@@ -20,6 +20,7 @@ try {
   console.log(`card covers: ${summary.cardCovers}`);
   console.log(`card moves: ${summary.cardMoves}`);
   console.log(`notes: ${summary.notes}`);
+  console.log(`scratchpad notes: ${summary.scratchpadNotes}`);
   console.log(`internal links: ${summary.internalLinks}`);
   console.log(`mentions: ${summary.mentions}`);
   console.log(`notifications: ${summary.notifications}`);

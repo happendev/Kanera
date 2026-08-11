@@ -31,13 +31,21 @@ import {
 /** Below this the dock has no room to be a dock and becomes a bottom sheet. Matches the shell's
  * auto-collapse breakpoint, so the sidebar and the scratchpad change shape at the same width. */
 const SHEET_QUERY = "(max-width: 900px)";
-/**
- * Display modes with no tab strip. Popping out has to mean something different in an installed PWA:
- * `window.open` there hands the page to the system browser, outside the app the user launched.
- */
-const NO_TABS_QUERY = "(display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui)";
 /** The popped-out route. Exported so the shell and the route table cannot drift from each other. */
 export const SCRATCHPAD_ROUTE = "/scratchpad";
+/** Named target so repeated pop-outs reuse one top-level window instead of opening duplicates. */
+const SCRATCHPAD_POPOUT_TARGET = "kanera-scratchpad";
+
+/**
+ * Open the scratchpad in another top-level browsing context.
+ *
+ * Installed PWAs still support `window.open`; standalone display mode means an app window has no tab
+ * strip, not that it cannot create another window. Keep display-mode detection out of this path so
+ * the same direct user gesture works in both a browser tab and an installed app.
+ */
+export function openScratchpadPopoutWindow(url: string): Window | null {
+  return window.open(url, SCRATCHPAD_POPOUT_TARGET);
+}
 
 /**
  * The scratchpad: a private, autosaving notepad docked to the right of the app shell.
@@ -52,7 +60,7 @@ export const SCRATCHPAD_ROUTE = "/scratchpad";
  * has less room instead of being covered. Below 900px there is no room for a third column, so it
  * becomes a bottom sheet.
  *
- * `variant="page"` is the popped-out form: the same component filling its own browser tab (see
+ * `variant="page"` is the popped-out form: the same component filling its own window or tab (see
  * `ScratchpadPage`). One component rather than two, because everything that makes this hard to get
  * right — the autosave bridge, the rename field, tab reordering with edge scroll, crash recovery — must
  * behave identically in both forms, and a second implementation would only diverge from this one.
@@ -198,8 +206,6 @@ export class ScratchpadPanelComponent implements OnDestroy {
 
   /** How far the pointer must travel before a press on a tab becomes a reorder rather than a click. */
   private static readonly DRAG_INTENT_PX = 6;
-  /** Named target so repeated pop-outs re-use one tab instead of opening a second copy. */
-  private static readonly POPOUT_TARGET = "kanera-scratchpad";
   /** How close to an end of the strip a dragged tab starts scrolling it, and how fast at the very edge. */
   private static readonly EDGE_SCROLL_ZONE_PX = 56;
   private static readonly EDGE_SCROLL_MAX_PX = 16;
@@ -297,15 +303,15 @@ export class ScratchpadPanelComponent implements OnDestroy {
   }
 
   /**
-   * Move the scratchpad into its own browser tab and close the dock behind it.
+   * Move the scratchpad into its own window or browser tab and close the dock behind it.
    *
    * The two halves are one gesture and must not half-happen: the new tab loads its pages from the
    * server, and the dock's editor is about to be destroyed, so anything still sitting in the autosave
    * debounce is flushed before either. The dock is closed only once there is somewhere for the writing
    * to continue — a blocked popup must never end with the panel gone and no page in its place.
    *
-   * A stable window name means pressing this twice focuses the tab that is already open rather than
-   * stacking duplicates of the same notepad.
+   * A stable window name means pressing this twice focuses the context that is already open rather
+   * than stacking duplicates of the same notepad.
    */
   protected popOut(): void {
     this.scratchpad.flushAll();
@@ -313,7 +319,7 @@ export class ScratchpadPanelComponent implements OnDestroy {
     this.closePagePicker();
     this.renamingId.set(null);
     const url = this.router.serializeUrl(this.router.createUrlTree([SCRATCHPAD_ROUTE]));
-    const popped = this.canOpenTab() ? window.open(url, ScratchpadPanelComponent.POPOUT_TARGET) : null;
+    const popped = openScratchpadPopoutWindow(url);
     this.scratchpad.setOpen(false);
     if (popped) {
       popped.focus();
@@ -321,8 +327,8 @@ export class ScratchpadPanelComponent implements OnDestroy {
       // whole point of popping out instead of navigating.
       return;
     }
-    // No tab to pop into (an installed PWA has no tab strip) or the popup was blocked. Navigating this
-    // tab reaches the same end state — the scratchpad filling the window — and Back undoes it.
+    // The popup was blocked. Navigating this context reaches the same end state — the scratchpad
+    // filling the window — and Back undoes it.
     void this.router.navigateByUrl(url);
   }
 
@@ -342,10 +348,6 @@ export class ScratchpadPanelComponent implements OnDestroy {
       return;
     }
     void this.router.navigateByUrl("/");
-  }
-
-  private canOpenTab(): boolean {
-    return typeof window.matchMedia !== "function" || !window.matchMedia(NO_TABS_QUERY).matches;
   }
 
   protected selectNote(noteId: string): void {

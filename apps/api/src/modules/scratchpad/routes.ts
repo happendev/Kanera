@@ -341,21 +341,28 @@ export async function scratchpadRoutes(app: FastifyInstance) {
 
   app.delete("/scratchpad/notes/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
-    await loadOwned(id, req);
+    const { attachments, clientId } = await db.transaction(async (tx) => {
+      // Lock the page while collecting keys and hard-deleting its rows. Without one transaction, an
+      // upload could commit between the key query and note delete: its row would cascade away, but its
+      // physical object key would be lost forever.
+      const note = await loadOwnedForUpdate(id, req, tx);
+      const attachments = await tx
+        .select({ fileKey: scratchpadNoteAttachments.fileKey })
+        .from(scratchpadNoteAttachments)
+        .where(eq(scratchpadNoteAttachments.scratchpadNoteId, id));
 
-    // Collect file keys before the row goes away — the attachment rows cascade with it, and after the
-    // commit there is nothing left to tell us which objects to remove from storage.
-    const attachments = await db
-      .select({ fileKey: scratchpadNoteAttachments.fileKey })
-      .from(scratchpadNoteAttachments)
-      .where(eq(scratchpadNoteAttachments.scratchpadNoteId, id));
+      // Be explicit about the hard delete rather than relying only on the FK cascade. This keeps the
+      // attachment lifecycle obvious here and leaves no rows contributing to storage quota.
+      await tx
+        .delete(scratchpadNoteAttachments)
+        .where(eq(scratchpadNoteAttachments.scratchpadNoteId, id));
+      await tx.delete(scratchpadNotes).where(eq(scratchpadNotes.id, id));
+      return { attachments, clientId: note.clientId };
+    });
 
-    await db.delete(scratchpadNotes).where(eq(scratchpadNotes.id, id));
-
-    // Best-effort: the page is already gone as far as the user is concerned, and a storage outage must
-    // not resurrect it. A leaked object costs quota until the org is deleted, which is the same
-    // tradeoff every other attachment delete path makes.
-    const storage = await getStorageForClient(req.auth.cid);
+    // Best-effort after the committed row deletion, matching the other attachment paths: a storage
+    // outage may leave an unreachable provider object, but must not resurrect the note or its rows.
+    const storage = await getStorageForClient(clientId);
     await Promise.all(attachments.map((row) => storage.delete(row.fileKey).catch(() => undefined)));
 
     await emitToUserDurable(req.auth.sub, SERVER_EVENTS.SCRATCHPAD_NOTE_DELETED, { noteId: id });

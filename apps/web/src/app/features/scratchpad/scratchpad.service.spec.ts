@@ -140,6 +140,38 @@ describe("ScratchpadService", () => {
     expect(editor.replaceWithCleanMarkdown).not.toHaveBeenCalled();
   });
 
+  it("preserves blank-paragraph cursor state when an echo beats the autosave response", async () => {
+    const { service, socket, patch } = setup([note(NOTE_A, { content: "thought" })]);
+    service.initialise();
+    await vi.runOnlyPendingTimersAsync();
+
+    // TipTap does not serialize trailing empty paragraphs. After Enter, Enter the document has a
+    // meaningful live cursor position, but both currentMarkdown() and the clean baseline still read
+    // "thought", so the editor's semantic dirty check deliberately reports false.
+    const editor = new EditorStub(NOTE_A, "thought", "thought");
+    service.registerEditor(editor);
+    let resolveSave!: (saved: WireScratchpadNote) => void;
+    patch.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveSave = resolve;
+    }));
+
+    service.updateContent(NOTE_A, "thought");
+    await vi.advanceTimersByTimeAsync(600);
+    expect(patch).toHaveBeenCalledTimes(1);
+
+    // The durable realtime echo can arrive before the HTTP response advances lastSavedAt. Replacing
+    // the document here would strip the empty paragraphs and pull the cursor back into the text.
+    socket.trigger(SERVER_EVENTS.SCRATCHPAD_NOTE_UPDATED, {
+      note: note(NOTE_A, { content: "thought", updatedAt: new Date("2026-08-01T00:00:10.000Z") }),
+    });
+
+    expect(editor.isDirty()).toBe(false);
+    expect(editor.replaceWithCleanMarkdown).not.toHaveBeenCalled();
+
+    resolveSave(note(NOTE_A, { content: "thought", updatedAt: new Date("2026-08-01T00:00:10.000Z") }));
+    await Promise.resolve();
+  });
+
   it("applies a newer remote edit only while the editor is clean", async () => {
     const { service, socket } = setup();
     service.initialise();

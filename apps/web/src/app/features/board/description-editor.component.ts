@@ -18,8 +18,9 @@ import type { WireBoardMemberUser } from "@kanera/shared/events";
 import { Editor, Extension, textblockTypeInputRule } from "@tiptap/core";
 import { HorizontalRule } from "@tiptap/extension-horizontal-rule";
 import Image from "@tiptap/extension-image";
+import { Paragraph } from "@tiptap/extension-paragraph";
 import Placeholder from "@tiptap/extension-placeholder";
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { Fragment, Slice, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import { Table } from "@tiptap/extension-table";
@@ -92,6 +93,8 @@ const FENCED_MARKDOWN_RE = /^\s*```(?:md|markdown)?[ \t]*\r?\n([\s\S]*?)\r?\n```
 const TABLE_SEPARATOR_RE = /^\s*\|?(?:\s*:?-{3,}:?\s*\|){1,}\s*:?-{3,}:?\s*\|?\s*$/m;
 const MARKDOWN_BLOCK_RE = /(^|\n)\s*(#{1,6}\s+\S|[-*+]\s+\S|\d+\.\s+\S|>\s+\S|[-*+]\s+\[[ xX]\]\s+\S)/;
 const TABLE_CELL_BLOCK_BREAK = "<br>";
+const EMPTY_PARAGRAPH_MARKDOWN = "&nbsp;";
+const EMPTY_PARAGRAPH_TEXT = "\u00a0";
 const KANERA_USER_LINK_PREFIX = "kanera-user:";
 const CODE_BLOCK_TAB_SIZE = 4;
 
@@ -104,6 +107,10 @@ type MarkdownTableSerializerState = {
 };
 
 type MarkdownBlockSerializerState = Pick<MarkdownTableSerializerState, "write" | "closeBlock">;
+
+type MarkdownParagraphSerializerState = MarkdownBlockSerializerState & {
+  renderInline(node: ProseMirrorNode): void;
+};
 
 type MarkdownItInlineState = {
   src: string;
@@ -193,6 +200,50 @@ const MarkdownHorizontalRule = HorizontalRule.extend({
           state.closeBlock(node);
         },
         parse: {},
+      },
+    };
+  },
+});
+
+/**
+ * Markdown collapses every run of blank lines to one block boundary, so an actual empty TipTap
+ * paragraph cannot survive save/reload without a marker. `&nbsp;` is invisible, valid Markdown and the
+ * marker used by TipTap's native Markdown paragraph extension. Strip it back out of the parsed DOM so
+ * it never becomes a cursor-visible character in the editor.
+ */
+const MarkdownParagraph = Paragraph.extend({
+  addStorage() {
+    return {
+      markdown: {
+        serialize(
+          state: MarkdownParagraphSerializerState,
+          node: ProseMirrorNode,
+          parent: ProseMirrorNode,
+          index: number,
+        ) {
+          const previous = index > 0 ? parent.child(index - 1) : null;
+          // TrailingNode gives non-paragraph blocks one final empty paragraph so the cursor can land
+          // after them. It is recreated automatically on load and was never user-authored, so saving
+          // it would add one phantom blank line after rules, code blocks and lists on every round trip.
+          const isGeneratedTrailingParagraph = parent.type.name === "doc"
+            && index === parent.childCount - 1
+            && previous?.type.name !== "paragraph";
+          if (node.childCount === 0 && parent.type.name === "doc" && !isGeneratedTrailingParagraph) {
+            state.write(EMPTY_PARAGRAPH_MARKDOWN);
+          } else {
+            state.renderInline(node);
+          }
+          state.closeBlock(node);
+        },
+        parse: {
+          updateDOM(element: HTMLElement) {
+            for (const paragraph of Array.from(element.querySelectorAll("p"))) {
+              if (paragraph.childNodes.length === 1 && paragraph.textContent === EMPTY_PARAGRAPH_TEXT) {
+                paragraph.replaceChildren();
+              }
+            }
+          },
+        },
       },
     };
   },
@@ -1010,6 +1061,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
       element: this.hostRef.nativeElement,
       extensions: [
         StarterKit.configure({
+          paragraph: false,
           horizontalRule: false,
           codeBlock: { enableTabIndentation: true, tabSize: CODE_BLOCK_TAB_SIZE },
           link: {
@@ -1019,6 +1071,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
             isAllowedUri: (url, { defaultValidate }) => url.startsWith(KANERA_USER_LINK_PREFIX) || defaultValidate(url),
           },
         }),
+        MarkdownParagraph,
         Image.configure({ inline: false, allowBase64: false }),
         MarkdownHorizontalRule,
         MarkdownTable.configure({ resizable: false }),
@@ -1082,6 +1135,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
 
     const shell = this.shellRef.nativeElement;
     shell.addEventListener("keydown", this.handleEditorKeydownCapture, { capture: true });
+    shell.addEventListener("keyup", this.handleEditorKeyupCapture, { capture: true });
     shell.addEventListener("paste", this.handlePaste, { capture: true });
     shell.addEventListener("dragenter", this.handleDragOver, { capture: true });
     shell.addEventListener("dragover", this.handleDragOver, { capture: true });
@@ -1097,6 +1151,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
     if (this.editor) {
       const shell = this.shellRef.nativeElement;
       shell.removeEventListener("keydown", this.handleEditorKeydownCapture, { capture: true });
+      shell.removeEventListener("keyup", this.handleEditorKeyupCapture, { capture: true });
       shell.removeEventListener("paste", this.handlePaste, { capture: true });
       shell.removeEventListener("dragenter", this.handleDragOver, { capture: true });
       shell.removeEventListener("dragover", this.handleDragOver, { capture: true });
@@ -1148,10 +1203,26 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
 
   private readonly handleEditorKeydownCapture = (event: KeyboardEvent) => {
     const target = event.target;
-    if (event.key !== "Tab" || !(target instanceof HTMLElement) || !target.closest(".ProseMirror")) return;
+    if (!(target instanceof HTMLElement) || !target.closest(".ProseMirror")) return;
+    if (this.isPasteWithoutFormattingShortcut(event)) {
+      // ClipboardEvent has no modifier fields, so carry this intent into the ensuing paste event.
+      this.pasteWithoutFormatting = true;
+      return;
+    }
+    if (event.key !== "Tab") return;
     if (!this.handleEditorKeydown(event)) return;
     event.stopImmediatePropagation();
   };
+
+  private pasteWithoutFormatting = false;
+
+  private readonly handleEditorKeyupCapture = (event: KeyboardEvent) => {
+    if (event.key.toLowerCase() === "v") this.pasteWithoutFormatting = false;
+  };
+
+  private isPasteWithoutFormattingShortcut(event: KeyboardEvent): boolean {
+    return (event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === "v";
+  }
 
   private handleEditorKeydown(event: KeyboardEvent): boolean {
     if (this.handleEmojiKeydown(event)) return true;
@@ -1538,6 +1609,19 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
 
   private readonly handlePaste = (e: ClipboardEvent) => {
     if (!this.editable()) return;
+    // Use a dedicated plain-text insertion path rather than relying on ProseMirror's internal Shift
+    // tracking: our capture listener runs before its paste listener, and browsers do not put the
+    // initiating modifiers on ClipboardEvent. This also bypasses Markdown auto-detection.
+    const plainText = e.clipboardData?.getData("text/plain") ?? "";
+    if (this.pasteWithoutFormatting && plainText && this.editor) {
+      this.pasteWithoutFormatting = false;
+      e.preventDefault();
+      // We dispatch the paste through the view below; do not let its DOM listener process the same
+      // clipboard payload a second time as rich HTML.
+      e.stopImmediatePropagation();
+      this.insertPlainText(plainText);
+      return;
+    }
     // Markdown paste still works without an upload target; only the file branch is gated.
     const files = this.allowAttachments() ? this.allowedClipboardFiles(e.clipboardData) : [];
     if (files.length > 0) {
@@ -1576,6 +1660,24 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
 
   private insertMarkdownSource(markdown: string) {
     this.editor?.chain().focus().insertContent(this.markdownShortcodesToUnicode(markdown)).run();
+  }
+
+  private insertPlainText(text: string) {
+    if (!this.editor) return;
+
+    // Match ProseMirror's native plain-text clipboard shape while building the slice ourselves. This
+    // avoids both source HTML and tiptap-markdown's clipboard parser, which intentionally recognizes
+    // Markdown syntax during a normal paste.
+    const { state } = this.editor;
+    const paragraph = state.schema.nodes["paragraph"];
+    if (!paragraph) return;
+    const blocks = text.split(/(?:\r\n?|\n)+/).map((block) =>
+      paragraph.create(null, block ? state.schema.text(block) : undefined),
+    );
+    const slice = Slice.maxOpen(Fragment.fromArray(blocks), true);
+    // Do not add ProseMirror's `paste` transaction metadata here: Tiptap paste rules use it to turn
+    // Markdown marks and URLs back into formatting, defeating the purpose of this shortcut.
+    this.editor.view.dispatch(state.tr.replaceSelection(slice).scrollIntoView());
   }
 
   private looksLikeMarkdownDocument(markdown: string): boolean {

@@ -110,7 +110,7 @@ export class ScratchpadService {
   /** Per-note debounce timers, pending field patches, and in-flight guards. */
   private readonly saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly pending = new Map<string, PendingPatch>();
-  private readonly inFlight = new Set<string>();
+  private readonly inFlight = new Map<string, PendingPatch>();
 
   /**
    * Echo watermark: the newest `updatedAt` this tab is responsible for, per note.
@@ -520,7 +520,7 @@ export class ScratchpadService {
     if (!patch || Object.keys(patch).length === 0) return;
     if (this.inFlight.has(noteId)) return;
     this.pending.delete(noteId);
-    this.inFlight.add(noteId);
+    this.inFlight.set(noteId, patch);
     this.armSavingIndicator();
     const lifecycleVersion = this.lifecycleVersion;
     let succeeded = false;
@@ -652,14 +652,18 @@ export class ScratchpadService {
        *    List metadata is still refreshed, because that is cheap and always correct.
        * 2. Newer, and the editor is clean — a genuine edit from the user's other device. Safe to adopt
        *    wholesale, and the watermark advances so this note's own echo is recognised next time.
-       * 3. Newer, but the editor is dirty — both sides have text. Local wins: the pending autosave
-       *    will overwrite the server (last-write-wins by design), and silently replacing what someone
-       *    is actively typing is the worse failure. The overwritten remote text is still in that
-       *    device's own draft store.
+       * 3. Newer, but the editor is dirty or has a queued/in-flight body write — both sides have text.
+       *    Local wins: the pending autosave will overwrite the server (last-write-wins by design), and
+       *    silently replacing what someone is actively typing is the worse failure. The explicit body
+       *    check matters for trailing blank paragraphs: TipTap omits them from serialized Markdown, so
+       *    the semantic dirty check can be false even though replacing the document would move the
+       *    live cursor. The overwritten remote text is still in that device's own draft store.
        */
       [SERVER_EVENTS.SCRATCHPAD_NOTE_UPDATED]: ({ note }) => {
         const isOwnEcho = this.timestamp(note.updatedAt) <= (this.lastSavedAt.get(note.id) ?? 0);
         const isActiveEditor = this.editor?.noteId === note.id;
+        const hasLocalBodyWrite = this.pending.get(note.id)?.content !== undefined
+          || this.inFlight.get(note.id)?.content !== undefined;
 
         if (isOwnEcho) {
           this.mergeMetadata(note);
@@ -672,7 +676,7 @@ export class ScratchpadService {
           this.lastAckedContent.set(note.id, note.content);
           return;
         }
-        if (this.editor!.isDirty()) {
+        if (hasLocalBodyWrite || this.editor!.isDirty()) {
           this.mergeMetadata(note);
           return;
         }
