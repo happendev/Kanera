@@ -66,6 +66,9 @@ interface PublicOpenApiTestDocument {
       get: object;
       post: object;
     };
+    "/workspaces/{wsId}/automations": { get: object; post: object };
+    "/automations/{id}": { patch: object; delete: object };
+    "/automations/{id}/executions": { get: object };
     "/cards/{id}/attachments": {
       post: {
         requestBody: {
@@ -203,6 +206,13 @@ void test("public API docs expose Scalar docs, Swagger UI, and OpenAPI JSON", as
   assert.ok(spec.paths["/boards/{boardId}/lists/{id}/cards"].post);
   assert.ok(spec.paths["/workspaces/{id}/external-links"].get);
   assert.ok(spec.paths["/workspaces/{id}/external-links"].post);
+  assert.ok(spec.paths["/workspaces/{wsId}/automations"].get);
+  assert.ok(spec.paths["/workspaces/{wsId}/automations"].post);
+  assert.ok(spec.paths["/automations/{id}"].patch);
+  assert.ok(spec.paths["/automations/{id}"].delete);
+  assert.ok(spec.paths["/automations/{id}/executions"].get);
+  assert.ok(spec.components.schemas.CreateAutomationBody?.properties?.actions);
+  assert.ok(spec.components.schemas.UpdateAutomationBody?.properties?.actions);
   assert.ok(spec.paths["/cards/{id}/attachments"].post);
   assert.equal(spec.paths["/cards/{id}/attachments"].post.requestBody.content["multipart/form-data"].schema.properties.file.format, "binary");
   assert.ok(spec.paths["/notes/{id}"].get);
@@ -215,6 +225,11 @@ void test("public API docs expose Scalar docs, Swagger UI, and OpenAPI JSON", as
   assert.equal(spec.paths["/notes/{id}/attachments"].post.requestBody.content["multipart/form-data"].schema.properties.file.format, "binary");
   assert.equal(app.hasRoute({ method: "DELETE", url: "/api/v1/notes/:id" }), false);
   assert.equal(app.hasRoute({ method: "DELETE", url: "/api/v1/notes/:id/attachments/:attachmentId" }), false);
+  assert.equal(app.hasRoute({ method: "GET", url: "/api/v1/workspaces/:wsId/automations" }), true);
+  assert.equal(app.hasRoute({ method: "POST", url: "/api/v1/workspaces/:wsId/automations" }), true);
+  assert.equal(app.hasRoute({ method: "PATCH", url: "/api/v1/automations/:id" }), true);
+  assert.equal(app.hasRoute({ method: "GET", url: "/api/v1/automations/:id/executions" }), true);
+  assert.equal(app.hasRoute({ method: "DELETE", url: "/api/v1/automations/:id" }), true);
   assert.equal(spec.paths["/workspaces"].get.security[0]?.BearerAuth.length, 0);
   assert.match(spec.tags.find((tag) => tag.name === "Webhooks")?.description ?? "", /HMAC-SHA256/);
   assert.ok(spec.components.schemas.Checklist?.properties?.parentItemId);

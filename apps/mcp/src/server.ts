@@ -183,9 +183,17 @@ const require = createRequire(import.meta.url);
 const { COLOR_TOKENS } = require("@kanera/shared/colors") as {
   COLOR_TOKENS: readonly [string, ...string[]];
 };
-const { COMMENT_REACTION_TYPES, MAX_CARD_PRIORITIES_PER_USER } = require("@kanera/shared/schema") as {
+const {
+  AUTOMATION_ACTION_LIMIT,
+  automationTriggerType,
+} = require("@kanera/shared/dto") as {
+  AUTOMATION_ACTION_LIMIT: number;
+  automationTriggerType: z.ZodType;
+};
+const { AUTOMATION_ACTION_TYPES, COMMENT_REACTION_TYPES, MAX_CARD_PRIORITIES_PER_USER } = require("@kanera/shared/schema") as {
   COMMENT_REACTION_TYPES: readonly [string, ...string[]];
   MAX_CARD_PRIORITIES_PER_USER: number;
+  AUTOMATION_ACTION_TYPES: readonly [string, ...string[]];
 };
 const reactionType = z.enum(COMMENT_REACTION_TYPES);
 const colorToken = z.enum(COLOR_TOKENS);
@@ -202,6 +210,29 @@ const noteUpdateChanges = z.union([
   noteUpdateFields.extend({ icon: z.string().trim().min(1).max(100).nullable() }),
   noteUpdateFields.extend({ color: colorToken.nullable() }),
 ]);
+const automationActionInput = z.object({
+  type: z.enum(AUTOMATION_ACTION_TYPES),
+  config: z.looseObject({}).describe("Config by type: add/remove_labels {labelIds}; add/remove_assignees {userIds}; apply_checklists {templateIds}; set_due_date {offsetDays, slot}; clear_due_date/move_to_top/move_to_bottom {}; set_completion {completed}; move_to_list {listId, placement}; populate_custom_field {fieldId, onlyIfEmpty, value}. IDs are UUID arrays where plural. The public API validates the selected type's exact config."),
+});
+const automationCreateFields = {
+  enabled: z.boolean().default(false).describe("Whether the rule should start running immediately. Enabled rules require at least one action."),
+  triggerType: automationTriggerType.describe("The event that starts the rule."),
+  triggerListId: uuid.optional().describe("Required when triggerType is card_enters_list."),
+  triggerUserIds: z.array(uuid).min(1).max(100).optional().describe("Required when triggerType is card_assigned_to_user."),
+  triggerLabelId: uuid.optional().describe("Required when triggerType is card_label_set."),
+  applyOnCreate: z.boolean().default(true).describe("For card_enters_list, also run when a card is created in the trigger list."),
+  applyOnMove: z.boolean().default(true).describe("For card_enters_list, run when a card moves into the trigger list."),
+  actions: z.array(automationActionInput).max(AUTOMATION_ACTION_LIMIT).default([]),
+};
+const automationChanges = z.object({
+  triggerType: automationTriggerType.optional(),
+  triggerListId: uuid.nullable().optional().describe("Required when the resulting triggerType is card_enters_list."),
+  triggerUserIds: z.array(uuid).min(1).max(100).nullable().optional().describe("Required when the resulting triggerType is card_assigned_to_user."),
+  triggerLabelId: uuid.nullable().optional().describe("Required when the resulting triggerType is card_label_set."),
+  applyOnCreate: z.boolean().optional(),
+  applyOnMove: z.boolean().optional(),
+  actions: z.array(automationActionInput).max(AUTOMATION_ACTION_LIMIT).optional().describe("Replace the full ordered action list atomically with the trigger changes. An empty list disables the rule."),
+}).refine((value) => Object.values(value).some((item) => item !== undefined), "provide at least one automation change");
 const mcpPackage = require("../package.json") as { version: string };
 
 export interface KaneraMcpContext {
@@ -214,7 +245,7 @@ function client(ctx: KaneraMcpContext) {
   return new KaneraClient({ baseUrl: ctx.publicApiUrl ?? env.KANERA_PUBLIC_API_URL, apiKey: ctx.apiKey });
 }
 
-const serverDescription = "Read Kanera configuration and manage cards, checklists, comments, notes, attachments, activity, work reporting, and \"Up next\" priority queues.";
+const serverDescription = "Read Kanera configuration and manage automations, cards, checklists, comments, notes, attachments, activity, work reporting, and \"Up next\" priority queues.";
 const serverIcons = [{
   src: "https://www.kanera.app/assets/favicon/android-chrome-512x512.png",
   mimeType: "image/png" as const,
@@ -275,6 +306,12 @@ const toolBehaviors: Record<string, ToolBehavior> = {
   kanera_get_standalone_board_settings: READ,
   kanera_get_board: READ,
   kanera_get_cards_list: READ,
+  kanera_list_automations: READ,
+  kanera_list_automation_executions: READ,
+  kanera_create_automation: ADD,
+  kanera_update_automation: CHANGE,
+  kanera_set_automation_enabled: CHANGE,
+  kanera_delete_automation: CHANGE,
   kanera_search: READ,
   kanera_search_docs: READ,
   kanera_get_card: READ,
@@ -691,7 +728,7 @@ export function createKaneraMcpServer(ctx: KaneraMcpContext) {
       // custom MCP clients connect directly to /mcp and never discover server.json.
       icons: serverIcons,
     },
-    { instructions: "For cross-board reporting, first resolve people with kanera_list_workspace_members, then use kanera_query_work_cards for active or completed assignments and kanera_query_work_history for one person's actions in a date range. Use kanera_get_cards_content for selected evidence and kanera_get_card or kanera_list_card_history only when deeper detail is needed. kanera_search returns one bounded, typed result stream with canonical links. Kanera MCP is work-focused: it reads configuration needed to resolve boards, lists, labels, fields, options, members, and permissions, but workspace/board/list/field/label administration remains in the Kanera UI. Standard-workspace lists, fields, labels, and membership are shared across its boards; standalone boards have dedicated configuration. Card reference fields accept a UUID, human key such as PROJ-123, or canonical card URL. Use kanera_list_accessible_boards for complete discovery including standalone and guest boards, kanera_get_board for metadata/configuration, and kanera_get_cards_list for bounded list pages. Use kanera_get_portfolio_summary for portfolio rollups. Use the priority tools (kanera_list_priorities, kanera_add_priority, kanera_move_priority, kanera_remove_priority) to read and curate a user's ranked cross-board \"Up next\" queue; kanera_list_priority_targets shows whose queues a manager can reach. Use kanera_search_docs for product guidance and kanera_search for live user data. Personal notes are private to their owner. Read-only credentials cannot mutate. Board, workspace, list, field, label, note, and note-attachment deletion or administration not represented by a tool must be completed manually in the Kanera UI." },
+    { instructions: "For cross-board reporting, first resolve people with kanera_list_workspace_members, then use kanera_query_work_cards for active or completed assignments and kanera_query_work_history for one person's actions in a date range. Use kanera_get_cards_content for selected evidence and kanera_get_card or kanera_list_card_history only when deeper detail is needed. kanera_search returns one bounded, typed result stream with canonical links. Kanera MCP is work-focused: it reads configuration needed to resolve boards, lists, labels, fields, options, members, and permissions; workspace admins can manage automations with the dedicated automation tools, while other workspace/board/list/field/label administration remains in the Kanera UI. Standard-workspace lists, fields, labels, membership, and automations are shared across its boards; standalone boards have dedicated configuration. Card reference fields accept a UUID, human key such as PROJ-123, or canonical card URL. Use kanera_list_accessible_boards for complete discovery including standalone and guest boards, kanera_get_board for metadata/configuration, and kanera_get_cards_list for bounded list pages. Use kanera_get_portfolio_summary for portfolio rollups. Use the priority tools (kanera_list_priorities, kanera_add_priority, kanera_move_priority, kanera_remove_priority) to read and curate a user's ranked cross-board \"Up next\" queue; kanera_list_priority_targets shows whose queues a manager can reach. Use kanera_search_docs for product guidance and kanera_search for live user data. Personal notes are private to their owner. Read-only credentials cannot mutate. Board, workspace, list, field, label, note, and note-attachment deletion or administration not represented by a tool must be completed manually in the Kanera UI." },
   );
 
   registerTools(server, ctx);
@@ -713,6 +750,28 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     remoteCollectionPage(api, "/api/v1/boards", {}, a.limit, a.cursor, "accessible-boards"), ctx);
   registerKaneraTool(server, "kanera_get_workspace", "Read a standard workspace and its shared lists, custom fields, labels, templates, and automations. For a standalone board, use kanera_get_standalone_board_settings.", { workspaceId: uuid }, async (a, api) =>
     boundedConfiguration((await standardWorkspaceContext(api, a.workspaceId)).detail), ctx);
+  registerKaneraTool(server, "kanera_list_automations", "List the ordered automation rules and lifetime run statistics for a standard workspace. Requires workspace-admin authority; use kanera_get_workspace when only general readable workspace configuration is needed.", {
+    workspaceId: uuid,
+  }, (a, api) => api.get(`/api/v1/workspaces/${a.workspaceId}/automations`), ctx);
+  registerKaneraTool(server, "kanera_list_automation_executions", "List a cursor-paginated history of one automation's retained execution outcomes (effectful, no-op, or failed), newest first. Requires workspace-admin authority.", {
+    automationId: uuid,
+    ...collectionPageSchema,
+  }, (a, api) => remoteCollectionPage(api, `/api/v1/automations/${a.automationId}/executions`, {}, a.limit, a.cursor, `automation-executions:${a.automationId}`), ctx);
+  registerKaneraTool(server, "kanera_create_automation", "Create a workspace automation with an ordered action list. Requires workspace-admin authority and a write-capable credential. For a rule that runs only when a card moves into a list, use card_enters_list with applyOnCreate=false and applyOnMove=true; add_assignees plus set_due_date implements a review handoff with a relative deadline. This is not idempotent; do not retry after an ambiguous success.", {
+    workspaceId: uuid,
+    ...automationCreateFields,
+  }, ({ workspaceId, ...body }, api) => api.post(`/api/v1/workspaces/${workspaceId}/automations`, body), ctx);
+  registerKaneraTool(server, "kanera_update_automation", "Atomically update an automation's trigger settings and/or replace its full ordered action list. Requires workspace-admin authority and a write-capable credential. Use kanera_set_automation_enabled for enable/disable changes.", {
+    automationId: uuid,
+    changes: automationChanges,
+  }, (a, api) => api.patch(`/api/v1/automations/${a.automationId}`, a.changes), ctx);
+  registerKaneraTool(server, "kanera_set_automation_enabled", "Enable or disable one automation without changing its trigger or actions. Enabling requires at least one action and is subject to plan limits. Requires workspace-admin authority and a write-capable credential.", {
+    automationId: uuid,
+    enabled: z.boolean(),
+  }, (a, api) => api.patch(`/api/v1/automations/${a.automationId}`, { enabled: a.enabled }), ctx);
+  registerKaneraTool(server, "kanera_delete_automation", "Delete one workspace automation. This archives the rule and stops future executions; it does not undo actions from prior executions. Requires workspace-admin authority and a write-capable credential.", {
+    automationId: uuid,
+  }, (a, api) => api.delete(`/api/v1/automations/${a.automationId}`), ctx);
   registerKaneraTool(server, "kanera_list_workspace_boards", "List a cursor-paginated directory of boards inside a standard workspace. Use kanera_list_accessible_boards when the workspace is unknown or the board may be standalone.", { workspaceId: uuid, ...collectionPageSchema }, async (a, api) => {
     await standardWorkspaceContext(api, a.workspaceId);
     return remoteCollectionPage(api, `/api/v1/workspaces/${a.workspaceId}/boards`, {}, a.limit, a.cursor, `workspace-boards:${a.workspaceId}`);

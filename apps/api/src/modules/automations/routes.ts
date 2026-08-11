@@ -1,6 +1,6 @@
 import { dto } from "@kanera/shared";
 import { AUTOMATION_LIMIT } from "@kanera/shared/automation-limits";
-import { automationActions, automations, cardLabels, checklistTemplates, customFieldOptions, customFields, lists, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { automationActions, automationRuns, automations, cardLabels, checklistTemplates, customFieldOptions, customFields, lists, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db, type Db } from "../../db.js";
@@ -260,6 +260,25 @@ export async function automationRoutes(app: FastifyInstance) {
     return loadAutomations(workspaceId);
   });
 
+  app.get("/automations/:id/executions", async (req) => {
+    const { id } = req.params as { id: string };
+    const query = dto.listAutomationExecutionsQuery.parse(req.query);
+    const [current] = await db
+      .select({ workspaceId: automations.workspaceId })
+      .from(automations)
+      .where(and(eq(automations.id, id), isNull(automations.archivedAt)))
+      .limit(1);
+    if (!current) throw notFound();
+    await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
+    return db
+      .select({ id: automationRuns.id, outcome: automationRuns.outcome, ranAt: automationRuns.ranAt })
+      .from(automationRuns)
+      .where(eq(automationRuns.automationId, id))
+      .orderBy(desc(automationRuns.ranAt), desc(automationRuns.id))
+      .limit(query.limit ?? 101)
+      .offset(query.offset);
+  });
+
   app.post("/workspaces/:wsId/automations", async (req, reply) => {
     const { wsId: workspaceId } = req.params as { wsId: string };
     const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
@@ -344,6 +363,7 @@ export async function automationRoutes(app: FastifyInstance) {
     await assertListInWorkspace(current.workspaceId, triggerListId);
     await validateTriggerUsers(current.workspaceId, triggerUserIds);
     await assertLabelInWorkspace(current.workspaceId, triggerLabelId);
+    if (body.actions !== undefined) await validateActionTargets(current.workspaceId, body.actions);
     await db.transaction(async (tx) => {
       // Action replacement also updates this row, so locking it before re-reading actions
       // serializes enable toggles with action clears and preserves the enabled/action invariant.
@@ -354,17 +374,20 @@ export async function automationRoutes(app: FastifyInstance) {
         .for("update")
         .limit(1);
       if (!locked) throw notFound();
-      if (body.enabled === true) {
-        assertEnabledAutomationHasActions(true, await hasAutomationActions(id, tx) ? 1 : 0);
-      }
+      const nextEnabled = body.enabled ?? (body.actions?.length === 0 ? false : locked.enabled);
+      const nextHasActions = body.actions !== undefined
+        ? body.actions.length > 0
+        : await hasAutomationActions(id, tx);
+      assertEnabledAutomationHasActions(nextEnabled, nextHasActions ? 1 : 0);
       // Enforce the free-tier enabled-automation cap only when turning a disabled automation on,
       // excluding this automation from the count so re-enabling the single allowed one is fine.
       // Runs inside the tx so the cap check, tenant lock, and update share one transaction.
-      if (body.enabled === true && !locked.enabled) await assertEnabledAutomationLimit(clientId, { excludeId: id }, tx);
+      if (nextEnabled && !locked.enabled) await assertEnabledAutomationLimit(clientId, { excludeId: id }, tx);
+      if (body.actions !== undefined) await replaceActions(tx, id, body.actions);
       await tx
         .update(automations)
         .set({
-          ...(body.enabled !== undefined && { enabled: body.enabled }),
+          ...(body.enabled !== undefined || body.actions?.length === 0 ? { enabled: nextEnabled } : {}),
           ...(body.triggerType !== undefined && { triggerType }),
           triggerListId,
           triggerUserIds: triggerUserIds ? Array.from(new Set(triggerUserIds)) : null,
@@ -381,7 +404,7 @@ export async function automationRoutes(app: FastifyInstance) {
         entityType: "workspace",
         entityId: current.workspaceId,
         action: "automation:updated",
-        payload: { automationId: id },
+        payload: { automationId: id, ...(body.actions !== undefined && { actions: body.actions.length }) },
       });
     });
     const automation = await loadAutomation(id);

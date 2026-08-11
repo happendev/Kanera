@@ -90,6 +90,7 @@ export type CreateAutomationBody = z.infer<typeof createAutomationBody>;
 export const updateAutomationBody = z
   .object({
     enabled: z.boolean().optional(),
+    actions: z.array(automationActionBody).max(AUTOMATION_ACTION_LIMIT).optional(),
     triggerType: automationTriggerType.optional(),
     triggerListId: z.uuid().nullable().optional(),
     triggerUserIds: z.array(z.uuid()).min(1).max(100).nullable().optional(),
@@ -100,6 +101,7 @@ export const updateAutomationBody = z
   .refine(
     (v) =>
       v.enabled !== undefined ||
+      v.actions !== undefined ||
       v.triggerType !== undefined ||
       v.triggerListId !== undefined ||
       v.triggerUserIds !== undefined ||
@@ -109,6 +111,12 @@ export const updateAutomationBody = z
     "provide a field to update",
   );
 export type UpdateAutomationBody = z.infer<typeof updateAutomationBody>;
+
+export const listAutomationExecutionsQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(101).optional(),
+  offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
+});
+export type ListAutomationExecutionsQuery = z.infer<typeof listAutomationExecutionsQuery>;
 
 export const setAutomationActionsBody = z.object({
   actions: z.array(automationActionBody).max(AUTOMATION_ACTION_LIMIT),

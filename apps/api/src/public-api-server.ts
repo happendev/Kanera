@@ -30,6 +30,7 @@ import type { SweepScheduler } from "./lib/sweep-scheduler.js";
 import { startWebhookDeliveryScheduler } from "./lib/webhooks.js";
 import { activityRoutes } from "./modules/activity/routes.js";
 import { agentWorkQueryRoutes, agentWorkRoutes } from "./modules/work/routes.js";
+import { automationRoutes } from "./modules/automations/routes.js";
 import { boardRoutes } from "./modules/boards/routes.js";
 import { cardLabelRoutes } from "./modules/card-labels/routes.js";
 import { cardPriorityRoutes } from "./modules/card-priorities/routes.js";
@@ -323,6 +324,10 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
     await api.register(cardLabelRoutes);
     await api.register(commentRoutes);
     await api.register(activityRoutes);
+    // Automation administration is workspace-admin scoped inside the reused routes. Registering
+    // the same handlers keeps validation, audit activity, realtime outbox writes, and plan limits
+    // identical for MCP/public-API changes and first-party UI changes.
+    await api.register(automationRoutes);
     await api.register(agentWorkRoutes);
     await api.register(agentWorkQueryRoutes);
   }, { prefix });
