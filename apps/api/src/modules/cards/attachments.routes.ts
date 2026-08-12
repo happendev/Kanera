@@ -1,12 +1,19 @@
 import type { AttachmentSource, CardAttachmentRow } from "@kanera/shared/dto";
 import { ATTACHMENT_SOURCES } from "@kanera/shared/dto";
 import { getAllowedAttachmentExtension } from "@kanera/shared/attachments";
-import { cardAttachments, cards, comments, users } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, cardAttachments, cards, comments, users } from "@kanera/shared/schema";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertCardAccess } from "../../lib/access.js";
-import { emitActivityFeedItem, recordActivity } from "../../lib/activity.js";
+import {
+  emitActivityFeedItem,
+  emitActivityFeedItemDeleted,
+  emitActivityFeedItemUpdated,
+  recordActivity,
+  recordCoalescedActivity,
+  type CoalescedActivityResult,
+} from "../../lib/activity.js";
 import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { fetchReactionsByComment } from "../../lib/comment-reactions.js";
@@ -51,6 +58,16 @@ type AttachmentRowWithKeys = CardAttachmentRow & {
   coverImageUrl?: string | null;
   uploadedByClientId: string;
 };
+
+const ATTACHMENT_MISTAKE_WINDOW_MS = 2 * 60 * 1000;
+
+async function emitCoalescedAttachmentActivity(boardId: string, cardId: string, result: CoalescedActivityResult) {
+  // A quick add/remove is an abandoned attachment operation, so remove the original realtime row
+  // (and its notification) instead of appending a contradictory removal row to the feed.
+  if (result.status === "created") await emitActivityFeedItem(boardId, cardId, result.activity);
+  else if (result.status === "updated") await emitActivityFeedItemUpdated(boardId, cardId, result.activity);
+  else await emitActivityFeedItemDeleted(boardId, cardId, result.activity.id);
+}
 
 async function selectAttachmentRow(attachmentId: string): Promise<AttachmentRowWithKeys> {
   const [row] = await db
@@ -273,13 +290,18 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
       }
     }
 
-    const activity = await recordActivity(db, {
+    const activity = await recordCoalescedActivity(db, {
       boardId: card.boardId,
       workspaceId: ctx.workspaceId,
       actorId: req.auth.sub,
       entityType: "card",
       entityId: cardId,
-      action: "attachment_added",
+      action: ACTIVITY_ACTION.ATTACHMENT_ADDED,
+      coalesceKey: `attachment:${inserted.id}`,
+      coalesceActions: [ACTIVITY_ACTION.ATTACHMENT_ADDED, ACTIVITY_ACTION.ATTACHMENT_REMOVED],
+      windowMs: ATTACHMENT_MISTAKE_WINDOW_MS,
+      fromValue: null,
+      toValue: { attachmentId: inserted.id },
       payload: {
         cardId,
         attachmentId: inserted.id,
@@ -289,7 +311,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
         commentId: commentIdParam,
       },
     });
-    emitActivityFeedItem(card.boardId, cardId, activity);
+    await emitCoalescedAttachmentActivity(card.boardId, cardId, activity);
 
     await evaluateWorkspaceAnalyticsMilestones({
       workspaceId: ctx.workspaceId,
@@ -554,16 +576,21 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
       }
     }
 
-    const activity = await recordActivity(db, {
+    const activity = await recordCoalescedActivity(db, {
       boardId: card.boardId,
       workspaceId: ctx.workspaceId,
       actorId: req.auth.sub,
       entityType: "card",
       entityId: cardId,
-      action: "attachment_removed",
+      action: ACTIVITY_ACTION.ATTACHMENT_REMOVED,
+      coalesceKey: `attachment:${attachmentId}`,
+      coalesceActions: [ACTIVITY_ACTION.ATTACHMENT_ADDED, ACTIVITY_ACTION.ATTACHMENT_REMOVED],
+      windowMs: ATTACHMENT_MISTAKE_WINDOW_MS,
+      fromValue: { attachmentId },
+      toValue: null,
       payload: { cardId, attachmentId, fileName: attachment.fileName },
     });
-    emitActivityFeedItem(card.boardId, cardId, activity);
+    await emitCoalescedAttachmentActivity(card.boardId, cardId, activity);
 
     return reply.status(204).send();
   });

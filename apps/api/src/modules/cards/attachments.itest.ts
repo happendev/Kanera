@@ -2,8 +2,8 @@ import "../../test/setup.integration.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { expandCardSummary, type CompactCardSummary } from "@kanera/shared/events";
-import { boardMembers, boards, cardAttachments, cards, clients, lists } from "@kanera/shared/schema";
-import { eq } from "drizzle-orm";
+import { activityEvents, boardMembers, boards, cardAttachments, cards, clients, lists } from "@kanera/shared/schema";
+import { and, eq } from "drizzle-orm";
 import sharp from "sharp";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
@@ -97,6 +97,35 @@ function mediaPath(url: string): string {
   const parsed = new URL(url);
   return `${parsed.pathname.replace(/^\/api/, "")}${parsed.search}`;
 }
+
+void test("rapid attachment add/remove activity collapses out of the card feed", async () => {
+  const { app, accessToken, card } = await setupCard();
+
+  const upload = await app.inject({
+    method: "POST",
+    url: `/cards/${card.id}/attachments`,
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: textForm("discarded.txt", "temporary"),
+  });
+  assert.equal(upload.statusCode, 201, upload.body);
+  const attachment = upload.json<{ id: string }>();
+
+  const remove = await app.inject({
+    method: "DELETE",
+    url: `/cards/${card.id}/attachments/${attachment.id}`,
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  assert.equal(remove.statusCode, 204, remove.body);
+
+  const rows = await db
+    .select()
+    .from(activityEvents)
+    .where(and(eq(activityEvents.entityId, card.id), eq(activityEvents.coalesceKey, `attachment:${attachment.id}`)));
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]!.action, "attachment_removed");
+  assert.equal(rows[0]!.feedVisible, false);
+  assert.equal(rows[0]!.coalescedCount, 2);
+});
 
 void test("new image covers expose derivative metadata in internal attachment and board summaries", async () => {
   const { app, accessToken, card, board } = await setupCard();
