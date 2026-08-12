@@ -403,6 +403,42 @@ describe("DescriptionEditorComponent", () => {
   });
 
   it.each([
+    ["plain-text paste", false],
+    ["Ctrl+Shift+V", true],
+  ])("preserves every blank line during %s and after reload", async (_pasteKind, useShortcut) => {
+    if (useShortcut) {
+      editorDom().dispatchEvent(new KeyboardEvent("keydown", {
+        key: "v",
+        ctrlKey: true,
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }));
+    }
+    const event = pasteEvent({
+      items: [clipboardTextItem()],
+      files: [],
+      text: "Alpha\n\n\nBeta\n\nGamma",
+    });
+
+    editorDom().dispatchEvent(event);
+    await fixture.whenStable();
+
+    const blockShape = () => Array.from(editorDom().children).map((element) =>
+      `${element.tagName}:${element.textContent ?? ""}`,
+    );
+    expect(event.defaultPrevented).toBe(true);
+    expect(blockShape()).toEqual(["P:Alpha", "P:", "P:", "P:Beta", "P:", "P:Gamma"]);
+
+    const saved = fixture.componentInstance.markdown();
+    expect(saved.match(/&nbsp;/g)).toHaveLength(3);
+    fixture.componentInstance.setMarkdown(saved);
+    await fixture.whenStable();
+
+    expect(blockShape()).toEqual(["P:Alpha", "P:", "P:", "P:Beta", "P:", "P:Gamma"]);
+  });
+
+  it.each([
     ["Google Docs", '<meta charset="utf-8"><p><b>Launch plan</b></p><p>Review owners</p>'],
     ["Word", '<p class="MsoNormal"><strong>Launch plan</strong></p><p class="MsoNormal">Review owners</p>'],
     ["Slack", '<div><strong>Launch plan</strong></div><div>Review owners</div>'],

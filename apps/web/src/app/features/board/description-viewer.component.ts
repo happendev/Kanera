@@ -45,6 +45,7 @@ const ALLOWED_ATTR = ["href", "title", "src", "alt", "target", "rel", "class", "
 const MENTION_RE = /@\[([^\]]+)\]\(kanera-user:([0-9a-fA-F-]{36})\)/g;
 const BOARD_PATH_RE = /^\/b\/([0-9a-fA-F-]{36})(?:\/)?$/;
 const CARD_PATH_RE = /^\/b\/([0-9a-fA-F-]{36})\/c\/([0-9a-fA-F-]{36})(?:\/)?$/;
+const CARD_KEY_PATH_RE = /^\/o\/[A-Fa-f0-9]{16}\/c\/[A-Za-z][A-Za-z0-9]{1,9}-[1-9][0-9]*(?:\/)?$/;
 const WORKSPACE_NOTES_PATH_RE = /^\/w\/([0-9a-fA-F-]{36})\/notes(?:\/)?$/;
 const UUID_RE = /^[0-9a-fA-F-]{36}$/;
 const GITHUB_URL_RE = /^https:\/\/github\.com\/[^/\s)]+\/[^/\s)]+(?:\/(?:pull\/\d+|issues\/\d+|releases\/tag\/[^\s)]+|commit\/[0-9a-fA-F]{7,40}))?\/?(?:[?#][^\s)]*)?$/;
@@ -932,6 +933,9 @@ export class DescriptionViewerComponent {
     try {
       const url = new URL(href, window.location.origin);
       if (!this.isAllowedInternalOrigin(url.origin)) return false;
+      // Human-readable card URLs are Kanera's canonical share links and need
+      // the same rich resolution pass as legacy UUID-based card URLs.
+      if (CARD_KEY_PATH_RE.test(url.pathname)) return true;
       if (CARD_PATH_RE.test(url.pathname)) return true;
       if (WORKSPACE_NOTES_PATH_RE.test(url.pathname)) {
         const noteId = url.searchParams.get("noteId");

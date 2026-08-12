@@ -2,7 +2,7 @@ import type { ActivityFeedEvent } from "@kanera/shared/dto";
 import { SERVER_EVENTS } from "@kanera/shared/events";
 import { activityEvents, type ActivityAction, type ActivityCoalesceKey, type ActivityEntityType, type ActivityEvent, type DynamicActivityCoalesceKey } from "@kanera/shared/schema";
 import { requestContext } from "@fastify/request-context";
-import { and, desc, eq, gte, isNull } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull } from "drizzle-orm";
 import type { Db } from "../db.js";
 import { queueNotificationFanout } from "./notifications.js";
 import { emitToBoard } from "../realtime/emit.js";
@@ -50,6 +50,7 @@ export interface CoalescedActivityInput extends ActivityInput {
   coalesceKey: ActivityCoalesceKey | DynamicActivityCoalesceKey;
   windowMs: number;
   coalesceAcrossBoards?: boolean;
+  coalesceActions?: ActivityAction[];
   preservePayloadKeys?: string[];
   fromValue?: unknown;
   toValue?: unknown;
@@ -162,7 +163,9 @@ export async function recordCoalescedActivity(tx: Tx, input: CoalescedActivityIn
         attribution.supportSessionId === null ? isNull(activityEvents.supportSessionId) : eq(activityEvents.supportSessionId, attribution.supportSessionId),
         eq(activityEvents.entityType, input.entityType),
         eq(activityEvents.entityId, input.entityId),
-        eq(activityEvents.action, input.action),
+        input.coalesceActions?.length
+          ? inArray(activityEvents.action, input.coalesceActions)
+          : eq(activityEvents.action, input.action),
         eq(activityEvents.coalesceKey, input.coalesceKey),
         gte(activityEvents.coalescedUntil, now),
       ),
@@ -227,6 +230,10 @@ export async function recordCoalescedActivity(tx: Tx, input: CoalescedActivityIn
       .update(activityEvents)
       .set({
         boardId: input.boardId,
+        // Some state transitions use distinct action names for each direction (for example an
+        // attachment being added and removed). Keep the surviving row aligned with the final
+        // transition while retaining the first value for no-op detection.
+        action: input.action,
         payload,
         feedVisible,
         coalescedCount: existing.coalescedCount + 1,

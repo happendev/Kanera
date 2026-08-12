@@ -154,6 +154,7 @@ export const ACTIVITY_COALESCE_KEY = {
 } as const satisfies Record<string, ActivityCoalesceKey>;
 export type DynamicActivityCoalesceKey =
   | `customField:${string}`
+  | `attachment:${string}`
   | `checklist:${string}:title`
   | `checklist:${string}:completed`
   | `checklistItem:${string}:text`

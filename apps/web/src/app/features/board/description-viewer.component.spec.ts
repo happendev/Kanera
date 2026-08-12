@@ -160,6 +160,36 @@ describe("DescriptionViewerComponent mentions", () => {
     expect(chip?.querySelector(".internal-link-hint")?.textContent).toBe("Launch - Todo");
   });
 
+  it("renders an absolute canonical card URL as a pretty card link after resolution", async () => {
+    const organisationKey = "019C965E119FBB20";
+    const cardKey = "DEV-829";
+    const href = `${window.location.origin}/o/${organisationKey}/c/${cardKey}`;
+    const canonicalHref = `/o/${organisationKey}/c/${cardKey}`;
+    const post = vi.fn(async () => ({
+      links: {
+        [href]: {
+          kind: "card",
+          title: "Fix comment links",
+          boardName: "Development",
+          listName: "In progress",
+          boardId: "123e4567-e89b-12d3-a456-426614174000",
+          boardIcon: "code",
+          boardIconColor: "blue",
+          cardId: "123e4567-e89b-12d3-a456-426614174001",
+          href: canonicalHref,
+        },
+      },
+    }));
+
+    const { el } = await render(`[${href}](${href})`, { post } as Partial<ApiClient>);
+
+    expect(post).toHaveBeenCalledWith("/internal-links/resolve", { urls: [href] });
+    const chip = el.querySelector(".internal-link-chip.is-card") as HTMLAnchorElement | null;
+    expect(chip?.getAttribute("href")).toBe(canonicalHref);
+    expect(chip?.textContent).toContain("Fix comment links");
+    expect(chip?.querySelector(".internal-link-hint")?.textContent).toBe("Development - In progress");
+  });
+
   it("renders a bare Kanera note URL as a pretty note link after resolution", async () => {
     const workspaceId = "123e4567-e89b-12d3-a456-426614174000";
     const noteId = "123e4567-e89b-12d3-a456-426614174002";

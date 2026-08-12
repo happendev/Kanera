@@ -91,7 +91,7 @@ function saveRecentEmojiNames(names: string[]): void {
 }
 const FENCED_MARKDOWN_RE = /^\s*```(?:md|markdown)?[ \t]*\r?\n([\s\S]*?)\r?\n```\s*$/i;
 const TABLE_SEPARATOR_RE = /^\s*\|?(?:\s*:?-{3,}:?\s*\|){1,}\s*:?-{3,}:?\s*\|?\s*$/m;
-const MARKDOWN_BLOCK_RE = /(^|\n)\s*(#{1,6}\s+\S|[-*+]\s+\S|\d+\.\s+\S|>\s+\S|[-*+]\s+\[[ xX]\]\s+\S)/;
+const MARKDOWN_BLOCK_RE = /(^|\n)\s*(```|~~~|#{1,6}\s+\S|[-*+]\s+\S|\d+\.\s+\S|>\s+\S|[-*+]\s+\[[ xX]\]\s+\S)/;
 const TABLE_CELL_BLOCK_BREAK = "<br>";
 const EMPTY_PARAGRAPH_MARKDOWN = "&nbsp;";
 const EMPTY_PARAGRAPH_TEXT = "\u00a0";
@@ -1633,10 +1633,19 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
     }
 
     const markdown = this.pastedMarkdownSource(e.clipboardData);
-    if (!markdown || !this.editor) return;
+    if (markdown && this.editor) {
+      e.preventDefault();
+      this.insertMarkdownSource(markdown);
+      return;
+    }
 
-    e.preventDefault();
-    this.insertMarkdownSource(markdown);
+    // ProseMirror's fallback plain-text parser splits on one-or-more line endings, which silently
+    // collapses intentional blank lines. Handle genuinely plain clipboard payloads ourselves; rich
+    // HTML still follows the native path so formatting from Docs, Word, Slack, etc. is retained.
+    if (plainText && !e.clipboardData?.getData("text/html") && this.editor) {
+      e.preventDefault();
+      this.insertPlainText(plainText);
+    }
   };
 
   private unwrapMarkdownFence(value: string): string | null {
@@ -1671,7 +1680,9 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
     const { state } = this.editor;
     const paragraph = state.schema.nodes["paragraph"];
     if (!paragraph) return;
-    const blocks = text.split(/(?:\r\n?|\n)+/).map((block) =>
+    // Split each line ending individually. Using `+` here turns every run into one boundary and
+    // loses the empty paragraphs between the surrounding lines before autosave can preserve them.
+    const blocks = text.split(/\r\n?|\n/).map((block) =>
       paragraph.create(null, block ? state.schema.text(block) : undefined),
     );
     const slice = Slice.maxOpen(Fragment.fromArray(blocks), true);

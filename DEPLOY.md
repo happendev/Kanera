@@ -597,7 +597,7 @@ staff, demo, seed, test, and load-test organisations.
 | `SMTP_FROM_EMAIL` | no | Default sender address. |
 | `SMTP_FROM_NAME` | no | Defaults to `Kanera`. |
 | `SMTP_IDENTITY_DOMAIN` | no | Domain used for SMTP EHLO and Message-ID headers. Defaults to `SMTP_FROM_EMAIL`'s domain; set this to your real sending domain, not `.local`. |
-| `INTERNAL_NOTIFICATION_EMAILS` | no | Comma-separated internal recipients for plain-text signup and invite-acceptance alerts. Requires env SMTP. |
+| `INTERNAL_NOTIFICATION_EMAILS` | no | Comma-separated internal recipients for plain-text signup, invite-acceptance, and positive paid-subscription invoice alerts. Requires env SMTP. |
 | `SUPPORT_SESSION_TTL_MINUTES` | no | Lifetime in minutes of a support-session token minted by the management portal (`POST /admin/orgs/:clientId/support-session`). Defaults to `60`. No refresh companion is issued. |
 | `S3_REGION` | no | Enables deployment-wide S3 storage when set with bucket and credentials. |
 | `S3_BUCKET` | no | S3 bucket for uploads. |
