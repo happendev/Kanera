@@ -155,6 +155,27 @@ describe("CardComposerDialogComponent", () => {
       expect(component.attachmentError()).toContain("1 file skipped");
     });
 
+    it("stages an image pasted inside the description without leaving a broken preview", async () => {
+      const component = await create();
+      const file = png();
+      const event = new Event("paste", { bubbles: true, cancelable: true }) as ClipboardEvent;
+      Object.defineProperty(event, "clipboardData", {
+        value: {
+          ...transfer([file]),
+          getData: vi.fn((type: string) => type === "text/html" ? '<img src="file:///temporary/shot.png">' : ""),
+        },
+      });
+      const editor = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".ProseMirror")!;
+
+      editor.dispatchEvent(event);
+      fixture.detectChanges();
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(component.pendingAttachments().map((item) => item.file.name)).toEqual(["shot.png"]);
+      expect(component.draft().description).not.toContain("shot.png");
+      expect(editor.querySelector("img")).toBeNull();
+    });
+
     it("ignores a paste carrying no files so text paste still reaches the editor", async () => {
       const component = await create();
       const event = pasteOf([]);

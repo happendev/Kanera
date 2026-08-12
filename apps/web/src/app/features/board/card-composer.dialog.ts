@@ -519,6 +519,11 @@ export class CardComposerDialogComponent implements OnInit {
     this.stageFiles(files);
   }
 
+  /** Receives file pastes intercepted by the editor before its rich-text engine can insert them. */
+  stagePastedAttachments(files: File[]): void {
+    this.stageFiles(files);
+  }
+
   private acceptsFileDrag(data: DataTransfer | null): boolean {
     if (this.busy() || !this.canEdit() || !data) return false;
     return Array.from(data.types ?? []).some((type) => type === "Files" || type === "application/x-moz-file")

@@ -1010,6 +1010,12 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   readonly save = output<EditorSaveEvent>();
   readonly cancel = output<void>();
   readonly contentChange = output<string>();
+  /**
+   * Hands file pastes back to a host that cannot upload them yet, such as the new-card composer.
+   * The editor must intercept these before ProseMirror inserts clipboard HTML with a transient or
+   * unusable image URL; the host can stage the original files and upload them once it has a target.
+   */
+  readonly filesForHost = output<File[]>();
 
   @ViewChild("host", { static: true }) hostRef!: ElementRef<HTMLDivElement>;
   @ViewChild("shell", { static: true }) shellRef!: ElementRef<HTMLDivElement>;
@@ -1622,8 +1628,16 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
       this.insertPlainText(plainText);
       return;
     }
-    // Markdown paste still works without an upload target; only the file branch is gated.
-    const files = this.allowAttachments() ? this.allowedClipboardFiles(e.clipboardData) : [];
+    const clipboardFiles = this.clipboardFiles(e.clipboardData);
+    if (!this.allowAttachments() && clipboardFiles.length > 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.filesForHost.emit(clipboardFiles);
+      return;
+    }
+
+    // Markdown paste still works without an upload target; only the upload branch is gated.
+    const files = clipboardFiles.filter((file) => this.uploader.isAllowedFile(file));
     if (files.length > 0) {
       e.preventDefault();
       for (const file of files) {
@@ -1708,18 +1722,13 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
       && lines[separatorIndex + 1]?.includes("|");
   }
 
-  private allowedClipboardFiles(data: DataTransfer | null): File[] {
+  private clipboardFiles(data: DataTransfer | null): File[] {
     if (!data) return [];
-
-    const files: File[] = [];
-    for (const item of Array.from(data.items ?? [])) {
-      if (item.kind !== "file") continue;
-      const file = item.getAsFile();
-      if (file && this.uploader.isAllowedFile(file)) files.push(file);
-    }
-
-    if (files.length > 0) return files;
-    return Array.from(data.files ?? []).filter((file) => this.uploader.isAllowedFile(file));
+    const fromItems = Array.from(data.items ?? [])
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null);
+    return fromItems.length > 0 ? fromItems : Array.from(data.files ?? []);
   }
 
   private readonly handleDragOver = (e: DragEvent) => {
