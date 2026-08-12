@@ -9,6 +9,7 @@ import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { cleanupStripeEvents, handleStripeEvent, setStripeClientForTests, syncStripeSeatQuantity } from "../../lib/billing.js";
 import { configureOpsAlertsForTests } from "../../lib/ops-alerts.js";
+import type { InternalSaleNotification } from "../../lib/internal-notification-emails.js";
 import { ANALYTICS_EVENT_VERSION, productAnalytics, type ServerAnalyticsEvent } from "../../lib/product-analytics.js";
 import { runSeatReconcileSweep } from "../../lib/seat-reconcile.js";
 import { buildIntegrationServer } from "../../test/integration.js";
@@ -645,10 +646,15 @@ void test("Stripe invoice paid captures one privacy-safe subscription payment ev
       billing_reason: "subscription_cycle",
     } as Stripe.Invoice;
     const paidEvent = event("invoice.paid", invoice, "evt_invoice_cycle_paid");
+    const saleNotifications: InternalSaleNotification[] = [];
 
     try {
-      await handleStripeEvent(paidEvent);
-      await handleStripeEvent(paidEvent);
+      const sendSale = async (notification: (typeof saleNotifications)[number]) => {
+        saleNotifications.push(notification);
+        return 1;
+      };
+      await handleStripeEvent(paidEvent, env, undefined, { sendSale });
+      await handleStripeEvent(paidEvent, env, undefined, { sendSale });
 
       const payments = captured.filter((item) => item.event === "subscription_payment_succeeded");
       assert.deepEqual(payments, [{
@@ -665,6 +671,16 @@ void test("Stripe invoice paid captures one privacy-safe subscription payment ev
           billing_reason: "subscription_cycle",
           event_version: ANALYTICS_EVENT_VERSION,
         },
+      }]);
+      assert.deepEqual(saleNotifications, [{
+        orgName: "stripe-payment-analytics@example.com",
+        clientId,
+        amountPaid: 14_500,
+        currency: "eur",
+        billingReason: "subscription_cycle",
+        billingInterval: "monthly",
+        seatCount: 5,
+        stripeInvoiceId: "in_cycle",
       }]);
       assert.equal(await db.$count(stripeEvents, eq(stripeEvents.id, "evt_invoice_cycle_paid")), 1);
     } finally {

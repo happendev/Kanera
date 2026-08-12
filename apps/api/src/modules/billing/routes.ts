@@ -202,7 +202,7 @@ export async function billingRoutes(app: FastifyInstance) {
     assertHostedBillingMode();
     const signature = req.headers["stripe-signature"];
     const event = constructStripeWebhookEvent(req.rawBody, Array.isArray(signature) ? signature[0] : signature);
-    await handleStripeEvent(event, env, app.mailer);
+    await handleStripeEvent(event, env, app.mailer, { log: req.log });
     return { received: true };
   });
 }

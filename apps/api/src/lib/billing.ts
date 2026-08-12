@@ -10,6 +10,7 @@ import { canAddPaidSeat, isPaidTier } from "./entitlements.js";
 import type { Mailer } from "./mailer.js";
 import { convertClientPlan } from "./plan-conversion.js";
 import { emitClientEntitlementsChanged } from "../realtime/emit.js";
+import { sendInternalSaleNotification } from "./internal-notification-emails.js";
 import {
   ANALYTICS_EVENT_VERSION,
   productAnalytics,
@@ -795,7 +796,12 @@ async function applySubscription(
   return client.id;
 }
 
-export async function handleStripeEvent(event: Stripe.Event, config: StripeEnv = env, mailer?: Mailer): Promise<void> {
+export async function handleStripeEvent(
+  event: Stripe.Event,
+  config: StripeEnv = env,
+  mailer?: Mailer,
+  internalNotifications: { sendSale?: typeof sendInternalSaleNotification; log?: FastifyBaseLogger } = {},
+): Promise<void> {
   const [claim] = await db
     .insert(stripeEvents)
     .values({ id: event.id, type: event.type })
@@ -883,6 +889,7 @@ export async function handleStripeEvent(event: Stripe.Event, config: StripeEnv =
           // webhook deliveries from double-counting it. No customer, invoice, or payment-method data leaves Kanera.
           if (clientId && invoice.amount_paid > 0) {
             const firstItem = (subscription as SubscriptionLike).items.data[0] ?? null;
+            const billingReason = analyticsPaymentReason(invoice.billing_reason);
             await productAnalytics.capture({
               event: "subscription_payment_succeeded",
               distinctId: `organization:${clientId}`,
@@ -894,10 +901,32 @@ export async function handleStripeEvent(event: Stripe.Event, config: StripeEnv =
                 seat_band: seatBand(firstItem?.quantity ?? 1),
                 revenue: invoice.amount_paid,
                 currency: invoice.currency.toUpperCase(),
-                billing_reason: analyticsPaymentReason(invoice.billing_reason),
+                billing_reason: billingReason,
                 event_version: ANALYTICS_EVENT_VERSION,
               },
             });
+            const [paidClient] = await db
+              .select({ name: clients.name })
+              .from(clients)
+              .where(eq(clients.id, clientId))
+              .limit(1);
+            try {
+              // Revenue alerts are intentionally tied to invoice.paid rather than Checkout completion:
+              // this covers new sales, renewals, and paid prorations without announcing unpaid sessions.
+              await (internalNotifications.sendSale ?? sendInternalSaleNotification)({
+                orgName: paidClient?.name ?? clientId,
+                clientId,
+                amountPaid: invoice.amount_paid,
+                currency: invoice.currency,
+                billingReason,
+                billingInterval: intervalForPrice(firstItem?.price.id, config),
+                seatCount: firstItem?.quantity ?? 1,
+                stripeInvoiceId: invoice.id,
+              }, { log: internalNotifications.log });
+            } catch (err) {
+              // An internal alert must not release the Stripe event claim and repeat revenue processing.
+              internalNotifications.log?.error({ err, eventId: event.id, clientId }, "failed to send internal sale notification");
+            }
           }
         }
         break;
