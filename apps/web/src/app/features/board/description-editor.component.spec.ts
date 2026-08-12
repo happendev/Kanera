@@ -55,6 +55,26 @@ describe("DescriptionEditorComponent", () => {
 
   const sources = ["description", "comment"] as const;
 
+  it("hands file pastes to a host when uploads are disabled without inserting clipboard HTML", () => {
+    const file = imageFile();
+    const pasted = vi.fn();
+    fixture.componentRef.setInput("allowAttachments", false);
+    fixture.componentInstance.filesForHost.subscribe(pasted);
+    fixture.detectChanges();
+    const event = pasteEvent({
+      items: [clipboardFileItem(file)],
+      files: [],
+      html: '<img src="file:///temporary/screenshot.png">',
+    });
+
+    editorDom().dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(pasted).toHaveBeenCalledWith([file]);
+    expect(uploadAndInsert).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.markdown()).not.toContain("screenshot.png");
+  });
+
   it("tracks edited content as unsaved until it is reset", () => {
     const unsavedWork = TestBed.inject(UnsavedWorkService);
 
