@@ -47,6 +47,14 @@ const personalOrganisationHeader = (): Schema => ({
   schema: { type: "string", format: "uuid" },
 });
 
+const idempotencyKeyHeader = (): Schema => ({
+  name: "Idempotency-Key",
+  in: "header",
+  required: false,
+  description: "Makes a JSON mutation safely retryable for 24 hours. Reuse only for the same method, URL, and request body.",
+  schema: { type: "string", minLength: 1, maxLength: 255, pattern: "^[\\x21-\\x7E]+$" },
+});
+
 const jsonBody = (schema: Schema, description?: string): Schema => ({
   required: true,
   description,
@@ -83,6 +91,7 @@ const errorResponses: Schema = {
   "403": { $ref: "#/components/responses/Forbidden" },
   "404": { $ref: "#/components/responses/NotFound" },
   "409": { $ref: "#/components/responses/Conflict" },
+  "429": { $ref: "#/components/responses/TooManyRequests" },
   "500": { $ref: "#/components/responses/Internal" },
 };
 
@@ -173,7 +182,14 @@ export const publicWebhookEventTypes = [
 
 function operation(input: Omit<Operation, "security"> & { public?: boolean }): Operation {
   const { public: isPublic, ...rest } = input;
-  return { ...rest, ...(isPublic ? {} : { security: bearerSecurity }) };
+  // Every operation needs a description for generated references and API catalogs to
+  // classify the schema as fully documented. Richer, operation-specific descriptions
+  // still override this concise baseline.
+  const description = rest.description?.trim() || `${rest.summary}.`;
+  // Fastify may produce additional transport-level 4xx responses (for example 413 or 415),
+  // and the shared error handler normalises those to the same typed envelope.
+  const responses = { default: { $ref: "#/components/responses/ApiError" }, ...rest.responses };
+  return { ...rest, description, responses, ...(isPublic ? {} : { security: bearerSecurity }) };
 }
 
 function pathItem(method: HttpMethod, op: Operation): Record<HttpMethod, Operation> {
@@ -271,6 +287,12 @@ curl "$KANERA_PUBLIC_API_URL/api/v1/cards/$CARD_ID" \\
 ## Pagination and Errors
 
 List endpoints that support pagination use \`limit\` and \`before\` query parameters. Errors return JSON with a stable \`code\`, a human-readable \`message\`, and optional validation \`issues\`.
+
+## Retries and Execution
+
+JSON mutation endpoints accept an optional \`Idempotency-Key\` header. Reusing the same key with the same method, URL, and body within 24 hours replays the original response and sets \`Idempotency-Replayed: true\`. Reusing a key for a different request, or while its original request is still running, returns \`409\`. Keys are scoped to the authenticated credential identity. Multipart attachment uploads do not support this header.
+
+Public API operations complete synchronously. Bounded bulk operations validate and commit atomically; Kanera does not currently expose long-running REST operations that require an asynchronous job resource or polling endpoint.
 
 ## Webhooks
 
@@ -377,11 +399,13 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       },
     },
     responses: {
+      ApiError: { description: "An error response not otherwise listed for the operation.", content: { "application/json": { schema: ref("Error") } } },
       BadRequest: { description: "Bad request or validation error.", content: { "application/json": { schema: ref("Error") } } },
       Unauthorized: { description: "Missing or invalid bearer token.", content: { "application/json": { schema: ref("Error") } } },
       Forbidden: { description: "Authenticated principal does not have access.", content: { "application/json": { schema: ref("Error") } } },
       NotFound: { description: "Resource not found.", content: { "application/json": { schema: ref("Error") } } },
       Conflict: { description: "Resource conflict.", content: { "application/json": { schema: ref("Error") } } },
+      TooManyRequests: { description: "Rate limit exceeded. Inspect the rate-limit response headers before retrying.", content: { "application/json": { schema: ref("Error") } } },
       Internal: { description: "Unexpected server error.", content: { "application/json": { schema: ref("Error") } } },
     },
     schemas: {
@@ -389,7 +413,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         type: "object",
         required: ["code", "message"],
         properties: {
-          code: { type: "string", examples: ["VALIDATION", "UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND", "CONFLICT", "INTERNAL"] },
+          code: { type: "string", examples: ["VALIDATION", "UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND", "CONFLICT", "RATE_LIMITED", "INTERNAL"] },
           message: { type: "string" },
           issues: { type: "array", items: { type: "object", additionalProperties: true } },
         },
@@ -1341,7 +1365,11 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       summary: "List webhook event types",
       description: "Returns the event type strings accepted in webhook endpoint `eventTypes`. Use this to populate an integration setup UI or validate a saved filter list. An empty webhook endpoint `eventTypes` configuration means all events.",
       operationId: "listWebhookEventTypes",
-      responses: { "200": ok(ref("WebhookEventTypesResponse")) },
+      responses: {
+        "200": ok(ref("WebhookEventTypesResponse")),
+        "429": { $ref: "#/components/responses/TooManyRequests" },
+        "500": { $ref: "#/components/responses/Internal" },
+      },
     })),
     "/api/media/{clientId}/{path}": pathItem("get", operation({
       public: true,
@@ -1822,7 +1850,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     "/boards/{boardId}/checklist-items/bulk/create": pathItem("post", operation({
       tags: ["Cards"],
       summary: "Create selected checklist items in bulk",
-      description: "Atomically creates up to 200 items across checklists and cards in one board. Results preserve request order. This operation is not idempotent.",
+      description: "Atomically creates up to 200 items across checklists and cards in one board. Results preserve request order. Supply an Idempotency-Key when retrying this otherwise non-idempotent create.",
       operationId: "bulkCreateChecklistItems",
       parameters: [idParam("boardId")],
       requestBody: jsonBody(ref("BulkCreateChecklistItemsBody")),
@@ -2034,7 +2062,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     "/boards/{boardId}/comments/bulk/create": pathItem("post", operation({
       tags: ["Comments"],
       summary: "Create selected comments in bulk",
-      description: "Atomically creates up to 200 text comments across cards in one board. Attachments are not accepted. Results preserve request order. This operation is not idempotent.",
+      description: "Atomically creates up to 200 text comments across cards in one board. Attachments are not accepted. Results preserve request order. Supply an Idempotency-Key when retrying this otherwise non-idempotent create.",
       operationId: "bulkCreateComments",
       parameters: [idParam("boardId")],
       requestBody: jsonBody(ref("BulkCreateCommentsBody")),
@@ -2045,6 +2073,16 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     "/boards/{id}/activity": pathItem("get", operation({ tags: ["Activity"], summary: "List recent board activity", description: "Returns a cursor-paginated board-wide feed of activity and comments.", operationId: "listBoardActivity", parameters: [idParam(), ...cursorPaginationParams], responses: authedResponses({ "200": ok(ref("CardFeedPage")) }) })),
   },
 };
+
+const mutationMethods = new Set<HttpMethod>(["post", "put", "patch", "delete"]);
+for (const pathItem of Object.values(publicOpenApiDocument.paths as Record<string, Record<string, Operation>>)) {
+  for (const [method, op] of Object.entries(pathItem)) {
+    if (!mutationMethods.has(method as HttpMethod)) continue;
+    const content = op.requestBody?.content as Record<string, unknown> | undefined;
+    if (content?.["multipart/form-data"]) continue;
+    op.parameters = [...(op.parameters ?? []), idempotencyKeyHeader()];
+  }
+}
 
 export function getPublicOpenApiDocument() {
   return publicOpenApiDocument;

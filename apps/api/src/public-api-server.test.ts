@@ -115,6 +115,13 @@ interface PublicOpenApiTestDocument {
   };
 }
 
+interface DocumentedOperation {
+  description?: string;
+  parameters?: Array<{ name?: string; $ref?: string }>;
+  requestBody?: { content?: Record<string, unknown> };
+  responses: Record<string, { $ref?: string }>;
+}
+
 async function buildPublicTestServer(rateLimit?: PublicApiRateLimitOptions) {
   const app = await buildPublicApiServer({
     enableWebhookDeliveryScheduler: false,
@@ -157,6 +164,32 @@ void test("public API docs expose Scalar docs, Swagger UI, and OpenAPI JSON", as
 
   const spec = specResponse.json<PublicOpenApiTestDocument>();
   assert.equal(spec.openapi, "3.0.3");
+  const httpMethods = new Set(["get", "post", "put", "patch", "delete"]);
+  const documentedOperations = Object.entries(spec.paths as unknown as Record<string, Record<string, DocumentedOperation>>).flatMap(([path, pathItem]) =>
+    Object.entries(pathItem)
+      .filter(([method]) => httpMethods.has(method))
+      .map(([method, operation]) => ({ path, method, operation })),
+  );
+  assert.ok(documentedOperations.length > 0);
+  for (const { path, method, operation } of documentedOperations) {
+    assert.ok(
+      typeof operation.description === "string"
+        && operation.description.trim().length > 0,
+      `${method.toUpperCase()} ${path} must have an OpenAPI description`,
+    );
+    assert.equal(operation.responses.default?.$ref, "#/components/responses/ApiError");
+    const isJsonMutation = ["post", "put", "patch", "delete"].includes(method)
+      && !operation.requestBody?.content?.["multipart/form-data"];
+    if (isJsonMutation) {
+      assert.ok(
+        operation.parameters?.some((parameter) => parameter.name === "Idempotency-Key"),
+        `${method.toUpperCase()} ${path} must document Idempotency-Key`,
+      );
+    }
+    if (path !== "/health") {
+      assert.equal(operation.responses["429"]?.$ref, "#/components/responses/TooManyRequests");
+    }
+  }
   assert.match(spec.info.description, /Quickstart/i);
   assert.match(spec.info.description, /Workspace Settings -> API/i);
   assert.match(spec.info.description, /Authorization: Bearer/i);
@@ -165,6 +198,8 @@ void test("public API docs expose Scalar docs, Swagger UI, and OpenAPI JSON", as
   assert.match(spec.info.description, /X-Kanera-Signature/i);
   assert.match(spec.info.description, /webhook-event-types/i);
   assert.match(spec.info.description, /retried up to 8 attempts/i);
+  assert.match(spec.info.description, /Idempotency-Key/i);
+  assert.match(spec.info.description, /complete synchronously/i);
   assert.equal(spec.components.securitySchemes.BearerAuth.scheme, "bearer");
   assert.ok(spec.paths["/webhook-event-types"].get);
   assert.match(spec.paths["/webhook-event-types"].get.description ?? "", /eventTypes/i);

@@ -14,6 +14,10 @@ export type AttachOptions = {
   // state still needs these handlers, but must not emit a raw leave that would invalidate the
   // parent page's room ref when the drawer closes.
   manageRoom?: boolean;
+  // Global Work hydrates a detail-only BoardState containing one card. Keep board/workspace
+  // vocabulary live, but ignore collection events for other cards instead of misreading the
+  // intentionally partial state as a desync and closing the open detail.
+  partialCardId?: string;
 };
 
 @Injectable()
@@ -23,6 +27,8 @@ export class BoardSocketBridge {
   attach(socket: AppSocket, boardId: string, options: AttachOptions = {}) {
     const state = this.state;
     const isCurrentWorkspace = (workspaceId: string) => state.board()?.workspaceId === workspaceId;
+    const acceptsCard = (cardId: string) => options.partialCardId === undefined || options.partialCardId === cardId;
+    const acceptsCollection = () => options.partialCardId === undefined;
     const requestResync = () => options.onDesync?.();
     const joinBoard = () => {
       socket.emit(CLIENT_EVENTS.BOARD_JOIN, boardId, (ok) => {
@@ -79,15 +85,17 @@ export class BoardSocketBridge {
         state.lists.update((ls) => ls.filter((l) => l.id !== listId));
       },
 
-      [SERVER_EVENTS.CARD_CREATED]: ({ boardId: eventBoardId, card }) => { if (eventBoardId === boardId) state.addCard(expandWireCard(card)); },
+      [SERVER_EVENTS.CARD_CREATED]: ({ boardId: eventBoardId, card }) => {
+        if (eventBoardId === boardId && acceptsCard(card.id)) state.addCard(expandWireCard(card));
+      },
       [SERVER_EVENTS.CARD_UPDATED]: ({ boardId: eventBoardId, card }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCard(card.id)) return;
         state.updateCard(expandWireCard(card));
         state.noteCardDetailRealtimeMutation(card.id);
         options.onWorkDoneChanged?.();
       },
       [SERVER_EVENTS.CARD_MOVED]: ({ boardId: eventBoardId, cardId, toListId, position }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         if (!state.hasCard(cardId) || !state.lists().some((list) => list.id === toListId)) {
           requestResync();
           return;
@@ -99,40 +107,43 @@ export class BoardSocketBridge {
       },
       [SERVER_EVENTS.CARD_REBALANCED]: ({ boardId: eventBoardId, positions }) => {
         if (eventBoardId !== boardId) return;
-        if (positions.some((p) => !state.hasCard(p.id))) {
+        const acceptedPositions = positions.filter((position) => acceptsCard(position.id));
+        if (acceptedPositions.length === 0) return;
+        if (acceptedPositions.some((p) => !state.hasCard(p.id))) {
           requestResync();
           return;
         }
-        state.rebalanceCards(positions);
+        state.rebalanceCards(acceptedPositions);
         // Rebalancing changes every listed card's detail-level position. Track each card separately
         // because detail requests and their stale-response guards are scoped per card.
-        for (const { id } of positions) state.noteCardDetailRealtimeMutation(id);
+        for (const { id } of acceptedPositions) state.noteCardDetailRealtimeMutation(id);
       },
       [SERVER_EVENTS.CARD_DELETED]: ({ boardId: eventBoardId, cardId }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         if (!state.hasCard(cardId)) {
           requestResync();
           return;
         }
         state.removeCard(cardId);
+        if (options.partialCardId === cardId) requestResync();
       },
-      [SERVER_EVENTS.CARD_VISIBILITY_GRANTED]: ({ boardId: eventBoardId }) => {
-        if (eventBoardId === boardId) requestResync();
+      [SERVER_EVENTS.CARD_VISIBILITY_GRANTED]: ({ boardId: eventBoardId, cardId }) => {
+        if (eventBoardId === boardId && acceptsCard(cardId)) requestResync();
       },
       [SERVER_EVENTS.CARD_VISIBILITY_REVOKED]: ({ boardId: eventBoardId, cardId }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         if (state.hasCard(cardId)) state.removeCard(cardId);
         // The page owns the open-detail route and closes it as part of its normal resync.
         requestResync();
       },
       [SERVER_EVENTS.SEPARATOR_CREATED]: ({ boardId: eventBoardId, separator }) => {
-        if (eventBoardId === boardId) state.addSeparator(separator);
+        if (eventBoardId === boardId && acceptsCollection()) state.addSeparator(separator);
       },
       [SERVER_EVENTS.SEPARATOR_UPDATED]: ({ boardId: eventBoardId, separator }) => {
-        if (eventBoardId === boardId) state.updateSeparator(separator);
+        if (eventBoardId === boardId && acceptsCollection()) state.updateSeparator(separator);
       },
       [SERVER_EVENTS.SEPARATOR_MOVED]: ({ boardId: eventBoardId, separatorId, toListId, position }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCollection()) return;
         if (!state.separatorsById().has(separatorId) || !state.lists().some((list) => list.id === toListId)) {
           requestResync();
           return;
@@ -140,7 +151,7 @@ export class BoardSocketBridge {
         state.moveSeparator(separatorId, toListId, position);
       },
       [SERVER_EVENTS.SEPARATOR_REBALANCED]: ({ boardId: eventBoardId, positions }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCollection()) return;
         if (positions.some((p) => !state.separatorsById().has(p.id))) {
           requestResync();
           return;
@@ -148,7 +159,7 @@ export class BoardSocketBridge {
         state.rebalanceSeparators(positions);
       },
       [SERVER_EVENTS.SEPARATOR_DELETED]: ({ boardId: eventBoardId, separatorId }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCollection()) return;
         if (!state.separatorsById().has(separatorId)) {
           requestResync();
           return;
@@ -156,7 +167,7 @@ export class BoardSocketBridge {
         state.removeSeparator(separatorId);
       },
       [SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_SET]: ({ boardId: eventBoardId, cardId, fieldId, valueText, valueNumber, valueCheckbox, valueDate, valueUrl, valueOptionIds, valueUserIds }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         if (!state.hasCard(cardId) || !state.customFields().some((field) => field.id === fieldId)) {
           requestResync();
           return;
@@ -177,7 +188,7 @@ export class BoardSocketBridge {
         state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_CLEARED]: ({ boardId: eventBoardId, cardId, fieldId }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         if (!state.hasCard(cardId)) {
           requestResync();
           return;
@@ -241,7 +252,7 @@ export class BoardSocketBridge {
         state.updateFieldOptions(fieldId, (options) => options.filter((o) => o.id !== optionId));
       },
       [SERVER_EVENTS.CARD_LABELS_SET]: ({ boardId: eventBoardId, cardId, labelIds }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         if (!state.hasCard(cardId) || labelIds.some((labelId) => !state.cardLabels().some((label) => label.id === labelId))) {
           requestResync();
           return;
@@ -253,7 +264,7 @@ export class BoardSocketBridge {
         state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_ASSIGNEES_SET]: ({ boardId: eventBoardId, cardId, assigneeIds }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         if (!state.hasCard(cardId) || assigneeIds.some((userId) => !state.assignableMembers().some((member) => member.userId === userId))) {
           requestResync();
           return;
@@ -264,7 +275,7 @@ export class BoardSocketBridge {
       // Comment events only carry card identity, so the board state keeps a local count
       // map and folds those deltas back into summary cards when needed.
       [SERVER_EVENTS.COMMENT_CREATED]: ({ boardId: eventBoardId, cardId, comment }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         if (!state.hasCard(cardId)) {
           requestResync();
           return;
@@ -277,7 +288,7 @@ export class BoardSocketBridge {
         });
       },
       [SERVER_EVENTS.COMMENT_DELETED]: ({ boardId: eventBoardId, cardId, commentId }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         if (!state.hasCard(cardId)) {
           requestResync();
           return;
@@ -296,7 +307,7 @@ export class BoardSocketBridge {
         });
       },
       [SERVER_EVENTS.CARD_ATTACHMENT_CREATED]: ({ boardId: eventBoardId, attachment }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCard(attachment.cardId)) return;
         if (!state.hasCard(attachment.cardId)) {
           requestResync();
           return;
@@ -312,7 +323,7 @@ export class BoardSocketBridge {
         state.noteCardDetailRealtimeMutation(attachment.cardId);
       },
       [SERVER_EVENTS.CARD_ATTACHMENT_DELETED]: ({ boardId: eventBoardId, cardId, attachmentId }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         if (!state.hasCard(cardId)) {
           requestResync();
           return;
@@ -323,7 +334,7 @@ export class BoardSocketBridge {
         state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_CREATED]: ({ boardId: eventBoardId, cardId, checklist }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         if (!state.hasCard(cardId)) {
           requestResync();
           return;
@@ -332,48 +343,48 @@ export class BoardSocketBridge {
         state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_UPDATED]: ({ boardId: eventBoardId, cardId, checklist }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         state.updateChecklist(cardId, checklist);
         state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_MOVED]: ({ boardId: eventBoardId, cardId, checklistId, position }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         state.moveChecklist(cardId, checklistId, position);
         state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_REBALANCED]: ({ boardId: eventBoardId, cardId, positions }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         for (const position of positions) state.moveChecklist(cardId, position.id, position.position);
         state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_DELETED]: ({ boardId: eventBoardId, cardId, checklistId }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         state.removeChecklist(cardId, checklistId);
         state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_ITEM_CREATED]: ({ boardId: eventBoardId, cardId, checklistId, checklistParentItemId, item }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         state.addChecklistItem(cardId, checklistId, item, checklistParentItemId);
         state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_ITEM_UPDATED]: ({ boardId: eventBoardId, cardId, checklistId, checklistParentItemId, item, prevCompletedAt }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         state.updateChecklistItem(cardId, checklistId, item, prevCompletedAt, checklistParentItemId);
         state.noteCardDetailRealtimeMutation(cardId);
         options.onWorkDoneChanged?.();
       },
       [SERVER_EVENTS.CARD_CHECKLIST_ITEM_MOVED]: ({ boardId: eventBoardId, cardId, itemId, fromChecklistId, toChecklistId, position }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         state.moveChecklistItem(cardId, itemId, fromChecklistId, toChecklistId, position);
         state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_ITEM_REBALANCED]: ({ boardId: eventBoardId, cardId, checklistId, positions }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         state.rebalanceChecklistItems(cardId, checklistId, positions);
         state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_ITEM_DELETED]: ({ boardId: eventBoardId, cardId, checklistId, checklistParentItemId, itemId, completedAt }) => {
-        if (eventBoardId !== boardId) return;
+        if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         state.removeChecklistItem(cardId, checklistId, itemId, completedAt, checklistParentItemId);
         state.noteCardDetailRealtimeMutation(cardId);
       },

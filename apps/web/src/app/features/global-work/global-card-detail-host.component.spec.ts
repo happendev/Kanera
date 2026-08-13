@@ -72,6 +72,7 @@ describe("GlobalCardDetailHostComponent", () => {
       lists: Array<{ id: string }>;
     }) => void>();
     const socket = { on: vi.fn(), off: vi.fn() };
+    const attach = vi.fn(() => vi.fn());
     const get = vi.fn(() => new Promise<never>(() => undefined));
 
     const cardsById = signal(new Map<string, WireCardSummary>([[
@@ -93,7 +94,7 @@ describe("GlobalCardDetailHostComponent", () => {
           template: "",
           providers: [
             { provide: BoardState, useValue: { hydrate, cardsById } },
-            { provide: BoardSocketBridge, useValue: { attach: vi.fn(() => vi.fn()) } },
+            { provide: BoardSocketBridge, useValue: { attach } },
           ],
         },
       })
@@ -110,6 +111,9 @@ describe("GlobalCardDetailHostComponent", () => {
     expect(provisional?.cards.map((candidate) => candidate.id)).toEqual([card.id]);
     expect(provisional?.lists.map((candidate) => candidate.id)).toEqual([card.listId]);
     expect(fixture.componentInstance.ready()).toBe(true);
+    expect(attach).toHaveBeenCalledWith(socket, card.boardId, expect.objectContaining({
+      partialCardId: card.id,
+    }));
 
     fixture.destroy();
   });

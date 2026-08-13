@@ -160,9 +160,10 @@ export class GlobalCardDetailHostComponent implements OnInit, OnDestroy {
     this.detachRealtime = this.socketBridge.attach(socket, this.card().boardId, {
       viewerUserId: this.auth.user()?.id ?? null,
       manageRoom: false,
+      partialCardId: this.card().id,
       onDesync: () => {
-        // The parent query owns the durable projection; closing on a detail-only desync lets that
-        // projection re-open a fresh source context without retaining stale native metadata.
+        // Unrelated board activity is filtered by partialCardId. A remaining desync therefore
+        // concerns this card or the viewer's access and must not leave stale controls mounted.
         this.closed.emit();
       },
     });
