@@ -913,6 +913,50 @@ describe("BoardState realtime regressions", () => {
     expect(state.cards().map((card) => card.id)).toEqual(["card-1"]);
   });
 
+  it("does not desync a detail-only state for assignment or mention activity on another card", () => {
+    const socket = new SocketStub();
+    socket.connected = false;
+    const onDesync = vi.fn();
+
+    bridge.attach(socket.asSocket(), "board-1", { onDesync, partialCardId: "card-1" });
+
+    socket.trigger(SERVER_EVENTS.CARD_ASSIGNEES_SET, {
+      boardId: "board-1",
+      cardId: "card-2",
+      assigneeIds: ["user-1"],
+    });
+    socket.trigger(SERVER_EVENTS.COMMENT_CREATED, {
+      boardId: "board-1",
+      cardId: "card-2",
+      comment: createComment({ id: "comment-2", cardId: "card-2" }),
+    });
+    // Assigned-items-only viewers also receive this before the notification when another card is
+    // assigned to them; it belongs to the parent collection, not the already-open detail.
+    socket.trigger(SERVER_EVENTS.CARD_VISIBILITY_GRANTED, {
+      boardId: "board-1",
+      cardId: "card-2",
+    });
+
+    expect(onDesync).not.toHaveBeenCalled();
+    expect(state.cards().map((card) => card.id)).toEqual(["card-1"]);
+    expect(state.commentCounts().size).toBe(0);
+  });
+
+  it("still desyncs a detail-only state when the open card is revoked", () => {
+    const socket = new SocketStub();
+    socket.connected = false;
+    const onDesync = vi.fn();
+
+    bridge.attach(socket.asSocket(), "board-1", { onDesync, partialCardId: "card-1" });
+    socket.trigger(SERVER_EVENTS.CARD_VISIBILITY_REVOKED, {
+      boardId: "board-1",
+      cardId: "card-1",
+    });
+
+    expect(onDesync).toHaveBeenCalledTimes(1);
+    expect(state.cards()).toEqual([]);
+  });
+
   it("applies card rebalance and delete socket events through board state", () => {
     const socket = new SocketStub();
     socket.connected = false;
