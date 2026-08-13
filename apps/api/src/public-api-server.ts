@@ -22,6 +22,7 @@ import { clientIpForRequest } from "./lib/client-ip.js";
 import { registerErrorHandler } from "./lib/errors.js";
 import mailerPlugin from "./lib/mailer-plugin.js";
 import { registerMetrics } from "./lib/metrics.js";
+import { registerPublicApiIdempotency } from "./lib/public-api-idempotency.js";
 import { withSignedMedia } from "./lib/media-keys.js";
 import { applyRateLimitHeaders, FixedWindowRateLimiter, type RateLimitPolicy } from "./lib/rate-limit.js";
 import { helmetSecurityOptionsWithoutCsp, registerApiContentSecurityPolicy, registerSecurityHeaderFallbacks } from "./lib/security-headers.js";
@@ -287,6 +288,9 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
       };
       if (await checkRateLimit(key, policy, reply)) return reply;
     });
+    // JSON mutations may opt into replay protection without changing the reused app route handlers.
+    // The hook runs after authentication so keys are isolated by the resolved credential identity.
+    registerPublicApiIdempotency(api);
 
     api.get("/session", async (req) => {
       const [organisation] = await db.select({ name: clients.name, logoUrl: clients.logoUrl }).from(clients).where(eq(clients.id, req.auth.cid)).limit(1);
