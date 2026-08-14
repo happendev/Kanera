@@ -1,8 +1,9 @@
+import { dto } from "@kanera/shared";
 import type { AdminDemoResetResponse, AdminDemoStatus } from "@kanera/shared/dto";
 import { adminAuditLogs, clients, oauthGrants, users, workspaceApiKeys, workspaces } from "@kanera/shared/schema";
 import { eq, inArray } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { db, pool } from "../db.js";
 import { conflict, forbidden } from "../lib/errors.js";
 import {
@@ -118,7 +119,7 @@ async function withDemoResetLock<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
-async function resetDemo(req: FastifyRequest): Promise<AdminDemoResetResponse> {
+async function resetDemo(req: FastifyRequest, password: string): Promise<AdminDemoResetResponse> {
   return withDemoResetLock(async () => {
     const operationId = randomUUID();
     const existingClients = await findDemoClients();
@@ -168,7 +169,6 @@ async function resetDemo(req: FastifyRequest): Promise<AdminDemoResetResponse> {
     // first purge began. Database ownership has now been removed, so no new demo write can commit.
     await Promise.all([...storageByClient.values()].map((storage) => storage.deleteAll()));
 
-    const password = randomBytes(24).toString("base64url");
     const seeded = await seedDatabase({
       requireBlankDatabase: false,
       password,
@@ -214,6 +214,7 @@ export async function adminDemoRoutes(app: FastifyInstance) {
 
   app.post("/demo/reset", async (req) => {
     requireSuperadmin(req);
-    return resetDemo(req);
+    const body = dto.adminDemoResetBody.parse(req.body);
+    return resetDemo(req, body.password);
   });
 }
