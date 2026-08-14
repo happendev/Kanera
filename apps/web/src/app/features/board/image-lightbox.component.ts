@@ -14,6 +14,9 @@ import { DomSanitizer } from "@angular/platform-browser";
 import { MediaDownloadService } from "../../core/media/media-download.service";
 import type { AttachmentPreviewType } from "../../shared/attachment-preview";
 import { TooltipDirective } from "../../shared/tooltip.directive";
+import { DescriptionViewerComponent } from "./description-viewer.component";
+
+const MARKDOWN_PREVIEW_MAX_BYTES = 2 * 1024 * 1024;
 
 export type ImageLightboxItem = {
   src: string;
@@ -31,7 +34,7 @@ export type ImageLightboxData = ImageLightboxItem & {
 @Component({
   selector: "k-image-lightbox",
   standalone: true,
-  imports: [TooltipDirective],
+  imports: [DescriptionViewerComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="lb-shell" (click)="close()">
@@ -93,6 +96,22 @@ export type ImageLightboxData = ImageLightboxItem & {
             }
           </div>
           }
+        } @else if (isMarkdown()) {
+          <article class="lb-markdown" (click)="$event.stopPropagation()">
+            @if (markdown(); as value) {
+            <k-description-viewer [value]="value" emptyLabel="This Markdown file is empty." emptyIcon="markdown" [showCopy]="true" />
+            } @else {
+            <div class="lb-file-card lb-markdown-state">
+              <i class="ti ti-markdown lb-file-icon"></i>
+              <span class="lb-file-card-name">{{ activeImage().fileName || 'Markdown attachment' }}</span>
+              @if (markdownLoading()) {
+              <span class="lb-file-hint">Rendering preview…</span>
+              } @else {
+              <span class="lb-file-hint">{{ markdownError() || 'This Markdown file is empty.' }}</span>
+              }
+            </div>
+            }
+          </article>
         } @else {
         <img
           class="lb-img"
@@ -363,6 +382,38 @@ export type ImageLightboxData = ImageLightboxItem & {
       box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
     }
 
+    .lb-markdown {
+      width: min(960px, calc(100vw - 48px));
+      height: calc(100vh - 150px);
+      padding: clamp(24px, 5vw, 64px);
+      box-sizing: border-box;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+      box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+      color: var(--text);
+      cursor: default;
+    }
+
+    .lb-markdown-state {
+      width: 100%;
+      min-height: 100%;
+      padding: 24px;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+      color: var(--text);
+    }
+
+    .lb-markdown-state .lb-file-icon {
+      color: var(--text-muted);
+    }
+
+    .lb-markdown-state .lb-file-hint {
+      color: var(--text-muted);
+    }
+
     .lb-footer {
       position: absolute;
       bottom: 0;
@@ -414,6 +465,7 @@ export class ImageLightboxComponent implements OnDestroy {
   private readonly mediaDownloads = inject(MediaDownloadService);
   private pdfObjectUrl: string | null = null;
   private pdfAbortController: AbortController | null = null;
+  private markdownAbortController: AbortController | null = null;
   readonly data = inject(DIALOG_DATA) as ImageLightboxData;
   readonly images = this.resolveImages(this.data);
 
@@ -429,8 +481,12 @@ export class ImageLightboxComponent implements OnDestroy {
   readonly isVideo = computed(() => this.activeImage().mediaType === "video");
   readonly isAudio = computed(() => this.activeImage().mediaType === "audio");
   readonly isPdf = computed(() => this.activeImage().mediaType === "pdf");
+  readonly isMarkdown = computed(() => this.activeImage().mediaType === "markdown");
   readonly pdfSrc = signal<SafeResourceUrl | null>(null);
   readonly pdfLoading = signal(false);
+  readonly markdown = signal<string | null>(null);
+  readonly markdownLoading = signal(false);
+  readonly markdownError = signal<string | null>(null);
   readonly positionLabel = computed(() => `${this.currentIndex() + 1} / ${this.images.length}`);
   readonly zoomLabel = computed(() => Math.round(this.scale() * 100) + "%");
 
@@ -438,16 +494,22 @@ export class ImageLightboxComponent implements OnDestroy {
     effect(() => {
       const image = this.activeImage();
       this.resetPdfPreview();
-      if (!this.isPdf()) return;
-
-      const controller = new AbortController();
-      this.pdfAbortController = controller;
-      void this.loadPdfPreview(image.src, controller);
+      this.resetMarkdownPreview();
+      if (this.isPdf()) {
+        const controller = new AbortController();
+        this.pdfAbortController = controller;
+        void this.loadPdfPreview(image.src, controller);
+      } else if (this.isMarkdown()) {
+        const controller = new AbortController();
+        this.markdownAbortController = controller;
+        void this.loadMarkdownPreview(image.src, controller);
+      }
     });
   }
 
   ngOnDestroy() {
     this.resetPdfPreview();
+    this.resetMarkdownPreview();
   }
 
   zoomIn() {
@@ -511,6 +573,37 @@ export class ImageLightboxComponent implements OnDestroy {
     this.pdfObjectUrl = null;
     this.pdfSrc.set(null);
     this.pdfLoading.set(false);
+  }
+
+  private async loadMarkdownPreview(src: string, controller: AbortController) {
+    this.markdownLoading.set(true);
+    try {
+      const response = await fetch(src, { signal: controller.signal });
+      if (!response.ok) throw new Error(`Markdown preview failed with status ${response.status}`);
+      const source = await response.blob();
+      if (source.size > MARKDOWN_PREVIEW_MAX_BYTES) {
+        throw new Error("This Markdown file is too large to preview. Download it to view the full file.");
+      }
+      const value = await source.text();
+      if (controller.signal.aborted || this.markdownAbortController !== controller) return;
+      this.markdown.set(value);
+    } catch (error) {
+      if (controller.signal.aborted || this.markdownAbortController !== controller) return;
+      this.markdown.set(null);
+      this.markdownError.set(error instanceof Error && error.message.startsWith("This Markdown file")
+        ? error.message
+        : "Preview unavailable. Download the Markdown file to view it.");
+    } finally {
+      if (this.markdownAbortController === controller) this.markdownLoading.set(false);
+    }
+  }
+
+  private resetMarkdownPreview(): void {
+    this.markdownAbortController?.abort();
+    this.markdownAbortController = null;
+    this.markdown.set(null);
+    this.markdownLoading.set(false);
+    this.markdownError.set(null);
   }
 
   private resolveImages(data: ImageLightboxData): ImageLightboxItem[] {

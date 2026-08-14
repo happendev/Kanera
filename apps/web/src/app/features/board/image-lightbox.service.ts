@@ -41,6 +41,7 @@ export class ImageLightboxService {
     if (mediaType === "video") return "Video";
     if (mediaType === "audio") return "Audio";
     if (mediaType === "pdf") return "PDF";
+    if (mediaType === "markdown") return "Markdown";
     return "Image";
   }
 }

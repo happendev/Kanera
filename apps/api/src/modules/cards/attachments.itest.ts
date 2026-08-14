@@ -74,6 +74,12 @@ function textForm(fileName: string, body: string) {
   return form;
 }
 
+function markdownForm(fileName: string, body: string) {
+  const form = new FormData();
+  form.append("file", new Blob([body], { type: "text/markdown" }), fileName);
+  return form;
+}
+
 async function pngForm(fileName: string, width: number, height: number) {
   const buffer = await sharp({
     create: { width, height, channels: 3, background: { r: 20, g: 120, b: 180 } },
@@ -125,6 +131,27 @@ void test("rapid attachment add/remove activity collapses out of the card feed",
   assert.equal(rows[0]!.action, "attachment_removed");
   assert.equal(rows[0]!.feedVisible, false);
   assert.equal(rows[0]!.coalescedCount, 2);
+});
+
+void test("Markdown files can be uploaded and served as card attachments", async () => {
+  const { app, accessToken, card } = await setupCard();
+  const body = "# Agent plan\n\n- Inspect inputs\n- Ship output";
+
+  const upload = await app.inject({
+    method: "POST",
+    url: `/cards/${card.id}/attachments`,
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: markdownForm("plan.md", body),
+  });
+
+  assert.equal(upload.statusCode, 201, upload.body);
+  const attachment = upload.json<{ fileName: string; mimeType: string; url: string }>();
+  assert.equal(attachment.fileName, "plan.md");
+  assert.equal(attachment.mimeType, "text/markdown");
+
+  const media = await app.inject({ method: "GET", url: mediaPath(attachment.url) });
+  assert.equal(media.statusCode, 200);
+  assert.equal(media.body, body);
 });
 
 void test("new image covers expose derivative metadata in internal attachment and board summaries", async () => {

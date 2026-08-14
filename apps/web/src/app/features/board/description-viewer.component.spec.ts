@@ -610,7 +610,7 @@ describe("DescriptionViewerComponent mentions", () => {
     const { el, fixture } = await render(`[Walkthrough.mp4](${href})`);
     fixture.componentRef.setInput("handleAttachmentLinks", true);
     fixture.detectChanges();
-    const emitted: Array<{ src: string; fileName: string; mediaType: "image" | "video" | "audio" | "pdf"; mimeType: string }> = [];
+    const emitted: Array<{ src: string; fileName: string; mediaType: "image" | "video" | "audio" | "pdf" | "markdown"; mimeType: string }> = [];
     fixture.componentInstance.attachmentClick.subscribe((attachment) => emitted.push(attachment));
     vi.stubGlobal("fetch", vi.fn());
 
