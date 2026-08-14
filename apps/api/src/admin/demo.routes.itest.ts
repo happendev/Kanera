@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { adminAuditLogs, cardAttachments, clients, oauthClients, oauthGrants, users, workspaceApiKeys } from "@kanera/shared/schema";
+import { adminAuditLogs, cardAttachments, cards, clients, oauthClients, oauthGrants, users, workspaceApiKeys } from "@kanera/shared/schema";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { verifyPassword } from "../auth/password.js";
 import { db } from "../db.js";
@@ -40,7 +40,16 @@ void test("demo reset creates paid seed data with images and hard-purges the pre
     .values({ name: "Keep Me", storageConfig: { kind: "local" } })
     .returning({ id: clients.id });
 
-  const first = await app.inject({ method: "POST", url: "/admin/demo/reset", headers });
+  const invalid = await app.inject({
+    method: "POST",
+    url: "/admin/demo/reset",
+    headers,
+    payload: { password: "short" },
+  });
+  assert.equal(invalid.statusCode, 400);
+
+  const demoPassword = "stable-marketing-demo-password";
+  const first = await app.inject({ method: "POST", url: "/admin/demo/reset", headers, payload: { password: demoPassword } });
   assert.equal(first.statusCode, 200, first.body);
   const firstBody = first.json<{
     primaryEmail: string;
@@ -50,8 +59,7 @@ void test("demo reset creates paid seed data with images and hard-purges the pre
     summary: { attachments: number; cardCovers: number };
   }>();
   assert.equal(firstBody.primaryEmail, "amelia@kanera.test");
-  assert.equal(firstBody.password.length, 32);
-  assert.notEqual(firstBody.password, "Abc12345");
+  assert.equal(firstBody.password, demoPassword);
   assert.equal(firstBody.loginEmails.length, 11);
   assert.equal(firstBody.clientIds.length, 2);
   assert.ok(firstBody.summary.attachments > 0);
@@ -71,6 +79,23 @@ void test("demo reset creates paid seed data with images and hard-purges the pre
       eq(clients.billingStatus, "active"),
     ));
   assert.equal(demoClients.length, 2);
+
+  const seededDueDates = await db
+    .select({ dueDate: cards.dueDateLocalDate })
+    .from(cards)
+    .where(isNotNull(cards.dueDateLocalDate));
+  const today = new Date();
+  const todayKey = today.toISOString().slice(0, 10);
+  const futureCutoff = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + 45))
+    .toISOString()
+    .slice(0, 10);
+  const upcomingDueDates = seededDueDates.flatMap(({ dueDate }) => dueDate !== null && dueDate >= todayKey ? [dueDate] : []);
+  assert.ok(upcomingDueDates.length > 0);
+  assert.ok(upcomingDueDates.every((dueDate) => dueDate <= futureCutoff));
+  assert.ok(upcomingDueDates.includes(todayKey), "upcoming dates begin on the seed date");
+  assert.ok(upcomingDueDates.includes(futureCutoff), "upcoming dates reach 45 days after the seed date");
+  assert.ok(new Set(upcomingDueDates).size >= 10, "upcoming dates are spread across the 45-day window");
+  assert.ok(seededDueDates.some(({ dueDate }) => dueDate !== null && dueDate < todayKey), "intentional overdue examples remain");
 
   const [owner] = await db
     .select({ id: users.id, passwordHash: users.passwordHash, clientId: users.clientId, avatarUrl: users.avatarUrl })
@@ -150,10 +175,10 @@ void test("demo reset creates paid seed data with images and hard-purges the pre
     resource: "https://api.kanera.test",
   }).returning({ id: oauthGrants.id });
 
-  const second = await app.inject({ method: "POST", url: "/admin/demo/reset", headers });
+  const second = await app.inject({ method: "POST", url: "/admin/demo/reset", headers, payload: { password: demoPassword } });
   assert.equal(second.statusCode, 200, second.body);
   const secondBody = second.json<{ password: string; clientIds: string[] }>();
-  assert.notEqual(secondBody.password, firstBody.password);
+  assert.equal(secondBody.password, firstBody.password);
   assert.ok(secondBody.clientIds.every((id) => !oldClientIds.includes(id)));
 
   assert.equal(
@@ -175,7 +200,7 @@ void test("demo reset creates paid seed data with images and hard-purges the pre
     .limit(1);
   assert.ok(newOwner);
   assert.equal(await verifyPassword(newOwner.passwordHash, secondBody.password), true);
-  assert.equal(await verifyPassword(newOwner.passwordHash, firstBody.password), false);
+  assert.equal(await verifyPassword(newOwner.passwordHash, firstBody.password), true);
   assert.equal(await db.$count(adminAuditLogs, eq(adminAuditLogs.action, "demo.reset.started")), 2);
   assert.equal(await db.$count(adminAuditLogs, eq(adminAuditLogs.action, "demo.reset")), 2);
 });

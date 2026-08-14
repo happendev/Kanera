@@ -249,6 +249,10 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
                         <button type="button" class="ne-attach-thumb is-doc is-pdf" (click)="openAttachmentPdf(a.id, $event)" [kTooltip]="'Preview ' + a.fileName" [attr.aria-label]="'Preview PDF ' + a.fileName">
                           <i class="ti ti-file-type-pdf"></i>
                         </button>
+                      } @else if (isMarkdownAttachment(a.mimeType, a.fileName)) {
+                        <button type="button" class="ne-attach-thumb is-doc" (click)="openAttachmentMarkdown(a.id, $event)" [kTooltip]="'Preview ' + a.fileName" [attr.aria-label]="'Preview Markdown ' + a.fileName">
+                          <i class="ti ti-markdown"></i>
+                        </button>
                       } @else {
                         <a class="ne-attach-thumb is-doc" [href]="a.url" (click)="downloadAttachment(a.url, a.fileName); $event.preventDefault()" [kTooltip]="a.fileName">
                           <i class="ti {{ attachmentIconClass(a.mimeType, a.fileName) }}"></i>
@@ -264,6 +268,8 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
                             <a class="ne-attach-name" [href]="a.url" (click)="openAttachmentAudio(a.id, $event)">{{ a.fileName }}</a>
                           } @else if (isPdfMime(a.mimeType)) {
                             <a class="ne-attach-name" [href]="a.url" (click)="openAttachmentPdf(a.id, $event)">{{ a.fileName }}</a>
+                          } @else if (isMarkdownAttachment(a.mimeType, a.fileName)) {
+                            <a class="ne-attach-name" [href]="a.url" (click)="openAttachmentMarkdown(a.id, $event)">{{ a.fileName }}</a>
                           } @else {
                             <a class="ne-attach-name" [href]="a.url" (click)="downloadAttachment(a.url, a.fileName); $event.preventDefault()">{{ a.fileName }}</a>
                           }
@@ -346,7 +352,7 @@ export class NoteEditorComponent implements OnDestroy {
   // Match card detail: the gallery contains every renderable attachment, preserving list order.
   readonly lightboxAttachments = computed(() => this.attachments()
     .flatMap((attachment) => {
-      const mediaType = attachmentPreviewType(attachment.mimeType);
+      const mediaType = attachmentPreviewType(attachment.mimeType, attachment.fileName);
       const src = visibleSignedMediaUrl(attachment.url);
       return src && mediaType ? [{
         id: attachment.id,
@@ -1044,6 +1050,10 @@ export class NoteEditorComponent implements OnDestroy {
     return this.openAttachmentPreview(attachmentId, "pdf", event);
   }
 
+  openAttachmentMarkdown(attachmentId: string, event?: Event): boolean {
+    return this.openAttachmentPreview(attachmentId, "markdown", event);
+  }
+
   private openAttachmentPreview(attachmentId: string, mediaType: AttachmentPreviewType, event?: Event): boolean {
     const attachments = this.lightboxAttachments();
     const initialIndex = attachments.findIndex((attachment) => attachment.id === attachmentId);
@@ -1088,6 +1098,10 @@ export class NoteEditorComponent implements OnDestroy {
 
   isPdfMime(mime: string): boolean {
     return attachmentPreviewType(mime) === "pdf";
+  }
+
+  isMarkdownAttachment(mime: string, fileName: string): boolean {
+    return attachmentPreviewType(mime, fileName) === "markdown";
   }
 
   // Suppress an attachment image / lock avatar whose signed token has expired

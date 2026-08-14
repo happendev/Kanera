@@ -3675,6 +3675,20 @@ function addDays(value: Date, days: number): Date {
   return new Date(value.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
+const AUTHORED_UPCOMING_DUE_OFFSET_MAX_DAYS = 18;
+const SEED_UPCOMING_DUE_WINDOW_DAYS = 45;
+
+function seedDueDate(baseDate: Date, dueOffsetDays: number): Date {
+  if (dueOffsetDays < 0) return addDays(baseDate, dueOffsetDays);
+
+  // The authored offsets express relative urgency. Stretch that 0–18 day scale across the full
+  // demo window so seeded work is due from reset day through day 45 instead of bunching in week one.
+  const distributedOffset = Math.round(
+    dueOffsetDays / AUTHORED_UPCOMING_DUE_OFFSET_MAX_DAYS * SEED_UPCOMING_DUE_WINDOW_DAYS,
+  );
+  return addDays(baseDate, distributedOffset);
+}
+
 function addHours(value: Date, hours: number): Date {
   const approximateTime = value.getTime() + hours * 60 * 60 * 1000;
   const salt = Math.abs(Math.trunc(value.getTime() / 60_000) + Math.round(hours * 100));
@@ -4365,7 +4379,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             title: cardSeed.title,
             description: cardSeed.description,
             position: positionForIndex(nextListCount),
-            dueDateLocalDate: formatLocalDate(addDays(baseDate, cardSeed.dueOffsetDays)),
+            dueDateLocalDate: formatLocalDate(seedDueDate(baseDate, cardSeed.dueOffsetDays)),
             dueDateSlot: cardSeed.dueDateSlot,
             dueDateTimezone: GUEST_USER_SEED.timezone,
             createdById: guestUser!.id,
@@ -4601,7 +4615,9 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
           title: cardSeed.title,
           description: cardSeed.description,
           position: positionForIndex(listPosition),
-          dueDateLocalDate: cardSeed.dueOffsetDays === undefined ? null : formatLocalDate(addDays(baseDate, cardSeed.dueOffsetDays)),
+          dueDateLocalDate: cardSeed.dueOffsetDays === undefined
+            ? null
+            : formatLocalDate(seedDueDate(baseDate, cardSeed.dueOffsetDays)),
           dueDateSlot: cardSeed.dueDateSlot ?? null,
           dueDateTimezone: cardSeed.dueOffsetDays === undefined ? null : userTimezoneByKey.get("amelia")!,
           createdById: userIdByKey.get("amelia")!,
@@ -4641,7 +4657,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
           summary.checklists += 1;
           await tx.insert(cardChecklistItems).values(seededItems.map((item, itemIndex) => {
             const itemCompletedAt = item.completedBy ? addHours(cardCreatedAt, item.completedOffsetHours ?? itemIndex + 2) : null;
-            return { checklistId: checklist!.id, text: item.text, position: positionForIndex(itemIndex), assigneeId: item.assignee ? userIdByKey.get(item.assignee)! : null, dueDateLocalDate: item.dueOffsetDays === undefined ? null : formatLocalDate(addDays(baseDate, item.dueOffsetDays)), dueDateSlot: item.dueDateSlot ?? null, dueDateTimezone: item.dueOffsetDays === undefined ? null : userTimezoneByKey.get("amelia")!, completedAt: itemCompletedAt, completedById: item.completedBy ? userIdByKey.get(item.completedBy)! : null, createdAt: checklistCreatedAt, updatedAt: itemCompletedAt ?? checklistCreatedAt };
+            return { checklistId: checklist!.id, text: item.text, position: positionForIndex(itemIndex), assigneeId: item.assignee ? userIdByKey.get(item.assignee)! : null, dueDateLocalDate: item.dueOffsetDays === undefined ? null : formatLocalDate(seedDueDate(baseDate, item.dueOffsetDays)), dueDateSlot: item.dueDateSlot ?? null, dueDateTimezone: item.dueOffsetDays === undefined ? null : userTimezoneByKey.get("amelia")!, completedAt: itemCompletedAt, completedById: item.completedBy ? userIdByKey.get(item.completedBy)! : null, createdAt: checklistCreatedAt, updatedAt: itemCompletedAt ?? checklistCreatedAt };
           }));
           summary.checklistItems += checklistSeed.items.length;
         }
@@ -4897,7 +4913,9 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
                 description: cardSeed.description,
                 position: positionForIndex(nextListCount),
                 dueDateLocalDate:
-                  cardSeed.dueOffsetDays === undefined ? null : formatLocalDate(addDays(baseDate, cardSeed.dueOffsetDays)),
+                  cardSeed.dueOffsetDays === undefined
+                    ? null
+                    : formatLocalDate(seedDueDate(baseDate, cardSeed.dueOffsetDays)),
                 dueDateSlot: cardSeed.dueDateSlot ?? null,
                 dueDateTimezone: cardSeed.dueOffsetDays === undefined ? null : (userTimezoneByKey.get(cardSeed.createdBy) ?? "UTC"),
                 createdById: userIdByKey.get(cardSeed.createdBy)!,
@@ -5171,7 +5189,9 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
                       position: positionForIndex(itemIndex),
                       assigneeId: itemSeed.assignee === undefined ? null : userIdByKey.get(itemSeed.assignee)!,
                       dueDateLocalDate:
-                        itemSeed.dueOffsetDays === undefined ? null : formatLocalDate(addDays(baseDate, itemSeed.dueOffsetDays)),
+                        itemSeed.dueOffsetDays === undefined
+                          ? null
+                          : formatLocalDate(seedDueDate(baseDate, itemSeed.dueOffsetDays)),
                       dueDateSlot: itemSeed.dueDateSlot ?? null,
                       dueDateTimezone:
                         itemSeed.dueOffsetDays === undefined

@@ -741,7 +741,7 @@ export class CardActivityComponent {
         markdown: `![${this.markdownAltText(fileName)}](${src})`,
       };
     }
-    const previewType = attachmentPreviewType(mimeType);
+    const previewType = attachmentPreviewType(mimeType, fileName);
     return {
       kind: "file",
       fileName,

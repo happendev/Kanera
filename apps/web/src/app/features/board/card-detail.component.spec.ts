@@ -4024,6 +4024,48 @@ describe("CardDetailComponent realtime regressions", () => {
     }, expect.any(Event));
   });
 
+  it("opens Markdown attachments as rendered lightbox previews", async () => {
+    const fixture = TestBed.createComponent(CardDetailComponent);
+    const markdown = createAttachment({
+      id: "attachment-markdown",
+      fileName: "agent-plan.md",
+      mimeType: "text/plain",
+      url: "https://example.com/agent-plan.md",
+      thumbnailUrl: null,
+    });
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.componentRef.setInput("attachments", [markdown]);
+    fixture.detectChanges();
+    await settleDetail(fixture);
+
+    const previewButton = (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>(".attach-thumb.is-markdown");
+    previewButton?.click();
+
+    expect(imageLightbox.open).toHaveBeenCalledWith({
+      src: markdown.url,
+      fileName: markdown.fileName,
+      createdAt: markdown.createdAt,
+      mediaType: "markdown",
+      mimeType: "text/plain",
+      images: [{
+        src: markdown.url,
+        fileName: markdown.fileName,
+        createdAt: markdown.createdAt,
+        mediaType: "markdown",
+        mimeType: "text/plain",
+      }],
+      initialIndex: 0,
+    }, expect.any(Event));
+  });
+
   it("opens PDFs linked in the card description in the same lightbox", async () => {
     const pdfUrl = "/api/media/client-1/cards/card-1/project-brief.pdf?t=token&e=9999999999999";
     const card = createCard();

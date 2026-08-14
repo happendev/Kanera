@@ -23,6 +23,8 @@ export const ALLOWED_ATTACHMENT_MIME = {
   "application/vnd.ms-excel": "xls",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
   "text/csv": "csv",
+  "text/markdown": "md",
+  "text/x-markdown": "md",
   "application/json": "json",
   "message/rfc822": "eml",
   "text/plain": "txt",

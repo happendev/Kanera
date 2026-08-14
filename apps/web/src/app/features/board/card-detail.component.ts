@@ -292,7 +292,7 @@ export class CardDetailComponent {
   // images, playback media, and documents without exposing download-only files in the sequence.
   readonly lightboxAttachments = computed(() => this.attachments()
     .flatMap((attachment) => {
-      const mediaType = attachmentPreviewType(attachment.mimeType);
+      const mediaType = attachmentPreviewType(attachment.mimeType, attachment.fileName);
       const src = visibleSignedMediaUrl(attachment.url);
       return src && mediaType ? [{
         id: attachment.id,
@@ -313,7 +313,8 @@ export class CardDetailComponent {
       isImage: this.isImageMime(attachment.mimeType),
       isVideo: this.isVideoMime(attachment.mimeType),
       isAudio: this.isAudioMime(attachment.mimeType),
-      isPdf: attachmentPreviewType(attachment.mimeType) === "pdf",
+      isPdf: attachmentPreviewType(attachment.mimeType, attachment.fileName) === "pdf",
+      isMarkdown: attachmentPreviewType(attachment.mimeType, attachment.fileName) === "markdown",
       thumbnailUrl: this.attachmentThumbUrl(attachment),
       iconClass: attachmentIconClass(attachment.mimeType, attachment.fileName),
       subtitle: `${attachment.uploadedByName} • ${this.formatFeedTime(attachment.createdAt)} • ${this.formatBytes(attachment.byteSize)}`,
@@ -386,6 +387,10 @@ export class CardDetailComponent {
     return this.openAttachmentPreview(attachmentId, "pdf", event);
   }
 
+  openAttachmentMarkdown(attachmentId: string, event?: Event): boolean {
+    return this.openAttachmentPreview(attachmentId, "markdown", event);
+  }
+
   private openAttachmentPreview(attachmentId: string, mediaType: AttachmentPreviewType, event?: Event): boolean {
     const attachments = this.lightboxAttachments();
     const initialIndex = attachments.findIndex((attachment) => attachment.id === attachmentId);
@@ -415,7 +420,8 @@ export class CardDetailComponent {
     return this.openAttachmentImage(attachmentId, event)
       || this.openAttachmentVideo(attachmentId, event)
       || this.openAttachmentAudio(attachmentId, event)
-      || this.openAttachmentPdf(attachmentId, event);
+      || this.openAttachmentPdf(attachmentId, event)
+      || this.openAttachmentMarkdown(attachmentId, event);
   }
 
   readonly currentUserId = computed(() => this.auth.user()?.id);

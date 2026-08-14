@@ -232,6 +232,11 @@ export interface AdminDemoStatus {
   }>;
 }
 
+export const adminDemoResetBody = z.object({
+  password: z.string().min(8).max(200),
+});
+export type AdminDemoResetBody = z.infer<typeof adminDemoResetBody>;
+
 export interface AdminDemoResetResponse {
   ok: true;
   primaryEmail: string;

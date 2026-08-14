@@ -178,6 +178,47 @@ describe("ImageLightboxComponent", () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("about:blank");
   });
 
+  it("fetches and renders Markdown attachments as sanitized rich content", async () => {
+    const markdownUrl = "https://api.test/api/media/client-1/cards/card-1/plan.md?t=token&e=9999999999999";
+    const markdown = "# Agent plan\n\n- Inspect inputs\n- Ship output\n\n<script>alert('no')</script>";
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({
+      ok: true,
+      blob: () => Promise.resolve({
+        size: markdown.length,
+        text: () => Promise.resolve(markdown),
+      }),
+    })));
+
+    TestBed.configureTestingModule({
+      imports: [ImageLightboxComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        {
+          provide: DIALOG_DATA,
+          useValue: {
+            src: markdownUrl,
+            fileName: "plan.md",
+            mediaType: "markdown",
+            mimeType: "text/markdown",
+          },
+        },
+        { provide: DialogRef, useValue: { close: vi.fn() } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(ImageLightboxComponent);
+    fixture.detectChanges();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect((fixture.nativeElement as HTMLElement).querySelector(".lb-markdown h1")?.textContent).toBe("Agent plan");
+    });
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelectorAll(".lb-markdown li")).toHaveLength(2);
+    expect(host.querySelector(".lb-markdown script")).toBeNull();
+    expect(fetch).toHaveBeenCalledWith(markdownUrl, { signal: expect.any(AbortSignal) });
+  });
+
   it("loads a PDF reached through gallery navigation and aborts it when navigating away", async () => {
     let resolvePdf!: (response: Response) => void;
     let resolvePdfBlob!: (blob: Blob) => void;

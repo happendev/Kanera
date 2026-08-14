@@ -728,7 +728,7 @@ export class DescriptionViewerComponent {
     event.preventDefault();
     event.stopPropagation();
     const mimeType = this.mediaMimeHint(anchor.href);
-    const mediaType = attachmentPreviewType(mimeType);
+    const mediaType = attachmentPreviewType(mimeType, fileName);
     if (this.handleAttachmentLinks() && mediaType) {
       this.attachmentClick.emit({
         src: anchor.href,
@@ -997,7 +997,8 @@ export class DescriptionViewerComponent {
       if (["csv", "xls", "xlsx", "ods"].includes(ext)) return "application/vnd.ms-excel";
       if (["ppt", "pptx", "odp", "key"].includes(ext)) return "application/vnd.ms-powerpoint";
       if (["doc", "docx", "odt", "rtf"].includes(ext)) return "application/msword";
-      if (["txt", "md", "markdown"].includes(ext)) return "text/plain";
+      if (["md", "markdown"].includes(ext)) return "text/markdown";
+      if (ext === "txt") return "text/plain";
       return "";
     } catch {
       return "";
