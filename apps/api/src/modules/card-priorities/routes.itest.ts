@@ -785,7 +785,10 @@ async function queueSnapshots(targetUserId: string): Promise<{ userId: string; p
   const rows = await db
     .select({ userId: directRealtimeOutbox.userId, payload: directRealtimeOutbox.payload })
     .from(directRealtimeOutbox)
-    .where(eq(directRealtimeOutbox.eventType, "cardPriority:queueChanged"));
+    .where(eq(directRealtimeOutbox.eventType, "cardPriority:queueChanged"))
+    // The assertions consume `at(-1)` as the latest snapshot. SQL row order is undefined without
+    // an explicit sort, and both events can share a timestamp on fast integration-test runs.
+    .orderBy(asc(directRealtimeOutbox.createdAt), asc(directRealtimeOutbox.id));
   return rows
     .flatMap((row) => (row.userId
       ? [{ userId: row.userId, payload: row.payload as WorkPriorityQueueSnapshot }]
