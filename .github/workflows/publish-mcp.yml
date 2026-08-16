@@ -1,11 +1,6 @@
 name: Publish MCP Registry metadata
 
 on:
-  push:
-    branches:
-      - live
-  release:
-    types: [published]
   workflow_dispatch:
 
 permissions:
