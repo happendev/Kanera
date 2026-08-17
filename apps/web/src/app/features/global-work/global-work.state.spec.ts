@@ -1378,20 +1378,27 @@ describe("GlobalWorkState priority queue", () => {
     }
   });
 
-  it("loads the viewer's own add candidates when Team Cards enters Priority view", async () => {
+  it("loads a filter-independent add-candidate pool when Team Cards enters Priority view", async () => {
     const { state, post } = setup();
     await state.initialize("team");
-    expect(state.teamPrioritySelfCandidateCards()).toEqual([]);
+    expect(state.teamPriorityCandidateCards()).toEqual([]);
 
     state.setDisplay("priorities");
     expect(state.interactionReady()).toBe(false);
     await vi.waitFor(() => expect(state.interactionReady()).toBe(true));
 
-    expect(state.teamPrioritySelfCandidateCards().map((card) => card.id)).toEqual([
+    expect(state.teamPriorityCandidateCards().map((card) => card.id)).toEqual([
       "40000000-0000-4000-8000-000000000001",
     ]);
-    expect(post.mock.calls.some(([path, body]) =>
-      path === "/work/cards/query" && (body as { lens?: string }).lens === "my"
+    const candidateQueries = post.mock.calls.filter(([path, body]) =>
+      path === "/work/cards/query"
+      && ["team", "my"].includes((body as { lens?: string }).lens ?? "")
+      && (body as { filters?: { completion?: string } }).filters?.completion === "active"
+      && Object.hasOwn((body as { filters: object }).filters, "customFieldValues")
+    );
+    expect(candidateQueries.map(([, body]) => (body as { lens: string }).lens)).toEqual(["team", "my"]);
+    expect(candidateQueries.every(([, body]) =>
+      (body as { scope: { allAccessible: boolean } }).scope.allAccessible
     )).toBe(true);
   });
 

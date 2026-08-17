@@ -1567,15 +1567,10 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       if (!lane.queue.canReorder || lane.queue.totalCount >= MAX_UP_NEXT_ENTRIES) continue;
       const ranked = new Set(lane.queue.items.flatMap((item) => item.card ? [item.card.id] : []));
       const workspaces = new Set(lane.queue.reorderableWorkspaceIds);
-      // Team Cards excludes the viewer's assignments, while the priorities batch intentionally
-      // includes a self lane. That lane alone receives the parallel My Cards candidate projection.
-      const sourceCards = lane.target.self
-        ? [...new Map(
-            [...this.state.cards(), ...this.state.teamPrioritySelfCandidateCards()]
-              .map((card) => [card.id, card]),
-          ).values()]
-        : this.state.cards();
-      const candidates = sourceCards.filter((card) =>
+      // This dedicated pool is independent of the page query. Queue rows are independent of those
+      // filters too, so a card removed from Up next must reappear here even when the visible board
+      // projection does not currently contain it.
+      const candidates = this.state.teamPriorityCandidateCards().filter((card) =>
         card.assigneeIds.includes(lane.target.userId)
         && !ranked.has(card.id)
         && !card.completedAt

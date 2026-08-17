@@ -2,7 +2,7 @@ import { Dialog } from "@angular/cdk/dialog";
 import { provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { Router } from "@angular/router";
-import type { WorkDisplayMode, WorkPrioritiesResponse } from "@kanera/shared/dto";
+import type { WorkDisplayMode, WorkPrioritiesResponse, WorkPriorityQueuesResponse } from "@kanera/shared/dto";
 import { describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
 import { workDonePreferencesStorageKey } from "../board/work-done-view/work-done-preferences";
@@ -1008,6 +1008,15 @@ describe("GlobalWorkPage toolbar state", () => {
       title: "Ship the follow-up",
       position: "2000.0000000000",
     };
+    const priorityCandidateCard = {
+      ...card,
+      id: "40000000-0000-4000-8000-000000000003",
+      number: 3,
+      key: "WORK-3",
+      title: "Pick this next",
+      position: "3000.0000000000",
+      assigneeIds: [priorityTargetId],
+    };
     const definition = signal({
       display: "board" as WorkDisplayMode,
       scope: { allAccessible: true, organisationIds: [], workspaceIds: [], boardIds: [] },
@@ -1064,7 +1073,8 @@ describe("GlobalWorkPage toolbar state", () => {
         }],
       }),
       definition,
-      teamPriorities: signal({
+      teamPriorityCandidateCards: signal([priorityCandidateCard]),
+      teamPriorities: signal<WorkPriorityQueuesResponse>({
         queues: [{
           target: {
             userId: priorityTargetId,
@@ -1087,6 +1097,7 @@ describe("GlobalWorkPage toolbar state", () => {
                 boardIconColor: null,
                 listName: "Doing",
                 workspaceName: "Product",
+                labels: [],
               },
             }, {
               id: "70000000-0000-4000-8000-000000000002",
@@ -1099,6 +1110,7 @@ describe("GlobalWorkPage toolbar state", () => {
                 boardIconColor: null,
                 listName: "Doing",
                 workspaceName: "Product",
+                labels: [],
               },
             }],
             totalCount: 2,
@@ -1138,7 +1150,17 @@ describe("GlobalWorkPage toolbar state", () => {
     fixture.componentRef.setInput("lens", "my");
     fixture.detectChanges();
     TestBed.tick();
-    return { fixture, definition, updateFilters, priorityTargetId, prioritySecondCard, moveTeamPriority, addTeamPriority };
+    return {
+      fixture,
+      definition,
+      updateFilters,
+      priorityTargetId,
+      prioritySecondCard,
+      priorityCandidateCard,
+      moveTeamPriority,
+      addTeamPriority,
+      state,
+    };
   }
 
   it("flags the trigger while any query control is away from its default", () => {
@@ -1261,6 +1283,56 @@ describe("GlobalWorkPage toolbar state", () => {
       fixture.componentInstance.setPriorityLayout("grid");
       fixture.destroy();
     });
+  });
+
+  it("updates each lane's Add card choices after an add and a removal", async () => {
+    const { fixture, priorityTargetId, priorityCandidateCard, state } = await mount();
+    fixture.componentRef.setInput("lens", "team");
+    await fixture.whenStable();
+
+    const candidateIds = () =>
+      fixture.componentInstance.teamPriorityAddableCards().get(priorityTargetId)?.map((item) => item.id) ?? [];
+    expect(candidateIds()).toEqual([priorityCandidateCard.id]);
+
+    // Adding changes only queue membership; reopening the picker must no longer offer that card.
+    state.teamPriorities.update((current) => ({
+      queues: current.queues.map((lane) => lane.target.userId === priorityTargetId
+        ? {
+            ...lane,
+            queue: {
+              ...lane.queue,
+              items: [...lane.queue.items, {
+                id: "70000000-0000-4000-8000-000000000003",
+                position: "3000.0000000000",
+                rank: 6,
+                card: priorityCandidateCard,
+                context: null,
+              }],
+              totalCount: lane.queue.totalCount + 1,
+            },
+          }
+        : lane),
+    }));
+    await fixture.whenStable();
+    expect(candidateIds()).toEqual([]);
+
+    // Removing it makes the same active assignment eligible again without reloading page cards.
+    state.teamPriorities.update((current) => ({
+      queues: current.queues.map((lane) => lane.target.userId === priorityTargetId
+        ? {
+            ...lane,
+            queue: {
+              ...lane.queue,
+              items: lane.queue.items.filter((item) => item.card?.id !== priorityCandidateCard.id),
+              totalCount: lane.queue.totalCount - 1,
+            },
+          }
+        : lane),
+    }));
+    await fixture.whenStable();
+    expect(candidateIds()).toEqual([priorityCandidateCard.id]);
+
+    fixture.destroy();
   });
 
   it("restores and persists the Up next and Work Done layouts", async () => {

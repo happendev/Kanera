@@ -223,12 +223,16 @@ export class GlobalWorkState {
    */
   readonly teamPriorities = signal<WorkPriorityQueuesResponse | null>(null);
   /**
-   * Team Cards deliberately excludes the viewer's own assignments. Priority view still includes a
-   * self lane, so its add picker gets a separate My Cards projection instead of weakening Team
-   * Cards' normal meaning.
+   * The stable candidate pool behind every Team Cards Up next picker.
+   *
+   * This cannot reuse `response.cards`: that projection follows the page's current filters, while
+   * a priority queue deliberately does not. In particular, once a filtered-out queue entry is
+   * removed, it still needs to become addable again. The team and self queries below load every
+   * active assignment independently of the visible card projection, then queue membership is
+   * applied reactively by the page.
    */
-  private readonly teamPrioritySelfCards = signal<WorkQueryResponse["cards"]>([]);
-  readonly teamPrioritySelfCandidateCards = computed(() => this.teamPrioritySelfCards().map((card) => ({
+  private readonly teamPriorityCandidates = signal<WorkQueryResponse["cards"]>([]);
+  readonly teamPriorityCandidateCards = computed(() => this.teamPriorityCandidates().map((card) => ({
     ...expandCardSummary(card),
     workspaceId: card.workspaceId,
   })));
@@ -334,7 +338,7 @@ export class GlobalWorkState {
     this.portfolio.set(null);
     this.otherPriorities.set(null);
     this.teamPriorities.set(null);
-    this.teamPrioritySelfCards.set([]);
+    this.teamPriorityCandidates.set([]);
     this.savedViews.set([]);
     this.shareCandidates.set([]);
     this.cachedAt.set(null);
@@ -453,17 +457,17 @@ export class GlobalWorkState {
       const cardsRequest = this.lens() === "portfolio" && this.definition().display === "summary"
         ? Promise.resolve(EMPTY_RESPONSE)
         : this.loadCards();
-      const [response, priorities, teamPriorities, selfCandidateCards] = await Promise.all([
+      const [response, priorities, teamPriorities, priorityCandidateCards] = await Promise.all([
         cardsRequest,
         this.loadPriorities(),
         this.loadTeamPriorities(),
-        this.loadTeamPrioritySelfCards(version),
+        this.loadTeamPriorityCandidateCards(version),
       ]);
       if (version !== this.requestVersion) return;
       this.response.set(response);
       this.otherPriorities.set(priorities);
       this.teamPriorities.set(teamPriorities);
-      this.teamPrioritySelfCards.set(selfCandidateCards);
+      this.teamPriorityCandidates.set(priorityCandidateCards);
       if (["board", "priorities"].includes(this.definition().display)) {
         await this.loadRemainingCards(version);
       }
@@ -648,19 +652,19 @@ export class GlobalWorkState {
     // Summary renders only portfolio aggregates. Defer the card projection until the viewer opens
     // a row display; switching either direction queries exactly the data that display needs.
     if (this.lens() === "portfolio") {
-      this.teamPrioritySelfCards.set([]);
+      this.teamPriorityCandidates.set([]);
       void this.queryFirstPage();
       return;
     }
     if (display === "priorities") {
       void this.queryFirstPage();
     } else if (display === "board") {
-      this.teamPrioritySelfCards.set([]);
+      this.teamPriorityCandidates.set([]);
       void this.loadRemainingCards(this.requestVersion)
         .then(() => this.persistCache())
         .catch(() => this.error.set("We couldn’t load every card. Try refreshing the page."));
     } else {
-      this.teamPrioritySelfCards.set([]);
+      this.teamPriorityCandidates.set([]);
     }
   }
 
@@ -1020,7 +1024,7 @@ export class GlobalWorkState {
   ): Promise<void> {
     const snapshot = this.teamPriorities();
     const lane = snapshot?.queues.find((candidate) => candidate.target.userId === targetUserId);
-    const card = [...this.cards(), ...this.teamPrioritySelfCandidateCards()]
+    const card = [...this.cards(), ...this.teamPriorityCandidateCards()]
       .find((candidate) => candidate.id === cardId) ?? null;
     if (lane && card) {
       const moving: WorkPrioritiesResponse["items"][number] = {
@@ -1295,7 +1299,7 @@ export class GlobalWorkState {
       initialPortfolio,
       priorities,
       teamPriorities,
-      initialSelfCandidateCards,
+      initialPriorityCandidateCards,
     ] = await Promise.all([
       this.api.get<WorkCatalog>("/work/catalog"),
       initialCardsRequest,
@@ -1304,7 +1308,7 @@ export class GlobalWorkState {
       this.lens() === "portfolio" ? this.loadPortfolio() : Promise.resolve(null),
       this.loadPriorities(),
       this.loadTeamPriorities(),
-      this.loadTeamPrioritySelfCards(version),
+      this.loadTeamPriorityCandidateCards(version),
     ]);
     if (version !== this.requestVersion) return;
     this.catalog.set(catalog);
@@ -1321,7 +1325,7 @@ export class GlobalWorkState {
     if (definitionChanged) this.drilldownLabel.set(null);
     let response = initialResponse;
     let portfolio = initialPortfolio;
-    let selfCandidateCards = initialSelfCandidateCards;
+    let priorityCandidateCards = initialPriorityCandidateCards;
     if (queryDefinitionChanged) {
       // A cached definition can paint while this request is in flight, and remembered sources can
       // become inaccessible. Refetch whenever the now-canonical definition differs from the one
@@ -1329,10 +1333,10 @@ export class GlobalWorkState {
       const correctedCardsRequest = this.lens() === "portfolio" && definition.display === "summary"
         ? Promise.resolve(EMPTY_RESPONSE)
         : atomicCards ? this.loadAllCards(version) : this.loadCards();
-      [response, portfolio, selfCandidateCards] = await Promise.all([
+      [response, portfolio, priorityCandidateCards] = await Promise.all([
         correctedCardsRequest,
         this.lens() === "portfolio" ? this.loadPortfolio() : Promise.resolve(null),
-        this.loadTeamPrioritySelfCards(version),
+        this.loadTeamPriorityCandidateCards(version),
       ]);
       if (version !== this.requestVersion) return;
     }
@@ -1348,7 +1352,7 @@ export class GlobalWorkState {
     this.portfolio.set(portfolio);
     this.otherPriorities.set(priorities);
     this.teamPriorities.set(teamPriorities);
-    this.teamPrioritySelfCards.set(selfCandidateCards);
+    this.teamPriorityCandidates.set(priorityCandidateCards);
     if (
       this.selectedViewId()
       && !savedViews.some((view) => view.id === this.selectedViewId() && view.lens === this.lens())
@@ -1406,35 +1410,36 @@ export class GlobalWorkState {
   }
 
   /**
-   * Candidate cards for the self lane while Team Cards is showing Priority view.
+   * Every active assignment the Team Cards Up next pickers may offer.
    *
-   * The ordinary team query excludes the signed-in user by product definition. Reusing the same
-   * scope, filters, and sort with the My Cards lens supplies only the missing assignments. Pages are
-   * exhausted here because a disabled Add button must mean there are truly no eligible cards, not
-   * merely none in the first 100 results.
+   * Priority queues are filter-independent, so their candidate pool must be too. A dedicated team
+   * query plus the self query (the team lens excludes the viewer by definition) keeps the pool
+   * stable when a queued card is absent from the visible filtered projection. Pages are exhausted
+   * because a disabled Add button must mean there are truly no eligible cards.
    */
-  private async loadTeamPrioritySelfCards(version: number): Promise<WorkQueryResponse["cards"]> {
+  private async loadTeamPriorityCandidateCards(version: number): Promise<WorkQueryResponse["cards"]> {
     if (this.lens() !== "team" || this.definition().display !== "priorities") return [];
-    const definition = this.definition();
     const cards: WorkQueryResponse["cards"] = [];
-    let cursor: string | undefined;
-    do {
-      const page = await this.api.post<WorkQueryResponse>("/work/cards/query", {
-        lens: "my",
-        scope: definition.scope,
-        // My Cards forces the viewer as assignee server-side; clear the hidden Team Cards focus so
-        // the request body still describes the candidate projection honestly.
-        filters: { ...definition.filters, assigneeIds: [] },
-        sort: definition.sort,
-        limit: 100,
-        includeMetadata: false,
-        ...(cursor ? { cursor } : {}),
-      });
-      if (version !== this.requestVersion) return [];
-      const seen = new Set(cards.map((card) => card.id));
-      cards.push(...page.cards.filter((card) => !seen.has(card.id)));
-      cursor = page.nextCursor ?? undefined;
-    } while (cursor && cards.length < 10_000);
+    for (const lens of ["team", "my"] as const) {
+      let cursor: string | undefined;
+      do {
+        const page = await this.api.post<WorkQueryResponse>("/work/cards/query", {
+          lens,
+          scope: { allAccessible: true, organisationIds: [], workspaceIds: [], boardIds: [] },
+          // The add route rejects completed and archived cards. Keep this projection limited to the
+          // exact durable candidate rule instead of inheriting transient page filters.
+          filters: { assigneeIds: [], labelIds: [], listIds: [], customFieldValues: [], completion: "active" },
+          sort: "dueAsc",
+          limit: 100,
+          includeMetadata: false,
+          ...(cursor ? { cursor } : {}),
+        });
+        if (version !== this.requestVersion) return [];
+        const seen = new Set(cards.map((card) => card.id));
+        cards.push(...page.cards.filter((card) => !seen.has(card.id)));
+        cursor = page.nextCursor ?? undefined;
+      } while (cursor && cards.length < 10_000);
+    }
     return cards;
   }
 
@@ -1766,11 +1771,12 @@ export class GlobalWorkState {
         const cardsRequest = this.lens() === "portfolio" && this.definition().display === "summary"
           ? Promise.resolve(EMPTY_RESPONSE)
           : this.loadAllCards(version);
-        const [response, portfolio, priorities, teamPriorities] = await Promise.all([
+        const [response, portfolio, priorities, teamPriorities, priorityCandidateCards] = await Promise.all([
           cardsRequest,
           this.lens() === "portfolio" ? this.loadPortfolio() : Promise.resolve(null),
           this.loadPriorities(),
           this.loadTeamPriorities(),
+          this.loadTeamPriorityCandidateCards(version),
         ]);
         if (version !== this.requestVersion) return;
         await this.whenCardDragIdle();
@@ -1779,6 +1785,7 @@ export class GlobalWorkState {
         if (this.lens() === "portfolio") this.portfolio.set(portfolio);
         this.otherPriorities.set(priorities);
         this.teamPriorities.set(teamPriorities);
+        this.teamPriorityCandidates.set(priorityCandidateCards);
         this.cachedAt.set(null);
         this.lastSyncedAt.set(new Date().toISOString());
         this.error.set(null);
