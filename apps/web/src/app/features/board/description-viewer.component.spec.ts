@@ -56,6 +56,17 @@ describe("DescriptionViewerComponent mentions", () => {
     expect(mention?.querySelector(".mention-chip-avatar")).not.toBeNull();
   });
 
+  it("shows a deterministic blobatar for mentioned users without profile images", async () => {
+    const userId = "123e4567-e89b-12d3-a456-426614174000";
+    const { el } = await render(`Ping @[Ada](kanera-user:${userId}) and @[Ada renamed](kanera-user:${userId}).`);
+
+    const images = el.querySelectorAll<HTMLImageElement>(".mention-chip-avatar img");
+    const firstSrc = images[0]?.getAttribute("src");
+    const secondSrc = images[1]?.getAttribute("src");
+    expect(firstSrc).toContain("data:image/svg+xml");
+    expect(secondSrc).toBe(firstSrc);
+  });
+
   it("shows a tiny profile image for mentioned users with avatars", async () => {
     const userId = "123e4567-e89b-12d3-a456-426614174000";
     const { el } = await render(
@@ -96,7 +107,7 @@ describe("DescriptionViewerComponent mentions", () => {
     expect(el.textContent).toContain("👍");
     expect(el.querySelector(".mention-chip span:last-child")?.textContent).toBe("@Ada");
     expect((el.querySelector('a[href="https://example.com"]') as HTMLAnchorElement | null)?.textContent).toBe("docs");
-    expect((el.querySelector("img") as HTMLImageElement | null)?.getAttribute("src")).toBe("/party.png");
+    expect((el.querySelector('img[alt="party"]') as HTMLImageElement | null)?.getAttribute("src")).toBe("/party.png");
   });
 
   it("renders pasted markdown as formatted content", async () => {
@@ -126,7 +137,9 @@ describe("DescriptionViewerComponent mentions", () => {
 
     const mention = el.querySelector(".mention-chip") as HTMLElement | null;
     expect(mention?.textContent).toContain("@<img src=x onerror=alert(1)>");
-    expect(mention?.querySelector("img")).toBeNull();
+    const images = mention?.querySelectorAll("img") ?? [];
+    expect(images).toHaveLength(1);
+    expect(images[0]?.getAttribute("src")).toContain("data:image/svg+xml");
   });
 
   it("renders a bare Kanera card URL as a pretty card link after resolution", async () => {

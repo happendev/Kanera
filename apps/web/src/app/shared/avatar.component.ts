@@ -1,5 +1,6 @@
 import { NgOptimizedImage } from "@angular/common";
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from "@angular/core";
+import { blobatarUri } from "blobatar/uri";
 import { visibleSignedMediaUrl } from "../core/media/signed-media-url";
 import { PresenceService } from "../core/realtime/presence.service";
 import { TooltipDirective } from "./tooltip.directive";
@@ -51,7 +52,7 @@ function watchRelativeTimeTicker(): () => void {
       @if (visibleUrl()) {
         <img [ngSrc]="visibleUrl()!" [width]="size()" [height]="size()" [alt]="name()" (error)="markImageFailed()" />
       } @else {
-        <span class="initials">{{ initial() }}</span>
+        <img class="blobatar" [src]="fallbackUrl()" [alt]="name()" />
       }
     </span>
     @if (online()) {
@@ -67,14 +68,7 @@ function watchRelativeTimeTicker(): () => void {
       border-radius: 50%;
       flex-shrink: 0;
       background: transparent;
-      color: var(--text);
-      font-weight: 600;
       line-height: 1;
-    }
-
-    :host(.is-fallback) {
-      background: var(--avatar-fallback-bg);
-      color: var(--avatar-fallback-fg);
     }
 
     .avatar-body {
@@ -94,14 +88,6 @@ function watchRelativeTimeTicker(): () => void {
       display: block;
     }
 
-    .initials {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-      height: 100%;
-    }
-
     .presence-dot {
       position: absolute;
       right: 3px;
@@ -118,11 +104,7 @@ function watchRelativeTimeTicker(): () => void {
   host: {
     "[style.width.px]": "size()",
     "[style.height.px]": "size()",
-    "[style.font-size.px]": "fontSize()",
     "[class.is-fallback]": "!visibleUrl()",
-    "[attr.data-avatar-color]": "visibleUrl() ? null : fallbackColor()",
-    "[style.--avatar-fallback-bg]": "visibleUrl() ? null : fallbackBg()",
-    "[style.--avatar-fallback-fg]": "visibleUrl() ? null : fallbackFg()",
   },
 })
 export class AvatarComponent {
@@ -160,14 +142,15 @@ export class AvatarComponent {
     const url = this.url();
     if (!url || url === this.failedUrl()) return null;
     // A cached member/auth payload can carry a signed avatar URL whose token has
-    // expired; suppress it so we show initials instead of a guaranteed 404.
+    // expired; suppress it so we show the local fallback instead of a guaranteed 404.
     return visibleSignedMediaUrl(url);
   });
 
-  protected readonly fontSize = computed(() => Math.round(this.size() * 0.45));
-  protected readonly fallbackColor = computed(() => this.colorIndex().toString());
-  protected readonly fallbackBg = computed(() => `var(--avatar-color-${this.colorIndex()}-bg)`);
-  protected readonly fallbackFg = computed(() => `var(--avatar-color-${this.colorIndex()}-fg)`);
+  protected readonly fallbackUrl = computed(() => {
+    // Prefer the immutable user id so a rename does not unexpectedly change a person's identity.
+    const identity = this.userId()?.trim() || this.name().trim().toLocaleLowerCase() || "?";
+    return blobatarUri(identity);
+  });
   protected readonly online = computed(() => {
     if (!this.shouldCheckPresence()) return false;
     return this.presence.isOnline(this.workspaceId(), this.userId());
@@ -186,15 +169,6 @@ export class AvatarComponent {
     return this.presence.lastOnlineAt(this.workspaceId(), this.userId());
   });
   private readonly shouldCheckPresence = computed(() => Boolean(this.showPresence() && this.userId() && this.workspaceId()));
-
-  protected readonly initial = computed(() => {
-    const n = this.name();
-    return (n || "?").charAt(0).toUpperCase();
-  });
-
-  private readonly colorIndex = computed(() => {
-    return avatarColorIndex(this.userId(), this.name());
-  });
 
   protected markImageFailed() {
     this.failedUrl.set(this.url());

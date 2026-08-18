@@ -325,6 +325,9 @@ importers:
       '@tiptap/suggestion':
         specifier: 3.29.2
         version: 3.29.2(@floating-ui/dom@1.7.6)(@tiptap/core@3.29.2(@tiptap/pm@3.29.2))(@tiptap/pm@3.29.2)
+      blobatar:
+        specifier: ^0.2.0
+        version: 0.2.0
       dompurify:
         specifier: ^3.4.13
         version: 3.4.13
@@ -2937,6 +2940,14 @@ packages:
 
   bintrees@1.0.2:
     resolution: {integrity: sha512-VOMgTMwjAaUG580SXn3LacVgjurrbMme7ZZNYGSSV7mmtY6QQRh0Eg3pwIcntQ77DErK1L0NxkbetjcoXzVwKw==}
+
+  blobatar@0.2.0:
+    resolution: {integrity: sha512-TL4blQf9fu+EzsFEKMjh7PVORnf42G9HdpaXzdLR9dTHcMSYJWEj5fPeLhsXTN5YFCNstZaRAQRAWyhW8lRAdw==}
+    peerDependencies:
+      react: '>=18'
+    peerDependenciesMeta:
+      react:
+        optional: true
 
   bn.js@4.12.5:
     resolution: {integrity: sha512-3aRg6/JxfffFD+OlOjOFR3Vo79l39ooBTFucxx+MT3dhCtzn3EmiUPQo+6/OZuI2jbXi3YKgmiTFBgChQMwIRQ==}
@@ -7992,6 +8003,8 @@ snapshots:
       file-uri-to-path: 1.0.0
 
   bintrees@1.0.2: {}
+
+  blobatar@0.2.0: {}
 
   bn.js@4.12.5: {}
 

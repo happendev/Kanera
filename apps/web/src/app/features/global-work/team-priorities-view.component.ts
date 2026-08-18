@@ -78,7 +78,7 @@ export class TeamPrioritiesViewComponent {
   protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
 
   readonly queues = input<WorkPriorityQueue[]>([]);
-  /** For lane-header avatars; targets outside the viewer's catalog just fall back to initials. */
+  /** Supplies uploaded images for lane headers; uncatalogued targets use deterministic fallbacks. */
   readonly people = input<WorkCatalogPerson[]>([]);
   /** False while the page is not interaction-ready. Per-lane curation rights still apply on top. */
   readonly canDrag = input(false);
