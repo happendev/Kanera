@@ -12,6 +12,7 @@ import {
 import { DomSanitizer } from "@angular/platform-browser";
 import type { ResolveGitHubLinksResponse, ResolvedGitHubLink, ResolveInternalLinksResponse, ResolvedInternalLink } from "@kanera/shared/dto";
 import type { WireBoardMemberUser } from "@kanera/shared/events";
+import { blobatarUri } from "blobatar/uri";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { ApiClient } from "../../core/api/api.client";
@@ -763,16 +764,11 @@ export class DescriptionViewerComponent {
     const displayName = member?.displayName || label;
     const style = avatarFallbackColorStyle(userId, displayName);
     // Drop an expired signed avatar URL (stale cached member list) so the chip
-    // shows the initial fallback rather than a broken 404 image.
+    // uses the same deterministic fallback as every other person surface.
     const avatarUrl = visibleSignedMediaUrl(member?.avatarUrl);
-    const avatar = avatarUrl
-      ? `<span class="mention-chip-avatar"><img src="${this.escapeAttr(avatarUrl)}" alt="" /></span>`
-      : `<span class="mention-chip-avatar" aria-hidden="true">${this.escapeHtml(this.initial(displayName))}</span>`;
+    const visibleAvatarUrl = avatarUrl ?? blobatarUri(userId || displayName.trim().toLocaleLowerCase() || "?");
+    const avatar = `<span class="mention-chip-avatar"><img src="${this.escapeAttr(visibleAvatarUrl)}" alt="" /></span>`;
     return `<span class="mention-chip" data-user-id="${this.escapeAttr(userId)}" style="${this.escapeAttr(style)}">${avatar}<span>@${this.escapeHtml(label)}</span></span>`;
-  }
-
-  private initial(name: string): string {
-    return (name || "?").charAt(0).toUpperCase();
   }
 
   private extractResolvableUrls(html: string): string[] {

@@ -1044,7 +1044,7 @@ describe("CardDetailComponent realtime regressions", () => {
       const avatar = fixture.nativeElement.querySelector(".comment-avatar") as HTMLElement | null;
 
       expect(author?.textContent).toContain("Ada Lovelace");
-      expect(avatar?.textContent?.trim()).toBe("A");
+      expect(avatar?.querySelector<HTMLImageElement>("img.blobatar")?.src).toContain("data:image/svg+xml");
       const [item] = fixture.componentInstance.feedItems();
       expect(item?.type).toBe("comment");
       if (item?.type !== "comment") throw new Error("Expected comment feed item");

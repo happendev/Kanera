@@ -50,7 +50,7 @@ const presence = {
 };
 
 describe("AvatarComponent", () => {
-  it("falls back to initials when the image cannot load", async () => {
+  it("falls back to a blobatar when the image cannot load", async () => {
     await TestBed.configureTestingModule({
       imports: [AvatarHostComponent],
       providers: [provideZonelessChangeDetection(), { provide: PresenceService, useValue: presence }],
@@ -60,14 +60,16 @@ describe("AvatarComponent", () => {
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
 
-    const image = host.querySelector("img");
+    const image = host.querySelector<HTMLImageElement>("img:not(.blobatar)");
     expect(image).toBeTruthy();
 
     image!.dispatchEvent(new Event("error"));
     fixture.detectChanges();
 
-    expect(host.querySelector("img")).toBeNull();
-    expect(host.textContent?.trim()).toBe("A");
+    expect(host.querySelector("img:not(.blobatar)")).toBeNull();
+    const fallback = host.querySelector<HTMLImageElement>("img.blobatar");
+    expect(fallback?.src).toContain("data:image/svg+xml");
+    expect(fallback?.alt).toBe("Ada Lovelace");
   });
 
   it("tries a new avatar URL after a previous URL failed", async () => {
@@ -80,18 +82,19 @@ describe("AvatarComponent", () => {
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
 
-    const image = host.querySelector("img");
+    const image = host.querySelector<HTMLImageElement>("img:not(.blobatar)");
     image!.dispatchEvent(new Event("error"));
     fixture.detectChanges();
-    expect(host.querySelector("img")).toBeNull();
+    expect(host.querySelector("img.blobatar")).toBeTruthy();
 
     fixture.componentInstance.url.set("/new-avatar.png");
     fixture.detectChanges();
 
-    expect(host.querySelector("img")).toBeTruthy();
+    expect(host.querySelector("img:not(.blobatar)")).toBeTruthy();
+    expect(host.querySelector("img.blobatar")).toBeNull();
   });
 
-  it("marks fallback initials with a deterministic color bucket", async () => {
+  it("keeps the same blobatar when the display name changes", async () => {
     await TestBed.configureTestingModule({
       imports: [FallbackColorAvatarHostComponent],
       providers: [provideZonelessChangeDetection(), { provide: PresenceService, useValue: presence }],
@@ -101,25 +104,17 @@ describe("AvatarComponent", () => {
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
 
-    const avatar = host.querySelector<HTMLElement>("k-avatar");
-    expect(avatar).toBeTruthy();
-    if (!avatar) throw new Error("Expected avatar to render.");
-    const firstColor = avatar.getAttribute("data-avatar-color");
-    expect(firstColor).not.toBeNull();
-    if (!firstColor) throw new Error("Expected fallback color to render.");
-
+    const avatar = host.querySelector<HTMLElement>("k-avatar")!;
+    const firstUrl = host.querySelector<HTMLImageElement>("img.blobatar")!.src;
     expect(avatar.classList.contains("is-fallback")).toBe(true);
-    expect(firstColor).toMatch(/^\d+$/);
-    expect(avatar.style.getPropertyValue("--avatar-fallback-bg")).toBe(`var(--avatar-color-${firstColor}-bg)`);
-    expect(avatar.style.getPropertyValue("--avatar-fallback-fg")).toBe(`var(--avatar-color-${firstColor}-fg)`);
 
     fixture.componentInstance.name.set("Different Name");
     fixture.detectChanges();
 
-    expect(avatar.getAttribute("data-avatar-color")).toBe(firstColor);
+    expect(host.querySelector<HTMLImageElement>("img.blobatar")!.src).toBe(firstUrl);
   });
 
-  it("uses different fallback buckets for different stable identities", async () => {
+  it("uses different blobatars for different stable identities", async () => {
     await TestBed.configureTestingModule({
       imports: [FallbackColorAvatarHostComponent],
       providers: [provideZonelessChangeDetection(), { provide: PresenceService, useValue: presence }],
@@ -129,18 +124,15 @@ describe("AvatarComponent", () => {
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
 
-    const avatar = host.querySelector<HTMLElement>("k-avatar");
-    expect(avatar).toBeTruthy();
-    if (!avatar) throw new Error("Expected avatar to render.");
-    const firstColor = avatar.getAttribute("data-avatar-color");
+    const firstUrl = host.querySelector<HTMLImageElement>("img.blobatar")!.src;
 
     fixture.componentInstance.userId.set("user-2");
     fixture.detectChanges();
 
-    expect(avatar.getAttribute("data-avatar-color")).not.toBe(firstColor);
+    expect(host.querySelector<HTMLImageElement>("img.blobatar")!.src).not.toBe(firstUrl);
   });
 
-  it("does not expose fallback styling while an image is visible", async () => {
+  it("does not expose the blobatar while an uploaded image is visible", async () => {
     await TestBed.configureTestingModule({
       imports: [AvatarHostComponent],
       providers: [provideZonelessChangeDetection(), { provide: PresenceService, useValue: presence }],
@@ -153,11 +145,9 @@ describe("AvatarComponent", () => {
     const avatar = host.querySelector<HTMLElement>("k-avatar");
     expect(avatar).toBeTruthy();
     if (!avatar) throw new Error("Expected avatar to render.");
-    expect(host.querySelector("img")).toBeTruthy();
+    expect(host.querySelector("img:not(.blobatar)")).toBeTruthy();
+    expect(host.querySelector("img.blobatar")).toBeNull();
     expect(avatar.classList.contains("is-fallback")).toBe(false);
-    expect(avatar.getAttribute("data-avatar-color")).toBeNull();
-    expect(avatar.style.getPropertyValue("--avatar-fallback-bg")).toBe("");
-    expect(avatar.style.getPropertyValue("--avatar-fallback-fg")).toBe("");
   });
 
   it("renders no badge by default", async () => {
