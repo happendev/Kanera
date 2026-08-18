@@ -5,6 +5,9 @@ type BrowserAudioContext = AudioContext & {
   state: AudioContextState;
 };
 
+const CHIME_START_DELAY_SECONDS = 0.01;
+const CHIME_DURATION_SECONDS = 0.34;
+
 @Injectable({ providedIn: "root" })
 export class MentionSoundService {
   readonly enabled = signal<boolean>(this.readEnabled());
@@ -12,6 +15,7 @@ export class MentionSoundService {
   private audioContext: BrowserAudioContext | null = null;
   private gestureListenersAttached = false;
   private unlocked = false;
+  private chimePlayingUntil = 0;
 
   constructor() {
     this.attachGestureUnlock();
@@ -82,7 +86,11 @@ export class MentionSoundService {
 
   private async playChime(ctx: BrowserAudioContext): Promise<void> {
     if (ctx.state === "suspended") await ctx.resume();
-    const start = ctx.currentTime + 0.01;
+    // A burst can contain many notification events. One chime communicates the
+    // burst without overlapping sounds or making the user hear a long queue.
+    if (ctx.currentTime < this.chimePlayingUntil) return;
+    const start = ctx.currentTime + CHIME_START_DELAY_SECONDS;
+    this.chimePlayingUntil = start + CHIME_DURATION_SECONDS;
     this.playTone(ctx, start, 880, 0.12, 0.09);
     this.playTone(ctx, start + 0.13, 1174.66, 0.18, 0.075);
   }
