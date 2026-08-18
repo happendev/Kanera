@@ -8,7 +8,7 @@ interface OpsHealth {
   eventOutbox: { pending: number; dispatched: number; total: number };
   orgs: { total: number; suspended: number; deleted: number };
   users: { total: number; suspended: number; deleted: number };
-  planUsers: { free: number; trial: number; pro: number };
+  planAccess: { freeUsers: number; trialUsers: number; proSeats: number };
   storageUsedBytes: number;
   trends: { date: string; activeUsers: number; registrations: number; cards: number; boards: number; automationEffectful: number; automationNoop: number; automationFailed: number }[];
 }
@@ -73,8 +73,8 @@ Chart.register(...registerables);
         <section class="card trends">
           <div class="chart-head">
             <div>
-              <h2>Plan users</h2>
-              <p class="muted small">Free, trial, and Pro users</p>
+              <h2>Plan access</h2>
+              <p class="muted small">Active Free/Trial users and purchased Pro seats</p>
             </div>
           </div>
           <div class="chart-wrap chart-wrap-compact"><canvas #planUsersChart></canvas></div>
@@ -287,11 +287,11 @@ export class DashboardPage implements OnInit, OnDestroy {
     this.planUsersChart = new Chart(planUsersCanvas, {
       type: "bar",
       data: {
-        labels: ["Free", "Trial", "Pro"],
+        labels: ["Free users", "Trial users", "Pro seats"],
         datasets: [
           {
-            label: "Users",
-            data: [health.planUsers.free, health.planUsers.trial, health.planUsers.pro],
+            label: "Users / seats",
+            data: [health.planAccess.freeUsers, health.planAccess.trialUsers, health.planAccess.proSeats],
             backgroundColor: ["#0f766e", "#2563eb", "#7c3aed"],
             borderRadius: 6,
           },

@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, type OnInit, inject, signal } from 
 import { RouterLink } from "@angular/router";
 import type { AdminOrgListItem } from "@kanera/shared/dto";
 import { ApiClient } from "../../core/api/api.client";
+import { isSubscribedPlan, organisationPlanLabel } from "../../shared/plan-access";
 import { TableControlsComponent, TablePagerComponent } from "../../shared/table-controls.component";
 
 interface OrgListResponse {
@@ -28,21 +29,38 @@ interface OrgListResponse {
       <table class="data">
         <thead>
           <tr>
-            <th><button class="sort" (click)="orderBy('name')">Name {{ arrow('name') }}</button></th><th><button class="sort" (click)="orderBy('plan')">Plan {{ arrow('plan') }}</button></th><th><button class="sort" (click)="orderBy('billingStatus')">Billing {{ arrow('billingStatus') }}</button></th><th><button class="sort" (click)="orderBy('memberCount')">Members {{ arrow('memberCount') }}</button></th><th><button class="sort" (click)="orderBy('createdAt')">Created {{ arrow('createdAt') }}</button></th><th><button class="sort" (click)="orderBy('status')">Status {{ arrow('status') }}</button></th>
+            <th><button class="sort" (click)="orderBy('name')">Name {{ arrow('name') }}</button></th><th><button class="sort" (click)="orderBy('plan')">Plan {{ arrow('plan') }}</button></th><th><button class="sort" (click)="orderBy('billingStatus')">Billing {{ arrow('billingStatus') }}</button></th><th>Seats</th><th><button class="sort" (click)="orderBy('memberCount')">People {{ arrow('memberCount') }}</button></th><th><button class="sort" (click)="orderBy('createdAt')">Created {{ arrow('createdAt') }}</button></th><th><button class="sort" (click)="orderBy('status')">Status {{ arrow('status') }}</button></th>
           </tr>
         </thead>
         <tbody>
           @for (org of items(); track org.id) {
             <tr [routerLink]="['/orgs', org.id]" class="row">
               <td>{{ org.name }}</td>
-              <td><span class="badge">{{ org.plan }}</span></td>
+              <td><span class="badge" [class.badge-pro]="planLabel(org) === 'Pro'" [class.badge-trial]="planLabel(org) === 'Trial'">{{ planLabel(org) }}</span></td>
               <td>
-                <span class="muted">{{ org.billingStatus }}</span>
+                <span>{{ org.billingStatus }}</span>
+                @if (billingIntervalLabel(org); as interval) {
+                  <span class="billing-interval">{{ interval }}</span>
+                }
                 @if (billingTiming(org); as timing) {
                   <span class="billing-timing">{{ timing }}</span>
                 }
               </td>
-              <td>{{ org.memberCount }}</td>
+              <td>
+                @if (isSubscribed(org)) {
+                  <strong>{{ org.usedSeatCount }} / {{ org.seatLimit }}</strong>
+                  <span class="cell-detail">used / purchased</span>
+                } @else if (org.billingStatus === "trialing") {
+                  <strong>{{ org.usedSeatCount }}</strong>
+                  <span class="cell-detail">needed at checkout</span>
+                } @else {
+                  <span class="muted">Not billed</span>
+                }
+              </td>
+              <td>
+                <strong>{{ org.memberCount }}</strong> member{{ org.memberCount === 1 ? "" : "s" }}
+                <span class="cell-detail">{{ org.paidGuestCount }} {{ guestSeatLabel(org, org.paidGuestCount) }} · {{ org.freeGuestCount }} free guest{{ org.freeGuestCount === 1 ? "" : "s" }}</span>
+              </td>
               <td class="muted">{{ formatDateTime(org.createdAt) }}</td>
               <td>
                 @if (org.deletedAt) {
@@ -55,7 +73,7 @@ interface OrgListResponse {
               </td>
             </tr>
           } @empty {
-            <tr><td colspan="6" class="muted">No organisations found.</td></tr>
+            <tr><td colspan="7" class="muted">No organisations found.</td></tr>
           }
         </tbody>
       </table>
@@ -85,6 +103,20 @@ interface OrgListResponse {
         font-size: 12px;
         white-space: nowrap;
       }
+      .billing-interval {
+        color: var(--text-muted);
+        font-size: 11px;
+        margin-left: 6px;
+      }
+      .cell-detail {
+        color: var(--text-muted);
+        display: block;
+        font-size: 11px;
+        margin-top: 3px;
+        white-space: nowrap;
+      }
+      .badge-pro { background: color-mix(in srgb, var(--success) 14%, var(--surface)); border-color: color-mix(in srgb, var(--success) 45%, var(--border)); color: var(--success); }
+      .badge-trial { background: color-mix(in srgb, var(--warning) 14%, var(--surface)); border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); color: var(--warning); }
       .sort { border: 0; background: none; padding: 0; font: inherit; font-weight: inherit; color: inherit; cursor: pointer; }
     `,
   ],
@@ -104,19 +136,42 @@ export class OrgsPage implements OnInit {
 
   readonly formatDateTime = (value: string): string => new Date(value).toLocaleString();
 
+  isSubscribed(org: AdminOrgListItem): boolean {
+    return isSubscribedPlan(org.plan, org.billingStatus);
+  }
+
+  planLabel(org: AdminOrgListItem): "Free" | "Trial" | "Pro" {
+    return organisationPlanLabel(org.plan, org.billingStatus);
+  }
+
+  guestSeatLabel(org: AdminOrgListItem, count: number): string {
+    const kind = this.isSubscribed(org) ? "paid guest" : org.billingStatus === "trialing" ? "trial guest" : "seat guest";
+    return count === 1 ? kind : `${kind}s`;
+  }
+
   billingTiming(org: AdminOrgListItem): string | null {
-    if (!org.currentPeriodEnd) return null;
+    if (!org.currentPeriodEnd) return org.cancelAtPeriodEnd ? "Expiry date not synced" : null;
     const end = new Date(org.currentPeriodEnd);
     const remainingMs = end.getTime() - Date.now();
     const absolute = end.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 
-    // currentPeriodEnd represents either trial expiry or the paid subscription renewal boundary.
-    if (remainingMs <= 0) return `Period ended ${absolute}`;
+    // The same Stripe period boundary means renewal for a continuing subscription and expiry when
+    // cancellation is scheduled, so never describe every period end as a payment date.
+    if (remainingMs <= 0) {
+      if (org.billingStatus === "trialing") return `Trial ended ${absolute}`;
+      return org.cancelAtPeriodEnd ? `Expired ${absolute}` : `Period ended ${absolute}`;
+    }
     const days = Math.ceil(remainingMs / 86_400_000);
     const remaining = days === 1 ? "1 day" : `${days} days`;
-    return org.billingStatus === "trialing"
-      ? `Trial: ${remaining} left · ${absolute}`
-      : `Next payment: ${remaining} · ${absolute}`;
+    if (org.billingStatus === "trialing") return `Trial ends: ${remaining} · ${absolute}`;
+    if (org.cancelAtPeriodEnd) return `Seats expire: ${remaining} · ${absolute}`;
+    return this.isSubscribed(org) ? `Renews: ${remaining} · ${absolute}` : `Ends: ${remaining} · ${absolute}`;
+  }
+
+  billingIntervalLabel(org: AdminOrgListItem): string | null {
+    if (org.billingInterval === "monthly") return "Monthly";
+    if (org.billingInterval === "annual") return "Annual";
+    return null;
   }
 
   async ngOnInit(): Promise<void> {

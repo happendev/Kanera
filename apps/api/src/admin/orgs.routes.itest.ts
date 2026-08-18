@@ -3,7 +3,7 @@ import { insertTestUsers } from "../test/user-fixtures.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { and, eq } from "drizzle-orm";
-import { adminAuditLogs, boards, clientMembers, clients, planActions, workspaces } from "@kanera/shared/schema";
+import { adminAuditLogs, boardMembers, boards, clientGuestSeats, clientMembers, clients, planActions, workspaces } from "@kanera/shared/schema";
 import { db } from "../db.js";
 import { env } from "../env.js";
 import { buildAdminIntegrationServer, buildIntegrationServer } from "../test/integration.js";
@@ -20,6 +20,73 @@ async function signupOrg(orgName: string, email: string) {
   const { user } = signup.json<{ user: { id: string; clientId: string } }>();
   return { tenantApp: app, clientId: user.clientId, userId: user.id };
 }
+
+void test("organisation admin views distinguish purchased seats, members, and paid/free guests", async () => {
+  const host = await signupOrg("Seat Visibility Co", "seat-visibility-owner@test.local");
+  const external = await signupOrg("External People Co", "paid-guest@test.local");
+  const [freeGuest] = await insertTestUsers(db, {
+    clientId: external.clientId,
+    email: "free-guest@test.local",
+    passwordHash: "x",
+    displayName: "Free Guest",
+  }).returning();
+  const periodEnd = new Date("2027-01-15T00:00:00.000Z");
+  await db.update(clients).set({
+    plan: "paid",
+    billingStatus: "active",
+    billingInterval: "annual",
+    currentPeriodEnd: periodEnd,
+    cancelAtPeriodEnd: true,
+    seatLimit: 4,
+  }).where(eq(clients.id, host.clientId));
+  const [workspace] = await db.insert(workspaces).values({ clientId: host.clientId, name: "Guest Work" }).returning();
+  const [board] = await db.insert(boards).values({ workspaceId: workspace!.id, name: "Guest Board", position: "1000" }).returning();
+  await db.insert(boardMembers).values([
+    { boardId: board!.id, userId: external.userId },
+    { boardId: board!.id, userId: freeGuest!.id },
+  ]);
+  await db.insert(clientGuestSeats).values({ clientId: host.clientId, userId: external.userId, createdById: host.userId });
+
+  const adminApp = await buildAdminIntegrationServer();
+  await createAdmin("seat-visibility-admin@test.local", "admin-password");
+  const { accessToken } = await loginAdmin(adminApp, "seat-visibility-admin@test.local", "admin-password");
+  const headers = adminAuthHeader(accessToken);
+
+  const list = await adminApp.inject({ method: "GET", url: "/admin/orgs?q=Seat%20Visibility%20Co", headers });
+  assert.equal(list.statusCode, 200, list.body);
+  const [item] = list.json<{ items: Array<{ id: string; billingInterval: string | null; currentPeriodEnd: string | null; cancelAtPeriodEnd: boolean; seatLimit: number; memberCount: number; paidGuestCount: number; freeGuestCount: number; usedSeatCount: number }> }>().items;
+  assert.deepEqual(
+    { id: item!.id, billingInterval: item!.billingInterval, currentPeriodEnd: item!.currentPeriodEnd, cancelAtPeriodEnd: item!.cancelAtPeriodEnd, seatLimit: item!.seatLimit, memberCount: item!.memberCount, paidGuestCount: item!.paidGuestCount, freeGuestCount: item!.freeGuestCount, usedSeatCount: item!.usedSeatCount },
+    { id: host.clientId, billingInterval: "annual", currentPeriodEnd: periodEnd.toISOString(), cancelAtPeriodEnd: true, seatLimit: 4, memberCount: 1, paidGuestCount: 1, freeGuestCount: 1, usedSeatCount: 2 },
+  );
+
+  const detail = await adminApp.inject({ method: "GET", url: `/admin/orgs/${host.clientId}`, headers });
+  assert.equal(detail.statusCode, 200, detail.body);
+  const detailBody = detail.json<{ billingInterval: string | null; currentPeriodEnd: string | null; cancelAtPeriodEnd: boolean; usage: unknown }>();
+  assert.deepEqual(
+    { billingInterval: detailBody.billingInterval, currentPeriodEnd: detailBody.currentPeriodEnd, cancelAtPeriodEnd: detailBody.cancelAtPeriodEnd },
+    { billingInterval: "annual", currentPeriodEnd: periodEnd.toISOString(), cancelAtPeriodEnd: true },
+  );
+  assert.deepEqual(detailBody.usage, {
+    storageUsedBytes: 0,
+    storageQuotaBytes: null,
+    workspaceCount: 1,
+    boardCount: 1,
+    cardCount: 0,
+    memberCount: 1,
+    guestCount: 2,
+    paidGuestCount: 1,
+    freeGuestCount: 1,
+    usedSeatCount: 2,
+  });
+
+  const people = await adminApp.inject({ method: "GET", url: `/admin/orgs/${host.clientId}/people`, headers });
+  assert.equal(people.statusCode, 200, people.body);
+  const accessByEmail = Object.fromEntries(people.json<{ items: Array<{ email: string; access: string }> }>().items.map((person) => [person.email, person.access]));
+  assert.equal(accessByEmail["seat-visibility-owner@test.local"], "pro_member");
+  assert.equal(accessByEmail["paid-guest@test.local"], "paid_guest");
+  assert.equal(accessByEmail["free-guest@test.local"], "free_guest");
+});
 
 void test("POST /admin/orgs/:id/suspend sets suspendedAt, writes an audit row, and blocks tenant login", async () => {
   const { tenantApp, clientId } = await signupOrg("Suspend Co", "suspend-owner@test.local");

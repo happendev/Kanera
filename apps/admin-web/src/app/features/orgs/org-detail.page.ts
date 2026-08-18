@@ -4,6 +4,7 @@ import type { AdminOrgDetail, AdminOrgPersonListItem, AdminSupportSessionListIte
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AdminAuthService } from "../../core/auth/admin-auth.service";
 import { ConfirmService } from "../../shared/confirm.service";
+import { isSubscribedPlan, organisationPlanLabel, orgPersonAccessLabel } from "../../shared/plan-access";
 import { TableControlsComponent, TablePagerComponent } from "../../shared/table-controls.component";
 import { ToastService } from "../../shared/toast.service";
 
@@ -60,7 +61,9 @@ const BILLING_STATUSES = ["none", "trialing", "active", "past_due", "canceled"] 
           <h2>Usage</h2>
           <dl>
             <dt class="muted">Members</dt><dd>{{ o.usage.memberCount }}</dd>
-            <dt class="muted">Guests</dt><dd>{{ o.usage.guestCount }}</dd>
+            <dt class="muted">Guests</dt><dd>{{ o.usage.guestCount }} <span class="sub-value">{{ o.usage.paidGuestCount }} {{ guestSeatLabel(o, o.usage.paidGuestCount) }} · {{ o.usage.freeGuestCount }} free</span></dd>
+            <dt class="muted">Seats used</dt><dd>{{ o.usage.usedSeatCount }} <span class="sub-value">{{ o.usage.memberCount }} member{{ o.usage.memberCount === 1 ? "" : "s" }} + {{ o.usage.paidGuestCount }} {{ guestSeatLabel(o, o.usage.paidGuestCount) }}</span></dd>
+            <dt class="muted">Seats purchased</dt><dd>{{ isSubscribed(o) ? o.seatLimit : "Not billed" }}</dd>
             <dt class="muted">Workspaces</dt><dd>{{ o.usage.workspaceCount }}</dd>
             <dt class="muted">Boards</dt><dd>{{ o.usage.boardCount }}</dd>
             <dt class="muted">Cards</dt><dd>{{ o.usage.cardCount }}</dd>
@@ -73,6 +76,29 @@ const BILLING_STATUSES = ["none", "trialing", "active", "past_due", "canceled"] 
 
         <div class="card">
           <h2>Plan &amp; billing</h2>
+          <div class="plan-summary">
+            <span class="badge" [class.badge-pro]="planLabel(o) === 'Pro'" [class.badge-trial]="planLabel(o) === 'Trial'">{{ planLabel(o) }}</span>
+            @if (isSubscribed(o)) {
+              <strong>{{ o.usage.usedSeatCount }} of {{ o.seatLimit }} seats used</strong>
+              <span class="muted">{{ seatAvailabilityLabel(o) }}</span>
+            } @else if (o.billingStatus === "trialing") {
+              <strong>{{ o.usage.usedSeatCount }} seats needed at checkout</strong>
+              <span class="muted">Trial access is not billed yet</span>
+            } @else {
+              <strong>No paid seats</strong>
+              <span class="muted">Free members and guests are governed by plan limits</span>
+            }
+          </div>
+          <dl class="billing-facts">
+            <dt class="muted">Billing cadence</dt><dd>{{ billingCadence(o) }}</dd>
+            @if (o.billingStatus === "trialing" || isSubscribed(o) || o.currentPeriodEnd) {
+              <dt class="muted">{{ periodBoundaryLabel(o) }}</dt>
+              <dd>{{ o.currentPeriodEnd ? formatPeriodDate(o.currentPeriodEnd) : "Not synced" }}</dd>
+            }
+            @if (o.cancelAtPeriodEnd) {
+              <dt class="muted">Subscription</dt><dd><span class="badge badge-danger">Cancellation scheduled</span></dd>
+            }
+          </dl>
           <label><span class="muted">Plan</span>
             <select class="select" [value]="plan()" (input)="setPlan($any($event.target).value)">
               @for (p of plans; track p) { <option [value]="p" [selected]="p === plan()">{{ p }}</option> }
@@ -102,18 +128,19 @@ const BILLING_STATUSES = ["none", "trialing", "active", "past_due", "canceled"] 
         <h2>Users and guests</h2>
         <a-table-controls [query]="peopleQuery()" placeholder="Search users and guests…" [page]="peoplePage()" [pageSize]="peoplePageSize()" [total]="peopleTotal()" [loading]="peopleLoading()" (queryChange)="searchPeople($event)" (pageChange)="goPeople($event)" (pageSizeChange)="resizePeople($event)" />
         <table class="data">
-          <thead><tr>@for(c of peopleColumns;track c.key){<th><button class="sort" (click)="orderPeople(c.key)">{{c.label}} {{peopleArrow(c.key)}}</button></th>}</tr></thead>
+          <thead><tr>@for(c of peopleColumns;track c.key){<th><button class="sort" (click)="orderPeople(c.sort)">{{c.label}} {{peopleArrow(c.sort)}}</button></th>}</tr></thead>
           <tbody>
             @for (person of people(); track person.id) {
               <tr class="person-row" role="link" tabindex="0" (click)="openUser(person.id)" (keydown.enter)="openUser(person.id)" (keydown.space)="openUser(person.id); $event.preventDefault()">
                 <td>{{ person.displayName }}</td>
                 <td class="muted">{{ person.email }}</td>
-                <td><span class="badge">{{ person.kind }}</span></td>
+                <td><span class="badge">{{ person.kind === "user" ? "member" : "guest" }}</span></td>
+                <td><span class="badge" [class.badge-pro]="person.access === 'pro_member' || person.access === 'paid_guest'" [class.badge-trial]="person.access === 'trial_member' || person.access === 'trial_guest'">{{ accessLabel(person.access) }}</span></td>
                 <td class="muted">{{ person.kind === "guest" ? person.boardCount + " board" + (person.boardCount === 1 ? "" : "s") : person.role }}</td>
                 <td class="muted">{{ person.lastOnlineAt ? formatDate(person.lastOnlineAt) : "Never" }}</td>
               </tr>
             } @empty {
-              <tr><td colspan="5" class="muted">No users or guests found.</td></tr>
+              <tr><td colspan="6" class="muted">No users or guests found.</td></tr>
             }
           </tbody>
         </table>
@@ -167,6 +194,12 @@ const BILLING_STATUSES = ["none", "trialing", "active", "past_due", "canceled"] 
       .card label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; margin-bottom: 12px; }
       dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0; font-size: 13px; }
       dd { margin: 0; text-align: right; }
+      .sub-value { color: var(--text-muted); display: block; font-size: 11px; margin-top: 2px; }
+      .plan-summary { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; align-items: center; border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 12px; font-size: 12px; }
+      .plan-summary .badge { grid-row: span 2; }
+      .billing-facts { border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 12px; }
+      .badge-pro { background: color-mix(in srgb, var(--success) 14%, var(--surface)); border-color: color-mix(in srgb, var(--success) 45%, var(--border)); color: var(--success); }
+      .badge-trial { background: color-mix(in srgb, var(--warning) 14%, var(--surface)); border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); color: var(--warning); }
       .people-card { margin-top: 14px; overflow-x: auto; }
       .support-start { margin-top: 14px; margin-bottom:14px; }
       .support-start .row { display: flex; gap: 8px; }
@@ -196,7 +229,7 @@ export class OrgDetailPage implements OnInit {
   readonly billingStatus = signal<string>("none");
   readonly quotaMb = signal<string>("");
   readonly name = signal<string>("");
-  readonly peopleColumns = [{ key: "displayName", label: "Name" }, { key: "email", label: "Email" }, { key: "kind", label: "Type" }, { key: "access", label: "Role / access" }, { key: "lastOnlineAt", label: "Last online" }];
+  readonly peopleColumns = [{ key: "displayName", label: "Name", sort: "displayName" }, { key: "email", label: "Email", sort: "email" }, { key: "kind", label: "Type", sort: "kind" }, { key: "planAccess", label: "Plan access", sort: "access" }, { key: "detail", label: "Role / boards", sort: "access" }, { key: "lastOnlineAt", label: "Last online", sort: "lastOnlineAt" }];
   readonly people = signal<AdminOrgPersonListItem[]>([]); readonly peopleTotal = signal(0); readonly peoplePage = signal(1); readonly peoplePageSize = signal(25); readonly peopleQuery = signal(""); readonly peopleSort = signal("displayName"); readonly peopleDirection = signal<"asc" | "desc">("asc"); readonly peopleLoading = signal(false); private peopleTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Support-session UI state: the inline "start" panel and the audit list for this org.
@@ -214,6 +247,45 @@ export class OrgDetailPage implements OnInit {
 
   mb(bytes: number): string {
     return `${(bytes / 1_048_576).toFixed(1)} MB`;
+  }
+
+  isSubscribed(org: AdminOrgDetail): boolean {
+    return isSubscribedPlan(org.plan, org.billingStatus);
+  }
+
+  planLabel(org: AdminOrgDetail): "Free" | "Trial" | "Pro" {
+    return organisationPlanLabel(org.plan, org.billingStatus);
+  }
+
+  guestSeatLabel(org: AdminOrgDetail, count: number): string {
+    const kind = this.isSubscribed(org) ? "paid guest" : org.billingStatus === "trialing" ? "trial guest" : "seat guest";
+    return count === 1 ? kind : `${kind}s`;
+  }
+
+  seatAvailabilityLabel(org: AdminOrgDetail): string {
+    const remaining = org.seatLimit - org.usage.usedSeatCount;
+    if (remaining < 0) return `${Math.abs(remaining)} over capacity`;
+    return `${remaining} available`;
+  }
+
+  billingCadence(org: AdminOrgDetail): string {
+    if (org.billingInterval === "monthly") return "Monthly";
+    if (org.billingInterval === "annual") return "Annual";
+    return this.planLabel(org) === "Free" ? "Not billed" : "Not synced";
+  }
+
+  periodBoundaryLabel(org: AdminOrgDetail): string {
+    if (org.billingStatus === "trialing") return "Trial ends";
+    if (org.cancelAtPeriodEnd) return "Seats expire";
+    return this.isSubscribed(org) ? "Next renewal" : "Period ended";
+  }
+
+  formatPeriodDate(value: string): string {
+    return new Date(value).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  }
+
+  accessLabel(access: AdminOrgPersonListItem["access"]): string {
+    return orgPersonAccessLabel(access);
   }
 
   formatDate(value: string): string {

@@ -5,6 +5,7 @@ import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AdminAuthService } from "../../core/auth/admin-auth.service";
 import { ToastService } from "../../shared/toast.service";
 import { ConfirmService } from "../../shared/confirm.service";
+import { guestAccess, membershipAccess, organisationBillingSummary, userAccessBreakdown } from "../../shared/plan-access";
 
 const ROLES = ["owner", "admin", "member"] as const;
 
@@ -18,7 +19,12 @@ const ROLES = ["owner", "admin", "member"] as const;
         <div>
           <a class="muted back" (click)="back()"><i class="ti ti-arrow-left"></i> Users</a>
           <h1>{{ u.displayName }}</h1>
-          <p class="muted">{{ u.email }} · {{ u.orgs.length }} organisation{{ u.orgs.length === 1 ? '' : 's' }}</p>
+          <p class="muted">{{ u.email }} · {{ u.orgs.length }} member org{{ u.orgs.length === 1 ? '' : 's' }} · {{ u.guestOrgs.length }} guest org{{ u.guestOrgs.length === 1 ? '' : 's' }}</p>
+          <div class="access-summary">
+            @for (access of accessBreakdown(u); track access.label) {
+              <span class="badge" [class.badge-pro]="access.tone === 'pro'" [class.badge-trial]="access.tone === 'trial'">{{ access.count > 1 ? access.count + "× " : "" }}{{ access.label }}</span>
+            }
+          </div>
         </div>
         <div class="actions">
           @if (selectedOrg()?.suspendedAt) {
@@ -42,7 +48,7 @@ const ROLES = ["owner", "admin", "member"] as const;
           <label><span class="muted">Organisation</span>
             <select class="select" [value]="selectedClientId()" (input)="selectOrganisation($any($event.target).value)">
               @for (organisation of u.orgs; track organisation.clientId) {
-                <option [value]="organisation.clientId" [selected]="organisation.clientId === selectedClientId()">{{ organisation.name }}</option>
+                <option [value]="organisation.clientId" [selected]="organisation.clientId === selectedClientId()">{{ organisation.name }} · {{ membershipAccessLabel(organisation) }}</option>
               }
             </select>
           </label>
@@ -54,6 +60,8 @@ const ROLES = ["owner", "admin", "member"] as const;
           <button class="btn btn-primary" type="button" (click)="saveRole()">Save role</button>
 
           @if (selectedOrg(); as organisation) {
+          <p><span class="badge" [class.badge-pro]="membershipTone(organisation) === 'pro'" [class.badge-trial]="membershipTone(organisation) === 'trial'">{{ membershipAccessLabel(organisation) }}</span></p>
+          <p class="muted">{{ billingSummary(organisation) }}</p>
           <p class="muted">{{ organisation.removedAt ? 'Removed' : organisation.suspendedAt ? 'Suspended' : 'Active' }} · added {{ formatDate(organisation.addedAt) }}</p>
           }
 
@@ -88,11 +96,12 @@ const ROLES = ["owner", "admin", "member"] as const;
         <h2>Guest board access</h2>
         @if (u.guestBoardAccess.length) {
           <table class="data">
-            <thead><tr><th>Organisation</th><th>Workspace</th><th>Board</th><th>Role</th><th>Added</th></tr></thead>
+            <thead><tr><th>Organisation</th><th>Access</th><th>Workspace</th><th>Board</th><th>Role</th><th>Added</th></tr></thead>
             <tbody>
               @for (access of u.guestBoardAccess; track access.boardId) {
                 <tr>
-                  <td>{{ access.orgName }}</td>
+                  <td><strong>{{ access.orgName }}</strong><span class="org-billing muted">{{ billingSummary(access) }}</span></td>
+                  <td><span class="badge" [class.badge-pro]="guestTone(access) === 'pro'" [class.badge-trial]="guestTone(access) === 'trial'">{{ guestAccessLabel(access) }}</span></td>
                   <td>{{ access.workspaceName }}</td>
                   <td>{{ access.boardName }}</td>
                   <td><span class="badge">{{ access.role }}</span></td>
@@ -119,6 +128,7 @@ const ROLES = ["owner", "admin", "member"] as const;
       h2 { font-size: 14px; margin: 0 0 12px; }
       p { margin: 4px 0 0; font-size: 13px; }
       .actions { display: flex; gap: 8px; }
+      .access-summary { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
       .cols { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; align-items: start; }
       .card label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; margin-bottom: 12px; }
       .card .btn { width: 100%; margin-bottom: 8px; }
@@ -126,6 +136,9 @@ const ROLES = ["owner", "admin", "member"] as const;
       ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
       li { display: flex; align-items: center; justify-content: space-between; }
       .guest-access { margin-top: 14px; overflow-x: auto; }
+      .org-billing { display: block; font-size: 11px; margin-top: 3px; white-space: nowrap; }
+      .badge-pro { background: color-mix(in srgb, var(--success) 14%, var(--surface)); border-color: color-mix(in srgb, var(--success) 45%, var(--border)); color: var(--success); }
+      .badge-trial { background: color-mix(in srgb, var(--warning) 14%, var(--surface)); border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); color: var(--warning); }
     `,
   ],
 })
@@ -155,6 +168,30 @@ export class UserDetailPage implements OnInit {
 
   formatDate(value: string): string {
     return new Date(value).toLocaleString();
+  }
+
+  membershipTone(organisation: AdminUserDetail["orgs"][number]): "free" | "trial" | "pro" {
+    return membershipAccess(organisation.plan, organisation.billingStatus).tone;
+  }
+
+  membershipAccessLabel(organisation: AdminUserDetail["orgs"][number]): string {
+    return membershipAccess(organisation.plan, organisation.billingStatus).label;
+  }
+
+  guestTone(access: AdminUserDetail["guestBoardAccess"][number] | AdminUserDetail["guestOrgs"][number]): "free" | "trial" | "pro" {
+    return guestAccess(access.paidGuestSeat, access.plan, access.billingStatus).tone;
+  }
+
+  guestAccessLabel(access: AdminUserDetail["guestBoardAccess"][number] | AdminUserDetail["guestOrgs"][number]): string {
+    return guestAccess(access.paidGuestSeat, access.plan, access.billingStatus).label;
+  }
+
+  billingSummary(organisation: AdminUserDetail["orgs"][number] | AdminUserDetail["guestBoardAccess"][number]): string {
+    return organisationBillingSummary(organisation);
+  }
+
+  accessBreakdown(user: AdminUserDetail): Array<{ label: string; count: number; tone: "free" | "trial" | "pro" }> {
+    return userAccessBreakdown(user);
   }
 
   private async load(): Promise<void> {
