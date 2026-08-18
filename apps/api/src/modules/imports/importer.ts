@@ -789,6 +789,7 @@ export async function runTrelloImport(
 
   const labelAssignments: { cardId: string; labelId: string }[] = [];
   const assignees: { cardId: string; userId: string }[] = [];
+  const assigneeKeys = new Set<string>();
   const fieldValues: TrelloImportEvents["customFieldValuesSet"] = [];
   for (const card of importCards) {
     const cardId = cardIdByTrelloId.get(card.id)!;
@@ -798,8 +799,17 @@ export async function runTrelloImport(
     }
     for (const memberId of new Set(card.memberIds)) {
       const userId = ctx.body.members[memberId];
-      if (userId) assignees.push({ cardId, userId });
-      else ctx.warnings.push(`Skipped an unmapped assignee on "${card.name}".`);
+      if (!userId) {
+        ctx.warnings.push(`Skipped an unmapped assignee on "${card.name}".`);
+        continue;
+      }
+      // Distinct Trello members can map to one workspace user. Keep one row per composite key so
+      // the assignment insert and the emitted assignee set describe the same valid relation.
+      const key = `${cardId}:${userId}`;
+      if (!assigneeKeys.has(key)) {
+        assigneeKeys.add(key);
+        assignees.push({ cardId, userId });
+      }
     }
     for (const item of card.customFieldItems) {
       const field = fieldMapping.map.get(item.fieldId);

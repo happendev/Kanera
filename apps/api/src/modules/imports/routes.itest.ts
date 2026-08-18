@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import type { CommitImportBody } from "@kanera/shared/dto";
-import { activityEvents, boards, cardAttachments, cardChecklistItems, cardChecklists, cards, clients, comments, eventOutbox, kaneraBoardImports, lists, trelloImports } from "@kanera/shared/schema";
+import { activityEvents, boards, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cards, clients, comments, eventOutbox, kaneraBoardImports, lists, trelloImports } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
@@ -695,6 +695,54 @@ void test("Trello import appends mapped-list cards after the workspace-list tail
   assert.equal(result.board.workspaceId, workspace.id);
 });
 
+void test("Trello import collapses assignees when source members map to the same workspace user", async () => {
+  const { user, workspace, targetList } = await setupImportTarget("Acme Trello Assignee Mapping", "owner-trello-assignee-mapping@example.com");
+  const source: NormalizedTrelloBoard = {
+    board: { id: "trello-board", name: "Imported", desc: null },
+    lists: [{ id: "trello-list", name: "Todo", closed: false, pos: 1 }],
+    labels: [],
+    customFields: [],
+    members: [
+      { id: "trello-member-1", fullName: "Source owner", username: "source-owner" },
+      { id: "trello-member-2", fullName: "Source duplicate", username: "source-duplicate" },
+    ],
+    cards: [{
+      id: "trello-card",
+      name: "Shared assignment",
+      desc: null,
+      listId: "trello-list",
+      pos: 1,
+      closed: false,
+      due: null,
+      dueComplete: false,
+      labelIds: [],
+      memberIds: ["trello-member-1", "trello-member-2"],
+      checklistIds: [],
+      customFieldItems: [],
+      attachments: [],
+    }],
+    checklists: [],
+    comments: [],
+  };
+  const body: CommitImportBody = {
+    board: { name: "Imported", icon: "layout-kanban" },
+    lists: { "trello-list": { action: "map", targetListId: targetList.id } },
+    labels: {},
+    customFields: {},
+    members: { "trello-member-1": user.id, "trello-member-2": user.id },
+    options: { includeArchived: false, importComments: false, importCustomFields: false, attachmentCopyMode: "skip" },
+  };
+
+  const result = await db.transaction((tx) =>
+    runTrelloImport(tx, { source, body, workspaceId: workspace.id, clientId: user.clientId, actorId: user.id, actorTimezone: "UTC" })
+  );
+
+  const [importedCard] = await db.select().from(cards).where(and(eq(cards.boardId, result.board.id), eq(cards.title, "Shared assignment"))).limit(1);
+  assert.ok(importedCard);
+  assert.equal(await db.$count(cardAssignees, eq(cardAssignees.cardId, importedCard.id)), 1);
+  assert.deepEqual(result.events.assigneesSet, [{ cardId: importedCard.id, assigneeIds: [user.id] }]);
+});
+
 void test("Kanera board import appends mapped-list cards after the workspace-list tail", async () => {
   const { user, workspace, targetList, existingCard } = await setupImportTarget("Acme Kanera Tail", "owner-kanera-tail@example.com");
 
@@ -746,6 +794,42 @@ void test("Kanera board import appends mapped-list cards after the workspace-lis
   const importedPositions = targetCards.filter((c) => c.boardId === result.board.id).map((c) => Number(c.position));
   assert.ok(importedPositions.every((p) => p > Number(existingCard.position)));
   assert.equal(new Set(targetCards.map((c) => c.position)).size, targetCards.length);
+});
+
+void test("Kanera board import collapses assignees when source members map to the same workspace user", async () => {
+  const { user, workspace, targetList } = await setupImportTarget("Acme Kanera Assignee Mapping", "owner-kanera-assignee-mapping@example.com");
+  const [sourceBoard] = await db.insert(boards).values({ workspaceId: workspace.id, name: "Source", position: "9000.0000000000" }).returning();
+  const [sourceList] = await db.insert(lists).values({ workspaceId: workspace.id, name: "Source list", position: "9000.0000000000" }).returning();
+  assert.ok(sourceBoard);
+  assert.ok(sourceList);
+  const [sourceCard] = await db.insert(cards).values({ listId: sourceList.id, boardId: sourceBoard.id, title: "Shared assignment", position: "1000.0000000000", createdById: user.id }).returning();
+  assert.ok(sourceCard);
+  await db.insert(cardAssignees).values({ cardId: sourceCard.id, userId: user.id });
+
+  const archive = await buildBoardExportArchive(sourceBoard.id, user.clientId);
+  const sourceMember = archive.members.find((member) => member.userId === user.id);
+  assert.ok(sourceMember);
+  const duplicateSourceUserId = randomUUID();
+  archive.members.push({ ...sourceMember, userId: duplicateSourceUserId });
+  archive.cardAssignees.push({ ...archive.cardAssignees[0]!, userId: duplicateSourceUserId });
+  const body: CommitImportBody = {
+    board: { name: "Imported Kanera", icon: "layout-kanban" },
+    lists: { [sourceList.id]: { action: "map", targetListId: targetList.id } },
+    labels: {},
+    customFields: {},
+    members: { [user.id]: user.id, [duplicateSourceUserId]: user.id },
+    options: { includeArchived: false, importComments: false, importCustomFields: false, attachmentCopyMode: "skip" },
+  };
+  const storage = await getStorageForClient(user.clientId);
+
+  const result = await db.transaction((tx) =>
+    runKaneraBoardImport(tx, { source: archive, body, workspaceId: workspace.id, clientId: user.clientId, actorId: user.id, storage })
+  );
+
+  const [importedCard] = await db.select().from(cards).where(and(eq(cards.boardId, result.board.id), eq(cards.title, "Shared assignment"))).limit(1);
+  assert.ok(importedCard);
+  assert.equal(await db.$count(cardAssignees, eq(cardAssignees.cardId, importedCard.id)), 1);
+  assert.deepEqual(result.events.assigneesSet, [{ cardId: importedCard.id, assigneeIds: [user.id] }]);
 });
 
 void test("Kanera board import round-trips nested checklist detail and item descriptions", async () => {

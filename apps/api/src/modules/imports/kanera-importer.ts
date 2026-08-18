@@ -113,6 +113,16 @@ function chunks<T>(items: T[], size = CHUNK_SIZE): T[][] {
   return result;
 }
 
+function uniqueCardUserRows(rows: { cardId: string; userId: string }[]): { cardId: string; userId: string }[] {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const key = `${row.cardId}:${row.userId}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 async function insertMany<T extends Record<string, unknown>, R>(tx: Tx, table: Parameters<Tx["insert"]>[0], rows: T[]): Promise<R[]> {
   const inserted: R[] = [];
   for (const chunk of chunks(rows)) {
@@ -462,9 +472,11 @@ export async function runKaneraBoardImport(tx: Tx, args: { source: BoardExportAr
   const labelAssignments = ctx.source.cardLabelAssignments
     .map((row) => ({ cardId: cardIdBySourceId.get(row.cardId), labelId: labelMapping.map.get(row.labelId) }))
     .filter((row): row is { cardId: string; labelId: string } => !!row.cardId && !!row.labelId);
-  const assignees = ctx.source.cardAssignees
+  // Multiple source identities may intentionally or automatically map to the same workspace user.
+  // Collapse those mappings per card before inserting the composite-primary-key relation.
+  const assignees = uniqueCardUserRows(ctx.source.cardAssignees
     .map((row) => ({ cardId: cardIdBySourceId.get(row.cardId), userId: memberMap.get(row.userId) }))
-    .filter((row): row is { cardId: string; userId: string } => !!row.cardId && !!row.userId);
+    .filter((row): row is { cardId: string; userId: string } => !!row.cardId && !!row.userId));
   const watchers = ctx.source.cardWatchers
     .map((row) => ({ cardId: cardIdBySourceId.get(row.cardId), userId: memberMap.get(row.userId) }))
     .filter((row): row is { cardId: string; userId: string } => !!row.cardId && !!row.userId);
