@@ -1,5 +1,5 @@
 import { dto } from "@kanera/shared";
-import { boardMembers, boards, clientMembers, clients, passwordResetTokens, refreshTokens, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { boardMembers, boards, clientGuestSeats, clientMembers, clients, passwordResetTokens, refreshTokens, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, asc, desc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../db.js";
@@ -60,6 +60,63 @@ async function revokeUserRefreshTokens(tx: Parameters<Parameters<typeof db.trans
     .where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt)));
 }
 
+async function loadGuestOrganisations(userIds: string[]) {
+  if (userIds.length === 0) return [];
+  const [paidRows, boardRows] = await Promise.all([
+    db
+      .select({
+        userId: clientGuestSeats.userId,
+        clientId: clients.id,
+        name: clients.name,
+        plan: clients.plan,
+        billingStatus: clients.billingStatus,
+        billingInterval: clients.billingInterval,
+        currentPeriodEnd: clients.currentPeriodEnd,
+        cancelAtPeriodEnd: clients.cancelAtPeriodEnd,
+      })
+      .from(clientGuestSeats)
+      .innerJoin(clients, eq(clients.id, clientGuestSeats.clientId))
+      .where(and(inArray(clientGuestSeats.userId, userIds), sql`not exists (
+        select 1 from ${clientMembers} cm where cm.client_id = ${clients.id}
+          and cm.user_id = ${clientGuestSeats.userId}
+      )`)),
+    db
+      .select({
+        userId: boardMembers.userId,
+        clientId: clients.id,
+        name: clients.name,
+        plan: clients.plan,
+        billingStatus: clients.billingStatus,
+        billingInterval: clients.billingInterval,
+        currentPeriodEnd: clients.currentPeriodEnd,
+        cancelAtPeriodEnd: clients.cancelAtPeriodEnd,
+        paidGuestSeat: sql<boolean>`bool_or(${clientGuestSeats.userId} is not null)`,
+      })
+      .from(boardMembers)
+      .innerJoin(boards, eq(boards.id, boardMembers.boardId))
+      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+      .innerJoin(clients, eq(clients.id, workspaces.clientId))
+      .leftJoin(clientGuestSeats, and(eq(clientGuestSeats.clientId, clients.id), eq(clientGuestSeats.userId, boardMembers.userId)))
+      .where(and(inArray(boardMembers.userId, userIds), isNull(boards.archivedAt), sql`not exists (
+        select 1 from ${clientMembers} cm where cm.client_id = ${clients.id}
+          and cm.user_id = ${boardMembers.userId}
+      )`))
+      .groupBy(boardMembers.userId, clients.id),
+  ]);
+
+  // Include durable paid guest assignments even if their final board grant was removed outside the
+  // normal pruning path; this keeps the admin view honest about every occupied seat.
+  const organisations = new Map(paidRows.map((row) => [
+    `${row.userId}:${row.clientId}`,
+    { ...row, paidGuestSeat: true },
+  ]));
+  for (const row of boardRows) {
+    const key = `${row.userId}:${row.clientId}`;
+    organisations.set(key, { ...row, paidGuestSeat: organisations.get(key)?.paidGuestSeat ?? row.paidGuestSeat });
+  }
+  return [...organisations.values()];
+}
+
 export async function adminUserRoutes(app: FastifyInstance) {
   // Global identities are returned once with every organisation membership attached. A person in
   // three organisations is one management-portal user, not three duplicate search rows.
@@ -109,11 +166,18 @@ export async function adminUserRoutes(app: FastifyInstance) {
       clientId: clientMembers.clientId,
       name: clients.name,
       role: clientMembers.clientRole,
+      plan: clients.plan,
+      billingStatus: clients.billingStatus,
+      billingInterval: clients.billingInterval,
+      currentPeriodEnd: clients.currentPeriodEnd,
+      cancelAtPeriodEnd: clients.cancelAtPeriodEnd,
       suspendedAt: clientMembers.suspendedAt,
       removedAt: clientMembers.removedAt,
       addedAt: clientMembers.addedAt,
     }).from(clientMembers).innerJoin(clients, eq(clients.id, clientMembers.clientId))
       .where(inArray(clientMembers.userId, rows.map((row) => row.id))).orderBy(asc(clientMembers.addedAt));
+
+    const guestOrganisations = await loadGuestOrganisations(rows.map((row) => row.id));
 
     return {
       items: rows.map((r) => ({
@@ -126,9 +190,18 @@ export async function adminUserRoutes(app: FastifyInstance) {
           clientId: membership.clientId,
           name: membership.name,
           role: membership.role,
+          plan: membership.plan,
+          billingStatus: membership.billingStatus,
+          billingInterval: membership.billingInterval,
+          currentPeriodEnd: iso(membership.currentPeriodEnd),
+          cancelAtPeriodEnd: membership.cancelAtPeriodEnd,
           suspendedAt: iso(membership.suspendedAt),
           removedAt: iso(membership.removedAt),
           addedAt: iso(membership.addedAt)!,
+        })),
+        guestOrgs: guestOrganisations.filter((organisation) => organisation.userId === r.id).map(({ userId: _userId, ...organisation }) => ({
+          ...organisation,
+          currentPeriodEnd: iso(organisation.currentPeriodEnd),
         })),
         deletedAt: iso(r.deletedAt),
         createdAt: iso(r.createdAt)!,
@@ -163,6 +236,11 @@ export async function adminUserRoutes(app: FastifyInstance) {
       clientId: clientMembers.clientId,
       name: clients.name,
       role: clientMembers.clientRole,
+      plan: clients.plan,
+      billingStatus: clients.billingStatus,
+      billingInterval: clients.billingInterval,
+      currentPeriodEnd: clients.currentPeriodEnd,
+      cancelAtPeriodEnd: clients.cancelAtPeriodEnd,
       suspendedAt: clientMembers.suspendedAt,
       removedAt: clientMembers.removedAt,
       addedAt: clientMembers.addedAt,
@@ -189,6 +267,12 @@ export async function adminUserRoutes(app: FastifyInstance) {
         workspaceName: workspaces.name,
         clientId: clients.id,
         orgName: clients.name,
+        plan: clients.plan,
+        billingStatus: clients.billingStatus,
+        billingInterval: clients.billingInterval,
+        currentPeriodEnd: clients.currentPeriodEnd,
+        cancelAtPeriodEnd: clients.cancelAtPeriodEnd,
+        paidGuestSeat: sql<boolean>`${clientGuestSeats.userId} is not null`,
         role: boardMembers.role,
         addedAt: boardMembers.addedAt,
       })
@@ -196,11 +280,14 @@ export async function adminUserRoutes(app: FastifyInstance) {
       .innerJoin(boards, eq(boards.id, boardMembers.boardId))
       .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
       .innerJoin(clients, eq(clients.id, workspaces.clientId))
+      .leftJoin(clientGuestSeats, and(eq(clientGuestSeats.clientId, clients.id), eq(clientGuestSeats.userId, boardMembers.userId)))
       .where(and(eq(boardMembers.userId, userId), sql`not exists (
         select 1 from ${clientMembers} cm where cm.user_id = ${userId}
           and cm.client_id = ${workspaces.clientId}
       )`))
       .orderBy(asc(clients.name), asc(workspaces.name), asc(boards.name));
+
+    const guestOrgs = await loadGuestOrganisations([userId]);
 
     return {
       ...withSignedMedia(row.homeClientId, { avatarUrl: row.avatarUrl }),
@@ -208,13 +295,14 @@ export async function adminUserRoutes(app: FastifyInstance) {
       email: row.email,
       displayName: row.displayName,
       homeClientId: row.homeClientId,
-      orgs: orgs.map((membership) => ({ ...membership, suspendedAt: iso(membership.suspendedAt), removedAt: iso(membership.removedAt), addedAt: iso(membership.addedAt)! })),
+      orgs: orgs.map((membership) => ({ ...membership, currentPeriodEnd: iso(membership.currentPeriodEnd), suspendedAt: iso(membership.suspendedAt), removedAt: iso(membership.removedAt), addedAt: iso(membership.addedAt)! })),
+      guestOrgs: guestOrgs.map(({ userId: _userId, ...organisation }) => ({ ...organisation, currentPeriodEnd: iso(organisation.currentPeriodEnd) })),
       emailVerifiedAt: iso(row.emailVerifiedAt),
       lastOnlineAt: iso(row.lastOnlineAt),
       deletedAt: iso(row.deletedAt),
       createdAt: iso(row.createdAt)!,
       memberships,
-      guestBoardAccess: guestBoardAccess.map((access) => ({ ...access, addedAt: access.addedAt.toISOString() })),
+      guestBoardAccess: guestBoardAccess.map((access) => ({ ...access, currentPeriodEnd: iso(access.currentPeriodEnd), addedAt: access.addedAt.toISOString() })),
     };
   });
 

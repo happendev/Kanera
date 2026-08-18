@@ -3,7 +3,7 @@ import { insertTestUsers } from "../test/user-fixtures.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { and, eq, isNull } from "drizzle-orm";
-import { adminAuditLogs, boardMembers, boards, clientMembers, refreshTokens, users, workspaces } from "@kanera/shared/schema";
+import { adminAuditLogs, boardMembers, boards, clientGuestSeats, clientMembers, clients, refreshTokens, users, workspaces } from "@kanera/shared/schema";
 import { db } from "../db.js";
 import { buildAdminIntegrationServer, buildIntegrationServer } from "../test/integration.js";
 import { adminAuthHeader, createAdmin, loginAdmin } from "../test/admin-fixtures.js";
@@ -19,6 +19,37 @@ async function signupOrg(orgName: string, email: string) {
   const { user } = signup.json<{ user: { id: string; clientId: string } }>();
   return { tenantApp: app, clientId: user.clientId, userId: user.id };
 }
+
+void test("user admin views expose Free/Pro membership and paid guest relationships", async () => {
+  const host = await signupOrg("User Access Host", "user-access-host@test.local");
+  const guest = await signupOrg("User Access Home", "user-access-guest@test.local");
+  const periodEnd = new Date("2027-01-15T00:00:00.000Z");
+  await db.update(clients).set({ plan: "paid", billingStatus: "active", billingInterval: "annual", currentPeriodEnd: periodEnd, cancelAtPeriodEnd: true, seatLimit: 3 }).where(eq(clients.id, host.clientId));
+  const [workspace] = await db.insert(workspaces).values({ clientId: host.clientId, name: "Host Workspace" }).returning();
+  const [board] = await db.insert(boards).values({ workspaceId: workspace!.id, name: "Host Board", position: "1000" }).returning();
+  await db.insert(boardMembers).values({ boardId: board!.id, userId: guest.userId });
+  await db.insert(clientGuestSeats).values({ clientId: host.clientId, userId: guest.userId, createdById: host.userId });
+
+  const adminApp = await buildAdminIntegrationServer();
+  await createAdmin("user-access-admin@test.local", "admin-password");
+  const { accessToken } = await loginAdmin(adminApp, "user-access-admin@test.local", "admin-password");
+  const headers = adminAuthHeader(accessToken);
+
+  const list = await adminApp.inject({ method: "GET", url: "/admin/users?q=user-access-guest%40test.local", headers });
+  assert.equal(list.statusCode, 200, list.body);
+  const [item] = list.json<{ items: Array<{ orgs: Array<{ name: string; plan: string; billingStatus: string }>; guestOrgs: Array<{ clientId: string; name: string; plan: string; paidGuestSeat: boolean; billingStatus: string; billingInterval: string | null; currentPeriodEnd: string | null; cancelAtPeriodEnd: boolean }> }> }>().items;
+  assert.deepEqual(item!.orgs.map(({ name, plan, billingStatus }) => ({ name, plan, billingStatus })), [
+    { name: "User Access Home", plan: "free", billingStatus: "none" },
+  ]);
+  assert.deepEqual(item!.guestOrgs, [{ clientId: host.clientId, name: "User Access Host", plan: "paid", billingStatus: "active", billingInterval: "annual", currentPeriodEnd: periodEnd.toISOString(), cancelAtPeriodEnd: true, paidGuestSeat: true }]);
+
+  const detail = await adminApp.inject({ method: "GET", url: `/admin/users/${guest.userId}`, headers });
+  assert.equal(detail.statusCode, 200, detail.body);
+  const body = detail.json<{ guestBoardAccess: Array<{ orgName: string; paidGuestSeat: boolean; billingStatus: string; billingInterval: string | null; currentPeriodEnd: string | null; cancelAtPeriodEnd: boolean }> }>();
+  assert.deepEqual(body.guestBoardAccess.map((access) => ({ orgName: access.orgName, paidGuestSeat: access.paidGuestSeat, billingStatus: access.billingStatus, billingInterval: access.billingInterval, currentPeriodEnd: access.currentPeriodEnd, cancelAtPeriodEnd: access.cancelAtPeriodEnd })), [
+    { orgName: "User Access Host", paidGuestSeat: true, billingStatus: "active", billingInterval: "annual", currentPeriodEnd: periodEnd.toISOString(), cancelAtPeriodEnd: true },
+  ]);
+});
 
 void test("POST /admin/users/:id/suspend sets membership suspendedAt, revokes refresh tokens, and audits", async () => {
   const { userId } = await signupOrg("User Suspend Co", "member-owner@test.local");

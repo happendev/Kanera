@@ -142,7 +142,12 @@ export interface AdminOrgListItem {
   billingStatus: string;
   billingInterval: string | null;
   currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  seatLimit: number;
   memberCount: number;
+  paidGuestCount: number;
+  freeGuestCount: number;
+  usedSeatCount: number;
   suspendedAt: string | null;
   deletedAt: string | null;
   createdAt: string;
@@ -159,6 +164,9 @@ export interface AdminOrgDetail extends AdminOrgListItem {
     cardCount: number;
     memberCount: number;
     guestCount: number;
+    paidGuestCount: number;
+    freeGuestCount: number;
+    usedSeatCount: number;
   };
   entitlements: Entitlements;
 }
@@ -168,6 +176,7 @@ export interface AdminOrgPersonListItem {
   displayName: string;
   email: string;
   kind: "user" | "guest";
+  access: "free_member" | "trial_member" | "pro_member" | "free_guest" | "trial_guest" | "paid_guest";
   role: string | null;
   boardCount: number | null;
   lastOnlineAt: string | null;
@@ -183,9 +192,24 @@ export interface AdminUserListItem {
     clientId: string;
     name: string;
     role: string;
+    plan: string;
+    billingStatus: string;
+    billingInterval: string | null;
+    currentPeriodEnd: string | null;
+    cancelAtPeriodEnd: boolean;
     suspendedAt: string | null;
     removedAt: string | null;
     addedAt: string;
+  }>;
+  guestOrgs: Array<{
+    clientId: string;
+    name: string;
+    plan: string;
+    billingStatus: string;
+    billingInterval: string | null;
+    currentPeriodEnd: string | null;
+    cancelAtPeriodEnd: boolean;
+    paidGuestSeat: boolean;
   }>;
   deletedAt: string | null;
   createdAt: string;
@@ -214,6 +238,12 @@ export interface AdminUserDetail extends AdminUserListItem {
     workspaceName: string;
     clientId: string;
     orgName: string;
+    plan: string;
+    billingStatus: string;
+    billingInterval: string | null;
+    currentPeriodEnd: string | null;
+    cancelAtPeriodEnd: boolean;
+    paidGuestSeat: boolean;
     role: string;
     addedAt: string;
   }[];

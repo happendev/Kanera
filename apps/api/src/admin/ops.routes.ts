@@ -79,17 +79,26 @@ export async function adminOpsRoutes(app: FastifyInstance) {
         deleted: sql<number>`count(*) filter (where ${users.deletedAt} is not null)::int`,
       })
       .from(users);
-    const [planUsers = { free: 0, trial: 0, pro: 0 }] = await db
+    const [planMembers = { freeUsers: 0, trialUsers: 0 }] = await db
       .select({
         // Trialing is a paid entitlement tier, but the portal splits it out so growth/conversion is visible.
-        free: sql<number>`count(*) filter (where ${clients.plan} = 'free')::int`,
-        trial: sql<number>`count(*) filter (where ${clients.plan} = 'paid' and ${clients.billingStatus} = 'trialing')::int`,
-        pro: sql<number>`count(*) filter (where ${clients.plan} = 'paid' and ${clients.billingStatus} in ('active', 'past_due'))::int`,
+        freeUsers: sql<number>`count(*) filter (where ${clients.plan} = 'free')::int`,
+        trialUsers: sql<number>`count(*) filter (where ${clients.plan} = 'paid' and ${clients.billingStatus} = 'trialing')::int`,
       })
       .from(clientMembers)
       .innerJoin(users, eq(users.id, clientMembers.userId))
       .innerJoin(clients, eq(clientMembers.clientId, clients.id))
       .where(and(isNull(users.deletedAt), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt), isNull(clients.deletedAt)));
+    const [proSeats = { proSeats: 0 }] = await db
+      .select({
+        // Purchased capacity, not current organisation headcount, is what Stripe bills and therefore
+        // the only reliable platform-wide Pro-seat total. Historical orgs can temporarily have more
+        // active membership rows than their purchased capacity.
+        proSeats: sql<number>`coalesce(sum(${clients.seatLimit}) filter (where ${clients.plan} = 'paid' and ${clients.billingStatus} in ('active', 'past_due')), 0)::int`,
+      })
+      .from(clients)
+      .where(isNull(clients.deletedAt));
+    const planAccess = { ...planMembers, ...proSeats };
 
     // Keep the dashboard total aligned with tenant quota accounting: card, note, and scratchpad
     // attachments all consume storage, while derived cover images are not separate attachment rows.
@@ -140,7 +149,7 @@ export async function adminOpsRoutes(app: FastifyInstance) {
       eventOutbox: { pending: outboxPending, dispatched: outboxTotal - outboxPending, total: outboxTotal },
       orgs: orgTotals,
       users: userTotals,
-      planUsers,
+      planAccess,
       storageUsedBytes,
       trends: trendRows.rows,
     };

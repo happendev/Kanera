@@ -3,6 +3,7 @@ import { RouterLink } from "@angular/router";
 import type { AdminUserListItem } from "@kanera/shared/dto";
 import { ApiClient } from "../../core/api/api.client";
 import { DataTableComponent, type DataTableColumn } from "../../shared/data-table.component";
+import { organisationBillingSummary, userAccessBreakdown } from "../../shared/plan-access";
 
 interface UserListResponse {
   items: AdminUserListItem[];
@@ -26,8 +27,27 @@ interface UserListResponse {
             <tr [routerLink]="['/users', u.id]" class="row">
               <td>{{ u.displayName }}</td>
               <td class="muted">{{ u.email }}</td>
-              <td>{{ organisationNames(u) }}</td>
-              <td>{{ u.orgs.length }}</td>
+              <td>
+                <div class="org-stack">
+                  @for (organisation of u.orgs; track organisation.clientId) {
+                    <span class="org-entry"><strong>{{ organisation.name }}</strong><span class="cell-detail">{{ billingSummary(organisation) }}</span></span>
+                  }
+                  @for (organisation of u.guestOrgs; track organisation.clientId) {
+                    <span class="org-entry"><strong>{{ organisation.name }}</strong><span class="cell-detail">Guest · {{ billingSummary(organisation) }}</span></span>
+                  } @empty {
+                    @if (!u.orgs.length) { <span class="muted">None</span> }
+                  }
+                </div>
+              </td>
+              <td>
+                <div class="access-stack">
+                  @for (access of accessBreakdown(u); track access.label) {
+                    <span class="badge" [class.badge-pro]="access.tone === 'pro'" [class.badge-trial]="access.tone === 'trial'">{{ access.count > 1 ? access.count + "× " : "" }}{{ access.label }}</span>
+                  } @empty {
+                    <span class="muted">No active access</span>
+                  }
+                </div>
+              </td>
               <td class="muted">{{ formatDateTime(u.createdAt) }}</td>
               <td class="muted">{{ u.lastOnlineAt ? formatDateTime(u.lastOnlineAt) : "Never" }}</td>
               <td>
@@ -50,12 +70,18 @@ interface UserListResponse {
       .page-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; gap: 16px; }
       h1 { font-size: 20px; margin: 0; }
       .row { cursor: pointer; }
+      .cell-detail { color: var(--text-muted); display: block; font-size: 11px; margin-top: 3px; }
+      .org-stack { display: flex; flex-direction: column; gap: 7px; min-width: 190px; }
+      .org-entry { display: block; }
+      .access-stack { display: flex; flex-wrap: wrap; gap: 4px; min-width: 160px; }
+      .badge-pro { background: color-mix(in srgb, var(--success) 14%, var(--surface)); border-color: color-mix(in srgb, var(--success) 45%, var(--border)); color: var(--success); }
+      .badge-trial { background: color-mix(in srgb, var(--warning) 14%, var(--surface)); border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); color: var(--warning); }
     `,
   ],
 })
 export class UsersPage implements OnInit {
   private readonly api = inject(ApiClient);
-  readonly columns: readonly DataTableColumn[]=[{key:"displayName",label:"Name"},{key:"email",label:"Email"},{key:"orgName",label:"Organisations"},{key:"role",label:"Memberships"},{key:"createdAt",label:"Created"},{key:"lastOnlineAt",label:"Last online"},{key:"status",label:"Status"}];
+  readonly columns: readonly DataTableColumn[]=[{key:"displayName",label:"Name"},{key:"email",label:"Email"},{key:"orgName",label:"Organisations"},{key:"role",label:"Access"},{key:"createdAt",label:"Created"},{key:"lastOnlineAt",label:"Last online"},{key:"status",label:"Status"}];
   readonly pageSize = signal(25);
 
   readonly items = signal<AdminUserListItem[]>([]);
@@ -69,8 +95,12 @@ export class UsersPage implements OnInit {
 
   readonly formatDateTime = (value: string): string => new Date(value).toLocaleString();
 
-  organisationNames(user: AdminUserListItem): string {
-    return user.orgs.map((organisation) => organisation.name).join(", ") || "None";
+  billingSummary(organisation: AdminUserListItem["orgs"][number] | AdminUserListItem["guestOrgs"][number]): string {
+    return organisationBillingSummary(organisation);
+  }
+
+  accessBreakdown(user: AdminUserListItem): Array<{ label: string; count: number; tone: "free" | "trial" | "pro" }> {
+    return userAccessBreakdown(user);
   }
 
   allOrganisationsInactive(user: AdminUserListItem): boolean {

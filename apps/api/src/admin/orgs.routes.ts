@@ -1,5 +1,5 @@
 import { dto } from "@kanera/shared";
-import { boardMembers, boards, cards, clientMembers, clients, users, workspaces } from "@kanera/shared/schema";
+import { boardMembers, boards, cards, clientGuestSeats, clientMembers, clients, users, workspaces } from "@kanera/shared/schema";
 import { and, asc, desc, eq, ilike, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../db.js";
@@ -22,6 +22,63 @@ async function loadOrgOr404(clientId: string) {
   const [row] = await db.select().from(clients).where(eq(clients.id, clientId)).limit(1);
   if (!row) throw notFound("organisation not found");
   return row;
+}
+
+async function loadOrgGuests(clientId: string) {
+  const [paidRows, boardRows] = await Promise.all([
+    db
+      .select({
+        id: users.id,
+        displayName: users.displayName,
+        email: users.email,
+        lastOnlineAt: users.lastOnlineAt,
+      })
+      .from(clientGuestSeats)
+      .innerJoin(users, eq(users.id, clientGuestSeats.userId))
+      .where(and(eq(clientGuestSeats.clientId, clientId), isNull(users.deletedAt), sql`not exists (
+        select 1 from ${clientMembers} cm where cm.client_id = ${clientId}
+          and cm.user_id = ${users.id}
+      )`)),
+    db
+      .select({
+        id: users.id,
+        displayName: users.displayName,
+        email: users.email,
+        lastOnlineAt: users.lastOnlineAt,
+        boardCount: sql<number>`count(distinct ${boardMembers.boardId})::int`,
+      })
+      .from(boardMembers)
+      .innerJoin(boards, eq(boards.id, boardMembers.boardId))
+      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+      .innerJoin(users, eq(users.id, boardMembers.userId))
+      .where(and(eq(workspaces.clientId, clientId), isNull(boards.archivedAt), isNull(users.deletedAt), sql`not exists (
+        select 1 from ${clientMembers} cm where cm.client_id = ${clientId}
+          and cm.user_id = ${users.id}
+      )`))
+      .groupBy(users.id),
+  ]);
+
+  // Start with durable paid-seat assignments so an inconsistent/stale assignment cannot disappear
+  // from the admin billing view merely because its last board grant was removed out of band.
+  const guests = new Map(paidRows.map((row) => [row.id, { ...row, boardCount: 0, paidGuestSeat: true }]));
+  for (const row of boardRows) {
+    const paid = guests.get(row.id);
+    guests.set(row.id, { ...row, paidGuestSeat: paid?.paidGuestSeat ?? false });
+  }
+  return [...guests.values()].sort((a, b) => a.displayName.localeCompare(b.displayName) || a.id.localeCompare(b.id));
+}
+
+function memberAccess(plan: string, billingStatus: string) {
+  if (plan === "paid" && billingStatus === "trialing") return "trial_member" as const;
+  if (plan === "paid" && (billingStatus === "active" || billingStatus === "past_due")) return "pro_member" as const;
+  return "free_member" as const;
+}
+
+function guestAccess(paidGuestSeat: boolean, plan: string, billingStatus: string) {
+  if (!paidGuestSeat) return "free_guest" as const;
+  if (plan === "paid" && billingStatus === "trialing") return "trial_guest" as const;
+  if (plan === "paid" && (billingStatus === "active" || billingStatus === "past_due")) return "paid_guest" as const;
+  return "free_guest" as const;
 }
 
 export async function adminOrgRoutes(app: FastifyInstance) {
@@ -56,11 +113,28 @@ export async function adminOrgRoutes(app: FastifyInstance) {
         billingStatus: clients.billingStatus,
         billingInterval: clients.billingInterval,
         currentPeriodEnd: clients.currentPeriodEnd,
+        cancelAtPeriodEnd: clients.cancelAtPeriodEnd,
+        seatLimit: clients.seatLimit,
         suspendedAt: clients.suspendedAt,
         deletedAt: clients.deletedAt,
         createdAt: clients.createdAt,
         // Active members only, matching how the tenant counts seats (excludes removed/soft-deleted rows).
         memberCount: sql<number>`count(${users.id})::int`,
+        paidGuestCount: sql<number>`(
+          select count(*)::int from client_guest_seat cgs
+          join "user" gu on gu.id = cgs.user_id and gu.deleted_at is null
+          where cgs.client_id = ${clients.id}
+            and not exists (select 1 from client_member cm where cm.client_id = ${clients.id} and cm.user_id = cgs.user_id)
+        )`,
+        freeGuestCount: sql<number>`(
+          select count(distinct bm.user_id)::int from board_member bm
+          join board gb on gb.id = bm.board_id and gb.archived_at is null
+          join workspace gw on gw.id = gb.workspace_id
+          join "user" gu on gu.id = bm.user_id and gu.deleted_at is null
+          where gw.client_id = ${clients.id}
+            and not exists (select 1 from client_member cm where cm.client_id = ${clients.id} and cm.user_id = bm.user_id)
+            and not exists (select 1 from client_guest_seat cgs where cgs.client_id = ${clients.id} and cgs.user_id = bm.user_id)
+        )`,
       })
       .from(clients)
       .leftJoin(clientMembers, and(eq(clientMembers.clientId, clients.id), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt)))
@@ -80,7 +154,12 @@ export async function adminOrgRoutes(app: FastifyInstance) {
         billingStatus: r.billingStatus,
         billingInterval: r.billingInterval,
         currentPeriodEnd: iso(r.currentPeriodEnd),
+        cancelAtPeriodEnd: r.cancelAtPeriodEnd,
+        seatLimit: r.seatLimit,
         memberCount: r.memberCount,
+        paidGuestCount: r.paidGuestCount,
+        freeGuestCount: r.freeGuestCount,
+        usedSeatCount: r.memberCount + r.paidGuestCount,
         suspendedAt: iso(r.suspendedAt),
         deletedAt: iso(r.deletedAt),
         createdAt: iso(r.createdAt)!,
@@ -124,26 +203,9 @@ export async function adminOrgRoutes(app: FastifyInstance) {
       .innerJoin(users, eq(users.id, clientMembers.userId))
       .where(and(eq(clientMembers.clientId, clientId), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt), isNull(users.deletedAt)));
     const memberCount = memberRow?.memberCount ?? 0;
-    // Guests belong to another organisation and can appear on several boards; group by user so the
-    // admin view and usage count describe people rather than board memberships.
-    const guestRows = await db
-      .select({
-        id: users.id,
-        displayName: users.displayName,
-        email: users.email,
-        lastOnlineAt: users.lastOnlineAt,
-        boardCount: sql<number>`count(distinct ${boardMembers.boardId})::int`,
-      })
-      .from(boardMembers)
-      .innerJoin(boards, eq(boards.id, boardMembers.boardId))
-      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
-      .innerJoin(users, eq(users.id, boardMembers.userId))
-      .where(and(eq(workspaces.clientId, clientId), isNull(users.deletedAt), sql`not exists (
-        select 1 from ${clientMembers} cm where cm.client_id = ${clientId}
-          and cm.user_id = ${users.id}
-      )`))
-      .groupBy(users.id)
-      .orderBy(asc(users.displayName));
+    const guestRows = await loadOrgGuests(clientId);
+    const paidGuestCount = guestRows.filter((guest) => guest.paidGuestSeat).length;
+    const freeGuestCount = guestRows.length - paidGuestCount;
 
     return {
       ...withSignedMedia(org.id, { logoUrl: org.logoUrl }),
@@ -155,6 +217,8 @@ export async function adminOrgRoutes(app: FastifyInstance) {
       deploymentMode: env.KANERA_DEPLOYMENT_MODE,
       storageQuotaBytes: org.storageQuotaBytes,
       currentPeriodEnd: iso(org.currentPeriodEnd),
+      cancelAtPeriodEnd: org.cancelAtPeriodEnd,
+      seatLimit: org.seatLimit,
       suspendedAt: iso(org.suspendedAt),
       deletedAt: iso(org.deletedAt),
       createdAt: iso(org.createdAt)!,
@@ -167,6 +231,9 @@ export async function adminOrgRoutes(app: FastifyInstance) {
         cardCount,
         memberCount,
         guestCount: guestRows.length,
+        paidGuestCount,
+        freeGuestCount,
+        usedSeatCount: memberCount + paidGuestCount,
       },
       entitlements,
     };
@@ -174,23 +241,18 @@ export async function adminOrgRoutes(app: FastifyInstance) {
 
   app.get("/orgs/:clientId/people", async (req) => {
     const { clientId } = req.params as { clientId: string };
-    await loadOrgOr404(clientId);
+    const org = await loadOrgOr404(clientId);
     const query = dto.adminListOrgPeopleQuery.parse(req.query);
     const members = await db.select({ id: users.id, displayName: users.displayName, email: users.email, role: clientMembers.clientRole, lastOnlineAt: users.lastOnlineAt })
       .from(clientMembers).innerJoin(users, eq(users.id, clientMembers.userId))
       .where(and(eq(clientMembers.clientId, clientId), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt), isNull(users.deletedAt)));
-    const guests = await db.select({ id: users.id, displayName: users.displayName, email: users.email, lastOnlineAt: users.lastOnlineAt, boardCount: sql<number>`count(distinct ${boardMembers.boardId})::int` })
-      .from(boardMembers).innerJoin(boards, eq(boards.id, boardMembers.boardId)).innerJoin(workspaces, eq(workspaces.id, boards.workspaceId)).innerJoin(users, eq(users.id, boardMembers.userId))
-      .where(and(eq(workspaces.clientId, clientId), isNull(users.deletedAt), sql`not exists (
-        select 1 from ${clientMembers} cm where cm.client_id = ${clientId}
-          and cm.user_id = ${users.id}
-      )`)).groupBy(users.id);
+    const guests = await loadOrgGuests(clientId);
     let people = [
-      ...members.map((row) => ({ ...row, kind: "user" as const, boardCount: null, lastOnlineAt: iso(row.lastOnlineAt) })),
-      ...guests.map((row) => ({ ...row, kind: "guest" as const, role: null, lastOnlineAt: iso(row.lastOnlineAt) })),
+      ...members.map((row) => ({ ...row, kind: "user" as const, access: memberAccess(org.plan, org.billingStatus), boardCount: null, lastOnlineAt: iso(row.lastOnlineAt) })),
+      ...guests.map((row) => ({ ...row, kind: "guest" as const, access: guestAccess(row.paidGuestSeat, org.plan, org.billingStatus), role: null, lastOnlineAt: iso(row.lastOnlineAt) })),
     ];
     if (query.q) { const q = query.q.toLocaleLowerCase(); people = people.filter((p) => p.displayName.toLocaleLowerCase().includes(q) || p.email.toLocaleLowerCase().includes(q)); }
-    const value = (p: (typeof people)[number]) => query.sort === "access" ? (p.kind === "guest" ? p.boardCount ?? 0 : p.role ?? "") : p[query.sort];
+    const value = (p: (typeof people)[number]) => query.sort === "access" ? p.access : p[query.sort];
     people.sort((a, b) => { const av = value(a) ?? "", bv = value(b) ?? ""; const compared = typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv)); return (query.direction === "asc" ? compared : -compared) || a.id.localeCompare(b.id); });
     const total = people.length;
     const start = (query.page - 1) * query.pageSize;
