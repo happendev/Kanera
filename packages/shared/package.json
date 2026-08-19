@@ -16,6 +16,7 @@
     "./client-ip": "./src/client-ip.ts",
     "./card-links": "./src/card-links.ts",
     "./colors": "./src/lib/colors.ts",
+    "./activity-summary": "./src/lib/activity-summary.ts",
     "./icons": "./src/tabler-icons.ts",
     "./workspace-defaults": "./src/lib/workspace-defaults.ts",
     "./workspace-templates": "./src/workspace-templates.ts",

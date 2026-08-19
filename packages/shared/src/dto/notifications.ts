@@ -40,6 +40,7 @@ export type PutNotificationWorkspaceRuleBody = z.infer<typeof putNotificationWor
 export const updateNotificationSettingsBody = z.object({
   emailEnabled: z.boolean().optional(),
   pushEnabled: z.boolean().optional(),
+  watchedActivityOutbound: z.boolean().optional(),
   personalChannels: z.object({
     ntfy: z.object({
       enabled: z.boolean().optional(),
@@ -71,6 +72,7 @@ export const notificationSettingsResponse = z.object({
   userId: z.uuid(),
   emailEnabled: z.boolean(),
   pushEnabled: z.boolean(),
+  watchedActivityOutbound: z.boolean(),
   types: notificationSettingsMatrix,
   push: z.object({
     status: z.enum(["enabled", "org-disabled", "system-disabled"]),
@@ -107,6 +109,7 @@ export const notificationSettingsResponse = z.object({
 export interface NotificationSettingsResponse {
   emailEnabled: boolean;
   pushEnabled: boolean;
+  watchedActivityOutbound: boolean;
   types: z.infer<typeof notificationSettingsMatrix>;
   push: {
     status: "enabled" | "org-disabled" | "system-disabled";

@@ -354,6 +354,7 @@ describe("CardDetailComponent realtime regressions", () => {
   let socket: SocketStub;
   let socketService: { connect: ReturnType<typeof vi.fn>; displayedOnline: ReturnType<typeof signal<boolean>>; joinWorkspace: ReturnType<typeof vi.fn> };
   let viewerRole: ReturnType<typeof signal<"owner" | "admin" | "editor" | "observer" | null>>;
+  let viewerIsWorkspaceAdmin: ReturnType<typeof signal<boolean>>;
   let canEditLive: ReturnType<typeof signal<boolean>>;
   let isOrgAdmin: ReturnType<typeof signal<boolean>>;
   let isPlanLimited: ReturnType<typeof signal<boolean>>;
@@ -420,6 +421,7 @@ describe("CardDetailComponent realtime regressions", () => {
       }),
     };
     viewerRole = signal<"owner" | "admin" | "editor" | "observer" | null>("editor");
+    viewerIsWorkspaceAdmin = signal(false);
     canEditLive = signal(true);
     isOrgAdmin = signal(false);
     isPlanLimited = signal(false);
@@ -485,6 +487,7 @@ describe("CardDetailComponent realtime regressions", () => {
             canEdit: () => canEditLive(),
             canEditRole: () => viewerRole() !== null && viewerRole() !== "observer",
             viewerRole,
+            viewerIsWorkspaceAdmin,
             workspaceKind,
             board: () => ({ id: "board-1", workspaceId: "workspace-1" }),
             lists: () => [{ id: "list-1", name: "To do", icon: null, color: null }],
@@ -1887,6 +1890,37 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(Array.from(commentEl.querySelectorAll("button")).map((button) => button.textContent?.trim())).not.toContain("Delete");
     expect(fixture.componentInstance.canReactRole(comment)).toBe(true);
     expect(fixture.nativeElement.querySelector(".activity-text")?.textContent?.trim()).toBe("Kanera (Grace Hopper) updated the description");
+  });
+
+  it("lets board administrators delete another author's comment without allowing edits", async () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    await fixture.whenStable();
+    fixture.componentInstance.feedItems.set([{ type: "comment", data: createComment({ authorId: "user-2" }) }]);
+    await fixture.whenStable();
+
+    const actionLabels = () => Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>(".comment-actions button"),
+      (button) => button.textContent?.trim(),
+    );
+    expect(actionLabels()).toContain("Reply");
+    expect(actionLabels()).not.toContain("Delete");
+
+    viewerIsWorkspaceAdmin.set(true);
+    await fixture.whenStable();
+    expect(actionLabels()).toContain("Reply");
+    expect(actionLabels()).toContain("Delete");
+    expect(actionLabels()).not.toContain("Edit");
+
+    const deleteButton = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>(".comment-actions button"),
+    ).find((button) => button.textContent?.trim() === "Delete");
+    deleteButton?.click();
+    await fixture.whenStable();
+    expect(api.delete).toHaveBeenCalledWith("/comments/comment-1");
+    expect(fixture.componentInstance.feedItems()).toEqual([]);
   });
 
   it("resolves the initial mirror provenance URL as an internal Kanera card link", async () => {

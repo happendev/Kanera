@@ -497,6 +497,79 @@ void test("editing a comment updates the comment feed item without recording edi
   assert.equal(commentItems[0].data.body, "Edited");
 });
 
+void test("board administrators can delete other authors' comments but editors cannot", async () => {
+  const app = await buildIntegrationServer();
+  const signup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: {
+      orgName: "Acme Comment Moderation",
+      email: "owner-comment-moderation@example.com",
+      password: "Abc12345",
+      displayName: "Owner",
+    },
+  });
+  assert.equal(signup.statusCode, 200);
+  const { accessToken: ownerToken, user: owner } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
+
+  const workspaceCreated = await app.inject({
+    method: "POST",
+    url: "/workspaces",
+    headers: { authorization: `Bearer ${ownerToken}` },
+    payload: { name: "Delivery" },
+  });
+  assert.equal(workspaceCreated.statusCode, 201);
+  const workspace = workspaceCreated.json<{ id: string }>();
+  const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
+  assert.ok(list);
+  const [board] = await db.insert(boards).values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" }).returning();
+  assert.ok(board);
+  const [card] = await db.insert(cards).values({ listId: list.id, boardId: board.id, title: "Moderated comments", position: "1000.0000000000", createdById: owner.id }).returning();
+  assert.ok(card);
+
+  const [admin, editor] = await insertTestUsers(db, [
+    { clientId: owner.clientId, email: "admin-comment-moderation@example.com", passwordHash: "x", displayName: "Admin", clientRole: "admin" },
+    { clientId: owner.clientId, email: "editor-comment-moderation@example.com", passwordHash: "x", displayName: "Editor" },
+  ]).returning();
+  assert.ok(admin && editor);
+  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: editor.id, role: "member" });
+  await db.insert(boardMembers).values({ boardId: board.id, userId: editor.id, role: "editor" });
+
+  const [ownerModerated, adminModerated, editorRejected] = await db.insert(comments).values([
+    { cardId: card.id, authorId: editor.id, body: "Owner can moderate this" },
+    { cardId: card.id, authorId: editor.id, body: "Admin can moderate this" },
+    { cardId: card.id, authorId: owner.id, body: "Editor cannot moderate this" },
+  ]).returning();
+  assert.ok(ownerModerated && adminModerated && editorRejected);
+
+  const ownerDelete = await app.inject({
+    method: "DELETE",
+    url: `/comments/${ownerModerated.id}`,
+    headers: { authorization: `Bearer ${ownerToken}` },
+  });
+  assert.equal(ownerDelete.statusCode, 204);
+
+  const adminToken = app.jwt.sign({ sub: admin.id, cid: owner.clientId, role: "admin" });
+  const adminDelete = await app.inject({
+    method: "DELETE",
+    url: `/comments/${adminModerated.id}`,
+    headers: { authorization: `Bearer ${adminToken}` },
+  });
+  assert.equal(adminDelete.statusCode, 204);
+
+  const editorToken = app.jwt.sign({ sub: editor.id, cid: owner.clientId, role: "member" });
+  const editorDelete = await app.inject({
+    method: "DELETE",
+    url: `/comments/${editorRejected.id}`,
+    headers: { authorization: `Bearer ${editorToken}` },
+  });
+  assert.equal(editorDelete.statusCode, 403);
+  assert.equal(await db.$count(comments, inArray(comments.id, [ownerModerated.id, adminModerated.id])), 0);
+  assert.equal(await db.$count(comments, eq(comments.id, editorRejected.id)), 1);
+
+  await app.close();
+});
+
 void test("observers cannot react to comments", async () => {
   const app = await buildIntegrationServer();
 

@@ -153,6 +153,7 @@ describe("AccountSettingsPage", () => {
     notificationSettingsResponse = {
       emailEnabled: true,
       pushEnabled: false,
+      watchedActivityOutbound: false,
       push: { status: "system-disabled", registrationEnabled: false, enabled: false, publicKey: null },
       personalChannels: {
         destinationPolicy: "public-https",

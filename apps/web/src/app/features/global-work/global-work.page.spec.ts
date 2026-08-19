@@ -80,6 +80,7 @@ describe("GlobalWorkPage card routing", () => {
         totals: { cards: 1, overdue: 0, dueSoon: 0, completed: 0, checklistItems: 0, overdueChecklistItems: 0 },
         nextCursor: null,
       }),
+      teamPriorities: signal<WorkPriorityQueuesResponse | null>(null),
       catalog,
       interactionReady: signal(true),
       setCardCompleted,
@@ -1245,6 +1246,22 @@ describe("GlobalWorkPage toolbar state", () => {
       expect(fixture.componentInstance.isPriorityLaneHidden(priorityTargetId)).toBe(false);
       expect(fixture.componentInstance.visiblePriorityLanes().map((lane) => lane.target.userId))
         .toEqual([priorityTargetId]);
+
+      fixture.destroy();
+    });
+  });
+
+  it("keeps a priority-queue card actionable before the main card query catches up", () => {
+    return mount().then(({ fixture, prioritySecondCard, state }) => {
+      // Queue and card-query refreshes are independent. This is the short-lived state after a card
+      // is created and its Up next lane has refreshed first.
+      state.cards.set([card]);
+      TestBed.tick();
+
+      expect(fixture.componentInstance.roleEditableCardIds().has(prioritySecondCard.id)).toBe(true);
+
+      fixture.componentInstance.openCardById(prioritySecondCard.id);
+      expect(fixture.componentInstance.selectedCard()?.id).toBe(prioritySecondCard.id);
 
       fixture.destroy();
     });

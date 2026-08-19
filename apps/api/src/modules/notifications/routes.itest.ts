@@ -1049,6 +1049,7 @@ void test("notification settings default enabled and patch merges type settings"
     userId: f.member.id,
     emailEnabled: true,
     pushEnabled: false,
+    watchedActivityOutbound: false,
     types: {
       cardAssigned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
       cardCommentAdded: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
@@ -1949,4 +1950,35 @@ void test("completing an overdue checklist item clears its overdue notification"
   assert.equal(completed.statusCode, 200);
 
   assert.equal((await checklistOverdueRowsForItem(item.id)).length, 0);
+});
+
+void test("the watched-activity opt-in round-trips and survives unrelated settings patches", async () => {
+  const f = await seed();
+
+  const enabled = await f.app.inject({
+    method: "PATCH",
+    url: "/notifications/settings",
+    headers: { authorization: `Bearer ${f.memberToken}` },
+    payload: { watchedActivityOutbound: true },
+  });
+  assert.equal(enabled.statusCode, 200);
+  assert.equal(enabled.json<{ watchedActivityOutbound: boolean }>().watchedActivityOutbound, true);
+
+  // The PATCH handler merges field by field, so an unrelated write must not reset the column.
+  const unrelated = await f.app.inject({
+    method: "PATCH",
+    url: "/notifications/settings",
+    headers: { authorization: `Bearer ${f.memberToken}` },
+    payload: { types: { cardAssigned: { email: false } } },
+  });
+  assert.equal(unrelated.statusCode, 200);
+  assert.equal(unrelated.json<{ watchedActivityOutbound: boolean }>().watchedActivityOutbound, true);
+
+  const reloaded = await f.app.inject({
+    method: "GET",
+    url: "/notifications/settings",
+    headers: { authorization: `Bearer ${f.memberToken}` },
+  });
+  assert.equal(reloaded.statusCode, 200);
+  assert.equal(reloaded.json<{ watchedActivityOutbound: boolean }>().watchedActivityOutbound, true);
 });

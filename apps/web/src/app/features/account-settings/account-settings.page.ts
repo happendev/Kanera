@@ -1215,6 +1215,31 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Opt-in that widens outbound delivery to cards and boards the user only watches. Saved on its
+   * own rather than through the type matrix: watching is a notification reason, not one of the five
+   * event types the matrix models, so it has no row there.
+   */
+  async setWatchedActivityOutbound(checked: boolean) {
+    const current = this.notificationSettings();
+    if (!current || this.notificationSettingsSaving()) return;
+    this.notificationSettingsSaving.set(true);
+    this.notificationSettingsError.set(null);
+    this.notificationSettingsSuccess.set(null);
+    try {
+      const updated = await this.api.patch<NotificationSettingsResponse>("/notifications/settings", {
+        watchedActivityOutbound: checked,
+      });
+      this.notificationSettings.set(updated);
+      this.notificationSettingsSuccess.set("Notification settings saved.");
+    } catch (err) {
+      this.notificationSettings.set(current);
+      this.notificationSettingsError.set(extractErrorMessage(err));
+    } finally {
+      this.notificationSettingsSaving.set(false);
+    }
+  }
+
   async setNotificationType(type: NotificationSettingType, channel: "email" | "push" | PersonalNotificationChannel, checked: boolean) {
     const current = this.notificationSettings();
     if (!current || this.notificationSettingsSaving()) return;

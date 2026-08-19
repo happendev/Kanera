@@ -393,6 +393,13 @@
       "when": 1786463805237,
       "tag": "0055_magical_zaran",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1787169748714,
+      "tag": "0056_quiet_lilandra",
+      "breakpoints": true
     }
   ]
 }

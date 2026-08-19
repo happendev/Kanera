@@ -32,6 +32,7 @@ import type { Db } from "../db.js";
 import { db as dbSingleton } from "../db.js";
 import { signedAvatarUrl, signEmbeddedMediaUrls, withSignedMedia } from "./media-keys.js";
 import { emitToUser } from "../realtime/emit.js";
+import { enqueueWatchedActivityOutbound } from "./watched-activity-push.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 
@@ -332,6 +333,9 @@ export async function fanoutNotificationsForActivity(
       for (const row of enriched) {
         emitToUser(row.userId, "notification:created", { notification: row });
       }
+      // Only the rows just inserted - a watcher who started watching mid-burst. Rows that already
+      // existed are handled by the visibleExisting branch below, which deliberately does not push.
+      await enqueueWatchedActivityOutbound(dbSingleton, ctx, enriched);
     }
     if (visibleExisting.length > 0) {
       // Re-fetch all existing rows so the emit carries the fresh activity payload.
@@ -347,6 +351,9 @@ export async function fanoutNotificationsForActivity(
         const refreshed = { ...row, readAt: null };
         emitToUser(refreshed.userId, "notification:updated", { notification: refreshed });
       }
+      // Intentionally no watched-activity push here. This branch re-fires on every tick of a
+      // coalescing window for rows that already exist, so pushing would send one notification per
+      // burst update. The drawer resurfaces the entry; the device stays quiet after the first push.
     }
     return;
   }
@@ -377,6 +384,10 @@ export async function fanoutNotificationsForActivity(
   for (const row of enriched) {
     emitToUser(row.userId, "notification:created", { notification: row });
   }
+  // Reuses the rows just enriched for the socket emit: actor name, card/board/list names and the
+  // activity payload are all resolved there already, so the push body costs no extra queries.
+  // On a fanout retry `onConflictDoNothing` leaves `inserted` empty, so this cannot double-enqueue.
+  await enqueueWatchedActivityOutbound(dbSingleton, ctx, enriched);
 }
 
 export async function notifyUserForActivity(params: {

@@ -148,7 +148,7 @@
             </button>
             }
           </div>
-          @if (canEdit() && item.data.authorKind === 'user' && item.data.authorId === currentUserId()?.id) {
+          @if (canEdit() && isOwnComment(item.data)) {
           <div class="comment-actions">
             <button class="ghost xs" [disabled]="!canMutate()" (click)="startEditComment(item.data)">Edit</button>
             <button class="ghost xs" [disabled]="!canMutate()" (click)="deleteComment(item.data.id)">Delete</button>
@@ -156,6 +156,9 @@
           } @else if (canEdit() && (item.data.authorKind !== 'user' || item.data.authorId !== currentUserId()?.id)) {
           <div class="comment-actions">
             <button class="ghost xs" [disabled]="!canMutate()" (click)="startReplyComment(item.data)"><i class="ti ti-arrow-back-up"></i> Reply</button>
+            @if (canDeleteCommentRole(item.data)) {
+            <button class="ghost xs" [disabled]="!canMutate()" (click)="deleteComment(item.data.id)">Delete</button>
+            }
           </div>
           }
         </div>

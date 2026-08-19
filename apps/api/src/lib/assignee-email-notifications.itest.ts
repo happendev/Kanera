@@ -523,3 +523,119 @@ void test("push settings require organisation push and user push preference", as
   assert.equal(assignedWithTypeDisabled.statusCode, 200);
   assert.equal((await db.select().from(pushQueue).where(eq(pushQueue.reason, "assigned"))).length, 0);
 });
+
+/** Moves a card to a second list, which is watcher-visible activity but notifies no assignee. */
+async function moveCardToNewList(f: Awaited<ReturnType<typeof seed>>, title = "Done") {
+  const [target] = await db
+    .insert(lists)
+    .values({ workspaceId: f.workspace.id, name: title, position: "9000.0000000000" })
+    .returning();
+  const moved = await f.app.inject({
+    method: "POST",
+    url: `/cards/${f.card.id}/move`,
+    headers: { authorization: `Bearer ${f.ownerToken}` },
+    payload: { listId: target!.id, beforeCardId: null },
+  });
+  assert.equal(moved.statusCode, 200);
+  await sleep(80);
+  return target!;
+}
+
+void test("watched activity sends no push by default, so enabling push alone cannot spam watchers", async () => {
+  const f = await seed();
+  await db.update(clients).set({ pushEnabled: true }).where(eq(clients.id, f.owner.clientId));
+  // Push fully enabled, but the watched-activity opt-in is left at its default.
+  await db.insert(notificationSettings).values({ userId: f.other.id, pushEnabled: true });
+  await db.insert(cardWatchers).values({ cardId: f.card.id, userId: f.other.id });
+  await db.insert(boardWatchers).values({ boardId: f.board.id, userId: f.member.id });
+
+  await moveCardToNewList(f);
+
+  // The drawer still fills up - that asymmetry is the behaviour this feature makes optional.
+  const drawer = await db.select().from(notifications).where(eq(notifications.reason, "watching"));
+  assert.ok(drawer.length >= 1, "watchers still receive in-app notifications");
+  assert.equal((await db.select().from(pushQueue).where(eq(pushQueue.reason, "watching"))).length, 0);
+});
+
+void test("opting in delivers watched activity as push, worded like the drawer entry", async () => {
+  const f = await seed();
+  await db.update(clients).set({ pushEnabled: true }).where(eq(clients.id, f.owner.clientId));
+  await db.insert(notificationSettings).values({ userId: f.other.id, pushEnabled: true, watchedActivityOutbound: true });
+  await db.insert(cardWatchers).values({ cardId: f.card.id, userId: f.other.id });
+
+  await moveCardToNewList(f, "Shipped");
+
+  const pushes = await db.select().from(pushQueue).where(and(eq(pushQueue.userId, f.other.id), eq(pushQueue.reason, "watching")));
+  assert.equal(pushes.length, 1);
+  assert.equal(pushes[0]!.payload.notification.data.kind, "card_watched_activity");
+  assert.equal(pushes[0]!.payload.notification.title, "Prepare launch");
+  assert.equal(pushes[0]!.payload.notification.body, "Owner moved this card to Shipped");
+  // Per-card tag so a busy card collapses into one tray entry rather than stacking.
+  assert.equal(pushes[0]!.payload.notification.tag, `card:${f.card.id}:watching`);
+});
+
+void test("a user who both watches and is assigned gets exactly one push, not two", async () => {
+  const f = await seed();
+  await db.update(clients).set({ pushEnabled: true }).where(eq(clients.id, f.owner.clientId));
+  await db.insert(notificationSettings).values({ userId: f.member.id, pushEnabled: true, watchedActivityOutbound: true });
+  await db.insert(cardAssignees).values({ cardId: f.card.id, userId: f.member.id });
+  await db.insert(cardWatchers).values({ cardId: f.card.id, userId: f.member.id });
+
+  const commented = await f.app.inject({
+    method: "POST",
+    url: `/cards/${f.card.id}/comments`,
+    headers: { authorization: `Bearer ${f.ownerToken}` },
+    payload: { body: "Please review." },
+  });
+  assert.equal(commented.statusCode, 201);
+  await sleep(80);
+
+  // resolveRecipients assigns one reason per user with assigned taking precedence over watching,
+  // so the assignee pipeline owns this notification and the watched path must stay out of it.
+  const all = await db.select().from(pushQueue).where(eq(pushQueue.userId, f.member.id));
+  assert.equal(all.length, 1);
+  assert.equal(all[0]!.reason, "comment");
+});
+
+void test("a paused workspace rule suppresses watched-activity push but keeps the in-app notification", async () => {
+  const f = await seed();
+  await db.update(clients).set({ pushEnabled: true }).where(eq(clients.id, f.owner.clientId));
+  await db.insert(notificationSettings).values({ userId: f.other.id, pushEnabled: true, watchedActivityOutbound: true });
+  await db.insert(userNotificationWorkspaceRules).values({ userId: f.other.id, workspaceId: f.workspace.id, paused: true });
+  await db.insert(cardWatchers).values({ cardId: f.card.id, userId: f.other.id });
+
+  await moveCardToNewList(f);
+
+  assert.equal((await db.select().from(pushQueue).where(eq(pushQueue.reason, "watching"))).length, 0);
+  const drawer = await db
+    .select()
+    .from(notifications)
+    .where(and(eq(notifications.userId, f.other.id), eq(notifications.reason, "watching")));
+  assert.ok(drawer.length >= 1, "pausing a rule never touches the in-app inbox");
+});
+
+void test("an overdue watched card pushes only once opted in, and never emails the watcher", async () => {
+  const f = await seed();
+  await db.update(clients).set({ pushEnabled: true }).where(eq(clients.id, f.owner.clientId));
+  await db.insert(notificationSettings).values({ userId: f.other.id, pushEnabled: true });
+  await db.insert(cardWatchers).values({ cardId: f.card.id, userId: f.other.id });
+  await db
+    .update(cards)
+    .set({ dueDateLocalDate: "2020-01-01", dueDateSlot: "anyTime", dueDateTimezone: "UTC" })
+    .where(eq(cards.id, f.card.id));
+
+  await createOverdueNotificationsForCards(db, [f.card.id]);
+  assert.equal((await db.select().from(pushQueue).where(and(eq(pushQueue.userId, f.other.id), eq(pushQueue.reason, "overdue")))).length, 0);
+
+  // Opt in, clear the overdue rows so the sweep can re-raise them, then run it again.
+  await db.update(notificationSettings).set({ watchedActivityOutbound: true }).where(eq(notificationSettings.userId, f.other.id));
+  await db.delete(notifications).where(eq(notifications.reason, "overdue"));
+  await createOverdueNotificationsForCards(db, [f.card.id]);
+
+  const pushes = await db.select().from(pushQueue).where(and(eq(pushQueue.userId, f.other.id), eq(pushQueue.reason, "overdue")));
+  assert.equal(pushes.length, 1);
+  assert.equal(pushes[0]!.payload.notification.tag, `card:${f.card.id}:overdue`);
+  // Watchers never get the overdue email - that stays assignee-only.
+  const emails = await queuedTypes("card_overdue");
+  assert.equal(emails.filter((row) => row.toEmail === f.otherEmail).length, 0);
+});

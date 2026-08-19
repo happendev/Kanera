@@ -1,12 +1,10 @@
+import type { ActivityChangeSummary } from "@kanera/shared/activity-summary";
 import type { NotificationRow } from "@kanera/shared/dto";
 import { localDateKey } from "../../shared/day-key.util";
 
-/** Precomputed action line for one notification, as the drawer renders it. */
-export interface ActivityChangeSummary {
-  icon: string;
-  text: string;
-  value?: string;
-}
+// The summary shape is shared with the API, which reuses the same summariser to build
+// watched-activity push bodies. Re-exported so drawer consumers keep importing it from here.
+export type { ActivityChangeSummary };
 
 export interface NotificationClusterEntry {
   notification: NotificationRow;
