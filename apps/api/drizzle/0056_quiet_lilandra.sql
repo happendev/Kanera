@@ -1,0 +1,1 @@
+ALTER TABLE "notification_settings" ADD COLUMN "watched_activity_outbound" boolean DEFAULT false NOT NULL;

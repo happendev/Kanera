@@ -7,6 +7,12 @@ export const notificationSettings = pgTable("notification_settings", {
     .references(() => users.id, { onDelete: "cascade" }),
   emailEnabled: boolean("email_enabled").notNull().default(true),
   pushEnabled: boolean("push_enabled").notNull().default(false),
+  // Kanera only sends outbound notifications for work you own: cards you are assigned and
+  // comments that mention you. The in-app drawer is broader - it also covers board and card
+  // watchers. This opt-in widens outbound delivery (push and the personal channels, never
+  // email) to those watcher rows too. Default off: a watcher on a busy board would otherwise
+  // start receiving one notification per card move the moment this ships.
+  watchedActivityOutbound: boolean("watched_activity_outbound").notNull().default(false),
   ntfyEnabled: boolean("ntfy_enabled").notNull().default(false),
   ntfyServerUrl: text("ntfy_server_url"),
   ntfyTopic: text("ntfy_topic"),

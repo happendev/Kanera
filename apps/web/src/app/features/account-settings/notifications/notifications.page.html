@@ -31,6 +31,14 @@
           </span>
         </label>
 
+        <label class="push-toggle-row">
+          <input type="checkbox" [checked]="notificationSettings.watchedActivityOutbound" (change)="settings.setWatchedActivityOutbound($any($event.target).checked)" [disabled]="settings.notificationSettingsSaving()" />
+          <span class="push-toggle-copy">
+            <span class="push-toggle-title">Also notify me about boards and cards I watch</span>
+            <span class="push-toggle-help">Activity on boards and cards you watch will also reach your devices, not just your in-app inbox. A busy board can generate a lot. Email is never included.</span>
+          </span>
+        </label>
+
         @if (notificationSettings.pushEnabled || settings.pushOptInAttempted()) {
         <div class="push-status-card" [class.success]="settings.browserPush.statusTone() === 'success'" [class.warning]="settings.browserPush.statusTone() === 'warning'">
           <i class="ti ti-bell push-status-icon"></i>

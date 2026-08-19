@@ -3,6 +3,7 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { db, type Db } from "../db.js";
 import { env } from "../env.js";
+import { enqueueOverdueWatcherOutbound } from "./watched-activity-push.js";
 import { emitToUser } from "../realtime/emit.js";
 import { emitActivityFeedItem, recordActivity } from "./activity.js";
 import { loadAssignedChecklistItems } from "./assigned-checklist-items.js";
@@ -235,6 +236,17 @@ export async function createOverdueNotificationsForCards(
     const overdueEmailRecipients = inserted
       .filter((row) => assigneesByCard.get(row.cardId ?? "")?.has(row.userId))
       .map((row) => ({ cardId: row.cardId!, userId: row.userId }));
+    // Watchers who are not assignees get no email - only push and personal channels, and only if
+    // they opted into watched-activity delivery. Assignees are excluded here because
+    // enqueueOverdueAssigneeEmails already covers their push on the same tag.
+    const overdueWatcherIds = new Set(
+      inserted
+        .filter((row) => !assigneesByCard.get(row.cardId ?? "")?.has(row.userId))
+        .map((row) => row.id),
+    );
+    if (overdueWatcherIds.size > 0) {
+      await enqueueOverdueWatcherOutbound(tx, enriched.filter((row) => overdueWatcherIds.has(row.id)));
+    }
     if (overdueEmailRecipients.length > 0) {
       await enqueueOverdueAssigneeEmails({
         tx,

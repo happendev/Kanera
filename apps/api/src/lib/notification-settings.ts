@@ -31,6 +31,7 @@ export interface EffectiveNotificationSettings {
   userId: string;
   emailEnabled: boolean;
   pushEnabled: boolean;
+  watchedActivityOutbound: boolean;
   ntfyEnabled: boolean;
   gotifyEnabled: boolean;
   webhookEnabled: boolean;
@@ -66,6 +67,7 @@ export function defaultNotificationSettings(userId: string): EffectiveNotificati
     userId,
     emailEnabled: true,
     pushEnabled: false,
+    watchedActivityOutbound: false,
     ntfyEnabled: false,
     gotifyEnabled: false,
     webhookEnabled: false,
@@ -91,6 +93,7 @@ export function toEffectiveNotificationSettings(row: NotificationSettings | null
     userId,
     emailEnabled: row.emailEnabled,
     pushEnabled: row.pushEnabled,
+    watchedActivityOutbound: row.watchedActivityOutbound,
     ntfyEnabled: row.ntfyEnabled,
     gotifyEnabled: row.gotifyEnabled,
     webhookEnabled: row.webhookEnabled,
@@ -219,6 +222,48 @@ export function allowsNotificationPush(
   scope?: NotificationWorkspaceRuleScope,
 ): boolean {
   return settings.pushEnabled && settings.types[type].push && workspaceRuleAllowsChannel(scope, "push", type);
+}
+
+/**
+ * Watched activity has no preference *type* - a watcher's "card moved" is none of the five event
+ * categories the settings matrix models - so the per-type columns cannot apply. Two coarser signals
+ * from a workspace rule still must:
+ *
+ *  - `paused` is a categorical "send me nothing outbound from this workspace", which is exactly what
+ *    the rule editor's copy promises. Ignoring it would make a paused workspace start pushing the
+ *    moment this feature ships, which is a regression rather than a new feature.
+ *  - A channel with every type turned off is the rule editor's channel column-header checkbox in its
+ *    unchecked state, which users read as "not this channel, not from here".
+ *
+ * Anything finer-grained would be unexplainable in the UI: there is no row in the matrix a user
+ * could point at to explain why their watched-card push went missing.
+ */
+function workspaceRuleAllowsAnyTypeOnChannel(
+  scope: NotificationWorkspaceRuleScope | undefined,
+  channel: keyof NotificationTypeChannels,
+): boolean {
+  if (!scope?.rule) return true;
+  if (scope.rule.paused) return false;
+  return Object.values(scope.rule.types).some((type) => type[channel]);
+}
+
+export function allowsWatchedActivityPush(
+  settings: EffectiveNotificationSettings,
+  scope?: NotificationWorkspaceRuleScope,
+): boolean {
+  return settings.watchedActivityOutbound
+    && settings.pushEnabled
+    && workspaceRuleAllowsAnyTypeOnChannel(scope, "push");
+}
+
+export function allowsWatchedActivityPersonalChannel(
+  settings: EffectiveNotificationSettings,
+  channel: PersonalNotificationChannel,
+  scope?: NotificationWorkspaceRuleScope,
+): boolean {
+  return settings.watchedActivityOutbound
+    && settings[`${channel}Enabled`]
+    && workspaceRuleAllowsAnyTypeOnChannel(scope, channel);
 }
 
 export function allowsPersonalNotificationChannel(

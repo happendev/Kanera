@@ -376,6 +376,7 @@ export async function notificationsRoutes(app: FastifyInstance) {
     const values = {
       ...(body.emailEnabled !== undefined ? { emailEnabled: body.emailEnabled } : {}),
       ...(body.pushEnabled !== undefined ? { pushEnabled: body.pushEnabled } : {}),
+      ...(body.watchedActivityOutbound !== undefined ? { watchedActivityOutbound: body.watchedActivityOutbound } : {}),
       ...(personal ? {
         ntfyEnabled: requestedNtfyEnabled && Boolean(ntfyServerUrl && ntfyTopic),
         ntfyServerUrl,
