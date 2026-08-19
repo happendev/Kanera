@@ -682,12 +682,15 @@ export async function commentRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const [current] = await db.select().from(comments).where(eq(comments.id, id)).limit(1);
     if (!current) throw notFound();
-    if (!canMutateComment(current, req.auth)) throw forbidden();
 
     const [card] = await db.select().from(cards).where(eq(cards.id, current.cardId)).limit(1);
     if (!card) throw notFound();
     const ctx = await assertCardAccess(req.auth, card.id, "editor");
     assertCardActive(card);
+    // Authors retain control of their own comments, while board administrators may moderate any
+    // comment on boards they manage. `isWorkspaceAdmin` is scoped to this board's organisation, so
+    // a guest cannot borrow admin status from their home organisation.
+    if (!canMutateComment(current, req.auth) && !ctx.isWorkspaceAdmin) throw forbidden();
 
     // Detach any attachments that were linked to this comment so the row's
     // commentId doesn't dangle. The attachments themselves stay on the card.

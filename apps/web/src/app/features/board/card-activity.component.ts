@@ -110,6 +110,7 @@ export class CardActivityComponent {
   // Live mutation gate: permission AND online. Used for handler guards and the disabled state of
   // send/edit/delete/reaction controls so they grey out (but stay mounted) when offline.
   readonly canMutate = computed(() => this.canEdit() && this.sockets.displayedOnline());
+  readonly canDeleteAnyCommentRole = computed(() => this.canEdit() && this.state.viewerIsWorkspaceAdmin());
 
   readonly currentUserId = this.auth.user;
   readonly memberIds = computed(() => new Set(this.members().map((member) => member.userId)));
@@ -178,6 +179,14 @@ export class CardActivityComponent {
 
   copiedSystemAuthorName(comment: CommentRow): string | null {
     return comment.authorKind === "system" && comment.apiKeyName ? comment.apiKeyName : null;
+  }
+
+  isOwnComment(comment: CommentRow): boolean {
+    return comment.authorKind === "user" && comment.authorId === this.currentUserId()?.id;
+  }
+
+  canDeleteCommentRole(comment: CommentRow): boolean {
+    return this.canEdit() && (this.isOwnComment(comment) || this.canDeleteAnyCommentRole());
   }
   readonly submittingComment = signal(false);
   readonly addingComment = signal(false);
