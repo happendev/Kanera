@@ -675,8 +675,22 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly boardCommentCounts = computed(() =>
     new Map(this.state.cards().map((card) => [card.id, card.commentCount]))
   );
+  /**
+   * Queue payloads are a complete, independently refreshed source of visible card summaries. A
+   * freshly created card can reach Team Up next before the page's ordinary card query reconciles;
+   * keep it actionable during that window instead of treating the rendered row as an unknown card.
+   */
+  readonly priorityCardsById = computed<ReadonlyMap<string, GlobalCard>>(() => {
+    const cards = new Map<string, GlobalCard>();
+    for (const lane of this.state.teamPriorities()?.queues ?? []) {
+      for (const entry of lane.queue.items) {
+        if (entry.card) cards.set(entry.card.id, expandCardSummary(entry.card));
+      }
+    }
+    return cards;
+  });
   readonly roleEditableCardIds = computed(() => new Set(
-    this.state.cards()
+    [...this.state.cards(), ...this.priorityCardsById().values()]
       .filter((card) => this.boardsById().get(card.boardId)?.viewerRole === "editor")
       .map((card) => card.id)
   ));
@@ -1450,7 +1464,12 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
 
   openCardById(cardId: string): void {
     const card = this.state.cards().find((candidate) => candidate.id === cardId);
-    if (card) this.openCard(card);
+    if (card) {
+      this.openCard(card);
+      return;
+    }
+    const priorityCard = this.priorityCardsById().get(cardId);
+    if (priorityCard) this.showCard(priorityCard);
   }
 
   /* ── Up next ─────────────────────────────────────────────────────────────────
@@ -1762,6 +1781,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly priorityTableGroups = computed<CardGroup[]>(() => {
     const query = this.state.definition().filters.q.trim().toLowerCase();
     const liveCards = new Map(this.state.cards().map((card) => [card.id, card]));
+    const priorityCards = this.priorityCardsById();
     const people = this.peopleById();
     return this.visiblePriorityLanes().map((lane) => ({
       key: priorityGroupKey(lane.target.userId),
@@ -1773,7 +1793,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       meta: {},
       cards: lane.queue.items.flatMap((entry) => {
         if (!entry.card) return [];
-        const card = liveCards.get(entry.card.id) ?? expandCardSummary(entry.card);
+        const card = liveCards.get(entry.card.id) ?? priorityCards.get(entry.card.id) ?? expandCardSummary(entry.card);
         return query && !card.title.toLowerCase().includes(query) ? [] : [card];
       }),
     }));
