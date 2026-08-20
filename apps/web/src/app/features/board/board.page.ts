@@ -34,6 +34,7 @@ import { BoardMembersMenu } from "../shared/board-members-menu.popover";
 import { BoardSocketBridge } from "./board-socket-bridge";
 import { BoardState, type BoardLaneItem, type LaneAnchor } from "./board-state";
 import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
+import { boardWorkRisk, isCardInactive } from "@kanera/shared/card-health";
 import { BulkCardActionsMenuPopover } from "./bulk-card-actions-menu.popover";
 import { BulkCustomFieldsDialogComponent } from "./bulk-custom-fields.dialog";
 import { BoardCalendarViewComponent } from "./calendar-view/board-calendar-view.component";
@@ -63,6 +64,7 @@ import { BoardMirrorsDialogComponent } from "../board-mirrors/board-mirrors.dial
 import { BoardMirrorsService } from "../board-mirrors/board-mirrors.service";
 
 type AnyCard = Card | WireCard | WireCardSummary;
+type BoardRiskFilter = "overdue" | "unassigned" | "inactive";
 const OFFLINE_COPY_PROMPT_DELAY_MS = 3000; // 3 seconds
 const SEARCH_DEBOUNCE_MS = 200;
 
@@ -230,6 +232,9 @@ export class BoardPage implements OnDestroy {
   }
   readonly showUnreadOnly = signal(false);
   readonly showOverdueOnly = signal(false);
+  readonly showInactiveOnly = signal(false);
+  /** Session-local drill-down selected from Board overview; composed with the normal filter bar. */
+  readonly boardRiskFilter = signal<BoardRiskFilter | null>(null);
   /** Only cards in the viewer's own "Up next" queue (`viewerPriorityRanks`). */
   readonly showPrioritySetOnly = signal(false);
   readonly showArchived = signal(false);
@@ -316,6 +321,7 @@ export class BoardPage implements OnDestroy {
     cfConditions: this.filterCfConditions(),
     showUnreadOnly: this.showUnreadOnly(),
     showOverdueOnly: this.showOverdueOnly(),
+    showInactiveOnly: this.showInactiveOnly(),
     showPrioritySetOnly: this.showPrioritySetOnly(),
   }));
 
@@ -368,11 +374,13 @@ export class BoardPage implements OnDestroy {
     const conditions = this.filterCfConditions();
     const unreadOnly = this.effectiveView() !== "history" && this.showUnreadOnly();
     const overdueOnly = this.showOverdueOnly();
+    const inactiveOnly = this.showInactiveOnly();
+    const riskFilter = this.boardRiskFilter();
     // Like overdue, ignored while viewing archived: archived cards are never in the live queue,
     // so applying it there would blank the archive rather than filter it.
     const prioritySetOnly = this.showPrioritySetOnly();
     const showArchived = this.showArchived();
-    if (!q && !labelIds.length && !memberIds.length && !listIds.length && !conditions.length && !unreadOnly && (!overdueOnly || showArchived) && (!prioritySetOnly || showArchived)) return null;
+    if (!q && !labelIds.length && !memberIds.length && !listIds.length && !conditions.length && !unreadOnly && (!overdueOnly || showArchived) && (!inactiveOnly || showArchived) && (!prioritySetOnly || showArchived) && (!riskFilter || showArchived)) return null;
     const fieldsById = conditions.length ? this.state.customFieldsById() : null;
     const cfValuesByCard = conditions.length ? this.state.customFieldValuesByCardAndField() : null;
     const listSet = new Set(listIds);
@@ -391,6 +399,15 @@ export class BoardPage implements OnDestroy {
         if (labelIdsByCard && !this.hasAny(labelIdsByCard.get(card.id), labelFilterIds)) return false;
         if (assigneeIdsByCard && !this.hasAny(assigneeIdsByCard.get(card.id), memberFilterIds)) return false;
         if (!showArchived && overdueOnly && (card.completedAt || !isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone))) return false;
+        // Inactivity is a live-work signal, matching the health indicator: completed cards do not
+        // become actionable again merely because their final update is more than 14 days old.
+        if (!showArchived && inactiveOnly && (card.completedAt || !isCardInactive(card.updatedAt))) return false;
+        if (!showArchived && riskFilter) {
+          if (card.completedAt) return false;
+          if (riskFilter === "overdue" && !isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone)) return false;
+          if (riskFilter === "unassigned" && (this.state.assigneesByCard().get(card.id)?.length ?? 0) > 0) return false;
+          if (riskFilter === "inactive" && !isCardInactive(card.updatedAt)) return false;
+        }
         // The queue drops completed cards (they take no rank), so this also hides the board's
         // recently-completed tiles — a done card no longer has a priority set, by definition.
         if (!showArchived && priorityRanks && !priorityRanks.has(card.id)) return false;
@@ -431,6 +448,53 @@ export class BoardPage implements OnDestroy {
   readonly activeCards = computed(() =>
     this.state.cards().filter((card) => this.showArchived() ? !!card.archivedAt : !card.archivedAt),
   );
+
+  readonly overviewOpen = signal(false);
+  private readonly workRiskClock = signal(Date.now());
+  readonly overviewPlacement: AnchoredPanelPlacement = { align: "end", gap: 6, width: 340, maxHeight: 520 };
+  readonly boardOverview = computed(() => {
+    const now = this.workRiskClock();
+    const cards = this.state.cards().filter((card) => !card.archivedAt);
+    const incomplete = cards.filter((card) => !card.completedAt);
+    const overdue = incomplete.filter((card) => isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone, new Date(now))).length;
+    const nextWeek = localDateKey(7);
+    const dueSoon = incomplete.filter((card) => {
+      const due = card.dueDateLocalDate;
+      return !!due && due >= localDateKey(0) && due <= nextWeek;
+    }).length;
+    const unassigned = incomplete.filter((card) => (this.state.assigneesByCard().get(card.id)?.length ?? 0) === 0).length;
+    const inactive = incomplete.filter((card) => isCardInactive(card.updatedAt, now)).length;
+    const risk = boardWorkRisk({ active: incomplete.length, overdue, unassigned, inactive });
+    const listCounts = this.state.visibleLists().map((list) => ({
+      id: list.id,
+      name: list.name,
+      icon: list.icon || "list",
+      count: cards.filter((card) => card.listId === list.id).length,
+    })).filter((entry) => entry.count > 0);
+    return {
+      total: cards.length,
+      active: incomplete.length,
+      overdue,
+      dueSoon,
+      unassigned,
+      inactive,
+      risk,
+      listCounts,
+    };
+  });
+
+  toggleOverview(): void {
+    this.overviewOpen.update((open) => !open);
+  }
+
+  setBoardRiskFilter(filter: BoardRiskFilter | null): void {
+    this.boardRiskFilter.set(this.boardRiskFilter() === filter ? null : filter);
+  }
+
+  openPortfolio(): void {
+    this.overviewOpen.set(false);
+    void this.router.navigate(["/portfolio"]);
+  }
 
   // ─── Kanban grouping ────────────────────────────────────────────────────────
   //
@@ -554,6 +618,8 @@ export class BoardPage implements OnDestroy {
     this.filterCfConditions().length > 0 ||
     (this.effectiveView() !== "history" && this.showUnreadOnly()) ||
     this.showOverdueOnly() ||
+    this.showInactiveOnly() ||
+    this.boardRiskFilter() !== null ||
     this.showPrioritySetOnly() ||
     this.showArchived() ||
     this.showCompleted()
@@ -669,6 +735,7 @@ export class BoardPage implements OnDestroy {
   ngOnDestroy() {
     document.removeEventListener("click", this.handleDocumentClick);
     document.removeEventListener("keydown", this.handleDocumentKeydown);
+    window.removeEventListener("kanera:new-card", this.handlePaletteNewCard);
     this.clearSearchDebounce();
     this.cancelScheduledListGrowth();
     this.stopListTitleHeightSync();
@@ -806,6 +873,15 @@ export class BoardPage implements OnDestroy {
   constructor() {
     document.addEventListener("click", this.handleDocumentClick);
     document.addEventListener("keydown", this.handleDocumentKeydown);
+    window.addEventListener("kanera:new-card", this.handlePaletteNewCard);
+    effect((onCleanup) => {
+      if (!this.overviewOpen()) return;
+      // A computed cannot observe time passing. Refresh while the panel is open so due/inactivity
+      // boundaries change the assessment without requiring an unrelated card mutation.
+      this.workRiskClock.set(Date.now());
+      const timer = window.setInterval(() => this.workRiskClock.set(Date.now()), 60_000);
+      onCleanup(() => window.clearInterval(timer));
+    });
     effect((onCleanup) => {
       // Re-measure list titles whenever the kanban scroller mounts.
       const el = this.listsEl()?.nativeElement;
@@ -980,7 +1056,7 @@ export class BoardPage implements OnDestroy {
       let refreshQueued = false;
       let pageViewCaptured = false;
       const completed = readCompletedFilter(`board:${boardId}`);
-      // Search stays session-local; label/member/list/CF/unread/overdue filters are sticky per board
+      // Search stays session-local; label/member/list/CF/unread/overdue/inactive filters are sticky per board
       // (restored here, persisted by the effect below), and the completed range keeps its own key.
       const saved = readFilters(`board:${boardId}`);
       this.setSearchQuery("");
@@ -990,6 +1066,8 @@ export class BoardPage implements OnDestroy {
       this.filterCfConditions.set(saved?.cfConditions ?? []);
       this.showUnreadOnly.set(saved?.showUnreadOnly ?? false);
       this.showOverdueOnly.set(saved?.showOverdueOnly ?? false);
+      this.showInactiveOnly.set(saved?.showInactiveOnly ?? false);
+      this.boardRiskFilter.set(null);
       this.showPrioritySetOnly.set(saved?.showPrioritySetOnly ?? false);
       this.showArchived.set(false);
       this.membersPopoverOpen.set(false);
@@ -1214,6 +1292,7 @@ export class BoardPage implements OnDestroy {
         cfConditions: this.filterCfConditions(),
         showUnreadOnly: this.showUnreadOnly(),
         showOverdueOnly: this.showOverdueOnly(),
+        showInactiveOnly: this.showInactiveOnly(),
         showPrioritySetOnly: this.showPrioritySetOnly(),
       };
       writeFilters(scope, filters);
@@ -1342,6 +1421,7 @@ export class BoardPage implements OnDestroy {
 
   readonly composerOpen = signal(false);
   readonly composerSeed = signal<CardComposerSeed | null>(null);
+  private readonly handlePaletteNewCard = () => this.openComposer();
 
   /**
    * Opens the full composer. `seed` carries whatever the opening surface already decided — the
@@ -1729,10 +1809,11 @@ export class BoardPage implements OnDestroy {
     const next = !this.showArchived();
     const seq = ++this.filterLoadSeq;
     this.showArchived.set(next);
-    // Both quick filters are meaningless over the archive (nothing archived is overdue-actionable
-    // or in a live queue), so entering it clears them instead of showing an empty board.
+    // Live-work quick filters are meaningless over the archive, so entering it clears them instead
+    // of showing an empty board.
     if (next) {
       this.showOverdueOnly.set(false);
+      this.showInactiveOnly.set(false);
       this.showPrioritySetOnly.set(false);
     }
     const data = await this.loadBoard(this.boardId(), false, next);
@@ -1780,6 +1861,7 @@ export class BoardPage implements OnDestroy {
     this.filterCfConditions.set(v.cfConditions);
     this.showUnreadOnly.set(v.showUnreadOnly);
     this.showOverdueOnly.set(v.showOverdueOnly);
+    this.showInactiveOnly.set(v.showInactiveOnly);
     this.showPrioritySetOnly.set(v.showPrioritySetOnly);
   }
 
@@ -1809,6 +1891,8 @@ export class BoardPage implements OnDestroy {
     this.workDoneEventType.set(null);
     this.showUnreadOnly.set(false);
     this.showOverdueOnly.set(false);
+    this.showInactiveOnly.set(false);
+    this.boardRiskFilter.set(null);
     this.showPrioritySetOnly.set(false);
     this.showArchived.set(false);
     this.completedFrom.set("");

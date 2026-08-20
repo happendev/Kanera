@@ -159,6 +159,7 @@ describe("AppShellComponent board search", () => {
         activeClientId: string;
         organisations: AuthOrganisation[];
         canCreateOrganisation: boolean;
+        showScratchpad: boolean;
       }>;
       isOrgAdmin?: boolean;
       maxBoards?: number | null;
@@ -387,6 +388,16 @@ describe("AppShellComponent board search", () => {
     target.dispatchEvent(event);
     return event;
   }
+
+  it("removes only the scratchpad trigger and shrinks the header clearance when hidden", async () => {
+    await render(undefined, { user: { showScratchpad: false } });
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector(".scratch-btn")).toBeNull();
+    expect(root.querySelector(".queue-btn")).not.toBeNull();
+    expect(root.querySelector(".bell-btn")).not.toBeNull();
+    expect(root.style.getPropertyValue("--bell-clearance")).toBe("calc(108px + env(safe-area-inset-right))");
+  });
 
   beforeEach(() => {
     TestBed.resetTestingModule();

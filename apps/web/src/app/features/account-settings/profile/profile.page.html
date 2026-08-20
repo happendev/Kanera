@@ -87,6 +87,18 @@
         @if (settings.cardKeysError()) { <p class="form-error">{{ settings.cardKeysError() }}</p> }
       </div>
 
+      <div class="settings-section">
+        <h3 class="settings-section-title"><i class="ti ti-notes"></i><span>Scratchpad</span></h3>
+        <label class="push-toggle-row">
+          <input type="checkbox" [checked]="settings.user()?.showScratchpad ?? true" (change)="settings.setShowScratchpad($any($event.target).checked)" [disabled]="settings.scratchpadVisibilitySaving()" />
+          <span class="push-toggle-copy">
+            <span class="push-toggle-title">Show scratchpad</span>
+            <span class="push-toggle-help">Keep the scratchpad button available in the app header. Turn this off if you do not use the scratchpad.</span>
+          </span>
+        </label>
+        @if (settings.scratchpadVisibilityError()) { <p class="form-error">{{ settings.scratchpadVisibilityError() }}</p> }
+      </div>
+
       @if (consent.available()) {
       <div class="settings-section">
         <h3 class="settings-section-title"><i class="ti ti-cookie"></i><span>Privacy</span></h3>

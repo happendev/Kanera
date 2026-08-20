@@ -9,9 +9,20 @@ import type {
   NoteSearchResult,
 } from "@kanera/shared/dto";
 import { GlobalSearchService } from "../../core/search/global-search.service";
+import { ThemeService } from "../../core/theme/theme.service";
 import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 
+type PaletteCommand = {
+  kind: "command";
+  id: string;
+  label: string;
+  detail: string;
+  icon: string;
+  run: () => void;
+};
+
 type FlatResult =
+  | PaletteCommand
   | { kind: "card"; data: CardSearchResult }
   | { kind: "note"; data: NoteSearchResult }
   | { kind: "comment"; data: CommentSearchResult }
@@ -50,8 +61,30 @@ type FlatResult =
             <kbd class="esc">Esc</kbd>
           </div>
 
-          @if (hasQuery()) {
+          @if (showResults()) {
             <div id="global-search-results" class="results" role="listbox" aria-label="Search results">
+              @if (commands().length) {
+                <div class="group-label"><i class="ti ti-bolt"></i> Quick actions</div>
+                @for (command of commands(); track command.id; let i = $index) {
+                  <button
+                    [id]="resultId(i)"
+                    type="button"
+                    class="row command-row"
+                    role="option"
+                    [class.active]="highlightedIndex() === i"
+                    [attr.aria-selected]="highlightedIndex() === i"
+                    (mouseenter)="highlightedIndex.set(i)"
+                    (click)="select(command)"
+                  >
+                    <span class="row-icon"><i [class]="'ti ti-' + command.icon"></i></span>
+                    <span class="row-main">
+                      <span class="row-title">{{ command.label }}</span>
+                      <span class="meta">{{ command.detail }}</span>
+                    </span>
+                    <i class="ti ti-arrow-right command-arrow" aria-hidden="true"></i>
+                  </button>
+                }
+              }
               @if (flat().length === 0 && !search.loading()) {
                 <div class="empty" role="status" aria-live="polite">
                   <i class="ti ti-mood-empty"></i>
@@ -63,13 +96,13 @@ type FlatResult =
                 <div class="group-label"><i class="ti ti-layout-kanban"></i> Cards</div>
                 @for (c of cards(); track c.id; let i = $index) {
                   <button
-                    [id]="resultId(i)"
+                    [id]="resultId(cardsOffset() + i)"
                     type="button"
                     class="row"
                     role="option"
-                    [class.active]="highlightedIndex() === i"
-                    [attr.aria-selected]="highlightedIndex() === i"
-                    (mouseenter)="highlightedIndex.set(i)"
+                    [class.active]="highlightedIndex() === cardsOffset() + i"
+                    [attr.aria-selected]="highlightedIndex() === cardsOffset() + i"
+                    (mouseenter)="highlightedIndex.set(cardsOffset() + i)"
                     (click)="select({ kind: 'card', data: c })"
                   >
                     <span class="row-icon">
@@ -273,6 +306,10 @@ type FlatResult =
 
     .row.active { background: var(--surface-hover); }
 
+    .command-row { align-items: center; }
+    .command-arrow { color: var(--text-muted); opacity: 0; transition: opacity 120ms ease; }
+    .command-row.active .command-arrow { opacity: 1; }
+
     .row-icon {
       display: grid;
       place-items: center;
@@ -357,6 +394,7 @@ type FlatResult =
 export class GlobalSearchOverlayComponent {
   readonly search = inject(GlobalSearchService);
   private readonly router = inject(Router);
+  private readonly theme = inject(ThemeService);
   protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
 
   private readonly inputEl = viewChild<ElementRef<HTMLInputElement>>("searchInput");
@@ -367,15 +405,44 @@ export class GlobalSearchOverlayComponent {
   readonly attachments = computed(() => this.search.results()?.attachments ?? []);
 
   readonly hasQuery = computed(() => this.search.query().trim().length > 0);
+  readonly showResults = computed(() => this.search.isOpen());
+
+  readonly commands = computed<PaletteCommand[]>(() => {
+    const query = this.search.query().trim();
+    const commands: PaletteCommand[] = [
+      { kind: "command", id: "home", label: "Go to Home", detail: "Workspace overview", icon: "home", run: () => void this.router.navigate(["/"]) },
+      { kind: "command", id: "my-cards", label: "Go to My Cards", detail: "Your work across boards", icon: "user-check", run: () => void this.router.navigate(["/my-cards"]) },
+      { kind: "command", id: "team-cards", label: "Go to Team Cards", detail: "Team work across boards", icon: "users", run: () => void this.router.navigate(["/team-cards"]) },
+      { kind: "command", id: "portfolio", label: "Go to Portfolio", detail: "Board health and progress", icon: "chart-dots-3", run: () => void this.router.navigate(["/portfolio"]) },
+      { kind: "command", id: "settings", label: "Open Settings", detail: "Workspace and account preferences", icon: "settings", run: () => void this.router.navigate(["/settings"]) },
+      { kind: "command", id: "theme", label: `Switch to ${this.theme.theme() === "dark" ? "light" : "dark"} mode`, detail: "Change the interface theme", icon: this.theme.theme() === "dark" ? "sun" : "moon", run: () => this.theme.toggle() },
+    ];
+    const boardMatch = /^\/b\/([^/?]+)/.exec(this.router.url ?? "");
+    if (boardMatch) {
+      commands.unshift({
+        kind: "command",
+        id: "new-card",
+        label: "Create a new card",
+        detail: "Add work to this board",
+        icon: "square-rounded-plus",
+        // The palette lives above the routed page. This narrow event keeps it decoupled from the
+        // route-scoped BoardState while still opening the board's one canonical composer.
+        run: () => window.dispatchEvent(new CustomEvent("kanera:new-card")),
+      });
+    }
+    return query ? [] : commands;
+  });
 
   // Group offsets into the flattened list used for keyboard navigation.
-  readonly notesOffset = computed(() => this.cards().length);
-  readonly commentsOffset = computed(() => this.cards().length + this.notes().length);
+  readonly cardsOffset = computed(() => this.commands().length);
+  readonly notesOffset = computed(() => this.commands().length + this.cards().length);
+  readonly commentsOffset = computed(() => this.commands().length + this.cards().length + this.notes().length);
   readonly attachmentsOffset = computed(
-    () => this.cards().length + this.notes().length + this.comments().length,
+    () => this.commands().length + this.cards().length + this.notes().length + this.comments().length,
   );
 
   readonly flat = computed<FlatResult[]>(() => [
+    ...this.commands(),
     ...this.cards().map((data): FlatResult => ({ kind: "card", data })),
     ...this.notes().map((data): FlatResult => ({ kind: "note", data })),
     ...this.comments().map((data): FlatResult => ({ kind: "comment", data })),
@@ -403,6 +470,7 @@ export class GlobalSearchOverlayComponent {
     // Reset the highlight to the first result whenever the result set changes.
     effect(() => {
       this.search.results();
+      this.search.query();
       this.highlightedIndex.set(0);
     });
   }
@@ -436,7 +504,9 @@ export class GlobalSearchOverlayComponent {
   }
 
   select(item: FlatResult) {
-    if (item.kind === "note") {
+    if (item.kind === "command") {
+      item.run();
+    } else if (item.kind === "note") {
       const note = item.data;
       if (note.boardId) {
         void this.router.navigate(["/b", note.boardId], { queryParams: { view: "notes", noteId: note.id } });

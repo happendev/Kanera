@@ -79,6 +79,7 @@ function defaultDefinition(lens: WorkViewLens): WorkViewDefinition {
       customFieldConditions: [],
       completion: DEFAULT_COMPLETION,
       unassignedOnly: false,
+      inactiveOnly: false,
       dueFrom: null,
       dueTo: null,
       overdueOnly: false,
@@ -1542,6 +1543,15 @@ export class GlobalWorkState {
     this.socket = socket;
     const refreshCards = () => this.scheduleRealtimeRefresh(false);
     const refreshCatalog = () => this.scheduleRealtimeRefresh(true);
+    const refreshCardActivity = ({ cardId }: { cardId: string }) => {
+      // Focused child events carry no card entity, though their API writes already advance
+      // cards.updatedAt. Patch the visible row now and let the debounced query reconcile it.
+      this.response.update((response) => ({
+        ...response,
+        cards: response.cards.map((card) => card.id === cardId ? { ...card, updatedAt: new Date() } : card),
+      }));
+      refreshCards();
+    };
     this.detachRealtime = registerSocketHandlers(socket, {
       [SERVER_EVENTS.CARD_UPDATED]: ({ card }) => {
         this.patchVisibleCard(card);
@@ -1550,7 +1560,7 @@ export class GlobalWorkState {
       [SERVER_EVENTS.CARD_MOVED]: ({ cardId, toListId, position }) => {
         this.response.update((response) => ({
           ...response,
-          cards: response.cards.map((card) => card.id === cardId ? { ...card, listId: toListId, position } : card),
+          cards: response.cards.map((card) => card.id === cardId ? { ...card, listId: toListId, position, updatedAt: new Date() } : card),
         }));
         refreshCards();
       },
@@ -1605,19 +1615,20 @@ export class GlobalWorkState {
       },
       [SERVER_EVENTS.CARD_VISIBILITY_GRANTED]: refreshCards,
       [SERVER_EVENTS.CARD_VISIBILITY_REVOKED]: refreshCards,
-      [SERVER_EVENTS.CARD_CHECKLIST_CREATED]: refreshCards,
-      [SERVER_EVENTS.CARD_CHECKLIST_UPDATED]: refreshCards,
-      [SERVER_EVENTS.CARD_CHECKLIST_MOVED]: refreshCards,
-      [SERVER_EVENTS.CARD_CHECKLIST_REBALANCED]: refreshCards,
-      [SERVER_EVENTS.CARD_CHECKLIST_DELETED]: refreshCards,
-      [SERVER_EVENTS.CARD_CHECKLIST_ITEM_CREATED]: refreshCards,
-      [SERVER_EVENTS.CARD_CHECKLIST_ITEM_UPDATED]: refreshCards,
-      [SERVER_EVENTS.CARD_CHECKLIST_ITEM_MOVED]: refreshCards,
-      [SERVER_EVENTS.CARD_CHECKLIST_ITEM_REBALANCED]: refreshCards,
-      [SERVER_EVENTS.CARD_CHECKLIST_ITEM_DELETED]: refreshCards,
+      [SERVER_EVENTS.CARD_CHECKLIST_CREATED]: refreshCardActivity,
+      [SERVER_EVENTS.CARD_CHECKLIST_UPDATED]: refreshCardActivity,
+      [SERVER_EVENTS.CARD_CHECKLIST_MOVED]: refreshCardActivity,
+      [SERVER_EVENTS.CARD_CHECKLIST_REBALANCED]: refreshCardActivity,
+      [SERVER_EVENTS.CARD_CHECKLIST_DELETED]: refreshCardActivity,
+      [SERVER_EVENTS.CARD_CHECKLIST_ITEM_CREATED]: refreshCardActivity,
+      [SERVER_EVENTS.CARD_CHECKLIST_ITEM_UPDATED]: refreshCardActivity,
+      [SERVER_EVENTS.CARD_CHECKLIST_ITEM_MOVED]: refreshCardActivity,
+      [SERVER_EVENTS.CARD_CHECKLIST_ITEM_REBALANCED]: refreshCardActivity,
+      [SERVER_EVENTS.CARD_CHECKLIST_ITEM_DELETED]: refreshCardActivity,
       [SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_SET]: refreshCards,
       [SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_CLEARED]: refreshCards,
       [SERVER_EVENTS.COMMENT_CREATED]: refreshCards,
+      [SERVER_EVENTS.COMMENT_UPDATED]: refreshCards,
       [SERVER_EVENTS.COMMENT_DELETED]: refreshCards,
       [SERVER_EVENTS.CARD_ATTACHMENT_CREATED]: refreshCards,
       [SERVER_EVENTS.CARD_ATTACHMENT_DELETED]: refreshCards,

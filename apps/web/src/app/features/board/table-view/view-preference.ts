@@ -23,6 +23,7 @@ export interface StoredFilters {
   cfConditions: CfFilterCondition[];
   showUnreadOnly: boolean;
   showOverdueOnly: boolean;
+  showInactiveOnly: boolean;
   showPrioritySetOnly: boolean;
 }
 
@@ -50,6 +51,7 @@ export function readFilters(scope: string): StoredFilters | null {
       cfConditions: cfConditions(obj["cfConditions"]),
       showUnreadOnly: obj["showUnreadOnly"] === true,
       showOverdueOnly: obj["showOverdueOnly"] === true,
+      showInactiveOnly: obj["showInactiveOnly"] === true,
       showPrioritySetOnly: obj["showPrioritySetOnly"] === true,
     };
     return hasAnyFilter(filters) ? filters : null;
@@ -74,6 +76,7 @@ function hasAnyFilter(f: StoredFilters): boolean {
     f.cfConditions.length > 0 ||
     f.showUnreadOnly ||
     f.showOverdueOnly ||
+    f.showInactiveOnly ||
     f.showPrioritySetOnly
   );
 }

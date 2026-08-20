@@ -698,6 +698,24 @@ export class BoardState {
     this.bumpCardMutationSeq();
   }
 
+  /**
+   * Child-resource and move events persist the card timestamp on the server but intentionally carry
+   * only their focused payload. Mirror that activity locally so stale-card UI clears immediately;
+   * the next card payload supplies the authoritative server timestamp.
+   */
+  touchCardActivity(cardId: string) {
+    const updatedAt = new Date();
+    this.cards.update((cards) => cards.map((card) => card.id === cardId ? { ...card, updatedAt } : card));
+    this.detailedCards.update((details) => {
+      const detail = details.get(cardId);
+      if (!detail) return details;
+      const next = new Map(details);
+      next.set(cardId, { ...detail, card: { ...detail.card, updatedAt } });
+      return next;
+    });
+    this.bumpCardMutationSeq();
+  }
+
   addSeparator(separator: AnySeparator) {
     this.separators.update((separators) => (separators.some((s) => s.id === separator.id) ? separators : [...separators, separator]));
   }

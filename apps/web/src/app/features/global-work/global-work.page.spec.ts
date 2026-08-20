@@ -796,7 +796,7 @@ describe("GlobalWorkPage portfolio summary", () => {
     [workspaceTwo]: "Product",
     [standaloneWorkspace]: "Roadmap",
   };
-  const bucket = (workspaceId: string, boardId: string, active: number, overdue = 0) => ({
+  const bucket = (workspaceId: string, boardId: string, active: number, overdue = 0, inactive = 0) => ({
     organisationId,
     organisationName: "Home",
     workspaceId,
@@ -807,6 +807,7 @@ describe("GlobalWorkPage portfolio summary", () => {
     overdue,
     dueSoon: 0,
     unassigned: 0,
+    inactive,
     completed: 0,
     overdueChecklistItems: 0,
   });
@@ -952,6 +953,20 @@ describe("GlobalWorkPage portfolio summary", () => {
     fixture.destroy();
   });
 
+  it("rolls up the worst board risk instead of diluting it across card totals", async () => {
+    const fixture = await mount();
+    const page = fixture.componentInstance;
+    const busiest = page.portfolioRows()
+      .find((row) => row.id === "board:30000000-0000-4000-8000-000000000001")!;
+    const organisation = page.portfolioRows().find((row) => row.level === "organisation")!;
+
+    expect(busiest.risk).toMatchObject({ level: "needsAttention", summary: "3 overdue" });
+    expect(organisation.risk).toMatchObject({ level: "needsAttention", summary: "1 board needs attention" });
+    expect(page.portfolioRiskTitle(busiest)).toBe("Needs attention: 3 overdue");
+
+    fixture.destroy();
+  });
+
   it("feeds the activity strip separate movement and completion counts per day", async () => {
     const today = new Date();
     const localDate = (date: Date) =>
@@ -1029,6 +1044,7 @@ describe("GlobalWorkPage toolbar state", () => {
         customFieldConditions: [],
         completion: DEFAULT_COMPLETION,
         unassignedOnly: false,
+        inactiveOnly: false,
         dueFrom: null,
         dueTo: null,
         overdueOnly: false,
@@ -1186,6 +1202,20 @@ describe("GlobalWorkPage toolbar state", () => {
       });
 
       expect(updateFilters.mock.calls.at(-1)![0]).toMatchObject({ prioritySetOnly: true });
+      fixture.destroy();
+    });
+  });
+
+  it("maps the inactive quick filter into the Global Work query", () => {
+    return mount().then(({ fixture, updateFilters }) => {
+      expect(fixture.componentInstance.filterValue().showInactiveOnly).toBe(false);
+
+      fixture.componentInstance.onFilterValueChange({
+        ...fixture.componentInstance.filterValue(),
+        showInactiveOnly: true,
+      });
+
+      expect(updateFilters.mock.calls.at(-1)![0]).toMatchObject({ inactiveOnly: true });
       fixture.destroy();
     });
   });
@@ -1395,6 +1425,7 @@ describe("GlobalWorkPage toolbar state", () => {
       expect(patch["labelIds"]).toEqual([]);
       expect(patch["listIds"]).toEqual([]);
       expect(patch["overdueOnly"]).toBe(false);
+      expect(patch["inactiveOnly"]).toBe(false);
       expect(patch["prioritySetOnly"]).toBe(false);
       expect(fixture.componentInstance.workDoneEventType()).toBeNull();
 

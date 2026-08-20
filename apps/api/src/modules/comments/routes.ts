@@ -16,6 +16,7 @@ import { assertBoardAccess, assertCardAccess } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
 import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
 import { enqueueCommentAddedEmails, enqueueCommentMentionedNotifications } from "../../lib/assignee-email-notifications.js";
+import { touchCardActivity } from "../../lib/card-activity.js";
 import { fetchReactionsByComment } from "../../lib/comment-reactions.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { externalEmbeddedMediaReferences, signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
@@ -485,6 +486,7 @@ export async function commentRoutes(app: FastifyInstance) {
     }
 
     const selectedCommentRow = await selectCommentRow(comment.id, req.auth.cid);
+    await touchCardActivity(cardId, req.auth.cid);
 
     const commentCreatedActivity = await recordActivity(db, {
       boardId: card.boardId,
@@ -590,6 +592,7 @@ export async function commentRoutes(app: FastifyInstance) {
     });
 
     const selectedRows = await selectCommentRows(created.map((entry) => entry.id), req.auth.cid);
+    for (const cardId of cardIds) await touchCardActivity(cardId, req.auth.cid);
     for (let index = 0; index < created.length; index += 1) {
       const entry = created[index]!;
       const selectedComment = selectedRows[index]!;
@@ -664,6 +667,7 @@ export async function commentRoutes(app: FastifyInstance) {
     }
 
     const commentRow = await selectCommentRow(comment!.id, req.auth.cid);
+    await touchCardActivity(card.id, req.auth.cid);
 
     emitToBoard(card.boardId, "comment:updated", {
       boardId: card.boardId,
@@ -700,6 +704,7 @@ export async function commentRoutes(app: FastifyInstance) {
       .where(eq(cardAttachments.commentId, id));
 
     await db.delete(comments).where(eq(comments.id, id));
+    await touchCardActivity(card.id, req.auth.cid);
     await recordActivity(db, {
       boardId: card.boardId,
       workspaceId: ctx.workspaceId,
@@ -782,6 +787,10 @@ export async function commentRoutes(app: FastifyInstance) {
       }
       return deleted.map((row) => row.id);
     });
+
+    for (const cardId of new Set(rows.map((row) => row.card.id))) {
+      await touchCardActivity(cardId, req.auth.cid);
+    }
 
     for (const commentId of body.commentIds) {
       const row = byId.get(commentId)!;

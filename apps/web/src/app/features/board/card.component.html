@@ -93,6 +93,11 @@
     @if (hasUnreadNotifications()) {
     <span class="card-unread-dot" [kTooltip]="unreadMarkLabel()" [attr.aria-label]="unreadMarkLabel()"></span>
     }
+    @if (attention(); as attention) {
+    <span class="card-attention" [kTooltip]="attention.label" [attr.aria-label]="attention.label">
+      <i [class]="'ti ti-' + attention.icon"></i>
+    </span>
+    }
     <span class="card-title-text">{{ card().title }}</span>
   </div>
 

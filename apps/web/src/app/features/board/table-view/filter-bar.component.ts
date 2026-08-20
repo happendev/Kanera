@@ -172,6 +172,14 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                     <i class="ti ti-alert-circle fb-row-icon"></i><span class="fb-row-name">Overdue</span>
                     @if (value().showOverdueOnly) { <i class="ti ti-check fb-row-check"></i> }
                   </button>
+                  <button type="button" class="fb-row" [class.active]="value().showInactiveOnly" (click)="toggleInactive()">
+                    <i class="ti ti-clock-pause fb-row-icon"></i>
+                    <span class="fb-row-text">
+                      <span class="fb-row-name">Inactive</span>
+                      <small>No activity for 14 days</small>
+                    </span>
+                    @if (value().showInactiveOnly) { <i class="ti ti-check fb-row-check"></i> }
+                  </button>
                 }
                 @if (showPrioritySet()) {
                   <button type="button" class="fb-row" [class.active]="value().showPrioritySetOnly" (click)="togglePrioritySet()">
@@ -894,6 +902,7 @@ export class FilterBarComponent implements OnDestroy {
     let n = v.labelIds.length + v.memberIds.length + v.listIds.length + v.boardIds.length + v.cfConditions.length;
     if (v.showUnreadOnly) n++;
     if (v.showOverdueOnly) n++;
+    if (v.showInactiveOnly) n++;
     if (v.showPrioritySetOnly) n++;
     if (this.completedActive()) n++;
     if (this.archived()) n++;
@@ -979,6 +988,9 @@ export class FilterBarComponent implements OnDestroy {
   }
   toggleOverdue() {
     this.emit({ showOverdueOnly: !this.value().showOverdueOnly });
+  }
+  toggleInactive() {
+    this.emit({ showInactiveOnly: !this.value().showInactiveOnly });
   }
   togglePrioritySet() {
     this.emit({ showPrioritySetOnly: !this.value().showPrioritySetOnly });

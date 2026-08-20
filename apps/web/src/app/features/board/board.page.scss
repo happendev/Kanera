@@ -140,6 +140,197 @@
   gap: 2px;
 }
 
+.board-overview-trigger {
+  // The radar identifies the overview; the beacon previews its current work-risk signal.
+  --overview-signal: var(--text-muted);
+
+  > .ti {
+    font-size: 18px;
+  }
+
+  &[data-risk="onTrack"] { --overview-signal: var(--success); }
+  &[data-risk="needsAttention"] { --overview-signal: var(--warning); }
+  &[data-risk="atRisk"] { --overview-signal: var(--danger); }
+
+  &:hover:not(:disabled),
+  &.is-open {
+    color: var(--text);
+
+    .board-overview-trigger-status {
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--overview-signal) 18%, transparent);
+    }
+  }
+}
+
+.board-overview-trigger-status {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 7px;
+  height: 7px;
+  background: var(--overview-signal);
+  border: 1.5px solid var(--surface);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--overview-signal) 22%, transparent);
+  transition: box-shadow 0.12s;
+}
+
+.board-overview {
+  position: fixed;
+  top: var(--ap-top, 0);
+  left: var(--ap-left, 0);
+  z-index: var(--z-panel);
+  width: var(--ap-width, 340px);
+  max-width: var(--ap-max-width, calc(100vw - 24px));
+  max-height: var(--ap-max-height, 520px);
+  padding: 14px;
+  overflow: auto;
+  visibility: hidden;
+  color: var(--text);
+  background: var(--surface-overlay);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg, 0 12px 36px rgb(0 0 0 / 22%));
+
+  &.is-positioned { visibility: visible; }
+  &.is-above { top: auto; bottom: var(--ap-bottom, auto); }
+}
+
+.board-overview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  > div { display: flex; flex-direction: column; gap: 2px; }
+  strong { font-size: 13px; }
+  span { color: var(--text-muted); font-size: 11px; }
+}
+
+.board-overview-risk {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  color: var(--text-muted) !important;
+  font-size: 12px !important;
+  font-weight: 700;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+
+  &[data-risk="onTrack"] {
+    color: var(--success) !important;
+    background: color-mix(in srgb, var(--success) 8%, var(--surface-2));
+    border-color: color-mix(in srgb, var(--success) 28%, var(--border));
+  }
+
+  &[data-risk="needsAttention"] {
+    color: var(--warning) !important;
+    background: color-mix(in srgb, var(--warning) 8%, var(--surface-2));
+    border-color: color-mix(in srgb, var(--warning) 28%, var(--border));
+  }
+
+  &[data-risk="atRisk"] {
+    color: var(--danger) !important;
+    background: color-mix(in srgb, var(--danger) 8%, var(--surface-2));
+    border-color: color-mix(in srgb, var(--danger) 28%, var(--border));
+  }
+}
+
+.board-overview-risk-summary {
+  margin: 10px 0 12px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.board-overview-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+
+  > button {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    padding: 9px 7px;
+    text-align: center;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+
+    &:hover:not(:disabled), &.is-active {
+      background: var(--accent-soft);
+      border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+    }
+
+    &:disabled { cursor: default; opacity: .55; }
+  }
+  strong { font-size: 16px; }
+  span { color: var(--text-muted); font-size: 10px; }
+  .needs-attention strong { color: var(--danger, #ef4444); }
+}
+
+.board-overview-callout {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  color: var(--text-muted);
+  font-size: 11px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-radius: var(--radius);
+}
+
+.board-overview-section-title {
+  margin: 14px 0 5px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.board-overview-lists {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+
+  > div { display: flex; align-items: center; justify-content: space-between; min-height: 28px; font-size: 11px; }
+  span { display: inline-flex; align-items: center; gap: 7px; min-width: 0; color: var(--text-muted); }
+  i { font-size: 14px; }
+}
+
+.board-overview-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+
+  button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 32px;
+    color: var(--text);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  button:hover { background: var(--surface-hover); border-color: var(--border-strong); }
+}
+
 // Used by both the export and the mirror menu. Placement comes from kAnchoredPanel, which clamps to
 // the viewport — these used to run off the right edge of the page on narrow headers.
 .board-export-menu {
@@ -358,6 +549,7 @@
 .board-member-stack {
   display: inline-flex;
   align-items: center;
+  gap: 2px;
   min-width: 0;
   height: 28px;
 }
@@ -373,9 +565,6 @@
   border: 2px solid var(--surface);
   border-radius: 50%;
 
-  &+& {
-    margin-left: -8px;
-  }
 }
 
 .board-member-overflow {

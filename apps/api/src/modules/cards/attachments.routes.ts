@@ -16,6 +16,7 @@ import {
 } from "../../lib/activity.js";
 import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
+import { touchCardActivity } from "../../lib/card-activity.js";
 import { fetchReactionsByComment } from "../../lib/comment-reactions.js";
 import { AppError, badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { assertCanUploadAttachment, formatStorageBytes, getUploadEntitlements, isStorageFull, storageQuotaExceededError } from "../../lib/entitlements.js";
@@ -276,6 +277,9 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
         .where(eq(cards.id, cardId));
       coverChanged = true;
     }
+
+    // Uploads that do not become the cover are still activity on the card.
+    if (!coverChanged) await touchCardActivity(cardId, req.auth.cid);
 
     emitToBoard(card.boardId, "card:attachment:created", {
       boardId: card.boardId,
@@ -574,6 +578,9 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
       if (updatedCard) {
         emitToBoard(card.boardId, "card:updated", { boardId: card.boardId, card: { ...updatedCard, description: signEmbeddedMediaUrls(updatedCard.description, req.auth.cid) } });
       }
+    } else {
+      // A plain attachment deletion does not otherwise mutate the card row.
+      await touchCardActivity(cardId, req.auth.cid);
     }
 
     const activity = await recordCoalescedActivity(db, {

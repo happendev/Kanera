@@ -457,6 +457,8 @@ void test("editing a comment updates the comment feed item without recording edi
     })
     .returning();
   assert.ok(card);
+  const inactiveAt = new Date("2025-01-01T00:00:00.000Z");
+  await db.update(cards).set({ updatedAt: inactiveAt }).where(eq(cards.id, card.id));
 
   const createComment = await app.inject({
     method: "POST",
@@ -466,6 +468,10 @@ void test("editing a comment updates the comment feed item without recording edi
   });
   assert.equal(createComment.statusCode, 201);
   const comment = createComment.json();
+  const [afterCreate] = await db.select({ updatedAt: cards.updatedAt }).from(cards).where(eq(cards.id, card.id));
+  assert.ok(afterCreate!.updatedAt > inactiveAt, "creating a comment should count as card activity");
+
+  await db.update(cards).set({ updatedAt: inactiveAt }).where(eq(cards.id, card.id));
 
   const editComment = await app.inject({
     method: "PATCH",
@@ -475,6 +481,8 @@ void test("editing a comment updates the comment feed item without recording edi
   });
   assert.equal(editComment.statusCode, 200);
   assert.equal(editComment.json().body, "Edited");
+  const [afterEdit] = await db.select({ updatedAt: cards.updatedAt }).from(cards).where(eq(cards.id, card.id));
+  assert.ok(afterEdit!.updatedAt > inactiveAt, "editing a comment should count as card activity");
 
   const updatedActivities = await db
     .select()

@@ -13,6 +13,7 @@ import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { BoardState } from "./board-state";
 import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
+import { isCardInactive } from "@kanera/shared/card-health";
 import { CardDragCoordinator } from "./card-drag-coordinator.service";
 import { CardActionsMenuPopover } from "./card-actions-menu.popover";
 import { priorityRankHeat } from "../../shared/priority-rank";
@@ -142,6 +143,14 @@ export class CardComponent {
       : null;
   });
   readonly coverHeightPx = computed(() => this.coverAspectRatio() ? null : COVER_HEIGHT_FALLBACK_PX);
+  readonly attention = computed<{ label: string; icon: string } | null>(() => {
+    const card = this.card();
+    if (card.completedAt || card.archivedAt) return null;
+    if (isCardInactive(card.updatedAt)) {
+      return { label: "No activity for 14+ days", icon: "zzz" };
+    }
+    return null;
+  });
 
   private detailLoadSeq = 0;
   private readonly detailLoaded = signal(false);

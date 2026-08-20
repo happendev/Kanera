@@ -93,16 +93,19 @@ type SidebarSwipe = {
   styleUrl: "./app-shell.component.scss",
   host: {
     "[style.--sidebar-swipe-width]": "sidebarSwipeWidth() === null ? null : sidebarSwipeWidth() + 'px'",
+    // Removing the left-most scratchpad trigger also shrinks the page-header exclusion band. The
+    // bell and Up next keep their fixed positions, so their row stays aligned at every viewport size.
+    "[style.--bell-clearance]": "showScratchpad() ? null : 'calc(108px + env(safe-area-inset-right))'",
     // The dock is a real third grid column, so the shell — which owns the grid — has to know about
     // it. Suppressed on mobile, where the panel leaves the grid and becomes a bottom sheet.
-    "[class.scratchpad-docked]": "scratchpad.open() && !isScratchpadSheet()",
+    "[class.scratchpad-docked]": "showScratchpad() && scratchpad.open() && !isScratchpadSheet()",
     "[class.scratchpad-resizing]": "scratchpadResizing()",
     "[style.--scratchpad-width.px]": "scratchpad.width()",
     // How far the fixed top-right trigger buttons (bell, Up next, scratchpad) must move left to stay
     // over the page instead of floating on top of the dock's own header. Published here because all
     // three live in sibling components that position against the viewport, and the shell is the only
     // place that knows the dock's current width. 0 whenever the dock is closed or in sheet mode.
-    "[style.--scratchpad-dock-offset.px]": "scratchpad.open() && !isScratchpadSheet() ? scratchpad.width() : 0",
+    "[style.--scratchpad-dock-offset.px]": "showScratchpad() && scratchpad.open() && !isScratchpadSheet() ? scratchpad.width() : 0",
   },
 })
 export class AppShellComponent implements OnInit, OnDestroy {
@@ -184,6 +187,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   });
   readonly usingOfflineShell = signal(false);
   readonly user = this.auth.user;
+  readonly showScratchpad = computed(() => this.user()?.showScratchpad ?? true);
   readonly userMenuTooltip = computed(() => {
     const user = this.user();
     return user ? `${user.displayName} · ${user.email}` : "";
@@ -609,7 +613,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     // ⌘⇧. / Ctrl+⇧. toggles the scratchpad. Like ⌘K above, this handler has no "is the user typing?"
     // guard — and does not need one, because a modifier combo cannot be produced by ordinary typing.
     // A bare key here would fire while writing in the scratchpad itself, which would be absurd.
-    if ((event.metaKey || event.ctrlKey) && event.shiftKey && (event.key === "." || event.key === ">")) {
+    if (this.showScratchpad() && (event.metaKey || event.ctrlKey) && event.shiftKey && (event.key === "." || event.key === ">")) {
       event.preventDefault();
       this.scratchpad.toggle();
     }

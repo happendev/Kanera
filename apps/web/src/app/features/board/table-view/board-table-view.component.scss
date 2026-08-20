@@ -1831,27 +1831,6 @@ k-card-labels.tv-labels {
   }
 }
 
-// Bottom-sheet fallback. Hand-rolled rather than reusing `anchoredSheetStyles()` from
-// shared/anchored-panel.ts: that helper styles a popover component's own `:host`, and these panels
-// are plain divs inside this component. The geometry is deliberately identical, including the
-// safe-area bottom inset, so a picker and a table menu dock the same way.
-@media (max-width: bp.$bp-sheet) {
-
-  .tv-small-menu,
-  .tv-columns-menu,
-  .tv-aggregate-menu,
-  .tv-small-menu.is-above,
-  .tv-columns-menu.is-above,
-  .tv-aggregate-menu.is-above {
-    top: auto;
-    right: 8px;
-    bottom: max(8px, calc(env(safe-area-inset-bottom) + 8px));
-    left: 8px;
-    width: auto;
-    max-height: min(70dvh, 480px);
-  }
-}
-
 // Pointer capability is independent of viewport width: a landscape tablet keeps the grid but still
 // needs finger-sized targets and permanently visible affordances.
 @media (hover: none),

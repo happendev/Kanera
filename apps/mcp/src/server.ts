@@ -38,6 +38,7 @@ const workFilters = z.object({
   customFieldConditions: z.array(workCustomFieldCondition).max(50).optional(),
   completion: z.enum(["activeAndRecentlyCompleted", "active", "completed", "all"]).optional(),
   unassignedOnly: z.boolean().optional(),
+  inactiveOnly: z.boolean().optional().describe("Return active cards whose canonical activity timestamp is at least 14 days old."),
   dueFrom: z.iso.date().nullable().optional(),
   dueTo: z.iso.date().nullable().optional(),
   overdueOnly: z.boolean().optional(),

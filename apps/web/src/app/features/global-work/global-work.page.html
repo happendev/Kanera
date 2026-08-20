@@ -317,6 +317,7 @@
             }
             @if (openMenu() === "period") {
               <k-anchored-picker
+                class="ap-stay-anchored"
                 title="Reporting period"
                 [groups]="periodGroups()"
                 [selectedId]="periodValue()"
@@ -361,6 +362,7 @@
             }
             @if (openMenu() === "group") {
               <k-anchored-picker
+                class="ap-stay-anchored"
                 title="Group by"
                 [groups]="groupByGroups()"
                 [selectedId]="state.definition().groupBy"
@@ -400,6 +402,7 @@
             }
             @if (openMenu() === "sort") {
               <k-anchored-picker
+                class="ap-stay-anchored"
                 title="Sort by"
                 [groups]="sortGroups()"
                 [selectedId]="state.definition().sort"
@@ -544,6 +547,7 @@
                       }
                     </span>
                   </th>
+                  <th>Work risk</th>
                   @for (column of portfolioColumns; track column.key) {
                     <th>{{ column.label }}</th>
                   }
@@ -553,23 +557,31 @@
                 @for (bucket of portfolioRows(); track bucket.id) {
                   <tr [class]="'portfolio-' + bucket.level">
                     <td class="entity-cell">
-                      @if (bucket.collapseId) {
-                        <button
-                          type="button"
-                          class="row-toggle"
-                          (click)="togglePortfolioRow(bucket, $event)"
-                          [attr.aria-expanded]="!isPortfolioRowCollapsed(bucket)"
-                          [title]="isPortfolioRowCollapsed(bucket) ? 'Expand ' + bucket.label : 'Collapse ' + bucket.label"
-                        >
-                          <i class="ti" [class.ti-chevron-right]="isPortfolioRowCollapsed(bucket)" [class.ti-chevron-down]="!isPortfolioRowCollapsed(bucket)"></i>
-                        </button>
-                      } @else {
-                        <span class="row-toggle is-leaf"></span>
-                      }
-                      <i [class]="portfolioRowIconClass(bucket)" [style.color]="portfolioRowIconColor(bucket)"></i>
-                      <div>
-                        <strong>{{ bucket.label }}</strong>
-                        <span>{{ bucket.context }}</span>
+                      <div class="entity-content">
+                        @if (bucket.collapseId) {
+                          <button
+                            type="button"
+                            class="row-toggle"
+                            (click)="togglePortfolioRow(bucket, $event)"
+                            [attr.aria-expanded]="!isPortfolioRowCollapsed(bucket)"
+                            [title]="isPortfolioRowCollapsed(bucket) ? 'Expand ' + bucket.label : 'Collapse ' + bucket.label"
+                          >
+                            <i class="ti" [class.ti-chevron-right]="isPortfolioRowCollapsed(bucket)" [class.ti-chevron-down]="!isPortfolioRowCollapsed(bucket)"></i>
+                          </button>
+                        } @else {
+                          <span class="row-toggle is-leaf"></span>
+                        }
+                        <i [class]="portfolioRowIconClass(bucket)" [style.color]="portfolioRowIconColor(bucket)"></i>
+                        <div>
+                          <strong>{{ bucket.label }}</strong>
+                          <span>{{ bucket.context }}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="portfolio-health-cell" [title]="portfolioRiskTitle(bucket)">
+                      <div class="portfolio-health" [attr.data-risk]="bucket.risk.level">
+                        <span class="portfolio-health-status"><i class="ti ti-activity-heartbeat"></i>{{ bucket.risk.label }}</span>
+                        <span class="portfolio-health-summary">{{ bucket.risk.summary }}</span>
                       </div>
                     </td>
                     @for (column of portfolioColumns; track column.key) {

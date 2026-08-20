@@ -315,14 +315,15 @@ export const ANCHORED_PANEL_STYLES = `
  * Only worth it for content-heavy panels (pickers, create forms) where a trigger near the edge of a
  * phone screen would otherwise open something cramped. It is deliberately separate rather than baked
  * into `ANCHORED_PANEL_STYLES`: applied wholesale it would turn every four-item context menu into a
- * full-width sheet, which reads as a bug. `:host(.is-above)` is listed explicitly so the sheet still
- * outranks the flip-above rule, which is equally specific.
+ * full-width sheet, which reads as a bug. Add `ap-stay-anchored` to a compact selector's component
+ * host to opt it out. `:host(.is-above)` is listed explicitly so the sheet still outranks the
+ * flip-above rule, which is equally specific.
  */
 export function anchoredSheetStyles(panelClass = "ap-panel"): string {
   return `
   @media (max-width: 560px) {
-    :host,
-    :host(.is-above) {
+    :host:not(.ap-stay-anchored),
+    :host(.is-above):not(.ap-stay-anchored) {
       top: auto;
       right: 8px;
       /* The sheet sat under the iOS home indicator, which is exactly where a picker's last rows are. */
@@ -333,7 +334,7 @@ export function anchoredSheetStyles(panelClass = "ap-panel"): string {
 
     /* dvh, not vh: a phone's collapsing URL bar otherwise sizes the sheet to a viewport taller than
        the one it is actually being shown in. */
-    .${panelClass} { max-height: min(70dvh, 480px); }
+    :host:not(.ap-stay-anchored) .${panelClass} { max-height: min(70dvh, 480px); }
   }
 `;
 }

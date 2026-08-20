@@ -1,0 +1,1 @@
+ALTER TABLE "user" ADD COLUMN "show_scratchpad" boolean DEFAULT true NOT NULL;

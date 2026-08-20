@@ -212,6 +212,7 @@ const cachedDefinition: WorkViewDefinition = {
     customFieldConditions: [],
     completion: "active",
     unassignedOnly: false,
+    inactiveOnly: false,
     dueFrom: null,
     dueTo: null,
     overdueOnly: false,
@@ -470,6 +471,33 @@ describe("GlobalWorkState", () => {
     }
   });
 
+  it("clears stale-card timestamps immediately for moves and checklist activity", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-08-19T12:00:00.000Z"));
+      const { state, socket } = setup();
+      await state.initialize("my");
+      const card = state.response().cards[0]!;
+
+      socket.trigger(SERVER_EVENTS.CARD_MOVED, {
+        boardId: card.boardId,
+        cardId: card.id,
+        fromListId: card.listId,
+        toListId: card.listId,
+        position: "2000.0000000000",
+        prevPosition: card.position,
+      });
+      expect(new Date(state.response().cards[0]!.updatedAt).toISOString()).toBe("2026-08-19T12:00:00.000Z");
+
+      vi.setSystemTime(new Date("2026-08-19T12:00:01.000Z"));
+      socket.trigger(SERVER_EVENTS.CARD_CHECKLIST_MOVED, { cardId: card.id });
+      expect(new Date(state.response().cards[0]!.updatedAt).toISOString()).toBe("2026-08-19T12:00:01.000Z");
+      await vi.advanceTimersByTimeAsync(180);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("recomputes visible card keys immediately after a workspace prefix event", async () => {
     vi.useFakeTimers();
     try {
@@ -505,6 +533,7 @@ describe("GlobalWorkState", () => {
         { event: SERVER_EVENTS.CARD_CHECKLIST_ITEM_MOVED, payload: {} },
         { event: SERVER_EVENTS.CARD_CHECKLIST_ITEM_REBALANCED, payload: {} },
         { event: SERVER_EVENTS.COMMENT_CREATED, payload: {} },
+        { event: SERVER_EVENTS.COMMENT_UPDATED, payload: {} },
         { event: SERVER_EVENTS.COMMENT_DELETED, payload: {} },
         { event: SERVER_EVENTS.CARD_ATTACHMENT_CREATED, payload: {} },
         { event: SERVER_EVENTS.CARD_ATTACHMENT_DELETED, payload: {} },
@@ -929,7 +958,7 @@ describe("GlobalWorkState", () => {
   it("keeps an empty cached Portfolio summary visible offline", async () => {
     const portfolio: PortfolioSummary = {
       days: 30,
-      totals: { cards: 0, overdue: 0, dueSoon: 0, completed: 0, overdueChecklistItems: 0, unassigned: 0 },
+      totals: { cards: 0, overdue: 0, dueSoon: 0, completed: 0, overdueChecklistItems: 0, unassigned: 0, inactive: 0 },
       buckets: [],
       activityDays: 60,
       activity: [],
@@ -1059,6 +1088,7 @@ describe("GlobalWorkState", () => {
         customFieldConditions: [],
         completion: "active",
         unassignedOnly: false,
+        inactiveOnly: false,
         dueFrom: null,
         dueTo: null,
         overdueOnly: false,

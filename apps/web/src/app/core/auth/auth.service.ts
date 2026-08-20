@@ -23,6 +23,7 @@ export interface AuthUser {
   canCreateOrganisation?: boolean;
   timezone: string;
   showCardKeys?: boolean;
+  showScratchpad?: boolean;
   storageUsage?: {
     usedBytes: number;
     quotaBytes: number | null;

@@ -292,6 +292,9 @@ export class ScratchpadPanelComponent implements OnDestroy {
     // Never leave text in a debounce that is about to be discarded with the component.
     this.scratchpad.flushAll();
     this.scratchpad.registerEditor(null);
+    // Hiding the personal scratchpad removes this dock component. Close its remembered UI state as
+    // well, otherwise showing the control again later would unexpectedly reopen the panel.
+    if (!this.isPage()) this.scratchpad.setOpen(false);
   }
 
   protected close(): void {

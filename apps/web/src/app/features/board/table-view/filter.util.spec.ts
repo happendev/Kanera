@@ -182,6 +182,7 @@ describe("matchesCfConditions", () => {
       cfConditions: [],
       showUnreadOnly: false,
       showOverdueOnly: false,
+      showInactiveOnly: false,
       showPrioritySetOnly: false,
     };
     it("is false when nothing is set", () => {
@@ -195,6 +196,7 @@ describe("matchesCfConditions", () => {
       expect(hasActiveFilter({ ...empty, cfConditions: [{ fieldId: "f", op: "isEmpty" }] })).toBe(true);
       expect(hasActiveFilter({ ...empty, showUnreadOnly: true })).toBe(true);
       expect(hasActiveFilter({ ...empty, showOverdueOnly: true })).toBe(true);
+      expect(hasActiveFilter({ ...empty, showInactiveOnly: true })).toBe(true);
       expect(hasActiveFilter({ ...empty, showPrioritySetOnly: true })).toBe(true);
     });
   });

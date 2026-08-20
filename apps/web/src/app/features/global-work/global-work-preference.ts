@@ -175,6 +175,7 @@ function storedDefinition(value: unknown): WorkViewDefinition | null {
       ? completion as WorkFilters["completion"]
       : DEFAULT_COMPLETION,
     unassignedOnly: filters["unassignedOnly"] === true,
+    inactiveOnly: filters["inactiveOnly"] === true,
     dueFrom: nullableDate(filters["dueFrom"]),
     dueTo: nullableDate(filters["dueTo"]),
     overdueOnly: filters["overdueOnly"] === true,

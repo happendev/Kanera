@@ -629,7 +629,9 @@
   instead of being covered. It must stay after </main> and before the overlay siblings below, which
   are all fixed-position and take no grid cell.
 -->
+@if (showScratchpad()) {
 <k-scratchpad-panel (resizeStateChange)="scratchpadResizing.set($event)" />
+}
 
 <k-my-priorities-panel />
 <k-notifications-panel />

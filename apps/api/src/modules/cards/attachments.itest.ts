@@ -106,6 +106,8 @@ function mediaPath(url: string): string {
 
 void test("rapid attachment add/remove activity collapses out of the card feed", async () => {
   const { app, accessToken, card } = await setupCard();
+  const inactiveAt = new Date("2025-01-01T00:00:00.000Z");
+  await db.update(cards).set({ updatedAt: inactiveAt }).where(eq(cards.id, card.id));
 
   const upload = await app.inject({
     method: "POST",
@@ -115,6 +117,10 @@ void test("rapid attachment add/remove activity collapses out of the card feed",
   });
   assert.equal(upload.statusCode, 201, upload.body);
   const attachment = upload.json<{ id: string }>();
+  const [afterUpload] = await db.select({ updatedAt: cards.updatedAt }).from(cards).where(eq(cards.id, card.id));
+  assert.ok(afterUpload!.updatedAt > inactiveAt, "uploading an attachment should count as card activity");
+
+  await db.update(cards).set({ updatedAt: inactiveAt }).where(eq(cards.id, card.id));
 
   const remove = await app.inject({
     method: "DELETE",
@@ -122,6 +128,8 @@ void test("rapid attachment add/remove activity collapses out of the card feed",
     headers: { authorization: `Bearer ${accessToken}` },
   });
   assert.equal(remove.statusCode, 204, remove.body);
+  const [afterRemove] = await db.select({ updatedAt: cards.updatedAt }).from(cards).where(eq(cards.id, card.id));
+  assert.ok(afterRemove!.updatedAt > inactiveAt, "removing an attachment should count as card activity");
 
   const rows = await db
     .select()
