@@ -570,8 +570,8 @@ void test("opting in delivers watched activity as push, worded like the drawer e
   assert.equal(pushes[0]!.payload.notification.data.kind, "card_watched_activity");
   assert.equal(pushes[0]!.payload.notification.title, "Prepare launch");
   assert.equal(pushes[0]!.payload.notification.body, "Owner moved this card to Shipped");
-  // Per-card tag so a busy card collapses into one tray entry rather than stacking.
-  assert.equal(pushes[0]!.payload.notification.tag, `card:${f.card.id}:watching`);
+  // Browser pushes share one tray entry; the durable drawer retains every underlying event.
+  assert.equal(pushes[0]!.payload.notification.tag, "kanera:notifications");
 });
 
 void test("a user who both watches and is assigned gets exactly one push, not two", async () => {
@@ -634,7 +634,7 @@ void test("an overdue watched card pushes only once opted in, and never emails t
 
   const pushes = await db.select().from(pushQueue).where(and(eq(pushQueue.userId, f.other.id), eq(pushQueue.reason, "overdue")));
   assert.equal(pushes.length, 1);
-  assert.equal(pushes[0]!.payload.notification.tag, `card:${f.card.id}:overdue`);
+  assert.equal(pushes[0]!.payload.notification.tag, "kanera:notifications");
   // Watchers never get the overdue email - that stays assignee-only.
   const emails = await queuedTypes("card_overdue");
   assert.equal(emails.filter((row) => row.toEmail === f.otherEmail).length, 0);
