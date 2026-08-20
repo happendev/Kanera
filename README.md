@@ -18,14 +18,15 @@ Use the hosted service and get started in minutes, or self-host Kanera on your o
 
 ## One place for moving work forward
 
-- **Plan in the view that fits.** Move between Kanban, List, Calendar, My Cards, Team Cards, Portfolio, and Work Done without duplicating work.
+- **Plan in the view that fits.** Move between Kanban, Table, Calendar, My Cards, Team Cards, Portfolio, and Work Done without duplicating work.
 - **Keep the details with the task.** Add descriptions, comments, attachments, labels, custom fields, watchers, and assignable checklist items to cards.
-- **See what needs attention.** Bring work assigned to you or your team together across every board, with search and filters when you need to narrow the view.
+- **Set clear priorities.** Use Home and a ranked Up next queue to keep urgent work visible across every board.
 - **Make progress visible.** Review what was created, moved, completed, or checked off without chasing another status update.
-- **Keep knowledge nearby.** Use personal, workspace, and board notes for decisions, processes, references, and project context.
+- **Keep knowledge nearby.** Use personal, workspace, and board notes for decisions, processes, references, and project context, with Scratchpad ready for quick capture.
 - **Automate and integrate.** Handle repetitive updates with trigger-based automations, post card activity into Slack, Discord, Telegram, or Zulip, and connect other tools through the REST API, webhooks, and MCP server.
 - **Get told what matters, where you want it.** Choose per notification type whether an update reaches email, browser push, ntfy, Gotify, or your own webhook, then add per-workspace exceptions so one busy board does not drown out the rest.
 - **Work together in real time.** Stay current with live updates, mentions, activity history, and controlled guest access.
+- **Work from any screen.** The full Kanera experience adapts to phones, tablets, and desktops, and installs as a PWA on iOS, Android, and desktop.
 
 ## Workspaces and standalone boards
 
@@ -38,11 +39,11 @@ Organisation
        └─ Card
 ```
 
-Use a workspace when several boards should follow the same operating model. Lists, labels, and custom fields are configured once and used across all of its boards, keeping workflows and reporting consistent as projects grow.
+Use a workspace when several boards should follow the same operating model. Lists, labels, custom fields, checklist templates, and automations are configured once and used across its boards, keeping workflows and reporting consistent as projects grow.
 
 That means a status like `In Review` or a field like `Client` has the same meaning everywhere—no rebuilding each board or reconciling mismatched setups later.
 
-For work that does not need to share that setup, create a standalone board. It has its own lists, labels, custom fields, members, and settings, independently of your workspaces.
+For work that does not need to share that setup, create a standalone board. It keeps its own lists, labels, custom fields, checklist templates, automations, members, access, and integrations independently of your workspaces.
 
 ## See Kanera in action
 
@@ -52,9 +53,15 @@ Start with overdue work, items due today, the next seven days, and recent progre
 
 ![Kanera Home showing Amelia's focus tiles, weekly agenda, and progress in dark mode](docs/readme-assets/home.jpg)
 
-### Board view keeps the workflow visible
+### Up next keeps priorities in order
 
-Move cards through shared lists while keeping labels, assignees, due dates, checklist progress, and visual covers in view.
+Build one ranked queue from cards assigned to you across every accessible board. Reorder it as priorities change, keep source boards and due dates visible, and see the same order on Home, My Cards, board cards, and Table.
+
+![Kanera My Cards showing a ranked Up next queue beside assigned work](docs/readme-assets/my-cards-up-next.jpg)
+
+### Boards and shared lists keep the workflow visible
+
+Move cards through lists while keeping labels, assignees, due dates, checklist progress, and visual covers in view. Boards in a workspace share the same ordered lists, so stages such as Intake, In progress, Review, and Done remain consistent across related projects.
 
 ![Kanera Autumn Campaign Launch board showing cards organised into shared lists](docs/readme-assets/board.jpg)
 
@@ -82,9 +89,15 @@ Descriptions, custom fields, checklists, due dates, comments, attachments, and a
 
 ### Team Cards brings assigned work together across boards
 
-Use My Cards, Team Cards, and Portfolio to review work across organisations, workspaces, and boards, then group and filter it without losing its source context.
+See the whole visible team or focus on one teammate without losing each card's board, list, fields, or permissions. Switch between Board, Table, Calendar, Work Done, and ranked team Up next views to review ownership, workload, and execution order across projects.
 
 ![Kanera Team Cards view filtered to Ben Ortega across accessible boards](docs/readme-assets/team-cards.jpg)
+
+### Automations keep routine work moving
+
+Build automations from a **When** trigger and ordered **Do** actions. Kanera can add labels, assign people, apply checklist templates, set due dates and custom fields, move cards, or mark work complete when predictable workflow events occur. Automations can belong to one standalone board or run across every board in a workspace.
+
+![Kanera automation builder showing a trigger and ordered card actions](docs/readme-assets/automations.jpg)
 
 ### Work Done shows what actually moved forward
 
@@ -97,6 +110,10 @@ Review a daily history of cards created, moved, and completed, plus finished che
 Review active, overdue, upcoming, unassigned, and completed work across organisations, workspaces, and boards from one reporting view.
 
 ![Kanera Portfolio showing organisation, workspace, and board-level work rollups](docs/readme-assets/portfolio.jpg)
+
+### Fully functional on mobile and installable as a PWA
+
+Kanera's responsive, touch-friendly interface keeps boards, cards, Table, Calendar, My Cards, Team Cards, notifications, settings, and the rest of the product available on phones and tablets. Use it in the browser or install the PWA on iOS, Android, or desktop. Installed devices support push notifications, and recently opened boards remain available for browsing when the connection drops.
 
 Explore the full product tour at [kanera.app/features](https://www.kanera.app/features).
 
@@ -121,13 +138,14 @@ For Jira, ClickUp, Asana, monday.com, Notion, Linear, or an internal system, the
 
 ## For developers
 
-Kanera is a pnpm monorepo built with Angular 21, Fastify 5, Socket.IO 4, PostgreSQL 18, Drizzle ORM, and Valkey.
+Kanera is a pnpm monorepo built with Angular 22, Fastify 5, Socket.IO 4, PostgreSQL 18, Drizzle ORM, and Valkey.
 
 For AI tools and automated research, see the [LLM-readable documentation index](https://www.kanera.app/docs/llms.txt).
 
 ```text
 apps/api/           Fastify API, worker, public API, and migrations
 apps/web/           Angular web application
+apps/admin-web/     Angular administration application
 apps/mcp/           MCP server for AI clients
 packages/shared/    Shared schema, DTOs, events, and workspace defaults
 docker/             Local and production support files

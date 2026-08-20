@@ -16,14 +16,43 @@
       "type": "image/png"
     },
     {
+      "src": "/assets/favicon/android-chrome-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png"
+    },
+    {
       "src": "/assets/favicon/android-chrome-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
+      "src": "/assets/favicon/android-chrome-1024x1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/favicon/maskable-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/assets/favicon/maskable-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
       "src": "/assets/favicon/maskable-512x512.png",
       "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/assets/favicon/maskable-1024x1024.png",
+      "sizes": "1024x1024",
       "type": "image/png",
       "purpose": "maskable"
     }
@@ -31,8 +60,25 @@
   "theme_color": "#0b111b",
   "background_color": "#0b111b",
   "display": "standalone",
+  "orientation": "any",
   "scope": "/",
   "start_url": "/",
+  "screenshots": [
+    {
+      "src": "/assets/screenshots/kanera-board.jpg",
+      "sizes": "1440x960",
+      "type": "image/jpeg",
+      "form_factor": "wide",
+      "label": "Kanera board view"
+    },
+    {
+      "src": "/assets/screenshots/kanera-home.jpg",
+      "sizes": "1440x960",
+      "type": "image/jpeg",
+      "form_factor": "wide",
+      "label": "Kanera home dashboard"
+    }
+  ],
   "shortcuts": [
     {
       "name": "Quick capture",
@@ -51,7 +97,7 @@
   "share_target": {
     "action": "/share-target?ngsw-bypass=1",
     "method": "POST",
-    "enctype": "application/x-www-form-urlencoded",
+    "enctype": "multipart/form-data",
     "params": {
       "title": "title",
       "text": "text",
