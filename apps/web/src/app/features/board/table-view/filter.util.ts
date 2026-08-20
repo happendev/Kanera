@@ -18,6 +18,7 @@ export function hasActiveFilter(v: FilterValue): boolean {
     v.cfConditions.length > 0 ||
     v.showUnreadOnly ||
     v.showOverdueOnly ||
+    v.showInactiveOnly ||
     v.showPrioritySetOnly
   );
 }

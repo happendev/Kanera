@@ -1,5 +1,6 @@
 import { dto } from "@kanera/shared";
 import { cardPath } from "@kanera/shared/card-links";
+import { CARD_INACTIVE_AFTER_MS } from "@kanera/shared/card-health";
 import type {
   AgentWorkHistoryResponse,
   AgentWorkHistoryQuery,
@@ -240,6 +241,11 @@ function baseCardConditions(
     select 1 from card_assignee work_unassigned
     where work_unassigned.card_id = ${columns.id}
   )`);
+  if (filters.inactiveOnly) {
+    // `updatedAt` is the canonical card-activity clock (child-resource changes touch it too), so the
+    // drill-down returns exactly the cards counted by Board overview and Portfolio.
+    conditions.push(lte(columns.updatedAt, new Date(Date.now() - CARD_INACTIVE_AFTER_MS)));
+  }
   if (filters.completedFrom) conditions.push(gte(columns.completedAt, new Date(filters.completedFrom)));
   if (filters.completedTo) conditions.push(lte(columns.completedAt, new Date(filters.completedTo)));
   if (filters.dueFrom) conditions.push(gte(columns.dueDateLocalDate, filters.dueFrom));
@@ -788,6 +794,8 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
   const query = dto.workPortfolioQueryBody.parse(input);
   const scopeBoards = applyWorkScope(allBoards, query.scope);
   const from = new Date(Date.now() - query.days * 24 * 60 * 60 * 1000);
+  // Portfolio health uses the same active-card inactivity boundary as board and card UI.
+  const inactiveCutoff = new Date(Date.now() - CARD_INACTIVE_AFTER_MS);
   const filters = dto.workFiltersSchema.parse({ ...(query.filters ?? {}), completion: "all" });
   const conditions = baseCardConditions(authUserId, scopeBoards, filters, { portfolio: true }, cardDueColumns);
 
@@ -802,6 +810,7 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
       unassigned: sql<number>`count(*) filter (where ${cards.completedAt} is null and not exists (
         select 1 from card_assignee portfolio_assignee where portfolio_assignee.card_id = ${cards.id}
       ))::integer`,
+      inactive: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${cards.updatedAt} <= ${inactiveCutoff})::integer`,
       completed: sql<number>`count(*) filter (where ${cards.completedAt} >= ${from})::integer`,
     })
     .from(cards)
@@ -854,6 +863,7 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
       overdue: row.overdue,
       dueSoon: row.dueSoon,
       unassigned: row.unassigned,
+      inactive: row.inactive,
       completed: row.completed,
       overdueChecklistItems: overdueChecklistByBoard.get(row.boardId) ?? 0,
     }];
@@ -874,7 +884,8 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
     completed: sum.completed + bucket.completed,
     overdueChecklistItems: sum.overdueChecklistItems + bucket.overdueChecklistItems,
     unassigned: sum.unassigned + bucket.unassigned,
-  }), { cards: 0, overdue: 0, dueSoon: 0, completed: 0, overdueChecklistItems: 0, unassigned: 0 });
+    inactive: sum.inactive + bucket.inactive,
+  }), { cards: 0, overdue: 0, dueSoon: 0, completed: 0, overdueChecklistItems: 0, unassigned: 0, inactive: 0 });
 
   return { days: query.days, totals, buckets, activityDays: PORTFOLIO_ACTIVITY_DAYS, activity };
 }

@@ -1381,6 +1381,8 @@ void test("push test sends the authenticated user's active subscriptions", async
         body: "If you see this, Web Push is working.",
         icon: "/assets/favicon/android-chrome-192x192.png",
         badge: "/assets/favicon/notification-badge.png",
+        tag: "kanera:notifications",
+        renotify: true,
         data: {
           kind: "test",
           onActionClick: {

@@ -14,8 +14,10 @@ const EMPTY: FilterValue = {
   cfConditions: [],
   showUnreadOnly: false,
   showOverdueOnly: false,
+  showInactiveOnly: false,
   showPrioritySetOnly: false,
 };
+
 
 const LABELS = [
   { id: "l1", name: "Bug", color: "red" },
@@ -124,6 +126,20 @@ describe("FilterBarComponent", () => {
     clickButton(fixture, "Labels"); // drill into labels
     clickButton(fixture, "Urgent"); // toggle a label on
     expect(emitted?.labelIds).toEqual(["l2"]);
+  });
+
+  it("offers inactivity as a counted quick filter", () => {
+    const fixture = makeFixture(EMPTY);
+    let emitted: FilterValue | undefined;
+    fixture.componentInstance.valueChange.subscribe((value) => (emitted = value));
+
+    clickButton(fixture, "Filter");
+    clickButton(fixture, "Inactive");
+
+    expect(emitted?.showInactiveOnly).toBe(true);
+    fixture.componentRef.setInput("value", emitted!);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.activeCount()).toBe(1);
   });
 
   it("allows multiple boards to be selected", () => {

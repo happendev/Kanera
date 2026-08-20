@@ -319,9 +319,10 @@ k-list.is-drop-target {
   --radius-lg: 10px;
 
   // The footprint of the shell's fixed circular buttons — the notifications bell, the Up next
-  // trigger, and the scratchpad trigger left of those — expressed as a band every page header must
-  // leave clear. Both axes are part of the same contract: grow them whenever a button is added to
-  // that row, and no page needs a clearance rule of its own.
+  // trigger, and (by default) the scratchpad trigger left of those — expressed as a band every page
+  // header must leave clear. The shell narrows it when the personal scratchpad control is hidden.
+  // Both axes are part of the same contract: grow them whenever a button is added to that row, and
+  // no page needs a clearance rule of its own.
   //
   // Width: bell (38px + its own 16px margin) + Up next (38px + an 8px gap) + scratchpad (38px + an
   // 8px gap) + an 8px gap before the header's last control, so chrome ends a normal control gap

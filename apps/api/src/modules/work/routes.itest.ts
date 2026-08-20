@@ -789,6 +789,9 @@ void test("opaque cursors page every supported sort without duplicates during co
 
 void test("portfolio summaries match access-filtered card drill-downs", async () => {
   const f = await seed();
+  await db.update(cards)
+    .set({ updatedAt: new Date("2020-01-01T00:00:00.000Z") })
+    .where(eq(cards.id, f.restrictedMine.id));
   const summaryResponse = await f.app.inject({
     method: "POST",
     url: "/work/portfolio/query",
@@ -807,6 +810,8 @@ void test("portfolio summaries match access-filtered card drill-downs", async ()
 
   const restricted = summary.buckets.find((bucket) => bucket.boardId === f.restrictedBoard.id);
   assert.equal(restricted?.active, 1);
+  assert.equal(restricted?.inactive, 1);
+  assert.equal(summary.totals.inactive, 1);
   const drillDown = await f.app.inject({
     method: "POST",
     url: "/work/cards/query",
@@ -814,6 +819,7 @@ void test("portfolio summaries match access-filtered card drill-downs", async ()
     payload: {
       lens: "portfolio",
       scope: { allAccessible: false, workspaceIds: [], boardIds: [f.restrictedBoard.id] },
+      filters: { completion: "active", inactiveOnly: true },
       limit: 100,
     },
   });

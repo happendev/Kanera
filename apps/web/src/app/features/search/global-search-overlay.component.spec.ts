@@ -5,6 +5,7 @@ import { Router } from "@angular/router";
 import type { WireSearchResults } from "@kanera/shared/dto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GlobalSearchService } from "../../core/search/global-search.service";
+import { ThemeService } from "../../core/theme/theme.service";
 import { GlobalSearchOverlayComponent } from "./global-search-overlay.component";
 
 function emptyResults(overrides: Partial<WireSearchResults> = {}): WireSearchResults {
@@ -26,7 +27,7 @@ describe("GlobalSearchOverlayComponent", () => {
     close: ReturnType<typeof vi.fn>;
     open: ReturnType<typeof vi.fn>;
   };
-  let router: { navigate: ReturnType<typeof vi.fn> };
+  let router: { navigate: ReturnType<typeof vi.fn>; url: string };
 
   beforeEach(async () => {
     search = {
@@ -37,13 +38,14 @@ describe("GlobalSearchOverlayComponent", () => {
       close: vi.fn(),
       open: vi.fn(),
     };
-    router = { navigate: vi.fn(() => Promise.resolve(true)) };
+    router = { navigate: vi.fn(() => Promise.resolve(true)), url: "/" };
 
     await TestBed.configureTestingModule({
       imports: [GlobalSearchOverlayComponent],
       providers: [
         provideZonelessChangeDetection(),
         { provide: GlobalSearchService, useValue: search },
+        { provide: ThemeService, useValue: { theme: signal<"dark" | "light">("dark"), toggle: vi.fn() } },
         { provide: Router, useValue: router },
       ],
     }).compileComponents();
@@ -128,6 +130,28 @@ describe("GlobalSearchOverlayComponent", () => {
       data: { id: "n2", snippet: "n", workspaceId: "w1", workspaceName: "W", boardId: "b1", boardName: "B", boardIcon: null, boardColor: null, title: "Note 2" },
     });
     expect(router.navigate).toHaveBeenCalledWith(["/b", "b1"], { queryParams: { view: "notes", noteId: "n2" } });
+  });
+
+  it("offers contextual commands before a search and runs them from the same keyboard list", async () => {
+    search.query.set("");
+    router.url = "/b/board-1";
+    await fixture.whenStable();
+
+    expect(component.commands()[0]?.label).toBe("Create a new card");
+    expect(component.flat()[0]?.kind).toBe("command");
+
+    component.onKeydown(key("Enter"));
+    expect(search.close).toHaveBeenCalled();
+  });
+
+  it("shows quick actions only while the search is empty", async () => {
+    search.query.set("");
+    await fixture.whenStable();
+    expect(component.commands().length).toBeGreaterThan(1);
+
+    search.query.set(">");
+    await fixture.whenStable();
+    expect(component.commands()).toEqual([]);
   });
 
   it("opens a comment result on the parent card", () => {

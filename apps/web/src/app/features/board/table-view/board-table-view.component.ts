@@ -539,6 +539,7 @@ export class BoardTableViewComponent implements OnDestroy {
     cfConditions: [],
     showUnreadOnly: false,
     showOverdueOnly: false,
+    showInactiveOnly: false,
     showPrioritySetOnly: false,
   }));
 

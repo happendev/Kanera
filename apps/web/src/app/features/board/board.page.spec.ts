@@ -243,6 +243,35 @@ describe("BoardPage", () => {
     fixture.destroy();
   });
 
+  it("shows actionable work risk and filters to the selected signal", async () => {
+    const fixture = createInitializedBoardPage();
+    await vi.waitFor(() => expect(boardState(fixture.componentInstance).board()).not.toBeNull());
+    const component = fixture.componentInstance;
+
+    expect(component.boardOverview().risk).toMatchObject({
+      level: "atRisk",
+      summary: "1 overdue · 1 unassigned · 1 inactive",
+    });
+
+    component.setBoardRiskFilter("unassigned");
+    expect(component.filteredCardIds()).toEqual(new Set(["card-2"]));
+    component.setBoardRiskFilter("unassigned");
+    expect(component.filteredCardIds()).toBeNull();
+
+    fixture.destroy();
+  });
+
+  it("does not call a board healthy when it has no active work", async () => {
+    const fixture = createInitializedBoardPage();
+    await vi.waitFor(() => expect(boardState(fixture.componentInstance).board()).not.toBeNull());
+    const state = boardState(fixture.componentInstance);
+    state.cards.update((cards) => cards.map((entry) => ({ ...entry, completedAt: new Date() })));
+
+    expect(fixture.componentInstance.boardOverview().risk.level).toBe("noActiveWork");
+
+    fixture.destroy();
+  });
+
   it("marks the link icon when the board participates in a mirror", async () => {
     api.post.mockResolvedValue({ ...boardPayload(), hasMirrors: true });
     api.get.mockImplementation((path: string) => Promise.resolve(
@@ -574,6 +603,27 @@ describe("BoardPage", () => {
     component.showOverdueOnly.set(true);
 
     expect(component.filteredCardIds()).toEqual(new Set(["card-2"]));
+  });
+
+  it("shows only incomplete cards with no activity for 14 days", () => {
+    const fixture = TestBed.createComponent(BoardPage);
+    const component = fixture.componentInstance;
+    boardState(component).hydrate({
+      board: board(),
+      lists: [list()],
+      cards: [
+        card({ id: "inactive", updatedAt: new Date("2020-01-01T00:00:00.000Z") }),
+        card({ id: "recent", updatedAt: new Date() }),
+        card({ id: "completed", updatedAt: new Date("2020-01-01T00:00:00.000Z"), completedAt: new Date("2020-01-02T00:00:00.000Z") }),
+      ],
+      customFields: [],
+      cardLabels: [],
+      members: [],
+      viewerRole: "editor",
+    });
+    component.showInactiveOnly.set(true);
+
+    expect(component.filteredCardIds()).toEqual(new Set(["inactive"]));
   });
 
   it("limits cards to the viewer's Up next queue with the priority-set filter", () => {

@@ -310,6 +310,8 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly nameError = signal<string | null>(null);
   readonly cardKeysSaving = signal(false);
   readonly cardKeysError = signal<string | null>(null);
+  readonly scratchpadVisibilitySaving = signal(false);
+  readonly scratchpadVisibilityError = signal<string | null>(null);
 
   readonly email = signal("");
   readonly emailVerificationEnabled = signal(false);
@@ -1507,6 +1509,25 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       this.cardKeysError.set(extractErrorMessage(err));
     } finally {
       this.cardKeysSaving.set(false);
+    }
+  }
+
+  async setShowScratchpad(next: boolean) {
+    const current = this.user();
+    if (!current) return;
+    const previous = current.showScratchpad ?? true;
+    if (next === previous) return;
+
+    this.scratchpadVisibilitySaving.set(true);
+    this.scratchpadVisibilityError.set(null);
+    this.auth.updateUser((user) => ({ ...user, showScratchpad: next }));
+    try {
+      await this.api.patch("/auth/me", { showScratchpad: next });
+    } catch (err) {
+      this.auth.updateUser((user) => ({ ...user, showScratchpad: previous }));
+      this.scratchpadVisibilityError.set(extractErrorMessage(err));
+    } finally {
+      this.scratchpadVisibilitySaving.set(false);
     }
   }
 

@@ -15,6 +15,7 @@
     "./attachments": "./src/attachments.ts",
     "./client-ip": "./src/client-ip.ts",
     "./card-links": "./src/card-links.ts",
+    "./card-health": "./src/card-health.ts",
     "./colors": "./src/lib/colors.ts",
     "./activity-summary": "./src/lib/activity-summary.ts",
     "./icons": "./src/tabler-icons.ts",

@@ -572,6 +572,7 @@ describe("BoardState realtime regressions", () => {
   it("advances the card detail revision for realtime moves and rebalances", () => {
     const socket = new SocketStub();
     bridge.attach(socket.asSocket(), "board-1");
+    const inactiveAt = new Date(state.cardById("card-1")!.updatedAt).getTime();
 
     expect(state.cardDetailRealtimeRevision("card-1")).toBe(0);
     socket.trigger(SERVER_EVENTS.CARD_MOVED, {
@@ -583,6 +584,7 @@ describe("BoardState realtime regressions", () => {
       prevPosition: "1000.0000000000",
     });
     expect(state.cardDetailRealtimeRevision("card-1")).toBe(1);
+    expect(new Date(state.cardById("card-1")!.updatedAt).getTime()).toBeGreaterThan(inactiveAt);
 
     socket.trigger(SERVER_EVENTS.CARD_REBALANCED, {
       boardId: "board-1",
@@ -1173,6 +1175,7 @@ describe("BoardState realtime regressions", () => {
       item: { ...item, completedAt: new Date("2026-05-21T01:00:00.000Z") },
     });
     expect(state.cards()[0]).toMatchObject({ checklistDoneCount: 1, checklistTotalCount: 2 });
+    expect(new Date(state.cards()[0]!.updatedAt).getTime()).toBeGreaterThan(new Date("2026-05-21T00:00:00.000Z").getTime());
   });
 
   // The badge-drift bug: when the card detail isn't cached locally, the client can't look up the

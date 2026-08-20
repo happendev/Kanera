@@ -528,6 +528,22 @@ describe("AccountSettingsPage", () => {
     expect(buildMeta?.textContent).toContain("Built");
   });
 
+  it("shows the scratchpad by default and persists the personal visibility choice", async () => {
+    activeSettingsRoute = "profile";
+    await createPage();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const row = Array.from(root.querySelectorAll<HTMLElement>(".push-toggle-row"))
+      .find((candidate) => candidate.textContent?.includes("Show scratchpad"));
+    const checkbox = row?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    expect(checkbox?.checked).toBe(true);
+
+    checkbox!.click();
+    await fixture.whenStable();
+
+    expect(api.patch).toHaveBeenCalledWith("/auth/me", { showScratchpad: false });
+  });
+
   it("opens cookie preferences from the profile tab without a floating control", async () => {
     activeSettingsRoute = "profile";
     const consent = TestBed.inject(CookieConsentService);

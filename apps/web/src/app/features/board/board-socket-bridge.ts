@@ -101,6 +101,7 @@ export class BoardSocketBridge {
           return;
         }
         state.moveCard(cardId, toListId, position);
+        state.touchCardActivity(cardId);
         // A concurrent detail fetch contains the card's list/position too. Mark the move so that
         // stale detail cannot put the card back after this realtime event has been applied.
         state.noteCardDetailRealtimeMutation(cardId);
@@ -340,16 +341,19 @@ export class BoardSocketBridge {
           return;
         }
         state.addChecklist(cardId, checklist);
+        state.touchCardActivity(cardId);
         state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_UPDATED]: ({ boardId: eventBoardId, cardId, checklist }) => {
         if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         state.updateChecklist(cardId, checklist);
+        state.touchCardActivity(cardId);
         state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_MOVED]: ({ boardId: eventBoardId, cardId, checklistId, position }) => {
         if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         state.moveChecklist(cardId, checklistId, position);
+        state.touchCardActivity(cardId);
         state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_REBALANCED]: ({ boardId: eventBoardId, cardId, positions }) => {
@@ -360,22 +364,26 @@ export class BoardSocketBridge {
       [SERVER_EVENTS.CARD_CHECKLIST_DELETED]: ({ boardId: eventBoardId, cardId, checklistId }) => {
         if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         state.removeChecklist(cardId, checklistId);
+        state.touchCardActivity(cardId);
         state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_ITEM_CREATED]: ({ boardId: eventBoardId, cardId, checklistId, checklistParentItemId, item }) => {
         if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         state.addChecklistItem(cardId, checklistId, item, checklistParentItemId);
+        state.touchCardActivity(cardId);
         state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_ITEM_UPDATED]: ({ boardId: eventBoardId, cardId, checklistId, checklistParentItemId, item, prevCompletedAt }) => {
         if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         state.updateChecklistItem(cardId, checklistId, item, prevCompletedAt, checklistParentItemId);
+        state.touchCardActivity(cardId);
         state.noteCardDetailRealtimeMutation(cardId);
         options.onWorkDoneChanged?.();
       },
       [SERVER_EVENTS.CARD_CHECKLIST_ITEM_MOVED]: ({ boardId: eventBoardId, cardId, itemId, fromChecklistId, toChecklistId, position }) => {
         if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         state.moveChecklistItem(cardId, itemId, fromChecklistId, toChecklistId, position);
+        state.touchCardActivity(cardId);
         state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_ITEM_REBALANCED]: ({ boardId: eventBoardId, cardId, checklistId, positions }) => {
@@ -386,6 +394,7 @@ export class BoardSocketBridge {
       [SERVER_EVENTS.CARD_CHECKLIST_ITEM_DELETED]: ({ boardId: eventBoardId, cardId, checklistId, checklistParentItemId, itemId, completedAt }) => {
         if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         state.removeChecklistItem(cardId, checklistId, itemId, completedAt, checklistParentItemId);
+        state.touchCardActivity(cardId);
         state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.BOARD_MEMBER_ADDED]: ({ boardId: eventBoardId, member, user }) => {

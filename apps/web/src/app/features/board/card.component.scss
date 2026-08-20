@@ -369,6 +369,20 @@
   transform: translateY(-1px);
 }
 
+.card-attention {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 17px;
+  width: 17px;
+  height: 17px;
+  border-radius: 5px;
+  transform: translateY(2px);
+
+  i { font-size: 12px; }
+  color: var(--text-muted);
+  background: var(--surface-2);
+}
+
 .card-title-text {
   min-width: 0;
 }

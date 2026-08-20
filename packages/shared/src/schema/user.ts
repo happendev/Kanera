@@ -27,6 +27,9 @@ export const users = pgTable(
     // On-screen only: exports, the "Copy key" actions and /o/{org}/c/{KEY} routes always keep the key.
     // Account-scoped rather than per-device, so the preference follows the person across browsers.
     showCardKeys: boolean("show_card_keys").notNull().default(true),
+    // The scratchpad is optional personal chrome. Keep this account-scoped so hiding it follows the
+    // person across devices, while the default preserves the existing experience for every user.
+    showScratchpad: boolean("show_scratchpad").notNull().default(true),
     lastOnlineAt: timestamp("last_online_at", { withTimezone: true }),
     // Set by a platform admin to soft-delete the user. Hides them from tenant listings and blocks auth;
     // the row is retained so historical author/audit references stay valid. Recoverable until purged.

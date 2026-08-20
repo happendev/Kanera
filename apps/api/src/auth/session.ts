@@ -42,6 +42,7 @@ export async function authUserPayload(userId: string, requestedClientId?: string
       avatarUrl: users.avatarUrl,
       timezone: users.timezone,
       showCardKeys: users.showCardKeys,
+      showScratchpad: users.showScratchpad,
     })
     .from(users)
     .where(eq(users.id, userId))
@@ -61,6 +62,7 @@ export async function authUserPayload(userId: string, requestedClientId?: string
     avatarUrl: withSignedMedia(identity.homeClientId, { avatarUrl: identity.avatarUrl }).avatarUrl,
     timezone: identity.timezone,
     showCardKeys: identity.showCardKeys,
+    showScratchpad: identity.showScratchpad,
     orgName: active.name,
     logoUrl: active.logoUrl,
     deploymentMode: env.KANERA_DEPLOYMENT_MODE,

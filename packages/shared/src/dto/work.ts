@@ -109,6 +109,7 @@ export const workFiltersSchema = z.object({
   customFieldConditions: z.array(workCustomFieldConditionSchema).max(50).default([]),
   completion: z.enum(WORK_COMPLETION_FILTERS).default(DEFAULT_WORK_COMPLETION),
   unassignedOnly: z.boolean().default(false),
+  inactiveOnly: z.boolean().default(false),
   dueFrom: z.iso.date().nullable().default(null),
   dueTo: z.iso.date().nullable().default(null),
   overdueOnly: z.boolean().default(false),
@@ -135,6 +136,7 @@ export const workViewDefinitionSchema = z.object({
     customFieldConditions: [],
     completion: DEFAULT_WORK_COMPLETION,
     unassignedOnly: false,
+    inactiveOnly: false,
     dueFrom: null,
     dueTo: null,
     overdueOnly: false,
@@ -338,6 +340,7 @@ export type PortfolioBucket = {
   overdue: number;
   dueSoon: number;
   unassigned: number;
+  inactive: number;
   completed: number;
   overdueChecklistItems: number;
 };
@@ -355,7 +358,7 @@ export type PortfolioActivityDay = {
 
 export type PortfolioSummary = {
   days: number;
-  totals: Omit<WorkTotals, "checklistItems"> & { unassigned: number };
+  totals: Omit<WorkTotals, "checklistItems"> & { unassigned: number; inactive: number };
   buckets: PortfolioBucket[];
   /** Length of the heatmap window in days. Fixed, and independent of the `days` reporting period. */
   activityDays: number;

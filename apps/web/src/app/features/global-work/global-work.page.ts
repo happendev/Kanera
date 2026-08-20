@@ -2,6 +2,7 @@ import type { OnDestroy, OnInit } from "@angular/core";
 import { DatePipe } from "@angular/common";
 import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal } from "@angular/core";
 import { Router } from "@angular/router";
+import { boardWorkRisk, type BoardWorkRiskAssessment } from "@kanera/shared/card-health";
 import { cardPath } from "@kanera/shared/card-links";
 import type {
   PortfolioBucket,
@@ -80,7 +81,7 @@ type ChecklistGroup = {
 };
 /** Which toolbar/header popover is open. Only one at a time, so opening one dismisses the rest. */
 type WorkMenu = "save" | "source" | "team" | "view" | "group" | "sort" | "period";
-type PortfolioMetric = "active" | "overdue" | "dueSoon" | "unassigned" | "completed" | "overdueChecklistItems";
+type PortfolioMetric = "active" | "overdue" | "dueSoon" | "unassigned" | "inactive" | "completed" | "overdueChecklistItems";
 type PriorityLayout = "grid" | "table";
 type PortfolioRow = {
   id: string;
@@ -100,8 +101,10 @@ type PortfolioRow = {
   overdue: number;
   dueSoon: number;
   unassigned: number;
+  inactive: number;
   completed: number;
   overdueChecklistItems: number;
+  risk: BoardWorkRiskAssessment;
 };
 /** Number columns of the portfolio table, in render order, with the tone their heat tint uses. */
 const PORTFOLIO_COLUMNS: { key: PortfolioMetric; label: string; tone: "danger" | "success" | "neutral" }[] = [
@@ -109,6 +112,7 @@ const PORTFOLIO_COLUMNS: { key: PortfolioMetric; label: string; tone: "danger" |
   { key: "overdue", label: "Overdue", tone: "danger" },
   { key: "dueSoon", label: "Next 7 days", tone: "neutral" },
   { key: "unassigned", label: "Unassigned", tone: "neutral" },
+  { key: "inactive", label: "Inactive 14d", tone: "neutral" },
   { key: "completed", label: "Completed", tone: "success" },
   { key: "overdueChecklistItems", label: "Checklist", tone: "danger" },
 ];
@@ -553,6 +557,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       })),
       showUnreadOnly: filters.unreadOnly,
       showOverdueOnly: filters.overdueOnly,
+      showInactiveOnly: filters.inactiveOnly,
       // Like the board filter, this always means the signed-in viewer's own queue. A Team Cards
       // focus still scopes assignees, so selecting this there deliberately shows the intersection.
       showPrioritySetOnly: filters.prioritySetOnly,
@@ -961,6 +966,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       { key: "overdue", label: "Overdue", icon: "alert-triangle", tone: "danger", value: totals.overdue },
       { key: "dueSoon", label: "Due next 7 days", icon: "calendar-due", tone: null, value: totals.dueSoon },
       { key: "unassigned", label: "Unassigned", icon: "user-question", tone: null, value: totals.unassigned },
+      { key: "inactive", label: "Inactive 14 days", icon: "clock-pause", tone: null, value: totals.inactive },
       { key: "completed", label: "Completed", icon: "circle-check", tone: "success", value: totals.completed },
       { key: "overdueChecklistItems", label: "Overdue checklist", icon: "list-check", tone: "danger", value: totals.overdueChecklistItems },
     ];
@@ -1032,8 +1038,12 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
             overdue: bucket.overdue,
             dueSoon: bucket.dueSoon,
             unassigned: bucket.unassigned,
+            // Older offline Portfolio snapshots predate this metric; treat them as having no known
+            // inactive work until the next online refresh replaces the cached response.
+            inactive: bucket.inactive ?? 0,
             completed: bucket.completed,
             overdueChecklistItems: bucket.overdueChecklistItems,
+            risk: boardWorkRisk(bucket),
           });
         }
       }
@@ -1080,6 +1090,10 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     const ratio = Math.min(1, value / peak);
     const scaled = HEAT_FLOOR + (1 - HEAT_FLOOR) * ratio ** HEAT_GAMMA;
     return Math.round(scaled * 100) / 100;
+  }
+
+  portfolioRiskTitle(row: PortfolioRow): string {
+    return `${row.risk.label}: ${row.risk.summary}`;
   }
 
   /**
@@ -1157,6 +1171,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       || filters.assigneeIds.length > 0
       || filters.customFieldConditions.length > 0
       || filters.unassignedOnly
+      || filters.inactiveOnly
       || filters.overdueOnly
       || filters.overdueChecklistOnly
       || filters.unreadOnly
@@ -1385,6 +1400,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       listIds: value.listIds,
       unreadOnly: value.showUnreadOnly,
       overdueOnly: value.showOverdueOnly,
+      inactiveOnly: value.showInactiveOnly,
       prioritySetOnly: value.showPrioritySetOnly,
       customFieldConditions,
       ...(this.lens() === "portfolio" ? { assigneeIds: value.memberIds } : {}),
@@ -1436,8 +1452,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
    *   `onFilterValueChange`, which gate it the same way). On "my"/"team" it is the scope of the page
    *   itself, driven by the Teammate trigger next door — clearing it from in here silently reset a
    *   control the panel never showed and whose badge never counted it.
-   * - `unassignedOnly` has no panel row at all; it belongs to the portfolio drill-down, which owns
-   *   its own chip and close button.
+   * - `unassignedOnly` has no panel row; it belongs to Portfolio drill-downs, which own their own
+   *   chip and close button.
    */
   clearFilters(): void {
     this.workDoneEventType.set(null);
@@ -1447,6 +1463,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       customFieldConditions: [],
       completion: DEFAULT_COMPLETION,
       overdueOnly: false,
+      inactiveOnly: false,
       unreadOnly: false,
       prioritySetOnly: false,
       archived: false,
@@ -2231,6 +2248,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       completion: metric === "completed" ? "completed" : "active",
       overdueOnly: metric === "overdue",
       unassignedOnly: metric === "unassigned",
+      inactiveOnly: metric === "inactive",
       overdueChecklistOnly: metric === "overdueChecklistItems",
       dueFrom: metric === "dueSoon" ? today : null,
       dueTo: metric === "dueSoon" ? this.localDate(nextSeven) : null,
@@ -2250,6 +2268,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       completion: DEFAULT_COMPLETION,
       overdueOnly: false,
       unassignedOnly: false,
+      inactiveOnly: false,
       overdueChecklistOnly: false,
       dueFrom: null,
       dueTo: null,
@@ -2266,6 +2285,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       overdue: "Overdue",
       dueSoon: "Due next 7 days",
       unassigned: "Unassigned",
+      inactive: "Inactive 14 days",
       completed: `Completed (${this.state.definition().portfolioDays}d)`,
       overdueChecklistItems: "Overdue checklist items",
     } as Record<string, string>)[metric] ?? metric;
@@ -2398,7 +2418,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     workspaceId: string | null,
     buckets: PortfolioBucket[],
   ): PortfolioRow {
-    return buckets.reduce<PortfolioRow>((row, bucket) => ({
+    const row = buckets.reduce<Omit<PortfolioRow, "risk">>((row, bucket) => ({
       ...row,
       workspaceIds: row.workspaceIds.includes(bucket.workspaceId)
         ? row.workspaceIds
@@ -2408,6 +2428,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       overdue: row.overdue + bucket.overdue,
       dueSoon: row.dueSoon + bucket.dueSoon,
       unassigned: row.unassigned + bucket.unassigned,
+      inactive: row.inactive + (bucket.inactive ?? 0),
       completed: row.completed + bucket.completed,
       overdueChecklistItems: row.overdueChecklistItems + bucket.overdueChecklistItems,
     }), {
@@ -2425,8 +2446,45 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       overdue: 0,
       dueSoon: 0,
       unassigned: 0,
+      inactive: 0,
       completed: 0,
       overdueChecklistItems: 0,
     });
+    return { ...row, risk: this.rollupPortfolioRisk(buckets) };
+  }
+
+  private rollupPortfolioRisk(buckets: PortfolioBucket[]): BoardWorkRiskAssessment {
+    const assessments = buckets.map((bucket) => boardWorkRisk(bucket));
+    if (assessments.length === 1) return assessments[0]!;
+    const count = (level: BoardWorkRiskAssessment["level"]) =>
+      assessments.filter((assessment) => assessment.level === level).length;
+    const atRisk = count("atRisk");
+    const needsAttention = count("needsAttention");
+    const activeBoards = assessments.length - count("noActiveWork");
+    if (atRisk > 0) {
+      return {
+        level: "atRisk",
+        label: "At risk",
+        summary: `${atRisk} ${atRisk === 1 ? "board" : "boards"} at risk${needsAttention ? ` · ${needsAttention} need attention` : ""}`,
+        signals: [],
+      };
+    }
+    if (needsAttention > 0) {
+      return {
+        level: "needsAttention",
+        label: "Needs attention",
+        summary: `${needsAttention} ${needsAttention === 1 ? "board needs" : "boards need"} attention`,
+        signals: [],
+      };
+    }
+    if (activeBoards === 0) {
+      return { level: "noActiveWork", label: "No active work", summary: "No active work to assess", signals: [] };
+    }
+    return {
+      level: "onTrack",
+      label: "On track",
+      summary: `${activeBoards} active ${activeBoards === 1 ? "board" : "boards"} on track`,
+      signals: [],
+    };
   }
 }
