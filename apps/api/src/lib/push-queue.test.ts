@@ -14,6 +14,8 @@ void test("browser push payload keeps Angular's nested notification and deep-lin
       body: "Alex mentioned you in Launch / Prepare release",
       icon: "/assets/favicon/android-chrome-192x192.png",
       badge: "/assets/favicon/notification-badge.png",
+      tag: "kanera:notifications",
+      renotify: true,
       data: {
         kind: "comment_mentioned",
         onActionClick: {
@@ -27,7 +29,7 @@ void test("browser push payload keeps Angular's nested notification and deep-lin
   });
 });
 
-void test("browser push payload enables renotify only for tagged notifications", () => {
+void test("browser push payload replaces the visible notification while retaining the newest content", () => {
   const tagged = toPushQueuePayload({
     kind: "watching",
     title: "Card updated",
@@ -40,10 +42,10 @@ void test("browser push payload enables renotify only for tagged notifications",
     body: "Alex updated Prepare release",
   });
 
-  assert.equal(tagged.notification.tag, "card:card-id:watching");
+  assert.equal(tagged.notification.tag, "kanera:notifications");
   assert.equal(tagged.notification.renotify, true);
-  assert.equal("tag" in untagged.notification, false);
-  assert.equal("renotify" in untagged.notification, false);
+  assert.equal(untagged.notification.tag, "kanera:notifications");
+  assert.equal(untagged.notification.renotify, true);
 });
 
 void test("browser push payload caps long bodies at 240 characters and preserves short bodies", () => {

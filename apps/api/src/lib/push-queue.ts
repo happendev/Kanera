@@ -34,6 +34,7 @@ const PERSONAL_DELIVERY_TIMEOUT_MS = 10_000;
 // alpha-only silhouette that Android masks and tints; do not reuse a PWA icon.
 const DEFAULT_PUSH_ICON = "/assets/favicon/android-chrome-192x192.png";
 const DEFAULT_PUSH_BADGE = "/assets/favicon/notification-badge.png";
+const DEFAULT_PUSH_TAG = "kanera:notifications";
 const MAX_PUSH_BODY_LENGTH = 240;
 
 export interface PushQueueDeps {
@@ -327,9 +328,11 @@ export function toPushQueuePayload(content: PushNotificationContent): PushQueueP
       body,
       ...(payload.icon ? { icon: payload.icon } : {}),
       ...(payload.badge ? { badge: payload.badge } : {}),
-      // Angular owns notification display; carry the old replacement/re-alert behavior in the
-      // payload instead of registering a competing service-worker push handler.
-      ...(payload.tag ? { tag: payload.tag, renotify: true } : {}),
+      // Android can auto-group several web notifications, but the Web Notifications API does not
+      // expose the native group-summary icon. Replacing the visible push keeps Kanera's badge in
+      // the status bar; the durable notification drawer still retains every underlying event.
+      tag: DEFAULT_PUSH_TAG,
+      renotify: true,
       data: {
         kind: payload.kind,
         ...(payload.url
