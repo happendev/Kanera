@@ -51,6 +51,128 @@ describe("ImageLightboxComponent", () => {
     expect(fixture.componentInstance.activeImage().fileName).toBe("second.png");
   });
 
+  it("drags a zoomed image within the visible viewport and resets its position", () => {
+    TestBed.configureTestingModule({
+      imports: [ImageLightboxComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: DIALOG_DATA, useValue: { src: "https://example.com/large.png" } },
+        { provide: DialogRef, useValue: { close: vi.fn() } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(ImageLightboxComponent);
+    fixture.detectChanges();
+    const image = (fixture.nativeElement as HTMLElement).querySelector("img.lb-img") as HTMLImageElement;
+    const container = image.parentElement!;
+    Object.defineProperties(image, {
+      offsetWidth: { value: 600 },
+      offsetHeight: { value: 400 },
+    });
+    Object.defineProperties(container, {
+      clientWidth: { value: 800 },
+      clientHeight: { value: 600 },
+    });
+    image.setPointerCapture = vi.fn();
+    image.hasPointerCapture = vi.fn(() => true);
+    image.releasePointerCapture = vi.fn();
+
+    fixture.componentInstance.zoomIn();
+    fixture.componentInstance.zoomIn();
+    fixture.componentInstance.startPan({
+      button: 0,
+      pointerId: 7,
+      clientX: 100,
+      clientY: 100,
+      currentTarget: image,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    } as unknown as PointerEvent);
+    fixture.componentInstance.movePan({
+      pointerId: 7,
+      clientX: 450,
+      clientY: -150,
+      currentTarget: image,
+      preventDefault: vi.fn(),
+    } as unknown as PointerEvent);
+
+    expect(fixture.componentInstance.panX()).toBe(200);
+    expect(fixture.componentInstance.panY()).toBe(-100);
+    expect(fixture.componentInstance.imageTransform()).toBe("translate(200px, -100px) scale(2)");
+
+    fixture.componentInstance.endPan({ pointerId: 7, currentTarget: image } as unknown as PointerEvent);
+    expect(image.releasePointerCapture).toHaveBeenCalledWith(7);
+    expect(fixture.componentInstance.isDragging()).toBe(false);
+
+    fixture.componentInstance.resetZoom();
+    expect(fixture.componentInstance.panX()).toBe(0);
+    expect(fixture.componentInstance.panY()).toBe(0);
+  });
+
+  it("zooms an image with the mouse wheel without scrolling the page", () => {
+    TestBed.configureTestingModule({
+      imports: [ImageLightboxComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: DIALOG_DATA, useValue: { src: "https://example.com/large.png" } },
+        { provide: DialogRef, useValue: { close: vi.fn() } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(ImageLightboxComponent);
+    fixture.detectChanges();
+    const preventDefault = vi.fn();
+    const stopPropagation = vi.fn();
+
+    fixture.componentInstance.onWheel({ deltaY: -100, preventDefault, stopPropagation } as unknown as WheelEvent);
+    expect(fixture.componentInstance.scale()).toBe(1.5);
+
+    fixture.componentInstance.onWheel({ deltaY: 100, preventDefault, stopPropagation } as unknown as WheelEvent);
+    expect(fixture.componentInstance.scale()).toBe(1);
+    expect(preventDefault).toHaveBeenCalledTimes(2);
+    expect(stopPropagation).toHaveBeenCalledTimes(2);
+  });
+
+  it("pinches to zoom and returns to one-finger panning", () => {
+    TestBed.configureTestingModule({
+      imports: [ImageLightboxComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: DIALOG_DATA, useValue: { src: "https://example.com/large.png" } },
+        { provide: DialogRef, useValue: { close: vi.fn() } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(ImageLightboxComponent);
+    fixture.detectChanges();
+    const image = (fixture.nativeElement as HTMLElement).querySelector("img.lb-img") as HTMLImageElement;
+    image.setPointerCapture = vi.fn();
+    image.hasPointerCapture = vi.fn(() => true);
+    image.releasePointerCapture = vi.fn();
+    const pointer = (pointerId: number, clientX: number, clientY: number) => ({
+      button: 0,
+      pointerType: "touch",
+      pointerId,
+      clientX,
+      clientY,
+      currentTarget: image,
+      preventDefault: vi.fn(),
+      stopPropagation: vi.fn(),
+    } as unknown as PointerEvent);
+
+    fixture.componentInstance.startPan(pointer(1, 100, 100));
+    fixture.componentInstance.startPan(pointer(2, 200, 100));
+    fixture.componentInstance.movePan(pointer(2, 300, 100));
+
+    expect(fixture.componentInstance.scale()).toBe(2);
+
+    fixture.componentInstance.endPan(pointer(2, 300, 100));
+    expect(fixture.componentInstance.isDragging()).toBe(true);
+
+    fixture.componentInstance.endPan(pointer(1, 100, 100));
+    expect(fixture.componentInstance.isDragging()).toBe(false);
+  });
+
   it("downloads the active image with its stored file name", async () => {
     const download = vi.fn<MediaDownloadService["download"]>(() => Promise.resolve());
     TestBed.configureTestingModule({

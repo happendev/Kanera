@@ -114,10 +114,19 @@ export type ImageLightboxData = ImageLightboxItem & {
           </article>
         } @else {
         <img
+          #lightboxImage
           class="lb-img"
+          [class.lb-img-pannable]="scale() > 1"
+          [class.lb-img-dragging]="isDragging()"
           [src]="activeImage().src"
-          [style.transform]="'scale(' + scale() + ')'"
+          [style.transform]="imageTransform()"
+          (pointerdown)="startPan($event)"
+          (pointermove)="movePan($event)"
+          (pointerup)="endPan($event)"
+          (pointercancel)="endPan($event)"
+          (wheel)="onWheel($event)"
           (click)="$event.stopPropagation()"
+          draggable="false"
           alt=""
         />
         }
@@ -326,6 +335,21 @@ export type ImageLightboxData = ImageLightboxItem & {
       cursor: default;
     }
 
+    .lb-img {
+      overscroll-behavior: contain;
+      touch-action: none;
+      user-select: none;
+    }
+
+    .lb-img-pannable {
+      cursor: grab;
+    }
+
+    .lb-img-dragging {
+      cursor: grabbing;
+      transition: none;
+    }
+
     .lb-video {
       width: min(1200px, 100%);
       background: #000;
@@ -473,7 +497,18 @@ export class ImageLightboxComponent implements OnDestroy {
   readonly maxScale = 4;
   readonly step = 0.5;
   readonly scale = signal(1);
+  readonly panX = signal(0);
+  readonly panY = signal(0);
+  readonly isDragging = signal(false);
   readonly currentIndex = signal(this.clampIndex(this.data.initialIndex ?? 0));
+  private dragPointerId: number | null = null;
+  private dragStartX = 0;
+  private dragStartY = 0;
+  private dragStartPanX = 0;
+  private dragStartPanY = 0;
+  private readonly activePointers = new Map<number, { x: number; y: number }>();
+  private pinchStartDistance = 0;
+  private pinchStartScale = 1;
 
   readonly hasMultiple = computed(() => this.images.length > 1);
   readonly activeImage = computed(() => this.images[this.currentIndex()]!);
@@ -489,6 +524,9 @@ export class ImageLightboxComponent implements OnDestroy {
   readonly markdownError = signal<string | null>(null);
   readonly positionLabel = computed(() => `${this.currentIndex() + 1} / ${this.images.length}`);
   readonly zoomLabel = computed(() => Math.round(this.scale() * 100) + "%");
+  readonly imageTransform = computed(() =>
+    `translate(${this.panX()}px, ${this.panY()}px) scale(${this.scale()})`,
+  );
 
   constructor() {
     effect(() => {
@@ -519,11 +557,94 @@ export class ImageLightboxComponent implements OnDestroy {
 
   zoomOut() {
     if (!this.isImage()) return;
-    this.scale.update((s) => Math.max(this.minScale, parseFloat((s - this.step).toFixed(2))));
+    this.scale.update((s) => {
+      const nextScale = Math.max(this.minScale, parseFloat((s - this.step).toFixed(2)));
+      if (nextScale <= 1) this.resetPan();
+      return nextScale;
+    });
   }
 
   resetZoom() {
     this.scale.set(1);
+    this.resetPan();
+  }
+
+  startPan(event: PointerEvent) {
+    if (event.button !== 0 || (event.pointerType === "mouse" && this.scale() <= 1)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const image = event.currentTarget as HTMLImageElement;
+    image.setPointerCapture(event.pointerId);
+    this.activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (this.activePointers.size === 2) {
+      this.pinchStartDistance = this.pointerDistance();
+      this.pinchStartScale = this.scale();
+      this.dragPointerId = null;
+      this.isDragging.set(false);
+      return;
+    }
+    if (this.scale() <= 1) return;
+    this.dragPointerId = event.pointerId;
+    this.dragStartX = event.clientX;
+    this.dragStartY = event.clientY;
+    this.dragStartPanX = this.panX();
+    this.dragStartPanY = this.panY();
+    this.isDragging.set(true);
+  }
+
+  movePan(event: PointerEvent) {
+    if (this.activePointers.has(event.pointerId)) {
+      this.activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    }
+    if (this.activePointers.size >= 2) {
+      event.preventDefault();
+      const distance = this.pointerDistance();
+      if (this.pinchStartDistance > 0) {
+        const nextScale = this.clamp(
+          this.pinchStartScale * distance / this.pinchStartDistance,
+          this.minScale,
+          this.maxScale,
+        );
+        this.scale.set(parseFloat(nextScale.toFixed(2)));
+        if (nextScale <= 1) {
+          this.panX.set(0);
+          this.panY.set(0);
+        }
+      }
+      return;
+    }
+    if (this.dragPointerId !== event.pointerId) return;
+    event.preventDefault();
+    const image = event.currentTarget as HTMLImageElement;
+    const bounds = this.panBounds(image);
+    this.panX.set(this.clamp(this.dragStartPanX + event.clientX - this.dragStartX, -bounds.x, bounds.x));
+    this.panY.set(this.clamp(this.dragStartPanY + event.clientY - this.dragStartY, -bounds.y, bounds.y));
+  }
+
+  endPan(event: PointerEvent) {
+    const image = event.currentTarget as HTMLImageElement;
+    if (image.hasPointerCapture(event.pointerId)) image.releasePointerCapture(event.pointerId);
+    this.activePointers.delete(event.pointerId);
+    this.pinchStartDistance = 0;
+    if (this.activePointers.size === 1 && this.scale() > 1) {
+      const [pointerId, pointer] = this.activePointers.entries().next().value!;
+      this.dragPointerId = pointerId;
+      this.dragStartX = pointer.x;
+      this.dragStartY = pointer.y;
+      this.dragStartPanX = this.panX();
+      this.dragStartPanY = this.panY();
+      this.isDragging.set(true);
+    } else if (this.dragPointerId === event.pointerId || this.activePointers.size === 0) {
+      this.dragPointerId = null;
+      this.isDragging.set(false);
+    }
+  }
+
+  onWheel(event: WheelEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.deltaY < 0) this.zoomIn();
+    if (event.deltaY > 0) this.zoomOut();
   }
 
   showPrevious() {
@@ -627,6 +748,36 @@ export class ImageLightboxComponent implements OnDestroy {
     const nextIndex = (this.currentIndex() + direction + this.images.length) % this.images.length;
     this.currentIndex.set(nextIndex);
     this.resetZoom();
+  }
+
+  private resetPan(): void {
+    this.dragPointerId = null;
+    this.activePointers.clear();
+    this.pinchStartDistance = 0;
+    this.isDragging.set(false);
+    this.panX.set(0);
+    this.panY.set(0);
+  }
+
+  private panBounds(image: HTMLImageElement): { x: number; y: number } {
+    const container = image.parentElement;
+    if (!container) return { x: 0, y: 0 };
+    // Keep at least one edge of the scaled image aligned with the viewport so panning cannot lose it
+    // completely off-screen. The image's untransformed dimensions are stable while it is dragged.
+    return {
+      x: Math.max(0, (image.offsetWidth * this.scale() - container.clientWidth) / 2),
+      y: Math.max(0, (image.offsetHeight * this.scale() - container.clientHeight) / 2),
+    };
+  }
+
+  private clamp(value: number, min: number, max: number): number {
+    return Math.min(Math.max(value, min), max);
+  }
+
+  private pointerDistance(): number {
+    const [first, second] = [...this.activePointers.values()];
+    if (!first || !second) return 0;
+    return Math.hypot(second.x - first.x, second.y - first.y);
   }
 
   @HostListener("document:keydown.=")
