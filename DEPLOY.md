@@ -308,8 +308,9 @@ after verifying the peer is in Cloudflare's published IP ranges.
 Do not expose the `api` service directly. The `web` nginx container already
 forwards app API and Socket.IO traffic.
 
-If you expose `mcp`, route `/mcp` and `/.well-known/oauth-protected-resource` to
-the `mcp` service and require TLS. Set `MCP_SERVER_PUBLIC_URL` to that public
+If you expose `mcp`, route `/mcp`, `/.well-known/oauth-protected-resource`, and
+`/.well-known/oauth-protected-resource/mcp` to the `mcp` service and require TLS.
+Set `MCP_SERVER_PUBLIC_URL` to that public
 `/mcp` URL and `PUBLIC_API_OAUTH_ISSUER` to the browser-reachable public API
 origin. Route the issuer's `/.well-known/oauth-authorization-server` and
 `/oauth/*` paths to `public-api`. Interactive MCP clients then sign in through
@@ -568,10 +569,12 @@ staff, demo, seed, test, and load-test organisations.
 | `SIGNUPS_ENABLED` | no | Defaults to `true`. Set `false` to close public self-signup/new organisation creation while still allowing existing organisation invite links. |
 | `EMAIL_VERIFICATION_ENABLED` | no | Defaults to `false`, allowing signup, invite signup, and email changes before SMTP is configured. Set `true` only after outbound mail works. |
 | `PUBLIC_API_FAILED_KEY_RATE_LIMIT_PER_MINUTE` | no | Per-IP failed `kanera_*` API-key auth throttle. Defaults to `10` in compose. |
-| `MCP_SERVER_PUBLIC_URL` | no | Optional public MCP endpoint URL, for example `https://mcp.kanera.example.com/mcp`. |
+| `MCP_SERVER_PUBLIC_URL` | yes for the MCP service | Canonical public MCP endpoint URL, for example `https://mcp.kanera.example.com/mcp`. Required in production so OAuth audiences never derive from an untrusted Host header. |
 | `PUBLIC_API_OAUTH_ISSUER` | required for remote OAuth | Browser-reachable public API origin that serves OAuth metadata, registration, authorization, token, and revocation endpoints. |
 | `MCP_PUBLIC_URL` | required for remote OAuth | Canonical protected-resource URL; normally the same value as `MCP_SERVER_PUBLIC_URL`. |
 | `MCP_INTERNAL_SECRET` | yes | Stable random secret shared only by public-api and MCP for audience-bound token exchange. Must differ from `JWT_SECRET`. |
+| `MCP_UPSTREAM_TIMEOUT_MS` | no | Deadline for MCP calls to the Kanera public API and OAuth delegation. Defaults to `15000`. |
+| `MCP_TOOL_OUTPUT_MAX_BYTES` | no | Maximum serialized structured result size for one tool call. Defaults to `1048576`; oversized results return a corrective tool error. |
 | `OAUTH_ISSUER_URL` | no | MCP service override for the OAuth issuer; Compose derives it from `PUBLIC_API_OAUTH_ISSUER`. |
 | `ALERT_WEBHOOK_URL` | no | A Slack-compatible incoming webhook for deployment readiness and operational alerts (Slack, Zulip `slack_incoming`, Mattermost, Discord, ...). Grafana reuses it for its alerts. |
 | `OPS_ALERTS_ENABLED` | no | Defaults to `true`; no alerts are sent unless `ALERT_WEBHOOK_URL` is set. |

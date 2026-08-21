@@ -553,26 +553,39 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
       if (client.kind !== "public" || !client.grantTypes.includes("authorization_code")) throw unauthorized("authorization_code is not allowed for this client");
       if (!body.code || !body.redirect_uri || !body.code_verifier) throw badRequest("code, redirect_uri, and code_verifier are required");
       if (client.clientSecretHash) await authenticateConfidentialClient(req, body);
-      const [code] = await db.select().from(oauthAuthorizationCodes).where(and(
-        eq(oauthAuthorizationCodes.codeHash, hashOpaqueToken(body.code)),
-        eq(oauthAuthorizationCodes.clientId, client.clientId),
-        gt(oauthAuthorizationCodes.expiresAt, new Date()),
-        isNull(oauthAuthorizationCodes.consumedAt),
-      )).limit(1);
-      if (!code || code.redirectUri !== body.redirect_uri || !safeEqual(code.codeChallenge, pkceChallenge(body.code_verifier))) throw unauthorized("invalid authorization code");
-      if (code.resource !== resource) return oauthError(reply, "invalid_target", "resource does not match the authorization code");
-      const [grant] = await db.select().from(oauthGrants).where(and(eq(oauthGrants.id, code.grantId), isNull(oauthGrants.revokedAt))).limit(1);
-      if (!grant) throw unauthorized("authorization grant is revoked");
-      await db.update(oauthAuthorizationCodes).set({ consumedAt: new Date() }).where(eq(oauthAuthorizationCodes.id, code.id));
+      // Lock and consume the code in the same transaction that creates its tokens. Concurrent
+      // exchanges must never mint two refresh families from one browser authorization.
+      const exchange = await db.transaction(async (tx) => {
+        const [code] = await tx.select().from(oauthAuthorizationCodes).where(and(
+          eq(oauthAuthorizationCodes.codeHash, hashOpaqueToken(body.code!)),
+          eq(oauthAuthorizationCodes.clientId, client.clientId),
+          gt(oauthAuthorizationCodes.expiresAt, new Date()),
+          isNull(oauthAuthorizationCodes.consumedAt),
+        )).for("update").limit(1);
+        if (!code || code.redirectUri !== body.redirect_uri || !safeEqual(code.codeChallenge, pkceChallenge(body.code_verifier!))) {
+          return { ok: false, error: "invalid authorization code" } as const;
+        }
+        if (code.resource !== resource) return { ok: false, error: "invalid_target" } as const;
+        const [grant] = await tx.select().from(oauthGrants).where(and(eq(oauthGrants.id, code.grantId), isNull(oauthGrants.revokedAt))).limit(1);
+        if (!grant) return { ok: false, error: "authorization grant is revoked" } as const;
+        const prepared = prepareTokens({
+          clientId: client.clientId,
+          userId: grant.userId,
+          grantId: grant.id,
+          scopes: code.scopes,
+          resource,
+          issueRefreshToken: client.grantTypes.includes("refresh_token"),
+        });
+        await tx.update(oauthAuthorizationCodes).set({ consumedAt: new Date() }).where(eq(oauthAuthorizationCodes.id, code.id));
+        await tx.insert(oauthTokens).values(prepared.values);
+        return { ok: true, tokens: prepared.response } as const;
+      });
+      if (!exchange.ok) {
+        if (exchange.error === "invalid_target") return oauthError(reply, "invalid_target", "resource does not match the authorization code");
+        throw unauthorized(exchange.error);
+      }
       oauthOperationsTotal.inc({ operation: "authorization_code_exchanged", client_kind: "public" });
-      return reply.send(await issueTokens({
-        clientId: client.clientId,
-        userId: grant.userId,
-        grantId: grant.id,
-        scopes: code.scopes,
-        resource,
-        issueRefreshToken: client.grantTypes.includes("refresh_token"),
-      }));
+      return reply.send(exchange.tokens);
     }
     if (body.grant_type === "refresh_token") {
       if (!body.refresh_token) throw badRequest("refresh_token is required");
@@ -580,25 +593,35 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
       if (!old) throw unauthorized("invalid refresh token");
       if (old.resource !== resource) return oauthError(reply, "invalid_target", "resource does not match the refresh token");
       if (!body.client_id || body.client_id !== old.clientId) throw unauthorized("refresh token client mismatch");
-      if (old.revokedAt || old.expiresAt <= new Date()) {
-        await db.update(oauthTokens).set({ revokedAt: new Date() }).where(eq(oauthTokens.familyId, old.familyId));
-        throw unauthorized("refresh token reuse or expiry detected");
-      }
       const client = await activeClient(old.clientId);
       if (client.kind !== "public" || !client.grantTypes.includes("refresh_token")) throw unauthorized("refresh_token is not allowed for this client");
       if (client.clientSecretHash) await authenticateConfidentialClient(req, body);
-      await db.update(oauthTokens).set({ revokedAt: new Date() }).where(eq(oauthTokens.id, old.id));
+      // Rotation is serialized per token. A replay that arrives while another refresh is completing
+      // waits for the lock, observes revocation, and invalidates the whole family as required by
+      // OAuth 2.1 instead of minting a second live refresh token.
+      const rotation = await db.transaction(async (tx) => {
+        const [locked] = await tx.select().from(oauthTokens).where(eq(oauthTokens.id, old.id)).for("update").limit(1);
+        if (!locked || locked.revokedAt || locked.expiresAt <= new Date()) {
+          if (locked) await tx.update(oauthTokens).set({ revokedAt: new Date() }).where(eq(oauthTokens.familyId, locked.familyId));
+          return { ok: false } as const;
+        }
+        const prepared = prepareTokens({
+          clientId: locked.clientId,
+          userId: locked.userId!,
+          grantId: locked.grantId!,
+          // Refreshing a legacy read-only interactive grant persists the current full MCP policy.
+          scopes: scopes(locked.scopes.join(" ")),
+          resource,
+          familyId: locked.familyId,
+          issueRefreshToken: true,
+        });
+        await tx.update(oauthTokens).set({ revokedAt: new Date() }).where(eq(oauthTokens.id, locked.id));
+        await tx.insert(oauthTokens).values(prepared.values);
+        return { ok: true, tokens: prepared.response } as const;
+      });
+      if (!rotation.ok) throw unauthorized("refresh token reuse or expiry detected");
       oauthOperationsTotal.inc({ operation: "refresh_rotated", client_kind: "public" });
-      return reply.send(await issueTokens({
-        clientId: old.clientId,
-        userId: old.userId!,
-        grantId: old.grantId!,
-        // Refreshing a legacy read-only interactive grant persists the current full MCP policy.
-        scopes: scopes(old.scopes.join(" ")),
-        resource,
-        familyId: old.familyId,
-        issueRefreshToken: true,
-      }));
+      return reply.send(rotation.tokens);
     }
     if (body.grant_type === "client_credentials") {
       const client = await authenticateConfidentialClient(req, body);

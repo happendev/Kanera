@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { env } from "./env.js";
 import { createKaneraMcpServer } from "./server.js";
 
 const WORKSPACE_ID = "11111111-1111-4111-8111-111111111111";
@@ -50,6 +51,27 @@ async function withFetchStub<T>(fetchImpl: typeof fetch, callback: () => Promise
     globalThis.fetch = originalFetch;
   }
 }
+
+void test("oversized tool results fail with a bounded corrective error", async () => {
+  const previousLimit = env.MCP_TOOL_OUTPUT_MAX_BYTES;
+  env.MCP_TOOL_OUTPUT_MAX_BYTES = 16;
+  try {
+    const result = await withFetchStub(
+      async () => new Response(JSON.stringify({ value: "x".repeat(100) }), { status: 200 }),
+      () => toolHandler("kanera_get_session")({}),
+    );
+    assert.equal(result.isError, true);
+    assert.deepEqual(parseToolText(result), {
+      error: {
+        status: 413,
+        code: "RESPONSE_TOO_LARGE",
+        message: "Kanera returned too much data for one MCP response; narrow the query or request a smaller page",
+      },
+    });
+  } finally {
+    env.MCP_TOOL_OUTPUT_MAX_BYTES = previousLimit;
+  }
+});
 
 void test("kanera_list_notes rejects missing target before calling the public API", async () => {
   let fetchCalls = 0;

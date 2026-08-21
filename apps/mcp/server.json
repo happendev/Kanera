@@ -3,7 +3,7 @@
   "name": "app.kanera/mcp",
   "title": "Kanera",
   "description": "Manage Kanera cards, checklists, comments, notes, attachments, automations, reports, and priorities.",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "icons": [
     {
       "src": "https://www.kanera.app/assets/favicon/android-chrome-512x512.png",

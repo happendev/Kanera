@@ -5,6 +5,7 @@ import { z } from "zod";
 import { docsSearchClient } from "./docs-search.js";
 import { env } from "./env.js";
 import { KaneraApiError, KaneraClient } from "./kanera-client.js";
+import { mcpToolDuration } from "./metrics.js";
 
 const uuid = z.uuid();
 const pageLimit = z.number().int().min(1).max(100).default(25);
@@ -242,8 +243,13 @@ export interface KaneraMcpContext {
   docsSearchUrl?: string;
 }
 
-function client(ctx: KaneraMcpContext) {
-  return new KaneraClient({ baseUrl: ctx.publicApiUrl ?? env.KANERA_PUBLIC_API_URL, apiKey: ctx.apiKey });
+function client(ctx: KaneraMcpContext, options: { signal?: AbortSignal; idempotencyKey?: string } = {}) {
+  return new KaneraClient({
+    baseUrl: ctx.publicApiUrl ?? env.KANERA_PUBLIC_API_URL,
+    apiKey: ctx.apiKey,
+    timeoutMs: env.MCP_UPSTREAM_TIMEOUT_MS,
+    ...options,
+  });
 }
 
 const serverDescription = "Read Kanera configuration and manage automations, cards, checklists, comments, notes, attachments, activity, work reporting, and \"Up next\" priority queues.";
@@ -262,15 +268,14 @@ function structuredData(data: unknown): Record<string, unknown> {
 
 function content(data: unknown): CallToolResult {
   const structuredContent = structuredData(data);
-  const summary = Array.isArray(data)
-    ? `Kanera returned ${data.length} item${data.length === 1 ? "" : "s"}. See structuredContent.items.`
-    : data === null
-      ? "Kanera request completed successfully."
-      : "Kanera request completed successfully. See structuredContent.";
-  // Avoid serializing a potentially large result twice. Modern clients receive the full structured
-  // value; the short text block keeps older hosts aware of success without doubling model context.
+  const serialized = JSON.stringify(structuredContent);
+  if (Buffer.byteLength(serialized, "utf8") > env.MCP_TOOL_OUTPUT_MAX_BYTES) {
+    throw new KaneraApiError(413, "RESPONSE_TOO_LARGE", "Kanera returned too much data for one MCP response; narrow the query or request a smaller page");
+  }
+  // MCP clients predating structuredContent only inspect text blocks. Keep the canonical JSON in
+  // both representations so Claude, ChatGPT, and older generic hosts observe identical results.
   return {
-    content: [{ type: "text" as const, text: summary }],
+    content: [{ type: "text" as const, text: serialized }],
     structuredContent,
   };
 }
@@ -670,27 +675,41 @@ function registerKaneraTool<T extends z.ZodRawShape>(
   ctx: KaneraMcpContext,
   outputSchema: z.ZodType<Record<string, unknown>> = z.looseObject({}),
 ) {
+  const supportsReplayProtection = toolBehaviors[name]?.idempotentHint === false
+    && name !== "kanera_add_card_attachment"
+    && name !== "kanera_add_note_attachment";
+  const registeredInputSchema = supportsReplayProtection && !("idempotencyKey" in inputSchema)
+    ? {
+        ...inputSchema,
+        idempotencyKey: z.uuid().optional().describe("Stable UUID reused only when retrying the same mutation after an ambiguous failure. Retained for 24 hours."),
+      }
+    : inputSchema;
   const registerTool = server.registerTool.bind(server) as unknown as (
     toolName: string,
     config: {
       title: string;
       description: string;
-      inputSchema: T;
+      inputSchema: z.ZodRawShape;
       outputSchema: z.ZodType<Record<string, unknown>>;
       annotations: ToolAnnotations;
     },
-    callback: (args: unknown) => Promise<CallToolResult>,
+    callback: (args: unknown, extra?: { signal: AbortSignal; requestId: string | number }) => Promise<CallToolResult>,
   ) => void;
   registerTool(name, {
     title: toolTitle(name),
     description,
-    inputSchema,
+    inputSchema: registeredInputSchema,
     outputSchema,
     annotations: toolAnnotations(name),
-  }, async (args): Promise<CallToolResult> => {
+  }, async (args, extra): Promise<CallToolResult> => {
     const startedAt = performance.now();
     try {
-      const result = content(await handler(args as ToolArgs<T>, client(ctx)));
+      const record = args as Record<string, unknown>;
+      const idempotencyKey = typeof record.idempotencyKey === "string" ? record.idempotencyKey : undefined;
+      const handlerArgs = idempotencyKey
+        ? Object.fromEntries(Object.entries(record).filter(([key]) => key !== "idempotencyKey"))
+        : record;
+      const result = content(await handler(handlerArgs as ToolArgs<T>, client(ctx, { signal: extra?.signal, idempotencyKey })));
       if (env.NODE_ENV !== "test" && process.env.NODE_TEST_CONTEXT === undefined) {
         console.info(JSON.stringify({
           event: "mcp_tool_call",
@@ -700,8 +719,10 @@ function registerKaneraTool<T extends z.ZodRawShape>(
           outcome: "success",
         }));
       }
+      mcpToolDuration.observe({ tool: name, outcome: "success", error_code: "none" }, (performance.now() - startedAt) / 1_000);
       return result;
     } catch (error) {
+      const errorCode = error instanceof KaneraApiError ? error.code : "INTERNAL";
       if (env.NODE_ENV !== "test" && process.env.NODE_TEST_CONTEXT === undefined) {
         console.info(JSON.stringify({
           event: "mcp_tool_call",
@@ -709,9 +730,10 @@ function registerKaneraTool<T extends z.ZodRawShape>(
           version: mcpPackage.version,
           durationMs: Math.round((performance.now() - startedAt) * 10) / 10,
           outcome: "error",
-          errorCode: error instanceof KaneraApiError ? error.code : "INTERNAL",
+          errorCode,
         }));
       }
+      mcpToolDuration.observe({ tool: name, outcome: "error", error_code: errorCode }, (performance.now() - startedAt) / 1_000);
       return errorResult(error);
     }
   });
@@ -849,7 +871,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     description: z.string().max(50000).optional(),
     atTop: z.boolean().optional(),
     idempotencyKey: uuid.optional().describe("Stable UUID reused when retrying this create after an ambiguous failure."),
-  }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/lists/${a.listId}/cards`, { title: a.title, description: a.description, atTop: a.atTop, clientToken: a.idempotencyKey }), ctx);
+  }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/lists/${a.listId}/cards`, { title: a.title, description: a.description, atTop: a.atTop }), ctx);
   registerKaneraTool(server, "kanera_update_card", "Update one or more card content fields. The required changes object cannot be empty. Requires board editor access and a write-capable credential.", {
     cardId: cardReference,
     changes: cardUpdateChanges,
@@ -1244,8 +1266,8 @@ function registerResource(
   read: (vars: Record<string, string>, api: KaneraClient) => Promise<unknown>,
   ctx: KaneraMcpContext,
 ) {
-  server.registerResource(name, new ResourceTemplate(template, { list: undefined }), { description, mimeType: "application/json" }, async (uri, vars) => {
-    const data = await read(vars as Record<string, string>, client(ctx));
+  server.registerResource(name, new ResourceTemplate(template, { list: undefined }), { description, mimeType: "application/json" }, async (uri, vars, extra) => {
+    const data = await read(vars as Record<string, string>, client(ctx, { signal: extra?.signal }));
     return { contents: [{ uri: uri.toString(), mimeType: "application/json", text: JSON.stringify(data, null, 2) }] };
   });
 }

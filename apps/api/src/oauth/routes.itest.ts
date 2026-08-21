@@ -140,7 +140,10 @@ void test("OAuth authorization-code, refresh rotation, and service client flows"
     assert.equal(mismatchedExchange.statusCode, 400);
     assert.equal(mismatchedExchange.json<{ error: string }>().error, "invalid_target");
 
-    const exchanged = await publicApi.inject({ method: "POST", url: "/oauth/token", ...form({ grant_type: "authorization_code", client_id: clientId, code, redirect_uri: authorization.redirect_uri, code_verifier: verifier, resource: MCP_RESOURCE }) });
+    const exchangeRequest = () => publicApi.inject({ method: "POST", url: "/oauth/token", ...form({ grant_type: "authorization_code", client_id: clientId, code, redirect_uri: authorization.redirect_uri, code_verifier: verifier, resource: MCP_RESOURCE }) });
+    const exchangeAttempts = await Promise.all([exchangeRequest(), exchangeRequest()]);
+    assert.deepEqual(exchangeAttempts.map((attempt) => attempt.statusCode).sort(), [200, 401], "one authorization code can mint only one token family under concurrency");
+    const exchanged = exchangeAttempts.find((attempt) => attempt.statusCode === 200)!;
     assert.equal(exchanged.statusCode, 200);
     const first = exchanged.json<{ access_token: string; refresh_token: string; expires_in: number }>();
     assert.match(first.access_token, /^kanera_mcp_/);
@@ -304,11 +307,13 @@ void test("OAuth authorization-code, refresh rotation, and service client flows"
     });
     assert.equal(narrowedAdminAttempt.statusCode, 201, narrowedAdminAttempt.body);
 
-    const refreshed = await publicApi.inject({ method: "POST", url: "/oauth/token", ...form({ grant_type: "refresh_token", client_id: clientId, refresh_token: first.refresh_token, resource: MCP_RESOURCE }) });
-    assert.equal(refreshed.statusCode, 200);
+    const refreshRequest = () => publicApi.inject({ method: "POST", url: "/oauth/token", ...form({ grant_type: "refresh_token", client_id: clientId, refresh_token: first.refresh_token, resource: MCP_RESOURCE }) });
+    const refreshAttempts = await Promise.all([refreshRequest(), refreshRequest()]);
+    assert.deepEqual(refreshAttempts.map((attempt) => attempt.statusCode).sort(), [200, 401], "concurrent refresh reuse is detected and cannot mint two live families");
+    const refreshed = refreshAttempts.find((attempt) => attempt.statusCode === 200)!;
     const second = refreshed.json<{ refresh_token: string }>();
     assert.notEqual(second.refresh_token, first.refresh_token);
-    const reused = await publicApi.inject({ method: "POST", url: "/oauth/token", ...form({ grant_type: "refresh_token", client_id: clientId, refresh_token: first.refresh_token, resource: MCP_RESOURCE }) });
+    const reused = await refreshRequest();
     assert.equal(reused.statusCode, 401);
 
     const service = await fixture.app.inject({

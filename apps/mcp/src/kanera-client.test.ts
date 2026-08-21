@@ -111,3 +111,66 @@ void test("marks public API requests as official MCP traffic", async () => {
   assert.equal(requestedHeaders[0]?.get("x-kanera-client"), "mcp");
   assert.equal(requestedHeaders[0]?.get("authorization"), "Bearer kanera_live_test");
 });
+
+void test("propagates replay protection only to JSON mutations", async () => {
+  const requestedHeaders: Headers[] = [];
+  const client = new KaneraClient({
+    baseUrl: "https://api.example.test",
+    apiKey: "kanera_live_test",
+    idempotencyKey: "33333333-3333-4333-8333-333333333333",
+    fetchImpl: async (_input, init) => {
+      requestedHeaders.push(new Headers(init?.headers));
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    },
+  });
+
+  await client.get("/api/v1/session");
+  await client.post("/api/v1/workspaces", { name: "Delivery" });
+
+  assert.equal(requestedHeaders[0]?.get("idempotency-key"), null);
+  assert.equal(requestedHeaders[1]?.get("idempotency-key"), "33333333-3333-4333-8333-333333333333");
+});
+
+void test("maps network failures and client cancellation to actionable MCP errors", async () => {
+  const unavailable = new KaneraClient({
+    baseUrl: "https://api.example.test",
+    apiKey: "kanera_live_test",
+    fetchImpl: async () => { throw new TypeError("fetch failed"); },
+  });
+  await assert.rejects(
+    unavailable.get("/api/v1/session"),
+    (error) => error instanceof KaneraApiError && error.status === 503 && error.code === "UPSTREAM_UNAVAILABLE",
+  );
+
+  const controller = new AbortController();
+  controller.abort();
+  const cancelled = new KaneraClient({
+    baseUrl: "https://api.example.test",
+    apiKey: "kanera_live_test",
+    signal: controller.signal,
+    fetchImpl: async () => { throw new DOMException("aborted", "AbortError"); },
+  });
+  await assert.rejects(
+    cancelled.get("/api/v1/session"),
+    (error) => error instanceof KaneraApiError && error.status === 499 && error.code === "REQUEST_CANCELLED",
+  );
+});
+
+void test("aborts a stalled Kanera request at the configured upstream deadline", async () => {
+  const client = new KaneraClient({
+    baseUrl: "https://api.example.test",
+    apiKey: "kanera_live_test",
+    timeoutMs: 5,
+    fetchImpl: async (_input, init) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => {
+        const reason: unknown = init.signal?.reason;
+        reject(reason instanceof Error ? reason : new Error("request aborted"));
+      }, { once: true });
+    }),
+  });
+
+  await assert.rejects(
+    client.get("/api/v1/session"),
+    (error) => error instanceof KaneraApiError && error.status === 504 && error.code === "UPSTREAM_TIMEOUT",
+  );
+});
