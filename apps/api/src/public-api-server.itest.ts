@@ -126,7 +126,7 @@ void test("failed public API key auth is rate limited by IP", async () => {
     assert.equal(first.headers["ratelimit-limit"], "1");
     assert.equal(first.headers["ratelimit-remaining"], "0");
     assert.ok(first.headers["ratelimit-reset"]);
-    assert.ok(first.headers["retry-after"]);
+    assert.equal(first.headers["retry-after"], undefined);
 
     const limited = await publicApi.inject({
       method: "GET",

@@ -61,6 +61,16 @@ type RateLimitEntry = { count: number; resetAt: number };
 
 type McpTokenExchange = (token: string, resource: string) => Promise<string>;
 
+const MCP_RESOURCE_SCOPES = ["kanera:read", "kanera:write"] as const;
+
+export function mcpAuthorizationChallenge(resource: string) {
+  const metadata = new URL("/.well-known/oauth-protected-resource", resource);
+  // The MCP endpoint exposes both read and mutation tools. Advertising only the read scope here
+  // causes clients that derive their authorization request from the challenge to mint a valid but
+  // read-only connection, even when the user later permits write actions in the client UI.
+  return `Bearer resource_metadata="${metadata.toString()}", scope="${MCP_RESOURCE_SCOPES.join(" ")}"`;
+}
+
 async function exchangeMcpToken(token: string, resource: string): Promise<string> {
   const response = await fetch(new URL("/oauth/mcp/delegate", env.KANERA_PUBLIC_API_URL), {
     method: "POST",
@@ -127,7 +137,7 @@ export function createMcpHttpHandler(options: {
         authorization_servers: [env.OAUTH_ISSUER_URL],
         // offline_access belongs to the authorization server's refresh flow, not the protected
         // resource's own capability set.
-        scopes_supported: ["kanera:read", "kanera:write"],
+        scopes_supported: [...MCP_RESOURCE_SCOPES],
         bearer_methods_supported: ["header"],
       }));
       return;
@@ -169,8 +179,7 @@ export function createMcpHttpHandler(options: {
     // prefix-only fakes before reading the body prevents unauthenticated streams consuming memory.
     if (!authorization || !bearerToken || !isBearerCredential) {
       if (env.MCP_SERVER_PUBLIC_URL) {
-        const metadata = new URL("/.well-known/oauth-protected-resource", env.MCP_SERVER_PUBLIC_URL);
-        res.setHeader("www-authenticate", `Bearer resource_metadata="${metadata.toString()}", scope="kanera:read"`);
+        res.setHeader("www-authenticate", mcpAuthorizationChallenge(env.MCP_SERVER_PUBLIC_URL));
       }
       res.writeHead(401, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: "missing or invalid Kanera bearer token" }));
@@ -183,8 +192,7 @@ export function createMcpHttpHandler(options: {
         downstreamToken = await tokenExchange(bearerToken, resource);
       } catch {
         if (env.MCP_SERVER_PUBLIC_URL) {
-          const metadata = new URL("/.well-known/oauth-protected-resource", env.MCP_SERVER_PUBLIC_URL);
-          res.setHeader("www-authenticate", `Bearer resource_metadata="${metadata.toString()}", scope="kanera:read"`);
+          res.setHeader("www-authenticate", mcpAuthorizationChallenge(env.MCP_SERVER_PUBLIC_URL));
         }
         res.writeHead(401, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: "invalid or expired MCP access token" }));

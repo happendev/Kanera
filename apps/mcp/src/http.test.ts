@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createServer, type IncomingMessage } from "node:http";
 import { createRequire } from "node:module";
-import { createMcpHttpHandler, mcpClientIp, mcpRequestPathname } from "./http.js";
+import { createMcpHttpHandler, mcpAuthorizationChallenge, mcpClientIp, mcpRequestPathname } from "./http.js";
 
 const mcpPackage = createRequire(import.meta.url)("../package.json") as { version: string };
 
@@ -16,6 +16,13 @@ void test("health route parsing ignores query strings", () => {
 
 void test("unrelated route parsing stays unrelated", () => {
   assert.equal(mcpRequestPathname("/elsewhere?probe=1"), "/elsewhere");
+});
+
+void test("MCP OAuth challenge requests both read and write resource scopes", () => {
+  assert.equal(
+    mcpAuthorizationChallenge("https://mcp.kanera.example/mcp"),
+    'Bearer resource_metadata="https://mcp.kanera.example/.well-known/oauth-protected-resource", scope="kanera:read kanera:write"',
+  );
 });
 
 void test("MCP trusts CF-Connecting-IP only from a Cloudflare peer", () => {

@@ -219,6 +219,9 @@ export async function assertBoardAccess(
   if (claims.authKind === "apiKey" && claims.apiKeyKind !== "personal") {
     if (claims.apiKeyWorkspaceId !== row.workspaceId) throw forbidden();
     assertWorkspaceRank(row.workspaceRole, "member");
+    if (claims.apiKeyScope === "read" && BOARD_RANK[minRole] > BOARD_RANK.observer) {
+      throw forbidden("write-capable credential required");
+    }
     const apiRole = API_KEY_BOARD_ROLE[claims.apiKeyScope ?? "read"];
     assertBoardRank(apiRole, minRole);
     requestContext.set("workspaceId", row.workspaceId);
@@ -229,7 +232,9 @@ export async function assertBoardAccess(
   // A read-only OAuth grant cannot mutate board content or perform board management. Personal API
   // keys without an explicit scope and write-scoped OAuth grants inherit the owner's permissions.
   const isPersonalKey = claims.apiKeyKind === "personal";
-  if (isPersonalKey && claims.apiKeyScope === "read" && BOARD_RANK[minRole] > BOARD_RANK.observer) throw forbidden();
+  if (isPersonalKey && claims.apiKeyScope === "read" && BOARD_RANK[minRole] > BOARD_RANK.observer) {
+    throw forbidden("write-capable credential required");
+  }
 
   if (row.currentOrgRole === "owner" || row.currentOrgRole === "admin") {
     requestContext.set("workspaceId", row.workspaceId);
