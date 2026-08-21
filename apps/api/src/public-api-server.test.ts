@@ -365,7 +365,7 @@ void test("public helper routes are rate limited by IP with standard headers", a
   assert.equal(first.headers["ratelimit-limit"], "1");
   assert.equal(first.headers["ratelimit-remaining"], "0");
   assert.ok(first.headers["ratelimit-reset"]);
-  assert.ok(first.headers["retry-after"]);
+  assert.equal(first.headers["retry-after"], undefined);
 
   const limited = await app.inject({ method: "GET", url: "/webhook-event-types" });
   assert.equal(limited.statusCode, 429);

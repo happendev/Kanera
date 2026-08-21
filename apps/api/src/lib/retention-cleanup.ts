@@ -7,11 +7,15 @@ import {
   emailVerificationCodes,
   inviteTokens,
   notifications,
+  oauthAuthorizationCodes,
+  oauthClients,
   oauthDeviceCodes,
+  oauthGrants,
+  oauthTokens,
   passwordResetTokens,
   refreshTokens,
 } from "@kanera/shared/schema";
-import { and, isNotNull, lt, or, type SQL } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lt, or, type SQL } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import type { FastifyBaseLogger } from "fastify";
 import type { Db } from "../db.js";
@@ -97,7 +101,7 @@ export async function runAuthTokenRetentionCleanup({ db, log }: RetentionCleanup
     return predicates.length === 1 ? predicates[0]! : or(...predicates)!;
   };
 
-  const [refresh, adminRefresh, emailCode, passwordReset, invite, adminInvite, boardInvite, oauthDeviceCode] = await Promise.all([
+  const [refresh, adminRefresh, emailCode, passwordReset, invite, adminInvite, boardInvite, oauthDeviceCode, oauthAuthorizationCode, oauthToken] = await Promise.all([
     db.delete(refreshTokens).where(terminalBefore([refreshTokens.expiresAt, refreshTokens.revokedAt])).returning({ id: refreshTokens.id }),
     db.delete(adminRefreshTokens).where(terminalBefore([adminRefreshTokens.expiresAt, adminRefreshTokens.revokedAt])).returning({ id: adminRefreshTokens.id }),
     db.delete(emailVerificationCodes).where(terminalBefore([emailVerificationCodes.expiresAt, emailVerificationCodes.consumedAt])).returning({ id: emailVerificationCodes.id }),
@@ -106,7 +110,27 @@ export async function runAuthTokenRetentionCleanup({ db, log }: RetentionCleanup
     db.delete(adminInvites).where(terminalBefore([adminInvites.expiresAt, adminInvites.acceptedAt, adminInvites.revokedAt])).returning({ id: adminInvites.id }),
     db.delete(boardInvitations).where(terminalBefore([boardInvitations.expiresAt, boardInvitations.acceptedAt, boardInvitations.revokedAt])).returning({ id: boardInvitations.id }),
     db.delete(oauthDeviceCodes).where(terminalBefore([oauthDeviceCodes.expiresAt])).returning({ id: oauthDeviceCodes.id }),
+    db.delete(oauthAuthorizationCodes).where(terminalBefore([oauthAuthorizationCodes.expiresAt, oauthAuthorizationCodes.consumedAt])).returning({ id: oauthAuthorizationCodes.id }),
+    db.delete(oauthTokens).where(terminalBefore([oauthTokens.expiresAt, oauthTokens.revokedAt])).returning({ id: oauthTokens.id }),
   ]);
+
+  // Grants and dynamically registered public clients are parents of the short-lived rows above.
+  // Delete them afterwards so cascades cannot obscure the per-table cleanup counts or race a live
+  // refresh family. Service clients are durable workspace configuration and are never aged out here.
+  const oauthGrant = await db.delete(oauthGrants)
+    .where(lt(oauthGrants.revokedAt, cutoff))
+    .returning({ id: oauthGrants.id });
+  const oauthClient = await db.delete(oauthClients)
+    .where(and(
+      eq(oauthClients.kind, "public"),
+      isNull(oauthClients.createdById),
+      or(
+        lt(oauthClients.revokedAt, cutoff),
+        and(isNull(oauthClients.lastUsedAt), lt(oauthClients.createdAt, cutoff)),
+        lt(oauthClients.lastUsedAt, cutoff),
+      ),
+    ))
+    .returning({ id: oauthClients.clientId });
 
   const byTable = {
     refresh_token: refresh.length,
@@ -117,6 +141,10 @@ export async function runAuthTokenRetentionCleanup({ db, log }: RetentionCleanup
     admin_invite: adminInvite.length,
     board_invitation: boardInvite.length,
     oauth_device_code: oauthDeviceCode.length,
+    oauth_authorization_code: oauthAuthorizationCode.length,
+    oauth_token: oauthToken.length,
+    oauth_grant: oauthGrant.length,
+    oauth_client: oauthClient.length,
   };
   const total = Object.values(byTable).reduce((sum, count) => sum + count, 0);
   if (total > 0) {

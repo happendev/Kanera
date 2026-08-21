@@ -13,6 +13,9 @@ export interface KaneraClientOptions {
   baseUrl: string;
   apiKey: string;
   fetchImpl?: typeof fetch;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+  idempotencyKey?: string;
 }
 
 export class KaneraClient {
@@ -56,10 +59,11 @@ export class KaneraClient {
     const bytes = new Uint8Array(file.bytes.byteLength);
     bytes.set(file.bytes);
     form.append("file", new Blob([bytes.buffer], { type: file.mimeType }), file.fileName);
-    const response = await this.fetchImpl(url, {
+    const response = await this.fetchResponse(url, {
       method: "POST",
       headers: this.headers(),
       body: form,
+      signal: this.signal(),
     });
     return this.responsePayload<T>(response);
   }
@@ -71,10 +75,11 @@ export class KaneraClient {
     query?: Record<string, string | number | boolean | null | undefined>,
   ): Promise<T> {
     const url = this.url(path, query);
-    const response = await this.fetchImpl(url, {
+    const response = await this.fetchResponse(url, {
       method,
-      headers: this.headers(body !== undefined),
+      headers: this.headers(body !== undefined, method !== "GET"),
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal: this.signal(),
     });
     return this.responsePayload<T>(response);
   }
@@ -90,7 +95,7 @@ export class KaneraClient {
     return url;
   }
 
-  private headers(json = false): Record<string, string> {
+  private headers(json = false, mutation = false): Record<string, string> {
     return {
       authorization: `Bearer ${this.options.apiKey}`,
       accept: "application/json",
@@ -98,7 +103,27 @@ export class KaneraClient {
       // activity from other API-key traffic. It grants no capability and is never trusted for auth.
       "x-kanera-client": "mcp",
       ...(json ? { "content-type": "application/json" } : {}),
+      ...(mutation && this.options.idempotencyKey ? { "idempotency-key": this.options.idempotencyKey } : {}),
     };
+  }
+
+  private signal(): AbortSignal {
+    const timeout = AbortSignal.timeout(this.options.timeoutMs ?? 15_000);
+    return this.options.signal ? AbortSignal.any([this.options.signal, timeout]) : timeout;
+  }
+
+  private async fetchResponse(input: URL, init: RequestInit): Promise<Response> {
+    try {
+      return await this.fetchImpl(input, init);
+    } catch (error) {
+      if (this.options.signal?.aborted) {
+        throw new KaneraApiError(499, "REQUEST_CANCELLED", "MCP request was cancelled by the client");
+      }
+      if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+        throw new KaneraApiError(504, "UPSTREAM_TIMEOUT", "Kanera did not respond before the MCP upstream timeout");
+      }
+      throw new KaneraApiError(503, "UPSTREAM_UNAVAILABLE", "Kanera is temporarily unavailable");
+    }
   }
 
   private async responsePayload<T>(response: Response): Promise<T> {

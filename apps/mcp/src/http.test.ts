@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createServer, type IncomingMessage } from "node:http";
 import { createRequire } from "node:module";
-import { createMcpHttpHandler, mcpClientIp, mcpRequestPathname } from "./http.js";
+import { createMcpHttpHandler, McpTokenExchangeError, mcpAuthorizationChallenge, mcpClientIp, mcpRequestPathname } from "./http.js";
+import { env } from "./env.js";
 
 const mcpPackage = createRequire(import.meta.url)("../package.json") as { version: string };
 
@@ -16,6 +17,14 @@ void test("health route parsing ignores query strings", () => {
 
 void test("unrelated route parsing stays unrelated", () => {
   assert.equal(mcpRequestPathname("/elsewhere?probe=1"), "/elsewhere");
+});
+
+void test("MCP OAuth challenge requests both read and write resource scopes", () => {
+  assert.equal(
+    mcpAuthorizationChallenge("https://mcp.kanera.example/mcp"),
+    'Bearer resource_metadata="https://mcp.kanera.example/.well-known/oauth-protected-resource", scope="kanera:read kanera:write"',
+  );
+  assert.match(mcpAuthorizationChallenge("https://mcp.kanera.example/mcp", "invalid_token"), /error="invalid_token"/u);
 });
 
 void test("MCP trusts CF-Connecting-IP only from a Cloudflare peer", () => {
@@ -77,6 +86,23 @@ void test("HTTP handler publishes OAuth protected-resource metadata", async () =
     assert.deepEqual(metadata.authorization_servers, ["http://localhost:3001"]);
     assert.ok(metadata.scopes_supported.includes("kanera:write"));
     assert.equal(metadata.scopes_supported.includes("offline_access"), false);
+    const pathMetadata = await fetch(`${baseUrl}/.well-known/oauth-protected-resource/mcp`);
+    assert.equal(pathMetadata.status, 200);
+  });
+});
+
+void test("HTTP MCP endpoint accepts browser and server-side clients regardless of Origin", async () => {
+  await withHttpServer(async (baseUrl) => {
+    const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+    const browserClient = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: { origin: "https://any-mcp-client.example" },
+      body,
+    });
+    assert.equal(browserClient.status, 401);
+
+    const noOrigin = await fetch(`${baseUrl}/mcp`, { method: "POST", body });
+    assert.equal(noOrigin.status, 401);
   });
 });
 
@@ -99,6 +125,21 @@ void test("HTTP MCP endpoint exchanges an audience-bound token before protocol h
       exchanged = { token, resource };
       return "kanera_delegate_test";
     },
+  });
+});
+
+void test("HTTP MCP endpoint treats a delegation outage as retryable instead of revoking auth", async () => {
+  await withHttpServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: { authorization: `Bearer kanera_mcp_${"A".repeat(43)}` },
+      body: "{}",
+    });
+    assert.equal(response.status, 503);
+    assert.equal(response.headers.get("retry-after"), "1");
+    assert.equal(response.headers.get("www-authenticate"), null);
+  }, {
+    tokenExchange: async () => { throw new McpTokenExchangeError(true); },
   });
 });
 
@@ -156,6 +197,50 @@ void test("HTTP MCP endpoint completes protocol initialization with a Kanera API
     assert.match(payload.result?.instructions ?? "", /administration remains in the Kanera UI/i);
     assert.match(payload.result?.instructions ?? "", /must be completed manually in the Kanera UI/i);
   });
+});
+
+void test("HTTP MCP endpoint negotiates current Claude and generic MCP protocol revisions", async () => {
+  await withHttpServer(async (baseUrl) => {
+    for (const protocolVersion of ["2025-03-26", "2025-06-18", "2025-11-25"]) {
+      const response = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer kanera_test_${"A".repeat(43)}`,
+          accept: "application/json, text/event-stream",
+          "content-type": "application/json",
+          "mcp-protocol-version": protocolVersion,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: protocolVersion,
+          method: "initialize",
+          params: { protocolVersion, capabilities: {}, clientInfo: { name: "compatibility-test", version: "1" } },
+        }),
+      });
+      assert.equal(response.status, 200, protocolVersion);
+      assert.match(await response.text(), new RegExp(`"protocolVersion":"${protocolVersion}"`, "u"));
+    }
+  });
+});
+
+void test("MCP metrics fail closed and expose protocol telemetry with the configured token", async () => {
+  const previousEnabled = env.METRICS_ENABLED;
+  const previousToken = env.METRICS_TOKEN;
+  env.METRICS_ENABLED = true;
+  env.METRICS_TOKEN = "metrics-test-token-32-characters";
+  try {
+    await withHttpServer(async (baseUrl) => {
+      assert.equal((await fetch(`${baseUrl}/metrics`)).status, 404);
+      const response = await fetch(`${baseUrl}/metrics`, {
+        headers: { authorization: "Bearer metrics-test-token-32-characters" },
+      });
+      assert.equal(response.status, 200);
+      assert.match(await response.text(), /kanera_mcp_active_http_requests/u);
+    });
+  } finally {
+    env.METRICS_ENABLED = previousEnabled;
+    env.METRICS_TOKEN = previousToken;
+  }
 });
 
 void test("HTTP MCP endpoint accepts the personal-key (kanera_u_) shape", async () => {
@@ -229,4 +314,15 @@ void test("HTTP MCP endpoint gives bearer keys the public API key allowance", as
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }
+});
+
+void test("HTTP MCP endpoint honors a shared replica-wide rate-limit result", async () => {
+  await withHttpServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/mcp`, { method: "POST" });
+    assert.equal(response.status, 429);
+    assert.equal(response.headers.get("retry-after"), "60");
+  }, {
+    ipRateLimitPerMinute: 1,
+    rateLimitCheck: async (_key, _limit, _windowMs, now) => ({ count: 2, resetAt: now + 60_000 }),
+  });
 });

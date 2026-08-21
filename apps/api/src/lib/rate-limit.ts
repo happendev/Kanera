@@ -85,6 +85,8 @@ export function applyRateLimitHeaders(reply: FastifyReply, result: RateLimitResu
   reply
     .header("RateLimit-Limit", result.limit)
     .header("RateLimit-Remaining", result.remaining)
-    .header("RateLimit-Reset", Math.ceil(result.resetAt / 1000))
-    .header("Retry-After", result.retryAfterSeconds);
+    .header("RateLimit-Reset", Math.ceil(result.resetAt / 1000));
+  // Retry-After describes an active throttle, not the lifetime of the current rate-limit window.
+  // Sending it on allowed requests made unrelated 4xx responses look transient to MCP clients.
+  if (!result.allowed) reply.header("Retry-After", result.retryAfterSeconds);
 }

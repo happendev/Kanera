@@ -113,7 +113,7 @@ const allToolCases: ToolCase[] = [
   { name: "kanera_get_card", args: { cardId: C }, method: "GET", path: `/api/v1/cards/${C}/detail` },
   { name: "kanera_list_card_history", args: { cardId: C, limit: 50 }, method: "GET", path: `/api/v1/cards/${C}/feed?limit=50` },
   { name: "kanera_get_cards_content", args: { boardId: B, cardIds: [C] }, method: "POST", path: `/api/v1/boards/${B}/cards/content/query`, body: { cardIds: [C] } },
-  { name: "kanera_create_card", args: { boardId: B, listId: L, title: "Title", description: "Body", atTop: true, idempotencyKey: C }, method: "POST", path: `/api/v1/boards/${B}/lists/${L}/cards`, body: { title: "Title", description: "Body", atTop: true, clientToken: C } },
+  { name: "kanera_create_card", args: { boardId: B, listId: L, title: "Title", description: "Body", atTop: true, idempotencyKey: C }, method: "POST", path: `/api/v1/boards/${B}/lists/${L}/cards`, body: { title: "Title", description: "Body", atTop: true } },
   { name: "kanera_update_card", args: { cardId: C, changes: { title: "New", dueDateLocalDate: "2026-07-01", dueDateSlot: "morning" } }, method: "PATCH", path: `/api/v1/cards/${C}`, body: { title: "New", dueDateLocalDate: "2026-07-01", dueDateSlot: "morning" } },
   { name: "kanera_move_card", args: { cardId: C, listId: L, anchor: { side: "before", id: C } }, method: "POST", path: `/api/v1/cards/${C}/move`, body: { listId: L, beforeCardId: C } },
   { name: "kanera_archive_card", args: { cardId: C, archived: true }, method: "PATCH", path: `/api/v1/cards/${C}/archive`, body: { archived: true } },
@@ -455,6 +455,7 @@ void test("every MCP tool declares structured output and explicit safety annotat
     globalThis.fetch = async () => new Response(JSON.stringify([{ id: W }]), { status: 200 });
     const result = await tools.kanera_list_workspaces!.handler({ limit: 25 });
     assert.deepEqual(result.structuredContent, { items: [{ id: W }], nextCursor: null });
+    assert.deepEqual(JSON.parse(result.content[0]?.type === "text" ? result.content[0].text : "null"), result.structuredContent);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -490,11 +491,16 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     assert.ok(byName.get("kanera_list_accessible_boards")?.inputSchema.properties?.cursor, "board discovery is paginated");
     assert.ok(byName.get("kanera_list_notes")?.inputSchema.properties?.cursor, "note discovery is paginated");
     assert.ok(getCardsContent?.inputSchema.properties?.cardIds, "bounded selected-card content reads are advertised");
+    assert.equal(byName.get("kanera_get_card")?.inputSchema.properties?.idempotencyKey, undefined, "reads do not advertise replay keys");
+    assert.ok(byName.get("kanera_add_comment")?.inputSchema.properties?.idempotencyKey, "JSON mutations advertise replay keys");
+    assert.equal(byName.get("kanera_add_card_attachment")?.inputSchema.properties?.idempotencyKey, undefined, "multipart uploads do not claim replay protection");
     assert.match(getCardsContent?.description ?? "", /up to 200 selected cards/i);
     // V2.1 adds the complete automation-management surface while retaining typed search and work
     // reporting. Keep the measured catalog under a deliberate ceiling so later tools cannot quietly
     // consume more host context.
-    assert.ok(JSON.stringify(tools).length <= 142_000, "the default tool catalog stays within its 142k-character budget");
+    // Replay keys add a small fixed schema cost to otherwise non-idempotent mutations. Keep the
+    // resulting catalog bounded so safety metadata cannot grow into an open-ended routing penalty.
+    assert.ok(JSON.stringify(tools).length <= 146_000, "the default tool catalog stays within its 146k-character budget");
     for (const name of [
       "kanera_bulk_add_comments",
       "kanera_bulk_delete_comments",

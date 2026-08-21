@@ -1,11 +1,12 @@
 import "../test/setup.integration.js";
-import { boards, cards, clientMembers, clients, comments, lists, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { boards, cards, clientMembers, clients, comments, lists, oauthTokens, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { buildPublicApiServer } from "../public-api-server.js";
 import { db } from "../db.js";
+import { hashOpaqueToken } from "../lib/tokens.js";
 import { buildIntegrationServer } from "../test/integration.js";
 
 const MCP_RESOURCE = "http://localhost:3002/mcp";
@@ -70,19 +71,37 @@ void test("OAuth authorization-code, refresh rotation, and service client flows"
     assert.equal(metadata.statusCode, 200);
     assert.equal(metadata.json<{ code_challenge_methods_supported: string[] }>().code_challenge_methods_supported[0], "S256");
 
+    const claudeRedirectUri = "https://claude.ai/api/mcp/auth_callback";
     const registered = await publicApi.inject({
       method: "POST", url: "/oauth/register",
-      payload: { client_name: "Test agent", redirect_uris: ["https://agent.example/callback"], grant_types: ["authorization_code", "refresh_token"], token_endpoint_auth_method: "none" },
+      payload: {
+        client_name: "Claude-compatible test agent",
+        redirect_uris: [claudeRedirectUri, "http://127.0.0.1:33418/callback"],
+        grant_types: ["authorization_code", "refresh_token"],
+        response_types: ["code"],
+        token_endpoint_auth_method: "none",
+        application_type: "web",
+        scope: "kanera:read",
+      },
     });
     assert.equal(registered.statusCode, 201);
-    const clientId = registered.json<{ client_id: string }>().client_id;
+    const registration = registered.json<{
+      client_id: string;
+      response_types: string[];
+      application_type: string;
+      scope: string;
+    }>();
+    assert.deepEqual(registration.response_types, ["code"]);
+    assert.equal(registration.application_type, "web");
+    assert.equal(registration.scope, "kanera:read kanera:write");
+    const clientId = registration.client_id;
 
     const missingResource = await fixture.app.inject({
       method: "GET",
       url: `/oauth/authorize/context?${new URLSearchParams({
         response_type: "code",
         client_id: clientId,
-        redirect_uri: "https://agent.example/callback",
+        redirect_uri: claudeRedirectUri,
         code_challenge: "x".repeat(43),
         code_challenge_method: "S256",
       }).toString()}`,
@@ -92,12 +111,12 @@ void test("OAuth authorization-code, refresh rotation, and service client flows"
     const verifier = randomBytes(48).toString("base64url");
     const challenge = createHash("sha256").update(verifier).digest("base64url");
     const authorization = {
-      response_type: "code", client_id: clientId, redirect_uri: "https://agent.example/callback",
+      response_type: "code", client_id: clientId, redirect_uri: claudeRedirectUri,
       code_challenge: challenge, code_challenge_method: "S256", scope: "kanera:read kanera:write offline_access", state: "test-state", resource: MCP_RESOURCE,
     };
     const context = await fixture.app.inject({ method: "GET", url: `/oauth/authorize/context?${new URLSearchParams(authorization).toString()}`, headers: { authorization: `Bearer ${fixture.accessToken}` } });
     assert.equal(context.statusCode, 200);
-    assert.equal(context.json<{ clientName: string }>().clientName, "Test agent");
+    assert.equal(context.json<{ clientName: string }>().clientName, "Claude-compatible test agent");
 
     const consent = await fixture.app.inject({ method: "POST", url: "/oauth/authorize/consent", headers: { authorization: `Bearer ${fixture.accessToken}` }, payload: authorization });
     assert.equal(consent.statusCode, 200);
@@ -121,7 +140,10 @@ void test("OAuth authorization-code, refresh rotation, and service client flows"
     assert.equal(mismatchedExchange.statusCode, 400);
     assert.equal(mismatchedExchange.json<{ error: string }>().error, "invalid_target");
 
-    const exchanged = await publicApi.inject({ method: "POST", url: "/oauth/token", ...form({ grant_type: "authorization_code", client_id: clientId, code, redirect_uri: authorization.redirect_uri, code_verifier: verifier, resource: MCP_RESOURCE }) });
+    const exchangeRequest = () => publicApi.inject({ method: "POST", url: "/oauth/token", ...form({ grant_type: "authorization_code", client_id: clientId, code, redirect_uri: authorization.redirect_uri, code_verifier: verifier, resource: MCP_RESOURCE }) });
+    const exchangeAttempts = await Promise.all([exchangeRequest(), exchangeRequest()]);
+    assert.deepEqual(exchangeAttempts.map((attempt) => attempt.statusCode).sort(), [200, 401], "one authorization code can mint only one token family under concurrency");
+    const exchanged = exchangeAttempts.find((attempt) => attempt.statusCode === 200)!;
     assert.equal(exchanged.statusCode, 200);
     const first = exchanged.json<{ access_token: string; refresh_token: string; expires_in: number }>();
     assert.match(first.access_token, /^kanera_mcp_/);
@@ -226,43 +248,72 @@ void test("OAuth authorization-code, refresh rotation, and service client flows"
     const [storedComment] = await db.select().from(comments).where(eq(comments.id, oauthComment.id)).limit(1);
     assert.equal(storedComment?.apiKeyId, null);
 
-    const readVerifier = randomBytes(48).toString("base64url");
-    const readAuthorization = {
+    const narrowedVerifier = randomBytes(48).toString("base64url");
+    const narrowedAuthorization = {
       ...authorization,
-      code_challenge: createHash("sha256").update(readVerifier).digest("base64url"),
+      code_challenge: createHash("sha256").update(narrowedVerifier).digest("base64url"),
       scope: "kanera:read",
-      state: "read-only-state",
+      state: "client-requested-read-state",
     };
-    const readConsent = await fixture.app.inject({
+    const normalizedAuthorizationRedirect = await publicApi.inject({
+      method: "GET",
+      url: `/oauth/authorize?${new URLSearchParams(narrowedAuthorization).toString()}`,
+    });
+    assert.equal(normalizedAuthorizationRedirect.statusCode, 302);
+    const consentLocation = new URL(normalizedAuthorizationRedirect.headers.location!);
+    assert.equal(consentLocation.searchParams.get("scope"), "kanera:read kanera:write");
+    const narrowedContext = await fixture.app.inject({
+      method: "GET",
+      url: `/oauth/authorize/context?${new URLSearchParams(narrowedAuthorization).toString()}`,
+      headers: { authorization: `Bearer ${fixture.accessToken}` },
+    });
+    assert.equal(narrowedContext.statusCode, 200);
+    assert.deepEqual(narrowedContext.json<{ scopes: string[] }>().scopes, ["kanera:read", "kanera:write"]);
+    const narrowedConsent = await fixture.app.inject({
       method: "POST",
       url: "/oauth/authorize/consent",
       headers: { authorization: `Bearer ${fixture.accessToken}` },
-      payload: readAuthorization,
+      payload: narrowedAuthorization,
     });
-    assert.equal(readConsent.statusCode, 200);
-    const readCode = new URL(readConsent.json<{ redirectUrl: string }>().redirectUrl).searchParams.get("code");
-    assert.ok(readCode);
-    const readExchange = await publicApi.inject({
+    assert.equal(narrowedConsent.statusCode, 200);
+    const narrowedCode = new URL(narrowedConsent.json<{ redirectUrl: string }>().redirectUrl).searchParams.get("code");
+    assert.ok(narrowedCode);
+    const narrowedExchange = await publicApi.inject({
       method: "POST",
       url: "/oauth/token",
-      ...form({ grant_type: "authorization_code", client_id: clientId, code: readCode, redirect_uri: authorization.redirect_uri, code_verifier: readVerifier, resource: MCP_RESOURCE }),
+      ...form({ grant_type: "authorization_code", client_id: clientId, code: narrowedCode, redirect_uri: authorization.redirect_uri, code_verifier: narrowedVerifier, resource: MCP_RESOURCE }),
     });
-    assert.equal(readExchange.statusCode, 200);
-    const readToken = readExchange.json<{ access_token: string }>().access_token;
-    const readDelegation = await delegate(publicApi, readToken);
-    const readAdminAttempt = await publicApi.inject({
+    assert.equal(narrowedExchange.statusCode, 200);
+    const narrowedToken = narrowedExchange.json<{ access_token: string; refresh_token: string; scope: string }>();
+    assert.equal(narrowedToken.scope, "kanera:read kanera:write");
+    assert.match(narrowedToken.refresh_token, /^kanera_refresh_/);
+    // Simulate an access token minted before full interactive scopes became mandatory. Delegation
+    // must apply the current MCP policy immediately instead of waiting for reconnection or refresh.
+    await db.update(oauthTokens).set({ scopes: ["kanera:read"] })
+      .where(eq(oauthTokens.tokenHash, hashOpaqueToken(narrowedToken.access_token)));
+    const narrowedDelegation = await delegate(publicApi, narrowedToken.access_token);
+    const narrowedCommentAttempt = await publicApi.inject({
+      method: "POST",
+      url: `/api/v1/cards/${card.id}/comments`,
+      headers: { authorization: `Bearer ${narrowedDelegation}` },
+      payload: { body: "Created even when the client requested only the read scope" },
+    });
+    assert.equal(narrowedCommentAttempt.statusCode, 201, narrowedCommentAttempt.body);
+    const narrowedAdminAttempt = await publicApi.inject({
       method: "POST",
       url: `/api/v1/workspaces/${fixture.workspaceId}/lists`,
-      headers: { authorization: `Bearer ${readDelegation}` },
-      payload: { name: "Must not be created" },
+      headers: { authorization: `Bearer ${narrowedDelegation}` },
+      payload: { name: "Created from normalized MCP scopes" },
     });
-    assert.equal(readAdminAttempt.statusCode, 403);
+    assert.equal(narrowedAdminAttempt.statusCode, 201, narrowedAdminAttempt.body);
 
-    const refreshed = await publicApi.inject({ method: "POST", url: "/oauth/token", ...form({ grant_type: "refresh_token", client_id: clientId, refresh_token: first.refresh_token, resource: MCP_RESOURCE }) });
-    assert.equal(refreshed.statusCode, 200);
+    const refreshRequest = () => publicApi.inject({ method: "POST", url: "/oauth/token", ...form({ grant_type: "refresh_token", client_id: clientId, refresh_token: first.refresh_token, resource: MCP_RESOURCE }) });
+    const refreshAttempts = await Promise.all([refreshRequest(), refreshRequest()]);
+    assert.deepEqual(refreshAttempts.map((attempt) => attempt.statusCode).sort(), [200, 401], "concurrent refresh reuse is detected and cannot mint two live families");
+    const refreshed = refreshAttempts.find((attempt) => attempt.statusCode === 200)!;
     const second = refreshed.json<{ refresh_token: string }>();
     assert.notEqual(second.refresh_token, first.refresh_token);
-    const reused = await publicApi.inject({ method: "POST", url: "/oauth/token", ...form({ grant_type: "refresh_token", client_id: clientId, refresh_token: first.refresh_token, resource: MCP_RESOURCE }) });
+    const reused = await refreshRequest();
     assert.equal(reused.statusCode, 401);
 
     const service = await fixture.app.inject({

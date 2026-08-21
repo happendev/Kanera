@@ -32,12 +32,16 @@ const MCP_DELEGATION_TTL_MS = 60_000;
 const DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code";
 const DEVICE_USER_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const interactiveScopes = new Set(["kanera:read", "kanera:write", "offline_access"]);
+const mandatoryInteractiveScopes = ["kanera:read", "kanera:write"] as const;
 
 const clientRegistrationSchema = z.object({
   client_name: z.string().trim().min(1).max(200),
   redirect_uris: z.array(z.url()).max(20).default([]),
   grant_types: z.array(z.enum(["authorization_code", "refresh_token", DEVICE_GRANT_TYPE])).default(["authorization_code", "refresh_token"]),
+  response_types: z.array(z.literal("code")).default(["code"]),
   token_endpoint_auth_method: z.enum(["none", "client_secret_basic", "client_secret_post"]).default("none"),
+  application_type: z.enum(["native", "web"]).optional(),
+  scope: z.string().optional(),
 }).superRefine((value, ctx) => {
   if (value.grant_types.includes("authorization_code") && value.redirect_uris.length === 0) {
     ctx.addIssue({ code: "custom", path: ["redirect_uris"], message: "authorization_code clients require a redirect URI" });
@@ -51,9 +55,9 @@ const authorizationSchema = z.object({
   code_challenge: z.string().min(43).max(128),
   code_challenge_method: z.literal("S256"),
   state: z.string().max(2000).optional(),
-  // Least privilege is the interoperable default. Write and refresh access must be explicit in the
-  // authorization request and visible on the consent screen.
-  scope: z.string().default("kanera:read"),
+  // Interactive MCP connections always receive both resource capabilities. The MCP client owns
+  // tool visibility/approval, while Kanera's live user and board permissions authorize each call.
+  scope: z.string().default(mandatoryInteractiveScopes.join(" ")),
   resource: z.url(),
 });
 
@@ -104,9 +108,12 @@ function oauthError(reply: FastifyReply, error: string, errorDescription: string
 }
 
 function scopes(raw: string) {
-  const result = [...new Set(raw.split(/\s+/).filter(Boolean))];
-  if (result.length === 0 || result.some((scope) => !interactiveScopes.has(scope))) throw badRequest("unsupported OAuth scope");
-  return result;
+  const requested = [...new Set(raw.split(/\s+/).filter(Boolean))];
+  if (requested.length === 0 || requested.some((scope) => !interactiveScopes.has(scope))) throw badRequest("unsupported OAuth scope");
+  return [
+    ...mandatoryInteractiveScopes,
+    ...(requested.includes("offline_access") ? ["offline_access"] : []),
+  ];
 }
 
 function validRedirectUri(value: string) {
@@ -159,12 +166,24 @@ async function authenticateConfidentialClient(req: FastifyRequest, body: Record<
   return client;
 }
 
-type IssueTokenInput = { clientId: string; userId?: string; apiKeyId?: string; grantId?: string; scopes: string[]; resource: string; familyId?: string };
+type IssueTokenInput = {
+  clientId: string;
+  userId?: string;
+  apiKeyId?: string;
+  grantId?: string;
+  scopes: string[];
+  resource: string;
+  familyId?: string;
+  issueRefreshToken?: boolean;
+};
 
 function prepareTokens(input: IssueTokenInput) {
   // This is a protected-resource token for the MCP endpoint, never a public API bearer token.
   const access = token("kanera_mcp");
-  const refresh = input.scopes.includes("offline_access") && input.userId ? token("kanera_refresh") : null;
+  // MCP clients register refresh_token support independently of whether they know to request the
+  // optional offline_access scope. Honor the registered grant type so short access-token TTLs work
+  // across Claude, the reference SDK, and other conforming clients without repeated user consent.
+  const refresh = input.issueRefreshToken && input.userId ? token("kanera_refresh") : null;
   const familyId = input.familyId ?? randomUUID();
   const now = Date.now();
   const values: (typeof oauthTokens.$inferInsert)[] = [
@@ -286,7 +305,10 @@ async function authenticateMcpToken(raw: string, resource: string): Promise<Auth
     // rotate every 15 min, so keying on row.id would hand a fresh rate-limit bucket to any agent that
     // refreshes, defeating the per-key limit. grantId/familyId are stable across the whole connection.
     apiKeyId: `oauth_grant_${row.token.grantId ?? row.token.familyId}`,
-    apiKeyScope: row.token.scopes.includes("kanera:write") ? "write" : "read",
+    // Interactive MCP OAuth is always resource-write-capable. The client decides whether a write
+    // tool may run; Kanera still evaluates the represented user's live role on every resource.
+    // Keeping this unconditional also upgrades access tokens minted before this policy changed.
+    apiKeyScope: "write",
   };
 }
 
@@ -373,6 +395,7 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
   app.post("/oauth/register", async (req, reply) => {
     const body = clientRegistrationSchema.parse(req.body);
     if (body.redirect_uris.some((uri) => !validRedirectUri(uri))) throw badRequest("redirect URIs must use HTTPS, except localhost callbacks");
+    const registeredScopes = scopes(body.scope ?? mandatoryInteractiveScopes.join(" "));
     const clientId = `kanera_client_${randomBytes(18).toString("base64url")}`;
     const confidential = body.token_endpoint_auth_method !== "none";
     const secret = confidential ? token("kanera_client_secret") : null;
@@ -391,7 +414,10 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
       client_name: body.client_name,
       redirect_uris: body.redirect_uris,
       grant_types: body.grant_types,
+      response_types: body.response_types,
       token_endpoint_auth_method: body.token_endpoint_auth_method,
+      scope: registeredScopes.join(" "),
+      ...(body.application_type ? { application_type: body.application_type } : {}),
       ...(secret ? { client_secret: secret.raw } : {}),
       ...(secret ? { client_secret_expires_at: 0 } : {}),
     });
@@ -416,7 +442,7 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
 
     let requestedScopes: string[];
     try {
-      requestedScopes = scopes(body.scope ?? "kanera:read");
+      requestedScopes = scopes(body.scope ?? mandatoryInteractiveScopes.join(" "));
     } catch {
       return oauthError(reply, "invalid_scope", "unsupported OAuth scope");
     }
@@ -448,9 +474,12 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
     const params = authorizationSchema.parse(req.query);
     const client = await activeClient(params.client_id);
     if (client.kind !== "public" || !client.grantTypes.includes("authorization_code") || !client.redirectUris.includes(params.redirect_uri)) throw badRequest("client cannot use this authorization request");
-    scopes(params.scope);
+    const grantedScopes = scopes(params.scope);
     requestedMcpResource(params.resource);
     const query = new URLSearchParams(Object.entries(req.query as Record<string, string>));
+    // Normalize before entering the browser consent flow. Some MCP clients omit scope or send only
+    // one advertised value; every interoperable path must show and persist Kanera's full policy.
+    query.set("scope", grantedScopes.join(" "));
     return reply.redirect(`${env.WEB_ORIGIN}/oauth/authorize?${query.toString()}`);
   });
 
@@ -502,7 +531,14 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
         )).limit(1);
         if (!grant) return { ok: false, error: "access_denied", description: "authorization grant is revoked" } as const;
 
-        const prepared = prepareTokens({ clientId: client.clientId, userId: request.userId, grantId: grant.id, scopes: request.scopes, resource });
+        const prepared = prepareTokens({
+          clientId: client.clientId,
+          userId: request.userId,
+          grantId: grant.id,
+          scopes: request.scopes,
+          resource,
+          issueRefreshToken: client.grantTypes.includes("refresh_token"),
+        });
         await tx.insert(oauthTokens).values(prepared.values);
         await tx.update(oauthDeviceCodes).set({ status: "consumed", updatedAt: now }).where(eq(oauthDeviceCodes.id, request.id));
         return { ok: true, tokens: prepared.response } as const;
@@ -517,19 +553,39 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
       if (client.kind !== "public" || !client.grantTypes.includes("authorization_code")) throw unauthorized("authorization_code is not allowed for this client");
       if (!body.code || !body.redirect_uri || !body.code_verifier) throw badRequest("code, redirect_uri, and code_verifier are required");
       if (client.clientSecretHash) await authenticateConfidentialClient(req, body);
-      const [code] = await db.select().from(oauthAuthorizationCodes).where(and(
-        eq(oauthAuthorizationCodes.codeHash, hashOpaqueToken(body.code)),
-        eq(oauthAuthorizationCodes.clientId, client.clientId),
-        gt(oauthAuthorizationCodes.expiresAt, new Date()),
-        isNull(oauthAuthorizationCodes.consumedAt),
-      )).limit(1);
-      if (!code || code.redirectUri !== body.redirect_uri || !safeEqual(code.codeChallenge, pkceChallenge(body.code_verifier))) throw unauthorized("invalid authorization code");
-      if (code.resource !== resource) return oauthError(reply, "invalid_target", "resource does not match the authorization code");
-      const [grant] = await db.select().from(oauthGrants).where(and(eq(oauthGrants.id, code.grantId), isNull(oauthGrants.revokedAt))).limit(1);
-      if (!grant) throw unauthorized("authorization grant is revoked");
-      await db.update(oauthAuthorizationCodes).set({ consumedAt: new Date() }).where(eq(oauthAuthorizationCodes.id, code.id));
+      // Lock and consume the code in the same transaction that creates its tokens. Concurrent
+      // exchanges must never mint two refresh families from one browser authorization.
+      const exchange = await db.transaction(async (tx) => {
+        const [code] = await tx.select().from(oauthAuthorizationCodes).where(and(
+          eq(oauthAuthorizationCodes.codeHash, hashOpaqueToken(body.code!)),
+          eq(oauthAuthorizationCodes.clientId, client.clientId),
+          gt(oauthAuthorizationCodes.expiresAt, new Date()),
+          isNull(oauthAuthorizationCodes.consumedAt),
+        )).for("update").limit(1);
+        if (!code || code.redirectUri !== body.redirect_uri || !safeEqual(code.codeChallenge, pkceChallenge(body.code_verifier!))) {
+          return { ok: false, error: "invalid authorization code" } as const;
+        }
+        if (code.resource !== resource) return { ok: false, error: "invalid_target" } as const;
+        const [grant] = await tx.select().from(oauthGrants).where(and(eq(oauthGrants.id, code.grantId), isNull(oauthGrants.revokedAt))).limit(1);
+        if (!grant) return { ok: false, error: "authorization grant is revoked" } as const;
+        const prepared = prepareTokens({
+          clientId: client.clientId,
+          userId: grant.userId,
+          grantId: grant.id,
+          scopes: code.scopes,
+          resource,
+          issueRefreshToken: client.grantTypes.includes("refresh_token"),
+        });
+        await tx.update(oauthAuthorizationCodes).set({ consumedAt: new Date() }).where(eq(oauthAuthorizationCodes.id, code.id));
+        await tx.insert(oauthTokens).values(prepared.values);
+        return { ok: true, tokens: prepared.response } as const;
+      });
+      if (!exchange.ok) {
+        if (exchange.error === "invalid_target") return oauthError(reply, "invalid_target", "resource does not match the authorization code");
+        throw unauthorized(exchange.error);
+      }
       oauthOperationsTotal.inc({ operation: "authorization_code_exchanged", client_kind: "public" });
-      return reply.send(await issueTokens({ clientId: client.clientId, userId: grant.userId, grantId: grant.id, scopes: code.scopes, resource }));
+      return reply.send(exchange.tokens);
     }
     if (body.grant_type === "refresh_token") {
       if (!body.refresh_token) throw badRequest("refresh_token is required");
@@ -537,16 +593,35 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
       if (!old) throw unauthorized("invalid refresh token");
       if (old.resource !== resource) return oauthError(reply, "invalid_target", "resource does not match the refresh token");
       if (!body.client_id || body.client_id !== old.clientId) throw unauthorized("refresh token client mismatch");
-      if (old.revokedAt || old.expiresAt <= new Date()) {
-        await db.update(oauthTokens).set({ revokedAt: new Date() }).where(eq(oauthTokens.familyId, old.familyId));
-        throw unauthorized("refresh token reuse or expiry detected");
-      }
       const client = await activeClient(old.clientId);
-      if (!client.grantTypes.includes("refresh_token")) throw unauthorized("refresh_token is not allowed for this client");
+      if (client.kind !== "public" || !client.grantTypes.includes("refresh_token")) throw unauthorized("refresh_token is not allowed for this client");
       if (client.clientSecretHash) await authenticateConfidentialClient(req, body);
-      await db.update(oauthTokens).set({ revokedAt: new Date() }).where(eq(oauthTokens.id, old.id));
+      // Rotation is serialized per token. A replay that arrives while another refresh is completing
+      // waits for the lock, observes revocation, and invalidates the whole family as required by
+      // OAuth 2.1 instead of minting a second live refresh token.
+      const rotation = await db.transaction(async (tx) => {
+        const [locked] = await tx.select().from(oauthTokens).where(eq(oauthTokens.id, old.id)).for("update").limit(1);
+        if (!locked || locked.revokedAt || locked.expiresAt <= new Date()) {
+          if (locked) await tx.update(oauthTokens).set({ revokedAt: new Date() }).where(eq(oauthTokens.familyId, locked.familyId));
+          return { ok: false } as const;
+        }
+        const prepared = prepareTokens({
+          clientId: locked.clientId,
+          userId: locked.userId!,
+          grantId: locked.grantId!,
+          // Refreshing a legacy read-only interactive grant persists the current full MCP policy.
+          scopes: scopes(locked.scopes.join(" ")),
+          resource,
+          familyId: locked.familyId,
+          issueRefreshToken: true,
+        });
+        await tx.update(oauthTokens).set({ revokedAt: new Date() }).where(eq(oauthTokens.id, locked.id));
+        await tx.insert(oauthTokens).values(prepared.values);
+        return { ok: true, tokens: prepared.response } as const;
+      });
+      if (!rotation.ok) throw unauthorized("refresh token reuse or expiry detected");
       oauthOperationsTotal.inc({ operation: "refresh_rotated", client_kind: "public" });
-      return reply.send(await issueTokens({ clientId: old.clientId, userId: old.userId!, grantId: old.grantId!, scopes: old.scopes, resource, familyId: old.familyId }));
+      return reply.send(rotation.tokens);
     }
     if (body.grant_type === "client_credentials") {
       const client = await authenticateConfidentialClient(req, body);

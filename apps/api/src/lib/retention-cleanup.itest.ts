@@ -15,8 +15,11 @@ import {
   emailVerificationCodes,
   inviteTokens,
   notifications,
+  oauthAuthorizationCodes,
   oauthClients,
   oauthDeviceCodes,
+  oauthGrants,
+  oauthTokens,
   passwordResetTokens,
   refreshTokens,
   webhookDeliveries,
@@ -198,9 +201,31 @@ void test("auth token retention purges terminal tokens/invites past the 30d grac
     { deviceCodeHash: `dc-live-${suffix}`, userCodeHash: `uc-live-${suffix}`, clientId: oauthClientId, scopes: ["kanera:read"], resource: "http://localhost:3002/mcp", pollingInterval: 5, expiresAt: future },
   ]);
 
-  // 9 terminal-past-grace rows: refresh_token contributes 2 (expired + old-revoked), the other seven
-  // tables one each.
-  assert.equal(await runAuthTokenRetentionCleanup({ db, log: noopLog }, NOW), 9);
+  const [liveGrant, oldRevokedGrant] = await db.insert(oauthGrants).values([
+    { clientId: oauthClientId, userId: user.id, orgClientId: clientId, scopes: ["kanera:read", "kanera:write"], resource: "http://localhost:3002/mcp" },
+    { clientId: oauthClientId, userId: user.id, orgClientId: clientId, scopes: ["kanera:read", "kanera:write"], resource: "http://localhost:3002/mcp", revokedAt: oldTerminal },
+  ]).returning();
+  assert.ok(liveGrant && oldRevokedGrant);
+  await db.insert(oauthAuthorizationCodes).values([
+    { codeHash: `oauth-code-old-${suffix}`, clientId: oauthClientId, grantId: liveGrant.id, redirectUri: "https://agent.example/callback", codeChallenge: "x".repeat(43), scopes: ["kanera:read", "kanera:write"], resource: "http://localhost:3002/mcp", expiresAt: expired },
+    { codeHash: `oauth-code-live-${suffix}`, clientId: oauthClientId, grantId: liveGrant.id, redirectUri: "https://agent.example/callback", codeChallenge: "x".repeat(43), scopes: ["kanera:read", "kanera:write"], resource: "http://localhost:3002/mcp", expiresAt: future },
+  ]);
+  await db.insert(oauthTokens).values([
+    { kind: "access", tokenHash: `oauth-token-old-${suffix}`, clientId: oauthClientId, grantId: liveGrant.id, userId: user.id, familyId: randomUUID(), scopes: ["kanera:read", "kanera:write"], resource: "http://localhost:3002/mcp", expiresAt: expired },
+    { kind: "refresh", tokenHash: `oauth-token-live-${suffix}`, clientId: oauthClientId, grantId: liveGrant.id, userId: user.id, familyId: randomUUID(), scopes: ["kanera:read", "kanera:write"], resource: "http://localhost:3002/mcp", expiresAt: future },
+  ]);
+  const unusedOauthClientId = `retention-unused-${suffix}`;
+  await db.insert(oauthClients).values({
+    clientId: unusedOauthClientId,
+    kind: "public",
+    name: "Unused dynamic client",
+    grantTypes: ["authorization_code"],
+    createdAt: oldTerminal,
+  });
+
+  // 13 terminal-past-grace rows: the original auth/invite rows plus one authorization code, OAuth
+  // token, revoked grant, and unused dynamic client.
+  assert.equal(await runAuthTokenRetentionCleanup({ db, log: noopLog }, NOW), 13);
 
   const rtLeft = await db.select({ h: refreshTokens.tokenHash }).from(refreshTokens).where(eq(refreshTokens.userId, user.id));
   assert.deepEqual(new Set(rtLeft.map((r) => r.h)), new Set([`rt-active-${suffix}`, `rt-newrevoked-${suffix}`]));
@@ -210,4 +235,10 @@ void test("auth token retention purges terminal tokens/invites past the 30d grac
   assert.deepEqual(biLeft.map((r) => r.h), [`bi-open-${suffix}`]);
   const dcLeft = await db.select({ h: oauthDeviceCodes.deviceCodeHash }).from(oauthDeviceCodes).where(eq(oauthDeviceCodes.clientId, oauthClientId));
   assert.deepEqual(dcLeft.map((r) => r.h), [`dc-live-${suffix}`]);
+  const oauthCodesLeft = await db.select({ h: oauthAuthorizationCodes.codeHash }).from(oauthAuthorizationCodes).where(eq(oauthAuthorizationCodes.clientId, oauthClientId));
+  assert.deepEqual(oauthCodesLeft.map((r) => r.h), [`oauth-code-live-${suffix}`]);
+  const oauthTokensLeft = await db.select({ h: oauthTokens.tokenHash }).from(oauthTokens).where(eq(oauthTokens.clientId, oauthClientId));
+  assert.deepEqual(oauthTokensLeft.map((r) => r.h), [`oauth-token-live-${suffix}`]);
+  assert.deepEqual(await db.select({ id: oauthGrants.id }).from(oauthGrants).where(eq(oauthGrants.id, oldRevokedGrant.id)), []);
+  assert.deepEqual(await db.select({ id: oauthClients.clientId }).from(oauthClients).where(eq(oauthClients.clientId, unusedOauthClientId)), []);
 });

@@ -356,17 +356,18 @@ void test("a personal key inherits the owner's board and workspace-admin permiss
   });
 });
 
-void test("a personal key is observer-blocked where the owner is only an observer", async () => {
+void test("a write-capable personal OAuth credential is observer-blocked where the user is only an observer", async () => {
   await seedAccessFixture();
   await db.insert(boards).values({ id: fixture.boardId, workspaceId: fixture.workspaceId, name: "Project board", position: "1000.0000000000" });
   await db.insert(workspaceMembers).values({ workspaceId: fixture.workspaceId, userId: fixture.userId, role: "member" });
   await db.insert(boardMembers).values({ boardId: fixture.boardId, userId: fixture.userId, role: "observer" });
 
+  const oauthWriteClaims = { ...personalKeyClaims, apiKeyScope: "write" as const };
   await runWithRequestContext("request-personal-observer", async () => {
-    const ctx = await assertBoardAccess(personalKeyClaims, fixture.boardId);
+    const ctx = await assertBoardAccess(oauthWriteClaims, fixture.boardId);
     assert.equal(ctx.role, "observer");
-    // Editor/observer is enforced: an observer owner's personal key cannot mutate board content.
-    await assertForbidden(assertBoardAccess(personalKeyClaims, fixture.boardId, "editor"));
+    // A write-capable OAuth credential does not bypass the represented user's observer role.
+    await assertForbidden(assertBoardAccess(oauthWriteClaims, fixture.boardId, "editor"));
   });
 });
 
