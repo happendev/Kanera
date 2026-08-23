@@ -129,7 +129,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
     const { id: cardId } = req.params as { id: string };
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
-    await assertCardAccess(req.auth, card.id);
+    await assertCardAccess(req.auth, card);
 
     const rows = await db
       .select(attachmentRowColumns)
@@ -156,7 +156,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
 
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card.id, "editor");
+    const ctx = await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
 
     if (commentIdParam) {
@@ -332,7 +332,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
 
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card.id, "editor");
+    const ctx = await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
 
     const storage = await getStorageForClient(req.auth.cid);
@@ -435,7 +435,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
 
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card.id, "editor");
+    const ctx = await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
 
     // Reassign cover BEFORE deleting the attachment row so coverAttachmentId

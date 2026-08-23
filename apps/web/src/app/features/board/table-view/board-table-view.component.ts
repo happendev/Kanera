@@ -833,6 +833,29 @@ export class BoardTableViewComponent implements OnDestroy {
       const el = this.scrollEl()?.nativeElement;
       if (el) untracked(() => this.observeScrollport(el));
     });
+
+    // A template `(scroll)` binding marks this component dirty on every scroll event, even when the
+    // handler returns without growing the slice — and a dirty pass here re-runs the per-row bindings
+    // for every rendered cell. Keep the hot path outside Angular's event wrapper, coalesce the
+    // threshold check into one rAF, and drop the listener once every row is mounted. Same pattern
+    // k-list already uses for its lane.
+    effect((onCleanup) => {
+      const el = this.scrollEl()?.nativeElement;
+      if (!el || !this.hasHiddenRows()) return;
+      let pendingFrame: number | null = null;
+      const onScroll = () => {
+        if (pendingFrame !== null) return;
+        pendingFrame = requestAnimationFrame(() => {
+          pendingFrame = null;
+          this.onTableScroll(el);
+        });
+      };
+      el.addEventListener("scroll", onScroll, { passive: true });
+      onCleanup(() => {
+        el.removeEventListener("scroll", onScroll);
+        if (pendingFrame !== null) cancelAnimationFrame(pendingFrame);
+      });
+    });
   }
 
   // ── Collapsing ────────────────────────────────────────────────────────────
@@ -1228,8 +1251,8 @@ export class BoardTableViewComponent implements OnDestroy {
       case "date": return value.valueDate || "—";
       case "checkbox": return value.valueCheckbox ? "Checked" : "Unchecked";
       case "select": {
-        const options = new Map(this.optionsForField(field).map((option) => [option.id, option.label]));
-        return (value.valueOptionIds ?? []).map((id) => options.get(id) ?? "Unknown").join(", ") || "—";
+        const options = this.optionLabelsByField().get(field.id);
+        return (value.valueOptionIds ?? []).map((id) => options?.get(id) ?? "Unknown").join(", ") || "—";
       }
       case "user":
         return (value.valueUserIds ?? []).map((id) => this.memberById().get(id)?.displayName ?? "Unknown").join(", ") || "—";
@@ -1428,6 +1451,22 @@ export class BoardTableViewComponent implements OnDestroy {
     return "options" in field ? field.options : [];
   }
 
+  /**
+   * option id → label, built once per field instead of once per select cell.
+   *
+   * `displayValue` is bound at six template sites, so this Map was being rebuilt for every select
+   * cell, on every row, on every change-detection pass — while the fields it derives from change
+   * only when the workspace's custom fields do.
+   */
+  private readonly optionLabelsByField = computed(() => {
+    const byField = new Map<string, Map<string, string>>();
+    for (const field of this.customFields()) {
+      if (!("options" in field)) continue;
+      byField.set(field.id, new Map(field.options.map((option) => [option.id, option.label])));
+    }
+    return byField;
+  });
+
   optionIdsFor(card: AnyCard, fieldId: string): string[] {
     return this.valueFor(card.id, fieldId)?.valueOptionIds ?? [];
   }
@@ -1470,11 +1509,38 @@ export class BoardTableViewComponent implements OnDestroy {
     return this.customFieldForColumn(id)?.type === "number";
   }
 
+  /**
+   * Due-date presentation, memoized per card for as long as the card set is unchanged.
+   *
+   * Both of these are bound inside `@for`, so each is called once per rendered row on every
+   * change-detection pass, and `isOverdue` is Intl-heavy. `k-card` solved the same problem with
+   * `computed()` because it owns a single card; rows here are plain template bindings, so the memo
+   * has to be a Map keyed off the cards signal — the shape the labelsByCard/assigneesByCard inputs
+   * already use. Time-relative staleness is the same tradeoff k-card already makes: the flag
+   * refreshes when the card set changes, not as the clock passes a due time.
+   */
+  private readonly dueDatePresentationByCard = computed(() => {
+    const presentation = new Map<string, { text: string; overdue: boolean }>();
+    const now = new Date();
+    for (const card of this.cards()) {
+      presentation.set(card.id, {
+        text: formatDueDate(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone),
+        overdue: !card.completedAt && isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone, now),
+      });
+    }
+    return presentation;
+  });
+
   formattedDue(card: AnyCard): string {
-    return formatDueDate(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone);
+    const memoized = this.dueDatePresentationByCard().get(card.id);
+    // A row can be rendered from a source outside `cards()` (an optimistic insert mid-flight), so
+    // fall back rather than blank the cell.
+    return memoized?.text ?? formatDueDate(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone);
   }
 
   isCardOverdue(card: AnyCard): boolean {
+    const memoized = this.dueDatePresentationByCard().get(card.id);
+    if (memoized) return memoized.overdue;
     return !card.completedAt && isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone);
   }
 
@@ -1561,15 +1627,35 @@ export class BoardTableViewComponent implements OnDestroy {
     !this.allRowsSelected() && this.bulkSelectedCardIds().size > 0,
   );
 
-  groupAllRowsSelected(group: TableRunGroup): boolean {
+  /**
+   * One pass per group, not one per binding.
+   *
+   * The header checkbox reads its group's state four times (checked, indeterminate, aria-label,
+   * tooltip) and `groupSomeRowsSelected` used to re-run the "all" scan first, so a group of N cards
+   * cost up to 8N membership probes per change-detection pass. A single tri-state per group makes it
+   * one pass, shared by every binding.
+   */
+  private readonly groupSelectionStateByKey = computed(() => {
     const selected = this.bulkSelectedCardIds();
-    return group.cardIds.length > 0 && group.cardIds.every((cardId) => selected.has(cardId));
+    const states = new Map<string, "none" | "some" | "all">();
+    for (const group of this.runGroups()) {
+      if (group.cardIds.length === 0) {
+        states.set(group.key, "none");
+        continue;
+      }
+      let selectedCount = 0;
+      for (const cardId of group.cardIds) if (selected.has(cardId)) selectedCount += 1;
+      states.set(group.key, selectedCount === 0 ? "none" : selectedCount === group.cardIds.length ? "all" : "some");
+    }
+    return states;
+  });
+
+  groupAllRowsSelected(group: TableRunGroup): boolean {
+    return this.groupSelectionStateByKey().get(group.key) === "all";
   }
 
   groupSomeRowsSelected(group: TableRunGroup): boolean {
-    if (this.groupAllRowsSelected(group)) return false;
-    const selected = this.bulkSelectedCardIds();
-    return group.cardIds.some((cardId) => selected.has(cardId));
+    return this.groupSelectionStateByKey().get(group.key) === "some";
   }
 
   /** Select or remove a whole group without disturbing cards selected in other groups. */
@@ -2275,7 +2361,12 @@ function isoTimestamp(value: Date | string | null | undefined): string {
 }
 
 /** Grouped and capped the same way in the footer, in every subtotal and in every breakdown row, so
- *  a number never reads as a different magnitude depending on which row it is printed in. */
+ *  a number never reads as a different magnitude depending on which row it is printed in.
+ *
+ *  The formatter is hoisted because this is called once per aggregate cell per change-detection
+ *  pass, and constructing an Intl.NumberFormat is far more expensive than the formatting itself. */
+const AGGREGATE_FORMAT = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+
 function formatAggregate(value: number): string {
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value);
+  return AGGREGATE_FORMAT.format(value);
 }

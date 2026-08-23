@@ -11,11 +11,12 @@ import {
   workspaceMembers,
   workspaces,
   type BoardRole,
+  type Card,
   type ClientBillingStatus,
   type ClientRole,
   type WorkspaceRole,
 } from "@kanera/shared/schema";
-import { and, eq, sql, type SQLWrapper } from "drizzle-orm";
+import { and, eq, inArray, sql, type SQLWrapper } from "drizzle-orm";
 import type { AuthClaims } from "../auth/plugin.js";
 import { db } from "../db.js";
 import { env } from "../env.js";
@@ -277,14 +278,29 @@ export function assignedCardVisibility(userId: string, cardId: SQLWrapper = card
   )`;
 }
 
+/**
+ * Accepts an already-loaded card so callers holding the row do not pay for a second read of it.
+ * Detail reads and comment routes select the whole card first, then called this with only its id,
+ * which re-read `board_id` purely to feed `assertBoardAccess` — an extra round-trip before the
+ * six-table board join even starts.
+ */
 export async function assertCardAccess(
   claims: AuthClaims,
-  cardId: string,
+  card: string | Pick<Card, "id" | "boardId">,
   minRole: BoardRole = "observer",
 ) {
-  const [card] = await db.select({ boardId: cards.boardId }).from(cards).where(eq(cards.id, cardId)).limit(1);
-  if (!card) throw notFound("card not found");
-  const ctx = await assertBoardAccess(claims, card.boardId, minRole);
+  let cardId: string;
+  let boardId: string;
+  if (typeof card === "string") {
+    cardId = card;
+    const [row] = await db.select({ boardId: cards.boardId }).from(cards).where(eq(cards.id, cardId)).limit(1);
+    if (!row) throw notFound("card not found");
+    boardId = row.boardId;
+  } else {
+    cardId = card.id;
+    boardId = card.boardId;
+  }
+  const ctx = await assertBoardAccess(claims, boardId, minRole);
   if (ctx.assignedItemsOnly) {
     const [visible] = await db.select({ id: cards.id }).from(cards)
       .where(and(eq(cards.id, cardId), assignedCardVisibility(claims.sub)))
@@ -292,6 +308,31 @@ export async function assertCardAccess(
     if (!visible) throw forbidden();
   }
   return { ...ctx, cardId };
+}
+
+/**
+ * Per-card visibility for a batch whose board access is already established for the whole request.
+ *
+ * Bulk endpoints assert board access once, verify every card belongs to that board, and then used to
+ * call `assertCardAccess` per item — re-reading the card and re-running the board join for a decision
+ * already made for the batch. The only genuinely per-card rule is the assigned-items-only
+ * restriction, and one `inArray` probe settles it for the whole batch instead of two queries per
+ * card. Callers must still have checked `card.boardId === boardId` themselves: this deliberately
+ * does not re-establish which board the cards are on.
+ */
+export async function assertBatchCardVisibility(
+  claims: AuthClaims,
+  ctx: { assignedItemsOnly: boolean },
+  cardIds: readonly string[],
+): Promise<void> {
+  if (!ctx.assignedItemsOnly) return;
+  const unique = [...new Set(cardIds)];
+  if (unique.length === 0) return;
+  const visible = await db
+    .select({ id: cards.id })
+    .from(cards)
+    .where(and(inArray(cards.id, unique), assignedCardVisibility(claims.sub)));
+  if (visible.length !== unique.length) throw forbidden();
 }
 
 /**

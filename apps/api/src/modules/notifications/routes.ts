@@ -632,7 +632,7 @@ export async function notificationsRoutes(app: FastifyInstance) {
       .where(eq(cards.id, cardId))
       .limit(1);
     if (!card) throw notFound();
-    await assertCardAccess(req.auth, card.id);
+    await assertCardAccess(req.auth, card);
 
     const readAt = new Date();
     const updated = await db
@@ -758,7 +758,7 @@ export async function notificationsRoutes(app: FastifyInstance) {
       .where(eq(cards.id, id))
       .limit(1);
     if (!card) throw notFound();
-    await assertCardAccess(req.auth, card.id);
+    await assertCardAccess(req.auth, card);
     const rows = await db
       .select({ userId: users.id, displayName: users.displayName, avatarUrl: users.avatarUrl, userClientId: users.clientId })
       .from(cardWatchers)
@@ -780,7 +780,7 @@ export async function notificationsRoutes(app: FastifyInstance) {
       .where(eq(cards.id, id))
       .limit(1);
     if (!card) throw notFound();
-    await assertCardAccess(req.auth, card.id);
+    await assertCardAccess(req.auth, card);
     await db
       .insert(cardWatchers)
       .values({ cardId: id, userId: req.auth.sub })
@@ -797,7 +797,7 @@ export async function notificationsRoutes(app: FastifyInstance) {
       .where(eq(cards.id, id))
       .limit(1);
     if (!card) throw notFound();
-    await assertCardAccess(req.auth, card.id);
+    await assertCardAccess(req.auth, card);
     await db
       .delete(cardWatchers)
       .where(and(eq(cardWatchers.cardId, id), eq(cardWatchers.userId, req.auth.sub)));

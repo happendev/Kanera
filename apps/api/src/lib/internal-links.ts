@@ -186,6 +186,9 @@ export async function canReadNote(claims: AuthClaims, note: Pick<Note, "workspac
 }
 
 export async function loadLinkedNotesForCard(claims: AuthClaims, cardId: string, workspaceId: string): Promise<LinkedInternalSummary[]> {
+  // Both directions in one OR: the planner resolves this with a BitmapOr across the two directional
+  // indexes (internal_links_workspace_source_idx / _target_idx), so it is already index-served —
+  // splitting it into two queries per relation measured no faster and cost two extra round-trips.
   const noteRows = await db
     .select({
       note: notes,
@@ -263,11 +266,59 @@ export async function loadLinkedNotesForCard(claims: AuthClaims, cardId: string,
   return summaries.sort((a, b) => (a.title || "Untitled").localeCompare(b.title || "Untitled"));
 }
 
+/**
+ * Repair is a self-healing safety net, not a read the UI waits on: both entry points are `void`-ed
+ * by their routes. What made it expensive was frequency, not the work itself — it ran on *every*
+ * card-detail open and every backlinks read, and in the overwhelming majority of those it finds
+ * nothing to change.
+ *
+ * The scans below are genuinely unindexed (`like(content, '%<id>%')` over every note in the
+ * workspace) and deliberately so: they discover sources that *mention* an id without having recorded
+ * a link for it, which is the case the repair exists to fix and which no index on `internal_link` can
+ * find — the row whose absence is the problem cannot be looked up. Narrowing discovery to already
+ * linked sources loses stale-link cleanup outright (see the notes route integration test).
+ *
+ * So the fix is to stop repeating it. One attempt per target per window is enough for an
+ * eventually-consistent repair, and it takes the seq scan off the hot read path: opening the same
+ * card fifty times now costs one repair, not fifty. In-process and per-replica by design — this
+ * records "recently attempted", never data, so a replica restart or an extra replica only means an
+ * extra attempt, never a stale answer.
+ */
+const REPAIR_COALESCE_MS = 5 * 60 * 1000;
+const REPAIR_COALESCE_MAX_ENTRIES = 5_000;
+const recentRepairAttempts = new Map<string, number>();
+
+function shouldAttemptRepair(key: string): boolean {
+  const now = Date.now();
+  const last = recentRepairAttempts.get(key);
+  if (last !== undefined && now - last < REPAIR_COALESCE_MS) return false;
+  // Bounded, and cheapest to prune when we are already writing. Expired entries go first; if every
+  // entry is still live the oldest are dropped, which only costs an earlier re-attempt.
+  if (recentRepairAttempts.size >= REPAIR_COALESCE_MAX_ENTRIES) {
+    for (const [entryKey, attemptedAt] of recentRepairAttempts) {
+      if (now - attemptedAt >= REPAIR_COALESCE_MS) recentRepairAttempts.delete(entryKey);
+    }
+    let overflow = recentRepairAttempts.size - REPAIR_COALESCE_MAX_ENTRIES + 1;
+    for (const entryKey of recentRepairAttempts.keys()) {
+      if (overflow-- <= 0) break;
+      recentRepairAttempts.delete(entryKey);
+    }
+  }
+  recentRepairAttempts.set(key, now);
+  return true;
+}
+
+/** Test seam: the coalescer is process-global, so suites asserting repair must not inherit it. */
+export function resetInternalLinkRepairCoalescing(): void {
+  recentRepairAttempts.clear();
+}
+
 export async function repairInternalLinksAroundCard(claims: AuthClaims, cardId: string, workspaceId: string): Promise<void> {
+  if (!shouldAttemptRepair(`card:${cardId}`)) return;
   const [card] = await db.select({ id: cards.id, boardId: cards.boardId, description: cards.description }).from(cards).where(eq(cards.id, cardId)).limit(1);
   if (card) {
     try {
-      await assertCardAccess(claims, card.id, "observer");
+      await assertCardAccess(claims, card, "observer");
       await replaceInternalLinksForSource({ tx: db, claims, workspaceId, sourceType: "card", sourceId: card.id, markdown: card.description });
     } catch {
       // Detail reads should not leak or fail because a repair candidate is inaccessible.
@@ -282,6 +333,7 @@ export async function repairInternalLinksAroundCard(claims: AuthClaims, cardId: 
 }
 
 export async function repairInternalLinksAroundNote(claims: AuthClaims, note: Note): Promise<void> {
+  if (!shouldAttemptRepair(`note:${note.id}`)) return;
   const cardCandidates = await db
     .select({ id: cards.id, boardId: cards.boardId, description: cards.description })
     .from(cards)
@@ -289,7 +341,7 @@ export async function repairInternalLinksAroundNote(claims: AuthClaims, note: No
     .where(and(eq(boards.workspaceId, note.workspaceId), like(cards.description, `%${note.id}%`)));
   for (const card of cardCandidates) {
     try {
-      await assertCardAccess(claims, card.id, "observer");
+      await assertCardAccess(claims, card, "observer");
       await replaceInternalLinksForSource({ tx: db, claims, workspaceId: note.workspaceId, sourceType: "card", sourceId: card.id, markdown: card.description });
     } catch {
       // Backlink reads should only repair sources visible to the viewer.

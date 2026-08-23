@@ -95,6 +95,17 @@ With the bundled Compose defaults, that starts as:
 linearly. When you scale `api` up, raise Postgres `max_connections` (or lower
 `PG_POOL_MAX`) to keep this sum comfortably under the server limit.
 
+**API response compression.** The bundled `web` container gzips proxied
+`/api/` and `/public-api/` JSON responses (`apps/web/nginx.conf`). This is the
+largest single bandwidth lever in the stack: opening a 1,000-card board is
+~1.6 MB uncompressed and ~120 KB gzipped. Compression runs in nginx rather than
+Node so it does not consume the API event loop.
+
+If you terminate requests somewhere other than the bundled `web` container — an
+external load balancer, an ingress controller, or a CDN that talks straight to
+`api:3000` — enable gzip or brotli for `application/json` there too, or that
+saving is lost.
+
 **File descriptors (`ulimits.nofile`).** The realtime server holds one file
 descriptor per connected WebSocket. The compose file already raises the `api`
 container limit to ~1,000,000; the default of 1024 would otherwise cap you near a

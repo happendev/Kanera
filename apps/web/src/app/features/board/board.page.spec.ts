@@ -513,7 +513,7 @@ describe("BoardPage", () => {
     const fixture = createInitializedBoardPage();
     const component = fixture.componentInstance;
     boardState(component).hydrate(boardPayload());
-    component.openCardId.set("card-2");
+    fixture.componentRef.setInput("cardId", "card-2");
     fixture.detectChanges();
     flushEffects();
 
@@ -524,7 +524,7 @@ describe("BoardPage", () => {
     const fixture = createInitializedBoardPage();
     const component = fixture.componentInstance;
     boardState(component).hydrate(boardPayload());
-    component.openCardId.set("card-2");
+    fixture.componentRef.setInput("cardId", "card-2");
     flushEffects();
 
     // Sticky modal: the held summary keeps openCard non-null after a background refresh / filter
@@ -545,7 +545,7 @@ describe("BoardPage", () => {
     const fixture = createInitializedBoardPage();
     const component = fixture.componentInstance;
     boardState(component).hydrate(boardPayload());
-    component.openCardId.set("card-2");
+    fixture.componentRef.setInput("cardId", "card-2");
     flushEffects();
 
     // card-2 leaves the live collection but stays open via the held summary.
@@ -555,12 +555,12 @@ describe("BoardPage", () => {
 
     // Navigate to a card that isn't in the collection: nothing resolves and card-2's held summary
     // must not leak across the id change.
-    component.openCardId.set("card-unavailable");
+    fixture.componentRef.setInput("cardId", "card-unavailable");
     flushEffects();
     expect(component.openCard()).toBeNull();
 
     // Returning to card-2 while it is still outside the collection must not revive the stale summary.
-    component.openCardId.set("card-2");
+    fixture.componentRef.setInput("cardId", "card-2");
     flushEffects();
     expect(component.openCard()).toBeNull();
   });
@@ -569,11 +569,11 @@ describe("BoardPage", () => {
     const fixture = createInitializedBoardPage();
     const component = fixture.componentInstance;
     boardState(component).hydrate(boardPayload());
-    component.openCardId.set("card-2");
+    fixture.componentRef.setInput("cardId", "card-2");
     fixture.detectChanges();
     flushEffects();
 
-    component.openCardId.set(null);
+    fixture.componentRef.setInput("cardId", undefined);
     fixture.detectChanges();
     flushEffects();
 
@@ -585,7 +585,7 @@ describe("BoardPage", () => {
     const component = fixture.componentInstance;
     const state = boardState(component);
     state.hydrate(boardPayload());
-    component.openCardId.set("card-2");
+    fixture.componentRef.setInput("cardId", "card-2");
     fixture.detectChanges();
     flushEffects();
 
@@ -601,7 +601,7 @@ describe("BoardPage", () => {
     const component = fixture.componentInstance;
     boardState(component).hydrate(boardPayload());
     component.completedHistoryCard.set(card({ id: "completed-1", title: "Finished milestone" }));
-    component.openCardId.set("completed-1");
+    fixture.componentRef.setInput("cardId", "completed-1");
     fixture.detectChanges();
     flushEffects();
 

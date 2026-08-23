@@ -458,11 +458,14 @@ export class GlobalWorkState {
       const cardsRequest = this.lens() === "portfolio" && this.definition().display === "summary"
         ? Promise.resolve(EMPTY_RESPONSE)
         : this.loadCards();
+      // The candidate pool is scoped to the lane owners, so it chains off the (single, small)
+      // priorities batch rather than running blind. Still concurrent with everything else.
+      const teamPrioritiesRequest = this.loadTeamPriorities();
       const [response, priorities, teamPriorities, priorityCandidateCards] = await Promise.all([
         cardsRequest,
         this.loadPriorities(),
-        this.loadTeamPriorities(),
-        this.loadTeamPriorityCandidateCards(version),
+        teamPrioritiesRequest,
+        teamPrioritiesRequest.then((queues) => this.loadTeamPriorityCandidateCards(version, queues)),
       ]);
       if (version !== this.requestVersion) return;
       this.response.set(response);
@@ -1300,6 +1303,7 @@ export class GlobalWorkState {
     // Priorities rides in the same Promise.all as the cards, so the ranked lane and the tail can
     // never be applied at different instants — the invariant that keeps a card from briefly
     // appearing in both, or in neither.
+    const initialTeamPrioritiesRequest = this.loadTeamPriorities();
     const [
       catalog,
       initialResponse,
@@ -1316,8 +1320,8 @@ export class GlobalWorkState {
       this.api.get<WorkViewShareCandidate[]>("/work-views/share-candidates"),
       this.lens() === "portfolio" ? this.loadPortfolio() : Promise.resolve(null),
       this.loadPriorities(),
-      this.loadTeamPriorities(),
-      this.loadTeamPriorityCandidateCards(version),
+      initialTeamPrioritiesRequest,
+      initialTeamPrioritiesRequest.then((queues) => this.loadTeamPriorityCandidateCards(version, queues)),
     ]);
     if (version !== this.requestVersion) return;
     this.catalog.set(catalog);
@@ -1345,7 +1349,7 @@ export class GlobalWorkState {
       [response, portfolio, priorityCandidateCards] = await Promise.all([
         correctedCardsRequest,
         this.lens() === "portfolio" ? this.loadPortfolio() : Promise.resolve(null),
-        this.loadTeamPriorityCandidateCards(version),
+        this.loadTeamPriorityCandidateCards(version, teamPriorities),
       ]);
       if (version !== this.requestVersion) return;
     }
@@ -1425,27 +1429,51 @@ export class GlobalWorkState {
    * query plus the self query (the team lens excludes the viewer by definition) keeps the pool
    * stable when a queued card is absent from the visible filtered projection. Pages are exhausted
    * because a disabled Add button must mean there are truly no eligible cards.
+   *
+   * Scoped to the lane owners, which is what makes exhausting the pages affordable. Every consumer
+   * filters by `card.assigneeIds.includes(lane.target.userId)`, so a pool of every active card in
+   * every accessible board was fetching — and re-fetching on four reload paths — a large multiple of
+   * what any picker can offer. Unscoped, this paged to a 10,000-card cap at 100 per request, twice:
+   * up to ~200 sequential round-trips to decide whether an Add button is enabled.
    */
-  private async loadTeamPriorityCandidateCards(version: number): Promise<WorkQueryResponse["cards"]> {
+  private async loadTeamPriorityCandidateCards(
+    version: number,
+    queues: WorkPriorityQueuesResponse | null,
+  ): Promise<WorkQueryResponse["cards"]> {
     if (this.lens() !== "team" || this.definition().display !== "priorities") return [];
+    const laneUserIds = queues?.queues.map((lane) => lane.target.userId) ?? [];
+    // No readable queue means no picker to populate, so there is nothing to fetch at all.
+    if (laneUserIds.length === 0) return [];
+    const viewerId = this.auth.user()?.id ?? null;
+    const teamUserIds = laneUserIds.filter((userId) => userId !== viewerId);
     const cards: WorkQueryResponse["cards"] = [];
-    for (const lens of ["team", "my"] as const) {
+    // One membership set for the whole accumulation. Rebuilding it per page made the dedup O(n²).
+    const seen = new Set<string>();
+    // The team lens excludes the viewer by definition, so their own lane still needs the my lens.
+    const passes: { lens: "team" | "my"; assigneeIds: string[] }[] = [];
+    if (teamUserIds.length > 0) passes.push({ lens: "team", assigneeIds: teamUserIds });
+    if (viewerId && laneUserIds.includes(viewerId)) passes.push({ lens: "my", assigneeIds: [] });
+
+    for (const pass of passes) {
       let cursor: string | undefined;
       do {
         const page = await this.api.post<WorkQueryResponse>("/work/cards/query", {
-          lens,
+          lens: pass.lens,
           scope: { allAccessible: true, organisationIds: [], workspaceIds: [], boardIds: [] },
           // The add route rejects completed and archived cards. Keep this projection limited to the
           // exact durable candidate rule instead of inheriting transient page filters.
-          filters: { assigneeIds: [], labelIds: [], listIds: [], customFieldValues: [], completion: "active" },
+          filters: { assigneeIds: pass.assigneeIds, labelIds: [], listIds: [], customFieldValues: [], completion: "active" },
           sort: "dueAsc",
           limit: 100,
           includeMetadata: false,
           ...(cursor ? { cursor } : {}),
         });
         if (version !== this.requestVersion) return [];
-        const seen = new Set(cards.map((card) => card.id));
-        cards.push(...page.cards.filter((card) => !seen.has(card.id)));
+        for (const card of page.cards) {
+          if (seen.has(card.id)) continue;
+          seen.add(card.id);
+          cards.push(card);
+        }
         cursor = page.nextCursor ?? undefined;
       } while (cursor && cards.length < 10_000);
     }
@@ -1790,12 +1818,13 @@ export class GlobalWorkState {
         const cardsRequest = this.lens() === "portfolio" && this.definition().display === "summary"
           ? Promise.resolve(EMPTY_RESPONSE)
           : this.loadAllCards(version);
+        const reconcileTeamPrioritiesRequest = this.loadTeamPriorities();
         const [response, portfolio, priorities, teamPriorities, priorityCandidateCards] = await Promise.all([
           cardsRequest,
           this.lens() === "portfolio" ? this.loadPortfolio() : Promise.resolve(null),
           this.loadPriorities(),
-          this.loadTeamPriorities(),
-          this.loadTeamPriorityCandidateCards(version),
+          reconcileTeamPrioritiesRequest,
+          reconcileTeamPrioritiesRequest.then((queues) => this.loadTeamPriorityCandidateCards(version, queues)),
         ]);
         if (version !== this.requestVersion) return;
         await this.whenCardDragIdle();

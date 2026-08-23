@@ -5,6 +5,16 @@ services:
     image: postgres:18-alpine
     container_name: kanera-postgres
     restart: unless-stopped
+    # Mirrors docker-compose.yml: pg_stat_statements must be loaded at server start via
+    # shared_preload_libraries, so local query profiling can read the view that
+    # docker/postgres/init.sql creates. Without this the extension exists but every read of
+    # pg_stat_statements errors, which silently blinds local performance work.
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_preload_libraries=pg_stat_statements"
+      - "-c"
+      - "pg_stat_statements.track=top"
     environment:
       POSTGRES_USER: kanera
       POSTGRES_PASSWORD: kanera

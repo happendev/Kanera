@@ -30,3 +30,6 @@ pnpm-debug.log*
 .codex/
 .data/uploads
 .tmp
+
+# Local benchmark runs. The harnesses are committed; their per-run results are not.
+benchmarks/*/results/

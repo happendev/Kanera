@@ -78,6 +78,14 @@ export const automations = pgTable(
     index("automations_active_workspace_position_idx")
       .on(t.workspaceId, t.position)
       .where(sql`${t.archivedAt} is null`),
+    // Every card create and every card move looks up the automations for one list. The
+    // workspace+position indexes above can only narrow to the workspace, leaving trigger_type and
+    // trigger_list_id as a heap filter over all of its automations — measured at 400 automations in
+    // one workspace, that discarded 382 of 402 rows per card move. Position is the trailing column
+    // so the ordered read still comes from the index.
+    index("automations_trigger_list_idx")
+      .on(t.workspaceId, t.triggerType, t.triggerListId, t.position)
+      .where(sql`${t.archivedAt} is null`),
   ],
 );
 

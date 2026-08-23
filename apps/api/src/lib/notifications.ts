@@ -341,13 +341,17 @@ export async function fanoutNotificationsForActivity(
       // Re-fetch all existing rows so the emit carries the fresh activity payload.
       const ids = visibleExisting.map((row) => row.id);
       const enriched = await enrichNotifications(dbSingleton, ids);
-      for (const row of enriched) {
-        // Updated activity should re-surface the notification even if it was
-        // previously marked read by the user.
+      // Updated activity should re-surface the notification even if it was previously marked read by
+      // the user. One statement for the whole audience, not one per recipient: this branch re-fires
+      // on every tick of a coalescing window, so a busy card multiplied the round-trips by the
+      // number of watchers on every single tick.
+      if (enriched.length > 0) {
         await dbSingleton
           .update(notifications)
           .set({ readAt: null })
-          .where(eq(notifications.id, row.id));
+          .where(inArray(notifications.id, enriched.map((row) => row.id)));
+      }
+      for (const row of enriched) {
         const refreshed = { ...row, readAt: null };
         emitToUser(refreshed.userId, "notification:updated", { notification: refreshed });
       }

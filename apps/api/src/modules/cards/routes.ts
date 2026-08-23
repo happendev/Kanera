@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import type { AuthClaims } from "../../auth/plugin.js";
 import { db, type Db } from "../../db.js";
 import { env } from "../../env.js";
-import { assignedCardVisibility, assertBoardAccess, assertCardAccess } from "../../lib/access.js";
+import { assignedCardVisibility, assertBatchCardVisibility, assertBoardAccess, assertCardAccess } from "../../lib/access.js";
 import {
   emitActivityFeedItem,
   emitActivityFeedItemDeleted,
@@ -1163,7 +1163,8 @@ export async function cardRoutes(
     const card = await resolveCardKey(db, organisationKey, key);
     if (!card) throw notFound();
     try {
-      await assertCardAccess(req.auth, card.id);
+      // resolveCardKey already returned the board id, so this needs no second card read.
+      await assertCardAccess(req.auth, card);
     } catch (error) {
       // Key lookup is intentionally non-disclosing: callers cannot distinguish an inaccessible
       // card from an identity that was never allocated.
@@ -1177,7 +1178,8 @@ export async function cardRoutes(
     const { id } = req.params as { id: string };
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card.id);
+    // The row is already in hand; passing it skips a redundant re-read of its board_id.
+    const ctx = await assertCardAccess(req.auth, card);
     // Healing with the viewer's claims can reveal links the author could not record, but its
     // workspace-wide note scan must not block this read; the next open can consume the repair.
     void repairInternalLinksAroundCard(req.auth, id, ctx.workspaceId).catch((err: unknown) =>
@@ -2766,7 +2768,7 @@ export async function cardRoutes(
     const body = dto.setCustomFieldValueBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card.id, "editor");
+    const ctx = await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
     const [field] = await db.select().from(customFields).where(eq(customFields.id, fieldId)).limit(1);
     if (!field || field.workspaceId !== ctx.workspaceId) throw notFound("custom field not found");
@@ -2937,7 +2939,7 @@ export async function cardRoutes(
     const body = dto.createChecklistBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card.id, "editor");
+    const ctx = await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
     const parentItemId = body.parentItemId ?? null;
     if (parentItemId) {
@@ -2994,7 +2996,7 @@ export async function cardRoutes(
     const body = dto.applyChecklistTemplatesBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card.id, "editor");
+    const ctx = await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
 
     const requestedTemplateIds = Array.from(new Set(body.templateIds));
@@ -3033,7 +3035,7 @@ export async function cardRoutes(
     const body = dto.updateChecklistBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card.id, "editor");
+    const ctx = await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
     const [current] = await db
       .select()
@@ -3074,7 +3076,7 @@ export async function cardRoutes(
     const { id, checklistId } = req.params as { id: string; checklistId: string };
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card.id, "editor");
+    const ctx = await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
     const [current] = await db
       .select()
@@ -3150,7 +3152,7 @@ export async function cardRoutes(
     const body = dto.moveChecklistBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    await assertCardAccess(req.auth, card.id, "editor");
+    await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
     const [current] = await db
       .select()
@@ -3195,8 +3197,10 @@ export async function cardRoutes(
       const card = cardsById.get(cardId);
       if (!card || card.boardId !== boardId) throw notFound("one or more cards were not found on this board");
       assertCardActive(card);
-      await assertCardAccess(req.auth, cardId, "editor");
     }
+    // Board editor access is asserted once above and every card is confirmed to be on that board,
+    // so only the assigned-items-only rule is still per-card — one probe for the whole batch.
+    await assertBatchCardVisibility(req.auth, boardAccess, cardIds);
     for (const entry of body.items) {
       const checklist = checklistsById.get(entry.checklistId);
       if (!checklist || checklist.cardId !== entry.cardId) throw notFound("one or more checklists were not found on their cards");
@@ -3273,7 +3277,7 @@ export async function cardRoutes(
     const body = dto.createChecklistItemBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    await assertCardAccess(req.auth, card.id, "editor");
+    await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
     const [checklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
     if (!checklist) throw notFound("checklist not found");
@@ -3311,7 +3315,7 @@ export async function cardRoutes(
     const body = dto.bulkUpdateChecklistItemsBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card.id, "editor");
+    const ctx = await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
     const [checklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
     if (!checklist) throw notFound("checklist not found");
@@ -3447,7 +3451,7 @@ export async function cardRoutes(
     const body = dto.updateChecklistItemBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card.id, "editor");
+    const ctx = await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
     const [checklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
     if (!checklist) throw notFound("checklist not found");
@@ -3747,7 +3751,7 @@ export async function cardRoutes(
     const { id, checklistId, itemId } = req.params as { id: string; checklistId: string; itemId: string };
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    await assertCardAccess(req.auth, card.id, "editor");
+    await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
     const [checklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
     if (!checklist) throw notFound("checklist not found");
@@ -3772,7 +3776,7 @@ export async function cardRoutes(
     const body = dto.moveChecklistItemBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    await assertCardAccess(req.auth, card.id, "editor");
+    await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
     const [sourceChecklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
     if (!sourceChecklist) throw notFound("checklist not found");
@@ -3826,7 +3830,7 @@ export async function cardRoutes(
     const body = dto.setCardArchivedBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card.id, "editor");
+    const ctx = await assertCardAccess(req.auth, card, "editor");
 
     const archivedAt = body.archived ? (card.archivedAt ?? new Date()) : null;
     if (body.archived === Boolean(card.archivedAt)) {
@@ -3866,7 +3870,7 @@ export async function cardRoutes(
     const { id, fieldId } = req.params as { id: string; fieldId: string };
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card.id, "editor");
+    const ctx = await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
     const [field] = await db.select().from(customFields).where(eq(customFields.id, fieldId)).limit(1);
     if (!field || field.workspaceId !== ctx.workspaceId) throw notFound("custom field not found");
@@ -3912,7 +3916,7 @@ export async function cardRoutes(
     const body = dto.setCardLabelsBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card.id, "editor");
+    const ctx = await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
     const currentAssignments = await db
       .select({ labelId: cardLabelAssignments.labelId })
@@ -4021,7 +4025,7 @@ export async function cardRoutes(
     const nextUserIds = Array.from(new Set(body.userIds));
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card.id, "editor");
+    const ctx = await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
 
     if (nextUserIds.length > 0) {

@@ -17,6 +17,20 @@ The fixture contains:
 
 Login with `perf@kanera.local` / `Perf12345`.
 
+The shape is env-tunable. The defaults above are the historical fixture, so results captured before
+the fixture became parameterised stay comparable:
+
+```bash
+PERF_CARD_COUNT=3000 PERF_BOARD_COUNT=60 pnpm perf:web:seed
+PERF_WORKSPACE_COUNT=6 PERF_MEMBER_COUNT=40 pnpm perf:web:seed
+PERF_SECONDARY_BOARDS=5 PERF_SECONDARY_CARDS=500 pnpm perf:web:seed
+```
+
+`PERF_WORKSPACE_COUNT` and `PERF_MEMBER_COUNT` control the cross-workspace breadth that
+`loadAccessibleBoards` fan-out, `/work/catalog`, and multi-page work cursors need; the primary
+1,000-card board is unaffected by them. The concurrent server-side companion to this benchmark lives
+in [../api](../api/README.md).
+
 ## Run
 
 Start the migrated local database and the normal development stack, then run:

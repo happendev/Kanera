@@ -33,8 +33,13 @@ export const eventOutbox = pgTable(
   },
   (t) => [
     check("event_outbox_scope_ck", valueIn(t.scope, EVENT_OUTBOX_SCOPES)),
+    // Leads on the claim query's own ordering (created_at, id) so the dispatcher can walk the index
+    // and stop at LIMIT. Leading on processing_lease_expires_at instead forced a Sort of the whole
+    // pending set on every claim, which is exactly the wrong shape under a backlog — the only time
+    // the pending set is large. The lease predicate becomes a cheap filter: rows leased at any
+    // moment are bounded by (dispatchers x batch size), and the lease is short.
     index("event_outbox_pending_idx")
-      .on(t.processingLeaseExpiresAt, t.createdAt)
+      .on(t.createdAt, t.id)
       .where(sql`${t.realtimeDispatched} = false or ${t.webhooksEnqueued} = false`),
     index("event_outbox_processed_created_at_idx")
       .on(t.createdAt)

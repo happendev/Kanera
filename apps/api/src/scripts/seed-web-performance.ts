@@ -34,9 +34,33 @@ const PERF_CLIENT_NAME = "[LOCAL PERF] Kanera Web Benchmark";
 const PERF_WORKSPACE_NAME = "[LOCAL PERF] Scale Lab";
 const PERF_EMAIL = "perf@kanera.local";
 const PERF_PASSWORD = "Perf12345";
-const CARD_COUNT = 1_000;
+
+/**
+ * Fixture shape is env-tunable so one script can serve both the historical single-user web
+ * baseline and larger API load tests. Defaults reproduce the original 1,000-card / 40-board
+ * fixture exactly, so previously captured `benchmarks/web/results` runs stay comparable.
+ */
+function envCount(name: string, fallback: number, max: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > max) {
+    throw new Error(`${name} must be an integer between 1 and ${max}`);
+  }
+  return parsed;
+}
+
+const CARD_COUNT = envCount("PERF_CARD_COUNT", 1_000, 50_000);
 const LIST_COUNT = 20;
-const BOARD_COUNT = 40;
+const BOARD_COUNT = envCount("PERF_BOARD_COUNT", 40, 500);
+// Extra standard workspaces and a wider membership exist so `loadAccessibleBoards` fan-out,
+// `/work/catalog` breadth, and multi-page work cursors are exercised; the original fixture had a
+// single workspace and six members, which made every cross-workspace query trivially small.
+const WORKSPACE_COUNT = envCount("PERF_WORKSPACE_COUNT", 4, 50);
+const MEMBER_COUNT = envCount("PERF_MEMBER_COUNT", 20, 200);
+const SECONDARY_BOARDS_PER_WORKSPACE = envCount("PERF_SECONDARY_BOARDS", 3, 100);
+const SECONDARY_LIST_COUNT = 8;
+const SECONDARY_CARDS_PER_WORKSPACE = envCount("PERF_SECONDARY_CARDS", 200, 20_000);
 const RICH_CARDS_PER_LIST = 3;
 const COVER_EVERY_NTH_CARD_IN_LIST = 2;
 const EXPECTED_COVER_COUNT = LIST_COUNT * Math.ceil((CARD_COUNT / LIST_COUNT) / COVER_EVERY_NTH_CARD_IN_LIST);
@@ -50,14 +74,54 @@ const COVER_ASSETS = [
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
-const MEMBER_SEEDS = [
-  { id: PERF_USER_ID, email: PERF_EMAIL, displayName: "Amelia Benchmark", clientRole: "owner" as const, workspaceRole: "admin" as const },
-  { id: "70000000-0000-4000-8000-000000000011", email: "marcus.perf@kanera.local", displayName: "Marcus Chen", clientRole: "member" as const, workspaceRole: "admin" as const },
-  { id: "70000000-0000-4000-8000-000000000012", email: "priya.perf@kanera.local", displayName: "Priya Nair", clientRole: "member" as const, workspaceRole: "member" as const },
-  { id: "70000000-0000-4000-8000-000000000013", email: "ben.perf@kanera.local", displayName: "Ben Carter", clientRole: "member" as const, workspaceRole: "member" as const },
-  { id: "70000000-0000-4000-8000-000000000014", email: "nina.perf@kanera.local", displayName: "Nina Alvarez", clientRole: "member" as const, workspaceRole: "member" as const },
-  { id: "70000000-0000-4000-8000-000000000015", email: "zoe.perf@kanera.local", displayName: "Zoe Williams", clientRole: "member" as const, workspaceRole: "member" as const },
+interface MemberSeed {
+  id: string;
+  email: string;
+  displayName: string;
+  clientRole: "owner" | "member";
+  workspaceRole: "admin" | "member";
+}
+
+// The first six members keep their original ids, emails, and roles so existing local logins and
+// captured benchmark results keep referring to the same people. Anything above six is generated.
+const NAMED_MEMBER_SEEDS: MemberSeed[] = [
+  { id: PERF_USER_ID, email: PERF_EMAIL, displayName: "Amelia Benchmark", clientRole: "owner", workspaceRole: "admin" },
+  { id: "70000000-0000-4000-8000-000000000011", email: "marcus.perf@kanera.local", displayName: "Marcus Chen", clientRole: "member", workspaceRole: "admin" },
+  { id: "70000000-0000-4000-8000-000000000012", email: "priya.perf@kanera.local", displayName: "Priya Nair", clientRole: "member", workspaceRole: "member" },
+  { id: "70000000-0000-4000-8000-000000000013", email: "ben.perf@kanera.local", displayName: "Ben Carter", clientRole: "member", workspaceRole: "member" },
+  { id: "70000000-0000-4000-8000-000000000014", email: "nina.perf@kanera.local", displayName: "Nina Alvarez", clientRole: "member", workspaceRole: "member" },
+  { id: "70000000-0000-4000-8000-000000000015", email: "zoe.perf@kanera.local", displayName: "Zoe Williams", clientRole: "member", workspaceRole: "member" },
 ];
+
+const GENERATED_FIRST_NAMES = [
+  "Ana", "Owen", "Lena", "Theo", "Maya", "Ivan", "Ruth", "Kai", "Nora", "Sami",
+  "Iris", "Liam", "Eve", "Noel", "Sara", "Dev", "Tara", "Hugo", "Mira", "Otis",
+];
+const GENERATED_LAST_NAMES = [
+  "Okafor", "Lindqvist", "Ferreira", "Novak", "Kaur", "Petrov", "Bello", "Tanaka",
+  "Costa", "Meyer", "Haddad", "Rossi", "Kowalski", "Dlamini", "Ivanov", "Silva",
+];
+
+function buildMemberSeeds(total: number): MemberSeed[] {
+  const seeds = NAMED_MEMBER_SEEDS.slice(0, total);
+  for (let index = seeds.length; index < total; index += 1) {
+    const first = GENERATED_FIRST_NAMES[index % GENERATED_FIRST_NAMES.length]!;
+    const last = GENERATED_LAST_NAMES[index % GENERATED_LAST_NAMES.length]!;
+    const suffix = String(index).padStart(3, "0");
+    seeds.push({
+      // Deterministic ids keep repeated seeding idempotent and make fixture rows recognisable.
+      id: `70000000-0000-4000-8000-001${String(index).padStart(9, "0")}`,
+      email: `member${suffix}.perf@kanera.local`,
+      displayName: `${first} ${last}`,
+      clientRole: "member",
+      // A couple of extra admins exercise admin-implicit board access without making everyone one.
+      workspaceRole: index % 7 === 0 ? "admin" : "member",
+    });
+  }
+  return seeds;
+}
+
+const MEMBER_SEEDS = buildMemberSeeds(MEMBER_COUNT);
 
 const LIST_NAMES = [
   "Inbox", "Discovery", "Ready", "In progress", "Review", "Validation", "Blocked", "Waiting",
@@ -96,7 +160,9 @@ async function insertChunks<T>(rows: T[], insert: (chunk: T[]) => Promise<unknow
   }
 }
 
-async function replaceFixture(tx: Tx): Promise<void> {
+interface SecondarySummary { workspaces: number; boards: number; cards: number }
+
+async function replaceFixture(tx: Tx): Promise<SecondarySummary> {
   const [existingClient] = await tx.select({ name: clients.name }).from(clients).where(eq(clients.id, PERF_CLIENT_ID)).limit(1);
   if (existingClient && existingClient.name !== PERF_CLIENT_NAME) {
     throw new Error(`Refusing to replace client ${PERF_CLIENT_ID}; it is not the marked local performance fixture.`);
@@ -338,17 +404,167 @@ async function replaceFixture(tx: Tx): Promise<void> {
   await insertChunks(checklistRows, (chunk) => tx.insert(cardChecklists).values(chunk));
   await insertChunks(checklistItemRows, (chunk) => tx.insert(cardChecklistItems).values(chunk));
   await insertChunks(commentRows, (chunk) => tx.insert(comments).values(chunk));
+
+  return await insertSecondaryWorkspaces(tx, createdAt, now);
+}
+
+
+const SECONDARY_LIST_NAMES = ["Intake", "Shaping", "Building", "Review", "Blocked", "Shipping", "Watching", "Archive soon"];
+const SECONDARY_WORKSPACE_NAMES = [
+  "Client Delivery", "Platform Group", "Growth Studio", "Support Desk", "Data Practice",
+  "Mobile Guild", "Security Office", "Partnerships", "Field Ops", "Research Lab",
+];
+
+/**
+ * Extra standard workspaces with their own lists, fields, boards and cards. These exist purely so
+ * cross-workspace read paths have realistic breadth: `loadAccessibleBoards` fan-out, `/work/catalog`,
+ * Global Work cursors that must page across boards, and the app shell's per-workspace requests.
+ * Content here is deliberately lighter than the primary board so seeding stays fast.
+ */
+async function insertSecondaryWorkspaces(tx: Tx, createdAt: Date, now: Date): Promise<{ workspaces: number; boards: number; cards: number }> {
+  const extraWorkspaces = WORKSPACE_COUNT - 1;
+  if (extraWorkspaces < 1) return { workspaces: 0, boards: 0, cards: 0 };
+
+  let boardTotal = 0;
+  let cardTotal = 0;
+
+  for (let workspaceIndex = 0; workspaceIndex < extraWorkspaces; workspaceIndex += 1) {
+    const workspaceId = randomUUID();
+    const label = SECONDARY_WORKSPACE_NAMES[workspaceIndex % SECONDARY_WORKSPACE_NAMES.length]!;
+    // Names must be distinct within the organisation: the workspace insert trigger derives the card
+    // key prefix from the name and only disambiguates collisions with a numeric suffix.
+    const name = `[LOCAL PERF] ${label} ${String(workspaceIndex + 2).padStart(2, "0")}`;
+    await tx.insert(workspaces).values({
+      id: workspaceId,
+      clientId: PERF_CLIENT_ID,
+      name,
+      icon: "layout-kanban",
+      accentColor: LABEL_SEEDS[workspaceIndex % LABEL_SEEDS.length]![1],
+      createdAt,
+      updatedAt: now,
+    });
+    await tx.insert(workspaceMembers).values(MEMBER_SEEDS.map((member) => ({
+      workspaceId,
+      userId: member.id,
+      role: member.workspaceRole,
+      addedAt: createdAt,
+    })));
+
+    const listRows: (typeof lists.$inferInsert)[] = Array.from({ length: SECONDARY_LIST_COUNT }, (_, index) => ({
+      id: randomUUID(),
+      workspaceId,
+      name: SECONDARY_LIST_NAMES[index % SECONDARY_LIST_NAMES.length]!,
+      icon: ["inbox", "bulb", "progress", "eye", "ban", "rocket", "radar", "archive"][index % 8],
+      color: LABEL_SEEDS[(index + workspaceIndex) % LABEL_SEEDS.length]![1],
+      position: position(index),
+      createdAt,
+      updatedAt: now,
+    }));
+    await tx.insert(lists).values(listRows);
+
+    const labelRows: (typeof cardLabels.$inferInsert)[] = LABEL_SEEDS.slice(0, 4).map(([labelName, color], index) => ({
+      id: randomUUID(), workspaceId, name: labelName, color, position: position(index), createdAt, updatedAt: now,
+    }));
+    await tx.insert(cardLabels).values(labelRows);
+
+    const fieldRows: (typeof customFields.$inferInsert)[] = [
+      { id: randomUUID(), workspaceId, name: "Priority", icon: "flag", type: "select", position: position(0), showOnCard: true },
+      { id: randomUUID(), workspaceId, name: "Effort", icon: "ruler", type: "number", position: position(1), showOnCard: true },
+    ];
+    await tx.insert(customFields).values(fieldRows);
+    const optionRows: (typeof customFieldOptions.$inferInsert)[] = ["Urgent", "High", "Medium", "Low"].map((optionLabel, index) => ({
+      id: randomUUID(), fieldId: fieldRows[0]!.id!, label: optionLabel, color: LABEL_SEEDS[index]![1], position: position(index), createdAt, updatedAt: now,
+    }));
+    await tx.insert(customFieldOptions).values(optionRows);
+
+    const boardRows: (typeof boards.$inferInsert)[] = Array.from({ length: SECONDARY_BOARDS_PER_WORKSPACE }, (_, index) => ({
+      id: randomUUID(),
+      workspaceId,
+      name: `${label} board ${String(index + 1).padStart(2, "0")}`,
+      icon: "layout-kanban",
+      iconColor: LABEL_SEEDS[(index + workspaceIndex) % LABEL_SEEDS.length]![1],
+      position: position(index),
+      createdAt,
+      updatedAt: now,
+    }));
+    await tx.insert(boards).values(boardRows);
+    boardTotal += boardRows.length;
+
+    const adminMembers = MEMBER_SEEDS.filter((member) => member.workspaceRole === "admin");
+    await tx.insert(boardMembers).values(boardRows.flatMap((board) => adminMembers.map((member) => ({
+      boardId: board.id!,
+      userId: member.id,
+      role: "editor" as const,
+      pinned: false,
+      addedAt: createdAt,
+    }))));
+
+    const identities = await allocateCardKeys(tx, workspaceId, SECONDARY_CARDS_PER_WORKSPACE);
+    const cardRows: (typeof cards.$inferInsert)[] = [];
+    const assigneeRows: (typeof cardAssignees.$inferInsert)[] = [];
+    const labelAssignmentRows: (typeof cardLabelAssignments.$inferInsert)[] = [];
+    const fieldValueRows: (typeof cardCustomFieldValues.$inferInsert)[] = [];
+
+    for (let cardIndex = 0; cardIndex < SECONDARY_CARDS_PER_WORKSPACE; cardIndex += 1) {
+      const cardId = randomUUID();
+      const board = boardRows[cardIndex % boardRows.length]!;
+      const list = listRows[cardIndex % listRows.length]!;
+      // A mix of open, completed, and archived cards so partial indexes and the completed/inactive
+      // work filters see representative selectivity instead of an all-open scope.
+      const completed = cardIndex % 5 === 0;
+      const archived = cardIndex % 17 === 0;
+      cardRows.push({
+        ...identities[cardIndex]!,
+        id: cardId,
+        boardId: board.id!,
+        listId: list.id!,
+        title: `${label} item ${String(cardIndex + 1).padStart(4, "0")}: ${["scoping", "handover", "regression", "rollout", "audit"][cardIndex % 5]}`,
+        description: `Cross-workspace fixture card used to give portfolio, catalog, and work-cursor queries realistic breadth across ${label}.`,
+        position: position(Math.floor(cardIndex / boardRows.length)),
+        dueDateLocalDate: cardIndex % 3 === 0 ? localDate((cardIndex % 40) - 10) : null,
+        dueDateSlot: cardIndex % 3 === 0 ? "endOfWorkDay" : null,
+        dueDateTimezone: cardIndex % 3 === 0 ? "Europe/London" : null,
+        completedAt: completed ? new Date(now.getTime() - (cardIndex % 30) * 86_400_000) : null,
+        archivedAt: archived ? new Date(now.getTime() - (cardIndex % 20) * 86_400_000) : null,
+        createdById: MEMBER_SEEDS[cardIndex % MEMBER_SEEDS.length]!.id,
+        createdAt: new Date(createdAt.getTime() + cardIndex * 120_000),
+        updatedAt: new Date(now.getTime() - (cardIndex % 90) * 86_400_000),
+      });
+
+      const assigned = new Set<string>();
+      // Keep roughly a third of cross-workspace work on the benchmark login so its Global Work
+      // queries actually page, while the rest spreads across the wider membership.
+      if (cardIndex % 3 === 0) assigned.add(PERF_USER_ID);
+      assigned.add(MEMBER_SEEDS[(cardIndex + workspaceIndex) % MEMBER_SEEDS.length]!.id);
+      assigneeRows.push(...Array.from(assigned, (userId) => ({ cardId, userId, assignedAt: createdAt })));
+
+      labelAssignmentRows.push({ cardId, labelId: labelRows[cardIndex % labelRows.length]!.id!, assignedAt: createdAt });
+      fieldValueRows.push(
+        { cardId, fieldId: fieldRows[0]!.id!, valueOptionIds: [optionRows[cardIndex % optionRows.length]!.id!], updatedAt: now },
+        { cardId, fieldId: fieldRows[1]!.id!, valueNumber: String((cardIndex % 8) + 1), updatedAt: now },
+      );
+    }
+
+    await insertChunks(cardRows, (chunk) => tx.insert(cards).values(chunk));
+    await insertChunks(assigneeRows, (chunk) => tx.insert(cardAssignees).values(chunk));
+    await insertChunks(labelAssignmentRows, (chunk) => tx.insert(cardLabelAssignments).values(chunk));
+    await insertChunks(fieldValueRows, (chunk) => tx.insert(cardCustomFieldValues).values(chunk));
+    cardTotal += cardRows.length;
+  }
+
+  return { workspaces: extraWorkspaces, boards: boardTotal, cards: cardTotal };
 }
 
 assertLocalOnly();
 try {
   const startedAt = performance.now();
-  await db.transaction(replaceFixture);
+  const secondary = await db.transaction(replaceFixture);
   console.log("local web performance fixture ready");
   console.log(`login: ${PERF_EMAIL} / ${PERF_PASSWORD}`);
   console.log(`workspace: ${PERF_WORKSPACE_ID}`);
   console.log(`primary board: ${PERF_BOARD_ID}`);
-  console.log(`shape: ${BOARD_COUNT} boards, ${LIST_COUNT} lists, ${CARD_COUNT} cards, ${EXPECTED_COVER_COUNT} covers, ${RICH_CARDS_PER_LIST * LIST_COUNT} rich card details`);
+  console.log(`shape: ${BOARD_COUNT} boards, ${LIST_COUNT} lists, ${CARD_COUNT} cards, ${EXPECTED_COVER_COUNT} covers, ${RICH_CARDS_PER_LIST * LIST_COUNT} rich card details, ${MEMBER_SEEDS.length} members`);
+  console.log(`cross-workspace: ${secondary.workspaces} extra workspaces, ${secondary.boards} extra boards, ${secondary.cards} extra cards`);
   console.log(`elapsed: ${Math.round(performance.now() - startedAt)}ms`);
 } finally {
   await pool.end();

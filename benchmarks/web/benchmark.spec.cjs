@@ -160,6 +160,12 @@ test("large main-page baseline", async ({ page, browser }) => {
   };
 
   const profileScroll = async (name, selector, axis = "vertical") => {
+    // Fail fast and say which selector went stale. Without this, a markup change that invalidates a
+    // scroll target makes the run hang on an implicit locator wait until the whole test times out,
+    // which reads as "the benchmark is slow" rather than "the benchmark is broken".
+    await page.locator(selector).first().waitFor({ state: "attached", timeout: 15_000 }).catch(() => {
+      throw new Error(`Scroll profile target not found for ${name}: ${selector}`);
+    });
     await page.locator(selector).evaluate((element, scrollAxis) => {
       element[scrollAxis === "horizontal" ? "scrollLeft" : "scrollTop"] = 0;
     }, axis);
@@ -417,7 +423,10 @@ test("large main-page baseline", async ({ page, browser }) => {
   dropProfiles.initial = await profileDrop("board/drop-initial");
 
   const firstListSelector = "k-board k-list:first-of-type .cards";
-  const boardListsSelector = "k-board .lists";
+  // `k-board` *is* the horizontal scroller: the component sets `host: { class: "lists" }`, so the
+  // class sits on the custom element itself. The descendant form ("k-board .lists") matches nothing
+  // and the run hangs forever on the first horizontal scroll profile waiting for it to appear.
+  const boardListsSelector = "k-board.lists";
   scrollProfiles.horizontalFirstTraversal = await profileScroll("board/horizontal-scroll-first-traversal", boardListsSelector, "horizontal");
   await navigate(`/b/${BOARD_ID}`, async () => await page.locator("k-board k-list").count() >= 8 && await page.locator("k-board k-card").count() >= 200);
   scrollProfiles.firstTraversal = await profileScroll("board/vertical-scroll-first-traversal", firstListSelector);
@@ -432,7 +441,11 @@ test("large main-page baseline", async ({ page, browser }) => {
     return ((performance.now() - start) * 1_000) / runs;
   });
   interactionTimings.boardSearchMs = await page.evaluate(async () => {
-    const input = document.querySelector("k-board .bf-search-input:not([disabled])");
+    // The board's search box is the shared k-search-field in the page toolbar — a sibling of the
+    // board canvas, not a descendant of it. Throw a named error rather than let a null input surface
+    // as "Illegal invocation" from the value setter.
+    const input = document.querySelector("k-page-toolbar k-search-field input.sf-input:not([disabled])");
+    if (!(input instanceof HTMLInputElement)) throw new Error("Board search input not found: k-page-toolbar k-search-field input.sf-input");
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
     const start = performance.now();
     setter.call(input, "scenario 09"); input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -446,7 +459,7 @@ test("large main-page baseline", async ({ page, browser }) => {
   await page.evaluate(async ({ expectedCards, expectedLists }) => {
     const pause = () => new Promise((resolve) => setTimeout(resolve, 80));
     for (let attempt = 0; attempt < 40 && document.querySelectorAll("k-board k-list").length < expectedLists; attempt += 1) {
-      const lists = document.querySelector("k-board .lists");
+      const lists = document.querySelector("k-board.lists");
       lists.scrollLeft = lists.scrollWidth;
       lists.dispatchEvent(new Event("scroll"));
       await pause();
@@ -483,9 +496,9 @@ test("large main-page baseline", async ({ page, browser }) => {
     for (let index = startIndex; index < startIndex + count; index += 1) {
       const startedAt = performance.now();
       await richCardTitles.nth(index).click();
-      await expect(page.locator("k-board k-card-detail .panel")).toBeVisible({ timeout: 30_000 });
-      await page.locator("k-board k-card-detail .close-btn").click();
-      await expect(page.locator("k-board k-card-detail")).toHaveCount(0);
+      await expect(page.locator("k-card-detail .panel")).toBeVisible({ timeout: 30_000 });
+      await page.locator("k-card-detail .close-btn").click();
+      await expect(page.locator("k-card-detail")).toHaveCount(0);
       timings.push(performance.now() - startedAt);
     }
     return timings;
@@ -499,7 +512,7 @@ test("large main-page baseline", async ({ page, browser }) => {
   await collect("board/reopen-25-details", round(median(cachedDetailBatch)), { detailRunsMs: cachedDetailBatch.map((value) => round(value)) });
 
   const tableViewStartedAt = performance.now();
-  await page.locator('k-board button[aria-label="Table view"]').click();
+  await page.locator('k-segmented button[aria-label="Table view"]').click({ timeout: 30_000 });
   await expect(page.locator("k-board-table-view")).toBeVisible();
   await page.waitForTimeout(150);
   interactionTimings.boardTableViewMs = round(performance.now() - tableViewStartedAt);

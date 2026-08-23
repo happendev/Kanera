@@ -4,7 +4,7 @@ import type { ColorToken } from "@kanera/shared/colors";
 import { NOTE_ATTACHMENT_SOURCES, type NoteAttachmentRow, type NoteAttachmentSource } from "@kanera/shared/dto";
 import type { ServerToClientEvents, WireNote, WireNoteLock } from "@kanera/shared/events";
 import { internalLinks, noteAttachments, notes, users, type Note, type NoteScope } from "@kanera/shared/schema";
-import { and, asc, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
 import { assertBoardAccess, assertWorkspaceAccess } from "../../lib/access.js";
@@ -155,6 +155,16 @@ function wireNote(note: Note, clientId: string, editor: LastEditor): WireNote {
     lastEditedByName: editor.displayName,
     lastEditedByAvatarUrl: signedAvatarUrl(editor.clientId, editor.avatarUrl),
   };
+}
+
+/**
+ * Directory listings page in SQL. Notes carry full markdown bodies, so applying limit/offset in JS
+ * meant selecting every note in the workspace (or on the board) to return one page of them.
+ */
+async function pageNotes(filter: SQL | undefined, directory: { limit?: number; offset: number }): Promise<Note[]> {
+  const query = db.select().from(notes).where(filter).orderBy(asc(notes.position));
+  if (directory.limit === undefined) return query;
+  return query.limit(directory.limit).offset(directory.offset);
 }
 
 async function wireNotes(rows: Note[], clientId: string): Promise<WireNote[]> {
@@ -458,8 +468,9 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
       eq(notes.scope, query.scope),
       query.scope === "personal" ? eq(notes.ownerId, req.auth.sub) : sql`true`,
     );
-    const rows = await db.select().from(notes).where(baseFilter).orderBy(asc(notes.position));
-    const page = directory.limit === undefined ? rows : rows.slice(directory.offset, directory.offset + directory.limit);
+    // Paginate in SQL, not with slice(): notes carry full markdown bodies, so fetching every note in
+    // the workspace to return ten of them read (and transferred) the whole set for nothing.
+    const page = await pageNotes(baseFilter, directory);
     return wireNotes(page, req.auth.cid);
   });
 
@@ -475,8 +486,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
       eq(notes.scope, query.scope),
       query.scope === "personal" ? eq(notes.ownerId, req.auth.sub) : sql`true`,
     );
-    const rows = await db.select().from(notes).where(baseFilter).orderBy(asc(notes.position));
-    const page = directory.limit === undefined ? rows : rows.slice(directory.offset, directory.offset + directory.limit);
+    const page = await pageNotes(baseFilter, directory);
     return wireNotes(page, req.auth.cid);
   });
 

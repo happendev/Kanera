@@ -1,3 +1,18 @@
+// Bundle size report, and with --check a gate against apps/web/bundle-budgets.json.
+//
+// What each budget guards:
+//   initialRaw / initialBrotli   the eager startup payload — main's static import closure plus
+//                                global styles. This is the number a first paint actually waits on.
+//   totalJavaScriptBrotli        every precached script. ngsw prefetches `/*.js` so the whole app is
+//                                installed for offline use, which means this is total app weight, not
+//                                startup weight, and lazy-loading cannot reduce it — only shipping
+//                                less code can. Raise it only alongside a note on what grew and why.
+//   largestScriptRaw             keeps any single chunk from becoming a parse-time cliff.
+//   tablerFontsRaw               the icon webfont, WOFF2-only (the check also rejects fallbacks).
+//
+// The report prints the measured values, so re-baselining is: run `pnpm bundle:web:check`, take the
+// reported figure, and set the budget just above it. This runs in CI, so a regression fails on the
+// commit that causes it rather than being discovered months later.
 import { brotliCompressSync, constants as zlibConstants } from "node:zlib";
 import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";

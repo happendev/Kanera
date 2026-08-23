@@ -36,6 +36,12 @@ export interface BoardListPresentation {
 }
 type AnyList = List | WireList | BoardListPresentation;
 type AnyCard = Card | WireCard | WireCardSummary;
+// Shared empty sentinels. These feed OnPush `k-card` inputs, so returning a fresh `[]` per call
+// gave every card without labels or assignees a new input identity on every change-detection tick,
+// which defeats the very check OnPush exists to make. BoardState already does this for the same
+// reason; these two accessors were the ones that missed out.
+const EMPTY_LABELS: CardLabelPresentation[] = [];
+const EMPTY_ASSIGNEES: CardAssigneePresentation[] = [];
 const EMPTY_FIELD_VALUES = new Map<string, CardCustomFieldValue>();
 
 // Large boards (3000+ cards across 30+ lists) choke if every card mounts on open, so each
@@ -265,11 +271,11 @@ export class ListComponent implements OnDestroy {
   }
 
   labelsForCard(cardId: string): CardLabelPresentation[] {
-    return this.labelsByCard().get(cardId) ?? [];
+    return this.labelsByCard().get(cardId) ?? EMPTY_LABELS;
   }
 
   assigneesForCard(cardId: string): CardAssigneePresentation[] {
-    return this.assigneesByCard().get(cardId) ?? [];
+    return this.assigneesByCard().get(cardId) ?? EMPTY_ASSIGNEES;
   }
 
   coverUrlForCard(card: AnyCard): string | null {

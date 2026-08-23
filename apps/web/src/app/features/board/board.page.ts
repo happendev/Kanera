@@ -176,7 +176,9 @@ export class BoardPage implements OnDestroy {
     const color = board?.iconColor ?? this.workspaceAccentColor();
     return color ? `var(--color-${color})` : null;
   });
-  readonly openCardId = signal<string | null>(null);
+  // Derived, not stored: the route's card id is its only source. As a signal fed by an effect it
+  // also scheduled a second change-detection pass on every navigation for no reason.
+  readonly openCardId = computed(() => this.cardId() ?? null);
   readonly showBackground = signal(false);
   readonly membersPopoverOpen = signal(false);
   readonly watcherPopoverOpen = signal(false);
@@ -933,10 +935,6 @@ export class BoardPage implements OnDestroy {
       void this.refreshMirrorStatus(boardId);
     });
 
-    effect(() => {
-      this.openCardId.set(this.cardId() ?? null);
-    });
-
     // Capture the last-known summary of the open card while it still resolves from the live
     // collection. Reads only openCardInCollection (never openCardHeld), so there is no feedback loop.
     effect(() => {
@@ -956,18 +954,16 @@ export class BoardPage implements OnDestroy {
       this.state.assignableMembers.set(this.assignableMembers());
     });
 
+    // Prune the bulk selection down to rows that are still on screen.
+    //
+    // `activeCards()` is the trigger and is read tracked, but the selection is read inside
+    // `untracked`: this effect *writes* that signal, and a tracked read scheduled a second, always
+    // no-op pass on every prune. Reading the selection first also means the Set over every card is
+    // only built when something is actually selected — previously it was rebuilt over all 1,000+
+    // cards on every realtime card event and every search keystroke, then thrown away.
     effect(() => {
-      const visibleIds = new Set(this.activeCards().map((card) => card.id));
-      const selected = this.bulkSelectedCardIds();
-      if (selected.size === 0) return;
-      const next = new Set([...selected].filter((id) => visibleIds.has(id)));
-      if (next.size !== selected.size) {
-        this.bulkSelectedCardIds.set(next);
-        if (this.lastBulkSelectedCardId() && !next.has(this.lastBulkSelectedCardId()!)) {
-          this.lastBulkSelectedCardId.set(null);
-        }
-        if (next.size === 0) this.closeBulkMenu();
-      }
+      const cards = this.activeCards();
+      untracked(() => this.pruneBulkSelection(cards));
     });
 
     effect((onCleanup) => {
@@ -1985,6 +1981,19 @@ export class BoardPage implements OnDestroy {
     event.stopPropagation();
     if (this.bulkSelectedCount() === 0) return;
     this.bulkMenuPoint.set({ x: event.clientX, y: event.clientY });
+  }
+
+  /** Drop selected ids that are no longer rendered. Called untracked; see the effect above. */
+  private pruneBulkSelection(cards: readonly AnyCard[]): void {
+    const selected = this.bulkSelectedCardIds();
+    if (selected.size === 0) return;
+    const visibleIds = new Set(cards.map((card) => card.id));
+    const next = new Set([...selected].filter((id) => visibleIds.has(id)));
+    if (next.size === selected.size) return;
+    this.bulkSelectedCardIds.set(next);
+    const lastSelected = this.lastBulkSelectedCardId();
+    if (lastSelected && !next.has(lastSelected)) this.lastBulkSelectedCardId.set(null);
+    if (next.size === 0) this.closeBulkMenu();
   }
 
   closeBulkMenu() {
