@@ -490,6 +490,15 @@ The generated demo password is rotated and shown once after every reset.
 For normal updates, push or pull the latest code and redeploy the application in
 Dokploy. Dokploy rebuilds the changed services from `docker-compose.yml`.
 
+A Dokploy redeploy runs `docker compose up -d`, which recreates any service whose
+image digest has moved. Because every third-party image is pinned to an exact patch
+version, that cannot happen as a side effect of shipping application code — Postgres,
+Valkey, and the monitoring stack only change when a commit changes the pinned tag.
+Merge the weekly Dependabot image PRs to pick up upstream security patches; the next
+redeploy then applies them, and reverting the commit rolls the version back. Database
+contents live in the `kanera_pgdata` volume, so recreating the Postgres container on a
+minor upgrade does not lose data.
+
 ## Troubleshooting
 
 - If login works briefly and then users are signed out, confirm

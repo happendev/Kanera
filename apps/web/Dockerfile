@@ -1,4 +1,4 @@
-FROM node:24.18.0-alpine AS build
+FROM node:24.19.0-alpine AS build
 # Hydrate Corepack before dependency installation so the build does not rely on an
 # implicit package-manager download at the first `pnpm` invocation.
 ENV COREPACK_DEFAULT_TO_LATEST=0
@@ -15,7 +15,7 @@ COPY packages/shared packages/shared
 COPY apps/web apps/web
 RUN pnpm --filter @kanera/web build
 
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.30.4-alpine AS runtime
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /repo/apps/web/dist/web/browser /usr/share/nginx/html
 EXPOSE 80

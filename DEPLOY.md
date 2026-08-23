@@ -372,6 +372,22 @@ docker compose up -d --build api public-api mcp web
 If a release includes new database migrations, the rebuilt `api` service applies
 them before starting.
 
+Postgres, Valkey, and the monitoring images are pinned to exact patch versions in
+`docker-compose.yml`, so the command above never moves them — it only rebuilds the
+application services. That is deliberate: a routine code deploy should not restart
+your database. Those versions move when you merge a Dependabot image PR, which
+changes the pinned tag in the repository. After pulling such a change, recreate the
+affected service explicitly:
+
+```bash
+docker compose up -d postgres
+```
+
+Data lives in the `kanera_pgdata` volume, not in the container, so recreating the
+Postgres container preserves the database. Postgres *minor* upgrades (18.6 to 18.7)
+are safe in place; a *major* upgrade (18 to 19) requires `pg_upgrade` or a
+dump-and-restore and is never proposed automatically.
+
 ## Backups
 
 For the bundled Postgres container:

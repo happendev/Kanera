@@ -2,9 +2,15 @@
 # uses the same value below to restrict Docker log discovery to this Kanera deployment.
 name: ${COMPOSE_PROJECT_NAME:-kanera}
 
+# Third-party images are pinned to exact patch versions on purpose. Dokploy redeploys run
+# `docker compose up -d`, which recreates any service whose image digest moved, so a floating tag
+# would let Postgres, Valkey, or the monitoring stack jump versions during a deploy that was only
+# meant to ship application code. Patch bumps arrive as reviewable Dependabot PRs instead
+# (see .github/dependabot.yml) so an upgrade is always a commit that can be reverted.
+
 services:
   postgres:
-    image: postgres:18-alpine
+    image: postgres:18.6-alpine
     restart: unless-stopped
     # pg_stat_statements must be loaded at server start via shared_preload_libraries; CREATE EXTENSION
     # alone is not enough. track=top records top-level statements (not every nested statement) to keep
@@ -33,7 +39,7 @@ services:
       retries: 10
 
   valkey:
-    image: valkey/valkey:9.1.0-alpine
+    image: valkey/valkey:9.1.1-alpine
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
@@ -51,6 +57,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+      pull: true
     command: ["node", "--import", "tsx", "src/scripts/migrate.ts"]
     environment:
       NODE_ENV: production
@@ -91,6 +98,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+      pull: true
     # Migrations run once in the dedicated `migrate` service (see depends_on); replicas just start.
     command: ["node", "--import", "tsx", "src/index.ts"]
     environment:
@@ -224,6 +232,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+      pull: true
     command: ["node", "--import", "tsx", "src/worker-index.ts"]
     environment:
       NODE_ENV: production
@@ -341,6 +350,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+      pull: true
     command: ["node", "--import", "tsx", "src/public-api-index.ts"]
     environment:
       NODE_ENV: production
@@ -463,6 +473,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+      pull: true
     command: ["node", "--import", "tsx", "src/admin-index.ts"]
     environment:
       NODE_ENV: production
@@ -543,6 +554,7 @@ services:
     build:
       context: .
       dockerfile: apps/mcp/Dockerfile
+      pull: true
     environment:
       NODE_ENV: production
       KANERA_PUBLIC_API_URL: http://public-api:3001
@@ -582,6 +594,7 @@ services:
     build:
       context: .
       dockerfile: docker/db-backup/Dockerfile
+      pull: true
     environment:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:-postgres://kanera:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/kanera}
@@ -604,6 +617,7 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      pull: true
     depends_on:
       api:
         condition: service_healthy
@@ -624,6 +638,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+      pull: true
     command: ["node", "--import", "tsx", "src/scripts/send-deployment-ready.ts"]
     environment:
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
@@ -650,7 +665,7 @@ services:
   # ---------------------------------------------------------------------------
 
   prometheus:
-    image: prom/prometheus:v3.12.0
+    image: prom/prometheus:v3.14.0
     restart: unless-stopped
     profiles: ["monitoring"]
     # Runs as root so it can both write the scrape token file and own the TSDB volume without a
@@ -694,7 +709,7 @@ services:
       - api
 
   grafana:
-    image: grafana/grafana:13.0.2
+    image: grafana/grafana:13.2.0
     restart: unless-stopped
     profiles: ["monitoring"]
     entrypoint:
@@ -742,7 +757,7 @@ services:
       - loki
 
   loki:
-    image: grafana/loki:3.7.3
+    image: grafana/loki:3.7.6
     restart: unless-stopped
     profiles: ["monitoring"]
     command: ["-config.file=/etc/loki/local-config.yaml"]
@@ -753,7 +768,7 @@ services:
       - "3100"
 
   alloy:
-    image: grafana/alloy:v1.17.0
+    image: grafana/alloy:v1.18.1
     restart: unless-stopped
     profiles: ["monitoring"]
     command:
@@ -777,7 +792,7 @@ services:
       - loki
 
   postgres-exporter:
-    image: quay.io/prometheuscommunity/postgres-exporter:v0.19.1
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
     restart: unless-stopped
     profiles: ["monitoring"]
     environment:
@@ -795,7 +810,7 @@ services:
 
   cadvisor:
     # cAdvisor releases moved from gcr.io to GHCR starting with v0.53.0.
-    image: ghcr.io/google/cadvisor:v0.60.3
+    image: ghcr.io/google/cadvisor:v0.60.5
     restart: unless-stopped
     profiles: ["monitoring"]
     # cAdvisor needs broad read access to the host's cgroup/container state for per-container CPU/mem.
@@ -816,7 +831,7 @@ services:
       - "8080"
 
   node-exporter:
-    image: prom/node-exporter:v1.11.1
+    image: prom/node-exporter:v1.12.1
     restart: unless-stopped
     profiles: ["monitoring"]
     command:
@@ -828,7 +843,7 @@ services:
       - "9100"
 
   redis-exporter:
-    image: oliver006/redis_exporter:v1.86.0
+    image: oliver006/redis_exporter:v1.89.0
     restart: unless-stopped
     profiles: ["monitoring"]
     environment:

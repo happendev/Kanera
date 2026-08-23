@@ -2,7 +2,7 @@ name: kanera
 
 services:
   postgres:
-    image: postgres:18-alpine
+    image: postgres:18.6-alpine
     container_name: kanera-postgres
     restart: unless-stopped
     # Mirrors docker-compose.yml: pg_stat_statements must be loaded at server start via
@@ -32,7 +32,7 @@ services:
       retries: 10
 
   valkey:
-    image: valkey/valkey:9.1.0-alpine
+    image: valkey/valkey:9.1.1-alpine
     container_name: kanera-valkey
     restart: unless-stopped
     ports:

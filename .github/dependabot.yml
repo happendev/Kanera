@@ -19,3 +19,34 @@ updates:
       - dependency-name: "*"
         update-types:
           - version-update:semver-major
+
+  # Container base images are pinned to exact patch versions (see the note in docker-compose.yml),
+  # so these two entries are the only mechanism that surfaces upstream security patches. Unlike the
+  # npm and github-actions entries above, they must keep a non-zero PR limit or pinned images would
+  # never be updated at all. List each Dockerfile directory explicitly: `directory` does not glob.
+  - package-ecosystem: docker
+    directories:
+      - /apps/api
+      - /apps/mcp
+      - /apps/web
+      - /docker/db-backup
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    ignore:
+      # Major bumps change runtimes and on-disk formats (Postgres majors need pg_upgrade, Node majors
+      # must move with `engines`/.nvmrc), so they stay a deliberate, hand-reviewed migration.
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+
+  # Scans the `image:` keys in docker-compose.yml, docker-compose.dev.yml, and docker-compose.test.yml.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major

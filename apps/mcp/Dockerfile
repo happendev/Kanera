@@ -1,4 +1,4 @@
-FROM node:24.18.0-alpine AS base
+FROM node:24.19.0-alpine AS base
 # Keep pnpm in the reusable image layer instead of downloading it on demand in
 # each dependency stage.
 ENV COREPACK_DEFAULT_TO_LATEST=0
