@@ -257,6 +257,9 @@ services:
       JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-10}
       API_PUBLIC_URL: ${API_PUBLIC_URL:-${WEB_ORIGIN}}
       WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN in .env}
+      # Recipient for the Monday 07:00 UTC system recap (also seeds the first admin account).
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_WEB_ORIGIN: ${ADMIN_WEB_ORIGIN:-http://localhost:4300}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:?set COOKIE_DOMAIN in .env}
       COOKIE_SECURE: ${COOKIE_SECURE:?set COOKIE_SECURE in .env}
       KANERA_ENVIRONMENT: ${KANERA_ENVIRONMENT:-production}

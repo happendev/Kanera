@@ -210,8 +210,9 @@ ADMIN_COOKIE_DOMAIN=
 
 **First superadmin.** There is no manual insert step. On every boot, the admin server seeds exactly one
 `superadmin` from `ADMIN_EMAIL`/`ADMIN_PASSWORD` if the `admin_user` table is still empty; once any
-admin account exists, this is a permanent no-op regardless of what those env vars still hold. Set them
-before the admin-api's first boot:
+admin account exists, this is a permanent no-op regardless of what those env vars still hold. The
+worker also sends a system recap to `ADMIN_EMAIL` every Monday at 07:00 UTC. Set both values before
+the admin-api's first boot:
 
 ```bash
 ADMIN_EMAIL=ops@example.com
@@ -569,7 +570,8 @@ staff, demo, seed, test, and load-test organisations.
 | `ADMIN_JWT_SECRET` | required to run the admin-api | Stable random secret for the management portal's own sessions. Must differ from `JWT_SECRET` (enforced at startup). |
 | `ADMIN_WEB_ORIGIN` | required to run the admin-api | Public origin of the admin console, for example `https://admin.kanera.example.com`. Also the CORS origin and the base for admin invite links. |
 | `ADMIN_COOKIE_DOMAIN` | no | Admin refresh-cookie domain override. Set this when the admin portal hostname is outside `COOKIE_DOMAIN`, for example `kanera-admin.example.com` while `COOKIE_DOMAIN=kanera.example.com`. |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | required for first boot only | Seeds exactly one `superadmin` account when `admin_user` is empty. Permanent no-op once any admin account exists — invite further admins from the console afterward. |
+| `ADMIN_EMAIL` | recommended | Receives the weekly system recap every Monday at 07:00 UTC. With `ADMIN_PASSWORD`, also seeds the first `superadmin` when `admin_user` is empty. |
+| `ADMIN_PASSWORD` | required for first boot only | Used with `ADMIN_EMAIL` to seed the first `superadmin`; permanent no-op once any admin exists. |
 | `ADMIN_JWT_ACCESS_TTL` | no | Defaults to `15m`. |
 | `ADMIN_JWT_REFRESH_TTL_DAYS` | no | Defaults to `7`. |
 | `ADMIN_LOGIN_RATE_LIMIT_MAX` / `ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS` | no | Per-IP admin login throttle. Default `5` attempts per `300000`ms. |

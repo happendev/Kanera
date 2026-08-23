@@ -469,7 +469,8 @@ After the domain is configured, check
 
 **First superadmin.** There is no manual insert step — on every boot the admin server seeds exactly one
 `superadmin` from `ADMIN_EMAIL`/`ADMIN_PASSWORD` if the `admin_user` table is still empty, and is a
-permanent no-op afterward regardless of what those vars still hold:
+permanent no-op afterward regardless of what those vars still hold. The worker also sends its weekly
+system recap to `ADMIN_EMAIL` every Monday at 07:00 UTC:
 
 ```bash
 ADMIN_EMAIL=ops@example.com

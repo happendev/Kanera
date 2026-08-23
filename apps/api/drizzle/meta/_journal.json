@@ -421,6 +421,13 @@
       "when": 1787503009244,
       "tag": "0059_cultured_boomerang",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1787521133840,
+      "tag": "0060_fluffy_frightful_four",
+      "breakpoints": true
     }
   ]
 }

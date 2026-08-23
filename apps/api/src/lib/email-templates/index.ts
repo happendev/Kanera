@@ -36,6 +36,8 @@ export type { ChecklistItemOverdueEmailParams } from "./card-checklist-item-over
 export { emailLayout } from "./layout.js";
 export { dailyDigestEmail } from "./daily-digest.js";
 export type { DailyDigestCardItem, DailyDigestEmailParams } from "./daily-digest.js";
+export { weeklyAdminRecapEmail } from "./weekly-admin-recap.js";
+export type { WeeklyAdminRecapEmailParams } from "./weekly-admin-recap.js";
 export { inviteAcceptedEmail } from "./invite-accepted.js";
 export type { InviteAcceptedEmailParams } from "./invite-accepted.js";
 export { passwordResetEmail } from "./password-reset.js";
