@@ -794,22 +794,68 @@ services:
     depends_on:
       - loki
 
+  # Creates the least-privilege `kanera_exporter` role before the exporter tries to log in. Follows
+  # the same one-shot pattern as `migrate`: the SQL is idempotent, so this runs to completion on
+  # every monitoring deploy and is a no-op once the role exists. Provisioning it here rather than in
+  # docker/postgres/init.sql matters because init.sql only runs when the data directory is first
+  # created — an existing deployment enabling monitoring would never get the role.
+  postgres-exporter-init:
+    image: postgres:18.6-alpine
+    restart: "no"
+    profiles: ["monitoring"]
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      # Delivered as a connection-time GUC rather than a psql variable so the exporter password is
+      # never part of a SQL statement — see the comment in exporter-role.sql for why that matters.
+      PGOPTIONS: -c kanera.exporter_password=${POSTGRES_EXPORTER_PASSWORD:-${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}}
+    command:
+      - "psql"
+      - "--host=postgres"
+      - "--username=kanera"
+      - "--dbname=kanera"
+      - "--no-password"
+      - "--set=ON_ERROR_STOP=1"
+      - "--file=/sql/exporter-role.sql"
+    volumes:
+      - ./docker/monitoring/exporter-role.sql:/sql/exporter-role.sql:ro,Z
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   postgres-exporter:
     image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
     restart: unless-stopped
     profiles: ["monitoring"]
+    # pg_stat_statements comes from the exporter's built-in collector. The older
+    # PG_EXPORTER_EXTEND_QUERY_PATH mechanism is deprecated upstream and logs a warning on every
+    # start; it will be removed in some future 0.x release, and this exporter floats no tag to
+    # cushion that. Metric names differ from the custom-query version
+    # (calls -> calls_total, total_exec_time_seconds -> seconds_total) and the query text moves to a
+    # separate pg_stat_statements_query_id series keyed by queryid — the query-performance dashboard
+    # joins the two on that label.
+    command:
+      - "--collector.stat_statements"
+      # Without include_query the exporter emits queryids only, which makes the dashboard unreadable.
+      - "--collector.stat_statements.include_query"
+      # Matches the truncation the previous custom query applied via left(query, 200).
+      - "--collector.stat_statements.query_length=200"
+      # Bounds series cardinality: one queryid can produce six metric families. The old custom query
+      # had no limit at all and exported every statement Postgres had ever seen.
+      - "--collector.stat_statements.limit=250"
+      # Drops the exporter's own pg_stat_* scrape queries, which otherwise dominate the slowest-query
+      # panels. See docker/monitoring/exporter-role.sql for why this must filter by role, not text.
+      - "--collector.stat_statements.exclude_users=kanera_exporter"
     environment:
-      DATA_SOURCE_NAME: ${POSTGRES_EXPORTER_DSN:-postgresql://kanera:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/kanera?sslmode=disable}
+      DATA_SOURCE_NAME: ${POSTGRES_EXPORTER_DSN:-postgresql://kanera_exporter:${POSTGRES_EXPORTER_PASSWORD:-${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}}@postgres:5432/kanera?sslmode=disable}
       # Hide Postgres system databases from dashboards — only the app database is relevant.
       PG_EXPORTER_EXCLUDE_DATABASES: template0,template1,postgres
-      PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yml
-    volumes:
-      - ./docker/monitoring/postgres-queries.yml:/etc/postgres-exporter/queries.yml:ro,Z
     expose:
       - "9187"
     depends_on:
       postgres:
         condition: service_healthy
+      postgres-exporter-init:
+        condition: service_completed_successfully
 
   cadvisor:
     # cAdvisor releases moved from gcr.io to GHCR starting with v0.53.0.

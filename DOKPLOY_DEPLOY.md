@@ -411,9 +411,16 @@ docker compose exec -T postgres psql -U kanera -d kanera \
   -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;"
 ```
 
+`postgres-exporter` connects as `kanera_exporter`, a dedicated role that holds
+only `pg_monitor` instead of the application role's full access. The
+`postgres-exporter-init` service provisions that role on every monitoring
+deploy, so no manual SQL is needed; set `POSTGRES_EXPORTER_PASSWORD` to give it
+a credential separate from `POSTGRES_PASSWORD`.
+
 If you use a managed Postgres instead of the bundled service, set
-`POSTGRES_EXPORTER_DSN` to its connection string and ensure `pg_stat_statements`
-is enabled there.
+`POSTGRES_EXPORTER_DSN` to its connection string, ensure `pg_stat_statements` is
+enabled there, and grant that role `pg_monitor` (or equivalent read-all-stats
+rights) yourself — the init service only provisions the bundled database.
 
 ## 7. Enable auto deploys
 

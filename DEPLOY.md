@@ -542,6 +542,20 @@ docker compose exec -T postgres psql -U kanera -d kanera -c \
    from pg_stat_statements order by total_exec_time desc limit 15;"
 ```
 
+The **Postgres Query Performance** dashboard reads the same data through
+`postgres-exporter`. That exporter connects as `kanera_exporter`, a dedicated
+role holding only `pg_monitor` rather than the application role's full access.
+The `postgres-exporter-init` service creates and updates that role from
+`docker/monitoring/exporter-role.sql` every time the monitoring profile starts,
+so enabling monitoring on an existing database needs no manual SQL — but note
+the exporter will not start until that one-shot service has completed
+successfully.
+
+Query text on that dashboard is truncated to 200 characters, and the exporter's
+own scrape queries are excluded by role so they cannot crowd out application
+traffic. DDL and migration statements are filtered out in the dashboard queries;
+use the `psql` command above when you need to see those.
+
 ## Environment Reference
 
 ### Product analytics (Kanera Cloud only)
@@ -620,7 +634,8 @@ staff, demo, seed, test, and load-test organisations.
 | `PROMETHEUS_RETENTION` | no | Prometheus TSDB time retention. Defaults to `30d`. |
 | `PROMETHEUS_RETENTION_SIZE` | no | Hard disk ceiling for the Prometheus TSDB (oldest blocks drop once exceeded). Defaults to `5GB`. |
 | `GRAFANA_ROOT_URL` | no | Public Grafana URL; set when serving Grafana under a path/subdomain. |
-| `POSTGRES_EXPORTER_DSN` | no | Postgres connection string for `postgres-exporter`. Defaults to the bundled Postgres. |
+| `POSTGRES_EXPORTER_PASSWORD` | no | Password for the dedicated `kanera_exporter` monitoring role. Defaults to `POSTGRES_PASSWORD`. |
+| `POSTGRES_EXPORTER_DSN` | no | Overrides the whole `postgres-exporter` connection string (e.g. a managed Postgres). Defaults to the bundled Postgres via the `kanera_exporter` role. |
 | `SMTP_HOST` | no | Default outbound SMTP host. |
 | `SMTP_PORT` | no | Defaults to `587`. |
 | `SMTP_SECURITY` | no | `starttls`, `tls`, or `none`. |

@@ -1,44 +1,115 @@
 {
   "uid": "kanera-postgres-queries",
   "title": "Kanera — Postgres Query Performance",
-  "description": "Application SQL activity reported by pg_stat_statements for the selected dashboard range.",
-  "tags": ["kanera", "postgres", "performance"],
+  "description": "Application SQL activity reported by pg_stat_statements for the selected dashboard range. Timing metrics come from postgres-exporter's built-in stat_statements collector, which keys them by queryid; each panel joins pg_stat_statements_query_id on that label to recover the SQL text. The exporter's own scrape queries are excluded at source via its exclude_users flag (see docker/monitoring/exporter-role.sql), so the regexes here only drop DDL and migrations.",
+  "tags": [
+    "kanera",
+    "postgres",
+    "performance"
+  ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 3,
+  "version": 4,
   "refresh": "30s",
-  "time": { "from": "now-6h", "to": "now" },
-  "templating": { "list": [] },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
   "panels": [
     {
       "id": 1,
       "title": "Slowest queries — mean execution time",
       "description": "Application statements with the highest average execution time during the selected dashboard range. Statements with no calls in the range are omitted.",
       "type": "table",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 9 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
       "fieldConfig": {
         "defaults": {},
         "overrides": [
-          { "matcher": { "id": "byName", "options": "query" }, "properties": [{ "id": "custom.width", "value": 1100 }] },
-          { "matcher": { "id": "byName", "options": "Value" }, "properties": [{ "id": "unit", "value": "s" }, { "id": "decimals", "value": 4 }, { "id": "displayName", "value": "Mean time" }] }
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "query"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 1100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "decimals",
+                "value": 4
+              },
+              {
+                "id": "displayName",
+                "value": "Mean time"
+              }
+            ]
+          }
         ]
       },
-      "options": { "showHeader": true, "cellHeight": "sm", "sortBy": [{ "displayName": "Mean time", "desc": true }] },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "Mean time",
+            "desc": true
+          }
+        ]
+      },
       "transformations": [
         {
           "id": "organize",
           "options": {
-            "excludeByName": { "Time": true, "__name__": true, "database_id": true, "instance": true, "job": true, "query_id": true, "server": true, "top_level": true, "user_id": true },
-            "indexByName": { "query": 0, "Value": 1 }
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true,
+              "server": true,
+              "datname": true,
+              "queryid": true,
+              "user": true
+            },
+            "indexByName": {
+              "query": 0,
+              "Value": 1
+            }
           }
         }
       ],
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "topk(10, (increase(pg_stat_statements_total_exec_time_seconds{query!~\"(?i)^(SELECT current_database[(][)] datname, schemaname, relname,|SELECT name, setting, COALESCE[(]unit,)\"}[$__range]) / clamp_min(increase(pg_stat_statements_calls{query!~\"(?i)^(SELECT current_database[(][)] datname, schemaname, relname,|SELECT name, setting, COALESCE[(]unit,)\"}[$__range]), 1)) and increase(pg_stat_statements_calls{query!~\"(?i)^(SELECT current_database[(][)] datname, schemaname, relname,|SELECT name, setting, COALESCE[(]unit,)\"}[$__range]) > 0)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "topk(10, ((increase(pg_stat_statements_seconds_total[$__range]) / clamp_min(increase(pg_stat_statements_calls_total[$__range]), 1)) and increase(pg_stat_statements_calls_total[$__range]) > 0) + on(queryid) group_left(query) (pg_stat_statements_query_id{query!~\"(?is)[[:space:]]*(DO|COPY|CREATE|ALTER|DROP|TRUNCATE|COMMENT|GRANT|REVOKE|VACUUM|ANALYZE|REINDEX|CLUSTER|CHECKPOINT|SET|SHOW|RESET|DISCARD|BEGIN|START[[:space:]]+TRANSACTION|COMMIT|ROLLBACK).*\",query!~\"(?is).*__drizzle_migrations.*\"} * 0))",
           "format": "table",
           "instant": true
         }
@@ -49,30 +120,92 @@
       "title": "Highest total database time",
       "description": "Application statements responsible for the most execution time during the selected dashboard range.",
       "type": "table",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 19 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      },
       "fieldConfig": {
         "defaults": {},
         "overrides": [
-          { "matcher": { "id": "byName", "options": "query" }, "properties": [{ "id": "custom.width", "value": 1100 }] },
-          { "matcher": { "id": "byName", "options": "Value" }, "properties": [{ "id": "unit", "value": "s" }, { "id": "decimals", "value": 2 }, { "id": "displayName", "value": "Total time" }] }
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "query"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 1100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "displayName",
+                "value": "Total time"
+              }
+            ]
+          }
         ]
       },
-      "options": { "showHeader": true, "cellHeight": "sm", "sortBy": [{ "displayName": "Total time", "desc": true }] },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "Total time",
+            "desc": true
+          }
+        ]
+      },
       "transformations": [
         {
           "id": "organize",
           "options": {
-            "excludeByName": { "Time": true, "__name__": true, "database_id": true, "instance": true, "job": true, "query_id": true, "server": true, "top_level": true, "user_id": true },
-            "indexByName": { "query": 0, "Value": 1 }
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true,
+              "server": true,
+              "datname": true,
+              "queryid": true,
+              "user": true
+            },
+            "indexByName": {
+              "query": 0,
+              "Value": 1
+            }
           }
         }
       ],
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "topk(10, increase(pg_stat_statements_total_exec_time_seconds{query!~\"(?i)^(SELECT current_database[(][)] datname, schemaname, relname,|SELECT name, setting, COALESCE[(]unit,)\"}[$__range]) and increase(pg_stat_statements_calls{query!~\"(?i)^(SELECT current_database[(][)] datname, schemaname, relname,|SELECT name, setting, COALESCE[(]unit,)\"}[$__range]) > 0)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "topk(10, (increase(pg_stat_statements_seconds_total[$__range]) and increase(pg_stat_statements_calls_total[$__range]) > 0) + on(queryid) group_left(query) (pg_stat_statements_query_id{query!~\"(?is)[[:space:]]*(DO|COPY|CREATE|ALTER|DROP|TRUNCATE|COMMENT|GRANT|REVOKE|VACUUM|ANALYZE|REINDEX|CLUSTER|CHECKPOINT|SET|SHOW|RESET|DISCARD|BEGIN|START[[:space:]]+TRANSACTION|COMMIT|ROLLBACK).*\",query!~\"(?is).*__drizzle_migrations.*\"} * 0))",
           "format": "table",
           "instant": true
         }
@@ -83,30 +216,92 @@
       "title": "Most frequently called queries",
       "description": "Application statements called most often during the selected dashboard range.",
       "type": "table",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 29 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 29
+      },
       "fieldConfig": {
         "defaults": {},
         "overrides": [
-          { "matcher": { "id": "byName", "options": "query" }, "properties": [{ "id": "custom.width", "value": 1100 }] },
-          { "matcher": { "id": "byName", "options": "Value" }, "properties": [{ "id": "unit", "value": "short" }, { "id": "decimals", "value": 0 }, { "id": "displayName", "value": "Calls" }] }
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "query"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 1100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "displayName",
+                "value": "Calls"
+              }
+            ]
+          }
         ]
       },
-      "options": { "showHeader": true, "cellHeight": "sm", "sortBy": [{ "displayName": "Calls", "desc": true }] },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "Calls",
+            "desc": true
+          }
+        ]
+      },
       "transformations": [
         {
           "id": "organize",
           "options": {
-            "excludeByName": { "Time": true, "__name__": true, "database_id": true, "instance": true, "job": true, "query_id": true, "server": true, "top_level": true, "user_id": true },
-            "indexByName": { "query": 0, "Value": 1 }
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true,
+              "server": true,
+              "datname": true,
+              "queryid": true,
+              "user": true
+            },
+            "indexByName": {
+              "query": 0,
+              "Value": 1
+            }
           }
         }
       ],
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "topk(10, increase(pg_stat_statements_calls{query!~\"(?i)^(SELECT current_database[(][)] datname, schemaname, relname,|SELECT name, setting, COALESCE[(]unit,)\"}[$__range]) > 0)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "topk(10, (increase(pg_stat_statements_calls_total[$__range]) > 0) + on(queryid) group_left(query) (pg_stat_statements_query_id{query!~\"(?is)[[:space:]]*(DO|COPY|CREATE|ALTER|DROP|TRUNCATE|COMMENT|GRANT|REVOKE|VACUUM|ANALYZE|REINDEX|CLUSTER|CHECKPOINT|SET|SHOW|RESET|DISCARD|BEGIN|START[[:space:]]+TRANSACTION|COMMIT|ROLLBACK).*\",query!~\"(?is).*__drizzle_migrations.*\"} * 0))",
           "format": "table",
           "instant": true
         }
@@ -117,15 +312,38 @@
       "title": "Mean execution time trend",
       "description": "Rolling average application-query latency calculated from execution-time and call counters. The displayed fingerprints may change as the top ten changes.",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
-      "fieldConfig": { "defaults": { "unit": "s", "decimals": 4 }, "overrides": [] },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true } },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 4
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "topk(10, (rate(pg_stat_statements_total_exec_time_seconds{query!~\"(?i)^(SELECT current_database[(][)] datname, schemaname, relname,|SELECT name, setting, COALESCE[(]unit,)\"}[$__rate_interval]) / clamp_min(rate(pg_stat_statements_calls{query!~\"(?i)^(SELECT current_database[(][)] datname, schemaname, relname,|SELECT name, setting, COALESCE[(]unit,)\"}[$__rate_interval]), 0.000000001)) and rate(pg_stat_statements_calls{query!~\"(?i)^(SELECT current_database[(][)] datname, schemaname, relname,|SELECT name, setting, COALESCE[(]unit,)\"}[$__rate_interval]) > 0)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "topk(10, ((rate(pg_stat_statements_seconds_total[$__rate_interval]) / clamp_min(rate(pg_stat_statements_calls_total[$__rate_interval]), 0.000000001)) and rate(pg_stat_statements_calls_total[$__rate_interval]) > 0) + on(queryid) group_left(query) (pg_stat_statements_query_id{query!~\"(?is)[[:space:]]*(DO|COPY|CREATE|ALTER|DROP|TRUNCATE|COMMENT|GRANT|REVOKE|VACUUM|ANALYZE|REINDEX|CLUSTER|CHECKPOINT|SET|SHOW|RESET|DISCARD|BEGIN|START[[:space:]]+TRANSACTION|COMMIT|ROLLBACK).*\",query!~\"(?is).*__drizzle_migrations.*\"} * 0))",
           "legendFormat": "{{query}}"
         }
       ]
@@ -135,15 +353,38 @@
       "title": "Query call rate",
       "description": "Application-query executions per second over Grafana's automatically selected rate interval for the ten busiest fingerprints.",
       "type": "timeseries",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 0 },
-      "fieldConfig": { "defaults": { "unit": "ops", "decimals": 2 }, "overrides": [] },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true } },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "topk(10, rate(pg_stat_statements_calls{query!~\"(?i)^(SELECT current_database[(][)] datname, schemaname, relname,|SELECT name, setting, COALESCE[(]unit,)\"}[$__rate_interval]) > 0)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "topk(10, (rate(pg_stat_statements_calls_total[$__rate_interval]) > 0) + on(queryid) group_left(query) (pg_stat_statements_query_id{query!~\"(?is)[[:space:]]*(DO|COPY|CREATE|ALTER|DROP|TRUNCATE|COMMENT|GRANT|REVOKE|VACUUM|ANALYZE|REINDEX|CLUSTER|CHECKPOINT|SET|SHOW|RESET|DISCARD|BEGIN|START[[:space:]]+TRANSACTION|COMMIT|ROLLBACK).*\",query!~\"(?is).*__drizzle_migrations.*\"} * 0))",
           "legendFormat": "{{query}}"
         }
       ]
