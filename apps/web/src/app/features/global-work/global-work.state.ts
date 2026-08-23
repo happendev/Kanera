@@ -977,14 +977,22 @@ export class GlobalWorkState {
     if (!card) return;
     const board = this.catalog().boards.find((candidate) => candidate.id === card.boardId);
     if (!board) return;
+    const list = this.catalog().lists.find((candidate) => candidate.id === card.listId) ?? null;
     this.myPriorities.rememberCandidate({
       id: card.id,
       title: card.title,
+      key: card.key,
       boardId: card.boardId,
       boardName: board.name,
       boardIcon: board.icon,
       boardIconColor: board.iconColor,
-      listName: this.catalog().lists.find((list) => list.id === card.listId)?.name ?? "",
+      listId: card.listId,
+      listName: list?.name ?? "",
+      listIcon: list?.icon ?? null,
+      listColor: list?.color ?? null,
+      dueDateLocalDate: card.dueDateLocalDate ?? null,
+      dueDateSlot: card.dueDateSlot ?? null,
+      dueDateTimezone: card.dueDateTimezone ?? null,
     });
   }
 

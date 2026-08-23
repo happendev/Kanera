@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from "@angular/core";
 import type { WorkCatalog, WorkPrioritiesResponse } from "@kanera/shared/dto";
 import { AnchoredPickerPopover } from "../../shared/anchored-picker.popover";
+import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import type { PickerGroup } from "../../shared/picker-list.component";
 import { priorityAddGroups, type PriorityAddableCard } from "../../shared/priority-queue/priority-add-cards";
 import {
@@ -38,6 +39,8 @@ export type UpNextAddableCard = PriorityAddableCard;
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class UpNextPanelComponent {
+  protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
+
   readonly priorities = input<WorkPrioritiesResponse | null>(null);
   /** For board/list names on optimistic rows, whose server-resolved `context` has not arrived. */
   readonly catalog = input<WorkCatalog | null>(null);
@@ -68,7 +71,9 @@ export class UpNextPanelComponent {
   readonly totalCount = computed(() => this.priorities()?.totalCount ?? 0);
   readonly atCapacity = computed(() => this.totalCount() >= this.maxEntries());
   readonly canReorder = computed(() => this.canDrag() && (this.priorities()?.canReorder ?? false));
-  readonly addGroups = computed<PickerGroup[]>(() => priorityAddGroups(this.addableCards()));
+  readonly addGroups = computed<PickerGroup[]>(() =>
+    priorityAddGroups(this.addableCards(), { showCardKeys: this.showCardKeys() })
+  );
 
   /** The header "+" picker. The inline "Add card" under the last row is the queue's own. */
   readonly headAddOpen = signal(false);

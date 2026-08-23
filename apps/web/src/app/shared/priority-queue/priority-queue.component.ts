@@ -28,6 +28,13 @@ type QueueRow = {
   boardIconColor: string | null;
   listName: string;
   /**
+   * The list's own icon and colour, resolved the same way the board's are. A queued card's list *is*
+   * its state, so the row states it in the list's own colour rather than as the grey tail of a
+   * board·list trail — the same treatment the notifications drawer's breadcrumb gives it.
+   */
+  listIconClass: string;
+  listColor: string | null;
+  /**
    * Resolved server-side into `context`, never looked up client-side: Home never loads a work
    * catalog, and a guest board from another organisation is in the queue but absent from the
    * viewer's catalog. Empty on an optimistic row until the server's response lands.
@@ -195,6 +202,10 @@ export class PriorityQueueComponent {
       const list = card ? this.listsById().get(card.listId) ?? null : null;
       const icon = entry.context?.boardIcon ?? board?.icon ?? "layout-kanban";
       const iconColor = entry.context?.boardIconColor ?? board?.iconColor ?? null;
+      // "list" is the fallback every other list affordance uses (the board picker, the bulk actions
+      // menu), so an unstyled list looks the same wherever it is named.
+      const listIcon = entry.context?.listIcon ?? list?.icon ?? "list";
+      const listColor = entry.context?.listColor ?? list?.color ?? null;
       return {
         entry,
         card,
@@ -202,6 +213,8 @@ export class PriorityQueueComponent {
         boardIconClass: `ti ti-${icon}`,
         boardIconColor: iconColor ? `var(--color-${iconColor})` : null,
         listName: entry.context?.listName ?? list?.name ?? "",
+        listIconClass: `ti ti-${listIcon}`,
+        listColor: listColor ? `var(--color-${listColor})` : null,
         labels: entry.context?.labels ?? [],
       };
     }),
@@ -219,7 +232,9 @@ export class PriorityQueueComponent {
   /** How many ranked cards a truncated surface is not showing. */
   readonly hiddenByLimit = computed(() => Math.max(0, this.totalCount() - this.rows().length));
 
-  readonly addGroups = computed<PickerGroup[]>(() => priorityAddGroups(this.addableCards()));
+  readonly addGroups = computed<PickerGroup[]>(() =>
+    priorityAddGroups(this.addableCards(), { showCardKeys: this.showCardKeys() })
+  );
 
   toggleAdd(at: "head" | "list" = "list"): void {
     this.addOpenAt.update((current) => (current === at ? null : at));

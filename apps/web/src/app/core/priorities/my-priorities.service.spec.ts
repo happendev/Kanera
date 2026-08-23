@@ -54,7 +54,7 @@ function entry(id: string, rank: number, cardId = `card-${rank}`): WorkPriorityI
       createdAt: new Date("2026-07-01T00:00:00.000Z"),
       updatedAt: new Date("2026-07-01T00:00:00.000Z"),
     },
-    context: { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery", labels: [] },
+    context: { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", listIcon: null, listColor: null, workspaceName: "Delivery", labels: [] },
   };
 }
 
@@ -284,11 +284,18 @@ describe("MyPrioritiesService", () => {
     f.service.rememberCandidate({
       id: "card-9",
       title: "Not queued yet",
+      key: "ROAD-9",
       boardId: "board-9",
       boardName: "Roadmap",
       boardIcon: null,
       boardIconColor: null,
+      listId: "list-1",
       listName: "Doing",
+      listIcon: null,
+      listColor: null,
+      dueDateLocalDate: null,
+      dueDateSlot: null,
+      dueDateTimezone: null,
     });
     const pending = f.service.addPriority("card-9", { beforeId: null });
     expect(f.service.items().at(-1)?.id).toBe("pending:card-9");

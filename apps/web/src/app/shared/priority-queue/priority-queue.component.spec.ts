@@ -3,6 +3,7 @@ import { TestBed } from "@angular/core/testing";
 import type { CdkDragDrop } from "@angular/cdk/drag-drop";
 import type { WorkCard, WorkPrioritiesResponse, WorkPriorityItem } from "@kanera/shared/dto";
 import { beforeEach, describe, expect, it } from "vitest";
+import type { PriorityAddableCard } from "./priority-add-cards";
 import { PriorityQueueComponent, type PriorityReorder } from "./priority-queue.component";
 
 function card(id: string, title: string): WorkCard {
@@ -28,7 +29,7 @@ function entry(id: string, rank: number, visible: boolean): WorkPriorityItem {
     rank,
     card: visible ? card(`40000000-0000-4000-8000-00000000000${rank}`, `Ranked ${rank}`) : null,
     context: visible
-      ? { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery", labels: [] }
+      ? { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", listIcon: null, listColor: null, workspaceName: "Delivery", labels: [] }
       : null,
   };
 }
@@ -42,6 +43,28 @@ const queue: WorkPrioritiesResponse = {
   canReorder: true,
   reorderableWorkspaceIds: ["20000000-0000-4000-8000-000000000001"],
 };
+
+/** A candidate for the Add card picker. Due date and key are what the rows now render. */
+function addable(
+  id: string,
+  title: string,
+  where: { boardId: string; boardName: string; listId: string; listName: string },
+  due: { dueDateLocalDate?: string | null; dueDateSlot?: null } = {},
+): PriorityAddableCard {
+  return {
+    id,
+    title,
+    key: `DEV-${id}`,
+    boardIcon: null,
+    boardIconColor: null,
+    listIcon: null,
+    listColor: null,
+    dueDateLocalDate: due.dueDateLocalDate ?? null,
+    dueDateSlot: null,
+    dueDateTimezone: "UTC",
+    ...where,
+  };
+}
 
 /** Only the container ids, indices and release point are read, so a minimal stand-in is honest. */
 function drop(
@@ -216,12 +239,12 @@ describe("PriorityQueueComponent", () => {
     expect(host.querySelector(".panel-drag-hint")?.textContent).toContain("drag a row out");
   });
 
-  it("offers Add card to curators, grouped per board, and emits the pick", () => {
+  it("offers Add card to curators, sectioned board › list, and emits the pick", () => {
     const fixture = setup();
     fixture.componentRef.setInput("addableCards", [
-      { id: "c1", title: "Fix login", boardId: "b1", boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing" },
-      { id: "c2", title: "Ship exports", boardId: "b2", boardName: "Delivery", boardIcon: "rocket", boardIconColor: "blue", listName: "Todo" },
-      { id: "c3", title: "Fix signup", boardId: "b1", boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Todo" },
+      addable("c1", "Fix login", { boardId: "b1", boardName: "Roadmap", listId: "l1", listName: "Doing" }),
+      addable("c2", "Ship exports", { boardId: "b2", boardName: "Delivery", listId: "l2", listName: "Todo" }),
+      addable("c3", "Fix signup", { boardId: "b1", boardName: "Roadmap", listId: "l2", listName: "Todo" }),
     ]);
     fixture.detectChanges();
 
@@ -229,9 +252,14 @@ describe("PriorityQueueComponent", () => {
     expect(button).not.toBeNull();
     expect(button?.disabled).toBe(false);
 
+    // The list is the section heading and the board is its parent, stated once per board. Both of
+    // Roadmap's lists stay together even though the input interleaves a Delivery card between them.
     const groups = fixture.componentInstance.addGroups();
-    expect(groups.map((group) => group.label)).toEqual(["Roadmap", "Delivery"]);
-    expect(groups[0]?.options.map((option) => option.id)).toEqual(["c1", "c3"]);
+    expect(groups.map((group) => group.label)).toEqual(["Doing", "Todo", "Todo"]);
+    expect(groups.map((group) => group.parent?.label)).toEqual(["Roadmap", "Roadmap", "Delivery"]);
+    expect(groups[1]?.options.map((option) => option.id)).toEqual(["c3"]);
+    // No per-row list hint any more — that repetition is what the sectioning replaced.
+    expect(groups[0]?.options[0]?.hint ?? null).toBeNull();
 
     const added: object[] = [];
     fixture.componentInstance.added.subscribe((event) => added.push(event));
@@ -264,7 +292,7 @@ describe("PriorityQueueComponent", () => {
       card: card("70000000-0000-4000-8000-000000000001", "Dragged in"),
     };
     fixture.componentRef.setInput("addableCards", [
-      { id: tile.card.id, title: tile.card.title, boardId: tile.card.boardId, boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing" },
+      addable(tile.card.id, tile.card.title, { boardId: tile.card.boardId, boardName: "Roadmap", listId: "l1", listName: "Doing" }),
     ]);
     fixture.detectChanges();
 
@@ -292,7 +320,7 @@ describe("PriorityQueueComponent", () => {
   it("refuses foreign tiles on surfaces that are not board drop targets", () => {
     const fixture = setup();
     fixture.componentRef.setInput("addableCards", [
-      { id: "c1", title: "Fix login", boardId: "b1", boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing" },
+      addable("c1", "Fix login", { boardId: "b1", boardName: "Roadmap", listId: "l1", listName: "Doing" }),
     ]);
     fixture.detectChanges();
     // The drawer and Home render the same rows but sit nowhere near a board's lanes; accepting a
@@ -418,8 +446,40 @@ describe("PriorityQueueComponent", () => {
     // role="button" and would be interactive content nested inside it.
     expect(host.querySelector(".row-labels .label-chip[role=\"button\"]")).toBeNull();
 
-    // A row without labels renders no bar at all, rather than an empty box in the context line.
+    // A row without labels renders no bar at all, rather than an empty box under the trail.
     expect(host.querySelectorAll(".row-labels")).toHaveLength(1);
+    // Its own row under the board › list line, never inside it: sharing that line is what clipped a
+    // chip down to a sliver.
+    expect(host.querySelector(".row-context .row-labels")).toBeNull();
+    expect(host.querySelector(".row-main > .row-labels")).not.toBeNull();
+  });
+
+  // "Which list" is the queued card's state, and the row's whole reason for a second line. It has to
+  // arrive from the server's `context` — Home mounts this component with no work catalog to resolve a
+  // list id against — and it has to survive a list with no colour of its own.
+  it("names the list in its own icon and colour, and stays neutral without one", () => {
+    const coloured = entry("p1", 1, true);
+    coloured.context!.listName = "Review & Approval";
+    coloured.context!.listIcon = "eye-check";
+    coloured.context!.listColor = "violet";
+    const fixture = setup({ items: [coloured, entry("p3", 2, true)] });
+    const host = fixture.nativeElement as HTMLElement;
+
+    const lists = [...host.querySelectorAll<HTMLElement>(".row-list")];
+    expect(lists[0]?.textContent?.trim()).toBe("Review & Approval");
+    expect(lists[0]?.querySelector("i")?.className).toBe("ti ti-eye-check");
+    // Icon and name both take the colour, the way the notifications breadcrumb renders a list.
+    expect(lists[0]?.querySelector<HTMLElement>("i")?.style.color).toBe("var(--color-violet)");
+    expect(lists[0]?.querySelector<HTMLElement>(".row-context-part")?.style.color).toBe("var(--color-violet)");
+
+    // No colour set: nothing is written, so the line's inherited muted colour applies rather than a
+    // literal grey the theme cannot follow.
+    expect(lists[1]?.querySelector<HTMLElement>("i")?.style.color).toBe("");
+    expect(lists[1]?.querySelector("i")?.className).toBe("ti ti-list");
+
+    // Board › list, so the hierarchy is explicit; the separator only exists between the two.
+    expect(host.querySelector(".row-board")?.textContent?.trim()).toBe("Roadmap");
+    expect(host.querySelectorAll(".row-sep-chevron")).toHaveLength(2);
   });
 
   it("shows a completed row as done, and drops its due pressure with it", () => {

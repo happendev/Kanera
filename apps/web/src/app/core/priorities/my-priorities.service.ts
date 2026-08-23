@@ -293,11 +293,18 @@ export class MyPrioritiesService {
           entry: {
             id: card.id,
             title: card.title,
+            key: card.key,
             boardId: card.boardId,
             boardName: board.name,
             boardIcon: board.icon,
             boardIconColor: board.iconColor,
+            listId: card.listId,
             listName: list?.name ?? "",
+            listIcon: list?.icon ?? null,
+            listColor: list?.color ?? null,
+            dueDateLocalDate: card.dueDateLocalDate ?? null,
+            dueDateSlot: card.dueDateSlot ?? null,
+            dueDateTimezone: card.dueDateTimezone ?? null,
           },
           boardRank: boardOrder.get(card.boardId) ?? Number.MAX_SAFE_INTEGER,
           listRank: Number(list?.position ?? 0),
@@ -428,6 +435,11 @@ export class MyPrioritiesService {
               boardIcon: candidate.boardIcon,
               boardIconColor: candidate.boardIconColor as never,
               listName: candidate.listName,
+              // The picker's candidate carries no list icon or colour (it only ever needed a name as
+              // a hint), so the row shows a neutral list chip for the round trip and the server's
+              // response fills the real ones in — the same deal `card: null` and `labels` make below.
+              listIcon: null,
+              listColor: null,
               workspaceName: "",
               // An optimistic add has no resolved labels yet — only a queue read produces them. Same
               // deal `card: null` above already makes: the server's response fills both in.

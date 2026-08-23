@@ -132,6 +132,8 @@ export function toPriorityQueueItem(
           boardIcon: row.board.icon,
           boardIconColor: row.board.iconColor,
           listName: row.list.name,
+          listIcon: row.list.icon,
+          listColor: row.list.color,
           workspaceName: row.workspace.name,
           labels: options.labels,
         }

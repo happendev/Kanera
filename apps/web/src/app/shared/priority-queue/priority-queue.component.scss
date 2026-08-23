@@ -48,9 +48,9 @@
   // rows do not give.
   flex: none;
   // Dense, but not cramped: the rows are the surface's statement of what matters most, and at 5px
-  // padding they read as an afterthought beside the tiles they rank. The second line now carries
-  // label chips as well as the board·list trail, which needs more room around it than plain 11px
-  // text did — at the old 7px the two lines and the chips read as one squashed block.
+  // padding they read as an afterthought beside the tiles they rank. The second line carries the
+  // board › list trail, its list pill and any label chips, which need more room around them than
+  // plain text did — at the old 7px the two lines and the chips read as one squashed block.
   padding: 9px 10px;
   min-height: 48px;
   background: var(--surface);
@@ -169,21 +169,18 @@
   vertical-align: -1px;
 }
 
+// Wraps instead of clipping. One nowrap line meant the width deficit was paid by ellipsising the
+// board name, the list name and any label chip all at once — the row kept its height and lost its
+// content. Wrapping spends a second line only when the width genuinely runs out, and 11.5px matches
+// the notifications drawer's breadcrumb so the two personal surfaces read as one system.
 .row-context {
   display: flex;
-  gap: 5px;
+  flex-wrap: wrap;
+  gap: 4px 5px;
   align-items: center;
   min-width: 0;
-  overflow: hidden;
   color: var(--text-muted);
-  font-size: 11px;
-  white-space: nowrap;
-  // Scoped container, so labels can stand down entirely on a line too narrow to hold them and the
-  // board·list trail (the 360px dock, and the drawer at 100vw on a phone) instead of degrading into
-  // colour slivers. Deliberately on this element rather than `.panel-rows`: `container-type` also
-  // makes an element the containing block for fixed-position descendants, and the "Add card" picker
-  // below the rows is exactly such a panel — it must keep measuring against the viewport.
-  container: queue-row-context / inline-size;
+  font-size: 11.5px;
 
   i {
     flex: none;
@@ -191,52 +188,77 @@
   }
 }
 
-// Chosen from measured widths: this line is ~340–380px in the 500px drawer, but ~210–280px in the
-// dock and the phone-width drawer, where "which board" is the only thing that still fits.
-@container queue-row-context (max-width: 300px) {
-  .row-card-key,
-  .row-labels {
-    display: none;
-  }
-}
-
+// Its own line above the title, matching the board tile and the notifications drawer. The negative
+// margin trims `.row-main`'s 4px track gap down to the ~2px that reads as "label of the line below"
+// rather than a third stacked register; the title and the context line keep the full gap.
 .row-card-key {
   @include key.card-key;
+
+  display: block;
+  margin-bottom: -2px;
+  opacity: 0.7;
+}
+
+// The quiet locator. Its coloured icon is what makes a run of same-board rows read as a block, so
+// the name itself stays muted text while the list beside it carries colour.
+.row-board {
+  display: inline-flex;
+  flex: 0 1 auto;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  font-weight: 500;
+}
+
+// A queued card's list *is* its state — "what is this thing I do next actually waiting on" — and it
+// carries its own icon and colour to say so, which is the notifications drawer's breadcrumb treatment
+// unchanged. As plain grey tail text it was both the hardest part of the row to read and the first
+// thing the old single-line trail ellipsised away.
+//
+// Presentational, never a button: `.row-main` is already a <button>, so an interactive chip here
+// would be nested interactive content (the same constraint the label chips are rendered under).
+.row-list {
+  display: inline-flex;
+  flex: 0 1 auto;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  font-weight: 500;
 }
 
 .row-context-part {
   overflow: hidden;
+  white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-.row-sep {
+// Hierarchy, not punctuation: board › list, the same separator the notifications breadcrumb uses.
+.row-sep-chevron {
   flex: none;
+  font-size: 10px;
+  opacity: 0.4;
 }
 
-// Labels ride the context line rather than taking a third one. Scaled through the chip component's
-// own host custom properties (never ::ng-deep) to sit *inside* the 11px line's box, so adding
-// labels to a row does not change its height.
-//
-// Absorbs essentially the whole width deficit before the board·list trail gives up any of its own
-// (shrink factor 1000 against the trail's default 1): "which board" is the disambiguator this row
-// exists for, and a label is a bonus on top of it. Equal shrink factors ellipsised both at once,
-// which cost the trail its board name in a 500px drawer for no gain.
+// Their own row under the board › list line, so the width they get is the row's full width and never
+// the leftovers of a trail. Sharing that line is what used to slice a chip down to a coloured circle
+// with one letter in it: as a shrinkable overflow container this host absorbed the whole width
+// deficit. A chip is either legible or absent, never a sliver. Scaled through the chip component's
+// own host custom properties, never ::ng-deep, so the two never drift apart visually.
 .row-labels {
   --label-bar-gap: 0;
-  --label-bar-wrap: nowrap;
+  --label-bar-wrap: wrap;
+  --label-bar-row-gap: 4px;
   --label-bar-column-gap: 4px;
   --label-chip-height: 17px;
   --label-chip-padding-x: 6px;
   --label-chip-font-size: 10px;
-  --label-chip-max-width: 110px;
-  --label-chip-text-max-width: 100px;
+  --label-chip-max-width: 130px;
+  --label-chip-text-max-width: 118px;
 
-  flex: 0 1000 auto;
   min-width: 0;
-  // A clear break from the board·list trail: the chips are a different kind of fact, and at the
-  // line's own 5px gap they read as a continuation of the sentence.
-  margin-left: 5px;
-  overflow: hidden;
+  max-width: 100%;
 }
 
 .row-due {

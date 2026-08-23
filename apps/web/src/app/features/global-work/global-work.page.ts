@@ -27,7 +27,7 @@ import { PageToolbarComponent } from "../../shared/page-toolbar.component";
 import { PanelStackService } from "../../shared/panel-stack.service";
 import { mediaQuerySignal } from "../../shared/media-query.signal";
 import type { PickerGroup } from "../../shared/picker-list.component";
-import { navBoardOrder } from "../../shared/priority-queue/priority-add-cards";
+import { navBoardOrder, priorityAddGroups } from "../../shared/priority-queue/priority-add-cards";
 import { SearchFieldComponent } from "../../shared/search-field.component";
 import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
@@ -156,22 +156,6 @@ function storedPriorityLayout(): PriorityLayout {
 
 function priorityGroupKey(userId: string): string {
   return `priority:${userId}`;
-}
-
-function priorityPickerGroups(cards: UpNextAddableCard[]): PickerGroup[] {
-  const groups = new Map<string, PickerGroup>();
-  for (const card of cards) {
-    const group = groups.get(card.boardId) ?? {
-      id: card.boardId,
-      label: card.boardName,
-      icon: card.boardIcon ?? "layout-kanban",
-      color: card.boardIconColor,
-      options: [],
-    };
-    group.options.push({ id: card.id, label: card.title, hint: card.listName || null });
-    groups.set(card.boardId, group);
-  }
-  return [...groups.values()];
 }
 
 @Component({
@@ -1642,11 +1626,18 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
           entry: {
             id: card.id,
             title: card.title,
+            key: card.key,
             boardId: card.boardId,
             boardName: board?.name ?? "Board",
             boardIcon: board?.icon ?? null,
             boardIconColor: board?.iconColor ?? null,
+            listId: card.listId,
             listName: list?.name ?? "",
+            listIcon: list?.icon ?? null,
+            listColor: list?.color ?? null,
+            dueDateLocalDate: card.dueDateLocalDate ?? null,
+            dueDateSlot: card.dueDateSlot ?? null,
+            dueDateTimezone: card.dueDateTimezone ?? null,
           },
           boardRank: boardOrder.get(card.boardId) ?? Number.MAX_SAFE_INTEGER,
           listRank: Number(list?.position ?? 0),
@@ -1865,7 +1856,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       if (!lane.queue.canReorder) continue;
       result.set(
         priorityGroupKey(lane.target.userId),
-        priorityPickerGroups(candidates.get(lane.target.userId) ?? []),
+        priorityAddGroups(candidates.get(lane.target.userId) ?? [], { showCardKeys: this.showCardKeys() }),
       );
     }
     return result;

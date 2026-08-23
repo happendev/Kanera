@@ -7,6 +7,7 @@ import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { AnchoredPickerPopover } from "../../shared/anchored-picker.popover";
 import type { PickerGroup } from "../../shared/picker-list.component";
 import { priorityRankHeat } from "../../shared/priority-rank";
+import { priorityAddGroups } from "../../shared/priority-queue/priority-add-cards";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { CARD_DRAG_START_DELAY } from "../board/card-drag-scroll";
 import { CardActionsMenuPopover } from "../board/card-actions-menu.popover";
@@ -164,20 +165,9 @@ export class TeamPrioritiesViewComponent {
     this.added.emit({ targetUserId, cardId });
   }
 
+  /** The shared builder, so a lane's picker reads exactly like the drawer's and the dock's. */
   private addGroups(cards: UpNextAddableCard[]): PickerGroup[] {
-    const groups = new Map<string, PickerGroup>();
-    for (const card of cards) {
-      const group = groups.get(card.boardId) ?? {
-        id: card.boardId,
-        label: card.boardName,
-        icon: card.boardIcon ?? "layout-kanban",
-        color: card.boardIconColor,
-        options: [],
-      };
-      group.options.push({ id: card.id, label: card.title, hint: card.listName || null });
-      groups.set(card.boardId, group);
-    }
-    return [...groups.values()];
+    return priorityAddGroups(cards, { showCardKeys: this.showCardKeys() });
   }
 
   onRowContextMenu(row: LaneRow, event: MouseEvent): void {
