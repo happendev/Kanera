@@ -1,3 +1,5 @@
+# Node LTS only. Even-numbered majors (22, 24, 26) are the LTS line; odd majors are "Current"
+# and never become LTS. Keep this on an even major, in step with .nvmrc and engines.node.
 FROM node:24.19.0-alpine AS base
 # Keep pnpm in the reusable image layer instead of downloading it on demand in
 # each dependency stage.

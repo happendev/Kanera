@@ -1,3 +1,9 @@
+# Pin the Compose project name. scripts/test-api-integration.sh already passes
+# `-p kanera-api-test`, but without this line a bare `docker compose -f docker-compose.test.yml ...`
+# falls back to the directory name and resolves to the same `kanera` project as
+# docker-compose.dev.yml — where a `down -v` will delete the development database volume.
+name: kanera-api-test
+
 services:
   postgres:
     image: postgres:18.6-alpine
