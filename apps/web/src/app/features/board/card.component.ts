@@ -146,8 +146,9 @@ export class CardComponent {
   readonly attention = computed<{ label: string; icon: string } | null>(() => {
     const card = this.card();
     if (card.completedAt || card.archivedAt) return null;
-    if (isCardInactive(card.updatedAt)) {
-      return { label: "No activity for 14+ days", icon: "zzz" };
+    const inactiveCardsDays = this.state.inactiveCardsDays();
+    if (isCardInactive(card.updatedAt, Date.now(), inactiveCardsDays)) {
+      return { label: `No activity for ${inactiveCardsDays}+ days`, icon: "zzz" };
     }
     return null;
   });

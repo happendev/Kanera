@@ -99,6 +99,7 @@ function boardStateStub() {
   return {
     canEdit: signal(false),
     canEditRole: signal(false),
+    inactiveCardsDays: signal(14),
     isCardChecklistExpanded: () => false,
     checklistsForCard: () => [],
   };

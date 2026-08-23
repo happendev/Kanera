@@ -2,7 +2,7 @@ import type { OnDestroy, OnInit } from "@angular/core";
 import { DatePipe } from "@angular/common";
 import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal } from "@angular/core";
 import { Router } from "@angular/router";
-import { boardWorkRisk, type BoardWorkRiskAssessment } from "@kanera/shared/card-health";
+import { boardWorkRisk, type BoardWorkRiskAssessment, type BoardWorkRiskConfig } from "@kanera/shared/card-health";
 import { cardPath } from "@kanera/shared/card-links";
 import type {
   PortfolioBucket,
@@ -104,6 +104,7 @@ type PortfolioRow = {
   inactive: number;
   completed: number;
   overdueChecklistItems: number;
+  healthEnabled: boolean;
   risk: BoardWorkRiskAssessment;
 };
 /** Number columns of the portfolio table, in render order, with the tone their heat tint uses. */
@@ -118,6 +119,15 @@ const PORTFOLIO_COLUMNS: { key: PortfolioMetric; label: string; tone: "danger" |
 ];
 /** Fallback window length until the first portfolio response lands; the server owns the real value. */
 const PORTFOLIO_ACTIVITY_DAYS = 60;
+
+function portfolioBucketRiskConfig(bucket: PortfolioBucket): BoardWorkRiskConfig {
+  // Optional fields keep cached responses from before workspace health configuration readable.
+  return {
+    overdue: bucket.boardHealthOverdueEnabled !== false,
+    unassigned: bucket.boardHealthUnassignedEnabled !== false,
+    inactive: bucket.boardHealthInactiveEnabled !== false,
+  };
+}
 /** Smallest tint a non-zero count gets, and the curve that keeps mid-range counts distinguishable. */
 const HEAT_FLOOR = 0.16;
 const HEAT_GAMMA = 0.6;
@@ -1043,7 +1053,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
             inactive: bucket.inactive ?? 0,
             completed: bucket.completed,
             overdueChecklistItems: bucket.overdueChecklistItems,
-            risk: boardWorkRisk(bucket),
+            healthEnabled: bucket.boardHealthEnabled !== false,
+            risk: boardWorkRisk(bucket, portfolioBucketRiskConfig(bucket)),
           });
         }
       }
@@ -1093,6 +1104,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   }
 
   portfolioRiskTitle(row: PortfolioRow): string {
+    if (!row.healthEnabled) return "Board health is disabled";
     return `${row.risk.label}: ${row.risk.summary}`;
   }
 
@@ -2431,6 +2443,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       inactive: row.inactive + (bucket.inactive ?? 0),
       completed: row.completed + bucket.completed,
       overdueChecklistItems: row.overdueChecklistItems + bucket.overdueChecklistItems,
+      healthEnabled: row.healthEnabled || bucket.boardHealthEnabled !== false,
     }), {
       id,
       level,
@@ -2449,12 +2462,19 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       inactive: 0,
       completed: 0,
       overdueChecklistItems: 0,
+      healthEnabled: false,
     });
     return { ...row, risk: this.rollupPortfolioRisk(buckets) };
   }
 
   private rollupPortfolioRisk(buckets: PortfolioBucket[]): BoardWorkRiskAssessment {
-    const assessments = buckets.map((bucket) => boardWorkRisk(bucket));
+    // A disabled child must not reappear as health through a workspace or organisation rollup.
+    const assessments = buckets
+      .filter((bucket) => bucket.boardHealthEnabled !== false)
+      .map((bucket) => boardWorkRisk(bucket, portfolioBucketRiskConfig(bucket)));
+    if (assessments.length === 0) {
+      return { level: "noActiveWork", label: "No active work", summary: "Board health is disabled", signals: [] };
+    }
     if (assessments.length === 1) return assessments[0]!;
     const count = (level: BoardWorkRiskAssessment["level"]) =>
       assessments.filter((assessment) => assessment.level === level).length;

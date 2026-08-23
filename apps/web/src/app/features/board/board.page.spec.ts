@@ -272,6 +272,19 @@ describe("BoardPage", () => {
     fixture.destroy();
   });
 
+  it("does not use workspace-disabled signals to determine board health", async () => {
+    api.post.mockResolvedValue({ ...boardPayload(), workspaceBoardHealthOverdueEnabled: false });
+    const fixture = createInitializedBoardPage();
+    await vi.waitFor(() => expect(boardState(fixture.componentInstance).board()).not.toBeNull());
+
+    expect(fixture.componentInstance.boardOverview().risk).toMatchObject({
+      level: "needsAttention",
+      summary: "1 unassigned · 1 inactive",
+    });
+
+    fixture.destroy();
+  });
+
   it("marks the link icon when the board participates in a mirror", async () => {
     api.post.mockResolvedValue({ ...boardPayload(), hasMirrors: true });
     api.get.mockImplementation((path: string) => Promise.resolve(
@@ -318,6 +331,16 @@ describe("BoardPage", () => {
     await vi.waitFor(() => expect(fixture.componentInstance.boardLinkingEnabled()).toBe(false));
     expect(fixture.componentInstance.boardLinkingEnabled()).toBe(false);
     expect(api.get).not.toHaveBeenCalledWith("/boards/board-1/mirror-status");
+  });
+
+  it("hides the board health overview when workspace health is disabled", async () => {
+    api.post.mockResolvedValue({ ...boardPayload(), workspaceBoardHealthEnabled: false });
+    const fixture = createInitializedBoardPage();
+
+    await vi.waitFor(() => expect(boardState(fixture.componentInstance).boardHealthEnabled()).toBe(false));
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector('[aria-label^="Board overview"]')).toBeNull();
   });
 
   it("blocks board-sync creation when the board-owning organisation is Free", async () => {

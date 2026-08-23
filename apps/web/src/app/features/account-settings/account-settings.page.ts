@@ -5,6 +5,7 @@ import { ActivatedRoute, NavigationEnd, Router, RouterLink } from "@angular/rout
 import type { BillingInfoResponse, NotificationSettingsResponse, NotificationSettingType, NotificationWorkspaceRule, PersonalNotificationChannel, PersonalNotificationTestResponse, PublicClientResponse, SeatChangeResponse } from "@kanera/shared/dto";
 import type { ServerToClientEvents } from "@kanera/shared/events";
 import type { SmtpConfig, StorageConfig } from "@kanera/shared/schema";
+import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS, DEFAULT_INACTIVE_CARDS_DAYS } from "@kanera/shared/workspace-defaults";
 import { filter } from "rxjs";
 import { buildInfo } from "../../../build-info.generated";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
@@ -29,6 +30,7 @@ import { AccountSettingsProfilePage } from "./profile/profile.page";
 import { AccountSettingsUsersPage } from "./users/users.page";
 
 type Tab = "profile" | "notifications" | "api-keys" | "org" | "users" | "account-plan";
+const WORKSPACE_DEFAULTS_SAVE_DEBOUNCE_MS = 300;
 
 type WorkspaceGrant = { workspaceId: string; workspaceName: string; role: "admin" | "member" };
 
@@ -494,6 +496,13 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly orgNameSaving = signal(false);
   readonly orgNameSavedAt = signal<number | null>(null);
   readonly orgError = signal<string | null>(null);
+  readonly defaultCompletedCardsActiveDays = signal(DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS);
+  readonly defaultInactiveCardsDays = signal(DEFAULT_INACTIVE_CARDS_DAYS);
+  readonly defaultBoardHealthEnabled = signal(true);
+  readonly cardTimingDefaultsSaving = signal(false);
+  readonly cardTimingDefaultsError = signal<string | null>(null);
+  readonly cardTimingDefaultsSavedAt = signal<number | null>(null);
+  private cardTimingDefaultsSaveTimer: ReturnType<typeof setTimeout> | null = null;
   readonly pushEnabledDraft = signal(false);
   readonly pushSaving = signal(false);
   readonly pushError = signal<string | null>(null);
@@ -631,6 +640,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.saveCardTimingDefaultsNow();
     this.detachSocket?.();
   }
 
@@ -671,6 +681,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     }
     this.pushEnabledDraft.set(c.pushEnabled);
     this.requireMfaDraft.set(c.requireMfa);
+    this.defaultCompletedCardsActiveDays.set(c.defaultCompletedCardsActiveDays);
+    this.defaultInactiveCardsDays.set(c.defaultInactiveCardsDays);
+    this.defaultBoardHealthEnabled.set(c.defaultBoardHealthEnabled);
     const sc = c.storageConfig;
     if (sc.kind === "s3") {
       this.storageKind.set("s3");
@@ -1877,6 +1890,56 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     } finally {
       this.orgNameSaving.set(false);
     }
+  }
+
+  async saveCardTimingDefaults() {
+    this.clearCardTimingDefaultsSaveTimer();
+    const current = this.client();
+    if (!current || this.cardTimingDefaultsSaving()) return;
+    const defaultCompletedCardsActiveDays = Math.max(0, Math.min(365, Math.trunc(this.defaultCompletedCardsActiveDays())));
+    const defaultInactiveCardsDays = Math.max(0, Math.min(365, Math.trunc(this.defaultInactiveCardsDays())));
+    const defaultBoardHealthEnabled = this.defaultBoardHealthEnabled();
+    this.defaultCompletedCardsActiveDays.set(defaultCompletedCardsActiveDays);
+    this.defaultInactiveCardsDays.set(defaultInactiveCardsDays);
+    if (current.defaultCompletedCardsActiveDays === defaultCompletedCardsActiveDays && current.defaultInactiveCardsDays === defaultInactiveCardsDays && current.defaultBoardHealthEnabled === defaultBoardHealthEnabled) return;
+
+    this.cardTimingDefaultsSaving.set(true);
+    this.cardTimingDefaultsError.set(null);
+    try {
+      this.applyClient(await this.api.patch<PublicClientResponse>("/clients/me", {
+        defaultCompletedCardsActiveDays,
+        defaultInactiveCardsDays,
+        defaultBoardHealthEnabled,
+      }));
+      this.cardTimingDefaultsSavedAt.set(Date.now());
+    } catch (err) {
+      this.defaultCompletedCardsActiveDays.set(current.defaultCompletedCardsActiveDays);
+      this.defaultInactiveCardsDays.set(current.defaultInactiveCardsDays);
+      this.defaultBoardHealthEnabled.set(current.defaultBoardHealthEnabled);
+      this.cardTimingDefaultsError.set(extractErrorMessage(err));
+    } finally {
+      this.cardTimingDefaultsSaving.set(false);
+    }
+  }
+
+  queueCardTimingDefaultsSave() {
+    this.clearCardTimingDefaultsSaveTimer();
+    this.cardTimingDefaultsSaveTimer = setTimeout(() => {
+      this.cardTimingDefaultsSaveTimer = null;
+      void this.saveCardTimingDefaults();
+    }, WORKSPACE_DEFAULTS_SAVE_DEBOUNCE_MS);
+  }
+
+  saveCardTimingDefaultsNow() {
+    if (!this.cardTimingDefaultsSaveTimer) return;
+    this.clearCardTimingDefaultsSaveTimer();
+    void this.saveCardTimingDefaults();
+  }
+
+  private clearCardTimingDefaultsSaveTimer() {
+    if (!this.cardTimingDefaultsSaveTimer) return;
+    clearTimeout(this.cardTimingDefaultsSaveTimer);
+    this.cardTimingDefaultsSaveTimer = null;
   }
 
   async savePushEnabled() {

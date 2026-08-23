@@ -40,6 +40,7 @@
   <!-- Board-level chrome actions. These moved up from row 2 so that row is purely query controls. -->
   @if (state.board(); as board) {
   <span phIcons class="board-icon-cluster">
+    @if (state.boardHealthEnabled()) {
     <span class="menu-anchor">
       <button #overviewTrigger type="button" class="k-toolbar-icon-btn is-ghost board-overview-trigger" [class.is-open]="overviewOpen()" [attr.data-risk]="boardOverview().risk.level" (click)="toggleOverview()" [attr.aria-label]="'Board overview · ' + boardOverview().risk.label" [attr.aria-expanded]="overviewOpen()" [kTooltip]="'Board overview · ' + boardOverview().risk.label">
         <i class="ti ti-radar-2"></i>
@@ -59,7 +60,7 @@
           <button type="button" [class.is-active]="boardRiskFilter() === null" (click)="setBoardRiskFilter(null)" kTooltip="Show all active cards"><strong>{{ overview.active }}</strong><span>Active</span></button>
           <button type="button" [class.needs-attention]="overview.overdue > 0" [class.is-active]="boardRiskFilter() === 'overdue'" [disabled]="overview.overdue === 0" (click)="setBoardRiskFilter('overdue')" kTooltip="Show overdue cards"><strong>{{ overview.overdue }}</strong><span>Overdue</span></button>
           <button type="button" [class.is-active]="boardRiskFilter() === 'unassigned'" [disabled]="overview.unassigned === 0" (click)="setBoardRiskFilter('unassigned')" kTooltip="Show unassigned cards"><strong>{{ overview.unassigned }}</strong><span>Unassigned</span></button>
-          <button type="button" [class.is-active]="boardRiskFilter() === 'inactive'" [disabled]="overview.inactive === 0" (click)="setBoardRiskFilter('inactive')" kTooltip="Show cards inactive for 14 days"><strong>{{ overview.inactive }}</strong><span>Inactive</span></button>
+          <button type="button" [class.is-active]="boardRiskFilter() === 'inactive'" [disabled]="overview.inactive === 0" (click)="setBoardRiskFilter('inactive')" [kTooltip]="inactiveCardsTooltip()"><strong>{{ overview.inactive }}</strong><span>Inactive</span></button>
         </div>
         @if (overview.dueSoon > 0) {
         <div class="board-overview-callout"><i class="ti ti-calendar-due"></i>{{ overview.dueSoon }} due in the next 7 days</div>
@@ -79,6 +80,7 @@
       </section>
       }
     </span>
+    }
     <!-- The board-level entry to the same composer every column's "+" opens. Hidden on Notes, which
          holds no cards, and while viewing the archive, where creating into it makes no sense. -->
     @if (state.canEditRole() && effectiveView() !== 'notes' && !showArchived()) {

@@ -812,7 +812,7 @@ describe("GlobalWorkPage portfolio summary", () => {
     overdueChecklistItems: 0,
   });
 
-  async function mount(activity: { date: string; moved: number; completed: number }[] = []) {
+  async function mount(activity: { date: string; moved: number; completed: number }[] = [], healthDisabledBoardId?: string, overdueDisabledBoardId?: string) {
     const definition = signal({ collapsedOrganisationIds: [] as string[], collapsedWorkspaceIds: [] as string[] });
     const toggle = (key: "collapsedOrganisationIds" | "collapsedWorkspaceIds") => (id: string) =>
       definition.update((current) => ({
@@ -853,7 +853,11 @@ describe("GlobalWorkPage portfolio summary", () => {
           bucket(workspaceOne, "30000000-0000-4000-8000-000000000002", 2),
           bucket(workspaceTwo, "30000000-0000-4000-8000-000000000003", 4),
           bucket(standaloneWorkspace, standaloneBoard, 1),
-        ],
+        ].map((row) => ({
+          ...row,
+          boardHealthEnabled: row.boardId !== healthDisabledBoardId,
+          boardHealthOverdueEnabled: row.boardId !== overdueDisabledBoardId,
+        })),
       }),
       toggleOrganisationCollapsed: vi.fn(toggle("collapsedOrganisationIds")),
       toggleWorkspaceCollapsed: vi.fn(toggle("collapsedWorkspaceIds")),
@@ -963,6 +967,33 @@ describe("GlobalWorkPage portfolio summary", () => {
     expect(busiest.risk).toMatchObject({ level: "needsAttention", summary: "3 overdue" });
     expect(organisation.risk).toMatchObject({ level: "needsAttention", summary: "1 board needs attention" });
     expect(page.portfolioRiskTitle(busiest)).toBe("Needs attention: 3 overdue");
+
+    fixture.destroy();
+  });
+
+  it("hides disabled board health and excludes it from portfolio rollups", async () => {
+    const disabledBoardId = "30000000-0000-4000-8000-000000000001";
+    const fixture = await mount([], disabledBoardId);
+    const page = fixture.componentInstance;
+    const disabledBoard = page.portfolioRows().find((row) => row.id === `board:${disabledBoardId}`)!;
+    const organisation = page.portfolioRows().find((row) => row.level === "organisation")!;
+
+    expect(disabledBoard.healthEnabled).toBe(false);
+    expect(page.portfolioRiskTitle(disabledBoard)).toBe("Board health is disabled");
+    expect(organisation.risk.level).toBe("onTrack");
+
+    fixture.destroy();
+  });
+
+  it("uses each workspace's enabled signals in board and portfolio health", async () => {
+    const boardId = "30000000-0000-4000-8000-000000000001";
+    const fixture = await mount([], undefined, boardId);
+    const page = fixture.componentInstance;
+    const board = page.portfolioRows().find((row) => row.id === `board:${boardId}`)!;
+    const organisation = page.portfolioRows().find((row) => row.level === "organisation")!;
+
+    expect(board.risk.level).toBe("onTrack");
+    expect(organisation.risk.level).toBe("onTrack");
 
     fixture.destroy();
   });

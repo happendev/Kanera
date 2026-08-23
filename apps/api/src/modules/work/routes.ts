@@ -1,6 +1,5 @@
 import { dto } from "@kanera/shared";
 import { cardPath } from "@kanera/shared/card-links";
-import { CARD_INACTIVE_AFTER_MS } from "@kanera/shared/card-health";
 import type {
   AgentWorkHistoryResponse,
   AgentWorkHistoryQuery,
@@ -244,7 +243,7 @@ function baseCardConditions(
   if (filters.inactiveOnly) {
     // `updatedAt` is the canonical card-activity clock (child-resource changes touch it too), so the
     // drill-down returns exactly the cards counted by Board overview and Portfolio.
-    conditions.push(lte(columns.updatedAt, new Date(Date.now() - CARD_INACTIVE_AFTER_MS)));
+    conditions.push(sql`${columns.updatedAt} <= now() - make_interval(days => ${workspaces.inactiveCardsDays})`);
   }
   if (filters.completedFrom) conditions.push(gte(columns.completedAt, new Date(filters.completedFrom)));
   if (filters.completedTo) conditions.push(lte(columns.completedAt, new Date(filters.completedTo)));
@@ -794,8 +793,8 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
   const query = dto.workPortfolioQueryBody.parse(input);
   const scopeBoards = applyWorkScope(allBoards, query.scope);
   const from = new Date(Date.now() - query.days * 24 * 60 * 60 * 1000);
-  // Portfolio health uses the same active-card inactivity boundary as board and card UI.
-  const inactiveCutoff = new Date(Date.now() - CARD_INACTIVE_AFTER_MS);
+  // Portfolio health uses each joined workspace's active-card inactivity boundary, matching the
+  // board UI even when an organisation's workspaces intentionally have different thresholds.
   const filters = dto.workFiltersSchema.parse({ ...(query.filters ?? {}), completion: "all" });
   const conditions = baseCardConditions(authUserId, scopeBoards, filters, { portfolio: true }, cardDueColumns);
 
@@ -804,13 +803,17 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
       organisationId: workspaces.clientId,
       workspaceId: workspaces.id,
       boardId: boards.id,
+      boardHealthEnabled: workspaces.boardHealthEnabled,
+      boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
+      boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
+      boardHealthInactiveEnabled: workspaces.boardHealthInactiveEnabled,
       active: sql<number>`count(*) filter (where ${cards.completedAt} is null)::integer`,
       overdue: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${overdueSql(cardDueColumns)})::integer`,
       dueSoon: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${dueSoonSql(cardDueColumns)})::integer`,
       unassigned: sql<number>`count(*) filter (where ${cards.completedAt} is null and not exists (
         select 1 from card_assignee portfolio_assignee where portfolio_assignee.card_id = ${cards.id}
       ))::integer`,
-      inactive: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${cards.updatedAt} <= ${inactiveCutoff})::integer`,
+      inactive: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${cards.updatedAt} <= now() - make_interval(days => ${workspaces.inactiveCardsDays}))::integer`,
       completed: sql<number>`count(*) filter (where ${cards.completedAt} >= ${from})::integer`,
     })
     .from(cards)
@@ -859,6 +862,10 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
       workspaceName: board.workspaceName,
       boardId: row.boardId,
       boardName: board.name,
+      boardHealthEnabled: row.boardHealthEnabled,
+      boardHealthOverdueEnabled: row.boardHealthOverdueEnabled,
+      boardHealthUnassignedEnabled: row.boardHealthUnassignedEnabled,
+      boardHealthInactiveEnabled: row.boardHealthInactiveEnabled,
       active: row.active,
       overdue: row.overdue,
       dueSoon: row.dueSoon,

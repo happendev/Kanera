@@ -26,6 +26,36 @@
 </div>
 
 <div class="settings-section">
+  <h3 class="settings-section-title"><i class="ti ti-clock-cog"></i><span>New workspace defaults</span></h3>
+  <p class="settings-section-help">Applied when a workspace or standalone board is created. Existing workspaces keep their own settings.</p>
+  <div class="settings-form">
+    <label class="settings-field">
+      <span class="settings-field-label"><i class="ti ti-circle-check"></i>Show completed cards for</span>
+      <span class="card-timing-default-input">
+        <input type="number" min="0" max="365" step="1" [value]="settings.defaultCompletedCardsActiveDays()" (input)="settings.defaultCompletedCardsActiveDays.set(+$any($event.target).value); settings.queueCardTimingDefaultsSave()" (blur)="settings.saveCardTimingDefaultsNow()" [disabled]="!settings.isClientAdmin() || settings.cardTimingDefaultsSaving()" />
+        <span>days</span>
+      </span>
+    </label>
+    <label class="settings-field">
+      <span class="settings-field-label"><i class="ti ti-zzz"></i>Mark cards inactive after</span>
+      <span class="card-timing-default-input">
+        <input type="number" min="0" max="365" step="1" [value]="settings.defaultInactiveCardsDays()" (input)="settings.defaultInactiveCardsDays.set(+$any($event.target).value); settings.queueCardTimingDefaultsSave()" (blur)="settings.saveCardTimingDefaultsNow()" [disabled]="!settings.isClientAdmin() || settings.cardTimingDefaultsSaving()" />
+        <span>days</span>
+      </span>
+    </label>
+    <label class="push-toggle-row">
+      <input type="checkbox" [checked]="settings.defaultBoardHealthEnabled()" (change)="settings.defaultBoardHealthEnabled.set($any($event.target).checked); settings.queueCardTimingDefaultsSave()" (blur)="settings.saveCardTimingDefaultsNow()" [disabled]="!settings.isClientAdmin() || settings.cardTimingDefaultsSaving()" />
+      <span class="push-toggle-copy">
+        <span class="push-toggle-title">Show board health by default</span>
+        <span class="settings-section-help">New workspaces and standalone boards can override this later.</span>
+      </span>
+    </label>
+  </div>
+  @if (settings.cardTimingDefaultsError()) { <p class="form-error">{{ settings.cardTimingDefaultsError() }}</p> }
+  @if (settings.cardTimingDefaultsSavedAt() && !settings.cardTimingDefaultsError()) { <p class="form-success">Saved.</p> }
+</div>
+
+<div class="settings-section">
   <h3 class="settings-section-title"><i class="ti ti-shield-lock"></i><span>Two-factor authentication</span></h3>
   <p class="settings-section-help">Require every organisation member to enroll an authenticator before their next fresh sign-in. Existing signed-in sessions remain active.</p>
   <label class="push-toggle-row">

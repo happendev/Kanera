@@ -1,5 +1,19 @@
 @use "../../../shared/page-styles";
 
+:host {
+  display: block;
+}
+
+// General settings use a mix of toggle rows and .board-form panels. Put the vertical rhythm on the
+// section itself so toggles receive the same separation that .board-form previously supplied alone.
+.board-settings-section + .board-settings-section {
+  margin-top: 16px;
+}
+
+.board-settings-section .board-form {
+  margin-bottom: 0;
+}
+
 .card-key-prefix-field {
   display: grid;
   width: 100%;
@@ -63,6 +77,61 @@
   margin: 8px 0 0;
   color: var(--danger);
   font-size: 12px;
+}
+
+.health-signal-options {
+  display: grid;
+  gap: 2px;
+  margin-top: 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.health-signal-heading {
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.health-signal-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+  cursor: pointer;
+}
+
+.health-signal-toggle + .health-signal-toggle {
+  border-top: 1px solid var(--border);
+}
+
+.health-signal-toggle input {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  flex: 0 0 auto;
+}
+
+.health-signal-toggle span {
+  display: grid;
+  gap: 2px;
+}
+
+.health-signal-toggle strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.health-signal-toggle small {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .standalone-group-field {

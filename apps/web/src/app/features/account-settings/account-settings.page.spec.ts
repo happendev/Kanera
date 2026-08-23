@@ -3,7 +3,7 @@ import type { ComponentFixture } from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
 import { ActivatedRoute, Router } from "@angular/router";
 import type { Entitlements, NotificationSettingsResponse, NotificationWorkspaceRule } from "@kanera/shared/dto";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import type { AuthUser } from "../../core/auth/auth.service";
 import { AuthService } from "../../core/auth/auth.service";
@@ -89,6 +89,10 @@ describe("AccountSettingsPage", () => {
     logoUrl: null,
     deploymentMode: "hosted" as const,
     pushEnabled: false,
+    requireMfa: false,
+    defaultCompletedCardsActiveDays: 35,
+    defaultInactiveCardsDays: 14,
+    defaultBoardHealthEnabled: true,
     storageConfig: { kind: "local" as const },
     storageConfigSource: "env" as const,
     smtpConfig: null,
@@ -273,6 +277,10 @@ describe("AccountSettingsPage", () => {
         { provide: ThemeService, useValue: { theme: signal("dark"), setTheme: vi.fn() } },
       ],
     }).compileComponents();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   async function createPage() {
@@ -970,6 +978,79 @@ describe("AccountSettingsPage", () => {
     expect(text).not.toContain("Current plan");
     expect(text).not.toContain("Upgrade to Pro");
     expect(text).not.toContain("Cancel plan");
+  });
+
+  it("saves completed and inactive timing defaults for new workspaces", async () => {
+    activeSettingsRoute = "org";
+    await createPage();
+    api.patch.mockResolvedValueOnce({
+      ...hostedClient,
+      defaultCompletedCardsActiveDays: 28,
+      defaultInactiveCardsDays: 10,
+      defaultBoardHealthEnabled: false,
+    });
+
+    fixture.componentInstance.defaultCompletedCardsActiveDays.set(28);
+    fixture.componentInstance.defaultInactiveCardsDays.set(10);
+    fixture.componentInstance.defaultBoardHealthEnabled.set(false);
+    await fixture.componentInstance.saveCardTimingDefaults();
+
+    expect(api.patch).toHaveBeenCalledWith("/clients/me", {
+      defaultCompletedCardsActiveDays: 28,
+      defaultInactiveCardsDays: 10,
+      defaultBoardHealthEnabled: false,
+    });
+    expect(fixture.componentInstance.client()?.defaultInactiveCardsDays).toBe(10);
+  });
+
+  it("keeps timing defaults together with their icons before board health", async () => {
+    activeSettingsRoute = "org";
+    await createPage();
+
+    const section = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(".settings-section"))
+      .find((element) => element.textContent?.includes("New workspace defaults"));
+    const controls = Array.from(section!.querySelectorAll<HTMLElement>(".settings-field, .push-toggle-row"));
+
+    expect(controls.map((control) => control.textContent?.trim())).toEqual([
+      expect.stringContaining("Show completed cards for"),
+      expect.stringContaining("Mark cards inactive after"),
+      expect.stringContaining("Show board health by default"),
+    ]);
+    expect(controls[0]!.querySelector(".ti-circle-check")).not.toBeNull();
+    expect(controls[1]!.querySelector(".ti-zzz")).not.toBeNull();
+    expect(section!.textContent).not.toContain("Save defaults");
+  });
+
+  it("debounces organisation workspace defaults into one update", async () => {
+    activeSettingsRoute = "org";
+    await createPage();
+    vi.useFakeTimers();
+    api.patch.mockResolvedValueOnce({
+      ...hostedClient,
+      defaultCompletedCardsActiveDays: 28,
+      defaultInactiveCardsDays: 10,
+      defaultBoardHealthEnabled: false,
+    });
+
+    fixture.componentInstance.defaultCompletedCardsActiveDays.set(2);
+    fixture.componentInstance.queueCardTimingDefaultsSave();
+    fixture.componentInstance.defaultCompletedCardsActiveDays.set(28);
+    fixture.componentInstance.queueCardTimingDefaultsSave();
+    fixture.componentInstance.defaultInactiveCardsDays.set(10);
+    fixture.componentInstance.queueCardTimingDefaultsSave();
+    fixture.componentInstance.defaultBoardHealthEnabled.set(false);
+    fixture.componentInstance.queueCardTimingDefaultsSave();
+
+    vi.advanceTimersByTime(299);
+    expect(api.patch).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+
+    expect(api.patch).toHaveBeenCalledTimes(1);
+    expect(api.patch).toHaveBeenCalledWith("/clients/me", {
+      defaultCompletedCardsActiveDays: 28,
+      defaultInactiveCardsDays: 10,
+      defaultBoardHealthEnabled: false,
+    });
   });
 
   it("requires the organisation name before requesting permanent deletion", async () => {

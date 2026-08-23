@@ -3,6 +3,7 @@ import { type AnyPgColumn, bigint, boolean, check, integer, jsonb, pgTable, text
 export { citext } from "./_citext.js";
 import { valueIn } from "./_value-check.js";
 import { users } from "./user.js";
+import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS, DEFAULT_INACTIVE_CARDS_DAYS } from "../lib/workspace-defaults.js";
 
 export type StorageConfig =
   | { kind: "local" }
@@ -57,6 +58,11 @@ export const clients = pgTable(
     pushEnabled: boolean("push_enabled").notNull().default(false),
     // When enabled, password login cannot issue a session until the member has completed TOTP setup.
     requireMfa: boolean("require_mfa").notNull().default(false),
+    // Creation routes copy these values onto new standard and hidden standalone-board workspaces.
+    // Existing workspaces remain independent when an organisation changes its defaults.
+    defaultCompletedCardsActiveDays: integer("default_completed_cards_active_days").notNull().default(DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS),
+    defaultInactiveCardsDays: integer("default_inactive_cards_days").notNull().default(DEFAULT_INACTIVE_CARDS_DAYS),
+    defaultBoardHealthEnabled: boolean("default_board_health_enabled").notNull().default(true),
     // Explicitly excludes staff, demo, seed, test, and load-test organisations from product analytics.
     // This is deliberately not inferred from an email domain because analytics never receives email.
     analyticsExcluded: boolean("analytics_excluded").notNull().default(false),

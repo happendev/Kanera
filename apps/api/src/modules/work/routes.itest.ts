@@ -789,6 +789,7 @@ void test("opaque cursors page every supported sort without duplicates during co
 
 void test("portfolio summaries match access-filtered card drill-downs", async () => {
   const f = await seed();
+  await db.update(workspaces).set({ boardHealthEnabled: false, boardHealthOverdueEnabled: false }).where(eq(workspaces.id, f.homeWorkspace.id));
   await db.update(cards)
     .set({ updatedAt: new Date("2020-01-01T00:00:00.000Z") })
     .where(eq(cards.id, f.restrictedMine.id));
@@ -809,8 +810,13 @@ void test("portfolio summaries match access-filtered card drill-downs", async ()
   assert.ok(!summary.buckets.some((bucket) => bucket.boardId === f.archivedBoard.id));
 
   const restricted = summary.buckets.find((bucket) => bucket.boardId === f.restrictedBoard.id);
+  const standalone = summary.buckets.find((bucket) => bucket.boardId === f.secondBoard.id);
   assert.equal(restricted?.active, 1);
   assert.equal(restricted?.inactive, 1);
+  assert.equal(restricted?.boardHealthEnabled, false);
+  assert.equal(restricted?.boardHealthOverdueEnabled, false);
+  assert.equal(standalone?.boardHealthEnabled, true);
+  assert.equal(standalone?.boardHealthOverdueEnabled, true);
   assert.equal(summary.totals.inactive, 1);
   const drillDown = await f.app.inject({
     method: "POST",

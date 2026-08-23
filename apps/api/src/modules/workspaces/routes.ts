@@ -91,6 +91,11 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           icon: workspaces.icon,
           accentColor: workspaces.accentColor,
           completedCardsActiveDays: workspaces.completedCardsActiveDays,
+          inactiveCardsDays: workspaces.inactiveCardsDays,
+          boardHealthEnabled: workspaces.boardHealthEnabled,
+          boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
+          boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
+          boardHealthInactiveEnabled: workspaces.boardHealthInactiveEnabled,
           boardLinkingEnabled: workspaces.boardLinkingEnabled,
           createdAt: workspaces.createdAt,
           updatedAt: workspaces.updatedAt,
@@ -138,6 +143,11 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           icon: workspaces.icon,
           accentColor: workspaces.accentColor,
           completedCardsActiveDays: workspaces.completedCardsActiveDays,
+          inactiveCardsDays: workspaces.inactiveCardsDays,
+          boardHealthEnabled: workspaces.boardHealthEnabled,
+          boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
+          boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
+          boardHealthInactiveEnabled: workspaces.boardHealthInactiveEnabled,
           boardLinkingEnabled: workspaces.boardLinkingEnabled,
           createdAt: workspaces.createdAt,
           updatedAt: workspaces.updatedAt,
@@ -155,12 +165,17 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           name: workspaces.name,
           cardKeyPrefix: workspaces.cardKeyPrefix,
           kind: workspaces.kind,
-         icon: workspaces.icon,
-         accentColor: workspaces.accentColor,
+          icon: workspaces.icon,
+          accentColor: workspaces.accentColor,
           completedCardsActiveDays: workspaces.completedCardsActiveDays,
+          inactiveCardsDays: workspaces.inactiveCardsDays,
+          boardHealthEnabled: workspaces.boardHealthEnabled,
+          boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
+          boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
+          boardHealthInactiveEnabled: workspaces.boardHealthInactiveEnabled,
           boardLinkingEnabled: workspaces.boardLinkingEnabled,
-         createdAt: workspaces.createdAt,
-         updatedAt: workspaces.updatedAt,
+          createdAt: workspaces.createdAt,
+          updatedAt: workspaces.updatedAt,
           role: sql<"admin">`'admin'::text`.as("role"),
         })
         .from(workspaces)
@@ -178,6 +193,11 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         icon: workspaces.icon,
         accentColor: workspaces.accentColor,
         completedCardsActiveDays: workspaces.completedCardsActiveDays,
+        inactiveCardsDays: workspaces.inactiveCardsDays,
+        boardHealthEnabled: workspaces.boardHealthEnabled,
+        boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
+        boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
+        boardHealthInactiveEnabled: workspaces.boardHealthInactiveEnabled,
         boardLinkingEnabled: workspaces.boardLinkingEnabled,
         createdAt: workspaces.createdAt,
         updatedAt: workspaces.updatedAt,
@@ -203,6 +223,16 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         workspaceName,
         requestedPrefix: body.cardKeyPrefix,
       });
+      const [organisationDefaults] = await tx
+        .select({
+          completedCardsActiveDays: clients.defaultCompletedCardsActiveDays,
+          inactiveCardsDays: clients.defaultInactiveCardsDays,
+          boardHealthEnabled: clients.defaultBoardHealthEnabled,
+        })
+        .from(clients)
+        .where(eq(clients.id, req.auth.cid))
+        .limit(1);
+      if (!organisationDefaults) throw notFound("organisation not found");
       const [workspace] = await tx
         .insert(workspaces)
         .values({
@@ -215,6 +245,11 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           // callers cannot create a hidden workspace whose icon or color disagrees with its board.
           icon: body.kind === "board" ? body.initialBoard!.icon ?? null : body.icon ?? null,
           accentColor: body.kind === "board" ? body.initialBoard!.iconColor ?? null : null,
+          // Defaults are copied at creation so each workspace can diverge later without an
+          // organisation-level change silently rewriting existing board behaviour.
+          completedCardsActiveDays: organisationDefaults.completedCardsActiveDays,
+          inactiveCardsDays: organisationDefaults.inactiveCardsDays,
+          boardHealthEnabled: organisationDefaults.boardHealthEnabled,
         })
         .returning();
       const [member] = await tx.insert(workspaceMembers).values({
@@ -614,6 +649,11 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           ...(body.icon !== undefined && { icon: body.icon }),
           ...(body.accentColor !== undefined && { accentColor: body.accentColor }),
           ...(body.completedCardsActiveDays !== undefined && { completedCardsActiveDays: body.completedCardsActiveDays }),
+          ...(body.inactiveCardsDays !== undefined && { inactiveCardsDays: body.inactiveCardsDays }),
+          ...(body.boardHealthEnabled !== undefined && { boardHealthEnabled: body.boardHealthEnabled }),
+          ...(body.boardHealthOverdueEnabled !== undefined && { boardHealthOverdueEnabled: body.boardHealthOverdueEnabled }),
+          ...(body.boardHealthUnassignedEnabled !== undefined && { boardHealthUnassignedEnabled: body.boardHealthUnassignedEnabled }),
+          ...(body.boardHealthInactiveEnabled !== undefined && { boardHealthInactiveEnabled: body.boardHealthInactiveEnabled }),
           ...(body.boardLinkingEnabled !== undefined && { boardLinkingEnabled: body.boardLinkingEnabled }),
           updatedAt: new Date(),
         })

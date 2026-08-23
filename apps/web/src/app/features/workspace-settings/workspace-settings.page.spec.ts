@@ -40,6 +40,11 @@ function workspace(overrides: Partial<Workspace & { role: string }> = {}): Works
     icon: null,
     accentColor: null,
     completedCardsActiveDays: 35,
+    inactiveCardsDays: 14,
+    boardHealthEnabled: true,
+    boardHealthOverdueEnabled: true,
+    boardHealthUnassignedEnabled: true,
+    boardHealthInactiveEnabled: true,
     boardLinkingEnabled: true,
     createdAt: new Date("2026-05-21T00:00:00.000Z"),
     updatedAt: new Date("2026-05-21T00:00:00.000Z"),
@@ -287,9 +292,9 @@ describe("WorkspaceSettingsPage", () => {
         if (path === "/workspaces/workspace-1/guests") return Promise.resolve({ boards: [], acceptedGuests: [], pendingInvites: [] });
         return Promise.resolve({});
       }),
-      patch: vi.fn((path: string, patch: { name?: string; boardLinkingEnabled?: boolean; groupTitle?: string | null }) => {
+      patch: vi.fn((path: string, patch: { name?: string; completedCardsActiveDays?: number; inactiveCardsDays?: number; boardHealthEnabled?: boolean; boardHealthOverdueEnabled?: boolean; boardHealthUnassignedEnabled?: boolean; boardHealthInactiveEnabled?: boolean; boardLinkingEnabled?: boolean; groupTitle?: string | null }) => {
         if (path === "/boards/board-1") return Promise.resolve(board({ name: patch.name ?? loadedBoard.name }));
-        if (path === "/workspaces/workspace-1") return Promise.resolve(workspace({ name: patch.name ?? loadedWorkspace.name, boardLinkingEnabled: patch.boardLinkingEnabled ?? loadedWorkspace.boardLinkingEnabled }));
+        if (path === "/workspaces/workspace-1") return Promise.resolve(workspace({ name: patch.name ?? loadedWorkspace.name, completedCardsActiveDays: patch.completedCardsActiveDays ?? loadedWorkspace.completedCardsActiveDays, inactiveCardsDays: patch.inactiveCardsDays ?? loadedWorkspace.inactiveCardsDays, boardHealthEnabled: patch.boardHealthEnabled ?? loadedWorkspace.boardHealthEnabled, boardHealthOverdueEnabled: patch.boardHealthOverdueEnabled ?? loadedWorkspace.boardHealthOverdueEnabled, boardHealthUnassignedEnabled: patch.boardHealthUnassignedEnabled ?? loadedWorkspace.boardHealthUnassignedEnabled, boardHealthInactiveEnabled: patch.boardHealthInactiveEnabled ?? loadedWorkspace.boardHealthInactiveEnabled, boardLinkingEnabled: patch.boardLinkingEnabled ?? loadedWorkspace.boardLinkingEnabled }));
         return Promise.resolve({});
       }),
       post: vi.fn((path: string) => {
@@ -441,6 +446,44 @@ describe("WorkspaceSettingsPage", () => {
     expect(api.patch).toHaveBeenCalledWith("/clients/me/standalone-boards/board-1/group", { groupTitle: "Client work" });
   });
 
+  it("debounces workspace timing and board-health settings into one update", async () => {
+    const { api } = await render();
+    vi.useFakeTimers();
+
+    fixture.componentInstance.updateInactiveCardsDays("2");
+    fixture.componentInstance.updateInactiveCardsDays("20");
+    fixture.componentInstance.updateCompletedCardsActiveDays("28");
+    fixture.componentInstance.updateBoardHealthSignal("unassigned", false);
+    expect(api.patch).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(299);
+    expect(api.patch).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+
+    expect(api.patch).toHaveBeenCalledTimes(1);
+    expect(api.patch).toHaveBeenCalledWith("/workspaces/workspace-1", {
+      completedCardsActiveDays: 28,
+      inactiveCardsDays: 20,
+      boardHealthEnabled: true,
+      boardHealthOverdueEnabled: true,
+      boardHealthUnassignedEnabled: false,
+      boardHealthInactiveEnabled: true,
+    });
+  });
+
+  it("only shows health signal configuration while board health is enabled", async () => {
+    await render();
+    fixture.componentInstance.selectedTab.set("general");
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('[aria-label="Board health signals"]')).not.toBeNull();
+
+    fixture.componentInstance.updateBoardHealthEnabled(false);
+    fixture.detectChanges();
+    expect(root.querySelector('[aria-label="Board health signals"]')).toBeNull();
+  });
+
   it("selects an existing standalone group from the editable group control", async () => {
     const { api } = await render({ standalone: true });
     fixture.componentInstance.selectedTab.set("general");
@@ -590,7 +633,7 @@ describe("WorkspaceSettingsPage", () => {
     const { api } = await render({ boardLinkCount: 1, confirmResult: false });
     fixture.componentInstance.selectedTab.set("general");
     fixture.detectChanges();
-    const checkbox = (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>(".board-linking-toggle input");
+    const checkbox = (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>('[aria-label="Enable board linking"]');
     expect(checkbox?.checked).toBe(true);
 
     checkbox?.click();

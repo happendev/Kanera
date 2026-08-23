@@ -401,12 +401,12 @@ export class BoardPage implements OnDestroy {
         if (!showArchived && overdueOnly && (card.completedAt || !isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone))) return false;
         // Inactivity is a live-work signal, matching the health indicator: completed cards do not
         // become actionable again merely because their final update is more than 14 days old.
-        if (!showArchived && inactiveOnly && (card.completedAt || !isCardInactive(card.updatedAt))) return false;
+        if (!showArchived && inactiveOnly && (card.completedAt || !isCardInactive(card.updatedAt, Date.now(), this.state.inactiveCardsDays()))) return false;
         if (!showArchived && riskFilter) {
           if (card.completedAt) return false;
           if (riskFilter === "overdue" && !isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone)) return false;
           if (riskFilter === "unassigned" && (this.state.assigneesByCard().get(card.id)?.length ?? 0) > 0) return false;
-          if (riskFilter === "inactive" && !isCardInactive(card.updatedAt)) return false;
+          if (riskFilter === "inactive" && !isCardInactive(card.updatedAt, Date.now(), this.state.inactiveCardsDays())) return false;
         }
         // The queue drops completed cards (they take no rank), so this also hides the board's
         // recently-completed tiles — a done card no longer has a priority set, by definition.
@@ -463,8 +463,17 @@ export class BoardPage implements OnDestroy {
       return !!due && due >= localDateKey(0) && due <= nextWeek;
     }).length;
     const unassigned = incomplete.filter((card) => (this.state.assigneesByCard().get(card.id)?.length ?? 0) === 0).length;
-    const inactive = incomplete.filter((card) => isCardInactive(card.updatedAt, now)).length;
-    const risk = boardWorkRisk({ active: incomplete.length, overdue, unassigned, inactive });
+    const inactive = incomplete.filter((card) => isCardInactive(card.updatedAt, now, this.state.inactiveCardsDays())).length;
+    // Workspace admins choose which observable signals participate in health; the raw counts stay
+    // visible for drill-down even when one signal is excluded from the status calculation.
+    const risk = boardWorkRisk(
+      { active: incomplete.length, overdue, unassigned, inactive },
+      {
+        overdue: this.state.boardHealthOverdueEnabled(),
+        unassigned: this.state.boardHealthUnassignedEnabled(),
+        inactive: this.state.boardHealthInactiveEnabled(),
+      },
+    );
     const listCounts = this.state.visibleLists().map((list) => ({
       id: list.id,
       name: list.name,
@@ -482,6 +491,7 @@ export class BoardPage implements OnDestroy {
       listCounts,
     };
   });
+  readonly inactiveCardsTooltip = computed(() => `Show cards inactive for ${this.state.inactiveCardsDays()} days`);
 
   toggleOverview(): void {
     this.overviewOpen.update((open) => !open);

@@ -69,11 +69,60 @@
       <span>Workspace prefix</span>
       <input maxlength="10" autocomplete="off" [value]="cardKeyPrefix()" (input)="cardKeyPrefix.set($any($event.target).value.toUpperCase())" (blur)="saveCardKeyPrefix()" (keydown.enter)="saveCardKeyPrefix(); $event.preventDefault()"
         [disabled]="cardKeyPrefixSaving()" />
-      <span class="board-linking-help">Cards use keys like {{ cardKeyPrefix() || 'PROJ' }}-123. Prefixes are unique only within this organisation. Previous prefixes remain valid aliases, and their reservations survive workspace deletion.</span>
+      <span class="board-linking-help">Cards use keys like {{ cardKeyPrefix() || 'PROJ' }}-123. Prefixes are unique only within this organisation. Previous prefixes remain valid aliases, and their reservations survive workspace
+        deletion.</span>
     </label>
     @if (cardKeyPrefixError(); as message) {
     <p class="board-linking-error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p>
     }
+  </div>
+</div>
+<div class="board-settings-section">
+  <div class="guest-section-head">
+    <i class="ti ti-activity-heartbeat"></i>
+    <span>Board health</span>
+  </div>
+  <label class="board-linking-toggle">
+    <input type="checkbox" aria-label="Show board health" [checked]="settings.boardHealthEnabledDraft()" (change)="settings.updateBoardHealthEnabled($any($event.target).checked)" (blur)="settings.saveGeneralSettingsNow()"
+      [disabled]="settings.boardHealthSaving()" />
+    <span class="board-linking-copy">
+      <span class="board-linking-title">Show board health</span>
+      <span class="board-linking-help">Show automatic work-risk signals on this {{ settings.isStandalone() ? 'board' : 'workspace and its boards' }} and in Portfolio.</span>
+    </span>
+  </label>
+  @if (settings.boardHealthEnabledDraft()) {
+  <div class="health-signal-options" role="group" aria-label="Board health signals">
+    <span class="health-signal-heading">Use these signals to determine health</span>
+    <label class="health-signal-toggle">
+      <input type="checkbox" [checked]="settings.boardHealthOverdueEnabledDraft()" (change)="settings.updateBoardHealthSignal('overdue', $any($event.target).checked)" [disabled]="settings.boardHealthSaving()" />
+      <span><strong>Overdue cards</strong><small>Flag boards when active cards are past their due date.</small></span>
+    </label>
+    <label class="health-signal-toggle">
+      <input type="checkbox" [checked]="settings.boardHealthUnassignedEnabledDraft()" (change)="settings.updateBoardHealthSignal('unassigned', $any($event.target).checked)" [disabled]="settings.boardHealthSaving()" />
+      <span><strong>Unassigned cards</strong><small>Flag boards when active work has no owner.</small></span>
+    </label>
+    <label class="health-signal-toggle">
+      <input type="checkbox" [checked]="settings.boardHealthInactiveEnabledDraft()" (change)="settings.updateBoardHealthSignal('inactive', $any($event.target).checked)" [disabled]="settings.boardHealthSaving()" />
+      <span><strong>Inactive cards</strong><small>Flag boards when active work has not changed within the inactivity window.</small></span>
+    </label>
+  </div>
+  }
+  @if (settings.boardHealthError(); as message) {
+  <p class="board-linking-error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+  }
+</div>
+<div class="board-settings-section">
+  <div class="guest-section-head">
+    <i class="ti ti-zzz"></i>
+    <span>Inactive cards</span>
+  </div>
+  <div class="board-form single-line-capture">
+    <label class="compact-number-field">
+      <span>Mark cards inactive after</span>
+      <input type="number" min="0" max="365" step="1" [value]="settings.inactiveCardsDaysDraft()" (input)="settings.updateInactiveCardsDays($any($event.target).value)" (blur)="settings.saveGeneralSettingsNow()"
+        [disabled]="settings.boardHealthSaving()" />
+      <span>days</span>
+    </label>
   </div>
 </div>
 <div class="board-settings-section">
@@ -84,7 +133,8 @@
   <div class="board-form single-line-capture">
     <label class="compact-number-field">
       <span>Show completed cards on boards for</span>
-      <input type="number" min="0" max="365" step="1" [value]="settings.workspace()?.completedCardsActiveDays ?? settings.completedCardsActiveDaysDefault" (input)="settings.updateCompletedCardsActiveDays($any($event.target).value)" />
+      <input type="number" min="0" max="365" step="1" [value]="settings.completedCardsActiveDaysDraft()" (input)="settings.updateCompletedCardsActiveDays($any($event.target).value)" (blur)="settings.saveGeneralSettingsNow()"
+        [disabled]="settings.boardHealthSaving()" />
       <span>days</span>
     </label>
   </div>
@@ -95,9 +145,10 @@
     <span>Board linking</span>
   </div>
   <label class="board-linking-toggle">
-    <input type="checkbox" [checked]="settings.boardLinkingEnabledDraft()" (change)="settings.updateBoardLinkingEnabled($any($event.target).checked, $any($event.target))" [disabled]="settings.boardLinkingSaving()" />
+    <input type="checkbox" aria-label="Enable board linking" [checked]="settings.boardLinkingEnabledDraft()" (change)="settings.updateBoardLinkingEnabled($any($event.target).checked, $any($event.target))"
+      [disabled]="settings.boardLinkingSaving()" />
     <span class="board-linking-copy">
-      <span class="board-linking-title">Enable board linking</span>
+      <span class="board-linking-title">Enable board linking (one way sync)</span>
       <span class="board-linking-help">
         @if (settings.isStandalone()) {
         Allow this board to create and receive board links.

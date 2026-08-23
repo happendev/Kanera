@@ -132,7 +132,7 @@ describe("ListComponent", () => {
         { provide: ApiClient, useValue: api },
         { provide: NotificationsService, useValue: { ...notifications, isWatchingCard: () => false, isWatchingBoard: () => false, cardUnreadCount: () => 0 } },
         // Child k-card components inject these; lightweight mocks keep the list spec isolated.
-        { provide: BoardState, useValue: { canEdit: signal(false), canEditRole: signal(false), isCardChecklistExpanded: () => checklistExpanded(), checklistsForCard: () => [], closeCardChecklists } },
+        { provide: BoardState, useValue: { canEdit: signal(false), canEditRole: signal(false), inactiveCardsDays: signal(14), isCardChecklistExpanded: () => checklistExpanded(), checklistsForCard: () => [], closeCardChecklists } },
         { provide: WorkspaceService, useValue: { workspaceIdForBoard: () => "workspace-1" } },
       ],
     }).compileComponents();

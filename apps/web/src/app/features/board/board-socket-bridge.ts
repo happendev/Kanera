@@ -43,9 +43,14 @@ export class BoardSocketBridge {
       [SERVER_EVENTS.WORKSPACE_UPDATED]: ({ workspace }) => {
         if (!isCurrentWorkspace(workspace.id)) return;
         // The app shell joins owned workspace rooms while this bridge joins the board room. Consume
-        // the governance flag here so an open board drops its link icon immediately after settings
-        // disable linking, without waiting for a board refresh.
+        // workspace settings here so an open board updates its governance and inactivity signals
+        // immediately, without waiting for a board refresh.
         state.boardLinkingEnabled.set(workspace.boardLinkingEnabled !== false);
+        state.inactiveCardsDays.set(workspace.inactiveCardsDays);
+        state.boardHealthEnabled.set(workspace.boardHealthEnabled);
+        state.boardHealthOverdueEnabled.set(workspace.boardHealthOverdueEnabled);
+        state.boardHealthUnassignedEnabled.set(workspace.boardHealthUnassignedEnabled);
+        state.boardHealthInactiveEnabled.set(workspace.boardHealthInactiveEnabled);
         if (workspace.boardLinkingEnabled === false) state.hasMirrorsAtHydration.set(false);
         state.updateCardKeyPrefix(workspace.cardKeyPrefix);
       },
