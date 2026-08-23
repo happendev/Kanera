@@ -1,4 +1,5 @@
 import { dto } from "@kanera/shared";
+import { CARD_DUE_DATE_SLOTS } from "@kanera/shared/due-date-slots";
 import { MAX_CARD_PRIORITIES_PER_USER } from "@kanera/shared/schema";
 import { z } from "zod";
 
@@ -663,7 +664,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           completedAt: nullable(dateTime),
           archivedAt: nullable(dateTime),
           dueDateLocalDate: nullable({ type: "string", format: "date" }),
-          dueDateSlot: nullable({ type: "string", enum: ["anyTime", "morning", "afternoon", "endOfWorkDay"] }),
+          dueDateSlot: nullable({ type: "string", enum: [...CARD_DUE_DATE_SLOTS] }),
           createdAt: dateTime,
           updatedAt: dateTime,
         },
@@ -771,7 +772,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           position,
           assigneeId: nullable(uuid),
           dueDateLocalDate: nullable({ type: "string", format: "date" }),
-          dueDateSlot: nullable({ type: "string", enum: ["anyTime", "morning", "afternoon", "endOfWorkDay"] }),
+          dueDateSlot: nullable({ type: "string", enum: [...CARD_DUE_DATE_SLOTS] }),
           dueDateTimezone: nullable({ type: "string" }),
           completedAt: nullable(dateTime),
           completedById: nullable(uuid),

@@ -9,22 +9,12 @@ import { encryptSecret } from "../lib/secrets.js";
 import { buildIntegrationServer } from "../test/integration.js";
 import { emitToBoardAudience } from "./emit.js";
 import { processDirectRealtimeOutbox, processRealtimeOutbox, publishDirectRealtimeEvent, publishRealtimeEvent, setRealtimeOutboxDependenciesForTests } from "./outbox.js";
+import { signupOwner } from "../test/api-fixtures.js";
 
 void test("public-api style board events are persisted then fan out to webhook delivery", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme",
-      email: "owner@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Acme", email: "owner@example.com", displayName: "Owner" });
 
   const wsCreated = await app.inject({
     method: "POST",
@@ -101,18 +91,7 @@ void test("public-api style board events are persisted then fan out to webhook d
 void test("a multi-event drain marks every row processed via the batched update", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme",
-      email: "owner@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Acme", email: "owner@example.com", displayName: "Owner" });
 
   const wsCreated = await app.inject({
     method: "POST",
@@ -164,18 +143,7 @@ void test("a multi-event drain marks every row processed via the batched update"
 void test("filtered board events write webhook outbox and io-less direct user outbox without workspace rebroadcast", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme",
-      email: "owner@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Acme", email: "owner@example.com", displayName: "Owner" });
 
   const wsCreated = await app.inject({
     method: "POST",
@@ -238,18 +206,7 @@ void test("filtered board events write webhook outbox and io-less direct user ou
 void test("outbox retry does not rebroadcast after webhook enqueue fails", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme",
-      email: "owner@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Acme", email: "owner@example.com", displayName: "Owner" });
 
   const wsCreated = await app.inject({
     method: "POST",
@@ -324,18 +281,7 @@ void test("outbox retry does not rebroadcast after webhook enqueue fails", async
 void test("direct realtime outbox dispatches user and client events without webhooks", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme",
-      email: "owner@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { user } = signup.json<{ user: { id: string; clientId: string } }>();
+  const { user } = await signupOwner(app, { orgName: "Acme", email: "owner@example.com", displayName: "Owner" });
 
   const userEvent = await publishDirectRealtimeEvent("user", user.id, "notification:read", {
     notificationIds: ["11111111-1111-1111-1111-111111111111"],
@@ -383,18 +329,7 @@ void test("direct realtime outbox dispatches user and client events without webh
 void test("direct realtime outbox skips rows when inline broadcast already succeeded", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme",
-      email: "owner@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { user } = signup.json<{ user: { id: string } }>();
+  const { user } = await signupOwner(app, { orgName: "Acme", email: "owner@example.com", displayName: "Owner" });
 
   const event = await publishDirectRealtimeEvent("user", user.id, "notification:allRead", {
     readAt: "2026-05-21T02:00:00.000Z",
@@ -411,18 +346,7 @@ void test("direct realtime outbox skips rows when inline broadcast already succe
 void test("direct realtime outbox retries failed broadcasts", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme",
-      email: "owner@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { user } = signup.json<{ user: { id: string } }>();
+  const { user } = await signupOwner(app, { orgName: "Acme", email: "owner@example.com", displayName: "Owner" });
 
   const event = await publishDirectRealtimeEvent("user", user.id, "notification:allRead", {
     readAt: "2026-05-21T02:00:00.000Z",

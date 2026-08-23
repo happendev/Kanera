@@ -8,6 +8,7 @@ import { env } from "../env.js";
 import { buildIntegrationServer } from "../test/integration.js";
 import { hashRefresh, REFRESH_REUSE_GRACE_MS } from "./jwt.js";
 import * as OTPAuth from "otpauth";
+import { signupOwner } from "../test/api-fixtures.js";
 
 type AuthResponse = { accessToken: string; user: { id: string; showCardKeys: boolean } };
 
@@ -28,9 +29,7 @@ function nextTotp(secret: string, label: string): string {
 
 async function signupUser(email = "owner@example.com", password = "Abc12345") {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({ method: "POST", url: "/auth/signup", payload: { orgName: "MFA Co", email, password, displayName: "Owner" } });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<AuthResponse>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "MFA Co", email, password, displayName: "Owner" });
   return { app, accessToken, userId: user.id, email, password };
 }
 

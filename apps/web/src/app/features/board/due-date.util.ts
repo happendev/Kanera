@@ -1,19 +1,18 @@
-export type DueDateSlot = "anyTime" | "morning" | "afternoon" | "endOfWorkDay";
+import { DUE_DATE_SLOT_TIMES, dueDateSlotTimeLabel, type CardDueDateSlot } from "@kanera/shared/due-date-slots";
+
+// The slot vocabulary and its cut-off times are server-owned: the overdue badge here must agree
+// with the API's overdue SQL, so both read the same shared constant. Only the user-facing copy
+// below is a web concern.
+export type DueDateSlot = CardDueDateSlot;
 export type DueDateSlotSelection = DueDateSlot;
 
-const SLOT_TIME: Record<DueDateSlot, { hour: number; minute: number }> = {
-  // Cards without an explicit slot remain actionable for the whole due date.
-  anyTime: { hour: 21, minute: 0 },
-  morning: { hour: 9, minute: 0 },
-  afternoon: { hour: 13, minute: 0 },
-  endOfWorkDay: { hour: 17, minute: 0 },
-};
+const SLOT_TIME = DUE_DATE_SLOT_TIMES;
 
 export const DUE_DATE_SLOT_OPTIONS: { value: DueDateSlot; label: string; shortLabel: string; timeLabel: string }[] = [
-  { value: "anyTime", label: "No slot", shortLabel: "No slot", timeLabel: "" },
-  { value: "morning", label: "Morning", shortLabel: "Morning", timeLabel: "09:00" },
-  { value: "afternoon", label: "Afternoon", shortLabel: "Afternoon", timeLabel: "13:00" },
-  { value: "endOfWorkDay", label: "End of work day", shortLabel: "EOD", timeLabel: "17:00" },
+  { value: "anyTime", label: "No slot", shortLabel: "No slot", timeLabel: dueDateSlotTimeLabel("anyTime") },
+  { value: "morning", label: "Morning", shortLabel: "Morning", timeLabel: dueDateSlotTimeLabel("morning") },
+  { value: "afternoon", label: "Afternoon", shortLabel: "Afternoon", timeLabel: dueDateSlotTimeLabel("afternoon") },
+  { value: "endOfWorkDay", label: "End of work day", shortLabel: "EOD", timeLabel: dueDateSlotTimeLabel("endOfWorkDay") },
 ];
 
 const PARTS_FORMAT_OPTIONS = {

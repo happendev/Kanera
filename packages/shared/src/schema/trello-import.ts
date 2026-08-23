@@ -45,4 +45,3 @@ export const trelloImports = pgTable(
 );
 
 export type TrelloImport = typeof trelloImports.$inferSelect;
-export type NewTrelloImport = typeof trelloImports.$inferInsert;

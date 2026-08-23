@@ -10,13 +10,6 @@ export type WorkDoneLayout = "list" | "grid";
 /** Matches the point where the day grid would collapse to one column and stop adding any value. */
 export const NARROW_WORK_DONE_LAYOUT_QUERY = "(max-width: 720px)";
 
-export interface WorkDoneRange {
-  preset: WorkDoneRangePreset;
-  /** Local start-of-day of the first day in the range. */
-  from: Date;
-  /** Local start-of-day of the last day in the range (inclusive). */
-  to: Date;
-}
 
 /** A list the card passed through, resolved for display. */
 export interface WorkDoneListStep {
@@ -88,5 +81,3 @@ export interface WorkDoneDay {
   actors: WorkDoneActor[];
 }
 
-/** The events a single day's digests were built from, kept for standup export. */
-export type WorkDoneEventsByDay = ReadonlyMap<string, WorkDoneEvent[]>;

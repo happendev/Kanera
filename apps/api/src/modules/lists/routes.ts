@@ -1,7 +1,7 @@
 import { dto } from "@kanera/shared";
 import type { DeletionImpactResponse } from "@kanera/shared/dto";
 import { cards, lists } from "@kanera/shared/schema";
-import { and, asc, desc, eq, gt, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertBoardAccess, assertWorkspaceAccess, assignedCardVisibility } from "../../lib/access.js";
@@ -10,65 +10,24 @@ import { deleteAttachmentFiles } from "../../lib/attachment-cleanup.js";
 import { invalidateQueuesForCards } from "../../lib/card-priority-invalidation.js";
 import { badRequest, notFound } from "../../lib/errors.js";
 import { clearNotificationsForCards, emitDeletedNotifications } from "../../lib/notifications.js";
-import { between } from "../../lib/position.js";
+import { between, neighbourPositions as resolveNeighbourPositions } from "../../lib/position.js";
 import { rebalanceLists } from "../../lib/rebalance.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { emitToBoard, emitToWorkspace } from "../../realtime/emit.js";
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
 // as targeted indexed probes so large workspaces do not pay for a full list scan.
-async function neighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
-  let prev: string | null = null;
-  let next: string | null = null;
-  if (afterId === null && beforeId === undefined) {
-    const [first] = await db
-      .select({ position: lists.position })
-      .from(lists)
-      .where(and(eq(lists.workspaceId, workspaceId), isNull(lists.archivedAt)))
-      .orderBy(asc(lists.position))
-      .limit(1);
-    next = first?.position ?? null;
-  } else if (beforeId === null && afterId === undefined) {
-    const [last] = await db
-      .select({ position: lists.position })
-      .from(lists)
-      .where(and(eq(lists.workspaceId, workspaceId), isNull(lists.archivedAt)))
-      .orderBy(desc(lists.position))
-      .limit(1);
-    prev = last?.position ?? null;
-  }
-  else if (afterId) {
-    const [after] = await db
-      .select({ position: lists.position })
-      .from(lists)
-      .where(and(eq(lists.id, afterId), eq(lists.workspaceId, workspaceId), isNull(lists.archivedAt)))
-      .limit(1);
-    if (!after) throw badRequest("afterListId not found");
-    const [nextList] = await db
-      .select({ position: lists.position })
-      .from(lists)
-      .where(and(eq(lists.workspaceId, workspaceId), isNull(lists.archivedAt), gt(lists.position, after.position)))
-      .orderBy(asc(lists.position))
-      .limit(1);
-    prev = after.position;
-    next = nextList?.position ?? null;
-  } else if (beforeId) {
-    const [before] = await db
-      .select({ position: lists.position })
-      .from(lists)
-      .where(and(eq(lists.id, beforeId), eq(lists.workspaceId, workspaceId), isNull(lists.archivedAt)))
-      .limit(1);
-    if (!before) throw badRequest("beforeListId not found");
-    const [prevList] = await db
-      .select({ position: lists.position })
-      .from(lists)
-      .where(and(eq(lists.workspaceId, workspaceId), isNull(lists.archivedAt), lt(lists.position, before.position)))
-      .orderBy(desc(lists.position))
-      .limit(1);
-    next = before.position;
-    prev = prevList?.position ?? null;
-  }
-  return { prev, next };
+function neighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
+  return resolveNeighbourPositions({
+    table: lists,
+    id: lists.id,
+    position: lists.position,
+    scope: and(eq(lists.workspaceId, workspaceId), isNull(lists.archivedAt)),
+    afterId,
+    beforeId,
+    afterLabel: "afterListId",
+    beforeLabel: "beforeListId",
+  });
 }
 
 function listUpdateActivityValue(name: string, icon: string | null, color: string | null) {

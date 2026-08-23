@@ -31,4 +31,3 @@ export const cardCustomFieldValues = pgTable(
 );
 
 export type CardCustomFieldValue = typeof cardCustomFieldValues.$inferSelect;
-export type NewCardCustomFieldValue = typeof cardCustomFieldValues.$inferInsert;

@@ -9,7 +9,6 @@ import { AccountSettingsPage } from "../account-settings.page";
   imports: [DatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./account-plan.page.html",
-  styleUrl: "./account-plan.page.scss",
 })
 export class AccountSettingsPlanPage implements OnInit {
   protected readonly settings = inject(AccountSettingsPage);

@@ -27,6 +27,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../../db.js";
 import { buildIntegrationServer } from "../../test/integration.js";
 import { processBoardMirrors } from "./drain.js";
+import { signupOwner } from "../../test/api-fixtures.js";
 
 async function waitForOutboxEvent(boardId: string, eventType: (typeof eventOutbox.$inferSelect)["eventType"]) {
   for (let attempt = 0; attempt < 50; attempt += 1) {
@@ -48,10 +49,7 @@ async function waitForNewOutboxEvent(boardId: string, eventType: (typeof eventOu
 
 void test("mirror worker starts at now, links new in-scope cards, and snapshots eligible assignees", async () => {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({ method: "POST", url: "/auth/signup", payload: { orgName: "Worker Org", email: "worker-owner@example.com", password: "Abc12345", displayName: "Owner" } });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
-  const auth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: auth } = await signupOwner(app, { orgName: "Worker Org", email: "worker-owner@example.com", displayName: "Owner" });
   const workspaceResponse = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Delivery" } });
   const workspace = workspaceResponse.json<{ id: string }>();
   const workspaceLists = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).orderBy(lists.position);

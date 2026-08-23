@@ -794,7 +794,3 @@ export function newServiceClientSecret() {
 export function newServiceClientId() {
   return `kanera_service_${randomBytes(18).toString("base64url")}`;
 }
-
-export function oauthScopeForWorkspaceScope(scope: WorkspaceApiKeyScope) {
-  return `kanera:${scope}`;
-}

@@ -12,6 +12,7 @@ import { ANCHORED_HOST_STYLES, anchoredSheetStyles, type AnchoredPanelPlacement 
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { WEEKDAY_LABELS, startOfWeek } from "../../shared/week-start";
+import { dueDateSlotTimeLabel } from "@kanera/shared/due-date-slots";
 import { DUE_DATE_SLOT_OPTIONS, type DueDateSlot, type DueDateSlotSelection } from "./due-date.util";
 
 type CalendarDay = {
@@ -559,13 +560,9 @@ export class DatePickerPopover implements OnInit {
   }
 
   slotTimeLabel(slot: DueDateSlot): string {
-    const times: Record<DueDateSlot, string> = {
-      anyTime: "",
-      morning: "09:00",
-      afternoon: "13:00",
-      endOfWorkDay: "17:00",
-    };
-    return times[slot];
+    // Derived from the shared cut-offs so the picker cannot advertise a time the overdue
+    // check does not actually use.
+    return dueDateSlotTimeLabel(slot);
   }
 
   private initialVisibleMonth(): Date {

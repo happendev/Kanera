@@ -23,4 +23,3 @@ export const clientGuestSeats = pgTable(
 );
 
 export type ClientGuestSeat = typeof clientGuestSeats.$inferSelect;
-export type NewClientGuestSeat = typeof clientGuestSeats.$inferInsert;

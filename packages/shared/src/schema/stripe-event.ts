@@ -13,4 +13,3 @@ export const stripeEvents = pgTable(
 );
 
 export type StripeEvent = typeof stripeEvents.$inferSelect;
-export type NewStripeEvent = typeof stripeEvents.$inferInsert;

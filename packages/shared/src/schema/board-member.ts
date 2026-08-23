@@ -39,4 +39,3 @@ export const boardMembers = pgTable(
 );
 
 export type BoardMember = typeof boardMembers.$inferSelect;
-export type NewBoardMember = typeof boardMembers.$inferInsert;

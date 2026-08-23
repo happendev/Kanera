@@ -20,4 +20,3 @@ export const boardWatchers = pgTable(
 );
 
 export type BoardWatcher = typeof boardWatchers.$inferSelect;
-export type NewBoardWatcher = typeof boardWatchers.$inferInsert;

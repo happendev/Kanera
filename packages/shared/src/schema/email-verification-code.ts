@@ -36,4 +36,3 @@ export const emailVerificationCodes = pgTable(
 );
 
 export type EmailVerificationCode = typeof emailVerificationCodes.$inferSelect;
-export type NewEmailVerificationCode = typeof emailVerificationCodes.$inferInsert;

@@ -5,21 +5,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db } from "../../db.js";
 import { buildIntegrationServer } from "../../test/integration.js";
+import { signupOwner } from "../../test/api-fixtures.js";
 
-type SignupResponse = { accessToken: string; user: { id: string } };
 type WorkspaceResponse = { id: string };
 type TemplateResponse = { id: string; title: string; items: { text: string }[]; position: string };
 
 async function setup() {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: { orgName: "Acme", email: "owner@example.com", password: "Abc12345", displayName: "Owner" },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken } = signup.json<SignupResponse>();
-  const auth = { authorization: `Bearer ${accessToken}` };
+  const { auth: auth } = await signupOwner(app, { orgName: "Acme", email: "owner@example.com", displayName: "Owner" });
 
   const wsCreated = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Delivery" } });
   assert.equal(wsCreated.statusCode, 201);

@@ -24,6 +24,7 @@ import { MyPrioritiesService } from "../../core/priorities/my-priorities.service
 import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
 import { SocketService, type AppSocket } from "../../core/realtime/socket.service";
 import { CardDragCoordinator } from "../board/card-drag-coordinator.service";
+import { optimisticPriorityPosition, reorderedQueueItems } from "../../shared/priority-queue/priority-queue-math";
 import {
   DEFAULT_COMPLETION,
   readGlobalWorkPreference,
@@ -865,7 +866,7 @@ export class GlobalWorkState {
       next = lane[index]?.position ?? null;
       previous = index > 0 ? lane[index - 1]?.position ?? null : null;
     }
-    const optimisticPosition = this.optimisticPosition(previous, next);
+    const optimisticPosition = optimisticPriorityPosition(previous, next);
     this.response.update((response) => ({
       ...response,
       cards: response.cards.map((card) =>
@@ -1014,7 +1015,7 @@ export class GlobalWorkState {
     const moving = lane?.queue.items.find((item) => item.id === priorityId);
     if (lane && moving) {
       const rest = lane.queue.items.filter((item) => item.id !== priorityId);
-      const items = this.reorderedQueueItems(rest, moving, anchor);
+      const items = reorderedQueueItems(rest, moving, anchor);
       this.patchTeamQueue(targetUserId, { ...lane.queue, items });
     }
     try {
@@ -1048,7 +1049,7 @@ export class GlobalWorkState {
         rank: 0,
         position: "0",
       };
-      const items = this.reorderedQueueItems(lane.queue.items, moving, anchor);
+      const items = reorderedQueueItems(lane.queue.items, moving, anchor);
       this.patchTeamQueue(targetUserId, { ...lane.queue, items, totalCount: items.length });
     }
     try {
@@ -1128,38 +1129,10 @@ export class GlobalWorkState {
           position: "0",
         };
     if (!moving) return;
-    const items = this.reorderedQueueItems(rest, moving, anchor);
+    const items = reorderedQueueItems(rest, moving, anchor);
     this.otherPriorities.set({ ...queue, items, totalCount: items.length });
   }
 
-  /**
-   * Place `moving` among `rest` at the anchor and renumber ranks — the shared optimistic-reorder
-   * core for both the focused queue and a team lane. The interpolated position is a stand-in the
-   * server response replaces; it only has to sort the row into the right slot locally.
-   */
-  private reorderedQueueItems(
-    rest: WorkPrioritiesResponse["items"],
-    moving: WorkPrioritiesResponse["items"][number],
-    anchor: { afterId?: string | null; beforeId?: string | null },
-  ): WorkPrioritiesResponse["items"] {
-    let previous: string | null = null;
-    let next: string | null = null;
-    if (anchor.afterId === null) next = rest[0]?.position ?? null;
-    else if (anchor.beforeId === null) previous = rest.at(-1)?.position ?? null;
-    else if (anchor.afterId) {
-      const index = rest.findIndex((item) => item.id === anchor.afterId);
-      previous = rest[index]?.position ?? null;
-      next = index >= 0 ? rest[index + 1]?.position ?? null : null;
-    } else if (anchor.beforeId) {
-      const index = rest.findIndex((item) => item.id === anchor.beforeId);
-      next = rest[index]?.position ?? null;
-      previous = index > 0 ? rest[index - 1]?.position ?? null : null;
-    }
-    const position = this.optimisticPosition(previous, next);
-    return [...rest, { ...moving, position }]
-      .sort((a, b) => Number(a.position) - Number(b.position) || a.id.localeCompare(b.id))
-      .map((item, index) => ({ ...item, rank: index + 1 }));
-  }
 
   addSeparator(separator: WireGlobalWorkSeparator): void {
     this.response.update((response) => ({
@@ -1214,7 +1187,7 @@ export class GlobalWorkState {
       next = lane[index]?.position ?? null;
       previous = index > 0 ? lane[index - 1]?.position ?? null : null;
     }
-    const optimisticPosition = this.optimisticPosition(previous, next);
+    const optimisticPosition = optimisticPriorityPosition(previous, next);
     this.response.update((response) => ({
       ...response,
       separators: response.separators.map((candidate) =>
@@ -1279,12 +1252,6 @@ export class GlobalWorkState {
     });
   }
 
-  private optimisticPosition(previous: string | null, next: string | null): string {
-    if (previous === null && next === null) return "1000.0000000000";
-    if (previous === null) return (Number(next) - 1000).toFixed(10);
-    if (next === null) return (Number(previous) + 1000).toFixed(10);
-    return ((Number(previous) + Number(next)) / 2).toFixed(10);
-  }
 
   /**
    * `atomicCards` swaps the progressive card paging for a single settled value — see loadAllCards.

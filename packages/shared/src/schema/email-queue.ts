@@ -290,4 +290,3 @@ export const emailQueue = pgTable(
 );
 
 export type EmailQueue = typeof emailQueue.$inferSelect;
-export type NewEmailQueue = typeof emailQueue.$inferInsert;

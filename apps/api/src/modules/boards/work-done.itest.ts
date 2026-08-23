@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db } from "../../db.js";
 import { buildIntegrationServer } from "../../test/integration.js";
+import { signupOwner } from "../../test/api-fixtures.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -34,18 +35,7 @@ interface WorkDoneEvent {
 void test("work-done emits created/moved/checklist events that day as separate rows", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Work Done",
-      email: "owner-work-done@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user: owner } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
+  const { accessToken, user: owner } = await signupOwner(app, { orgName: "Acme Work Done", email: "owner-work-done@example.com", displayName: "Owner" });
   await db
     .update(users)
     .set({ avatarUrl: `/api/media/${owner.clientId}/avatars/owner.webp` })
@@ -266,13 +256,7 @@ void test("work-done emits created/moved/checklist events that day as separate r
 /** Minimal board/list scaffold for the focused coalesce/completion tests below. */
 async function seedBoard(email: string) {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: { orgName: "Acme", email, password: "Abc12345", displayName: "Owner" },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user: owner } = signup.json<{ accessToken: string; user: { id: string } }>();
+  const { accessToken, user: owner } = await signupOwner(app, { orgName: "Acme", email, displayName: "Owner" });
 
   const wsCreated = await app.inject({
     method: "POST",

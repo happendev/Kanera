@@ -161,10 +161,7 @@ export const automationRuns = pgTable(
 );
 
 export type Automation = typeof automations.$inferSelect;
-export type NewAutomation = typeof automations.$inferInsert;
 export type AutomationAction = typeof automationActions.$inferSelect;
-export type NewAutomationAction = typeof automationActions.$inferInsert;
 export type AutomationDueDateRun = typeof automationDueDateRuns.$inferSelect;
 export type AutomationRunStats = typeof automationRunStats.$inferSelect;
-export type NewAutomationRunStats = typeof automationRunStats.$inferInsert;
 export type AutomationRun = typeof automationRuns.$inferSelect;

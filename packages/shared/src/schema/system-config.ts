@@ -12,4 +12,3 @@ export const systemConfigs = pgTable("system_config", {
 });
 
 export type SystemConfig = typeof systemConfigs.$inferSelect;
-export type NewSystemConfig = typeof systemConfigs.$inferInsert;

@@ -32,7 +32,7 @@ import { assertBoardLimit, assertGuestsAllowed, hasBoardSyncEntitlement } from "
 import { badRequest, notFound } from "../../lib/errors.js";
 import { deleteExternalLinks } from "../../lib/external-links.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
-import { between } from "../../lib/position.js";
+import { between, neighbourPositions as resolveNeighbourPositions } from "../../lib/position.js";
 import { rebalanceBoardGroups, rebalanceBoards } from "../../lib/rebalance.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { deleteWorkspaceCascade } from "../../lib/workspace-delete.js";
@@ -210,58 +210,32 @@ async function boardPayload(
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
 // as targeted indexed probes so large workspaces do not pay for a full board scan.
-async function neighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
-  let prev: string | null = null;
-  let next: string | null = null;
-  if (afterId === null && beforeId === undefined) {
-    const [first] = await db.select({ position: boards.position }).from(boards).where(and(eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt))).orderBy(asc(boards.position)).limit(1);
-    next = first?.position ?? null;
-  } else if (beforeId === null && afterId === undefined) {
-    const [last] = await db.select({ position: boards.position }).from(boards).where(and(eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt))).orderBy(desc(boards.position)).limit(1);
-    prev = last?.position ?? null;
-  }
-  else if (afterId) {
-    const [after] = await db.select({ position: boards.position }).from(boards).where(and(eq(boards.id, afterId), eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt))).limit(1);
-    if (!after) throw badRequest("afterBoardId not found");
-    const [nextBoard] = await db.select({ position: boards.position }).from(boards).where(and(eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt), gt(boards.position, after.position))).orderBy(asc(boards.position)).limit(1);
-    prev = after.position;
-    next = nextBoard?.position ?? null;
-  } else if (beforeId) {
-    const [before] = await db.select({ position: boards.position }).from(boards).where(and(eq(boards.id, beforeId), eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt))).limit(1);
-    if (!before) throw badRequest("beforeBoardId not found");
-    const [prevBoard] = await db.select({ position: boards.position }).from(boards).where(and(eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt), lt(boards.position, before.position))).orderBy(desc(boards.position)).limit(1);
-    next = before.position;
-    prev = prevBoard?.position ?? null;
-  }
-  return { prev, next };
+function neighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
+  return resolveNeighbourPositions({
+    table: boards,
+    id: boards.id,
+    position: boards.position,
+    scope: and(eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt)),
+    afterId,
+    beforeId,
+    afterLabel: "afterBoardId",
+    beforeLabel: "beforeBoardId",
+  });
 }
 
 // Board groups share the same sparse-position contract as boards; use one-neighbor
 // probes rather than materializing every group in the workspace.
-async function groupNeighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
-  let prev: string | null = null;
-  let next: string | null = null;
-  if (afterId === null && beforeId === undefined) {
-    const [first] = await db.select({ position: boardGroups.position }).from(boardGroups).where(eq(boardGroups.workspaceId, workspaceId)).orderBy(asc(boardGroups.position)).limit(1);
-    next = first?.position ?? null;
-  } else if (beforeId === null && afterId === undefined) {
-    const [last] = await db.select({ position: boardGroups.position }).from(boardGroups).where(eq(boardGroups.workspaceId, workspaceId)).orderBy(desc(boardGroups.position)).limit(1);
-    prev = last?.position ?? null;
-  }
-  else if (afterId) {
-    const [after] = await db.select({ position: boardGroups.position }).from(boardGroups).where(and(eq(boardGroups.id, afterId), eq(boardGroups.workspaceId, workspaceId))).limit(1);
-    if (!after) throw badRequest("afterGroupId not found");
-    const [nextGroup] = await db.select({ position: boardGroups.position }).from(boardGroups).where(and(eq(boardGroups.workspaceId, workspaceId), gt(boardGroups.position, after.position))).orderBy(asc(boardGroups.position)).limit(1);
-    prev = after.position;
-    next = nextGroup?.position ?? null;
-  } else if (beforeId) {
-    const [before] = await db.select({ position: boardGroups.position }).from(boardGroups).where(and(eq(boardGroups.id, beforeId), eq(boardGroups.workspaceId, workspaceId))).limit(1);
-    if (!before) throw badRequest("beforeGroupId not found");
-    const [prevGroup] = await db.select({ position: boardGroups.position }).from(boardGroups).where(and(eq(boardGroups.workspaceId, workspaceId), lt(boardGroups.position, before.position))).orderBy(desc(boardGroups.position)).limit(1);
-    next = before.position;
-    prev = prevGroup?.position ?? null;
-  }
-  return { prev, next };
+function groupNeighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
+  return resolveNeighbourPositions({
+    table: boardGroups,
+    id: boardGroups.id,
+    position: boardGroups.position,
+    scope: eq(boardGroups.workspaceId, workspaceId),
+    afterId,
+    beforeId,
+    afterLabel: "afterGroupId",
+    beforeLabel: "beforeGroupId",
+  });
 }
 
 async function validateBoardGroup(workspaceId: string, groupId: string | null | undefined) {

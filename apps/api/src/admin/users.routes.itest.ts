@@ -7,16 +7,11 @@ import { adminAuditLogs, boardMembers, boards, clientGuestSeats, clientMembers, 
 import { db } from "../db.js";
 import { buildAdminIntegrationServer, buildIntegrationServer } from "../test/integration.js";
 import { adminAuthHeader, createAdmin, loginAdmin } from "../test/admin-fixtures.js";
+import { signupOwner } from "../test/api-fixtures.js";
 
 async function signupOrg(orgName: string, email: string) {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: { orgName, email, password: "Abc12345", displayName: "Owner" },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { user } = signup.json<{ user: { id: string; clientId: string } }>();
+  const { user } = await signupOwner(app, { orgName, email, displayName: "Owner" });
   return { tenantApp: app, clientId: user.clientId, userId: user.id };
 }
 

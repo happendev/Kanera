@@ -128,13 +128,6 @@ export const BUILTIN_COLUMN_IDS = [
   "created",
 ] as const;
 
-export type BuiltinColumnId = typeof BUILTIN_COLUMN_IDS[number];
-
-export interface ColumnDef {
-  id: string;
-  label: string;
-  icon: string;
-}
 
 export const GROUP_BY_OPTIONS: { value: BuiltinGroupBy; label: string; icon: string }[] = [
   { value: "list", label: "List", icon: "layout-list" },

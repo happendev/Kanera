@@ -75,4 +75,3 @@ export const notes = pgTable(
 );
 
 export type Note = typeof notes.$inferSelect;
-export type NewNote = typeof notes.$inferInsert;

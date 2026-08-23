@@ -3,6 +3,7 @@ import { SERVER_EVENTS } from "@kanera/shared/events";
 import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
 import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
 import { DEFAULT_WORKSPACE_LIST_NAMES } from "@kanera/shared/default-workspace-lists";
+import { DUE_DATE_SLOT_RANK, type CardDueDateSlot } from "@kanera/shared/due-date-slots";
 import { automationActions, automations, boardGroups, boardInvitationGrants, boardInvitations, boardMembers, boardMirrors, boards, cardAssignees, cardLabelAssignments, cardLabels, cards, checklistTemplateItems, checklistTemplates, clientGuestSeats, clientMembers, clients, customFieldOptions, customFields, lists, planActions, standaloneBoardGroups, users, workspaceMembers, workspaces, type AutomationActionConfig, type Workspace } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -1868,7 +1869,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       boardName: string;
       boardIcon: string | null;
       dueDateLocalDate: string;
-      dueDateSlot: "anyTime" | "morning" | "afternoon" | "endOfWorkDay" | null;
+      dueDateSlot: CardDueDateSlot | null;
       dueDateTimezone: string | null;
     };
     // Home's due projection uses the same canonical active-board resolver as global work and
@@ -1937,10 +1938,9 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       overdueChecklistItems = assignedChecklistItems.filter((item) => isDueDateOverdue(item)).length;
 
       dueSoon = [...cardDueSoon, ...checklistDueSoon];
-      const slotRank = { morning: 0, afternoon: 1, endOfWorkDay: 2, anyTime: 3 } as const;
       dueSoon.sort((a, b) =>
         a.dueDateLocalDate.localeCompare(b.dueDateLocalDate) ||
-        (slotRank[a.dueDateSlot ?? "anyTime"] - slotRank[b.dueDateSlot ?? "anyTime"]) ||
+        (DUE_DATE_SLOT_RANK[a.dueDateSlot ?? "anyTime"] - DUE_DATE_SLOT_RANK[b.dueDateSlot ?? "anyTime"]) ||
         a.boardName.localeCompare(b.boardName) ||
         a.title.localeCompare(b.title)
       );

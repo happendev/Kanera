@@ -9,6 +9,7 @@ import { db } from "../../db.js";
 import { getUserDisplay } from "../../lib/user-display-cache.js";
 import { buildPublicApiServer } from "../../public-api-server.js";
 import { buildIntegrationServer, testUploadsDir } from "../../test/integration.js";
+import { signupOwner } from "../../test/api-fixtures.js";
 
 type ApiActivityFeedItem = {
   type: "activity";
@@ -194,18 +195,7 @@ void test("GET /cards/:id/comments paginates with a descending cursor", async ()
 void test("card feed shows card creation before same-transaction automation activity", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Automation Feed",
-      email: "owner-automation-feed@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken } = signup.json<{ accessToken: string }>();
+  const { accessToken } = await signupOwner(app, { orgName: "Acme Automation Feed", email: "owner-automation-feed@example.com", displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -278,18 +268,7 @@ void test("card feed shows card creation before same-transaction automation acti
 void test("workspace API keys can update and delete their attributed comments", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme API Activity",
-      email: "owner-api-activity@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken } = signup.json<{ accessToken: string }>();
+  const { accessToken } = await signupOwner(app, { orgName: "Acme API Activity", email: "owner-api-activity@example.com", displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -507,18 +486,7 @@ void test("editing a comment updates the comment feed item without recording edi
 
 void test("board administrators can delete other authors' comments but editors cannot", async () => {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Comment Moderation",
-      email: "owner-comment-moderation@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken: ownerToken, user: owner } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
+  const { accessToken: ownerToken, user: owner } = await signupOwner(app, { orgName: "Acme Comment Moderation", email: "owner-comment-moderation@example.com", displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -676,19 +644,7 @@ void test("observers cannot react to comments", async () => {
 
 void test("bulk comment deletion is atomic, owner-only, and emits one event per deleted comment", async () => {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Bulk Comment Delete",
-      email: "owner-bulk-comment-delete@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user: owner } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
-  const auth = { authorization: `Bearer ${accessToken}` };
+  const { user: owner, auth: auth } = await signupOwner(app, { orgName: "Acme Bulk Comment Delete", email: "owner-bulk-comment-delete@example.com", displayName: "Owner" });
   const workspaceCreated = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Delivery" } });
   assert.equal(workspaceCreated.statusCode, 201);
   const workspace = workspaceCreated.json<{ id: string }>();
@@ -734,19 +690,7 @@ void test("bulk comment deletion is atomic, owner-only, and emits one event per 
 
 void test("bulk comment creation validates atomically and preserves request order", async () => {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Bulk Comment Create",
-      email: "owner-bulk-comment-create@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user: owner } = signup.json<{ accessToken: string; user: { id: string } }>();
-  const auth = { authorization: `Bearer ${accessToken}` };
+  const { user: owner, auth: auth } = await signupOwner(app, { orgName: "Acme Bulk Comment Create", email: "owner-bulk-comment-create@example.com", displayName: "Owner" });
   const workspaceCreated = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Delivery" } });
   assert.equal(workspaceCreated.statusCode, 201);
   const workspace = workspaceCreated.json<{ id: string }>();

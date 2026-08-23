@@ -23,4 +23,3 @@ export const inviteWorkspaceGrants = pgTable(
 );
 
 export type InviteWorkspaceGrant = typeof inviteWorkspaceGrants.$inferSelect;
-export type NewInviteWorkspaceGrant = typeof inviteWorkspaceGrants.$inferInsert;

@@ -20,4 +20,3 @@ export const cardWatchers = pgTable(
 );
 
 export type CardWatcher = typeof cardWatchers.$inferSelect;
-export type NewCardWatcher = typeof cardWatchers.$inferInsert;

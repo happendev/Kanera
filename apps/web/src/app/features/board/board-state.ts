@@ -34,6 +34,21 @@ const EMPTY_ATTACHMENTS: CardAttachmentRow[] = [];
 const EMPTY_CHECKLISTS: WireCardChecklist[] = [];
 const EMPTY_FIELD_VALUES = new Map<string, CardCustomFieldValue>();
 
+/**
+ * An optimistic position between two board-lane neighbours.
+ *
+ * Halving toward the head (rather than subtracting a fixed step, as the priority queue does)
+ * keeps board positions strictly positive: a lane can be prepended to indefinitely without ever
+ * reaching zero or going negative. The two rules are deliberately different — do not unify them
+ * with `optimisticPriorityPosition` without deciding which behaviour the other surface wants.
+ */
+export function betweenBoardPositions(prev: string | null, next: string | null): string {
+  if (prev === null && next === null) return "1000.0000000000";
+  if (prev === null) return (Number(next) / 2).toFixed(10);
+  if (next === null) return (Number(prev) + 1000).toFixed(10);
+  return ((Number(prev) + Number(next)) / 2).toFixed(10);
+}
+
 @Injectable()
 export class BoardState {
   private readonly workspaceService = inject(WorkspaceService);
@@ -1297,10 +1312,7 @@ export class BoardState {
   }
 
   private betweenPositions(prev: string | null, next: string | null) {
-    if (prev === null && next === null) return "1000.0000000000";
-    if (prev === null) return (Number(next) / 2).toFixed(10);
-    if (next === null) return (Number(prev) + 1000).toFixed(10);
-    return ((Number(prev) + Number(next)) / 2).toFixed(10);
+    return betweenBoardPositions(prev, next);
   }
 
   sortCustomFields(fields: AnyCustomField[]) {

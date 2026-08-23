@@ -8,8 +8,8 @@ import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { buildIntegrationServer } from "../../test/integration.js";
 import { decryptSecret } from "../../lib/secrets.js";
+import { signupOwner } from "../../test/api-fixtures.js";
 
-type SignupResponse = { accessToken: string; user: { id: string; clientId: string } };
 type WorkspaceResponse = { id: string };
 type ApiKeyResponse = {
   id: string;
@@ -29,18 +29,7 @@ type WebhookResponse = {
 void test("workspace admins can list, rename, and order keys by most recent use", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Integrations",
-      email: "integrations-owner@example.com",
-      password: "Abc12345",
-      displayName: "Owner User",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user: owner } = signup.json<SignupResponse>();
+  const { accessToken, user: owner } = await signupOwner(app, { orgName: "Acme Integrations", email: "integrations-owner@example.com", displayName: "Owner User" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -155,18 +144,7 @@ void test("workspace admins can list, rename, and order keys by most recent use"
 void test("workspace webhook list includes the latest successful delivery timestamp", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Webhooks",
-      email: "webhooks-owner@example.com",
-      password: "Abc12345",
-      displayName: "Owner User",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken } = signup.json<SignupResponse>();
+  const { accessToken } = await signupOwner(app, { orgName: "Acme Webhooks", email: "webhooks-owner@example.com", displayName: "Owner User" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -238,13 +216,7 @@ void test("workspace webhook list includes the latest successful delivery timest
 
 void test("workspace admins can configure chat destinations without exposing credentials", async () => {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: { orgName: "Acme Chat", email: "chat-owner@example.com", password: "Abc12345", displayName: "Owner User" },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken } = signup.json<SignupResponse>();
+  const { accessToken } = await signupOwner(app, { orgName: "Acme Chat", email: "chat-owner@example.com", displayName: "Owner User" });
   const workspaceCreated = await app.inject({
     method: "POST",
     url: "/workspaces",

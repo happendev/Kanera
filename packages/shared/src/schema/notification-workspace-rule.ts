@@ -49,4 +49,3 @@ export const userNotificationWorkspaceRules = pgTable(
 );
 
 export type UserNotificationWorkspaceRule = typeof userNotificationWorkspaceRules.$inferSelect;
-export type NewUserNotificationWorkspaceRule = typeof userNotificationWorkspaceRules.$inferInsert;

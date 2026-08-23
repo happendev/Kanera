@@ -31,4 +31,3 @@ export const adminUsers = pgTable(
 );
 
 export type AdminUser = typeof adminUsers.$inferSelect;
-export type NewAdminUser = typeof adminUsers.$inferInsert;

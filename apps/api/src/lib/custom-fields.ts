@@ -45,11 +45,6 @@ export async function loadWorkspaceCustomFields(workspaceId: string, tx: Db = db
   return attachFieldOptions(fields, tx);
 }
 
-/** Build a single wire field from a row plus its options (empty for non-select types). */
-export function toWireCustomField(field: CustomField, options: WireCustomFieldOption[]): WireCustomField {
-  return { ...field, options };
-}
-
 // The typed value column that backs each custom field type. Kept here (not in the
 // route module) so the single-card and bulk write paths share one source of truth.
 export const CUSTOM_FIELD_VALUE_COLUMN_BY_TYPE = {

@@ -48,7 +48,7 @@ import { ConfirmService } from "../../shared/confirm.service";
 import { DraftBannerComponent } from "../../shared/draft-banner.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { BoardPickerPopover, type BoardPickerPick } from "./board-picker.popover";
-import { BoardState, type AnyCustomField } from "./board-state";
+import { BoardState, betweenBoardPositions, type AnyCustomField } from "./board-state";
 import { CardActivityComponent } from "./card-activity.component";
 import { CardDetailLayoutService } from "./card-detail-layout.service";
 import { DatePickerPopover } from "./date-picker.popover";
@@ -1745,10 +1745,7 @@ export class CardDetailComponent {
   }
 
   private positionBetween(prev: string | null, next: string | null): string {
-    if (prev === null && next === null) return "1000.0000000000";
-    if (prev === null) return (Number(next) / 2).toFixed(10);
-    if (next === null) return (Number(prev) + 1000).toFixed(10);
-    return ((Number(prev) + Number(next)) / 2).toFixed(10);
+    return betweenBoardPositions(prev, next);
   }
 
   private initialHideCompletedChecklistItems(): boolean {

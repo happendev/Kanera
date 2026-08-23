@@ -40,6 +40,7 @@ import { hashOpaqueToken } from "../../lib/tokens.js";
 import { ensureSystemWebPushConfig, webPushClient } from "../../lib/web-push.js";
 import { setupIo } from "../../realtime/io.js";
 import { buildIntegrationServer } from "../../test/integration.js";
+import { signupOwner } from "../../test/api-fixtures.js";
 
 const enabledWorkspaceRuleTypes = (): NotificationWorkspaceRule["types"] => ({
   cardAssigned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
@@ -101,21 +102,7 @@ async function seed() {
   const app = await buildIntegrationServer();
   await setupIo(app);
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme",
-      email: "owner@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken: ownerToken, user: owner } = signup.json<{
-    accessToken: string;
-    user: { id: string; clientId: string };
-  }>();
+  const { accessToken: ownerToken, user: owner } = await signupOwner(app, { orgName: "Acme", email: "owner@example.com", displayName: "Owner" });
 
   const wsCreated = await app.inject({
     method: "POST",

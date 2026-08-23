@@ -132,7 +132,17 @@ describe("NotificationsService", () => {
         provideZonelessChangeDetection(),
         NotificationsService,
         { provide: ApiClient, useValue: api },
-        { provide: AuthService, useValue: { user: signal({ id: "user-1", clientId: "client-1" }) } },
+        {
+          provide: AuthService,
+          useValue: {
+            user: signal({
+              id: "user-1",
+              clientId: "client-1",
+              displayName: "Me User",
+              avatarUrl: "https://example.test/me.png",
+            }),
+          },
+        },
         { provide: MentionSoundService, useValue: mentionSound },
         { provide: SocketService, useValue: { connect: vi.fn(() => socket.asSocket()), displayedOnline: online } },
       ],
@@ -235,7 +245,10 @@ describe("NotificationsService", () => {
 
     expect(api.get).toHaveBeenCalledWith("/boards/board-1/watchers");
     expect(api.put).toHaveBeenCalledWith("/boards/board-1/watch", {});
-    expect(service.boardWatchers()["board-1"].map((user) => user.userId)).toEqual(["user-2", "user-1"]);
+    expect(service.boardWatchers()["board-1"]).toEqual([
+      { userId: "user-2", displayName: "Ada", avatarUrl: null },
+      { userId: "user-1", displayName: "Me User", avatarUrl: "https://example.test/me.png" },
+    ]);
   });
 
   it("resyncs board counts when returning online", async () => {

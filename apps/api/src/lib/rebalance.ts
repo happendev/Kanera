@@ -1,6 +1,6 @@
 import { SERVER_EVENTS } from "@kanera/shared/events";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
-import type { PgTable } from "drizzle-orm/pg-core";
+import { and, asc, eq, isNull, sql, type SQL } from "drizzle-orm";
+import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
 import {
   boards,
   boardGroups,
@@ -43,140 +43,71 @@ async function applyPositions(table: PgTable, updates: RebalancedPosition[], tx:
   `);
 }
 
-export async function rebalanceBoards(workspaceId: string): Promise<RebalancedPosition[]> {
-  const rows = await db
-    .select({ id: boards.id, position: boards.position })
-    .from(boards)
-    .where(and(eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt)))
+/**
+ * Renumber every row matching `where` to evenly spaced positions.
+ *
+ * The ten wrappers below differ only in table, scope predicate, and tiebreak, so the query shape
+ * lives here once: `select … for update order by position` inside the caller's transaction, then a
+ * single batched `applyPositions`. Rows whose position is already correct are filtered out, so a
+ * no-op rebalance issues no UPDATE at all.
+ *
+ * `for("update")` is load-bearing — it serialises concurrent rebalances of the same scope, which is
+ * what stops two writers interleaving and producing duplicate positions.
+ */
+async function rebalanceTable(
+  table: PgTable,
+  columns: { id: AnyPgColumn; position: AnyPgColumn },
+  where: SQL | undefined,
+  options: { tx?: Tx; tiebreak?: AnyPgColumn } = {},
+): Promise<RebalancedPosition[]> {
+  const tx = options.tx ?? db;
+  const order = options.tiebreak ? [asc(columns.position), asc(options.tiebreak)] : [asc(columns.position)];
+  const rows = await tx
+    .select({ id: columns.id, position: columns.position })
+    .from(table)
+    .where(where)
     .for("update")
-    .orderBy(asc(boards.position));
+    .orderBy(...order);
 
   const updates = rows
-    .map((row, index) => ({ id: row.id, position: positionAtIndex(index), previousPosition: row.position }))
+    .map((row, index) => ({ id: row.id as string, position: positionAtIndex(index), previousPosition: row.position as string }))
     .filter((row) => row.position !== row.previousPosition);
 
-  await applyPositions(boards, updates, db);
+  await applyPositions(table, updates, tx);
 
   return updates.map(({ id, position }) => ({ id, position }));
+}
+
+export async function rebalanceBoards(workspaceId: string): Promise<RebalancedPosition[]> {
+  return rebalanceTable(boards, { id: boards.id, position: boards.position }, and(eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt)));
 }
 
 export async function rebalanceBoardGroups(workspaceId: string): Promise<RebalancedPosition[]> {
-  const rows = await db
-    .select({ id: boardGroups.id, position: boardGroups.position })
-    .from(boardGroups)
-    .where(eq(boardGroups.workspaceId, workspaceId))
-    .for("update")
-    .orderBy(asc(boardGroups.position));
-
-  const updates = rows
-    .map((row, index) => ({ id: row.id, position: positionAtIndex(index), previousPosition: row.position }))
-    .filter((row) => row.position !== row.previousPosition);
-
-  await applyPositions(boardGroups, updates, db);
-
-  return updates.map(({ id, position }) => ({ id, position }));
+  return rebalanceTable(boardGroups, { id: boardGroups.id, position: boardGroups.position }, eq(boardGroups.workspaceId, workspaceId));
 }
 
 export async function rebalanceLists(workspaceId: string): Promise<RebalancedPosition[]> {
-  const rows = await db
-    .select({ id: lists.id, position: lists.position })
-    .from(lists)
-    .where(and(eq(lists.workspaceId, workspaceId), isNull(lists.archivedAt)))
-    .for("update")
-    .orderBy(asc(lists.position));
-
-  const updates = rows
-    .map((row, index) => ({ id: row.id, position: positionAtIndex(index), previousPosition: row.position }))
-    .filter((row) => row.position !== row.previousPosition);
-
-  await applyPositions(lists, updates, db);
-
-  return updates.map(({ id, position }) => ({ id, position }));
+  return rebalanceTable(lists, { id: lists.id, position: lists.position }, and(eq(lists.workspaceId, workspaceId), isNull(lists.archivedAt)));
 }
 
 export async function rebalanceCustomFields(workspaceId: string): Promise<RebalancedPosition[]> {
-  const rows = await db
-    .select({ id: customFields.id, position: customFields.position })
-    .from(customFields)
-    .where(and(eq(customFields.workspaceId, workspaceId), isNull(customFields.archivedAt)))
-    .for("update")
-    .orderBy(asc(customFields.position));
-
-  const updates = rows
-    .map((row, index) => ({ id: row.id, position: positionAtIndex(index), previousPosition: row.position }))
-    .filter((row) => row.position !== row.previousPosition);
-
-  await applyPositions(customFields, updates, db);
-
-  return updates.map(({ id, position }) => ({ id, position }));
+  return rebalanceTable(customFields, { id: customFields.id, position: customFields.position }, and(eq(customFields.workspaceId, workspaceId), isNull(customFields.archivedAt)));
 }
 
 export async function rebalanceCustomFieldOptions(fieldId: string): Promise<RebalancedPosition[]> {
-  const rows = await db
-    .select({ id: customFieldOptions.id, position: customFieldOptions.position })
-    .from(customFieldOptions)
-    .where(and(eq(customFieldOptions.fieldId, fieldId), isNull(customFieldOptions.archivedAt)))
-    .for("update")
-    .orderBy(asc(customFieldOptions.position));
-
-  const updates = rows
-    .map((row, index) => ({ id: row.id, position: positionAtIndex(index), previousPosition: row.position }))
-    .filter((row) => row.position !== row.previousPosition);
-
-  await applyPositions(customFieldOptions, updates, db);
-
-  return updates.map(({ id, position }) => ({ id, position }));
+  return rebalanceTable(customFieldOptions, { id: customFieldOptions.id, position: customFieldOptions.position }, and(eq(customFieldOptions.fieldId, fieldId), isNull(customFieldOptions.archivedAt)));
 }
 
 export async function rebalanceCardLabels(workspaceId: string): Promise<RebalancedPosition[]> {
-  const rows = await db
-    .select({ id: cardLabels.id, position: cardLabels.position })
-    .from(cardLabels)
-    .where(and(eq(cardLabels.workspaceId, workspaceId), isNull(cardLabels.archivedAt)))
-    .for("update")
-    .orderBy(asc(cardLabels.position));
-
-  const updates = rows
-    .map((row, index) => ({ id: row.id, position: positionAtIndex(index), previousPosition: row.position }))
-    .filter((row) => row.position !== row.previousPosition);
-
-  await applyPositions(cardLabels, updates, db);
-
-  return updates.map(({ id, position }) => ({ id, position }));
+  return rebalanceTable(cardLabels, { id: cardLabels.id, position: cardLabels.position }, and(eq(cardLabels.workspaceId, workspaceId), isNull(cardLabels.archivedAt)));
 }
 
 export async function rebalanceChecklistTemplates(workspaceId: string): Promise<RebalancedPosition[]> {
-  const rows = await db
-    .select({ id: checklistTemplates.id, position: checklistTemplates.position })
-    .from(checklistTemplates)
-    .where(and(eq(checklistTemplates.workspaceId, workspaceId), isNull(checklistTemplates.archivedAt)))
-    .for("update")
-    .orderBy(asc(checklistTemplates.position));
-
-  const updates = rows
-    .map((row, index) => ({ id: row.id, position: positionAtIndex(index), previousPosition: row.position }))
-    .filter((row) => row.position !== row.previousPosition);
-
-  await applyPositions(checklistTemplates, updates, db);
-
-  return updates.map(({ id, position }) => ({ id, position }));
+  return rebalanceTable(checklistTemplates, { id: checklistTemplates.id, position: checklistTemplates.position }, and(eq(checklistTemplates.workspaceId, workspaceId), isNull(checklistTemplates.archivedAt)));
 }
 
 export async function rebalanceAutomations(workspaceId: string, tx: Tx = db): Promise<RebalancedPosition[]> {
-  const rows = await tx
-    .select({ id: automations.id, position: automations.position })
-    .from(automations)
-    .where(and(eq(automations.workspaceId, workspaceId), isNull(automations.archivedAt)))
-    .for("update")
-    .orderBy(asc(automations.position));
-
-  const updates = rows
-    .map((row, index) => ({ id: row.id, position: positionAtIndex(index), previousPosition: row.position }))
-    .filter((row) => row.position !== row.previousPosition);
-
-  await applyPositions(automations, updates, tx);
-
-  return updates.map(({ id, position }) => ({ id, position }));
+  return rebalanceTable(automations, { id: automations.id, position: automations.position }, and(eq(automations.workspaceId, workspaceId), isNull(automations.archivedAt)), { tx });
 }
 
 /**
@@ -193,20 +124,13 @@ export async function rebalanceAutomations(workspaceId: string, tx: Tx = db): Pr
  * whose whole value is "this order is what I said".
  */
 export async function rebalanceCardPriorities(targetUserId: string, tx: Tx = db): Promise<RebalancedPosition[]> {
-  const rows = await tx
-    .select({ id: cardPriorities.id, position: cardPriorities.position })
-    .from(cardPriorities)
-    .where(eq(cardPriorities.targetUserId, targetUserId))
-    .for("update")
-    .orderBy(asc(cardPriorities.position), asc(cardPriorities.cardId));
-
-  const updates = rows
-    .map((row, index) => ({ id: row.id, position: positionAtIndex(index), previousPosition: row.position }))
-    .filter((row) => row.position !== row.previousPosition);
-
-  await applyPositions(cardPriorities, updates, tx);
-
-  return updates.map(({ id, position }) => ({ id, position }));
+  // Tiebreak on cardId so two entries that momentarily share a position renumber deterministically.
+  return rebalanceTable(
+    cardPriorities,
+    { id: cardPriorities.id, position: cardPriorities.position },
+    eq(cardPriorities.targetUserId, targetUserId),
+    { tx, tiebreak: cardPriorities.cardId },
+  );
 }
 
 /**
@@ -223,20 +147,12 @@ export async function rebalanceScratchpadNotes(
   clientId: string,
   tx: Tx = db,
 ): Promise<RebalancedPosition[]> {
-  const rows = await tx
-    .select({ id: scratchpadNotes.id, position: scratchpadNotes.position })
-    .from(scratchpadNotes)
-    .where(and(eq(scratchpadNotes.userId, userId), eq(scratchpadNotes.clientId, clientId)))
-    .for("update")
-    .orderBy(asc(scratchpadNotes.position), asc(scratchpadNotes.id));
-
-  const updates = rows
-    .map((row, index) => ({ id: row.id, position: positionAtIndex(index), previousPosition: row.position }))
-    .filter((row) => row.position !== row.previousPosition);
-
-  await applyPositions(scratchpadNotes, updates, tx);
-
-  return updates.map(({ id, position }) => ({ id, position }));
+  return rebalanceTable(
+    scratchpadNotes,
+    { id: scratchpadNotes.id, position: scratchpadNotes.position },
+    and(eq(scratchpadNotes.userId, userId), eq(scratchpadNotes.clientId, clientId)),
+    { tx, tiebreak: scratchpadNotes.id },
+  );
 }
 
 export async function rebalanceCards(listId: string, tx: Tx = db): Promise<CardRebalancedPosition[]> {

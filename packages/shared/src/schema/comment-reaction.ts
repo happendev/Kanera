@@ -28,4 +28,3 @@ export const commentReactions = pgTable(
 );
 
 export type CommentReaction = typeof commentReactions.$inferSelect;
-export type NewCommentReaction = typeof commentReactions.$inferInsert;

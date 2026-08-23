@@ -17,4 +17,3 @@ export const standaloneBoardGroups = pgTable(
 );
 
 export type StandaloneBoardGroup = typeof standaloneBoardGroups.$inferSelect;
-export type NewStandaloneBoardGroup = typeof standaloneBoardGroups.$inferInsert;

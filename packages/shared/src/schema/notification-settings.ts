@@ -53,4 +53,3 @@ export const notificationSettings = pgTable("notification_settings", {
 });
 
 export type NotificationSettings = typeof notificationSettings.$inferSelect;
-export type NewNotificationSettings = typeof notificationSettings.$inferInsert;

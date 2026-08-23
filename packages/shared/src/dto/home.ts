@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ianaTimeZoneName } from "./_time-zone.js";
 import type { ColorToken } from "../lib/colors.js";
 import type { CardDueDateSlot } from "../schema/index.js";
 
@@ -24,20 +25,7 @@ export type HomeDueBucket = (typeof HOME_DUE_BUCKETS)[number];
  * the zone the daily digest and overdue emails already use, so home's "today" matches the mail.
  */
 export const homeTodayQuery = z.object({
-  timeZone: z
-    .string()
-    .min(1)
-    .max(100)
-    .optional()
-    .refine((value) => {
-      if (value === undefined) return true;
-      try {
-        new Intl.DateTimeFormat("en", { timeZone: value }).format();
-        return true;
-      } catch {
-        return false;
-      }
-    }, "Invalid IANA time zone"),
+  timeZone: ianaTimeZoneName.optional(),
 });
 export type HomeTodayQuery = z.infer<typeof homeTodayQuery>;
 

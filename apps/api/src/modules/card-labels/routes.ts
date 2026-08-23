@@ -1,41 +1,28 @@
 import { dto } from "@kanera/shared";
 import { cardLabels } from "@kanera/shared/schema";
-import { and, asc, desc, eq, gt, isNull, lt } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertWorkspaceAccess } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
-import { badRequest, notFound } from "../../lib/errors.js";
-import { between } from "../../lib/position.js";
+import { notFound } from "../../lib/errors.js";
+import { between, neighbourPositions as resolveNeighbourPositions } from "../../lib/position.js";
 import { rebalanceCardLabels } from "../../lib/rebalance.js";
 import { emitToWorkspace } from "../../realtime/emit.js";
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
 // as targeted indexed probes so large workspaces do not pay for a full label scan.
-async function neighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
-  let prev: string | null = null;
-  let next: string | null = null;
-  if (afterId === null && beforeId === undefined) {
-    const [first] = await db.select({ position: cardLabels.position }).from(cardLabels).where(and(eq(cardLabels.workspaceId, workspaceId), isNull(cardLabels.archivedAt))).orderBy(asc(cardLabels.position)).limit(1);
-    next = first?.position ?? null;
-  } else if (beforeId === null && afterId === undefined) {
-    const [last] = await db.select({ position: cardLabels.position }).from(cardLabels).where(and(eq(cardLabels.workspaceId, workspaceId), isNull(cardLabels.archivedAt))).orderBy(desc(cardLabels.position)).limit(1);
-    prev = last?.position ?? null;
-  }
-  else if (afterId) {
-    const [after] = await db.select({ position: cardLabels.position }).from(cardLabels).where(and(eq(cardLabels.id, afterId), eq(cardLabels.workspaceId, workspaceId), isNull(cardLabels.archivedAt))).limit(1);
-    if (!after) throw badRequest("afterLabelId not found");
-    const [nextLabel] = await db.select({ position: cardLabels.position }).from(cardLabels).where(and(eq(cardLabels.workspaceId, workspaceId), isNull(cardLabels.archivedAt), gt(cardLabels.position, after.position))).orderBy(asc(cardLabels.position)).limit(1);
-    prev = after.position;
-    next = nextLabel?.position ?? null;
-  } else if (beforeId) {
-    const [before] = await db.select({ position: cardLabels.position }).from(cardLabels).where(and(eq(cardLabels.id, beforeId), eq(cardLabels.workspaceId, workspaceId), isNull(cardLabels.archivedAt))).limit(1);
-    if (!before) throw badRequest("beforeLabelId not found");
-    const [prevLabel] = await db.select({ position: cardLabels.position }).from(cardLabels).where(and(eq(cardLabels.workspaceId, workspaceId), isNull(cardLabels.archivedAt), lt(cardLabels.position, before.position))).orderBy(desc(cardLabels.position)).limit(1);
-    next = before.position;
-    prev = prevLabel?.position ?? null;
-  }
-  return { prev, next };
+function neighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
+  return resolveNeighbourPositions({
+    table: cardLabels,
+    id: cardLabels.id,
+    position: cardLabels.position,
+    scope: and(eq(cardLabels.workspaceId, workspaceId), isNull(cardLabels.archivedAt)),
+    afterId,
+    beforeId,
+    afterLabel: "afterLabelId",
+    beforeLabel: "beforeLabelId",
+  });
 }
 
 export async function cardLabelRoutes(app: FastifyInstance) {

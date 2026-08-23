@@ -36,4 +36,3 @@ export const cardMentions = pgTable(
 );
 
 export type CardMention = typeof cardMentions.$inferSelect;
-export type NewCardMention = typeof cardMentions.$inferInsert;

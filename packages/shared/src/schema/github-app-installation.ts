@@ -33,7 +33,6 @@ export const githubApp = pgTable(
 );
 
 export type GitHubApp = typeof githubApp.$inferSelect;
-export type NewGitHubApp = typeof githubApp.$inferInsert;
 
 /**
  * Per-organisation installation of the deployment's GitHub App. Stores only the
@@ -58,4 +57,3 @@ export const githubAppInstallations = pgTable(
 );
 
 export type GitHubAppInstallation = typeof githubAppInstallations.$inferSelect;
-export type NewGitHubAppInstallation = typeof githubAppInstallations.$inferInsert;

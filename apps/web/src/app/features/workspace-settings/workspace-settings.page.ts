@@ -1,3 +1,4 @@
+import { CARD_DUE_DATE_SLOTS } from "@kanera/shared/due-date-slots";
 import type { CdkDragDrop } from "@angular/cdk/drag-drop";
 import type { OnDestroy } from "@angular/core";
 import { ChangeDetectionStrategy, Component, ElementRef, ViewEncapsulation, computed, effect, inject, input, signal } from "@angular/core";
@@ -767,7 +768,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
       a.email.localeCompare(b.email, undefined, { sensitivity: "base" }),
     ),
   );
-  readonly dueDateSlots: DueDateSlot[] = ["anyTime", "morning", "afternoon", "endOfWorkDay"];
+  readonly dueDateSlots: readonly DueDateSlot[] = CARD_DUE_DATE_SLOTS;
   readonly editingLabelId = signal<string | null>(null);
   readonly editingLabelName = signal("");
   readonly addMemberUserId = signal("");

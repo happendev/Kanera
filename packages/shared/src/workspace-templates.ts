@@ -1,4 +1,5 @@
 import type { ColorToken } from "./lib/colors.js";
+import type { CardDueDateSlot } from "./lib/due-date-slots.js";
 
 export type WorkspaceTemplateId =
   | "development-team"
@@ -49,7 +50,7 @@ export type WorkspaceTemplateAutomationTrigger =
 export type WorkspaceTemplateAutomationAction =
   | { type: "add_labels" | "remove_labels"; labelNames: string[] }
   | { type: "apply_checklists"; checklistTemplateTitles: string[] }
-  | { type: "set_due_date"; offsetDays: number; slot?: "anyTime" | "morning" | "afternoon" | "endOfWorkDay" }
+  | { type: "set_due_date"; offsetDays: number; slot?: CardDueDateSlot }
   | { type: "clear_due_date" | "move_to_top" | "move_to_bottom" }
   | { type: "set_completion"; completed: boolean }
   | { type: "move_to_list"; listName: string; placement?: "top" | "bottom" }
