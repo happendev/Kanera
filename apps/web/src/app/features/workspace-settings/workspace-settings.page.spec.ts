@@ -1567,6 +1567,99 @@ describe("WorkspaceSettingsPage", () => {
     expect(component.addAutomationHint()).toBe("Workspaces can have up to 30 automations. Contact support if you need more.");
   });
 
+  it("names the workspace's own lists and labels in example automations", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    component.lists.set([
+      workspaceList({ id: "list-1", name: "Inbox" }),
+      workspaceList({ id: "list-2", name: "In Progress", position: "2000.0000000000" }),
+      workspaceList({ id: "list-3", name: "Ready for QA", position: "3000.0000000000" }),
+      workspaceList({ id: "list-4", name: "Complete", position: "4000.0000000000" }),
+    ]);
+    component.labels.set([cardLabel({ id: "label-1", name: "Needs Review" })]);
+
+    const byId = new Map(component.automationRecipes().map((recipe) => [recipe.id, recipe]));
+    expect(byId.get("finish-cleanly")?.available).toBe(true);
+    expect(byId.get("finish-cleanly")?.detail).toBe("When a card enters Complete, mark it complete, clear its due date and remove the Needs Review label.");
+    // The review list is matched by name, not by position.
+    expect(byId.get("start-review")?.detail).toBe("When a card enters Ready for QA, add the Needs Review label.");
+  });
+
+  it("offers an example without the ingredients it cannot match instead of inventing them", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    component.lists.set([workspaceList({ id: "list-1", name: "Inbox" }), workspaceList({ id: "list-2", name: "Complete", position: "2000.0000000000" })]);
+    // A text field that has nothing to do with months, and a label that is not a review flag: neither
+    // should be conscripted into an example just because it is the only one of its kind.
+    component.fields.set([customField({ id: "field-1", name: "Branch", type: "text" })]);
+    component.labels.set([cardLabel({ id: "label-1", name: "Design" })]);
+
+    const byId = new Map(component.automationRecipes().map((recipe) => [recipe.id, recipe]));
+    expect(byId.get("stamp-completion-month")?.available).toBe(false);
+    expect(byId.get("stamp-completion-month")?.requirement).toBe("Needs a text field named for a month or period.");
+    // The label drops out of the sentence and out of the rule, rather than being used at random.
+    expect(byId.get("finish-cleanly")?.detail).toBe("When a card enters Complete, mark it complete and clear its due date.");
+  });
+
+  it("opens the examples menu from the automations toolbar", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    component.selectedTab.set("automations");
+    component.lists.set([
+      workspaceList({ id: "list-1", name: "Inbox" }),
+      workspaceList({ id: "list-2", name: "Done", position: "2000.0000000000" }),
+    ]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const trigger = fixture.nativeElement.querySelector(".automation-examples-button") as HTMLButtonElement | null;
+    expect(trigger).not.toBeNull();
+    trigger?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    // The catalogue stays reachable once the workspace has automations, which is the reason it moved
+    // out of the empty state.
+    const panel = fixture.nativeElement.querySelector("k-automation-examples") as HTMLElement | null;
+    expect(panel).not.toBeNull();
+    expect(panel?.textContent).toContain("When a card enters Done, mark it complete and clear its due date.");
+  });
+
+  it("creates the example automation the menu describes", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.lists.set([
+      workspaceList({ id: "list-1", name: "Inbox" }),
+      workspaceList({ id: "list-2", name: "Done", position: "2000.0000000000" }),
+    ]);
+    api.post.mockClear();
+    api.post.mockResolvedValueOnce(automation({ id: "automation-new", enabled: false, triggerListId: "list-2" }));
+
+    await component.applyAutomationRecipe("finish-cleanly");
+
+    expect(api.post).toHaveBeenCalledWith("/workspaces/workspace-1/automations", {
+      triggerType: "card_enters_list",
+      triggerListId: "list-2",
+      applyOnCreate: true,
+      applyOnMove: true,
+      actions: [
+        { type: "set_completion", config: { completed: true } },
+        { type: "clear_due_date", config: {} },
+      ],
+    });
+  });
+
+  it("does not create an example automation whose ingredients have gone", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.lists.set([]);
+    api.post.mockClear();
+
+    await component.applyAutomationRecipe("finish-cleanly");
+
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
   it("coalesces typed value edits into a single actions save", async () => {
     const { api } = await render();
     const component = fixture.componentInstance;

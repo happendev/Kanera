@@ -186,32 +186,385 @@ const automationDueDatePresets = [
 ] as const satisfies readonly { value: AutomationDueDatePreset; label: string }[];
 const automationDueDatePresetOffsets = new Set<number>(automationDueDatePresets.filter((option) => option.value !== "custom").map((option) => Number(option.value)));
 
-// Starter rules for the empty state. Each one is deliberately buildable from nothing but the lists
-// every workspace already has, so a first-time admin gets a working, disabled rule to inspect rather
-// than a blank editor. `actions` is resolved against live workspace data at click time.
-type AutomationStarter = { id: "due-tomorrow" | "complete-on-done" | "checklist-on-entry"; icon: string; title: string; detail: string; requiresTemplate?: boolean };
-const automationStarters: readonly AutomationStarter[] = [
+// ─── Example automations ──────────────────────────────────────────────────────
+//
+// The catalogue behind the empty state and the toolbar's Examples menu. These mirror the worked
+// examples in the automations documentation, because those are the patterns support actually
+// recommends — not invented-for-the-UI filler.
+//
+// Two rules keep an example honest, both learned from getting it wrong:
+//
+//  1. Semantic ingredients — labels, checklist templates, custom fields — are matched by name or not
+//     used at all. There is no "first label" or "first text field" fallback: pairing an arbitrary
+//     field with an arbitrary value produced sentences like "fill Branch with the current month",
+//     which is worse than offering nothing. Only list *positions* have structural meaning on a
+//     board (first = intake, last = the end of the workflow), so those are the one positional
+//     fallback allowed.
+//  2. The sentence is built from the actions that actually resolved, so what the menu promises and
+//     what gets created cannot drift. An optional action that found no matching label simply drops
+//     out of both. A recipe with nothing left to do, or an unresolvable trigger, is offered greyed
+//     out with `requirement` naming the missing piece.
+type AutomationRecipeContext = {
+  lists: List[];
+  labels: WireCardLabel[];
+  templates: WireChecklistTemplate[];
+  fields: WireCustomField[];
+};
+/** Trigger + actions only. Everything else on the create DTO takes its default. */
+type AutomationRecipeBody = {
+  triggerType: AutomationTriggerTypeName;
+  triggerListId?: string;
+  triggerLabelId?: string;
+  applyOnCreate?: boolean;
+  applyOnMove?: boolean;
+  actions: AutomationActionBody[];
+};
+const automationRecipeGroups = ["Intake", "In progress", "Wrap-up"] as const;
+type AutomationRecipeGroup = (typeof automationRecipeGroups)[number];
+type AutomationRecipe = {
+  id: string;
+  group: AutomationRecipeGroup;
+  icon: string;
+  title: string;
+  /** Generic wording, shown when this workspace cannot build the example yet. */
+  detail: string;
+  /** The missing piece, phrased as what to add. Only surfaced when `resolve` returns null. */
+  requirement: string;
+  resolve: (ctx: AutomationRecipeContext) => { detail: string; body: AutomationRecipeBody } | null;
+};
+/** The resolved row the templates render. */
+export type AutomationRecipeOption = {
+  id: string;
+  group: AutomationRecipeGroup;
+  icon: string;
+  title: string;
+  detail: string;
+  available: boolean;
+  requirement: string;
+};
+
+/**
+ * First item whose name contains one of `hints`. Hint order is preference order, so a workspace with
+ * both "Review" and "QA" lists gets the one the recipe is really about.
+ */
+function matchNamed<T>(items: readonly T[], hints: readonly string[], nameOf: (item: T) => string): T | undefined {
+  const named = items.map((item) => ({ item, name: nameOf(item).toLocaleLowerCase() }));
+  for (const hint of hints) {
+    const found = named.find((entry) => entry.name.includes(hint));
+    if (found) return found.item;
+  }
+  return undefined;
+}
+
+const matchRecipeList = (lists: List[], hints: readonly string[]) => matchNamed(lists, hints, (list) => list.name);
+const matchRecipeLabel = (labels: WireCardLabel[], hints: readonly string[]) => matchNamed(labels, hints, (label) => label.name);
+const matchRecipeTemplate = (templates: WireChecklistTemplate[], hints: readonly string[]) => matchNamed(templates, hints, (template) => template.title);
+const matchRecipeField = (fields: WireCustomField[], type: CustomFieldTypeName, hints: readonly string[]) =>
+  matchNamed(fields.filter((field) => field.type === type), hints, (field) => field.name);
+
+/** "a", "a and b", "a, b and c" — recipe sentences run to three clauses at most. */
+function joinRecipeClauses(clauses: string[]): string {
+  if (clauses.length < 2) return clauses[0] ?? "";
+  return `${clauses.slice(0, -1).join(", ")} and ${clauses[clauses.length - 1]}`;
+}
+
+// Vocabulary a workspace is likely to use for each workflow stage. Substrings, so "escalat" covers
+// both "Escalated" and "Escalation", and "progress" covers "In Progress" and "Progress".
+const REVIEW_LIST_HINTS = ["review", "qa", "approval", "testing", "check"];
+const DONE_LIST_HINTS = ["done", "complete", "shipped", "closed", "won", "live", "launched"];
+const PROGRESS_LIST_HINTS = ["in progress", "progress", "doing", "build", "development", "working"];
+const READY_LIST_HINTS = ["ready", "ship", "release", "deploy", "launch", ...DONE_LIST_HINTS];
+const REVIEW_LABEL_HINTS = ["needs review", "review", "qa", "testing"];
+const REVIEW_TEMPLATE_HINTS = ["qa", "review", "test", "acceptance"];
+const TRIAGE_LABEL_HINTS = ["triage", "support", "incoming", "new", "unsorted"];
+const TRIAGE_TEMPLATE_HINTS = ["triage", "intake", "support", "onboard"];
+const ACTIVE_LABEL_HINTS = ["active", "in progress", "wip", "working", "started"];
+const OVERDUE_LABEL_HINTS = ["overdue", "late", "urgent", "at risk", "risk", "escalat"];
+const ESCALATION_LABEL_HINTS = ["escalat", "blocked", "urgent", "critical", "issue"];
+
+const automationRecipeCatalogue: readonly AutomationRecipe[] = [
   {
-    id: "due-tomorrow",
-    icon: "ti-calendar-due",
-    title: "Set a due date on intake",
-    detail: "When a card lands in your first list, give it a due date of tomorrow.",
+    id: "triage-new-cards",
+    group: "Intake",
+    icon: "ti-inbox",
+    title: "Triage new cards",
+    detail: "When a card is created in your first list, label it for triage and apply your intake checklist.",
+    requirement: "Needs a triage or support label, or an intake checklist template.",
+    resolve: ({ lists, labels, templates }) => {
+      const intake = lists[0];
+      if (!intake) return null;
+      const label = matchRecipeLabel(labels, TRIAGE_LABEL_HINTS);
+      const template = matchRecipeTemplate(templates, TRIAGE_TEMPLATE_HINTS);
+      const actions: AutomationActionBody[] = [];
+      const clauses: string[] = [];
+      if (label) {
+        actions.push({ type: "add_labels", config: { labelIds: [label.id] } });
+        clauses.push(`add the ${label.name} label`);
+      }
+      if (template) {
+        actions.push({ type: "apply_checklists", config: { templateIds: [template.id] } });
+        clauses.push(`apply the ${template.title} checklist`);
+      }
+      if (!actions.length) return null;
+      return {
+        detail: `When a card is created in ${intake.name}, ${joinRecipeClauses(clauses)}.`,
+        // Created only: a card moved back into intake has already been triaged once, and re-applying
+        // the checklist would reset the items someone has ticked.
+        body: { triggerType: "card_enters_list", triggerListId: intake.id, applyOnCreate: true, applyOnMove: false, actions },
+      };
+    },
   },
   {
-    id: "complete-on-done",
+    id: "due-on-intake",
+    group: "Intake",
+    icon: "ti-calendar-plus",
+    title: "Give new work a deadline",
+    detail: "When a card lands in your first list, set its due date to tomorrow.",
+    requirement: "Add a list first.",
+    resolve: ({ lists }) => {
+      const intake = lists[0];
+      if (!intake) return null;
+      return {
+        detail: `When a card lands in ${intake.name}, set its due date to tomorrow.`,
+        body: {
+          triggerType: "card_enters_list",
+          triggerListId: intake.id,
+          applyOnCreate: true,
+          applyOnMove: true,
+          actions: [{ type: "set_due_date", config: { offsetDays: 1, slot: "endOfWorkDay" } }],
+        },
+      };
+    },
+  },
+  {
+    id: "start-review",
+    group: "In progress",
+    icon: "ti-checkup-list",
+    title: "Start review consistently",
+    detail: "When a card enters your review list, apply the review checklist and flag it as needing review.",
+    requirement: "Needs a review or QA list, plus a matching checklist template or label.",
+    resolve: ({ lists, labels, templates }) => {
+      const review = matchRecipeList(lists, REVIEW_LIST_HINTS);
+      if (!review) return null;
+      const template = matchRecipeTemplate(templates, REVIEW_TEMPLATE_HINTS);
+      const label = matchRecipeLabel(labels, REVIEW_LABEL_HINTS);
+      const actions: AutomationActionBody[] = [];
+      const clauses: string[] = [];
+      if (template) {
+        actions.push({ type: "apply_checklists", config: { templateIds: [template.id] } });
+        clauses.push(`apply the ${template.title} checklist`);
+      }
+      if (label) {
+        actions.push({ type: "add_labels", config: { labelIds: [label.id] } });
+        clauses.push(`add the ${label.name} label`);
+      }
+      if (!actions.length) return null;
+      return {
+        detail: `When a card enters ${review.name}, ${joinRecipeClauses(clauses)}.`,
+        body: { triggerType: "card_enters_list", triggerListId: review.id, applyOnCreate: true, applyOnMove: true, actions },
+      };
+    },
+  },
+  {
+    id: "advance-checklist-work",
+    group: "In progress",
+    icon: "ti-checkbox",
+    title: "Advance checklist-driven work",
+    detail: "When every checklist item on a card is ticked, move it on and drop the review label.",
+    requirement: "Add a second list to move finished work into.",
+    resolve: ({ lists, labels }) => {
+      if (lists.length < 2) return null;
+      const target = matchRecipeList(lists, READY_LIST_HINTS) ?? lists[lists.length - 1];
+      if (!target) return null;
+      const label = matchRecipeLabel(labels, REVIEW_LABEL_HINTS);
+      const actions: AutomationActionBody[] = [{ type: "move_to_list", config: { listId: target.id, placement: "top" } }];
+      const clauses = [`move it to the top of ${target.name}`];
+      if (label) {
+        actions.push({ type: "remove_labels", config: { labelIds: [label.id] } });
+        clauses.push(`remove the ${label.name} label`);
+      }
+      return {
+        detail: `When every checklist item on a card is ticked, ${joinRecipeClauses(clauses)}.`,
+        body: { triggerType: "all_checklist_items_complete", actions },
+      };
+    },
+  },
+  {
+    id: "surface-overdue",
+    group: "In progress",
+    icon: "ti-alarm",
+    title: "Surface overdue work",
+    detail: "When a card's due date arrives, float it to the top of its list so nobody has to go looking.",
+    requirement: "Add a list first.",
+    resolve: ({ lists, labels }) => {
+      if (!lists.length) return null;
+      const label = matchRecipeLabel(labels, OVERDUE_LABEL_HINTS);
+      const actions: AutomationActionBody[] = [{ type: "move_to_top", config: {} }];
+      const clauses = ["move it to the top of its list"];
+      if (label) {
+        actions.push({ type: "add_labels", config: { labelIds: [label.id] } });
+        clauses.push(`add the ${label.name} label`);
+      }
+      return {
+        detail: `When a card's due date arrives, ${joinRecipeClauses(clauses)}.`,
+        body: { triggerType: "due_date_arrives", actions },
+      };
+    },
+  },
+  {
+    id: "escalate-consistently",
+    group: "In progress",
+    icon: "ti-flag",
+    title: "Escalate consistently",
+    detail: "When an escalation label is added, pull the card to the top of its list and stamp when it happened.",
+    requirement: "Needs a label like Escalated, Blocked or Urgent.",
+    resolve: ({ labels, fields }) => {
+      const label = matchRecipeLabel(labels, ESCALATION_LABEL_HINTS);
+      if (!label) return null;
+      // A date field named for the escalation itself ("Blocked Since", "Escalation Date"); a generic
+      // date field would be stamped with a date that means nothing.
+      const sinceField = matchRecipeField(fields, "date", ["escalat", "blocked since", "flagged", "raised"]);
+      const actions: AutomationActionBody[] = [{ type: "move_to_top", config: {} }];
+      const clauses = ["move the card to the top of its list"];
+      if (sinceField) {
+        actions.push({ type: "populate_custom_field", config: { fieldId: sinceField.id, onlyIfEmpty: true, value: { kind: "date", source: "current" } } });
+        clauses.push(`set ${sinceField.name} to today`);
+      }
+      return {
+        detail: `When the ${label.name} label is added, ${joinRecipeClauses(clauses)}.`,
+        body: { triggerType: "card_label_set", triggerLabelId: label.id, actions },
+      };
+    },
+  },
+  {
+    id: "finish-cleanly",
+    group: "Wrap-up",
     icon: "ti-circle-check",
-    title: "Mark done cards complete",
-    detail: "When a card enters your last list, mark it complete and clear its due date.",
+    title: "Finish work cleanly",
+    detail: "When a card reaches your done list, mark it complete and clear the deadline it no longer needs.",
+    requirement: "Add a second list to act as the done list.",
+    resolve: ({ lists, labels }) => {
+      if (lists.length < 2) return null;
+      const done = matchRecipeList(lists, DONE_LIST_HINTS) ?? lists[lists.length - 1];
+      if (!done) return null;
+      const label = matchRecipeLabel(labels, REVIEW_LABEL_HINTS);
+      const actions: AutomationActionBody[] = [
+        { type: "set_completion", config: { completed: true } },
+        { type: "clear_due_date", config: {} },
+      ];
+      const clauses = ["mark it complete", "clear its due date"];
+      if (label) {
+        actions.push({ type: "remove_labels", config: { labelIds: [label.id] } });
+        clauses.push(`remove the ${label.name} label`);
+      }
+      return {
+        detail: `When a card enters ${done.name}, ${joinRecipeClauses(clauses)}.`,
+        body: { triggerType: "card_enters_list", triggerListId: done.id, applyOnCreate: true, applyOnMove: true, actions },
+      };
+    },
   },
   {
-    id: "checklist-on-entry",
-    icon: "ti-list-check",
-    title: "Apply a checklist on entry",
-    detail: "When a card enters your first list, attach a checklist template.",
-    requiresTemplate: true,
+    id: "reopen-on-return",
+    group: "Wrap-up",
+    icon: "ti-rotate-2",
+    title: "Reopen work that moves back",
+    detail: "When a completed card returns to your in-progress list, mark it incomplete again.",
+    // No positional fallback: a middle list has no structural meaning, and marking cards incomplete
+    // in the wrong one is a destructive guess.
+    requirement: "Needs a list named for work in progress.",
+    resolve: ({ lists, labels }) => {
+      const progress = matchRecipeList(lists, PROGRESS_LIST_HINTS);
+      if (!progress) return null;
+      const label = matchRecipeLabel(labels, ACTIVE_LABEL_HINTS);
+      const actions: AutomationActionBody[] = [{ type: "set_completion", config: { completed: false } }];
+      const clauses = ["mark it incomplete"];
+      if (label) {
+        actions.push({ type: "add_labels", config: { labelIds: [label.id] } });
+        clauses.push(`add the ${label.name} label`);
+      }
+      return {
+        detail: `When a card moves back into ${progress.name}, ${joinRecipeClauses(clauses)}.`,
+        body: {
+          triggerType: "card_enters_list",
+          triggerListId: progress.id,
+          // Moved only: a card created straight into the in-progress list was never complete.
+          applyOnCreate: false,
+          applyOnMove: true,
+          actions,
+        },
+      };
+    },
+  },
+  {
+    id: "cleanup-completed",
+    group: "Wrap-up",
+    icon: "ti-eraser",
+    title: "Clean up completed work",
+    detail: "When a card is marked complete, clear its due date so it stops showing as due.",
+    requirement: "Add a list first.",
+    resolve: ({ lists, labels }) => {
+      if (!lists.length) return null;
+      const label = matchRecipeLabel(labels, ACTIVE_LABEL_HINTS);
+      const actions: AutomationActionBody[] = [{ type: "clear_due_date", config: {} }];
+      const clauses = ["clear its due date"];
+      if (label) {
+        actions.push({ type: "remove_labels", config: { labelIds: [label.id] } });
+        clauses.push(`remove the ${label.name} label`);
+      }
+      return {
+        detail: `When a card is marked complete, ${joinRecipeClauses(clauses)}.`,
+        body: { triggerType: "card_marked_complete", actions },
+      };
+    },
+  },
+  {
+    id: "carry-estimate-into-actuals",
+    group: "Wrap-up",
+    icon: "ti-arrow-bar-to-right",
+    title: "Carry an estimate into actuals",
+    detail: "When a card is finished, copy its estimate into the actuals field so the two can be compared.",
+    requirement: "Needs two number fields, one for the estimate and one for actuals.",
+    resolve: ({ lists, fields }) => {
+      const done = matchRecipeList(lists, DONE_LIST_HINTS) ?? (lists.length > 1 ? lists[lists.length - 1] : undefined);
+      const estimate = matchRecipeField(fields, "number", ["estimate", "estimated", "planned", "budget"]);
+      const actual = matchRecipeField(fields, "number", ["actual", "spent", "logged", "real"]);
+      if (!done || !estimate || !actual) return null;
+      return {
+        detail: `When a card enters ${done.name}, copy ${estimate.name} into ${actual.name} if it is still empty.`,
+        body: {
+          triggerType: "card_enters_list",
+          triggerListId: done.id,
+          applyOnCreate: true,
+          applyOnMove: true,
+          actions: [{ type: "populate_custom_field", config: { fieldId: actual.id, onlyIfEmpty: true, value: { kind: "field", sourceFieldId: estimate.id } } }],
+        },
+      };
+    },
+  },
+  {
+    id: "stamp-completion-month",
+    group: "Wrap-up",
+    icon: "ti-calendar-stats",
+    title: "Stamp the month work finished",
+    detail: "When a card is marked complete, record the month in your reporting field.",
+    // Only a field that names a month: a text field grabbed by position gets stamped with a value
+    // that means nothing to whoever reads the column later.
+    requirement: "Needs a text field named for a month or period.",
+    resolve: ({ fields }) => {
+      const field = matchRecipeField(fields, "text", ["month", "period", "billing"]);
+      if (!field) return null;
+      return {
+        detail: `When a card is marked complete, fill ${field.name} with the current month.`,
+        body: {
+          triggerType: "card_marked_complete",
+          // onlyIfEmpty: a card can be completed, reopened and completed again; the month the work
+          // first landed in is the one reporting wants.
+          actions: [{ type: "populate_custom_field", config: { fieldId: field.id, onlyIfEmpty: true, value: { kind: "text_current_date", format: "month" } } }],
+        },
+      };
+    },
   },
 ];
-type AutomationStarterId = AutomationStarter["id"];
 
 // A save is queued per automation while the admin is still typing into a value field. Without this,
 // every keystroke sent a full PUT that deletes and re-inserts every action row, wrote an activity
@@ -379,7 +732,33 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly automationDueDatePresets = automationDueDatePresets;
   readonly automationSetCustomFields = computed(() => this.fields().filter((field) => (automationSetCustomFieldTypes as readonly CustomFieldTypeName[]).includes(field.type)));
   readonly enabledAutomationCount = computed(() => this.automations().filter((automation) => automation.enabled).length);
-  readonly automationStarters = automationStarters;
+  readonly automationRecipeGroups = automationRecipeGroups;
+  /**
+   * Example automations, resolved against this workspace's lists, labels, templates and fields.
+   *
+   * Available ones sort to the top of their group so a workspace that has not set up labels yet
+   * still leads with the examples it can actually use, rather than three dimmed rows.
+   */
+  readonly automationRecipes = computed<AutomationRecipeOption[]>(() => {
+    const ctx: AutomationRecipeContext = { lists: this.lists(), labels: this.labels(), templates: this.templates(), fields: this.fields() };
+    const options = automationRecipeCatalogue.map((recipe) => {
+      const resolved = recipe.resolve(ctx);
+      return {
+        id: recipe.id,
+        group: recipe.group,
+        icon: recipe.icon,
+        title: recipe.title,
+        detail: resolved?.detail ?? recipe.detail,
+        available: resolved !== null,
+        requirement: recipe.requirement,
+      } satisfies AutomationRecipeOption;
+    });
+    return automationRecipeGroups.flatMap((group) => {
+      const inGroup = options.filter((option) => option.group === group);
+      return [...inGroup.filter((option) => option.available), ...inGroup.filter((option) => !option.available)];
+    });
+  });
+  readonly availableAutomationRecipeCount = computed(() => this.automationRecipes().filter((recipe) => recipe.available).length);
   readonly creatingAutomation = signal(false);
   private readonly pendingAutomationSaves = new Map<string, number>();
   readonly automationMembers = computed(() =>
@@ -2342,44 +2721,19 @@ export class WorkspaceSettingsPage implements OnDestroy {
     });
   }
 
-  /** Build one of the empty-state starter rules from whatever lists/templates the workspace has. */
-  async addAutomationStarter(starter: AutomationStarterId) {
-    const lists = this.lists();
-    const firstList = lists[0];
-    const lastList = lists[lists.length - 1];
-    if (!firstList || !lastList) return;
-    if (starter === "due-tomorrow") {
-      await this.createAutomation({
-        triggerType: "card_enters_list",
-        triggerListId: firstList.id,
-        applyOnCreate: true,
-        applyOnMove: true,
-        actions: [{ type: "set_due_date", config: { offsetDays: 1, slot: "anyTime" } }],
-      });
-      return;
-    }
-    if (starter === "complete-on-done") {
-      await this.createAutomation({
-        triggerType: "card_enters_list",
-        triggerListId: lastList.id,
-        applyOnCreate: true,
-        applyOnMove: true,
-        actions: [
-          { type: "set_completion", config: { completed: true } },
-          { type: "clear_due_date", config: {} },
-        ],
-      });
-      return;
-    }
-    const template = this.templates()[0];
-    if (!template) return;
-    await this.createAutomation({
-      triggerType: "card_enters_list",
-      triggerListId: firstList.id,
-      applyOnCreate: true,
-      applyOnMove: false,
-      actions: [{ type: "apply_checklists", config: { templateIds: [template.id] } }],
-    });
+  /**
+   * Create one of the example automations, resolved against live workspace data at click time.
+   *
+   * Re-resolving here rather than trusting the row the admin clicked keeps the created rule honest:
+   * a list or label deleted in another tab since the menu opened would otherwise be POSTed as a
+   * dangling id and rejected by the API.
+   */
+  async applyAutomationRecipe(id: string) {
+    if (!this.canDuplicateAutomation()) return;
+    const recipe = automationRecipeCatalogue.find((candidate) => candidate.id === id);
+    const resolved = recipe?.resolve({ lists: this.lists(), labels: this.labels(), templates: this.templates(), fields: this.fields() });
+    if (!resolved) return;
+    await this.createAutomation(resolved.body);
   }
 
   /** Copy an existing rule, including its actions. Lands disabled so it cannot fire before review. */
