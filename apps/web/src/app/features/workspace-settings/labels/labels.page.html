@@ -1,4 +1,5 @@
-<form class="board-form single-line-capture" (submit)="settings.addLabel($event)">
+<k-docs-link class="spaced" path="card-labels" label="Learn more about card labels" />
+      <form class="board-form single-line-capture" (submit)="settings.addLabel($event)">
         <k-color-picker [value]="settings.newLabelColor()" (valueChange)="settings.newLabelColor.set($event)" />
         <input name="label" placeholder="Label name" [value]="settings.newLabel()" (input)="settings.newLabel.set($any($event.target).value)" [maxLength]="settings.labelNameMaxLength" required style="flex:1" />
         <button class="sm compact-add-button" type="submit" aria-label="Add label" kTooltip="Add label"><i class="ti ti-plus"></i><span class="mobile-hide">Add label</span></button>

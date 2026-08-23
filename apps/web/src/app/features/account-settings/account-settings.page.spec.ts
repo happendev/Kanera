@@ -1019,6 +1019,7 @@ describe("AccountSettingsPage", () => {
     expect(controls[0]!.querySelector(".ti-circle-check")).not.toBeNull();
     expect(controls[1]!.querySelector(".ti-zzz")).not.toBeNull();
     expect(section!.textContent).not.toContain("Save defaults");
+    expect(section!.querySelector<HTMLAnchorElement>('a[href="https://www.kanera.app/docs/board-health#organisation-default"]')?.target).toBe("_blank");
   });
 
   it("debounces organisation workspace defaults into one update", async () => {

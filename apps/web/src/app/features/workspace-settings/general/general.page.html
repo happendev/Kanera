@@ -107,6 +107,7 @@
     </label>
   </div>
   }
+  <k-docs-link path="board-health" label="Learn how board health and signal thresholds work" />
   @if (settings.boardHealthError(); as message) {
   <p class="board-linking-error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p>
   }
@@ -130,6 +131,7 @@
     <i class="ti ti-circle-check"></i>
     <span>Completed cards</span>
   </div>
+  <k-docs-link path="completed-cards" label="Learn more about completed cards" />
   <div class="board-form single-line-capture">
     <label class="compact-number-field">
       <span>Show completed cards on boards for</span>
@@ -144,6 +146,7 @@
     <i class="ti ti-link"></i>
     <span>Board linking</span>
   </div>
+  <k-docs-link path="board-syncing" label="Learn more about board syncing" />
   <label class="board-linking-toggle">
     <input type="checkbox" aria-label="Enable board linking" [checked]="settings.boardLinkingEnabledDraft()" (change)="settings.updateBoardLinkingEnabled($any($event.target).checked, $any($event.target))"
       [disabled]="settings.boardLinkingSaving()" />

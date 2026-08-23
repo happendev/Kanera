@@ -89,6 +89,7 @@
 
       <div class="settings-section">
         <h3 class="settings-section-title"><i class="ti ti-notes"></i><span>Scratchpad</span></h3>
+        <k-docs-link path="scratchpad" label="Learn more about the scratchpad" />
         <label class="push-toggle-row">
           <input type="checkbox" [checked]="settings.user()?.showScratchpad ?? true" (change)="settings.setShowScratchpad($any($event.target).checked)" [disabled]="settings.scratchpadVisibilitySaving()" />
           <span class="push-toggle-copy">
@@ -143,6 +144,7 @@
       <div class="settings-section">
         <h3 class="settings-section-title"><i class="ti ti-shield-lock"></i><span>Two-factor authentication</span></h3>
         <p class="settings-section-help">Protect fresh sign-ins with an authenticator app or a one-time recovery code.</p>
+        <k-docs-link path="profile-security" label="Learn more about account security" />
         @if (!mfaEnabled() && !mfaSecret()) {
           <div class="board-form"><input type="password" autocomplete="current-password" placeholder="Current password" [value]="mfaPassword()" (input)="mfaPassword.set($any($event.target).value)" /><button class="sm" type="button" (click)="startMfa()" [disabled]="mfaBusy()">Set up authenticator</button></div>
         } @else if (mfaSecret()) {

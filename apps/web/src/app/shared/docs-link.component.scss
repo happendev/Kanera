@@ -1,0 +1,26 @@
+:host {
+  // A real box, not `display: contents`, so a host page can set margins on <k-docs-link> where its
+  // container is block flow rather than a gapped flex column. `fit-content` keeps the link from
+  // stretching when the container *is* a flex/grid parent.
+  display: block;
+  width: fit-content;
+}
+
+// Opt-in spacing for the tabs whose body is plain block flow (a bare form or list at the tab root)
+// rather than a gapped flex column like .settings-section / .board-settings-section.
+:host(.spaced) {
+  margin-bottom: 12px;
+}
+
+.docs-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  font-size: 12px;
+  text-decoration: none;
+
+  &:hover { text-decoration: underline; }
+
+  i { font-size: 12px; }
+}

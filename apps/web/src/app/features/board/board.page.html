@@ -56,6 +56,7 @@
           </span>
         </div>
         <p class="board-overview-risk-summary">{{ overview.risk.summary }}</p>
+        <k-docs-link class="spaced" path="board-health" label="How board health is calculated" />
         <div class="board-overview-metrics">
           <button type="button" [class.is-active]="boardRiskFilter() === null" (click)="setBoardRiskFilter(null)" kTooltip="Show all active cards"><strong>{{ overview.active }}</strong><span>Active</span></button>
           <button type="button" [class.needs-attention]="overview.overdue > 0" [class.is-active]="boardRiskFilter() === 'overdue'" [disabled]="overview.overdue === 0" (click)="setBoardRiskFilter('overdue')" kTooltip="Show overdue cards"><strong>{{ overview.overdue }}</strong><span>Overdue</span></button>

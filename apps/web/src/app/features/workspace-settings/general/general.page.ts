@@ -3,13 +3,14 @@ import type { Board, StandaloneBoardGroup } from "@kanera/shared/schema";
 import { ApiClient, ApiError } from "../../../core/api/api.client";
 import { AnchoredPanelDirective } from "../../../shared/anchored-panel.directive";
 import { ColorPickerComponent } from "../../../shared/color-picker.component";
+import { DocsLinkComponent } from "../../../shared/docs-link.component";
 import { IconPickerComponent } from "../../../shared/icon-picker.component";
 import { WorkspaceSettingsPage } from "../workspace-settings.page";
 
 @Component({
   selector: "k-workspace-settings-general",
   standalone: true,
-  imports: [AnchoredPanelDirective, IconPickerComponent, ColorPickerComponent],
+  imports: [AnchoredPanelDirective, ColorPickerComponent, DocsLinkComponent, IconPickerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./general.page.html",
   styleUrl: "./general.page.scss",

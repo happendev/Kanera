@@ -50,6 +50,7 @@
         <span class="settings-section-help">New workspaces and standalone boards can override this later.</span>
       </span>
     </label>
+    <k-docs-link path="board-health" fragment="organisation-default" label="Learn how the organisation default affects new workspaces" />
   </div>
   @if (settings.cardTimingDefaultsError()) { <p class="form-error">{{ settings.cardTimingDefaultsError() }}</p> }
   @if (settings.cardTimingDefaultsSavedAt() && !settings.cardTimingDefaultsError()) { <p class="form-success">Saved.</p> }
@@ -69,6 +70,7 @@
 
 <div class="settings-section">
   <h3 class="settings-section-title"><i class="ti ti-building-skyscraper"></i><span>Organisation name</span></h3>
+  <k-docs-link path="organisations" label="Learn more about organisations" />
   <div class="board-form">
     <input name="orgName" placeholder="Organisation name" [value]="settings.orgName()" (input)="settings.orgName.set($any($event.target).value)" [disabled]="!settings.isClientAdmin() || settings.orgNameSaving()" style="flex:1" />
     <button class="sm" type="button" (click)="settings.saveOrgName()" [disabled]="!settings.isClientAdmin() || settings.orgNameSaving() || !settings.orgName().trim() || settings.orgName().trim() === settings.client()?.name">

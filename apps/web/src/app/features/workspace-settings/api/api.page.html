@@ -92,6 +92,7 @@
           <i class="ti ti-webhook"></i>
           <span>Custom webhooks</span>
         </div>
+        <k-docs-link path="webhooks" label="Learn more about webhooks" />
         @if (settings.webhooksAllowed()) {
         <form class="integration-form webhook-form" (submit)="settings.createWebhook($event)">
           <label class="integration-field">
@@ -167,6 +168,7 @@
       <div class="integration-section">
         <div class="integration-section-head"><i class="ti ti-robot"></i><span>Unattended AI agents</span></div>
         <p class="settings-section-help">Create an OAuth client for CI, cron, or a server-side custom agent. The secret is shown once.</p>
+        <k-docs-link path="ai-mcp-reference" label="Learn more about AI agent connections" />
         @if (settings.apiAllowed()) {
         <form class="integration-form" (submit)="settings.createAgentConnection($event)">
           <label class="integration-field"><span>Name</span><input [value]="settings.newAgentConnectionName()" (input)="settings.newAgentConnectionName.set($any($event.target).value); settings.agentConnectionError.set(null)" required /></label>

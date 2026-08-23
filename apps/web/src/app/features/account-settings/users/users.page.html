@@ -4,6 +4,7 @@
 <div class="settings-section">
   <h3 class="settings-section-title"><i class="ti ti-user-plus"></i><span>Invite people</span></h3>
   <p class="settings-section-help">Create an invite link to join {{ settings.user()?.orgName }}.</p>
+  <k-docs-link path="managing-users" label="Learn more about managing users" />
   @if (settings.isHosted()) {
   <div class="user-seat-pool" [class.user-seat-pool--full]="settings.planTier() !== 'trial' && settings.availableSeats() === 0">
     <div class="user-seat-pool-icon">
@@ -167,6 +168,7 @@
 
 <div class="settings-section">
   <h3 class="settings-section-title"><i class="ti ti-users"></i><span>People in {{ settings.user()?.orgName }}</span></h3>
+  <k-docs-link path="user-roles" label="Learn more about roles and permissions" />
   @if (settings.orgUsersError()) { <p class="form-error">{{ settings.orgUsersError() }}</p> }
   @if (settings.isHosted() && settings.suspendedMemberCount() > 0) {
   <p class="plan-limit-hint"><i class="ti ti-ban"></i> {{ settings.suspendedMemberCount() }} {{ settings.suspendedMemberCount() === 1 ? "member is" : "members are" }} suspended by your plan's member limit. Upgrade your plan to restore their

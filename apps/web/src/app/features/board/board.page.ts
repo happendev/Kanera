@@ -19,6 +19,7 @@ import { AppTitleService } from "../../core/title/app-title.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import type { AnchoredPanelPlacement } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
+import { DocsLinkComponent } from "../../shared/docs-link.component";
 import { PanelStackService } from "../../shared/panel-stack.service";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { PageHeaderComponent } from "../../shared/page-header.component";
@@ -98,7 +99,7 @@ function localDateKey(offsetDays: number): string {
 @Component({
   selector: "k-board-page",
   standalone: true,
-  imports: [AnchoredPanelDirective, BoardCanvasComponent, BoardGroupColumnComponent, CardComposerDialogComponent, ListComponent, CardDetailComponent, BoardBackgroundPopover, BoardMembersMenu, AvatarComponent, BoardTableViewComponent, BoardCalendarViewComponent, WorkDoneViewComponent, NotesViewComponent, CompletedCardsPanelComponent, FilterBarComponent, PageHeaderComponent, PageToolbarComponent, SearchFieldComponent, SegmentedComponent, StatusToastComponent, TooltipDirective, WatcherPopoverComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, MirrorCreateDialogComponent, BoardMirrorsDialogComponent],
+  imports: [AnchoredPanelDirective, AvatarComponent, BoardBackgroundPopover, BoardCalendarViewComponent, BoardCanvasComponent, BoardGroupColumnComponent, BoardMembersMenu, BoardMirrorsDialogComponent, BoardTableViewComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, CardComposerDialogComponent, CardDetailComponent, CompletedCardsPanelComponent, DocsLinkComponent, FilterBarComponent, ListComponent, MirrorCreateDialogComponent, NotesViewComponent, PageHeaderComponent, PageToolbarComponent, SearchFieldComponent, SegmentedComponent, StatusToastComponent, TooltipDirective, WatcherPopoverComponent, WorkDoneViewComponent],
   providers: [BoardState, BoardSocketBridge, BoardMenuCoordinator],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./board.page.html",

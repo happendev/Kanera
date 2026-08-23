@@ -15,6 +15,7 @@ import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { BrowserPushService } from "../../core/notifications/browser-push.service";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
+import { KANERA_DOCS_URL } from "../../shared/docs-link.component";
 import { ScratchpadPanelComponent } from "../scratchpad/scratchpad-panel.component";
 import { ScratchpadService } from "../scratchpad/scratchpad.service";
 import { OfflineCacheService, type GuestHomeGroup, type HomeGroup, type HomeResponse } from "../../core/offline/offline-cache.service";
@@ -198,7 +199,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly activeClientId = computed(() => this.user()?.activeClientId ?? this.user()?.clientId ?? null);
   readonly activeOrganisation = computed(() => this.organisations().find((organisation) => organisation.clientId === this.activeClientId()) ?? null);
   readonly switchingOrganisationId = signal<string | null>(null);
-  readonly docsUrl = "https://www.kanera.app/docs";
+  readonly docsUrl = KANERA_DOCS_URL;
   // Tracks which workspaces are collapsed in the nav. Default empty (all expanded); persisted to localStorage.
   readonly collapsed = signal<Record<string, boolean>>(this.readCollapsed());
   // Tracks which workspaces have their boards section collapsed.

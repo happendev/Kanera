@@ -12,6 +12,7 @@ import type { Board, BoardGroup, List, Workspace, WorkspaceMember } from "@kaner
 import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS, DEFAULT_INACTIVE_CARDS_DAYS } from "@kanera/shared/workspace-defaults";
 import { filter } from "rxjs";
 import { ApiClient, ApiError } from "../../core/api/api.client";
+import { KANERA_DOCS_URL } from "../../shared/docs-link.component";
 import type { CardLabelPresentation } from "../board/card-labels.component";
 import { formatRelativeTime } from "../board/table-view/table-columns.util";
 import { AuthService } from "../../core/auth/auth.service";
@@ -494,7 +495,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly labelNameMaxLength = CARD_LABEL_NAME_MAX_LENGTH;
   readonly apiKeyNameMaxLength = API_KEY_NAME_MAX_LENGTH;
 
-  readonly apiDocsUrl = "https://www.kanera.app/docs/api";
+  readonly apiDocsUrl = `${KANERA_DOCS_URL}/api`;
   readonly customFieldError = signal<string | null>(null);
   readonly apiKeys = signal<WorkspaceApiKeyRow[]>([]);
   readonly agentConnections = signal<AgentConnectionRow[]>([]);

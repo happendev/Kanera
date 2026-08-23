@@ -1,5 +1,6 @@
 import { CdkDrag, CdkDragHandle, CdkDropList } from "@angular/cdk/drag-drop";
 import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
+import { DocsLinkComponent } from "../../../shared/docs-link.component";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { BoardMenuCoordinator } from "../../board/board-menu-coordinator.service";
 import { CardLabelsComponent } from "../../board/card-labels.component";
@@ -10,7 +11,7 @@ import { AutomationActionFieldsComponent } from "./automation-action-fields.comp
 @Component({
   selector: "k-workspace-settings-automations",
   standalone: true,
-  imports: [CdkDropList, CdkDrag, CdkDragHandle, UserMultiSelectDropdownComponent, AutomationActionFieldsComponent, CardLabelsComponent, TooltipDirective],
+  imports: [AutomationActionFieldsComponent, CardLabelsComponent, CdkDrag, CdkDragHandle, CdkDropList, DocsLinkComponent, TooltipDirective, UserMultiSelectDropdownComponent],
   // k-card-labels reads the shared compressed-labels preference from BoardMenuCoordinator, which is
   // deliberately not root-provided (it owns document listeners torn down in ngOnDestroy). Providing
   // it here — as home.page.ts does for the same reason — scopes it to this tab, and the parent's

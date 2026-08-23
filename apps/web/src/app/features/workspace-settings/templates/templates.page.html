@@ -2,6 +2,7 @@
         <i class="ti ti-info-circle"></i>
         <span>Checklist templates are added automatically the first time a card is created in, or moved into, a selected list. A template is never added to the same card twice.</span>
       </div>
+      <k-docs-link class="spaced" path="checklist-templates" label="Learn more about checklist templates" />
       <form class="board-form" (submit)="settings.addTemplate($event)">
         <input name="template" placeholder="Template settings.name (e.g. Design review)" [value]="settings.newTemplate()" (input)="settings.newTemplate.set($any($event.target).value)" required style="flex:1" />
         <button class="sm compact-add-button" type="submit" aria-label="Add template" kTooltip="Add template"><i class="ti ti-plus"></i><span class="mobile-hide">Add template</span></button>

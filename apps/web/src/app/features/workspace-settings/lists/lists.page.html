@@ -1,3 +1,4 @@
+      <k-docs-link class="spaced" path="lists" label="Learn more about lists" />
       <form class="board-form single-line-capture" (submit)="settings.addList($event)">
         <k-icon-picker [value]="settings.newListIcon() ?? 'list'" (valueChange)="settings.newListIcon.set($event)" />
         <k-color-picker [value]="settings.newListColor()" (valueChange)="settings.newListColor.set($event)" />

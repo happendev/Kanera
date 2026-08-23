@@ -1,4 +1,5 @@
-<form class="board-form single-line-capture" (submit)="settings.addField($event)">
+<k-docs-link class="spaced" path="custom-fields" label="Learn more about custom fields" />
+      <form class="board-form single-line-capture" (submit)="settings.addField($event)">
         <k-icon-picker [value]="settings.newFieldIcon()" (valueChange)="settings.newFieldIcon.set($event)" />
         <input name="field" placeholder="Field name" [value]="settings.newField()" (input)="settings.updateNewField($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" required />
         <select name="type" [value]="settings.newFieldType()" (input)="settings.newFieldType.set($any($event.target).value)" style="flex: 0 0 110px; height: 36px; padding: 0 8px;">

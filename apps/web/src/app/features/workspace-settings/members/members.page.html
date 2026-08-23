@@ -1,3 +1,4 @@
+<k-docs-link class="spaced" path="workspace-users" label="Learn more about workspace members" />
 @if (settings.availableOrgUsers().length > 0) {
 <form class="board-form" (submit)="settings.addMember($event)">
   <select name="userId" [value]="settings.addMemberUserId()" (input)="settings.addMemberUserId.set($any($event.target).value)" required style="flex:1">

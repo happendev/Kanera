@@ -5,6 +5,7 @@ import { ApiClient, ApiError } from "../../../core/api/api.client";
 import { AuthService } from "../../../core/auth/auth.service";
 import { buildAgentSetupPrompt } from "../../../shared/agent-setup-prompt";
 import { ConfirmService } from "../../../shared/confirm.service";
+import { DocsLinkComponent, KANERA_DOCS_URL } from "../../../shared/docs-link.component";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { AccountSettingsPage } from "../account-settings.page";
 
@@ -47,7 +48,7 @@ function sortPersonalApiKeys(keys: PersonalApiKeyRow[]): PersonalApiKeyRow[] {
 @Component({
   selector: "k-account-settings-api-keys",
   standalone: true,
-  imports: [TooltipDirective],
+  imports: [DocsLinkComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./api-keys.page.html",
   styleUrl: "./api-keys.page.scss",
@@ -56,6 +57,7 @@ export class AccountSettingsApiKeysPage implements OnInit {
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthService);
   private readonly confirm = inject(ConfirmService);
+  readonly agentSetupDocsUrl = `${KANERA_DOCS_URL}/ai-mcp-oauth`;
   protected readonly settings = inject(AccountSettingsPage);
 
   // Personal API keys are gated behind the same paid entitlement as workspace keys; the server still

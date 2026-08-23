@@ -3,6 +3,7 @@
     <i class="ti ti-info-circle"></i>
     <span>Automations run on every board in this {{ settings.entityLabel() }}. Each one watches for a single event, then applies its actions in order. They never run on cards that already match.</span>
   </p>
+  <k-docs-link path="automations" label="Learn more about automations" />
 
   @if (settings.enabledAutomationLimitHint(); as automationLimitHint) {
     @if (settings.enabledAutomationLimitReached()) {

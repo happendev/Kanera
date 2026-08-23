@@ -2,13 +2,14 @@ import { NgOptimizedImage } from "@angular/common";
 import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
 import { visibleSignedMediaUrl } from "../../../core/media/signed-media-url";
 import { AnchoredPanelDirective } from "../../../shared/anchored-panel.directive";
+import { DocsLinkComponent } from "../../../shared/docs-link.component";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { AccountSettingsPage } from "../account-settings.page";
 
 @Component({
   selector: "k-account-settings-org",
   standalone: true,
-  imports: [AnchoredPanelDirective, NgOptimizedImage, TooltipDirective],
+  imports: [AnchoredPanelDirective, DocsLinkComponent, NgOptimizedImage, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./org.page.html",
   styleUrl: "./org.page.scss",

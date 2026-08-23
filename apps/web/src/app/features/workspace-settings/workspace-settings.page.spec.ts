@@ -478,6 +478,7 @@ describe("WorkspaceSettingsPage", () => {
 
     const root = fixture.nativeElement as HTMLElement;
     expect(root.querySelector('[aria-label="Board health signals"]')).not.toBeNull();
+    expect(root.querySelector<HTMLAnchorElement>('a[href="https://www.kanera.app/docs/board-health"]')?.target).toBe("_blank");
 
     fixture.componentInstance.updateBoardHealthEnabled(false);
     fixture.detectChanges();
