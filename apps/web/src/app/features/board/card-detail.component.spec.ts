@@ -3142,7 +3142,7 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(api.post).toHaveBeenCalledWith("/cards/card-1/checklists", { title: "Nested", parentItemId: item.id });
   });
 
-  it("does not offer another checklist level from a sub-checklist item", async () => {
+  it("renders sub-checklist items as terminal rows without item details", async () => {
     const parentItem = createChecklistItemFixture({ id: "parent-item" });
     const nestedItem = createChecklistItemFixture({ id: "nested-item", text: "Nested item" });
     const topLevel = createChecklistFixture({ id: "top-level", items: [parentItem] });
@@ -3159,11 +3159,23 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.componentRef.setInput("checklists", [topLevel, nested]);
     await settleDetail(fixture);
 
-    fixture.componentInstance.openChecklistItemDetail(nestedItem);
+    fixture.componentInstance.openChecklistItemDetail(parentItem);
     await fixture.whenStable();
 
-    const panel = fixture.nativeElement.querySelector(".checklist-item-panel") as HTMLElement;
-    expect(panel.textContent).not.toContain("Add checklist");
+    const nestedRow = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".checklist-item-panel .checklist-item");
+    const nestedTitle = nestedRow?.querySelector<HTMLElement>(".checklist-item-text");
+    expect(nestedTitle?.tagName).toBe("SPAN");
+
+    nestedRow?.querySelector<HTMLButtonElement>(".checklist-item-more")?.click();
+    await fixture.whenStable();
+    const menu = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".checklist-item-actions-menu");
+    expect(menu?.textContent).not.toContain("Open details");
+    expect(menu?.textContent).toContain("Rename");
+    expect(menu?.textContent).toContain("Delete");
+
+    fixture.componentInstance.closeChecklistItemDetail();
+    fixture.componentInstance.openChecklistItemDetail(nestedItem);
+    expect(fixture.componentInstance.openChecklistItemId()).toBeNull();
 
     fixture.componentInstance.startAddChecklist(nestedItem.id);
     expect(fixture.componentInstance.addingChecklist()).toBe(false);
