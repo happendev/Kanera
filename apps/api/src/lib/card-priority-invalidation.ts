@@ -20,7 +20,9 @@ export async function invalidateQueuesForCards(cardIds: string[]): Promise<void>
     .selectDistinct({ targetUserId: cardPriorities.targetUserId })
     .from(cardPriorities)
     .where(inArray(cardPriorities.cardId, ids));
-  for (const { targetUserId } of targets) {
-    await emitCardPriorityInvalidated(targetUserId);
-  }
+  // One audience's ping does not depend on another's, and each one costs a membership query plus two
+  // queries per workspace plus a queue snapshot. Serialising them made a 100-card bulk completion
+  // pay that chain once per distinct queue owner. Ordering across audiences carries no meaning here
+  // (these are content-free "refetch" pings to separate users), so nothing observable is reordered.
+  await Promise.all(targets.map(({ targetUserId }) => emitCardPriorityInvalidated(targetUserId)));
 }

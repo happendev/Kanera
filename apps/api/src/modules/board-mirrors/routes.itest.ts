@@ -8,16 +8,11 @@ import { env } from "../../env.js";
 import { processBoardMirrors } from "../../lib/board-mirror/drain.js";
 import { convertClientPlan } from "../../lib/plan-conversion.js";
 import { buildIntegrationServer } from "../../test/integration.js";
+import { signupOwner } from "../../test/api-fixtures.js";
 
 async function setup() {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: { orgName: "Mirror Org", email: "mirror-owner@example.com", password: "Abc12345", displayName: "Owner" },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Mirror Org", email: "mirror-owner@example.com", displayName: "Owner" });
   const workspaceResponse = await app.inject({ method: "POST", url: "/workspaces", headers: { authorization: `Bearer ${accessToken}` }, payload: { name: "Delivery" } });
   assert.equal(workspaceResponse.statusCode, 201);
   const workspace = workspaceResponse.json<{ id: string }>();

@@ -106,8 +106,5 @@ export const boardMirrorDirtyCards = pgTable(
 );
 
 export type BoardMirror = typeof boardMirrors.$inferSelect;
-export type NewBoardMirror = typeof boardMirrors.$inferInsert;
 export type BoardMirrorList = typeof boardMirrorLists.$inferSelect;
-export type NewBoardMirrorList = typeof boardMirrorLists.$inferInsert;
 export type BoardMirrorDirtyCard = typeof boardMirrorDirtyCards.$inferSelect;
-export type NewBoardMirrorDirtyCard = typeof boardMirrorDirtyCards.$inferInsert;

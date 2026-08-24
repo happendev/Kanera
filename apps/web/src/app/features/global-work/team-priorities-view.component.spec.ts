@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { By } from "@angular/platform-browser";
 import { CARD_DRAG_START_DELAY } from "../board/card-drag-scroll";
 import { TeamPrioritiesViewComponent, type TeamPriorityReorder } from "./team-priorities-view.component";
+import type { UpNextAddableCard } from "./up-next-panel.component";
 
 function card(id: string, title: string): WorkCard {
   return {
@@ -30,7 +31,7 @@ function entry(id: string, rank: number, visible: boolean): WorkPriorityItem {
     rank,
     card: visible ? card(`40000000-0000-4000-8000-00000000000${rank}`, `Ranked ${rank}`) : null,
     context: visible
-      ? { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery", labels: [] }
+      ? { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", listIcon: null, listColor: null, workspaceName: "Delivery", labels: [] }
       : null,
   };
 }
@@ -88,6 +89,27 @@ function setup(input: WorkPriorityQueue[] = queues) {
   fixture.componentRef.setInput("canDrag", true);
   fixture.detectChanges();
   return fixture;
+}
+
+/** A candidate for a lane's Add card picker. */
+function addable(
+  id: string,
+  title: string,
+  where: { boardId: string; boardName: string; listId: string; listName: string },
+): UpNextAddableCard {
+  return {
+    id,
+    title,
+    key: `DEV-${id}`,
+    boardIcon: null,
+    boardIconColor: null,
+    listIcon: null,
+    listColor: null,
+    dueDateLocalDate: null,
+    dueDateSlot: null,
+    dueDateTimezone: "UTC",
+    ...where,
+  };
 }
 
 describe("TeamPrioritiesViewComponent", () => {
@@ -178,18 +200,21 @@ describe("TeamPrioritiesViewComponent", () => {
     expect(fixture.componentInstance.actionsMenu()).toEqual([]);
   });
 
-  it("offers Add card in the lane header and footer, grouped by board, and emits the lane owner", () => {
+  it("offers Add card in the lane header and footer, sectioned board › list, and emits the lane owner", () => {
     const fixture = setup();
     fixture.componentRef.setInput("addableCardsByUserId", new Map([[TEAMMATE_ID, [
-      { id: "c1", title: "Fix login", boardId: "b1", boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing" },
-      { id: "c2", title: "Ship exports", boardId: "b2", boardName: "Delivery", boardIcon: "rocket", boardIconColor: "blue", listName: "Todo" },
-      { id: "c3", title: "Fix signup", boardId: "b1", boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Todo" },
+      addable("c1", "Fix login", { boardId: "b1", boardName: "Roadmap", listId: "l1", listName: "Doing" }),
+      addable("c2", "Ship exports", { boardId: "b2", boardName: "Delivery", listId: "l2", listName: "Todo" }),
+      addable("c3", "Fix signup", { boardId: "b1", boardName: "Roadmap", listId: "l2", listName: "Todo" }),
     ]]]));
     fixture.detectChanges();
 
+    // Sectioned board › list by the shared builder, so a lane's picker reads exactly like the
+    // drawer's and the dock's.
     const teammateLane = fixture.componentInstance.lanes()[1]!;
-    expect(teammateLane.addGroups.map((group) => group.label)).toEqual(["Roadmap", "Delivery"]);
-    expect(teammateLane.addGroups[0]?.options.map((option) => option.id)).toEqual(["c1", "c3"]);
+    expect(teammateLane.addGroups.map((group) => group.label)).toEqual(["Doing", "Todo", "Todo"]);
+    expect(teammateLane.addGroups.map((group) => group.parent?.label)).toEqual(["Roadmap", "Roadmap", "Delivery"]);
+    expect(teammateLane.addGroups[1]?.options.map((option) => option.id)).toEqual(["c3"]);
 
     const laneElements = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(".lane");
     expect(laneElements[1]!.querySelector<HTMLButtonElement>(".lane-head-add")?.disabled).toBe(false);

@@ -5,13 +5,14 @@ import { ApiClient, ApiError } from "../../../core/api/api.client";
 import { AuthService } from "../../../core/auth/auth.service";
 import { CookieConsentService } from "../../../core/consent/cookie-consent.service";
 import { AvatarComponent } from "../../../shared/avatar.component";
+import { DocsLinkComponent } from "../../../shared/docs-link.component";
 import { mfaQrDataUrl } from "../../../shared/mfa-qr";
 import { AccountSettingsPage } from "../account-settings.page";
 
 @Component({
   selector: "k-account-settings-profile",
   standalone: true,
-  imports: [AvatarComponent, FormField],
+  imports: [AvatarComponent, DocsLinkComponent, FormField],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./profile.page.html",
   styleUrl: "./profile.page.scss",

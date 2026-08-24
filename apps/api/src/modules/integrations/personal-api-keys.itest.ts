@@ -7,20 +7,14 @@ import { test } from "node:test";
 import { db } from "../../db.js";
 import { buildPublicApiServer } from "../../public-api-server.js";
 import { buildIntegrationServer, testUploadsDir } from "../../test/integration.js";
+import { signupOwner } from "../../test/api-fixtures.js";
 
 // Exercises the full personal-key stack over HTTP: the /me/api-keys management routes on the app
 // server, the auth plugin's personal-key claim construction, activity attribution as the owner, and
 // revocation. Board-content-only enforcement is proven precisely in lib/access.itest.ts.
 async function seedOwnerWithBoardCard(testName: string) {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: { orgName: `Acme ${testName}`, email: `owner-${randomUUID()}@example.com`, password: "Abc12345", displayName: "Owner" },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
-  const auth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: auth } = await signupOwner(app, { orgName: `Acme ${testName}`, email: `owner-${randomUUID()}@example.com`, displayName: "Owner" });
 
   const workspaceCreated = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Delivery" } });
   assert.equal(workspaceCreated.statusCode, 201);

@@ -1,7 +1,7 @@
 import { dto } from "@kanera/shared";
 import { AUTOMATION_LIMIT } from "@kanera/shared/automation-limits";
 import { automationActions, automationRuns, automations, cardLabels, checklistTemplates, customFieldOptions, customFields, lists, workspaceMembers, workspaces } from "@kanera/shared/schema";
-import { and, asc, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db, type Db } from "../../db.js";
 import { env } from "../../env.js";
@@ -9,7 +9,8 @@ import { assertWorkspaceAccess } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
 import { loadAutomation, loadAutomations } from "../../lib/automations.js";
 import { badRequest, notFound } from "../../lib/errors.js";
-import { between, positionAtIndex } from "../../lib/position.js";
+import { moveOrderedEntity } from "../../lib/move-ordered-entity.js";
+import { between, neighbourPositions as resolveNeighbourPositions, positionAtIndex } from "../../lib/position.js";
 import { capturePremiumFeatureUsed } from "../../lib/product-analytics.js";
 import { rebalanceAutomations } from "../../lib/rebalance.js";
 import { assertEnabledAutomationLimit } from "../../lib/tier-limits.js";
@@ -41,30 +42,17 @@ async function capturePremiumAutomationRuleUse(input: {
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
 // as targeted indexed probes so large workspaces do not pay for a full automation scan.
-async function neighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
-  let prev: string | null = null;
-  let next: string | null = null;
-  if (afterId === null && beforeId === undefined) {
-    const [first] = await db.select({ position: automations.position }).from(automations).where(and(eq(automations.workspaceId, workspaceId), isNull(automations.archivedAt))).orderBy(asc(automations.position)).limit(1);
-    next = first?.position ?? null;
-  } else if (beforeId === null && afterId === undefined) {
-    const [last] = await db.select({ position: automations.position }).from(automations).where(and(eq(automations.workspaceId, workspaceId), isNull(automations.archivedAt))).orderBy(desc(automations.position)).limit(1);
-    prev = last?.position ?? null;
-  }
-  else if (afterId) {
-    const [after] = await db.select({ position: automations.position }).from(automations).where(and(eq(automations.id, afterId), eq(automations.workspaceId, workspaceId), isNull(automations.archivedAt))).limit(1);
-    if (!after) throw badRequest("afterAutomationId not found");
-    const [nextAutomation] = await db.select({ position: automations.position }).from(automations).where(and(eq(automations.workspaceId, workspaceId), isNull(automations.archivedAt), gt(automations.position, after.position))).orderBy(asc(automations.position)).limit(1);
-    prev = after.position;
-    next = nextAutomation?.position ?? null;
-  } else if (beforeId) {
-    const [before] = await db.select({ position: automations.position }).from(automations).where(and(eq(automations.id, beforeId), eq(automations.workspaceId, workspaceId), isNull(automations.archivedAt))).limit(1);
-    if (!before) throw badRequest("beforeAutomationId not found");
-    const [prevAutomation] = await db.select({ position: automations.position }).from(automations).where(and(eq(automations.workspaceId, workspaceId), isNull(automations.archivedAt), lt(automations.position, before.position))).orderBy(desc(automations.position)).limit(1);
-    next = before.position;
-    prev = prevAutomation?.position ?? null;
-  }
-  return { prev, next };
+function neighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
+  return resolveNeighbourPositions({
+    table: automations,
+    id: automations.id,
+    position: automations.position,
+    scope: and(eq(automations.workspaceId, workspaceId), isNull(automations.archivedAt)),
+    afterId,
+    beforeId,
+    afterLabel: "afterAutomationId",
+    beforeLabel: "beforeAutomationId",
+  });
 }
 
 async function assertListInWorkspace(workspaceId: string, listId: string | null | undefined, tx: Tx = db) {
@@ -457,20 +445,14 @@ export async function automationRoutes(app: FastifyInstance) {
     const [current] = await db.select().from(automations).where(eq(automations.id, id)).limit(1);
     if (!current) throw notFound();
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
-    const { prev, next } = await neighbourPositions(current.workspaceId, body.afterAutomationId, body.beforeAutomationId);
-    const result = between(prev, next);
     const prevPosition = current.position;
-    const { position, rebalancedPositions } = await db.transaction(async (tx) => {
-      let position = result.position;
-      await tx.update(automations).set({ position, updatedAt: new Date() }).where(eq(automations.id, id));
-
-      // Keep the move, any full reorder, and its audit row atomic so the recorded position
-      // always describes the committed automation order.
-      const rebalancedPositions = result.needsRebalance
-        ? await rebalanceAutomations(current.workspaceId, tx)
-        : null;
-      position = rebalancedPositions?.find((row) => row.id === id)?.position ?? position;
-      await recordActivity(tx, {
+    const { position, rebalancedPositions } = await moveOrderedEntity({
+      table: automations,
+      idColumn: automations.id,
+      id,
+      neighbours: await neighbourPositions(current.workspaceId, body.afterAutomationId, body.beforeAutomationId),
+      rebalance: (tx) => rebalanceAutomations(current.workspaceId, tx),
+      activity: (position) => ({
         boardId: null,
         workspaceId: current.workspaceId,
         actorId: req.auth.sub,
@@ -478,8 +460,7 @@ export async function automationRoutes(app: FastifyInstance) {
         entityId: current.workspaceId,
         action: "moved",
         payload: { automationId: id, prevPosition, position },
-      });
-      return { position, rebalancedPositions };
+      }),
     });
     if (rebalancedPositions) {
       await emitToWorkspaceAdmins(current.workspaceId, "automation:rebalanced", { workspaceId: current.workspaceId, positions: rebalancedPositions });

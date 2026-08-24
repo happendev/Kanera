@@ -17,6 +17,7 @@ import { resolveSmtpConfig } from "./lib/smtp-resolve.js";
 import type { SweepScheduler } from "./lib/sweep-scheduler.js";
 import { startTrialExpiryScheduler } from "./lib/trial-expiry.js";
 import { startWebhookDeliveryScheduler } from "./lib/webhooks.js";
+import { startWeeklyAdminRecapScheduler } from "./lib/weekly-admin-recap.js";
 import { initRedis } from "./redis.js";
 import { setupBroadcastIo, closeRealtimeIo, recordPresenceOffline } from "./realtime/io.js";
 import { setRealtimeLogger } from "./realtime/metrics.js";
@@ -59,6 +60,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   let stopRetentionCleanupScheduler: (() => Promise<void>) | null = null;
   let stopTrialExpiryScheduler: (() => Promise<void>) | null = null;
   let stopBoardMirrorScheduler: (() => Promise<void>) | null = null;
+  let stopWeeklyAdminRecapScheduler: (() => Promise<void>) | null = null;
   let stopPresenceReaper: (() => void) | null = null;
 
   app.addHook("onClose", async () => stopPresenceReaper?.());
@@ -76,6 +78,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   app.addHook("onClose", async () => stopRetentionCleanupScheduler?.());
   app.addHook("onClose", async () => stopTrialExpiryScheduler?.());
   app.addHook("onClose", async () => stopBoardMirrorScheduler?.());
+  app.addHook("onClose", async () => stopWeeklyAdminRecapScheduler?.());
   app.addHook("onClose", async () => closeRealtimeIo());
 
   app.addHook("onReady", async () => {
@@ -111,6 +114,12 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
     stopPushQueueScheduler = startPushQueueScheduler({ db, log: app.log });
     stopRetentionCleanupScheduler = startRetentionCleanupScheduler({ db, log: app.log });
     stopTrialExpiryScheduler = startTrialExpiryScheduler(app.log, app.mailer);
+    stopWeeklyAdminRecapScheduler = startWeeklyAdminRecapScheduler({
+      db,
+      adminEmail: env.ADMIN_EMAIL,
+      adminUrl: env.ADMIN_WEB_ORIGIN,
+      log: app.log,
+    });
   });
 
   return app;

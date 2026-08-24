@@ -129,7 +129,13 @@ const searchOutputSchema = z.object({
     z.object({ type: z.literal("attachment"), ...cardSearchResultFields, fileName: z.string() }),
   ])),
 });
-const dueDateSlot = z.enum(["anyTime", "morning", "afternoon", "endOfWorkDay"]);
+const require = createRequire(import.meta.url);
+// Same reasoning for the due-date slots: the tool schema must accept exactly the slots the API
+// stores, and the cut-off times behind them are defined once in the shared package.
+const { CARD_DUE_DATE_SLOTS } = require("@kanera/shared/due-date-slots") as {
+  CARD_DUE_DATE_SLOTS: readonly [string, ...string[]];
+};
+const dueDateSlot = z.enum(CARD_DUE_DATE_SLOTS);
 const cardUpdateFields = z.object({
   title: z.string().min(1).max(500).optional(),
   description: z.string().max(50000).nullable().optional(),
@@ -179,7 +185,6 @@ const CARD_KEY_PATTERN = /^[A-Z][A-Z0-9]{1,9}-[1-9][0-9]*$/iu;
 const ORGANISATION_KEY_PATTERN = /^[A-F0-9]{16}$/iu;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 type ToolArgs<T extends z.ZodRawShape> = z.infer<z.ZodObject<T>>;
-const require = createRequire(import.meta.url);
 // Load the runtime tuple from the shared package without making TypeScript compile shared sources
 // outside this package's rootDir. The MCP schema and public API now have one color source of truth.
 const { COLOR_TOKENS } = require("@kanera/shared/colors") as {
@@ -908,7 +913,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     boardId: uuid,
     cardIds: z.array(cardReference).min(1).max(200),
     dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
-    dueDateSlot: z.enum(["anyTime", "morning", "afternoon", "endOfWorkDay"]).nullable().optional(),
+    dueDateSlot: dueDateSlot.nullable().optional(),
   }, async (a, api) => api.patch(`/api/v1/boards/${a.boardId}/cards/bulk/due-date`, { cardIds: await resolveCardReferences(api, a.cardIds), dueDateLocalDate: a.dueDateLocalDate, dueDateSlot: a.dueDateSlot }), ctx);
   registerKaneraTool(server, "kanera_bulk_patch_card_labels", `Add or remove labels on up to 200 selected cards in a board. Returns the number changed, changed card ids, and skipped archived card ids. ${boardBatchScope} Requires board editor access and a write-capable credential.`, {
     boardId: uuid,

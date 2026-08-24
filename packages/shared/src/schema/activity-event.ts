@@ -231,4 +231,3 @@ export const activityEvents = pgTable(
 );
 
 export type ActivityEvent = typeof activityEvents.$inferSelect;
-export type NewActivityEvent = typeof activityEvents.$inferInsert;

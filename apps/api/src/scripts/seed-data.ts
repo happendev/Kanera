@@ -46,7 +46,6 @@ import { fileURLToPath } from "node:url";
 import { hashPassword } from "../auth/password.js";
 import { db, type Db } from "../db.js";
 import { env } from "../env.js";
-import { recordActivity } from "../lib/activity.js";
 import { seedBoardMembersFromWorkspace } from "../lib/board-membership.js";
 import { allocateCardKeys } from "../lib/card-keys.js";
 import { generateCoverImage, generateThumbnail, isProcessableImage } from "../lib/image.js";
@@ -4320,7 +4319,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
         addedAt: addHours(guestBoardCreatedAt, 1),
       });
 
-      await recordActivity(tx, {
+      await insertSeedActivity(tx, {
         boardId: guestBoard!.id,
         workspaceId: guestWorkspace!.id,
         actorId: guestUser!.id,
@@ -4328,6 +4327,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
         entityId: guestBoard!.id,
         action: "created",
         payload: { name: "Todo" },
+        createdAt: guestBoardCreatedAt,
       });
 
       const guestCards = [
@@ -4397,7 +4397,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
           assignedAt: addHours(cardCreatedAt, 1),
         });
 
-        await recordActivity(tx, {
+        await insertSeedActivity(tx, {
           boardId: guestBoard!.id,
           workspaceId: guestWorkspace!.id,
           actorId: guestUser!.id,
@@ -4405,6 +4405,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
           entityId: card!.id,
           action: "created",
           payload: { title: cardSeed.title, listId: listRow.id },
+          createdAt: cardCreatedAt,
         });
       }
 
@@ -4494,7 +4495,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
       // The migration runs before this seed, so it cannot backfill boards created here. Use the
       // production helper to keep every organisation owner/admin pinned on the standalone board.
       await seedBoardMembersFromWorkspace(tx, standaloneBoard!.id, standaloneWorkspace!.id, userIdByKey.get("amelia")!);
-      await recordActivity(tx, {
+      await insertSeedActivity(tx, {
         boardId: standaloneBoard!.id,
         workspaceId: standaloneWorkspace!.id,
         actorId: userIdByKey.get("amelia")!,
@@ -4502,6 +4503,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
         entityId: standaloneBoard!.id,
         action: "created",
         payload: { name: standaloneName },
+        createdAt: addHours(standaloneCreatedAt, 3),
       });
       summary.workspaces += 1;
       summary.boards += 1;
@@ -4641,9 +4643,9 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             return { cardId: card!.id, fieldId: fieldRow.id, ...fieldValueUpdate(fieldName, fieldRow.type, value, new Map()), updatedAt: addHours(cardCreatedAt, 1) };
           }));
         }
-        await recordActivity(tx, { boardId: standaloneBoard!.id, workspaceId: standaloneWorkspace!.id, actorId: userIdByKey.get("amelia")!, entityType: "card", entityId: card!.id, action: "created", payload: { title: cardSeed.title, listId: listRow.id } });
+        await insertSeedActivity(tx, { boardId: standaloneBoard!.id, workspaceId: standaloneWorkspace!.id, actorId: userIdByKey.get("amelia")!, entityType: "card", entityId: card!.id, action: "created", payload: { title: cardSeed.title, listId: listRow.id }, createdAt: cardCreatedAt });
         if (completedAt) {
-          await tx.insert(activityEvents).values({ boardId: standaloneBoard!.id, workspaceId: standaloneWorkspace!.id, actorId: userIdByKey.get("amelia")!, entityType: "card", entityId: card!.id, action: "completed", payload: { completedAt }, createdAt: completedAt });
+          await insertSeedActivity(tx, { boardId: standaloneBoard!.id, workspaceId: standaloneWorkspace!.id, actorId: userIdByKey.get("amelia")!, entityType: "card", entityId: card!.id, action: "completed", payload: { completedAt }, createdAt: completedAt });
         }
 
         for (const [checklistIndex, checklistSeed] of (cardSeed.checklists ?? []).entries()) {
@@ -4662,9 +4664,10 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
           summary.checklistItems += checklistSeed.items.length;
         }
         for (const commentSeed of cardSeed.comments ?? []) {
-          const [comment] = await tx.insert(comments).values({ cardId: card!.id, authorId: userIdByKey.get(commentSeed.author)!, body: commentSeed.body, createdAt: addHours(cardCreatedAt, commentSeed.hoursAfterCreation) }).returning();
+          const commentCreatedAt = addHours(cardCreatedAt, commentSeed.hoursAfterCreation);
+          const [comment] = await tx.insert(comments).values({ cardId: card!.id, authorId: userIdByKey.get(commentSeed.author)!, body: commentSeed.body, createdAt: commentCreatedAt }).returning();
           summary.comments += 1;
-          await recordActivity(tx, { boardId: standaloneBoard!.id, workspaceId: standaloneWorkspace!.id, actorId: userIdByKey.get(commentSeed.author)!, entityType: "comment", entityId: comment!.id, action: "created", payload: { cardId: card!.id } });
+          await insertSeedActivity(tx, { boardId: standaloneBoard!.id, workspaceId: standaloneWorkspace!.id, actorId: userIdByKey.get(commentSeed.author)!, entityType: "comment", entityId: comment!.id, action: "created", payload: { cardId: card!.id }, createdAt: commentCreatedAt });
         }
       }
 
@@ -4855,7 +4858,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
               .map((member) => member.user),
           );
 
-          await recordActivity(tx, {
+          await insertSeedActivity(tx, {
             boardId: board!.id,
             workspaceId: workspace!.id,
             actorId: userIdByKey.get(boardSeed.createdBy)!,
@@ -4863,6 +4866,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             entityId: board!.id,
             action: "created",
             payload: { name: boardSeed.name },
+            createdAt: boardCreatedAt,
           });
 
           const boardNotes = await insertSeedNotes({
@@ -4936,76 +4940,62 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
               : [cardSeed.list];
             const originListRow = listByName.get(movementPath[0]!) ?? listRow;
 
-            if (workspaceSeed.listFlow) {
-              await insertSeedActivity(tx, {
-                boardId: board!.id,
-                workspaceId: workspace!.id,
-                actorId: userIdByKey.get(cardSeed.createdBy)!,
-                entityType: "card",
-                entityId: card!.id,
-                action: "created",
-                payload: { title: cardSeed.title, listId: originListRow.id },
-                createdAt: cardCreatedAt,
-              });
+            await insertSeedActivity(tx, {
+              boardId: board!.id,
+              workspaceId: workspace!.id,
+              actorId: userIdByKey.get(cardSeed.createdBy)!,
+              entityType: "card",
+              entityId: card!.id,
+              action: "created",
+              payload: { title: cardSeed.title, listId: originListRow.id },
+              createdAt: cardCreatedAt,
+            });
 
-              if (movementPath.length > 1) {
-                // Whoever owns the card is the natural mover; fall back to its creator for cards with
-                // no assignee (idea cards never reach here because they have an empty movement path).
-                const moverId = userIdByKey.get(cardSeed.assignees[0] ?? cardSeed.createdBy)!;
-                // Moves sit between creation and the card "arriving" in its current list: shortly
-                // before completion for done cards, or a short window after creation for active ones.
-                // Spreading them evenly reads as steady progress rather than one instantaneous jump.
-                const arrivalAt = completedAt
-                  ? addHours(completedAt, -3)
-                  : addHours(cardCreatedAt, 3 * (movementPath.length - 1) + 3);
-                const spanMs = arrivalAt.getTime() - cardCreatedAt.getTime();
-                const steps = movementPath.length - 1;
-                for (let step = 0; step < steps; step++) {
-                  const fromList = listByName.get(movementPath[step]!)!;
-                  const toList = listByName.get(movementPath[step + 1]!)!;
-                  const movedAt = addMinutes(
-                    new Date(cardCreatedAt.getTime() + Math.round((spanMs * (step + 1)) / (steps + 1))),
-                    0,
-                  );
-                  await insertSeedActivity(tx, {
-                    boardId: board!.id,
-                    workspaceId: workspace!.id,
-                    actorId: moverId,
-                    entityType: "card",
-                    entityId: card!.id,
-                    action: ACTIVITY_ACTION.MOVED,
-                    // Names are stored alongside ids so the feed still renders if a demo later renames
-                    // or deletes a list; the client prefers the live list name and falls back to these.
-                    payload: {
-                      fromListId: fromList.id,
-                      toListId: toList.id,
-                      fromListName: fromList.name,
-                      toListName: toList.name,
-                      prevPosition: card!.position,
-                      position: card!.position,
-                    },
-                    createdAt: movedAt,
-                  });
-                  summary.cardMoves += 1;
-                }
+            if (workspaceSeed.listFlow && movementPath.length > 1) {
+              // Whoever owns the card is the natural mover; fall back to its creator for cards with
+              // no assignee (idea cards never reach here because they have an empty movement path).
+              const moverId = userIdByKey.get(cardSeed.assignees[0] ?? cardSeed.createdBy)!;
+              // Moves sit between creation and the card "arriving" in its current list: shortly
+              // before completion for done cards, or a short window after creation for active ones.
+              // Spreading them evenly reads as steady progress rather than one instantaneous jump.
+              const arrivalAt = completedAt
+                ? addHours(completedAt, -3)
+                : addHours(cardCreatedAt, 3 * (movementPath.length - 1) + 3);
+              const spanMs = arrivalAt.getTime() - cardCreatedAt.getTime();
+              const steps = movementPath.length - 1;
+              for (let step = 0; step < steps; step++) {
+                const fromList = listByName.get(movementPath[step]!)!;
+                const toList = listByName.get(movementPath[step + 1]!)!;
+                const movedAt = addMinutes(
+                  new Date(cardCreatedAt.getTime() + Math.round((spanMs * (step + 1)) / (steps + 1))),
+                  0,
+                );
+                await insertSeedActivity(tx, {
+                  boardId: board!.id,
+                  workspaceId: workspace!.id,
+                  actorId: moverId,
+                  entityType: "card",
+                  entityId: card!.id,
+                  action: ACTIVITY_ACTION.MOVED,
+                  // Names are stored alongside ids so the feed still renders if a demo later renames
+                  // or deletes a list; the client prefers the live list name and falls back to these.
+                  payload: {
+                    fromListId: fromList.id,
+                    toListId: toList.id,
+                    fromListName: fromList.name,
+                    toListName: toList.name,
+                    prevPosition: card!.position,
+                    position: card!.position,
+                  },
+                  createdAt: movedAt,
+                });
+                summary.cardMoves += 1;
               }
-            } else {
-              await recordActivity(tx, {
-                boardId: board!.id,
-                workspaceId: workspace!.id,
-                actorId: userIdByKey.get(cardSeed.createdBy)!,
-                entityType: "card",
-                entityId: card!.id,
-                action: "created",
-                payload: { title: cardSeed.title, listId: listRow.id },
-              });
             }
 
             if (completedAt) {
               if (!completedBy) throw new Error(`Completed card '${cardSeed.title}' needs completedBy.`);
-              // Seed the matching audit row at the historical time; recordActivity intentionally
-              // uses the current time and therefore cannot represent old completion history.
-              await tx.insert(activityEvents).values({
+              await insertSeedActivity(tx, {
                 boardId: board!.id,
                 workspaceId: workspace!.id,
                 actorId: userIdByKey.get(completedBy)!,
@@ -5158,13 +5148,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
                 action: "checklist:created" as const,
                 payload: { cardId: card!.id, checklistId: checklist!.id, title: checklistSeed.title },
               };
-              // Keep this row in true chronological order for worked-in workspaces so it does not
-              // jump above the card's earlier created/moved history in the feed.
-              if (workspaceSeed.listFlow) {
-                await insertSeedActivity(tx, { ...checklistActivity, entityId: card!.id, createdAt: checklistCreatedAt });
-              } else {
-                await recordActivity(tx, { ...checklistActivity, entityId: card!.id });
-              }
+              await insertSeedActivity(tx, { ...checklistActivity, entityId: card!.id, createdAt: checklistCreatedAt });
 
               if (checklistSeed.items.length > 0) {
                 const invalidItemAssignees = checklistSeed.items
@@ -5268,12 +5252,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
                   source: attachment.source,
                 },
               };
-              // Historical timestamp for worked-in workspaces so the upload lands in feed order.
-              if (workspaceSeed.listFlow) {
-                await insertSeedActivity(tx, { ...attachmentActivity, createdAt: attachmentCreatedAt });
-              } else {
-                await recordActivity(tx, attachmentActivity);
-              }
+              await insertSeedActivity(tx, { ...attachmentActivity, createdAt: attachmentCreatedAt });
             }
 
             if (coverAttachmentId) {
@@ -5378,7 +5357,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
               .returning();
             summary.separators += 1;
 
-            await recordActivity(tx, {
+            await insertSeedActivity(tx, {
               boardId: board!.id,
               workspaceId: workspace!.id,
               actorId: userIdByKey.get(separatorSeed.createdBy)!,
@@ -5386,6 +5365,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
               entityId: separator!.id,
               action: "created",
               payload: { title: separatorSeed.title, color: separatorSeed.color ?? null, listId: listRow.id },
+              createdAt: separatorCreatedAt,
             });
           }
         }

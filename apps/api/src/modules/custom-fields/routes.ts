@@ -1,6 +1,6 @@
 import { dto } from "@kanera/shared";
 import { customFieldOptions, customFields } from "@kanera/shared/schema";
-import { and, asc, desc, eq, gt, isNull, lt } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertWorkspaceAccess } from "../../lib/access.js";
@@ -8,36 +8,24 @@ import { recordActivity } from "../../lib/activity.js";
 import { disableAutomationsReferencingCustomField, loadAutomation } from "../../lib/automations.js";
 import { loadFieldOptions } from "../../lib/custom-fields.js";
 import { badRequest, conflict, notFound } from "../../lib/errors.js";
-import { between } from "../../lib/position.js";
+import { moveOrderedEntity } from "../../lib/move-ordered-entity.js";
+import { between, neighbourPositions as resolveNeighbourPositions } from "../../lib/position.js";
 import { rebalanceCustomFieldOptions, rebalanceCustomFields } from "../../lib/rebalance.js";
 import { emitToWorkspace, emitToWorkspaceAdmins } from "../../realtime/emit.js";
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
 // as targeted indexed probes so fields with many select options stay cheap to reorder.
-async function optionNeighbourPositions(fieldId: string, afterId?: string | null, beforeId?: string | null) {
-  let prev: string | null = null;
-  let next: string | null = null;
-  if (afterId === null && beforeId === undefined) {
-    const [first] = await db.select({ position: customFieldOptions.position }).from(customFieldOptions).where(and(eq(customFieldOptions.fieldId, fieldId), isNull(customFieldOptions.archivedAt))).orderBy(asc(customFieldOptions.position)).limit(1);
-    next = first?.position ?? null;
-  } else if (beforeId === null && afterId === undefined) {
-    const [last] = await db.select({ position: customFieldOptions.position }).from(customFieldOptions).where(and(eq(customFieldOptions.fieldId, fieldId), isNull(customFieldOptions.archivedAt))).orderBy(desc(customFieldOptions.position)).limit(1);
-    prev = last?.position ?? null;
-  }
-  else if (afterId) {
-    const [after] = await db.select({ position: customFieldOptions.position }).from(customFieldOptions).where(and(eq(customFieldOptions.id, afterId), eq(customFieldOptions.fieldId, fieldId), isNull(customFieldOptions.archivedAt))).limit(1);
-    if (!after) throw badRequest("afterOptionId not found");
-    const [nextOption] = await db.select({ position: customFieldOptions.position }).from(customFieldOptions).where(and(eq(customFieldOptions.fieldId, fieldId), isNull(customFieldOptions.archivedAt), gt(customFieldOptions.position, after.position))).orderBy(asc(customFieldOptions.position)).limit(1);
-    prev = after.position;
-    next = nextOption?.position ?? null;
-  } else if (beforeId) {
-    const [before] = await db.select({ position: customFieldOptions.position }).from(customFieldOptions).where(and(eq(customFieldOptions.id, beforeId), eq(customFieldOptions.fieldId, fieldId), isNull(customFieldOptions.archivedAt))).limit(1);
-    if (!before) throw badRequest("beforeOptionId not found");
-    const [prevOption] = await db.select({ position: customFieldOptions.position }).from(customFieldOptions).where(and(eq(customFieldOptions.fieldId, fieldId), isNull(customFieldOptions.archivedAt), lt(customFieldOptions.position, before.position))).orderBy(desc(customFieldOptions.position)).limit(1);
-    next = before.position;
-    prev = prevOption?.position ?? null;
-  }
-  return { prev, next };
+function optionNeighbourPositions(fieldId: string, afterId?: string | null, beforeId?: string | null) {
+  return resolveNeighbourPositions({
+    table: customFieldOptions,
+    id: customFieldOptions.id,
+    position: customFieldOptions.position,
+    scope: and(eq(customFieldOptions.fieldId, fieldId), isNull(customFieldOptions.archivedAt)),
+    afterId,
+    beforeId,
+    afterLabel: "afterOptionId",
+    beforeLabel: "beforeOptionId",
+  });
 }
 
 const normalizeCustomFieldName = (name: string) => name.trim().toLocaleLowerCase();
@@ -55,30 +43,17 @@ async function assertUniqueCustomFieldName(workspaceId: string, name: string, ex
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
 // as targeted indexed probes so large workspaces do not pay for a full custom-field scan.
-async function neighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
-  let prev: string | null = null;
-  let next: string | null = null;
-  if (afterId === null && beforeId === undefined) {
-    const [first] = await db.select({ position: customFields.position }).from(customFields).where(and(eq(customFields.workspaceId, workspaceId), isNull(customFields.archivedAt))).orderBy(asc(customFields.position)).limit(1);
-    next = first?.position ?? null;
-  } else if (beforeId === null && afterId === undefined) {
-    const [last] = await db.select({ position: customFields.position }).from(customFields).where(and(eq(customFields.workspaceId, workspaceId), isNull(customFields.archivedAt))).orderBy(desc(customFields.position)).limit(1);
-    prev = last?.position ?? null;
-  }
-  else if (afterId) {
-    const [after] = await db.select({ position: customFields.position }).from(customFields).where(and(eq(customFields.id, afterId), eq(customFields.workspaceId, workspaceId), isNull(customFields.archivedAt))).limit(1);
-    if (!after) throw badRequest("afterFieldId not found");
-    const [nextField] = await db.select({ position: customFields.position }).from(customFields).where(and(eq(customFields.workspaceId, workspaceId), isNull(customFields.archivedAt), gt(customFields.position, after.position))).orderBy(asc(customFields.position)).limit(1);
-    prev = after.position;
-    next = nextField?.position ?? null;
-  } else if (beforeId) {
-    const [before] = await db.select({ position: customFields.position }).from(customFields).where(and(eq(customFields.id, beforeId), eq(customFields.workspaceId, workspaceId), isNull(customFields.archivedAt))).limit(1);
-    if (!before) throw badRequest("beforeFieldId not found");
-    const [prevField] = await db.select({ position: customFields.position }).from(customFields).where(and(eq(customFields.workspaceId, workspaceId), isNull(customFields.archivedAt), lt(customFields.position, before.position))).orderBy(desc(customFields.position)).limit(1);
-    next = before.position;
-    prev = prevField?.position ?? null;
-  }
-  return { prev, next };
+function neighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
+  return resolveNeighbourPositions({
+    table: customFields,
+    id: customFields.id,
+    position: customFields.position,
+    scope: and(eq(customFields.workspaceId, workspaceId), isNull(customFields.archivedAt)),
+    afterId,
+    beforeId,
+    afterLabel: "afterFieldId",
+    beforeLabel: "beforeFieldId",
+  });
 }
 
 export async function customFieldRoutes(app: FastifyInstance) {
@@ -201,27 +176,27 @@ export async function customFieldRoutes(app: FastifyInstance) {
     const [current] = await db.select().from(customFields).where(eq(customFields.id, id)).limit(1);
     if (!current) throw notFound();
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
-    const { prev, next } = await neighbourPositions(current.workspaceId, body.afterFieldId, body.beforeFieldId);
-    const result = between(prev, next);
-    let position = result.position;
     const prevPosition = current.position;
-    await db.update(customFields).set({ position, updatedAt: new Date() }).where(eq(customFields.id, id));
-
-    if (result.needsRebalance) {
-      const positions = await rebalanceCustomFields(current.workspaceId);
-      position = positions.find((p) => p.id === id)?.position ?? position;
-      await emitToWorkspace(current.workspaceId, "customField:rebalanced", { workspaceId: current.workspaceId, positions });
-    }
-
-    await recordActivity(db, {
-      boardId: null,
-      workspaceId: current.workspaceId,
-      actorId: req.auth.sub,
-      entityType: "customField",
-      entityId: id,
-      action: "moved",
-      payload: { prevPosition, position },
+    const { position, rebalancedPositions } = await moveOrderedEntity({
+      table: customFields,
+      idColumn: customFields.id,
+      id,
+      neighbours: await neighbourPositions(current.workspaceId, body.afterFieldId, body.beforeFieldId),
+      rebalance: (tx) => rebalanceCustomFields(current.workspaceId, tx),
+      activity: (position) => ({
+        boardId: null,
+        workspaceId: current.workspaceId,
+        actorId: req.auth.sub,
+        entityType: "customField",
+        entityId: id,
+        action: "moved",
+        payload: { prevPosition, position },
+      }),
     });
+
+    if (rebalancedPositions) {
+      await emitToWorkspace(current.workspaceId, "customField:rebalanced", { workspaceId: current.workspaceId, positions: rebalancedPositions });
+    }
     emitToWorkspace(current.workspaceId, "customField:moved", {
       workspaceId: current.workspaceId,
       fieldId: id,
@@ -326,30 +301,30 @@ export async function customFieldRoutes(app: FastifyInstance) {
     const body = dto.moveCustomFieldOptionBody.parse(req.body);
     const { field, workspaceId, option: current } = await loadOptionField(optionId);
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
-    const { prev, next } = await optionNeighbourPositions(field.id, body.afterOptionId, body.beforeOptionId);
-    const result = between(prev, next);
-    let position = result.position;
     const prevPosition = current.position;
-    await db
-      .update(customFieldOptions)
-      .set({ position, updatedAt: new Date() })
-      .where(eq(customFieldOptions.id, optionId));
-    await recordActivity(db, {
-      boardId: null,
-      workspaceId,
-      actorId: req.auth.sub,
-      entityType: "customField",
-      entityId: field.id,
-      action: "updated",
-      payload: { optionMoved: current.label, optionId, fromPosition: prevPosition, toPosition: position },
+    const { position, rebalancedPositions } = await moveOrderedEntity({
+      table: customFieldOptions,
+      idColumn: customFieldOptions.id,
+      id: optionId,
+      neighbours: await optionNeighbourPositions(field.id, body.afterOptionId, body.beforeOptionId),
+      rebalance: (tx) => rebalanceCustomFieldOptions(field.id, tx),
+      // Recorded against the post-rebalance position. This route used to write the audit row
+      // before renumbering, so `toPosition` disagreed with the committed row whenever the gap
+      // between two options collapsed.
+      activity: (position) => ({
+        boardId: null,
+        workspaceId,
+        actorId: req.auth.sub,
+        entityType: "customField",
+        entityId: field.id,
+        action: "updated",
+        payload: { optionMoved: current.label, optionId, fromPosition: prevPosition, toPosition: position },
+      }),
     });
 
-    if (result.needsRebalance) {
-      const positions = await rebalanceCustomFieldOptions(field.id);
-      position = positions.find((p) => p.id === optionId)?.position ?? position;
-      await emitToWorkspace(workspaceId, "customFieldOption:rebalanced", { workspaceId, fieldId: field.id, positions });
+    if (rebalancedPositions) {
+      await emitToWorkspace(workspaceId, "customFieldOption:rebalanced", { workspaceId, fieldId: field.id, positions: rebalancedPositions });
     }
-
     emitToWorkspace(workspaceId, "customFieldOption:moved", {
       workspaceId,
       fieldId: field.id,

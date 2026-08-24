@@ -22,4 +22,3 @@ export const cardAssignees = pgTable(
 );
 
 export type CardAssignee = typeof cardAssignees.$inferSelect;
-export type NewCardAssignee = typeof cardAssignees.$inferInsert;

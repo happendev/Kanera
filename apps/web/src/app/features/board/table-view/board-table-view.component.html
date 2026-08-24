@@ -243,7 +243,9 @@
     }
   </div>
 
-  <div #scrollEl class="tv-scroll" (scroll)="onTableScroll(scrollEl)" (mousedown)="startBackgroundPan(scrollEl, $event)">
+  <!-- No (scroll) binding: incremental row mounting is driven by a coalesced listener attached
+       outside Angular in the constructor, so scrolling does not mark this component dirty per event. -->
+  <div #scrollEl class="tv-scroll" (mousedown)="startBackgroundPan(scrollEl, $event)">
     <!-- Masks the grid's left indent so cells sliding out from under the frozen title column never
          show in it. First child, and above the rows but below the header and footer, which paint
          across it end to end. -->
@@ -378,7 +380,7 @@
                     <k-anchored-picker
                       title="Add to Up next"
                       [groups]="hostAddGroupsByGroup().get(group.key) ?? []"
-                      [width]="380"
+                      [width]="420"
                       [align]="'end'"
                       searchPlaceholder="Search cards…"
                       emptyLabel="No cards can be added"

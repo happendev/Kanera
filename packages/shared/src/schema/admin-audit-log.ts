@@ -35,4 +35,3 @@ export const adminAuditLogs = pgTable(
 );
 
 export type AdminAuditLog = typeof adminAuditLogs.$inferSelect;
-export type NewAdminAuditLog = typeof adminAuditLogs.$inferInsert;

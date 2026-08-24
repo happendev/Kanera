@@ -37,7 +37,29 @@ async function loadCardSummariesFromFilteredCards(
 ): Promise<CardSummaryRow[]> {
   const result = await db.execute<CardSummaryRow>(sql`
     with filtered_cards as materialized (
-      select c.*
+      -- Explicit column list, not c.*: this CTE is materialized, so every listed column is copied
+      -- into a tuplestore for the whole matched set. c.* dragged the full description text and the
+      -- generated search_vector through it on a board where the only thing either is used for is
+      -- the hasDescription flag below, which is why that is projected as a boolean here instead.
+      select
+        c.id,
+        c.workspace_id,
+        c.organisation_key,
+        c.number,
+        c.key,
+        c.list_id,
+        c.board_id,
+        c.title,
+        c.position,
+        c.due_date_local_date,
+        c.due_date_slot,
+        c.due_date_timezone,
+        c.completed_at,
+        c.archived_at,
+        c.cover_attachment_id,
+        c.created_at,
+        c.updated_at,
+        (c.description is not null) as has_description
       from card c
       where ${whereClause}
       ${page ? sql`order by c.position, c.id limit ${page.limit} offset ${page.offset}` : sql``}
@@ -116,7 +138,7 @@ async function loadCardSummariesFromFilteredCards(
       fc.cover_attachment_id as "coverAttachmentId",
       fc.created_at as "createdAt",
       fc.updated_at as "updatedAt",
-      fc.description is not null as "hasDescription",
+      fc.has_description as "hasDescription",
       coalesce(comment_counts.comment_count, 0)::integer as "commentCount",
       coalesce(attachment_counts.attachment_count, 0)::integer as "attachmentCount",
       coalesce(checklist_counts.done_count, 0)::integer as "checklistDoneCount",

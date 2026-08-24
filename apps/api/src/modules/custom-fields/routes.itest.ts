@@ -5,17 +5,12 @@ import { boards, cards, lists } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import { db } from "../../db.js";
 import { buildIntegrationServer } from "../../test/integration.js";
+import { signupOwner } from "../../test/api-fixtures.js";
 
 async function setup() {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: { orgName: "Acme", email: "owner@example.com", password: "Abc12345", displayName: "Owner" },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Acme", email: "owner@example.com", displayName: "Owner" });
 
   const created = await app.inject({
     method: "POST",

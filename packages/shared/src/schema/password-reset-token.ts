@@ -20,4 +20,3 @@ export const passwordResetTokens = pgTable(
 );
 
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
-export type NewPasswordResetToken = typeof passwordResetTokens.$inferInsert;

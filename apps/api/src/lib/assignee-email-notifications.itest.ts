@@ -29,11 +29,8 @@ import { createOverdueNotificationsForCards } from "./overdue-notifications.js";
 import { encryptSecret } from "./secrets.js";
 import { hashOpaqueToken } from "./tokens.js";
 import { buildIntegrationServer } from "../test/integration.js";
+import { signupOwner } from "../test/api-fixtures.js";
 
-interface SignupResponse {
-  accessToken: string;
-  user: { id: string; clientId: string };
-}
 
 interface WorkspaceResponse {
   id: string;
@@ -45,18 +42,7 @@ async function seed() {
   const ownerEmail = `owner-${suffix}@example.com`;
   const memberEmail = `member-${suffix}@example.com`;
   const otherEmail = `other-${suffix}@example.com`;
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme",
-      displayName: "Owner",
-      email: ownerEmail,
-      password: "Abc12345",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken: ownerToken, user: owner } = signup.json<SignupResponse>();
+  const { accessToken: ownerToken, user: owner } = await signupOwner(app, { orgName: "Acme", displayName: "Owner", email: ownerEmail });
   const wsCreated = await app.inject({
     method: "POST",
     url: "/workspaces",

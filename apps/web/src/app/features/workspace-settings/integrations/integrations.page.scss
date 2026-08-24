@@ -1,5 +1,3 @@
-@use "../../../shared/page-styles";
-
 .chat-integrations-page { display: grid; gap: 1rem; }
 .integration-info-note { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 12px; padding: 0 2px; color: var(--text-muted); font-size: 13px; line-height: 1.45; }
 .integration-info-note i { flex-shrink: 0; margin-top: 1px; color: var(--accent); font-size: 16px; }
@@ -16,12 +14,10 @@
 .post-when-types legend { padding: 0 .5rem 0 0; color: var(--text-muted); font-size: .75rem; font-weight: 650; letter-spacing: .02em; }
 .post-when-types > div { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .55rem; padding-top: .2rem; }
 .post-when-types.compact { grid-column: 1 / -1; }
-.event-toggle { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: .55rem; min-height: 3.25rem; padding: .55rem .65rem; border: 1px solid var(--border); border-radius: .55rem; background: var(--surface, var(--card)); cursor: pointer; transition: border-color .15s ease, background .15s ease; }
+.event-toggle { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: .55rem; min-height: 3.25rem; padding: .55rem .65rem; border: 1px solid var(--border); border-radius: .55rem; background: var(--surface, var(--card)); cursor: pointer; transition: border-color .15s ease, background .15s ease; }
 .event-toggle:hover { border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); background: var(--surface-2, var(--muted)); }
 .event-toggle:has(input:checked) { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: var(--accent-soft); }
 .event-toggle input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
-.event-toggle > i { color: var(--text-muted); font-size: 1rem; }
-.event-toggle:has(input:checked) > i { color: var(--accent); }
 .event-toggle > span { display: grid; gap: .08rem; min-width: 0; }
 .event-toggle strong { color: var(--text); font-size: .78rem; font-weight: 600; }
 .event-toggle small { color: var(--text-muted); font-size: .68rem; line-height: 1.3; }

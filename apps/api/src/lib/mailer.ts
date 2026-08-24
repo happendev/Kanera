@@ -32,6 +32,7 @@ import {
   verificationCodeEmail,
   welcomeToProEmail,
   welcomeEmail,
+  weeklyAdminRecapEmail,
   type BillingEmailParams,
   type BoardAccessGrantedEmailParams,
   type BoardInviteEmailParams,
@@ -43,6 +44,7 @@ import {
   type CommentMentionedEmailParams,
   type DailyDigestEmailParams,
   type InviteAcceptedEmailParams,
+  type WeeklyAdminRecapEmailParams,
 } from "./email-templates/index.js";
 import { sendEmail, type SendEmailOptions } from "./smtp.js";
 
@@ -440,6 +442,8 @@ export function renderEmail(row: EmailQueue): string {
       return verificationCodeEmail(row.data as { code: string; expiresInMinutes: number });
     case "daily_digest":
       return dailyDigestEmail(row.data as DailyDigestEmailParams);
+    case "weekly_admin_recap":
+      return weeklyAdminRecapEmail(row.data as WeeklyAdminRecapEmailParams);
     case "card_assigned":
       return cardAssignedEmail(row.data as CardAssignedEmailParams);
     case "card_comment_added":

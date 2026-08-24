@@ -20,4 +20,3 @@ export const cardLabelAssignments = pgTable(
 );
 
 export type CardLabelAssignment = typeof cardLabelAssignments.$inferSelect;
-export type NewCardLabelAssignment = typeof cardLabelAssignments.$inferInsert;

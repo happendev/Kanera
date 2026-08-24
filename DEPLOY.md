@@ -95,6 +95,17 @@ With the bundled Compose defaults, that starts as:
 linearly. When you scale `api` up, raise Postgres `max_connections` (or lower
 `PG_POOL_MAX`) to keep this sum comfortably under the server limit.
 
+**API response compression.** The bundled `web` container gzips proxied
+`/api/` and `/public-api/` JSON responses (`apps/web/nginx.conf`). This is the
+largest single bandwidth lever in the stack: opening a 1,000-card board is
+~1.6 MB uncompressed and ~120 KB gzipped. Compression runs in nginx rather than
+Node so it does not consume the API event loop.
+
+If you terminate requests somewhere other than the bundled `web` container — an
+external load balancer, an ingress controller, or a CDN that talks straight to
+`api:3000` — enable gzip or brotli for `application/json` there too, or that
+saving is lost.
+
 **File descriptors (`ulimits.nofile`).** The realtime server holds one file
 descriptor per connected WebSocket. The compose file already raises the `api`
 container limit to ~1,000,000; the default of 1024 would otherwise cap you near a
@@ -199,8 +210,9 @@ ADMIN_COOKIE_DOMAIN=
 
 **First superadmin.** There is no manual insert step. On every boot, the admin server seeds exactly one
 `superadmin` from `ADMIN_EMAIL`/`ADMIN_PASSWORD` if the `admin_user` table is still empty; once any
-admin account exists, this is a permanent no-op regardless of what those env vars still hold. Set them
-before the admin-api's first boot:
+admin account exists, this is a permanent no-op regardless of what those env vars still hold. The
+worker also sends a system recap to `ADMIN_EMAIL` every Monday at 07:00 UTC. Set both values before
+the admin-api's first boot:
 
 ```bash
 ADMIN_EMAIL=ops@example.com
@@ -361,6 +373,22 @@ docker compose up -d --build api public-api mcp web
 If a release includes new database migrations, the rebuilt `api` service applies
 them before starting.
 
+Postgres, Valkey, and the monitoring images are pinned to exact patch versions in
+`docker-compose.yml`, so the command above never moves them — it only rebuilds the
+application services. That is deliberate: a routine code deploy should not restart
+your database. Those versions move when you merge a Dependabot image PR, which
+changes the pinned tag in the repository. After pulling such a change, recreate the
+affected service explicitly:
+
+```bash
+docker compose up -d postgres
+```
+
+Data lives in the `kanera_pgdata` volume, not in the container, so recreating the
+Postgres container preserves the database. Postgres *minor* upgrades (18.6 to 18.7)
+are safe in place; a *major* upgrade (18 to 19) requires `pg_upgrade` or a
+dump-and-restore and is never proposed automatically.
+
 ## Backups
 
 For the bundled Postgres container:
@@ -514,6 +542,20 @@ docker compose exec -T postgres psql -U kanera -d kanera -c \
    from pg_stat_statements order by total_exec_time desc limit 15;"
 ```
 
+The **Postgres Query Performance** dashboard reads the same data through
+`postgres-exporter`. That exporter connects as `kanera_exporter`, a dedicated
+role holding only `pg_monitor` rather than the application role's full access.
+The `postgres-exporter-init` service creates and updates that role from
+`docker/monitoring/exporter-role.sql` every time the monitoring profile starts,
+so enabling monitoring on an existing database needs no manual SQL — but note
+the exporter will not start until that one-shot service has completed
+successfully.
+
+Query text on that dashboard is truncated to 200 characters, and the exporter's
+own scrape queries are excluded by role so they cannot crowd out application
+traffic. DDL and migration statements are filtered out in the dashboard queries;
+use the `psql` command above when you need to see those.
+
 ## Environment Reference
 
 ### Product analytics (Kanera Cloud only)
@@ -542,7 +584,8 @@ staff, demo, seed, test, and load-test organisations.
 | `ADMIN_JWT_SECRET` | required to run the admin-api | Stable random secret for the management portal's own sessions. Must differ from `JWT_SECRET` (enforced at startup). |
 | `ADMIN_WEB_ORIGIN` | required to run the admin-api | Public origin of the admin console, for example `https://admin.kanera.example.com`. Also the CORS origin and the base for admin invite links. |
 | `ADMIN_COOKIE_DOMAIN` | no | Admin refresh-cookie domain override. Set this when the admin portal hostname is outside `COOKIE_DOMAIN`, for example `kanera-admin.example.com` while `COOKIE_DOMAIN=kanera.example.com`. |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | required for first boot only | Seeds exactly one `superadmin` account when `admin_user` is empty. Permanent no-op once any admin account exists — invite further admins from the console afterward. |
+| `ADMIN_EMAIL` | recommended | Receives the weekly system recap every Monday at 07:00 UTC. With `ADMIN_PASSWORD`, also seeds the first `superadmin` when `admin_user` is empty. |
+| `ADMIN_PASSWORD` | required for first boot only | Used with `ADMIN_EMAIL` to seed the first `superadmin`; permanent no-op once any admin exists. |
 | `ADMIN_JWT_ACCESS_TTL` | no | Defaults to `15m`. |
 | `ADMIN_JWT_REFRESH_TTL_DAYS` | no | Defaults to `7`. |
 | `ADMIN_LOGIN_RATE_LIMIT_MAX` / `ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS` | no | Per-IP admin login throttle. Default `5` attempts per `300000`ms. |
@@ -591,7 +634,8 @@ staff, demo, seed, test, and load-test organisations.
 | `PROMETHEUS_RETENTION` | no | Prometheus TSDB time retention. Defaults to `30d`. |
 | `PROMETHEUS_RETENTION_SIZE` | no | Hard disk ceiling for the Prometheus TSDB (oldest blocks drop once exceeded). Defaults to `5GB`. |
 | `GRAFANA_ROOT_URL` | no | Public Grafana URL; set when serving Grafana under a path/subdomain. |
-| `POSTGRES_EXPORTER_DSN` | no | Postgres connection string for `postgres-exporter`. Defaults to the bundled Postgres. |
+| `POSTGRES_EXPORTER_PASSWORD` | no | Password for the dedicated `kanera_exporter` monitoring role. Defaults to `POSTGRES_PASSWORD`. |
+| `POSTGRES_EXPORTER_DSN` | no | Overrides the whole `postgres-exporter` connection string (e.g. a managed Postgres). Defaults to the bundled Postgres via the `kanera_exporter` role. |
 | `SMTP_HOST` | no | Default outbound SMTP host. |
 | `SMTP_PORT` | no | Defaults to `587`. |
 | `SMTP_SECURITY` | no | `starttls`, `tls`, or `none`. |

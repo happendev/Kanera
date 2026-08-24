@@ -35,6 +35,12 @@
 
       @if (row.card; as card) {
         <button type="button" class="row-main" (click)="onCardOpened(card, $event)" (auxclick)="onCardOpened(card, $event)">
+          <!-- Opens the row on its own quiet line, the same placement the board tile and the
+               notifications drawer give it. It shared the context line below until it was measured
+               against what it was crowding out: ~90px of a ~360px line, spent on a reference nobody
+               reads while scanning, at the cost of the board and list names that say where the card
+               is. -->
+          @if (showCardKeys()) { <span class="row-card-key">{{ card.key }}</span> }
           <span class="row-title">
             <!-- Inline, so the title keeps its ellipsis and the coarse-pointer two-line layout needs
                  no grid change. Deliberately not in `.row-tools`, which is hover-revealed: "done"
@@ -44,25 +50,38 @@
             }
             {{ card.title }}
           </span>
+          <!-- Wraps rather than ellipsising: everything on this line is a fact about *where* the card
+               is, and a trail cut to "Events & Partnershi… · Review & Appro…" answers neither half of
+               it. A second line only ever appears when the width genuinely runs out. -->
           <span class="row-context">
-            @if (showCardKeys()) { <span class="row-card-key">{{ card.key }}</span> }
             @if (row.boardName) {
-              <i [class]="row.boardIconClass" [style.color]="row.boardIconColor"></i>
-              <span class="row-context-part">{{ row.boardName }}</span>
+              <span class="row-board">
+                <i [class]="row.boardIconClass" [style.color]="row.boardIconColor"></i>
+                <span class="row-context-part">{{ row.boardName }}</span>
+              </span>
             }
             @if (row.listName) {
-              <span class="row-sep">·</span>
-              <span class="row-context-part">{{ row.listName }}</span>
-            }
-            <!-- Shares the context line rather than taking a third one: the row's whole argument is
-                 that a rank fits in two lines. `interactive` is false because `.row-main` is a
-                 <button> and an interactive chip renders role="button" — nested interactive content.
-                 Sized down via the host custom properties the chip component exposes, so the row's
-                 height is unchanged. -->
-            @if (row.labels.length) {
-              <k-card-labels class="row-labels" [labels]="row.labels" [limit]="3" [showOverflow]="true" [interactive]="false" />
+              @if (row.boardName) {
+                <i class="ti ti-chevron-right row-sep-chevron" aria-hidden="true"></i>
+              }
+              <!-- The list is the queued card's state, and it says so in its own icon and colour —
+                   the notifications drawer's breadcrumb treatment exactly, so "board › list" reads
+                   the same on both personal surfaces. Colour is bound rather than classed because it
+                   is a per-list workspace token; unset simply leaves the inherited muted colour. -->
+              <span class="row-list">
+                <i [class]="row.listIconClass" [style.color]="row.listColor"></i>
+                <span class="row-context-part" [style.color]="row.listColor">{{ row.listName }}</span>
+              </span>
             }
           </span>
+          <!-- Always its own row, never sharing the board › list line. Chips are a different kind of
+               fact from "where is this card", and squeezing them onto that line is what used to slice
+               a label down to a coloured circle with one letter in it. `interactive` is false because
+               `.row-main` is a <button> and an interactive chip renders role="button" — nested
+               interactive content. -->
+          @if (row.labels.length) {
+            <k-card-labels class="row-labels" [labels]="row.labels" [limit]="3" [showOverflow]="true" [interactive]="false" />
+          }
         </button>
         @if (dueText(card); as due) {
           <span class="row-due" [class.overdue]="dueOverdue(card)" [class.due-soon]="dueSoon(card)">{{ due }}</span>
@@ -151,12 +170,13 @@
           <span>Add card</span>
         </button>
         @if (addOpenAt() === "list") {
-          <!-- Wider than the dock (the placement logic clamps to the viewport): the options are
-               card titles with a board/list trail, which the default width truncated. -->
+          <!-- Wider than the dock (the placement logic clamps to the viewport): the rows are card
+               titles sectioned board › list, with a due date in a right-hand column, and the default
+               width truncated every title that mattered. -->
           <k-anchored-picker
             title="Add to Up next"
             [groups]="addGroups()"
-            [width]="380"
+            [width]="420"
             searchPlaceholder="Search cards…"
             emptyLabel="No cards can be added"
             (picked)="onAddPicked($event)"

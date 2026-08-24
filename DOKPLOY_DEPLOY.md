@@ -411,9 +411,16 @@ docker compose exec -T postgres psql -U kanera -d kanera \
   -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;"
 ```
 
+`postgres-exporter` connects as `kanera_exporter`, a dedicated role that holds
+only `pg_monitor` instead of the application role's full access. The
+`postgres-exporter-init` service provisions that role on every monitoring
+deploy, so no manual SQL is needed; set `POSTGRES_EXPORTER_PASSWORD` to give it
+a credential separate from `POSTGRES_PASSWORD`.
+
 If you use a managed Postgres instead of the bundled service, set
-`POSTGRES_EXPORTER_DSN` to its connection string and ensure `pg_stat_statements`
-is enabled there.
+`POSTGRES_EXPORTER_DSN` to its connection string, ensure `pg_stat_statements` is
+enabled there, and grant that role `pg_monitor` (or equivalent read-all-stats
+rights) yourself — the init service only provisions the bundled database.
 
 ## 7. Enable auto deploys
 
@@ -469,7 +476,8 @@ After the domain is configured, check
 
 **First superadmin.** There is no manual insert step — on every boot the admin server seeds exactly one
 `superadmin` from `ADMIN_EMAIL`/`ADMIN_PASSWORD` if the `admin_user` table is still empty, and is a
-permanent no-op afterward regardless of what those vars still hold:
+permanent no-op afterward regardless of what those vars still hold. The worker also sends its weekly
+system recap to `ADMIN_EMAIL` every Monday at 07:00 UTC:
 
 ```bash
 ADMIN_EMAIL=ops@example.com
@@ -489,6 +497,15 @@ The generated demo password is rotated and shown once after every reset.
 
 For normal updates, push or pull the latest code and redeploy the application in
 Dokploy. Dokploy rebuilds the changed services from `docker-compose.yml`.
+
+A Dokploy redeploy runs `docker compose up -d`, which recreates any service whose
+image digest has moved. Because every third-party image is pinned to an exact patch
+version, that cannot happen as a side effect of shipping application code — Postgres,
+Valkey, and the monitoring stack only change when a commit changes the pinned tag.
+Merge the weekly Dependabot image PRs to pick up upstream security patches; the next
+redeploy then applies them, and reverting the commit rolls the version back. Database
+contents live in the `kanera_pgdata` volume, so recreating the Postgres container on a
+minor upgrade does not lose data.
 
 ## Troubleshooting
 

@@ -336,6 +336,12 @@ export type PortfolioBucket = {
   workspaceName: string;
   boardId: string;
   boardName: string;
+  /** Whether automatic work-risk assessment is enabled for this board's workspace. */
+  boardHealthEnabled?: boolean;
+  /** Workspace-selected signals that contribute to automatic work-risk assessment. */
+  boardHealthOverdueEnabled?: boolean;
+  boardHealthUnassignedEnabled?: boolean;
+  boardHealthInactiveEnabled?: boolean;
   active: number;
   overdue: number;
   dueSoon: number;

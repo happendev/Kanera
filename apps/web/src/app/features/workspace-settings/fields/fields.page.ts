@@ -2,6 +2,7 @@ import { CdkDrag, CdkDragHandle, CdkDropList } from "@angular/cdk/drag-drop";
 import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
 import { AutofocusDirective } from "../../../shared/autofocus.directive";
 import { ColorPickerComponent } from "../../../shared/color-picker.component";
+import { DocsLinkComponent } from "../../../shared/docs-link.component";
 import { IconPickerComponent } from "../../../shared/icon-picker.component";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { WorkspaceSettingsPage } from "../workspace-settings.page";
@@ -9,7 +10,7 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
 @Component({
   selector: "k-workspace-settings-fields",
   standalone: true,
-  imports: [CdkDropList, CdkDrag, CdkDragHandle, IconPickerComponent, ColorPickerComponent, AutofocusDirective, TooltipDirective],
+  imports: [AutofocusDirective, CdkDrag, CdkDragHandle, CdkDropList, ColorPickerComponent, DocsLinkComponent, IconPickerComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./fields.page.html",
   styleUrl: "./fields.page.scss",

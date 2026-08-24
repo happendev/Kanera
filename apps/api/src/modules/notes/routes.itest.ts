@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { db, pool } from "../../db.js";
 import { env } from "../../env.js";
 import { buildIntegrationServer } from "../../test/integration.js";
+import { signupOwner } from "../../test/api-fixtures.js";
 
 async function setupWorkspace() {
   const app = await buildIntegrationServer();
@@ -730,18 +731,7 @@ void test("users outside the workspace cannot delete note attachments", async ()
   assert.equal(upload.statusCode, 201);
   const attachment = upload.json<{ id: string }>();
 
-  const outsiderSignup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Other Org",
-      email: "outsider-notes@example.com",
-      password: "Abc12345",
-      displayName: "Outsider",
-    },
-  });
-  assert.equal(outsiderSignup.statusCode, 200);
-  const { accessToken: outsiderToken } = outsiderSignup.json<{ accessToken: string }>();
+  const { accessToken: outsiderToken } = await signupOwner(app, { orgName: "Other Org", email: "outsider-notes@example.com", displayName: "Outsider" });
 
   const deleted = await app.inject({
     method: "DELETE",

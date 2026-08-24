@@ -14,10 +14,19 @@ import { env } from "../../env.js";
 import { setStripeClientForTests } from "../../lib/billing.js";
 import { buildPublicApiServer } from "../../public-api-server.js";
 import { buildIntegrationServer, testUploadsDir } from "../../test/integration.js";
+import { signupOwner } from "../../test/api-fixtures.js";
 
 const position = (index: number) => `${(index + 1) * 1000}.0000000000`;
-type SignupResponse = { accessToken: string; user: { id: string; clientId: string; hasWorkspace: boolean } };
-type WorkspaceResponse = { id: string; clientId: string };
+type WorkspaceResponse = {
+  id: string;
+  clientId: string;
+  completedCardsActiveDays: number;
+  inactiveCardsDays: number;
+  boardHealthEnabled: boolean;
+  boardHealthOverdueEnabled: boolean;
+  boardHealthUnassignedEnabled: boolean;
+  boardHealthInactiveEnabled: boolean;
+};
 type WorkspaceGuestsResponse = {
   acceptedGuests: { userId: string }[];
   boards: { id: string }[];
@@ -40,19 +49,20 @@ function utcLocalDate(date: Date): string {
 void test("POST /workspaces creates workspace-scoped defaults and admin membership", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme",
-      email: "owner@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<SignupResponse>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Acme", email: "owner@example.com", displayName: "Owner" });
   assert.equal(user.hasWorkspace, false);
+
+  const defaults = await app.inject({
+    method: "PATCH",
+    url: "/clients/me",
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: { defaultCompletedCardsActiveDays: 21, defaultInactiveCardsDays: 9, defaultBoardHealthEnabled: false },
+  });
+  assert.equal(defaults.statusCode, 200);
+  const savedDefaults = defaults.json<{ defaultCompletedCardsActiveDays: number; defaultInactiveCardsDays: number; defaultBoardHealthEnabled: boolean }>();
+  assert.equal(savedDefaults.defaultCompletedCardsActiveDays, 21);
+  assert.equal(savedDefaults.defaultInactiveCardsDays, 9);
+  assert.equal(savedDefaults.defaultBoardHealthEnabled, false);
 
   const created = await app.inject({
     method: "POST",
@@ -62,6 +72,24 @@ void test("POST /workspaces creates workspace-scoped defaults and admin membersh
   });
   assert.equal(created.statusCode, 201);
   const workspace = created.json<WorkspaceResponse>();
+  assert.equal(workspace.completedCardsActiveDays, 21);
+  assert.equal(workspace.inactiveCardsDays, 9);
+  assert.equal(workspace.boardHealthEnabled, false);
+  assert.equal(workspace.boardHealthOverdueEnabled, true);
+  assert.equal(workspace.boardHealthUnassignedEnabled, true);
+  assert.equal(workspace.boardHealthInactiveEnabled, true);
+
+  const updatedTiming = await app.inject({
+    method: "PATCH",
+    url: `/workspaces/${workspace.id}`,
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: { inactiveCardsDays: 30, boardHealthEnabled: true, boardHealthUnassignedEnabled: false },
+  });
+  assert.equal(updatedTiming.statusCode, 200);
+  const updatedTimingBody = updatedTiming.json<{ inactiveCardsDays: number; boardHealthEnabled: boolean; boardHealthUnassignedEnabled: boolean }>();
+  assert.equal(updatedTimingBody.inactiveCardsDays, 30);
+  assert.equal(updatedTimingBody.boardHealthEnabled, true);
+  assert.equal(updatedTimingBody.boardHealthUnassignedEnabled, false);
 
   const [ownerMembership] = await db
     .select()
@@ -142,19 +170,7 @@ void test("POST /workspaces creates workspace-scoped defaults and admin membersh
 
 void test("POST /workspaces atomically seeds checklist templates, starter cards, and automation recipes", async () => {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Seeded Org",
-      email: "seeded-workspace-owner@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken } = signup.json<SignupResponse>();
-  const auth = { authorization: `Bearer ${accessToken}` };
+  const { auth: auth } = await signupOwner(app, { orgName: "Seeded Org", email: "seeded-workspace-owner@example.com", displayName: "Owner" });
 
   const created = await app.inject({
     method: "POST",
@@ -242,18 +258,7 @@ void test("POST /workspaces atomically seeds checklist templates, starter cards,
 
 void test("POST /workspaces keeps all template automation recipes disabled on hosted Free", async () => {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Free Recipe Org",
-      email: "free-automation-recipes@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken } = signup.json<SignupResponse>();
+  const { accessToken } = await signupOwner(app, { orgName: "Free Recipe Org", email: "free-automation-recipes@example.com", displayName: "Owner" });
   const previousMode = env.KANERA_DEPLOYMENT_MODE;
   env.KANERA_DEPLOYMENT_MODE = "hosted";
   try {
@@ -291,14 +296,10 @@ void test("POST /workspaces keeps all template automation recipes disabled on ho
 
 void test("standalone workspaces create one mirrored board and stay hidden from workspace surfaces", async () => {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: { orgName: "Standalone Org", email: "standalone-owner@example.com", password: "Abc12345", displayName: "Owner" },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<SignupResponse>();
-  const auth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: auth } = await signupOwner(app, { orgName: "Standalone Org", email: "standalone-owner@example.com", displayName: "Owner" });
+  await db.update(clients)
+    .set({ defaultCompletedCardsActiveDays: 18, defaultInactiveCardsDays: 6, defaultBoardHealthEnabled: false })
+    .where(eq(clients.id, user.clientId));
 
   const missingBoard = await app.inject({
     method: "POST",
@@ -329,12 +330,18 @@ void test("standalone workspaces create one mirrored board and stay hidden from 
     name: string;
     icon: string | null;
     accentColor: string | null;
+    completedCardsActiveDays: number;
+    inactiveCardsDays: number;
+    boardHealthEnabled: boolean;
     initialBoard: { id: string; workspaceId: string; name: string; icon: string | null; iconColor: string | null };
   }>();
   assert.equal(standalone.kind, "board");
   assert.equal(standalone.name, "Launch plan");
   assert.equal(standalone.icon, "rocket");
   assert.equal(standalone.accentColor, "violet");
+  assert.equal(standalone.completedCardsActiveDays, 18);
+  assert.equal(standalone.inactiveCardsDays, 6);
+  assert.equal(standalone.boardHealthEnabled, false);
   assert.equal(standalone.initialBoard.name, "Launch plan");
   assert.equal(standalone.initialBoard.icon, "rocket");
   assert.equal(standalone.initialBoard.iconColor, "violet");
@@ -446,18 +453,7 @@ void test("standalone workspaces create one mirrored board and stay hidden from 
 void test("POST /workspaces accepts explicit empty onboarding setup", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Blank Co",
-      email: "blank-owner@example.com",
-      password: "Abc12345",
-      displayName: "Blank Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken } = signup.json<SignupResponse>();
+  const { accessToken } = await signupOwner(app, { orgName: "Blank Co", email: "blank-owner@example.com", displayName: "Blank Owner" });
 
   const created = await app.inject({
     method: "POST",
@@ -488,19 +484,7 @@ void test("POST /workspaces accepts explicit empty onboarding setup", async () =
 
 void test("workspace analytics milestones are durably claimed at the approved thresholds", async () => {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Activation Org",
-      email: "activation-owner@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<SignupResponse>();
-  const auth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: auth } = await signupOwner(app, { orgName: "Activation Org", email: "activation-owner@example.com", displayName: "Owner" });
   const created = await app.inject({
     method: "POST",
     url: "/workspaces",
@@ -610,18 +594,7 @@ void test("workspace analytics milestones are durably claimed at the approved th
 void test("adding a workspace member emits directly to the newly added user", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Workspace Add Realtime Org",
-      email: "workspace-add-owner@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<SignupResponse>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Workspace Add Realtime Org", email: "workspace-add-owner@example.com", displayName: "Owner" });
 
   const created = await app.inject({
     method: "POST",
@@ -732,18 +705,7 @@ void test("adding a workspace member emits directly to the newly added user", as
 void test("removing a workspace member clears live board access, assignments, watches, mentions, and workspace notifications", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Workspace Remove Cleanup Org",
-      email: "workspace-remove-owner@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<SignupResponse>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Workspace Remove Cleanup Org", email: "workspace-remove-owner@example.com", displayName: "Owner" });
 
   const created = await app.inject({
     method: "POST",
@@ -844,18 +806,7 @@ void test("removing a workspace member clears live board access, assignments, wa
 void test("POST /workspaces can create an initial board for onboarding", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Starter Co",
-      email: "starter@example.com",
-      password: "Abc12345",
-      displayName: "Starter",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<SignupResponse>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Starter Co", email: "starter@example.com", displayName: "Starter" });
 
   const created = await app.inject({
     method: "POST",
@@ -923,18 +874,7 @@ void test("POST /workspaces can create an initial board for onboarding", async (
 void test("GET /home/boards overdue stats ignore completed cards", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme",
-      email: "owner@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<SignupResponse>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Acme", email: "owner@example.com", displayName: "Owner" });
 
   const created = await app.inject({
     method: "POST",
@@ -980,18 +920,7 @@ void test("GET /home/boards overdue stats ignore completed cards", async () => {
 void test("GET /home/boards includes assigned cards due today and tomorrow in due-soon order", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Due Soon",
-      email: "due-soon-owner@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<SignupResponse>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Acme Due Soon", email: "due-soon-owner@example.com", displayName: "Owner" });
 
   const created = await app.inject({
     method: "POST",
@@ -1053,18 +982,7 @@ void test("GET /home/boards includes assigned cards due today and tomorrow in du
   await insertCard("Completed", today, "morning", { completed: true });
   await insertCard("Archived", today, "morning", { archived: true });
 
-  const hostSignup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Host Due Soon",
-      email: "due-soon-host@example.com",
-      password: "Abc12345",
-      displayName: "Host",
-    },
-  });
-  assert.equal(hostSignup.statusCode, 200);
-  const { accessToken: hostToken } = hostSignup.json<SignupResponse>();
+  const { accessToken: hostToken } = await signupOwner(app, { orgName: "Host Due Soon", email: "due-soon-host@example.com", displayName: "Host" });
   const hostWorkspaceResponse = await app.inject({
     method: "POST",
     url: "/workspaces",
@@ -1127,18 +1045,7 @@ void test("GET /home/boards includes assigned cards due today and tomorrow in du
 void test("workspace guest management lists, invites, revokes, and removes external board guests", async () => {
   const app = await buildIntegrationServer();
 
-  const hostSignup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Host Guests",
-      email: "host-guests-owner@gmail.com",
-      password: "Abc12345",
-      displayName: "Host Owner",
-    },
-  });
-  assert.equal(hostSignup.statusCode, 200);
-  const { accessToken: hostToken, user: hostUser } = hostSignup.json<SignupResponse>();
+  const { accessToken: hostToken, user: hostUser } = await signupOwner(app, { orgName: "Host Guests", email: "host-guests-owner@gmail.com", displayName: "Host Owner" });
 
   const created = await app.inject({
     method: "POST",
@@ -1160,31 +1067,9 @@ void test("workspace guest management lists, invites, revokes, and removes exter
     .returning();
   assert.ok(secondBoard);
 
-  const externalSignup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "External Org",
-      email: "external-guest-settings@external.test",
-      password: "Abc12345",
-      displayName: "External Guest",
-    },
-  });
-  assert.equal(externalSignup.statusCode, 200);
-  const { user: externalUser } = externalSignup.json<SignupResponse>();
+  const { user: externalUser } = await signupOwner(app, { orgName: "External Org", email: "external-guest-settings@external.test", displayName: "External Guest" });
 
-  const foreignMemberSignup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Foreign Home Org",
-      email: "foreign-home-host-member@example.com",
-      password: "Abc12345",
-      displayName: "Foreign Home Member",
-    },
-  });
-  assert.equal(foreignMemberSignup.statusCode, 200);
-  const { user: foreignHomeMember } = foreignMemberSignup.json<SignupResponse>();
+  const { user: foreignHomeMember } = await signupOwner(app, { orgName: "Foreign Home Org", email: "foreign-home-host-member@example.com", displayName: "Foreign Home Member" });
   // A user's home organisation no longer determines guest status. This second active membership
   // makes the user a normal Host Guests member even though their identity was created elsewhere.
   await db.insert(clientMembers).values({
@@ -1332,18 +1217,7 @@ void test("workspace guest management lists, invites, revokes, and removes exter
 void test("workspace guest invitations reuse one pending invite per email and acceptance grants all boards", async () => {
   const app = await buildIntegrationServer();
 
-  const hostSignup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Bundled Guest Host",
-      email: "bundled-guest-owner@example.com",
-      password: "Abc12345",
-      displayName: "Host Owner",
-    },
-  });
-  assert.equal(hostSignup.statusCode, 200);
-  const { accessToken: hostToken } = hostSignup.json<SignupResponse>();
+  const { accessToken: hostToken } = await signupOwner(app, { orgName: "Bundled Guest Host", email: "bundled-guest-owner@example.com", displayName: "Host Owner" });
 
   const wsCreated = await app.inject({
     method: "POST",
@@ -1440,18 +1314,7 @@ void test("workspace guest invitations reuse one pending invite per email and ac
   assert.equal(pendingBody.pendingInvites?.length, 1);
   assert.equal(pendingBody.pendingInvites?.[0]?.boards?.length, 2);
 
-  const guestSignup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Bundled Guest External",
-      email: "bundled-guest@external.test",
-      password: "Abc12345",
-      displayName: "Bundled Guest",
-    },
-  });
-  assert.equal(guestSignup.statusCode, 200);
-  const { accessToken: guestToken, user: guest } = guestSignup.json<SignupResponse>();
+  const { accessToken: guestToken, user: guest } = await signupOwner(app, { orgName: "Bundled Guest External", email: "bundled-guest@external.test", displayName: "Bundled Guest" });
 
   const accept = await app.inject({
     method: "POST",
@@ -1470,18 +1333,7 @@ void test("workspace guest invitations reuse one pending invite per email and ac
 void test("workspace guest management emails an existing external user for every newly granted board", async () => {
   const app = await buildIntegrationServer();
 
-  const hostSignup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Existing Guest Host",
-      email: "existing-guest-host@example.com",
-      password: "Abc12345",
-      displayName: "Host Owner",
-    },
-  });
-  assert.equal(hostSignup.statusCode, 200);
-  const { accessToken: hostToken } = hostSignup.json<SignupResponse>();
+  const { accessToken: hostToken } = await signupOwner(app, { orgName: "Existing Guest Host", email: "existing-guest-host@example.com", displayName: "Host Owner" });
 
   const workspaceResponse = await app.inject({
     method: "POST",
@@ -1564,18 +1416,7 @@ void test("workspace guest management gives one free board, then uses one reusab
   const app = await buildIntegrationServer();
   try {
 
-  const hostSignup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Guest Limit Host",
-      email: "guest-limit-owner@example.com",
-      password: "Abc12345",
-      displayName: "Host Owner",
-    },
-  });
-  assert.equal(hostSignup.statusCode, 200);
-  const { accessToken: hostToken } = hostSignup.json<SignupResponse>();
+  const { accessToken: hostToken } = await signupOwner(app, { orgName: "Guest Limit Host", email: "guest-limit-owner@example.com", displayName: "Host Owner" });
 
   const created = await app.inject({
     method: "POST",
@@ -1610,18 +1451,7 @@ void test("workspace guest management gives one free board, then uses one reusab
     .returning();
   assert.equal(workspaceBoards.length, 4);
 
-  const externalSignup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Guest Limit External",
-      email: "guest-limit-external@external.test",
-      password: "Abc12345",
-      displayName: "External Guest",
-    },
-  });
-  assert.equal(externalSignup.statusCode, 200);
-  const { user: externalUser } = externalSignup.json<SignupResponse>();
+  const { user: externalUser } = await signupOwner(app, { orgName: "Guest Limit External", email: "guest-limit-external@external.test", displayName: "External Guest" });
 
   const firstBoard = await app.inject({
     method: "POST",

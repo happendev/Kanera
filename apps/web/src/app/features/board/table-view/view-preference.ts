@@ -140,16 +140,6 @@ export function writeViewMode(scope: string, mode: ViewMode): void {
   writeString(viewPreferenceKey("mode", scope), mode);
 }
 
-export function readViewBackground(scope: string): GradientToken | null {
-  const value = readString(viewPreferenceKey("background", scope));
-  return GRADIENT_TOKENS.includes(value as GradientToken) ? value as GradientToken : null;
-}
-
-export function writeViewBackground(scope: string, value: GradientToken | null): void {
-  const key = viewPreferenceKey("background", scope);
-  if (value === null) removeString(key);
-  else writeString(key, value);
-}
 
 /** Group-by axis selected for the table view in this scope. */
 export function readGroupBy(scope: string): GroupBy | null {
@@ -168,16 +158,6 @@ export function writeSortBy(scope: string, value: SortBy): void {
   writeString(viewPreferenceKey("sort", scope), value);
 }
 
-export function readShowSeparators(scope: string): boolean | null {
-  const value = readString(viewPreferenceKey("showSeparators", scope));
-  if (value === "true") return true;
-  if (value === "false") return false;
-  return null;
-}
-
-export function writeShowSeparators(scope: string, value: boolean): void {
-  writeString(viewPreferenceKey("showSeparators", scope), value ? "true" : "false");
-}
 
 export function readAggregateConfig(scope: string): AggregateConfig | null {
   const raw = readString(viewPreferenceKey("aggregates", scope));

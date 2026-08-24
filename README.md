@@ -10,7 +10,7 @@ See what is assigned, what changed, what is blocked, and what has been completed
 
 </div>
 
-![Kanera Home showing Amelia's focus tiles, weekly agenda, and progress in dark mode](docs/readme-assets/home.jpg)
+![Kanera Autumn Campaign Launch board showing cards organised into shared lists](docs/readme-assets/board.jpg)
 
 Kanera coordinates assigned, active, blocked, and completed work across projects, clients, and teams from one fast, polished workspace. It brings boards, structured tasks, notes, assignments, progress history, automation, and integrations into one focused system—more visibility than a basic Kanban board without the overhead of a heavyweight work suite.
 
@@ -51,7 +51,13 @@ For work that does not need to share that setup, create a standalone board. It k
 
 Start with overdue work, items due today, the next seven days, and recent progress in one focused view. Jump back into active boards and scan the week without opening each project separately.
 
-![Kanera Home showing Amelia's focus tiles, weekly agenda, and progress in dark mode](docs/readme-assets/home.jpg)
+![Kanera Home showing Amelia's focus tiles, ranked Up next queue, recent boards, and weekly agenda in dark mode](docs/readme-assets/home.jpg)
+
+### Boards and shared lists keep the workflow visible
+
+Move cards through lists while keeping labels, assignees, due dates, checklist progress, and visual covers in view. Boards in a workspace share the same ordered lists, so stages such as Intake, In progress, Review, and Done remain consistent across related projects.
+
+![Kanera Autumn Campaign Launch board showing cards organised into shared lists](docs/readme-assets/board.jpg)
 
 ### Up next keeps priorities in order
 
@@ -59,11 +65,7 @@ Build one ranked queue from cards assigned to you across every accessible board.
 
 ![Kanera My Cards showing a ranked Up next queue beside assigned work](docs/readme-assets/my-cards-up-next.jpg)
 
-### Boards and shared lists keep the workflow visible
 
-Move cards through lists while keeping labels, assignees, due dates, checklist progress, and visual covers in view. Boards in a workspace share the same ordered lists, so stages such as Intake, In progress, Review, and Done remain consistent across related projects.
-
-![Kanera Autumn Campaign Launch board showing cards organised into shared lists](docs/readme-assets/board.jpg)
 
 ### Table view turns live work into structured reports
 
@@ -91,7 +93,7 @@ Descriptions, custom fields, checklists, due dates, comments, attachments, and a
 
 See the whole visible team or focus on one teammate without losing each card's board, list, fields, or permissions. Switch between Board, Table, Calendar, Work Done, and ranked team Up next views to review ownership, workload, and execution order across projects.
 
-![Kanera Team Cards view filtered to Ben Ortega across accessible boards](docs/readme-assets/team-cards.jpg)
+![Kanera Team Cards focused on Ben Ortega with his ranked Up next queue beside assigned work across accessible boards](docs/readme-assets/team-cards.jpg)
 
 ### Automations keep routine work moving
 

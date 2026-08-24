@@ -19,6 +19,7 @@ import { AppTitleService } from "../../core/title/app-title.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import type { AnchoredPanelPlacement } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
+import { DocsLinkComponent } from "../../shared/docs-link.component";
 import { PanelStackService } from "../../shared/panel-stack.service";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { PageHeaderComponent } from "../../shared/page-header.component";
@@ -98,7 +99,7 @@ function localDateKey(offsetDays: number): string {
 @Component({
   selector: "k-board-page",
   standalone: true,
-  imports: [AnchoredPanelDirective, BoardCanvasComponent, BoardGroupColumnComponent, CardComposerDialogComponent, ListComponent, CardDetailComponent, BoardBackgroundPopover, BoardMembersMenu, AvatarComponent, BoardTableViewComponent, BoardCalendarViewComponent, WorkDoneViewComponent, NotesViewComponent, CompletedCardsPanelComponent, FilterBarComponent, PageHeaderComponent, PageToolbarComponent, SearchFieldComponent, SegmentedComponent, StatusToastComponent, TooltipDirective, WatcherPopoverComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, MirrorCreateDialogComponent, BoardMirrorsDialogComponent],
+  imports: [AnchoredPanelDirective, AvatarComponent, BoardBackgroundPopover, BoardCalendarViewComponent, BoardCanvasComponent, BoardGroupColumnComponent, BoardMembersMenu, BoardMirrorsDialogComponent, BoardTableViewComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, CardComposerDialogComponent, CardDetailComponent, CompletedCardsPanelComponent, DocsLinkComponent, FilterBarComponent, ListComponent, MirrorCreateDialogComponent, NotesViewComponent, PageHeaderComponent, PageToolbarComponent, SearchFieldComponent, SegmentedComponent, StatusToastComponent, TooltipDirective, WatcherPopoverComponent, WorkDoneViewComponent],
   providers: [BoardState, BoardSocketBridge, BoardMenuCoordinator],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./board.page.html",
@@ -175,7 +176,9 @@ export class BoardPage implements OnDestroy {
     const color = board?.iconColor ?? this.workspaceAccentColor();
     return color ? `var(--color-${color})` : null;
   });
-  readonly openCardId = signal<string | null>(null);
+  // Derived, not stored: the route's card id is its only source. As a signal fed by an effect it
+  // also scheduled a second change-detection pass on every navigation for no reason.
+  readonly openCardId = computed(() => this.cardId() ?? null);
   readonly showBackground = signal(false);
   readonly membersPopoverOpen = signal(false);
   readonly watcherPopoverOpen = signal(false);
@@ -401,12 +404,12 @@ export class BoardPage implements OnDestroy {
         if (!showArchived && overdueOnly && (card.completedAt || !isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone))) return false;
         // Inactivity is a live-work signal, matching the health indicator: completed cards do not
         // become actionable again merely because their final update is more than 14 days old.
-        if (!showArchived && inactiveOnly && (card.completedAt || !isCardInactive(card.updatedAt))) return false;
+        if (!showArchived && inactiveOnly && (card.completedAt || !isCardInactive(card.updatedAt, Date.now(), this.state.inactiveCardsDays()))) return false;
         if (!showArchived && riskFilter) {
           if (card.completedAt) return false;
           if (riskFilter === "overdue" && !isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone)) return false;
           if (riskFilter === "unassigned" && (this.state.assigneesByCard().get(card.id)?.length ?? 0) > 0) return false;
-          if (riskFilter === "inactive" && !isCardInactive(card.updatedAt)) return false;
+          if (riskFilter === "inactive" && !isCardInactive(card.updatedAt, Date.now(), this.state.inactiveCardsDays())) return false;
         }
         // The queue drops completed cards (they take no rank), so this also hides the board's
         // recently-completed tiles — a done card no longer has a priority set, by definition.
@@ -463,8 +466,17 @@ export class BoardPage implements OnDestroy {
       return !!due && due >= localDateKey(0) && due <= nextWeek;
     }).length;
     const unassigned = incomplete.filter((card) => (this.state.assigneesByCard().get(card.id)?.length ?? 0) === 0).length;
-    const inactive = incomplete.filter((card) => isCardInactive(card.updatedAt, now)).length;
-    const risk = boardWorkRisk({ active: incomplete.length, overdue, unassigned, inactive });
+    const inactive = incomplete.filter((card) => isCardInactive(card.updatedAt, now, this.state.inactiveCardsDays())).length;
+    // Workspace admins choose which observable signals participate in health; the raw counts stay
+    // visible for drill-down even when one signal is excluded from the status calculation.
+    const risk = boardWorkRisk(
+      { active: incomplete.length, overdue, unassigned, inactive },
+      {
+        overdue: this.state.boardHealthOverdueEnabled(),
+        unassigned: this.state.boardHealthUnassignedEnabled(),
+        inactive: this.state.boardHealthInactiveEnabled(),
+      },
+    );
     const listCounts = this.state.visibleLists().map((list) => ({
       id: list.id,
       name: list.name,
@@ -482,6 +494,7 @@ export class BoardPage implements OnDestroy {
       listCounts,
     };
   });
+  readonly inactiveCardsTooltip = computed(() => `Show cards inactive for ${this.state.inactiveCardsDays()} days`);
 
   toggleOverview(): void {
     this.overviewOpen.update((open) => !open);
@@ -922,10 +935,6 @@ export class BoardPage implements OnDestroy {
       void this.refreshMirrorStatus(boardId);
     });
 
-    effect(() => {
-      this.openCardId.set(this.cardId() ?? null);
-    });
-
     // Capture the last-known summary of the open card while it still resolves from the live
     // collection. Reads only openCardInCollection (never openCardHeld), so there is no feedback loop.
     effect(() => {
@@ -945,18 +954,16 @@ export class BoardPage implements OnDestroy {
       this.state.assignableMembers.set(this.assignableMembers());
     });
 
+    // Prune the bulk selection down to rows that are still on screen.
+    //
+    // `activeCards()` is the trigger and is read tracked, but the selection is read inside
+    // `untracked`: this effect *writes* that signal, and a tracked read scheduled a second, always
+    // no-op pass on every prune. Reading the selection first also means the Set over every card is
+    // only built when something is actually selected — previously it was rebuilt over all 1,000+
+    // cards on every realtime card event and every search keystroke, then thrown away.
     effect(() => {
-      const visibleIds = new Set(this.activeCards().map((card) => card.id));
-      const selected = this.bulkSelectedCardIds();
-      if (selected.size === 0) return;
-      const next = new Set([...selected].filter((id) => visibleIds.has(id)));
-      if (next.size !== selected.size) {
-        this.bulkSelectedCardIds.set(next);
-        if (this.lastBulkSelectedCardId() && !next.has(this.lastBulkSelectedCardId()!)) {
-          this.lastBulkSelectedCardId.set(null);
-        }
-        if (next.size === 0) this.closeBulkMenu();
-      }
+      const cards = this.activeCards();
+      untracked(() => this.pruneBulkSelection(cards));
     });
 
     effect((onCleanup) => {
@@ -1974,6 +1981,19 @@ export class BoardPage implements OnDestroy {
     event.stopPropagation();
     if (this.bulkSelectedCount() === 0) return;
     this.bulkMenuPoint.set({ x: event.clientX, y: event.clientY });
+  }
+
+  /** Drop selected ids that are no longer rendered. Called untracked; see the effect above. */
+  private pruneBulkSelection(cards: readonly AnyCard[]): void {
+    const selected = this.bulkSelectedCardIds();
+    if (selected.size === 0) return;
+    const visibleIds = new Set(cards.map((card) => card.id));
+    const next = new Set([...selected].filter((id) => visibleIds.has(id)));
+    if (next.size === selected.size) return;
+    this.bulkSelectedCardIds.set(next);
+    const lastSelected = this.lastBulkSelectedCardId();
+    if (lastSelected && !next.has(lastSelected)) this.lastBulkSelectedCardId.set(null);
+    if (next.size === 0) this.closeBulkMenu();
   }
 
   closeBulkMenu() {

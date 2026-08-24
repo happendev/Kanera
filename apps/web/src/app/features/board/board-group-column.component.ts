@@ -19,6 +19,12 @@ import type { BulkCardMenuPayload, BulkCardSelectionPayload } from "./list.compo
 import type { CardGroup } from "./table-view/table-view.types";
 
 type AnyCard = Card | WireCard | WireCardSummary;
+// Shared empty sentinels. These feed OnPush `k-card` inputs, so returning a fresh `[]` per call
+// gave every card without labels or assignees a new input identity on every change-detection tick,
+// which defeats the very check OnPush exists to make. BoardState already does this for the same
+// reason; these two accessors were the ones that missed out.
+const EMPTY_LABELS: CardLabelPresentation[] = [];
+const EMPTY_ASSIGNEES: CardAssigneePresentation[] = [];
 const EMPTY_FIELD_VALUES = new Map<string, CardCustomFieldValue>();
 
 // Same incremental-mount strategy as `k-list`: a grouped board can put every card of a large board
@@ -171,11 +177,11 @@ export class BoardGroupColumnComponent implements OnDestroy {
   // ─── Card presentation (mirrors k-list; the tile takes the same inputs either way) ──────────
 
   labelsForCard(cardId: string): CardLabelPresentation[] {
-    return this.labelsByCard().get(cardId) ?? [];
+    return this.labelsByCard().get(cardId) ?? EMPTY_LABELS;
   }
 
   assigneesForCard(cardId: string): CardAssigneePresentation[] {
-    return this.assigneesByCard().get(cardId) ?? [];
+    return this.assigneesByCard().get(cardId) ?? EMPTY_ASSIGNEES;
   }
 
   customFieldValuesForCard(cardId: string): Map<string, CardCustomFieldValue> {

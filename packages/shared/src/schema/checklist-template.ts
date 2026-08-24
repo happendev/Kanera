@@ -65,7 +65,5 @@ export const cardChecklistTemplateApplications = pgTable(
 );
 
 export type ChecklistTemplate = typeof checklistTemplates.$inferSelect;
-export type NewChecklistTemplate = typeof checklistTemplates.$inferInsert;
 export type ChecklistTemplateItem = typeof checklistTemplateItems.$inferSelect;
-export type NewChecklistTemplateItem = typeof checklistTemplateItems.$inferInsert;
 export type CardChecklistTemplateApplication = typeof cardChecklistTemplateApplications.$inferSelect;

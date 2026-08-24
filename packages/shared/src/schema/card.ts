@@ -7,9 +7,11 @@ import { clients } from "./client.js";
 import { lists } from "./list.js";
 import { users } from "./user.js";
 import { workspaces } from "./workspace.js";
+import { CARD_DUE_DATE_SLOTS, type CardDueDateSlot } from "../lib/due-date-slots.js";
 
-export const CARD_DUE_DATE_SLOTS = ["anyTime", "morning", "afternoon", "endOfWorkDay"] as const;
-export type CardDueDateSlot = (typeof CARD_DUE_DATE_SLOTS)[number];
+// Re-exported so existing `@kanera/shared/schema` consumers are unaffected; the values live in
+// the dependency-free lib module because the web bundle and MCP server need them without drizzle.
+export { CARD_DUE_DATE_SLOTS, type CardDueDateSlot };
 
 export const cards = pgTable(
   "card",
@@ -96,4 +98,3 @@ export const cards = pgTable(
 );
 
 export type Card = typeof cards.$inferSelect;
-export type NewCard = typeof cards.$inferInsert;

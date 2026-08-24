@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { boolean, date, integer, json, numeric, pgView, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import type { CardCustomFieldValue } from "./card-custom-field-value.js";
+import type { CardDueDateSlot } from "../lib/due-date-slots.js";
 
 export const cardSummaryView = pgView("card_summary_view", {
   id: uuid("id").notNull(),
@@ -13,7 +14,7 @@ export const cardSummaryView = pgView("card_summary_view", {
   title: text("title").notNull(),
   position: numeric("position", { precision: 20, scale: 10 }).notNull(),
   dueDateLocalDate: date("due_date_local_date", { mode: "string" }),
-  dueDateSlot: text("due_date_slot").$type<"anyTime" | "morning" | "afternoon" | "endOfWorkDay" | null>(),
+  dueDateSlot: text("due_date_slot").$type<CardDueDateSlot | null>(),
   dueDateTimezone: text("due_date_timezone"),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   archivedAt: timestamp("archived_at", { withTimezone: true }),

@@ -63,4 +63,3 @@ export const cardAttachments = pgTable(
 );
 
 export type CardAttachment = typeof cardAttachments.$inferSelect;
-export type NewCardAttachment = typeof cardAttachments.$inferInsert;

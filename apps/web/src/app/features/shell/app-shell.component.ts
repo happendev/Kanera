@@ -15,6 +15,7 @@ import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { BrowserPushService } from "../../core/notifications/browser-push.service";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
+import { KANERA_DOCS_URL } from "../../shared/docs-link.component";
 import { ScratchpadPanelComponent } from "../scratchpad/scratchpad-panel.component";
 import { ScratchpadService } from "../scratchpad/scratchpad.service";
 import { OfflineCacheService, type GuestHomeGroup, type HomeGroup, type HomeResponse } from "../../core/offline/offline-cache.service";
@@ -198,7 +199,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly activeClientId = computed(() => this.user()?.activeClientId ?? this.user()?.clientId ?? null);
   readonly activeOrganisation = computed(() => this.organisations().find((organisation) => organisation.clientId === this.activeClientId()) ?? null);
   readonly switchingOrganisationId = signal<string | null>(null);
-  readonly docsUrl = "https://www.kanera.app/docs";
+  readonly docsUrl = KANERA_DOCS_URL;
   // Tracks which workspaces are collapsed in the nav. Default empty (all expanded); persisted to localStorage.
   readonly collapsed = signal<Record<string, boolean>>(this.readCollapsed());
   // Tracks which workspaces have their boards section collapsed.
@@ -1010,18 +1011,54 @@ export class AppShellComponent implements OnInit, OnDestroy {
     return this.isOrgAdmin() || workspace.role === "admin";
   }
 
+  /**
+   * Per-group derivation caches, invalidated as one.
+   *
+   * `filteredBoards`, `filteredBoardGroups` and `filteredUngroupedBoards` are all called as method
+   * bindings inside `@for`, and `collapsedBoardLinks` calls two of them again — so a single change
+   * detection pass regrouped every workspace's boards several times over. The shell is mounted on
+   * every screen, which made that a constant app-wide tax.
+   *
+   * The caches are keyed by group object identity, which is stable because `groups`/`guestGroups` are
+   * signals holding the group objects: replacing either signal (or changing the search term)
+   * produces a new computed value here and therefore fresh empty caches, so nothing can go stale.
+   */
+  private readonly sidebarBoardDerivations = computed(() => {
+    this.groups();
+    this.guestGroups();
+    this.boardSearchTerm();
+    return {
+      filtered: new WeakMap<object, ShellBoard[]>(),
+      grouped: new WeakMap<object, SidebarBoardGroup[]>(),
+      ungrouped: new WeakMap<object, ShellBoard[]>(),
+    };
+  });
+
   filteredBoards(group: HomeGroup | GuestHomeGroup): ShellBoard[] {
+    const cache = this.sidebarBoardDerivations().filtered;
+    const cached = cache.get(group);
+    if (cached) return cached;
     const term = this.boardSearchTerm();
-    if (!term) return group.boards as ShellBoard[];
-    return (group.boards as ShellBoard[]).filter((board) => board.name.toLocaleLowerCase().includes(term));
+    const result = term
+      ? (group.boards as ShellBoard[]).filter((board) => board.name.toLocaleLowerCase().includes(term))
+      : group.boards as ShellBoard[];
+    cache.set(group, result);
+    return result;
   }
 
   filteredBoardGroups(group: HomeGroup | GuestHomeGroup): SidebarBoardGroup[] {
+    const cache = this.sidebarBoardDerivations().grouped;
+    const cached = cache.get(group);
+    if (cached) return cached;
     const boards = this.filteredBoards(group);
     const byGroupId = new Map<string | null, ShellBoard[]>();
     for (const board of boards) {
       const groupId = board.groupId ?? null;
-      byGroupId.set(groupId, [...(byGroupId.get(groupId) ?? []), board]);
+      // Push, never spread: rebuilding the accumulator array on every board made this O(boards²)
+      // per workspace.
+      const bucket = byGroupId.get(groupId);
+      if (bucket) bucket.push(board);
+      else byGroupId.set(groupId, [board]);
     }
     const namedGroups = sortBoardGroups(group.boardGroups ?? [])
       .map((boardGroup) => ({
@@ -1030,18 +1067,29 @@ export class AppShellComponent implements OnInit, OnDestroy {
         boards: byGroupId.get(boardGroup.id) ?? [],
       }))
       .filter((boardGroup) => boardGroup.boards.length > 0);
+    cache.set(group, namedGroups);
     return namedGroups;
   }
 
   filteredUngroupedBoards(group: HomeGroup | GuestHomeGroup): ShellBoard[] {
-    return this.filteredBoards(group).filter((board) => !board.groupId);
+    const cache = this.sidebarBoardDerivations().ungrouped;
+    const cached = cache.get(group);
+    if (cached) return cached;
+    const result = this.filteredBoards(group).filter((board) => !board.groupId);
+    cache.set(group, result);
+    return result;
   }
 
   standaloneNavigationGroups(groups: Array<HomeGroup | GuestHomeGroup>): Array<{ id: string; title: string; boards: StandaloneBoardNavItem[] }> {
     const items = groups.flatMap((homeGroup) => this.filteredBoards(homeGroup).map((board) => ({ board, homeGroup })));
     const byGroupId = new Map<string, StandaloneBoardNavItem[]>();
     for (const item of items) {
-      if (item.board.standaloneGroupId) byGroupId.set(item.board.standaloneGroupId, [...(byGroupId.get(item.board.standaloneGroupId) ?? []), item]);
+      const groupId = item.board.standaloneGroupId;
+      if (!groupId) continue;
+      // Same reason as filteredBoardGroups: spreading the accumulator made this quadratic.
+      const bucket = byGroupId.get(groupId);
+      if (bucket) bucket.push(item);
+      else byGroupId.set(groupId, [item]);
     }
     return this.standaloneBoardGroups()
       .map((group) => ({

@@ -74,10 +74,39 @@
   }
 }
 
-.automation-new-button {
+// One flex item so the pair stays together when the tally wraps onto two lines.
+.automation-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-left: auto;
   flex-shrink: 0;
+}
+
+.automation-new-button {
   white-space: nowrap;
+}
+
+// The anchor box for the Examples menu. `position: relative` is not what places the panel — that is
+// fixed-positioned against this element's rect — but it keeps the box out of the toolbar's flow
+// calculations when the panel is open.
+.menu-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.automation-examples-button {
+  white-space: nowrap;
+
+  &.is-open {
+    border-color: var(--border-strong);
+    background: var(--surface-hover);
+  }
+}
+
+.automation-examples-caret {
+  font-size: 13px;
+  opacity: 0.7;
 }
 
 // ─── Empty state ──────────────────────────────────────────────────────────────
@@ -122,7 +151,9 @@
   font-size: 20px;
 }
 
-.automation-empty-blocked {
+// Scoped through the parent so it out-specifies `.automation-empty > p`, which would otherwise win
+// the colour and render the warning in muted body text.
+.automation-empty > .automation-empty-blocked {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -131,77 +162,13 @@
   font-size: 13px;
 }
 
-.automation-empty-foot {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-.automation-starters {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 8px;
-  width: 100%;
-  max-width: 720px;
-  margin-top: 4px;
-  text-align: left;
-}
-
-.automation-starter {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+.automation-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  height: auto;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface-2);
-  color: var(--text);
-  cursor: pointer;
-  text-align: left;
-  // Undo the global button reset: these cards carry two lines of prose that must wrap.
-  white-space: normal;
-  line-height: 1.4;
-  transition: border-color 0.15s, background-color 0.15s;
-
-  > i:first-child {
-    color: var(--accent);
-    font-size: 18px;
-  }
-
-  span {
-    display: grid;
-    gap: 2px;
-    min-width: 0;
-  }
-
-  strong {
-    color: var(--text);
-    font-size: 13px;
-    font-weight: 600;
-  }
-
-  small {
-    color: var(--text-muted);
-    font-size: 12px;
-    line-height: 1.4;
-  }
-
-  &:hover:not(:disabled) {
-    border-color: var(--accent, var(--border-strong));
-    background: var(--surface-hover);
-  }
-
-  &:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
-}
-
-.automation-starter-go {
-  color: var(--text-muted);
-  font-size: 15px;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
 }
 
 // ─── Rule card ────────────────────────────────────────────────────────────────
@@ -1053,7 +1020,24 @@
     display: none;
   }
 
-  .automation-starters {
-    grid-template-columns: minmax(0, 1fr);
+  // Coarse-pointer targets, and the two empty-state actions stack rather than shrinking below them.
+  .automation-empty-actions button {
+    min-height: 44px;
+    flex: 1 1 100%;
+  }
+
+  .automation-empty-actions .menu-anchor {
+    flex: 1 1 100%;
+  }
+
+  .automation-empty-actions .menu-anchor button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  // The label goes; the bulb plus caret still read as "open a list of examples", and two full labels
+  // push New automation off a 360px row.
+  .automation-examples-label {
+    display: none;
   }
 }

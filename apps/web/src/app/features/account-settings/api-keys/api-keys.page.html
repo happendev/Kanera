@@ -7,7 +7,7 @@
             <i [class]="agentSetupCopied() ? 'ti ti-check' : 'ti ti-sparkles'"></i>
             {{ agentSetupCopied() ? "Setup prompt copied" : "Copy agent setup prompt" }}
           </button>
-          <a class="ghost sm" href="https://www.kanera.app/docs/ai-mcp-oauth" target="_blank" rel="noopener noreferrer">
+          <a class="ghost sm" [href]="agentSetupDocsUrl" target="_blank" rel="noopener noreferrer">
             Setup guide <i class="ti ti-external-link"></i>
           </a>
         </div>
@@ -40,6 +40,7 @@
           A personal key acts as you: it can read and edit content across every workspace and board you can access,
           including workspace administration where you are an admin. Activity done with it shows up as you. Use it for the API or an MCP client.
         </p>
+        <k-docs-link path="api" fragment="create-a-personal-api-key" label="Learn more about personal API keys" />
         @if (apiAllowed()) {
         <form class="board-form" (submit)="createPersonalKey($event)">
           <input name="personalKeyLabel" placeholder="Label (optional, e.g. 'CI script')" [maxLength]="apiKeyNameMaxLength" [value]="newPersonalKeyLabel()" (input)="newPersonalKeyLabel.set($any($event.target).value); personalKeyError.set(null)" style="flex:1" />

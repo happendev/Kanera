@@ -44,4 +44,3 @@ export const kaneraBoardImports = pgTable(
 );
 
 export type KaneraBoardImport = typeof kaneraBoardImports.$inferSelect;
-export type NewKaneraBoardImport = typeof kaneraBoardImports.$inferInsert;

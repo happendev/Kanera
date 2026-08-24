@@ -105,4 +105,3 @@ export const pushQueue = pgTable(
 );
 
 export type PushQueue = typeof pushQueue.$inferSelect;
-export type NewPushQueue = typeof pushQueue.$inferInsert;

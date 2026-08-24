@@ -33,9 +33,12 @@ export const comments = pgTable(
   (t) => [
     check("comments_author_kind_ck", valueIn(t.authorKind, COMMENT_AUTHOR_KINDS)),
     index("comments_card_id_created_at_idx").on(t.cardId, t.createdAt),
+    // author_id is a foreign key with no index, so both the ownership checks on the bulk
+    // edit/delete routes and the ON DELETE restrict enforcement when removing a user fall back to a
+    // sequential scan of every comment in the deployment.
+    index("comments_author_id_idx").on(t.authorId),
     index("comments_search_vector_idx").using("gin", t.searchVector),
   ],
 );
 
 export type Comment = typeof comments.$inferSelect;
-export type NewComment = typeof comments.$inferInsert;

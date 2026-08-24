@@ -1,19 +1,22 @@
 import { dto } from "@kanera/shared";
 import {
+  ACTIVITY_ACTION,
+  ACTIVITY_ENTITY_TYPE,
   automationActions,
   automations,
   checklistTemplateItems,
   checklistTemplates,
 } from "@kanera/shared/schema";
-import { and, asc, desc, eq, gt, inArray, isNull, lt } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db, type Db } from "../../db.js";
 import { assertWorkspaceAccess } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
 import { loadAutomation } from "../../lib/automations.js";
 import { loadChecklistTemplate } from "../../lib/checklist-templates.js";
-import { badRequest, notFound } from "../../lib/errors.js";
-import { between, positionAtIndex } from "../../lib/position.js";
+import { notFound } from "../../lib/errors.js";
+import { moveOrderedEntity } from "../../lib/move-ordered-entity.js";
+import { between, neighbourPositions as resolveNeighbourPositions, positionAtIndex } from "../../lib/position.js";
 import { rebalanceChecklistTemplates } from "../../lib/rebalance.js";
 import { emitToWorkspace, emitToWorkspaceAdmins } from "../../realtime/emit.js";
 
@@ -21,30 +24,17 @@ type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
 // as targeted indexed probes so large workspaces do not pay for a full template scan.
-async function neighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
-  let prev: string | null = null;
-  let next: string | null = null;
-  if (afterId === null && beforeId === undefined) {
-    const [first] = await db.select({ position: checklistTemplates.position }).from(checklistTemplates).where(and(eq(checklistTemplates.workspaceId, workspaceId), isNull(checklistTemplates.archivedAt))).orderBy(asc(checklistTemplates.position)).limit(1);
-    next = first?.position ?? null;
-  } else if (beforeId === null && afterId === undefined) {
-    const [last] = await db.select({ position: checklistTemplates.position }).from(checklistTemplates).where(and(eq(checklistTemplates.workspaceId, workspaceId), isNull(checklistTemplates.archivedAt))).orderBy(desc(checklistTemplates.position)).limit(1);
-    prev = last?.position ?? null;
-  }
-  else if (afterId) {
-    const [after] = await db.select({ position: checklistTemplates.position }).from(checklistTemplates).where(and(eq(checklistTemplates.id, afterId), eq(checklistTemplates.workspaceId, workspaceId), isNull(checklistTemplates.archivedAt))).limit(1);
-    if (!after) throw badRequest("afterTemplateId not found");
-    const [nextTemplate] = await db.select({ position: checklistTemplates.position }).from(checklistTemplates).where(and(eq(checklistTemplates.workspaceId, workspaceId), isNull(checklistTemplates.archivedAt), gt(checklistTemplates.position, after.position))).orderBy(asc(checklistTemplates.position)).limit(1);
-    prev = after.position;
-    next = nextTemplate?.position ?? null;
-  } else if (beforeId) {
-    const [before] = await db.select({ position: checklistTemplates.position }).from(checklistTemplates).where(and(eq(checklistTemplates.id, beforeId), eq(checklistTemplates.workspaceId, workspaceId), isNull(checklistTemplates.archivedAt))).limit(1);
-    if (!before) throw badRequest("beforeTemplateId not found");
-    const [prevTemplate] = await db.select({ position: checklistTemplates.position }).from(checklistTemplates).where(and(eq(checklistTemplates.workspaceId, workspaceId), isNull(checklistTemplates.archivedAt), lt(checklistTemplates.position, before.position))).orderBy(desc(checklistTemplates.position)).limit(1);
-    next = before.position;
-    prev = prevTemplate?.position ?? null;
-  }
-  return { prev, next };
+function neighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
+  return resolveNeighbourPositions({
+    table: checklistTemplates,
+    id: checklistTemplates.id,
+    position: checklistTemplates.position,
+    scope: and(eq(checklistTemplates.workspaceId, workspaceId), isNull(checklistTemplates.archivedAt)),
+    afterId,
+    beforeId,
+    afterLabel: "afterTemplateId",
+    beforeLabel: "beforeTemplateId",
+  });
 }
 
 async function replaceItems(tx: Tx, templateId: string, items: string[]) {
@@ -201,18 +191,32 @@ export async function checklistTemplateRoutes(app: FastifyInstance) {
     const [current] = await db.select().from(checklistTemplates).where(eq(checklistTemplates.id, id)).limit(1);
     if (!current) throw notFound();
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
-    const { prev, next } = await neighbourPositions(current.workspaceId, body.afterTemplateId, body.beforeTemplateId);
-    const result = between(prev, next);
-    let position = result.position;
     const prevPosition = current.position;
-    await db.update(checklistTemplates).set({ position, updatedAt: new Date() }).where(eq(checklistTemplates.id, id));
+    const { position, rebalancedPositions } = await moveOrderedEntity({
+      table: checklistTemplates,
+      idColumn: checklistTemplates.id,
+      id,
+      neighbours: await neighbourPositions(current.workspaceId, body.afterTemplateId, body.beforeTemplateId),
+      rebalance: (tx) => rebalanceChecklistTemplates(current.workspaceId, tx),
+      // This route previously recorded no activity at all, so reordering templates was the one
+      // workspace mutation missing from the audit log. Recorded against the workspace with the
+      // template id in the payload, matching the automation move route: there is no
+      // `checklistTemplate` entity type, and workspace-scoped configuration objects that lack one
+      // are attributed to the workspace rather than widening the entity vocabulary.
+      activity: (position) => ({
+        boardId: null,
+        workspaceId: current.workspaceId,
+        actorId: req.auth.sub,
+        entityType: ACTIVITY_ENTITY_TYPE.WORKSPACE,
+        entityId: current.workspaceId,
+        action: ACTIVITY_ACTION.MOVED,
+        payload: { templateId: id, prevPosition, position },
+      }),
+    });
 
-    if (result.needsRebalance) {
-      const positions = await rebalanceChecklistTemplates(current.workspaceId);
-      position = positions.find((p) => p.id === id)?.position ?? position;
-      await emitToWorkspace(current.workspaceId, "checklistTemplate:rebalanced", { workspaceId: current.workspaceId, positions });
+    if (rebalancedPositions) {
+      await emitToWorkspace(current.workspaceId, "checklistTemplate:rebalanced", { workspaceId: current.workspaceId, positions: rebalancedPositions });
     }
-
     emitToWorkspace(current.workspaceId, "checklistTemplate:moved", {
       workspaceId: current.workspaceId,
       templateId: id,

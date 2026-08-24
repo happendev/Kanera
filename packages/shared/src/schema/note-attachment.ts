@@ -38,4 +38,3 @@ export const noteAttachments = pgTable(
 );
 
 export type NoteAttachment = typeof noteAttachments.$inferSelect;
-export type NewNoteAttachment = typeof noteAttachments.$inferInsert;

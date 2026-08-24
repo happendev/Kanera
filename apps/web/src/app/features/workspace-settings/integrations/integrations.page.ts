@@ -2,6 +2,7 @@ import type { OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
 import { ApiClient, ApiError } from "../../../core/api/api.client";
 import { ConfirmService } from "../../../shared/confirm.service";
+import { DocsLinkComponent } from "../../../shared/docs-link.component";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { WorkspaceSettingsPage } from "../workspace-settings.page";
 
@@ -41,7 +42,7 @@ function extractErrorMessage(error: unknown): string {
 @Component({
   selector: "k-workspace-settings-integrations",
   standalone: true,
-  imports: [TooltipDirective],
+  imports: [DocsLinkComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./integrations.page.html",
   styleUrl: "./integrations.page.scss",
@@ -57,13 +58,13 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
     { value: "telegram" as const, label: "Telegram", icon: "brand-telegram" },
     { value: "zulip" as const, label: "Zulip", icon: "brand-zulip" },
   ];
-  readonly eventOptions: { value: ChatEvent; label: string; description: string; icon: string }[] = [
-    { value: "card_created", label: "Card created", description: "New work is added", icon: "square-plus" },
-    { value: "status_changed", label: "Status changed", description: "A card moves between lists", icon: "arrows-exchange" },
-    { value: "priority_changed", label: "Priority changed", description: "The mapped field changes", icon: "flag" },
-    { value: "title_changed", label: "Title changed", description: "A card is renamed", icon: "text-caption" },
-    { value: "description_changed", label: "Description changed", description: "Card details are updated", icon: "file-description" },
-    { value: "comment_created", label: "Comment created", description: "A teammate adds a comment", icon: "message-plus" },
+  readonly eventOptions: { value: ChatEvent; label: string; description: string }[] = [
+    { value: "card_created", label: "Card created", description: "New work is added" },
+    { value: "status_changed", label: "Status changed", description: "A card moves between lists" },
+    { value: "priority_changed", label: "Priority changed", description: "The mapped field changes" },
+    { value: "title_changed", label: "Title changed", description: "A card is renamed" },
+    { value: "description_changed", label: "Description changed", description: "Card details are updated" },
+    { value: "comment_created", label: "Comment created", description: "A teammate adds a comment" },
   ];
 
   readonly priorityMappingMissing = (destination: ChatDestinationRow): boolean =>

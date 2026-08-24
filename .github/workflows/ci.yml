@@ -34,6 +34,10 @@ jobs:
 
       - run: pnpm --filter @kanera/web test
 
+      # Bundle budgets were previously only checkable by hand, so growth went unnoticed between
+      # releases. Gating here fails the commit that regresses the payload instead of a later audit.
+      - run: pnpm bundle:web:check
+
   secret-scan:
     runs-on: ubuntu-latest
     timeout-minutes: 10

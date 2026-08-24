@@ -3,6 +3,7 @@
     <i class="ti ti-info-circle"></i>
     <span>Chat destinations post workspace card activity directly to the channel where your team works.</span>
   </div>
+  <k-docs-link path="chat-destinations" label="Learn more about chat destinations" />
 
   @if (!settings.webhooksAllowed()) {
   <div class="upgrade-action-callout">
@@ -43,7 +44,6 @@
         @for (option of eventOptions; track option.value) {
         <label class="event-toggle">
           <input type="checkbox" [checked]="selectedEvents().has(option.value)" (change)="setEvent(option.value, $any($event.target).checked)" />
-          <i [class]="'ti ti-' + option.icon"></i>
           <span><strong>{{ option.label }}</strong><small>{{ option.description }}</small></span>
         </label>
         }
@@ -102,7 +102,7 @@
           <legend>Post when</legend>
           <div>
             @for (option of eventOptions; track option.value) {
-            <label class="event-toggle"><input type="checkbox" [checked]="editingEvents().has(option.value)" (change)="setEvent(option.value, $any($event.target).checked, true)" /><i [class]="'ti ti-' + option.icon"></i><span><strong>{{
+            <label class="event-toggle"><input type="checkbox" [checked]="editingEvents().has(option.value)" (change)="setEvent(option.value, $any($event.target).checked, true)" /><span><strong>{{
                   option.label }}</strong><small>{{ option.description }}</small></span></label>
             }
           </div>

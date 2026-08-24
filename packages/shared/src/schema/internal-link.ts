@@ -32,4 +32,3 @@ export const internalLinks = pgTable(
 );
 
 export type InternalLink = typeof internalLinks.$inferSelect;
-export type NewInternalLink = typeof internalLinks.$inferInsert;

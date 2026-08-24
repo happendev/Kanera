@@ -52,6 +52,7 @@
 
         <div class="notification-types-block">
           <h3 class="settings-section-title"><i class="ti ti-list-check"></i><span>Notification types</span></h3>
+          <k-docs-link path="notification-configuration" label="Learn more about notification types" />
           <div class="notification-grid">
             <div class="notification-grid-head">
               <span>Type</span>
@@ -88,6 +89,7 @@
             </button>
             }
           </div>
+          <k-docs-link path="notification-workspace-rules" label="Learn more about workspace rules" />
 
           @if (settings.workspaceRulePickerOpen()) {
           <section class="workspace-rule-picker" aria-label="Choose a workspace rule">
@@ -238,6 +240,7 @@
             <i class="ti ti-chevron-down additional-destinations-chevron"></i>
           </summary>
           <div class="additional-destinations-content">
+            <k-docs-link path="notification-channels" label="Learn more about delivery channels" />
 
         @if (!settings.personalNotificationChannelsAllowed()) {
         <p class="plan-limit-hint"><i class="ti ti-lock"></i> ntfy, Gotify, and personal webhooks aren't available on your plan. Upgrade your plan to unlock them.</p>

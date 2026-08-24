@@ -4,6 +4,7 @@
           <span>Groups</span>
         </div>
         <p class="settings-section-hint">Use groups to organize the sidebar. Boards without a group stay listed directly under Boards.</p>
+        <k-docs-link path="boards" fragment="group-boards" label="Learn more about board groups" />
         <form class="board-form" (submit)="settings.createBoardGroup($event)">
           <input name="boardGroup" placeholder="Group title" [value]="settings.newBoardGroupTitle()" (input)="settings.newBoardGroupTitle.set($any($event.target).value)" required style="flex:1" />
           <button class="sm compact-add-button" type="submit" aria-label="Add group" kTooltip="Add group"><i class="ti ti-plus"></i><span class="mobile-hide">Add group</span></button>
@@ -35,6 +36,7 @@
           <i class="ti ti-layout-kanban"></i>
           <span>Boards</span>
         </div>
+        <k-docs-link path="boards" label="Learn more about boards" />
         <form class="board-form" (submit)="settings.createBoard($event)">
           <input name="board" placeholder="Board name" [value]="settings.newBoardName()" (input)="settings.newBoardName.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" required style="flex:1" />
           <button class="sm compact-add-button" type="submit" aria-label="Add board" kTooltip="Add board"><i class="ti ti-plus"></i><span class="mobile-hide">Add board</span></button>

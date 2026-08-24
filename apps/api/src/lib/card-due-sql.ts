@@ -1,3 +1,4 @@
+import { DUE_DATE_SLOT_RANK, DUE_DATE_SLOT_TIMES } from "@kanera/shared/due-date-slots";
 import { cards, cardChecklistItems, cardSummaryView } from "@kanera/shared/schema";
 import { and, inArray, notInArray, or, sql, type SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
@@ -54,6 +55,48 @@ export const cardDueColumns: CardDueColumns = {
   updatedAt: cards.updatedAt,
 };
 
+/**
+ * The `case` mapping a slot column to its overdue cut-off time.
+ *
+ * Generated from `DUE_DATE_SLOT_TIMES` so the three SQL predicates below and the TypeScript
+ * check in `lib/due-date.ts` cannot drift: changing a slot time is a one-line edit in
+ * `@kanera/shared/due-date-slots`. `anyTime` is the `else` branch because the column is
+ * nullable and `coalesce` already maps null to it.
+ */
+function slotCutoffCaseSql(slotColumn: AnyPgColumn | SQL): SQL {
+  const branch = (slot: "morning" | "afternoon" | "endOfWorkDay") => {
+    const { hour, minute } = DUE_DATE_SLOT_TIMES[slot];
+    const literal = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+    // Slot names come from a closed union, never user input, so emitting them as literals is
+    // safe and keeps the generated SQL byte-identical to the hand-written CASE it replaced.
+    return sql.raw(`when '${slot}' then time '${literal}'`);
+  };
+  const fallback = DUE_DATE_SLOT_TIMES.anyTime;
+  const fallbackLiteral = `${String(fallback.hour).padStart(2, "0")}:${String(fallback.minute).padStart(2, "0")}`;
+  return sql`case coalesce(${slotColumn}, 'anyTime')
+      ${branch("morning")}
+      ${branch("afternoon")}
+      ${branch("endOfWorkDay")}
+      else time ${sql.raw(`'${fallbackLiteral}'`)}
+    end`;
+}
+
+/**
+ * The `case` ordering a slot column for agenda-style sorts, generated from `DUE_DATE_SLOT_RANK`.
+ *
+ * `anyTime` is the `else` branch: the column is nullable and an unset slot sorts last.
+ */
+export function slotRankCaseSql(slotColumn: AnyPgColumn | SQL): SQL {
+  const branch = (slot: "morning" | "afternoon" | "endOfWorkDay") =>
+    sql.raw(`when '${slot}' then ${DUE_DATE_SLOT_RANK[slot]}`);
+  return sql`case coalesce(${slotColumn}, 'anyTime')
+      ${branch("morning")}
+      ${branch("afternoon")}
+      ${branch("endOfWorkDay")}
+      else ${sql.raw(String(DUE_DATE_SLOT_RANK.anyTime))}
+    end`;
+}
+
 export function currentLocalDateSql(columns: CardDueColumns): SQL {
   // Stored zones come from the user's IANA timezone setting. Falling back for null/empty values
   // mirrors the application overdue helper while keeping the global query index-friendly.
@@ -69,12 +112,7 @@ export function overdueSql(columns: CardDueColumns): SQL {
       ${localDate} > ${columns.dueDateLocalDate}
       or (
         ${localDate} = ${columns.dueDateLocalDate}
-        and ${localTime} >= case coalesce(${columns.dueDateSlot}, 'anyTime')
-          when 'morning' then time '09:00'
-          when 'afternoon' then time '13:00'
-          when 'endOfWorkDay' then time '17:00'
-          else time '21:00'
-        end
+        and ${localTime} >= ${slotCutoffCaseSql(columns.dueDateSlot)}
       )
     )
   )`;
@@ -98,12 +136,7 @@ export function overdueChecklistItemSql(): SQL {
       or (
         (now() at time zone coalesce(nullif(${cardChecklistItems.dueDateTimezone}, ''), 'UTC'))::date = ${cardChecklistItems.dueDateLocalDate}
         and (now() at time zone coalesce(nullif(${cardChecklistItems.dueDateTimezone}, ''), 'UTC'))::time >=
-          case coalesce(${cardChecklistItems.dueDateSlot}, 'anyTime')
-            when 'morning' then time '09:00'
-            when 'afternoon' then time '13:00'
-            when 'endOfWorkDay' then time '17:00'
-            else time '21:00'
-          end
+          ${slotCutoffCaseSql(cardChecklistItems.dueDateSlot)}
       )
     )
   )`;
@@ -126,12 +159,7 @@ export function overdueChecklistSql(cardId: AnyPgColumn, assigneeId?: string): S
         or (
           (now() at time zone coalesce(nullif(work_item.due_date_timezone, ''), 'UTC'))::date = work_item.due_date_local_date
           and (now() at time zone coalesce(nullif(work_item.due_date_timezone, ''), 'UTC'))::time >=
-            case coalesce(work_item.due_date_slot, 'anyTime')
-              when 'morning' then time '09:00'
-              when 'afternoon' then time '13:00'
-              when 'endOfWorkDay' then time '17:00'
-              else time '21:00'
-            end
+            ${slotCutoffCaseSql(sql`work_item.due_date_slot`)}
         )
       )
   )`;

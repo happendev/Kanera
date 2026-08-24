@@ -14,8 +14,8 @@ import { runTrelloImport } from "./importer.js";
 import { runKaneraBoardImport } from "./kanera-importer.js";
 import { parseKaneraBoardExport } from "./kanera-parser.js";
 import type { NormalizedTrelloBoard } from "./types.js";
+import { signupOwner } from "../../test/api-fixtures.js";
 
-type SignupResponse = { accessToken: string; user: { id: string; clientId: string } };
 type WorkspaceResponse = { id: string };
 type ImportResult = { createdBoardId: string; cards: { created: number }; comments: number; checklists: number; attachments: { imported: number; skipped: number }; warnings: string[] };
 
@@ -58,14 +58,7 @@ async function setFreeTier(clientId: string) {
 
 void test("standalone board settings can append Trello and Kanera imports into their sole board", async () => {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: { orgName: "Standalone Imports", email: "standalone-imports@example.com", password: "Abc12345", displayName: "Owner" },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<SignupResponse>();
-  const auth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: auth } = await signupOwner(app, { orgName: "Standalone Imports", email: "standalone-imports@example.com", displayName: "Owner" });
 
   const created = await app.inject({
     method: "POST",
@@ -190,18 +183,7 @@ void test("standalone board settings can append Trello and Kanera imports into t
 
 void test("POST /imports/:importId/commit imports a ready Trello session", async () => {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Import Co",
-      email: "owner@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<SignupResponse>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Import Co", email: "owner@example.com", displayName: "Owner" });
 
   const created = await app.inject({
     method: "POST",
@@ -397,18 +379,7 @@ void test("POST /imports/:importId/commit imports a ready Trello session", async
 
 void test("POST /imports/:importId/commit copies Trello uploaded attachments when connected", async () => {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Trello Files Co",
-      email: "owner-trello-files@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<SignupResponse>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Trello Files Co", email: "owner-trello-files@example.com", displayName: "Owner" });
   const created = await app.inject({
     method: "POST",
     url: "/workspaces",
@@ -520,13 +491,7 @@ void test("POST /imports/:importId/commit copies Trello uploaded attachments whe
 void test("Trello import commit is blocked by the org-wide free board cap", async () => {
   await withHosted(async () => {
     const app = await buildIntegrationServer();
-    const signup = await app.inject({
-      method: "POST",
-      url: "/auth/signup",
-      payload: { orgName: "Trello Limit Co", email: "owner-trello-limit@example.com", password: "Abc12345", displayName: "Owner" },
-    });
-    assert.equal(signup.statusCode, 200);
-    const { accessToken, user } = signup.json<SignupResponse>();
+    const { accessToken, user } = await signupOwner(app, { orgName: "Trello Limit Co", email: "owner-trello-limit@example.com", displayName: "Owner" });
     await setFreeTier(user.clientId);
 
     const created = await app.inject({ method: "POST", url: "/workspaces", headers: { authorization: `Bearer ${accessToken}` }, payload: { name: "Migration" } });
@@ -619,14 +584,7 @@ void test("Kanera board import commit is blocked by the org-wide free board cap"
 
 async function setupImportTarget(testName: string, email: string) {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: { orgName: testName, email, password: "Abc12345", displayName: "Owner" },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<SignupResponse>();
-  const auth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: auth } = await signupOwner(app, { orgName: testName, email, displayName: "Owner" });
 
   const created = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Delivery" } });
   assert.equal(created.statusCode, 201);

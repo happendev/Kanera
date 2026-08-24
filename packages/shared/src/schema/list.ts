@@ -29,4 +29,3 @@ export const lists = pgTable(
 );
 
 export type List = typeof lists.$inferSelect;
-export type NewList = typeof lists.$inferInsert;

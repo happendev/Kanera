@@ -53,4 +53,3 @@ export const scratchpadNotes = pgTable(
 export const MAX_SCRATCHPAD_NOTES = 50;
 
 export type ScratchpadNote = typeof scratchpadNotes.$inferSelect;
-export type NewScratchpadNote = typeof scratchpadNotes.$inferInsert;

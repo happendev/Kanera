@@ -9,11 +9,6 @@ interface CachedDropTargetGeometry {
   bottom: number;
 }
 
-export function extendRectToViewportBottom(rect: DOMRect, viewportBottom: number): DOMRect {
-  const bottom = Math.max(rect.bottom, viewportBottom);
-  return new DOMRect(rect.left, rect.top, rect.width, bottom - rect.top);
-}
-
 export function extendDropTargetRect(
   element: HTMLElement,
   rect: DOMRect,

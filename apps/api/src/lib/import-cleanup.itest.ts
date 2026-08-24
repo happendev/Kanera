@@ -8,6 +8,7 @@ import { db } from "../db.js";
 import { buildIntegrationServer } from "../test/integration.js";
 import { runImportCleanup } from "./import-cleanup.js";
 import { getStorageForClient } from "./storage/index.js";
+import { signupOwner } from "../test/api-fixtures.js";
 
 const log = {
   info() { },
@@ -18,13 +19,7 @@ const log = {
 void test("import cleanup deletes sessions and source files older than 7 days", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: { orgName: "Acme", email: "owner@example.com", password: "Abc12345", displayName: "Owner" },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Acme", email: "owner@example.com", displayName: "Owner" });
 
   const created = await app.inject({
     method: "POST",

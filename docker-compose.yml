@@ -2,9 +2,99 @@
 # uses the same value below to restrict Docker log discovery to this Kanera deployment.
 name: ${COMPOSE_PROJECT_NAME:-kanera}
 
+# Third-party images are pinned to exact patch versions on purpose. Dokploy redeploys run
+# `docker compose up -d`, which recreates any service whose image digest moved, so a floating tag
+# would let Postgres, Valkey, or the monitoring stack jump versions during a deploy that was only
+# meant to ship application code. Patch bumps arrive as reviewable Dependabot PRs instead
+# (see .github/dependabot.yml) so an upgrade is always a commit that can be reverted.
+
+# Environment shared verbatim by the three services built from the Kanera API image (app api,
+# worker, public api). Compose ignores top-level `x-` keys, so this exists only to be merged.
+# Each service merges it and then adds or overrides what differs — ports, pool sizes, and the
+# per-surface rate limits. Deliberately not merged into `migrate` or `admin-api`: they carry a
+# smaller subset, and merging would silently hand them variables they are not meant to see.
+x-app-env: &app-env
+  NODE_ENV: production
+  DATABASE_URL: postgres://kanera:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/kanera
+  REDIS_URL: redis://valkey:6379/0
+  DATABASE_SSL: ${DATABASE_SSL:-false}
+  NODE_OPTIONS: ${NODE_OPTIONS:-}
+  UV_THREADPOOL_SIZE: ${UV_THREADPOOL_SIZE:-16}
+  PG_IDLE_TIMEOUT_MS: ${PG_IDLE_TIMEOUT_MS:-30000}
+  PG_CONNECTION_TIMEOUT_MS: ${PG_CONNECTION_TIMEOUT_MS:-5000}
+  PG_STATEMENT_TIMEOUT_MS: ${PG_STATEMENT_TIMEOUT_MS:-30000}
+  SLOW_QUERY_LOG_MS: ${SLOW_QUERY_LOG_MS:-250}
+  JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+  MCP_INTERNAL_SECRET: ${MCP_INTERNAL_SECRET:?set MCP_INTERNAL_SECRET in .env}
+  MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?set MFA_ENCRYPTION_KEY in .env}
+  MEDIA_SIGNING_SECRET: ${MEDIA_SIGNING_SECRET:?set MEDIA_SIGNING_SECRET in .env}
+  SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:-}
+  JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-5m}
+  JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-10}
+  API_PUBLIC_URL: ${API_PUBLIC_URL:-${WEB_ORIGIN}}
+  WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN in .env}
+  COOKIE_DOMAIN: ${COOKIE_DOMAIN:?set COOKIE_DOMAIN in .env}
+  COOKIE_SECURE: ${COOKIE_SECURE:?set COOKIE_SECURE in .env}
+  KANERA_ENVIRONMENT: ${KANERA_ENVIRONMENT:-production}
+  KANERA_DEPLOYMENT_MODE: ${KANERA_DEPLOYMENT_MODE:-self_hosted}
+  KANERA_HOSTED_MODE_TOKEN: ${KANERA_HOSTED_MODE_TOKEN:-}
+  KANERA_ALLOW_PRIVATE_NOTIFICATION_DESTINATIONS: ${KANERA_ALLOW_PRIVATE_NOTIFICATION_DESTINATIONS:-false}
+  SIGNUPS_ENABLED: ${SIGNUPS_ENABLED:-true}
+  EMAIL_VERIFICATION_ENABLED: ${EMAIL_VERIFICATION_ENABLED:-false}
+  CLOUDFLARE_TURNSTILE_SITE_KEY: ${CLOUDFLARE_TURNSTILE_SITE_KEY:-}
+  CLOUDFLARE_TURNSTILE_SECRET_KEY: ${CLOUDFLARE_TURNSTILE_SECRET_KEY:-}
+  ATTACHMENT_MAX_BYTES: ${ATTACHMENT_MAX_BYTES:-104857600}
+  HOSTED_FREE_ATTACHMENT_MAX_BYTES: ${HOSTED_FREE_ATTACHMENT_MAX_BYTES:-5242880}
+  HOSTED_FREE_STORAGE_QUOTA_BYTES: ${HOSTED_FREE_STORAGE_QUOTA_BYTES:-262144000}
+  HOSTED_PAID_STORAGE_QUOTA_BYTES: ${HOSTED_PAID_STORAGE_QUOTA_BYTES:-214748364800}
+  HOSTED_PRO_PRICE_MONTHLY_CENTS: ${HOSTED_PRO_PRICE_MONTHLY_CENTS:-500}
+  HOSTED_PRO_PRICE_ANNUAL_CENTS: ${HOSTED_PRO_PRICE_ANNUAL_CENTS:-4900}
+  HOSTED_FREE_MAX_BOARDS: ${HOSTED_FREE_MAX_BOARDS:-3}
+  HOSTED_FREE_MAX_ORG_MEMBERS: ${HOSTED_FREE_MAX_ORG_MEMBERS:-4}
+  HOSTED_FREE_MAX_ENABLED_AUTOMATIONS: ${HOSTED_FREE_MAX_ENABLED_AUTOMATIONS:-3}
+  HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY: ${HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY:-100}
+  HOSTED_FREE_MAX_GUEST_BOARDS: ${HOSTED_FREE_MAX_GUEST_BOARDS:-1}
+  HOSTED_TRIAL_DAYS: ${HOSTED_TRIAL_DAYS:-30}
+  STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+  STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+  STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+  STRIPE_PRICE_ID_PRO_MONTHLY: ${STRIPE_PRICE_ID_PRO_MONTHLY:-}
+  STRIPE_PRICE_ID_PRO_ANNUAL: ${STRIPE_PRICE_ID_PRO_ANNUAL:-}
+  UPLOADS_DIR: /data/uploads
+  S3_ENDPOINT: ${S3_ENDPOINT:-}
+  S3_REGION: ${S3_REGION:-}
+  S3_BUCKET: ${S3_BUCKET:-}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+  S3_PUBLIC_URL_PREFIX: ${S3_PUBLIC_URL_PREFIX:-}
+  SLOW_REQUEST_LOG_MS: ${SLOW_REQUEST_LOG_MS:-2500}
+  USER_DISPLAY_CACHE_TTL_MS: ${USER_DISPLAY_CACHE_TTL_MS:-60000}
+  METRICS_ENABLED: ${METRICS_ENABLED:-true}
+  METRICS_TOKEN: ${METRICS_TOKEN:-}
+  REALTIME_EMIT_METRICS_ENABLED: ${REALTIME_EMIT_METRICS_ENABLED:-false}
+  REALTIME_EMIT_METRICS_SAMPLE_RATE: ${REALTIME_EMIT_METRICS_SAMPLE_RATE:-0.01}
+  REALTIME_EMIT_METRICS_MIN_BYTES: ${REALTIME_EMIT_METRICS_MIN_BYTES:-0}
+  OPS_ALERTS_ENABLED: ${OPS_ALERTS_ENABLED:-true}
+  OPS_ALERT_THROTTLE_MS: ${OPS_ALERT_THROTTLE_MS:-300000}
+  ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+  GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+  GITHUB_APP_SLUG: ${GITHUB_APP_SLUG:-}
+  GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
+  TRELLO_API_KEY: ${TRELLO_API_KEY:-}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+  SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Kanera}
+  SMTP_IDENTITY_DOMAIN: ${SMTP_IDENTITY_DOMAIN:-}
+  INTERNAL_NOTIFICATION_EMAILS: ${INTERNAL_NOTIFICATION_EMAILS:-}
+  SUPPORT_SESSION_TTL_MINUTES: ${SUPPORT_SESSION_TTL_MINUTES:-60}
+
 services:
   postgres:
-    image: postgres:18-alpine
+    image: postgres:18.6-alpine
     restart: unless-stopped
     # pg_stat_statements must be loaded at server start via shared_preload_libraries; CREATE EXTENSION
     # alone is not enough. track=top records top-level statements (not every nested statement) to keep
@@ -33,7 +123,7 @@ services:
       retries: 10
 
   valkey:
-    image: valkey/valkey:9.1.0-alpine
+    image: valkey/valkey:9.1.1-alpine
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
@@ -51,6 +141,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+      pull: true
     command: ["node", "--import", "tsx", "src/scripts/migrate.ts"]
     environment:
       NODE_ENV: production
@@ -91,102 +182,27 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+      pull: true
     # Migrations run once in the dedicated `migrate` service (see depends_on); replicas just start.
     command: ["node", "--import", "tsx", "src/index.ts"]
     environment:
-      NODE_ENV: production
+      <<: *app-env
       API_PORT: 3000
       API_TRUST_PROXY: ${API_TRUST_PROXY:-false}
-      DATABASE_URL: postgres://kanera:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/kanera
-      REDIS_URL: redis://valkey:6379/0
-      DATABASE_SSL: ${DATABASE_SSL:-false}
       # Capacity tuning. The bundled production Compose default is 20; set PG_POOL_MAX
       # in .env to override it. See "Performance tuning" in DEPLOY.md before raising it.
-      NODE_OPTIONS: ${NODE_OPTIONS:-}
-      UV_THREADPOOL_SIZE: ${UV_THREADPOOL_SIZE:-16}
       PG_POOL_MAX: ${PG_POOL_MAX:-20}
-      PG_IDLE_TIMEOUT_MS: ${PG_IDLE_TIMEOUT_MS:-30000}
-      PG_CONNECTION_TIMEOUT_MS: ${PG_CONNECTION_TIMEOUT_MS:-5000}
-      PG_STATEMENT_TIMEOUT_MS: ${PG_STATEMENT_TIMEOUT_MS:-30000}
-      SLOW_QUERY_LOG_MS: ${SLOW_QUERY_LOG_MS:-250}
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
-      MCP_INTERNAL_SECRET: ${MCP_INTERNAL_SECRET:?set MCP_INTERNAL_SECRET in .env}
-      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?set MFA_ENCRYPTION_KEY in .env}
-      MEDIA_SIGNING_SECRET: ${MEDIA_SIGNING_SECRET:?set MEDIA_SIGNING_SECRET in .env}
-      SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:-}
-      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-5m}
-      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-10}
-      API_PUBLIC_URL: ${API_PUBLIC_URL:-${WEB_ORIGIN}}
       PUBLIC_API_OAUTH_ISSUER: ${PUBLIC_API_OAUTH_ISSUER:-http://localhost:3001}
       MCP_PUBLIC_URL: ${MCP_SERVER_PUBLIC_URL:-http://localhost:3002/mcp}
-      WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN in .env}
-      COOKIE_DOMAIN: ${COOKIE_DOMAIN:?set COOKIE_DOMAIN in .env}
-      COOKIE_SECURE: ${COOKIE_SECURE:?set COOKIE_SECURE in .env}
-      KANERA_ENVIRONMENT: ${KANERA_ENVIRONMENT:-production}
-      KANERA_DEPLOYMENT_MODE: ${KANERA_DEPLOYMENT_MODE:-self_hosted}
-      KANERA_HOSTED_MODE_TOKEN: ${KANERA_HOSTED_MODE_TOKEN:-}
-      KANERA_ALLOW_PRIVATE_NOTIFICATION_DESTINATIONS: ${KANERA_ALLOW_PRIVATE_NOTIFICATION_DESTINATIONS:-false}
       ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-false}
       ANALYTICS_PROVIDER: ${ANALYTICS_PROVIDER:-}
       POSTHOG_PROJECT_KEY: ${POSTHOG_PROJECT_KEY:-}
       POSTHOG_API_HOST: ${POSTHOG_API_HOST:-}
-      SIGNUPS_ENABLED: ${SIGNUPS_ENABLED:-true}
-      EMAIL_VERIFICATION_ENABLED: ${EMAIL_VERIFICATION_ENABLED:-false}
-      CLOUDFLARE_TURNSTILE_SITE_KEY: ${CLOUDFLARE_TURNSTILE_SITE_KEY:-}
-      CLOUDFLARE_TURNSTILE_SECRET_KEY: ${CLOUDFLARE_TURNSTILE_SECRET_KEY:-}
-      ATTACHMENT_MAX_BYTES: ${ATTACHMENT_MAX_BYTES:-104857600}
-      HOSTED_FREE_ATTACHMENT_MAX_BYTES: ${HOSTED_FREE_ATTACHMENT_MAX_BYTES:-5242880}
-      HOSTED_FREE_STORAGE_QUOTA_BYTES: ${HOSTED_FREE_STORAGE_QUOTA_BYTES:-262144000}
-      HOSTED_PAID_STORAGE_QUOTA_BYTES: ${HOSTED_PAID_STORAGE_QUOTA_BYTES:-214748364800}
-      HOSTED_PRO_PRICE_MONTHLY_CENTS: ${HOSTED_PRO_PRICE_MONTHLY_CENTS:-500}
-      HOSTED_PRO_PRICE_ANNUAL_CENTS: ${HOSTED_PRO_PRICE_ANNUAL_CENTS:-4900}
-      HOSTED_FREE_MAX_BOARDS: ${HOSTED_FREE_MAX_BOARDS:-3}
-      HOSTED_FREE_MAX_ORG_MEMBERS: ${HOSTED_FREE_MAX_ORG_MEMBERS:-4}
-      HOSTED_FREE_MAX_ENABLED_AUTOMATIONS: ${HOSTED_FREE_MAX_ENABLED_AUTOMATIONS:-3}
-      HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY: ${HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY:-100}
-      HOSTED_FREE_MAX_GUEST_BOARDS: ${HOSTED_FREE_MAX_GUEST_BOARDS:-1}
-      HOSTED_TRIAL_DAYS: ${HOSTED_TRIAL_DAYS:-30}
       AUTH_RATE_LIMIT_ENABLED: ${AUTH_RATE_LIMIT_ENABLED:-true}
       AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-10}
       AUTH_RATE_LIMIT_WINDOW_MS: ${AUTH_RATE_LIMIT_WINDOW_MS:-60000}
-      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
-      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
-      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
-      STRIPE_PRICE_ID_PRO_MONTHLY: ${STRIPE_PRICE_ID_PRO_MONTHLY:-}
-      STRIPE_PRICE_ID_PRO_ANNUAL: ${STRIPE_PRICE_ID_PRO_ANNUAL:-}
-      UPLOADS_DIR: /data/uploads
-      S3_ENDPOINT: ${S3_ENDPOINT:-}
-      S3_REGION: ${S3_REGION:-}
-      S3_BUCKET: ${S3_BUCKET:-}
-      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
-      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
-      S3_PUBLIC_URL_PREFIX: ${S3_PUBLIC_URL_PREFIX:-}
-      SLOW_REQUEST_LOG_MS: ${SLOW_REQUEST_LOG_MS:-2500}
-      USER_DISPLAY_CACHE_TTL_MS: ${USER_DISPLAY_CACHE_TTL_MS:-60000}
-      METRICS_ENABLED: ${METRICS_ENABLED:-true}
-      METRICS_TOKEN: ${METRICS_TOKEN:-}
-      REALTIME_EMIT_METRICS_ENABLED: ${REALTIME_EMIT_METRICS_ENABLED:-false}
-      REALTIME_EMIT_METRICS_SAMPLE_RATE: ${REALTIME_EMIT_METRICS_SAMPLE_RATE:-0.01}
-      REALTIME_EMIT_METRICS_MIN_BYTES: ${REALTIME_EMIT_METRICS_MIN_BYTES:-0}
       REALTIME_WEBSOCKET_COMPRESSION_ENABLED: ${REALTIME_WEBSOCKET_COMPRESSION_ENABLED:-true}
       REALTIME_WEBSOCKET_COMPRESSION_THRESHOLD_BYTES: ${REALTIME_WEBSOCKET_COMPRESSION_THRESHOLD_BYTES:-1024}
-      OPS_ALERTS_ENABLED: ${OPS_ALERTS_ENABLED:-true}
-      OPS_ALERT_THROTTLE_MS: ${OPS_ALERT_THROTTLE_MS:-300000}
-      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
-      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
-      GITHUB_APP_SLUG: ${GITHUB_APP_SLUG:-}
-      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
-      TRELLO_API_KEY: ${TRELLO_API_KEY:-}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
-      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Kanera}
-      SMTP_IDENTITY_DOMAIN: ${SMTP_IDENTITY_DOMAIN:-}
-      INTERNAL_NOTIFICATION_EMAILS: ${INTERNAL_NOTIFICATION_EMAILS:-}
-      SUPPORT_SESSION_TTL_MINUTES: ${SUPPORT_SESSION_TTL_MINUTES:-60}
     volumes:
       - kanera_uploads:/data/uploads
     depends_on:
@@ -224,89 +240,18 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+      pull: true
     command: ["node", "--import", "tsx", "src/worker-index.ts"]
     environment:
-      NODE_ENV: production
+      <<: *app-env
       WORKER_PORT: 3003
-      DATABASE_URL: postgres://kanera:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/kanera
-      REDIS_URL: redis://valkey:6379/0
-      DATABASE_SSL: ${DATABASE_SSL:-false}
-      NODE_OPTIONS: ${NODE_OPTIONS:-}
-      UV_THREADPOOL_SIZE: ${UV_THREADPOOL_SIZE:-16}
       PG_POOL_MAX: ${WORKER_PG_POOL_MAX:-5}
       WORKER_PG_POOL_MAX: ${WORKER_PG_POOL_MAX:-5}
-      PG_IDLE_TIMEOUT_MS: ${PG_IDLE_TIMEOUT_MS:-30000}
-      PG_CONNECTION_TIMEOUT_MS: ${PG_CONNECTION_TIMEOUT_MS:-5000}
-      PG_STATEMENT_TIMEOUT_MS: ${PG_STATEMENT_TIMEOUT_MS:-30000}
-      SLOW_QUERY_LOG_MS: ${SLOW_QUERY_LOG_MS:-250}
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
-      MCP_INTERNAL_SECRET: ${MCP_INTERNAL_SECRET:?set MCP_INTERNAL_SECRET in .env}
-      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?set MFA_ENCRYPTION_KEY in .env}
-      MEDIA_SIGNING_SECRET: ${MEDIA_SIGNING_SECRET:?set MEDIA_SIGNING_SECRET in .env}
-      SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:-}
-      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-5m}
-      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-10}
-      API_PUBLIC_URL: ${API_PUBLIC_URL:-${WEB_ORIGIN}}
-      WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN in .env}
-      COOKIE_DOMAIN: ${COOKIE_DOMAIN:?set COOKIE_DOMAIN in .env}
-      COOKIE_SECURE: ${COOKIE_SECURE:?set COOKIE_SECURE in .env}
-      KANERA_ENVIRONMENT: ${KANERA_ENVIRONMENT:-production}
-      KANERA_DEPLOYMENT_MODE: ${KANERA_DEPLOYMENT_MODE:-self_hosted}
-      KANERA_HOSTED_MODE_TOKEN: ${KANERA_HOSTED_MODE_TOKEN:-}
-      KANERA_ALLOW_PRIVATE_NOTIFICATION_DESTINATIONS: ${KANERA_ALLOW_PRIVATE_NOTIFICATION_DESTINATIONS:-false}
-      SIGNUPS_ENABLED: ${SIGNUPS_ENABLED:-true}
-      EMAIL_VERIFICATION_ENABLED: ${EMAIL_VERIFICATION_ENABLED:-false}
-      CLOUDFLARE_TURNSTILE_SITE_KEY: ${CLOUDFLARE_TURNSTILE_SITE_KEY:-}
-      CLOUDFLARE_TURNSTILE_SECRET_KEY: ${CLOUDFLARE_TURNSTILE_SECRET_KEY:-}
-      ATTACHMENT_MAX_BYTES: ${ATTACHMENT_MAX_BYTES:-104857600}
-      HOSTED_FREE_ATTACHMENT_MAX_BYTES: ${HOSTED_FREE_ATTACHMENT_MAX_BYTES:-5242880}
-      HOSTED_FREE_STORAGE_QUOTA_BYTES: ${HOSTED_FREE_STORAGE_QUOTA_BYTES:-262144000}
-      HOSTED_PAID_STORAGE_QUOTA_BYTES: ${HOSTED_PAID_STORAGE_QUOTA_BYTES:-214748364800}
-      HOSTED_PRO_PRICE_MONTHLY_CENTS: ${HOSTED_PRO_PRICE_MONTHLY_CENTS:-500}
-      HOSTED_PRO_PRICE_ANNUAL_CENTS: ${HOSTED_PRO_PRICE_ANNUAL_CENTS:-4900}
-      HOSTED_FREE_MAX_BOARDS: ${HOSTED_FREE_MAX_BOARDS:-3}
-      HOSTED_FREE_MAX_ORG_MEMBERS: ${HOSTED_FREE_MAX_ORG_MEMBERS:-4}
-      HOSTED_FREE_MAX_ENABLED_AUTOMATIONS: ${HOSTED_FREE_MAX_ENABLED_AUTOMATIONS:-3}
-      HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY: ${HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY:-100}
-      HOSTED_FREE_MAX_GUEST_BOARDS: ${HOSTED_FREE_MAX_GUEST_BOARDS:-1}
-      HOSTED_TRIAL_DAYS: ${HOSTED_TRIAL_DAYS:-30}
-      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
-      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
-      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
-      STRIPE_PRICE_ID_PRO_MONTHLY: ${STRIPE_PRICE_ID_PRO_MONTHLY:-}
-      STRIPE_PRICE_ID_PRO_ANNUAL: ${STRIPE_PRICE_ID_PRO_ANNUAL:-}
-      UPLOADS_DIR: /data/uploads
-      S3_ENDPOINT: ${S3_ENDPOINT:-}
-      S3_REGION: ${S3_REGION:-}
-      S3_BUCKET: ${S3_BUCKET:-}
-      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
-      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
-      S3_PUBLIC_URL_PREFIX: ${S3_PUBLIC_URL_PREFIX:-}
-      SLOW_REQUEST_LOG_MS: ${SLOW_REQUEST_LOG_MS:-2500}
-      USER_DISPLAY_CACHE_TTL_MS: ${USER_DISPLAY_CACHE_TTL_MS:-60000}
-      METRICS_ENABLED: ${METRICS_ENABLED:-true}
-      METRICS_TOKEN: ${METRICS_TOKEN:-}
-      REALTIME_EMIT_METRICS_ENABLED: ${REALTIME_EMIT_METRICS_ENABLED:-false}
-      REALTIME_EMIT_METRICS_SAMPLE_RATE: ${REALTIME_EMIT_METRICS_SAMPLE_RATE:-0.01}
-      REALTIME_EMIT_METRICS_MIN_BYTES: ${REALTIME_EMIT_METRICS_MIN_BYTES:-0}
+      # Recipient for the Monday 07:00 UTC system recap (also seeds the first admin account).
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_WEB_ORIGIN: ${ADMIN_WEB_ORIGIN:-http://localhost:4300}
       REALTIME_OUTBOX_POLL_MS: ${REALTIME_OUTBOX_POLL_MS:-1000}
       REALTIME_OUTBOX_RETENTION_DAYS: ${REALTIME_OUTBOX_RETENTION_DAYS:-30}
-      OPS_ALERTS_ENABLED: ${OPS_ALERTS_ENABLED:-true}
-      OPS_ALERT_THROTTLE_MS: ${OPS_ALERT_THROTTLE_MS:-300000}
-      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
-      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
-      GITHUB_APP_SLUG: ${GITHUB_APP_SLUG:-}
-      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
-      TRELLO_API_KEY: ${TRELLO_API_KEY:-}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
-      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Kanera}
-      SMTP_IDENTITY_DOMAIN: ${SMTP_IDENTITY_DOMAIN:-}
-      INTERNAL_NOTIFICATION_EMAILS: ${INTERNAL_NOTIFICATION_EMAILS:-}
       # Retention windows for the daily cleanup sweeps the worker owns (bounds otherwise-unbounded
       # tables). Defaults match apps/api/src/env.ts; override only to tune growth/compliance tradeoffs.
       OUTBOX_STUCK_RETENTION_DAYS: ${OUTBOX_STUCK_RETENTION_DAYS:-30}
@@ -315,7 +260,6 @@ services:
       NOTIFICATION_READ_RETENTION_DAYS: ${NOTIFICATION_READ_RETENTION_DAYS:-90}
       NOTIFICATION_MAX_RETENTION_DAYS: ${NOTIFICATION_MAX_RETENTION_DAYS:-365}
       AUTH_TOKEN_RETENTION_DAYS: ${AUTH_TOKEN_RETENTION_DAYS:-30}
-      SUPPORT_SESSION_TTL_MINUTES: ${SUPPORT_SESSION_TTL_MINUTES:-60}
     volumes:
       - kanera_uploads:/data/uploads
     depends_on:
@@ -341,9 +285,10 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+      pull: true
     command: ["node", "--import", "tsx", "src/public-api-index.ts"]
     environment:
-      NODE_ENV: production
+      <<: *app-env
       API_PORT: 3000
       PUBLIC_API_PORT: 3001
       PUBLIC_API_OAUTH_ISSUER: ${PUBLIC_API_OAUTH_ISSUER:-http://localhost:3001}
@@ -355,84 +300,8 @@ services:
       PUBLIC_API_UPLOAD_RATE_LIMIT_PER_MINUTE: ${PUBLIC_API_UPLOAD_RATE_LIMIT_PER_MINUTE:-30}
       PUBLIC_API_RATE_LIMIT_WINDOW_MS: ${PUBLIC_API_RATE_LIMIT_WINDOW_MS:-60000}
       PUBLIC_API_TRUST_PROXY: ${PUBLIC_API_TRUST_PROXY:-false}
-      DATABASE_URL: postgres://kanera:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/kanera
-      REDIS_URL: redis://valkey:6379/0
-      DATABASE_SSL: ${DATABASE_SSL:-false}
       # Each public-api process keeps its own DB pool; size it like the app api. See DEPLOY.md.
-      NODE_OPTIONS: ${NODE_OPTIONS:-}
-      UV_THREADPOOL_SIZE: ${UV_THREADPOOL_SIZE:-16}
       PG_POOL_MAX: ${PG_POOL_MAX:-20}
-      PG_IDLE_TIMEOUT_MS: ${PG_IDLE_TIMEOUT_MS:-30000}
-      PG_CONNECTION_TIMEOUT_MS: ${PG_CONNECTION_TIMEOUT_MS:-5000}
-      PG_STATEMENT_TIMEOUT_MS: ${PG_STATEMENT_TIMEOUT_MS:-30000}
-      SLOW_QUERY_LOG_MS: ${SLOW_QUERY_LOG_MS:-250}
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
-      MCP_INTERNAL_SECRET: ${MCP_INTERNAL_SECRET:?set MCP_INTERNAL_SECRET in .env}
-      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?set MFA_ENCRYPTION_KEY in .env}
-      MEDIA_SIGNING_SECRET: ${MEDIA_SIGNING_SECRET:?set MEDIA_SIGNING_SECRET in .env}
-      SECRETS_ENCRYPTION_KEY: ${SECRETS_ENCRYPTION_KEY:-}
-      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-5m}
-      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-10}
-      API_PUBLIC_URL: ${API_PUBLIC_URL:-${WEB_ORIGIN}}
-      WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN in .env}
-      COOKIE_DOMAIN: ${COOKIE_DOMAIN:?set COOKIE_DOMAIN in .env}
-      COOKIE_SECURE: ${COOKIE_SECURE:?set COOKIE_SECURE in .env}
-      KANERA_ENVIRONMENT: ${KANERA_ENVIRONMENT:-production}
-      KANERA_DEPLOYMENT_MODE: ${KANERA_DEPLOYMENT_MODE:-self_hosted}
-      KANERA_HOSTED_MODE_TOKEN: ${KANERA_HOSTED_MODE_TOKEN:-}
-      KANERA_ALLOW_PRIVATE_NOTIFICATION_DESTINATIONS: ${KANERA_ALLOW_PRIVATE_NOTIFICATION_DESTINATIONS:-false}
-      SIGNUPS_ENABLED: ${SIGNUPS_ENABLED:-true}
-      EMAIL_VERIFICATION_ENABLED: ${EMAIL_VERIFICATION_ENABLED:-false}
-      CLOUDFLARE_TURNSTILE_SITE_KEY: ${CLOUDFLARE_TURNSTILE_SITE_KEY:-}
-      CLOUDFLARE_TURNSTILE_SECRET_KEY: ${CLOUDFLARE_TURNSTILE_SECRET_KEY:-}
-      ATTACHMENT_MAX_BYTES: ${ATTACHMENT_MAX_BYTES:-104857600}
-      HOSTED_FREE_ATTACHMENT_MAX_BYTES: ${HOSTED_FREE_ATTACHMENT_MAX_BYTES:-5242880}
-      HOSTED_FREE_STORAGE_QUOTA_BYTES: ${HOSTED_FREE_STORAGE_QUOTA_BYTES:-262144000}
-      HOSTED_PAID_STORAGE_QUOTA_BYTES: ${HOSTED_PAID_STORAGE_QUOTA_BYTES:-214748364800}
-      HOSTED_PRO_PRICE_MONTHLY_CENTS: ${HOSTED_PRO_PRICE_MONTHLY_CENTS:-500}
-      HOSTED_PRO_PRICE_ANNUAL_CENTS: ${HOSTED_PRO_PRICE_ANNUAL_CENTS:-4900}
-      HOSTED_FREE_MAX_BOARDS: ${HOSTED_FREE_MAX_BOARDS:-3}
-      HOSTED_FREE_MAX_ORG_MEMBERS: ${HOSTED_FREE_MAX_ORG_MEMBERS:-4}
-      HOSTED_FREE_MAX_ENABLED_AUTOMATIONS: ${HOSTED_FREE_MAX_ENABLED_AUTOMATIONS:-3}
-      HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY: ${HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY:-100}
-      HOSTED_FREE_MAX_GUEST_BOARDS: ${HOSTED_FREE_MAX_GUEST_BOARDS:-1}
-      HOSTED_TRIAL_DAYS: ${HOSTED_TRIAL_DAYS:-30}
-      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
-      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
-      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
-      STRIPE_PRICE_ID_PRO_MONTHLY: ${STRIPE_PRICE_ID_PRO_MONTHLY:-}
-      STRIPE_PRICE_ID_PRO_ANNUAL: ${STRIPE_PRICE_ID_PRO_ANNUAL:-}
-      UPLOADS_DIR: /data/uploads
-      S3_ENDPOINT: ${S3_ENDPOINT:-}
-      S3_REGION: ${S3_REGION:-}
-      S3_BUCKET: ${S3_BUCKET:-}
-      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
-      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
-      S3_PUBLIC_URL_PREFIX: ${S3_PUBLIC_URL_PREFIX:-}
-      SLOW_REQUEST_LOG_MS: ${SLOW_REQUEST_LOG_MS:-2500}
-      USER_DISPLAY_CACHE_TTL_MS: ${USER_DISPLAY_CACHE_TTL_MS:-60000}
-      METRICS_ENABLED: ${METRICS_ENABLED:-true}
-      METRICS_TOKEN: ${METRICS_TOKEN:-}
-      REALTIME_EMIT_METRICS_ENABLED: ${REALTIME_EMIT_METRICS_ENABLED:-false}
-      REALTIME_EMIT_METRICS_SAMPLE_RATE: ${REALTIME_EMIT_METRICS_SAMPLE_RATE:-0.01}
-      REALTIME_EMIT_METRICS_MIN_BYTES: ${REALTIME_EMIT_METRICS_MIN_BYTES:-0}
-      OPS_ALERTS_ENABLED: ${OPS_ALERTS_ENABLED:-true}
-      OPS_ALERT_THROTTLE_MS: ${OPS_ALERT_THROTTLE_MS:-300000}
-      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
-      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
-      GITHUB_APP_SLUG: ${GITHUB_APP_SLUG:-}
-      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
-      TRELLO_API_KEY: ${TRELLO_API_KEY:-}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
-      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-Kanera}
-      SMTP_IDENTITY_DOMAIN: ${SMTP_IDENTITY_DOMAIN:-}
-      INTERNAL_NOTIFICATION_EMAILS: ${INTERNAL_NOTIFICATION_EMAILS:-}
-      SUPPORT_SESSION_TTL_MINUTES: ${SUPPORT_SESSION_TTL_MINUTES:-60}
     volumes:
       - kanera_uploads:/data/uploads
     depends_on:
@@ -463,6 +332,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+      pull: true
     command: ["node", "--import", "tsx", "src/admin-index.ts"]
     environment:
       NODE_ENV: production
@@ -543,6 +413,7 @@ services:
     build:
       context: .
       dockerfile: apps/mcp/Dockerfile
+      pull: true
     environment:
       NODE_ENV: production
       KANERA_PUBLIC_API_URL: http://public-api:3001
@@ -582,6 +453,7 @@ services:
     build:
       context: .
       dockerfile: docker/db-backup/Dockerfile
+      pull: true
     environment:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL:-postgres://kanera:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/kanera}
@@ -604,6 +476,7 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      pull: true
     depends_on:
       api:
         condition: service_healthy
@@ -624,6 +497,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+      pull: true
     command: ["node", "--import", "tsx", "src/scripts/send-deployment-ready.ts"]
     environment:
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
@@ -650,7 +524,7 @@ services:
   # ---------------------------------------------------------------------------
 
   prometheus:
-    image: prom/prometheus:v3.12.0
+    image: prom/prometheus:v3.14.0
     restart: unless-stopped
     profiles: ["monitoring"]
     # Runs as root so it can both write the scrape token file and own the TSDB volume without a
@@ -694,7 +568,7 @@ services:
       - api
 
   grafana:
-    image: grafana/grafana:13.0.2
+    image: grafana/grafana:13.2.0
     restart: unless-stopped
     profiles: ["monitoring"]
     entrypoint:
@@ -742,7 +616,7 @@ services:
       - loki
 
   loki:
-    image: grafana/loki:3.7.3
+    image: grafana/loki:3.7.6
     restart: unless-stopped
     profiles: ["monitoring"]
     command: ["-config.file=/etc/loki/local-config.yaml"]
@@ -753,7 +627,7 @@ services:
       - "3100"
 
   alloy:
-    image: grafana/alloy:v1.17.0
+    image: grafana/alloy:v1.18.1
     restart: unless-stopped
     profiles: ["monitoring"]
     command:
@@ -776,26 +650,72 @@ services:
     depends_on:
       - loki
 
-  postgres-exporter:
-    image: quay.io/prometheuscommunity/postgres-exporter:v0.19.1
-    restart: unless-stopped
+  # Creates the least-privilege `kanera_exporter` role before the exporter tries to log in. Follows
+  # the same one-shot pattern as `migrate`: the SQL is idempotent, so this runs to completion on
+  # every monitoring deploy and is a no-op once the role exists. Provisioning it here rather than in
+  # docker/postgres/init.sql matters because init.sql only runs when the data directory is first
+  # created — an existing deployment enabling monitoring would never get the role.
+  postgres-exporter-init:
+    image: postgres:18.6-alpine
+    restart: "no"
     profiles: ["monitoring"]
     environment:
-      DATA_SOURCE_NAME: ${POSTGRES_EXPORTER_DSN:-postgresql://kanera:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/kanera?sslmode=disable}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      # Delivered as a connection-time GUC rather than a psql variable so the exporter password is
+      # never part of a SQL statement — see the comment in exporter-role.sql for why that matters.
+      PGOPTIONS: -c kanera.exporter_password=${POSTGRES_EXPORTER_PASSWORD:-${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}}
+    command:
+      - "psql"
+      - "--host=postgres"
+      - "--username=kanera"
+      - "--dbname=kanera"
+      - "--no-password"
+      - "--set=ON_ERROR_STOP=1"
+      - "--file=/sql/exporter-role.sql"
+    volumes:
+      - ./docker/monitoring/exporter-role.sql:/sql/exporter-role.sql:ro,Z
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
+    restart: unless-stopped
+    profiles: ["monitoring"]
+    # pg_stat_statements comes from the exporter's built-in collector. The older
+    # PG_EXPORTER_EXTEND_QUERY_PATH mechanism is deprecated upstream and logs a warning on every
+    # start; it will be removed in some future 0.x release, and this exporter floats no tag to
+    # cushion that. Metric names differ from the custom-query version
+    # (calls -> calls_total, total_exec_time_seconds -> seconds_total) and the query text moves to a
+    # separate pg_stat_statements_query_id series keyed by queryid — the query-performance dashboard
+    # joins the two on that label.
+    command:
+      - "--collector.stat_statements"
+      # Without include_query the exporter emits queryids only, which makes the dashboard unreadable.
+      - "--collector.stat_statements.include_query"
+      # Matches the truncation the previous custom query applied via left(query, 200).
+      - "--collector.stat_statements.query_length=200"
+      # Bounds series cardinality: one queryid can produce six metric families. The old custom query
+      # had no limit at all and exported every statement Postgres had ever seen.
+      - "--collector.stat_statements.limit=250"
+      # Drops the exporter's own pg_stat_* scrape queries, which otherwise dominate the slowest-query
+      # panels. See docker/monitoring/exporter-role.sql for why this must filter by role, not text.
+      - "--collector.stat_statements.exclude_users=kanera_exporter"
+    environment:
+      DATA_SOURCE_NAME: ${POSTGRES_EXPORTER_DSN:-postgresql://kanera_exporter:${POSTGRES_EXPORTER_PASSWORD:-${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}}@postgres:5432/kanera?sslmode=disable}
       # Hide Postgres system databases from dashboards — only the app database is relevant.
       PG_EXPORTER_EXCLUDE_DATABASES: template0,template1,postgres
-      PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yml
-    volumes:
-      - ./docker/monitoring/postgres-queries.yml:/etc/postgres-exporter/queries.yml:ro,Z
     expose:
       - "9187"
     depends_on:
       postgres:
         condition: service_healthy
+      postgres-exporter-init:
+        condition: service_completed_successfully
 
   cadvisor:
     # cAdvisor releases moved from gcr.io to GHCR starting with v0.53.0.
-    image: ghcr.io/google/cadvisor:v0.60.3
+    image: ghcr.io/google/cadvisor:v0.60.5
     restart: unless-stopped
     profiles: ["monitoring"]
     # cAdvisor needs broad read access to the host's cgroup/container state for per-container CPU/mem.
@@ -816,7 +736,7 @@ services:
       - "8080"
 
   node-exporter:
-    image: prom/node-exporter:v1.11.1
+    image: prom/node-exporter:v1.12.1
     restart: unless-stopped
     profiles: ["monitoring"]
     command:
@@ -828,7 +748,7 @@ services:
       - "9100"
 
   redis-exporter:
-    image: oliver006/redis_exporter:v1.86.0
+    image: oliver006/redis_exporter:v1.89.0
     restart: unless-stopped
     profiles: ["monitoring"]
     environment:

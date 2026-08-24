@@ -41,4 +41,3 @@ export const boards = pgTable(
 );
 
 export type Board = typeof boards.$inferSelect;
-export type NewBoard = typeof boards.$inferInsert;

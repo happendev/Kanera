@@ -42,4 +42,3 @@ export const directRealtimeOutbox = pgTable(
 );
 
 export type DirectRealtimeOutbox = typeof directRealtimeOutbox.$inferSelect;
-export type NewDirectRealtimeOutbox = typeof directRealtimeOutbox.$inferInsert;

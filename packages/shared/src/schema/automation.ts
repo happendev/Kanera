@@ -78,6 +78,14 @@ export const automations = pgTable(
     index("automations_active_workspace_position_idx")
       .on(t.workspaceId, t.position)
       .where(sql`${t.archivedAt} is null`),
+    // Every card create and every card move looks up the automations for one list. The
+    // workspace+position indexes above can only narrow to the workspace, leaving trigger_type and
+    // trigger_list_id as a heap filter over all of its automations — measured at 400 automations in
+    // one workspace, that discarded 382 of 402 rows per card move. Position is the trailing column
+    // so the ordered read still comes from the index.
+    index("automations_trigger_list_idx")
+      .on(t.workspaceId, t.triggerType, t.triggerListId, t.position)
+      .where(sql`${t.archivedAt} is null`),
   ],
 );
 
@@ -153,10 +161,7 @@ export const automationRuns = pgTable(
 );
 
 export type Automation = typeof automations.$inferSelect;
-export type NewAutomation = typeof automations.$inferInsert;
 export type AutomationAction = typeof automationActions.$inferSelect;
-export type NewAutomationAction = typeof automationActions.$inferInsert;
 export type AutomationDueDateRun = typeof automationDueDateRuns.$inferSelect;
 export type AutomationRunStats = typeof automationRunStats.$inferSelect;
-export type NewAutomationRunStats = typeof automationRunStats.$inferInsert;
 export type AutomationRun = typeof automationRuns.$inferSelect;

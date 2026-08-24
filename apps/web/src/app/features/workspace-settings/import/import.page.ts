@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/core";
+import { DocsLinkComponent } from "../../../shared/docs-link.component";
 import { SegmentedComponent, type SegmentedOption } from "../../../shared/segmented.component";
 import { TrelloImportPage } from "../../import/trello-import.page";
 import { WorkspaceSettingsPage } from "../workspace-settings.page";
@@ -8,7 +9,7 @@ type ImportSource = "trello" | "kanera";
 @Component({
   selector: "k-workspace-settings-import",
   standalone: true,
-  imports: [SegmentedComponent, TrelloImportPage],
+  imports: [DocsLinkComponent, SegmentedComponent, TrelloImportPage],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./import.page.html",
   styleUrl: "./import.page.scss",

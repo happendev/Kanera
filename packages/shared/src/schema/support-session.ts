@@ -45,4 +45,3 @@ export const supportSessions = pgTable(
 );
 
 export type SupportSession = typeof supportSessions.$inferSelect;
-export type NewSupportSession = typeof supportSessions.$inferInsert;

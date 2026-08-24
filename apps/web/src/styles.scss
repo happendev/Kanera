@@ -871,7 +871,16 @@ button.destructive {
   color: #fff;
 
   &:hover:not(:disabled) {
+    background: var(--danger);
     opacity: 0.9;
+  }
+
+  &:active:not(:disabled) {
+    background: var(--danger);
+  }
+
+  &:focus-visible {
+    box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--danger);
   }
 }
 
@@ -899,6 +908,15 @@ button.icon {
   &.danger:hover:not(:disabled) {
     background: color-mix(in srgb, var(--danger) 12%, transparent);
     color: var(--danger);
+  }
+
+  &.danger:active:not(:disabled) {
+    background: color-mix(in srgb, var(--danger) 18%, transparent);
+    color: var(--danger);
+  }
+
+  &.danger:focus-visible {
+    box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--danger);
   }
 }
 

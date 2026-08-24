@@ -3,6 +3,7 @@ import { SERVER_EVENTS } from "@kanera/shared/events";
 import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
 import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
 import { DEFAULT_WORKSPACE_LIST_NAMES } from "@kanera/shared/default-workspace-lists";
+import { DUE_DATE_SLOT_RANK, type CardDueDateSlot } from "@kanera/shared/due-date-slots";
 import { automationActions, automations, boardGroups, boardInvitationGrants, boardInvitations, boardMembers, boardMirrors, boards, cardAssignees, cardLabelAssignments, cardLabels, cards, checklistTemplateItems, checklistTemplates, clientGuestSeats, clientMembers, clients, customFieldOptions, customFields, lists, planActions, standaloneBoardGroups, users, workspaceMembers, workspaces, type AutomationActionConfig, type Workspace } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -91,6 +92,11 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           icon: workspaces.icon,
           accentColor: workspaces.accentColor,
           completedCardsActiveDays: workspaces.completedCardsActiveDays,
+          inactiveCardsDays: workspaces.inactiveCardsDays,
+          boardHealthEnabled: workspaces.boardHealthEnabled,
+          boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
+          boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
+          boardHealthInactiveEnabled: workspaces.boardHealthInactiveEnabled,
           boardLinkingEnabled: workspaces.boardLinkingEnabled,
           createdAt: workspaces.createdAt,
           updatedAt: workspaces.updatedAt,
@@ -138,6 +144,11 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           icon: workspaces.icon,
           accentColor: workspaces.accentColor,
           completedCardsActiveDays: workspaces.completedCardsActiveDays,
+          inactiveCardsDays: workspaces.inactiveCardsDays,
+          boardHealthEnabled: workspaces.boardHealthEnabled,
+          boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
+          boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
+          boardHealthInactiveEnabled: workspaces.boardHealthInactiveEnabled,
           boardLinkingEnabled: workspaces.boardLinkingEnabled,
           createdAt: workspaces.createdAt,
           updatedAt: workspaces.updatedAt,
@@ -155,12 +166,17 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           name: workspaces.name,
           cardKeyPrefix: workspaces.cardKeyPrefix,
           kind: workspaces.kind,
-         icon: workspaces.icon,
-         accentColor: workspaces.accentColor,
+          icon: workspaces.icon,
+          accentColor: workspaces.accentColor,
           completedCardsActiveDays: workspaces.completedCardsActiveDays,
+          inactiveCardsDays: workspaces.inactiveCardsDays,
+          boardHealthEnabled: workspaces.boardHealthEnabled,
+          boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
+          boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
+          boardHealthInactiveEnabled: workspaces.boardHealthInactiveEnabled,
           boardLinkingEnabled: workspaces.boardLinkingEnabled,
-         createdAt: workspaces.createdAt,
-         updatedAt: workspaces.updatedAt,
+          createdAt: workspaces.createdAt,
+          updatedAt: workspaces.updatedAt,
           role: sql<"admin">`'admin'::text`.as("role"),
         })
         .from(workspaces)
@@ -178,6 +194,11 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         icon: workspaces.icon,
         accentColor: workspaces.accentColor,
         completedCardsActiveDays: workspaces.completedCardsActiveDays,
+        inactiveCardsDays: workspaces.inactiveCardsDays,
+        boardHealthEnabled: workspaces.boardHealthEnabled,
+        boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
+        boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
+        boardHealthInactiveEnabled: workspaces.boardHealthInactiveEnabled,
         boardLinkingEnabled: workspaces.boardLinkingEnabled,
         createdAt: workspaces.createdAt,
         updatedAt: workspaces.updatedAt,
@@ -203,6 +224,16 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         workspaceName,
         requestedPrefix: body.cardKeyPrefix,
       });
+      const [organisationDefaults] = await tx
+        .select({
+          completedCardsActiveDays: clients.defaultCompletedCardsActiveDays,
+          inactiveCardsDays: clients.defaultInactiveCardsDays,
+          boardHealthEnabled: clients.defaultBoardHealthEnabled,
+        })
+        .from(clients)
+        .where(eq(clients.id, req.auth.cid))
+        .limit(1);
+      if (!organisationDefaults) throw notFound("organisation not found");
       const [workspace] = await tx
         .insert(workspaces)
         .values({
@@ -215,6 +246,11 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           // callers cannot create a hidden workspace whose icon or color disagrees with its board.
           icon: body.kind === "board" ? body.initialBoard!.icon ?? null : body.icon ?? null,
           accentColor: body.kind === "board" ? body.initialBoard!.iconColor ?? null : null,
+          // Defaults are copied at creation so each workspace can diverge later without an
+          // organisation-level change silently rewriting existing board behaviour.
+          completedCardsActiveDays: organisationDefaults.completedCardsActiveDays,
+          inactiveCardsDays: organisationDefaults.inactiveCardsDays,
+          boardHealthEnabled: organisationDefaults.boardHealthEnabled,
         })
         .returning();
       const [member] = await tx.insert(workspaceMembers).values({
@@ -614,6 +650,11 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           ...(body.icon !== undefined && { icon: body.icon }),
           ...(body.accentColor !== undefined && { accentColor: body.accentColor }),
           ...(body.completedCardsActiveDays !== undefined && { completedCardsActiveDays: body.completedCardsActiveDays }),
+          ...(body.inactiveCardsDays !== undefined && { inactiveCardsDays: body.inactiveCardsDays }),
+          ...(body.boardHealthEnabled !== undefined && { boardHealthEnabled: body.boardHealthEnabled }),
+          ...(body.boardHealthOverdueEnabled !== undefined && { boardHealthOverdueEnabled: body.boardHealthOverdueEnabled }),
+          ...(body.boardHealthUnassignedEnabled !== undefined && { boardHealthUnassignedEnabled: body.boardHealthUnassignedEnabled }),
+          ...(body.boardHealthInactiveEnabled !== undefined && { boardHealthInactiveEnabled: body.boardHealthInactiveEnabled }),
           ...(body.boardLinkingEnabled !== undefined && { boardLinkingEnabled: body.boardLinkingEnabled }),
           updatedAt: new Date(),
         })
@@ -1828,7 +1869,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       boardName: string;
       boardIcon: string | null;
       dueDateLocalDate: string;
-      dueDateSlot: "anyTime" | "morning" | "afternoon" | "endOfWorkDay" | null;
+      dueDateSlot: CardDueDateSlot | null;
       dueDateTimezone: string | null;
     };
     // Home's due projection uses the same canonical active-board resolver as global work and
@@ -1897,10 +1938,9 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       overdueChecklistItems = assignedChecklistItems.filter((item) => isDueDateOverdue(item)).length;
 
       dueSoon = [...cardDueSoon, ...checklistDueSoon];
-      const slotRank = { morning: 0, afternoon: 1, endOfWorkDay: 2, anyTime: 3 } as const;
       dueSoon.sort((a, b) =>
         a.dueDateLocalDate.localeCompare(b.dueDateLocalDate) ||
-        (slotRank[a.dueDateSlot ?? "anyTime"] - slotRank[b.dueDateSlot ?? "anyTime"]) ||
+        (DUE_DATE_SLOT_RANK[a.dueDateSlot ?? "anyTime"] - DUE_DATE_SLOT_RANK[b.dueDateSlot ?? "anyTime"]) ||
         a.boardName.localeCompare(b.boardName) ||
         a.title.localeCompare(b.title)
       );

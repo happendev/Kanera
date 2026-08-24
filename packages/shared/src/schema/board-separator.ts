@@ -34,4 +34,3 @@ export const boardSeparators = pgTable(
 );
 
 export type BoardSeparator = typeof boardSeparators.$inferSelect;
-export type NewBoardSeparator = typeof boardSeparators.$inferInsert;

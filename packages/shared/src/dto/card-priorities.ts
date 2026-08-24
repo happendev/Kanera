@@ -73,6 +73,14 @@ export type WorkPriorityContext = {
   boardIcon: string | null;
   boardIconColor: ColorToken | null;
   listName: string;
+  /**
+   * The list's own icon and colour, carried so a queue row can show *state* the way the notifications
+   * drawer shows it. "Which list" is the status of a queued card, and as plain grey text at the tail
+   * of a truncated board·list trail it was both the least legible and the first thing to be
+   * ellipsised. Null on an optimistic client row until the server's response lands.
+   */
+  listIcon: string | null;
+  listColor: ColorToken | null;
   workspaceName: string;
   /**
    * Ordered by workspace label position, so a card's chips read in the same order here as on its

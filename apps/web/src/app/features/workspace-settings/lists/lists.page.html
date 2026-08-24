@@ -1,3 +1,4 @@
+      <k-docs-link class="spaced" path="lists" label="Learn more about lists" />
       <form class="board-form single-line-capture" (submit)="settings.addList($event)">
         <k-icon-picker [value]="settings.newListIcon() ?? 'list'" (valueChange)="settings.newListIcon.set($event)" />
         <k-color-picker [value]="settings.newListColor()" (valueChange)="settings.newListColor.set($event)" />
@@ -21,7 +22,7 @@
             <div class="row-actions">
               <k-icon-picker [value]="list.icon ?? 'list'" (valueChange)="settings.updateListStyle(list.id, { icon: $event })" />
               <k-color-picker [value]="$any(list.color)" (valueChange)="settings.updateListStyle(list.id, { color: $event })" />
-              <button class="ghost icon" (click)="settings.archiveList(list.id)" [disabled]="!!settings.deletionPreviewKey()" aria-label="Delete list" kTooltip="Delete list">
+              <button class="ghost icon danger" (click)="settings.archiveList(list.id)" [disabled]="!!settings.deletionPreviewKey()" aria-label="Delete list" kTooltip="Delete list">
                 <i [class]="settings.deletionPreviewKey() === 'list:' + list.id ? 'ti ti-loader-2 spin' : 'ti ti-trash'"></i>
               </button>
             </div>

@@ -19,22 +19,12 @@ import { hashOpaqueToken } from "./lib/tokens.js";
 import { buildPublicApiServer } from "./public-api-server.js";
 import { buildIntegrationServer, testUploadsDir } from "./test/integration.js";
 import { insertTestUsers } from "./test/user-fixtures.js";
+import { signupOwner } from "./test/api-fixtures.js";
 
 async function createWorkspaceApiKey() {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Rate Limit Co",
-      email: `rate-limit-${randomUUID()}@example.com`,
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken } = signup.json<{ accessToken: string }>();
+  const { accessToken } = await signupOwner(app, { orgName: "Rate Limit Co", email: `rate-limit-${randomUUID()}@example.com`, displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -214,18 +204,7 @@ void test("public board reads reject unbounded card hydration", async () => {
 // cannot stop a read-scoped key — the dedicated guard in assertPriorityWriteAccess must.
 void test("public API priority queues support the full lifecycle and read-scoped keys cannot mutate them", async () => {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Priorities Co",
-      email: `priorities-${randomUUID()}@example.com`,
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Priorities Co", email: `priorities-${randomUUID()}@example.com`, displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -349,18 +328,7 @@ void test("public API priority queues support the full lifecycle and read-scoped
 
 void test("public API workspace key scopes isolate teammate queues to the pinned admin workspace", async () => {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Priority Scope Co",
-      email: `priority-scope-${randomUUID()}@example.com`,
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Priority Scope Co", email: `priority-scope-${randomUUID()}@example.com`, displayName: "Owner" });
 
   const createWorkspace = async (name: string) => {
     const response = await app.inject({

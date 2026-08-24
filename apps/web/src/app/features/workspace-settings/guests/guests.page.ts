@@ -1,12 +1,13 @@
 import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
 import { AvatarComponent } from "../../../shared/avatar.component";
+import { DocsLinkComponent } from "../../../shared/docs-link.component";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { WorkspaceSettingsPage } from "../workspace-settings.page";
 
 @Component({
   selector: "k-workspace-settings-guests",
   standalone: true,
-  imports: [AvatarComponent, TooltipDirective],
+  imports: [AvatarComponent, DocsLinkComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./guests.page.html",
   styleUrl: "./guests.page.scss",

@@ -2,13 +2,14 @@ import { CdkDrag, CdkDragHandle, CdkDropList } from "@angular/cdk/drag-drop";
 import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
 import { AutofocusDirective } from "../../../shared/autofocus.directive";
 import { ColorPickerComponent } from "../../../shared/color-picker.component";
+import { DocsLinkComponent } from "../../../shared/docs-link.component";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { WorkspaceSettingsPage } from "../workspace-settings.page";
 
 @Component({
   selector: "k-workspace-settings-labels",
   standalone: true,
-  imports: [CdkDropList, CdkDrag, CdkDragHandle, ColorPickerComponent, AutofocusDirective, TooltipDirective],
+  imports: [AutofocusDirective, CdkDrag, CdkDragHandle, CdkDropList, ColorPickerComponent, DocsLinkComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./labels.page.html",
   styleUrl: "./labels.page.scss",

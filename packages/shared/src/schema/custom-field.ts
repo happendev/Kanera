@@ -43,4 +43,3 @@ export const customFields = pgTable(
 );
 
 export type CustomField = typeof customFields.$inferSelect;
-export type NewCustomField = typeof customFields.$inferInsert;

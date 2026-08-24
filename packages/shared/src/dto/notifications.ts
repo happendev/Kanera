@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { ianaTimeZone } from "./_time-zone.js";
 import type { ActivityEvent } from "../schema/activity-event.js";
 import type { Notification, NotificationReason } from "../schema/notification.js";
+import type { CardDueDateSlot } from "../lib/due-date-slots.js";
 
 export const NOTIFICATION_SETTING_TYPES = [
   "cardAssigned",
@@ -157,14 +159,7 @@ export const notificationGroupCountsQuery = listNotificationsQuery
   .omit({ cursor: true, limit: true })
   .extend({
     groupBy: notificationGroupBy.default("day"),
-    timeZone: z.string().min(1).max(100).default("UTC").refine((value) => {
-      try {
-        new Intl.DateTimeFormat("en", { timeZone: value }).format();
-        return true;
-      } catch {
-        return false;
-      }
-    }, "Invalid IANA time zone"),
+    timeZone: ianaTimeZone,
   });
 export type NotificationGroupCountsQuery = z.infer<typeof notificationGroupCountsQuery>;
 
@@ -203,11 +198,11 @@ export type NotificationRow = Notification & {
   cardCompletedAt: Date | null;
   cardArchivedAt: Date | null;
   cardDueDateLocalDate: string | null;
-  cardDueDateSlot: "anyTime" | "morning" | "afternoon" | "endOfWorkDay" | null;
+  cardDueDateSlot: CardDueDateSlot | null;
   cardDueDateTimezone: string | null;
   checklistItemText: string | null;
   checklistItemDueDateLocalDate: string | null;
-  checklistItemDueDateSlot: "anyTime" | "morning" | "afternoon" | "endOfWorkDay" | null;
+  checklistItemDueDateSlot: CardDueDateSlot | null;
   checklistItemDueDateTimezone: string | null;
   viewerRole: "editor" | "observer" | null;
   listName: string | null;

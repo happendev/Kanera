@@ -20,4 +20,3 @@ export const boardGroups = pgTable(
 );
 
 export type BoardGroup = typeof boardGroups.$inferSelect;
-export type NewBoardGroup = typeof boardGroups.$inferInsert;

@@ -701,9 +701,11 @@ export class NotificationsService {
   }
 
   private addWatcher(rows: WatcherUser[]): WatcherUser[] {
-    const userId = this.currentUserId();
-    if (!userId || rows.some((watcher) => watcher.userId === userId)) return rows;
-    const next = [...rows, { userId, displayName: "Me", avatarUrl: null }];
+    const user = this.auth.user();
+    if (!user || rows.some((watcher) => watcher.userId === user.id)) return rows;
+    // Keep the open watcher popover faithful to the current profile after a toggle; the API watcher
+    // list is not fetched again until the menu is reopened.
+    const next = [...rows, { userId: user.id, displayName: user.displayName, avatarUrl: user.avatarUrl }];
     next.sort((a, b) => a.displayName.localeCompare(b.displayName));
     return next;
   }

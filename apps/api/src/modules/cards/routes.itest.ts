@@ -1,7 +1,7 @@
 import "../../test/setup.integration.js";
 import { insertTestNotifications } from "../../test/notification-fixtures.js";
 import { insertTestUsers } from "../../test/user-fixtures.js";
-import { ACTIVITY_ACTION, ACTIVITY_ENTITY_TYPE, NOTIFICATION_REASON, activityEvents, boardMembers, boards, boardWatchers, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardLabelAssignments, cardLabels, cardSummaryView, cards, cardAssignees, cardWatchers, checklistTemplateItems, checklistTemplates, comments, directRealtimeOutbox, eventOutbox, internalLinks, lists, notifications, workspaceMembers, workspaces, type ActivityAction } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, ACTIVITY_ENTITY_TYPE, NOTIFICATION_REASON, activityEvents, boardMembers, boards, boardWatchers, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cardSummaryView, cards, cardAssignees, customFields, cardWatchers, checklistTemplateItems, checklistTemplates, comments, directRealtimeOutbox, eventOutbox, internalLinks, lists, notifications, workspaceMembers, workspaces, type ActivityAction } from "@kanera/shared/schema";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -10,6 +10,7 @@ import { db, pool } from "../../db.js";
 import { queueNotificationFanout, waitForNotificationFanoutForTests } from "../../lib/notifications.js";
 import { buildPublicApiServer } from "../../public-api-server.js";
 import { buildIntegrationServer, testUploadsDir } from "../../test/integration.js";
+import { signupOwner } from "../../test/api-fixtures.js";
 
 async function waitForBoardOutboxEvents(boardId: string, eventTypes: string[]) {
   for (let attempt = 0; attempt < 20; attempt++) {
@@ -32,19 +33,7 @@ async function waitForBoardOutboxEvents(boardId: string, eventTypes: string[]) {
 
 async function seedChecklistTemplateApplyFixture(testName: string) {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: `Acme ${testName}`,
-      email: `owner-${testName}@example.com`,
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
-  const auth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: auth } = await signupOwner(app, { orgName: `Acme ${testName}`, email: `owner-${testName}@example.com`, displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -95,19 +84,7 @@ async function seedChecklistTemplateApplyFixture(testName: string) {
 
 async function seedDescriptionActivityPayloadFixture(testName: string) {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: `Acme ${testName}`,
-      email: `owner-${testName}@example.com`,
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
-  const auth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: auth } = await signupOwner(app, { orgName: `Acme ${testName}`, email: `owner-${testName}@example.com`, displayName: "Owner" });
   const workspaceCreated = await app.inject({
     method: "POST",
     url: "/workspaces",
@@ -140,19 +117,7 @@ async function seedDescriptionActivityPayloadFixture(testName: string) {
 
 async function seedChecklistCompletionFixture(testName: string) {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: `Acme ${testName}`,
-      email: `owner-${testName}@example.com`,
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
-  const ownerAuth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: ownerAuth } = await signupOwner(app, { orgName: `Acme ${testName}`, email: `owner-${testName}@example.com`, displayName: "Owner" });
   const workspaceCreated = await app.inject({
     method: "POST",
     url: "/workspaces",
@@ -689,18 +654,7 @@ void test("mixed card update activity stores description before and after markdo
 
 async function seedAssigneeActivityFixture(testName: string) {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: `Acme ${testName}`,
-      email: `owner-${testName}@example.com`,
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
+  const { accessToken, user } = await signupOwner(app, { orgName: `Acme ${testName}`, email: `owner-${testName}@example.com`, displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -762,19 +716,7 @@ async function seedAssigneeActivityFixture(testName: string) {
 
 void test("workspace members must be added to a board before they can be assigned", async () => {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme readded-private-assignee",
-      email: "owner-readded-private-assignee@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
-  const auth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: auth } = await signupOwner(app, { orgName: "Acme readded-private-assignee", email: "owner-readded-private-assignee@example.com", displayName: "Owner" });
   const workspaceCreated = await app.inject({
     method: "POST",
     url: "/workspaces",
@@ -840,19 +782,7 @@ void test("workspace members must be added to a board before they can be assigne
 
 void test("card creation is idempotent, assigns eligible users, and rejects unassignable users", async () => {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme create-assigned-card",
-      email: "owner-create-assigned-card@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
-  const auth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: auth } = await signupOwner(app, { orgName: "Acme create-assigned-card", email: "owner-create-assigned-card@example.com", displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -1078,19 +1008,7 @@ void test("different organisations can use the same workspace card prefix", asyn
 
 void test("cross-org board guests with editor access are assignable to cards and checklist items", async () => {
   const app = await buildIntegrationServer();
-  const ownerSignup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme guest assignment",
-      email: "owner-guest-assignment@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(ownerSignup.statusCode, 200);
-  const { accessToken, user: owner } = ownerSignup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
-  const ownerAuth = { authorization: `Bearer ${accessToken}` };
+  const { user: owner, auth: ownerAuth } = await signupOwner(app, { orgName: "Acme guest assignment", email: "owner-guest-assignment@example.com", displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -1117,32 +1035,10 @@ void test("cross-org board guests with editor access are assignable to cards and
   const [item] = await db.insert(cardChecklistItems).values({ checklistId: checklist.id, text: "Review", position: "1000.0000000000" }).returning();
   assert.ok(item);
 
-  const guestSignup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "External guest assignment",
-      email: "guest-assignment-editor@external.test",
-      password: "Abc12345",
-      displayName: "Guest Editor",
-    },
-  });
-  assert.equal(guestSignup.statusCode, 200);
-  const { user: guest } = guestSignup.json<{ user: { id: string; clientId: string } }>();
+  const { user: guest } = await signupOwner(app, { orgName: "External guest assignment", email: "guest-assignment-editor@external.test", displayName: "Guest Editor" });
   assert.notEqual(guest.clientId, owner.clientId);
 
-  const observerSignup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "External guest observer",
-      email: "guest-assignment-observer@external.test",
-      password: "Abc12345",
-      displayName: "Guest Observer",
-    },
-  });
-  assert.equal(observerSignup.statusCode, 200);
-  const { user: observer } = observerSignup.json<{ user: { id: string; clientId: string } }>();
+  const { user: observer } = await signupOwner(app, { orgName: "External guest observer", email: "guest-assignment-observer@external.test", displayName: "Guest Observer" });
   assert.notEqual(observer.clientId, owner.clientId);
 
   await db.insert(boardMembers).values([
@@ -1189,18 +1085,7 @@ void test("cross-org board guests with editor access are assignable to cards and
 
 async function seedLabelActivityFixture(testName: string) {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: `Acme ${testName}`,
-      email: `owner-${testName}@example.com`,
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
+  const { accessToken, user } = await signupOwner(app, { orgName: `Acme ${testName}`, email: `owner-${testName}@example.com`, displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -1256,18 +1141,7 @@ async function seedLabelActivityFixture(testName: string) {
 void test("public API card creation and edits do not auto-watch as the API key owner", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Public Cards",
-      email: "owner-public-cards@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Acme Public Cards", email: "owner-public-cards@example.com", displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -1367,19 +1241,7 @@ void test("public API card creation and edits do not auto-watch as the API key o
 void test("board watchers are notified when another user completes a card", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Completion Watchers",
-      email: "owner-completion-watchers@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
-  const ownerAuth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: ownerAuth } = await signupOwner(app, { orgName: "Acme Completion Watchers", email: "owner-completion-watchers@example.com", displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -1433,19 +1295,7 @@ void test("board watchers are notified when another user completes a card", asyn
 void test("description edits notify assignees but not card or board watchers", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Description Notifications",
-      email: "owner-description-notifications@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
-  const ownerAuth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: ownerAuth } = await signupOwner(app, { orgName: "Acme Description Notifications", email: "owner-description-notifications@example.com", displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -1515,19 +1365,7 @@ void test("description edits notify assignees but not card or board watchers", a
 void test("rapid card renames refresh one notification per recipient and undo removes them", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Title Notifications",
-      email: "owner-title-notifications@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
-  const ownerAuth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: ownerAuth } = await signupOwner(app, { orgName: "Acme Title Notifications", email: "owner-title-notifications@example.com", displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -1623,19 +1461,7 @@ void test("rapid card renames refresh one notification per recipient and undo re
 void test("checklist item text edits notify assignees but not card or board watchers", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Checklist Item Notifications",
-      email: "owner-checklist-item-notifications@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
-  const ownerAuth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: ownerAuth } = await signupOwner(app, { orgName: "Acme Checklist Item Notifications", email: "owner-checklist-item-notifications@example.com", displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -1715,19 +1541,7 @@ void test("checklist item text edits notify assignees but not card or board watc
 void test("label changes notify assignees but not card or board watchers", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Label Notifications",
-      email: "owner-label-notifications@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
-  const ownerAuth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: ownerAuth } = await signupOwner(app, { orgName: "Acme Label Notifications", email: "owner-label-notifications@example.com", displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -1800,19 +1614,7 @@ void test("label changes notify assignees but not card or board watchers", async
 void test("attachment additions notify assignees and watchers while other metadata activity remains assignee-only", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Metadata Notifications",
-      email: "owner-metadata-notifications@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
-  const ownerAuth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: ownerAuth } = await signupOwner(app, { orgName: "Acme Metadata Notifications", email: "owner-metadata-notifications@example.com", displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -1899,19 +1701,7 @@ void test("attachment additions notify assignees and watchers while other metada
 void test("assignee changes notify card and board watchers", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Assignee Watcher Notifications",
-      email: "owner-assignee-watcher-notifications@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
-  const ownerAuth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: ownerAuth } = await signupOwner(app, { orgName: "Acme Assignee Watcher Notifications", email: "owner-assignee-watcher-notifications@example.com", displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -1987,18 +1777,7 @@ void test("assignee changes notify card and board watchers", async () => {
 void test("cross-board card copy and move place the card at the top of the destination list", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Board Transfers",
-      email: "owner-board-transfers@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Acme Board Transfers", email: "owner-board-transfers@example.com", displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -2154,19 +1933,7 @@ void test("cross-board card copy and move place the card at the top of the desti
 void test("cross-workspace card copy without listId uses one same-name target list", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Cross Workspace Copy Match",
-      email: "owner-cross-workspace-copy-match@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
-  const auth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: auth } = await signupOwner(app, { orgName: "Acme Cross Workspace Copy Match", email: "owner-cross-workspace-copy-match@example.com", displayName: "Owner" });
 
   const sourceWorkspaceCreated = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Source workspace" } });
   const targetWorkspaceCreated = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Target workspace" } });
@@ -2207,14 +1974,7 @@ void test("cross-workspace card copy without listId uses one same-name target li
 
 void test("card duplicate preserves nested checklist detail and item descriptions", async () => {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: { orgName: "Acme Duplicate Detail", email: "owner-duplicate-detail@example.com", password: "Abc12345", displayName: "Owner" },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
-  const auth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: auth } = await signupOwner(app, { orgName: "Acme Duplicate Detail", email: "owner-duplicate-detail@example.com", displayName: "Owner" });
   const workspaceCreated = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Delivery" } });
   assert.equal(workspaceCreated.statusCode, 201);
   const workspace = workspaceCreated.json<{ id: string }>();
@@ -2260,19 +2020,7 @@ void test("card duplicate preserves nested checklist detail and item description
 void test("cross-workspace card copy without listId rejects when no same-name target list exists", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Cross Workspace Copy No Match",
-      email: "owner-cross-workspace-copy-no-match@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
-  const auth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: auth } = await signupOwner(app, { orgName: "Acme Cross Workspace Copy No Match", email: "owner-cross-workspace-copy-no-match@example.com", displayName: "Owner" });
 
   const sourceWorkspaceCreated = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Source workspace" } });
   const targetWorkspaceCreated = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Target workspace" } });
@@ -2314,19 +2062,7 @@ void test("cross-workspace card copy without listId rejects when no same-name ta
 void test("copied support-session card history labels the acted-as user, not the support operator", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Copied Support History",
-      email: "bernard-copied-support-history@example.com",
-      password: "Abc12345",
-      displayName: "Bernard Van Erk",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
-  const auth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: auth } = await signupOwner(app, { orgName: "Acme Copied Support History", email: "bernard-copied-support-history@example.com", displayName: "Bernard Van Erk" });
 
   const sourceWorkspaceCreated = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Source workspace" } });
   const targetWorkspaceCreated = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Target workspace" } });
@@ -2385,21 +2121,94 @@ void test("copied support-session card history labels the acted-as user, not the
   assert.equal(payload.copiedActorName, "Bernard Van Erk");
 });
 
+void test("card duplicate drops user field values and checklist completers who cannot access the target board", async () => {
+  const app = await buildIntegrationServer();
+
+  const { user, accessToken } = await signupOwner(app, { orgName: "Acme Duplicate Field Tenancy", email: "owner-duplicate-field-tenancy@example.com", displayName: "Owner" });
+  const auth = { authorization: `Bearer ${accessToken}` };
+
+  const workspaceCreated = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Tenancy workspace" } });
+  assert.equal(workspaceCreated.statusCode, 201);
+  const workspace = workspaceCreated.json<{ id: string }>();
+  const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).orderBy(asc(lists.position)).limit(1);
+  assert.ok(list);
+
+  const [sourceBoard, targetBoard] = await db
+    .insert(boards)
+    .values([
+      { workspaceId: workspace.id, name: "Source", position: "1000.0000000000" },
+      { workspaceId: workspace.id, name: "Target", position: "2000.0000000000" },
+    ])
+    .returning();
+  assert.ok(sourceBoard);
+  assert.ok(targetBoard);
+
+  // An outsider is a member of the source board only. Nothing about them should survive a copy
+  // onto a board they cannot reach.
+  const [outsider] = await insertTestUsers(db, {
+      clientId: user.clientId,
+      email: "outsider-duplicate-field-tenancy@example.com",
+      passwordHash: "x",
+      displayName: "Outsider",
+    })
+    .returning();
+  assert.ok(outsider);
+  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: outsider.id, role: "member" });
+  await db.insert(boardMembers).values({ boardId: sourceBoard.id, userId: outsider.id, role: "editor" });
+
+  const [userField] = await db
+    .insert(customFields)
+    .values({ workspaceId: workspace.id, name: "Reviewer", type: "user", position: "1000.0000000000" })
+    .returning();
+  assert.ok(userField);
+
+  const [source] = await db
+    .insert(cards)
+    .values({ listId: list.id, boardId: sourceBoard.id, title: "Tenancy source", position: "1000.0000000000", createdById: user.id })
+    .returning();
+  assert.ok(source);
+  await db.insert(cardCustomFieldValues).values({ cardId: source.id, fieldId: userField.id, valueUserIds: [outsider.id] });
+  const [checklist] = await db
+    .insert(cardChecklists)
+    .values({ cardId: source.id, title: "Steps", position: "1000.0000000000" })
+    .returning();
+  assert.ok(checklist);
+  await db.insert(cardChecklistItems).values({
+    checklistId: checklist.id,
+    text: "Done by the outsider",
+    position: "1000.0000000000",
+    completedAt: new Date(),
+    completedById: outsider.id,
+  });
+
+  const copied = await app.inject({
+    method: "POST",
+    url: `/cards/${source.id}/duplicate`,
+    headers: auth,
+    payload: { boardId: targetBoard.id },
+  });
+  assert.equal(copied.statusCode, 201);
+  const copy = copied.json<{ id: string }>();
+
+  // A user-valued custom field must not name someone with no access to the destination board, and
+  // a value that would be left empty is dropped rather than written as an empty array.
+  const copiedValues = await db.select().from(cardCustomFieldValues).where(eq(cardCustomFieldValues.cardId, copy.id));
+  assert.deepEqual(copiedValues, []);
+
+  // The completion timestamp is preserved, but the completer attribution is not: it would credit
+  // work to someone the destination board never grants access to.
+  const [copiedChecklist] = await db.select().from(cardChecklists).where(eq(cardChecklists.cardId, copy.id)).limit(1);
+  assert.ok(copiedChecklist);
+  const [copiedItem] = await db.select().from(cardChecklistItems).where(eq(cardChecklistItems.checklistId, copiedChecklist.id)).limit(1);
+  assert.ok(copiedItem);
+  assert.ok(copiedItem.completedAt);
+  assert.equal(copiedItem.completedById, null);
+});
+
 void test("card duplicate persists rebalance before created event", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Duplicate Rebalance",
-      email: "owner-duplicate-rebalance@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Acme Duplicate Rebalance", email: "owner-duplicate-rebalance@example.com", displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -2445,18 +2254,7 @@ void test("card duplicate persists rebalance before created event", async () => 
 void test("same-list card reorder does not create activity feed noise", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Reorder",
-      email: "owner-reorder@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Acme Reorder", email: "owner-reorder@example.com", displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -2502,18 +2300,7 @@ void test("same-list card reorder does not create activity feed noise", async ()
 void test("card move accepts cross-board anchors in the same workspace list", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Cross Board Priority",
-      email: "owner-cross-board-priority@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Acme Cross Board Priority", email: "owner-cross-board-priority@example.com", displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -2569,18 +2356,7 @@ void test("card move accepts cross-board anchors in the same workspace list", as
 void test("card move rejects anchors from another list", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Wrong Anchor List",
-      email: "owner-wrong-anchor-list@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Acme Wrong Anchor List", email: "owner-wrong-anchor-list@example.com", displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -2626,18 +2402,7 @@ void test("card move rejects anchors from another list", async () => {
 void test("same-list card reorder emits rebalance before moved when neighbours are too close", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Rebalance Route",
-      email: "owner-rebalance-route@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Acme Rebalance Route", email: "owner-rebalance-route@example.com", displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -2822,19 +2587,7 @@ void test("card assignee activity coalesces quick assignee swaps into net change
 void test("assigning a checklist item does not add the user to card assignees but still notifies them", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Checklist Decouple",
-      email: "owner-checklist-decouple@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
-  const ownerAuth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: ownerAuth } = await signupOwner(app, { orgName: "Acme Checklist Decouple", email: "owner-checklist-decouple@example.com", displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -2907,19 +2660,7 @@ void test("assigning a checklist item does not add the user to card assignees bu
 void test("bulk checklist item assignment updates all items and records one activity", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Checklist Bulk",
-      email: "owner-checklist-bulk@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
-  const ownerAuth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: ownerAuth } = await signupOwner(app, { orgName: "Acme Checklist Bulk", email: "owner-checklist-bulk@example.com", displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -2992,13 +2733,7 @@ void test("bulk checklist item assignment updates all items and records one acti
 
 void test("single and bulk card archive delete card notifications and emit recipient-scoped removal events", async () => {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({ method: "POST", url: "/auth/signup", payload: {
-    orgName: "Acme Archive Notifications", email: "owner-archive-notifications@example.com",
-    password: "Abc12345", displayName: "Owner",
-  } });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
-  const auth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: auth } = await signupOwner(app, { orgName: "Acme Archive Notifications", email: "owner-archive-notifications@example.com", displayName: "Owner" });
   const workspaceResponse = await app.inject({
     method: "POST", url: "/workspaces", headers: auth, payload: { name: "Delivery" },
   });

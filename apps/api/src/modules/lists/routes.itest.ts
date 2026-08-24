@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db } from "../../db.js";
 import { buildIntegrationServer } from "../../test/integration.js";
+import { signupOwner } from "../../test/api-fixtures.js";
 
 // Emits are fire-and-forget (emitToBoard -> void publishRealtimeEvent), so the
 // outbox rows land after the HTTP response. Poll until the expected count appears.
@@ -32,19 +33,7 @@ async function waitForBoardOutboxEvents(boardId: string, eventType: string, minC
 void test("merging a list threads one cursor so cross-board cards keep order without colliding", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Merge Lists",
-      email: "owner-merge-lists@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
-  const auth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: auth } = await signupOwner(app, { orgName: "Acme Merge Lists", email: "owner-merge-lists@example.com", displayName: "Owner" });
 
   const workspaceCreated = await app.inject({
     method: "POST",
@@ -296,13 +285,7 @@ void test("a restricted editor bulk-moves and archives only cards assigned to th
 
 void test("archiving every card in a list deletes only those cards' notifications", async () => {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({ method: "POST", url: "/auth/signup", payload: {
-    orgName: "Acme List Archive Notifications", email: "owner-list-archive-notifications@example.com",
-    password: "Abc12345", displayName: "Owner",
-  } });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string } }>();
-  const auth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: auth } = await signupOwner(app, { orgName: "Acme List Archive Notifications", email: "owner-list-archive-notifications@example.com", displayName: "Owner" });
   const workspaceResponse = await app.inject({
     method: "POST", url: "/workspaces", headers: auth, payload: { name: "Delivery" },
   });

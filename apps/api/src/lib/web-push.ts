@@ -1,7 +1,7 @@
-import type { PushSubscriptionBody, PushTestBody, PushTestResponse } from "@kanera/shared/dto";
+import type { PushSubscriptionBody } from "@kanera/shared/dto";
 import { clients, pushSubscriptions, SYSTEM_CONFIG_ROW_ID, systemConfigs } from "@kanera/shared/schema";
-import { and, eq, isNull } from "drizzle-orm";
-import webPush, { type ContentEncoding } from "web-push";
+import { and, eq } from "drizzle-orm";
+import webPush from "web-push";
 import type { Db } from "../db.js";
 import { db } from "../db.js";
 import { env } from "../env.js";
@@ -325,66 +325,4 @@ export async function refreshPushSubscription(args: {
     .where(eq(pushSubscriptions.id, existing.id));
 
   return true;
-}
-
-export async function sendWebPushToUser(args: {
-  clientId: string;
-  userId: string;
-  payload: PushTestBody;
-}): Promise<PushTestResponse> {
-  await ensureWebPushConfigured(args.clientId);
-
-  const rows = await db
-    .select()
-    .from(pushSubscriptions)
-    .where(
-      and(
-        eq(pushSubscriptions.userId, args.userId),
-        isNull(pushSubscriptions.disabledAt),
-      ),
-    );
-
-  const result: PushTestResponse = {
-    attempted: rows.length,
-    delivered: 0,
-    disabled: 0,
-    failed: 0,
-  };
-  const payload = JSON.stringify(args.payload);
-
-  for (const row of rows) {
-    try {
-      await webPushClient.sendNotification(
-        toPushSubscription(row),
-        payload,
-        { TTL: DEFAULT_PUSH_TTL, ...(row.contentEncoding ? { contentEncoding: row.contentEncoding as ContentEncoding } : {}) },
-      );
-      result.delivered += 1;
-      if (row.failureCount > 0 || row.lastError !== null || row.disabledAt !== null) {
-        await db
-          .update(pushSubscriptions)
-          .set({ failureCount: 0, lastError: null, disabledAt: null, updatedAt: new Date() })
-          .where(eq(pushSubscriptions.id, row.id));
-      }
-    } catch (err) {
-      const now = new Date();
-      const permanent = isPermanentSubscriptionError(err);
-      if (permanent) {
-        result.disabled += 1;
-      } else {
-        result.failed += 1;
-      }
-      await db
-        .update(pushSubscriptions)
-        .set({
-          failureCount: row.failureCount + 1,
-          lastError: describeWebPushError(err),
-          disabledAt: permanent ? now : null,
-          updatedAt: now,
-        })
-        .where(eq(pushSubscriptions.id, row.id));
-    }
-  }
-
-  return result;
 }

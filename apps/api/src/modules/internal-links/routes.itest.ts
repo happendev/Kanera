@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
+import { resetInternalLinkRepairCoalescing } from "../../lib/internal-links.js";
 import { buildIntegrationServer } from "../../test/integration.js";
 
 void test("POST /internal-links/resolve resolves accessible card and board links", async () => {
@@ -239,6 +240,10 @@ void test("note URLs resolve and saved markdown maintains card-note backlinks", 
     targetType: "board",
     targetId: board.id,
   });
+  // The link repair coalesces one attempt per card per window, so a second detail open in the same
+  // process would legitimately skip it. Clear the window to assert the repair itself, not the
+  // coalescing — which the previous open above already exercised.
+  resetInternalLinkRepairCoalescing();
   const detailAfterStaleLink = await app.inject({
     method: "GET",
     url: `/cards/${card.id}/detail`,

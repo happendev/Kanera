@@ -58,4 +58,3 @@ export const cardPriorities = pgTable(
 export const MAX_CARD_PRIORITIES_PER_USER = 50;
 
 export type CardPriority = typeof cardPriorities.$inferSelect;
-export type NewCardPriority = typeof cardPriorities.$inferInsert;

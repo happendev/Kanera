@@ -252,6 +252,16 @@ import type { DueDateSlotSelection } from "./due-date.util";
       transition: opacity 0.1s;
       flex: 0 0 auto;
 
+      &:hover:not(:disabled),
+      &:active:not(:disabled) {
+        background: var(--danger, #d33);
+        opacity: 0.9;
+      }
+
+      &:focus-visible {
+        box-shadow: 0 0 0 2px var(--surface-overlay), 0 0 0 4px var(--danger, #d33);
+      }
+
       &:disabled {
         opacity: 0.5;
         cursor: not-allowed;
@@ -269,7 +279,8 @@ import type { DueDateSlotSelection } from "./due-date.util";
       transition: background 0.1s;
       flex: 0 0 auto;
 
-      &:hover {
+      &:hover:not(:disabled),
+      &:active:not(:disabled) {
         background: var(--surface-hover);
         color: var(--text);
       }

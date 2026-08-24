@@ -24,4 +24,3 @@ export const adminRefreshTokens = pgTable(
 );
 
 export type AdminRefreshToken = typeof adminRefreshTokens.$inferSelect;
-export type NewAdminRefreshToken = typeof adminRefreshTokens.$inferInsert;

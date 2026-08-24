@@ -36,11 +36,6 @@ export async function recordPresenceOffline(event: Parameters<ServerToClientEven
   return { ...event, lastOnlineAt: lastOnlineAt.toISOString() };
 }
 
-export function getIo(): IoServer {
-  if (!io) throw new Error("io not initialised");
-  return io;
-}
-
 export function maybeGetIo(): IoServer | null {
   return io;
 }

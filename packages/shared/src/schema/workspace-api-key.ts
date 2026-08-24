@@ -64,4 +64,3 @@ export const workspaceApiKeys = pgTable(
 );
 
 export type WorkspaceApiKey = typeof workspaceApiKeys.$inferSelect;
-export type NewWorkspaceApiKey = typeof workspaceApiKeys.$inferInsert;

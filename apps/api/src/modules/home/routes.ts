@@ -33,13 +33,12 @@ import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { loadAccessibleBoards, type AccessibleBoard } from "../../lib/accessible-boards.js";
 import { loadAssignedChecklistItems } from "../../lib/assigned-checklist-items.js";
-import { cardAccessCondition, cardSummaryDueColumns, overdueChecklistItemSql, overdueSql } from "../../lib/card-due-sql.js";
+import { DUE_DATE_SLOT_RANK, type CardDueDateSlot } from "@kanera/shared/due-date-slots";
+import { cardAccessCondition, cardSummaryDueColumns, overdueChecklistItemSql, overdueSql, slotRankCaseSql } from "../../lib/card-due-sql.js";
 import { addDays, isDueDateOverdue, localDateInTimezone } from "../../lib/due-date.js";
 import { activityCompletedPredicate, activityDayExpr } from "../../lib/work-done.js";
 import { getAutomationExecutionsRemaining } from "../../lib/tier-limits.js";
 
-/** Slot cut-off ordering, matching the table the due-soon projections already use. */
-const SLOT_RANK = { morning: 0, afternoon: 1, endOfWorkDay: 2, anyTime: 3 } as const;
 
 /** Bucket precedence: overdue always wins, then the calendar buckets in date order. */
 const BUCKET_RANK: Record<HomeDueBucket, number> = {
@@ -65,8 +64,8 @@ const EMPTY_COUNTS: HomeCounts = {
 };
 
 /** Sort key for a slot, used both in SQL and when merging the two item streams in JS. */
-function slotRank(slot: keyof typeof SLOT_RANK | null): number {
-  return SLOT_RANK[slot ?? "anyTime"];
+function slotRank(slot: CardDueDateSlot | null): number {
+  return DUE_DATE_SLOT_RANK[slot ?? "anyTime"];
 }
 
 /**
@@ -360,8 +359,7 @@ export async function homeRoutes(app: FastifyInstance) {
         .orderBy(
           sql`${overdue} desc`,
           sql`${cardSummaryDueColumns.dueDateLocalDate} asc`,
-          sql`case coalesce(${cardSummaryDueColumns.dueDateSlot}, 'anyTime')
-            when 'morning' then 0 when 'afternoon' then 1 when 'endOfWorkDay' then 2 else 3 end asc`,
+          sql`${slotRankCaseSql(cardSummaryDueColumns.dueDateSlot)} asc`,
           sql`${cardSummaryView.id} asc`,
         )
         .limit(HOME_HORIZON_LIMIT),

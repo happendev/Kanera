@@ -40,12 +40,29 @@ import { passwordResetEmail } from "../lib/email-templates/password-reset.js";
 import { smtpTestEmail } from "../lib/email-templates/smtp-test.js";
 import { verificationCodeEmail } from "../lib/email-templates/verification-code.js";
 import { welcomeEmail } from "../lib/email-templates/welcome.js";
+import { weeklyAdminRecapEmail } from "../lib/email-templates/weekly-admin-recap.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const outDir = resolve(scriptDir, "../lib/email-templates/preview");
 mkdirSync(outDir, { recursive: true });
 
 const templates = [
+  {
+    name: "weekly-admin-recap",
+    html: weeklyAdminRecapEmail({
+      periodStart: "2026-05-25",
+      lastWeekLabel: "18 May 2026–24 May 2026",
+      thisWeekLabel: "25 May 2026–31 May 2026",
+      lastWeek: { newAccounts: 14, newOrganisations: 9, invitesAccepted: 7, boardsCreated: 32, subscriptionsStarted: 4, seatsPurchased: 18 },
+      snapshot: { activeAccounts: 284, activeOrganisations: 91, activeBoards: 617, paidOrganisations: 38, trialOrganisations: 12, purchasedSeats: 146 },
+      upcoming: {
+        renewals: [{ dateLabel: "27 May 2026", organisationCount: 2, seatCount: 8, organisations: ["Northstar Studio", "Happen Software"] }],
+        trialEnds: [{ dateLabel: "29 May 2026", organisationCount: 1, seatCount: 4, organisations: ["Bluebird Labs"] }],
+        cancellations: [{ dateLabel: "31 May 2026", organisationCount: 1, seatCount: 3, organisations: ["Acme Design"] }],
+      },
+      adminUrl: "http://localhost:4300",
+    }),
+  },
   {
     name: "admin-invite",
     html: adminInviteEmail({ displayName: "Amelia Hart", inviteUrl: "http://localhost:4300/accept-invite?token=example", expiresInHours: 24 }),

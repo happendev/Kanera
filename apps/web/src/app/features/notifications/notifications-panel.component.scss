@@ -1,3 +1,5 @@
+@use "../../shared/drawer-chrome";
+
 // Colour policy for this file: --bell-accent (the active workspace's accent, bound
 // on the host) marks *unread* and nothing else — the bell, its badge, the drawer's
 // unread count, and each row's read-dot. Everything else in the drawer is neutral
@@ -156,11 +158,7 @@
 }
 
 .drawer-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.36);
-  z-index: 70;
-  animation: fade-in 0.16s ease-out;
+  @include drawer-chrome.drawer-backdrop;
 }
 
 .drawer-backdrop.closing {
@@ -240,14 +238,7 @@
 }
 
 .drawer-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 56px;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
+  @include drawer-chrome.drawer-header;
 }
 
 .drawer-title {
@@ -281,10 +272,7 @@
 }
 
 .close-btn {
-  width: 30px;
-  height: 30px;
-  font-size: 16px;
-  color: var(--text-muted);
+  @include drawer-chrome.drawer-close-btn;
 }
 
 .drawer-toolbar {
@@ -442,13 +430,7 @@
 }
 
 .drawer-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 64px 32px;
-  text-align: center;
-  gap: 6px;
+  @include drawer-chrome.drawer-empty;
 }
 
 .empty-icon {

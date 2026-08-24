@@ -87,9 +87,11 @@ const POPULAR_ICONS = [
       position: relative;
     }
 
+    /* Sized by a variable, like k-color-picker's --color-picker-size, so a host that packs several
+       of these into one row can shrink the whole cluster to a single number. */
     .ip-trigger {
-      width: 36px;
-      height: 36px;
+      width: var(--icon-picker-size, 36px);
+      height: var(--icon-picker-size, 36px);
       padding: 0;
       border-radius: var(--radius);
       background: var(--surface-2);
@@ -101,7 +103,9 @@ const POPULAR_ICONS = [
       flex-shrink: 0;
 
       i {
-        font-size: 18px;
+        /* Half the box, so the glyph keeps its proportions when the trigger is scaled down
+           (18px at the default 36px, 14px at the 28px settings-row size). */
+        font-size: calc(var(--icon-picker-size, 36px) / 2);
         color: var(--accent);
       }
 

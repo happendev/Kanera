@@ -1,11 +1,4 @@
-import type { CardDueDateSlot } from "@kanera/shared/schema";
-
-const SLOT_TIME: Record<CardDueDateSlot, { hour: number; minute: number }> = {
-  anyTime: { hour: 21, minute: 0 },
-  morning: { hour: 9, minute: 0 },
-  afternoon: { hour: 13, minute: 0 },
-  endOfWorkDay: { hour: 17, minute: 0 },
-};
+import { DUE_DATE_SLOT_TIMES, type CardDueDateSlot } from "@kanera/shared/due-date-slots";
 
 export interface DueDateCandidate {
   dueDateLocalDate: string | null;
@@ -54,7 +47,7 @@ export function isDueDateOverdue(candidate: DueDateCandidate, now = new Date()):
   const local = localParts(now, candidate.dueDateTimezone || "UTC");
   if (local.date > dueDate) return true;
   if (local.date < dueDate) return false;
-  const boundary = SLOT_TIME[candidate.dueDateSlot ?? "anyTime"];
+  const boundary = DUE_DATE_SLOT_TIMES[candidate.dueDateSlot ?? "anyTime"];
   return local.hour > boundary.hour || (local.hour === boundary.hour && local.minute >= boundary.minute);
 }
 

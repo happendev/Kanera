@@ -35,4 +35,3 @@ export const inviteTokens = pgTable(
 );
 
 export type InviteToken = typeof inviteTokens.$inferSelect;
-export type NewInviteToken = typeof inviteTokens.$inferInsert;

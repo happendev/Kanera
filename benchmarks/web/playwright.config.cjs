@@ -8,7 +8,10 @@ module.exports = defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
-  timeout: 10 * 60 * 1_000,
+  // The whole run is one test: five warm navigations per page, scroll/drag profiles, and 75 card
+  // detail opens. A development build at fixture scale can exceed ten minutes on a slower machine or
+  // with a widened fixture, so the budget is generous and tunable rather than a tripwire.
+  timeout: Math.max(60_000, Number.parseInt(process.env.PERF_TEST_TIMEOUT_MS ?? "1800000", 10)),
   outputDir: process.env.PERF_TEST_OUTPUT ?? path.join(os.tmpdir(), "kanera-web-benchmark-test-results"),
   reporter: "line",
   use: {

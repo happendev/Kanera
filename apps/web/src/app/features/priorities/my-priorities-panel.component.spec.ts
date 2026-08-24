@@ -29,7 +29,7 @@ function entry(id: string, rank: number, card: Partial<EntryCard> = {}): WorkPri
       updatedAt: new Date("2026-07-01T00:00:00.000Z"),
       ...card,
     },
-    context: { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", workspaceName: "Delivery", labels: [] },
+    context: { boardName: "Roadmap", boardIcon: null, boardIconColor: null, listName: "Doing", listIcon: null, listColor: null, workspaceName: "Delivery", labels: [] },
   };
 }
 

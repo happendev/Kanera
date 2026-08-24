@@ -59,4 +59,3 @@ export const webhookEndpoints = pgTable(
 );
 
 export type WebhookEndpoint = typeof webhookEndpoints.$inferSelect;
-export type NewWebhookEndpoint = typeof webhookEndpoints.$inferInsert;

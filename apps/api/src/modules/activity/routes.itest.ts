@@ -17,6 +17,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db } from "../../db.js";
 import { buildIntegrationServer } from "../../test/integration.js";
+import { signupOwner } from "../../test/api-fixtures.js";
 
 async function waitFor<T>(read: () => Promise<T>, predicate: (value: T) => boolean): Promise<T> {
   let last = await read();
@@ -30,18 +31,7 @@ async function waitFor<T>(read: () => Promise<T>, predicate: (value: T) => boole
 void test("board activity shows card creation before same-timestamp card activity", async () => {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Board Activity Order",
-      email: "owner-board-activity-order@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user: owner } = signup.json<{ accessToken: string; user: { id: string } }>();
+  const { accessToken, user: owner } = await signupOwner(app, { orgName: "Acme Board Activity Order", email: "owner-board-activity-order@example.com", displayName: "Owner" });
 
   const wsCreated = await app.inject({
     method: "POST",

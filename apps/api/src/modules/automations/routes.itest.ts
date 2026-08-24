@@ -39,6 +39,7 @@ import { db, pool } from "../../db.js";
 import { runDueDateAutomationSweep, runListEntryAutomations } from "../../lib/automations.js";
 import { waitForNotificationFanoutForTests } from "../../lib/notifications.js";
 import { buildIntegrationServer } from "../../test/integration.js";
+import { signupOwner } from "../../test/api-fixtures.js";
 
 function completionActions(count: number): AutomationActionBody[] {
   return Array.from({ length: count }, () => ({ type: "set_completion", config: { completed: true } }));
@@ -46,19 +47,7 @@ function completionActions(count: number): AutomationActionBody[] {
 
 async function setupWorkspace(email: string) {
   const app = await buildIntegrationServer();
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme Automation",
-      email,
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
-  const auth = { authorization: `Bearer ${accessToken}` };
+  const { user, auth: auth } = await signupOwner(app, { orgName: "Acme Automation", email, displayName: "Owner" });
 
   const created = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Delivery" } });
   assert.equal(created.statusCode, 201);

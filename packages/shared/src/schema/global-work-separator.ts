@@ -44,4 +44,3 @@ export const globalWorkSeparators = pgTable(
 );
 
 export type GlobalWorkSeparator = typeof globalWorkSeparators.$inferSelect;
-export type NewGlobalWorkSeparator = typeof globalWorkSeparators.$inferInsert;

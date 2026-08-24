@@ -376,6 +376,11 @@ export const updateWorkspaceBody = z.object({
   icon: updateIconSchema(DEFAULT_WORKSPACE_ICON),
   accentColor: colorTokenSchema.nullable().optional(),
   completedCardsActiveDays: z.number().int().min(0).max(365).optional(),
+  inactiveCardsDays: z.number().int().min(0).max(365).optional(),
+  boardHealthEnabled: z.boolean().optional(),
+  boardHealthOverdueEnabled: z.boolean().optional(),
+  boardHealthUnassignedEnabled: z.boolean().optional(),
+  boardHealthInactiveEnabled: z.boolean().optional(),
   boardLinkingEnabled: z.boolean().optional(),
 });
 export type UpdateWorkspaceBody = z.infer<typeof updateWorkspaceBody>;

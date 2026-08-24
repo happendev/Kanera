@@ -1,0 +1,61 @@
+name: Image scan
+
+# Reports only vulnerabilities that moving a pinned tag would actually fix.
+#
+# A plain vulnerability scan of this repo's images returns well over a hundred HIGH/CRITICAL
+# findings that no change here can resolve — they are OS and Go-stdlib CVEs in images already on
+# their newest published tag. Gating on those would mean a permanently red pipeline, so this
+# workflow compares each pin against the newest same-flavour, same-major tag and reports the
+# difference. If every image is already newest, it passes silently.
+#
+# The weekly schedule is the point: it is what re-evaluates pinned images against a moving
+# vulnerability database, and catches the case where upstream publishes a tag that fixes something.
+on:
+  schedule:
+    # Mondays, shortly after Dependabot's weekly run, so a finding and its bump PR arrive together.
+    - cron: "17 6 * * 1"
+  pull_request:
+    paths:
+      - "docker-compose*.yml"
+      - "**/Dockerfile"
+      - "scripts/scan-image-updates.py"
+      - ".github/workflows/image-scan.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "docker-compose*.yml"
+      - "**/Dockerfile"
+      - "scripts/scan-image-updates.py"
+      - ".github/workflows/image-scan.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: image-scan-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: aquasecurity/setup-trivy@v0.3.1
+        with:
+          version: v0.74.0
+
+      # Warm the vulnerability database once so the per-image scans below can use
+      # --skip-db-update and share a single download.
+      - name: Prime the vulnerability database
+        run: trivy image --download-db-only
+
+      # crane lists tags uniformly across Docker Hub, quay.io, and ghcr.io, which this stack all
+      # pulls from. Run it from its own pinned image rather than adding a third-party setup action.
+      - name: Report image upgrades that fix vulnerabilities
+        env:
+          CRANE_CMD: docker run --rm gcr.io/go-containerregistry/crane:v0.21.9
+        run: python3 scripts/scan-image-updates.py

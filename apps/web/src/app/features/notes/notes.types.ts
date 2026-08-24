@@ -2,11 +2,6 @@ import type { WireNote } from "@kanera/shared/events";
 
 export type NoteScopeValue = "personal" | "team";
 
-export interface NotesScopeKey {
-  /** workspaceId-or-boardId qualifier for sibling ordering / room joins */
-  workspaceId: string;
-  boardId: string | null;
-}
 
 export interface NoteTreeNode extends WireNote {
   children: NoteTreeNode[];

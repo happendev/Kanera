@@ -56,6 +56,4 @@ export const workViewShares = pgTable(
 );
 
 export type WorkView = typeof workViews.$inferSelect;
-export type NewWorkView = typeof workViews.$inferInsert;
 export type WorkViewShare = typeof workViewShares.$inferSelect;
-export type NewWorkViewShare = typeof workViewShares.$inferInsert;

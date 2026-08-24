@@ -48,7 +48,7 @@ import { ConfirmService } from "../../shared/confirm.service";
 import { DraftBannerComponent } from "../../shared/draft-banner.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { BoardPickerPopover, type BoardPickerPick } from "./board-picker.popover";
-import { BoardState, type AnyCustomField } from "./board-state";
+import { BoardState, betweenBoardPositions, type AnyCustomField } from "./board-state";
 import { CardActivityComponent } from "./card-activity.component";
 import { CardDetailLayoutService } from "./card-detail-layout.service";
 import { DatePickerPopover } from "./date-picker.popover";
@@ -428,6 +428,8 @@ export class CardDetailComponent {
   readonly memberPickerOpen = signal(false);
   readonly checklistItemAssigneePickerId = signal<string | null>(null);
   readonly checklistItemDueDatePickerId = signal<string | null>(null);
+  readonly checklistItemActionsMenuId = signal<string | null>(null);
+  readonly checklistItemActionsMenuPlacement = { align: "end", width: 180, minHeight: 110, gap: 4 } as const;
   readonly bulkChecklistAssigneePickerId = signal<string | null>(null);
   readonly bulkChecklistDueDatePickerId = signal<string | null>(null);
   readonly labelPickerOpen = signal(false);
@@ -557,6 +559,12 @@ export class CardDetailComponent {
     const itemId = this.openChecklistItemId();
     if (!itemId) return null;
     return this.checklists().find((checklist) => checklist.items.some((item) => item.id === itemId))?.id ?? null;
+  });
+  readonly openChecklistItemCanHaveSubChecklists = computed(() => {
+    const checklistId = this.openChecklistItemChecklistId();
+    return checklistId
+      ? this.checklists().some((checklist) => checklist.id === checklistId && checklist.parentItemId === null)
+      : false;
   });
   readonly topLevelChecklists = computed(() => this.checklists().filter((checklist) => checklist.parentItemId === null));
   readonly openItemSubChecklists = computed(() => {
@@ -1344,6 +1352,11 @@ export class CardDetailComponent {
   }
 
   startAddChecklist(parentItemId: string | null = null) {
+    // The API intentionally permits one nested level only. Keep programmatic callers aligned with
+    // the drawer UI so an item already inside a sub-checklist cannot start an invalid third level.
+    if (parentItemId && !this.checklists().some((checklist) =>
+      checklist.parentItemId === null && checklist.items.some((item) => item.id === parentItemId)
+    )) return;
     this.checklistTemplatePickerOpen.set(false);
     this.addingChecklist.set(true);
     this.newChecklistParentItemId.set(parentItemId);
@@ -1450,6 +1463,21 @@ export class CardDetailComponent {
     if (!this.canEdit()) return;
     this.editingItemId.set(item.id);
     this.draftItemText.set(item.text);
+  }
+
+  openChecklistItemDetailsFromMenu(item: WireCardChecklistItem) {
+    this.checklistItemActionsMenuId.set(null);
+    this.openChecklistItemDetail(item);
+  }
+
+  startEditChecklistItemFromMenu(item: WireCardChecklistItem) {
+    this.checklistItemActionsMenuId.set(null);
+    this.startEditItem(item);
+  }
+
+  async deleteChecklistItemFromMenu(checklistId: string, item: WireCardChecklistItem) {
+    this.checklistItemActionsMenuId.set(null);
+    await this.deleteChecklistItem(checklistId, item);
   }
 
   async saveChecklistItem(checklistId: string, item: WireCardChecklistItem) {
@@ -1745,10 +1773,7 @@ export class CardDetailComponent {
   }
 
   private positionBetween(prev: string | null, next: string | null): string {
-    if (prev === null && next === null) return "1000.0000000000";
-    if (prev === null) return (Number(next) / 2).toFixed(10);
-    if (next === null) return (Number(prev) + 1000).toFixed(10);
-    return ((Number(prev) + Number(next)) / 2).toFixed(10);
+    return betweenBoardPositions(prev, next);
   }
 
   private initialHideCompletedChecklistItems(): boolean {
@@ -1802,8 +1827,9 @@ export class CardDetailComponent {
       const targetItemId = isDrawerTitleControl
         ? this.openChecklistItemId()
         : target?.closest(".checklist-item")?.getAttribute("data-checklist-item-id") ?? null;
-      // The rename pencil starts editing on the same click that bubbles here; treat it as an
-      // in-item edit control so this handler doesn't cancel the edit it just triggered.
+      // Rename starts editing on the same click that bubbles here (from the row action menu on
+      // desktop or the item title control in the drawer). Treat it as an in-item edit control so
+      // this handler doesn't immediately cancel the edit it just triggered.
       const isChecklistItemTitleControl = isDrawerTitleControl || Boolean(target?.closest(".checklist-item-text, .checklist-item-input, .checklist-item-rename"));
       if (targetItemId !== editingItemId || !isChecklistItemTitleControl) this.cancelChecklistItem();
     }

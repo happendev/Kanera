@@ -30,9 +30,10 @@ import { ANALYTICS_EVENT_VERSION, analyticsCountBand, capturePremiumFeatureUsed,
 import { reactivatePlanArchivedBoardsIfRoom } from "../../lib/plan-conversion.js";
 import { assertBoardLimit, assertGuestsAllowed, hasBoardSyncEntitlement } from "../../lib/tier-limits.js";
 import { badRequest, notFound } from "../../lib/errors.js";
+import { moveOrderedEntity } from "../../lib/move-ordered-entity.js";
 import { deleteExternalLinks } from "../../lib/external-links.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
-import { between } from "../../lib/position.js";
+import { between, neighbourPositions as resolveNeighbourPositions } from "../../lib/position.js";
 import { rebalanceBoardGroups, rebalanceBoards } from "../../lib/rebalance.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { deleteWorkspaceCascade } from "../../lib/workspace-delete.js";
@@ -94,6 +95,11 @@ async function boardPayload(
       clientId: workspaces.clientId,
       kind: workspaces.kind,
       completedCardsActiveDays: workspaces.completedCardsActiveDays,
+      inactiveCardsDays: workspaces.inactiveCardsDays,
+      boardHealthEnabled: workspaces.boardHealthEnabled,
+      boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
+      boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
+      boardHealthInactiveEnabled: workspaces.boardHealthInactiveEnabled,
       boardLinkingEnabled: workspaces.boardLinkingEnabled,
       plan: clients.plan,
       billingStatus: clients.billingStatus,
@@ -200,63 +206,37 @@ async function boardPayload(
     ? hydratedCardSummaries
     : hydratedCardSummaries.slice(0, cardQuery.limit);
 
-  return { board, workspaceClientId: workspace.clientId, workspaceKind: workspace.kind, workspaceCardKeyPrefixes: workspaceCardKeyPrefixRows.map((row) => row.prefix), boardLinkingEnabled: workspace.boardLinkingEnabled, boardSyncAllowed: hasBoardSyncEntitlement(workspace.plan, workspace.billingStatus), hasMirrors: participatingMirrors.length > 0, lists: boardLists, ...(cardQuery.includeCards === false ? {} : { cards: cardSummaries, ...(cardQuery.limit === undefined ? {} : { cardPage: { offset: cardQuery.offset ?? 0, limit: cardQuery.limit, hasMore: hasMoreCards } }) }), separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, checklistTemplates, members, viewerRole, viewerSource, viewerCanAccessWorkspace, viewerIsWorkspaceAdmin, viewerAssignedItemsOnly: Boolean(assignedUserId), customFieldValuesComplete };
+  return { board, workspaceClientId: workspace.clientId, workspaceKind: workspace.kind, workspaceInactiveCardsDays: workspace.inactiveCardsDays, workspaceBoardHealthEnabled: workspace.boardHealthEnabled, workspaceBoardHealthOverdueEnabled: workspace.boardHealthOverdueEnabled, workspaceBoardHealthUnassignedEnabled: workspace.boardHealthUnassignedEnabled, workspaceBoardHealthInactiveEnabled: workspace.boardHealthInactiveEnabled, workspaceCardKeyPrefixes: workspaceCardKeyPrefixRows.map((row) => row.prefix), boardLinkingEnabled: workspace.boardLinkingEnabled, boardSyncAllowed: hasBoardSyncEntitlement(workspace.plan, workspace.billingStatus), hasMirrors: participatingMirrors.length > 0, lists: boardLists, ...(cardQuery.includeCards === false ? {} : { cards: cardSummaries, ...(cardQuery.limit === undefined ? {} : { cardPage: { offset: cardQuery.offset ?? 0, limit: cardQuery.limit, hasMore: hasMoreCards } }) }), separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, checklistTemplates, members, viewerRole, viewerSource, viewerCanAccessWorkspace, viewerIsWorkspaceAdmin, viewerAssignedItemsOnly: Boolean(assignedUserId), customFieldValuesComplete };
 }
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
 // as targeted indexed probes so large workspaces do not pay for a full board scan.
-async function neighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
-  let prev: string | null = null;
-  let next: string | null = null;
-  if (afterId === null && beforeId === undefined) {
-    const [first] = await db.select({ position: boards.position }).from(boards).where(and(eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt))).orderBy(asc(boards.position)).limit(1);
-    next = first?.position ?? null;
-  } else if (beforeId === null && afterId === undefined) {
-    const [last] = await db.select({ position: boards.position }).from(boards).where(and(eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt))).orderBy(desc(boards.position)).limit(1);
-    prev = last?.position ?? null;
-  }
-  else if (afterId) {
-    const [after] = await db.select({ position: boards.position }).from(boards).where(and(eq(boards.id, afterId), eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt))).limit(1);
-    if (!after) throw badRequest("afterBoardId not found");
-    const [nextBoard] = await db.select({ position: boards.position }).from(boards).where(and(eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt), gt(boards.position, after.position))).orderBy(asc(boards.position)).limit(1);
-    prev = after.position;
-    next = nextBoard?.position ?? null;
-  } else if (beforeId) {
-    const [before] = await db.select({ position: boards.position }).from(boards).where(and(eq(boards.id, beforeId), eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt))).limit(1);
-    if (!before) throw badRequest("beforeBoardId not found");
-    const [prevBoard] = await db.select({ position: boards.position }).from(boards).where(and(eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt), lt(boards.position, before.position))).orderBy(desc(boards.position)).limit(1);
-    next = before.position;
-    prev = prevBoard?.position ?? null;
-  }
-  return { prev, next };
+function neighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
+  return resolveNeighbourPositions({
+    table: boards,
+    id: boards.id,
+    position: boards.position,
+    scope: and(eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt)),
+    afterId,
+    beforeId,
+    afterLabel: "afterBoardId",
+    beforeLabel: "beforeBoardId",
+  });
 }
 
 // Board groups share the same sparse-position contract as boards; use one-neighbor
 // probes rather than materializing every group in the workspace.
-async function groupNeighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
-  let prev: string | null = null;
-  let next: string | null = null;
-  if (afterId === null && beforeId === undefined) {
-    const [first] = await db.select({ position: boardGroups.position }).from(boardGroups).where(eq(boardGroups.workspaceId, workspaceId)).orderBy(asc(boardGroups.position)).limit(1);
-    next = first?.position ?? null;
-  } else if (beforeId === null && afterId === undefined) {
-    const [last] = await db.select({ position: boardGroups.position }).from(boardGroups).where(eq(boardGroups.workspaceId, workspaceId)).orderBy(desc(boardGroups.position)).limit(1);
-    prev = last?.position ?? null;
-  }
-  else if (afterId) {
-    const [after] = await db.select({ position: boardGroups.position }).from(boardGroups).where(and(eq(boardGroups.id, afterId), eq(boardGroups.workspaceId, workspaceId))).limit(1);
-    if (!after) throw badRequest("afterGroupId not found");
-    const [nextGroup] = await db.select({ position: boardGroups.position }).from(boardGroups).where(and(eq(boardGroups.workspaceId, workspaceId), gt(boardGroups.position, after.position))).orderBy(asc(boardGroups.position)).limit(1);
-    prev = after.position;
-    next = nextGroup?.position ?? null;
-  } else if (beforeId) {
-    const [before] = await db.select({ position: boardGroups.position }).from(boardGroups).where(and(eq(boardGroups.id, beforeId), eq(boardGroups.workspaceId, workspaceId))).limit(1);
-    if (!before) throw badRequest("beforeGroupId not found");
-    const [prevGroup] = await db.select({ position: boardGroups.position }).from(boardGroups).where(and(eq(boardGroups.workspaceId, workspaceId), lt(boardGroups.position, before.position))).orderBy(desc(boardGroups.position)).limit(1);
-    next = before.position;
-    prev = prevGroup?.position ?? null;
-  }
-  return { prev, next };
+function groupNeighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
+  return resolveNeighbourPositions({
+    table: boardGroups,
+    id: boardGroups.id,
+    position: boardGroups.position,
+    scope: eq(boardGroups.workspaceId, workspaceId),
+    afterId,
+    beforeId,
+    afterLabel: "afterGroupId",
+    beforeLabel: "beforeGroupId",
+  });
 }
 
 async function validateBoardGroup(workspaceId: string, groupId: string | null | undefined) {
@@ -718,25 +698,26 @@ export async function boardRoutes(app: FastifyInstance) {
     const [current] = await db.select().from(boardGroups).where(eq(boardGroups.id, id)).limit(1);
     if (!current) throw notFound();
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
-    const { prev, next } = await groupNeighbourPositions(current.workspaceId, body.afterGroupId, body.beforeGroupId);
-    const result = between(prev, next);
-    let position = result.position;
     const prevPosition = current.position;
-    await db.update(boardGroups).set({ position, updatedAt: new Date() }).where(eq(boardGroups.id, id));
-    if (result.needsRebalance) {
-      const positions = await rebalanceBoardGroups(current.workspaceId);
-      position = positions.find((p) => p.id === id)?.position ?? position;
-      await emitToWorkspace(current.workspaceId, "boardGroup:rebalanced", { workspaceId: current.workspaceId, positions });
-    }
-    await recordActivity(db, {
-      boardId: null,
-      workspaceId: current.workspaceId,
-      actorId: req.auth.sub,
-      entityType: "boardGroup",
-      entityId: id,
-      action: "moved",
-      payload: { prevPosition, position },
+    const { position, rebalancedPositions } = await moveOrderedEntity({
+      table: boardGroups,
+      idColumn: boardGroups.id,
+      id,
+      neighbours: await groupNeighbourPositions(current.workspaceId, body.afterGroupId, body.beforeGroupId),
+      rebalance: (tx) => rebalanceBoardGroups(current.workspaceId, tx),
+      activity: (position) => ({
+        boardId: null,
+        workspaceId: current.workspaceId,
+        actorId: req.auth.sub,
+        entityType: "boardGroup",
+        entityId: id,
+        action: "moved",
+        payload: { prevPosition, position },
+      }),
     });
+    if (rebalancedPositions) {
+      await emitToWorkspace(current.workspaceId, "boardGroup:rebalanced", { workspaceId: current.workspaceId, positions: rebalancedPositions });
+    }
     emitToWorkspace(current.workspaceId, "boardGroup:moved", {
       workspaceId: current.workspaceId,
       groupId: id,
@@ -772,27 +753,27 @@ export async function boardRoutes(app: FastifyInstance) {
     if (!current) throw notFound();
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
 
-    const { prev, next } = await neighbourPositions(current.workspaceId, body.afterBoardId, body.beforeBoardId);
-    const result = between(prev, next);
-    let position = result.position;
     const prevPosition = current.position;
-    await db.update(boards).set({ position, updatedAt: new Date() }).where(eq(boards.id, id));
-
-    if (result.needsRebalance) {
-      const positions = await rebalanceBoards(current.workspaceId);
-      position = positions.find((p) => p.id === id)?.position ?? position;
-      await emitBoardRebalancedToVisibleUsers(current.workspaceId, { workspaceId: current.workspaceId, positions });
-    }
-
-    await recordActivity(db, {
-      boardId: id,
-      workspaceId: current.workspaceId,
-      actorId: req.auth.sub,
-      entityType: "board",
-      entityId: id,
-      action: "moved",
-      payload: { prevPosition, position },
+    const { position, rebalancedPositions } = await moveOrderedEntity({
+      table: boards,
+      idColumn: boards.id,
+      id,
+      neighbours: await neighbourPositions(current.workspaceId, body.afterBoardId, body.beforeBoardId),
+      rebalance: (tx) => rebalanceBoards(current.workspaceId, tx),
+      activity: (position) => ({
+        boardId: id,
+        workspaceId: current.workspaceId,
+        actorId: req.auth.sub,
+        entityType: "board",
+        entityId: id,
+        action: "moved",
+        payload: { prevPosition, position },
+      }),
     });
+
+    if (rebalancedPositions) {
+      await emitBoardRebalancedToVisibleUsers(current.workspaceId, { workspaceId: current.workspaceId, positions: rebalancedPositions });
+    }
     await emitToBoardAudience(id, "board:moved", {
       workspaceId: current.workspaceId,
       boardId: id,

@@ -330,6 +330,10 @@ h3 {
     &:hover {
       background: color-mix(in srgb, var(--danger, #d33) 10%, transparent);
     }
+
+    &:active:not(:disabled) {
+      background: color-mix(in srgb, var(--danger, #d33) 16%, transparent);
+    }
   }
 }
 
@@ -398,6 +402,16 @@ h3 {
   background: var(--danger, #d33);
   color: #fff;
   transition: opacity 0.1s;
+
+  &:hover:not(:disabled),
+  &:active:not(:disabled) {
+    background: var(--danger, #d33);
+    opacity: 0.9;
+  }
+
+  &:focus-visible {
+    box-shadow: 0 0 0 2px var(--surface-overlay), 0 0 0 4px var(--danger, #d33);
+  }
 
   &:disabled {
     opacity: 0.5;

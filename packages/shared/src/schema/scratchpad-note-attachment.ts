@@ -37,4 +37,3 @@ export const scratchpadNoteAttachments = pgTable(
 );
 
 export type ScratchpadNoteAttachment = typeof scratchpadNoteAttachments.$inferSelect;
-export type NewScratchpadNoteAttachment = typeof scratchpadNoteAttachments.$inferInsert;

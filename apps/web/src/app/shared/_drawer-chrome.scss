@@ -1,0 +1,46 @@
+// The shell drawers' shared chrome — scrim, header bar, empty state, close button.
+//
+// The notifications and Up-next drawers are deliberately one design: they open from the same edge,
+// at the same width, and a user who learns one has learned the other. That intent was previously
+// carried by a comment asking the next author to keep two copies in step, which is not a mechanism.
+// These mixins are.
+//
+// Only the parts that are verbatim identical live here. The completed-cards drawer is a
+// near-neighbour but not the same recipe (lighter scrim, taller header, its own keyframes), so it
+// keeps its own chrome rather than being bent into this one.
+
+@mixin drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgb(0 0 0 / 36%);
+  animation: fade-in 0.16s ease-out;
+}
+
+@mixin drawer-header {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 56px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+@mixin drawer-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 64px 32px;
+  text-align: center;
+}
+
+@mixin drawer-close-btn {
+  width: 30px;
+  height: 30px;
+  color: var(--text-muted);
+  font-size: 16px;
+}

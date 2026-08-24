@@ -1,3 +1,4 @@
+import { requestContext } from "@fastify/request-context";
 import type { ColorToken } from "@kanera/shared/colors";
 import type { WorkScope } from "@kanera/shared/dto";
 import {
@@ -16,6 +17,13 @@ import { db } from "../db.js";
 import { env } from "../env.js";
 import { isOrgAdmin } from "./access.js";
 import { isPaidTier } from "./entitlements.js";
+
+declare module "@fastify/request-context" {
+  interface RequestContextData {
+    /** Per-request memo for `loadAccessibleBoards`, keyed by identity fingerprint. */
+    accessibleBoardsCache?: Map<string, Promise<AccessibleBoard[]>>;
+  }
+}
 
 export type AccessibleBoard = {
   id: string;
@@ -176,7 +184,61 @@ async function applyNavigationOrder(
  * Keeping this as a shared helper prevents Home, search-like projections, and global work queries
  * from quietly disagreeing about guests, archived sources, or assigned-items-only restrictions.
  */
+/**
+ * Identity fingerprint for the per-request memo below. Every claim that can change which boards come
+ * back is part of the key, so a request that somehow resolves two different identities (support
+ * sessions, a key-scoped sub-call) can never read another identity's cached answer.
+ */
+function accessibleBoardsCacheKey(auth: AuthClaims): string {
+  return [
+    auth.sub,
+    auth.cid,
+    auth.authKind ?? "",
+    auth.apiKeyKind ?? "",
+    auth.apiKeyScope ?? "",
+    auth.apiKeyWorkspaceId ?? "",
+  ].join("|");
+}
+
+/**
+ * Per-request memo, keyed by identity. This is a prelude to nearly every Global Work, Home, search
+ * and portfolio request and costs two to three sequential queries with 25 call sites, several of
+ * which run more than once while serving one request.
+ *
+ * Request-scoped only, and deliberately so: it lives in the `@fastify/request-context`
+ * AsyncLocalStorage store, so it cannot outlive the request and an access change (a board share
+ * revoked, a guest removed) takes effect on the very next request rather than at some cache expiry.
+ * Outside a request — worker schedulers, scripts — `requestContext.get` returns undefined and every
+ * call runs uncached.
+ *
+ * The promise is cached rather than the result so concurrent callers inside one request (a
+ * `Promise.all` of projections) share a single in-flight load instead of racing three of them.
+ */
 export async function loadAccessibleBoards(auth: AuthClaims): Promise<AccessibleBoard[]> {
+  let store: Map<string, Promise<AccessibleBoard[]>> | undefined;
+  try {
+    store = requestContext.get("accessibleBoardsCache");
+    if (store === undefined) {
+      store = new Map();
+      requestContext.set("accessibleBoardsCache", store);
+    }
+  } catch {
+    // No request context (worker, script, or a test calling this directly): run uncached.
+    store = undefined;
+  }
+  if (!store) return loadAccessibleBoardsUncached(auth);
+
+  const key = accessibleBoardsCacheKey(auth);
+  const cached = store.get(key);
+  if (cached) return cached;
+  const pending = loadAccessibleBoardsUncached(auth);
+  store.set(key, pending);
+  // A rejected load must not be memoized, or one transient failure poisons the rest of the request.
+  pending.catch(() => store?.delete(key));
+  return pending;
+}
+
+async function loadAccessibleBoardsUncached(auth: AuthClaims): Promise<AccessibleBoard[]> {
   const readOnlyCredential = auth.apiKeyKind === "personal" && auth.apiKeyScope === "read";
   const byId = new Map<string, UnorderedAccessibleBoard>();
 

@@ -1,10 +1,11 @@
 import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
+import { DocsLinkComponent } from "../../../shared/docs-link.component";
 import { AccountSettingsPage } from "../account-settings.page";
 
 @Component({
   selector: "k-account-settings-notifications",
   standalone: true,
-  imports: [],
+  imports: [DocsLinkComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./notifications.page.html",
   styleUrl: "./notifications.page.scss",

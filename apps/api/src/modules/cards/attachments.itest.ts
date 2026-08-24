@@ -10,22 +10,12 @@ import { env } from "../../env.js";
 import { getOrgStorageUsage } from "../../lib/entitlements.js";
 import { buildPublicApiServer } from "../../public-api-server.js";
 import { buildIntegrationServer, testUploadsDir } from "../../test/integration.js";
+import { signupOwner } from "../../test/api-fixtures.js";
 
 async function setupCard() {
   const app = await buildIntegrationServer();
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme",
-      email: "owner@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken, user } = signup.json<{ accessToken: string; user: { id: string; clientId: string } }>();
+  const { accessToken, user } = await signupOwner(app, { orgName: "Acme", email: "owner@example.com", displayName: "Owner" });
 
   const created = await app.inject({
     method: "POST",

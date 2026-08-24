@@ -1,8 +1,9 @@
 <div class="automations-page">
   <p class="automation-info-note">
     <i class="ti ti-info-circle"></i>
-    <span>Automations run on every board in this {{ settings.entityLabel() }}. Each one watches for a single event, then applies its actions in order. They never run on cards that already match.</span>
+    <span>Automations run on every board in this {{ settings.entityLabel() }}: each one watches for a single event, then applies its actions in order to cards that do not already match.</span>
   </p>
+  <k-docs-link path="automations" label="Learn more about automations" />
 
   @if (settings.enabledAutomationLimitHint(); as automationLimitHint) {
     @if (settings.enabledAutomationLimitReached()) {
@@ -53,42 +54,76 @@
         }
       }
     </div>
-    <button
-      class="sm automation-new-button"
-      type="button"
-      [disabled]="!settings.canAddAutomation()"
-      [kTooltip]="settings.addAutomationHint()"
-      (click)="settings.addAutomation()"
-    >
-      <i class="ti ti-plus"></i> New automation
-    </button>
+    <!-- Examples sits beside New automation, not only inside the empty state: an admin who already has
+         one rule is exactly the person wondering what else automations can do, and the old catalogue
+         disappeared the moment the first rule existed. -->
+    <div class="automation-toolbar-actions">
+      <div class="menu-anchor">
+        <button
+          class="secondary sm automation-examples-button"
+          type="button"
+          [class.is-open]="examplesAnchor() === 'toolbar'"
+          [attr.aria-expanded]="examplesAnchor() === 'toolbar'"
+          [disabled]="!settings.canDuplicateAutomation()"
+          [kTooltip]="settings.canDuplicateAutomation() ? 'Browse example automations' : settings.automationLimitHint()"
+          (click)="toggleExamples('toolbar')"
+        >
+          <i class="ti ti-bulb"></i> <span class="automation-examples-label">Examples</span> <i class="ti ti-chevron-down automation-examples-caret"></i>
+        </button>
+        @if (examplesAnchor() === "toolbar") {
+        <k-automation-examples (closed)="closeExamples('toolbar')" />
+        }
+      </div>
+      <button
+        class="sm automation-new-button"
+        type="button"
+        [disabled]="!settings.canAddAutomation()"
+        [kTooltip]="settings.addAutomationHint()"
+        (click)="settings.addAutomation()"
+      >
+        <i class="ti ti-plus"></i> New automation
+      </button>
+    </div>
   </div>
 
   @if (settings.automations().length === 0) {
-  <!-- First-run state. Automations are the one settings tab nobody arrives already understanding,
-       so the empty state teaches the model and offers automations buildable from lists alone. -->
+  <!-- First-run state. Deliberately one idea and one decision: the catalogue that used to live here
+       now sits in the toolbar's Examples menu, which stays reachable once the first rule exists. -->
   <div class="automation-empty">
     <span class="automation-empty-icon"><i class="ti ti-settings-automation"></i></span>
     <h3>No automations yet</h3>
-    <p>An automation is one trigger and up to {{ settings.automationActionLimit }} actions — "when a card enters Review, assign the reviewer and set a due date". Start from a common pattern, or build your own.</p>
+    <p>Choose something that happens to a card — it enters a list, its due date arrives, its checklist is finished — and Kanera applies up to {{ settings.automationActionLimit }} actions for you every time.</p>
     @if (settings.lists().length === 0) {
     <p class="automation-empty-blocked"><i class="ti ti-alert-triangle"></i> Add at least one list to this {{ settings.entityLabel() }} first — every trigger needs something to watch.</p>
     } @else {
-    <div class="automation-starters">
-      @for (starter of settings.automationStarters; track starter.id) {
-        @if (!starter.requiresTemplate || settings.templates().length) {
-        <button type="button" class="automation-starter" [disabled]="!settings.canAddAutomation()" (click)="settings.addAutomationStarter(starter.id)">
-          <i [class]="'ti ' + starter.icon"></i>
-          <span>
-            <strong>{{ starter.title }}</strong>
-            <small>{{ starter.detail }}</small>
-          </span>
-          <i class="ti ti-arrow-right automation-starter-go"></i>
+    <div class="automation-empty-actions">
+      <div class="menu-anchor">
+        <button
+          type="button"
+          class="sm"
+          [class.is-open]="examplesAnchor() === 'empty'"
+          [attr.aria-expanded]="examplesAnchor() === 'empty'"
+          [disabled]="!settings.canDuplicateAutomation()"
+          (click)="toggleExamples('empty')"
+        >
+          <!-- The count is the point of the button: it says how many of these the workspace can build
+               right now, which a bare "Browse examples" does not. Dropped when nothing resolves. -->
+          <i class="ti ti-bulb"></i> @if (settings.availableAutomationRecipeCount(); as count) { Browse {{ count }} examples } @else { Browse examples }
         </button>
+        @if (examplesAnchor() === "empty") {
+        <k-automation-examples (closed)="closeExamples('empty')" />
         }
-      }
+      </div>
+      <button
+        type="button"
+        class="secondary sm"
+        [disabled]="!settings.canAddAutomation()"
+        [kTooltip]="settings.addAutomationHint()"
+        (click)="settings.addAutomation()"
+      >
+        Start from scratch
+      </button>
     </div>
-    <p class="automation-empty-foot">Starter automations are created disabled so you can review them before they run.</p>
     }
   </div>
   } @else {

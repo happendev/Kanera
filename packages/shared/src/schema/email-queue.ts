@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { check, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { valueIn } from "./_value-check.js";
 
 export const EMAIL_QUEUE_TYPES = [
@@ -8,6 +8,7 @@ export const EMAIL_QUEUE_TYPES = [
   "password_reset",
   "email_verification",
   "daily_digest",
+  "weekly_admin_recap",
   "card_assigned",
   "card_comment_added",
   "comment_mentioned",
@@ -99,6 +100,42 @@ export type DailyDigestEmailQueueData = {
     cardUrl: string;
     dueLabel?: string | null;
   }[];
+};
+
+export type WeeklyAdminRecapUpcomingGroup = {
+  dateLabel: string;
+  organisationCount: number;
+  seatCount: number;
+  organisations: string[];
+};
+
+export type WeeklyAdminRecapEmailQueueData = {
+  /** ISO date for the Monday that begins the reporting week; also the durable dedupe key. */
+  periodStart: string;
+  lastWeekLabel: string;
+  thisWeekLabel: string;
+  lastWeek: {
+    newAccounts: number;
+    newOrganisations: number;
+    invitesAccepted: number;
+    boardsCreated: number;
+    subscriptionsStarted: number;
+    seatsPurchased: number;
+  };
+  snapshot: {
+    activeAccounts: number;
+    activeOrganisations: number;
+    activeBoards: number;
+    paidOrganisations: number;
+    trialOrganisations: number;
+    purchasedSeats: number;
+  };
+  upcoming: {
+    renewals: WeeklyAdminRecapUpcomingGroup[];
+    trialEnds: WeeklyAdminRecapUpcomingGroup[];
+    cancellations: WeeklyAdminRecapUpcomingGroup[];
+  };
+  adminUrl: string;
 };
 
 export type CardAssignedEmailQueueData = {
@@ -235,6 +272,7 @@ export type EmailQueueData =
   | { type: "password_reset"; data: PasswordResetEmailQueueData }
   | { type: "email_verification"; data: EmailVerificationEmailQueueData }
   | { type: "daily_digest"; data: DailyDigestEmailQueueData }
+  | { type: "weekly_admin_recap"; data: WeeklyAdminRecapEmailQueueData }
   | { type: "card_assigned"; data: CardAssignedEmailQueueData }
   | { type: "card_comment_added"; data: CardCommentAddedEmailQueueData }
   | { type: "comment_mentioned"; data: CommentMentionedEmailQueueData }
@@ -286,8 +324,12 @@ export const emailQueue = pgTable(
     index("email_queue_created_at_idx").on(t.createdAt),
     // Supports the sweep claim query, which filters by status and due time.
     index("email_queue_status_next_attempt_idx").on(t.status, t.nextAttemptAt),
+    // One recap per reporting week and recipient, even if the worker restarts or the scheduler is
+    // triggered repeatedly after Monday's send boundary.
+    uniqueIndex("email_queue_weekly_admin_recap_uq")
+      .on(t.toEmail, sql`(${t.data}->>'periodStart')`)
+      .where(sql`${t.type} = 'weekly_admin_recap'`),
   ],
 );
 
 export type EmailQueue = typeof emailQueue.$inferSelect;
-export type NewEmailQueue = typeof emailQueue.$inferInsert;

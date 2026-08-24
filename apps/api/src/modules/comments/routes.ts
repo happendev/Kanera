@@ -12,7 +12,7 @@ import { and, asc, desc, eq, getTableColumns, gt, inArray, isNull, lt, ne, or, s
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
-import { assertBoardAccess, assertCardAccess } from "../../lib/access.js";
+import { assertBatchCardVisibility, assertBoardAccess, assertCardAccess } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
 import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
 import { enqueueCommentAddedEmails, enqueueCommentMentionedNotifications } from "../../lib/assignee-email-notifications.js";
@@ -300,7 +300,8 @@ export async function commentRoutes(app: FastifyInstance) {
     const cursor = cardFeedCursor(query.cursor);
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
-    await assertCardAccess(req.auth, card.id);
+    // The row is already in hand; passing it skips a redundant re-read of its board_id.
+    await assertCardAccess(req.auth, card);
 
     const commentConditions = [eq(comments.cardId, cardId)];
     const commentPriority = sql<number>`1`;
@@ -397,7 +398,7 @@ export async function commentRoutes(app: FastifyInstance) {
     const cursor = commentCursor(query.cursor);
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
-    await assertCardAccess(req.auth, card.id);
+    await assertCardAccess(req.auth, card);
 
     const conditions = [eq(comments.cardId, cardId)];
     if (cursor) conditions.push(commentAfterCursor(cursor));
@@ -448,7 +449,7 @@ export async function commentRoutes(app: FastifyInstance) {
 
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card.id, "editor");
+    const ctx = await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
     // Resource access rebases an identity-wide personal credential to this card's organisation.
     // Validate and strip media only afterwards so tenant-bound media keys use the resource owner.
@@ -548,8 +549,10 @@ export async function commentRoutes(app: FastifyInstance) {
       const card = cardsById.get(cardId);
       if (!card || card.boardId !== boardId) throw notFound("one or more cards were not found on this board");
       assertCardActive(card);
-      await assertCardAccess(req.auth, cardId, "editor");
     }
+    // Board editor access is asserted once above and every card is confirmed to be on that board,
+    // so only the assigned-items-only rule is still per-card — one probe for the whole batch.
+    await assertBatchCardVisibility(req.auth, boardAccess, cardIds);
     const entries = body.comments.map((entry) => {
       assertIntegrationEmbeddedMediaStoredLocally(entry.body, req.auth.cid, req.auth.authKind);
       return { ...entry, body: stripSignedEmbeddedMediaUrls(entry.body, req.auth.cid) ?? entry.body };
@@ -635,7 +638,7 @@ export async function commentRoutes(app: FastifyInstance) {
 
     const [card] = await db.select().from(cards).where(eq(cards.id, current.cardId)).limit(1);
     if (!card) throw notFound();
-    await assertCardAccess(req.auth, card.id, "editor");
+    await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
     assertIntegrationEmbeddedMediaStoredLocally(body.body, req.auth.cid, req.auth.authKind);
     const commentBody = stripSignedEmbeddedMediaUrls(body.body, req.auth.cid) ?? body.body;
@@ -689,7 +692,7 @@ export async function commentRoutes(app: FastifyInstance) {
 
     const [card] = await db.select().from(cards).where(eq(cards.id, current.cardId)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card.id, "editor");
+    const ctx = await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
     // Authors retain control of their own comments, while board administrators may moderate any
     // comment on boards they manage. `isWorkspaceAdmin` is scoped to this board's organisation, so
@@ -757,9 +760,9 @@ export async function commentRoutes(app: FastifyInstance) {
     });
     if (notOwnedIds.length > 0) throw forbidden(`bulk delete only removes comments you authored; not authored by you: ${notOwnedIds.join(", ")}`);
     for (const commentId of body.commentIds) assertCardActive(byId.get(commentId)!.card);
-    for (const cardId of new Set(rows.map((row) => row.card.id))) {
-      await assertCardAccess(req.auth, cardId, "editor");
-    }
+    // Same batch reasoning as bulk create: board editor access is already established for this
+    // board and every comment was matched to a card on it.
+    await assertBatchCardVisibility(req.auth, boardAccess, rows.map((row) => row.card.id));
 
     const deletedIds = await db.transaction(async (tx) => {
       await tx
@@ -815,7 +818,7 @@ export async function commentRoutes(app: FastifyInstance) {
 
     const [card] = await db.select().from(cards).where(eq(cards.id, current.cardId)).limit(1);
     if (!card) throw notFound();
-    await assertCardAccess(req.auth, card.id, "editor");
+    await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
 
     const inserted = await db
@@ -858,7 +861,7 @@ export async function commentRoutes(app: FastifyInstance) {
 
     const [card] = await db.select().from(cards).where(eq(cards.id, current.cardId)).limit(1);
     if (!card) throw notFound();
-    await assertCardAccess(req.auth, card.id, "editor");
+    await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
 
     const removed = await db

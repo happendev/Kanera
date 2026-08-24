@@ -40,6 +40,7 @@ import { hashOpaqueToken } from "../../lib/tokens.js";
 import { ensureSystemWebPushConfig, webPushClient } from "../../lib/web-push.js";
 import { setupIo } from "../../realtime/io.js";
 import { buildIntegrationServer } from "../../test/integration.js";
+import { signupOwner } from "../../test/api-fixtures.js";
 
 const enabledWorkspaceRuleTypes = (): NotificationWorkspaceRule["types"] => ({
   cardAssigned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
@@ -101,21 +102,7 @@ async function seed() {
   const app = await buildIntegrationServer();
   await setupIo(app);
 
-  const signup = await app.inject({
-    method: "POST",
-    url: "/auth/signup",
-    payload: {
-      orgName: "Acme",
-      email: "owner@example.com",
-      password: "Abc12345",
-      displayName: "Owner",
-    },
-  });
-  assert.equal(signup.statusCode, 200);
-  const { accessToken: ownerToken, user: owner } = signup.json<{
-    accessToken: string;
-    user: { id: string; clientId: string };
-  }>();
+  const { accessToken: ownerToken, user: owner } = await signupOwner(app, { orgName: "Acme", email: "owner@example.com", displayName: "Owner" });
 
   const wsCreated = await app.inject({
     method: "POST",
@@ -1773,11 +1760,16 @@ void test("bulk uncompletion immediately recreates overdue notifications for sti
   const reopenedRows = await overdueRowsForCard(overdueCard!.id);
   assert.deepEqual(userIds(reopenedRows), [f.member.id, f.owner.id].sort());
 
+  // The whole-list completion route coalesces like the single and bulk routes: completing and
+  // then re-opening inside the 60s window collapses to one `completion:set` row, and because the
+  // burst ends where it started that row is hidden from the human-facing feed. The overdue row is
+  // written by the sweep and never coalesced.
   const activities = await db
-    .select({ action: activityEvents.action })
+    .select({ action: activityEvents.action, feedVisible: activityEvents.feedVisible })
     .from(activityEvents)
     .where(and(eq(activityEvents.entityType, "card"), eq(activityEvents.entityId, overdueCard!.id)));
-  assert.deepEqual(activities.map((row) => row.action).sort(), ["completed", "overdue", "uncompleted"]);
+  assert.deepEqual(activities.map((row) => row.action).sort(), ["completion:set", "overdue"]);
+  assert.equal(activities.find((row) => row.action === "completion:set")!.feedVisible, false);
 });
 
 void test("card and board watch endpoints enforce access, are idempotent, and delete only the current user's watch", async () => {

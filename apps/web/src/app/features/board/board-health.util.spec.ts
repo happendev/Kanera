@@ -37,10 +37,26 @@ describe("board health", () => {
     });
   });
 
+  it("excludes workspace-disabled signals from the health status and summary", () => {
+    expect(boardWorkRisk(
+      { active: 10, overdue: 10, unassigned: 0, inactive: 0 },
+      { overdue: false, unassigned: true, inactive: true },
+    )).toMatchObject({
+      level: "onTrack",
+      signals: [],
+    });
+  });
+
   it("uses the same fourteen-day inactivity boundary as card indicators", () => {
     const now = new Date("2026-08-19T12:00:00.000Z").getTime();
     expect(isCardInactive("2026-08-05T12:00:00.000Z", now)).toBe(true);
     expect(isCardInactive("2026-08-05T12:00:00.001Z", now)).toBe(false);
+  });
+
+  it("uses a workspace-specific inactivity boundary", () => {
+    const now = new Date("2026-08-19T12:00:00.000Z").getTime();
+    expect(isCardInactive("2026-08-09T12:00:00.000Z", now, 10)).toBe(true);
+    expect(isCardInactive("2026-08-09T12:00:00.001Z", now, 10)).toBe(false);
   });
 
 });
