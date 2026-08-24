@@ -311,6 +311,9 @@ export const emailQueue = pgTable(
     // longer between attempts instead of being re-sent on every sweep. New rows default to
     // now() so they remain eligible immediately.
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+    // Hard stops must not strand claimed emails forever. An `immediate` row becomes claimable again
+    // after this lease expires; terminal and retryable rows clear it.
+    processingLeaseExpiresAt: timestamp("processing_lease_expires_at", { withTimezone: true }),
     lastError: text("last_error"),
     sentAt: timestamp("sent_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -324,6 +327,7 @@ export const emailQueue = pgTable(
     index("email_queue_created_at_idx").on(t.createdAt),
     // Supports the sweep claim query, which filters by status and due time.
     index("email_queue_status_next_attempt_idx").on(t.status, t.nextAttemptAt),
+    index("email_queue_status_lease_idx").on(t.status, t.processingLeaseExpiresAt),
     // One recap per reporting week and recipient, even if the worker restarts or the scheduler is
     // triggered repeatedly after Monday's send boundary.
     uniqueIndex("email_queue_weekly_admin_recap_uq")

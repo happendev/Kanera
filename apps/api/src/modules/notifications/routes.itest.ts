@@ -20,6 +20,7 @@ import {
   lists,
   notificationSettings,
   notifications,
+  pushQueue,
   pushSubscriptions,
   userNotificationWorkspaceRules,
   users,
@@ -1314,6 +1315,43 @@ void test("push registration is identity-wide even when the active organisation 
   assert.equal(await db.$count(pushSubscriptions, eq(pushSubscriptions.userId, f.member.id)), 1);
 });
 
+void test("subscription rotation requires the old push auth secret and updates the durable endpoint", async () => {
+  const f = await seed();
+  await ensureSystemWebPushConfig();
+  await db.insert(pushSubscriptions).values({
+    clientId: f.owner.clientId,
+    userId: f.member.id,
+    endpoint: "https://push.example.test/subscriptions/rotating-old",
+    keyP256dh: "old-p256dh",
+    keyAuth: "old-auth",
+  });
+  const payload = {
+    oldEndpoint: "https://push.example.test/subscriptions/rotating-old",
+    endpoint: "https://push.example.test/subscriptions/rotating-new",
+    keys: { p256dh: "new-p256dh", auth: "new-auth" },
+  };
+
+  const rejected = await f.app.inject({
+    method: "POST",
+    url: "/notifications/push/subscription-refresh",
+    payload: { ...payload, oldAuth: "wrong-auth" },
+  });
+  assert.equal(rejected.statusCode, 404);
+
+  const refreshed = await f.app.inject({
+    method: "POST",
+    url: "/notifications/push/subscription-refresh",
+    payload: { ...payload, oldAuth: "old-auth" },
+  });
+  assert.equal(refreshed.statusCode, 204, refreshed.body);
+  const [subscription] = await db.select().from(pushSubscriptions).where(eq(
+    pushSubscriptions.endpoint,
+    "https://push.example.test/subscriptions/rotating-new",
+  ));
+  assert.equal(subscription?.keyP256dh, "new-p256dh");
+  assert.equal(subscription?.keyAuth, "new-auth");
+});
+
 void test("push test sends the authenticated user's active subscriptions", async () => {
   const f = await seed();
   await enableOrgPush(f.owner.clientId);
@@ -1362,13 +1400,19 @@ void test("push test sends the authenticated user's active subscriptions", async
       failed: 0,
     });
     assert.equal(send.mock.calls.length, 2);
+    assert.deepEqual(send.mock.calls[0]?.arguments[2], {
+      TTL: 86_400,
+      urgency: "high",
+      timeout: 10_000,
+      contentEncoding: "aes128gcm",
+    });
     assert.deepEqual(JSON.parse(send.mock.calls[0]?.arguments[1] as string), {
       notification: {
         title: "Kanera push smoke test",
         body: "If you see this, Web Push is working.",
         icon: "/assets/favicon/android-chrome-192x192.png",
         badge: "/assets/favicon/notification-badge.png",
-        tag: "kanera:notifications",
+        tag: "kanera:notifications:test",
         renotify: true,
         data: {
           kind: "test",
@@ -1381,6 +1425,10 @@ void test("push test sends the authenticated user's active subscriptions", async
         },
       },
     });
+    const [auditRow] = await db.select().from(pushQueue).where(eq(pushQueue.reason, "test"));
+    assert.equal(auditRow?.status, "success");
+    assert.equal(auditRow?.processingLeaseExpiresAt, null);
+    assert.ok(auditRow?.sentAt);
   } finally {
     send.mock.restore();
   }

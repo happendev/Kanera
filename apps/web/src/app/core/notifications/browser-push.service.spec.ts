@@ -129,6 +129,19 @@ describe("BrowserPushService", () => {
     expect(service.subscriptionEndpoint()).toBe("https://push.example.test/subscriptions/device-1");
   });
 
+  it("re-syncs an existing browser subscription during authenticated startup", async () => {
+    notificationApi.permission = "granted";
+    subscription = createSubscription("https://push.example.test/subscriptions/restored-device");
+
+    await service.initialise();
+
+    expect(api.put).toHaveBeenCalledWith("/notifications/push/subscription", expect.objectContaining({
+      endpoint: "https://push.example.test/subscriptions/restored-device",
+      keys: { p256dh: "p256dh-value", auth: "auth-value" },
+    }));
+    expect(service.subscribed()).toBe(true);
+  });
+
   it("sends a test push and reports the delivery summary", async () => {
     notificationApi.permission = "granted";
     subscription = createSubscription();

@@ -4,6 +4,7 @@ import { ApiClient } from "../../core/api/api.client";
 
 interface OpsHealth {
   emailQueue: Record<string, number>;
+  pushQueue: Record<string, number | string | null> & { oldestQueuedAt: string | null };
   webhookDeliveries: Record<string, number>;
   eventOutbox: { pending: number; dispatched: number; total: number };
   orgs: { total: number; suspended: number; deleted: number };
@@ -52,6 +53,14 @@ Chart.register(...registerables);
           <div class="stat-label">Storage used</div>
           <div class="stat">{{ formatBytes(h.storageUsedBytes) }}</div>
           <div class="muted small">Across all organisations</div>
+        </div>
+        <div class="card">
+          <div class="stat-label">Push queue (failed)</div>
+          <div class="stat">{{ h.pushQueue["error"] }}</div>
+          <div class="muted small">
+            {{ h.pushQueue["queued"] }} queued
+            @if (h.pushQueue.oldestQueuedAt) { <span>· oldest {{ queueAge(h.pushQueue.oldestQueuedAt) }}</span> }
+          </div>
         </div>
         <div class="card">
           <div class="stat-label">Email queue (failed)</div>
@@ -209,6 +218,13 @@ export class DashboardPage implements OnInit, OnDestroy {
     const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
     const value = bytes / 1024 ** unit;
     return `${value.toLocaleString(undefined, { maximumFractionDigits: unit === 0 ? 0 : 1 })} ${units[unit]}`;
+  }
+
+  queueAge(value: string): string {
+    const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000));
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+    return `${Math.floor(seconds / 3600)}h`;
   }
 
   async ngOnInit(): Promise<void> {

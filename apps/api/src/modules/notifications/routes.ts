@@ -1,6 +1,6 @@
 import { dto } from "@kanera/shared";
 import type { ListNotificationsQuery, NotificationGroupCountsResponse, NotificationWorkspaceRule, NotificationsPage, PersonalNotificationTestResponse, PushTestResponse, WatcherUser } from "@kanera/shared/dto";
-import { activityEvents, boards, boardWatchers, cardChecklistItems, cardKeyPrefixReservations, cards, cardWatchers, lists, notificationSettings, notifications, userNotificationWorkspaceRules, users } from "@kanera/shared/schema";
+import { activityEvents, boards, boardWatchers, cardChecklistItems, cardKeyPrefixReservations, cards, cardWatchers, lists, notificationSettings, notifications, PUSH_QUEUE_STATUS, pushQueue, userNotificationWorkspaceRules, users } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
@@ -543,9 +543,24 @@ export async function notificationsRoutes(app: FastifyInstance) {
       payload: body,
     });
     const result = await deliverPushRow(db, row);
+    const attempted = result.delivered + result.disabled + result.failed;
+    const now = new Date();
+    // This endpoint intentionally tests the provider synchronously, but its durable audit row must
+    // still reach a terminal state instead of looking like a worker-stranded delivery.
+    await db.update(pushQueue).set({
+      status: result.delivered > 0 && result.failed === 0 ? PUSH_QUEUE_STATUS.success : PUSH_QUEUE_STATUS.error,
+      sentAt: result.delivered > 0 ? now : null,
+      lastError: result.failed > 0 || result.delivered === 0
+        ? `delivered=${result.delivered} disabled=${result.disabled} failed=${result.failed}`
+        : null,
+      processingLeaseExpiresAt: null,
+      updatedAt: now,
+    }).where(eq(pushQueue.id, row.id));
     return {
-      attempted: result.delivered + result.disabled + result.failed,
-      ...result,
+      attempted,
+      delivered: result.delivered,
+      disabled: result.disabled,
+      failed: result.failed,
     };
   });
 
@@ -835,13 +850,15 @@ export async function pushPublicRoutes(app: FastifyInstance) {
     const body = dto.pushSubscriptionRefreshBody.parse(req.body);
     const updated = await refreshPushSubscription({
       oldEndpoint: body.oldEndpoint,
+      oldAuth: body.oldAuth,
       endpoint: body.endpoint,
       keys: body.keys,
       expirationTime: body.expirationTime,
       contentEncoding: body.contentEncoding,
     });
     // Thrown rather than hand-rolled so the response carries the same `{ code, message }`
-    // envelope as every other error; the service worker treats any 404 as "stop retrying".
+    // envelope as every other error. A failed background refresh opens the app, whose
+    // authenticated startup sync repairs the durable subscription row.
     if (!updated) throw notFound("subscription not found");
     return reply.status(204).send();
   });

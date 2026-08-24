@@ -46,6 +46,9 @@ export type PushTestResponse = z.infer<typeof pushTestResponse>;
 
 export const pushSubscriptionRefreshBody = z.object({
   oldEndpoint: z.url(),
+  // The endpoint is a capability URL but can still leak through logs. Requiring the old Web Push
+  // auth secret prevents an endpoint-only leak from rotating someone else's subscription.
+  oldAuth: z.string().min(1),
   endpoint: z.url(),
   expirationTime: z.number().int().nullable().optional(),
   contentEncoding: z.string().trim().min(1).max(64).optional(),

@@ -3,7 +3,7 @@ import { ApiClient, ApiError } from "../../core/api/api.client";
 import { ToastService } from "../../shared/toast.service";
 import { TableControlsComponent, TablePagerComponent } from "../../shared/table-controls.component";
 
-type QueueKey = "email-queue" | "webhook-deliveries" | "event-outbox";
+type QueueKey = "push-queue" | "email-queue" | "webhook-deliveries" | "event-outbox";
 type Row = Record<string, unknown>;
 
 interface QueueTab {
@@ -14,6 +14,18 @@ interface QueueTab {
 }
 
 const TABS: QueueTab[] = [
+  {
+    key: "push-queue",
+    label: "Push queue",
+    columns: [
+      { field: "channel", header: "Channel" },
+      { field: "reason", header: "Reason" },
+      { field: "status", header: "Status" },
+      { field: "retries", header: "Retries" },
+      { field: "lastError", header: "Last error" },
+      { field: "createdAt", header: "Created" },
+    ],
+  },
   {
     key: "email-queue",
     label: "Email queue",
@@ -174,12 +186,14 @@ export class OpsPage implements OnInit {
   }
 
   canRetry(row: Row): boolean {
+    if (this.active().key === "push-queue") return row["status"] === "error";
     if (this.active().key === "email-queue") return row["status"] === 2 || row["status"] === "error";
     if (this.active().key === "webhook-deliveries") return row["status"] === "failed";
     return this.outboxPending(row);
   }
 
   canCancel(row: Row): boolean {
+    if (this.active().key === "push-queue") return row["status"] === "queued" || row["status"] === "immediate";
     if (this.active().key === "email-queue") return row["status"] === 0 || row["status"] === 99 || row["status"] === "queued" || row["status"] === "immediate";
     if (this.active().key === "webhook-deliveries") return row["status"] === "queued" || row["status"] === "delivering";
     return this.outboxPending(row);

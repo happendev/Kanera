@@ -7,10 +7,13 @@ import {
   EMAIL_QUEUE_STATUS,
   eventOutbox,
   noteAttachments,
+  PUSH_QUEUE_STATUS,
+  pushQueue,
   scratchpadNoteAttachments,
   users,
   webhookDeliveries,
   type EmailQueueStatus,
+  type PushQueueStatus,
 } from "@kanera/shared/schema";
 import { and, asc, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -28,6 +31,13 @@ const EMAIL_STATUS_BY_NAME: Record<string, EmailQueueStatus> = {
   error: EMAIL_QUEUE_STATUS.error,
   immediate: EMAIL_QUEUE_STATUS.immediate,
 };
+const PUSH_STATUS_BY_NAME: Record<string, PushQueueStatus> = {
+  queued: PUSH_QUEUE_STATUS.queued,
+  success: PUSH_QUEUE_STATUS.success,
+  error: PUSH_QUEUE_STATUS.error,
+  immediate: PUSH_QUEUE_STATUS.immediate,
+  cancelled: PUSH_QUEUE_STATUS.cancelled,
+};
 const WEBHOOK_STATUSES = ["queued", "delivering", "success", "failed"] as const;
 
 async function auditQueue(req: FastifyRequest, action: string, queue: string, id: string) {
@@ -42,7 +52,7 @@ async function auditQueue(req: FastifyRequest, action: string, queue: string, id
 }
 
 export async function adminOpsRoutes(app: FastifyInstance) {
-  // Grouped health snapshot across the three durable queues plus org/user totals. Read-only.
+  // Grouped health snapshot across the durable queues plus org/user totals. Read-only.
   app.get("/ops/health", async (req) => {
     const { days } = dto.adminHealthQuery.parse(req.query);
     const emailRows = await db
@@ -53,6 +63,15 @@ export async function adminOpsRoutes(app: FastifyInstance) {
       .select({ status: webhookDeliveries.status, count: sql<number>`count(*)::int` })
       .from(webhookDeliveries)
       .groupBy(webhookDeliveries.status);
+    const pushRows = await db
+      .select({ status: pushQueue.status, count: sql<number>`count(*)::int` })
+      .from(pushQueue)
+      .groupBy(pushQueue.status);
+    const [pushPending] = await db
+      .select({
+        oldestQueuedAt: sql<Date | null>`min(${pushQueue.createdAt}) filter (where ${pushQueue.status} in ('queued', 'immediate'))`,
+      })
+      .from(pushQueue);
     // Outbox has no status column — a row is "pending" until BOTH realtime + webhook fanout complete.
     const [outboxPendingRow] = await db
       .select({ outboxPending: sql<number>`count(*)::int` })
@@ -142,9 +161,13 @@ export async function adminOpsRoutes(app: FastifyInstance) {
     const webhookByName = Object.fromEntries(
       WEBHOOK_STATUSES.map((name) => [name, webhookRows.find((r) => r.status === name)?.count ?? 0]),
     );
+    const pushByName = Object.fromEntries(
+      Object.entries(PUSH_STATUS_BY_NAME).map(([name, status]) => [name, pushRows.find((row) => row.status === status)?.count ?? 0]),
+    );
 
     return {
       emailQueue: emailByName,
+      pushQueue: { ...pushByName, oldestQueuedAt: iso(pushPending?.oldestQueuedAt) },
       webhookDeliveries: webhookByName,
       eventOutbox: { pending: outboxPending, dispatched: outboxTotal - outboxPending, total: outboxTotal },
       orgs: orgTotals,
@@ -153,6 +176,83 @@ export async function adminOpsRoutes(app: FastifyInstance) {
       storageUsedBytes,
       trends: trendRows.rows,
     };
+  });
+
+  // --- push and personal-notification queue ---
+  app.get("/ops/push-queue", async (req) => {
+    const query = dto.adminQueueFilterQuery.parse(req.query);
+    const status = query.status ? PUSH_STATUS_BY_NAME[query.status] : undefined;
+    if (query.status && status === undefined) throw badRequest("invalid status");
+    const where = and(
+      status !== undefined ? eq(pushQueue.status, status) : undefined,
+      query.q ? or(
+        ilike(pushQueue.channel, `%${query.q}%`),
+        ilike(pushQueue.reason, `%${query.q}%`),
+        ilike(pushQueue.lastError, `%${query.q}%`),
+      ) : undefined,
+    );
+    const [countRow] = await db.select({ total: sql<number>`count(*)::int` }).from(pushQueue).where(where);
+    const pushSort = { primary: pushQueue.reason, status: pushQueue.status, attempts: pushQueue.retries, lastError: pushQueue.lastError, createdAt: pushQueue.createdAt } as const;
+    const order = query.direction === "asc" ? asc : desc;
+    const rows = await db.select({
+      id: pushQueue.id,
+      channel: pushQueue.channel,
+      reason: pushQueue.reason,
+      status: pushQueue.status,
+      retries: pushQueue.retries,
+      lastError: pushQueue.lastError,
+      processingLeaseExpiresAt: pushQueue.processingLeaseExpiresAt,
+      sentAt: pushQueue.sentAt,
+      createdAt: pushQueue.createdAt,
+    }).from(pushQueue)
+      .where(where)
+      .orderBy(order(pushSort[query.sort]), asc(pushQueue.id))
+      .limit(query.pageSize)
+      .offset((query.page - 1) * query.pageSize);
+    return {
+      items: rows.map((row) => ({
+        ...row,
+        processingLeaseExpiresAt: iso(row.processingLeaseExpiresAt),
+        sentAt: iso(row.sentAt),
+        createdAt: iso(row.createdAt),
+      })),
+      total: countRow?.total ?? 0,
+      page: query.page,
+      pageSize: query.pageSize,
+    };
+  });
+
+  app.post("/ops/push-queue/:id/retry", async (req) => {
+    const { id } = req.params as { id: string };
+    const [current] = await db.select({ status: pushQueue.status }).from(pushQueue).where(eq(pushQueue.id, id)).limit(1);
+    if (!current) throw notFound("push notification not found");
+    if (current.status !== PUSH_QUEUE_STATUS.error) throw badRequest("only failed push notifications can be retried");
+    await db.update(pushQueue).set({
+      status: PUSH_QUEUE_STATUS.queued,
+      retries: 0,
+      lastError: null,
+      processingLeaseExpiresAt: null,
+      updatedAt: new Date(),
+    }).where(eq(pushQueue.id, id));
+    await auditQueue(req, "queue.push.retry", "push_queue", id);
+    return { ok: true };
+  });
+
+  app.post("/ops/push-queue/:id/cancel", async (req) => {
+    const { id } = req.params as { id: string };
+    const [current] = await db.select({ status: pushQueue.status }).from(pushQueue).where(eq(pushQueue.id, id)).limit(1);
+    if (!current) throw notFound("push notification not found");
+    if (current.status !== PUSH_QUEUE_STATUS.queued && current.status !== PUSH_QUEUE_STATUS.immediate) {
+      throw badRequest("only pending push notifications can be cancelled");
+    }
+    await db.update(pushQueue).set({
+      status: PUSH_QUEUE_STATUS.cancelled,
+      lastError: "cancelled by admin",
+      processingLeaseExpiresAt: null,
+      updatedAt: new Date(),
+    }).where(eq(pushQueue.id, id));
+    await auditQueue(req, "queue.push.cancel", "push_queue", id);
+    return { ok: true };
   });
 
   // --- email queue ---
@@ -196,7 +296,7 @@ export async function adminOpsRoutes(app: FastifyInstance) {
     // (it selects status=queued AND retries<MAX AND nextAttemptAt<=now). We do NOT process it here.
     const res = await db
       .update(emailQueue)
-      .set({ status: EMAIL_QUEUE_STATUS.queued, retries: 0, nextAttemptAt: new Date(), lastError: null, updatedAt: new Date() })
+      .set({ status: EMAIL_QUEUE_STATUS.queued, retries: 0, nextAttemptAt: new Date(), processingLeaseExpiresAt: null, lastError: null, updatedAt: new Date() })
       .where(eq(emailQueue.id, id))
       .returning({ id: emailQueue.id });
     if (!res.length) throw notFound("email not found");
@@ -212,7 +312,7 @@ export async function adminOpsRoutes(app: FastifyInstance) {
     // Mark terminal (error) so the sweeper never claims it. There is no dedicated "cancelled" code.
     const res = await db
       .update(emailQueue)
-      .set({ status: EMAIL_QUEUE_STATUS.error, lastError: "cancelled by admin", updatedAt: new Date() })
+      .set({ status: EMAIL_QUEUE_STATUS.error, processingLeaseExpiresAt: null, lastError: "cancelled by admin", updatedAt: new Date() })
       .where(eq(emailQueue.id, id))
       .returning({ id: emailQueue.id });
     if (!res.length) throw notFound("email not found");

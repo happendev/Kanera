@@ -16,4 +16,6 @@ void test("push worker leaves notification display and clicks exclusively to Ang
   assert.equal(listenerCount("fetch"), 1, "share-target listener must remain");
   assert.equal(listenerCount("activate"), 1, "navigation-preload listener must remain");
   assert.equal(listenerCount("pushsubscriptionchange"), 1, "subscription-refresh listener must remain");
+  assert.match(source, /oldAuth/u, "subscription rotation must prove possession of the old auth secret");
+  assert.match(source, /if \(!response\.ok\)/u, "HTTP failures must trigger the open-client resync fallback");
 });
