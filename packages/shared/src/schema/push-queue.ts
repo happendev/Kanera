@@ -62,6 +62,8 @@ export interface PushQueuePayload {
     };
   };
   ttl?: number;
+  /** Retry scope after a partial multi-device delivery; absent means every active subscription. */
+  targetSubscriptionIds?: string[];
 }
 
 export interface PersonalNotificationQueuePayload {
@@ -89,6 +91,9 @@ export const pushQueue = pgTable(
     payload: jsonb("payload").notNull().$type<PushQueuePayload>(),
     status: text("status", { enum: PUSH_QUEUE_STATUSES }).notNull().default(PUSH_QUEUE_STATUS.queued),
     retries: integer("retries").notNull().default(0),
+    // A claimed row remains recoverable after a hard worker stop. The sweeper may reclaim an
+    // `immediate` row only after this lease expires.
+    processingLeaseExpiresAt: timestamp("processing_lease_expires_at", { withTimezone: true }),
     lastError: text("last_error"),
     sentAt: timestamp("sent_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -99,6 +104,7 @@ export const pushQueue = pgTable(
     check("push_queue_channel_ck", valueIn(t.channel, PUSH_QUEUE_CHANNELS)),
     check("push_queue_status_ck", valueIn(t.status, PUSH_QUEUE_STATUSES)),
     index("push_queue_status_created_at_idx").on(t.status, t.createdAt),
+    index("push_queue_status_lease_idx").on(t.status, t.processingLeaseExpiresAt),
     index("push_queue_user_id_created_at_idx").on(t.userId, t.createdAt),
     index("push_queue_created_at_idx").on(t.createdAt),
   ],

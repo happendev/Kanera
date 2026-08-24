@@ -44,6 +44,80 @@ export const oauthOperationsTotal = new client.Counter({
   registers: [metricsRegistry],
 });
 
+export const notificationQueueWaitDuration = new client.Histogram({
+  name: "kanera_notification_queue_wait_seconds",
+  help: "Time from durable enqueue until a notification delivery attempt starts",
+  labelNames: ["queue", "channel"],
+  buckets: [0.1, 1, 5, 15, 30, 60, 120, 300, 900, 3600],
+  registers: [metricsRegistry],
+});
+
+export const notificationDeliveryDuration = new client.Histogram({
+  name: "kanera_notification_delivery_seconds",
+  help: "Notification provider delivery attempt duration",
+  labelNames: ["queue", "channel"],
+  buckets: [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60],
+  registers: [metricsRegistry],
+});
+
+export const notificationDeliveryTotal = new client.Counter({
+  name: "kanera_notification_delivery_total",
+  help: "Notification queue row outcomes",
+  labelNames: ["queue", "channel", "outcome"],
+  registers: [metricsRegistry],
+});
+
+export interface NotificationQueueStats {
+  push: { queued: number; inFlight: number; oldestAgeSeconds: number };
+  email: { queued: number; inFlight: number; oldestAgeSeconds: number };
+}
+
+let notificationQueueStatsProvider: (() => Promise<NotificationQueueStats>) | null = null;
+let notificationQueueStatsCache: { at: number; value: Promise<NotificationQueueStats> } | null = null;
+export function registerNotificationQueueStatsProvider(provider: () => Promise<NotificationQueueStats>): void {
+  notificationQueueStatsProvider = provider;
+  notificationQueueStatsCache = null;
+}
+
+function notificationQueueStats(): Promise<NotificationQueueStats> | null {
+  if (!notificationQueueStatsProvider) return null;
+  const now = Date.now();
+  if (!notificationQueueStatsCache || now - notificationQueueStatsCache.at > 1_000) {
+    notificationQueueStatsCache = { at: now, value: notificationQueueStatsProvider() };
+  }
+  return notificationQueueStatsCache.value;
+}
+
+const notificationQueueRows = new client.Gauge({
+  name: "kanera_notification_queue_rows",
+  help: "Current durable notification queue rows by state",
+  labelNames: ["queue", "state"],
+  registers: [metricsRegistry],
+  async collect() {
+    const statsPromise = notificationQueueStats();
+    if (!statsPromise) return;
+    const stats = await statsPromise;
+    this.set({ queue: "push", state: "queued" }, stats.push.queued);
+    this.set({ queue: "push", state: "in_flight" }, stats.push.inFlight);
+    this.set({ queue: "email", state: "queued" }, stats.email.queued);
+    this.set({ queue: "email", state: "in_flight" }, stats.email.inFlight);
+  },
+});
+
+const notificationQueueOldestAge = new client.Gauge({
+  name: "kanera_notification_queue_oldest_age_seconds",
+  help: "Age of the oldest unresolved notification queue row",
+  labelNames: ["queue"],
+  registers: [metricsRegistry],
+  async collect() {
+    const statsPromise = notificationQueueStats();
+    if (!statsPromise) return;
+    const stats = await statsPromise;
+    this.set({ queue: "push" }, stats.push.oldestAgeSeconds);
+    this.set({ queue: "email" }, stats.email.oldestAgeSeconds);
+  },
+});
+
 // pg pool saturation. A sustained nonzero `waiting` means requests are queued waiting for a connection,
 // i.e. PG_POOL_MAX (or the database) is the bottleneck. Read live at scrape time via a collect
 // callback. db.ts registers the provider so this module never imports db.ts (avoids a circular import).

@@ -6,6 +6,8 @@ import {
   emailQueue,
   EMAIL_QUEUE_STATUS,
   eventOutbox,
+  PUSH_QUEUE_STATUS,
+  pushQueue,
   type NewEventOutbox,
   webhookDeliveries,
   webhookEndpoints,
@@ -58,11 +60,12 @@ void test("ops health reports purchased Pro seats instead of paid-organisation m
 
   assert.equal(response.statusCode, 200, response.body);
   assert.equal(response.json<{ planAccess: { proSeats: number } }>().planAccess.proSeats, 10);
+  assert.ok(response.json<{ pushQueue: Record<string, unknown> }>().pushQueue);
 });
 
 void test("ops queue actions reject terminal success rows", async () => {
   const { app, headers } = await adminSession();
-  const { userId, workspaceId } = await tenantWorkspace();
+  const { clientId, userId, workspaceId } = await tenantWorkspace();
 
   const [email] = await db
     .insert(emailQueue)
@@ -91,6 +94,14 @@ void test("ops queue actions reject terminal success rows", async () => {
       deliveredAt: new Date(),
     })
     .returning({ id: webhookDeliveries.id });
+  const [push] = await db.insert(pushQueue).values({
+    clientId,
+    userId,
+    reason: "test",
+    payload: { notification: { title: "Delivered", body: "Delivered", data: { kind: "test" } } },
+    status: PUSH_QUEUE_STATUS.success,
+    sentAt: new Date(),
+  }).returning({ id: pushQueue.id });
 
   const now = new Date();
   const deliveredOutboxRow = {
@@ -131,6 +142,8 @@ void test("ops queue actions reject terminal success rows", async () => {
     `/admin/ops/webhook-deliveries/${delivery!.id}/cancel`,
     `/admin/ops/event-outbox/${outbox!.id}/retry`,
     `/admin/ops/event-outbox/${outbox!.id}/cancel`,
+    `/admin/ops/push-queue/${push!.id}/retry`,
+    `/admin/ops/push-queue/${push!.id}/cancel`,
   ];
 
   for (const url of cases) {

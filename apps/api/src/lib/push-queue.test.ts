@@ -14,7 +14,7 @@ void test("browser push payload keeps Angular's nested notification and deep-lin
       body: "Alex mentioned you in Launch / Prepare release",
       icon: "/assets/favicon/android-chrome-192x192.png",
       badge: "/assets/favicon/notification-badge.png",
-      tag: "kanera:notifications",
+      tag: "kanera:notifications:comment_mentioned",
       renotify: true,
       data: {
         kind: "comment_mentioned",
@@ -29,7 +29,7 @@ void test("browser push payload keeps Angular's nested notification and deep-lin
   });
 });
 
-void test("browser push payload replaces the visible notification while retaining the newest content", () => {
+void test("browser push payload replaces only matching activity instead of the entire inbox", () => {
   const tagged = toPushQueuePayload({
     kind: "watching",
     title: "Card updated",
@@ -42,9 +42,9 @@ void test("browser push payload replaces the visible notification while retainin
     body: "Alex updated Prepare release",
   });
 
-  assert.equal(tagged.notification.tag, "kanera:notifications");
+  assert.equal(tagged.notification.tag, "card:card-id:watching");
   assert.equal(tagged.notification.renotify, true);
-  assert.equal(untagged.notification.tag, "kanera:notifications");
+  assert.equal(untagged.notification.tag, "kanera:notifications:watching");
   assert.equal(untagged.notification.renotify, true);
 });
 

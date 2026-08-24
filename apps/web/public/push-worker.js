@@ -61,6 +61,7 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("pushsubscriptionchange", (event) => {
   event.waitUntil((async () => {
     const oldEndpoint = event.oldSubscription?.endpoint;
+    const oldAuth = event.oldSubscription?.toJSON().keys?.auth;
     let newSubscription = event.newSubscription;
 
     // If the browser didn't provide a new subscription, re-subscribe with the
@@ -78,22 +79,24 @@ self.addEventListener("pushsubscriptionchange", (event) => {
 
     // Inform the server directly so the subscription row stays current even
     // when no app windows are open.
-    if (oldEndpoint && newSubscription) {
+    if (oldEndpoint && oldAuth && newSubscription) {
       const json = newSubscription.toJSON();
       const p256dh = json.keys?.p256dh;
       const auth = json.keys?.auth;
       if (p256dh && auth) {
         try {
-          await fetch(new URL("/api/notifications/push/subscription-refresh", self.location.origin).toString(), {
+          const response = await fetch(new URL("/api/notifications/push/subscription-refresh", self.location.origin).toString(), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               oldEndpoint,
+              oldAuth,
               endpoint: newSubscription.endpoint,
               expirationTime: newSubscription.expirationTime ?? null,
               keys: { p256dh, auth },
             }),
           });
+          if (!response.ok) throw new Error(`subscription refresh failed with HTTP ${response.status}`);
         } catch {
           // Network failure — fall through to notify open windows as fallback.
         }

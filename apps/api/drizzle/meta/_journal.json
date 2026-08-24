@@ -428,6 +428,13 @@
       "when": 1787521133840,
       "tag": "0060_fluffy_frightful_four",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1787587710627,
+      "tag": "0061_slippery_starfox",
+      "breakpoints": true
     }
   ]
 }

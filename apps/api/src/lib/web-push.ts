@@ -294,6 +294,7 @@ export async function deletePushSubscriptionForUser(args: {
  */
 export async function refreshPushSubscription(args: {
   oldEndpoint: string;
+  oldAuth: string;
   endpoint: string;
   keys: { p256dh: string; auth: string };
   expirationTime?: number | null;
@@ -303,7 +304,10 @@ export async function refreshPushSubscription(args: {
   const [existing] = await db
     .select({ id: pushSubscriptions.id })
     .from(pushSubscriptions)
-    .where(eq(pushSubscriptions.endpoint, args.oldEndpoint))
+    .where(and(
+      eq(pushSubscriptions.endpoint, args.oldEndpoint),
+      eq(pushSubscriptions.keyAuth, args.oldAuth),
+    ))
     .limit(1);
 
   if (!existing) return false;

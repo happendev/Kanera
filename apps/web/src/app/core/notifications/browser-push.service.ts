@@ -108,6 +108,11 @@ export class BrowserPushService {
       }
 
       const subscription = await registration.pushManager.getSubscription();
+      // Browser state is not proof that the durable server row survived a failed rotation or restore.
+      // Re-upsert on authenticated startup so subscription delivery self-heals without a settings visit.
+      if (subscription) {
+        await this.api.put<void>("/notifications/push/subscription", this.toApiSubscription(subscription));
+      }
       this.subscriptionEndpoint.set(subscription?.endpoint ?? null);
     } catch (err) {
       this.error.set(extractPushError(err));

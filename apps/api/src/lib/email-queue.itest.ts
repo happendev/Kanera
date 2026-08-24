@@ -2,7 +2,7 @@ import "../test/setup.integration.js";
 import { clients, EMAIL_QUEUE_STATUS, emailQueue, inviteTokens } from "@kanera/shared/schema";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "../db.js";
 import { env } from "../env.js";
 import { setStripeClientForTests } from "./billing.js";
@@ -305,6 +305,68 @@ test("queue sweep sends queued email and marks success", async () => {
   assert.ok(updated!.sentAt);
 });
 
+test("queue sweep drains every due email across bounded batches", async () => {
+  const rows = await db
+    .insert(emailQueue)
+    .values(Array.from({ length: 26 }, (_, index) => ({
+      toEmail: `batch-${index}@example.com`,
+      subject: `Batch email ${index}`,
+      type: "welcome" as const,
+      data: { displayName: `Batch ${index}`, loginUrl: "https://kanera.example/login" },
+      status: EMAIL_QUEUE_STATUS.queued,
+    })))
+    .returning({ id: emailQueue.id });
+
+  const delivered: string[] = [];
+  const processed = await runEmailQueueSweep({
+    db,
+    log,
+    resolveSmtpConfig: async () => smtpConfig,
+    sendEmail: async ({ to }) => {
+      delivered.push(to);
+    },
+  });
+
+  assert.equal(processed, 26);
+  assert.equal(delivered.length, 26);
+  const updated = await db.select().from(emailQueue).where(inArray(emailQueue.id, rows.map((row) => row.id)));
+  assert.ok(updated.every((row) => row.status === EMAIL_QUEUE_STATUS.success));
+});
+
+test("expired email processing leases are reclaimed but active leases are left alone", async () => {
+  const [expired, active] = await db.insert(emailQueue).values([
+    {
+      toEmail: "expired-lease@example.com",
+      subject: "Expired lease",
+      type: "welcome",
+      data: { displayName: "Expired", loginUrl: "https://kanera.example/login" },
+      status: EMAIL_QUEUE_STATUS.immediate,
+      processingLeaseExpiresAt: new Date(Date.now() - 1_000),
+    },
+    {
+      toEmail: "active-lease@example.com",
+      subject: "Active lease",
+      type: "welcome",
+      data: { displayName: "Active", loginUrl: "https://kanera.example/login" },
+      status: EMAIL_QUEUE_STATUS.immediate,
+      processingLeaseExpiresAt: new Date(Date.now() + 60_000),
+    },
+  ]).returning();
+  const delivered: string[] = [];
+
+  assert.equal(await runEmailQueueSweep({
+    db,
+    log,
+    resolveSmtpConfig: async () => smtpConfig,
+    sendEmail: async ({ to }) => { delivered.push(to); },
+  }), 1);
+
+  assert.deepEqual(delivered, ["expired-lease@example.com"]);
+  const rows = await db.select().from(emailQueue).where(inArray(emailQueue.id, [expired!.id, active!.id]));
+  assert.equal(rows.find((row) => row.id === expired!.id)?.status, EMAIL_QUEUE_STATUS.success);
+  assert.equal(rows.find((row) => row.id === active!.id)?.status, EMAIL_QUEUE_STATUS.immediate);
+});
+
 test("queue sweep leaves queued emails untouched without SMTP config", async () => {
   const [row] = await db
     .insert(emailQueue)
@@ -415,6 +477,14 @@ test("queue cleanup purges rows older than 30 days", async () => {
       createdAt: new Date("2026-04-01T00:00:00Z"),
     },
     {
+      toEmail: "old-pending@example.com",
+      subject: "Pending welcome",
+      type: "welcome",
+      data: { displayName: "Pending", loginUrl: "https://kanera.example/login" },
+      status: EMAIL_QUEUE_STATUS.queued,
+      createdAt: new Date("2026-04-01T00:00:00Z"),
+    },
+    {
       toEmail: "new@example.com",
       subject: "Welcome to Kanera",
       type: "welcome",
@@ -428,6 +498,6 @@ test("queue cleanup purges rows older than 30 days", async () => {
 
   assert.equal(deleted, 1);
   const rows = await db.select().from(emailQueue);
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0]!.toEmail, "new@example.com");
+  assert.equal(rows.length, 2);
+  assert.deepEqual(new Set(rows.map((row) => row.toEmail)), new Set(["old-pending@example.com", "new@example.com"]));
 });

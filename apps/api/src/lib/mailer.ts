@@ -89,6 +89,7 @@ export interface MailerDeps {
 
 const PASSWORD_RESET_EXPIRY_MINUTES = 60;
 const DEVELOPMENT_SUBJECT_PREFIX = "[Development] ";
+const IMMEDIATE_DELIVERY_LEASE_MS = 15 * 60_000;
 
 export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail: deliverEmail = sendEmail }: MailerDeps): Mailer {
   async function deliver(row: EmailQueue): Promise<void> {
@@ -103,7 +104,7 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
   async function markDelivered(row: EmailQueue) {
     const [updated] = await db
       .update(emailQueue)
-      .set({ status: EMAIL_QUEUE_STATUS.success, sentAt: new Date(), updatedAt: new Date(), lastError: null })
+      .set({ status: EMAIL_QUEUE_STATUS.success, sentAt: new Date(), processingLeaseExpiresAt: null, updatedAt: new Date(), lastError: null })
       .where(eq(emailQueue.id, row.id))
       .returning();
     return updated ?? row;
@@ -116,6 +117,7 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
         status: EMAIL_QUEUE_STATUS.error,
         retries: row.retries + 1,
         lastError: errorMessage(err),
+        processingLeaseExpiresAt: null,
         updatedAt: new Date(),
       })
       .where(eq(emailQueue.id, row.id))
@@ -132,6 +134,7 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
         type: "admin_invite",
         data: { displayName, inviteUrl: link, expiresInHours: 24 },
         status: EMAIL_QUEUE_STATUS.immediate,
+        processingLeaseExpiresAt: new Date(Date.now() + IMMEDIATE_DELIVERY_LEASE_MS),
       }).returning();
       try {
         await deliver(row!);
@@ -168,6 +171,7 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
           type: "password_reset",
           data: { displayName, resetUrl: link, expiresInMinutes: PASSWORD_RESET_EXPIRY_MINUTES },
           status: EMAIL_QUEUE_STATUS.immediate,
+          processingLeaseExpiresAt: new Date(Date.now() + IMMEDIATE_DELIVERY_LEASE_MS),
         })
         .returning();
       try {
@@ -189,6 +193,7 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
           type: "email_verification",
           data: { code, expiresInMinutes },
           status: EMAIL_QUEUE_STATUS.immediate,
+          processingLeaseExpiresAt: new Date(Date.now() + IMMEDIATE_DELIVERY_LEASE_MS),
         })
         .returning();
       try {

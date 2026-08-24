@@ -117,7 +117,7 @@ export const adminUpdateUserRoleBody = z.object({
 export type AdminUpdateUserRoleBody = z.infer<typeof adminUpdateUserRoleBody>;
 
 // --- Ops queues ---
-// One shared filter for all three queues. `status` is validated per-queue in the route since each queue
+// One shared filter for all durable queues. `status` is validated per-queue in the route since each queue
 // has its own status vocabulary (email state vs. webhook state vs. outbox boolean flags).
 export const adminQueueFilterQuery = z.object({
   status: z.string().trim().min(1).max(40).optional(),
