@@ -362,86 +362,90 @@ async function clearSubscriptionErrors(db: Db, sub: { id: string; failureCount: 
 }
 
 export async function runPushQueueSweep({ db, log }: PushQueueDeps): Promise<number> {
-  const rows = await claimQueuedPushes(db);
-  if (rows.length === 0) return 0;
+  let processed = 0;
+  while (true) {
+    const rows = await claimQueuedPushes(db);
+    if (rows.length === 0) return processed;
 
-  for (const row of rows) {
-    try {
-      if (row.channel !== "webPush") {
-        const result = await deliverPersonalNotificationRow(db, row);
-        if (result.cancelled) {
-          await db.update(pushQueue).set({ status: PUSH_QUEUE_STATUS.cancelled, lastError: result.error, updatedAt: new Date() }).where(eq(pushQueue.id, row.id));
-        } else {
-          await db.update(pushQueue).set({ status: PUSH_QUEUE_STATUS.success, sentAt: new Date(), lastError: null, updatedAt: new Date() }).where(eq(pushQueue.id, row.id));
+    // Empty the eligible backlog before the scheduler waits another 30 seconds. Each claim remains
+    // bounded so delivery work does not hold one database transaction open for the whole drain.
+    for (const row of rows) {
+      try {
+        if (row.channel !== "webPush") {
+          const result = await deliverPersonalNotificationRow(db, row);
+          if (result.cancelled) {
+            await db.update(pushQueue).set({ status: PUSH_QUEUE_STATUS.cancelled, lastError: result.error, updatedAt: new Date() }).where(eq(pushQueue.id, row.id));
+          } else {
+            await db.update(pushQueue).set({ status: PUSH_QUEUE_STATUS.success, sentAt: new Date(), lastError: null, updatedAt: new Date() }).where(eq(pushQueue.id, row.id));
+          }
+          log.info({ pushQueueId: row.id, userId: row.userId, reason: row.reason, channel: row.channel, delivered: result.delivered }, "personal notification queue row processed");
+          continue;
         }
-        log.info({ pushQueueId: row.id, userId: row.userId, reason: row.reason, channel: row.channel, delivered: result.delivered }, "personal notification queue row processed");
-        continue;
-      }
-      const result = await deliverPushRow(db, row);
-      const attempted = result.delivered + result.disabled + result.failed;
-      if (attempted === 0) {
-        // A removed or tenant-mismatched subscription must not make a push look
-        // successful; there was no delivery attempt for the provider to accept.
+        const result = await deliverPushRow(db, row);
+        const attempted = result.delivered + result.disabled + result.failed;
+        if (attempted === 0) {
+          // A removed or tenant-mismatched subscription must not make a push look
+          // successful; there was no delivery attempt for the provider to accept.
+          await db
+            .update(pushQueue)
+            .set({
+              status: PUSH_QUEUE_STATUS.error,
+              lastError: "no active push subscriptions",
+              updatedAt: new Date(),
+            })
+            .where(eq(pushQueue.id, row.id));
+          log.warn({ pushQueueId: row.id, userId: row.userId, reason: row.reason }, "push queue row had no active subscriptions");
+          continue;
+        }
+        const allFailed = result.delivered === 0 && (result.disabled > 0 || result.failed > 0);
+        if (allFailed && row.retries + 1 < MAX_RETRIES) {
+          // Return to queue for retry if nothing was delivered
+          await db
+            .update(pushQueue)
+            .set({
+              status: PUSH_QUEUE_STATUS.queued,
+              retries: row.retries + 1,
+              lastError: `delivered=0 disabled=${result.disabled} failed=${result.failed}`,
+              updatedAt: new Date(),
+            })
+            .where(eq(pushQueue.id, row.id));
+        } else {
+          await db
+            .update(pushQueue)
+            .set({
+              status: allFailed ? PUSH_QUEUE_STATUS.error : PUSH_QUEUE_STATUS.success,
+              sentAt: new Date(),
+              lastError: allFailed ? `delivered=0 disabled=${result.disabled} failed=${result.failed}` : null,
+              retries: row.retries + (allFailed ? 1 : 0),
+              updatedAt: new Date(),
+            })
+            .where(eq(pushQueue.id, row.id));
+        }
+        log.info({ pushQueueId: row.id, userId: row.userId, reason: row.reason, ...result }, "push queue row processed");
+      } catch (err) {
+        const retries = row.retries + 1;
+        const lastError = row.channel === "webPush"
+          ? Error.isError(err) ? err.message : String(err)
+          : personalDeliveryError(err);
         await db
           .update(pushQueue)
           .set({
-            status: PUSH_QUEUE_STATUS.error,
-            lastError: "no active push subscriptions",
+            status: retries >= MAX_RETRIES ? PUSH_QUEUE_STATUS.error : PUSH_QUEUE_STATUS.queued,
+            retries,
+            lastError,
             updatedAt: new Date(),
           })
           .where(eq(pushQueue.id, row.id));
-        log.warn({ pushQueueId: row.id, userId: row.userId, reason: row.reason }, "push queue row had no active subscriptions");
-        continue;
-      }
-      const allFailed = result.delivered === 0 && (result.disabled > 0 || result.failed > 0);
-      if (allFailed && row.retries + 1 < MAX_RETRIES) {
-        // Return to queue for retry if nothing was delivered
-        await db
-          .update(pushQueue)
-          .set({
-            status: PUSH_QUEUE_STATUS.queued,
-            retries: row.retries + 1,
-            lastError: `delivered=0 disabled=${result.disabled} failed=${result.failed}`,
-            updatedAt: new Date(),
-          })
-          .where(eq(pushQueue.id, row.id));
-      } else {
-        await db
-          .update(pushQueue)
-          .set({
-            status: allFailed ? PUSH_QUEUE_STATUS.error : PUSH_QUEUE_STATUS.success,
-            sentAt: new Date(),
-            lastError: allFailed ? `delivered=0 disabled=${result.disabled} failed=${result.failed}` : null,
-            retries: row.retries + (allFailed ? 1 : 0),
-            updatedAt: new Date(),
-          })
-          .where(eq(pushQueue.id, row.id));
-      }
-      log.info({ pushQueueId: row.id, userId: row.userId, reason: row.reason, ...result }, "push queue row processed");
-    } catch (err) {
-      const retries = row.retries + 1;
-      const lastError = row.channel === "webPush"
-        ? Error.isError(err) ? err.message : String(err)
-        : personalDeliveryError(err);
-      await db
-        .update(pushQueue)
-        .set({
-          status: retries >= MAX_RETRIES ? PUSH_QUEUE_STATUS.error : PUSH_QUEUE_STATUS.queued,
-          retries,
-          lastError,
-          updatedAt: new Date(),
-        })
-        .where(eq(pushQueue.id, row.id));
-      if (row.channel === "webPush") {
-        log.error({ err, pushQueueId: row.id, retries }, "push queue delivery failed");
-      } else {
-        // Do not attach the raw fetch error: Undici may include the personal destination URL.
-        log.error({ pushQueueId: row.id, channel: row.channel, retries, error: lastError }, "personal notification queue delivery failed");
+        if (row.channel === "webPush") {
+          log.error({ err, pushQueueId: row.id, retries }, "push queue delivery failed");
+        } else {
+          // Do not attach the raw fetch error: Undici may include the personal destination URL.
+          log.error({ pushQueueId: row.id, channel: row.channel, retries, error: lastError }, "personal notification queue delivery failed");
+        }
       }
     }
+    processed += rows.length;
   }
-
-  return rows.length;
 }
 
 export async function runPushQueueCleanup({ db, log }: PushQueueDeps, now = new Date()): Promise<number> {

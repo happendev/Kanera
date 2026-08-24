@@ -8,7 +8,7 @@ import { startSweepScheduler } from "./sweep-scheduler.js";
 
 const MAX_RETRIES = 3;
 const SWEEP_BATCH_SIZE = 25;
-const SWEEP_INTERVAL_MS = 25_000; // 25 seconds
+const SWEEP_INTERVAL_MS = 30_000; // 30 seconds
 const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 1,440 minutes
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 43,200 minutes
 const RETRY_BACKOFF_BASE_MS = 5 * 60_000; // 5 minutes
@@ -38,34 +38,41 @@ export async function runEmailQueueSweep({
     return 0;
   }
 
-  const rows = await claimQueuedEmails(db);
-  for (const row of rows) {
-    try {
-      await deliverEmail({ config, to: row.toEmail, subject: row.subject, html: renderEmail(row) });
-      await db
-        .update(emailQueue)
-        .set({ status: EMAIL_QUEUE_STATUS.success, sentAt: new Date(), updatedAt: new Date(), lastError: null })
-        .where(eq(emailQueue.id, row.id));
-      log.info({ emailQueueId: row.id, to: row.toEmail, subject: row.subject }, "email sent");
-    } catch (err) {
-      const retries = row.retries + 1;
-      const now = new Date();
-      await db
-        .update(emailQueue)
-        .set({
-          status: retries >= MAX_RETRIES ? EMAIL_QUEUE_STATUS.error : EMAIL_QUEUE_STATUS.queued,
-          retries,
-          // Defer the next attempt with exponential backoff so the next sweep skips this row
-          // until it's due. Terminal failures keep a future value too; it's simply ignored.
-          nextAttemptAt: new Date(now.getTime() + retryDelayMs(retries)),
-          lastError: errorMessage(err),
-          updatedAt: now,
-        })
-        .where(eq(emailQueue.id, row.id));
-      log.error({ err, emailQueueId: row.id, retries }, "queued email send failed");
+  let processed = 0;
+  while (true) {
+    const rows = await claimQueuedEmails(db);
+    if (rows.length === 0) return processed;
+
+    // Drain every email that is currently due before the scheduler starts its next idle window.
+    // Claims stay bounded so a large backlog never becomes one oversized database transaction.
+    for (const row of rows) {
+      try {
+        await deliverEmail({ config, to: row.toEmail, subject: row.subject, html: renderEmail(row) });
+        await db
+          .update(emailQueue)
+          .set({ status: EMAIL_QUEUE_STATUS.success, sentAt: new Date(), updatedAt: new Date(), lastError: null })
+          .where(eq(emailQueue.id, row.id));
+        log.info({ emailQueueId: row.id, to: row.toEmail, subject: row.subject }, "email sent");
+      } catch (err) {
+        const retries = row.retries + 1;
+        const now = new Date();
+        await db
+          .update(emailQueue)
+          .set({
+            status: retries >= MAX_RETRIES ? EMAIL_QUEUE_STATUS.error : EMAIL_QUEUE_STATUS.queued,
+            retries,
+            // Defer the next attempt with exponential backoff so this drain skips the row
+            // until it becomes due again. Terminal failures keep a future value too; it is ignored.
+            nextAttemptAt: new Date(now.getTime() + retryDelayMs(retries)),
+            lastError: errorMessage(err),
+            updatedAt: now,
+          })
+          .where(eq(emailQueue.id, row.id));
+        log.error({ err, emailQueueId: row.id, retries }, "queued email send failed");
+      }
     }
+    processed += rows.length;
   }
-  return rows.length;
 }
 
 export async function runEmailQueueCleanup({ db, log }: Pick<EmailQueueDeps, "db" | "log">, now = new Date()): Promise<number> {

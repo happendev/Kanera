@@ -1,7 +1,7 @@
 import "../test/setup.integration.js";
 import { insertTestUsers } from "../test/user-fixtures.js";
 import { clients, notificationSettings, pushQueue } from "@kanera/shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
 import { createServer } from "node:http";
@@ -94,6 +94,37 @@ void test("push queue records zero-subscription deliveries as errors", async () 
   assert.equal(processed?.lastError, "no active push subscriptions");
 });
 
+void test("push queue sweep drains every queued row across bounded batches", async () => {
+  const app = await buildIntegrationServer();
+  await ensureSystemWebPushConfig();
+  const [client] = await db
+    .insert(clients)
+    .values({ name: "Push batch drain", pushEnabled: true })
+    .returning();
+  const [user] = await insertTestUsers(db, {
+    clientId: client!.id,
+    email: `push-batch-${randomUUID()}@example.com`,
+    passwordHash: "x",
+    displayName: "Push batch recipient",
+  }).returning();
+
+  const rows = await Promise.all(Array.from({ length: 51 }, (_, index) => enqueuePush(db, {
+    clientId: client!.id,
+    userId: user!.id,
+    reason: "mentioned",
+    payload: {
+      kind: "comment_mentioned",
+      title: "Mentioned in a comment",
+      body: `Queued mention ${index}`,
+    },
+  })));
+
+  assert.equal(await runPushQueueSweep({ db, log: app.log }), 51);
+  const processed = await db.select().from(pushQueue).where(inArray(pushQueue.id, rows.map((row) => row.id)));
+  assert.equal(processed.length, 51);
+  assert.ok(processed.every((row) => row.status === "error" && row.lastError === "no active push subscriptions"));
+});
+
 void test("personal channel adapters send provider contracts, sign webhooks, cancel disabled rows, and retry failures", async () => {
   const requests: Array<{ url: string; headers: Record<string, string | string[] | undefined>; body: string }> = [];
   let failWebhook = false;
@@ -182,9 +213,9 @@ void test("personal channel adapters send provider contracts, sign webhooks, can
     failWebhook = true;
     await db.update(notificationSettings).set({ webhookUrl: `${origin}/failing` }).where(eq(notificationSettings.userId, user!.id));
     const failing = await enqueuePersonalNotification(db, { clientId: client!.id, userId: user!.id, reason: "mentioned", channel: "webhook", payload });
-    assert.equal(await runPushQueueSweep({ db, log: app.log }), 1);
-    assert.equal(await runPushQueueSweep({ db, log: app.log }), 1);
-    assert.equal(await runPushQueueSweep({ db, log: app.log }), 1);
+    // A drain keeps claiming queued work, including retryable failures, until every row reaches a
+    // terminal state. The scheduler only starts its 30-second wait after all three attempts finish.
+    assert.equal(await runPushQueueSweep({ db, log: app.log }), 3);
     const [failedRow] = await db.select().from(pushQueue).where(eq(pushQueue.id, failing.id)).limit(1);
     assert.equal(failedRow?.status, "error");
     assert.equal(failedRow?.retries, 3);
