@@ -578,13 +578,13 @@
                 <input #checklistItemInput class="checklist-item-input" [value]="draftItemText()" (input)="draftItemText.set($any($event.target).value)" (keydown.enter)="saveChecklistItem(checklist.id, item)"
                   (keydown.escape)="cancelChecklistItem()" autofocus />
                 } @else {
-                <!-- Mini-card model: clicking the item opens its detail drawer (description + sub-checklists). Renaming is the hover pencil only — a double-click can't coexist here because the first click already opens the drawer. Observers can open (read-only) too, so this is not gated on canEdit. -->
+                <!-- Mini-card model: clicking the item opens its detail drawer (description + sub-checklists). Renaming lives in the item actions menu — a double-click can't coexist here because the first click already opens the drawer. Observers can open (read-only) too, so this is not gated on canEdit. -->
                 <button type="button" class="checklist-item-text" [class.is-done]="item.completedAt" (click)="openChecklistItemDetail(item)" kTooltip="Open details">{{ item.text }}</button>
                 }
                 @if (showItemMeta || canEditRole()) {
                 <div class="checklist-item-actions">
                 @if (showItemMeta && (itemPresentation?.hasDueDate || canEditRole())) {
-                <div class="checklist-duedate-wrap">
+                <div class="checklist-duedate-wrap" [class.is-empty]="!itemPresentation?.hasDueDate" [class.is-open]="checklistItemDueDatePickerId() === item.id">
                   @if (itemPresentation?.hasDueDate) {
                   <button type="button" class="checklist-item-due due-badge due-badge-btn" [class.overdue]="itemPresentation?.overdue" [class.is-active]="checklistItemDueDatePickerId() === item.id" [disabled]="!canEdit()"
                     (click)="toggleChecklistItemDueDatePicker(item.id, $event)" [kTooltip]="canEdit() ? 'Change due date' : itemPresentation.dueDateText" aria-label="Change checklist item due date">
@@ -607,7 +607,7 @@
                 </div>
                 }
                 @if (showItemMeta && (canEditRole() || itemPresentation?.assignee)) {
-                <div class="checklist-assignee-wrap">
+                <div class="checklist-assignee-wrap" [class.is-empty]="!itemPresentation?.assignee" [class.is-open]="checklistItemAssigneePickerId() === item.id">
                   @if (itemPresentation?.assignee; as assignee) {
                   <button type="button" class="checklist-item-assignee" [disabled]="!canEdit()" (click)="toggleChecklistItemAssigneePicker(item.id, $event)" [attr.aria-label]="'Change checklist item assignee from ' + assignee.displayName"
                     [kTooltip]="canEdit() ? ('Unassign ' + assignee.displayName) : ('Assigned to ' + assignee.displayName)">
@@ -625,17 +625,13 @@
                   }
                 </div>
                 }
-                @if (canEditRole()) {
-                <button type="button" class="ghost xs checklist-item-rename" [disabled]="!canEdit()" (click)="startEditItem(item)" kTooltip="Rename item" aria-label="Rename checklist item">
-                  <i class="ti ti-pencil"></i>
-                </button>
-                }
                 @if (showItemMeta) {
                 @let subChecklistProgress = subChecklistProgressByItemId().get(item.id);
                 @let hasDetail = !!item.description || !!subChecklistProgress;
-                <!-- The fixed-width detail slot keeps every trailing action aligned. Notes and
-                sub-items remain independently visible: when both exist, the notes glyph plus x/y
-                progress communicates both states without adding another variable-width column. -->
+                @if (hasDetail) {
+                <!-- Notes and sub-items are persistent metadata, so they remain visible while empty
+                actions stay contextual. The indicator sizes to its content instead of reserving a
+                wide empty column on every row. -->
                 <button type="button" class="ghost xs checklist-item-detail" [class.has-detail]="hasDetail" (click)="openChecklistItemDetail(item)"
                   [kTooltip]="item.description && subChecklistProgress ? 'Notes and sub-items' : item.description ? 'Notes' : subChecklistProgress ? 'Sub-items' : 'Add notes & sub-items'" aria-label="Open checklist item detail">
                   @if (item.description) {
@@ -646,15 +642,31 @@
                   <i class="ti ti-checklist"></i>
                   }
                   <span>{{ subChecklistProgress.done }}/{{ subChecklistProgress.total }}</span>
-                  } @else if (!item.description) {
-                  <i class="ti ti-layout-sidebar-right-expand"></i>
                   }
                 </button>
                 }
+                }
                 @if (canEditRole()) {
-                <button type="button" class="ghost xs checklist-item-delete" [disabled]="!canEdit()" (click)="deleteChecklistItem(checklist.id, item)" kTooltip="Delete item">
-                  <i class="ti ti-trash"></i>
-                </button>
+                <div class="checklist-item-more-wrap" [class.is-open]="checklistItemActionsMenuId() === item.id">
+                  <button #itemActionsTrigger type="button" class="ghost xs checklist-item-more" [class.is-active]="checklistItemActionsMenuId() === item.id" [disabled]="!canEdit()"
+                    (click)="checklistItemActionsMenuId.set(checklistItemActionsMenuId() === item.id ? null : item.id)" aria-label="Checklist item actions" aria-haspopup="menu" [attr.aria-expanded]="checklistItemActionsMenuId() === item.id" kTooltip="Item actions">
+                    <i class="ti ti-dots"></i>
+                  </button>
+                  @if (checklistItemActionsMenuId() === item.id) {
+                  <div class="card-actions-menu checklist-item-actions-menu" kAnchoredPanel [apAnchor]="itemActionsTrigger" [apPlacement]="checklistItemActionsMenuPlacement"
+                    (apDismissed)="checklistItemActionsMenuId.set(null)" role="menu">
+                    <button type="button" class="card-actions-item" (click)="openChecklistItemDetailsFromMenu(item)" role="menuitem">
+                      <i class="ti ti-layout-sidebar-right-expand"></i><span>Open details</span>
+                    </button>
+                    <button type="button" class="card-actions-item checklist-item-rename" (click)="startEditChecklistItemFromMenu(item)" role="menuitem">
+                      <i class="ti ti-pencil"></i><span>Rename</span>
+                    </button>
+                    <button type="button" class="card-actions-item is-danger" (click)="deleteChecklistItemFromMenu(checklist.id, item)" role="menuitem">
+                      <i class="ti ti-trash"></i><span>Delete</span>
+                    </button>
+                  </div>
+                  }
+                </div>
                 }
                 </div>
                 }
@@ -971,6 +983,7 @@
         }
       </section>
 
+      @if (openChecklistItemCanHaveSubChecklists()) {
       <section class="detail-section">
         <div class="section-label">
           <i class="ti ti-checklist"></i>Checklists
@@ -1000,6 +1013,7 @@
         </div>
         }
       </section>
+      }
     </div>
   </aside>
   }

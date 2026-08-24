@@ -3029,6 +3029,49 @@ describe("CardDetailComponent realtime regressions", () => {
     });
   });
 
+  it("keeps empty checklist rows content-first and moves secondary edits into one actions menu", async () => {
+    const checklist = createChecklistFixture({ items: [createChecklistItemFixture()] });
+    const fixture = TestBed.createComponent(CardDetailComponent);
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.componentRef.setInput("checklists", [checklist]);
+    fixture.detectChanges();
+    await settleDetail(fixture);
+    fixture.componentRef.setInput("checklists", [checklist]);
+    await fixture.whenStable();
+
+    const row = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".checklist-item");
+    expect(row?.querySelector(".checklist-item-detail")).toBeNull();
+    expect(row?.querySelector(".checklist-item-rename")).toBeNull();
+    expect(row?.querySelector(".checklist-item-delete")).toBeNull();
+
+    row?.querySelector<HTMLButtonElement>(".checklist-item-more")?.click();
+    await fixture.whenStable();
+
+    const menu = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".checklist-item-actions-menu");
+    expect(menu?.textContent).toContain("Open details");
+    expect(menu?.textContent).toContain("Rename");
+    expect(menu?.textContent).toContain("Delete");
+
+    const rename = [...(menu?.querySelectorAll<HTMLButtonElement>(".card-actions-item") ?? [])]
+      .find((button) => button.textContent?.includes("Rename"));
+    expect(rename).toBeDefined();
+    rename!.click();
+    await fixture.whenStable();
+
+    expect(fixture.componentInstance.checklistItemActionsMenuId()).toBeNull();
+    expect(fixture.componentInstance.editingItemId()).toBe("item-1");
+    await vi.waitFor(() => {
+      expect((fixture.nativeElement as HTMLElement).querySelector(".checklist-item-input")).not.toBeNull();
+    });
+  });
+
   it("deletes empty top-level and sub-checklists without confirmation", async () => {
     const fixture = TestBed.createComponent(CardDetailComponent);
     const confirm = vi.spyOn(TestBed.inject(ConfirmService), "open").mockResolvedValue(false);
@@ -3097,6 +3140,34 @@ describe("CardDetailComponent realtime regressions", () => {
     await fixture.componentInstance.createChecklist();
 
     expect(api.post).toHaveBeenCalledWith("/cards/card-1/checklists", { title: "Nested", parentItemId: item.id });
+  });
+
+  it("does not offer another checklist level from a sub-checklist item", async () => {
+    const parentItem = createChecklistItemFixture({ id: "parent-item" });
+    const nestedItem = createChecklistItemFixture({ id: "nested-item", text: "Nested item" });
+    const topLevel = createChecklistFixture({ id: "top-level", items: [parentItem] });
+    const nested = createChecklistFixture({ id: "nested", parentItemId: parentItem.id, items: [nestedItem] });
+    const fixture = TestBed.createComponent(CardDetailComponent);
+
+    fixture.componentRef.setInput("card", createCard());
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("customFields", []);
+    fixture.componentRef.setInput("customFieldValues", []);
+    fixture.componentRef.setInput("cardLabels", []);
+    fixture.componentRef.setInput("cardLabelIds", []);
+    fixture.componentRef.setInput("members", []);
+    fixture.componentRef.setInput("checklists", [topLevel, nested]);
+    await settleDetail(fixture);
+
+    fixture.componentInstance.openChecklistItemDetail(nestedItem);
+    await fixture.whenStable();
+
+    const panel = fixture.nativeElement.querySelector(".checklist-item-panel") as HTMLElement;
+    expect(panel.textContent).not.toContain("Add checklist");
+
+    fixture.componentInstance.startAddChecklist(nestedItem.id);
+    expect(fixture.componentInstance.addingChecklist()).toBe(false);
+    expect(fixture.componentInstance.newChecklistParentItemId()).toBeNull();
   });
 
   it("dims the card and closes item detail when the drawer scrim is clicked", async () => {

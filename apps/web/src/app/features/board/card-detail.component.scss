@@ -1143,12 +1143,12 @@
 
 .checklist-item-text {
   font-size: 13px;
-  white-space: normal;
-  overflow: visible;
-  overflow-wrap: break-word;
-  text-overflow: unset;
-  height: auto;
-  line-height: unset;
+  height: 26px;
+  line-height: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
   // Mini-card model: the item text opens the detail drawer, so signal a click target (renaming is the pencil / double-click) rather than the text-caret cursor inherited from .checklist-title.
   cursor: pointer;
 
@@ -1219,18 +1219,22 @@
   flex: 0 0 auto;
 }
 
-.checklist-item-delete,
 .checklist-item-assign,
-.checklist-item-rename,
-.checklist-item-detail {
+.checklist-item-detail,
+.checklist-item-more-wrap {
   flex: 0 0 auto;
   opacity: 1;
 }
 
-// Keep action controls as direct flex children on larger layouts so the established
-// desktop alignment and fixed-width detail slot remain unchanged.
+// Treat item chrome as one compact cluster. Persistent metadata remains visible; empty actions
+// collapse until the row is hovered or keyboard focus enters it, following the content-first
+// checklist pattern without making those controls unreachable from the keyboard.
 .checklist-item-actions {
-  display: contents;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
 }
 
 .checklist-items {
@@ -1240,8 +1244,10 @@
 }
 
 .checklist-item {
-  min-height: 28px;
-  padding: 1px 4px;
+  height: 34px;
+  min-height: 34px;
+  max-height: 34px;
+  padding: 3px 4px;
   border-radius: var(--radius-sm);
   background: transparent;
   box-sizing: border-box;
@@ -1259,6 +1265,24 @@
       opacity: 1;
     }
   }
+
+  &:hover,
+  &:focus-within {
+    .checklist-duedate-wrap.is-empty,
+    .checklist-assignee-wrap.is-empty,
+    .checklist-item-more-wrap {
+      flex-basis: 26px;
+      width: 26px;
+      opacity: 1;
+      overflow: visible;
+      pointer-events: auto;
+    }
+  }
+}
+
+// Renaming must not change the row's footprint either.
+.checklist-item-input {
+  height: 26px;
 }
 
 .checklist-item-detail {
@@ -1266,12 +1290,11 @@
   align-items: center;
   justify-content: center;
   gap: 2px;
-  // Fixed-width slot: reserve enough room for the combined notes glyph + checklist progress state.
-  // Keeping the same footprint for every state prevents trailing actions shifting row-to-row.
-  flex: 0 0 58px;
-  width: 58px;
+  flex: 0 0 auto;
+  min-width: 26px;
+  width: auto;
   height: 26px;
-  padding: 0;
+  padding: 0 5px;
   color: var(--text-muted);
 
   // When the item holds a description or sub-checklist, the indicator is a persistent accent cue (not hover-only) so detail is discoverable at a glance.
@@ -1385,6 +1408,9 @@
   gap: 24px;
   min-height: 0;
   overflow-y: auto;
+  // Nested checklist actions expand on hover. The drawer is only meant to scroll vertically;
+  // suppress transient sub-pixel overflow so a horizontal scrollbar cannot shift its content.
+  overflow-x: hidden;
   padding: 20px;
 }
 
@@ -1516,6 +1542,28 @@
   justify-content: center;
 }
 
+.checklist-duedate-wrap.is-empty,
+.checklist-assignee-wrap.is-empty,
+.checklist-item-more-wrap {
+  flex: 0 0 0;
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  // Width must switch atomically: revealing a fixed-width child while this wrapper is still
+  // interpolating from zero briefly pushes narrow sub-checklist drawers past their edge.
+  transition: opacity 0.12s ease;
+
+  &.is-open,
+  &:focus-within {
+    flex-basis: 26px;
+    width: 26px;
+    opacity: 1;
+    overflow: visible;
+    pointer-events: auto;
+  }
+}
+
 .checklist-item-assign {
   flex: 0 0 26px;
   width: 26px;
@@ -1541,6 +1589,8 @@
 
 // A set due date stays visible so overdue state remains obvious.
 .checklist-item-due {
+  height: 26px;
+  min-height: 26px;
   max-width: 100%;
   font-size: 12px;
   padding: 3px 6px;
@@ -1562,44 +1612,81 @@
   }
 }
 
-.checklist-item-rename,
-.checklist-item-delete {
+.checklist-item-more-wrap {
+  position: relative;
+  height: 26px;
+}
+
+.checklist-item-more {
   flex: 0 0 26px;
   width: 26px;
   height: 26px;
+}
+
+.checklist-item-actions-menu {
+  width: var(--ap-width, 180px);
+
+  .card-actions-item.is-danger {
+    color: var(--danger);
+
+    >i {
+      color: currentColor;
+    }
+  }
 }
 
 @container card-panel (max-width: 560px) {
   .checklist-duedate-wrap {
     max-width: 124px;
   }
-
-  .checklist-item-rename {
-    display: none;
-  }
 }
 
-@media (max-width: 1023.98px) {
+@media (max-width: 767.98px), (hover: none) {
+  // Mobile rows use one fixed touch-friendly track. Metadata stays inline and the title yields
+  // space with an ellipsis; the item drawer provides the larger editing controls.
   .checklist-item {
-    flex-wrap: wrap;
+    height: 44px;
+    min-height: 44px;
+    max-height: 44px;
+    padding-block: 6px;
   }
 
-  // Below lg, metadata and destructive actions get a dedicated
-  // toolbar beneath the item text instead of competing with it for the first row.
-  .checklist-item-actions {
-    display: flex;
-    flex: 0 0 100%;
-    align-items: center;
-    gap: 6px;
-    box-sizing: border-box;
-    min-width: 0;
-    padding-left: 46px;
+  .checklist-item-text,
+  .checklist-item-input {
+    height: 32px;
   }
 
-  // Editing remains available in the relocated toolbar at the narrow sizes where
-  // the previous single-row layout had to hide it.
-  .checklist-item-rename {
-    display: inline-flex;
+  .checklist-item-due,
+  .checklist-item-assignee,
+  .checklist-item-detail {
+    height: 32px;
+  }
+
+  .checklist-item-assignee {
+    width: 32px;
+  }
+
+  .checklist-assignee-wrap:not(.is-empty) {
+    flex-basis: 32px;
+    width: 32px;
+  }
+
+  // Phones and touch devices have no reliable hover affordance, so keep the compact item menu
+  // visible. Empty date and assignee actions stay in the item detail drawer instead of turning
+  // every mobile row into a toolbar.
+  .checklist-item-more-wrap {
+    flex-basis: 32px;
+    width: 32px;
+    height: 32px;
+    opacity: 1;
+    overflow: visible;
+    pointer-events: auto;
+  }
+
+  .checklist-item-more {
+    flex-basis: 32px;
+    width: 32px;
+    height: 32px;
   }
 }
 
