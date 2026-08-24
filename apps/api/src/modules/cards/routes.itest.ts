@@ -1,7 +1,7 @@
 import "../../test/setup.integration.js";
 import { insertTestNotifications } from "../../test/notification-fixtures.js";
 import { insertTestUsers } from "../../test/user-fixtures.js";
-import { ACTIVITY_ACTION, ACTIVITY_ENTITY_TYPE, NOTIFICATION_REASON, activityEvents, boardMembers, boards, boardWatchers, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardLabelAssignments, cardLabels, cardSummaryView, cards, cardAssignees, cardWatchers, checklistTemplateItems, checklistTemplates, comments, directRealtimeOutbox, eventOutbox, internalLinks, lists, notifications, workspaceMembers, workspaces, type ActivityAction } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, ACTIVITY_ENTITY_TYPE, NOTIFICATION_REASON, activityEvents, boardMembers, boards, boardWatchers, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cardSummaryView, cards, cardAssignees, customFields, cardWatchers, checklistTemplateItems, checklistTemplates, comments, directRealtimeOutbox, eventOutbox, internalLinks, lists, notifications, workspaceMembers, workspaces, type ActivityAction } from "@kanera/shared/schema";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -2119,6 +2119,90 @@ void test("copied support-session card history labels the acted-as user, not the
   assert.equal(copiedHistorical.supportActorEmail, null);
   const payload = copiedHistorical.payload as { copiedActorName?: string };
   assert.equal(payload.copiedActorName, "Bernard Van Erk");
+});
+
+void test("card duplicate drops user field values and checklist completers who cannot access the target board", async () => {
+  const app = await buildIntegrationServer();
+
+  const { user, accessToken } = await signupOwner(app, { orgName: "Acme Duplicate Field Tenancy", email: "owner-duplicate-field-tenancy@example.com", displayName: "Owner" });
+  const auth = { authorization: `Bearer ${accessToken}` };
+
+  const workspaceCreated = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Tenancy workspace" } });
+  assert.equal(workspaceCreated.statusCode, 201);
+  const workspace = workspaceCreated.json<{ id: string }>();
+  const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).orderBy(asc(lists.position)).limit(1);
+  assert.ok(list);
+
+  const [sourceBoard, targetBoard] = await db
+    .insert(boards)
+    .values([
+      { workspaceId: workspace.id, name: "Source", position: "1000.0000000000" },
+      { workspaceId: workspace.id, name: "Target", position: "2000.0000000000" },
+    ])
+    .returning();
+  assert.ok(sourceBoard);
+  assert.ok(targetBoard);
+
+  // An outsider is a member of the source board only. Nothing about them should survive a copy
+  // onto a board they cannot reach.
+  const [outsider] = await insertTestUsers(db, {
+      clientId: user.clientId,
+      email: "outsider-duplicate-field-tenancy@example.com",
+      passwordHash: "x",
+      displayName: "Outsider",
+    })
+    .returning();
+  assert.ok(outsider);
+  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: outsider.id, role: "member" });
+  await db.insert(boardMembers).values({ boardId: sourceBoard.id, userId: outsider.id, role: "editor" });
+
+  const [userField] = await db
+    .insert(customFields)
+    .values({ workspaceId: workspace.id, name: "Reviewer", type: "user", position: "1000.0000000000" })
+    .returning();
+  assert.ok(userField);
+
+  const [source] = await db
+    .insert(cards)
+    .values({ listId: list.id, boardId: sourceBoard.id, title: "Tenancy source", position: "1000.0000000000", createdById: user.id })
+    .returning();
+  assert.ok(source);
+  await db.insert(cardCustomFieldValues).values({ cardId: source.id, fieldId: userField.id, valueUserIds: [outsider.id] });
+  const [checklist] = await db
+    .insert(cardChecklists)
+    .values({ cardId: source.id, title: "Steps", position: "1000.0000000000" })
+    .returning();
+  assert.ok(checklist);
+  await db.insert(cardChecklistItems).values({
+    checklistId: checklist.id,
+    text: "Done by the outsider",
+    position: "1000.0000000000",
+    completedAt: new Date(),
+    completedById: outsider.id,
+  });
+
+  const copied = await app.inject({
+    method: "POST",
+    url: `/cards/${source.id}/duplicate`,
+    headers: auth,
+    payload: { boardId: targetBoard.id },
+  });
+  assert.equal(copied.statusCode, 201);
+  const copy = copied.json<{ id: string }>();
+
+  // A user-valued custom field must not name someone with no access to the destination board, and
+  // a value that would be left empty is dropped rather than written as an empty array.
+  const copiedValues = await db.select().from(cardCustomFieldValues).where(eq(cardCustomFieldValues.cardId, copy.id));
+  assert.deepEqual(copiedValues, []);
+
+  // The completion timestamp is preserved, but the completer attribution is not: it would credit
+  // work to someone the destination board never grants access to.
+  const [copiedChecklist] = await db.select().from(cardChecklists).where(eq(cardChecklists.cardId, copy.id)).limit(1);
+  assert.ok(copiedChecklist);
+  const [copiedItem] = await db.select().from(cardChecklistItems).where(eq(cardChecklistItems.checklistId, copiedChecklist.id)).limit(1);
+  assert.ok(copiedItem);
+  assert.ok(copiedItem.completedAt);
+  assert.equal(copiedItem.completedById, null);
 });
 
 void test("card duplicate persists rebalance before created event", async () => {

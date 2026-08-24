@@ -374,6 +374,11 @@ const BULK_MENU_WIDTH = 232;
       > i {
         color: var(--danger, #d33);
       }
+
+      &:hover:not(:disabled),
+      &:active:not(:disabled) {
+        background: color-mix(in srgb, var(--danger, #d33) 10%, transparent);
+      }
     }
 
     .bcam-confirm {
@@ -401,11 +406,27 @@ const BULK_MENU_WIDTH = 232;
     .bcam-confirm-yes {
       background: var(--danger, #d33);
       color: #fff;
+
+      &:hover:not(:disabled),
+      &:active:not(:disabled) {
+        background: var(--danger, #d33);
+        opacity: 0.9;
+      }
+
+      &:focus-visible {
+        box-shadow: 0 0 0 2px var(--surface-overlay), 0 0 0 4px var(--danger, #d33);
+      }
     }
 
     .bcam-confirm-cancel {
       background: transparent;
       color: var(--text-muted);
+
+      &:hover:not(:disabled),
+      &:active:not(:disabled) {
+        background: var(--surface-hover);
+        color: var(--text);
+      }
     }
   `,
   ],

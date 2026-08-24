@@ -1,5 +1,7 @@
 import { dto } from "@kanera/shared";
 import {
+  ACTIVITY_ACTION,
+  ACTIVITY_ENTITY_TYPE,
   automationActions,
   automations,
   checklistTemplateItems,
@@ -13,6 +15,7 @@ import { recordActivity } from "../../lib/activity.js";
 import { loadAutomation } from "../../lib/automations.js";
 import { loadChecklistTemplate } from "../../lib/checklist-templates.js";
 import { notFound } from "../../lib/errors.js";
+import { moveOrderedEntity } from "../../lib/move-ordered-entity.js";
 import { between, neighbourPositions as resolveNeighbourPositions, positionAtIndex } from "../../lib/position.js";
 import { rebalanceChecklistTemplates } from "../../lib/rebalance.js";
 import { emitToWorkspace, emitToWorkspaceAdmins } from "../../realtime/emit.js";
@@ -188,18 +191,32 @@ export async function checklistTemplateRoutes(app: FastifyInstance) {
     const [current] = await db.select().from(checklistTemplates).where(eq(checklistTemplates.id, id)).limit(1);
     if (!current) throw notFound();
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
-    const { prev, next } = await neighbourPositions(current.workspaceId, body.afterTemplateId, body.beforeTemplateId);
-    const result = between(prev, next);
-    let position = result.position;
     const prevPosition = current.position;
-    await db.update(checklistTemplates).set({ position, updatedAt: new Date() }).where(eq(checklistTemplates.id, id));
+    const { position, rebalancedPositions } = await moveOrderedEntity({
+      table: checklistTemplates,
+      idColumn: checklistTemplates.id,
+      id,
+      neighbours: await neighbourPositions(current.workspaceId, body.afterTemplateId, body.beforeTemplateId),
+      rebalance: (tx) => rebalanceChecklistTemplates(current.workspaceId, tx),
+      // This route previously recorded no activity at all, so reordering templates was the one
+      // workspace mutation missing from the audit log. Recorded against the workspace with the
+      // template id in the payload, matching the automation move route: there is no
+      // `checklistTemplate` entity type, and workspace-scoped configuration objects that lack one
+      // are attributed to the workspace rather than widening the entity vocabulary.
+      activity: (position) => ({
+        boardId: null,
+        workspaceId: current.workspaceId,
+        actorId: req.auth.sub,
+        entityType: ACTIVITY_ENTITY_TYPE.WORKSPACE,
+        entityId: current.workspaceId,
+        action: ACTIVITY_ACTION.MOVED,
+        payload: { templateId: id, prevPosition, position },
+      }),
+    });
 
-    if (result.needsRebalance) {
-      const positions = await rebalanceChecklistTemplates(current.workspaceId);
-      position = positions.find((p) => p.id === id)?.position ?? position;
-      await emitToWorkspace(current.workspaceId, "checklistTemplate:rebalanced", { workspaceId: current.workspaceId, positions });
+    if (rebalancedPositions) {
+      await emitToWorkspace(current.workspaceId, "checklistTemplate:rebalanced", { workspaceId: current.workspaceId, positions: rebalancedPositions });
     }
-
     emitToWorkspace(current.workspaceId, "checklistTemplate:moved", {
       workspaceId: current.workspaceId,
       templateId: id,

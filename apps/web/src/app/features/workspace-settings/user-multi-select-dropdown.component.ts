@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from "@angular/core";
-import { AvatarComponent } from "../../shared/avatar.component";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
+import { AvatarComponent } from "../../shared/avatar.component";
+import { PickerListComponent, type PickerGroup } from "../../shared/picker-list.component";
 
 export type UserMultiSelectOption = {
   userId: string;
@@ -12,7 +13,7 @@ export type UserMultiSelectOption = {
 @Component({
   selector: "k-user-multi-select-dropdown",
   standalone: true,
-  imports: [AnchoredPanelDirective, AvatarComponent],
+  imports: [AnchoredPanelDirective, AvatarComponent, PickerListComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="ums">
@@ -39,32 +40,14 @@ export type UserMultiSelectOption = {
           [apPlacement]="placement"
           (apDismissed)="open.set(false)"
         >
-          <input
-            class="ums-search"
-            type="text"
-            placeholder="Search users..."
-            [value]="query()"
-            (input)="query.set($any($event.target).value)"
+          <k-picker-list
+            [groups]="pickerGroups()"
+            [selectedIds]="selectedIds()"
+            [searchThreshold]="0"
+            searchPlaceholder="Search users..."
+            emptyLabel="No matching users"
+            (pick)="toggleUser($event)"
           />
-          <div class="ums-list" role="listbox" aria-multiselectable="true">
-            @if (filteredUsers().length === 0) {
-              <p class="ums-empty">No matching users</p>
-            }
-            @for (user of filteredUsers(); track user.userId) {
-              <button type="button" class="ums-row" [class.is-selected]="isSelected(user.userId)" (click)="toggleUser(user.userId)" role="option" [attr.aria-selected]="isSelected(user.userId)">
-                <k-avatar [url]="user.avatarUrl" [name]="user.displayName" [size]="24" [userId]="user.userId" [workspaceId]="workspaceId()" />
-                <span class="ums-user">
-                  <span class="ums-name">{{ user.displayName }}</span>
-                  @if (user.email) {
-                    <span class="ums-email">{{ user.email }}</span>
-                  }
-                </span>
-                @if (isSelected(user.userId)) {
-                  <i class="ti ti-check ums-check"></i>
-                }
-              </button>
-            }
-          </div>
         </div>
       }
     </div>
@@ -93,7 +76,6 @@ export type UserMultiSelectOption = {
       text-align: left;
       font-size: 13px;
 
-      &:hover,
       &.is-open {
         border-color: var(--border-strong);
         background: var(--surface-hover);
@@ -148,86 +130,6 @@ export type UserMultiSelectOption = {
       overflow: hidden;
     }
 
-    .ums-search {
-      height: 32px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      background: var(--surface-2);
-      color: var(--text);
-      padding: 0 8px;
-      font-size: 13px;
-      outline: none;
-
-      &:focus {
-        border-color: var(--accent, var(--text));
-      }
-    }
-
-    .ums-list {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      min-height: 0;
-      overflow-y: auto;
-    }
-
-    .ums-row {
-      width: 100%;
-      min-height: 38px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 8px;
-      border: 0;
-      border-radius: var(--radius-sm);
-      background: transparent;
-      color: var(--text);
-      cursor: pointer;
-      text-align: left;
-
-      &:hover,
-      &.is-selected {
-        background: var(--surface-2);
-      }
-    }
-
-    .ums-user {
-      flex: 1;
-      min-width: 0;
-      display: grid;
-      gap: 1px;
-    }
-
-    .ums-name,
-    .ums-email {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .ums-name {
-      font-size: 13px;
-      font-weight: 600;
-    }
-
-    .ums-email {
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    .ums-check {
-      color: var(--accent, var(--text));
-      font-size: 15px;
-      flex: 0 0 auto;
-    }
-
-    .ums-empty {
-      margin: 0;
-      padding: 10px 6px;
-      text-align: center;
-      color: var(--text-muted);
-      font-size: 12px;
-    }
   `,
 })
 export class UserMultiSelectDropdownComponent {
@@ -245,7 +147,6 @@ export class UserMultiSelectDropdownComponent {
   readonly selectedIdsChange = output<string[]>();
 
   readonly open = signal(false);
-  readonly query = signal("");
   readonly placement = { width: 320, maxHeight: 340, minHeight: 180, gap: 4, margin: 8 } as const;
 
   readonly selectedUsers = computed(() => {
@@ -260,18 +161,22 @@ export class UserMultiSelectDropdownComponent {
     return `${users[0]?.displayName}, ${users[1]?.displayName} +${users.length - 2}`;
   });
 
-  readonly filteredUsers = computed(() => {
-    const q = this.query().trim().toLowerCase();
-    if (!q) return this.users();
-    return this.users().filter((user) =>
-      user.displayName.toLowerCase().includes(q) ||
-      (user.email?.toLowerCase().includes(q) ?? false),
-    );
-  });
-
-  isSelected(userId: string): boolean {
-    return this.selectedIds().includes(userId);
-  }
+  /**
+   * One ungrouped run of rows for `k-picker-list`, which owns the search, row markup, selected tick
+   * and empty state. `searchThreshold` is 0 so the box is always present: these lists are workspace
+   * membership, which is long enough that hunting by eye is the wrong interaction even at five rows.
+   */
+  readonly pickerGroups = computed<PickerGroup[]>(() => [{
+    id: "users",
+    options: this.users().map((user) => ({
+      id: user.userId,
+      label: user.displayName,
+      hint: user.email ?? null,
+      avatarUrl: user.avatarUrl,
+      avatarName: user.displayName,
+      avatarUserId: user.userId,
+    })),
+  }]);
 
   toggleOpen() {
     this.open.update((value) => !value);

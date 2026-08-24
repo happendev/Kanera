@@ -9,6 +9,7 @@ import { assertWorkspaceAccess } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
 import { loadAutomation, loadAutomations } from "../../lib/automations.js";
 import { badRequest, notFound } from "../../lib/errors.js";
+import { moveOrderedEntity } from "../../lib/move-ordered-entity.js";
 import { between, neighbourPositions as resolveNeighbourPositions, positionAtIndex } from "../../lib/position.js";
 import { capturePremiumFeatureUsed } from "../../lib/product-analytics.js";
 import { rebalanceAutomations } from "../../lib/rebalance.js";
@@ -444,20 +445,14 @@ export async function automationRoutes(app: FastifyInstance) {
     const [current] = await db.select().from(automations).where(eq(automations.id, id)).limit(1);
     if (!current) throw notFound();
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
-    const { prev, next } = await neighbourPositions(current.workspaceId, body.afterAutomationId, body.beforeAutomationId);
-    const result = between(prev, next);
     const prevPosition = current.position;
-    const { position, rebalancedPositions } = await db.transaction(async (tx) => {
-      let position = result.position;
-      await tx.update(automations).set({ position, updatedAt: new Date() }).where(eq(automations.id, id));
-
-      // Keep the move, any full reorder, and its audit row atomic so the recorded position
-      // always describes the committed automation order.
-      const rebalancedPositions = result.needsRebalance
-        ? await rebalanceAutomations(current.workspaceId, tx)
-        : null;
-      position = rebalancedPositions?.find((row) => row.id === id)?.position ?? position;
-      await recordActivity(tx, {
+    const { position, rebalancedPositions } = await moveOrderedEntity({
+      table: automations,
+      idColumn: automations.id,
+      id,
+      neighbours: await neighbourPositions(current.workspaceId, body.afterAutomationId, body.beforeAutomationId),
+      rebalance: (tx) => rebalanceAutomations(current.workspaceId, tx),
+      activity: (position) => ({
         boardId: null,
         workspaceId: current.workspaceId,
         actorId: req.auth.sub,
@@ -465,8 +460,7 @@ export async function automationRoutes(app: FastifyInstance) {
         entityId: current.workspaceId,
         action: "moved",
         payload: { automationId: id, prevPosition, position },
-      });
-      return { position, rebalancedPositions };
+      }),
     });
     if (rebalancedPositions) {
       await emitToWorkspaceAdmins(current.workspaceId, "automation:rebalanced", { workspaceId: current.workspaceId, positions: rebalancedPositions });

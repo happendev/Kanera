@@ -840,7 +840,9 @@ export async function pushPublicRoutes(app: FastifyInstance) {
       expirationTime: body.expirationTime,
       contentEncoding: body.contentEncoding,
     });
-    if (!updated) return reply.status(404).send({ message: "subscription not found" });
+    // Thrown rather than hand-rolled so the response carries the same `{ code, message }`
+    // envelope as every other error; the service worker treats any 404 as "stop retrying".
+    if (!updated) throw notFound("subscription not found");
     return reply.status(204).send();
   });
 }

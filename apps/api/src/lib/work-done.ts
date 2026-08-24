@@ -44,10 +44,12 @@ export function activityDayExpr(column: SQLWrapper, timeZone: string): SQL<strin
 /**
  * Predicate matching activity rows that represent a card being completed.
  *
- * Completion is recorded two ways: the bulk "complete list" path writes a plain `completed`, while
- * the single-card toggle writes a coalesced `completion:set` whose payload says which direction it
- * went. Un-completions must never read as delivery. Exported so the work-done timeline, the
- * work-done summary, and the portfolio activity strips cannot drift on what "completed" means.
+ * Completion is recorded two ways: every user-driven route (single, bulk, and whole-list) writes a
+ * coalesced `completion:set` whose payload says which direction it went, while a set_completion
+ * automation writes a plain `completed`. Historical rows predating the coalesced action also use
+ * the plain form, so both must be matched. Un-completions must never read as delivery. Exported so
+ * the work-done timeline, the work-done summary, and the portfolio activity strips cannot drift on
+ * what "completed" means.
  */
 export function activityCompletedPredicate(): SQL {
   return sql`(
@@ -240,10 +242,10 @@ export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneR
     .innerJoin(cards, eq(cards.id, activityEvents.entityId))
     .leftJoin(users, eq(users.id, activityEvents.actorId))
     .where(and(
-      // Card completion is recorded two ways: the bulk "complete list" path writes a
-      // plain `completed` action, while the normal single-card toggle writes a coalesced
-      // `completion:set` (whose payload.toValue tells us complete vs un-complete). Pull
-      // both; un-completions are filtered out below. "uncompleted" is excluded outright.
+      // Card completion is recorded two ways: user-driven routes write a coalesced
+      // `completion:set` (whose payload.toValue tells us complete vs un-complete), while
+      // set_completion automations and legacy rows write a plain `completed`. Pull both;
+      // un-completions are filtered out below. "uncompleted" is excluded outright.
       inArray(activityEvents.action, [
         ACTIVITY_ACTION.CREATED,
         ACTIVITY_ACTION.MOVED,

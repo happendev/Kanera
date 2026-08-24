@@ -25,6 +25,46 @@ import { PageHeaderComponent } from "../../shared/page-header.component";
 import { UpgradePromptService, type UpgradePromptReason } from "../../shared/upgrade-prompt.service";
 import { WorkspaceSettingsApiPage } from "./api/api.page";
 import { WorkspaceSettingsAutomationsPage } from "./automations/automations.page";
+import {
+  automationActionIcon,
+  automationActionIconClass,
+  automationActionLabelChips,
+  automationActionLabelColor,
+  automationActionLabelIds,
+  automationActionSummary,
+  automationActionSummarySegments,
+  automationActionTargetLabel,
+  automationActionTargetValue,
+  automationActionTemplateIds,
+  automationActionTypeValue,
+  automationActionTypes,
+  automationActionUserIds,
+  automationCompletionValue,
+  automationCustomFieldName,
+  automationDueOffsetValue,
+  automationDueSlotLabel,
+  automationDueSlotValue,
+  automationLabelName,
+  automationMemberName,
+  automationMovePlacementValue,
+  automationPopulateTextDateFormatLabel,
+  automationPopulateTextSource,
+  automationPopulateTextValue,
+  automationPopulateValueLabel,
+  automationSetCustomField,
+  automationSetCustomFieldTypes,
+  automationTemplateName,
+  automationTriggerLabelId,
+  automationTriggerLabelMissing,
+  automationTriggerLabelName,
+  automationTriggerTargetLabel,
+  automationTriggerUserIds,
+  isAutomationActionComplete,
+  isAutomationLabelAction,
+  type AutomationLookups,
+  type AutomationSummarySegment,
+  type PopulateTextDateFormat,
+} from "./automations/automation-presentation.util";
 import { WorkspaceSettingsBoardsPage } from "./boards/boards.page";
 import { WorkspaceSettingsFieldsPage } from "./fields/fields.page";
 import { WorkspaceSettingsGeneralPage } from "./general/general.page";
@@ -54,8 +94,6 @@ function sortWorkspaceApiKeys(keys: WorkspaceApiKeyRow[]): WorkspaceApiKeyRow[] 
 }
 type WorkspaceSettingsTab = "general" | "boards" | "lists" | "fields" | "templates" | "automations" | "labels" | "members" | "guests" | "integrations" | "api" | "import";
 type WorkspaceGuestBoard = Pick<Board, "id" | "name" | "icon" | "iconColor" | "position">;
-/** One fragment of an automation's summary sentence. `strong` marks a configured value, not grammar. */
-export type AutomationSummarySegment = { text: string; strong: boolean };
 type AcceptedGuestRow = {
   boardId: string;
   boardName: string;
@@ -167,17 +205,14 @@ const workspaceSettingsTabIcons: Record<WorkspaceSettingsTab, string> = {
   api: "plug-connected",
   import: "download",
 };
-const automationActionTypes = ["add_labels", "remove_labels", "add_assignees", "remove_assignees", "apply_checklists", "set_due_date", "clear_due_date", "set_completion", "move_to_list", "move_to_top", "move_to_bottom", "populate_custom_field"] as const;
 type AutomationActionTypeName = (typeof automationActionTypes)[number];
 type AutomationTriggerTypeName = AutomationTriggerTypeDto;
 type PopulateCustomFieldAction = Extract<AutomationActionBody, { type: "populate_custom_field" }>;
 type PopulateCustomFieldValue = PopulateCustomFieldAction["config"]["value"];
-type PopulateTextDateFormat = Extract<PopulateCustomFieldValue, { kind: "text_current_date" }>["format"];
 type PopulateTextSource = "text" | "current_date";
 type PopulateDateSource = "fixed" | "current";
 type AutomationDueDatePreset = "0" | "1" | "2" | "7" | "custom";
 const automationTextDateFormats = ["date", "month", "month_long_short_year", "month_long_year", "datetime"] as const satisfies readonly PopulateTextDateFormat[];
-const automationSetCustomFieldTypes = ["text", "number", "date", "checkbox", "select", "user"] as const satisfies readonly CustomFieldTypeName[];
 const automationDueDatePresets = [
   { value: "0", label: "Today" },
   { value: "1", label: "Tomorrow" },
@@ -724,6 +759,22 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly expandedAutomationIds = signal<ReadonlySet<string>>(new Set());
   readonly automationActionDrafts = signal<Record<string, AutomationActionBody[]>>({});
   readonly customAutomationDueDateDrafts = signal<ReadonlySet<string>>(new Set());
+  /**
+   * One snapshot of the collections automation summaries resolve ids against.
+   *
+   * A `computed` rather than a fresh object per call: the summary helpers run once per action per
+   * rendered rule, so a workspace with a dozen automations would otherwise rebuild this object
+   * dozens of times per change-detection pass. Read-only — nothing writes back through it, so the
+   * new object identity on each dependency change cannot feed an effect loop.
+   */
+  private readonly automationLookups = computed<AutomationLookups>(() => ({
+    lists: this.lists(),
+    labels: this.labels(),
+    members: this.members(),
+    templates: this.templates(),
+    fields: this.fields(),
+  }));
+
   readonly automationActionTypes = automationActionTypes;
   readonly automationActionLimit = AUTOMATION_ACTION_LIMIT;
   readonly automationLimit = AUTOMATION_LIMIT;
@@ -2122,60 +2173,27 @@ export class WorkspaceSettingsPage implements OnDestroy {
     return automation.triggerListId ?? "";
   }
 
-  automationTriggerUserIds(automation: WireAutomation): string[] {
-    return automation.triggerUserIds ?? [];
-  }
+  automationTriggerUserIds(automation: WireAutomation): string[] { return automationTriggerUserIds(automation); }
 
-  automationTriggerLabelId(automation: WireAutomation): string {
-    return automation.triggerLabelId ?? "";
-  }
+  automationTriggerLabelId(automation: WireAutomation): string { return automationTriggerLabelId(automation); }
 
-  automationTriggerLabelMissing(automation: WireAutomation): boolean {
-    return Boolean(automation.triggerLabelId) && !this.labels().some((label) => label.id === automation.triggerLabelId);
-  }
+  automationTriggerLabelMissing(automation: WireAutomation): boolean { return automationTriggerLabelMissing(automation, this.automationLookups()); }
 
-  automationActionTypeValue(action: AutomationActionBody): string {
-    return automationActionTypes.includes(action.type) ? action.type : "set_completion";
-  }
+  automationActionTypeValue(action: AutomationActionBody): string { return automationActionTypeValue(action); }
 
-  automationActionTargetValue(action: AutomationActionBody): string {
-    if (action.type === "add_labels" || action.type === "remove_labels") return action.config.labelIds[0] ?? "";
-    if (action.type === "add_assignees" || action.type === "remove_assignees") return action.config.userIds[0] ?? "";
-    if (action.type === "move_to_list") return action.config.listId;
-    if (action.type === "populate_custom_field") return action.config.fieldId;
-    return "";
-  }
+  automationActionTargetValue(action: AutomationActionBody): string { return automationActionTargetValue(action); }
 
-  automationActionUserIds(action: AutomationActionBody): string[] {
-    return action.type === "add_assignees" || action.type === "remove_assignees" ? action.config.userIds : [];
-  }
+  automationActionUserIds(action: AutomationActionBody): string[] { return automationActionUserIds(action); }
 
-  automationActionLabelIds(action: AutomationActionBody): string[] {
-    return action.type === "add_labels" || action.type === "remove_labels" ? action.config.labelIds : [];
-  }
+  automationActionLabelIds(action: AutomationActionBody): string[] { return automationActionLabelIds(action); }
 
-  /**
-   * Labels for the collapsed summary, in the shape `k-card-labels` takes so rule summaries render
-   * labels exactly as boards, the table and the agenda do — colour token, not a resolved CSS value.
-   */
-  automationActionLabelChips(action: AutomationActionBody): CardLabelPresentation[] {
-    return this.automationActionLabelIds(action).map((id) => {
-      const label = this.labels().find((candidate) => candidate.id === id);
-      return { id, name: label?.name ?? "Deleted label", color: label?.color ?? null };
-    });
-  }
+  automationActionLabelChips(action: AutomationActionBody): CardLabelPresentation[] { return automationActionLabelChips(action, this.automationLookups()); }
 
-  automationActionTemplateIds(action: AutomationActionBody): string[] {
-    return action.type === "apply_checklists" ? action.config.templateIds : [];
-  }
+  automationActionTemplateIds(action: AutomationActionBody): string[] { return automationActionTemplateIds(action); }
 
-  automationMovePlacementValue(action: AutomationActionBody): "top" | "bottom" {
-    return action.type === "move_to_list" && action.config.placement === "top" ? "top" : "bottom";
-  }
+  automationMovePlacementValue(action: AutomationActionBody): "top" | "bottom" { return automationMovePlacementValue(action); }
 
-  automationDueOffsetValue(action: AutomationActionBody): number {
-    return action.type === "set_due_date" ? action.config.offsetDays : 0;
-  }
+  automationDueOffsetValue(action: AutomationActionBody): number { return automationDueOffsetValue(action); }
 
   automationDueDatePresetValue(action: AutomationActionBody, automationId?: string, index?: number): AutomationDueDatePreset {
     if (automationId !== undefined && index !== undefined && this.customAutomationDueDateDrafts().has(this.automationActionDraftKey(automationId, index))) return "custom";
@@ -2187,33 +2205,17 @@ export class WorkspaceSettingsPage implements OnDestroy {
     return this.automationDueDatePresetValue(action, automationId, index) === "custom";
   }
 
-  automationDueSlotValue(action: AutomationActionBody): DueDateSlot {
-    return action.type === "set_due_date" ? action.config.slot : "anyTime";
-  }
+  automationDueSlotValue(action: AutomationActionBody): DueDateSlot { return automationDueSlotValue(action); }
 
-  automationDueSlotLabel(slot: DueDateSlot): string {
-    if (slot === "anyTime") return "Any time";
-    if (slot === "endOfWorkDay") return "End of workday";
-    return slot.charAt(0).toUpperCase() + slot.slice(1);
-  }
+  automationDueSlotLabel(slot: DueDateSlot): string { return automationDueSlotLabel(slot); }
 
-  automationCompletionValue(action: AutomationActionBody): string {
-    return action.type === "set_completion" && !action.config.completed ? "false" : "true";
-  }
+  automationCompletionValue(action: AutomationActionBody): string { return automationCompletionValue(action); }
 
-  automationSetCustomField(action: AutomationActionBody): WireCustomField | null {
-    return action.type === "populate_custom_field"
-      ? this.fields().find((field) => field.id === action.config.fieldId) ?? null
-      : null;
-  }
+  automationSetCustomField(action: AutomationActionBody): WireCustomField | null { return automationSetCustomField(action, this.automationLookups()); }
 
-  automationPopulateTextSource(action: AutomationActionBody): PopulateTextSource {
-    return action.type === "populate_custom_field" && action.config.value.kind === "text_current_date" ? "current_date" : "text";
-  }
+  automationPopulateTextSource(action: AutomationActionBody): PopulateTextSource { return automationPopulateTextSource(action); }
 
-  automationPopulateTextValue(action: AutomationActionBody): string {
-    return action.type === "populate_custom_field" && action.config.value.kind === "text" ? action.config.value.text : "";
-  }
+  automationPopulateTextValue(action: AutomationActionBody): string { return automationPopulateTextValue(action); }
 
   automationPopulateNumberValue(action: AutomationActionBody): string {
     return action.type === "populate_custom_field" && action.config.value.kind === "number" ? String(action.config.value.number) : "";
@@ -2315,157 +2317,21 @@ export class WorkspaceSettingsPage implements OnDestroy {
     return automation.triggerType === "card_enters_list" && !automation.applyOnCreate && !automation.applyOnMove;
   }
 
-  /**
-   * Reads as the tail of automationTriggerLabel()'s sentence, which is its only caller, so the
-   * unconfigured cases are worded as prose ("a list") rather than as a control prompt ("Choose list").
-   */
-  automationTriggerTargetLabel(automation: WireAutomation): string | null {
-    if (automation.triggerType === "due_date_arrives") return null;
-    if (automation.triggerType === "all_checklist_items_complete") return null;
-    if (automation.triggerType === "card_marked_complete") return null;
-    if (automation.triggerType === "card_label_set") {
-      return automation.triggerLabelId ? this.automationTriggerLabelName(automation.triggerLabelId) : "a label";
-    }
-    if (automation.triggerType === "card_assigned_to_user") {
-      const names = this.automationTriggerUserIds(automation).map((id) => this.automationMemberName(id));
-      if (names.length === 0) return "selected users";
-      if (names.length <= 2) return names.join(", ");
-      return `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
-    }
-    return this.lists().find((item) => item.id === automation.triggerListId)?.name ?? "a list";
-  }
+  automationTriggerTargetLabel(automation: WireAutomation): string | null { return automationTriggerTargetLabel(automation, this.automationLookups()); }
 
-  /**
-   * The collapsed summary renders one sentence per action — "Set Billing Month to Branch" — with only
-   * the configured values emphasised, which is the shape ClickUp, Trello Butler and Notion all settle
-   * on. Segments rather than one string is what lets the template carry that emphasis: the earlier
-   * verb/value table needed two strong grey levels to read as columns and never got them, so a
-   * sentence with one weight step replaces a layout with none.
-   *
-   * Label actions end on a trailing space and let k-card-labels finish the sentence — a label's
-   * colour *is* the value, so no text stands in for it.
-   */
-  automationActionSummarySegments(action: AutomationActionBody): AutomationSummarySegment[] {
-    const plain = (text: string): AutomationSummarySegment => ({ text, strong: false });
-    const value = (text: string): AutomationSummarySegment => ({ text, strong: true });
+  automationActionSummarySegments(action: AutomationActionBody): AutomationSummarySegment[] { return automationActionSummarySegments(action, this.automationLookups()); }
 
-    if (action.type === "add_labels" || action.type === "remove_labels") {
-      const verb = action.type === "add_labels" ? "Add" : "Remove";
-      const count = action.config.labelIds.length;
-      if (count === 0) return [plain(`${verb} label `), value("(choose labels)")];
-      return [plain(`${verb} ${count === 1 ? "label" : "labels"} `)];
-    }
-    if (action.type === "add_assignees" || action.type === "remove_assignees") {
-      const verb = action.type === "add_assignees" ? "Assign" : "Unassign";
-      if (action.config.userIds.length === 0) return [plain(`${verb} `), value("(choose members)")];
-      return [plain(`${verb} `), value(this.automationActionTargetLabel(action) ?? "")];
-    }
-    if (action.type === "apply_checklists") {
-      if (action.config.templateIds.length === 0) return [plain("Apply "), value("(choose checklists)")];
-      const count = action.config.templateIds.length;
-      return [plain(`Apply ${count === 1 ? "checklist" : "checklists"} `), value(this.automationActionTargetLabel(action) ?? "")];
-    }
-    if (action.type === "move_to_list") {
-      if (!action.config.listId) return [plain("Move to "), value("(choose list)")];
-      const listName = this.lists().find((list) => list.id === action.config.listId)?.name ?? "list";
-      return [plain("Move to "), value(listName), plain(", at the "), value(this.automationMovePlacementValue(action))];
-    }
-    if (action.type === "move_to_top") return [plain("Move to the top of its list")];
-    if (action.type === "move_to_bottom") return [plain("Move to the bottom of its list")];
-    if (action.type === "set_due_date") {
-      return [plain("Set due date "), value(this.automationDueDateSummary(action.config.offsetDays, action.config.slot))];
-    }
-    if (action.type === "clear_due_date") return [plain("Clear the due date")];
-    if (action.type === "populate_custom_field") {
-      if (!action.config.fieldId) return [plain("Set "), value("(choose custom field)")];
-      return [
-        plain("Set "),
-        value(this.automationCustomFieldName(action.config.fieldId)),
-        plain(" to "),
-        value(this.automationPopulateValueLabel(action)),
-      ];
-    }
-    return [plain(action.config.completed ? "Mark complete" : "Mark incomplete")];
-  }
+  automationActionTargetLabel(action: AutomationActionBody): string | null { return automationActionTargetLabel(action, this.automationLookups()); }
 
-  automationActionTargetLabel(action: AutomationActionBody): string | null {
-    if (action.type === "add_labels" || action.type === "remove_labels") {
-      return action.config.labelIds[0] ? this.automationLabelName(action.config.labelIds[0]) : "Choose label";
-    }
-    if (action.type === "add_assignees" || action.type === "remove_assignees") {
-      if (action.config.userIds.length === 0) return "Choose members";
-      const names = action.config.userIds.map((id) => this.automationMemberName(id));
-      if (names.length <= 2) return names.join(", ");
-      return `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
-    }
-    if (action.type === "apply_checklists") {
-      if (action.config.templateIds.length === 0) return "Choose checklists";
-      const names = action.config.templateIds.map((id) => this.automationTemplateName(id));
-      if (names.length <= 2) return names.join(", ");
-      return `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
-    }
-    if (action.type === "move_to_list") {
-      if (!action.config.listId) return "Choose list";
-      const listName = this.lists().find((list) => list.id === action.config.listId)?.name ?? "list";
-      return `${listName} · ${this.automationMovePlacementValue(action)}`;
-    }
-    if (action.type === "set_due_date") return this.automationDueDateSummary(action.config.offsetDays, action.config.slot);
-    if (action.type === "populate_custom_field") {
-      if (!action.config.fieldId) return "Choose custom field";
-      return `${this.automationCustomFieldName(action.config.fieldId)} · ${this.automationPopulateValueLabel(action)}`;
-    }
-    return null;
-  }
+  isAutomationLabelAction(action: AutomationActionBody): boolean { return isAutomationLabelAction(action); }
 
-  isAutomationLabelAction(action: AutomationActionBody): boolean {
-    return action.type === "add_labels" || action.type === "remove_labels";
-  }
+  automationActionLabelColor(action: AutomationActionBody): string | null { return automationActionLabelColor(action, this.automationLookups()); }
 
-  automationActionLabelColor(action: AutomationActionBody): string | null {
-    if (!this.isAutomationLabelAction(action)) return null;
-    const labelId = this.automationActionTargetValue(action);
-    const color = this.labels().find((label) => label.id === labelId)?.color;
-    return color ? `var(--color-${color})` : "var(--border-strong)";
-  }
+  automationActionSummary(action: AutomationActionBody): string { return automationActionSummary(action, this.automationLookups()); }
 
-  automationActionSummary(action: AutomationActionBody): string {
-    if (action.type === "add_labels") return action.config.labelIds[0] ? `Add label ${this.automationLabelName(action.config.labelIds[0])}` : "Add label (choose label)";
-    if (action.type === "remove_labels") return action.config.labelIds[0] ? `Remove label ${this.automationLabelName(action.config.labelIds[0])}` : "Remove label (choose label)";
-    if (action.type === "add_assignees") return action.config.userIds.length ? `Assign ${this.automationActionTargetLabel(action)}` : "Assign (choose members)";
-    if (action.type === "remove_assignees") return action.config.userIds.length ? `Unassign ${this.automationActionTargetLabel(action)}` : "Unassign (choose members)";
-    if (action.type === "apply_checklists") return action.config.templateIds.length ? `Apply checklist ${this.automationActionTargetLabel(action)}` : "Apply checklist (choose checklists)";
-    if (action.type === "move_to_list") {
-      if (!action.config.listId) return "Move to list (choose list)";
-      const listName = this.lists().find((list) => list.id === action.config.listId)?.name ?? "list";
-      return `Move to ${listName} ${this.automationMovePlacementValue(action)}`;
-    }
-    if (action.type === "move_to_top") return "Move to top";
-    if (action.type === "move_to_bottom") return "Move to bottom";
-    if (action.type === "set_due_date") return `Set due date ${this.automationDueDateSummary(action.config.offsetDays, action.config.slot)}`;
-    if (action.type === "clear_due_date") return "Clear due date";
-    if (action.type === "populate_custom_field") {
-      return action.config.fieldId
-        ? `Set ${this.automationCustomFieldName(action.config.fieldId)} to ${this.automationPopulateValueLabel(action)}`
-        : "Set custom field (choose field)";
-    }
-    return action.config.completed ? "Mark complete" : "Mark incomplete";
-  }
+  automationActionIcon(action: AutomationActionBody): string { return automationActionIcon(action); }
 
-  automationActionIcon(action: AutomationActionBody): string {
-    if (action.type === "add_labels" || action.type === "remove_labels") return "ti-tag";
-    if (action.type === "add_assignees" || action.type === "remove_assignees") return "ti-user";
-    if (action.type === "apply_checklists") return "ti-list-check";
-    if (action.type === "move_to_list") return "ti-arrow-right";
-    if (action.type === "move_to_top") return "ti-arrow-up";
-    if (action.type === "move_to_bottom") return "ti-arrow-down";
-    if (action.type === "set_due_date" || action.type === "clear_due_date") return "ti-calendar";
-    if (action.type === "populate_custom_field") return "ti-forms";
-    return action.config.completed ? "ti-circle-check" : "ti-circle-dashed";
-  }
-
-  automationActionIconClass(action: AutomationActionBody): string {
-    return `ti ${this.automationActionIcon(action)}`;
-  }
+  automationActionIconClass(action: AutomationActionBody): string { return automationActionIconClass(action); }
 
   automationSummaryActions(automation: WireAutomation): AutomationActionBody[] {
     return this.automationActionDrafts()[automation.id] ?? this.automationActionBodies(automation);
@@ -2481,87 +2347,21 @@ export class WorkspaceSettingsPage implements OnDestroy {
     return slot === "anyTime" ? dayLabel : `${dayLabel}, ${this.automationDueSlotLabel(slot)}`;
   }
 
-  automationLabelName(id: string): string {
-    return this.labels().find((label) => label.id === id)?.name ?? "Label";
-  }
+  automationLabelName(id: string): string { return automationLabelName(id, this.automationLookups()); }
 
-  automationTriggerLabelName(id: string): string {
-    return this.labels().find((label) => label.id === id)?.name ?? "Deleted label";
-  }
+  automationTriggerLabelName(id: string): string { return automationTriggerLabelName(id, this.automationLookups()); }
 
-  automationMemberName(id: string): string {
-    return this.members().find((member) => member.userId === id)?.displayName ?? "Member";
-  }
+  automationMemberName(id: string): string { return automationMemberName(id, this.automationLookups()); }
 
-  automationTemplateName(id: string): string {
-    return this.templates().find((template) => template.id === id)?.title ?? "Checklist";
-  }
+  automationTemplateName(id: string): string { return automationTemplateName(id, this.automationLookups()); }
 
-  automationCustomFieldName(id: string): string {
-    return this.fields().find((field) => field.id === id)?.name ?? "Custom field";
-  }
+  automationCustomFieldName(id: string): string { return automationCustomFieldName(id, this.automationLookups()); }
 
-  automationPopulateTextDateFormatLabel(format: PopulateTextDateFormat): string {
-    if (format === "date") return "YYYY-MM-DD";
-    if (format === "month") return "YYYY-MM";
-    if (format === "month_long_short_year") return "MMMM yy";
-    if (format === "month_long_year") return "MMMM yyyy";
-    if (format === "datetime") return "YYYY-MM-DD HH:mm";
-    return "YYYY-MM-DD";
-  }
+  automationPopulateTextDateFormatLabel(format: PopulateTextDateFormat): string { return automationPopulateTextDateFormatLabel(format); }
 
-  automationPopulateValueLabel(action: AutomationActionBody): string {
-    if (action.type !== "populate_custom_field") return "";
-    const value = action.config.value;
-    if (value.kind === "text") return value.text || "Text";
-    if (value.kind === "number") return String(value.number);
-    if (value.kind === "text_current_date") return this.automationPopulateTextDateFormatLabel(value.format);
-    if (value.kind === "date") return value.source === "current" ? "Current date" : value.date;
-    if (value.kind === "checkbox") return value.checked ? "Checked" : "Unchecked";
-    if (value.kind === "select") {
-      const field = this.automationSetCustomField(action);
-      const labels = value.optionIds.map((id) => field?.options.find((option) => option.id === id)?.label ?? "Option");
-      if (labels.length === 0) return "Choose option";
-      return labels.length <= 2 ? labels.join(", ") : `${labels.slice(0, 2).join(", ")} +${labels.length - 2}`;
-    }
-    if (value.kind === "user") {
-      const names = value.userIds.map((id) => this.automationMemberName(id));
-      if (names.length === 0) return "Choose members";
-      return names.length <= 2 ? names.join(", ") : `${names.slice(0, 2).join(", ")} +${names.length - 2}`;
-    }
-    if (value.kind === "field") return value.sourceFieldId ? this.automationCustomFieldName(value.sourceFieldId) : "Choose field";
-    return "";
-  }
+  automationPopulateValueLabel(action: AutomationActionBody): string { return automationPopulateValueLabel(action, this.automationLookups()); }
 
-  private isAutomationActionComplete(action: AutomationActionBody): boolean {
-    if (action.type === "add_labels" || action.type === "remove_labels") return action.config.labelIds.length > 0;
-    if (action.type === "add_assignees" || action.type === "remove_assignees") return action.config.userIds.length > 0;
-    if (action.type === "apply_checklists") return action.config.templateIds.length > 0;
-    if (action.type === "move_to_list") return !!action.config.listId;
-    if (action.type === "populate_custom_field") {
-      if (!action.config.fieldId) return false;
-      const field = this.automationSetCustomField(action);
-      if (!field || !(automationSetCustomFieldTypes as readonly CustomFieldTypeName[]).includes(field.type)) return false;
-      const value = action.config.value;
-      if ((value.kind === "text" || value.kind === "text_current_date") && field.type !== "text") return false;
-      if (value.kind === "number" && field.type !== "number") return false;
-      if (value.kind === "date" && field.type !== "date") return false;
-      if (value.kind === "checkbox" && field.type !== "checkbox") return false;
-      if (value.kind === "select" && field.type !== "select") return false;
-      if (value.kind === "user" && field.type !== "user") return false;
-      if (value.kind === "text") return Boolean(value.text.trim());
-      if (value.kind === "date" && value.source === "fixed") return /^\d{4}-\d{2}-\d{2}$/u.test(value.date);
-      if (value.kind === "select") return value.optionIds.length > 0 && (field.allowMultiple || value.optionIds.length === 1);
-      if (value.kind === "user") return value.userIds.length > 0 && (field.allowMultiple || value.userIds.length === 1);
-      if (value.kind === "field") {
-        // Copy-from-field is complete only when the source resolves to another field of the same type.
-        const source = this.fields().find((candidate) => candidate.id === value.sourceFieldId) ?? null;
-        return Boolean(source && source.type === field.type && source.id !== field.id);
-      }
-      return true;
-    }
-    return true;
-  }
+  private isAutomationActionComplete(action: AutomationActionBody): boolean { return isAutomationActionComplete(action, this.automationLookups()); }
 
   private hasIncompleteAutomationDraft(id: string): boolean {
     return this.automationActionDrafts()[id]?.some((action) => !this.isAutomationActionComplete(action)) ?? false;

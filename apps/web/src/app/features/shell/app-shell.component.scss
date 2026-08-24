@@ -360,6 +360,12 @@ k-support-session-banner {
     color: var(--text);
     text-decoration: none;
   }
+
+  // Declared after `:hover` on purpose: both selectors weigh the same, so source order is
+  // what keeps an active workspace accented while the pointer is over it.
+  &.active {
+    color: var(--accent);
+  }
 }
 
 .nav-help {
@@ -440,26 +446,6 @@ k-support-session-banner {
 .guest-ws-group {
   .ws-toggle {
     color: var(--nav-text-strong);
-  }
-}
-
-.ws-settings {
-  opacity: 1;
-
-  &.active {
-    opacity: 1;
-    color: var(--accent);
-  }
-}
-
-@media (hover: none),
-(pointer: coarse),
-(any-pointer: coarse) {
-
-  .section-label .new-ws-btn,
-  .section-label .new-board-btn,
-  .ws-settings {
-    opacity: 1;
   }
 }
 

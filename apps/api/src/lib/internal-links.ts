@@ -244,7 +244,7 @@ export async function loadLinkedNotesForCard(claims: AuthClaims, cardId: string,
   for (const row of cardRows) {
     if (row.id === cardId || seen.has(`card:${row.id}`)) continue;
     try {
-      await assertCardAccess(claims, row.id, "observer");
+      await assertCardAccess(claims, row, "observer");
       seen.add(`card:${row.id}`);
       summaries.push({
         kind: "card",
@@ -375,7 +375,7 @@ export async function loadBacklinksForNote(claims: AuthClaims, note: Note): Prom
     }).from(cards).innerJoin(boards, eq(boards.id, cards.boardId)).innerJoin(lists, eq(lists.id, cards.listId)).where(inArray(cards.id, cardIds));
     for (const row of cardRows) {
       try {
-        await assertCardAccess(claims, row.id, "observer");
+        await assertCardAccess(claims, row, "observer");
         backlinks.push({ kind: "card", id: row.id, organisationKey: row.organisationKey, key: row.key, title: row.title, boardId: row.boardId, boardName: row.boardName, listName: row.listName, icon: row.boardIcon, iconColor: row.boardIconColor });
       } catch {
         // Backlinks follow the same non-leaking access rule as link resolution.

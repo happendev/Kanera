@@ -188,13 +188,36 @@
   }
 
   .row-actions {
+    // The trailing controls on a settings row are three unrelated components whose natural sizes
+    // disagree — k-icon-picker and k-color-picker default to 36px, and the global `button.icon`
+    // rule is 32px. They read as one cluster, so one variable sizes all three rather than each
+    // carrying its own number and drifting apart again.
+    --row-action-size: 28px;
+
     display: flex;
     align-items: center;
     gap: 4px;
     margin-left: auto;
 
+    k-icon-picker {
+      --icon-picker-size: var(--row-action-size);
+    }
+
     k-color-picker {
-      --color-picker-size: 28px;
+      --color-picker-size: var(--row-action-size);
+    }
+
+    // Beats the global `button.icon` 32px on specificity rather than by `!important`.
+    button.icon {
+      width: var(--row-action-size);
+      height: var(--row-action-size);
+    }
+
+    // A text control in the cluster (the boards tab's group select) keeps its own width — it has
+    // to fit a group name — but matches the cluster's height so the row reads as one strip rather
+    // than a tall control with short buttons beside it.
+    select {
+      height: var(--row-action-size);
     }
   }
 }

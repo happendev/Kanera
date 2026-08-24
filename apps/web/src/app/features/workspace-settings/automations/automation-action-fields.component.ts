@@ -288,7 +288,8 @@ export class AutomationActionFieldsComponent {
     this.settings.labels().map((label) => ({
       id: label.id,
       name: label.name,
-      color: label.color ? `var(--color-${label.color})` : null,
+      // The picker resolves the token itself, the same way every other coloured row in the app does.
+      color: label.color ?? null,
     })),
   );
 

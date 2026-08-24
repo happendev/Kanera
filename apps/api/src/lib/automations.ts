@@ -909,6 +909,57 @@ async function applyAutomationActionsAndRecordStats(tx: Tx, automationId: string
   }
 }
 
+/**
+ * The shared tail of every trigger runner.
+ *
+ * Each runner differs only in how it selects the automations that fired; from there the work is
+ * identical — load those automations' actions, snapshot the card once as the run context, and
+ * apply each automation's actions in authored order. Keeping it in one place is what stops the
+ * five copies drifting: they already had, and the loop variable in one of them was renamed
+ * because the others shadowed the imported `automationActions` table.
+ *
+ * `cardGate` covers the one real difference. The card is re-read inside the transaction rather
+ * than passed in, so an automation always sees the row as committed by the mutation that
+ * triggered it — `card_marked_complete` uses that to confirm the card really is complete.
+ */
+async function applyTriggeredAutomations(
+  tx: Tx,
+  rows: (typeof automations.$inferSelect)[],
+  opts: { cardId: string; boardId: string; workspaceId: string; clientId: string; triggerActorId?: string | null },
+  cardGate: (card: typeof cards.$inferSelect) => boolean = () => true,
+): Promise<AutomationEffects> {
+  const actions = await tx
+    .select()
+    .from(automationActions)
+    .where(inArray(automationActions.automationId, rows.map((row) => row.id)))
+    .orderBy(asc(automationActions.position));
+  const actionsByAutomation = new Map<string, AutomationAction[]>();
+  for (const action of actions) {
+    const list = actionsByAutomation.get(action.automationId);
+    if (list) list.push(action);
+    else actionsByAutomation.set(action.automationId, [action]);
+  }
+  const [card] = await tx.select().from(cards).where(eq(cards.id, opts.cardId)).limit(1);
+  if (!card || !cardGate(card)) return EMPTY_EFFECTS;
+  const ctx: AutomationRunContext = {
+    card,
+    boardId: opts.boardId,
+    workspaceId: opts.workspaceId,
+    clientId: opts.clientId,
+    fireDateLocalDate: localDateInTimezone(new Date(), card.dueDateTimezone || "UTC"),
+    fireDate: new Date(),
+    triggerActorId: opts.triggerActorId,
+  };
+  const effects: AutomationEffect[] = [];
+  for (const automation of rows) {
+    const actionsForAutomation = actionsByAutomation.get(automation.id);
+    if (!actionsForAutomation?.length) continue;
+    const result = await applyAutomationActionsAndRecordStats(tx, automation.id, ctx, actionsForAutomation);
+    effects.push(...result.effects);
+  }
+  return { effects };
+}
+
 export async function runListEntryAutomations(
   tx: Tx,
   opts: { cardId: string; listId: string; boardId: string; workspaceId: string; clientId: string; trigger: "create" | "move"; triggerActorId?: string | null },
@@ -927,36 +978,7 @@ export async function runListEntryAutomations(
     ))
     .orderBy(asc(automations.position));
   if (rows.length === 0) return EMPTY_EFFECTS;
-  const actions = await tx
-    .select()
-    .from(automationActions)
-    .where(inArray(automationActions.automationId, rows.map((row) => row.id)))
-    .orderBy(asc(automationActions.position));
-  const actionsByAutomation = new Map<string, AutomationAction[]>();
-  for (const action of actions) {
-    const list = actionsByAutomation.get(action.automationId);
-    if (list) list.push(action);
-    else actionsByAutomation.set(action.automationId, [action]);
-  }
-  const [card] = await tx.select().from(cards).where(eq(cards.id, opts.cardId)).limit(1);
-  if (!card) return EMPTY_EFFECTS;
-  const ctx: AutomationRunContext = {
-    card,
-    boardId: opts.boardId,
-    workspaceId: opts.workspaceId,
-    clientId: opts.clientId,
-    fireDateLocalDate: localDateInTimezone(new Date(), card.dueDateTimezone || "UTC"),
-    fireDate: new Date(),
-    triggerActorId: opts.triggerActorId,
-  };
-  const effects: AutomationEffect[] = [];
-  for (const automation of rows) {
-    const automationActions = actionsByAutomation.get(automation.id);
-    if (!automationActions?.length) continue;
-    const result = await applyAutomationActionsAndRecordStats(tx, automation.id, ctx, automationActions);
-    effects.push(...result.effects);
-  }
-  return { effects };
+  return applyTriggeredAutomations(tx, rows, opts);
 }
 
 export async function runChecklistCompletionAutomations(
@@ -984,36 +1006,7 @@ export async function runChecklistCompletionAutomations(
     .where(and(eq(cardChecklists.cardId, opts.cardId), isNull(cardChecklists.parentItemId)));
   if (items.length === 0 || items.some((item) => !item.completedAt)) return EMPTY_EFFECTS;
 
-  const actions = await tx
-    .select()
-    .from(automationActions)
-    .where(inArray(automationActions.automationId, rows.map((row) => row.id)))
-    .orderBy(asc(automationActions.position));
-  const actionsByAutomation = new Map<string, AutomationAction[]>();
-  for (const action of actions) {
-    const list = actionsByAutomation.get(action.automationId);
-    if (list) list.push(action);
-    else actionsByAutomation.set(action.automationId, [action]);
-  }
-  const [card] = await tx.select().from(cards).where(eq(cards.id, opts.cardId)).limit(1);
-  if (!card) return EMPTY_EFFECTS;
-  const ctx: AutomationRunContext = {
-    card,
-    boardId: opts.boardId,
-    workspaceId: opts.workspaceId,
-    clientId: opts.clientId,
-    fireDateLocalDate: localDateInTimezone(new Date(), card.dueDateTimezone || "UTC"),
-    fireDate: new Date(),
-    triggerActorId: opts.triggerActorId,
-  };
-  const effects: AutomationEffect[] = [];
-  for (const automation of rows) {
-    const automationActions = actionsByAutomation.get(automation.id);
-    if (!automationActions?.length) continue;
-    const result = await applyAutomationActionsAndRecordStats(tx, automation.id, ctx, automationActions);
-    effects.push(...result.effects);
-  }
-  return { effects };
+  return applyTriggeredAutomations(tx, rows, opts);
 }
 
 export async function runCardMarkedCompleteAutomations(
@@ -1034,36 +1027,7 @@ export async function runCardMarkedCompleteAutomations(
     .orderBy(asc(automations.position));
   if (rows.length === 0) return EMPTY_EFFECTS;
 
-  const actions = await tx
-    .select()
-    .from(automationActions)
-    .where(inArray(automationActions.automationId, rows.map((row) => row.id)))
-    .orderBy(asc(automationActions.position));
-  const actionsByAutomation = new Map<string, AutomationAction[]>();
-  for (const action of actions) {
-    const list = actionsByAutomation.get(action.automationId);
-    if (list) list.push(action);
-    else actionsByAutomation.set(action.automationId, [action]);
-  }
-  const [card] = await tx.select().from(cards).where(eq(cards.id, opts.cardId)).limit(1);
-  if (!card?.completedAt) return EMPTY_EFFECTS;
-  const ctx: AutomationRunContext = {
-    card,
-    boardId: opts.boardId,
-    workspaceId: opts.workspaceId,
-    clientId: opts.clientId,
-    fireDateLocalDate: localDateInTimezone(new Date(), card.dueDateTimezone || "UTC"),
-    fireDate: new Date(),
-    triggerActorId: opts.triggerActorId,
-  };
-  const effects: AutomationEffect[] = [];
-  for (const automation of rows) {
-    const automationActions = actionsByAutomation.get(automation.id);
-    if (!automationActions?.length) continue;
-    const result = await applyAutomationActionsAndRecordStats(tx, automation.id, ctx, automationActions);
-    effects.push(...result.effects);
-  }
-  return { effects };
+  return applyTriggeredAutomations(tx, rows, opts, (card) => card.completedAt !== null);
 }
 
 export async function runCardAssignedAutomations(
@@ -1085,36 +1049,7 @@ export async function runCardAssignedAutomations(
     .filter((automation) => (automation.triggerUserIds ?? []).some((userId) => addedUserIdSet.has(userId)));
   if (rows.length === 0) return EMPTY_EFFECTS;
 
-  const actions = await tx
-    .select()
-    .from(automationActions)
-    .where(inArray(automationActions.automationId, rows.map((row) => row.id)))
-    .orderBy(asc(automationActions.position));
-  const actionsByAutomation = new Map<string, AutomationAction[]>();
-  for (const action of actions) {
-    const list = actionsByAutomation.get(action.automationId);
-    if (list) list.push(action);
-    else actionsByAutomation.set(action.automationId, [action]);
-  }
-  const [card] = await tx.select().from(cards).where(eq(cards.id, opts.cardId)).limit(1);
-  if (!card) return EMPTY_EFFECTS;
-  const ctx: AutomationRunContext = {
-    card,
-    boardId: opts.boardId,
-    workspaceId: opts.workspaceId,
-    clientId: opts.clientId,
-    fireDateLocalDate: localDateInTimezone(new Date(), card.dueDateTimezone || "UTC"),
-    fireDate: new Date(),
-    triggerActorId: opts.triggerActorId,
-  };
-  const effects: AutomationEffect[] = [];
-  for (const automation of rows) {
-    const automationActions = actionsByAutomation.get(automation.id);
-    if (!automationActions?.length) continue;
-    const result = await applyAutomationActionsAndRecordStats(tx, automation.id, ctx, automationActions);
-    effects.push(...result.effects);
-  }
-  return { effects };
+  return applyTriggeredAutomations(tx, rows, opts);
 }
 
 export async function runCardLabelSetAutomations(
@@ -1136,36 +1071,7 @@ export async function runCardLabelSetAutomations(
     .orderBy(asc(automations.position));
   if (rows.length === 0) return EMPTY_EFFECTS;
 
-  const actions = await tx
-    .select()
-    .from(automationActions)
-    .where(inArray(automationActions.automationId, rows.map((row) => row.id)))
-    .orderBy(asc(automationActions.position));
-  const actionsByAutomation = new Map<string, AutomationAction[]>();
-  for (const action of actions) {
-    const list = actionsByAutomation.get(action.automationId);
-    if (list) list.push(action);
-    else actionsByAutomation.set(action.automationId, [action]);
-  }
-  const [card] = await tx.select().from(cards).where(eq(cards.id, opts.cardId)).limit(1);
-  if (!card) return EMPTY_EFFECTS;
-  const ctx: AutomationRunContext = {
-    card,
-    boardId: opts.boardId,
-    workspaceId: opts.workspaceId,
-    clientId: opts.clientId,
-    fireDateLocalDate: localDateInTimezone(new Date(), card.dueDateTimezone || "UTC"),
-    fireDate: new Date(),
-    triggerActorId: opts.triggerActorId,
-  };
-  const effects: AutomationEffect[] = [];
-  for (const automation of rows) {
-    const actionsForAutomation = actionsByAutomation.get(automation.id);
-    if (!actionsForAutomation?.length) continue;
-    const result = await applyAutomationActionsAndRecordStats(tx, automation.id, ctx, actionsForAutomation);
-    effects.push(...result.effects);
-  }
-  return { effects };
+  return applyTriggeredAutomations(tx, rows, opts);
 }
 
 export async function emitAutomationEffects(effects: AutomationEffects): Promise<void> {

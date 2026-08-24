@@ -1,8 +1,8 @@
 import { dto } from "@kanera/shared";
 import { cardPath } from "@kanera/shared/card-links";
 import { SERVER_EVENTS, type WireCard, type WireCardChecklist, type WireCardDetail } from "@kanera/shared/events";
-import { ACTIVITY_ACTION, activityEvents, boardMembers, boards, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cards, cardWatchers, commentReactions, comments, customFieldOptions, customFields, lists, users, type ActivityEvent, type CustomFieldType } from "@kanera/shared/schema";
-import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import { ACTIVITY_ACTION, activityEvents, boardMembers, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cards, cardWatchers, customFields, lists, users, type ActivityEvent } from "@kanera/shared/schema";
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import type { AuthClaims } from "../../auth/plugin.js";
@@ -27,14 +27,11 @@ import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { assertValidOptionIds, assertWorkspaceMemberIds, buildCustomFieldValueColumns, customFieldValueEquals, describeCustomFieldValue, emptyValueColumns, hasCustomFieldValue, type CustomFieldValueColumns } from "../../lib/custom-fields.js";
 import { AppError, badRequest, notFound } from "../../lib/errors.js";
 import { allocateCardKeys, resolveCardKey } from "../../lib/card-keys.js";
-import { externalEmbeddedMediaReferences, signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
+import { externalEmbeddedMediaReferences, signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls } from "../../lib/media-keys.js";
 import { replaceCardMentions } from "../../lib/mentions.js";
 import { clearNotificationsForCards, clearOverdueChecklistItemNotifications, clearOverdueNotificationsForCards, emitDeletedNotifications, emitRelocatedNotifications, relocateNotificationsForCard, syncDirectNotificationForActivity } from "../../lib/notifications.js";
 import { createOverdueNotificationsForCards } from "../../lib/overdue-notifications.js";
 import { between } from "../../lib/position.js";
-import type { StorageProvider } from "../../lib/storage/index.js";
-import { getStorageForClient } from "../../lib/storage/index.js";
-import { attachmentCoverStorageKey, attachmentThumbnailStorageKey, cardAttachmentStorageKey } from "../../lib/storage/keys.js";
 import { emitToBoard } from "../../realtime/emit.js";
 import { loadLinkedNotesForCard, repairInternalLinksAroundCard, replaceInternalLinksForSource } from "../../lib/internal-links.js";
 import { assertGlobalWorkSeparatorContext, positionForGlobalWorkLaneInsert } from "../global-work-separators/routes.js";
@@ -370,786 +367,99 @@ async function loadChecklistsForCard(cardId: string, tx: Tx = db): Promise<WireC
   return (await loadChecklistsForCards([cardId], tx)).get(cardId) ?? [];
 }
 
-async function copyAttachmentBlobs(
-  srcStorage: StorageProvider,
-  dstStorage: StorageProvider,
-  dstClientId: string,
-  source: typeof cardAttachments.$inferSelect,
-  newCardId: string,
-): Promise<{
-  fileKey: string;
-  url: string;
-  thumbnailFileKey: string | null;
-  thumbnailUrl: string | null;
-  coverImageFileKey: string | null;
-  coverImageUrl: string | null;
-}> {
-  const ext = source.fileKey.includes(".") ? source.fileKey.slice(source.fileKey.lastIndexOf(".") + 1) : "";
-  const baseKey = cardAttachmentStorageKey(newCardId, ext);
-
-  const originalBuffer = await srcStorage.get(source.fileKey);
-  await dstStorage.put(baseKey, originalBuffer, source.mimeType);
-  const url = unsignedMediaUrl(dstClientId, baseKey) ?? baseKey;
-
-  let thumbnailFileKey: string | null = null;
-  let thumbnailUrl: string | null = null;
-  if (source.thumbnailFileKey) {
-    const buf = await srcStorage.get(source.thumbnailFileKey);
-    thumbnailFileKey = attachmentThumbnailStorageKey(baseKey, mediaExtensionForKey(source.thumbnailFileKey));
-    await dstStorage.put(thumbnailFileKey, buf, mediaContentTypeForKey(source.thumbnailFileKey));
-    thumbnailUrl = unsignedMediaUrl(dstClientId, thumbnailFileKey);
-  }
-
-  let coverImageFileKey: string | null = null;
-  let coverImageUrl: string | null = null;
-  if (source.coverImageFileKey) {
-    const buf = await srcStorage.get(source.coverImageFileKey);
-    coverImageFileKey = attachmentCoverStorageKey(baseKey, mediaExtensionForKey(source.coverImageFileKey));
-    await dstStorage.put(coverImageFileKey, buf, mediaContentTypeForKey(source.coverImageFileKey));
-    coverImageUrl = unsignedMediaUrl(dstClientId, coverImageFileKey);
-  }
-
-  return { fileKey: baseKey, url, thumbnailFileKey, thumbnailUrl, coverImageFileKey, coverImageUrl };
-}
+import {
+  duplicateCardInto,
+  emitDuplicatedCardIntoBoard,
+  resolveDuplicateTargetList,
+} from "./duplicate-card.js";
 
 type BoardAccessContext = Awaited<ReturnType<typeof assertBoardAccess>>;
-type CardAccessContext = Awaited<ReturnType<typeof assertCardAccess>>;
-type DuplicatedAttachment = {
-  src: typeof cardAttachments.$inferSelect;
-  copy: Awaited<ReturnType<typeof copyAttachmentBlobs>>;
-};
-type DuplicateFieldValueRow = {
-  fieldId: string;
-} & CustomFieldValueColumns;
 
-function mediaContentTypeForKey(key: string): string {
-  const ext = key.includes(".") ? key.slice(key.lastIndexOf(".") + 1).toLowerCase() : "";
-  if (ext === "png") return "image/png";
-  if (ext === "webp") return "image/webp";
-  return "image/jpeg";
-}
 
-function mediaExtensionForKey(key: string): string {
-  const ext = key.includes(".") ? key.slice(key.lastIndexOf(".") + 1).toLowerCase() : "";
-  return ext || "jpg";
-}
-
-async function resolveDuplicateTargetList(
-  source: typeof cards.$inferSelect,
-  dstCtx: Pick<BoardAccessContext, "workspaceId">,
-  explicitListId?: string,
-): Promise<string> {
-  if (explicitListId) {
-    const [targetList] = await db.select().from(lists).where(eq(lists.id, explicitListId)).limit(1);
-    if (!targetList || targetList.workspaceId !== dstCtx.workspaceId) {
-      throw badRequest("target list not in same workspace");
-    }
-    return explicitListId;
-  }
-
-  const [sourceList] = await db.select({ name: lists.name, workspaceId: lists.workspaceId }).from(lists).where(eq(lists.id, source.listId)).limit(1);
-  if (sourceList?.workspaceId === dstCtx.workspaceId) return source.listId;
-
-  if (sourceList?.name) {
-    const matchingLists = await db
-      .select({ id: lists.id })
-      .from(lists)
-      .where(and(eq(lists.workspaceId, dstCtx.workspaceId), eq(lists.name, sourceList.name), isNull(lists.archivedAt)));
-    if (matchingLists.length === 1) return matchingLists[0]!.id;
-  }
-
-  // Cross-workspace copies cannot reuse the source list id because lists are workspace-scoped.
-  // Exact name matching preserves the common lane automatically; ambiguous or missing matches
-  // still require an explicit target list from the UI/API client.
-  throw badRequest("target list required");
-}
-
-async function duplicateLabelIds(
-  sourceLabels: { labelId: string }[],
-  srcCtx: Pick<CardAccessContext, "workspaceId">,
-  dstCtx: Pick<BoardAccessContext, "workspaceId">,
-): Promise<string[]> {
-  if (sourceLabels.length === 0) return [];
-  const sourceIds = sourceLabels.map((label) => label.labelId);
-  if (srcCtx.workspaceId === dstCtx.workspaceId) {
-    const valid = await db
-      .select({ id: cardLabels.id })
-      .from(cardLabels)
-      .where(and(eq(cardLabels.workspaceId, dstCtx.workspaceId), inArray(cardLabels.id, sourceIds), isNull(cardLabels.archivedAt)));
-    const validIds = new Set(valid.map((label) => label.id));
-    return sourceIds.filter((id) => validIds.has(id));
-  }
-
-  const [sourceRows, destRows] = await Promise.all([
-    db
-      .select({ id: cardLabels.id, name: cardLabels.name })
-      .from(cardLabels)
-      .where(and(eq(cardLabels.workspaceId, srcCtx.workspaceId), inArray(cardLabels.id, sourceIds), isNull(cardLabels.archivedAt))),
-    db
-      .select({ id: cardLabels.id, name: cardLabels.name })
-      .from(cardLabels)
-      .where(and(eq(cardLabels.workspaceId, dstCtx.workspaceId), isNull(cardLabels.archivedAt)))
-      .orderBy(asc(cardLabels.position)),
-  ]);
-  const sourceNameById = new Map(sourceRows.map((label) => [label.id, label.name]));
-  const destIdByName = new Map(destRows.map((label) => [label.name, label.id]));
-  const mapped: string[] = [];
-  for (const sourceId of sourceIds) {
-    const destId = destIdByName.get(sourceNameById.get(sourceId) ?? "");
-    if (destId && !mapped.includes(destId)) mapped.push(destId);
-  }
-  return mapped;
-}
-
-async function duplicateCustomFieldValues(
-  sourceValues: (typeof cardCustomFieldValues.$inferSelect)[],
-  srcCtx: Pick<CardAccessContext, "workspaceId">,
-  dstCtx: Pick<BoardAccessContext, "workspaceId">,
-  eligibleAssigneeIds: string[],
-): Promise<DuplicateFieldValueRow[]> {
-  if (sourceValues.length === 0) return [];
-  const sourceFieldIds = sourceValues.map((value) => value.fieldId);
-  if (srcCtx.workspaceId === dstCtx.workspaceId) {
-    const validFields = await db
-      .select({ id: customFields.id })
-      .from(customFields)
-      .where(and(eq(customFields.workspaceId, dstCtx.workspaceId), inArray(customFields.id, sourceFieldIds), isNull(customFields.archivedAt)));
-    const validFieldIds = new Set(validFields.map((field) => field.id));
-    return sourceValues
-      .filter((value) => validFieldIds.has(value.fieldId))
-      .map((value) => ({
-        fieldId: value.fieldId,
-        valueText: value.valueText,
-        valueNumber: value.valueNumber,
-        valueCheckbox: value.valueCheckbox,
-        valueDate: value.valueDate,
-        valueUrl: value.valueUrl,
-        valueOptionIds: value.valueOptionIds,
-        valueUserIds: value.valueUserIds,
-      }));
-  }
-
-  const [sourceFields, destFields] = await Promise.all([
-    db
-      .select()
-      .from(customFields)
-      .where(and(eq(customFields.workspaceId, srcCtx.workspaceId), inArray(customFields.id, sourceFieldIds), isNull(customFields.archivedAt))),
-    db
-      .select()
-      .from(customFields)
-      .where(and(eq(customFields.workspaceId, dstCtx.workspaceId), isNull(customFields.archivedAt)))
-      .orderBy(asc(customFields.position)),
-  ]);
-  const sourceFieldById = new Map(sourceFields.map((field) => [field.id, field]));
-  const destFieldByNameAndType = new Map<string, (typeof customFields.$inferSelect)>();
-  for (const field of destFields) {
-    const key = `${field.name}\0${field.type}`;
-    if (!destFieldByNameAndType.has(key)) destFieldByNameAndType.set(key, field);
-  }
-
-  const allSourceOptionIds = sourceValues.flatMap((value) => value.valueOptionIds ?? []);
-  const destSelectFieldIds = destFields.filter((field) => field.type === "select").map((field) => field.id);
-  const [sourceOptionRows, destOptionRows] = await Promise.all([
-    allSourceOptionIds.length > 0
-      ? db
-        .select({ id: customFieldOptions.id, label: customFieldOptions.label })
-        .from(customFieldOptions)
-        .where(inArray(customFieldOptions.id, allSourceOptionIds))
-      : Promise.resolve([]),
-    destSelectFieldIds.length > 0
-      ? db
-        .select({ id: customFieldOptions.id, fieldId: customFieldOptions.fieldId, label: customFieldOptions.label })
-        .from(customFieldOptions)
-        .where(and(inArray(customFieldOptions.fieldId, destSelectFieldIds), isNull(customFieldOptions.archivedAt)))
-        .orderBy(asc(customFieldOptions.position))
-      : Promise.resolve([]),
-  ]);
-  const sourceOptionLabelById = new Map(sourceOptionRows.map((option) => [option.id, option.label]));
-  const destOptionIdByFieldAndLabel = new Map<string, string>();
-  for (const option of destOptionRows) {
-    const key = `${option.fieldId}\0${option.label}`;
-    if (!destOptionIdByFieldAndLabel.has(key)) destOptionIdByFieldAndLabel.set(key, option.id);
-  }
-  const eligibleUsers = new Set(eligibleAssigneeIds);
-
-  const rows: DuplicateFieldValueRow[] = [];
-  for (const value of sourceValues) {
-    const sourceField = sourceFieldById.get(value.fieldId);
-    if (!sourceField || !hasCustomFieldValue(sourceField.type, value)) continue;
-    const destField = destFieldByNameAndType.get(`${sourceField.name}\0${sourceField.type}`);
-    if (!destField) continue;
-    const cols = emptyValueColumns();
-    switch (sourceField.type as CustomFieldType) {
-      case "text": cols.valueText = value.valueText; break;
-      case "number": cols.valueNumber = value.valueNumber; break;
-      case "checkbox": cols.valueCheckbox = value.valueCheckbox; break;
-      case "date": cols.valueDate = value.valueDate; break;
-      case "url": cols.valueUrl = value.valueUrl; break;
-      case "select": {
-        const mapped: string[] = [];
-        for (const sourceOptionId of value.valueOptionIds ?? []) {
-          const label = sourceOptionLabelById.get(sourceOptionId);
-          const destOptionId = label ? destOptionIdByFieldAndLabel.get(`${destField.id}\0${label}`) : undefined;
-          if (destOptionId && !mapped.includes(destOptionId)) mapped.push(destOptionId);
-        }
-        const capped = destField.allowMultiple ? mapped : mapped.slice(0, 1);
-        if (capped.length === 0) continue;
-        cols.valueOptionIds = capped;
-        break;
-      }
-      case "user": {
-        const mapped = (value.valueUserIds ?? []).filter((userId) => eligibleUsers.has(userId));
-        const capped = destField.allowMultiple ? mapped : mapped.slice(0, 1);
-        if (capped.length === 0) continue;
-        cols.valueUserIds = capped;
-        break;
-      }
-    }
-    rows.push({ fieldId: destField.id, ...cols });
-  }
-  return rows;
-}
-
-async function copyAttachmentsForDuplicate(
-  sourceAttachments: (typeof cardAttachments.$inferSelect)[],
-  srcCtx: Pick<CardAccessContext, "clientId">,
-  dstCtx: Pick<BoardAccessContext, "clientId">,
-  newCardId: string,
-): Promise<{ copiedAttachments: DuplicatedAttachment[]; dstStorage: StorageProvider }> {
-  const srcStorage = await getStorageForClient(srcCtx.clientId);
-  const dstStorage = srcCtx.clientId === dstCtx.clientId ? srcStorage : await getStorageForClient(dstCtx.clientId);
-  const attachmentCopyTasks = sourceAttachments.map(async (att) => ({
-    src: att,
-    copy: await copyAttachmentBlobs(srcStorage, dstStorage, dstCtx.clientId, att, newCardId),
-  }));
-  try {
-    const copiedAttachments = await Promise.all(attachmentCopyTasks);
-    return { copiedAttachments, dstStorage };
-  } catch (err) {
-    const settledCopies = await Promise.allSettled(attachmentCopyTasks);
-    await Promise.all(
-      settledCopies
-        .filter((result): result is PromiseFulfilledResult<DuplicatedAttachment> => result.status === "fulfilled")
-        .map(({ value: { copy } }) =>
-          Promise.allSettled([
-            dstStorage.delete(copy.fileKey),
-            copy.thumbnailFileKey ? dstStorage.delete(copy.thumbnailFileKey) : Promise.resolve(),
-            copy.coverImageFileKey ? dstStorage.delete(copy.coverImageFileKey) : Promise.resolve(),
-          ]),
-        ),
-    );
-    throw err;
-  }
-}
-
-type SourceCommentForDuplicate = typeof comments.$inferSelect & { authorName: string };
-type SourceActivityForDuplicate = typeof activityEvents.$inferSelect & { actorNameSnapshot: string | null };
-
-function duplicateActorSnapshotName(
-  kind: SourceActivityForDuplicate["actorKind"] | SourceCommentForDuplicate["authorKind"],
-  fallbackName: string | null | undefined,
-  apiKeyName: string | null | undefined,
-  supportActorEmail?: string | null,
-): string | null {
-  if (kind === "apiKey") return apiKeyName ?? "API key";
-  if (kind === "support") return fallbackName ?? `Kanera Support (${supportActorEmail ?? "operator"})`;
-  if (kind === "system") return "Kanera";
-  return fallbackName ?? "Unknown";
-}
-
-async function targetAttributionUserIds(boardId: string): Promise<Set<string>> {
-  const rows = await db
-    .select({ userId: boardMembers.userId })
-    .from(boardMembers)
-    .where(eq(boardMembers.boardId, boardId));
-  return new Set(rows.map((row) => row.userId));
-}
-
-async function loadCommentsForDuplicate(cardId: string): Promise<SourceCommentForDuplicate[]> {
-  return db
-    .select({
-      id: comments.id,
-      cardId: comments.cardId,
-      authorId: comments.authorId,
-      authorKind: comments.authorKind,
-      apiKeyId: comments.apiKeyId,
-      apiKeyName: comments.apiKeyName,
-      body: comments.body,
-      editedAt: comments.editedAt,
-      createdAt: comments.createdAt,
-      searchVector: comments.searchVector,
-      authorName: sql<string>`case when ${comments.authorKind} = 'system' then coalesce(${comments.apiKeyName}, 'Kanera') when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
-    })
-    .from(comments)
-    .innerJoin(users, eq(users.id, comments.authorId))
-    .where(eq(comments.cardId, cardId))
-    .orderBy(asc(comments.createdAt));
-}
-
-async function loadActivityForDuplicate(card: typeof cards.$inferSelect): Promise<SourceActivityForDuplicate[]> {
-  return db
-    .select({
-      id: activityEvents.id,
-      boardId: activityEvents.boardId,
-      clientId: activityEvents.clientId,
-      workspaceId: activityEvents.workspaceId,
-      actorId: activityEvents.actorId,
-      actorKind: activityEvents.actorKind,
-      apiKeyId: activityEvents.apiKeyId,
-      apiKeyName: activityEvents.apiKeyName,
-      supportSessionId: activityEvents.supportSessionId,
-      supportActorEmail: activityEvents.supportActorEmail,
-      entityType: activityEvents.entityType,
-      entityId: activityEvents.entityId,
-      action: activityEvents.action,
-      payload: activityEvents.payload,
-      feedVisible: activityEvents.feedVisible,
-      coalesceKey: activityEvents.coalesceKey,
-      coalescedCount: activityEvents.coalescedCount,
-      coalescedUntil: activityEvents.coalescedUntil,
-      createdAt: activityEvents.createdAt,
-      updatedAt: activityEvents.updatedAt,
-      actorNameSnapshot: sql<string | null>`case when ${activityEvents.actorKind} = 'system' then 'Kanera' when ${activityEvents.actorKind} = 'support' then ${users.displayName} when ${activityEvents.actorKind} = 'apiKey' then coalesce(${activityEvents.apiKeyName}, 'API key') else ${users.displayName} end`,
-    })
-    .from(activityEvents)
-    .leftJoin(users, eq(users.id, activityEvents.actorId))
-    .where(
-      and(
-        eq(activityEvents.boardId, card.boardId),
-        eq(activityEvents.feedVisible, true),
-        or(
-          and(eq(activityEvents.entityType, "card"), eq(activityEvents.entityId, card.id)),
-          sql`${activityEvents.payload}->>'cardId' = ${card.id}`,
-        )!,
-      ),
-    )
-    .orderBy(asc(activityEvents.createdAt));
-}
-
-async function sourceListNameMap(workspaceId: string): Promise<Map<string, string>> {
-  const rows = await db
-    .select({ id: lists.id, name: lists.name })
-    .from(lists)
-    .where(eq(lists.workspaceId, workspaceId));
-  return new Map(rows.map((row) => [row.id, row.name]));
-}
-
-function cloneActivityPayloadForDuplicate(
-  event: SourceActivityForDuplicate,
-  source: typeof cards.$inferSelect,
-  newCardId: string,
-  sourceListNames: Map<string, string>,
-  copiedActorName: string | null,
-): Record<string, unknown> {
-  const payload = event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
-    ? { ...(event.payload as Record<string, unknown>) }
-    : {};
-  if (payload.cardId === source.id) payload.cardId = newCardId;
-
-  const fromListId = typeof payload.fromListId === "string" ? payload.fromListId : null;
-  const toListId = typeof payload.toListId === "string" ? payload.toListId : null;
-  if (fromListId && !payload.fromListName) payload.fromListName = sourceListNames.get(fromListId) ?? null;
-  if (toListId && !payload.toListName) payload.toListName = sourceListNames.get(toListId) ?? null;
-  if (typeof payload.listId === "string" && !payload.listName) {
-    payload.listName = sourceListNames.get(payload.listId) ?? null;
-  }
-  if (copiedActorName) payload.copiedActorName = copiedActorName;
-  return payload;
-}
-
-async function duplicateCardInto({
-  source,
-  srcCtx,
-  dstCtx,
-  targetBoardId,
-  targetListId,
-  position,
-  actor,
-  bulk,
-}: {
-  source: typeof cards.$inferSelect;
-  srcCtx: Pick<CardAccessContext, "workspaceId" | "clientId">;
-  dstCtx: BoardAccessContext;
-  targetBoardId: string;
-  targetListId: string;
-  position: string;
-  actor: AuthClaims;
-  bulk: boolean;
-}) {
-  const [sourceLabels, sourceFieldValues, sourceAssignees, sourceAttachments, sourceChecklists, sourceTemplateApplications, sourceComments, sourceActivityRows, targetAttributionIds, sourceListNames] = await Promise.all([
-    db.select({ labelId: cardLabelAssignments.labelId }).from(cardLabelAssignments).where(eq(cardLabelAssignments.cardId, source.id)),
-    db.select().from(cardCustomFieldValues).where(eq(cardCustomFieldValues.cardId, source.id)),
-    db.select({ userId: cardAssignees.userId }).from(cardAssignees).where(eq(cardAssignees.cardId, source.id)),
-    db.select().from(cardAttachments).where(eq(cardAttachments.cardId, source.id)),
-    loadChecklistsForCard(source.id),
-    db.select({ templateId: cardChecklistTemplateApplications.templateId }).from(cardChecklistTemplateApplications).where(eq(cardChecklistTemplateApplications.cardId, source.id)),
-    loadCommentsForDuplicate(source.id),
-    loadActivityForDuplicate(source),
-    targetAttributionUserIds(targetBoardId),
-    sourceListNameMap(srcCtx.workspaceId),
-  ]);
-  const sourceCommentReactions = sourceComments.length > 0
-    ? await db.select().from(commentReactions).where(inArray(commentReactions.commentId, sourceComments.map((comment) => comment.id)))
-    : [];
-  const [sourceBoard] = await db
-    .select({ id: boards.id, name: boards.name })
-    .from(boards)
-    .where(eq(boards.id, source.boardId))
-    .limit(1);
-  const eligibleAssigneeIds = await ensureBoardMembershipForUsers(
-    targetBoardId,
-    dstCtx.workspaceId,
-    sourceAssignees.map((assignee) => assignee.userId),
-  );
-  const [labelIds, fieldValueRows] = await Promise.all([
-    duplicateLabelIds(sourceLabels, srcCtx, dstCtx),
-    duplicateCustomFieldValues(sourceFieldValues, srcCtx, dstCtx, eligibleAssigneeIds),
-  ]);
-
-  const newCardId = randomUUID();
-  const { copiedAttachments, dstStorage } = await copyAttachmentsForDuplicate(sourceAttachments, srcCtx, dstCtx, newCardId);
-
-  let result: { newCard: typeof cards.$inferSelect; attachmentRows: (typeof cardAttachments.$inferSelect)[]; activity: ActivityEvent };
-  try {
-    result = await db.transaction(async (tx) => {
-      const [identity] = await allocateCardKeys(tx, dstCtx.workspaceId, 1);
-      const [inserted] = await tx
-        .insert(cards)
-        .values({
-          ...identity!,
-          id: newCardId,
-          listId: targetListId,
-          boardId: targetBoardId,
-          title: source.title,
-          description: source.description,
-          dueDateLocalDate: source.dueDateLocalDate,
-          dueDateSlot: source.dueDateSlot,
-          dueDateTimezone: source.dueDateTimezone,
-          position,
-          createdById: actor.sub,
-        })
-        .returning();
-
-      await replaceCardMentions({
-        tx,
-        boardId: targetBoardId,
-        cardId: inserted!.id,
-        source: "description",
-        markdown: inserted!.description,
-      });
-
-      if (shouldAutoWatchAuthoredCards(actor.authKind)) {
-        await tx.insert(cardWatchers).values({ cardId: inserted!.id, userId: actor.sub }).onConflictDoNothing();
-      }
-
-      if (labelIds.length > 0) {
-        await tx.insert(cardLabelAssignments).values(labelIds.map((labelId) => ({ cardId: inserted!.id, labelId })));
-      }
-      if (eligibleAssigneeIds.length > 0) {
-        await tx.insert(cardAssignees).values(eligibleAssigneeIds.map((userId) => ({ cardId: inserted!.id, userId })));
-      }
-      if (fieldValueRows.length > 0) {
-        await tx.insert(cardCustomFieldValues).values(fieldValueRows.map((value) => ({
-          cardId: inserted!.id,
-          fieldId: value.fieldId,
-          valueText: value.valueText,
-          valueNumber: value.valueNumber,
-          valueCheckbox: value.valueCheckbox,
-          valueDate: value.valueDate,
-          valueUrl: value.valueUrl,
-          valueOptionIds: value.valueOptionIds,
-          valueUserIds: value.valueUserIds,
-        })));
-      }
-
-      // Carry over the template-application ledger so the duplicate (which already
-      // has the seeded checklists copied below) does not re-acquire those templates
-      // when it later enters a bound list.
-      if (sourceTemplateApplications.length > 0) {
-        await tx
-          .insert(cardChecklistTemplateApplications)
-          .values(sourceTemplateApplications.map((row) => ({ cardId: inserted!.id, templateId: row.templateId })))
-          .onConflictDoNothing();
-      }
-
-      // Duplicate checklists in two passes so nested item-detail checklists can be re-parented onto
-      // the *new* item ids. Copying every checklist as top-level (or dropping item.description) would
-      // silently flatten the hierarchy and lose item detail. Pass 1 copies top-level checklists and
-      // their items, recording each source item id -> new item id; pass 2 copies nested checklists
-      // (whose parentItemId points at a top-level item) using that map. Depth is capped at one level,
-      // so pass 1 always establishes every parent a nested checklist can reference.
-      const sourceItemIdToNewId = new Map<string, string>();
-      const insertDuplicatedChecklist = async (
-        sourceChecklist: (typeof sourceChecklists)[number],
-        parentItemId: string | null,
-      ) => {
-        const [checklist] = await tx
-          .insert(cardChecklists)
-          .values({
-            cardId: inserted!.id,
-            parentItemId,
-            title: sourceChecklist.title,
-            position: sourceChecklist.position,
-          })
-          .returning();
-        if (sourceChecklist.items.length > 0) {
-          await tx.insert(cardChecklistItems).values(sourceChecklist.items.map((item) => {
-            const newItemId = randomUUID();
-            sourceItemIdToNewId.set(item.id, newItemId);
-            return {
-              id: newItemId,
-              checklistId: checklist!.id,
-              text: item.text,
-              description: item.description,
-              position: item.position,
-              assigneeId: item.assigneeId && eligibleAssigneeIds.includes(item.assigneeId) ? item.assigneeId : null,
-              completedAt: item.completedAt ? new Date(item.completedAt as unknown as string) : null,
-              completedById: item.completedById,
-              dueDateLocalDate: item.dueDateLocalDate,
-              dueDateSlot: item.dueDateSlot,
-              dueDateTimezone: item.dueDateTimezone,
-            };
-          }));
-        }
-      };
-
-      for (const sourceChecklist of sourceChecklists) {
-        if (sourceChecklist.parentItemId === null) await insertDuplicatedChecklist(sourceChecklist, null);
-      }
-      for (const sourceChecklist of sourceChecklists) {
-        if (sourceChecklist.parentItemId === null) continue;
-        const mappedParentId = sourceItemIdToNewId.get(sourceChecklist.parentItemId);
-        // A nested checklist whose parent item wasn't duplicated should be impossible under the
-        // one-level depth cap; skip rather than silently promote it to a top-level checklist.
-        if (!mappedParentId) continue;
-        await insertDuplicatedChecklist(sourceChecklist, mappedParentId);
-      }
-
-      const sourceCommentIdToNewId = new Map<string, string>();
-      if (sourceComments.length > 0) {
-        const commentRows = sourceComments.map((comment) => {
-          const canKeepOriginalUser = comment.authorKind === "user" && targetAttributionIds.has(comment.authorId);
-          const newCommentId = randomUUID();
-          sourceCommentIdToNewId.set(comment.id, newCommentId);
-          const originalName = duplicateActorSnapshotName(comment.authorKind, comment.authorName, comment.apiKeyName);
-          return {
-            id: newCommentId,
-            cardId: inserted!.id,
-            authorId: canKeepOriginalUser ? comment.authorId : actor.sub,
-            // Historical comments from users outside the target board are system-attributed so the
-            // feed keeps the original name without implying that person is a current board member.
-            authorKind: canKeepOriginalUser ? "user" as const : "system" as const,
-            apiKeyId: null,
-            apiKeyName: canKeepOriginalUser ? null : originalName,
-            body: comment.body,
-            editedAt: comment.editedAt,
-            createdAt: comment.createdAt,
-          };
-        });
-        await tx.insert(comments).values(commentRows);
-        for (const comment of sourceComments) {
-          const newCommentId = sourceCommentIdToNewId.get(comment.id);
-          if (!newCommentId) continue;
-          await replaceCardMentions({
-            tx,
-            boardId: targetBoardId,
-            cardId: inserted!.id,
-            commentId: newCommentId,
-            source: "comment",
-            markdown: comment.body,
-          });
-        }
-      }
-
-      const copiedReactions = sourceCommentReactions
-        .map((reaction) => {
-          const commentId = sourceCommentIdToNewId.get(reaction.commentId);
-          if (!commentId || !targetAttributionIds.has(reaction.userId)) return null;
-          return {
-            commentId,
-            userId: reaction.userId,
-            reactionType: reaction.reactionType,
-            createdAt: reaction.createdAt,
-          };
-        })
-        .filter((reaction): reaction is NonNullable<typeof reaction> => reaction !== null);
-      if (copiedReactions.length > 0) {
-        await tx.insert(commentReactions).values(copiedReactions).onConflictDoNothing();
-      }
-
-      const insertedAttachments: (typeof cardAttachments.$inferSelect)[] = [];
-      let newCoverAttachmentId: string | null = null;
-      for (const { src, copy } of copiedAttachments) {
-        const copiedCommentId = src.commentId ? sourceCommentIdToNewId.get(src.commentId) ?? null : null;
-        const [row] = await tx
-          .insert(cardAttachments)
-          .values({
-            cardId: inserted!.id,
-            clientId: dstCtx.clientId,
-            uploadedById: actor.sub,
-            fileName: src.fileName,
-            mimeType: src.mimeType,
-            byteSize: src.byteSize,
-            fileKey: copy.fileKey,
-            url: copy.url,
-            thumbnailFileKey: copy.thumbnailFileKey,
-            thumbnailUrl: copy.thumbnailUrl,
-            coverImageFileKey: copy.coverImageFileKey,
-            coverImageUrl: copy.coverImageUrl,
-            coverImageWidth: copy.coverImageFileKey ? src.coverImageWidth : null,
-            coverImageHeight: copy.coverImageFileKey ? src.coverImageHeight : null,
-            coverImageColor: copy.coverImageFileKey ? src.coverImageColor : null,
-            source: src.source === "comment" && copiedCommentId ? "comment" : src.source === "comment" ? "attachment" : src.source,
-            commentId: copiedCommentId,
-          })
-          .returning();
-        insertedAttachments.push(row!);
-        if (source.coverAttachmentId === src.id) newCoverAttachmentId = row!.id;
-      }
-
-      let finalCard = inserted!;
-      if (newCoverAttachmentId) {
-        const [withCover] = await tx
-          .update(cards)
-          .set({ coverAttachmentId: newCoverAttachmentId, updatedAt: new Date() })
-          .where(eq(cards.id, inserted!.id))
-          .returning();
-        finalCard = withCover!;
-      }
-
-      const historicalActivities = sourceActivityRows
-        .filter((event) => event.entityType !== "comment")
-        .map((event) => {
-          const canKeepOriginalUser = event.actorKind === "user" && event.actorId !== null && targetAttributionIds.has(event.actorId);
-          const existingPayload = event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
-            ? event.payload as Record<string, unknown>
-            : {};
-          const existingSnapshot = typeof existingPayload.copiedActorName === "string" ? existingPayload.copiedActorName : null;
-          const copiedActorName = canKeepOriginalUser
-            ? null
-            : existingSnapshot ?? duplicateActorSnapshotName(event.actorKind, event.actorNameSnapshot, event.apiKeyName, event.supportActorEmail);
-          return {
-            boardId: targetBoardId,
-            workspaceId: dstCtx.workspaceId,
-            actorId: canKeepOriginalUser ? event.actorId : null,
-            actorKind: canKeepOriginalUser ? "user" as const : "system" as const,
-            apiKeyId: null,
-            apiKeyName: null,
-            supportSessionId: null,
-            supportActorEmail: null,
-            entityType: event.entityType,
-            entityId: event.entityType === "card" && event.entityId === source.id ? finalCard.id : event.entityId,
-            action: event.action,
-            payload: cloneActivityPayloadForDuplicate(event, source, finalCard.id, sourceListNames, copiedActorName),
-            feedVisible: event.feedVisible,
-            coalesceKey: event.coalesceKey,
-            coalescedCount: event.coalescedCount,
-            coalescedUntil: event.coalescedUntil,
-            createdAt: event.createdAt,
-            updatedAt: event.updatedAt,
-          };
-        });
-      if (historicalActivities.length > 0) await tx.insert(activityEvents).values(historicalActivities);
-
-      const activity = await recordActivity(tx, {
-        boardId: targetBoardId,
-        workspaceId: dstCtx.workspaceId,
-        actorId: actor.sub,
-        entityType: "card",
-        entityId: finalCard.id,
-        action: ACTIVITY_ACTION.CREATED,
-        payload: {
-          title: finalCard.title,
-          listId: targetListId,
-          duplicatedFromId: source.id,
-          duplicatedFromBoardId: source.boardId,
-          duplicatedFromBoardName: sourceBoard?.name ?? null,
-          ...(bulk && { bulk: true }),
-        },
-      });
-
-      return { newCard: finalCard, attachmentRows: insertedAttachments, activity };
-    });
-  } catch (err) {
-    // Blob copies happen before the database transaction so failures inside the write path need
-    // explicit destination cleanup, especially when crossing org-prefixed storage roots.
-    await Promise.all(copiedAttachments.map(({ copy }) =>
-      Promise.allSettled([
-        dstStorage.delete(copy.fileKey),
-        copy.thumbnailFileKey ? dstStorage.delete(copy.thumbnailFileKey) : Promise.resolve(),
-        copy.coverImageFileKey ? dstStorage.delete(copy.coverImageFileKey) : Promise.resolve(),
-      ]),
-    ));
-    throw err;
-  }
-
-  return { ...result, labelIds, assigneeIds: eligibleAssigneeIds };
-}
-
-async function emitDuplicatedCardIntoBoard({
-  actor,
-  boardId,
-  card,
-  activity,
-  labelIds,
-  assigneeIds,
-  attachmentRows,
-}: {
-  actor: AuthClaims;
-  boardId: string;
+type CardCompletionWrite = {
   card: typeof cards.$inferSelect;
-  activity: ActivityEvent;
-  labelIds: string[];
-  assigneeIds: string[];
-  attachmentRows: (typeof cardAttachments.$inferSelect)[];
-}) {
-  const wireCard = toWireCard(card, actor.cid);
-  await emitToBoard(boardId, SERVER_EVENTS.CARD_CREATED, { boardId, card: wireCard });
-  await emitCardActivityFeedItem(boardId, card.id, activity);
+  finalCard: typeof cards.$inferSelect;
+  activity: CoalescedActivityResult;
+  automationEffects: AutomationEffects;
+};
 
-  const copiedChecklists = await loadChecklistsForCard(card.id);
-  for (const checklist of copiedChecklists) {
-    emitToBoard(boardId, SERVER_EVENTS.CARD_CHECKLIST_CREATED, { boardId, cardId: card.id, checklist });
+/**
+ * Flip one card's completion inside a transaction, with the full side-effect tail.
+ *
+ * Three routes complete cards — one card, a selection, or a whole list — and every one of them
+ * owes the same four things: the write, a coalescable `completion:set` audit row, the overdue
+ * notification swing, and the `card_marked_complete` automations. Keeping that tail in one place
+ * is not cosmetic; the whole-list route previously recorded a different action, so the same user
+ * action rendered two ways in the feed depending on which control performed it.
+ *
+ * `fromValue` comes from the caller's pre-write row, so a burst of toggles inside the coalesce
+ * window collapses to a single "A -> C" entry and a round-trip back to the original value hides
+ * itself from the feed.
+ */
+async function applyCardCompletion(
+  tx: Parameters<Parameters<Db["transaction"]>[0]>[0],
+  opts: {
+    card: Pick<typeof cards.$inferSelect, "id" | "boardId" | "completedAt">;
+    completed: boolean;
+    completedAt: Date | null;
+    workspaceId: string;
+    clientId: string;
+    actorId: string;
+  },
+): Promise<CardCompletionWrite> {
+  const { card: current, completed, completedAt } = opts;
+  const [card] = await tx
+    .update(cards)
+    .set({ completedAt, updatedAt: new Date() })
+    .where(eq(cards.id, current.id))
+    .returning();
+  const activity = await recordCoalescedActivity(tx, {
+    boardId: current.boardId,
+    workspaceId: opts.workspaceId,
+    actorId: opts.actorId,
+    entityType: "card",
+    entityId: current.id,
+    action: ACTIVITY_ACTION.COMPLETION_SET,
+    coalesceKey: "card:completion",
+    windowMs: 60_000,
+    fromValue: Boolean(current.completedAt),
+    toValue: completed,
+    payload: { completedAt, fromValue: Boolean(current.completedAt), toValue: completed },
+  });
+  if (completed) await clearOverdueNotificationsForCards(tx, [current.id]);
+  else await createOverdueNotificationsForCards(tx, [current.id]);
+  const automationEffects = completed
+    ? await runCardMarkedCompleteAutomations(tx, {
+      cardId: current.id,
+      boardId: current.boardId,
+      workspaceId: opts.workspaceId,
+      clientId: opts.clientId,
+      triggerActorId: opts.actorId,
+    })
+    : { effects: [] };
+  // Automations can mutate the card further (move it, complete a parent), so the response must
+  // report the row as it stands after they ran. Only re-read when something actually fired: a
+  // workspace with no completion automations is the common case, and a whole-list completion
+  // would otherwise pay one extra point query per card for a row it already holds.
+  const [finalCard] = automationEffects.effects.length > 0
+    ? await tx.select().from(cards).where(eq(cards.id, current.id)).limit(1)
+    : [card];
+  return { card: card!, finalCard: finalCard ?? card!, activity, automationEffects };
+}
+
+/** Post-commit fanout for `applyCardCompletion`, including the queue audiences board rooms miss. */
+async function emitCardCompletion(
+  rows: readonly CardCompletionWrite[],
+  opts: { clientId: string; completed: boolean },
+): Promise<void> {
+  for (const { card, activity, automationEffects } of rows) {
+    await emitToBoard(card.boardId, SERVER_EVENTS.CARD_UPDATED, { boardId: card.boardId, card: toWireCard(card, opts.clientId) });
+    await emitCoalescedCardActivityFeedItem(card.boardId, card.id, activity, { notify: opts.completed });
+    await emitAutomationEffects(automationEffects);
   }
-
-  if (labelIds.length > 0) emitToBoard(boardId, SERVER_EVENTS.CARD_LABELS_SET, { boardId, cardId: card.id, labelIds });
-  if (assigneeIds.length > 0) emitToBoard(boardId, SERVER_EVENTS.CARD_ASSIGNEES_SET, { boardId, cardId: card.id, assigneeIds });
-
-  if (attachmentRows.length > 0) {
-    const userRow = await db
-      .select({ displayName: users.displayName, avatarUrl: users.avatarUrl, homeClientId: users.clientId })
-      .from(users)
-      .where(eq(users.id, actor.sub))
-      .limit(1);
-    const uploadedByName = userRow[0]?.displayName ?? "";
-    const uploadedByAvatarUrl = userRow[0]?.avatarUrl ?? null;
-    for (const att of attachmentRows) {
-      const shaped = shapeAttachmentMedia(att);
-      emitToBoard(boardId, SERVER_EVENTS.CARD_ATTACHMENT_CREATED, {
-        boardId,
-        cardId: card.id,
-        attachment: {
-          id: att.id,
-          cardId: att.cardId,
-          fileName: att.fileName,
-          mimeType: att.mimeType,
-          byteSize: att.byteSize,
-          url: shaped.url,
-          thumbnailUrl: shaped.thumbnailUrl,
-          createdAt: att.createdAt,
-          uploadedById: att.uploadedById,
-          uploadedByName,
-          uploadedByAvatarUrl: withSignedMedia(userRow[0]?.homeClientId ?? actor.cid, { uploadedByAvatarUrl }).uploadedByAvatarUrl,
-          source: att.source,
-          commentId: att.commentId,
-        },
-      });
-    }
-    if (card.coverAttachmentId) {
-      emitToBoard(boardId, SERVER_EVENTS.CARD_UPDATED, { boardId, card: wireCard });
-    }
-  }
-  return wireCard;
+  // Completion moves cards in and out of "Up next" queues without touching their rows, so the
+  // queue audiences must be pinged separately from the board rooms above.
+  await invalidateQueuesForCards(rows.map(({ card }) => card.id));
 }
 
 export async function cardRoutes(
@@ -1547,50 +857,21 @@ export async function cardRoutes(
 
     const completedAt = body.completed ? new Date() : null;
     const updates = await db.transaction(async (tx) => {
-      const rows: { card: typeof cards.$inferSelect; activity: ActivityEvent; automationEffects: AutomationEffects }[] = [];
+      const rows: CardCompletionWrite[] = [];
       for (const row of targetCards) {
-        const [card] = await tx
-          .update(cards)
-          .set({ completedAt, updatedAt: new Date() })
-          .where(eq(cards.id, row.card.id))
-          .returning();
-        const activity = await recordActivity(tx, {
-          boardId: row.card.boardId,
+        rows.push(await applyCardCompletion(tx, {
+          card: row.card,
+          completed: body.completed,
+          completedAt,
           workspaceId: ctx.workspaceId,
+          clientId: ctx.clientId,
           actorId: req.auth.sub,
-          entityType: "card",
-          entityId: row.card.id,
-          action: body.completed ? ACTIVITY_ACTION.COMPLETED : ACTIVITY_ACTION.UNCOMPLETED,
-          payload: { completedAt },
-        });
-        if (body.completed) {
-          await clearOverdueNotificationsForCards(tx, [row.card.id]);
-        } else {
-          await createOverdueNotificationsForCards(tx, [row.card.id]);
-        }
-        const automationEffects = body.completed
-          ? await runCardMarkedCompleteAutomations(tx, {
-            cardId: row.card.id,
-            boardId: row.card.boardId,
-            workspaceId: ctx.workspaceId,
-            clientId: ctx.clientId,
-            triggerActorId: req.auth.sub,
-          })
-          : { effects: [] };
-        rows.push({ card: card!, activity, automationEffects });
+        }));
       }
       return rows;
     });
 
-    for (const { card, activity, automationEffects } of updates) {
-      const wireCard = toWireCard(card, req.auth.cid);
-      await emitToBoard(card.boardId, SERVER_EVENTS.CARD_UPDATED, { boardId: card.boardId, card: wireCard });
-      await emitCardActivityFeedItem(card.boardId, card.id, activity, { notify: body.completed });
-      await emitAutomationEffects(automationEffects);
-    }
-    // Completion moves cards in and out of "Up next" queues without touching their rows, so the
-    // queue audiences must be pinged separately from the board rooms above.
-    await invalidateQueuesForCards(updates.map(({ card }) => card.id));
+    await emitCardCompletion(updates, { clientId: req.auth.cid, completed: body.completed });
     return { updated: updates.length };
   });
 
@@ -1605,51 +886,21 @@ export async function cardRoutes(
 
     const completedAt = body.completed ? new Date() : null;
     const updates = await db.transaction(async (tx) => {
-      const rows: { card: typeof cards.$inferSelect; finalCard: typeof cards.$inferSelect; activity: CoalescedActivityResult; automationEffects: AutomationEffects }[] = [];
+      const rows: CardCompletionWrite[] = [];
       for (const current of changingCards) {
-        const [card] = await tx
-          .update(cards)
-          .set({ completedAt, updatedAt: new Date() })
-          .where(eq(cards.id, current.id))
-          .returning();
-        const activity = await recordCoalescedActivity(tx, {
-          boardId,
+        rows.push(await applyCardCompletion(tx, {
+          card: current,
+          completed: body.completed,
+          completedAt,
           workspaceId: ctx.workspaceId,
+          clientId: ctx.clientId,
           actorId: req.auth.sub,
-          entityType: "card",
-          entityId: current.id,
-          action: ACTIVITY_ACTION.COMPLETION_SET,
-          coalesceKey: "card:completion",
-          windowMs: 60_000,
-          fromValue: Boolean(current.completedAt),
-          toValue: body.completed,
-          payload: { completedAt, fromValue: Boolean(current.completedAt), toValue: body.completed },
-        });
-        if (body.completed) await clearOverdueNotificationsForCards(tx, [current.id]);
-        else await createOverdueNotificationsForCards(tx, [current.id]);
-        const automationEffects = body.completed
-          ? await runCardMarkedCompleteAutomations(tx, {
-            cardId: current.id,
-            boardId,
-            workspaceId: ctx.workspaceId,
-            clientId: ctx.clientId,
-            triggerActorId: req.auth.sub,
-          })
-          : { effects: [] };
-        const [finalCard] = await tx.select().from(cards).where(eq(cards.id, current.id)).limit(1);
-        rows.push({ card: card!, finalCard: finalCard ?? card!, activity, automationEffects });
+        }));
       }
       return rows;
     });
 
-    for (const { card, activity, automationEffects } of updates) {
-      await emitToBoard(boardId, SERVER_EVENTS.CARD_UPDATED, { boardId, card: toWireCard(card, req.auth.cid) });
-      await emitCoalescedCardActivityFeedItem(boardId, card.id, activity, { notify: body.completed });
-      await emitAutomationEffects(automationEffects);
-    }
-    // Completion moves cards in and out of "Up next" queues without touching their rows, so the
-    // queue audiences must be pinged separately from the board rooms above.
-    await invalidateQueuesForCards(updates.map(({ card }) => card.id));
+    await emitCardCompletion(updates, { clientId: req.auth.cid, completed: body.completed });
     return { updated: updates.length, cards: updates.map(({ finalCard }) => toWireCard(finalCard, req.auth.cid)), skippedCardIds };
   });
 
@@ -2040,6 +1291,7 @@ export async function cardRoutes(
         activity: duplicated.activity,
         labelIds: duplicated.labelIds,
         assigneeIds: duplicated.assigneeIds,
+        customFieldValues: duplicated.customFieldValues,
         attachmentRows: duplicated.attachmentRows,
       });
       created.push(wireCard);
@@ -2054,7 +1306,7 @@ export async function cardRoutes(
 
     const [current] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!current) throw notFound();
-    const ctx = await assertCardAccess(req.auth, current.id, "editor");
+    const ctx = await assertCardAccess(req.auth, current, "editor");
     assertCardActive(current);
     assertIntegrationEmbeddedMediaStoredLocally(body.description, req.auth.cid, req.auth.authKind);
     const description = body.description === undefined
@@ -2187,65 +1439,24 @@ export async function cardRoutes(
     const body = dto.setCardCompletionBody.parse(req.body);
     const [current] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!current) throw notFound();
-    const ctx = await assertCardAccess(req.auth, current.id, "editor");
+    const ctx = await assertCardAccess(req.auth, current, "editor");
     assertCardActive(current);
     if (body.completed === Boolean(current.completedAt)) {
       return toWireCard(current, req.auth.cid);
     }
 
     const completedAt = body.completed ? new Date() : null;
-    const { card, finalCard, activity, automationEffects } = await db.transaction(async (tx) => {
-      const [card] = await tx
-        .update(cards)
-        .set({ completedAt, updatedAt: new Date() })
-        .where(eq(cards.id, id))
-        .returning();
+    const write = await db.transaction((tx) => applyCardCompletion(tx, {
+      card: current,
+      completed: body.completed,
+      completedAt,
+      workspaceId: ctx.workspaceId,
+      clientId: ctx.clientId,
+      actorId: req.auth.sub,
+    }));
+    const { finalCard } = write;
 
-      const activity = await recordCoalescedActivity(tx, {
-        boardId: current.boardId,
-        workspaceId: ctx.workspaceId,
-        actorId: req.auth.sub,
-        entityType: "card",
-        entityId: id,
-        action: ACTIVITY_ACTION.COMPLETION_SET,
-        coalesceKey: "card:completion",
-        windowMs: 60_000,
-        fromValue: Boolean(current.completedAt),
-        toValue: body.completed,
-        payload: {
-          completedAt,
-          fromValue: Boolean(current.completedAt),
-          toValue: body.completed,
-        },
-      });
-
-      if (body.completed) {
-        await clearOverdueNotificationsForCards(tx, [id]);
-      } else {
-        await createOverdueNotificationsForCards(tx, [id]);
-      }
-
-      const automationEffects = body.completed
-        ? await runCardMarkedCompleteAutomations(tx, {
-          cardId: id,
-          boardId: current.boardId,
-          workspaceId: ctx.workspaceId,
-          clientId: ctx.clientId,
-          triggerActorId: req.auth.sub,
-        })
-        : { effects: [] };
-      const [finalCard] = await tx.select().from(cards).where(eq(cards.id, id)).limit(1);
-
-      return { card: card!, finalCard: finalCard ?? card!, activity, automationEffects };
-    });
-
-    const wireCard = toWireCard(card, req.auth.cid);
-    await emitToBoard(current.boardId, SERVER_EVENTS.CARD_UPDATED, { boardId: current.boardId, card: wireCard });
-    await emitCoalescedCardActivityFeedItem(current.boardId, id, activity, { notify: body.completed });
-    await emitAutomationEffects(automationEffects);
-    // Completion moves the card in or out of any "Up next" queue holding it, without touching the
-    // queue rows, so those audiences are pinged separately from the board room above.
-    await invalidateQueuesForCards([id]);
+    await emitCardCompletion([write], { clientId: req.auth.cid, completed: body.completed });
     if (body.completed) await evaluateWorkspaceAnalyticsMilestones({
       workspaceId: ctx.workspaceId,
       actorId: req.auth.sub,
@@ -2265,7 +1476,7 @@ export async function cardRoutes(
 
     const [current] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!current) throw notFound();
-    const ctx = await assertCardAccess(req.auth, current.id, "editor");
+    const ctx = await assertCardAccess(req.auth, current, "editor");
     assertCardActive(current);
 
     const [targetList] = await db.select().from(lists).where(eq(lists.id, body.listId)).limit(1);
@@ -2437,7 +1648,7 @@ export async function cardRoutes(
 
     const [source] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!source) throw notFound();
-    const srcCtx = await assertCardAccess(req.auth, source.id, "editor");
+    const srcCtx = await assertCardAccess(req.auth, source, "editor");
     assertCardActive(source);
 
     const targetBoardId = body.boardId ?? source.boardId;
@@ -2490,6 +1701,7 @@ export async function cardRoutes(
       activity: duplicated.activity,
       labelIds: duplicated.labelIds,
       assigneeIds: duplicated.assigneeIds,
+      customFieldValues: duplicated.customFieldValues,
       attachmentRows: duplicated.attachmentRows,
     });
 
@@ -2502,7 +1714,7 @@ export async function cardRoutes(
 
     const [source] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!source) throw notFound();
-    const srcCtx = await assertCardAccess(req.auth, source.id, "editor");
+    const srcCtx = await assertCardAccess(req.auth, source, "editor");
     assertCardActive(source);
 
     if (body.boardId === source.boardId) {

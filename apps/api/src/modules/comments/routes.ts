@@ -398,7 +398,7 @@ export async function commentRoutes(app: FastifyInstance) {
     const cursor = commentCursor(query.cursor);
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
-    await assertCardAccess(req.auth, card.id);
+    await assertCardAccess(req.auth, card);
 
     const conditions = [eq(comments.cardId, cardId)];
     if (cursor) conditions.push(commentAfterCursor(cursor));
@@ -449,7 +449,7 @@ export async function commentRoutes(app: FastifyInstance) {
 
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card.id, "editor");
+    const ctx = await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
     // Resource access rebases an identity-wide personal credential to this card's organisation.
     // Validate and strip media only afterwards so tenant-bound media keys use the resource owner.
@@ -638,7 +638,7 @@ export async function commentRoutes(app: FastifyInstance) {
 
     const [card] = await db.select().from(cards).where(eq(cards.id, current.cardId)).limit(1);
     if (!card) throw notFound();
-    await assertCardAccess(req.auth, card.id, "editor");
+    await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
     assertIntegrationEmbeddedMediaStoredLocally(body.body, req.auth.cid, req.auth.authKind);
     const commentBody = stripSignedEmbeddedMediaUrls(body.body, req.auth.cid) ?? body.body;
@@ -692,7 +692,7 @@ export async function commentRoutes(app: FastifyInstance) {
 
     const [card] = await db.select().from(cards).where(eq(cards.id, current.cardId)).limit(1);
     if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card.id, "editor");
+    const ctx = await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
     // Authors retain control of their own comments, while board administrators may moderate any
     // comment on boards they manage. `isWorkspaceAdmin` is scoped to this board's organisation, so
@@ -818,7 +818,7 @@ export async function commentRoutes(app: FastifyInstance) {
 
     const [card] = await db.select().from(cards).where(eq(cards.id, current.cardId)).limit(1);
     if (!card) throw notFound();
-    await assertCardAccess(req.auth, card.id, "editor");
+    await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
 
     const inserted = await db
@@ -861,7 +861,7 @@ export async function commentRoutes(app: FastifyInstance) {
 
     const [card] = await db.select().from(cards).where(eq(cards.id, current.cardId)).limit(1);
     if (!card) throw notFound();
-    await assertCardAccess(req.auth, card.id, "editor");
+    await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
 
     const removed = await db

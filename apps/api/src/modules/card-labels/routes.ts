@@ -6,6 +6,7 @@ import { db } from "../../db.js";
 import { assertWorkspaceAccess } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
 import { notFound } from "../../lib/errors.js";
+import { moveOrderedEntity } from "../../lib/move-ordered-entity.js";
 import { between, neighbourPositions as resolveNeighbourPositions } from "../../lib/position.js";
 import { rebalanceCardLabels } from "../../lib/rebalance.js";
 import { emitToWorkspace } from "../../realtime/emit.js";
@@ -115,27 +116,27 @@ export async function cardLabelRoutes(app: FastifyInstance) {
     if (!current) throw notFound();
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
 
-    const { prev, next } = await neighbourPositions(current.workspaceId, body.afterLabelId, body.beforeLabelId);
-    const result = between(prev, next);
-    let position = result.position;
     const prevPosition = current.position;
-    await db.update(cardLabels).set({ position, updatedAt: new Date() }).where(eq(cardLabels.id, id));
-
-    if (result.needsRebalance) {
-      const positions = await rebalanceCardLabels(current.workspaceId);
-      position = positions.find((p) => p.id === id)?.position ?? position;
-      await emitToWorkspace(current.workspaceId, "cardLabel:rebalanced", { workspaceId: current.workspaceId, positions });
-    }
-
-    await recordActivity(db, {
-      boardId: null,
-      workspaceId: current.workspaceId,
-      actorId: req.auth.sub,
-      entityType: "cardLabel",
-      entityId: id,
-      action: "moved",
-      payload: { prevPosition, position },
+    const { position, rebalancedPositions } = await moveOrderedEntity({
+      table: cardLabels,
+      idColumn: cardLabels.id,
+      id,
+      neighbours: await neighbourPositions(current.workspaceId, body.afterLabelId, body.beforeLabelId),
+      rebalance: (tx) => rebalanceCardLabels(current.workspaceId, tx),
+      activity: (position) => ({
+        boardId: null,
+        workspaceId: current.workspaceId,
+        actorId: req.auth.sub,
+        entityType: "cardLabel",
+        entityId: id,
+        action: "moved",
+        payload: { prevPosition, position },
+      }),
     });
+
+    if (rebalancedPositions) {
+      await emitToWorkspace(current.workspaceId, "cardLabel:rebalanced", { workspaceId: current.workspaceId, positions: rebalancedPositions });
+    }
     emitToWorkspace(current.workspaceId, "cardLabel:moved", {
       workspaceId: current.workspaceId,
       labelId: id,

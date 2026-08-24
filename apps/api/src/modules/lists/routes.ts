@@ -7,6 +7,7 @@ import { db } from "../../db.js";
 import { assertBoardAccess, assertWorkspaceAccess, assignedCardVisibility } from "../../lib/access.js";
 import { recordActivity, recordCoalescedActivity } from "../../lib/activity.js";
 import { deleteAttachmentFiles } from "../../lib/attachment-cleanup.js";
+import { emitAutomationEffects, runListEntryAutomations, type AutomationEffects } from "../../lib/automations.js";
 import { invalidateQueuesForCards } from "../../lib/card-priority-invalidation.js";
 import { badRequest, notFound } from "../../lib/errors.js";
 import { clearNotificationsForCards, emitDeletedNotifications } from "../../lib/notifications.js";
@@ -204,7 +205,12 @@ export async function listRoutes(app: FastifyInstance) {
       nextPos = position;
     }
 
-    await db.transaction(async (tx) => {
+    // Automations run inside the write transaction and their effects are emitted after commit,
+    // matching the single- and bulk-card move routes. A whole-list merge is still N list entries,
+    // so a "when a card enters this list" rule must fire for each moved card or the same user
+    // action behaves differently depending on which entry point performed it.
+    const automationEffects = await db.transaction(async (tx) => {
+      const collected: AutomationEffects[] = [];
       for (const m of moves) {
         await tx.update(cards)
           .set({
@@ -213,7 +219,19 @@ export async function listRoutes(app: FastifyInstance) {
             updatedAt: new Date(),
           })
           .where(eq(cards.id, m.id));
+        collected.push(await runListEntryAutomations(tx, {
+          cardId: m.id,
+          listId: body.targetListId,
+          // Cards in a workspace-scoped list can span sibling boards, so the trigger context is
+          // per-card rather than the request's optional board filter.
+          boardId: m.boardId,
+          workspaceId: source.workspaceId,
+          clientId: req.auth.cid,
+          trigger: "move",
+          triggerActorId: req.auth.sub,
+        }));
       }
+      return collected;
     });
 
     await recordActivity(db, {
@@ -244,6 +262,9 @@ export async function listRoutes(app: FastifyInstance) {
         });
       }
     }
+    // After the board rooms so clients apply the move before any automation-driven follow-up
+    // (completion, label, assignee) lands on the same card.
+    for (const effects of automationEffects) await emitAutomationEffects(effects);
     return { moved: moves.length };
   });
 

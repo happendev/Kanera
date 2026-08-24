@@ -1,7 +1,10 @@
-// Deliberately the notifications drawer's recipe (notifications-panel.component.scss): the trigger
-// geometry, the backdrop, the slide-in and the header are copied so the two shell surfaces read as
-// one pair rather than two designs. What differs is only the accent policy — this drawer has no
-// unread concept, so the accent marks "your queue changed since you last looked".
+// Deliberately the notifications drawer's recipe: the trigger geometry, the slide-in and the width
+// match so the two shell surfaces read as one pair rather than two designs. The chrome they share
+// verbatim — scrim, header bar, empty state, close button — now comes from `shared/_drawer-chrome`
+// so the two cannot drift. What differs is only the accent policy: this drawer has no unread
+// concept, so the accent marks "your queue changed since you last looked".
+@use "../../shared/drawer-chrome";
+
 :host {
   // The same width as the notifications drawer. These two are a pair, and a narrower one read as a
   // lesser surface next to it — while the rows themselves want the room for a title, a board·list
@@ -87,11 +90,7 @@
 }
 
 .drawer-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 70;
-  background: rgb(0 0 0 / 36%);
-  animation: fade-in 0.16s ease-out;
+  @include drawer-chrome.drawer-backdrop;
 
   &.closing {
     animation: fade-out 0.1s ease forwards;
@@ -169,14 +168,7 @@
 }
 
 .drawer-header {
-  display: flex;
-  flex-shrink: 0;
-  gap: 8px;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 56px;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--border);
+  @include drawer-chrome.drawer-header;
 }
 
 .drawer-title {
@@ -209,10 +201,7 @@
 }
 
 .close-btn {
-  width: 30px;
-  height: 30px;
-  color: var(--text-muted);
-  font-size: 16px;
+  @include drawer-chrome.drawer-close-btn;
 }
 
 .drawer-explainer {
@@ -307,13 +296,7 @@
 }
 
 .drawer-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 64px 32px;
-  text-align: center;
+  @include drawer-chrome.drawer-empty;
 }
 
 .empty-icon {

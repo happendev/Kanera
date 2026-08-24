@@ -8,6 +8,7 @@ import { recordActivity } from "../../lib/activity.js";
 import { disableAutomationsReferencingCustomField, loadAutomation } from "../../lib/automations.js";
 import { loadFieldOptions } from "../../lib/custom-fields.js";
 import { badRequest, conflict, notFound } from "../../lib/errors.js";
+import { moveOrderedEntity } from "../../lib/move-ordered-entity.js";
 import { between, neighbourPositions as resolveNeighbourPositions } from "../../lib/position.js";
 import { rebalanceCustomFieldOptions, rebalanceCustomFields } from "../../lib/rebalance.js";
 import { emitToWorkspace, emitToWorkspaceAdmins } from "../../realtime/emit.js";
@@ -175,27 +176,27 @@ export async function customFieldRoutes(app: FastifyInstance) {
     const [current] = await db.select().from(customFields).where(eq(customFields.id, id)).limit(1);
     if (!current) throw notFound();
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
-    const { prev, next } = await neighbourPositions(current.workspaceId, body.afterFieldId, body.beforeFieldId);
-    const result = between(prev, next);
-    let position = result.position;
     const prevPosition = current.position;
-    await db.update(customFields).set({ position, updatedAt: new Date() }).where(eq(customFields.id, id));
-
-    if (result.needsRebalance) {
-      const positions = await rebalanceCustomFields(current.workspaceId);
-      position = positions.find((p) => p.id === id)?.position ?? position;
-      await emitToWorkspace(current.workspaceId, "customField:rebalanced", { workspaceId: current.workspaceId, positions });
-    }
-
-    await recordActivity(db, {
-      boardId: null,
-      workspaceId: current.workspaceId,
-      actorId: req.auth.sub,
-      entityType: "customField",
-      entityId: id,
-      action: "moved",
-      payload: { prevPosition, position },
+    const { position, rebalancedPositions } = await moveOrderedEntity({
+      table: customFields,
+      idColumn: customFields.id,
+      id,
+      neighbours: await neighbourPositions(current.workspaceId, body.afterFieldId, body.beforeFieldId),
+      rebalance: (tx) => rebalanceCustomFields(current.workspaceId, tx),
+      activity: (position) => ({
+        boardId: null,
+        workspaceId: current.workspaceId,
+        actorId: req.auth.sub,
+        entityType: "customField",
+        entityId: id,
+        action: "moved",
+        payload: { prevPosition, position },
+      }),
     });
+
+    if (rebalancedPositions) {
+      await emitToWorkspace(current.workspaceId, "customField:rebalanced", { workspaceId: current.workspaceId, positions: rebalancedPositions });
+    }
     emitToWorkspace(current.workspaceId, "customField:moved", {
       workspaceId: current.workspaceId,
       fieldId: id,
@@ -300,30 +301,30 @@ export async function customFieldRoutes(app: FastifyInstance) {
     const body = dto.moveCustomFieldOptionBody.parse(req.body);
     const { field, workspaceId, option: current } = await loadOptionField(optionId);
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
-    const { prev, next } = await optionNeighbourPositions(field.id, body.afterOptionId, body.beforeOptionId);
-    const result = between(prev, next);
-    let position = result.position;
     const prevPosition = current.position;
-    await db
-      .update(customFieldOptions)
-      .set({ position, updatedAt: new Date() })
-      .where(eq(customFieldOptions.id, optionId));
-    await recordActivity(db, {
-      boardId: null,
-      workspaceId,
-      actorId: req.auth.sub,
-      entityType: "customField",
-      entityId: field.id,
-      action: "updated",
-      payload: { optionMoved: current.label, optionId, fromPosition: prevPosition, toPosition: position },
+    const { position, rebalancedPositions } = await moveOrderedEntity({
+      table: customFieldOptions,
+      idColumn: customFieldOptions.id,
+      id: optionId,
+      neighbours: await optionNeighbourPositions(field.id, body.afterOptionId, body.beforeOptionId),
+      rebalance: (tx) => rebalanceCustomFieldOptions(field.id, tx),
+      // Recorded against the post-rebalance position. This route used to write the audit row
+      // before renumbering, so `toPosition` disagreed with the committed row whenever the gap
+      // between two options collapsed.
+      activity: (position) => ({
+        boardId: null,
+        workspaceId,
+        actorId: req.auth.sub,
+        entityType: "customField",
+        entityId: field.id,
+        action: "updated",
+        payload: { optionMoved: current.label, optionId, fromPosition: prevPosition, toPosition: position },
+      }),
     });
 
-    if (result.needsRebalance) {
-      const positions = await rebalanceCustomFieldOptions(field.id);
-      position = positions.find((p) => p.id === optionId)?.position ?? position;
-      await emitToWorkspace(workspaceId, "customFieldOption:rebalanced", { workspaceId, fieldId: field.id, positions });
+    if (rebalancedPositions) {
+      await emitToWorkspace(workspaceId, "customFieldOption:rebalanced", { workspaceId, fieldId: field.id, positions: rebalancedPositions });
     }
-
     emitToWorkspace(workspaceId, "customFieldOption:moved", {
       workspaceId,
       fieldId: field.id,

@@ -50,7 +50,7 @@
                 [attr.aria-label]="field.showOnCard ? 'Hide from card' : 'Show on card'">
                 <i class="ti" [class.ti-eye]="field.showOnCard" [class.ti-eye-off]="!field.showOnCard" [style.color]="field.showOnCard ? 'var(--accent)' : 'var(--text-muted)'"></i>
               </button>
-              <button class="ghost icon" (click)="settings.archiveField(field.id)" aria-label="Delete field" kTooltip="Delete field">
+              <button class="ghost icon danger" (click)="settings.archiveField(field.id)" aria-label="Delete field" kTooltip="Delete field">
                 <i class="ti ti-trash"></i>
               </button>
             </div>

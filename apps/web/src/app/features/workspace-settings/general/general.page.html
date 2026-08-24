@@ -79,6 +79,35 @@
 </div>
 <div class="board-settings-section">
   <div class="guest-section-head">
+    <i class="ti ti-zzz"></i>
+    <span>Inactive cards</span>
+  </div>
+  <div class="board-form single-line-capture">
+    <label class="compact-number-field">
+      <span>Mark cards inactive after</span>
+      <input type="number" min="0" max="365" step="1" [value]="settings.inactiveCardsDaysDraft()" (input)="settings.updateInactiveCardsDays($any($event.target).value)" (blur)="settings.saveGeneralSettingsNow()"
+        [disabled]="settings.boardHealthSaving()" />
+      <span>days</span>
+    </label>
+  </div>
+</div>
+<div class="board-settings-section">
+  <div class="guest-section-head">
+    <i class="ti ti-circle-check"></i>
+    <span>Completed cards</span>
+  </div>
+  <k-docs-link path="completed-cards" label="Learn more about completed cards" />
+  <div class="board-form single-line-capture">
+    <label class="compact-number-field">
+      <span>Show completed cards on boards for</span>
+      <input type="number" min="0" max="365" step="1" [value]="settings.completedCardsActiveDaysDraft()" (input)="settings.updateCompletedCardsActiveDays($any($event.target).value)" (blur)="settings.saveGeneralSettingsNow()"
+        [disabled]="settings.boardHealthSaving()" />
+      <span>days</span>
+    </label>
+  </div>
+</div>
+<div class="board-settings-section">
+  <div class="guest-section-head">
     <i class="ti ti-activity-heartbeat"></i>
     <span>Board health</span>
   </div>
@@ -111,35 +140,6 @@
   @if (settings.boardHealthError(); as message) {
   <p class="board-linking-error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p>
   }
-</div>
-<div class="board-settings-section">
-  <div class="guest-section-head">
-    <i class="ti ti-zzz"></i>
-    <span>Inactive cards</span>
-  </div>
-  <div class="board-form single-line-capture">
-    <label class="compact-number-field">
-      <span>Mark cards inactive after</span>
-      <input type="number" min="0" max="365" step="1" [value]="settings.inactiveCardsDaysDraft()" (input)="settings.updateInactiveCardsDays($any($event.target).value)" (blur)="settings.saveGeneralSettingsNow()"
-        [disabled]="settings.boardHealthSaving()" />
-      <span>days</span>
-    </label>
-  </div>
-</div>
-<div class="board-settings-section">
-  <div class="guest-section-head">
-    <i class="ti ti-circle-check"></i>
-    <span>Completed cards</span>
-  </div>
-  <k-docs-link path="completed-cards" label="Learn more about completed cards" />
-  <div class="board-form single-line-capture">
-    <label class="compact-number-field">
-      <span>Show completed cards on boards for</span>
-      <input type="number" min="0" max="365" step="1" [value]="settings.completedCardsActiveDaysDraft()" (input)="settings.updateCompletedCardsActiveDays($any($event.target).value)" (blur)="settings.saveGeneralSettingsNow()"
-        [disabled]="settings.boardHealthSaving()" />
-      <span>days</span>
-    </label>
-  </div>
 </div>
 <div class="board-settings-section">
   <div class="guest-section-head">

@@ -78,32 +78,32 @@ async function rebalanceTable(
   return updates.map(({ id, position }) => ({ id, position }));
 }
 
-export async function rebalanceBoards(workspaceId: string): Promise<RebalancedPosition[]> {
-  return rebalanceTable(boards, { id: boards.id, position: boards.position }, and(eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt)));
+export async function rebalanceBoards(workspaceId: string, tx: Tx = db): Promise<RebalancedPosition[]> {
+  return rebalanceTable(boards, { id: boards.id, position: boards.position }, and(eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt)), { tx });
 }
 
-export async function rebalanceBoardGroups(workspaceId: string): Promise<RebalancedPosition[]> {
-  return rebalanceTable(boardGroups, { id: boardGroups.id, position: boardGroups.position }, eq(boardGroups.workspaceId, workspaceId));
+export async function rebalanceBoardGroups(workspaceId: string, tx: Tx = db): Promise<RebalancedPosition[]> {
+  return rebalanceTable(boardGroups, { id: boardGroups.id, position: boardGroups.position }, eq(boardGroups.workspaceId, workspaceId), { tx });
 }
 
-export async function rebalanceLists(workspaceId: string): Promise<RebalancedPosition[]> {
-  return rebalanceTable(lists, { id: lists.id, position: lists.position }, and(eq(lists.workspaceId, workspaceId), isNull(lists.archivedAt)));
+export async function rebalanceLists(workspaceId: string, tx: Tx = db): Promise<RebalancedPosition[]> {
+  return rebalanceTable(lists, { id: lists.id, position: lists.position }, and(eq(lists.workspaceId, workspaceId), isNull(lists.archivedAt)), { tx });
 }
 
-export async function rebalanceCustomFields(workspaceId: string): Promise<RebalancedPosition[]> {
-  return rebalanceTable(customFields, { id: customFields.id, position: customFields.position }, and(eq(customFields.workspaceId, workspaceId), isNull(customFields.archivedAt)));
+export async function rebalanceCustomFields(workspaceId: string, tx: Tx = db): Promise<RebalancedPosition[]> {
+  return rebalanceTable(customFields, { id: customFields.id, position: customFields.position }, and(eq(customFields.workspaceId, workspaceId), isNull(customFields.archivedAt)), { tx });
 }
 
-export async function rebalanceCustomFieldOptions(fieldId: string): Promise<RebalancedPosition[]> {
-  return rebalanceTable(customFieldOptions, { id: customFieldOptions.id, position: customFieldOptions.position }, and(eq(customFieldOptions.fieldId, fieldId), isNull(customFieldOptions.archivedAt)));
+export async function rebalanceCustomFieldOptions(fieldId: string, tx: Tx = db): Promise<RebalancedPosition[]> {
+  return rebalanceTable(customFieldOptions, { id: customFieldOptions.id, position: customFieldOptions.position }, and(eq(customFieldOptions.fieldId, fieldId), isNull(customFieldOptions.archivedAt)), { tx });
 }
 
-export async function rebalanceCardLabels(workspaceId: string): Promise<RebalancedPosition[]> {
-  return rebalanceTable(cardLabels, { id: cardLabels.id, position: cardLabels.position }, and(eq(cardLabels.workspaceId, workspaceId), isNull(cardLabels.archivedAt)));
+export async function rebalanceCardLabels(workspaceId: string, tx: Tx = db): Promise<RebalancedPosition[]> {
+  return rebalanceTable(cardLabels, { id: cardLabels.id, position: cardLabels.position }, and(eq(cardLabels.workspaceId, workspaceId), isNull(cardLabels.archivedAt)), { tx });
 }
 
-export async function rebalanceChecklistTemplates(workspaceId: string): Promise<RebalancedPosition[]> {
-  return rebalanceTable(checklistTemplates, { id: checklistTemplates.id, position: checklistTemplates.position }, and(eq(checklistTemplates.workspaceId, workspaceId), isNull(checklistTemplates.archivedAt)));
+export async function rebalanceChecklistTemplates(workspaceId: string, tx: Tx = db): Promise<RebalancedPosition[]> {
+  return rebalanceTable(checklistTemplates, { id: checklistTemplates.id, position: checklistTemplates.position }, and(eq(checklistTemplates.workspaceId, workspaceId), isNull(checklistTemplates.archivedAt)), { tx });
 }
 
 export async function rebalanceAutomations(workspaceId: string, tx: Tx = db): Promise<RebalancedPosition[]> {

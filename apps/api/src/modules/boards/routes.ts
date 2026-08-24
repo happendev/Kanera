@@ -30,6 +30,7 @@ import { ANALYTICS_EVENT_VERSION, analyticsCountBand, capturePremiumFeatureUsed,
 import { reactivatePlanArchivedBoardsIfRoom } from "../../lib/plan-conversion.js";
 import { assertBoardLimit, assertGuestsAllowed, hasBoardSyncEntitlement } from "../../lib/tier-limits.js";
 import { badRequest, notFound } from "../../lib/errors.js";
+import { moveOrderedEntity } from "../../lib/move-ordered-entity.js";
 import { deleteExternalLinks } from "../../lib/external-links.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
 import { between, neighbourPositions as resolveNeighbourPositions } from "../../lib/position.js";
@@ -697,25 +698,26 @@ export async function boardRoutes(app: FastifyInstance) {
     const [current] = await db.select().from(boardGroups).where(eq(boardGroups.id, id)).limit(1);
     if (!current) throw notFound();
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
-    const { prev, next } = await groupNeighbourPositions(current.workspaceId, body.afterGroupId, body.beforeGroupId);
-    const result = between(prev, next);
-    let position = result.position;
     const prevPosition = current.position;
-    await db.update(boardGroups).set({ position, updatedAt: new Date() }).where(eq(boardGroups.id, id));
-    if (result.needsRebalance) {
-      const positions = await rebalanceBoardGroups(current.workspaceId);
-      position = positions.find((p) => p.id === id)?.position ?? position;
-      await emitToWorkspace(current.workspaceId, "boardGroup:rebalanced", { workspaceId: current.workspaceId, positions });
-    }
-    await recordActivity(db, {
-      boardId: null,
-      workspaceId: current.workspaceId,
-      actorId: req.auth.sub,
-      entityType: "boardGroup",
-      entityId: id,
-      action: "moved",
-      payload: { prevPosition, position },
+    const { position, rebalancedPositions } = await moveOrderedEntity({
+      table: boardGroups,
+      idColumn: boardGroups.id,
+      id,
+      neighbours: await groupNeighbourPositions(current.workspaceId, body.afterGroupId, body.beforeGroupId),
+      rebalance: (tx) => rebalanceBoardGroups(current.workspaceId, tx),
+      activity: (position) => ({
+        boardId: null,
+        workspaceId: current.workspaceId,
+        actorId: req.auth.sub,
+        entityType: "boardGroup",
+        entityId: id,
+        action: "moved",
+        payload: { prevPosition, position },
+      }),
     });
+    if (rebalancedPositions) {
+      await emitToWorkspace(current.workspaceId, "boardGroup:rebalanced", { workspaceId: current.workspaceId, positions: rebalancedPositions });
+    }
     emitToWorkspace(current.workspaceId, "boardGroup:moved", {
       workspaceId: current.workspaceId,
       groupId: id,
@@ -751,27 +753,27 @@ export async function boardRoutes(app: FastifyInstance) {
     if (!current) throw notFound();
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
 
-    const { prev, next } = await neighbourPositions(current.workspaceId, body.afterBoardId, body.beforeBoardId);
-    const result = between(prev, next);
-    let position = result.position;
     const prevPosition = current.position;
-    await db.update(boards).set({ position, updatedAt: new Date() }).where(eq(boards.id, id));
-
-    if (result.needsRebalance) {
-      const positions = await rebalanceBoards(current.workspaceId);
-      position = positions.find((p) => p.id === id)?.position ?? position;
-      await emitBoardRebalancedToVisibleUsers(current.workspaceId, { workspaceId: current.workspaceId, positions });
-    }
-
-    await recordActivity(db, {
-      boardId: id,
-      workspaceId: current.workspaceId,
-      actorId: req.auth.sub,
-      entityType: "board",
-      entityId: id,
-      action: "moved",
-      payload: { prevPosition, position },
+    const { position, rebalancedPositions } = await moveOrderedEntity({
+      table: boards,
+      idColumn: boards.id,
+      id,
+      neighbours: await neighbourPositions(current.workspaceId, body.afterBoardId, body.beforeBoardId),
+      rebalance: (tx) => rebalanceBoards(current.workspaceId, tx),
+      activity: (position) => ({
+        boardId: id,
+        workspaceId: current.workspaceId,
+        actorId: req.auth.sub,
+        entityType: "board",
+        entityId: id,
+        action: "moved",
+        payload: { prevPosition, position },
+      }),
     });
+
+    if (rebalancedPositions) {
+      await emitBoardRebalancedToVisibleUsers(current.workspaceId, { workspaceId: current.workspaceId, positions: rebalancedPositions });
+    }
     await emitToBoardAudience(id, "board:moved", {
       workspaceId: current.workspaceId,
       boardId: id,

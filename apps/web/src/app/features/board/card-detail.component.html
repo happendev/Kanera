@@ -113,7 +113,7 @@
       <button class="ghost sm" (click)="confirmingDelete.set(false)">Cancel</button>
     </div>
     } @else {
-    <button class="ghost icon" (click)="confirmingDelete.set(true)" [disabled]="!canEdit()" aria-label="Archive card" kTooltip="Archive card">
+    <button class="ghost icon danger" (click)="confirmingDelete.set(true)" [disabled]="!canEdit()" aria-label="Archive card" kTooltip="Archive card">
       <i class="ti ti-archive"></i>
     </button>
     }

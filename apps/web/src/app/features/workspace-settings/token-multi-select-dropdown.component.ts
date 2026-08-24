@@ -1,10 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from "@angular/core";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
+import { PickerListComponent, type PickerGroup } from "../../shared/picker-list.component";
 
 export type TokenMultiSelectOption = {
   id: string;
   name: string;
-  /** Resolved CSS colour for the swatch, e.g. `var(--color-teal)`. Omitted options render no dot. */
+  /** Shared colour token name, e.g. `teal` — not a resolved CSS value. Omitted options fall back
+   * to a neutral swatch, matching how every other picker in the app renders a colourless row. */
   color?: string | null;
 };
 
@@ -19,7 +21,7 @@ export type TokenMultiSelectOption = {
 @Component({
   selector: "k-token-multi-select-dropdown",
   standalone: true,
-  imports: [AnchoredPanelDirective],
+  imports: [AnchoredPanelDirective, PickerListComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="tms">
@@ -27,7 +29,7 @@ export type TokenMultiSelectOption = {
         @if (selectedOptions().length) {
           <span class="tms-swatches" aria-hidden="true">
             @for (option of selectedOptions().slice(0, 3); track option.id) {
-              @if (option.color) { <span class="tms-dot" [style.background]="option.color"></span> }
+              @if (option.color) { <span class="tms-dot" [style.background]="swatch(option.color)"></span> }
             }
           </span>
         } @else {
@@ -45,29 +47,13 @@ export type TokenMultiSelectOption = {
           [apPlacement]="placement"
           (apDismissed)="open.set(false)"
         >
-          @if (options().length > 7) {
-            <input
-              class="tms-search"
-              type="text"
-              [placeholder]="searchPlaceholder()"
-              [value]="query()"
-              (input)="query.set($any($event.target).value)"
-            />
-          }
-          <div class="tms-list" role="listbox" [attr.aria-multiselectable]="max() !== 1">
-            @if (filteredOptions().length === 0) {
-              <p class="tms-empty">{{ emptyMessage() }}</p>
-            }
-            @for (option of filteredOptions(); track option.id) {
-              <button type="button" class="tms-row" [class.is-selected]="isSelected(option.id)" (click)="toggle(option.id)" role="option" [attr.aria-selected]="isSelected(option.id)">
-                <span class="tms-dot" [style.background]="option.color || 'var(--border-strong)'"></span>
-                <span class="tms-name">{{ option.name }}</span>
-                @if (isSelected(option.id)) {
-                  <i class="ti ti-check tms-check"></i>
-                }
-              </button>
-            }
-          </div>
+          <k-picker-list
+            [groups]="pickerGroups()"
+            [selectedIds]="selectedIds()"
+            [searchPlaceholder]="searchPlaceholder()"
+            [emptyLabel]="emptyMessage()"
+            (pick)="toggle($event)"
+          />
         </div>
       }
     </div>
@@ -96,7 +82,6 @@ export type TokenMultiSelectOption = {
       text-align: left;
       font-size: 13px;
 
-      &:hover,
       &.is-open {
         border-color: var(--border-strong);
         background: var(--surface-hover);
@@ -159,71 +144,6 @@ export type TokenMultiSelectOption = {
       overflow: hidden;
     }
 
-    .tms-search {
-      height: 32px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      background: var(--surface-2);
-      color: var(--text);
-      padding: 0 8px;
-      font-size: 13px;
-      outline: none;
-
-      &:focus {
-        border-color: var(--accent, var(--text));
-      }
-    }
-
-    .tms-list {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      min-height: 0;
-      overflow-y: auto;
-    }
-
-    .tms-row {
-      width: 100%;
-      min-height: 34px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 8px;
-      border: 0;
-      border-radius: var(--radius-sm);
-      background: transparent;
-      color: var(--text);
-      cursor: pointer;
-      text-align: left;
-      font-size: 13px;
-
-      &:hover,
-      &.is-selected {
-        background: var(--surface-2);
-      }
-    }
-
-    .tms-name {
-      flex: 1;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .tms-check {
-      color: var(--accent, var(--text));
-      font-size: 15px;
-      flex: 0 0 auto;
-    }
-
-    .tms-empty {
-      margin: 0;
-      padding: 10px 6px;
-      text-align: center;
-      color: var(--text-muted);
-      font-size: 12px;
-    }
   `,
 })
 export class TokenMultiSelectDropdownComponent {
@@ -239,7 +159,6 @@ export class TokenMultiSelectDropdownComponent {
   readonly selectedIdsChange = output<string[]>();
 
   readonly open = signal(false);
-  readonly query = signal("");
   readonly placement = { width: 280, maxHeight: 320, minHeight: 160, gap: 4, margin: 8 } as const;
 
   readonly selectedOptions = computed(() => {
@@ -254,14 +173,27 @@ export class TokenMultiSelectDropdownComponent {
     return `${options[0]?.name}, ${options[1]?.name} +${options.length - 2}`;
   });
 
-  readonly filteredOptions = computed(() => {
-    const q = this.query().trim().toLowerCase();
-    if (!q) return this.options();
-    return this.options().filter((option) => option.name.toLowerCase().includes(q));
-  });
+  /**
+   * Rows for `k-picker-list`, which owns the search, row markup, selected tick and empty state.
+   * `dot: true` on every row, colour or not, keeps the swatch column aligned — a colourless option
+   * renders the neutral dot rather than shifting its label left past its neighbours.
+   *
+   * The default `searchThreshold` of 8 is deliberately left alone: it matches the "more than seven
+   * options" rule this control used before, so short vocabularies still open straight onto the list.
+   */
+  readonly pickerGroups = computed<PickerGroup[]>(() => [{
+    id: "tokens",
+    options: this.options().map((option) => ({
+      id: option.id,
+      label: option.name,
+      color: option.color ?? null,
+      dot: true,
+    })),
+  }]);
 
-  isSelected(id: string): boolean {
-    return this.selectedIds().includes(id);
+  /** Resolve a colour token for the trigger's own swatch stack, which is outside the picker list. */
+  swatch(color: string | null | undefined): string {
+    return color ? `var(--color-${color})` : "var(--border-strong)";
   }
 
   toggleOpen() {

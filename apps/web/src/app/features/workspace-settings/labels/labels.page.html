@@ -17,7 +17,7 @@
           }
           <div class="row-actions">
             <k-color-picker [value]="$any(label.color)" (valueChange)="settings.updateLabelColor(label.id, $event)" />
-            <button class="ghost icon" (click)="settings.archiveLabel(label.id)" aria-label="Delete label" kTooltip="Delete label">
+            <button class="ghost icon danger" (click)="settings.archiveLabel(label.id)" aria-label="Delete label" kTooltip="Delete label">
               <i class="ti ti-trash"></i>
             </button>
           </div>

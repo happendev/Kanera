@@ -1760,11 +1760,16 @@ void test("bulk uncompletion immediately recreates overdue notifications for sti
   const reopenedRows = await overdueRowsForCard(overdueCard!.id);
   assert.deepEqual(userIds(reopenedRows), [f.member.id, f.owner.id].sort());
 
+  // The whole-list completion route coalesces like the single and bulk routes: completing and
+  // then re-opening inside the 60s window collapses to one `completion:set` row, and because the
+  // burst ends where it started that row is hidden from the human-facing feed. The overdue row is
+  // written by the sweep and never coalesced.
   const activities = await db
-    .select({ action: activityEvents.action })
+    .select({ action: activityEvents.action, feedVisible: activityEvents.feedVisible })
     .from(activityEvents)
     .where(and(eq(activityEvents.entityType, "card"), eq(activityEvents.entityId, overdueCard!.id)));
-  assert.deepEqual(activities.map((row) => row.action).sort(), ["completed", "overdue", "uncompleted"]);
+  assert.deepEqual(activities.map((row) => row.action).sort(), ["completion:set", "overdue"]);
+  assert.equal(activities.find((row) => row.action === "completion:set")!.feedVisible, false);
 });
 
 void test("card and board watch endpoints enforce access, are idempotent, and delete only the current user's watch", async () => {
