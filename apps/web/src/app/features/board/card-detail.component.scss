@@ -1157,6 +1157,10 @@
   &:hover:not(:disabled) {
     background: transparent;
   }
+
+  &.is-static {
+    cursor: default;
+  }
 }
 
 .checklist-title-input,

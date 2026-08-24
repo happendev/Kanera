@@ -43,6 +43,7 @@ minimumReleaseAgeExclude:
   - '@angular/router@22.1.1'
   - '@angular/service-worker@22.1.1'
   - blobatar@0.2.0
+minimumReleaseAgeExcludePrune: true
 overrides:
   # Keep Vite aligned with @angular/build: its dev-server linker depends on the matching
   # dependency-optimizer API, and an older forced Vite leaves Angular packages partially compiled.

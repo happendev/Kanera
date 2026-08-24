@@ -429,7 +429,7 @@ export class CardDetailComponent {
   readonly checklistItemAssigneePickerId = signal<string | null>(null);
   readonly checklistItemDueDatePickerId = signal<string | null>(null);
   readonly checklistItemActionsMenuId = signal<string | null>(null);
-  readonly checklistItemActionsMenuPlacement = { align: "end", width: 180, minHeight: 110, gap: 4 } as const;
+  readonly checklistItemActionsMenuPlacement = { align: "end", width: 180, gap: 4 } as const;
   readonly bulkChecklistAssigneePickerId = signal<string | null>(null);
   readonly bulkChecklistDueDatePickerId = signal<string | null>(null);
   readonly labelPickerOpen = signal(false);
@@ -559,12 +559,6 @@ export class CardDetailComponent {
     const itemId = this.openChecklistItemId();
     if (!itemId) return null;
     return this.checklists().find((checklist) => checklist.items.some((item) => item.id === itemId))?.id ?? null;
-  });
-  readonly openChecklistItemCanHaveSubChecklists = computed(() => {
-    const checklistId = this.openChecklistItemChecklistId();
-    return checklistId
-      ? this.checklists().some((checklist) => checklist.id === checklistId && checklist.parentItemId === null)
-      : false;
   });
   readonly topLevelChecklists = computed(() => this.checklists().filter((checklist) => checklist.parentItemId === null));
   readonly openItemSubChecklists = computed(() => {
@@ -1688,6 +1682,10 @@ export class CardDetailComponent {
   }
 
   openChecklistItemDetail(item: WireCardChecklistItem) {
+    // Nested checklist items are terminal rows. Their API supports text and completion only, so
+    // never expose the mini-card drawer even if this method is reached outside the row template.
+    const containingChecklist = this.checklists().find((checklist) => checklist.items.some((candidate) => candidate.id === item.id));
+    if (!containingChecklist || containingChecklist.parentItemId !== null) return;
     this.openChecklistItemId.set(item.id);
   }
 
