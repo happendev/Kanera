@@ -41,7 +41,7 @@ export class ApiClient {
     }
     if (res.status === 409) {
       const body = await res.clone().json().catch(() => null) as { code?: string; clientId?: string } | null;
-      if (body?.code === "WRONG_ORG" && body.clientId) {
+      if (body?.code === "WRONG_ORG" && body.clientId && !this.auth.organisationSwitchPending()) {
         this.sockets.pauseForOrganisationSwitch();
         try {
           await this.auth.switchOrg(body.clientId);
