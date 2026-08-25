@@ -72,6 +72,14 @@ export interface NotificationQueueStats {
   email: { queued: number; inFlight: number; oldestAgeSeconds: number };
 }
 
+export function timestampAgeSeconds(value: Date | string | null, now = Date.now()): number {
+  if (value === null) return 0;
+  // Drizzle cannot attach the timestamptz decoder to an aggregate SQL expression, so PostgreSQL may
+  // return min(created_at) as an ISO string even though ordinary timestamp columns arrive as Dates.
+  const timestamp = value instanceof Date ? value.getTime() : Date.parse(value);
+  return Number.isFinite(timestamp) ? Math.max(0, (now - timestamp) / 1_000) : 0;
+}
+
 let notificationQueueStatsProvider: (() => Promise<NotificationQueueStats>) | null = null;
 let notificationQueueStatsCache: { at: number; value: Promise<NotificationQueueStats> } | null = null;
 export function registerNotificationQueueStatsProvider(provider: () => Promise<NotificationQueueStats>): void {

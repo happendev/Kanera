@@ -2,7 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import Fastify from "fastify";
 import { env } from "../env.js";
-import { registerMetrics } from "./metrics.js";
+import { registerMetrics, timestampAgeSeconds } from "./metrics.js";
+
+void test("timestampAgeSeconds accepts aggregate timestamps returned as Dates or strings", () => {
+  const now = Date.parse("2026-08-25T11:15:34.000Z");
+
+  assert.equal(timestampAgeSeconds(new Date("2026-08-25T11:15:04.000Z"), now), 30);
+  assert.equal(timestampAgeSeconds("2026-08-25T11:14:34.000Z", now), 60);
+  assert.equal(timestampAgeSeconds(null, now), 0);
+  assert.equal(timestampAgeSeconds("not-a-timestamp", now), 0);
+});
 
 void test("GET /metrics fails closed and accepts only the configured bearer token", async () => {
   const app = Fastify({ logger: false });

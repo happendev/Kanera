@@ -9,7 +9,7 @@ import { startDueDateAutomationScheduler } from "./lib/automations.js";
 import { startDailyDigestScheduler } from "./lib/daily-digest.js";
 import { startEmailQueueScheduler } from "./lib/email-queue.js";
 import { startImportCleanupScheduler } from "./lib/import-cleanup.js";
-import { registerMetrics, registerNotificationQueueStatsProvider } from "./lib/metrics.js";
+import { registerMetrics, registerNotificationQueueStatsProvider, timestampAgeSeconds } from "./lib/metrics.js";
 import mailerPlugin from "./lib/mailer-plugin.js";
 import { startOverdueNotificationScheduler } from "./lib/overdue-notifications.js";
 import { startOrganisationDeletionScheduler } from "./lib/organisation-delete.js";
@@ -52,24 +52,24 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
       db.select({
         queued: sql<number>`count(*) filter (where ${pushQueue.status} = ${PUSH_QUEUE_STATUS.queued})::int`,
         inFlight: sql<number>`count(*) filter (where ${pushQueue.status} = ${PUSH_QUEUE_STATUS.immediate})::int`,
-        oldest: sql<Date | null>`min(${pushQueue.createdAt}) filter (where ${pushQueue.status} in (${PUSH_QUEUE_STATUS.queued}, ${PUSH_QUEUE_STATUS.immediate}))`,
+        oldest: sql<Date | string | null>`min(${pushQueue.createdAt}) filter (where ${pushQueue.status} in (${PUSH_QUEUE_STATUS.queued}, ${PUSH_QUEUE_STATUS.immediate}))`,
       }).from(pushQueue),
       db.select({
         queued: sql<number>`count(*) filter (where ${emailQueue.status} = ${EMAIL_QUEUE_STATUS.queued})::int`,
         inFlight: sql<number>`count(*) filter (where ${emailQueue.status} = ${EMAIL_QUEUE_STATUS.immediate})::int`,
-        oldest: sql<Date | null>`min(${emailQueue.createdAt}) filter (where ${emailQueue.status} in (${EMAIL_QUEUE_STATUS.queued}, ${EMAIL_QUEUE_STATUS.immediate}))`,
+        oldest: sql<Date | string | null>`min(${emailQueue.createdAt}) filter (where ${emailQueue.status} in (${EMAIL_QUEUE_STATUS.queued}, ${EMAIL_QUEUE_STATUS.immediate}))`,
       }).from(emailQueue),
     ]);
     return {
       push: {
         queued: pushStats?.queued ?? 0,
         inFlight: pushStats?.inFlight ?? 0,
-        oldestAgeSeconds: pushStats?.oldest ? Math.max(0, (now - pushStats.oldest.getTime()) / 1000) : 0,
+        oldestAgeSeconds: timestampAgeSeconds(pushStats?.oldest ?? null, now),
       },
       email: {
         queued: emailStats?.queued ?? 0,
         inFlight: emailStats?.inFlight ?? 0,
-        oldestAgeSeconds: emailStats?.oldest ? Math.max(0, (now - emailStats.oldest.getTime()) / 1000) : 0,
+        oldestAgeSeconds: timestampAgeSeconds(emailStats?.oldest ?? null, now),
       },
     };
   });
