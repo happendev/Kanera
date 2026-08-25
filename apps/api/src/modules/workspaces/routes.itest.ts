@@ -1587,3 +1587,68 @@ void test("workspace guest management gives one free board, then uses one reusab
     setStripeClientForTests(null);
   }
 });
+
+// Regression: a plain member of one organisation who also owns workspaces in another organisation
+// (e.g. an invited user who later created a personal organisation with a standalone board) must not
+// see the other organisation's workspaces in organisation-scoped listings. The shell prefetches
+// every /home/boards group on boot; a leaked foreign workspace answers WRONG_ORG (409) and the
+// client's recovery path then auto-switches the user back into the other organisation — which made
+// switching organisations impossible for exactly this shape of user.
+void test("GET /home/boards and /workspaces stay scoped to the active organisation for plain members", async () => {
+  const app = await buildIntegrationServer();
+
+  const owner = await signupOwner(app, { seed: "org-scope" });
+  const createdWorkspace = await app.inject({ method: "POST", url: "/workspaces", headers: owner.auth, payload: { name: "Delivery" } });
+  assert.equal(createdWorkspace.statusCode, 201);
+  const workspace = createdWorkspace.json<{ id: string }>();
+  const [member] = await insertTestUsers(db, {
+    clientId: owner.user.clientId,
+    clientRole: "member",
+    email: "org-scope-member@example.com",
+    passwordHash: "hash",
+    displayName: "Invited Member",
+  }).returning();
+  assert.ok(member);
+  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: member.id, role: "member" });
+
+  const workToken = app.jwt.sign({ sub: member.id, cid: owner.user.clientId, role: "member" as const });
+  const workAuth = { authorization: `Bearer ${workToken}` };
+
+  // The member creates their own organisation and a standalone board inside it, which also creates
+  // a workspace_members row for them in that organisation's hidden board workspace.
+  const createdOrg = await app.inject({ method: "POST", url: "/clients", headers: workAuth, payload: { name: "Member Private" } });
+  assert.equal(createdOrg.statusCode, 200);
+  const privateSession = createdOrg.json<{ accessToken: string; user: { clientId: string } }>();
+  assert.notEqual(privateSession.user.clientId, owner.user.clientId);
+
+  const createdStandalone = await app.inject({
+    method: "POST",
+    url: "/workspaces",
+    headers: { authorization: `Bearer ${privateSession.accessToken}` },
+    payload: { kind: "board", name: "My Private Board", initialBoard: { name: "My Private Board" } },
+  });
+  assert.equal(createdStandalone.statusCode, 201);
+  const privateWorkspaceId = createdStandalone.json<{ id: string }>().id;
+
+  // Back in the work organisation, the home directory and the workspace listing must contain only
+  // the work organisation's workspaces — the private one belongs behind the organisation switcher.
+  const home = await app.inject({ method: "GET", url: "/home/boards", headers: workAuth });
+  assert.equal(home.statusCode, 200);
+  const homeBody = home.json<{ groups: { workspace: { id: string } }[]; guestGroups?: { workspace: { id: string } }[] }>();
+  const homeWorkspaceIds = homeBody.groups.map((group) => group.workspace.id);
+  assert.ok(homeWorkspaceIds.includes(workspace.id));
+  assert.equal(homeWorkspaceIds.includes(privateWorkspaceId), false);
+  // A full membership in the other organisation must not resurface as a pseudo guest group either.
+  assert.equal((homeBody.guestGroups ?? []).some((group) => group.workspace.id === privateWorkspaceId), false);
+
+  const listed = await app.inject({ method: "GET", url: "/workspaces", headers: workAuth });
+  assert.equal(listed.statusCode, 200);
+  for (const row of listed.json<{ clientId: string }[]>()) assert.equal(row.clientId, owner.user.clientId);
+
+  // A direct read of the foreign workspace still answers WRONG_ORG so deliberate deep links can
+  // offer the organisation switch; the listing fix above is what stops the shell from tripping this
+  // recovery automatically on every boot.
+  const foreign = await app.inject({ method: "GET", url: `/workspaces/${privateWorkspaceId}`, headers: workAuth });
+  assert.equal(foreign.statusCode, 409);
+  assert.equal(foreign.json<{ code: string }>().code, "WRONG_ORG");
+});
