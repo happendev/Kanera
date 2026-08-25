@@ -206,8 +206,15 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       })
       .from(workspaceMembers)
       .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
-      // Archived workspaces (e.g. downgrade-archived) are hidden from listings.
-      .where(and(eq(workspaceMembers.userId, req.auth.sub), ne(workspaces.kind, "board"), isNull(workspaces.archivedAt)))
+      // Archived workspaces (e.g. downgrade-archived) are hidden from listings. Membership rows
+      // span every organisation the identity has joined, so scope to the active organisation —
+      // workspaces in other organisations belong behind the organisation switcher.
+      .where(and(
+        eq(workspaceMembers.userId, req.auth.sub),
+        eq(workspaces.clientId, req.auth.cid),
+        ne(workspaces.kind, "board"),
+        isNull(workspaces.archivedAt),
+      ))
       .orderBy(asc(workspaces.createdAt));
     return page(rows);
   });
@@ -1590,6 +1597,11 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         .leftJoin(boardMembers, and(eq(boardMembers.boardId, boards.id), eq(boardMembers.userId, userId)))
         .where(and(
           eq(workspaceMembers.userId, userId),
+          // Membership rows span every organisation the identity has joined. The home directory
+          // must stay scoped to the active organisation like the admin branch above: leaking
+          // another organisation's workspace here makes the shell prefetch it, hit WRONG_ORG, and
+          // auto-switch the user out of the organisation they just selected.
+          eq(workspaces.clientId, req.auth.cid),
           isNull(clients.suspendedAt),
           isNull(clients.deletedAt),
         ))
