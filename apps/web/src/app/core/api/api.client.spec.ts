@@ -46,6 +46,7 @@ describe("ApiClient organisation recovery", () => {
     getAccessToken: vi.fn(() => "client-1-token"),
     refresh: vi.fn(),
     switchOrg: vi.fn(async () => ({ clientId: "client-2" })),
+    organisationSwitchPending: signal(false),
   };
   const sockets = {
     displayedOnline: vi.fn(() => true),
@@ -57,6 +58,7 @@ describe("ApiClient organisation recovery", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     MockXmlHttpRequest.instances = [];
+    auth.organisationSwitchPending.set(false);
     auth.getAccessToken
       .mockReturnValueOnce("client-1-token")
       .mockReturnValue("client-2-token");
@@ -93,6 +95,25 @@ describe("ApiClient organisation recovery", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(new Headers(fetch.mock.calls[0]![1]!.headers).get("Authorization")).toBe("Bearer client-1-token");
     expect(new Headers(fetch.mock.calls[1]![1]!.headers).get("Authorization")).toBe("Bearer client-2-token");
+  });
+
+  it("does not let a stale WRONG_ORG response reverse an explicit organisation switch", async () => {
+    auth.organisationSwitchPending.set(true);
+    const fetch = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(new Response(JSON.stringify({
+        code: "WRONG_ORG",
+        clientId: "client-1",
+        orgName: "Organisation being left",
+      }), { status: 409 }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(TestBed.inject(ApiClient).get("/workspaces/stale-workspace"))
+      .rejects.toMatchObject({ status: 409 });
+
+    expect(auth.switchOrg).not.toHaveBeenCalled();
+    expect(sockets.pauseForOrganisationSwitch).not.toHaveBeenCalled();
+    expect(reloadAfterOrganisationSwitch).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it("reports upload progress and resolves a successful XHR response", async () => {

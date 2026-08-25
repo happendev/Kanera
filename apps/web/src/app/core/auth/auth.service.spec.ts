@@ -145,8 +145,19 @@ describe("AuthService logout refresh guard", { concurrent: false }, () => {
     await expect(auth.switchOrg("client-2")).resolves.toMatchObject({ clientId: "client-2" });
     expect(auth.getAccessToken()).toBe("client-2-token");
     expect(auth.user()?.orgName).toBe("Second Org");
+    expect(auth.organisationSwitchPending()).toBe(true);
     const [, init] = fetchCallsFor(auth.fetchMock, "/auth/switch-org")[0]!;
     expect(init?.body).toBe(JSON.stringify({ clientId: "client-2" }));
+  });
+
+  it("allows another organisation-switch attempt after a rejected switch", async () => {
+    const auth = new TestAuthService();
+    auth.setSession("token", user());
+    auth.fetchMock.mockResolvedValue(new Response("{}", { status: 403 }));
+
+    await expect(auth.switchOrg("client-2")).rejects.toThrow("organisation switch failed (403)");
+
+    expect(auth.organisationSwitchPending()).toBe(false);
   });
 
   it("refreshes an expired access token and retries an organisation switch", async () => {

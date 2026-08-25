@@ -70,9 +70,13 @@ export class AuthService {
   private refreshInFlight: Promise<RefreshResult> | null = null;
   private hydrateInFlight: Promise<void> | null = null;
   private refreshDisabled = false;
+  private readonly _organisationSwitchPending = signal(false);
   private readonly _supportSession = signal<{ sessionId: string; orgName: string } | null>(null);
 
   readonly user = this._user.asReadonly();
+  // Remains true after a successful switch until the hard navigation replaces this app instance.
+  // ApiClient uses it to ignore WRONG_ORG responses from the screen that is being torn down.
+  readonly organisationSwitchPending = this._organisationSwitchPending.asReadonly();
   // True while the browser is running a superadmin support session (acting as another org). Drives
   // the persistent warning banner. Refresh stays disabled for the whole session (see below).
   readonly supportSession = this._supportSession.asReadonly();
@@ -167,6 +171,7 @@ export class AuthService {
     if (options.disableRefresh) this.refreshDisabled = true;
     this.accessToken = null;
     this._user.set(null);
+    this._organisationSwitchPending.set(false);
     this._supportSession.set(null);
     if (options.broadcast) this.broadcastLogout();
   }
@@ -219,29 +224,36 @@ export class AuthService {
   }
 
   async switchOrg(clientId: string): Promise<AuthUser> {
-    let token = this.accessToken ?? await this.refresh();
-    if (!token) throw new Error("not authenticated");
-
-    const requestSwitch = (accessToken: string) => this.request(`${environment.apiUrl}/auth/switch-org`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-      body: JSON.stringify({ clientId }),
-    });
-
-    let res = await requestSwitch(token);
-    if (res.status === 401) {
-      // Organisation switching uses the auth transport directly rather than ApiClient. Mirror its
-      // single refresh-and-retry boundary so a five-minute access-token expiry cannot make the
-      // selector appear to switch before silently restoring the organisation being left.
-      token = await this.refresh();
+    this._organisationSwitchPending.set(true);
+    try {
+      let token = this.accessToken ?? await this.refresh();
       if (!token) throw new Error("not authenticated");
-      res = await requestSwitch(token);
+
+      const requestSwitch = (accessToken: string) => this.request(`${environment.apiUrl}/auth/switch-org`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ clientId }),
+      });
+
+      let res = await requestSwitch(token);
+      if (res.status === 401) {
+        // Organisation switching uses the auth transport directly rather than ApiClient. Mirror its
+        // single refresh-and-retry boundary so a five-minute access-token expiry cannot make the
+        // selector appear to switch before silently restoring the organisation being left.
+        token = await this.refresh();
+        if (!token) throw new Error("not authenticated");
+        res = await requestSwitch(token);
+      }
+      if (!res.ok) throw new Error(`organisation switch failed (${res.status})`);
+      const session = (await res.json()) as { accessToken: string; user: AuthUser };
+      this.setSession(session.accessToken, session.user);
+      return session.user;
+    } catch (error) {
+      // A rejected switch leaves the existing shell usable and allows another attempt.
+      this._organisationSwitchPending.set(false);
+      throw error;
     }
-    if (!res.ok) throw new Error(`organisation switch failed (${res.status})`);
-    const session = (await res.json()) as { accessToken: string; user: AuthUser };
-    this.setSession(session.accessToken, session.user);
-    return session.user;
   }
 
   async hydrate(): Promise<void> {
