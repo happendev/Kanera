@@ -8,7 +8,7 @@ import { cardPath } from "@kanera/shared/card-links";
 import type { WireBoardMemberUser, WireCardSummary } from "@kanera/shared/events";
 import type { Board, BoardRole, CardLabel, CustomField, List } from "@kanera/shared/schema";
 import type { NotificationGroupBy, NotificationRow } from "@kanera/shared/dto";
-import { ApiClient } from "../../core/api/api.client";
+import { ApiClient, ORGANISATION_SWITCH_NAVIGATOR } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { NotificationsService } from "../../core/notifications/notifications.service";
@@ -56,6 +56,7 @@ const SEARCH_DEBOUNCE_MS = 200;
 })
 export class NotificationsPanelComponent {
   private readonly api = inject(ApiClient);
+  private readonly navigateAfterOrganisationSwitch = inject(ORGANISATION_SWITCH_NAVIGATOR);
   private readonly auth = inject(AuthService);
   private readonly notifications = inject(NotificationsService);
   private readonly router = inject(Router);
@@ -425,8 +426,9 @@ export class NotificationsPanelComponent {
       this.sockets.pauseForOrganisationSwitch();
       try {
         await this.auth.switchOrg(notification.clientId);
-        this.sockets.resumeAfterOrganisationSwitch();
-        window.location.assign(this.notificationUrl(notification));
+        // The hard navigation creates a new socket in the destination organisation. Reconnecting
+        // this shell first would let its old route issue WRONG_ORG requests and reverse the switch.
+        this.navigateAfterOrganisationSwitch(this.notificationUrl(notification));
       } catch {
         this.sockets.resumeAfterOrganisationSwitch();
       }

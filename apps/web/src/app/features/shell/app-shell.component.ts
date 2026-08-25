@@ -8,7 +8,7 @@ import type { ServerToClientEvents } from "@kanera/shared/events";
 import type { Board, BoardGroup, StandaloneBoardGroup } from "@kanera/shared/schema";
 import type { Subscription } from "rxjs";
 import { filter } from "rxjs/operators";
-import { ApiClient } from "../../core/api/api.client";
+import { ApiClient, ORGANISATION_SWITCH_NAVIGATOR } from "../../core/api/api.client";
 import { AuthService, authenticatedLandingPath } from "../../core/auth/auth.service";
 import { STORAGE_KEYS, organisationStorageKey } from "../../core/browser/browser-contracts";
 import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
@@ -111,6 +111,7 @@ type SidebarSwipe = {
 })
 export class AppShellComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiClient);
+  private readonly navigateAfterOrganisationSwitch = inject(ORGANISATION_SWITCH_NAVIGATOR);
   private readonly auth = inject(AuthService);
   private readonly browserPush = inject(BrowserPushService);
   private readonly dialog = inject(Dialog);
@@ -534,9 +535,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
       const user = await this.auth.switchOrg(clientId);
       // A shell owns many route-scoped stores and room references. Reloading at this boundary gives
       // every consumer one atomic active-organisation snapshot while the refresh cookie preserves
-      // the chosen organisation for this tab.
-      this.sockets.resumeAfterOrganisationSwitch();
-      window.location.assign(authenticatedLandingPath(user));
+      // the chosen organisation for this tab. Keep the old socket paused: reconnecting it here fires
+      // this shell's onConnect refresh against workspace ids from the organisation being left.
+      this.navigateAfterOrganisationSwitch(authenticatedLandingPath(user));
     } catch {
       this.sockets.resumeAfterOrganisationSwitch();
       this.notifications.initialise();
@@ -656,7 +657,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     for (const g of groups) {
       this.workspaceService.registerBoards(g.workspace.id, g.boards.filter((board) => !this.isPlanDisabled(board)), g.workspace.accentColor);
       this.workspaceService.registerMembers(g.workspace.id, g.members ?? []);
-      void this.workspaceService.loadLists(g.workspace.id);
+      void this.workspaceService.loadLists(g.workspace.id).catch(() => undefined);
     }
     for (const g of guestGroups) {
       this.workspaceService.registerBoards(g.workspace.id, g.boards, g.workspace.accentColor);
@@ -932,7 +933,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     for (const g of groups) {
       this.workspaceService.registerBoards(g.workspace.id, g.boards.filter((board) => !this.isPlanDisabled(board)), g.workspace.accentColor);
       this.workspaceService.registerMembers(g.workspace.id, g.members ?? []);
-      void this.workspaceService.loadLists(g.workspace.id);
+      void this.workspaceService.loadLists(g.workspace.id).catch(() => undefined);
     }
     for (const g of guestGroups) {
       this.workspaceService.registerBoards(g.workspace.id, g.boards, g.workspace.accentColor);

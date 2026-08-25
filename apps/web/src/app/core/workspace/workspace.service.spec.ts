@@ -4,6 +4,14 @@ import { describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../api/api.client";
 import { WorkspaceService } from "./workspace.service";
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
 describe("WorkspaceService", () => {
   function setup() {
     TestBed.configureTestingModule({
@@ -74,5 +82,53 @@ describe("WorkspaceService", () => {
     expect(service.notificationBoardOptions()).toEqual([
       { boardId: "board-1", boardName: "Delivery Ops", boardIcon: "truck", boardIconColor: "blue" },
     ]);
+  });
+
+  it("deduplicates list loads and discards a response that crosses a cache clear", async () => {
+    const response = deferred<{ lists: Array<{
+      id: string;
+      workspaceId: string;
+      name: string;
+      icon: string | null;
+      color: null;
+      position: string;
+      archivedAt: Date | null;
+      createdAt: Date;
+      updatedAt: Date;
+    }> }>();
+    const get = vi.fn(() => response.promise);
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        WorkspaceService,
+        { provide: ApiClient, useValue: { get } },
+      ],
+    });
+    const service = TestBed.inject(WorkspaceService);
+    service.registerBoards("workspace-1", [{ id: "board-1" }]);
+
+    const first = service.loadLists("workspace-1");
+    const duplicate = service.loadLists("workspace-1");
+    expect(get).toHaveBeenCalledTimes(1);
+
+    service.clear();
+    service.registerBoards("workspace-1", [{ id: "board-1" }]);
+    const now = new Date();
+    response.resolve({
+      lists: [{
+        id: "list-1",
+        workspaceId: "workspace-1",
+        name: "Todo",
+        icon: "list",
+        color: null,
+        position: "1000",
+        archivedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      }],
+    });
+    await Promise.all([first, duplicate]);
+
+    expect(service.listsForBoard("board-1")).toEqual([]);
   });
 });
