@@ -7,7 +7,7 @@ import type { Entitlements } from "@kanera/shared/dto";
 import type { Board, BoardGroup, Workspace } from "@kanera/shared/schema";
 import { of } from "rxjs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiClient } from "../../core/api/api.client";
+import { ApiClient, ORGANISATION_SWITCH_NAVIGATOR } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import type { AuthOrganisation } from "../../core/auth/auth.service";
 import { organisationStorageKey, STORAGE_KEYS } from "../../core/browser/browser-contracts";
@@ -282,6 +282,7 @@ describe("AppShellComponent board search", () => {
     }));
     const pauseForOrganisationSwitch = vi.fn();
     const resumeAfterOrganisationSwitch = vi.fn();
+    const navigateAfterOrganisationSwitch = vi.fn();
     const dialog = { open: vi.fn() };
     await TestBed.configureTestingModule({
       imports: [AppShellComponent],
@@ -293,6 +294,7 @@ describe("AppShellComponent board search", () => {
           provide: ApiClient,
           useValue: api,
         },
+        { provide: ORGANISATION_SWITCH_NAVIGATOR, useValue: navigateAfterOrganisationSwitch },
         {
           provide: AuthService,
           useValue: {
@@ -363,7 +365,7 @@ describe("AppShellComponent board search", () => {
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
-    return { api, browserPush, authUser, dialog, notifications, socket, joinBoard, joinWorkspace, workspaceService, switchOrg, pauseForOrganisationSwitch, resumeAfterOrganisationSwitch };
+    return { api, browserPush, authUser, dialog, notifications, socket, joinBoard, joinWorkspace, workspaceService, switchOrg, pauseForOrganisationSwitch, resumeAfterOrganisationSwitch, navigateAfterOrganisationSwitch };
   }
 
   function text(): string {
@@ -472,6 +474,17 @@ describe("AppShellComponent board search", () => {
     expect(result.pauseForOrganisationSwitch).toHaveBeenCalledTimes(1);
     expect(result.resumeAfterOrganisationSwitch).toHaveBeenCalledTimes(1);
     expect(result.notifications.initialise).toHaveBeenCalled();
+  });
+
+  it("keeps the old socket paused after a successful organisation switch", async () => {
+    const result = await render(undefined, { user: { activeClientId: "client-1" } });
+
+    await component.switchOrganisation("client-2");
+
+    expect(result.switchOrg).toHaveBeenCalledWith("client-2");
+    expect(result.pauseForOrganisationSwitch).toHaveBeenCalledTimes(1);
+    expect(result.navigateAfterOrganisationSwitch).toHaveBeenCalledWith("/");
+    expect(result.resumeAfterOrganisationSwitch).not.toHaveBeenCalled();
   });
 
   it("opens app dialogs for creating and joining organisations", async () => {

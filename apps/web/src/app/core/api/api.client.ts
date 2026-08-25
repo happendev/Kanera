@@ -3,9 +3,9 @@ import { environment } from "../../../environments/environment";
 import { AuthService } from "../auth/auth.service";
 import { SocketService } from "../realtime/socket.service";
 
-export const ORGANISATION_SWITCH_NAVIGATOR = new InjectionToken<() => void>("ORGANISATION_SWITCH_NAVIGATOR", {
+export const ORGANISATION_SWITCH_NAVIGATOR = new InjectionToken<(url?: string) => void>("ORGANISATION_SWITCH_NAVIGATOR", {
   providedIn: "root",
-  factory: () => () => window.location.assign(window.location.href),
+  factory: () => (url) => window.location.assign(url ?? window.location.href),
 });
 
 @Injectable({ providedIn: "root" })
@@ -49,14 +49,15 @@ export class ApiClient {
         try {
           await this.auth.switchOrg(body.clientId);
           res = await doFetch(this.auth.getAccessToken());
-        } finally {
-          // The socket keeps its listeners and desired-room references, but reconnects with the new
-          // token so no room from the prior organisation survives the handshake.
+          // Keep the old socket paused until the hard reload below replaces all of its listeners and
+          // desired rooms. Reconnecting here can make the shell reload the organisation being left.
+          this.reloadAfterOrganisationSwitch();
+        } catch (error) {
           this.sockets.resumeAfterOrganisationSwitch();
+          throw error;
         }
         // The retry lets the deep-link request complete, while a same-URL reload tears down every
         // route-scoped store and rebuilds the active-org sidebar/cache from one coherent snapshot.
-        this.reloadAfterOrganisationSwitch();
       }
     }
     if (!res.ok) {

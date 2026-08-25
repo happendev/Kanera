@@ -17,6 +17,8 @@ export interface WorkspaceMemberSummary {
 @Injectable({ providedIn: "root" })
 export class WorkspaceService {
   private readonly api = inject(ApiClient);
+  private readonly listLoads = new Map<string, Promise<void>>();
+  private cacheGeneration = 0;
 
   private readonly _boardToWorkspace = signal<Map<string, string>>(new Map());
   private readonly _workspaceAccentColor = signal<Map<string, string | null>>(new Map());
@@ -68,6 +70,10 @@ export class WorkspaceService {
   }
 
   clear(): void {
+    // Responses already in flight belong to the organisation whose shell initiated them. Bumping
+    // the generation prevents a late response from repopulating the freshly cleared destination.
+    this.cacheGeneration += 1;
+    this.listLoads.clear();
     this._boardToWorkspace.set(new Map());
     this._workspaceAccentColor.set(new Map());
     this._boardSummaries.set(new Map());
@@ -237,14 +243,26 @@ export class WorkspaceService {
     });
   }
 
-  async loadLists(workspaceId: string) {
+  async loadLists(workspaceId: string): Promise<void> {
     if (this._lists().has(workspaceId)) return;
-    const detail = await this.api.get<{ lists: List[] }>(`/workspaces/${workspaceId}`);
-    this._lists.update((m) => {
-      const next = new Map(m);
-      next.set(workspaceId, detail.lists.filter((l) => !l.archivedAt));
-      return next;
-    });
+    const existing = this.listLoads.get(workspaceId);
+    if (existing) return existing;
+
+    const generation = this.cacheGeneration;
+    const load = this.api.get<{ lists: List[] }>(`/workspaces/${workspaceId}`)
+      .then((detail) => {
+        if (generation !== this.cacheGeneration) return;
+        this._lists.update((m) => {
+          const next = new Map(m);
+          next.set(workspaceId, detail.lists.filter((l) => !l.archivedAt));
+          return next;
+        });
+      })
+      .finally(() => {
+        if (this.listLoads.get(workspaceId) === load) this.listLoads.delete(workspaceId);
+      });
+    this.listLoads.set(workspaceId, load);
+    return load;
   }
 
   cacheLists(workspaceId: string, lists: List[]) {

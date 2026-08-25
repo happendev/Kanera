@@ -90,7 +90,7 @@ describe("ApiClient organisation recovery", () => {
 
     expect(auth.switchOrg).toHaveBeenCalledWith("client-2");
     expect(sockets.pauseForOrganisationSwitch).toHaveBeenCalledTimes(1);
-    expect(sockets.resumeAfterOrganisationSwitch).toHaveBeenCalledTimes(1);
+    expect(sockets.resumeAfterOrganisationSwitch).not.toHaveBeenCalled();
     expect(reloadAfterOrganisationSwitch).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(new Headers(fetch.mock.calls[0]![1]!.headers).get("Authorization")).toBe("Bearer client-1-token");

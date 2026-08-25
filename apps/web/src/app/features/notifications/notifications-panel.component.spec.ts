@@ -4,7 +4,7 @@ import { TestBed } from "@angular/core/testing";
 import { DefaultUrlSerializer, Router } from "@angular/router";
 import type { NotificationRow } from "@kanera/shared/dto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiClient } from "../../core/api/api.client";
+import { ApiClient, ORGANISATION_SWITCH_NAVIGATOR } from "../../core/api/api.client";
 import { AuthService, type AuthUser } from "../../core/auth/auth.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { NotificationsService } from "../../core/notifications/notifications.service";
@@ -155,6 +155,7 @@ describe("NotificationsPanelComponent", () => {
   let switchOrg: ReturnType<typeof vi.fn>;
   let pauseForOrganisationSwitch: ReturnType<typeof vi.fn>;
   let resumeAfterOrganisationSwitch: ReturnType<typeof vi.fn>;
+  let navigateAfterOrganisationSwitch: ReturnType<typeof vi.fn>;
   let workspaceService: {
     activeAccentColor: ReturnType<typeof signal<string | null>>;
     notificationBoardOptions: ReturnType<typeof signal<{ boardId: string; boardName: string; boardIcon: string | null; boardIconColor: string | null }[]>>;
@@ -272,12 +273,14 @@ describe("NotificationsPanelComponent", () => {
     switchOrg = vi.fn(() => Promise.resolve(authUser()!));
     pauseForOrganisationSwitch = vi.fn();
     resumeAfterOrganisationSwitch = vi.fn();
+    navigateAfterOrganisationSwitch = vi.fn();
 
     await TestBed.configureTestingModule({
       imports: [NotificationsPanelComponent],
       providers: [
         provideZonelessChangeDetection(),
         { provide: ApiClient, useValue: api },
+        { provide: ORGANISATION_SWITCH_NAVIGATOR, useValue: navigateAfterOrganisationSwitch },
         { provide: AuthService, useValue: { user: authUser.asReadonly(), switchOrg } },
         { provide: NotificationsService, useValue: service },
         { provide: Router, useValue: router },
