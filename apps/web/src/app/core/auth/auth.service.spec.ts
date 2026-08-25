@@ -149,6 +149,38 @@ describe("AuthService logout refresh guard", { concurrent: false }, () => {
     expect(init?.body).toBe(JSON.stringify({ clientId: "client-2" }));
   });
 
+  it("refreshes an expired access token and retries an organisation switch", async () => {
+    const auth = new TestAuthService();
+    auth.setSession("expired-token", user({ clientId: "client-1", activeClientId: "client-1" }));
+    let switchAttempt = 0;
+    auth.fetchMock.mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input instanceof Request ? input.url : input.href;
+      if (url.includes("/auth/refresh")) return new Response(JSON.stringify({
+        accessToken: "refreshed-token",
+        user: user({ clientId: "client-1", activeClientId: "client-1" }),
+      }), { status: 200 });
+      if (url.includes("/auth/switch-org")) {
+        switchAttempt += 1;
+        return switchAttempt === 1
+          ? new Response("{}", { status: 401 })
+          : new Response(JSON.stringify({
+            accessToken: "client-2-token",
+            user: user({ clientId: "client-2", activeClientId: "client-2", orgName: "Second Org" }),
+          }), { status: 200 });
+      }
+      return new Response("{}", { status: 500 });
+    });
+
+    await expect(auth.switchOrg("client-2")).resolves.toMatchObject({ clientId: "client-2" });
+
+    const switchCalls = fetchCallsFor(auth.fetchMock, "/auth/switch-org");
+    expect(switchCalls).toHaveLength(2);
+    expect(new Headers(switchCalls[0]![1]?.headers).get("Authorization")).toBe("Bearer expired-token");
+    expect(new Headers(switchCalls[1]![1]?.headers).get("Authorization")).toBe("Bearer refreshed-token");
+    expect(fetchCallsFor(auth.fetchMock, "/auth/refresh")).toHaveLength(1);
+    expect(auth.getAccessToken()).toBe("client-2-token");
+  });
+
   it("refreshes the organisation visible in this tab instead of silently following another tab", async () => {
     const auth = new TestAuthService();
     auth.setSession("client-2-old", user({ clientId: "client-2", activeClientId: "client-2" }));

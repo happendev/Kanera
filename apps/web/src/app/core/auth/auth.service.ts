@@ -219,14 +219,25 @@ export class AuthService {
   }
 
   async switchOrg(clientId: string): Promise<AuthUser> {
-    const token = this.accessToken ?? await this.refresh();
+    let token = this.accessToken ?? await this.refresh();
     if (!token) throw new Error("not authenticated");
-    const res = await this.request(`${environment.apiUrl}/auth/switch-org`, {
+
+    const requestSwitch = (accessToken: string) => this.request(`${environment.apiUrl}/auth/switch-org`, {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify({ clientId }),
     });
+
+    let res = await requestSwitch(token);
+    if (res.status === 401) {
+      // Organisation switching uses the auth transport directly rather than ApiClient. Mirror its
+      // single refresh-and-retry boundary so a five-minute access-token expiry cannot make the
+      // selector appear to switch before silently restoring the organisation being left.
+      token = await this.refresh();
+      if (!token) throw new Error("not authenticated");
+      res = await requestSwitch(token);
+    }
     if (!res.ok) throw new Error(`organisation switch failed (${res.status})`);
     const session = (await res.json()) as { accessToken: string; user: AuthUser };
     this.setSession(session.accessToken, session.user);
