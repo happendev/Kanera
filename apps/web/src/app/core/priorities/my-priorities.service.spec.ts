@@ -73,6 +73,7 @@ const WORKSPACE_ID = "20000000-0000-4000-8000-000000000001";
 
 function setup(options: {
   offline?: boolean;
+  priorityQueue?: WorkPrioritiesResponse;
   /** Overridden together, so a test can describe a multi-board catalog and the cards inside it. */
   catalog?: Record<string, unknown>;
   assignedCards?: Record<string, unknown>[];
@@ -83,7 +84,7 @@ function setup(options: {
   const joinBoard = vi.fn(() => leaveBoard);
   const get = vi.fn(async (path: string) => {
     if (!online()) throw new Error("offline");
-    if (path.startsWith("/work/priorities/")) return queue();
+    if (path.startsWith("/work/priorities/")) return options.priorityQueue ?? queue();
     if (path === "/work/catalog") {
       return options.catalog ?? {
         organisations: [],
@@ -158,6 +159,33 @@ describe("MyPrioritiesService", () => {
     // Card edits to a queued card need no queue-specific fanout: they arrive as ordinary board
     // events, which is only true while these rooms are joined.
     expect(f.joinBoard).toHaveBeenCalledWith("board-1");
+    expect(f.joinBoard).toHaveBeenCalledWith("board-2");
+  });
+
+  it("removes redacted stale entries from every personal Up next surface", async () => {
+    const hidden: WorkPriorityItem = {
+      id: "stale-priority",
+      position: "1000.0000000000",
+      rank: 1,
+      card: null,
+      context: null,
+    };
+    const f = setup({
+      priorityQueue: {
+        ...queue(),
+        items: [hidden, entry("p1", 2)],
+        totalCount: 2,
+        hiddenCount: 1,
+      },
+    });
+    f.service.initialise();
+    await vi.waitFor(() => expect(f.service.items()).toHaveLength(1));
+
+    expect(f.service.items().map((item) => ({ id: item.id, rank: item.rank }))).toEqual([
+      { id: "p1", rank: 1 },
+    ]);
+    expect(f.service.totalCount()).toBe(1);
+    expect(f.service.queue()?.hiddenCount).toBe(0);
     expect(f.joinBoard).toHaveBeenCalledWith("board-2");
   });
 

@@ -119,7 +119,12 @@ void test("two-org notifications retain event org labels, aggregate globally, an
   });
   const send = mock.method(webPushClient, "sendNotification", async () => undefined as never);
   try {
-    assert.deepEqual(await deliverPushRow(db, queued!), { delivered: 1, disabled: 0, failed: 0 });
+    assert.deepEqual(await deliverPushRow(db, queued!), {
+      delivered: 1,
+      disabled: 0,
+      failed: 0,
+      failedSubscriptionIds: [],
+    });
     assert.equal(send.mock.callCount(), 1);
   } finally {
     send.mock.restore();

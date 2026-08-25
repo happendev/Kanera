@@ -41,6 +41,9 @@ export class ApiClient {
     }
     if (res.status === 409) {
       const body = await res.clone().json().catch(() => null) as { code?: string; clientId?: string } | null;
+      // Once the user has explicitly selected an organisation, requests from the old shell can race
+      // its hard reload and return WRONG_ORG. They are stale work, not permission to reverse the
+      // selection. A normal deep link still reaches this recovery path when no switch is pending.
       if (body?.code === "WRONG_ORG" && body.clientId && !this.auth.organisationSwitchPending()) {
         this.sockets.pauseForOrganisationSwitch();
         try {

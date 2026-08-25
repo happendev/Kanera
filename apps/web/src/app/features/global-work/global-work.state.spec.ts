@@ -1355,8 +1355,9 @@ describe("GlobalWorkState priority queue", () => {
     expect(state.priorities()).toBeNull();
 
     myPriorities.initialise();
-    await vi.waitFor(() => expect(state.priorities()?.items.map((item) => item.rank)).toEqual([1, 2]));
+    await vi.waitFor(() => expect(state.priorities()?.items.map((item) => item.rank)).toEqual([1]));
     expect(state.priorities()).toBe(myPriorities.queue());
+    expect(state.priorities()?.hiddenCount).toBe(0);
   });
 
   it("issues no request when no single teammate is in focus", async () => {
@@ -1541,9 +1542,13 @@ describe("GlobalWorkState priority queue", () => {
     const { state, setOffline } = setup();
     // The write is delegated to the shell service, but it must still land — and roll back — through
     // the page's own `priorities` seam, which is what every Global Work surface reads.
-    TestBed.inject(MyPrioritiesService).initialise();
+    const myPriorities = TestBed.inject(MyPrioritiesService);
+    myPriorities.initialise();
     await state.initialize("my");
     await vi.waitFor(() => expect(state.priorities()).not.toBeNull());
+    // Use two visible personal rows for the reorder itself. Redacted manager placeholders are
+    // intentionally removed by MyPrioritiesService before any personal surface receives them.
+    myPriorities.queue.set({ ...teammateQueue, targetUserId: VIEWER_ID });
     const snapshot = state.priorities();
 
     setOffline(true);
@@ -1551,7 +1556,7 @@ describe("GlobalWorkState priority queue", () => {
     const pending = state.movePriority(moving, { beforeId: null });
     // Applied before the round trip: the row is under the pointer and must not wait for the server.
     expect(state.priorities()!.items.map((item) => item.id)).toEqual([
-      "80000000-0000-4000-8000-000000000002",
+      "80000000-0000-4000-8000-000000000012",
       moving,
     ]);
     expect(state.priorities()!.items.map((item) => item.rank)).toEqual([1, 2]);

@@ -29,6 +29,21 @@ const INVALIDATION_DEBOUNCE_MS = 180;
 export const MAX_UP_NEXT_ENTRIES = 50;
 
 /**
+ * Redacted rows belong to manager views, where preserving another person's absolute ranks is
+ * useful. This service only owns the signed-in viewer's personal surfaces. A redacted row here can
+ * occur after an organisation switch when the identity-wide queue still contains work outside the
+ * active organisation, and rendering it as a locked mystery card makes Home and the drawer look
+ * broken. Keep only usable cards and make their displayed order contiguous.
+ */
+function personalQueue(response: WorkPrioritiesResponse): WorkPrioritiesResponse {
+  if (response.hiddenCount === 0 && response.items.every((item) => item.card !== null)) return response;
+  const items = response.items
+    .filter((item) => item.card !== null)
+    .map((item, index) => ({ ...item, rank: index + 1 }));
+  return { ...response, items, totalCount: items.length, hiddenCount: 0 };
+}
+
+/**
  * The signed-in user's own "Up next" queue, app-wide.
  *
  * One instance, owned by the shell rather than by any page, because the queue is now a first-class
@@ -411,7 +426,7 @@ export class MyPrioritiesService {
   }
 
   private applyQueue(response: WorkPrioritiesResponse): void {
-    this.queue.set(response);
+    this.queue.set(personalQueue(response));
     // A REST read is newer than anything already applied, so it also resets the snapshot watermark;
     // otherwise a settled mutation would be undone by a snapshot that predates it.
     this.appliedSnapshotAt = null;
@@ -479,7 +494,7 @@ export class MyPrioritiesService {
           return;
         }
         this.appliedSnapshotAt = snapshot.snapshotAt;
-        this.queue.update((queue) => ({
+        this.queue.update((queue) => personalQueue({
           // `canReorder`/`reorderableWorkspaceIds` are properties of this *viewer's* credentials,
           // which the snapshot does not carry — the queue is the viewer's own, so they are already
           // correct and must survive the swap. Before the first REST read there is no such value,
