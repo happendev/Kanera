@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/core";
 import type { OnInit } from "@angular/core";
 import { API_KEY_NAME_MAX_LENGTH } from "@kanera/shared/dto/name-limits";
+import type { PersonalApiKeyScope } from "@kanera/shared/schema";
 import { ApiClient, ApiError } from "../../../core/api/api.client";
 import { AuthService } from "../../../core/auth/auth.service";
 import { buildAgentSetupPrompt } from "../../../shared/agent-setup-prompt";
@@ -10,11 +11,13 @@ import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { AccountSettingsPage } from "../account-settings.page";
 
 // Personal API keys are the caller's own, board-content-only credentials; the list carries no
-// workspace/scope/creator fields (see the /me/api-keys response shape on the API).
+// workspace/creator fields (see the /me/api-keys response shape on the API). `scope` caps what the
+// key may do within the owner's live access: `read` is the safe choice to hand an AI agent.
 interface PersonalApiKeyRow {
   id: string;
   label: string | null;
   keyPrefix: string;
+  scope: PersonalApiKeyScope;
   clientId: string;
   orgName: string | null;
   orgLogoUrl: string | null;
@@ -68,6 +71,9 @@ export class AccountSettingsApiKeysPage implements OnInit {
   protected readonly mcpUrl = signal("");
   protected readonly agentSetupCopied = signal(false);
   protected readonly newPersonalKeyLabel = signal("");
+  // Defaults to write so the create flow behaves exactly as before; read is the explicit opt-in
+  // for credentials handed to unattended agents.
+  protected readonly newPersonalKeyScope = signal<PersonalApiKeyScope>("write");
   protected readonly revealedPersonalKeySecret = signal<string | null>(null);
   protected readonly personalKeyError = signal<string | null>(null);
   protected readonly personalKeyBusy = signal(false);
@@ -95,12 +101,16 @@ export class AccountSettingsApiKeysPage implements OnInit {
     this.personalKeyError.set(null);
     try {
       const label = this.newPersonalKeyLabel().trim();
-      const created = await this.api.post<PersonalApiKeyRow & { secret: string }>("/me/api-keys", label ? { label } : {});
+      const created = await this.api.post<PersonalApiKeyRow & { secret: string }>("/me/api-keys", {
+        ...(label ? { label } : {}),
+        scope: this.newPersonalKeyScope(),
+      });
       const { secret, ...row } = created;
       this.personalApiKeys.update((keys) => sortPersonalApiKeys([...keys, row]));
       // Show the plaintext secret once; it is never retrievable again.
       this.revealedPersonalKeySecret.set(secret);
       this.newPersonalKeyLabel.set("");
+      this.newPersonalKeyScope.set("write");
     } catch (err) {
       this.personalKeyError.set(extractErrorMessage(err));
     } finally {

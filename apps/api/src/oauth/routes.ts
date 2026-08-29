@@ -778,6 +778,9 @@ export async function oauthUserRoutes(app: FastifyInstance) {
   app.get("/me/agent-connection-config", async () => ({ mcpUrl: env.MCP_PUBLIC_URL }));
 
   app.delete("/me/oauth-connections/:id", async (req, reply) => {
+    // Same credential-manages-credential rule as /me/api-keys: an API key must not be able to
+    // revoke its owner's agent connections.
+    if (req.auth.authKind !== "user") throw forbidden();
     const { id } = req.params as { id: string };
     const [grant] = await db.update(oauthGrants).set({ revokedAt: new Date(), updatedAt: new Date() })
       .where(and(eq(oauthGrants.id, id), eq(oauthGrants.userId, req.auth.sub), isNull(oauthGrants.revokedAt))).returning();

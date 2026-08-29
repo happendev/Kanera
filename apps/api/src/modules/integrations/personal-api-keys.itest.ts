@@ -1,5 +1,5 @@
 import "../../test/setup.integration.js";
-import { activityEvents, boards, cards, clientMembers, clients, lists, workspaceApiKeys, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { activityEvents, boards, cards, clientMembers, clients, lists, oauthClients, oauthGrants, workspaceApiKeys, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, desc, eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -24,13 +24,23 @@ async function seedOwnerWithBoardCard(testName: string) {
   const [board] = await db.insert(boards).values({ workspaceId: workspace.id, name: "Board", position: "1000.0000000000" }).returning();
   const [card] = await db.insert(cards).values({ listId: list.id, boardId: board!.id, title: "Original", position: "1000.0000000000", createdById: user.id }).returning();
 
-  return { app, auth, userId: user.id, workspaceId: workspace.id, boardId: board!.id, cardId: card!.id };
+  return { app, auth, userId: user.id, orgId: user.clientId, workspaceId: workspace.id, boardId: board!.id, cardId: card!.id };
 }
 
-async function createPersonalKey(app: Awaited<ReturnType<typeof buildIntegrationServer>>, auth: { authorization: string }, label?: string) {
-  const created = await app.inject({ method: "POST", url: "/me/api-keys", headers: auth, payload: label ? { label } : {} });
+async function createPersonalKey(
+  app: Awaited<ReturnType<typeof buildIntegrationServer>>,
+  auth: { authorization: string },
+  label?: string,
+  scope?: "read" | "write",
+) {
+  const created = await app.inject({
+    method: "POST",
+    url: "/me/api-keys",
+    headers: auth,
+    payload: { ...(label ? { label } : {}), ...(scope ? { scope } : {}) },
+  });
   assert.equal(created.statusCode, 201);
-  return created.json<{ id: string; kind: string; label: string | null; keyPrefix: string; secret: string }>();
+  return created.json<{ id: string; kind: string; label: string | null; keyPrefix: string; scope: string; secret: string }>();
 }
 
 async function addOwnedOrganisation(userId: string, suffix: string) {
@@ -154,6 +164,106 @@ void test("a user can only revoke their own personal keys", async () => {
   // Owner B cannot revoke owner A's key (scoped by createdById), so it returns not found.
   const crossRevoke = await b.app.inject({ method: "DELETE", url: `/me/api-keys/${key.id}`, headers: b.auth });
   assert.equal(crossRevoke.statusCode, 404);
+});
+
+void test("an API key cannot mint or revoke personal keys", async () => {
+  const owner = await seedOwnerWithBoardCard("personal-key-escalation");
+  const sibling = await createPersonalKey(owner.app, owner.auth, "Sibling");
+  const readKey = await createPersonalKey(owner.app, owner.auth, "Agent", "read");
+  const readAuth = { authorization: `Bearer ${readKey.secret}` };
+
+  // Two independent layers must keep every response here a non-2xx:
+  //   1. authenticateApiKey only authenticates on the public API (the /api/v1 prefix), so the app
+  //      server rejects the credential outright with 401;
+  //   2. the route-level authKind guard backstops with 403 if a key ever authenticates here.
+  // Layer 1 is a single URL check that is easy to miss or relax — the escalation (a read-scoped
+  // key minting itself a write-scoped key, or revoking its siblings) must survive that happening.
+  const mint = await owner.app.inject({ method: "POST", url: "/me/api-keys", headers: readAuth, payload: { scope: "write" } });
+  assert.ok(mint.statusCode === 401 || mint.statusCode === 403, `expected 401/403, got ${mint.statusCode}`);
+  const revoke = await owner.app.inject({ method: "DELETE", url: `/me/api-keys/${sibling.id}`, headers: readAuth });
+  assert.ok(revoke.statusCode === 401 || revoke.statusCode === 403, `expected 401/403, got ${revoke.statusCode}`);
+
+  // The interactive owner is unaffected.
+  const ownerMint = await createPersonalKey(owner.app, owner.auth, "Owner minted", "write");
+  assert.equal(ownerMint.scope, "write");
+});
+
+void test("an API key cannot revoke its owner's OAuth connections", async () => {
+  const owner = await seedOwnerWithBoardCard("personal-key-oauth-revoke");
+  const readKey = await createPersonalKey(owner.app, owner.auth, "Agent", "read");
+  const readAuth = { authorization: `Bearer ${readKey.secret}` };
+
+  // A minimal interactive OAuth client + grant so the route has a row to revoke.
+  const [oauthClient] = await db.insert(oauthClients).values({
+    clientId: `kanera_test_${randomUUID()}`,
+    kind: "public",
+    name: "Interactive agent",
+    grantTypes: ["authorization_code", "refresh_token"],
+    createdById: owner.userId,
+  }).returning();
+  const [grant] = await db.insert(oauthGrants).values({
+    clientId: oauthClient!.clientId,
+    userId: owner.userId,
+    orgClientId: owner.orgId,
+    scopes: ["kanera:read", "kanera:write"],
+    resource: "http://localhost:3002/mcp",
+  }).returning();
+
+  // Same two-layer expectation as the /me/api-keys test above: 401 from the app server's URL gate,
+  // 403 from the route guard if that gate ever changes — never a successful revoke.
+  const revoke = await owner.app.inject({ method: "DELETE", url: `/me/oauth-connections/${grant!.id}`, headers: readAuth });
+  assert.ok(revoke.statusCode === 401 || revoke.statusCode === 403, `expected 401/403, got ${revoke.statusCode}`);
+  const ownerRevoke = await owner.app.inject({ method: "DELETE", url: `/me/oauth-connections/${grant!.id}`, headers: owner.auth });
+  assert.equal(ownerRevoke.statusCode, 204);
+});
+
+void test("POST /me/api-keys persists the requested scope and defaults an absent scope to write", async () => {
+  const owner = await seedOwnerWithBoardCard("personal-key-scope");
+  const readOnly = await createPersonalKey(owner.app, owner.auth, "Agent (read-only)", "read");
+  const defaulted = await createPersonalKey(owner.app, owner.auth, "CI script");
+  assert.equal(readOnly.scope, "read");
+  // Compatibility guarantee: a body without `scope` keeps the historical read-write behaviour.
+  assert.equal(defaulted.scope, "write");
+
+  // The owner sees each key's scope in their list.
+  const list = await owner.app.inject({ method: "GET", url: "/me/api-keys", headers: owner.auth });
+  assert.equal(list.statusCode, 200);
+  const rows = list.json<{ id: string; scope: string }[]>();
+  assert.equal(rows.find((key) => key.id === readOnly.id)?.scope, "read");
+  assert.equal(rows.find((key) => key.id === defaulted.id)?.scope, "write");
+});
+
+void test("a read-scoped personal key reads but cannot mutate via the public API", async () => {
+  const { app, auth, cardId } = await seedOwnerWithBoardCard("personal-key-readonly");
+  const key = await createPersonalKey(app, auth, "Agent", "read");
+  const publicApi = await buildPublicApiServer(publicApiOptions);
+  const keyAuth = { authorization: `Bearer ${key.secret}` };
+  try {
+    // GET /api/v1/session reports the credential's real scope; agent tooling is told to trust it.
+    const session = await publicApi.inject({ method: "GET", url: "/api/v1/session", headers: keyAuth });
+    assert.equal(session.statusCode, 200, session.body);
+    assert.equal(session.json<{ scope: string | null }>().scope, "read");
+
+    // Reads resolve through the owner's access.
+    const detail = await publicApi.inject({ method: "GET", url: `/api/v1/cards/${cardId}/detail`, headers: keyAuth });
+    assert.equal(detail.statusCode, 200, detail.body);
+
+    // Writes are forbidden even though the owner is an org admin.
+    const patched = await publicApi.inject({ method: "PATCH", url: `/api/v1/cards/${cardId}`, headers: keyAuth, payload: { title: "Nope" } });
+    assert.equal(patched.statusCode, 403);
+
+    // The regression that matters: a write-scoped key for the same owner still mutates.
+    const writeKey = await createPersonalKey(app, auth, "CI script", "write");
+    const writePatch = await publicApi.inject({
+      method: "PATCH",
+      url: `/api/v1/cards/${cardId}`,
+      headers: { authorization: `Bearer ${writeKey.secret}` },
+      payload: { title: "Edited via write key" },
+    });
+    assert.equal(writePatch.statusCode, 200, writePatch.body);
+  } finally {
+    await publicApi.close();
+  }
 });
 
 void test("personal API keys are ordered by most recent use with unused keys last", async () => {

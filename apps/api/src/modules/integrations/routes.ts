@@ -6,7 +6,7 @@ import { randomBytes } from "node:crypto";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { assertWorkspaceAccess } from "../../lib/access.js";
-import { badRequest, notFound } from "../../lib/errors.js";
+import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { encryptSecret } from "../../lib/secrets.js";
 import { assertWebhookUrlAllowed } from "../../lib/ssrf.js";
 import { newWebhookSecret } from "../../lib/webhook-signing.js";
@@ -67,8 +67,9 @@ function shapeApiKey(row: ApiKeyWithCreator) {
   };
 }
 
-// Personal keys are always the caller's own and inherit their permissions, so the shape omits
-// workspace/scope/creator fields the workspace-key shape carries. `name` is the optional label.
+// Personal keys are always the caller's own and are evaluated with the owner's live access, so the
+// shape omits the workspace/creator fields the workspace-key shape carries; `scope` still reports
+// what the credential may do within that access. `name` is the optional label.
 function shapePersonalApiKey(row: typeof workspaceApiKeys.$inferSelect & { orgName?: string; orgLogoUrl?: string | null }) {
   return {
     id: row.id,
@@ -78,6 +79,7 @@ function shapePersonalApiKey(row: typeof workspaceApiKeys.$inferSelect & { orgNa
     orgName: row.orgName ?? null,
     orgLogoUrl: row.clientId ? withSignedMedia(row.clientId, { logoUrl: row.orgLogoUrl ?? null }).logoUrl : null,
     keyPrefix: row.keyPrefix,
+    scope: row.scope,
     lastUsedAt: row.lastUsedAt,
     revokedAt: row.revokedAt,
     createdAt: row.createdAt,
@@ -194,6 +196,11 @@ export async function integrationRoutes(app: FastifyInstance) {
   });
 
   app.post("/me/api-keys", async (req, reply) => {
+    // A credential must never manage credentials. Block every API-key kind — a read-scoped personal
+    // key could otherwise mint itself a write-scoped key, and a pinned workspace key could mint a
+    // full-power personal key for its creator. Support sessions are blocked too: a key minted
+    // during one would outlive it. Same gate as /auth/switch-org and leaving an organisation.
+    if (req.auth.authKind !== "user") throw forbidden();
     // Gate on the owner's org plan, mirroring workspace keys (both are paid-only).
     await assertApiKeysAllowed(req.auth.cid);
     const body = dto.createPersonalApiKeyBody.parse(req.body ?? {});
@@ -206,6 +213,10 @@ export async function integrationRoutes(app: FastifyInstance) {
         clientId: req.auth.cid,
         createdById: req.auth.sub,
         name: body.label ?? null,
+        // Explicit scope on every insert: the column default is 'read', but a personal key without
+        // an explicit choice must behave as read-write (the historical behaviour), so the DTO
+        // defaults to 'write' and it is persisted here rather than left to the column.
+        scope: body.scope,
         keyPrefix: keyPrefix(secret),
         keyHash: hashOpaqueToken(secret),
       })
@@ -216,12 +227,16 @@ export async function integrationRoutes(app: FastifyInstance) {
       workspaceId: req.auth.cid,
       actorId: req.auth.sub,
       premiumFeature: "api",
-      supportSession: req.auth.authKind === "support",
+      // The authKind guard above rejects every non-user caller, so no support-session attribution
+      // can reach here (unlike the workspace-key route below, which still accepts them).
+      supportSession: false,
     });
     return reply.status(201).send({ ...shapePersonalApiKey({ ...row!, ...organisation }), secret });
   });
 
   app.delete("/me/api-keys/:keyId", async (req, reply) => {
+    // Same credential-manages-credential rule as the create route above.
+    if (req.auth.authKind !== "user") throw forbidden();
     const { keyId } = req.params as { keyId: string };
     // Scope the revoke by owner + kind so a user can only ever revoke their own personal keys.
     const [row] = await db
