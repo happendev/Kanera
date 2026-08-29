@@ -59,7 +59,7 @@ void test("the packed CLI installs and runs without workspace or development dep
     // The executable bundles MIT/Apache/BSD/ISC code whose licenses require their notices to ship
     // with redistributed copies; the build collects them from the bundle's metafile.
     const notices = readFileSync(join(installDir, "node_modules", "@kanera", "cli", "dist", "THIRD_PARTY_NOTICES.md"), "utf8");
-    for (const bundled of ["@modelcontextprotocol/sdk", "zod", "prom-client"]) {
+    for (const bundled of ["@modelcontextprotocol/sdk", "zod", "@prometheus-io/client"]) {
       assert.ok(notices.includes(`## ${bundled}@`), `THIRD_PARTY_NOTICES.md is missing ${bundled}`);
     }
   } finally {

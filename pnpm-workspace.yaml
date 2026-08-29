@@ -18,15 +18,21 @@ minimumReleaseAgeExclude:
   - body-parser@2.3.0
   - linkify-it@5.0.2
   - svgo@3.3.4
-  - '@angular/common@22.1.1'
-  - '@angular/compiler-cli@22.1.1'
-  - '@angular/compiler@22.1.1'
-  - '@angular/core@22.1.1'
-  - '@angular/forms@22.1.1'
-  - '@angular/platform-browser@22.1.1'
-  - '@angular/router@22.1.1'
-  - '@angular/service-worker@22.1.1'
-  - blobatar@0.2.0
+  - zod@4.5.1
+  - '@posthog/browser-common@0.7.0'
+  - '@posthog/core@1.49.2'
+  - '@posthog/types@1.407.1'
+  - '@scalar/client-side-rendering@0.3.10'
+  - '@scalar/fastify-api-reference@1.67.0'
+  - '@scalar/helpers@0.11.2'
+  - '@scalar/json-magic@0.13.3'
+  - '@scalar/json-schema-validator@0.1.0'
+  - '@scalar/openapi-parser@0.29.0'
+  - '@scalar/openapi-validator@0.1.0'
+  - '@scalar/schemas@0.8.4'
+  - '@scalar/types@0.18.3'
+  - blobatar@2.6.0
+  - posthog-js@1.422.5
 minimumReleaseAgeExcludePrune: true
 overrides:
   # Keep Vite aligned with @angular/build: its dev-server linker depends on the matching

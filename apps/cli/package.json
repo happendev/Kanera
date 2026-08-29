@@ -43,7 +43,7 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@types/node": "^24.13.3",
     "esbuild": "0.28.1",
-    "tsx": "^4.23.9",
+    "tsx": "^4.23.12",
     "typescript": "~5.9.3",
     "zod": "^4.4.3"
   }
