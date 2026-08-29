@@ -3,6 +3,9 @@
   "version": "2.2.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./server": "./src/server.ts"
+  },
   "scripts": {
     "dev": "tsx watch src/http.ts",
     "start": "tsx src/http.ts",

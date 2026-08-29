@@ -1,0 +1,42 @@
+{
+  "name": "@kanera/sdk",
+  "version": "1.4.0",
+  "description": "TypeScript client for the Kanera public API",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "sideEffects": false,
+  "files": ["dist", "README.md"],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/happendev/Kanera.git",
+    "directory": "packages/sdk"
+  },
+  "keywords": ["kanera", "project-management", "api", "sdk", "kanban"],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.build.json",
+    "lint": "tsc -p tsconfig.json --noEmit && eslint src",
+    "test": "pnpm build && node --import tsx --test 'src/**/*.test.ts' 'test/**/*.test.mjs'",
+    "prepublishOnly": "pnpm test"
+  },
+  "devDependencies": {
+    "@kanera/shared": "workspace:*",
+    "@types/node": "^24.13.3",
+    "tsx": "^4.23.9",
+    "typescript": "~5.9.3",
+    "zod": "^4.4.3"
+  }
+}

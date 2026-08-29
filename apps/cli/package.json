@@ -1,0 +1,50 @@
+{
+  "name": "@kanera/cli",
+  "version": "1.4.0",
+  "description": "Kanera command-line interface for terminals and AI agents",
+  "license": "Elastic-2.0",
+  "private": false,
+  "type": "module",
+  "bin": {
+    "kanera": "dist/kanera.mjs"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/happendev/Kanera.git",
+    "directory": "apps/cli"
+  },
+  "keywords": [
+    "kanera",
+    "project-management",
+    "cli",
+    "ai-agents",
+    "mcp"
+  ],
+  "scripts": {
+    "dev": "tsx src/main.ts",
+    "build": "tsc -p tsconfig.json --noEmit && node scripts/build.mjs",
+    "lint": "tsc -p tsconfig.json --noEmit && eslint src",
+    "test": "pnpm build && node --import tsx --test 'src/**/*.test.ts' 'test/**/*.test.mjs'",
+    "prepublishOnly": "pnpm test"
+  },
+  "devDependencies": {
+    "@kanera/mcp": "workspace:*",
+    "@kanera/shared": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@types/node": "^24.13.3",
+    "esbuild": "0.28.1",
+    "tsx": "^4.23.9",
+    "typescript": "~5.9.3",
+    "zod": "^4.4.3"
+  }
+}
