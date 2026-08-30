@@ -505,3 +505,43 @@ void test("concurrent creates cannot both slip past the page cap", async () => {
   assert.equal(listed.length, 50);
   assert.equal(new Set(listed.map((note) => note.position)).size, 50);
 });
+
+/**
+ * The scratchpad is app-server-only: `scratchpadRoutes` is never registered on the public API, and
+ * `authenticateApiKey` refuses to authenticate outside `/api/v1/`. No API key can reach these
+ * routes at all, so the `assertWriteCapableCredential` calls in the handlers are a backstop for the
+ * day the scratchpad is exposed publicly, not live enforcement.
+ *
+ * This pins the outer layer. Relaxing that URL gate must not silently hand a read-scoped agent
+ * credential write access to the owner's private pages.
+ */
+void test("an API key cannot reach the scratchpad at all", async () => {
+  const { app, ownerToken } = await setup();
+  const note = await createNote(app, ownerToken, "Private");
+
+  const keyCreated = await app.inject({
+    method: "POST",
+    url: "/me/api-keys",
+    headers: auth(ownerToken),
+    payload: { label: "Agent", scope: "read" },
+  });
+  assert.equal(keyCreated.statusCode, 201, keyCreated.body);
+  const keyAuth = auth(keyCreated.json<{ secret: string }>().secret);
+
+  // 401, not 403: the credential never authenticates here, so the route guard is never consulted.
+  const reads = await app.inject({ method: "GET", url: "/scratchpad/notes", headers: keyAuth });
+  assert.equal(reads.statusCode, 401, reads.body);
+  const created = await app.inject({ method: "POST", url: "/scratchpad/notes", headers: keyAuth, payload: { title: "Nope" } });
+  assert.equal(created.statusCode, 401, created.body);
+  const patched = await app.inject({ method: "PATCH", url: `/scratchpad/notes/${note.id}`, headers: keyAuth, payload: { content: "Nope" } });
+  assert.equal(patched.statusCode, 401, patched.body);
+  const moved = await app.inject({ method: "PATCH", url: `/scratchpad/notes/${note.id}/move`, headers: keyAuth, payload: {} });
+  assert.equal(moved.statusCode, 401, moved.body);
+  const removed = await app.inject({ method: "DELETE", url: `/scratchpad/notes/${note.id}`, headers: keyAuth });
+  assert.equal(removed.statusCode, 401, removed.body);
+
+  // The owner's interactive session is unaffected, and the page survived every attempt.
+  const listed = await listNotes(app, ownerToken);
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0]!.id, note.id);
+});

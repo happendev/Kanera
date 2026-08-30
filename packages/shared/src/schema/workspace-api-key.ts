@@ -8,12 +8,20 @@ import { workspaces } from "./workspace.js";
 export const WORKSPACE_API_KEY_SCOPES = ["read", "write", "admin"] as const;
 export type WorkspaceApiKeyScope = (typeof WORKSPACE_API_KEY_SCOPES)[number];
 
+// Personal keys are evaluated with the owner's live access everywhere; `scope` only caps what the
+// credential may do within that access. `admin` is deliberately not offered: the access layer
+// treats personal scope as binary (`read` downgrades org/workspace/board authority, anything else
+// grants the owner's full power), so a third value would mean nothing.
+export const PERSONAL_API_KEY_SCOPES = ["read", "write"] as const;
+export type PersonalApiKeyScope = (typeof PERSONAL_API_KEY_SCOPES)[number];
+
 // Two kinds share this table (and the activity_events / comment `api_key_id` FKs that point at it):
 //   - `workspace`: an integration credential pinned to one workspace, created by a workspace admin,
 //     powers downgraded by `scope`. Acts as the creating user but reaches only `workspace_id`.
 //   - `personal`: a user's own identity-wide key. Not pinned to a workspace (`workspace_id` is
 //     null); when used it is evaluated with the owner's live access in every organisation and
-//     attributes activity to the owner, not to a key name. `scope` is ignored for personal keys.
+//     attributes activity to the owner, not to a key name. `scope` caps what it may do within that
+//     access: `read` downgrades the authority it borrows, `write` grants the owner's full power.
 export const WORKSPACE_API_KEY_KINDS = ["workspace", "personal"] as const;
 export type WorkspaceApiKeyKind = (typeof WORKSPACE_API_KEY_KINDS)[number];
 

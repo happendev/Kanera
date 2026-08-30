@@ -56,10 +56,14 @@ export interface AuthClaims {
   authKind?: "user" | "apiKey" | "support";
   apiKeyId?: string;
   apiKeyName?: string;
-  // Personal keys are not pinned to a workspace and carry no scope: they act with the owner's real
-  // permissions. OAuth personal credentials set apiKeyScope; workspace credentials also set a pin.
+  // Personal keys are not pinned to a workspace and act as their owner; a `read` scope caps the
+  // authority they may exercise below the owner's. OAuth personal credentials set apiKeyScope;
+  // workspace credentials also set a pin.
   apiKeyKind?: WorkspaceApiKeyKind;
   apiKeyWorkspaceId?: string;
+  // Typed as the workspace superset because workspace keys carry it, but personal keys only ever
+  // hold the personal subset ("read" | "write"); "admin" is a workspace-key value. The one
+  // "admin" comparison lives in the workspace branch of assertBoardAccess.
   apiKeyScope?: WorkspaceApiKeyScope;
   support?: SupportClaims;
 }
@@ -129,6 +133,11 @@ async function authenticateApiKey(req: FastifyRequest, raw: string): Promise<Aut
       authKind: "apiKey",
       apiKeyKind: "personal",
       apiKeyId: row.apiKeyId,
+      // Scope rides along even though the key acts as its owner: access.ts downgrades org/board
+      // authority for `read`, while the request-context authKind below stays "user". That split is
+      // deliberate — attribution ("acts as its owner") is governed by authKind, authorization
+      // ("may do less than its owner") by apiKeyScope — and the two must not be conflated.
+      apiKeyScope: row.scope,
     };
   }
 

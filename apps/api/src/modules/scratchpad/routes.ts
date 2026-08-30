@@ -20,6 +20,7 @@ import {
   storageQuotaExceededError,
 } from "../../lib/entitlements.js";
 import { AppError, badRequest, forbidden, notFound } from "../../lib/errors.js";
+import { assertWriteCapableCredential } from "../../lib/access.js";
 import { signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, unsignedMediaUrl } from "../../lib/media-keys.js";
 import { between } from "../../lib/position.js";
 import { rebalanceScratchpadNotes } from "../../lib/rebalance.js";
@@ -186,7 +187,13 @@ export async function scratchpadRoutes(app: FastifyInstance) {
     return rows.map(wire);
   });
 
+  // Every mutating route below calls assertWriteCapableCredential. This is a backstop, not live
+  // enforcement: these routes are app-server-only and authenticateApiKey refuses to authenticate
+  // outside /api/v1/, so no API key reaches them today. The guard is here because the scratchpad
+  // has no workspace and no role ranks — ownership alone is the only check — so exposing it on the
+  // public API later would otherwise hand a read-scoped credential the owner's private pages.
   app.post("/scratchpad/notes", async (req, reply) => {
+    assertWriteCapableCredential(req.auth);
     const body = dto.createScratchpadNoteBody.parse(req.body ?? {});
 
     const note = await db.transaction(async (tx) => {
@@ -242,6 +249,7 @@ export async function scratchpadRoutes(app: FastifyInstance) {
    * the user typed disappears from the machine they typed it on.
    */
   app.patch("/scratchpad/notes/:id", async (req) => {
+    assertWriteCapableCredential(req.auth);
     const { id } = req.params as { id: string };
     const body = dto.updateScratchpadNoteBody.parse(req.body);
 
@@ -306,6 +314,7 @@ export async function scratchpadRoutes(app: FastifyInstance) {
   });
 
   app.patch("/scratchpad/notes/:id/move", async (req) => {
+    assertWriteCapableCredential(req.auth);
     const { id } = req.params as { id: string };
     const body = dto.moveScratchpadNoteBody.parse(req.body ?? {});
     const note = await loadOwned(id, req);
@@ -355,6 +364,7 @@ export async function scratchpadRoutes(app: FastifyInstance) {
   });
 
   app.delete("/scratchpad/notes/:id", async (req, reply) => {
+    assertWriteCapableCredential(req.auth);
     const { id } = req.params as { id: string };
     const { attachments, clientId } = await db.transaction(async (tx) => {
       // Lock the page while collecting keys and hard-deleting its rows. Without one transaction, an
@@ -396,6 +406,7 @@ export async function scratchpadRoutes(app: FastifyInstance) {
    * accounting, and physical storage are all the requester's own org — `req.auth.cid` throughout.
    */
   app.post("/scratchpad/notes/:id/attachments", async (req, reply) => {
+    assertWriteCapableCredential(req.auth);
     const { id } = req.params as { id: string };
     await loadOwned(id, req);
 
@@ -474,6 +485,7 @@ export async function scratchpadRoutes(app: FastifyInstance) {
    * can retain an invisible, broken quota consumer.
    */
   app.delete("/scratchpad/notes/:id/attachments/:attachmentId", async (req, reply) => {
+    assertWriteCapableCredential(req.auth);
     const { id, attachmentId } = req.params as { id: string; attachmentId: string };
 
     const { attachment, updated } = await db.transaction(async (tx) => {

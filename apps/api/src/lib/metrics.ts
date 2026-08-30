@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import client from "prom-client";
+import client from "@prometheus-io/client";
 import { env } from "../env.js";
 
 // One Prometheus registry per process. api/worker/public-api each run as their own Node process, so a

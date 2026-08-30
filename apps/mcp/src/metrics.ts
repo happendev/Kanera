@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import client from "prom-client";
+import client from "@prometheus-io/client";
 import { env } from "./env.js";
 
 const registry = new client.Registry();

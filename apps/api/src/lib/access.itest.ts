@@ -8,7 +8,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../db.js";
 import "../test/integration.js";
 import { AppError } from "./errors.js";
-import { assertBoardAccess, assertBoardManageAccess, assertCardAccess, assertWorkspaceAccess } from "./access.js";
+import { assertBoardAccess, assertBoardManageAccess, assertCardAccess, assertOrgRole, assertWorkspaceAccess } from "./access.js";
 
 const fixture = {
   clientId: "00000000-0000-0000-0000-000000000101",
@@ -368,6 +368,51 @@ void test("a write-capable personal OAuth credential is observer-blocked where t
     assert.equal(ctx.role, "observer");
     // A write-capable OAuth credential does not bypass the represented user's observer role.
     await assertForbidden(assertBoardAccess(oauthWriteClaims, fixture.boardId, "editor"));
+  });
+});
+
+void test("a read-scoped personal key can read but cannot write or administer", async () => {
+  await seedAccessFixture();
+  await db.insert(boards).values({ id: fixture.boardId, workspaceId: fixture.workspaceId, name: "Project board", position: "1000.0000000000" });
+  await db.insert(workspaceMembers).values({ workspaceId: fixture.workspaceId, userId: fixture.userId, role: "admin" });
+  // Owner is an editor on this board; a read-scoped key must not borrow that for mutations.
+  await db.insert(boardMembers).values({ boardId: fixture.boardId, userId: fixture.userId, role: "editor" });
+  const readOnlyPersonalKey = { ...personalKeyClaims, apiKeyScope: "read" as const };
+
+  await runWithRequestContext("request-personal-readonly", async () => {
+    // Reads still resolve through the owner's live access.
+    const ctx = await assertBoardAccess(readOnlyPersonalKey, fixture.boardId);
+    assert.equal(ctx.role, "editor");
+    const ws = await assertWorkspaceAccess(readOnlyPersonalKey, fixture.workspaceId);
+    assert.equal(ws.role, "admin");
+    // Board-editor, board-management, and workspace-admin paths are all downgraded.
+    await assertForbidden(assertBoardAccess(readOnlyPersonalKey, fixture.boardId, "editor"));
+    await assertForbidden(assertBoardManageAccess(readOnlyPersonalKey, fixture.boardId));
+    await assertForbidden(assertWorkspaceAccess(readOnlyPersonalKey, fixture.workspaceId, "admin"));
+  });
+});
+
+void test("a read-scoped personal key is capped below its owner's org-admin authority", async () => {
+  await seedAccessFixture();
+  await db.insert(boards).values({ id: fixture.boardId, workspaceId: fixture.workspaceId, name: "Project board", position: "1000.0000000000" });
+  // Owner is an org admin; the read-scoped key must not inherit that authority for writes.
+  await db.update(clientMembers).set({ clientRole: "admin" }).where(and(eq(clientMembers.clientId, fixture.clientId), eq(clientMembers.userId, fixture.userId)));
+  const orgAdminReadOnlyKey = { ...personalKeyClaims, role: "admin" as const, apiKeyScope: "read" as const };
+  const orgAdminWriteKey = { ...personalKeyClaims, role: "admin" as const, apiKeyScope: "write" as const };
+
+  await runWithRequestContext("request-personal-readonly-org-admin", async () => {
+    // Reads still reach every org board with the owner's content role.
+    const ctx = await assertBoardAccess(orgAdminReadOnlyKey, fixture.boardId);
+    assert.equal(ctx.role, "editor");
+    // But the credential is capped: no board-management, no org-above-member mutations.
+    assert.equal(ctx.isWorkspaceAdmin, false);
+    await assertForbidden(assertBoardAccess(orgAdminReadOnlyKey, fixture.boardId, "editor"));
+    await assertForbidden(assertWorkspaceAccess(orgAdminReadOnlyKey, fixture.workspaceId, "admin"));
+    await assertForbidden(Promise.resolve().then(() => assertOrgRole(orgAdminReadOnlyKey, "admin")));
+    // A write-scoped key for the same org-admin owner keeps the full authority.
+    const writeCtx = await assertBoardAccess(orgAdminWriteKey, fixture.boardId, "editor");
+    assert.equal(writeCtx.isWorkspaceAdmin, true);
+    assertOrgRole(orgAdminWriteKey, "admin");
   });
 });
 

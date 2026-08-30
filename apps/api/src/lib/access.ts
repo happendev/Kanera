@@ -107,6 +107,17 @@ function assertBoardRank(role: BoardRole | null | undefined, minRole: BoardRole)
   if (!role || BOARD_RANK[role] < BOARD_RANK[minRole]) throw forbidden();
 }
 
+/**
+ * Throws for read-scoped API credentials on surfaces the role-rank checks above cannot cover:
+ * owner-private content (personal notes, the scratchpad) authorises at plain `member`/`observer`,
+ * so its write routes must apply this gate themselves. Read means read regardless of key kind —
+ * this covers read-scoped personal keys and read-scoped workspace keys alike. OAuth personal
+ * grants always carry write (oauth/routes.ts), so they never hit this.
+ */
+export function assertWriteCapableCredential(claims: AuthClaims): void {
+  if (claims.authKind === "apiKey" && claims.apiKeyScope === "read") throw forbidden("write-capable credential required");
+}
+
 export function isOrgAdmin(claims: AuthClaims): boolean {
   // Personal credentials act as their owner. Workspace keys remain deliberately unable to borrow
   // their creator's organisation-wide authority beyond the workspace and scope pinned to the key.
@@ -188,8 +199,9 @@ export async function assertWorkspaceAccess(
   }
 
   const isPersonalKey = claims.apiKeyKind === "personal";
-  // Interactive OAuth can be read-only. Legacy personal API keys have no explicit scope and retain
-  // their owner's full effective permissions.
+  // Read-scoped personal keys are downgraded; write-scoped ones inherit the owner's full effective
+  // permissions. This branch went live with scopeable personal keys — OAuth personal grants hardcode
+  // write (oauth/routes.ts), so `kanera_u_` keys are the only read-scoped personal credentials here.
   if (isPersonalKey && claims.apiKeyScope === "read" && WORKSPACE_RANK[minRole] > WORKSPACE_RANK.member) throw forbidden();
 
   if (row.currentOrgRole === "owner" || row.currentOrgRole === "admin") {
@@ -230,8 +242,9 @@ export async function assertBoardAccess(
     return { boardId: row.boardId, workspaceId: row.workspaceId, clientId: row.clientId, role: apiRole, source: "workspace" as const, canAccessWorkspace: true, isWorkspaceAdmin: claims.apiKeyScope === "admin", assignedItemsOnly: false };
   }
 
-  // A read-only OAuth grant cannot mutate board content or perform board management. Personal API
-  // keys without an explicit scope and write-scoped OAuth grants inherit the owner's permissions.
+  // A read-scoped personal key cannot mutate board content or perform board management; write-scoped
+  // keys inherit the owner's permissions. This branch went live with scopeable personal keys —
+  // OAuth personal grants hardcode write, so `kanera_u_` keys are the only credentials capped here.
   const isPersonalKey = claims.apiKeyKind === "personal";
   if (isPersonalKey && claims.apiKeyScope === "read" && BOARD_RANK[minRole] > BOARD_RANK.observer) {
     throw forbidden("write-capable credential required");
@@ -260,8 +273,8 @@ export async function assertBoardAccess(
     // Same-org members can reach workspace-scoped endpoints; cross-org guests (no workspaceRole)
     // cannot. Clients use this to avoid probing workspace routes a guest would be forbidden from.
     canAccessWorkspace: row.clientId === claims.cid && !!row.workspaceRole,
-    // Board-management actions require the owner's workspace-admin grant. A read-only OAuth grant
-    // is capped even when its owner is an administrator.
+    // Board-management actions require the owner's workspace-admin grant. A read-only credential is
+    // capped even when its owner is an administrator.
     isWorkspaceAdmin: row.clientId === claims.cid && row.workspaceRole === "admin" && !(isPersonalKey && claims.apiKeyScope === "read"),
     assignedItemsOnly: row.assignedItemsOnly ?? false,
   };

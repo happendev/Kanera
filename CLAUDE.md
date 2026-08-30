@@ -26,6 +26,9 @@ Durable product invariants:
 ```text
 apps/api/        Fastify + Socket.IO + Drizzle
 apps/web/        Angular standalone app
+apps/mcp/        MCP tool layer over the public API
+apps/cli/        `kanera` CLI; a second transport onto the MCP tool layer
+packages/sdk/    `@kanera/sdk`; self-contained public API client, no workspace deps
 packages/shared/ Shared schema, DTOs, and realtime event types
 ```
 
@@ -53,6 +56,8 @@ pnpm db:studio
 pnpm build
 pnpm lint
 pnpm test:api
+pnpm test:cli
+pnpm test:sdk
 pnpm email:preview
 pnpm test:api:integration
 pnpm test:api:integration -- apps/api/src/modules/cards/routes.itest.ts

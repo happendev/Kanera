@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { WORKSPACE_API_KEY_SCOPES } from "../schema/workspace-api-key.js";
+import { PERSONAL_API_KEY_SCOPES, WORKSPACE_API_KEY_SCOPES } from "../schema/workspace-api-key.js";
 import { CHAT_DESTINATION_EVENT_TYPES, CHAT_DESTINATION_PROVIDERS } from "../schema/webhook-endpoint.js";
 import { API_KEY_NAME_MAX_LENGTH, GENERAL_NAME_MAX_LENGTH } from "./name-limits.js";
 
@@ -17,10 +17,16 @@ export const updateWorkspaceApiKeyBody = z.object({
 });
 export type UpdateWorkspaceApiKeyBody = z.infer<typeof updateWorkspaceApiKeyBody>;
 
-// Personal keys act as the owner (board-content only, cross-workspace) and are always read-write, so
-// they carry no scope. The only input is an optional private label shown solely in the owner's list.
+export const personalApiKeyScope = z.enum(PERSONAL_API_KEY_SCOPES);
+export type PersonalApiKeyScopeDto = z.infer<typeof personalApiKeyScope>;
+
+// Personal keys act as the owner (board-content only, cross-workspace) and are evaluated with the
+// owner's live access; `scope` caps what the credential may do within it. `write` is the default so
+// the create flow behaves exactly as before; a read-only key is the explicit opt-in to hand an
+// unattended agent. The label is an optional private name shown solely in the owner's list.
 export const createPersonalApiKeyBody = z.object({
   label: z.string().trim().min(1).max(API_KEY_NAME_MAX_LENGTH).optional(),
+  scope: personalApiKeyScope.default("write"),
 });
 export type CreatePersonalApiKeyBody = z.infer<typeof createPersonalApiKeyBody>;
 
