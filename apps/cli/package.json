@@ -1,6 +1,6 @@
 {
   "name": "@kanera/cli",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Kanera command-line interface for terminals and AI agents",
   "license": "Elastic-2.0",
   "private": false,
