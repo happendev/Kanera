@@ -1,0 +1,83 @@
+name: Publish npm packages
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Pack and validate without publishing to npm
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  # npm provenance attestation is signed with the workflow's OIDC identity.
+  id-token: write
+
+concurrency:
+  group: publish-npm
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Workspace releases are tagged vX.Y.Z. MCP registry metadata has its own mcp-vX.Y.Z tags and
+    # its own workflow, so those releases must not republish the npm packages.
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run && '--dry-run' || '' }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - run: corepack enable
+
+      - run: corepack prepare pnpm@11.23.0 --activate
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Validate release tag
+        if: ${{ github.event_name == 'release' }}
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          for manifest in apps/cli/package.json packages/sdk/package.json; do
+            version=$(node -p "require('./${manifest}').version")
+            if [ "${RELEASE_TAG}" != "v${version}" ]; then
+              echo "Release tag ${RELEASE_TAG} does not match ${manifest} version v${version}."
+              exit 1
+            fi
+          done
+
+      # The CLI bundles the MCP tool layer, so its behaviour must be green before either publish.
+      # The CLI and SDK suites themselves rerun as each package's prepublishOnly gate.
+      - name: Check the MCP tool layer
+        run: pnpm test:mcp
+
+      - name: Publish @kanera/sdk and @kanera/cli
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # Attach provenance so installs can verify the tarball was built from this repository.
+          NPM_CONFIG_PROVENANCE: "true"
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN}" ]; then
+            echo "The NPM_TOKEN repository secret is required."
+            exit 1
+          fi
+          for package in @kanera/sdk @kanera/cli; do
+            version=$(pnpm --filter "${package}" exec node -p "require('./package.json').version")
+            # Idempotent re-runs: a version that already exists is a completed publish, not an error,
+            # so a partial failure can be retried without bumping the version.
+            if npm view "${package}@${version}" version >/dev/null 2>&1; then
+              echo "${package}@${version} is already published; skipping."
+              continue
+            fi
+            pnpm --filter "${package}" publish --access public --no-git-checks ${DRY_RUN}
+          done

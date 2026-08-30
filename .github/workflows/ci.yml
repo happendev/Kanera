@@ -34,6 +34,15 @@ jobs:
 
       - run: pnpm --filter @kanera/web test
 
+      # The MCP, CLI, and SDK packages ship to third parties (npm and the MCP registry), so their
+      # suites gate every commit rather than being discovered broken at publish time. The CLI and
+      # SDK tests also pack each tarball and verify a clean install of it.
+      - run: pnpm test:mcp
+
+      - run: pnpm test:cli
+
+      - run: pnpm test:sdk
+
       # Bundle budgets were previously only checkable by hand, so growth went unnoticed between
       # releases. Gating here fails the commit that regresses the payload instead of a later audit.
       - run: pnpm bundle:web:check

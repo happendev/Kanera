@@ -7,9 +7,17 @@ import { createInterface } from "node:readline/promises";
 const manifestPaths = [
   "package.json",
   "apps/api/package.json",
+  "apps/cli/package.json",
   "apps/web/package.json",
+  "packages/sdk/package.json",
   "packages/shared/package.json",
 ];
+
+// The SDK sends its version in every request's User-Agent, and that constant is hardcoded because
+// the package must run on browsers and Workers where reading package.json at runtime is not an
+// option. The release rewrites it alongside the manifests so the two can never drift.
+const sdkVersionPath = "packages/sdk/src/client.ts";
+const sdkVersionPattern = /^const SDK_VERSION = "[^"]+";$/m;
 
 const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const dryRun = process.argv.includes("--dry-run");
@@ -197,6 +205,11 @@ async function updateManifestVersions(version) {
     manifest.version = version;
     await writeJson(path, manifest);
   }
+  const clientSource = await readFile(sdkVersionPath, "utf8");
+  if (!sdkVersionPattern.test(clientSource)) {
+    fail(`${sdkVersionPath} no longer contains the SDK_VERSION constant this script keeps in sync.`);
+  }
+  await writeFile(sdkVersionPath, clientSource.replace(sdkVersionPattern, `const SDK_VERSION = "${version}";`));
 }
 
 function rollbackRelease(initialHead, tagName, tagCreated) {
@@ -261,7 +274,7 @@ async function main() {
     run("pnpm", ["lint"]);
     run("pnpm", ["test"]);
 
-    run("git", ["add", ...manifestPaths, "pnpm-lock.yaml"]);
+    run("git", ["add", ...manifestPaths, sdkVersionPath, "pnpm-lock.yaml"]);
     run("git", ["commit", "-m", `chore: release ${tagName}`]);
     if (shouldCreateTag) {
       run("git", ["tag", "-a", tagName, "-m", tagName]);
@@ -274,6 +287,8 @@ async function main() {
     if (shouldCreateTag) {
       console.log(`git push origin ${tagName}`);
       console.log(`gh release create ${tagName} --title "${tagName}" --generate-notes --verify-tag`);
+      console.log("\nPublishing the release triggers .github/workflows/publish-npm.yml, which");
+      console.log("publishes @kanera/cli and @kanera/sdk to npm. See RELEASING.md.");
     }
   } catch (error) {
     const rollbackFailure = rollbackRelease(initialHead, tagName, tagCreated);

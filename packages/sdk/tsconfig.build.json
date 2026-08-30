@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    // The shipped artefact is dist only, so maps carry their own sources instead of pointing at
+    // src paths that do not exist in the installed package.
+    "declarationMap": false,
+    "inlineSources": true,
+    "outDir": "dist"
+  },
+  "exclude": ["src/**/*.test.ts"]
+}

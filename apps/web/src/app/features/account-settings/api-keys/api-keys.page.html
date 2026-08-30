@@ -1,6 +1,6 @@
 <div class="settings-section">
         <h3 class="settings-section-title"><i class="ti ti-plug-connected"></i><span>AI agent connection</span>@if (settings.isHosted()) { <span class="pro-marker">Pro</span> }</h3>
-        <p class="settings-section-help">Connect Claude, Copilot, Codex, ChatGPT, or another compatible agent. Kanera will open a browser sign-in and consent screen; you do not need to create an API key.</p>
+        <p class="settings-section-help">Connect Claude, Copilot, Codex, ChatGPT, or another compatible agent. Kanera will open a browser sign-in and consent screen; you do not need to create an API key. An interactive connection can always read and write — for a look-only agent, create a read-only personal key below.</p>
         @if (mcpUrl()) {
         <div class="agent-setup-actions">
           <button type="button" class="sm" (click)="copyAgentSetupPrompt()">
@@ -37,13 +37,19 @@
       <div class="settings-section">
         <h3 class="settings-section-title"><i class="ti ti-key"></i><span>Personal API keys</span>@if (settings.isHosted()) { <span class="pro-marker">Pro</span> }</h3>
         <p class="settings-section-help">
-          A personal key acts as you: it can read and edit content across every workspace and board you can access,
-          including workspace administration where you are an admin. Activity done with it shows up as you. Use it for the API or an MCP client.
+          A personal key acts as you: it is evaluated against everything you can access, and activity done with it shows up as you.
+          A write key can create and edit anything you can, including workspace administration where you are an admin.
+          A read key can read everywhere but cannot change content, manage keys, or touch account settings — the right one to hand an AI agent.
+          A key's scope can't be changed after creation; revoke it and create a new one instead.
         </p>
         <k-docs-link path="api" fragment="create-a-personal-api-key" label="Learn more about personal API keys" />
         @if (apiAllowed()) {
         <form class="board-form" (submit)="createPersonalKey($event)">
           <input name="personalKeyLabel" placeholder="Label (optional, e.g. 'CI script')" [maxLength]="apiKeyNameMaxLength" [value]="newPersonalKeyLabel()" (input)="newPersonalKeyLabel.set($any($event.target).value); personalKeyError.set(null)" style="flex:1" />
+          <select name="personalKeyScope" aria-label="Key scope" [value]="newPersonalKeyScope()" (input)="newPersonalKeyScope.set($any($event.target).value); personalKeyError.set(null)">
+            <option value="write">Write</option>
+            <option value="read">Read only</option>
+          </select>
           <button class="sm" type="submit" [disabled]="personalKeyBusy()">{{ personalKeyBusy() ? "Creating..." : "Create key" }}</button>
         </form>
         } @else {
@@ -68,6 +74,7 @@
               <code>{{ key.keyPrefix }}...</code>
               <small><i class="ti ti-building"></i> {{ key.orgName || "Organisation" }}</small>
             </div>
+            <span class="field-type-badge">{{ key.scope }}</span>
             <span class="key-row-used">
               <small>Last used</small>
               <span>{{ formatKeyLastUsed(key.lastUsedAt) }}</span>

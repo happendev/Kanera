@@ -1,7 +1,7 @@
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult, ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
-import { createRequire } from "node:module";
 import { z } from "zod";
+import mcpPackage from "../package.json" with { type: "json" };
 import { docsSearchClient } from "./docs-search.js";
 import { env } from "./env.js";
 import { KaneraApiError, KaneraClient } from "./kanera-client.js";
@@ -129,12 +129,10 @@ const searchOutputSchema = z.object({
     z.object({ type: z.literal("attachment"), ...cardSearchResultFields, fileName: z.string() }),
   ])),
 });
-const require = createRequire(import.meta.url);
-// Same reasoning for the due-date slots: the tool schema must accept exactly the slots the API
-// stores, and the cut-off times behind them are defined once in the shared package.
-const { CARD_DUE_DATE_SLOTS } = require("@kanera/shared/due-date-slots") as {
-  CARD_DUE_DATE_SLOTS: readonly [string, ...string[]];
-};
+// Dynamic imports keep the MCP package's no-emit typecheck scoped to its own root while allowing
+// the standalone CLI build to bundle these runtime sources instead of depending on private
+// workspace packages.
+const { CARD_DUE_DATE_SLOTS } = await import("@kanera/shared/due-date-slots");
 const dueDateSlot = z.enum(CARD_DUE_DATE_SLOTS);
 const cardUpdateFields = z.object({
   title: z.string().min(1).max(500).optional(),
@@ -185,23 +183,9 @@ const CARD_KEY_PATTERN = /^[A-Z][A-Z0-9]{1,9}-[1-9][0-9]*$/iu;
 const ORGANISATION_KEY_PATTERN = /^[A-F0-9]{16}$/iu;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 type ToolArgs<T extends z.ZodRawShape> = z.infer<z.ZodObject<T>>;
-// Load the runtime tuple from the shared package without making TypeScript compile shared sources
-// outside this package's rootDir. The MCP schema and public API now have one color source of truth.
-const { COLOR_TOKENS } = require("@kanera/shared/colors") as {
-  COLOR_TOKENS: readonly [string, ...string[]];
-};
-const {
-  AUTOMATION_ACTION_LIMIT,
-  automationTriggerType,
-} = require("@kanera/shared/dto") as {
-  AUTOMATION_ACTION_LIMIT: number;
-  automationTriggerType: z.ZodType;
-};
-const { AUTOMATION_ACTION_TYPES, COMMENT_REACTION_TYPES, MAX_CARD_PRIORITIES_PER_USER } = require("@kanera/shared/schema") as {
-  COMMENT_REACTION_TYPES: readonly [string, ...string[]];
-  MAX_CARD_PRIORITIES_PER_USER: number;
-  AUTOMATION_ACTION_TYPES: readonly [string, ...string[]];
-};
+const { COLOR_TOKENS } = await import("@kanera/shared/colors");
+const { AUTOMATION_ACTION_LIMIT, automationTriggerType } = await import("@kanera/shared/dto");
+const { AUTOMATION_ACTION_TYPES, COMMENT_REACTION_TYPES, MAX_CARD_PRIORITIES_PER_USER } = await import("@kanera/shared/schema");
 const reactionType = z.enum(COMMENT_REACTION_TYPES);
 const colorToken = z.enum(COLOR_TOKENS);
 const noteUpdateFields = z.object({
@@ -240,12 +224,16 @@ const automationChanges = z.object({
   applyOnMove: z.boolean().optional(),
   actions: z.array(automationActionInput).max(AUTOMATION_ACTION_LIMIT).optional().describe("Replace the full ordered action list atomically with the trigger changes. An empty list disables the rule."),
 }).refine((value) => Object.values(value).some((item) => item !== undefined), "provide at least one automation change");
-const mcpPackage = require("../package.json") as { version: string };
-
 export interface KaneraMcpContext {
   apiKey: string;
   publicApiUrl?: string;
   docsSearchUrl?: string;
+  /**
+   * Emit the per-call JSON telemetry line to stdout. Defaults to on, which is correct for the HTTP
+   * and stdio servers where stdout is a log stream. In-process hosts such as the CLI set this false
+   * because their stdout is the command's result and callers parse it.
+   */
+  logToolCalls?: boolean;
 }
 
 function client(ctx: KaneraMcpContext, options: { signal?: AbortSignal; idempotencyKey?: string } = {}) {
@@ -708,6 +696,7 @@ function registerKaneraTool<T extends z.ZodRawShape>(
     annotations: toolAnnotations(name),
   }, async (args, extra): Promise<CallToolResult> => {
     const startedAt = performance.now();
+    const logToolCalls = ctx.logToolCalls !== false && env.NODE_ENV !== "test" && process.env.NODE_TEST_CONTEXT === undefined;
     try {
       const record = args as Record<string, unknown>;
       const idempotencyKey = typeof record.idempotencyKey === "string" ? record.idempotencyKey : undefined;
@@ -715,7 +704,7 @@ function registerKaneraTool<T extends z.ZodRawShape>(
         ? Object.fromEntries(Object.entries(record).filter(([key]) => key !== "idempotencyKey"))
         : record;
       const result = content(await handler(handlerArgs as ToolArgs<T>, client(ctx, { signal: extra?.signal, idempotencyKey })));
-      if (env.NODE_ENV !== "test" && process.env.NODE_TEST_CONTEXT === undefined) {
+      if (logToolCalls) {
         console.info(JSON.stringify({
           event: "mcp_tool_call",
           tool: name,
@@ -728,7 +717,7 @@ function registerKaneraTool<T extends z.ZodRawShape>(
       return result;
     } catch (error) {
       const errorCode = error instanceof KaneraApiError ? error.code : "INTERNAL";
-      if (env.NODE_ENV !== "test" && process.env.NODE_TEST_CONTEXT === undefined) {
+      if (logToolCalls) {
         console.info(JSON.stringify({
           event: "mcp_tool_call",
           tool: name,

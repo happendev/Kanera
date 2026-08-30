@@ -7,7 +7,7 @@ import { internalLinks, noteAttachments, notes, users, type Note, type NoteScope
 import { and, asc, desc, eq, gt, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
-import { assertBoardAccess, assertWorkspaceAccess } from "../../lib/access.js";
+import { assertBoardAccess, assertWorkspaceAccess, assertWriteCapableCredential } from "../../lib/access.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { AppError, badRequest, conflict, forbidden, notFound } from "../../lib/errors.js";
 import { assertCanUploadAttachment, formatStorageBytes, getUploadEntitlements, isStorageFull, storageQuotaExceededError } from "../../lib/entitlements.js";
@@ -334,8 +334,11 @@ async function authoriseRead(req: FastifyRequest, note: Note) {
 }
 
 // Returns the org that owns the note's workspace (host-pays storage attribution). Both access
-// helpers resolve clientId from workspaces.clientId, so this is the host org even for cross-org guests.
+// helpers resolve clientId from workspaces.client_id, so this is the host org even for cross-org guests.
 async function authoriseWrite(req: FastifyRequest, note: Note): Promise<{ clientId: string }> {
+  // Personal notes authorise at plain member/observer, so the role ranks cannot catch a read-scoped
+  // credential: gate it here (see assertWriteCapableCredential).
+  assertWriteCapableCredential(req.auth);
   // Board and workspace roles are different scales. Personal notes only need read-level access to
   // manage one's own; team notes are shared, so board team notes need editor and workspace team
   // notes need admin (a plain workspace member cannot edit shared workspace content).
@@ -512,6 +515,9 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
   app.post("/workspaces/:wsId/notes", async (req, reply) => {
     const { wsId: workspaceId } = req.params as { wsId: string };
     const body = dto.createNoteBody.parse(req.body);
+    // Personal-scope creation passes at plain member, so gate read-scoped credentials explicitly;
+    // team-scope creation already requires admin and is unreachable for them.
+    assertWriteCapableCredential(req.auth);
     await assertWorkspaceAccess(req.auth, workspaceId, body.scope === "team" ? "admin" : "member");
 
     const parent = await resolveParent(workspaceId, null, body.parentNoteId ?? null, body.scope, req.auth.sub);
@@ -537,6 +543,8 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
   app.post("/boards/:boardId/notes", async (req, reply) => {
     const { boardId } = req.params as { boardId: string };
     const body = dto.createNoteBody.parse(req.body);
+    // Same read-scope gate as the workspace create route: personal scope passes at observer.
+    assertWriteCapableCredential(req.auth);
     const { workspaceId } = await assertBoardAccess(req.auth, boardId, body.scope === "team" ? "editor" : "observer");
 
     const parent = await resolveParent(workspaceId, boardId, body.parentNoteId ?? null, body.scope, req.auth.sub);

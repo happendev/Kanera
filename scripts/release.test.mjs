@@ -10,7 +10,9 @@ const scriptPath = fileURLToPath(new URL("./release.mjs", import.meta.url));
 const releaseManifestPaths = [
   "package.json",
   "apps/api/package.json",
+  "apps/cli/package.json",
   "apps/web/package.json",
+  "packages/sdk/package.json",
   "packages/shared/package.json",
 ];
 const independentManifestPaths = ["apps/mcp/package.json", "apps/mcp/server.json"];
@@ -39,6 +41,12 @@ async function createFixture() {
     await writeFile(fullPath, `${JSON.stringify({ name: manifestPath, version: "9.9.9" }, null, 2)}\n`);
   }
   await writeFile(path.join(repo, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+  // The release also rewrites the SDK's hardcoded User-Agent version constant.
+  await mkdir(path.join(repo, "packages/sdk/src"), { recursive: true });
+  await writeFile(
+    path.join(repo, "packages/sdk/src/client.ts"),
+    'const before = 1;\nconst SDK_VERSION = "1.2.3";\nconst after = 2;\n',
+  );
 
   git(repo, ["init", "-b", "main"]);
   git(repo, ["config", "user.name", "Release Test"]);
@@ -73,6 +81,8 @@ async function assertRolledBack(fixture, initialHead, result) {
   assert.equal(git(fixture.repo, ["status", "--porcelain"]), "");
   const manifest = JSON.parse(await readFile(path.join(fixture.repo, "package.json"), "utf8"));
   assert.equal(manifest.version, "1.2.3");
+  const clientSource = await readFile(path.join(fixture.repo, "packages/sdk/src/client.ts"), "utf8");
+  assert.match(clientSource, /const SDK_VERSION = "1\.2\.3";/);
 }
 
 test("rolls back version and lockfile changes when validation fails", async (t) => {
@@ -118,4 +128,8 @@ test("leaves independently versioned MCP manifests unchanged", async (t) => {
     const manifest = JSON.parse(await readFile(path.join(fixture.repo, manifestPath), "utf8"));
     assert.equal(manifest.version, "9.9.9", manifestPath);
   }
+  const clientSource = await readFile(path.join(fixture.repo, "packages/sdk/src/client.ts"), "utf8");
+  assert.match(clientSource, /const SDK_VERSION = "1\.2\.4";/);
+  // Only the version constant changes; the rest of the file is untouched.
+  assert.match(clientSource, /const before = 1;\nconst SDK_VERSION = "1\.2\.4";\nconst after = 2;\n/);
 });

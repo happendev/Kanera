@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db, pool } from "../../db.js";
 import { env } from "../../env.js";
+import { buildPublicApiServer } from "../../public-api-server.js";
 import { buildIntegrationServer } from "../../test/integration.js";
 import { signupOwner } from "../../test/api-fixtures.js";
 
@@ -762,4 +763,55 @@ void test("saving a locked team note clears the holder lock", async () => {
   assert.equal(update.json().content, "Saved");
   assert.equal(update.json().editingUserId, null);
   assert.equal(update.json().editingExpiresAt, null);
+});
+
+void test("a read-scoped personal API key can read but not write notes", async () => {
+  // The fixture is untyped (setupWorkspace returns whatever signup.json() hands back), so narrow
+  // the fields this test uses to keep the unsafe-any lint warnings out of the new block.
+  const { app, ownerToken, workspace, note } = await setupWorkspace() as {
+    app: Awaited<ReturnType<typeof buildIntegrationServer>>;
+    ownerToken: string;
+    workspace: { id: string };
+    note: { id: string };
+  };
+  const keyCreated = await app.inject({
+    method: "POST",
+    url: "/me/api-keys",
+    headers: { authorization: `Bearer ${ownerToken}` },
+    payload: { label: "Agent", scope: "read" },
+  });
+  assert.equal(keyCreated.statusCode, 201, keyCreated.body);
+  const keyAuth = { authorization: `Bearer ${keyCreated.json<{ secret: string }>().secret}` };
+
+  // Notes are reachable by API keys through the public API server, so the read-scope gate in
+  // authoriseWrite/the create routes is live enforcement, not just defense-in-depth.
+  const publicApi = await buildPublicApiServer({ logger: false, rateLimit: { enabled: false } });
+  try {
+    // Reads resolve through the owner's access.
+    const detail = await publicApi.inject({ method: "GET", url: `/api/v1/notes/${note.id}`, headers: keyAuth });
+    assert.equal(detail.statusCode, 200, detail.body);
+
+    // Personal-scope writes pass at plain member/observer, so the gate must catch them explicitly —
+    // this is the surface a read-only key would otherwise leak writes into.
+    const createPersonal = await publicApi.inject({
+      method: "POST",
+      url: `/api/v1/workspaces/${workspace.id}/notes`,
+      headers: keyAuth,
+      payload: { scope: "personal", title: "Nope" },
+    });
+    assert.equal(createPersonal.statusCode, 403, createPersonal.body);
+    const patch = await publicApi.inject({ method: "PATCH", url: `/api/v1/notes/${note.id}`, headers: keyAuth, payload: { title: "Nope" } });
+    assert.equal(patch.statusCode, 403, patch.body);
+  } finally {
+    await publicApi.close();
+  }
+
+  // The owner's interactive session keeps full write access on the app server.
+  const ownerCreate = await app.inject({
+    method: "POST",
+    url: `/workspaces/${workspace.id}/notes`,
+    headers: { authorization: `Bearer ${ownerToken}` },
+    payload: { scope: "personal", title: "Mine" },
+  });
+  assert.equal(ownerCreate.statusCode, 201);
 });

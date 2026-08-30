@@ -301,7 +301,10 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
         organisationLogoUrl: organisation ? withSignedMedia(req.auth.cid, { logoUrl: organisation.logoUrl }).logoUrl : null,
         credentialKind: req.auth.apiKeyKind === "workspace" ? "workspace" : req.auth.apiKeyKind === "personal" ? "personal" : "user",
         organisationScope: req.auth.apiKeyKind === "workspace" ? "workspace-pinned" : "identity-wide",
-        scope: req.auth.apiKeyScope ?? (req.auth.apiKeyKind === "personal" ? "write" : null),
+        // Report the credential's actual scope. No hardcoded personal fallback: agents are told to
+        // trust this value ("read-only credentials cannot mutate"), so it must reflect what the
+        // access layer will really enforce.
+        scope: req.auth.apiKeyScope ?? null,
         workspaceId: req.auth.apiKeyWorkspaceId ?? null,
         webUrl: env.WEB_ORIGIN,
       };

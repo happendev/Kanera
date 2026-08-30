@@ -137,6 +137,7 @@ For Jira, ClickUp, Asana, monday.com, Notion, Linear, or an internal system, the
 - [Self-hosting guide](https://www.kanera.app/docs/self-host)
 - [Docker deployment](DEPLOY.md)
 - [Dokploy deployment](DOKPLOY_DEPLOY.md)
+- [Releasing and npm publishing](RELEASING.md)
 
 ## For developers
 
@@ -149,6 +150,8 @@ apps/api/           Fastify API, worker, public API, and migrations
 apps/web/           Angular web application
 apps/admin-web/     Angular administration application
 apps/mcp/           MCP server for AI clients
+apps/cli/           kanera command-line interface for terminals and AI agents
+packages/sdk/       @kanera/sdk TypeScript client for the public API
 packages/shared/    Shared schema, DTOs, events, and workspace defaults
 docker/             Local and production support files
 ```
@@ -184,6 +187,7 @@ Seed account details are documented in [dev-db-seed-content/README.md](dev-db-se
 pnpm dev                  # API :3000 + worker :3003 + web :4200
 pnpm dev:public-api       # Public integration API on :3001
 pnpm dev:mcp              # MCP server on :3002
+pnpm cli -- whoami        # Run the kanera CLI from the workspace
 pnpm dev:db               # Start local PostgreSQL and Valkey
 pnpm dev:db:down          # Stop local database services
 pnpm db:generate          # Generate Drizzle migrations
@@ -192,6 +196,8 @@ pnpm build                # Build and type-check all packages
 pnpm lint                 # Type-check and lint all packages
 pnpm test                 # Run unit and integration test suites
 pnpm test:api             # Run API unit and route tests
+pnpm test:cli             # Run CLI tests
+pnpm test:sdk             # Run SDK tests
 pnpm test:api:integration # Run API integration tests with isolated PostgreSQL
 ```
 
@@ -204,10 +210,15 @@ pnpm test:api:integration # Run API integration tests with isolated PostgreSQL
 - **Delivery outside the app:** chat destinations are webhook endpoints with a provider set, so Slack, Discord, Telegram, and Zulip reuse the webhook worker, retry policy, and delivery history. Personal notification channels run through the push queue, with HMAC-signed payloads for user-owned endpoints.
 - **Agent-native MCP:** OAuth-capable AI clients can connect with short-lived tokens, structured tool results, explicit safety annotations, and auditable access.
 
-Hosted MCP clients connect to `https://mcp.kanera.app/mcp`. See the [AI and MCP guide](https://www.kanera.app/docs/ai-mcp) for supported clients and setup instructions.
+- **Typed API client:** `@kanera/sdk` wraps the public API with card-key resolution, cursor iteration, idempotent retries, and webhook signature verification. See [packages/sdk/README.md](packages/sdk/README.md).
+- **Agent-native CLI:** `kanera` exposes the same tool layer as the MCP server to any agent that can run shell commands, with a machine-readable command catalog and exit codes that distinguish "not permitted" from "failed".
+
+Hosted MCP clients connect to `https://mcp.kanera.app/mcp`. See the [AI and MCP guide](https://www.kanera.app/docs/ai-mcp) for supported clients and setup instructions. For the command line, see [apps/cli/README.md](apps/cli/README.md).
 
 ## License
 
 Kanera is source available under the [Elastic License 2.0](LICENSE). You may inspect, modify, and self-host it for your own use, but may not provide Kanera to third parties as a hosted or managed service.
+
+The `@kanera/sdk` API client is the exception: it is [MIT licensed](packages/sdk/LICENSE) so it can be embedded in any application without license-policy friction.
 
 The Kanera name, logo, and brand assets are covered separately by [TRADEMARKS.md](TRADEMARKS.md).
