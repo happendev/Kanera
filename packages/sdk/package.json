@@ -1,6 +1,6 @@
 {
   "name": "@kanera/sdk",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "TypeScript client for the Kanera public API",
   "license": "MIT",
   "type": "module",
@@ -13,7 +13,10 @@
     }
   },
   "sideEffects": false,
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "publishConfig": {
     "access": "public"
   },
@@ -22,7 +25,13 @@
     "url": "git+https://github.com/happendev/Kanera.git",
     "directory": "packages/sdk"
   },
-  "keywords": ["kanera", "project-management", "api", "sdk", "kanban"],
+  "keywords": [
+    "kanera",
+    "project-management",
+    "api",
+    "sdk",
+    "kanban"
+  ],
   "engines": {
     "node": ">=18"
   },
