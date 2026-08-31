@@ -14,6 +14,9 @@ host/model used for launch material (currently ChatGPT), then inspect the captur
 account, so compare semantics rather than literal ids.
 4. Negative/read-only cases must not cause unintended mutations.
 5. Returned citations must open the expected Kanera source.
+6. A `forbiddenCapabilities` entry means the host must not route the request to that non-Kanera
+   fallback. In particular, card reads and writes supported by Kanera MCP must not use browser or
+   computer-use automation merely because Kanera also has a web interface.
 
 Run the matrix against ChatGPT, Claude web/Desktop, Codex, and the MCP Inspector/reference client.
 Record the host, model, negotiated protocol version, transport response type, date, and pass/fail

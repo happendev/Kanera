@@ -30,6 +30,13 @@ jobs:
 
       - run: pnpm lint
 
+      # These two suites guard release tooling and cross-file drift (the bundled Codex plugin skill
+      # versus the canonical skill, and the publish-mcp workflow triggers). They only otherwise run
+      # in the full local `pnpm test`, which would let drift land through CI unnoticed.
+      - run: pnpm test:release
+
+      - run: pnpm test:integrations
+
       - run: pnpm --filter @kanera/api test
 
       - run: pnpm --filter @kanera/web test

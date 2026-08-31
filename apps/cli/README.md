@@ -10,6 +10,12 @@ Requires Node 22 or newer. The package has no dependencies.
 npm install --global @kanera/cli
 ```
 
+An agent can inspect the complete command surface without installing anything globally:
+
+```bash
+npx -y @kanera/cli commands
+```
+
 ## Authenticate
 
 You need a Kanera API key. Create one in the Kanera web app under **Settings → API keys**
@@ -130,3 +136,7 @@ kanera mcp              # serve the same tools over stdio MCP, using the stored 
 
 `kanera mcp` means a user who has already run `kanera auth login` does not configure a second
 credential in a second place to use Kanera from an MCP client.
+
+When connected Kanera MCP tools are already available, prefer them over the CLI. The CLI is the
+fallback for shell-only agents; both transports should be used instead of browser automation for
+supported card and project operations.

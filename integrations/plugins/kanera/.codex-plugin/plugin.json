@@ -1,0 +1,42 @@
+{
+  "name": "kanera",
+  "version": "2.2.1",
+  "description": "Read and manage Kanera cards, boards, comments, notes, priorities, automations, and project reports.",
+  "author": {
+    "name": "Happen Software Limited",
+    "email": "hi@kanera.app",
+    "url": "https://www.happen.software"
+  },
+  "homepage": "https://www.kanera.app/docs/ai-mcp",
+  "repository": "https://github.com/happendev/Kanera",
+  "license": "Elastic-2.0",
+  "keywords": [
+    "kanera",
+    "project-management",
+    "kanban",
+    "cards",
+    "mcp"
+  ],
+  "skills": "./skills/",
+  "apps": "./.app.json",
+  "interface": {
+    "displayName": "Kanera",
+    "shortDescription": "Read and update Kanera project work",
+    "longDescription": "Use the connected Kanera app to find, inspect, create, and update cards and other permission-scoped project work.",
+    "developerName": "Happen Software Limited",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://www.kanera.app",
+    "privacyPolicyURL": "https://www.kanera.app/privacy",
+    "termsOfServiceURL": "https://www.kanera.app/terms",
+    "defaultPrompt": [
+      "Update Kanera card DEV-938 with my investigation findings and agreed plan.",
+      "Summarize my active Kanera work and flag blockers.",
+      "Find overdue Kanera cards assigned to me."
+    ],
+    "brandColor": "#14B8A6"
+  }
+}

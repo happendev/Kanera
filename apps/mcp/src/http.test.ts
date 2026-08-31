@@ -194,6 +194,8 @@ void test("HTTP MCP endpoint completes protocol initialization with a Kanera API
     assert.ok(payload.result?.capabilities?.tools);
     assert.ok(payload.result?.capabilities?.resources);
     assert.ok(payload.result?.capabilities?.prompts);
+    assert.match(payload.result?.instructions ?? "", /instead of browser automation/i);
+    assert.match(payload.result?.instructions ?? "", /exact human card key/i);
     assert.match(payload.result?.instructions ?? "", /administration remains in the Kanera UI/i);
     assert.match(payload.result?.instructions ?? "", /must be completed manually in the Kanera UI/i);
   });
