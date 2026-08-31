@@ -672,10 +672,10 @@ void test("all prompts produce actionable text containing their target identifie
 void test("golden tool-selection prompts reference only the v2 catalog", () => {
   const fixture = JSON.parse(readFileSync(new URL("../evals/tool-selection.json", import.meta.url), "utf8")) as {
     version: number;
-    cases: Array<{ id: string; category: string; prompt: string; expectedTools: string[]; expectedArguments: Record<string, unknown>; forbiddenTools: string[] }>;
+    cases: Array<{ id: string; category: string; prompt: string; expectedTools: string[]; expectedArguments: Record<string, unknown>; forbiddenTools: string[]; forbiddenCapabilities?: string[] }>;
   };
   const names = new Set(Object.keys(internals()._registeredTools));
-  assert.equal(fixture.version, 1);
+  assert.equal(fixture.version, 2);
   assert.equal(new Set(fixture.cases.map((item) => item.id)).size, fixture.cases.length, "eval case ids are unique");
   assert.ok(fixture.cases.some((item) => item.category === "direct"));
   assert.ok(fixture.cases.some((item) => item.category === "indirect"));
@@ -686,6 +686,7 @@ void test("golden tool-selection prompts reference only the v2 catalog", () => {
     assert.equal(typeof item.expectedArguments, "object", `${item.id} has argument expectations`);
     assert.equal(new Set(item.expectedTools).size, item.expectedTools.length, `${item.id} expected tools are unique`);
     assert.equal(new Set(item.forbiddenTools).size, item.forbiddenTools.length, `${item.id} forbidden tools are unique`);
+    assert.equal(new Set(item.forbiddenCapabilities ?? []).size, (item.forbiddenCapabilities ?? []).length, `${item.id} forbidden capabilities are unique`);
     for (const name of [...item.expectedTools, ...item.forbiddenTools]) {
       assert.equal(names.has(name), true, `${name} is present in the v2 tool catalog`);
     }
@@ -693,4 +694,8 @@ void test("golden tool-selection prompts reference only the v2 catalog", () => {
       assert.equal(item.forbiddenTools.includes(name), false, `${item.id} does not both expect and forbid ${name}`);
     }
   }
+  assert.ok(
+    fixture.cases.some((item) => item.forbiddenCapabilities?.includes("browser")),
+    "the eval matrix covers Kanera MCP versus browser routing",
+  );
 });

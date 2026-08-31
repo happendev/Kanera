@@ -1,6 +1,23 @@
 {
-  "version": 1,
+  "version": 2,
   "cases": [
+    {
+      "id": "update-card-by-human-key",
+      "category": "direct",
+      "prompt": "Update DEV-938 with the investigation findings and agreed implementation plan.",
+      "expectedTools": ["kanera_get_card", "kanera_update_card"],
+      "expectedArguments": {
+        "kanera_get_card": {
+          "cardId": "DEV-938"
+        },
+        "kanera_update_card": {
+          "cardId": "DEV-938",
+          "changes": "the requested investigation findings and implementation plan"
+        }
+      },
+      "forbiddenTools": ["kanera_search"],
+      "forbiddenCapabilities": ["browser", "computer-use"]
+    },
     {
       "id": "active-work-by-person",
       "category": "direct",

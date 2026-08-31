@@ -10,13 +10,17 @@
 export function skillDocument(): string {
   return `---
 name: kanera
-description: Read and manage Kanera work — boards, cards, comments, notes, and priority queues — from the shell with the kanera CLI. Use when the user mentions Kanera, a card key like MKT-42, a board, or their "Up next" queue.
+description: Read and manage Kanera work from the shell with the kanera CLI. Use when MCP tools are unavailable and the user mentions Kanera, a human card key such as DEV-938, a board, or an "Up next" queue.
 ---
 
 # Kanera
 
 The \`kanera\` CLI talks to Kanera's public API. Every command accepts \`--json\` for a structured
 envelope and \`--quiet\` for the bare result, which is what you should use when parsing output.
+
+Use this shell transport instead of browser automation for supported Kanera work. Open the Kanera
+web interface only for an explicitly visual task or an administration operation the CLI does not
+expose. When connected Kanera MCP tools are available, prefer those tools over this CLI.
 
 ## Before anything else
 
