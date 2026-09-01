@@ -19,14 +19,26 @@
     </div>
     } @else if (step() === 'details') {
     <form (submit)="submit($event)">
-      @if (invite()) {
+      @if (boardInvite(); as boardInvitation) {
+      <div class="invite-banner">
+        <i class="ti ti-layout-kanban"></i>
+        <span>You've been invited to <strong>{{ boardSummary(boardInvitation) }}</strong> on <strong>{{ boardInvitation.clientName }}</strong></span>
+      </div>
+      } @else if (invite()) {
       <div class="invite-banner">
         <i class="ti ti-building"></i>
         <span>You've been invited to join <strong>{{ invite()!.orgName }}</strong></span>
       </div>
       }
 
-      @if (!inviteToken()) {
+      @if (boardInviteNotice()) {
+      <div class="notice-banner" role="status">
+        <i class="ti ti-info-circle"></i>
+        {{ boardInviteNotice() }}
+      </div>
+      }
+
+      @if (!inviteToken() && !boardInviteToken()) {
       <div class="field">
         <label for="cname"><i class="ti ti-building"></i> Organisation name</label>
         <input id="cname" placeholder="Private" [formField]="signupForm.orgName" />
@@ -40,7 +52,12 @@
 
       <div class="field">
         <label for="email"><i class="ti ti-mail"></i> Email</label>
+        @if (boardInvite()) {
+        <input id="email" type="email" [value]="email()" autocomplete="email" readonly />
+        <p class="field-help">This invitation is tied to this email address.</p>
+        } @else {
         <input id="email" type="email" placeholder="you@example.com" [formField]="signupForm.email" autocomplete="email" />
+        }
       </div>
 
       <div class="field">
@@ -156,7 +173,7 @@
     }
 
     <div class="auth-footer">
-      Already have an account? <a routerLink="/login">Sign in</a>
+      Already have an account? <a [href]="signInLink()">Sign in</a>
     </div>
   </div>
 </div>

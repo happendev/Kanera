@@ -1,5 +1,5 @@
 import "../test/setup.integration.js";
-import { clients, EMAIL_QUEUE_STATUS, emailQueue, inviteTokens } from "@kanera/shared/schema";
+import { boardInvitations, boards, clients, EMAIL_QUEUE_STATUS, emailQueue, inviteTokens, workspaces } from "@kanera/shared/schema";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { asc, eq, inArray } from "drizzle-orm";
@@ -94,6 +94,24 @@ void test("invite signup with an existing email returns a conflict instead of a 
   });
   assert.equal(signup.statusCode, 200);
 
+  const hostSignup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: { orgName: "Invite Host", displayName: "Host", email: "invite-host@example.com", password: "Abc12345" },
+  });
+  assert.equal(hostSignup.statusCode, 200);
+  const host = hostSignup.json<{ user: { id: string; clientId: string } }>().user;
+  const [workspace] = await db.insert(workspaces).values({ clientId: host.clientId, name: "Invite Workspace", cardKeyPrefix: "INV" }).returning();
+  const [board] = await db.insert(boards).values({ workspaceId: workspace!.id, name: "Invite Board", position: "1000.0000000000" }).returning();
+  const token = newOpaqueToken();
+  await db.insert(boardInvitations).values({
+    clientId: host.clientId,
+    boardId: board!.id,
+    email: "ada@example.com",
+    tokenHash: token.hash,
+    invitedById: host.id,
+  });
+
   const duplicateInviteSignup = await app.inject({
     method: "POST",
     url: "/auth/signup",
@@ -102,12 +120,13 @@ void test("invite signup with an existing email returns a conflict instead of a 
       displayName: "Ada",
       email: "ada@example.com",
       password: "Abc12345",
-      boardInviteToken: "invite-link-token",
+      boardInviteToken: token.raw,
     },
   });
 
   assert.equal(duplicateInviteSignup.statusCode, 409);
   assert.equal(duplicateInviteSignup.json<{ message: string }>().message, "An account already exists for this email. Sign in to accept the invite.");
+  assert.equal(duplicateInviteSignup.json<{ boardInvite: boolean }>().boardInvite, true);
 });
 
 void test("invite signup notifies organisation owners and admins for all invited roles", async () => {

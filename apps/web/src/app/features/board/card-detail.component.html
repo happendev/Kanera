@@ -579,10 +579,11 @@
                   (keydown.escape)="cancelChecklistItem()" autofocus />
                 } @else if (showItemMeta) {
                 <!-- Mini-card model: clicking the item opens its detail drawer (description + sub-checklists). Renaming lives in the item actions menu — a double-click can't coexist here because the first click already opens the drawer. Observers can open (read-only) too, so this is not gated on canEdit. -->
-                <button type="button" class="checklist-item-text" [class.is-done]="item.completedAt" (click)="openChecklistItemDetail(item)" kTooltip="Open details">{{ item.text }}</button>
+                <!-- Rows keep a single-line ellipsis, so the tooltip carries the full text for titles too long to fit; the drawer is the only other place it can be read. -->
+                <button type="button" class="checklist-item-text" [class.is-done]="item.completedAt" (click)="openChecklistItemDetail(item)" [kTooltip]="item.text">{{ item.text }}</button>
                 } @else {
                 <!-- Sub-checklist items are terminal rows: they support text and completion only. -->
-                <span class="checklist-item-text is-static" [class.is-done]="item.completedAt">{{ item.text }}</span>
+                <span class="checklist-item-text is-static" [class.is-done]="item.completedAt" [kTooltip]="item.text">{{ item.text }}</span>
                 }
                 @if (showItemMeta || canEditRole()) {
                 <div class="checklist-item-actions">
@@ -923,9 +924,10 @@
       </button>
       }
       @if (editingItemId() === item.id && canEditRole()) {
-      <input class="checklist-item-panel-title" [value]="draftItemText()" (input)="draftItemText.set($any($event.target).value)" (blur)="saveChecklistItem(checklistId, item)"
+      <input #checklistItemPanelTitleInput class="checklist-item-panel-title" [value]="draftItemText()" (input)="draftItemText.set($any($event.target).value)" (blur)="saveChecklistItem(checklistId, item)"
         (keydown.enter)="saveChecklistItem(checklistId, item)" (keydown.escape)="cancelChecklistItem(); $event.stopPropagation()" autofocus />
       } @else {
+      <!-- Same treatment as the card title in the panel header: the drawer is where a row's ellipsised text becomes readable, so it wraps over as many lines as it needs. -->
       <button type="button" class="checklist-item-panel-title is-button" [disabled]="!canEdit()" (click)="startEditItem(item)"><span>{{ item.text }}</span></button>
       }
       @if (canEditRole()) {

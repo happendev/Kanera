@@ -442,6 +442,13 @@
       "when": 1787956924671,
       "tag": "0062_scope_personal_api_keys",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1788278141270,
+      "tag": "0063_clumsy_hellcat",
+      "breakpoints": true
     }
   ]
 }

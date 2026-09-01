@@ -1,7 +1,8 @@
-import type { AfterViewInit, ElementRef, OnDestroy } from "@angular/core";
+import type { AfterViewInit, ElementRef, OnDestroy, OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, ViewChild, computed, inject, signal } from "@angular/core";
 import { disabled, form, FormField, submit, validate } from "@angular/forms/signals";
 import { ActivatedRoute, Router, RouterLink } from "@angular/router";
+import type { BoardInvitationLookupResponse } from "@kanera/shared/dto";
 import { AuthService } from "../../core/auth/auth.service";
 import { PublicAuthClient } from "../../core/auth/public-auth.client";
 import { LogoComponent } from "../../shared/logo.component";
@@ -81,7 +82,7 @@ function signupAcquisition() {
   templateUrl: "./signup.page.html",
   styleUrl: "./signup.page.scss",
 })
-export class SignupPage implements AfterViewInit, OnDestroy {
+export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
   private readonly auth = inject(AuthService);
   private readonly publicAuth = inject(PublicAuthClient);
   private readonly router = inject(Router);
@@ -100,7 +101,7 @@ export class SignupPage implements AfterViewInit, OnDestroy {
   });
   readonly signupForm = form(this.signupModel, (signup) => {
     validate(signup.orgName, ({ value }) => validationError(
-      this.inviteToken() ? null : validateText(value().trim(), "Organisation name", 120),
+      this.inviteToken() || this.boardInviteToken() ? null : validateText(value().trim(), "Organisation name", 120),
     ));
     validate(signup.displayName, ({ value }) => validationError(validateText(value().trim(), "Your name", 120)));
     validate(signup.email, ({ value }) => validationError(validateEmail(value().trim())));
@@ -137,9 +138,17 @@ export class SignupPage implements AfterViewInit, OnDestroy {
   readonly showPassword = signal(false);
   readonly showConfirmPassword = signal(false);
   readonly invite = signal<InviteSummaryResponse | null>(null);
+  readonly boardInvite = signal<BoardInvitationLookupResponse | null>(null);
+  readonly boardInviteNotice = signal<string | null>(null);
   readonly emailVerificationEnabled = signal(false);
   readonly signupsEnabled = signal(true);
-  readonly publicSignupBlocked = computed(() => !this.signupsEnabled() && !this.inviteToken());
+  readonly publicSignupBlocked = computed(() => !this.signupsEnabled() && !this.inviteToken() && !this.boardInviteToken());
+  readonly signInLink = computed(() => {
+    const token = this.boardInviteToken();
+    if (!token) return "/login";
+    const returnUrl = `/board-invite?token=${encodeURIComponent(token)}`;
+    return `/login?returnUrl=${encodeURIComponent(returnUrl)}`;
+  });
   readonly kaneraEnvironment = signal<KaneraEnvironment>("production");
   readonly deploymentMode = signal<DeploymentMode>("self_hosted");
   readonly environmentBannerLabel = computed(() => environmentBannerLabel(this.kaneraEnvironment()));
@@ -200,6 +209,31 @@ export class SignupPage implements AfterViewInit, OnDestroy {
         this.kaneraEnvironment.set("production");
         this.deploymentMode.set("self_hosted");
       });
+  }
+
+  async ngOnInit(): Promise<void> {
+    const token = this.boardInviteToken();
+    if (!token) return;
+    try {
+      const res = await this.publicAuth.get(`/board-invitations/lookup?token=${encodeURIComponent(token)}`);
+      if (res.status === 404) {
+        // Only an authoritative "this invitation does not exist / has expired" drops the token.
+        this.boardInviteToken.set(null);
+        this.boardInviteNotice.set("We couldn’t load that board invitation — it may have been revoked or expired. You can still create a regular account below.");
+        return;
+      }
+      if (!res.ok) throw new Error("lookup failed");
+      const invitation = parseBoardInviteSummaryResponse(await res.json());
+      this.boardInvite.set(invitation);
+      // The invite token was delivered to this mailbox, and the API rejects any mismatch. Locking
+      // the prefilled value prevents the most common accidental path into a disconnected account.
+      this.email.set(invitation.email);
+    } catch {
+      // A transient failure (network blip, lookup rate limit, response-shape skew during a rolling
+      // deploy) must NOT discard the token: signup still carries it, and the API enforces the
+      // invited-email match with a clear error. Only the banner and prefill degrade.
+      this.boardInviteNotice.set("We couldn’t load the invitation details right now. Sign up with the invited email address and your board access will still be connected.");
+    }
   }
 
   // Step 1: validate the form locally, then ask the API to email a verification code.
@@ -344,12 +378,24 @@ export class SignupPage implements AfterViewInit, OnDestroy {
 
   private async redirectExistingInviteAccount(body: unknown): Promise<boolean> {
     const code = body && typeof body === "object" ? (body as Record<string, unknown>)["code"] : null;
+    if (code !== "ACCOUNT_EXISTS") return false;
+    const boardToken = this.boardInviteToken();
+    if (boardToken) {
+      const returnUrl = `/board-invite?token=${encodeURIComponent(boardToken)}`;
+      await this.router.navigateByUrl(`/login?returnUrl=${encodeURIComponent(returnUrl)}`);
+      return true;
+    }
     const token = this.inviteToken();
-    if (code !== "ACCOUNT_EXISTS" || !token) return false;
+    if (!token) return false;
     // Existing identities accept org invites through the authenticated invite flow. Keeping the
     // token in the URL also lets that page send a signed-out visitor through login and back again.
     await this.router.navigateByUrl(`/invite?token=${encodeURIComponent(token)}`);
     return true;
+  }
+
+  boardSummary(invitation: BoardInvitationLookupResponse): string {
+    const boards = invitation.boards ?? [];
+    return boards.length > 0 ? boards.map((board) => board.boardName).join(", ") : invitation.boardName;
   }
 
   private startResendCooldown() {
@@ -504,6 +550,19 @@ function parseInviteSummaryResponse(value: unknown): InviteSummaryResponse {
     orgRole: invite.orgRole as InviteSummaryResponse["orgRole"],
     workspaces: invite.workspaces as InviteSummaryResponse["workspaces"],
   };
+}
+
+
+// Typed against the shared DTO (compile-checked drift protection; the schema itself cannot be
+// imported at runtime here without dragging drizzle into the browser bundle). Deliberately lenient:
+// only the fields this page cannot work without are required, so response-shape skew during a
+// rolling deploy degrades the banner instead of throwing a valid invitation away.
+function parseBoardInviteSummaryResponse(value: unknown): BoardInvitationLookupResponse {
+  const invitation = value as BoardInvitationLookupResponse | null;
+  if (!invitation || typeof invitation.id !== "string" || typeof invitation.email !== "string") {
+    throw new Error("Invalid board invite response");
+  }
+  return invitation;
 }
 
 function parseAuthConfigResponse(value: unknown): AuthConfigResponse {

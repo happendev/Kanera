@@ -6,6 +6,7 @@ import type { HomeItem, HomeTodayResponse } from "@kanera/shared/dto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
+import { PendingInvitationsService } from "../../core/board-invitations/pending-invitations.service";
 import { organisationStorageKey, STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import type { AppSocket } from "../../core/realtime/socket.service";
@@ -117,6 +118,13 @@ describe("HomePage", () => {
     entitlements?: unknown;
     deploymentMode?: "hosted" | "self_hosted";
     role?: "owner" | "admin" | "member";
+    pendingInvitations?: Array<{
+      id: string;
+      orgName: string;
+      invitedByName: string;
+      expiresAt: string | null;
+      boards: Array<{ boardId: string; boardName: string; workspaceName: string; role: "editor" | "observer"; assignedItemsOnly: boolean }>;
+    }>;
   } = {}) {
     const socket = new SocketStub();
     const get = vi.fn(async (path: string) => {
@@ -183,6 +191,10 @@ describe("HomePage", () => {
       ],
     }).compileComponents();
 
+    TestBed.inject(PendingInvitationsService).setFromHome({
+      guestGroups: [],
+      pendingBoardInvitations: options.pendingInvitations ?? [],
+    });
     fixture = TestBed.createComponent(HomePage);
     fixture.detectChanges();
     await settle();
@@ -805,5 +817,24 @@ describe("HomePage", () => {
     fixture.detectChanges();
 
     expect(text()).toContain("Your plan allows 0 boards. Upgrade to add another board.");
+  });
+
+  it("renders pending board invitations even before the user has a board", async () => {
+    await render({
+      hasWorkspace: false,
+      response: payload({ boardCount: 0 }),
+      pendingInvitations: [{
+        id: "invite-1",
+        orgName: "Acme",
+        invitedByName: "Alex",
+        expiresAt: null,
+        boards: [{ boardId: "board-1", boardName: "Delivery", workspaceName: "Product", role: "editor", assignedItemsOnly: false }],
+      }],
+    });
+
+    expect(text()).toContain("Pending invitations");
+    expect(text()).toContain("Acme");
+    expect(text()).toContain("Delivery · invited by Alex");
+    expect(host().querySelector<HTMLButtonElement>(".invitation-row button")?.textContent).toContain("Accept");
   });
 });

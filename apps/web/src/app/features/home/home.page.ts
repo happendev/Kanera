@@ -8,6 +8,7 @@ import type { BillingDowngradePreviewResponse, HomeDueBucket, HomeItem } from "@
 import { AnalyticsService } from "../../core/analytics/analytics.service";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
+import { describeAcceptInvitationError, PendingInvitationsService } from "../../core/board-invitations/pending-invitations.service";
 import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
 import { RecentBoardsService } from "../../core/recent-boards/recent-boards.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
@@ -62,6 +63,7 @@ export class HomePage implements OnInit {
   private readonly analytics = inject(AnalyticsService);
   private readonly api = inject(ApiClient);
   private readonly dialog = inject(Dialog);
+  readonly invitations = inject(PendingInvitationsService);
   readonly myPriorities = inject(MyPrioritiesService);
   private readonly recentBoardsService = inject(RecentBoardsService);
   private readonly router = inject(Router);
@@ -77,6 +79,8 @@ export class HomePage implements OnInit {
 
   readonly displayName = computed(() => this.auth.user()?.displayName ?? "");
   readonly today = signal(new Date());
+  readonly acceptingInvitationId = signal<string | null>(null);
+  readonly invitationError = signal<string | null>(null);
 
   /**
    * Whether the account has a *standard* workspace. Only used for empty-state copy, never to decide
@@ -303,6 +307,23 @@ export class HomePage implements OnInit {
         })
         .catch(() => undefined);
     }
+  }
+
+  async acceptInvitation(id: string): Promise<void> {
+    this.acceptingInvitationId.set(id);
+    this.invitationError.set(null);
+    try {
+      const boardId = await this.invitations.accept(id);
+      await this.router.navigate(["/b", boardId]);
+    } catch (error: unknown) {
+      this.invitationError.set(describeAcceptInvitationError(error).message);
+    } finally {
+      this.acceptingInvitationId.set(null);
+    }
+  }
+
+  invitationBoardNames(boards: { boardName: string }[]): string {
+    return boards.map((board) => board.boardName).join(", ");
   }
 
   /** Focus tiles toggle: clicking the engaged one clears the filter rather than dead-ending. */

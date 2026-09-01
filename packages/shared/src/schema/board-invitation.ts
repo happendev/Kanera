@@ -32,6 +32,9 @@ export const boardInvitations = pgTable(
   (t) => [
     check("board_invitations_role_ck", valueIn(t.role, BOARD_ROLES)),
     index("board_invitations_client_email_idx").on(t.clientId, sql`lower(${t.email})`),
+    // The recipient's pending-invitation lookup on /home/boards matches by email across all
+    // tenants (the invitee has no client_id yet), so it cannot use the client-led index above.
+    index("board_invitations_email_idx").on(sql`lower(${t.email})`),
     index("board_invitations_board_id_idx").on(t.boardId),
   ],
 );

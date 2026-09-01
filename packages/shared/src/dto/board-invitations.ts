@@ -11,6 +11,9 @@ export type CreateBoardInvitationBody = z.infer<typeof createBoardInvitationBody
 
 export const boardInvitationLookupResponse = z.object({
   id: z.uuid(),
+  // The token is a bearer secret delivered only to the invited mailbox. Possession proves receipt,
+  // and the unauthenticated lookup endpoint remains rate-limited.
+  email: z.email(),
   boardId: z.string(),
   boardName: z.string(),
   workspaceName: z.string(),
@@ -27,6 +30,21 @@ export const boardInvitationLookupResponse = z.object({
   })).optional(),
 });
 export type BoardInvitationLookupResponse = z.infer<typeof boardInvitationLookupResponse>;
+
+export const pendingBoardInvitationSummary = z.object({
+  id: z.uuid(),
+  orgName: z.string(),
+  invitedByName: z.string(),
+  expiresAt: z.string().nullable(),
+  boards: z.array(z.object({
+    boardId: z.string(),
+    boardName: z.string(),
+    workspaceName: z.string(),
+    role: z.enum(BOARD_ROLES),
+    assignedItemsOnly: z.boolean(),
+  })),
+});
+export type PendingBoardInvitationSummary = z.infer<typeof pendingBoardInvitationSummary>;
 
 export const acceptBoardInvitationResponse = z.object({
   boardId: z.string(),

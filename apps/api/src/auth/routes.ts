@@ -1,7 +1,5 @@
 import { dto } from "@kanera/shared";
 import {
-  boardInvitationGrants,
-  boardInvitations,
   boardMembers,
   boards,
   clientMembers,
@@ -17,7 +15,7 @@ import {
   workspaces,
   mfaCredentials,
 } from "@kanera/shared/schema";
-import { and, asc, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { db } from "../db.js";
@@ -31,8 +29,8 @@ import { sendHostedBillingEmail } from "../lib/billing-emails.js";
 import { sendInternalSignupNotification } from "../lib/internal-notification-emails.js";
 import { getConfiguredS3StorageConfig, getStorageForClient } from "../lib/storage/index.js";
 import { avatarStorageKey } from "../lib/storage/keys.js";
-import { notifyAdminsBoardInviteAccepted, notifyAdminsOrgInviteAccepted } from "../lib/invite-accepted-notifications.js";
-import { assertGuestBoardLimitForBoards } from "../lib/board-guest-limits.js";
+import { notifyAdminsOrgInviteAccepted } from "../lib/invite-accepted-notifications.js";
+import { emitBoardInvitationAccepted, loadBoardInvitationGrants, loadRedeemableBoardInvitation, redeemBoardInvitationInTx, type BoardInvitationGrant, type RedeemableBoardInvitation } from "../lib/board-invitation-redemption.js";
 import { pinOrgAdminToClientBoards } from "../lib/board-membership.js";
 import { hashOpaqueToken, newOpaqueToken, newVerificationCode } from "../lib/tokens.js";
 import { emitToBoard, emitToClient, emitToClientDurable, emitToWorkspace } from "../realtime/emit.js";
@@ -235,23 +233,30 @@ export async function authRoutes(app: FastifyInstance) {
 
   async function assertSignupOpenForIntent(params: { inviteToken?: string; boardInviteToken?: string }) {
     if (env.SIGNUPS_ENABLED) return;
-    if (!params.inviteToken) {
-      // Board-invite-only signup still creates the user's home organisation before adding
-      // board access, so it follows the public signup gate rather than the org-invite exception.
-      throw forbidden("Signups are currently disabled.");
+    // An organisation invite is the strongest intent, so it is checked first: a stale board-invite
+    // token accompanying a valid org invite (tokens rotate when boards are bundled onto a pending
+    // invitation) must never block an otherwise-valid invited signup.
+    if (params.inviteToken) {
+      const [invite] = await db
+        .select({ id: inviteTokens.id })
+        .from(inviteTokens)
+        .where(
+          and(
+            eq(inviteTokens.tokenHash, hashOpaqueToken(params.inviteToken)),
+            isNull(inviteTokens.revokedAt),
+            sql`(${inviteTokens.expiresAt} is null or ${inviteTokens.expiresAt} > now())`,
+          ),
+        )
+        .limit(1);
+      if (invite) return;
     }
-    const [invite] = await db
-      .select({ id: inviteTokens.id })
-      .from(inviteTokens)
-      .where(
-        and(
-          eq(inviteTokens.tokenHash, hashOpaqueToken(params.inviteToken)),
-          isNull(inviteTokens.revokedAt),
-          sql`(${inviteTokens.expiresAt} is null or ${inviteTokens.expiresAt} > now())`,
-        ),
-      )
-      .limit(1);
-    if (!invite) throw unauthorized("invalid invite");
+    if (params.boardInviteToken) {
+      const invitation = await loadRedeemableBoardInvitation({ token: params.boardInviteToken });
+      if (!invitation) throw unauthorized("invalid invite");
+      return;
+    }
+    if (!params.inviteToken) throw forbidden("Signups are currently disabled.");
+    throw unauthorized("invalid invite");
   }
 
   async function requiresMfaForAccess(userId: string, activeClientId: string, activeRequiresMfa: boolean) {
@@ -366,12 +371,14 @@ export async function authRoutes(app: FastifyInstance) {
   app.post("/auth/request-email-verification", { preHandler: authRateLimit("request-email-verification") }, async (req) => {
     const body = dto.requestEmailVerificationBody.parse(req.body);
     await assertSignupOpenForIntent({ inviteToken: body.inviteToken, boardInviteToken: body.boardInviteToken });
-    // Verification can be disabled before SMTP is ready. Keep the endpoint benign so stale
-    // clients do not get stuck on an email send that the deployment intentionally turned off.
-    if (!env.EMAIL_VERIFICATION_ENABLED) return { ok: true };
     // This endpoint sends mail before an account exists, so Turnstile is checked here to protect
     // the inbox path. The final signup step is then protected by the one-time email code.
-    await verifyTurnstile(req, body.turnstileToken);
+    if (env.EMAIL_VERIFICATION_ENABLED) await verifyTurnstile(req, body.turnstileToken);
+    // Verification can be disabled before SMTP is ready. A token-less request must then return ok
+    // before ANY account probe — Turnstile is also skipped in this mode, so answering 409 for
+    // registered addresses would hand bots an email-enumeration oracle. Invite-carrying requests
+    // (whose tokens were themselves delivered by email) still get the existing-account steer below.
+    if (!env.EMAIL_VERIFICATION_ENABLED && !body.inviteToken && !body.boardInviteToken) return { ok: true };
     const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, body.email)).limit(1);
     if (existing) {
       if (body.inviteToken) {
@@ -387,8 +394,20 @@ export async function authRoutes(app: FastifyInstance) {
           .limit(1);
         if (invite) throw new AppError(409, "ACCOUNT_EXISTS", "An account already exists for this email. Sign in to accept the invite.", { orgName: invite.orgName });
       }
+      if (body.boardInviteToken) {
+        const invitation = await loadRedeemableBoardInvitation({ token: body.boardInviteToken });
+        if (invitation) {
+          throw new AppError(409, "ACCOUNT_EXISTS", "An account already exists for this email. Sign in to accept the invite.", {
+            orgName: invitation.orgName,
+            boardInvite: true,
+          });
+        }
+      }
       throw conflict("email already registered");
     }
+    // Verification can be disabled before SMTP is ready. Keep the endpoint benign for new
+    // addresses, while preserving the invite-aware existing-account route above.
+    if (!env.EMAIL_VERIFICATION_ENABLED) return { ok: true };
     await issueVerificationCode({ email: body.email, purpose: "signup", userId: null, log: req.log });
     return { ok: true };
   });
@@ -396,6 +415,22 @@ export async function authRoutes(app: FastifyInstance) {
   app.post("/auth/signup", { preHandler: authRateLimit("signup") }, async (req, reply) => {
     const body = dto.signupBody.parse(req.body);
     await assertSignupOpenForIntent({ inviteToken: body.inviteToken, boardInviteToken: body.boardInviteToken });
+    const boardInvitation = body.boardInviteToken
+      ? await loadRedeemableBoardInvitation({ token: body.boardInviteToken })
+      : null;
+    // Fail loud only when the board invite is the sole signup intent. Alongside a valid org
+    // invite, a stale board token (they rotate when boards are bundled onto a pending invitation)
+    // is ignored rather than blocking the stronger, still-valid invitation.
+    if (body.boardInviteToken && !boardInvitation && !body.inviteToken) {
+      throw unauthorized("This board invitation is invalid or has expired.");
+    }
+    if (boardInvitation && boardInvitation.email.toLowerCase() !== body.email.toLowerCase()) {
+      throw new AppError(
+        403,
+        "BOARD_INVITE_EMAIL_MISMATCH",
+        "This invitation was sent to a different email address. Sign up with the invited address.",
+      );
+    }
     const duplicateSignupMessage = body.boardInviteToken || body.inviteToken
       ? "An account already exists for this email. Sign in to accept the invite."
       : "email already registered";
@@ -418,6 +453,12 @@ export async function authRoutes(app: FastifyInstance) {
           ))
           .limit(1);
         if (invite) throw new AppError(409, "ACCOUNT_EXISTS", duplicateSignupMessage, { orgName: invite.orgName });
+      }
+      if (boardInvitation) {
+        throw new AppError(409, "ACCOUNT_EXISTS", duplicateSignupMessage, {
+          orgName: boardInvitation.orgName,
+          boardInvite: true,
+        });
       }
       throw conflict(duplicateSignupMessage);
     }
@@ -444,6 +485,7 @@ export async function authRoutes(app: FastifyInstance) {
         let orgRole: "owner" | "admin" | "member";
         let workspaceGrants: Array<{ workspaceId: string; role: "admin" | "member" }> = [];
         let acceptedInvite = false;
+        let redeemedInvite: { invitation: RedeemableBoardInvitation; grants: BoardInvitationGrant[] } | null = null;
 
         if (body.inviteToken) {
           acceptedInvite = true;
@@ -483,18 +525,26 @@ export async function authRoutes(app: FastifyInstance) {
           const [client] = await tx
             .insert(clients)
             .values({
-              name: body.orgName,
+              // A board-only guest still needs a home client for the identity/JWT/media tenancy
+              // invariant, but it is intentionally private and invisible in the signup journey.
+              name: boardInvitation ? "Private" : body.orgName,
               storageConfig: getConfiguredS3StorageConfig() ?? { kind: "local" },
-              // In hosted mode every new org (including a brand-new guest's own org) starts on a
-              // time-boxed trial. currentPeriodEnd is the trial end consumed by the trial-expiry
-              // sweep and surfaced to the UI; once it lapses the org reverts to free.
+              // In hosted mode a new org starts on a time-boxed trial. currentPeriodEnd is the
+              // trial end consumed by the trial-expiry sweep and surfaced to the UI; once it lapses
+              // the org reverts to free. A board-invite guest's silent home org must NOT enter that
+              // lifecycle: the sweeps select purely on billingStatus='trialing' and would otherwise
+              // email trial warnings and a downgrade notice for a trial the guest was never told
+              // about (their signup deliberately sends only the welcome email). Their org starts on
+              // the free plan; they can begin a trial later by choosing to upgrade.
               ...(env.KANERA_DEPLOYMENT_MODE === "hosted"
-                ? {
-                  pushEnabled: true,
-                  plan: "paid" as const,
-                  billingStatus: "trialing" as const,
-                  currentPeriodEnd: new Date(Date.now() + env.HOSTED_TRIAL_DAYS * 86_400_000),
-                }
+                ? boardInvitation
+                  ? { pushEnabled: true }
+                  : {
+                    pushEnabled: true,
+                    plan: "paid" as const,
+                    billingStatus: "trialing" as const,
+                    currentPeriodEnd: new Date(Date.now() + env.HOSTED_TRIAL_DAYS * 86_400_000),
+                  }
                 : {}),
             })
             .returning();
@@ -527,6 +577,30 @@ export async function authRoutes(app: FastifyInstance) {
           await tx.update(clients).set({ createdByUserId: user!.id }).where(eq(clients.id, clientId));
         }
 
+        if (boardInvitation) {
+          // The outer read gives a clear pre-verification error. Revalidation here is the
+          // concurrency boundary; a seat failure or concurrent redemption rolls back the account,
+          // private client, and every board membership together.
+          const currentInvitation = await loadRedeemableBoardInvitation({ token: body.boardInviteToken! }, tx);
+          if (!currentInvitation) throw conflict("invitation already accepted");
+          // A board invite from the org this signup just joined via inviteToken is moot: org
+          // membership supersedes guest access, and board_members rows are for cross-organisation
+          // guests only (the accept route rejects the same combination). Skip rather than fail so
+          // the org-invite signup still completes; the host can revoke the leftover invitation.
+          if (currentInvitation.hostClientId !== clientId) {
+            const grants = await loadBoardInvitationGrants(currentInvitation, tx);
+            await redeemBoardInvitationInTx(tx, {
+              invitation: currentInvitation,
+              grants,
+              userId: user!.id,
+              redeemerEmail: user!.email,
+              targetClientId: clientId,
+              createdById: currentInvitation.invitedById,
+            });
+            redeemedInvite = { invitation: currentInvitation, grants };
+          }
+        }
+
         if (workspaceGrants.length > 0) {
           await tx.insert(workspaceMembers).values(
             workspaceGrants.map((g) => ({
@@ -550,7 +624,8 @@ export async function authRoutes(app: FastifyInstance) {
           orgName: orgName!,
           orgRole,
           acceptedInvite,
-          boardInviteToken: body.boardInviteToken,
+          redeemedInvite,
+          boardInviteRedirect: redeemedInvite ? `/b/${redeemedInvite.grants[0]!.boardId}` : null,
         };
       });
 
@@ -579,7 +654,11 @@ export async function authRoutes(app: FastifyInstance) {
           event_version: ANALYTICS_EVENT_VERSION,
         },
       });
-      if (env.KANERA_DEPLOYMENT_MODE === "hosted" && !result.acceptedInvite) {
+      // Single source for every trial-start side effect (analytics below, email switch further
+      // down): a signup that joined an existing org or redeemed a board invite starts no trial,
+      // and its silent home org was created without trial billing columns to match.
+      const startsHostedTrial = env.KANERA_DEPLOYMENT_MODE === "hosted" && !result.acceptedInvite && !result.redeemedInvite;
+      if (startsHostedTrial) {
         void productAnalytics.capture({
           event: "trial_started",
           distinctId: result.user.id,
@@ -608,101 +687,14 @@ export async function authRoutes(app: FastifyInstance) {
         });
       }
 
-      // Redeem a board invitation if one was provided at signup.
-      let boardInviteRedirect: string | null = null;
-      if (result.boardInviteToken) {
-        const [invitation] = await db
-          .select({
-            id: boardInvitations.id,
-            boardId: boardInvitations.boardId,
-            boardName: boards.name,
-            role: boardInvitations.role,
-            email: boardInvitations.email,
-            hostClientId: workspaces.clientId,
-            orgName: clients.name,
-            workspaceId: workspaces.id,
-          })
-          .from(boardInvitations)
-          .innerJoin(boards, eq(boards.id, boardInvitations.boardId))
-          .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
-          .innerJoin(clients, eq(clients.id, workspaces.clientId))
-          .where(
-            and(
-              eq(boardInvitations.tokenHash, hashOpaqueToken(result.boardInviteToken)),
-              isNull(boardInvitations.revokedAt),
-              isNull(boardInvitations.acceptedAt),
-              sql`(${boardInvitations.expiresAt} is null or ${boardInvitations.expiresAt} > now())`,
-            ),
-          )
-          .limit(1);
-        if (
-          invitation &&
-          invitation.hostClientId !== result.user.clientId &&
-          invitation.email.toLowerCase() === result.user.email.toLowerCase()
-        ) {
-          const grantRows = await db
-            .select({
-              boardId: boardInvitationGrants.boardId,
-              boardName: boards.name,
-              workspaceId: boards.workspaceId,
-              role: boardInvitationGrants.role,
-            })
-            .from(boardInvitationGrants)
-            .innerJoin(boards, eq(boards.id, boardInvitationGrants.boardId))
-            .where(and(eq(boardInvitationGrants.invitationId, invitation.id), isNull(boards.archivedAt)))
-            .orderBy(asc(boards.position));
-          const grants = grantRows.length > 0
-            ? grantRows
-            : [{ boardId: invitation.boardId, boardName: invitation.boardName, workspaceId: invitation.workspaceId, role: invitation.role }];
-
-          await db.transaction(async (tx) => {
-            // Crossing the host org's free guest-board cap consumes a seat from its purchased pool. The
-            // host pre-paid for capacity, so this only fails if the pool is full (402 SEAT_LIMIT_REACHED).
-            // Runs in-tx with the membership inserts for race-safe gating.
-            await assertGuestBoardLimitForBoards({
-              hostClientId: invitation.hostClientId,
-              boardIds: grants.map((grant) => grant.boardId),
-              userId: result.user.id,
-              targetClientId: result.user.clientId,
-              createdById: undefined,
-              tx,
-            });
-            for (const grant of grants) {
-              await tx
-                .insert(boardMembers)
-                .values({ boardId: grant.boardId, userId: result.user.id, role: grant.role })
-                .onConflictDoUpdate({
-                  target: [boardMembers.boardId, boardMembers.userId],
-                  set: { role: grant.role },
-                });
-            }
-            await tx
-              .update(boardInvitations)
-              .set({ acceptedAt: new Date(), acceptedByUserId: result.user.id })
-              .where(eq(boardInvitations.id, invitation.id));
-          });
-          await captureWorkspaceMemberJoined({
-            organizationId: invitation.hostClientId,
-            workspaceIds: [...new Set(grants.map((grant) => grant.workspaceId))],
-            actorId: result.user.id,
-            joinSource: "guest_invitation",
-          });
-          const firstGrant = grants[0]!;
-          boardInviteRedirect = `/b/${firstGrant.boardId}`;
-          await notifyAdminsBoardInviteAccepted(app, {
-            acceptedUserId: result.user.id,
-            acceptedByName: result.user.displayName,
-            acceptedByEmail: result.user.email,
-            hostClientId: invitation.hostClientId,
-            orgName: invitation.orgName,
-            boardId: firstGrant.boardId,
-            boardName: firstGrant.boardName,
-            boardRole: firstGrant.role,
-          });
-        }
+      if (result.redeemedInvite) {
+        await emitBoardInvitationAccepted(app, {
+          invitation: result.redeemedInvite.invitation,
+          grants: result.redeemedInvite.grants,
+          user: result.user,
+        });
       }
 
-      const startsHostedTrial = env.KANERA_DEPLOYMENT_MODE === "hosted" && !result.acceptedInvite;
       // A new hosted owner gets the trial-start message below, which now includes the account-ready
       // context and trial next steps. Avoid sending a second generic welcome email in the same minute.
       if (!startsHostedTrial) await app.mailer.sendWelcome(result.user.email, result.user.displayName);
@@ -763,7 +755,7 @@ export async function authRoutes(app: FastifyInstance) {
         // seat_limit, not headcount. Capacity is only charged when the admin explicitly buys seats.
       }
 
-      return { accessToken, user: { ...(await meResponseFor(result.user.id, result.user.clientId)), boardInviteRedirect } };
+      return { accessToken, user: { ...(await meResponseFor(result.user.id, result.user.clientId)), boardInviteRedirect: result.boardInviteRedirect } };
     } catch (err: unknown) {
       if (isUniqueViolation(err)) throw conflict(duplicateSignupMessage);
       throw err;

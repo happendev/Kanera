@@ -1,4 +1,5 @@
 import { dto } from "@kanera/shared";
+import type { PendingBoardInvitationSummary } from "@kanera/shared/dto";
 import { SERVER_EVENTS } from "@kanera/shared/events";
 import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
 import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
@@ -1547,6 +1548,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           ? await db.select().from(standaloneBoardGroups).where(eq(standaloneBoardGroups.id, workspaceBoards[0].standaloneGroupId))
           : [],
         dueSoon: [],
+        pendingBoardInvitations: [],
       };
     }
 
@@ -1853,6 +1855,96 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
 
     const guestGroups = [...guestGrouped.values()];
 
+    let pendingBoardInvitations: PendingBoardInvitationSummary[] = [];
+    // Pending invitations are personal recipient state tied to the human's mailbox. Workspace API
+    // keys act on behalf of an integration, not a person, so they must neither see nor redeem them.
+    if (req.auth.authKind !== "apiKey") {
+      const invitationRows = await db
+        .select({
+          id: boardInvitations.id,
+          orgName: clients.name,
+          invitedByName: users.displayName,
+          expiresAt: boardInvitations.expiresAt,
+          boardId: boardInvitations.boardId,
+          boardName: boards.name,
+          boardArchivedAt: boards.archivedAt,
+          workspaceName: workspaces.name,
+          role: boardInvitations.role,
+          assignedItemsOnly: boardInvitations.assignedItemsOnly,
+        })
+        .from(boardInvitations)
+        .innerJoin(boards, eq(boards.id, boardInvitations.boardId))
+        .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+        .innerJoin(clients, eq(clients.id, workspaces.clientId))
+        .innerJoin(users, eq(users.id, boardInvitations.invitedById))
+        .leftJoin(clientMembers, and(
+          eq(clientMembers.clientId, workspaces.clientId),
+          eq(clientMembers.userId, userId),
+        ))
+        .where(and(
+          // Scalar subquery instead of a separate viewer read: this handler runs on every shell
+          // load, so the match stays a single round trip. "user" is joined above for invitedByName,
+          // hence the raw aliased subquery.
+          sql`lower(${boardInvitations.email}) = (select lower(u.email) from "user" u where u.id = ${userId})`,
+          isNull(boardInvitations.revokedAt),
+          isNull(boardInvitations.acceptedAt),
+          sql`(${boardInvitations.expiresAt} is null or ${boardInvitations.expiresAt} > now())`,
+          // Any retained host membership blocks the guest fallback, matching guestGroups above.
+          isNull(clientMembers.userId),
+          isNull(clients.suspendedAt),
+          isNull(clients.deletedAt),
+        ))
+        .orderBy(asc(boardInvitations.createdAt));
+
+      if (invitationRows.length > 0) {
+        const grantRows = await db
+          .select({
+            invitationId: boardInvitationGrants.invitationId,
+            boardId: boardInvitationGrants.boardId,
+            boardName: boards.name,
+            workspaceName: workspaces.name,
+            role: boardInvitationGrants.role,
+            assignedItemsOnly: boardInvitationGrants.assignedItemsOnly,
+          })
+          .from(boardInvitationGrants)
+          .innerJoin(boards, and(eq(boards.id, boardInvitationGrants.boardId), isNull(boards.archivedAt)))
+          .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+          .where(inArray(boardInvitationGrants.invitationId, invitationRows.map((row) => row.id)))
+          .orderBy(asc(boards.position));
+        const grantsByInvitation = new Map<string, PendingBoardInvitationSummary["boards"]>();
+        for (const grant of grantRows) {
+          const grants = grantsByInvitation.get(grant.invitationId) ?? [];
+          grants.push({
+            boardId: grant.boardId,
+            boardName: grant.boardName,
+            workspaceName: grant.workspaceName,
+            role: grant.role,
+            assignedItemsOnly: grant.assignedItemsOnly,
+          });
+          grantsByInvitation.set(grant.invitationId, grants);
+        }
+        pendingBoardInvitations = invitationRows
+          .map((invitation) => ({
+            id: invitation.id,
+            orgName: invitation.orgName,
+            invitedByName: invitation.invitedByName,
+            expiresAt: invitation.expiresAt?.toISOString() ?? null,
+            // The primary-board fallback applies the same archived filter as grant rows, matching
+            // loadBoardInvitationGrants: an invitation whose every board is archived must not
+            // render an Accept button that redemption would refuse.
+            boards: grantsByInvitation.get(invitation.id)
+              ?? (invitation.boardArchivedAt ? [] : [{
+                boardId: invitation.boardId,
+                boardName: invitation.boardName,
+                workspaceName: invitation.workspaceName,
+                role: invitation.role,
+                assignedItemsOnly: invitation.assignedItemsOnly,
+              }]),
+          }))
+          .filter((invitation) => invitation.boards.length > 0);
+      }
+    }
+
     const referencedStandaloneGroupIds = [...new Set(
       [...groups, ...guestGroups].flatMap((group) => group.boards.map((board) => board.standaloneGroupId).filter((id): id is string => !!id)),
     )];
@@ -1958,7 +2050,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       );
     }
 
-    return { groups, guestGroups, standaloneBoardGroups: standaloneBoardGroupRows, dueSoon, overdueChecklistItems };
+    return { groups, guestGroups, standaloneBoardGroups: standaloneBoardGroupRows, dueSoon, overdueChecklistItems, pendingBoardInvitations };
   };
 
   // The web app retains its home-shaped route. Public integrations use the board directory route,

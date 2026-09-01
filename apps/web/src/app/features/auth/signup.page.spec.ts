@@ -18,7 +18,9 @@ describe("SignupPage", () => {
   let deploymentMode: "self_hosted" | "hosted";
   let inviteToken: string | null;
   let boardInviteToken: string | null;
+  let boardLookupStatus: number | null;
   let accountExists: boolean;
+  let boardInviteRedirect: string | null;
 
   const authResponse = {
     accessToken: "access-token",
@@ -53,7 +55,9 @@ describe("SignupPage", () => {
     deploymentMode = "hosted";
     inviteToken = null;
     boardInviteToken = null;
+    boardLookupStatus = null;
     accountExists = false;
+    boardInviteRedirect = null;
     setSession = vi.fn();
     navigateByUrl = vi.fn();
     fetchMock = vi.fn(async (input: RequestInfo | URL) => {
@@ -64,13 +68,28 @@ describe("SignupPage", () => {
       if (url.includes("/invites/lookup")) {
         return response({ orgName: "Invite Org", orgRole: "member", workspaces: [] });
       }
+      if (url.includes("/board-invitations/lookup")) {
+        if (boardLookupStatus !== null) return response({}, false, boardLookupStatus);
+        return response({
+          id: "board-invite-1",
+          email: "owner@example.com",
+          boardId: "board-1",
+          boardName: "Delivery",
+          workspaceName: "Product",
+          clientName: "Invite Org",
+          role: "editor",
+          assignedItemsOnly: false,
+          expiresAt: null,
+          boards: [{ boardId: "board-1", boardName: "Delivery", workspaceName: "Product", role: "editor", assignedItemsOnly: false }],
+        });
+      }
       if (url.endsWith("/auth/request-email-verification")) {
         if (accountExists) return response({ code: "ACCOUNT_EXISTS", message: "Sign in to accept the invite." }, false, 409);
         return response({ ok: true });
       }
       if (url.endsWith("/auth/signup")) {
         if (accountExists) return response({ code: "ACCOUNT_EXISTS", message: "Sign in to accept the invite." }, false, 409);
-        return response(authResponse);
+        return response({ ...authResponse, user: { ...authResponse.user, boardInviteRedirect } });
       }
       return response({}, false, 404);
     });
@@ -121,7 +140,7 @@ describe("SignupPage", () => {
     const urls = fetchMock.mock.calls.map(([input]) => urlFromRequest(input as RequestInfo | URL));
     expect(urls.some((url) => url.endsWith("/auth/signup"))).toBe(true);
     expect(urls.some((url) => url.endsWith("/auth/request-email-verification"))).toBe(false);
-    expect(setSession).toHaveBeenCalledWith("access-token", authResponse.user);
+    expect(setSession).toHaveBeenCalledWith("access-token", { ...authResponse.user, boardInviteRedirect: null });
     expect(navigateByUrl).toHaveBeenCalledWith("/");
     const signupCall = fetchMock.mock.calls.find(([input]) => urlFromRequest(input as RequestInfo | URL).endsWith("/auth/signup"));
     expect(JSON.parse((signupCall?.[1] as RequestInit).body as string)).toMatchObject({
@@ -246,6 +265,67 @@ describe("SignupPage", () => {
 
     expect(navigateByUrl).toHaveBeenCalledWith("/invite?token=verified-existing-token");
     expect(fixture.componentInstance.step()).toBe("details");
+  });
+
+  it("prefills and locks the invited email while hiding organisation name", async () => {
+    boardInviteToken = "board-token";
+    await createPage();
+    await vi.waitFor(() => expect(fixture.componentInstance.email()).toBe("owner@example.com"));
+    await fixture.whenStable();
+
+    const element = fixture.nativeElement as HTMLElement;
+    const email = element.querySelector<HTMLInputElement>("#email");
+    expect(email?.value).toBe("owner@example.com");
+    expect(email?.readOnly).toBe(true);
+    expect(element.querySelector("#cname")).toBeNull();
+    expect(element.textContent).toContain("Delivery");
+    expect(element.textContent).toContain("Invite Org");
+  });
+
+  it("keeps the invite token when the lookup fails transiently", async () => {
+    boardInviteToken = "board-token";
+    boardLookupStatus = 429;
+    await createPage();
+    await vi.waitFor(() => expect(fixture.componentInstance.boardInviteNotice()).not.toBeNull());
+
+    // A rate limit or network blip must not downgrade the flow to a disconnected plain signup:
+    // the token still travels with the submission and the API enforces the invited-email match.
+    expect(fixture.componentInstance.boardInviteToken()).toBe("board-token");
+    expect(fixture.componentInstance.boardInvite()).toBeNull();
+  });
+
+  it("drops the invite token only when the invitation no longer exists", async () => {
+    boardInviteToken = "board-token";
+    boardLookupStatus = 404;
+    await createPage();
+    await vi.waitFor(() => expect(fixture.componentInstance.boardInviteNotice()).not.toBeNull());
+
+    expect(fixture.componentInstance.boardInviteToken()).toBeNull();
+    expect(fixture.componentInstance.boardInviteNotice()).toContain("revoked or expired");
+  });
+
+  it("routes an existing board invitee through login with the token", async () => {
+    boardInviteToken = "board-token";
+    accountExists = true;
+    await createPage();
+    fillValidForm();
+
+    await fixture.componentInstance.submit(submitEvent());
+
+    expect(navigateByUrl).toHaveBeenCalledWith(
+      "/login?returnUrl=%2Fboard-invite%3Ftoken%3Dboard-token",
+    );
+  });
+
+  it("lands on the redeemed board returned by signup", async () => {
+    boardInviteToken = "board-token";
+    boardInviteRedirect = "/b/board-1";
+    await createPage();
+    fillValidForm();
+
+    await fixture.componentInstance.submit(submitEvent());
+
+    expect(navigateByUrl).toHaveBeenCalledWith("/b/board-1");
   });
 });
 
