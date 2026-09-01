@@ -17,10 +17,12 @@ export const workspaceGuard: CanActivateFn = async () => {
     const home = await api.get<{
       groups?: { workspace: { kind?: "standard" | "board" }; boards: unknown[] }[];
       guestGroups?: { boards: unknown[] }[];
+      pendingBoardInvitations?: unknown[];
     }>("/home/boards").catch(() => null);
     const hasGuestBoards = home?.guestGroups?.some((group) => group.boards.length > 0) ?? false;
     const hasStandaloneBoards = home?.groups?.some((group) => group.workspace.kind === "board" && group.boards.length > 0) ?? false;
-    if (!hasGuestBoards && !hasStandaloneBoards) return router.createUrlTree(["/onboarding"]);
+    const hasPendingInvitations = (home?.pendingBoardInvitations?.length ?? 0) > 0;
+    if (!hasGuestBoards && !hasStandaloneBoards && !hasPendingInvitations) return router.createUrlTree(["/onboarding"]);
   }
   return true;
 };

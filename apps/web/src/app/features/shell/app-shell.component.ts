@@ -10,6 +10,7 @@ import type { Subscription } from "rxjs";
 import { filter } from "rxjs/operators";
 import { ApiClient, ORGANISATION_SWITCH_NAVIGATOR } from "../../core/api/api.client";
 import { AuthService, authenticatedLandingPath } from "../../core/auth/auth.service";
+import { PendingInvitationsService } from "../../core/board-invitations/pending-invitations.service";
 import { STORAGE_KEYS, organisationStorageKey } from "../../core/browser/browser-contracts";
 import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { BrowserPushService } from "../../core/notifications/browser-push.service";
@@ -116,6 +117,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private readonly browserPush = inject(BrowserPushService);
   private readonly dialog = inject(Dialog);
   private readonly notifications = inject(NotificationsService);
+  private readonly pendingInvitations = inject(PendingInvitationsService);
   private readonly myPriorities = inject(MyPrioritiesService);
   protected readonly scratchpad = inject(ScratchpadService);
   protected readonly scratchpadResizing = signal(false);
@@ -641,6 +643,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
       const response = await this.api.get<HomeResponse>("/home/boards");
       groups = response.groups;
       guestGroups = response.guestGroups ?? [];
+      this.pendingInvitations.setFromHome({
+        guestGroups,
+        pendingBoardInvitations: response.pendingBoardInvitations ?? [],
+      });
       this.standaloneBoardGroups.set(response.standaloneBoardGroups ?? []);
       this.usingOfflineShell.set(false);
       void this.offlineCache.saveShell(this.user()!.clientId, response.groups, guestGroups, response.standaloneBoardGroups ?? []).catch(() => undefined);
@@ -649,6 +655,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
       if (!cached) throw error;
       groups = cached.groups;
       guestGroups = cached.guestGroups ?? [];
+      this.pendingInvitations.setFromHome({ guestGroups, pendingBoardInvitations: [] });
       this.standaloneBoardGroups.set(cached.standaloneBoardGroups ?? []);
       this.usingOfflineShell.set(true);
     }
@@ -927,6 +934,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private applyHomeResponse(response: HomeResponse): void {
     const groups = response.groups;
     const guestGroups = response.guestGroups ?? [];
+    this.pendingInvitations.setFromHome({
+      guestGroups,
+      pendingBoardInvitations: response.pendingBoardInvitations ?? [],
+    });
     this.groups.set(groups.map((g) => ({ ...g, boardGroups: sortBoardGroups(g.boardGroups ?? []), boards: sortBoards(g.boards), members: g.members ?? [] })));
     this.guestGroups.set(guestGroups.map((g) => ({ ...g, boardGroups: sortBoardGroups(g.boardGroups ?? []), boards: sortBoards(g.boards) })));
     this.standaloneBoardGroups.set(response.standaloneBoardGroups ?? []);

@@ -253,7 +253,7 @@ void test("disabled signups still allow valid organisation invite signup", async
   });
 });
 
-void test("disabled signups reject board-invite-only signup", async () => {
+void test("disabled signups reject an invalid board-invite-only signup as unauthorized", async () => {
   await withSignupsDisabled(async () => {
     const app = await buildIntegrationServer();
     const res = await app.inject({
@@ -267,7 +267,7 @@ void test("disabled signups reject board-invite-only signup", async () => {
         boardInviteToken: "board-token",
       },
     });
-    assert.equal(res.statusCode, 403);
+    assert.equal(res.statusCode, 401);
 
     const rows = await db.select({ id: users.id }).from(users).where(eq(users.email, "closed-board-guest@example.com"));
     assert.equal(rows.length, 0);
@@ -364,6 +364,32 @@ void test("signup succeeds with a valid code and marks the email verified", asyn
     });
     assert.equal(reuse.statusCode, 400);
   });
+});
+
+void test("disabled verification keeps token-less verification requests benign for registered addresses", async () => {
+  // With verification (and therefore Turnstile) off, a token-less probe must answer identically for
+  // registered and unregistered addresses — otherwise this endpoint is an account-enumeration oracle.
+  const app = await buildIntegrationServer();
+  await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: { orgName: "Oracle Org", email: "oracle-owner@example.com", password: "Abc12345", displayName: "Owner" },
+  });
+
+  const registered = await app.inject({
+    method: "POST",
+    url: "/auth/request-email-verification",
+    payload: { email: "oracle-owner@example.com" },
+  });
+  const unregistered = await app.inject({
+    method: "POST",
+    url: "/auth/request-email-verification",
+    payload: { email: "oracle-nobody@example.com" },
+  });
+  assert.equal(registered.statusCode, 200, registered.body);
+  assert.equal(unregistered.statusCode, 200, unregistered.body);
+  assert.deepEqual(registered.json(), { ok: true });
+  assert.deepEqual(unregistered.json(), { ok: true });
 });
 
 void test("request-email-verification refuses an already-registered address", async () => {

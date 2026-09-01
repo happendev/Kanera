@@ -86,6 +86,17 @@ export class LoginPage {
   ));
   readonly kaneraEnvironment = signal<KaneraEnvironment>("production");
   readonly returnUrl = input<string>();
+  readonly signupLink = computed(() => {
+    const value = this.returnUrl();
+    if (!value?.startsWith("/") || value.startsWith("//")) return "/signup";
+    try {
+      const parsed = new URL(value, "https://kanera.local");
+      const token = parsed.pathname === "/board-invite" ? parsed.searchParams.get("token")?.trim() : null;
+      return token ? `/signup?boardInviteToken=${encodeURIComponent(token)}` : "/signup";
+    } catch {
+      return "/signup";
+    }
+  });
   readonly environmentBannerLabel = computed(() => environmentBannerLabel(this.kaneraEnvironment()));
 
   constructor() {

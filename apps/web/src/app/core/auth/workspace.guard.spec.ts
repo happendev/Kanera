@@ -10,6 +10,7 @@ describe("workspaceGuard", () => {
   type GuardHome = {
     groups: Array<{ workspace: { kind?: "standard" | "board" }; boards: unknown[] }>;
     guestGroups: Array<{ boards: unknown[] }>;
+    pendingBoardInvitations?: unknown[];
   };
 
   const hydrate = vi.fn(async () => undefined);
@@ -50,6 +51,13 @@ describe("workspaceGuard", () => {
   it("redirects a genuinely empty admin organisation to onboarding", async () => {
     await expect(runGuard()).resolves.toBe(redirectTree);
     expect(createUrlTree).toHaveBeenCalledWith(["/onboarding"]);
+  });
+
+  it("allows an admin with a pending board invitation into the app", async () => {
+    get.mockResolvedValue({ groups: [], guestGroups: [], pendingBoardInvitations: [{ id: "invite-1" }] });
+
+    await expect(runGuard()).resolves.toBe(true);
+    expect(createUrlTree).not.toHaveBeenCalled();
   });
 
   it("does not load home content when a standard workspace already exists", async () => {

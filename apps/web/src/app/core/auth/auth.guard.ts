@@ -15,11 +15,17 @@ export const authGuard: CanActivateFn = async (_route, state) => {
 
 // Keeps logged-in users out of public auth screens like login and signup.
 // The root route then applies the normal workspace/onboarding routing rules.
-export const publicAuthGuard: CanActivateFn = async () => {
+export const publicAuthGuard: CanActivateFn = async (route) => {
   const auth = inject(AuthService);
   const router = inject(Router);
   await auth.hydrate();
   if (!auth.isAuthenticated()) return true;
+  const boardInviteToken = route.queryParamMap.get("boardInviteToken")?.trim();
+  if (boardInviteToken) {
+    return router.createUrlTree(["/board-invite"], { queryParams: { token: boardInviteToken } });
+  }
+  const returnUrl = route.queryParamMap.get("returnUrl")?.trim();
+  if (returnUrl?.startsWith("/") && !returnUrl.startsWith("//")) return router.parseUrl(returnUrl);
   return router.createUrlTree(["/"]);
 };
 

@@ -48,6 +48,50 @@
     </div>
     }
 
+    @if (invitations.pending().length > 0) {
+    <section class="invitation-panel" aria-labelledby="pending-invitations-heading">
+      <div class="invitation-heading">
+        <i class="ti ti-mail-opened"></i>
+        <div>
+          <h2 id="pending-invitations-heading">Pending invitations</h2>
+          <p>Board access waiting for you.</p>
+        </div>
+      </div>
+      <div class="invitation-list">
+        @for (invitation of invitations.pending(); track invitation.id) {
+        <div class="invitation-row">
+          <div class="invitation-copy">
+            <strong>{{ invitation.orgName }}</strong>
+            <span>{{ invitationBoardNames(invitation.boards) }} · invited by {{ invitation.invitedByName }}</span>
+          </div>
+          <button type="button" class="sm" [disabled]="acceptingInvitationId() !== null" (click)="acceptInvitation(invitation.id)">
+            @if (acceptingInvitationId() === invitation.id) {
+            <i class="ti ti-loader-2 kanera-spin"></i> Accepting…
+            } @else {
+            <i class="ti ti-check"></i> Accept
+            }
+          </button>
+        </div>
+        }
+      </div>
+      @if (invitationError()) {
+      <p class="invitation-error" role="alert"><i class="ti ti-alert-circle"></i>{{ invitationError() }}</p>
+      }
+    </section>
+    }
+
+    @if (invitations.guestOrgs().length > 0) {
+    <section class="guest-affordances" aria-label="Guest organisations">
+      @for (organisation of invitations.guestOrgs(); track organisation.clientId) {
+      <a [routerLink]="['/b', organisation.firstBoardId]">
+        <i class="ti ti-users-group"></i>
+        <span>You're a guest on <strong>{{ organisation.orgName }}</strong> — view boards</span>
+        <i class="ti ti-arrow-right"></i>
+      </a>
+      }
+    </section>
+    }
+
     @if (state.loading() && state.response().items.length === 0 && !state.error()) {
     <!-- Skeleton shaped like the final layout, so nothing jumps when the data lands. The page must
          never render an empty <main>: a blank screen was the old failure mode on a slow request. -->

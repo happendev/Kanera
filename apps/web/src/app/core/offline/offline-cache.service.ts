@@ -1,5 +1,5 @@
 import { Injectable } from "@angular/core";
-import type { HomeTodayResponse, PortfolioSummary, SavedWorkView, WorkCatalog, WorkQueryResponse, WorkViewDefinition } from "@kanera/shared/dto";
+import type { HomeTodayResponse, PendingBoardInvitationSummary, PortfolioSummary, SavedWorkView, WorkCatalog, WorkQueryResponse, WorkViewDefinition } from "@kanera/shared/dto";
 import type { CardAttachmentRow, CardFeedItem, WireBoardMemberUser, WireCard, WireCardDetail, WireCardLabel, WireCardSummary, WireChecklistTemplate, WireList, WireNote, WireSeparator } from "@kanera/shared/events";
 import type {
   Board,
@@ -85,6 +85,8 @@ export type HomeResponse = {
   // card-based per-board overdue stats so the UI can surface it as its own chip without
   // conflating the two entity types.
   overdueChecklistItems: number;
+  /** Live bearer-token invitations are never persisted in OfflineShellEntry. */
+  pendingBoardInvitations?: PendingBoardInvitationSummary[];
 };
 
 export type OfflineShellEntry = {

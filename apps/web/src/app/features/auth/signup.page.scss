@@ -127,6 +127,26 @@ form {
   i { font-size: 15px; flex-shrink: 0; }
 }
 
+.notice-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 14px;
+
+  i { margin-top: 1px; color: var(--text); }
+}
+
+input[readonly] {
+  background: var(--surface-2);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
 .closed-signup {
   display: flex;
   flex-direction: column;

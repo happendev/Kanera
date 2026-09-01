@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, Component, inject, input, signal } from "@angular/core";
 import type { OnInit } from "@angular/core";
 import { Router } from "@angular/router";
-import { ApiClient, ApiError } from "../../core/api/api.client";
+import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
+import { describeAcceptInvitationError } from "../../core/board-invitations/pending-invitations.service";
 import { LogoComponent } from "../../shared/logo.component";
 
 interface InviteDetails {
@@ -40,6 +41,9 @@ export class BoardInvitePage implements OnInit {
   readonly isLoggedIn = this.auth.isAuthenticated;
 
   async ngOnInit() {
+    // A refresh cookie can restore a session on a cold invite load. Hydrate before choosing between
+    // the Accept button and signup/login links so authenticated recipients never lose the token.
+    await this.auth.hydrate();
     const token = this.token();
     if (!token) {
       this.state.set("invalid");
@@ -64,11 +68,7 @@ export class BoardInvitePage implements OnInit {
       this.state.set("accepted");
       await this.router.navigate(["/b", invite.boardId]);
     } catch (err: unknown) {
-      if (err instanceof ApiError && (err.body as { code?: string } | undefined)?.code === "SEAT_LIMIT_REACHED") {
-        this.errorMessage.set("This organisation has no available seats. Ask an admin to purchase more seats, then try again.");
-      } else {
-        this.errorMessage.set((err as { message?: string })?.message ?? "Could not accept the invitation.");
-      }
+      this.errorMessage.set(describeAcceptInvitationError(err).message);
     } finally {
       this.busy.set(false);
     }

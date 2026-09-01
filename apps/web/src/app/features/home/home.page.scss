@@ -553,6 +553,94 @@
   }
 }
 
+.invitation-panel {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.invitation-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  > i {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: var(--radius);
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 17px;
+  }
+
+  h2, p { margin: 0; }
+  h2 { color: var(--text); font-size: 14px; font-weight: 650; }
+  p { margin-top: 2px; color: var(--text-muted); font-size: 12px; }
+}
+
+.invitation-list {
+  display: grid;
+  border-top: 1px solid var(--border);
+}
+
+.invitation-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+
+  &:last-child { padding-bottom: 0; border-bottom: 0; }
+}
+
+.invitation-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+
+  strong { color: var(--text); font-size: 13px; }
+  span { color: var(--text-muted); font-size: 12px; line-height: 1.4; }
+}
+
+.invitation-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.guest-affordances {
+  display: grid;
+  gap: 6px;
+
+  a {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 38px;
+    padding: 0 11px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text-muted);
+    font-size: 13px;
+    text-decoration: none;
+
+    &:hover { border-color: var(--border-strong); background: var(--surface-2); color: var(--text); }
+    strong { color: var(--text); font-weight: 600; }
+    .ti-arrow-right { margin-left: auto; }
+  }
+}
+
 // ─── Responsive ─────────────────────────────────────────────────────────────
 
 @container (max-width: 900px) {
@@ -584,6 +672,13 @@
 
   .account-status-action {
     width: 100%;
+  }
+
+  .invitation-row {
+    align-items: stretch;
+    flex-direction: column;
+
+    button { width: 100%; }
   }
 
   .progress-strip {

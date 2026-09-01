@@ -10,8 +10,10 @@ import { BoardInvitePage } from "./board-invite.page";
 
 describe("BoardInvitePage", () => {
   let fixture: ComponentFixture<BoardInvitePage>;
+  let hydrate: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
+    hydrate = vi.fn(async () => undefined);
     await TestBed.configureTestingModule({
       imports: [BoardInvitePage],
       providers: [
@@ -31,7 +33,7 @@ describe("BoardInvitePage", () => {
             post: vi.fn(),
           },
         },
-        { provide: AuthService, useValue: { isAuthenticated: signal(false) } },
+        { provide: AuthService, useValue: { isAuthenticated: signal(false), hydrate } },
         { provide: ThemeService, useValue: { theme: signal("dark") } },
         { provide: Router, useValue: { navigate: vi.fn() } },
       ],
@@ -47,5 +49,6 @@ describe("BoardInvitePage", () => {
     expect(fixture.componentInstance.loginUrl()).toBe(
       "/login?returnUrl=%2Fboard-invite%3Ftoken%3Dinvite-token",
     );
+    expect(hydrate).toHaveBeenCalledOnce();
   });
 });

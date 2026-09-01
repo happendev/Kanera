@@ -170,6 +170,14 @@ describe("LoginPage", () => {
     expect(fixture.componentInstance.environmentBannerLabel()).toBeNull();
     expect((fixture.nativeElement as HTMLElement).querySelector(".auth-env-banner")).toBeNull();
   });
+
+  it("preserves a board invitation when linking to signup", async () => {
+    await createPage();
+    fixture.componentRef.setInput("returnUrl", "/board-invite?token=board-token");
+    await fixture.whenStable();
+
+    expect(fixture.componentInstance.signupLink()).toBe("/signup?boardInviteToken=board-token");
+  });
 });
 
 function response(body: unknown, ok = true, status = 200): Response {
