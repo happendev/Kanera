@@ -616,7 +616,7 @@ services:
       - loki
 
   loki:
-    image: grafana/loki:3.7.6
+    image: grafana/loki:3.7.7
     restart: unless-stopped
     profiles: ["monitoring"]
     command: ["-config.file=/etc/loki/local-config.yaml"]
