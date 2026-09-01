@@ -1,6 +1,6 @@
 # Node LTS only. Even-numbered majors (22, 24, 26) are the LTS line; odd majors are "Current"
 # and never become LTS. Keep this on an even major, in step with .nvmrc and engines.node.
-FROM node:24.19.0-alpine AS base
+FROM node:24.20.0-alpine AS base
 # Install the repository-pinned package manager in the shared base layer. `corepack enable`
 # only creates shims, which otherwise makes every parallel dependency stage fetch pnpm itself.
 ENV COREPACK_DEFAULT_TO_LATEST=0
