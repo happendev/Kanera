@@ -171,6 +171,7 @@ export class CardDetailComponent {
   readonly addChecklistInput = viewChild<ElementRef<HTMLInputElement>>("addChecklistInput");
   readonly checklistTitleInput = viewChild<ElementRef<HTMLInputElement>>("checklistTitleInput");
   readonly checklistItemInput = viewChild<ElementRef<HTMLInputElement>>("checklistItemInput");
+  readonly checklistItemPanelTitleInput = viewChild<ElementRef<HTMLInputElement>>("checklistItemPanelTitleInput");
   readonly checklistList = viewChild.required<TemplateRef<{ checklists: WireCardChecklist[]; showItemMeta: boolean }>>("checklistList");
   readonly descriptionExpanded = signal(false);
   readonly descriptionOverflows = signal(false);
@@ -908,7 +909,14 @@ export class CardDetailComponent {
         this.checklistTitleInput()?.nativeElement.focus();
       }
       if (this.editingItemId()) {
-        this.checklistItemInput()?.nativeElement.focus();
+        // Renaming from the drawer leaves the row underneath in edit mode too, so both title inputs
+        // exist and share draftItemText. The drawer's is the one on screen, so it takes the caret.
+        const panelTitle = this.checklistItemPanelTitleInput()?.nativeElement;
+        if (panelTitle) {
+          if (document.activeElement !== panelTitle) panelTitle.focus();
+        } else {
+          this.checklistItemInput()?.nativeElement.focus();
+        }
       }
     });
 

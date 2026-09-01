@@ -1374,6 +1374,8 @@
   font-weight: 600;
   line-height: 1.4;
 
+  // Follows .card-title: the row above shows one ellipsised line, so the drawer wraps the whole item
+  // text over as many lines as it needs rather than clamping it out of reach.
   &.is-button {
     align-items: center;
     justify-content: flex-start;
@@ -1385,14 +1387,11 @@
     text-align: left;
     cursor: text;
     white-space: normal;
+    overflow-wrap: break-word;
 
     span {
-      display: -webkit-box;
+      display: block;
       min-width: 0;
-      overflow: hidden;
-      overflow-wrap: anywhere;
-      -webkit-box-orient: vertical;
-      -webkit-line-clamp: 2;
     }
   }
 }
