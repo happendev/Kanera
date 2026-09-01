@@ -748,7 +748,7 @@ services:
       - "9100"
 
   redis-exporter:
-    image: oliver006/redis_exporter:v1.89.0
+    image: oliver006/redis_exporter:v1.90.0
     restart: unless-stopped
     profiles: ["monitoring"]
     environment:
