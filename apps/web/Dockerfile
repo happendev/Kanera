@@ -1,6 +1,6 @@
 # Node LTS only. Even-numbered majors (22, 24, 26) are the LTS line; odd majors are "Current"
 # and never become LTS. Keep this on an even major, in step with .nvmrc and engines.node.
-FROM node:24.19.0-alpine AS build
+FROM node:24.20.0-alpine AS build
 # Hydrate Corepack before dependency installation so the build does not rely on an
 # implicit package-manager download at the first `pnpm` invocation.
 ENV COREPACK_DEFAULT_TO_LATEST=0
