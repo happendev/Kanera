@@ -627,7 +627,7 @@ services:
       - "3100"
 
   alloy:
-    image: grafana/alloy:v1.19.0
+    image: grafana/alloy:v1.19.2
     restart: unless-stopped
     profiles: ["monitoring"]
     command:
