@@ -596,7 +596,7 @@
                   @case ('labels') {
                     <button type="button" class="tv-cell-trigger" [disabled]="!rowEditable" (click)="openLabelsCellPicker(card, col, $event)">
                       @if (labelsForCard(card.id).length) {
-                        <k-card-labels class="tv-labels" [labels]="labelsForCard(card.id)" [limit]="3" [showOverflow]="true" [interactive]="false" />
+                        <k-card-labels class="tv-labels" [labels]="labelsForCard(card.id)" [limit]="3" [showOverflow]="true" [interactive]="false" [alwaysExpanded]="true" />
                       } @else { <span class="tv-muted">—</span> }
                     </button>
                     @if (pickerIsOpen(card.id, col)) {

@@ -53,12 +53,14 @@ export class CardLabelsComponent {
   /** Dense views can cap named chips and optionally summarize the remainder with a neutral +N. */
   readonly limit = input<number | null>(null);
   readonly showOverflow = input(false);
+  /** Table rows keep label names visible regardless of the app-wide board-card preference. */
+  readonly alwaysExpanded = input(false);
   /**
    * A label inside another control (the editable table cell) stays presentational so it does not
-   * create nested buttons. It still follows the same route-wide compressed preference.
+   * create nested buttons. Unless alwaysExpanded is set, it follows the shared display preference.
    */
   readonly interactive = input(true);
-  readonly labelsCompressed = this.labelDisplay.labelsCompressed;
+  readonly labelsCompressed = computed(() => !this.alwaysExpanded() && this.labelDisplay.labelsCompressed());
   readonly visibleLabels = computed(() => {
     const limit = this.limit();
     return limit === null ? this.labels() : this.labels().slice(0, Math.max(0, limit));
