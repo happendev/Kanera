@@ -3,9 +3,11 @@ import type { CanActivateFn } from "@angular/router";
 import { Router } from "@angular/router";
 import { ApiClient } from "../api/api.client";
 import { AuthService } from "./auth.service";
+import { isOnboardingSkipped } from "./onboarding-skip";
 
-// Gates the main app shell. Users without a workspace enter onboarding unless
-// they still have guest board access, which gives them useful app content.
+// Gates the main app shell. Users without a workspace enter onboarding unless they still have
+// guest board access, which gives them useful app content, or they chose "Skip for now" and want
+// the blank home page (which offers guided setup, board creation, and agent connection itself).
 export const workspaceGuard: CanActivateFn = async () => {
   const auth = inject(AuthService);
   const router = inject(Router);
@@ -14,6 +16,8 @@ export const workspaceGuard: CanActivateFn = async () => {
   const user = auth.user();
   if (!user) return router.createUrlTree(["/login"]);
   if (!user.hasWorkspace && auth.isOrgAdmin()) {
+    // Checked before the home fetch so a skipped user pays nothing extra on every shell entry.
+    if (isOnboardingSkipped(user)) return true;
     const home = await api.get<{
       groups?: { workspace: { kind?: "standard" | "board" }; boards: unknown[] }[];
       guestGroups?: { boards: unknown[] }[];

@@ -183,7 +183,7 @@ void test("HTTP MCP endpoint completes protocol initialization with a Kanera API
     };
     assert.equal(payload.result?.serverInfo?.name, "kanera");
     assert.equal(payload.result?.serverInfo?.title, "Kanera");
-    assert.equal(payload.result?.serverInfo?.description, "Read Kanera configuration and manage automations, cards, checklists, comments, notes, attachments, activity, work reporting, and \"Up next\" priority queues.");
+    assert.equal(payload.result?.serverInfo?.description, "Bootstrap Kanera workspaces and boards from templates, read configuration, and manage automations, cards, checklists, comments, notes, attachments, activity, work reporting, and \"Up next\" priority queues.");
     assert.equal(payload.result?.serverInfo?.websiteUrl, "https://www.kanera.app");
     assert.equal(payload.result?.serverInfo?.version, mcpPackage.version);
     assert.deepEqual(payload.result?.serverInfo?.icons, [{
@@ -196,7 +196,7 @@ void test("HTTP MCP endpoint completes protocol initialization with a Kanera API
     assert.ok(payload.result?.capabilities?.prompts);
     assert.match(payload.result?.instructions ?? "", /instead of browser automation/i);
     assert.match(payload.result?.instructions ?? "", /exact human card key/i);
-    assert.match(payload.result?.instructions ?? "", /administration remains in the Kanera UI/i);
+    assert.match(payload.result?.instructions ?? "", /after creation remains in the Kanera UI/i);
     assert.match(payload.result?.instructions ?? "", /must be completed manually in the Kanera UI/i);
   });
 });

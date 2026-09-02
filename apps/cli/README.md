@@ -40,6 +40,8 @@ kanera work              # your assignments across every accessible board
 kanera card MKT-42       # a card, by key, id, or URL
 kanera card done MKT-42  # mark it complete
 kanera comment MKT-42 "Shipped."
+kanera workspace create "Marketing" --templateId marketing   # bootstrap a workspace (org admin)
+kanera standalone create "Reading list" --templateId simple-todo
 kanera doctor            # diagnose credentials and connectivity
 ```
 
@@ -122,7 +124,7 @@ usage errors. The CLI never silently discards an operand.
 ```bash
 kanera card update MKT-42 --changes.title "Revised"     # dots nest
 kanera work --scope.boardIds[] abc --scope.boardIds[] def   # repeat or [] for arrays
-kanera call kanera_update_card --json-args '{"cardId":"MKT-42","changes":{"title":"Revised"}}'
+kanera call cards.update --json-args '{"cardId":"MKT-42","changes":{"title":"Revised"}}'
 ```
 
 ## Agent setup

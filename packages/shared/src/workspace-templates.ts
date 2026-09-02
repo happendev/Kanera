@@ -152,6 +152,7 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
       { name: "Scheduled", icon: "calendar-event" },
       { name: "Live", icon: "broadcast" },
       { name: "Reporting", icon: "chart-bar" },
+      { name: "Done", icon: "circle-check" },
     ],
     customFields: [
       {
@@ -172,13 +173,27 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
       { name: "Asset URL", icon: "link", type: "url" },
       { name: "Approved", icon: "checkbox", type: "checkbox" },
     ],
+    // The Channel select already classifies the medium, so labels describe intent instead of
+    // repeating Social/Email/Paid as a second taxonomy that has to be kept in sync.
     labels: [
       { name: "Campaign", color: "blue" },
-      { name: "Social", color: "sky" },
-      { name: "Email", color: "violet" },
-      { name: "Content", color: "green" },
-      { name: "Paid", color: "orange" },
-      { name: "Event", color: "rose" },
+      { name: "Launch", color: "rose" },
+      { name: "Evergreen", color: "green" },
+      { name: "Brand", color: "violet" },
+      { name: "Urgent", color: "red" },
+    ],
+    automations: [
+      {
+        // Scheduling is the approval gate, so record it on the card without a manual tick.
+        trigger: { type: "card_enters_list", listName: "Scheduled" },
+        actions: [
+          { type: "populate_custom_field", fieldName: "Approved", onlyIfEmpty: true, value: { kind: "checkbox", checked: true } },
+        ],
+      },
+      {
+        trigger: { type: "card_enters_list", listName: "Done" },
+        actions: [{ type: "set_completion", completed: true }],
+      },
     ],
   },
   {
@@ -205,7 +220,8 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
           { label: "Low", color: "green" },
         ],
       },
-      { name: "Due Date", icon: "calendar-due", type: "date" },
+      // Deadlines use the card's native due date (reminders, overdue notifications, and
+      // due-date automations all key off it), so the preset does not add a competing date field.
       { name: "Blocked", icon: "alert-triangle", type: "checkbox" },
     ],
     labels: [
@@ -326,13 +342,21 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
       { name: "Partner", color: "orange" },
     ],
     automations: [
+      // Follow-up flags a stalled deal as At Risk; the closed lanes clear that flag again so a
+      // recovered or lost deal is not reported as still at risk.
       {
         trigger: { type: "card_enters_list", listName: "Won" },
-        actions: [{ type: "set_completion", completed: true }],
+        actions: [
+          { type: "set_completion", completed: true },
+          { type: "remove_labels", labelNames: ["At Risk"] },
+        ],
       },
       {
         trigger: { type: "card_enters_list", listName: "Lost" },
-        actions: [{ type: "set_completion", completed: true }],
+        actions: [
+          { type: "set_completion", completed: true },
+          { type: "remove_labels", labelNames: ["At Risk"] },
+        ],
       },
       {
         trigger: { type: "card_enters_list", listName: "Follow-up" },
@@ -379,7 +403,8 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
           { label: "Maintenance", color: "gray" },
         ],
       },
-      { name: "SLA Date", icon: "calendar-time", type: "date" },
+      // The SLA deadline is the card's native due date: the escalation automation below fires on
+      // it, so a separate date field would be a second deadline that nothing enforces.
       { name: "Customer", icon: "building-store", type: "text" },
       { name: "Escalated", icon: "urgent", type: "checkbox" },
     ],
@@ -393,7 +418,16 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
     automations: [
       {
         trigger: { type: "due_date_arrives" },
-        actions: [{ type: "move_to_list", listName: "Escalated", placement: "top" }],
+        actions: [
+          { type: "move_to_list", listName: "Escalated", placement: "top" },
+          { type: "populate_custom_field", fieldName: "Escalated", onlyIfEmpty: true, value: { kind: "checkbox", checked: true } },
+        ],
+      },
+      // Both terminal lanes complete the card. The due-date sweep only escalates incomplete cards,
+      // so without this a Resolved ticket with a past SLA would be dragged back into Escalated.
+      {
+        trigger: { type: "card_enters_list", listName: "Resolved" },
+        actions: [{ type: "set_completion", completed: true }],
       },
       {
         trigger: { type: "card_enters_list", listName: "Closed" },
@@ -534,12 +568,14 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
         ],
       },
     ],
+    // Workstream already covers Venue/Programme/Promotion/Logistics, so labels carry the
+    // cross-cutting concerns instead of duplicating that taxonomy.
     labels: [
-      { name: "Venue", color: "blue" },
-      { name: "Content", color: "violet" },
-      { name: "Promotion", color: "rose" },
-      { name: "Logistics", color: "orange" },
       { name: "Sponsors", color: "green" },
+      { name: "Speakers", color: "violet" },
+      { name: "Contract", color: "blue" },
+      { name: "Decision", color: "amber" },
+      { name: "Urgent", color: "red" },
     ],
     checklistTemplates: [
       {
@@ -567,26 +603,25 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
         title: "Write the event brief",
         description: "Capture the audience, purpose, format, budget, and measures of success before booking begins.",
         listName: "Planning",
-        labelNames: ["Content"],
+        labelNames: ["Decision"],
         checklistTemplateTitles: ["Event brief"],
       },
       {
         title: "Confirm venue and key suppliers",
         description: "Compare options, confirm availability and costs, and keep contracts or booking links attached here.",
         listName: "Planning",
-        labelNames: ["Venue", "Logistics"],
+        labelNames: ["Contract"],
       },
       {
         title: "Build the run of show",
         description: "Create the event timeline with owners, transitions, speaker cues, and contingency notes.",
         listName: "In Progress",
-        labelNames: ["Content", "Logistics"],
+        labelNames: ["Speakers"],
       },
       {
         title: "Complete the final readiness check",
         description: "Use this as the final cross-team check before the event moves to Event Day.",
         listName: "Ready",
-        labelNames: ["Logistics"],
         checklistTemplateTitles: ["Event-day readiness"],
       },
     ],
@@ -775,6 +810,13 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
       {
         trigger: { type: "card_enters_list", listName: "Hired" },
         actions: [{ type: "apply_checklists", checklistTemplateTitles: ["New hire onboarding"] }],
+      },
+      // Rejected is a terminal outcome, so complete the card and take it out of active work and
+      // overdue views (as Sales does for Lost). Hired deliberately stays open: it just received the
+      // onboarding checklist, and completing it there would hide work that has not happened yet.
+      {
+        trigger: { type: "card_enters_list", listName: "Rejected" },
+        actions: [{ type: "set_completion", completed: true }],
       },
     ],
   },

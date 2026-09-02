@@ -184,7 +184,7 @@ async function callTool(ctx: CommandContext): Promise<CommandResult> {
 async function callAlias(ctx: CommandContext): Promise<CommandResult> {
   const match = matchAlias(ctx.positionals);
   if (!match) {
-    // A bare tool name works too, so `kanera kanera_get_card MKT-42` behaves like `kanera call`.
+    // A bare tool name works too, so `kanera cards.get MKT-42` behaves like `kanera call`.
     const direct = ctx.positionals[0];
     if (direct?.startsWith("kanera_")) {
       const positional = ctx.positionals.slice(1);

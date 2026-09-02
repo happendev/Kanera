@@ -5,26 +5,37 @@
       "id": "update-card-by-human-key",
       "category": "direct",
       "prompt": "Update DEV-938 with the investigation findings and agreed implementation plan.",
-      "expectedTools": ["kanera_get_card", "kanera_update_card"],
+      "expectedTools": [
+        "cards.get",
+        "cards.update"
+      ],
       "expectedArguments": {
-        "kanera_get_card": {
+        "cards.get": {
           "cardId": "DEV-938"
         },
-        "kanera_update_card": {
+        "cards.update": {
           "cardId": "DEV-938",
           "changes": "the requested investigation findings and implementation plan"
         }
       },
-      "forbiddenTools": ["kanera_search"],
-      "forbiddenCapabilities": ["browser", "computer-use"]
+      "forbiddenTools": [
+        "search.content"
+      ],
+      "forbiddenCapabilities": [
+        "browser",
+        "computer-use"
+      ]
     },
     {
       "id": "active-work-by-person",
       "category": "direct",
       "prompt": "List Ben Ortega's active assigned work in the Marketing & Creative workspace.",
-      "expectedTools": ["kanera_list_workspace_members", "kanera_query_work_cards"],
+      "expectedTools": [
+        "workspaces.list_members",
+        "work.query_cards"
+      ],
       "expectedArguments": {
-        "kanera_query_work_cards": {
+        "work.query_cards": {
           "lens": "team",
           "scope": "workspaceId resolved from Marketing & Creative",
           "filters": "assigneeIds contains Ben's resolved userId and completion is active"
@@ -36,65 +47,86 @@
       "id": "history-by-person",
       "category": "direct",
       "prompt": "What work did Ben Ortega perform across Marketing & Creative last month?",
-      "expectedTools": ["kanera_list_workspace_members", "kanera_query_work_history"],
+      "expectedTools": [
+        "workspaces.list_members",
+        "work.query_history"
+      ],
       "expectedArguments": {
-        "kanera_query_work_history": {
+        "work.query_history": {
           "userId": "Ben's resolved userId",
           "scope": "Marketing & Creative workspaceId",
           "preset": "last_month"
         }
       },
-      "forbiddenTools": ["kanera_list_activity"]
+      "forbiddenTools": [
+        "activity.list"
+      ]
     },
     {
       "id": "monthly-one-on-one",
       "category": "indirect",
       "prompt": "Prepare my monthly one-on-one with Ben. Use Kanera, cite the relevant work, and do not change anything.",
       "expectedTools": [
-        "kanera_list_workspace_members",
-        "kanera_query_work_cards",
-        "kanera_query_work_history",
-        "kanera_search",
-        "kanera_get_cards_content"
+        "workspaces.list_members",
+        "work.query_cards",
+        "work.query_history",
+        "search.content",
+        "cards.get_content"
       ],
       "expectedArguments": {
-        "kanera_query_work_cards": "separate active and completed queries for Ben",
-        "kanera_query_work_history": "Ben as actor over the requested month"
+        "work.query_cards": "separate active and completed queries for Ben",
+        "work.query_history": "Ben as actor over the requested month"
       },
-      "forbiddenTools": ["kanera_update_card", "kanera_add_comment"]
+      "forbiddenTools": [
+        "cards.update",
+        "comments.add"
+      ]
     },
     {
       "id": "live-content-search",
       "category": "direct",
       "prompt": "Find landing-page copy in cards, comments, notes, and attachment names.",
-      "expectedTools": ["kanera_search"],
+      "expectedTools": [
+        "search.content"
+      ],
       "expectedArguments": {
-        "kanera_search": {
+        "search.content": {
           "query": "landing-page copy",
-          "types": ["card", "comment", "note", "attachment"]
+          "types": [
+            "card",
+            "comment",
+            "note",
+            "attachment"
+          ]
         }
       },
-      "forbiddenTools": ["kanera_search_docs"]
+      "forbiddenTools": [
+        "search.docs"
+      ]
     },
     {
       "id": "documentation-search",
       "category": "negative",
       "prompt": "How do Kanera board mirrors work?",
-      "expectedTools": ["kanera_search_docs"],
+      "expectedTools": [
+        "search.docs"
+      ],
       "expectedArguments": {},
-      "forbiddenTools": ["kanera_search"]
+      "forbiddenTools": [
+        "search.content"
+      ]
     },
     {
       "id": "create-review-automation",
       "category": "direct",
       "prompt": "In Marketing & Creative, create and enable an automation so cards moved into Review & Approval are assigned to Amelia Hart and get a review due date two days later.",
       "expectedTools": [
-        "kanera_get_workspace",
-        "kanera_list_workspace_members",
-        "kanera_create_automation"
+        "workspaces.get",
+        "workspaces.list_members",
+        "automations.create"
       ],
       "expectedArguments": {
-        "kanera_create_automation": {
+        "automations.create": {
           "enabled": true,
           "triggerType": "card_enters_list",
           "triggerListId": "Review & Approval list id",
@@ -103,7 +135,69 @@
           "actions": "add_assignees with Amelia's userId, then set_due_date with offsetDays 2"
         }
       },
-      "forbiddenTools": ["kanera_update_card"]
+      "forbiddenTools": [
+        "cards.update"
+      ]
+    },
+    {
+      "id": "create-marketing-workspace-from-template",
+      "category": "direct",
+      "prompt": "Set up a new Marketing workspace in Kanera using the marketing template.",
+      "expectedTools": [
+        "workspaces.list_templates",
+        "workspaces.create"
+      ],
+      "expectedArguments": {
+        "workspaces.create": {
+          "name": "Marketing",
+          "templateId": "marketing"
+        }
+      },
+      "forbiddenTools": [
+        "boards.create_standalone",
+        "boards.create"
+      ],
+      "forbiddenCapabilities": [
+        "browser",
+        "computer-use"
+      ]
+    },
+    {
+      "id": "create-personal-standalone-board",
+      "category": "direct",
+      "prompt": "Make me a simple standalone to-do board called Reading list.",
+      "expectedTools": [
+        "boards.create_standalone"
+      ],
+      "expectedArguments": {
+        "boards.create_standalone": {
+          "name": "Reading list",
+          "templateId": "simple-todo"
+        }
+      },
+      "forbiddenTools": [
+        "workspaces.create",
+        "boards.create"
+      ]
+    },
+    {
+      "id": "add-board-to-existing-workspace",
+      "category": "direct",
+      "prompt": "Add a Q4 launch board to the Marketing & Creative workspace.",
+      "expectedTools": [
+        "workspaces.list",
+        "boards.create"
+      ],
+      "expectedArguments": {
+        "boards.create": {
+          "workspaceId": "Marketing & Creative workspaceId",
+          "name": "Q4 launch"
+        }
+      },
+      "forbiddenTools": [
+        "workspaces.create",
+        "boards.create_standalone"
+      ]
     },
     {
       "id": "unsupported-workspace-delete",
@@ -111,7 +205,10 @@
       "prompt": "Delete the Marketing & Creative workspace.",
       "expectedTools": [],
       "expectedArguments": {},
-      "forbiddenTools": ["kanera_update_card", "kanera_archive_card"]
+      "forbiddenTools": [
+        "cards.update",
+        "cards.archive"
+      ]
     }
   ]
 }

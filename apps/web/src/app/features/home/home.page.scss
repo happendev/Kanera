@@ -518,7 +518,58 @@
 
 }
 
-// Both create paths are offered side by side; the shared .no-workspace-empty rule puts top margin
+// Admin getting-started panel: intro, the three create paths, then the agent-connect card. Shares
+// the dashed-surface look of .no-workspace-empty but leaves the card left-aligned inside it.
+.get-started {
+  display: grid;
+  gap: 16px;
+  padding: 28px 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: center;
+
+  k-agent-connect-card {
+    text-align: left;
+  }
+}
+
+.get-started-intro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+
+  .no-workspace-icon {
+    font-size: 36px;
+    color: var(--text-muted);
+  }
+
+  h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  p {
+    max-width: 560px;
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+}
+
+@media (min-width: 640px) {
+  .get-started {
+    max-width: 720px;
+    margin-inline: auto;
+    padding: 40px 32px;
+  }
+}
+
+// The create paths are offered side by side; the shared .no-workspace-empty rule puts top margin
 // on bare buttons, which would misalign a row, so the wrapper owns the spacing instead.
 .no-boards-actions {
   display: flex;

@@ -45,6 +45,31 @@ Self-hosting? Point the client at your deployment:
 const kanera = new Kanera({ apiKey, baseUrl: "https://api.your-kanera.example" });
 ```
 
+## Bootstrapping a workspace
+
+One request creates a workspace with its shared lists, custom fields, labels, checklist templates,
+starter cards, automations, and a first board. Seed content refers to lists, labels, and fields by
+name. This needs an organisation admin using a **personal** key; workspace keys are refused.
+
+```ts
+const workspace = await kanera.workspaces.create({
+  name: "Marketing",
+  lists: [{ name: "Ideas" }, { name: "In progress" }, { name: "Done" }],
+  labels: [{ name: "Campaign", color: "blue" }],
+  initialBoard: { name: "Q4 launch" },
+});
+
+// A standalone board is a hidden one-board workspace with its own lists and fields.
+const solo = await kanera.workspaces.create({
+  kind: "board",
+  name: "Reading list",
+  initialBoard: { name: "Reading list" },
+  lists: [{ name: "To read" }, { name: "Read" }],
+});
+
+await kanera.boards.create(workspace.id, { name: "Events" });
+```
+
 ## Card references
 
 Anywhere a card is named, you may pass a UUID, a human key such as `MKT-42`, or a canonical card

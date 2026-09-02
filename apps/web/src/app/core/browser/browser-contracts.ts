@@ -25,6 +25,7 @@ export const STORAGE_KEYS = {
   NOTES_SELECTION_PREFIX: "kanera.notes.selection",
   NOTES_TAB_PREFIX: "kanera.notes.tab",
   NOTIFICATION_BOARD_FILTER: "kanera:notif-board-filter",
+  ONBOARDING_SKIPPED_PREFIX: "kanera.onboarding.skipped",
   NOTIFICATION_GROUP_BY: "kanera:notif-group-by",
   MENTION_SOUND_ENABLED: "kanera:mention-sound-enabled",
   NOTIFICATION_USER_FILTER: "kanera:notif-user-filter",
@@ -50,11 +51,21 @@ export type StorageKey =
   | (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS]
   | `kanera.notes.selection:${string}:${string}:${"personal" | "team"}`
   | `kanera.notes.tab:${string}:${string}`
+  | `kanera.onboarding.skipped:${string}:${string}`
   | `kanera.scratchpad.active:${string}:${string}`
   | `kanera.view.${"aggregates" | "aggregateSplit" | "background" | "columnOrder" | "columnWidths" | "columns" | "completed" | "definition" | "filters" | "groupBy" | "mode" | "showSeparators" | "sort" | "upNextSeen"}:${string}`;
 
 export function organisationStorageKey(key: StorageKey, clientId: string | null | undefined): string {
   return `${key}:${clientId ?? "anonymous"}`;
+}
+
+/**
+ * Remembers that a first-run admin chose "Skip for now" on onboarding. Keyed by user and
+ * organisation for the same reasons as scratchpadActiveNoteKey: a shared machine and an organisation
+ * switch must each see their own decision.
+ */
+export function onboardingSkippedKey(userId: string, clientId: string): StorageKey {
+  return `${STORAGE_KEYS.ONBOARDING_SKIPPED_PREFIX}:${userId}:${clientId}`;
 }
 
 export function notesTabKey(scopeId: string, workspaceId: string): StorageKey {

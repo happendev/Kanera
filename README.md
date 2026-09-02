@@ -212,7 +212,7 @@ pnpm test:api:integration # Run API integration tests with isolated PostgreSQL
 - **Durable events:** board- and workspace-scoped events are recorded in an outbox for cross-process realtime delivery and webhooks.
 - **Integrations:** workspace API keys support external tools without exposing user credentials.
 - **Delivery outside the app:** chat destinations are webhook endpoints with a provider set, so Slack, Discord, Telegram, and Zulip reuse the webhook worker, retry policy, and delivery history. Personal notification channels run through the push queue, with HMAC-signed payloads for user-owned endpoints.
-- **Agent-native MCP:** OAuth-capable AI clients can connect with short-lived tokens, structured tool results, explicit safety annotations, and auditable access.
+- **Agent-native MCP:** OAuth-capable AI clients can connect with short-lived tokens, structured tool results, explicit safety annotations, and auditable access. An organisation admin can hand a connected agent a blank account and have it bootstrap workspaces and standalone boards from templates.
 
 - **Typed API client:** `@kanera/sdk` wraps the public API with card-key resolution, cursor iteration, idempotent retries, and webhook signature verification. See [packages/sdk/README.md](packages/sdk/README.md).
 - **Agent-native CLI:** `kanera` exposes the same tool layer as the MCP server to any agent that can run shell commands, with a machine-readable command catalog and exit codes that distinguish "not permitted" from "failed". Try it without a global install using `npx -y @kanera/cli commands`, or install it with `npm install --global @kanera/cli`.

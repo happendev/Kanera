@@ -22,6 +22,7 @@
     "./icons": "./src/tabler-icons.ts",
     "./workspace-defaults": "./src/lib/workspace-defaults.ts",
     "./workspace-templates": "./src/workspace-templates.ts",
+    "./workspace-template-payload": "./src/workspace-template-payload.ts",
     "./default-workspace-lists": "./src/default-workspace-lists.ts",
     "./default-workspace-custom-fields": "./src/default-workspace-custom-fields.ts",
     "./default-workspace-labels": "./src/default-workspace-labels.ts"

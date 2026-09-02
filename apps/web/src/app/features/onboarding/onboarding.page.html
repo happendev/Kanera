@@ -79,6 +79,12 @@
         <span class="ob-kind-action">Set up workspace <i class="ti ti-arrow-right"></i></span>
       </button>
     </div>
+    @if (canSkip()) {
+    <p class="ob-skip-row">
+      <span>Not ready to decide? You can create boards, or connect an AI agent to set things up for you, from Home.</span>
+      <button type="button" class="ghost sm" (click)="skip()">Skip for now <i class="ti ti-arrow-right"></i></button>
+    </p>
+    }
     }
     @else if (setupKind() === 'board') {
     <div class="ob-heading">
@@ -127,6 +133,9 @@
 
     <div class="ob-footer">
       <button class="ghost" [disabled]="busy()" (click)="returnToSetupChoice()"><i class="ti ti-arrow-left"></i> Back</button>
+      @if (canSkip()) {
+      <button class="ghost" [disabled]="busy()" (click)="skip()">Skip for now</button>
+      }
       @if (boardLimitReached()) {
       <div class="ob-error ob-footer-alert" role="alert">
         <i class="ti ti-lock"></i>
@@ -187,6 +196,8 @@
       }
       @if (canCancel()) {
       <button class="ghost" (click)="cancel()">Cancel</button>
+      } @else if (canSkip()) {
+      <button class="ghost" (click)="skip()">Skip for now</button>
       }
       @if (boardLimitReached()) {
       <div class="ob-error ob-footer-alert" role="alert">
@@ -223,6 +234,8 @@
     <div class="ob-footer">
       @if (canCancel()) {
       <button class="ghost" (click)="cancel()">Cancel</button>
+      } @else if (canSkip()) {
+      <button class="ghost" (click)="skip()">Skip for now</button>
       }
       <button class="ghost" (click)="step.set(1)"><i class="ti ti-arrow-left"></i> Back</button>
       <button [disabled]="!canUseOnboarding()" (click)="step.set(3)">Continue <i class="ti ti-arrow-right"></i></button>
@@ -249,6 +262,8 @@
     <div class="ob-footer">
       @if (canCancel()) {
       <button class="ghost" (click)="cancel()">Cancel</button>
+      } @else if (canSkip()) {
+      <button class="ghost" (click)="skip()">Skip for now</button>
       }
       <button class="ghost" (click)="step.set(2)"><i class="ti ti-arrow-left"></i> Back</button>
       <button [disabled]="!canUseOnboarding()" (click)="step.set(4)">Continue <i class="ti ti-arrow-right"></i></button>
@@ -290,6 +305,8 @@
     <div class="ob-footer">
       @if (canCancel()) {
       <button class="ghost" (click)="cancel()">Cancel</button>
+      } @else if (canSkip()) {
+      <button class="ghost" (click)="skip()">Skip for now</button>
       }
       <button class="ghost" (click)="step.set(3)"><i class="ti ti-arrow-left"></i> Back</button>
       <button [disabled]="!canUseOnboarding() || !canContinueFromLists()" (click)="continueFromLists()">Continue <i class="ti ti-arrow-right"></i></button>
@@ -387,6 +404,8 @@
     <div class="ob-footer">
       @if (canCancel()) {
       <button class="ghost" (click)="cancel()">Cancel</button>
+      } @else if (canSkip()) {
+      <button class="ghost" (click)="skip()">Skip for now</button>
       }
       <button class="ghost" (click)="step.set(4)"><i class="ti ti-arrow-left"></i> Back</button>
       <button [disabled]="!canUseOnboarding()" (click)="step.set(6)">Continue <i class="ti ti-arrow-right"></i></button>
@@ -429,6 +448,8 @@
     <div class="ob-footer">
       @if (canCancel()) {
       <button class="ghost" [disabled]="busy()" (click)="cancel()">Cancel</button>
+      } @else if (canSkip()) {
+      <button class="ghost" [disabled]="busy()" (click)="skip()">Skip for now</button>
       }
       <button class="ghost" (click)="step.set(5)"><i class="ti ti-arrow-left"></i> Back</button>
       <button [disabled]="busy() || !canUseOnboarding()" (click)="finish()">

@@ -51,7 +51,7 @@ export async function doctorCommand(ctx: CommandContext): Promise<CommandResult>
   try {
     const session = await openToolSession({ apiKey: credential.apiKey, publicApiUrl: credential.url });
     try {
-      const result = await session.call("kanera_get_session", {}) as {
+      const result = await session.call("session.get", {}) as {
         scope?: string | null; userId?: string; organisationName?: string; credentialKind?: string;
       };
       const elapsed = Math.round(performance.now() - startedAt);

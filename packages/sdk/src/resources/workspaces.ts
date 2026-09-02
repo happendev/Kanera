@@ -1,5 +1,5 @@
 import { paginateOffset, type PageIterator } from "../pagination.js";
-import type { AccessibleBoard, CustomField, Label, List, Member, Uuid, Workspace } from "../types.js";
+import type { AccessibleBoard, CreatedWorkspace, CreateWorkspaceInput, CustomField, Label, List, Member, Uuid, Workspace } from "../types.js";
 import type { CallOptions, ResourceContext } from "./base.js";
 
 export interface WorkspaceDetail {
@@ -31,6 +31,18 @@ export class Workspaces {
   iterate(options: { pageSize?: number } & CallOptions = {}): PageIterator<Workspace> {
     const { pageSize, ...call } = options;
     return paginateOffset((limit, offset) => this.list({ limit, offset, ...call }), pageSize);
+  }
+
+  /**
+   * Bootstrap a workspace in one request: lists, custom fields, labels, checklist templates,
+   * starter cards, automations, and an initial board are created in a single transaction.
+   *
+   * Requires an organisation admin or owner using a write-capable personal credential; a
+   * workspace-scoped key is refused with 403. Pass `kind: "board"` plus `initialBoard` to create a
+   * standalone board, which is hidden from {@link list} and appears in `boards.list()`.
+   */
+  create(body: CreateWorkspaceInput, options: CallOptions = {}): Promise<CreatedWorkspace> {
+    return this.ctx.http.post<CreatedWorkspace>("/api/v1/workspaces", body, options);
   }
 
   /** A workspace with the lists, custom fields, and labels shared across all of its boards. */

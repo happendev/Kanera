@@ -1,0 +1,143 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.agent-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, var(--radius));
+  background: var(--surface);
+  text-align: left;
+
+  // Embedded under an existing section title: no chrome of its own, just the controls.
+  &.is-compact {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+}
+
+.agent-card-header {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.agent-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--accent);
+  font-size: 18px;
+}
+
+.agent-card-heading {
+  min-width: 0;
+
+  h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  p {
+    margin: 4px 0 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+}
+
+.pro-marker {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.agent-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+
+  button,
+  a {
+    margin: 0;
+  }
+}
+
+.agent-card-address {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2, var(--surface));
+  color: var(--text-muted);
+
+  code {
+    flex: 1;
+    min-width: 0;
+    // The MCP address must never force the page to scroll sideways on a phone.
+    overflow-wrap: anywhere;
+    font-size: 0.85rem;
+    color: var(--text);
+  }
+
+  button {
+    flex: none;
+    margin: 0;
+  }
+}
+
+.agent-card-callout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  color: var(--text-muted);
+
+  button {
+    margin: 0 0 0 auto;
+  }
+}
+
+.agent-card-manage {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  justify-self: start;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-decoration: none;
+
+  &:hover {
+    color: var(--text);
+    text-decoration: underline;
+  }
+}

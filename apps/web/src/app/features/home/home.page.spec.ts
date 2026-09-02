@@ -133,6 +133,9 @@ describe("HomePage", () => {
         if (options.apiFails) throw new Error("offline");
         return options.response ?? payload();
       }
+      if (path === "/me/agent-connection-config") {
+        return { mcpUrl: "https://mcp.example.test/mcp" };
+      }
       if (path.startsWith("/work/priorities/")) {
         // The queue is shell-wide state; Home reads MyPrioritiesService rather than fetching it.
         // Served here only so an accidental fetch would not throw and mask the regression.
@@ -158,6 +161,7 @@ describe("HomePage", () => {
               role: options.role ?? (options.isOrgAdmin ? "admin" : "member"),
             }),
             isOrgAdmin: signal(options.isOrgAdmin ?? false),
+            apiAllowed: signal((options.entitlements as { apiAllowed?: boolean } | undefined)?.apiAllowed ?? true),
             entitlements: signal(options.entitlements ?? null),
             maxBoards: signal((options.entitlements as { maxBoards?: number | null } | undefined)?.maxBoards ?? null),
           },
@@ -691,6 +695,38 @@ describe("HomePage", () => {
     expect(host().querySelector(".progress-panel")).toBeNull();
   });
 
+  it("offers guided setup and an agent connection to admins with nothing yet, but not to members", async () => {
+    await render({ hasWorkspace: false, isOrgAdmin: true, response: payload({ boardCount: 0 }) });
+
+    expect(text()).toContain("Start guided setup");
+    expect(host().querySelector("k-agent-connect-card")).not.toBeNull();
+    expect(text()).toContain("https://mcp.example.test/mcp");
+    expect(text()).toContain("Copy agent setup prompt");
+
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, "navigateByUrl").mockResolvedValue(true);
+    host().querySelector<HTMLButtonElement>(".no-boards-actions button:first-of-type")!.click();
+    expect(navigate).toHaveBeenCalledWith("/onboarding");
+
+    TestBed.resetTestingModule();
+    await render({ hasWorkspace: false, isOrgAdmin: false, response: payload({ boardCount: 0 }) });
+    expect(text()).toContain("Ask an administrator");
+    expect(host().querySelector("k-agent-connect-card")).toBeNull();
+    expect(text()).not.toContain("Start guided setup");
+  });
+
+  it("gates the agent connection behind Pro when the plan has no API access", async () => {
+    await render({
+      hasWorkspace: false,
+      isOrgAdmin: true,
+      entitlements: { tier: "free", billingStatus: "none", apiAllowed: false },
+      response: payload({ boardCount: 0 }),
+    });
+
+    expect(text()).toContain("Connecting an AI agent is part of Kanera Pro");
+    expect(text()).not.toContain("Copy agent setup prompt");
+  });
+
   it("renders the full page for a standalone-only account, which reports no workspace", async () => {
     // Regression guard: `hasWorkspace` excludes standalone and guest boards, so gating the empty
     // state on it hid a real agenda behind a "no workspaces" lock.
@@ -813,7 +849,8 @@ describe("HomePage", () => {
       response: payload({ boardCount: 0 }),
     });
 
-    host().querySelector<HTMLButtonElement>(".no-boards-actions button")!.click();
+    // Guided setup comes first and is never plan-gated; "New standalone board" is the second action.
+    host().querySelector<HTMLButtonElement>(".no-boards-actions button:nth-of-type(2)")!.click();
     fixture.detectChanges();
 
     expect(text()).toContain("Your plan allows 0 boards. Upgrade to add another board.");

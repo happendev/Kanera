@@ -13,6 +13,7 @@ import { MyPrioritiesService } from "../../core/priorities/my-priorities.service
 import { RecentBoardsService } from "../../core/recent-boards/recent-boards.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { ActivityStripComponent, type ActivityStripSeries } from "../../shared/activity-strip.component";
+import { AgentConnectCardComponent } from "../../shared/agent-connect-card/agent-connect-card.component";
 import { mediaQuerySignal } from "../../shared/media-query.signal";
 import { PageHeaderComponent } from "../../shared/page-header.component";
 import { StatTileComponent } from "../../shared/stat-tile.component";
@@ -49,7 +50,7 @@ type AccountStatusBanner = {
 @Component({
   selector: "k-home",
   standalone: true,
-  imports: [ActivityStripComponent, AgendaGroupComponent, DatePipe, PageHeaderComponent, PriorityQueueComponent, RouterLink, StatTileComponent],
+  imports: [ActivityStripComponent, AgendaGroupComponent, AgentConnectCardComponent, DatePipe, PageHeaderComponent, PriorityQueueComponent, RouterLink, StatTileComponent],
   // BoardMenuCoordinator owns the shared "labels compressed" preference that k-card-labels reads.
   // It is deliberately not root-provided (it holds document listeners), so every surface rendering
   // board chips provides it — same as GlobalWorkPage.
@@ -395,6 +396,15 @@ export class HomePage implements OnInit {
     void this.myPriorities.setCardCompleted(event.cardId, event.completed).catch(() => {
       this.priorityError.set("We couldn’t update that card. Nothing has changed.");
     });
+  }
+
+  /**
+   * Back into first-run onboarding from the blank home page. No plan gate here: the onboarding page
+   * enforces its own board headroom, and onboardingGuard admits a no-workspace admin regardless of
+   * the "skipped" flag, which only workspaceGuard consults.
+   */
+  startGuidedSetup(): void {
+    void this.router.navigateByUrl("/onboarding");
   }
 
   newWorkspace(): void {
