@@ -20,10 +20,9 @@ updates:
         update-types:
           - version-update:semver-major
 
-  # Container base images are pinned to exact patch versions (see the note in docker-compose.yml),
-  # so these two entries are the only mechanism that surfaces upstream security patches. Unlike the
-  # npm and github-actions entries above, they must keep a non-zero PR limit or pinned images would
-  # never be updated at all. List each Dockerfile directory explicitly: `directory` does not glob.
+  # Routine container version updates are intentionally disabled. Dependabot security updates use a
+  # separate PR limit, so urgent vulnerability fixes can still open PRs without weekly patch noise.
+  # List each Dockerfile directory explicitly: `directory` does not glob.
   - package-ecosystem: docker
     directories:
       - /apps/api
@@ -32,7 +31,7 @@ updates:
       - /docker/db-backup
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     ignore:
       # Major bumps change runtimes and on-disk formats (Postgres majors need pg_upgrade, Node majors
       # must move with `engines`/.nvmrc), so they stay a deliberate, hand-reviewed migration.
@@ -52,7 +51,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    # Keep routine image bumps quiet while allowing Dependabot security updates to remain active.
+    open-pull-requests-limit: 0
     ignore:
       - dependency-name: "*"
         update-types:
