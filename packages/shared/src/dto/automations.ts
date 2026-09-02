@@ -4,7 +4,9 @@ import { AUTOMATION_ACTION_LIMIT } from "../automation-limits.js";
 import { AUTOMATION_TRIGGER_TYPES } from "../schema/automation.js";
 import { dueDateSlot } from "./cards.js";
 
-export const automationTriggerType = z.enum(AUTOMATION_TRIGGER_TYPES);
+export const automationTriggerType = z.enum(AUTOMATION_TRIGGER_TYPES).describe(
+  "Automation trigger event. card_leaves_list matches the source list of a move. custom_field_value_changed fires only on a transition into the selected typed value. due_date_approaching is scheduled and fires once per due date and lead-time setting before the due day. card_becomes_inactive is scheduled and fires once per inactivity boundary.",
+);
 export type AutomationTriggerTypeDto = z.infer<typeof automationTriggerType>;
 
 const labelActionConfig = z.object({ labelIds: z.array(z.uuid()).min(1).max(100) });
@@ -43,6 +45,17 @@ const populateCustomFieldActionConfig = z.object({
 });
 const emptyConfig = z.object({}).strict();
 
+export const automationTriggerCustomFieldValue = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("text").describe("Text-field value kind."), text: z.string().max(20000).describe("Exact text to match.") }),
+  z.object({ kind: z.literal("number").describe("Number-field value kind."), number: z.number().describe("Exact number to match.") }),
+  z.object({ kind: z.literal("checkbox").describe("Checkbox-field value kind."), checked: z.boolean().describe("Checked state to match.") }),
+  z.object({ kind: z.literal("date").describe("Date-field value kind."), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD").describe("Exact local date in YYYY-MM-DD format.") }),
+  z.object({ kind: z.literal("url").describe("URL-field value kind."), url: z.url().max(20000).describe("Exact URL to match.") }),
+  z.object({ kind: z.literal("select").describe("Select-field value kind."), optionId: z.uuid().describe("Selected option UUID to match; multi-select fields match when this option is present.") }),
+  z.object({ kind: z.literal("user").describe("User-field value kind."), userId: z.uuid().describe("Workspace-member UUID to match; multi-user fields match when this member is present.") }),
+]);
+export type AutomationTriggerCustomFieldValueDto = z.infer<typeof automationTriggerCustomFieldValue>;
+
 export const automationActionBody = z.discriminatedUnion("type", [
   z.object({ type: z.literal("add_labels"), config: labelActionConfig }),
   z.object({ type: z.literal("remove_labels"), config: labelActionConfig }),
@@ -64,12 +77,15 @@ const triggerFields = {
   triggerListId: z.uuid().nullable().optional(),
   triggerUserIds: z.array(z.uuid()).min(1).max(100).nullable().optional(),
   triggerLabelId: z.uuid().nullable().optional(),
+  triggerCustomFieldId: z.uuid().nullable().optional(),
+  triggerCustomFieldValue: automationTriggerCustomFieldValue.nullable().optional(),
+  triggerDaysBefore: z.number().int().min(1).max(3650).nullable().optional(),
   applyOnCreate: z.boolean().default(true),
   applyOnMove: z.boolean().default(true),
 };
 
-function requireTriggerConfig(value: { triggerType?: AutomationTriggerTypeDto; triggerListId?: string | null; triggerUserIds?: string[] | null; triggerLabelId?: string | null }, ctx: z.RefinementCtx) {
-  if (value.triggerType === "card_enters_list" && !value.triggerListId) {
+function requireTriggerConfig(value: { triggerType?: AutomationTriggerTypeDto; triggerListId?: string | null; triggerUserIds?: string[] | null; triggerLabelId?: string | null; triggerCustomFieldId?: string | null; triggerCustomFieldValue?: AutomationTriggerCustomFieldValueDto | null; triggerDaysBefore?: number | null }, ctx: z.RefinementCtx) {
+  if ((value.triggerType === "card_enters_list" || value.triggerType === "card_leaves_list") && !value.triggerListId) {
     ctx.addIssue({ code: "custom", path: ["triggerListId"], message: "triggerListId is required" });
   }
   if (value.triggerType === "card_assigned_to_user" && (!value.triggerUserIds || value.triggerUserIds.length === 0)) {
@@ -77,6 +93,13 @@ function requireTriggerConfig(value: { triggerType?: AutomationTriggerTypeDto; t
   }
   if (value.triggerType === "card_label_set" && !value.triggerLabelId) {
     ctx.addIssue({ code: "custom", path: ["triggerLabelId"], message: "triggerLabelId is required" });
+  }
+  if (value.triggerType === "due_date_approaching" && !value.triggerDaysBefore) {
+    ctx.addIssue({ code: "custom", path: ["triggerDaysBefore"], message: "triggerDaysBefore is required" });
+  }
+  if (value.triggerType === "custom_field_value_changed") {
+    if (!value.triggerCustomFieldId) ctx.addIssue({ code: "custom", path: ["triggerCustomFieldId"], message: "triggerCustomFieldId is required" });
+    if (!value.triggerCustomFieldValue) ctx.addIssue({ code: "custom", path: ["triggerCustomFieldValue"], message: "triggerCustomFieldValue is required" });
   }
 }
 
@@ -95,6 +118,9 @@ export const updateAutomationBody = z
     triggerListId: z.uuid().nullable().optional(),
     triggerUserIds: z.array(z.uuid()).min(1).max(100).nullable().optional(),
     triggerLabelId: z.uuid().nullable().optional(),
+    triggerCustomFieldId: z.uuid().nullable().optional(),
+    triggerCustomFieldValue: automationTriggerCustomFieldValue.nullable().optional(),
+    triggerDaysBefore: z.number().int().min(1).max(3650).nullable().optional(),
     applyOnCreate: z.boolean().optional(),
     applyOnMove: z.boolean().optional(),
   })
@@ -106,6 +132,9 @@ export const updateAutomationBody = z
       v.triggerListId !== undefined ||
       v.triggerUserIds !== undefined ||
       v.triggerLabelId !== undefined ||
+      v.triggerCustomFieldId !== undefined ||
+      v.triggerCustomFieldValue !== undefined ||
+      v.triggerDaysBefore !== undefined ||
       v.applyOnCreate !== undefined ||
       v.applyOnMove !== undefined,
     "provide a field to update",

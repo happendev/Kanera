@@ -45,7 +45,8 @@ export type WorkspaceTemplateAutomationTrigger =
   | { type: "due_date_arrives" }
   | { type: "all_checklist_items_complete" }
   | { type: "card_marked_complete" }
-  | { type: "card_label_set"; labelName: string };
+  | { type: "card_label_set"; labelName: string }
+  | { type: "card_becomes_inactive" };
 
 export type WorkspaceTemplateAutomationAction =
   | { type: "add_labels" | "remove_labels"; labelNames: string[] }

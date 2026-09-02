@@ -108,6 +108,9 @@ function automation(overrides: Partial<WireAutomation> = {}): WireAutomation {
     triggerListId: "list-1",
     triggerUserIds: null,
     triggerLabelId: null,
+    triggerCustomFieldId: null,
+    triggerCustomFieldValue: null,
+    triggerDaysBefore: null,
     applyOnCreate: true,
     applyOnMove: true,
     archivedAt: null,
@@ -311,6 +314,9 @@ describe("WorkspaceSettingsPage", () => {
         triggerListId: "list-1",
         triggerUserIds: null,
         triggerLabelId: null,
+        triggerCustomFieldId: null,
+        triggerCustomFieldValue: null,
+        triggerDaysBefore: null,
         applyOnCreate: true,
         applyOnMove: true,
         archivedAt: null,
@@ -1330,6 +1336,9 @@ describe("WorkspaceSettingsPage", () => {
       triggerListId: "list-1",
       triggerUserIds: null,
       triggerLabelId: null,
+      triggerCustomFieldId: null,
+      triggerCustomFieldValue: null,
+      triggerDaysBefore: null,
       applyOnCreate: true,
       applyOnMove: true,
       archivedAt: null,
@@ -1377,6 +1386,9 @@ describe("WorkspaceSettingsPage", () => {
       triggerListId: "list-1",
       triggerUserIds: null,
       triggerLabelId: null,
+      triggerCustomFieldId: null,
+      triggerCustomFieldValue: null,
+      triggerDaysBefore: null,
       applyOnCreate: true,
       applyOnMove: true,
       archivedAt: null,
@@ -1945,6 +1957,9 @@ describe("WorkspaceSettingsPage", () => {
       triggerListId: "list-1",
       triggerUserIds: null,
       triggerLabelId: null,
+      triggerCustomFieldId: null,
+      triggerCustomFieldValue: null,
+      triggerDaysBefore: null,
       applyOnCreate: true,
       applyOnMove: false,
       actions: [{ type: "add_labels", config: { labelIds: ["label-1"] } }],
@@ -2103,6 +2118,9 @@ describe("WorkspaceSettingsPage", () => {
       triggerListId: "list-1",
       triggerUserIds: null,
       triggerLabelId: null,
+      triggerCustomFieldId: null,
+      triggerCustomFieldValue: null,
+      triggerDaysBefore: null,
       applyOnCreate: true,
       applyOnMove: true,
       archivedAt: null,
@@ -2133,6 +2151,9 @@ describe("WorkspaceSettingsPage", () => {
       triggerListId: "list-1",
       triggerUserIds: null,
       triggerLabelId: null,
+      triggerCustomFieldId: null,
+      triggerCustomFieldValue: null,
+      triggerDaysBefore: null,
       applyOnCreate: true,
       applyOnMove: true,
       archivedAt: null,
@@ -2175,6 +2196,9 @@ describe("WorkspaceSettingsPage", () => {
       triggerListId: null,
       triggerUserIds: ["user-1", "user-2"],
       triggerLabelId: null,
+      triggerCustomFieldId: null,
+      triggerCustomFieldValue: null,
+      triggerDaysBefore: null,
       applyOnCreate: true,
       applyOnMove: true,
       archivedAt: null,
@@ -2223,8 +2247,42 @@ describe("WorkspaceSettingsPage", () => {
       triggerListId: null,
       triggerUserIds: null,
       triggerLabelId: null,
+      triggerCustomFieldId: null,
+      triggerCustomFieldValue: null,
+      triggerDaysBefore: null,
     });
     expect(component.automations()[0]?.triggerType).toBe("card_marked_complete");
+  });
+
+  it("summarizes and updates card-becomes-inactive automations without trigger targets", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    const current = automation();
+    const updated = automation({
+      triggerType: "card_becomes_inactive",
+      triggerListId: null,
+      triggerUserIds: null,
+      triggerLabelId: null,
+    });
+    component.automations.set([current]);
+
+    expect(component.automationTriggerTypeValue(updated)).toBe("card_becomes_inactive");
+    expect(component.automationTriggerLabel(updated)).toBe("Card becomes inactive");
+    expect(component.automationTriggerTargetLabel(updated)).toBeNull();
+
+    api.patch.mockResolvedValue(updated);
+    await component.updateAutomationTrigger(current.id, "card_becomes_inactive");
+
+    expect(api.patch).toHaveBeenCalledWith(`/automations/${current.id}`, {
+      triggerType: "card_becomes_inactive",
+      triggerListId: null,
+      triggerUserIds: null,
+      triggerLabelId: null,
+      triggerCustomFieldId: null,
+      triggerCustomFieldValue: null,
+      triggerDaysBefore: null,
+    });
+    expect(component.automations()[0]?.triggerType).toBe("card_becomes_inactive");
   });
 
   it("summarizes label-set automations and shows deleted labels", async () => {
@@ -2325,7 +2383,57 @@ describe("WorkspaceSettingsPage", () => {
       triggerListId: null,
       triggerUserIds: null,
       triggerLabelId: "label-1",
+      triggerCustomFieldId: null,
+      triggerCustomFieldValue: null,
+      triggerDaysBefore: null,
     });
     expect(component.automations()[0]?.triggerType).toBe("card_label_set");
+  });
+
+  it("configures and summarizes the three priority automation triggers", async () => {
+    const { api } = await render();
+    const component = fixture.componentInstance;
+    component.lists.set([workspaceList()]);
+    component.fields.set([customField({ id: "field-1", name: "Stage", type: "text" })]);
+    const current = automation();
+    component.automations.set([current]);
+
+    const leaves = automation({ triggerType: "card_leaves_list", triggerListId: "list-1" });
+    api.patch.mockResolvedValueOnce(leaves);
+    await component.updateAutomationTrigger(current.id, "card_leaves_list");
+    expect(api.patch).toHaveBeenLastCalledWith(`/automations/${current.id}`, expect.objectContaining({
+      triggerType: "card_leaves_list",
+      triggerListId: "list-1",
+    }));
+    expect(component.automationTriggerLabel(leaves)).toBe("Card leaves Inbox");
+
+    const approaching = automation({ triggerType: "due_date_approaching", triggerListId: null, triggerDaysBefore: 3 });
+    api.patch.mockResolvedValueOnce(approaching);
+    await component.updateAutomationTrigger(current.id, "due_date_approaching");
+    expect(api.patch).toHaveBeenLastCalledWith(`/automations/${current.id}`, expect.objectContaining({
+      triggerType: "due_date_approaching",
+      triggerDaysBefore: 3,
+    }));
+    expect(component.automationTriggerLabel(approaching)).toBe("Due date approaches 3 days before");
+
+    const custom = automation({
+      triggerType: "custom_field_value_changed",
+      triggerListId: null,
+      triggerCustomFieldId: "field-1",
+      triggerCustomFieldValue: { kind: "text", text: "Ready" },
+    });
+    component.automations.set([current]);
+    api.patch.mockResolvedValueOnce(custom);
+    await component.updateAutomationTrigger(current.id, "custom_field_value_changed");
+    expect(api.patch).toHaveBeenLastCalledWith(`/automations/${current.id}`, expect.objectContaining({
+      triggerType: "custom_field_value_changed",
+      triggerCustomFieldId: "field-1",
+      triggerCustomFieldValue: { kind: "text", text: "" },
+    }));
+    expect(component.automationTriggerLabel(custom)).toBe("Custom field changes to Stage = Ready");
+
+    api.patch.mockResolvedValueOnce({ ...approaching, triggerDaysBefore: 5 });
+    await component.updateAutomationTriggerDaysBefore(current.id, 5.9);
+    expect(api.patch).toHaveBeenLastCalledWith(`/automations/${current.id}`, { triggerDaysBefore: 5 });
   });
 });

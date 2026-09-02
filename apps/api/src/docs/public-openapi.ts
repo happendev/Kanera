@@ -1287,6 +1287,9 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           triggerListId: nullable(uuid),
           triggerUserIds: nullable(arrayOf(uuid)),
           triggerLabelId: nullable(uuid),
+          triggerCustomFieldId: nullable(uuid),
+          triggerCustomFieldValue: nullable(zodSchema(dto.automationTriggerCustomFieldValue)),
+          triggerDaysBefore: nullable({ type: "integer", minimum: 1, maximum: 3650 }),
           applyOnCreate: { type: "boolean" },
           applyOnMove: { type: "boolean" },
           actions: arrayOf({ type: "object", additionalProperties: true }),
@@ -1437,7 +1440,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       post: operation({
         tags: ["Automations"],
         summary: "Create an automation",
-        description: "Creates a workspace rule and its ordered actions atomically. Enabled rules require at least one action. Requires workspace-admin authority and a write-capable credential.",
+        description: "Creates a workspace rule and its ordered actions atomically. List-exit rules match the source list of a move; custom-field rules run only when an edit transitions into the configured typed value; approaching-due rules run once per due date and lead-time setting before the due day; inactivity rules run once per inactivity boundary. Enabled rules require at least one action. Requires workspace-admin authority and a write-capable credential.",
         operationId: "createAutomation",
         parameters: [idParam("wsId", "Workspace id.")],
         requestBody: jsonBody(ref("CreateAutomationBody")),

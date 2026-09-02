@@ -39,6 +39,7 @@ const initialAutomationTrigger = z.discriminatedUnion("type", [
     applyOnMove: z.boolean().default(true),
   }),
   z.object({ type: z.literal("due_date_arrives") }),
+  z.object({ type: z.literal("card_becomes_inactive") }),
   z.object({ type: z.literal("all_checklist_items_complete") }),
   z.object({ type: z.literal("card_marked_complete") }),
   z.object({

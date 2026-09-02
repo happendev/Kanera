@@ -45,6 +45,7 @@ export function describeWorkspaceTemplateAutomation(automation: WorkspaceTemplat
   const trigger = automation.trigger;
   const when = trigger.type === "card_enters_list" ? `When a card enters ${trigger.listName}`
     : trigger.type === "due_date_arrives" ? "When a card's due date arrives"
+    : trigger.type === "card_becomes_inactive" ? "When a card becomes inactive"
     : trigger.type === "all_checklist_items_complete" ? "When every checklist item is complete"
     : trigger.type === "card_marked_complete" ? "When a card is marked complete"
     : `When the ${trigger.labelName} label is set`;

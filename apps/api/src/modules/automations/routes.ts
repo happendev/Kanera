@@ -75,6 +75,38 @@ async function assertLabelInWorkspace(workspaceId: string, labelId: string | nul
   if (!row) throw badRequest("label not in workspace");
 }
 
+async function validateCustomFieldTrigger(
+  workspaceId: string,
+  fieldId: string | null | undefined,
+  value: dto.AutomationTriggerCustomFieldValueDto | null | undefined,
+  tx: Tx = db,
+) {
+  if (!fieldId || !value) return;
+  const [field] = await tx
+    .select({ id: customFields.id, type: customFields.type })
+    .from(customFields)
+    .where(and(eq(customFields.id, fieldId), eq(customFields.workspaceId, workspaceId), isNull(customFields.archivedAt)))
+    .limit(1);
+  if (!field) throw badRequest("custom field trigger field is invalid");
+  if (field.type !== value.kind) throw badRequest("custom field trigger value does not match field type");
+  if (value.kind === "select") {
+    const [option] = await tx
+      .select({ id: customFieldOptions.id })
+      .from(customFieldOptions)
+      .where(and(eq(customFieldOptions.id, value.optionId), eq(customFieldOptions.fieldId, field.id), isNull(customFieldOptions.archivedAt)))
+      .limit(1);
+    if (!option) throw badRequest("unknown option for custom field trigger");
+  }
+  if (value.kind === "user") {
+    const [member] = await tx
+      .select({ userId: workspaceMembers.userId })
+      .from(workspaceMembers)
+      .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, value.userId)))
+      .limit(1);
+    if (!member) throw badRequest("custom field trigger user is not a workspace member");
+  }
+}
+
 async function validateActionTargets(workspaceId: string, actions: dto.AutomationActionBody[], tx: Tx = db) {
   const listIds = actions.flatMap((action) => action.type === "move_to_list" ? [action.config.listId] : []);
   if (listIds.length > 0) {
@@ -271,9 +303,10 @@ export async function automationRoutes(app: FastifyInstance) {
     const { wsId: workspaceId } = req.params as { wsId: string };
     const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const body = dto.createAutomationBody.parse(req.body);
-    await assertListInWorkspace(workspaceId, body.triggerType === "card_enters_list" ? body.triggerListId : null);
+    await assertListInWorkspace(workspaceId, body.triggerType === "card_enters_list" || body.triggerType === "card_leaves_list" ? body.triggerListId : null);
     await validateTriggerUsers(workspaceId, body.triggerType === "card_assigned_to_user" ? body.triggerUserIds : null);
     await assertLabelInWorkspace(workspaceId, body.triggerType === "card_label_set" ? body.triggerLabelId : null);
+    await validateCustomFieldTrigger(workspaceId, body.triggerType === "custom_field_value_changed" ? body.triggerCustomFieldId : null, body.triggerType === "custom_field_value_changed" ? body.triggerCustomFieldValue : null);
     await validateActionTargets(workspaceId, body.actions);
     assertEnabledAutomationHasActions(body.enabled, body.actions.length);
     const [first] = await db
@@ -299,9 +332,12 @@ export async function automationRoutes(app: FastifyInstance) {
           enabled: body.enabled,
           position,
           triggerType: body.triggerType,
-          triggerListId: body.triggerType === "card_enters_list" ? body.triggerListId! : null,
+          triggerListId: body.triggerType === "card_enters_list" || body.triggerType === "card_leaves_list" ? body.triggerListId! : null,
           triggerUserIds: body.triggerType === "card_assigned_to_user" ? Array.from(new Set(body.triggerUserIds ?? [])) : null,
           triggerLabelId: body.triggerType === "card_label_set" ? body.triggerLabelId! : null,
+          triggerCustomFieldId: body.triggerType === "custom_field_value_changed" ? body.triggerCustomFieldId! : null,
+          triggerCustomFieldValue: body.triggerType === "custom_field_value_changed" ? body.triggerCustomFieldValue! : null,
+          triggerDaysBefore: body.triggerType === "due_date_approaching" ? body.triggerDaysBefore! : null,
           applyOnCreate: body.applyOnCreate,
           applyOnMove: body.applyOnMove,
         })
@@ -336,7 +372,7 @@ export async function automationRoutes(app: FastifyInstance) {
     if (!current) throw notFound();
     const { clientId } = await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
     const triggerType = body.triggerType ?? current.triggerType;
-    const triggerListId = triggerType === "card_enters_list"
+    const triggerListId = triggerType === "card_enters_list" || triggerType === "card_leaves_list"
       ? body.triggerListId !== undefined ? body.triggerListId : current.triggerListId
       : null;
     const triggerUserIds = triggerType === "card_assigned_to_user"
@@ -345,12 +381,24 @@ export async function automationRoutes(app: FastifyInstance) {
     const triggerLabelId = triggerType === "card_label_set"
       ? body.triggerLabelId !== undefined ? body.triggerLabelId : current.triggerLabelId
       : null;
-    if (triggerType === "card_enters_list" && !triggerListId) throw badRequest("triggerListId is required");
+    const triggerCustomFieldId = triggerType === "custom_field_value_changed"
+      ? body.triggerCustomFieldId !== undefined ? body.triggerCustomFieldId : current.triggerCustomFieldId
+      : null;
+    const triggerCustomFieldValue = triggerType === "custom_field_value_changed"
+      ? body.triggerCustomFieldValue !== undefined ? body.triggerCustomFieldValue : current.triggerCustomFieldValue
+      : null;
+    const triggerDaysBefore = triggerType === "due_date_approaching"
+      ? body.triggerDaysBefore !== undefined ? body.triggerDaysBefore : current.triggerDaysBefore
+      : null;
+    if ((triggerType === "card_enters_list" || triggerType === "card_leaves_list") && !triggerListId) throw badRequest("triggerListId is required");
     if (triggerType === "card_assigned_to_user" && (!triggerUserIds || triggerUserIds.length === 0)) throw badRequest("triggerUserIds is required");
     if (triggerType === "card_label_set" && !triggerLabelId) throw badRequest("triggerLabelId is required");
+    if (triggerType === "due_date_approaching" && !triggerDaysBefore) throw badRequest("triggerDaysBefore is required");
+    if (triggerType === "custom_field_value_changed" && (!triggerCustomFieldId || !triggerCustomFieldValue)) throw badRequest("triggerCustomFieldId and triggerCustomFieldValue are required");
     await assertListInWorkspace(current.workspaceId, triggerListId);
     await validateTriggerUsers(current.workspaceId, triggerUserIds);
     await assertLabelInWorkspace(current.workspaceId, triggerLabelId);
+    await validateCustomFieldTrigger(current.workspaceId, triggerCustomFieldId, triggerCustomFieldValue);
     if (body.actions !== undefined) await validateActionTargets(current.workspaceId, body.actions);
     await db.transaction(async (tx) => {
       // Action replacement also updates this row, so locking it before re-reading actions
@@ -380,6 +428,9 @@ export async function automationRoutes(app: FastifyInstance) {
           triggerListId,
           triggerUserIds: triggerUserIds ? Array.from(new Set(triggerUserIds)) : null,
           triggerLabelId,
+          triggerCustomFieldId,
+          triggerCustomFieldValue,
+          triggerDaysBefore,
           ...(body.applyOnCreate !== undefined && { applyOnCreate: body.applyOnCreate }),
           ...(body.applyOnMove !== undefined && { applyOnMove: body.applyOnMove }),
           updatedAt: new Date(),

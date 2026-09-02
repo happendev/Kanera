@@ -101,7 +101,7 @@ See the whole visible team or focus on one teammate without losing each card's b
 
 ### Automations keep routine work moving
 
-Build automations from a **When** trigger and ordered **Do** actions. Kanera can add labels, assign people, apply checklist templates, set due dates and custom fields, move cards, or mark work complete when predictable workflow events occur. Automations can belong to one standalone board or run across every board in a workspace.
+Build automations from a **When** trigger and ordered **Do** actions. Triggers can respond when cards enter or leave lists, a custom field changes to a selected value, a due date approaches or arrives, assignments and labels change, checklists or cards complete, or a card reaches the configured inactivity period. Kanera can then add labels, assign people, apply checklist templates, set due dates and custom fields, move cards, or mark work complete. Automations can belong to one standalone board or run across every board in a workspace.
 
 ![Kanera automation builder showing a trigger and ordered card actions](docs/readme-assets/automations.jpg)
 

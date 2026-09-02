@@ -235,11 +235,15 @@
               <span class="ac-field-label">Event</span>
               <select [value]="settings.automationTriggerTypeValue(automation)" (change)="settings.updateAutomationTrigger(automation.id, $any($event.target).value)">
                 <option value="card_enters_list" [selected]="settings.automationTriggerTypeValue(automation) === 'card_enters_list'">Card enters a list</option>
+                <option value="card_leaves_list" [selected]="settings.automationTriggerTypeValue(automation) === 'card_leaves_list'">Card leaves a list</option>
                 <option value="due_date_arrives" [selected]="settings.automationTriggerTypeValue(automation) === 'due_date_arrives'">Due date arrives</option>
+                <option value="due_date_approaching" [selected]="settings.automationTriggerTypeValue(automation) === 'due_date_approaching'">Due date is approaching</option>
+                <option value="card_becomes_inactive" [selected]="settings.automationTriggerTypeValue(automation) === 'card_becomes_inactive'">Card becomes inactive</option>
                 <option value="all_checklist_items_complete" [selected]="settings.automationTriggerTypeValue(automation) === 'all_checklist_items_complete'">All checklist items complete</option>
                 <option value="card_assigned_to_user" [selected]="settings.automationTriggerTypeValue(automation) === 'card_assigned_to_user'">Card assigned to a member</option>
                 <option value="card_marked_complete" [selected]="settings.automationTriggerTypeValue(automation) === 'card_marked_complete'">Card marked complete</option>
                 <option value="card_label_set" [selected]="settings.automationTriggerTypeValue(automation) === 'card_label_set'">Label added to a card</option>
+                <option value="custom_field_value_changed" [selected]="settings.automationTriggerTypeValue(automation) === 'custom_field_value_changed'">Custom field changes to a value</option>
               </select>
             </label>
 
@@ -276,6 +280,17 @@
                   }
                 </div>
               }
+              @case ('card_leaves_list') {
+                <label class="ac-field">
+                  <span class="ac-field-label">List</span>
+                  <select [value]="settings.automationTriggerListValue(automation)" (change)="settings.updateAutomationTriggerList(automation.id, $any($event.target).value)">
+                    @for (list of settings.lists(); track list.id) {
+                    <option [value]="list.id" [selected]="settings.automationTriggerListValue(automation) === list.id">{{ list.name }}</option>
+                    }
+                  </select>
+                </label>
+                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> Runs whenever a card moves out of this list, including a move to another board.</p>
+              }
               @case ('card_assigned_to_user') {
                 <div class="ac-field ac-field-wide">
                   <span class="ac-field-label">Members</span>
@@ -303,6 +318,57 @@
               }
               @case ('due_date_arrives') {
                 <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> Runs once per card on the day its due date arrives, on every board in this {{ settings.entityLabel() }}.</p>
+              }
+              @case ('due_date_approaching') {
+                <label class="ac-field">
+                  <span class="ac-field-label">Days before due date</span>
+                  <input type="number" min="1" max="3650" [value]="settings.automationTriggerDaysBefore(automation)" (change)="settings.updateAutomationTriggerDaysBefore(automation.id, +$any($event.target).value)" />
+                </label>
+                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> Runs once per due date and lead-time setting when the card enters this window. Completed cards are skipped.</p>
+              }
+              @case ('custom_field_value_changed') {
+                @let triggerField = settings.automationTriggerCustomField(automation);
+                @let triggerValue = settings.automationTriggerCustomFieldValue(automation);
+                <label class="ac-field">
+                  <span class="ac-field-label">Custom field</span>
+                  <select [value]="automation.triggerCustomFieldId ?? ''" (change)="settings.updateAutomationTriggerCustomField(automation.id, $any($event.target).value)">
+                    @if (settings.automationTriggerCustomFieldMissing(automation)) {
+                    <option [value]="automation.triggerCustomFieldId" [selected]="true">Deleted field — pick a replacement</option>
+                    }
+                    @for (field of settings.automationTriggerCustomFields(); track field.id) {
+                    <option [value]="field.id" [selected]="automation.triggerCustomFieldId === field.id">{{ field.name }}</option>
+                    }
+                  </select>
+                </label>
+                @if (triggerField && triggerValue) {
+                  @switch (triggerField.type) {
+                    @case ('text') {
+                      <label class="ac-field"><span class="ac-field-label">Value</span><input type="text" [value]="triggerValue.kind === 'text' ? triggerValue.text : ''" (change)="settings.updateAutomationTriggerCustomFieldValue(automation.id, { kind: 'text', text: $any($event.target).value })" /></label>
+                    }
+                    @case ('number') {
+                      <label class="ac-field"><span class="ac-field-label">Value</span><input type="number" [value]="triggerValue.kind === 'number' ? triggerValue.number : 0" (change)="settings.updateAutomationTriggerCustomFieldValue(automation.id, { kind: 'number', number: +$any($event.target).value })" /></label>
+                    }
+                    @case ('checkbox') {
+                      <label class="ac-field"><span class="ac-field-label">Value</span><select [value]="triggerValue.kind === 'checkbox' && triggerValue.checked ? 'true' : 'false'" (change)="settings.updateAutomationTriggerCustomFieldValue(automation.id, { kind: 'checkbox', checked: $any($event.target).value === 'true' })"><option value="true" [selected]="triggerValue.kind === 'checkbox' && triggerValue.checked">Checked</option><option value="false" [selected]="triggerValue.kind === 'checkbox' && !triggerValue.checked">Unchecked</option></select></label>
+                    }
+                    @case ('date') {
+                      <label class="ac-field"><span class="ac-field-label">Value</span><input type="date" [value]="triggerValue.kind === 'date' ? triggerValue.date : ''" (change)="settings.updateAutomationTriggerCustomFieldValue(automation.id, { kind: 'date', date: $any($event.target).value })" /></label>
+                    }
+                    @case ('url') {
+                      <label class="ac-field"><span class="ac-field-label">Value</span><input type="url" [value]="triggerValue.kind === 'url' ? triggerValue.url : ''" (change)="settings.updateAutomationTriggerCustomFieldValue(automation.id, { kind: 'url', url: $any($event.target).value })" /></label>
+                    }
+                    @case ('select') {
+                      <label class="ac-field"><span class="ac-field-label">Value</span><select [value]="triggerValue.kind === 'select' ? triggerValue.optionId : ''" (change)="settings.updateAutomationTriggerCustomFieldValue(automation.id, { kind: 'select', optionId: $any($event.target).value })">@if (settings.automationTriggerCustomOptionMissing(automation)) {<option [value]="triggerValue.kind === 'select' ? triggerValue.optionId : ''" [selected]="true">Deleted option — pick a replacement</option>}@for (option of triggerField.options; track option.id) {<option [value]="option.id" [selected]="triggerValue.kind === 'select' && triggerValue.optionId === option.id">{{ option.label }}</option>}</select></label>
+                    }
+                    @case ('user') {
+                      <label class="ac-field"><span class="ac-field-label">Member</span><select [value]="triggerValue.kind === 'user' ? triggerValue.userId : ''" (change)="settings.updateAutomationTriggerCustomFieldValue(automation.id, { kind: 'user', userId: $any($event.target).value })">@for (member of settings.automationMembers(); track member.userId) {<option [value]="member.userId" [selected]="triggerValue.kind === 'user' && triggerValue.userId === member.userId">{{ member.displayName }}</option>}</select></label>
+                    }
+                  }
+                }
+                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> Runs only when an edit changes the field from a different value to the selected value.</p>
+              }
+              @case ('card_becomes_inactive') {
+                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> Runs when a card reaches the inactivity period, on every board in this {{ settings.entityLabel() }}. New card activity resets the period.</p>
               }
               @case ('all_checklist_items_complete') {
                 <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> Runs when the last unticked checklist item on a card is completed.</p>

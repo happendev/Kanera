@@ -278,7 +278,7 @@ function describeInputParameters<T extends z.ZodRawShape>(inputSchema: T): T {
   })) as unknown as T;
 }
 const { COLOR_TOKENS } = await import("@kanera/shared/colors");
-const { AUTOMATION_ACTION_LIMIT, automationTriggerType } = await import("@kanera/shared/dto");
+const { AUTOMATION_ACTION_LIMIT, automationTriggerCustomFieldValue, automationTriggerType } = await import("@kanera/shared/dto");
 const { AUTOMATION_ACTION_TYPES, COMMENT_REACTION_TYPES, MAX_CARD_PRIORITIES_PER_USER } = await import("@kanera/shared/schema");
 const reactionType = z.enum(COMMENT_REACTION_TYPES);
 const colorToken = z.enum(COLOR_TOKENS);
@@ -395,19 +395,25 @@ const automationActionInput = z.object({
 });
 const automationCreateFields = {
   enabled: z.boolean().default(false).describe("Whether the rule should start running immediately. Enabled rules require at least one action."),
-  triggerType: automationTriggerType.describe("The event that starts the rule."),
-  triggerListId: uuid.optional().describe("Required when triggerType is card_enters_list."),
+  triggerType: automationTriggerType.describe("The event that starts the rule. List-exit and custom-value rules are transition based; approaching-due and inactivity rules are scheduled and one-shot per event boundary."),
+  triggerListId: uuid.optional().describe("Required when triggerType is card_enters_list or card_leaves_list."),
   triggerUserIds: z.array(uuid).min(1).max(100).optional().describe("Required when triggerType is card_assigned_to_user."),
   triggerLabelId: uuid.optional().describe("Required when triggerType is card_label_set."),
+  triggerCustomFieldId: uuid.optional().describe("Required when triggerType is custom_field_value_changed."),
+  triggerCustomFieldValue: automationTriggerCustomFieldValue.optional().describe("Typed selected value required when triggerType is custom_field_value_changed."),
+  triggerDaysBefore: z.number().int().min(1).max(3650).optional().describe("Lead time required when triggerType is due_date_approaching."),
   applyOnCreate: z.boolean().default(true).describe("For card_enters_list, also run when a card is created in the trigger list."),
   applyOnMove: z.boolean().default(true).describe("For card_enters_list, run when a card moves into the trigger list."),
   actions: z.array(automationActionInput).max(AUTOMATION_ACTION_LIMIT).default([]).describe("Ordered action definitions; enabled rules require at least one."),
 };
 const automationChanges = z.object({
-  triggerType: automationTriggerType.optional().describe("Replacement event that starts the rule."),
-  triggerListId: uuid.nullable().optional().describe("Required when the resulting triggerType is card_enters_list."),
+  triggerType: automationTriggerType.optional().describe("Replacement event that starts the rule. List-exit and custom-value rules are transition based; approaching-due and inactivity rules are scheduled and one-shot per event boundary."),
+  triggerListId: uuid.nullable().optional().describe("Required when the resulting triggerType is card_enters_list or card_leaves_list."),
   triggerUserIds: z.array(uuid).min(1).max(100).nullable().optional().describe("Required when the resulting triggerType is card_assigned_to_user."),
   triggerLabelId: uuid.nullable().optional().describe("Required when the resulting triggerType is card_label_set."),
+  triggerCustomFieldId: uuid.nullable().optional().describe("Required when the resulting triggerType is custom_field_value_changed."),
+  triggerCustomFieldValue: automationTriggerCustomFieldValue.nullable().optional().describe("Typed selected value required when the resulting triggerType is custom_field_value_changed."),
+  triggerDaysBefore: z.number().int().min(1).max(3650).nullable().optional().describe("Lead time required when the resulting triggerType is due_date_approaching."),
   applyOnCreate: z.boolean().optional().describe("For card_enters_list, whether card creation can trigger the rule."),
   applyOnMove: z.boolean().optional().describe("For card_enters_list, whether moving a card can trigger the rule."),
   actions: z.array(automationActionInput).max(AUTOMATION_ACTION_LIMIT).optional().describe("Replace the full ordered action list atomically with the trigger changes. An empty list disables the rule."),

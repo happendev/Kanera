@@ -10,6 +10,7 @@ import {
   activityEvents,
   automationActions,
   automationDueDateRuns,
+  automationInactiveRuns,
   automationRunStats,
   automations,
   boardMembers,
@@ -31,12 +32,13 @@ import {
   notifications,
   customFields,
   workspaceMembers,
+  workspaces,
 } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, ne } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db, pool } from "../../db.js";
-import { runDueDateAutomationSweep, runListEntryAutomations } from "../../lib/automations.js";
+import { runDueDateApproachingAutomationSweep, runDueDateAutomationSweep, runInactivityAutomationSweep, runListEntryAutomations } from "../../lib/automations.js";
 import { waitForNotificationFanoutForTests } from "../../lib/notifications.js";
 import { buildIntegrationServer } from "../../test/integration.js";
 import { signupOwner } from "../../test/api-fixtures.js";
@@ -2718,6 +2720,79 @@ void test("due date automation sweep runs overdue candidates while ignoring futu
   assert.ok(updated?.completedAt);
 });
 
+void test("inactivity automation sweep fires once per card inactivity boundary", async () => {
+  const f = await setupWorkspace("owner-automation-inactivity-sweep@example.com");
+  await db.update(workspaces).set({ inactiveCardsDays: 7 }).where(eq(workspaces.id, f.workspace.id));
+  const [label] = await db
+    .insert(cardLabels)
+    .values({ workspaceId: f.workspace.id, name: "Needs attention", position: "1000.0000000000" })
+    .returning();
+  assert.ok(label);
+  const createdAutomation = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: {
+      enabled: true,
+      triggerType: "card_becomes_inactive",
+      actions: [{ type: "add_labels", config: { labelIds: [label.id] } }],
+    },
+  });
+  assert.equal(createdAutomation.statusCode, 201);
+  const automation = createdAutomation.json<{ id: string; triggerType: string }>();
+  assert.equal(automation.triggerType, "card_becomes_inactive");
+
+  const [inactive, recent, completed] = await db
+    .insert(cards)
+    .values([
+      { listId: f.list.id, boardId: f.board.id, title: "Inactive", position: "1000.0000000000", createdById: f.user.id, updatedAt: new Date("2026-05-01T12:00:00.000Z") },
+      { listId: f.list.id, boardId: f.board.id, title: "Recent", position: "2000.0000000000", createdById: f.user.id, updatedAt: new Date("2026-05-16T12:00:00.000Z") },
+      { listId: f.list.id, boardId: f.board.id, title: "Completed", position: "3000.0000000000", createdById: f.user.id, completedAt: new Date("2026-05-02T12:00:00.000Z"), updatedAt: new Date("2026-05-01T12:00:00.000Z") },
+    ])
+    .returning();
+  assert.ok(inactive && recent && completed);
+  const now = new Date("2026-05-21T12:00:00.000Z");
+
+  assert.equal(await runInactivityAutomationSweep(undefined, now), 1);
+  assert.deepEqual(
+    await db.select({ cardId: cardLabelAssignments.cardId }).from(cardLabelAssignments).where(eq(cardLabelAssignments.labelId, label.id)),
+    [{ cardId: inactive.id }],
+  );
+  const [firstRun] = await db
+    .select()
+    .from(automationInactiveRuns)
+    .where(and(eq(automationInactiveRuns.automationId, automation.id), eq(automationInactiveRuns.cardId, inactive.id)));
+  assert.equal(firstRun?.inactiveAt.toISOString(), "2026-05-08T12:00:00.000Z");
+
+  // Label actions intentionally do not change the card activity clock. The ledger, rather than an
+  // incidental card update, must therefore prevent an hourly sweep from repeating this event.
+  assert.equal(await runInactivityAutomationSweep(undefined, now), 0);
+  assert.equal((await loadAutomationRunStats(automation.id))?.runCount, 1);
+
+  // New activity establishes a new boundary, so the rule can fire again after another quiet week.
+  await db.delete(cardLabelAssignments).where(and(eq(cardLabelAssignments.cardId, inactive.id), eq(cardLabelAssignments.labelId, label.id)));
+  await db.update(cards).set({ updatedAt: new Date("2026-05-10T12:00:00.000Z") }).where(eq(cards.id, inactive.id));
+  assert.equal(await runInactivityAutomationSweep(undefined, now), 1);
+  const [secondRun] = await db
+    .select()
+    .from(automationInactiveRuns)
+    .where(and(eq(automationInactiveRuns.automationId, automation.id), eq(automationInactiveRuns.cardId, inactive.id)));
+  assert.equal(secondRun?.inactiveAt.toISOString(), "2026-05-17T12:00:00.000Z");
+  assert.equal((await loadAutomationRunStats(automation.id))?.runCount, 2);
+
+  // The period itself is part of the event boundary. Lengthening it makes the card active again,
+  // then allows one new event when that later boundary is eventually crossed.
+  await db.update(workspaces).set({ inactiveCardsDays: 14 }).where(eq(workspaces.id, f.workspace.id));
+  await db.delete(cardLabelAssignments).where(and(eq(cardLabelAssignments.cardId, inactive.id), eq(cardLabelAssignments.labelId, label.id)));
+  assert.equal(await runInactivityAutomationSweep(undefined, now), 0);
+  assert.equal(await runInactivityAutomationSweep(undefined, new Date("2026-05-25T12:00:00.000Z")), 1);
+  const [periodChangedRun] = await db
+    .select()
+    .from(automationInactiveRuns)
+    .where(and(eq(automationInactiveRuns.automationId, automation.id), eq(automationInactiveRuns.cardId, inactive.id)));
+  assert.equal(periodChangedRun?.inactiveAt.toISOString(), "2026-05-24T12:00:00.000Z");
+});
+
 void test("due date automation sweep pages through every overdue candidate across batches", async () => {
   const f = await setupWorkspace("owner-automation-due-sweep-batched@example.com");
 
@@ -2998,6 +3073,21 @@ void test("deleting a custom field prunes and disables automations that referenc
   assert.equal(targetAutomation.statusCode, 201);
   const automationB = targetAutomation.json<{ id: string }>();
 
+  const triggerAutomation = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: {
+      enabled: true,
+      triggerType: "custom_field_value_changed",
+      triggerCustomFieldId: source.id,
+      triggerCustomFieldValue: { kind: "text", text: "ready" },
+      actions: [{ type: "set_completion", config: { completed: true } }],
+    },
+  });
+  assert.equal(triggerAutomation.statusCode, 201);
+  const automationC = triggerAutomation.json<{ id: string }>();
+
   const del = await f.app.inject({ method: "DELETE", url: `/custom-fields/${source.id}`, headers: f.auth });
   assert.equal(del.statusCode, 204);
 
@@ -3007,4 +3097,140 @@ void test("deleting a custom field prunes and disables automations that referenc
     const actions = await db.select().from(automationActions).where(eq(automationActions.automationId, id));
     assert.equal(actions.length, 0);
   }
+  const [triggerRow] = await db.select().from(automations).where(eq(automations.id, automationC.id)).limit(1);
+  assert.equal(triggerRow?.enabled, false);
+  assert.equal(triggerRow?.triggerCustomFieldId, source.id);
+  assert.equal((await db.select().from(automationActions).where(eq(automationActions.automationId, automationC.id))).length, 1);
+});
+
+void test("card-leaves-list automation runs when a card moves out of its configured list", async () => {
+  const f = await setupWorkspace("owner-automation-leaves-list@example.com");
+  const [destination] = await db.select().from(lists).where(and(eq(lists.workspaceId, f.workspace.id), ne(lists.id, f.list.id))).limit(1);
+  assert.ok(destination);
+  const [label] = await db.insert(cardLabels).values({ workspaceId: f.workspace.id, name: "Left intake", position: "1000.0000000000" }).returning();
+  assert.ok(label);
+
+  const createdAutomation = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: {
+      enabled: true,
+      triggerType: "card_leaves_list",
+      triggerListId: f.list.id,
+      actions: [{ type: "add_labels", config: { labelIds: [label.id] } }],
+    },
+  });
+  assert.equal(createdAutomation.statusCode, 201);
+
+  // Both sides of one transition share the global rule order. If entry and exit rules were run in
+  // separate groups, the later entry rule here would incorrectly leave the card incomplete.
+  const [entryRule, exitRule] = await db.insert(automations).values([
+    { workspaceId: f.workspace.id, enabled: true, position: "2000.0000000000", triggerType: "card_enters_list", triggerListId: destination.id },
+    { workspaceId: f.workspace.id, enabled: true, position: "3000.0000000000", triggerType: "card_leaves_list", triggerListId: f.list.id },
+  ]).returning();
+  assert.ok(entryRule && exitRule);
+  await db.insert(automationActions).values([
+    { automationId: entryRule.id, type: "set_completion", config: { completed: false }, position: "1000.0000000000" },
+    { automationId: exitRule.id, type: "set_completion", config: { completed: true }, position: "1000.0000000000" },
+  ]);
+
+  const [card] = await db.insert(cards).values({ boardId: f.board.id, listId: f.list.id, title: "Move out", position: "1000.0000000000", createdById: f.user.id }).returning();
+  assert.ok(card);
+  const moved = await f.app.inject({ method: "POST", url: `/cards/${card.id}/move`, headers: f.auth, payload: { listId: destination.id, afterCardId: null } });
+  assert.equal(moved.statusCode, 200);
+
+  const assignments = await db.select().from(cardLabelAssignments).where(and(eq(cardLabelAssignments.cardId, card.id), eq(cardLabelAssignments.labelId, label.id)));
+  assert.equal(assignments.length, 1);
+  const [movedCard] = await db.select().from(cards).where(eq(cards.id, card.id)).limit(1);
+  assert.ok(movedCard?.completedAt);
+});
+
+void test("custom-field-value automation fires only on transitions into the selected value", async () => {
+  const f = await setupWorkspace("owner-automation-custom-field-trigger@example.com");
+  const [field] = await db.insert(customFields).values({ workspaceId: f.workspace.id, name: "Stage", icon: "selector", type: "select", position: "1000.0000000000" }).returning();
+  assert.ok(field);
+  const [ready, blocked] = await db.insert(customFieldOptions).values([
+    { fieldId: field.id, label: "Ready", position: "1000.0000000000" },
+    { fieldId: field.id, label: "Blocked", position: "2000.0000000000" },
+  ]).returning();
+  const [label] = await db.insert(cardLabels).values({ workspaceId: f.workspace.id, name: "Ready now", position: "1000.0000000000" }).returning();
+  assert.ok(ready && blocked && label);
+
+  const createdAutomation = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: {
+      enabled: true,
+      triggerType: "custom_field_value_changed",
+      triggerCustomFieldId: field.id,
+      triggerCustomFieldValue: { kind: "select", optionId: ready.id },
+      actions: [{ type: "add_labels", config: { labelIds: [label.id] } }],
+    },
+  });
+  assert.equal(createdAutomation.statusCode, 201);
+  const automation = createdAutomation.json<{ id: string }>();
+  const [card] = await db.insert(cards).values({ boardId: f.board.id, listId: f.list.id, title: "Field transition", position: "1000.0000000000", createdById: f.user.id }).returning();
+  assert.ok(card);
+
+  const setValue = (optionId: string) => f.app.inject({ method: "PUT", url: `/cards/${card.id}/custom-fields/${field.id}`, headers: f.auth, payload: { valueOptionIds: [optionId] } });
+  assert.equal((await setValue(ready.id)).statusCode, 200);
+  assert.equal((await loadAutomationRunStats(automation.id))?.runCount, 1);
+  const firstActivities = await db.select({ action: activityEvents.action }).from(activityEvents)
+    .where(and(eq(activityEvents.entityId, card.id), inArray(activityEvents.action, [ACTIVITY_ACTION.CUSTOM_FIELD_VALUE_SET, ACTIVITY_ACTION.LABELS_SET])))
+    .orderBy(asc(activityEvents.id));
+  assert.deepEqual(firstActivities.map((row) => row.action), [ACTIVITY_ACTION.CUSTOM_FIELD_VALUE_SET, ACTIVITY_ACTION.LABELS_SET]);
+  assert.equal((await setValue(ready.id)).statusCode, 200);
+  assert.equal((await loadAutomationRunStats(automation.id))?.runCount, 1);
+  assert.equal((await setValue(blocked.id)).statusCode, 200);
+  assert.equal((await setValue(ready.id)).statusCode, 200);
+  assert.equal((await loadAutomationRunStats(automation.id))?.runCount, 2);
+
+  const deletedOption = await f.app.inject({ method: "DELETE", url: `/options/${ready.id}`, headers: f.auth });
+  assert.equal(deletedOption.statusCode, 204);
+  const [disabled] = await db.select().from(automations).where(eq(automations.id, automation.id)).limit(1);
+  assert.equal(disabled?.enabled, false);
+});
+
+void test("due-date-approaching automation fires once per due date and lead-time window", async () => {
+  const f = await setupWorkspace("owner-automation-due-approaching@example.com");
+  const [label] = await db.insert(cardLabels).values({ workspaceId: f.workspace.id, name: "Due soon", position: "1000.0000000000" }).returning();
+  assert.ok(label);
+  const createdAutomation = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: {
+      enabled: true,
+      triggerType: "due_date_approaching",
+      triggerDaysBefore: 3,
+      actions: [{ type: "add_labels", config: { labelIds: [label.id] } }],
+    },
+  });
+  assert.equal(createdAutomation.statusCode, 201);
+  const automation = createdAutomation.json<{ id: string }>();
+  const [card] = await db.insert(cards).values({
+    boardId: f.board.id,
+    listId: f.list.id,
+    title: "Upcoming",
+    position: "1000.0000000000",
+    createdById: f.user.id,
+    dueDateLocalDate: "2026-06-10",
+    dueDateSlot: "anyTime",
+    dueDateTimezone: "UTC",
+  }).returning();
+  assert.ok(card);
+
+  assert.equal(await runDueDateApproachingAutomationSweep(undefined, new Date("2026-06-06T12:00:00.000Z")), 0);
+  assert.equal(await runDueDateApproachingAutomationSweep(undefined, new Date("2026-06-07T12:00:00.000Z")), 1);
+  assert.equal(await runDueDateApproachingAutomationSweep(undefined, new Date("2026-06-08T12:00:00.000Z")), 0);
+  const [firstRun] = await db.select().from(automationDueDateRuns).where(and(eq(automationDueDateRuns.automationId, automation.id), eq(automationDueDateRuns.cardId, card.id))).limit(1);
+  assert.equal(firstRun?.dueDateLocalDate, "2026-06-10");
+  assert.equal(firstRun?.triggerDaysBefore, 3);
+
+  await db.delete(cardLabelAssignments).where(and(eq(cardLabelAssignments.cardId, card.id), eq(cardLabelAssignments.labelId, label.id)));
+  await db.update(cards).set({ dueDateLocalDate: "2026-06-12" }).where(eq(cards.id, card.id));
+  assert.equal(await runDueDateApproachingAutomationSweep(undefined, new Date("2026-06-09T12:00:00.000Z")), 1);
+  assert.equal((await loadAutomationRunStats(automation.id))?.runCount, 2);
 });
