@@ -1,6 +1,10 @@
 <div align="center">
 
-# Kanera
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="apps/web/public/assets/logo/Kanera%20dark%20long.svg">
+  <source media="(prefers-color-scheme: light)" srcset="apps/web/public/assets/logo/Kanera%20light%20long.svg">
+  <img alt="Kanera" src="apps/web/public/assets/logo/Kanera%20light%20long.svg" width="425">
+</picture>
 
 **One clear view. Keep work moving.**
 
