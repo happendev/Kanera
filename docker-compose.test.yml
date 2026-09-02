@@ -24,7 +24,7 @@ services:
       retries: 20
 
   valkey:
-    image: valkey/valkey:9.1.1-alpine
+    image: valkey/valkey:9.1.2-alpine
     container_name: kanera-api-test-valkey
     ports:
       - "127.0.0.1:56379:6379"
