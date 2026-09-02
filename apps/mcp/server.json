@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "app.kanera/mcp",
   "title": "Kanera",
-  "description": "Bootstrap Kanera workspaces and boards from templates, and manage cards, checklists, comments, notes, attachments, automations, reports, and priorities.",
+  "description": "Manage Kanera workspaces, boards, cards, checklists, comments, notes, automations, and reports.",
   "version": "3.0.0",
   "icons": [
     {
