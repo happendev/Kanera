@@ -105,6 +105,7 @@ interface ImportContext {
   warnings: string[];
   actorName: string;
   actorAvatarUrl: string | null;
+  sourceLabel: "kanera" | "csv";
 }
 
 function chunks<T>(items: T[], size = CHUNK_SIZE): T[][] {
@@ -151,10 +152,11 @@ function normalize(value: string): string {
   return value.trim().toLocaleLowerCase();
 }
 
-function importedCommentBody(body: string, authorName: string | null, mappedAuthor: boolean): string {
+function importedCommentBody(body: string, authorName: string | null, mappedAuthor: boolean, sourceLabel: "kanera" | "csv"): string {
   const trimmed = body.trim();
   if (mappedAuthor || !authorName) return trimmed.slice(0, 20_000);
-  return `[Imported from Kanera - ${authorName}]\n\n${trimmed}`.slice(0, 20_000);
+  const sourceName = sourceLabel === "csv" ? "CSV" : "Kanera";
+  return `[Imported from ${sourceName} - ${authorName}]\n\n${trimmed}`.slice(0, 20_000);
 }
 
 async function createBoard(ctx: ImportContext): Promise<Board> {
@@ -412,8 +414,8 @@ async function copyAttachments(ctx: ImportContext, cardIdBySourceId: Map<string,
   return { rows, coverUpdates };
 }
 
-export async function runKaneraBoardImport(tx: Tx, args: { source: BoardExportArchive; body: CommitImportBody; workspaceId: string; clientId: string; actorId: string; targetBoardId?: string | null; storage: StorageProvider }): Promise<KaneraBoardImportResult> {
-  const ctx: ImportContext = { tx, warnings: [], actorName: "Importer", actorAvatarUrl: null, targetBoardId: null, ...args };
+export async function runKaneraBoardImport(tx: Tx, args: { source: BoardExportArchive; body: CommitImportBody; workspaceId: string; clientId: string; actorId: string; targetBoardId?: string | null; storage: StorageProvider; sourceLabel?: "kanera" | "csv" }): Promise<KaneraBoardImportResult> {
+  const ctx: ImportContext = { tx, warnings: [], actorName: "Importer", actorAvatarUrl: null, targetBoardId: null, sourceLabel: "kanera", ...args };
   const [workspaceUserRows, actorRow] = await Promise.all([
     tx.select({ userId: workspaceMembers.userId }).from(workspaceMembers).where(eq(workspaceMembers.workspaceId, ctx.workspaceId)),
     tx.select({ displayName: users.displayName, avatarUrl: users.avatarUrl, homeClientId: users.clientId }).from(users).where(eq(users.id, ctx.actorId)).limit(1),
@@ -555,7 +557,7 @@ export async function runKaneraBoardImport(tx: Tx, args: { source: BoardExportAr
         cardId,
         authorId: mappedAuthorId ?? ctx.actorId,
         authorKind: "user" as const,
-        body: importedCommentBody(comment.body, comment.authorName, !!mappedAuthorId),
+        body: importedCommentBody(comment.body, comment.authorName, !!mappedAuthorId, ctx.sourceLabel),
         editedAt: toDate(comment.editedAt),
         createdAt: toDate(comment.createdAt) ?? new Date(),
       }];
@@ -601,12 +603,12 @@ export async function runKaneraBoardImport(tx: Tx, args: { source: BoardExportAr
 
   const createdActivities: ActivityEvent[] = [];
   if (!ctx.targetBoardId) {
-    createdActivities.push(await recordActivity(tx, { boardId: board.id, workspaceId: ctx.workspaceId, actorId: ctx.actorId, entityType: "board", entityId: board.id, action: "created", payload: { name: board.name, importedFrom: "kanera", counts: summary } }));
+    createdActivities.push(await recordActivity(tx, { boardId: board.id, workspaceId: ctx.workspaceId, actorId: ctx.actorId, entityType: "board", entityId: board.id, action: "created", payload: { name: board.name, importedFrom: ctx.sourceLabel, counts: summary } }));
   }
-  for (const list of listMapping.created) createdActivities.push(await recordActivity(tx, { boardId: null, workspaceId: ctx.workspaceId, actorId: ctx.actorId, entityType: "list", entityId: list.id, action: "created", payload: { name: list.name, importedFrom: "kanera" } }));
-  for (const label of labelMapping.created) createdActivities.push(await recordActivity(tx, { boardId: null, workspaceId: ctx.workspaceId, actorId: ctx.actorId, entityType: "cardLabel", entityId: label.id, action: "created", payload: { name: label.name, importedFrom: "kanera" } }));
-  for (const field of fieldMapping.created) createdActivities.push(await recordActivity(tx, { boardId: null, workspaceId: ctx.workspaceId, actorId: ctx.actorId, entityType: "customField", entityId: field.id, action: "created", payload: { name: field.name, icon: field.icon, type: field.type, importedFrom: "kanera" } }));
-  for (const card of insertedCards) createdActivities.push(await recordActivity(tx, { boardId: board.id, workspaceId: ctx.workspaceId, actorId: ctx.actorId, entityType: "card", entityId: card.id, action: "created", payload: { title: card.title, listId: card.listId, importedFrom: "kanera" } }));
+  for (const list of listMapping.created) createdActivities.push(await recordActivity(tx, { boardId: null, workspaceId: ctx.workspaceId, actorId: ctx.actorId, entityType: "list", entityId: list.id, action: "created", payload: { name: list.name, importedFrom: ctx.sourceLabel } }));
+  for (const label of labelMapping.created) createdActivities.push(await recordActivity(tx, { boardId: null, workspaceId: ctx.workspaceId, actorId: ctx.actorId, entityType: "cardLabel", entityId: label.id, action: "created", payload: { name: label.name, importedFrom: ctx.sourceLabel } }));
+  for (const field of fieldMapping.created) createdActivities.push(await recordActivity(tx, { boardId: null, workspaceId: ctx.workspaceId, actorId: ctx.actorId, entityType: "customField", entityId: field.id, action: "created", payload: { name: field.name, icon: field.icon, type: field.type, importedFrom: ctx.sourceLabel } }));
+  for (const card of insertedCards) createdActivities.push(await recordActivity(tx, { boardId: board.id, workspaceId: ctx.workspaceId, actorId: ctx.actorId, entityType: "card", entityId: card.id, action: "created", payload: { title: card.title, listId: card.listId, importedFrom: ctx.sourceLabel } }));
 
   const activityRows = createdActivities.length ? await tx.select().from(activityEvents).where(inArray(activityEvents.id, createdActivities.map((activity) => activity.id))) : [];
   const activityByEntityId = new Map(activityRows.map((activity) => [activity.entityId, activity]));

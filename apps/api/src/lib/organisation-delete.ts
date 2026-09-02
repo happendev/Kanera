@@ -13,6 +13,7 @@ import {
   githubAppInstallations,
   inviteTokens,
   kaneraBoardImports,
+  csvImports,
   noteAttachments,
   notes,
   notifications,
@@ -153,6 +154,7 @@ export async function purgeOrganisation(clientId: string, log: FastifyBaseLogger
       await tx.delete(boardInvitations).where(eq(boardInvitations.clientId, clientId));
       await tx.delete(activityEvents).where(eq(activityEvents.clientId, clientId));
       await tx.delete(kaneraBoardImports).where(eq(kaneraBoardImports.clientId, clientId));
+      await tx.delete(csvImports).where(eq(csvImports.clientId, clientId));
       await tx.delete(trelloImports).where(eq(trelloImports.clientId, clientId));
       await tx.delete(standaloneBoardGroups).where(eq(standaloneBoardGroups.clientId, clientId));
       await tx.delete(githubAppInstallations).where(eq(githubAppInstallations.clientId, clientId));

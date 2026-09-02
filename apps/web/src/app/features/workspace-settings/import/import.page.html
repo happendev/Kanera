@@ -1,4 +1,4 @@
-<k-docs-link class="spaced" path="trello-import" label="Learn more about importing" />
+<k-docs-link class="spaced" [path]="docsPath()" label="Learn more about importing" />
 <k-segmented
   class="import-source-switch"
   [options]="sourceOptions"
@@ -10,6 +10,8 @@
 
 @if (source() === 'trello') {
 <k-trello-import source="trello" [workspaceId]="settings.workspaceId()" [standalone]="settings.isStandalone()" [lists]="settings.lists()" [labels]="settings.labels()" [fields]="settings.fields()" [members]="settings.members()" />
-} @else {
+} @else if (source() === 'kanera') {
 <k-trello-import source="kanera" [workspaceId]="settings.workspaceId()" [standalone]="settings.isStandalone()" [lists]="settings.lists()" [labels]="settings.labels()" [fields]="settings.fields()" [members]="settings.members()" />
+} @else {
+<k-trello-import source="csv" [workspaceId]="settings.workspaceId()" [standalone]="settings.isStandalone()" [lists]="settings.lists()" [labels]="settings.labels()" [fields]="settings.fields()" [members]="settings.members()" />
 }

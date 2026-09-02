@@ -12,6 +12,7 @@
     "./events": "./src/events/index.ts",
     "./automation-limits": "./src/automation-limits.ts",
     "./dto/name-limits": "./src/dto/name-limits.ts",
+    "./dto/csv-import-targets": "./src/dto/csv-import-targets.ts",
     "./attachments": "./src/attachments.ts",
     "./client-ip": "./src/client-ip.ts",
     "./card-links": "./src/card-links.ts",

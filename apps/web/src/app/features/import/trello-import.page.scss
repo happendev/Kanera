@@ -467,6 +467,103 @@ input[type="text"],
   font-size: 13px;
 }
 
+.csv-options {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+
+  > label:not(.check-row) {
+    display: grid;
+    gap: 5px;
+
+    > span {
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+  }
+}
+
+.csv-timezone {
+  align-self: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.csv-columns {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.csv-column-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(190px, 2fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+
+  &:last-child { border-bottom: 0; }
+
+  > select { min-width: 190px; }
+}
+
+.csv-column-source,
+.csv-samples {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+}
+
+.csv-column-source {
+  align-items: flex-start;
+  flex-direction: column;
+
+  strong {
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.csv-samples { flex-wrap: wrap; }
+
+.csv-sample {
+  max-width: 160px;
+  overflow: hidden;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-family: monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.csv-field-controls {
+  grid-column: auto;
+  min-width: min(330px, 100%);
+}
+
+.csv-errors {
+  align-items: flex-start;
+
+  div {
+    display: grid;
+    gap: 3px;
+  }
+}
+
 .result-panel {
   display: grid;
   justify-items: start;
@@ -500,9 +597,16 @@ input[type="text"],
 
   .upload-panel,
   .mapping-controls,
-  .trello-connect-row {
+  .trello-connect-row,
+  .csv-options {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .csv-column-row {
+    grid-template-columns: 1fr;
+
+    > select { min-width: 0; }
   }
 
   .wizard-actions {

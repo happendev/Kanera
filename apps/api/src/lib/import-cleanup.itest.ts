@@ -2,7 +2,7 @@ import "../test/setup.integration.js";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
-import { kaneraBoardImports, trelloImports } from "@kanera/shared/schema";
+import { csvImports, kaneraBoardImports, trelloImports } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import { db } from "../db.js";
 import { buildIntegrationServer } from "../test/integration.js";
@@ -33,12 +33,15 @@ void test("import cleanup deletes sessions and source files older than 7 days", 
 
   const oldTrelloId = randomUUID();
   const oldKaneraId = randomUUID();
+  const oldCsvId = randomUUID();
   const freshTrelloId = randomUUID();
   const oldTrelloKey = `imports/${oldTrelloId}/source.json`;
   const oldKaneraKey = `imports/kanera-board/${oldKaneraId}/source.json`;
+  const oldCsvKey = `imports/csv/${oldCsvId}/source.csv`;
   const freshTrelloKey = `imports/${freshTrelloId}/source.json`;
   await storage.put(oldTrelloKey, Buffer.from("{}"), "application/json");
   await storage.put(oldKaneraKey, Buffer.from("{}"), "application/json");
+  await storage.put(oldCsvKey, Buffer.from("Title\nCard"), "text/csv");
   await storage.put(freshTrelloKey, Buffer.from("{}"), "application/json");
 
   await db.insert(trelloImports).values([
@@ -82,14 +85,29 @@ void test("import cleanup deletes sessions and source files older than 7 days", 
     createdAt: new Date("2026-06-01T00:00:00Z"),
     updatedAt: new Date("2026-06-01T00:00:00Z"),
   });
+  await db.insert(csvImports).values({
+    id: oldCsvId,
+    workspaceId: workspace.id,
+    clientId: user.clientId,
+    createdById: user.id,
+    status: "completed",
+    sourceFileKey: oldCsvKey,
+    sourceFileName: "old.csv",
+    manifest: {},
+    source: {},
+    createdAt: new Date("2026-06-01T00:00:00Z"),
+    updatedAt: new Date("2026-06-01T00:00:00Z"),
+  });
 
   const deleted = await runImportCleanup({ db, log }, new Date("2026-06-10T00:00:00Z"));
-  assert.equal(deleted, 2);
+  assert.equal(deleted, 3);
 
   assert.equal((await db.select().from(trelloImports).where(eq(trelloImports.id, oldTrelloId))).length, 0);
   assert.equal((await db.select().from(kaneraBoardImports).where(eq(kaneraBoardImports.id, oldKaneraId))).length, 0);
+  assert.equal((await db.select().from(csvImports).where(eq(csvImports.id, oldCsvId))).length, 0);
   assert.equal((await db.select().from(trelloImports).where(eq(trelloImports.id, freshTrelloId))).length, 1);
   await assert.rejects(storage.get(oldTrelloKey));
   await assert.rejects(storage.get(oldKaneraKey));
+  await assert.rejects(storage.get(oldCsvKey));
   await assert.doesNotReject(storage.get(freshTrelloKey));
 });

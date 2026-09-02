@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, HostListener, computed, inject, inp
 import type { OnDestroy } from "@angular/core";
 import { RouterLink } from "@angular/router";
 import type { ColorToken } from "@kanera/shared/colors";
-import type { AnalyzeImportResponse, AnalyzeKaneraBoardImportResponse, CommitImportBody, CustomFieldTypeName, ImportAttachmentProgress, ImportResultSummary, KaneraBoardImportManifest, TrelloImportManifest, TrelloImportStatusResponse } from "@kanera/shared/dto";
+import type { AnalyzeCsvImportResponse, AnalyzeImportResponse, AnalyzeKaneraBoardImportResponse, CommitImportBody, CsvColumnMapping, CsvColumnTarget, CsvColumnsResponse, CsvImportIssues, CsvImportManifest, CsvImportPreview, CustomFieldTypeName, ImportAttachmentProgress, ImportResultSummary, KaneraBoardImportManifest, TrelloImportManifest, TrelloImportStatusResponse } from "@kanera/shared/dto";
+import { CSV_SINGLE_TARGETS } from "@kanera/shared/dto/csv-import-targets";
 import { CARD_LABEL_NAME_MAX_LENGTH, WORKSPACE_ENTITY_NAME_MAX_LENGTH } from "@kanera/shared/dto/name-limits";
 import type { WireCardLabel, WireCustomField } from "@kanera/shared/events";
 import type { List, WorkspaceMember } from "@kanera/shared/schema";
@@ -14,10 +15,10 @@ import { ImportNavigationGuardService } from "./import-navigation-guard.service"
 import { findMatchingImportMember } from "./import-member-mapping.util";
 
 type MemberRow = WorkspaceMember & { email: string; displayName: string; avatarUrl: string | null };
-type Step = "upload" | "lists" | "labels" | "fields" | "members" | "options" | "result";
+type Step = "upload" | "columns" | "lists" | "labels" | "fields" | "members" | "options" | "result";
 type Action = "create" | "map" | "skip";
-type ImportSource = "trello" | "kanera";
-type ImportManifest = TrelloImportManifest | KaneraBoardImportManifest;
+type ImportSource = "trello" | "kanera" | "csv";
+type ImportManifest = TrelloImportManifest | KaneraBoardImportManifest | CsvImportManifest;
 type ListMapping = { action: Action; targetListId?: string; name: string; icon: string | null; color: ColorToken | null };
 type LabelMapping = { action: Action; targetLabelId?: string; name: string; color: ColorToken | null };
 type FieldMapping = { action: Action; targetFieldId?: string; name: string; type: CustomFieldTypeName; icon: string };
@@ -26,12 +27,17 @@ type CommitLabelMapping = CommitImportBody["labels"][string];
 type CommitFieldMapping = CommitImportBody["customFields"][string];
 type TrelloAuthConfig = { enabled: boolean; apiKey?: string };
 
-const STEPS: Step[] = ["upload", "lists", "labels", "fields", "members", "options", "result"];
+const DEFAULT_STEPS: Step[] = ["upload", "lists", "labels", "fields", "members", "options", "result"];
+const CSV_STEPS: Step[] = ["upload", "columns", "lists", "labels", "fields", "members", "options", "result"];
 const cappedName = (value: string, maxLength: number) => value.trim().slice(0, maxLength);
 const STEP_COPY: Record<Step, { title: string; description: string }> = {
   upload: {
     title: "Upload Export",
     description: "Choose a JSON export so Kanera can inspect the board before anything is created.",
+  },
+  columns: {
+    title: "Map Columns",
+    description: "Tell Kanera what each CSV column means. Title is required; everything else is optional.",
   },
   lists: {
     title: "Mapping Lists",
@@ -39,7 +45,7 @@ const STEP_COPY: Record<Step, { title: string; description: string }> = {
   },
   labels: {
     title: "Mapping Labels",
-    description: "Choose whether Trello labels become new workspace labels, reuse existing labels, or are left off imported cards.",
+    description: "Choose whether source labels become new workspace labels, reuse existing labels, or are left off imported cards.",
   },
   fields: {
     title: "Mapping Custom Fields",
@@ -75,6 +81,14 @@ const SOURCE_COPY: Record<ImportSource, { title: string; hint: string; upload: s
     fileError: "Choose a Kanera board JSON export first.",
     importComplete: "The Kanera board has been imported into a new board.",
     preservedAttachments: "attachments will be copied when possible",
+  },
+  csv: {
+    title: "CSV import",
+    hint: "Import cards from a CSV file into a new Kanera board.",
+    upload: "Choose a CSV file",
+    fileError: "Choose a CSV file first.",
+    importComplete: "The CSV rows have been imported into a new Kanera board.",
+    preservedAttachments: "attachments are not imported from CSV",
   },
 };
 
@@ -124,27 +138,39 @@ export class TrelloImportPage implements OnDestroy {
   readonly trelloAuthConfig = signal<TrelloAuthConfig>({ enabled: false });
   readonly trelloToken = signal<string | null>(null);
   readonly attachmentProgress = signal<ImportAttachmentProgress | null>(null);
+  readonly csvPreview = signal<CsvImportPreview | null>(null);
+  readonly csvMapping = signal<CsvColumnMapping | null>(null);
+  readonly csvIssues = signal<CsvImportIssues | null>(null);
+  private readonly analyzedMembers = signal<MemberRow[]>([]);
+  /** Serialized column mapping last accepted by the server; unchanged mappings skip re-initialising workspace mappings. */
+  private appliedCsvMappingJson: string | null = null;
 
-  readonly steps = STEPS;
+  readonly steps = computed(() => this.source() === "csv" ? CSV_STEPS : DEFAULT_STEPS);
   readonly workspaceEntityNameMaxLength = WORKSPACE_ENTITY_NAME_MAX_LENGTH;
   readonly labelNameMaxLength = CARD_LABEL_NAME_MAX_LENGTH;
   readonly sourceCopy = computed(() => {
     const copy = SOURCE_COPY[this.source()];
     if (!this.standalone()) return copy;
-    const sourceName = this.source() === "trello" ? "Trello" : "Kanera";
+    const sourceName = this.source() === "trello" ? "Trello" : this.source() === "kanera" ? "Kanera" : "CSV";
     return {
       ...copy,
-      hint: `Import a ${sourceName} board JSON export into this board. Existing cards and board settings remain.`,
-      importComplete: `The ${sourceName} board has been imported into this board.`,
+      hint: this.source() === "csv"
+        ? "Import cards from a CSV file into this board. Existing cards and board settings remain."
+        : `Import a ${sourceName} board JSON export into this board. Existing cards and board settings remain.`,
+      importComplete: this.source() === "csv" ? "The CSV rows have been imported into this board." : `The ${sourceName} board has been imported into this board.`,
     };
   });
-  readonly stepIndex = computed(() => STEPS.indexOf(this.step()));
+  readonly stepIndex = computed(() => this.steps().indexOf(this.step()));
   readonly stepTitle = computed(() => `Step ${this.stepIndex() + 1} - ${STEP_COPY[this.step()].title}`);
   readonly stepDescription = computed(() => {
     if (this.step() === "result") return this.sourceCopy().importComplete;
-    if (!this.standalone()) return STEP_COPY[this.step()].description;
+    if (!this.standalone()) {
+      if (this.step() === "upload" && this.source() === "csv") return "Choose a CSV file so Kanera can inspect its columns before anything is created.";
+      return STEP_COPY[this.step()].description;
+    }
     switch (this.step()) {
-      case "upload": return "Choose a JSON export so Kanera can inspect it before adding anything to this board.";
+      case "upload": return this.source() === "csv" ? "Choose a CSV file so Kanera can inspect it before adding anything to this board." : "Choose a JSON export so Kanera can inspect it before adding anything to this board.";
+      case "columns": return "Tell Kanera what each CSV column means before mapping workspace data.";
       case "lists": return "Create new board lists, reuse matching lists, or skip lists and their cards.";
       case "labels": return "Choose whether source labels become new board labels, reuse existing labels, or are left off imported cards.";
       case "fields": return "Create or reuse compatible custom fields before their values are imported into this board.";
@@ -176,6 +202,32 @@ export class TrelloImportPage implements OnDestroy {
     return progress && progress.total > 0 ? Math.round((progress.processed / progress.total) * 100) : 0;
   });
   readonly attachmentProgressTitle = computed(() => this.attachmentProgress()?.phase === "finalizing" ? "Finalizing imported cards" : "Copying Trello uploaded files");
+  readonly csvColumnNames = computed(() => {
+    const preview = this.csvPreview();
+    const mapping = this.csvMapping();
+    if (!preview || !mapping) return [];
+    return preview.columns.map((column) => mapping.hasHeaderRow ? preview.firstRows[0]?.[column.index]?.trim() || `Column ${column.index + 1}` : `Column ${column.index + 1}`);
+  });
+  readonly csvAmbiguousDates = computed(() => (this.csvIssues()?.ambiguousDateColumns.length ?? 0) > 0);
+  readonly csvMappingErrors = computed(() => {
+    const mapping = this.csvMapping();
+    if (!mapping) return ["Choose how the CSV columns should be imported."];
+    const entries = Object.values(mapping.columns);
+    const errors: string[] = [];
+    if (entries.filter((entry) => entry.target === "title").length !== 1) errors.push("Choose exactly one Title column.");
+    for (const target of CSV_SINGLE_TARGETS) {
+      if (target !== "title" && entries.filter((entry) => entry.target === target).length > 1) errors.push(`Only one ${target} column can be mapped.`);
+    }
+    const names = new Set<string>();
+    for (const entry of entries) {
+      if (entry.target !== "customField") continue;
+      const name = entry.name.trim().toLocaleLowerCase();
+      if (!name) errors.push("Every custom field needs a name.");
+      else if (names.has(name)) errors.push(`Custom field names must be unique: ${entry.name}.`);
+      names.add(name);
+    }
+    return errors;
+  });
 
   ngOnDestroy(): void {
     this.stopImportStatusPolling();
@@ -203,8 +255,8 @@ export class TrelloImportPage implements OnDestroy {
     this.slowImport.set(false);
     this.error.set(null);
     try {
-      const endpoint = this.source() === "kanera" ? "kanera-board" : "trello";
-      const response = await this.api.request<AnalyzeImportResponse | AnalyzeKaneraBoardImportResponse>(`/workspaces/${this.workspaceId()}/imports/${endpoint}/analyze`, {
+      const endpoint = this.source() === "kanera" ? "kanera-board" : this.source();
+      const response = await this.api.request<AnalyzeImportResponse | AnalyzeKaneraBoardImportResponse | AnalyzeCsvImportResponse>(`/workspaces/${this.workspaceId()}/imports/${endpoint}/analyze`, {
         method: "POST",
         body: form,
       });
@@ -214,7 +266,7 @@ export class TrelloImportPage implements OnDestroy {
       this.boardName.set(cappedName(response.manifest.board.name, WORKSPACE_ENTITY_NAME_MAX_LENGTH));
       this.boardIcon.set("icon" in response.manifest.board ? response.manifest.board.icon ?? "layout-kanban" : "layout-kanban");
       this.boardIconColor.set("iconColor" in response.manifest.board ? response.manifest.board.iconColor ?? null : null);
-      this.includeArchived.set(this.source() === "kanera");
+      this.includeArchived.set(this.source() !== "trello");
       this.trelloToken.set(null);
       this.attachmentProgress.set(null);
       if (this.source() === "trello" && response.manifest.counts.uploadedAttachments > 0) {
@@ -225,8 +277,26 @@ export class TrelloImportPage implements OnDestroy {
       const members = this.members().length
         ? this.members()
         : await this.api.get<MemberRow[]>(`/workspaces/${this.workspaceId()}/members`);
-      this.initializeMappings(response.manifest, members);
-      this.step.set("lists");
+      this.analyzedMembers.set(members);
+      if (this.source() === "csv" && "preview" in response) {
+        this.csvPreview.set(response.preview);
+        this.csvIssues.set(response.issues);
+        this.appliedCsvMappingJson = null;
+        this.csvMapping.set({
+          ...response.preview.suggestedMapping,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+          dateOrder: response.issues.ambiguousDateColumns.length
+            ? navigator.language.toLocaleLowerCase().startsWith("en-us") ? "mdy" : "dmy"
+            : "auto",
+        });
+        this.step.set("columns");
+      } else {
+        this.csvPreview.set(null);
+        this.csvMapping.set(null);
+        this.csvIssues.set(null);
+        this.initializeMappings(response.manifest, members);
+        this.step.set("lists");
+      }
     } catch (error) {
       this.error.set(this.describeError(error));
     } finally {
@@ -266,15 +336,78 @@ export class TrelloImportPage implements OnDestroy {
     this.setSelectedFile(event.dataTransfer?.files?.[0] ?? null);
   }
 
-  next() {
+  async next() {
+    if (this.step() === "columns") {
+      await this.applyColumns();
+      return;
+    }
     const index = this.stepIndex();
-    if (index >= 0 && index < STEPS.length - 2) this.step.set(STEPS[index + 1]!);
+    const steps = this.steps();
+    if (index >= 0 && index < steps.length - 2) this.step.set(steps[index + 1]!);
   }
 
   previous() {
     const index = this.stepIndex();
-    if (index > 1) this.step.set(STEPS[index - 1]!);
+    const steps = this.steps();
+    if (index > 1) this.step.set(steps[index - 1]!);
     else this.step.set("upload");
+  }
+
+  csvSamples(index: number): string[] {
+    const preview = this.csvPreview();
+    const mapping = this.csvMapping();
+    if (!preview || !mapping) return [];
+    const rows = mapping.hasHeaderRow ? preview.firstRows.slice(1) : preview.firstRows;
+    return rows.map((row) => row[index]?.trim() ?? "").filter(Boolean).slice(0, 3);
+  }
+
+  setCsvColumnTarget(index: number, target: CsvColumnTarget["target"]): void {
+    const mapping = this.csvMapping();
+    if (!mapping) return;
+    const current = mapping.columns[String(index)];
+    const next: CsvColumnTarget = target === "customField"
+      ? current?.target === "customField" ? current : { target, name: cappedName(this.csvColumnNames()[index] ?? `Column ${index + 1}`, WORKSPACE_ENTITY_NAME_MAX_LENGTH), type: "text" }
+      : { target };
+    this.csvMapping.set({ ...mapping, columns: { ...mapping.columns, [String(index)]: next } });
+  }
+
+  updateCsvCustomField(index: number, patch: Partial<Extract<CsvColumnTarget, { target: "customField" }>>): void {
+    const mapping = this.csvMapping();
+    const current = mapping?.columns[String(index)];
+    if (!mapping || current?.target !== "customField") return;
+    this.csvMapping.set({ ...mapping, columns: { ...mapping.columns, [String(index)]: { ...current, ...patch, target: "customField" } } });
+  }
+
+  setCsvOption(patch: Partial<Pick<CsvColumnMapping, "hasHeaderRow" | "multiValueDelimiter" | "dateOrder">>): void {
+    const mapping = this.csvMapping();
+    if (mapping) this.csvMapping.set({ ...mapping, ...patch });
+  }
+
+  async applyColumns(): Promise<void> {
+    const importId = this.importId();
+    const mapping = this.csvMapping();
+    if (!importId || !mapping || this.csvMappingErrors().length) return;
+    const mappingJson = JSON.stringify(mapping);
+    // Going Back to Columns and forward again without changes must not wipe the user's list,
+    // label, field and member decisions, which initializeMappings rebuilds from defaults.
+    if (mappingJson === this.appliedCsvMappingJson) {
+      this.step.set("lists");
+      return;
+    }
+    this.busy.set(true);
+    this.error.set(null);
+    try {
+      const response = await this.api.request<CsvColumnsResponse>(`/imports/csv/${importId}/columns`, { method: "POST", body: mappingJson });
+      this.manifest.set(response.manifest);
+      this.csvIssues.set(response.issues);
+      this.initializeMappings(response.manifest, this.analyzedMembers());
+      this.appliedCsvMappingJson = mappingJson;
+      this.step.set("lists");
+    } catch (error) {
+      this.error.set(this.describeError(error));
+    } finally {
+      this.busy.set(false);
+    }
   }
 
   setListAction(id: string, action: Action) {
@@ -334,7 +467,9 @@ export class TrelloImportPage implements OnDestroy {
     try {
       if (this.source() === "trello" && this.trelloAttachmentCopyEnabled()) this.startImportStatusPolling(importId);
       const body = this.buildCommitBody();
-      const endpoint = this.source() === "kanera" ? `/imports/kanera-board/${importId}/commit` : `/imports/${importId}/commit`;
+      const endpoint = this.source() === "kanera"
+        ? `/imports/kanera-board/${importId}/commit`
+        : this.source() === "csv" ? `/imports/csv/${importId}/commit` : `/imports/${importId}/commit`;
       const headers = new Headers();
       if (this.source() === "trello" && this.trelloToken()) headers.set("X-Trello-Token", this.trelloToken()!);
       const result = await this.api.request<ImportResultSummary>(endpoint, { method: "POST", body: JSON.stringify(body), headers });
@@ -457,7 +592,7 @@ export class TrelloImportPage implements OnDestroy {
         includeArchived: this.includeArchived(),
         importComments: this.importComments(),
         importCustomFields: this.importCustomFields(),
-        attachmentCopyMode: this.source() === "kanera" || this.trelloAttachmentCopyEnabled() ? "copy" : "skip",
+        attachmentCopyMode: this.source() === "kanera" || (this.source() === "trello" && this.trelloAttachmentCopyEnabled()) ? "copy" : "skip",
       },
     };
   }
@@ -568,7 +703,10 @@ export class TrelloImportPage implements OnDestroy {
 
   private describeError(error: unknown): string {
     if (error instanceof ApiError) {
-      if (error.status === 413) return `That ${this.source() === "kanera" ? "Kanera board" : "Trello"} export is over the 50MB import limit.`;
+      if (error.status === 413) {
+        if (this.source() === "csv") return "That CSV file is over the 20MB import limit.";
+        return `That ${this.source() === "kanera" ? "Kanera board" : "Trello"} export is over the 50MB import limit.`;
+      }
       const body = error.body as { message?: string } | undefined;
       return body?.message ?? `Import failed with status ${error.status}.`;
     }

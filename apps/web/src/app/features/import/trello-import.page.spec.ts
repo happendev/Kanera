@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { provideRouter } from "@angular/router";
-import type { AnalyzeImportResponse, AnalyzeKaneraBoardImportResponse, CommitImportBody, ImportResultSummary, KaneraBoardImportManifest, TrelloImportManifest } from "@kanera/shared/dto";
+import type { AnalyzeCsvImportResponse, AnalyzeImportResponse, AnalyzeKaneraBoardImportResponse, CommitImportBody, CsvImportManifest, ImportResultSummary, KaneraBoardImportManifest, TrelloImportManifest } from "@kanera/shared/dto";
 import type { WorkspaceMember } from "@kanera/shared/schema";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
@@ -49,6 +49,40 @@ function trelloManifest(): TrelloImportManifest {
     customFields: [],
     members: [],
     counts: { cards: 1, checklists: 0, comments: 0, linkAttachments: 0, uploadedAttachments: 1 },
+  };
+}
+
+function csvManifest(): CsvImportManifest {
+  return {
+    source: "csv",
+    board: { name: "cards", desc: null },
+    lists: [{ id: "list:doing", name: "Doing", closed: false, cardCount: 1 }],
+    labels: [],
+    customFields: [],
+    members: [{ id: "member:dylan", fullName: "Dylan van der Merwe", username: null, email: "dylan@happen.software" }],
+    counts: { cards: 1, checklists: 0, comments: 0, linkAttachments: 0, uploadedAttachments: 0, rows: 1, skippedRows: 0 },
+  };
+}
+
+function csvAnalyzeResponse(): AnalyzeCsvImportResponse {
+  return {
+    importId: "00000000-0000-4000-8000-000000000001",
+    manifest: csvManifest(),
+    preview: {
+      columns: [{ index: 0, name: "Title", samples: ["Ship"] }, { index: 1, name: "Owner", samples: ["Dylan van der Merwe"] }],
+      firstRows: [["Title", "Owner"], ["Ship", "Dylan van der Merwe"]],
+      rowCount: 1,
+      delimiter: ",",
+      encoding: "utf-8",
+      suggestedMapping: {
+        hasHeaderRow: true,
+        multiValueDelimiter: ",",
+        dateOrder: "auto",
+        timezone: "UTC",
+        columns: { "0": { target: "title" }, "1": { target: "assignees" } },
+      },
+    },
+    issues: { rowsWithoutTitle: 0, unparseableDates: 0, unparseableNumbers: 0, invalidUrls: 0, ambiguousDateColumns: [], raggedRows: 0 },
   };
 }
 
@@ -229,5 +263,54 @@ describe("TrelloImportPage", () => {
     expect(fixture.componentInstance.step()).toBe("result");
     expect(fixture.componentInstance.result()?.createdBoardId).toBe(importResult().createdBoardId);
     expect(fixture.componentInstance.error()).toBeNull();
+  });
+
+  it("maps CSV columns before initializing workspace mappings", async () => {
+    api.request.mockResolvedValueOnce(csvAnalyzeResponse());
+    api.request.mockResolvedValueOnce({ manifest: csvManifest(), issues: csvAnalyzeResponse().issues });
+    const fixture = TestBed.createComponent(TrelloImportPage);
+    fixture.componentRef.setInput("source", "csv");
+    fixture.componentRef.setInput("workspaceId", "workspace-1");
+    fixture.componentRef.setInput("members", [workspaceMember()]);
+    fixture.detectChanges();
+    fixture.componentInstance.selectedFile.set(new File(["Title,Owner\nShip,Dylan"], "cards.csv", { type: "text/csv" }));
+
+    await fixture.componentInstance.analyze(new Event("submit"));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.step()).toBe("columns");
+    expect(fixture.componentInstance.csvMapping()?.timezone).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
+    expect((fixture.nativeElement as HTMLElement).querySelectorAll(".step-pill")).toHaveLength(8);
+
+    fixture.componentInstance.setCsvColumnTarget(0, "ignore");
+    fixture.detectChanges();
+    const next = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll(".wizard-actions button")).find((button) => button.textContent?.includes("Next")) as HTMLButtonElement;
+    expect(next.disabled).toBe(true);
+
+    fixture.componentInstance.setCsvColumnTarget(0, "title");
+    await fixture.componentInstance.next();
+    expect(api.request.mock.calls[1]?.[0]).toBe("/imports/csv/00000000-0000-4000-8000-000000000001/columns");
+    expect(fixture.componentInstance.step()).toBe("lists");
+    expect(fixture.componentInstance.memberMappings()).toEqual({ "member:dylan": "target-user" });
+  });
+
+  it("commits CSV imports with attachments disabled", async () => {
+    api.request.mockResolvedValueOnce(csvAnalyzeResponse());
+    api.request.mockResolvedValueOnce({ manifest: csvManifest(), issues: csvAnalyzeResponse().issues });
+    api.request.mockResolvedValueOnce(importResult());
+    const fixture = TestBed.createComponent(TrelloImportPage);
+    fixture.componentRef.setInput("source", "csv");
+    fixture.componentRef.setInput("workspaceId", "workspace-1");
+    fixture.componentRef.setInput("members", [workspaceMember()]);
+    fixture.detectChanges();
+    fixture.componentInstance.selectedFile.set(new File(["Title\nShip"], "cards.csv", { type: "text/csv" }));
+
+    await fixture.componentInstance.analyze(new Event("submit"));
+    await fixture.componentInstance.next();
+    await fixture.componentInstance.commit();
+
+    expect(api.request.mock.calls[2]?.[0]).toBe("/imports/csv/00000000-0000-4000-8000-000000000001/commit");
+    const body = JSON.parse((api.request.mock.calls[2]?.[1] as RequestInit).body as string) as CommitImportBody;
+    expect(body.options.attachmentCopyMode).toBe("skip");
   });
 });

@@ -6,12 +6,12 @@
     </div>
     <p class="settings-section-hint">{{ sourceCopy().hint }}</p>
     @if (fileName()) {
-    <span class="file-chip"><i class="ti ti-file-type-json"></i>{{ fileName() }}</span>
+    <span class="file-chip"><i class="ti" [class.ti-file-type-csv]="source() === 'csv'" [class.ti-file-type-json]="source() !== 'csv'"></i>{{ fileName() }}</span>
     }
   </div>
 
   <div class="import-stepper" aria-label="Import steps">
-    @for (item of steps; track item; let index = $index) {
+    @for (item of steps(); track item; let index = $index) {
     <span class="step-pill" [class.is-active]="step() === item" [class.is-done]="stepIndex() > index" [attr.aria-current]="step() === item ? 'step' : null">
       @if (stepIndex() > index) { <i class="ti ti-check"></i> } @else { <span>{{ index + 1 }}</span> }
     </span>
@@ -33,11 +33,11 @@
     <label class="attach-upload sm" [class.disabled]="busy()">
       <i class="ti ti-upload"></i>
       {{ selectedFile() ? 'Change export' : 'Add export' }}
-      <input type="file" hidden accept=".json,application/json" [disabled]="busy()" (change)="onFileSelected($event)" />
+      <input type="file" hidden [attr.accept]="source() === 'csv' ? '.csv,text/csv,text/plain' : '.json,application/json'" [disabled]="busy()" (change)="onFileSelected($event)" />
     </label>
     <div class="upload-file-meta">
       @if (selectedFile()) {
-      <span class="upload-file-name"><i class="ti ti-file-type-json"></i>{{ selectedFile()!.name }}</span>
+      <span class="upload-file-name"><i class="ti" [class.ti-file-type-csv]="source() === 'csv'" [class.ti-file-type-json]="source() !== 'csv'"></i>{{ selectedFile()!.name }}</span>
       <span>{{ (selectedFile()!.size / 1024 / 1024).toFixed(1) }} MB</span>
       } @else {
       <span>{{ sourceCopy().upload }}</span>
@@ -49,9 +49,92 @@
     </button>
     <div class="attach-drop-hint" aria-hidden="true">
       <i class="ti ti-drag-drop"></i>
-      Drop JSON export here
+      Drop {{ source() === 'csv' ? 'CSV file' : 'JSON export' }} here
     </div>
   </form>
+  } @else if (step() === 'columns' && csvPreview(); as preview) {
+  @if (csvMapping(); as mapping) {
+  <div class="csv-options">
+    <label class="check-row"><input type="checkbox" [checked]="mapping.hasHeaderRow" (change)="setCsvOption({ hasHeaderRow: $any($event.target).checked })" /> First row is a header</label>
+    <label><span>Multi-value separator</span>
+      <select [value]="mapping.multiValueDelimiter" (input)="setCsvOption({ multiValueDelimiter: $any($event.target).value })">
+        <option value="," [selected]="mapping.multiValueDelimiter === ','">Comma</option>
+        <option value=";" [selected]="mapping.multiValueDelimiter === ';'">Semicolon</option>
+        <option value="|" [selected]="mapping.multiValueDelimiter === '|'">Pipe</option>
+        <option value="newline" [selected]="mapping.multiValueDelimiter === 'newline'">New line</option>
+      </select>
+    </label>
+    <label><span>Day/month order</span>
+      <select [value]="mapping.dateOrder" (input)="setCsvOption({ dateOrder: $any($event.target).value })">
+        <option value="auto" [selected]="mapping.dateOrder === 'auto'">Detect automatically</option>
+        <option value="dmy" [selected]="mapping.dateOrder === 'dmy'">Day / month / year</option>
+        <option value="mdy" [selected]="mapping.dateOrder === 'mdy'">Month / day / year</option>
+      </select>
+    </label>
+    <span class="csv-timezone">Detected {{ preview.encoding }} · {{ preview.delimiter === '\t' ? 'tab' : preview.delimiter }} delimiter.</span>
+    <span class="csv-timezone">Due dates use your timezone ({{ mapping.timezone }}).</span>
+  </div>
+  @if (csvAmbiguousDates()) {
+  <p class="import-warning"><i class="ti ti-alert-triangle"></i>Some dates are ambiguous. Confirm whether the day or month comes first.</p>
+  }
+  <div class="csv-columns">
+    @for (column of preview.columns; track column.index) {
+    <div class="csv-column-row">
+      <div class="csv-column-source">
+        <strong>{{ csvColumnNames()[column.index] }}</strong>
+        <div class="csv-samples">
+          @for (sample of csvSamples(column.index); track $index) { <span class="csv-sample" [title]="sample">{{ sample }}</span> }
+        </div>
+      </div>
+      <select [value]="mapping.columns[column.index].target" (input)="setCsvColumnTarget(column.index, $any($event.target).value)">
+        <optgroup label="Card">
+          <option value="title" [selected]="mapping.columns[column.index].target === 'title'">Title</option>
+          <option value="description" [selected]="mapping.columns[column.index].target === 'description'">Description</option>
+          <option value="list" [selected]="mapping.columns[column.index].target === 'list'">List / status</option>
+          <option value="dueDate" [selected]="mapping.columns[column.index].target === 'dueDate'">Due date</option>
+          <option value="completed" [selected]="mapping.columns[column.index].target === 'completed'">Completed</option>
+          <option value="archived" [selected]="mapping.columns[column.index].target === 'archived'">Archived</option>
+          <option value="createdAt" [selected]="mapping.columns[column.index].target === 'createdAt'">Created at</option>
+          <option value="cardId" [selected]="mapping.columns[column.index].target === 'cardId'">Card ID / group</option>
+        </optgroup>
+        <optgroup label="Multiple values">
+          <option value="labels" [selected]="mapping.columns[column.index].target === 'labels'">Labels</option>
+          <option value="assignees" [selected]="mapping.columns[column.index].target === 'assignees'">Assignees</option>
+          <option value="comment" [selected]="mapping.columns[column.index].target === 'comment'">Comment</option>
+          <option value="checklistItem" [selected]="mapping.columns[column.index].target === 'checklistItem'">Checklist item</option>
+        </optgroup>
+        <optgroup label="Other">
+          <option value="customField" [selected]="mapping.columns[column.index].target === 'customField'">Custom field</option>
+          <option value="ignore" [selected]="mapping.columns[column.index].target === 'ignore'">Ignore</option>
+        </optgroup>
+      </select>
+      @if (mapping.columns[column.index].target === 'customField') {
+      <div class="mapping-controls csv-field-controls">
+        <input [value]="$any(mapping.columns[column.index]).name" (input)="updateCsvCustomField(column.index, { name: $any($event.target).value })" [maxLength]="workspaceEntityNameMaxLength" aria-label="Custom field name" />
+        <select [value]="$any(mapping.columns[column.index]).type" (input)="updateCsvCustomField(column.index, { type: $any($event.target).value })" aria-label="Custom field type">
+          <option value="text" [selected]="$any(mapping.columns[column.index]).type === 'text'">Text</option>
+          <option value="number" [selected]="$any(mapping.columns[column.index]).type === 'number'">Number</option>
+          <option value="checkbox" [selected]="$any(mapping.columns[column.index]).type === 'checkbox'">Checkbox</option>
+          <option value="select" [selected]="$any(mapping.columns[column.index]).type === 'select'">Select</option>
+          <option value="date" [selected]="$any(mapping.columns[column.index]).type === 'date'">Date</option>
+          <option value="url" [selected]="$any(mapping.columns[column.index]).type === 'url'">URL</option>
+        </select>
+      </div>
+      }
+    </div>
+    }
+  </div>
+  @if (csvMappingErrors().length) {
+  <div class="import-error csv-errors">
+    <i class="ti ti-alert-circle"></i>
+    <div>@for (mappingError of csvMappingErrors(); track mappingError) { <span>{{ mappingError }}</span> }</div>
+  </div>
+  }
+  <div class="wizard-actions">
+    <button type="button" class="ghost sm" (click)="previous()" [disabled]="busy()"><i class="ti ti-arrow-left"></i>Back</button>
+    <button type="button" class="sm" (click)="next()" [disabled]="busy() || csvMappingErrors().length > 0">Next<i class="ti ti-arrow-right"></i></button>
+  </div>
+  }
   } @else if (manifest(); as manifest) {
   @if (step() === 'lists') {
   <div class="mapping-list">
@@ -123,9 +206,11 @@
       <div class="mapping-controls">
         <k-icon-picker [value]="fieldMappings()[field.id].icon" (valueChange)="updateField(field.id, { icon: $event })" />
         <input [value]="fieldMappings()[field.id].name" (input)="updateField(field.id, { name: $any($event.target).value })" [maxLength]="workspaceEntityNameMaxLength" />
+        @if (source() !== 'csv') {
         <select [value]="fieldMappings()[field.id].type" (input)="updateField(field.id, { type: $any($event.target).value })">
           <option value="text">Text</option><option value="number">Number</option><option value="checkbox">Checkbox</option><option value="select">Select</option><option value="date">Date</option>
         </select>
+        }
       </div>
       } @else if (fieldMappings()[field.id].action === 'map') {
       <select [value]="fieldMappings()[field.id].targetFieldId ?? ''" (change)="updateField(field.id, { targetFieldId: $any($event.target).value })">
@@ -186,7 +271,14 @@
     <div class="summary-box">
       <span>{{ manifest.counts.cards - skippedCardCount() }} cards will be imported</span>
       <span>{{ skippedCardCount() }} cards skipped by list mapping</span>
+      @if (source() === 'csv' && csvIssues(); as issues) {
+      <span>{{ issues.rowsWithoutTitle }} card{{ issues.rowsWithoutTitle === 1 ? '' : 's' }} skipped: no title</span>
+      <span>{{ issues.unparseableDates }} dates could not be read</span>
+      <span>{{ issues.unparseableNumbers }} numbers could not be read</span>
+      <span>{{ sourceCopy().preservedAttachments }}</span>
+      } @else {
       <span>{{ manifest.counts.linkAttachments + manifest.counts.uploadedAttachments }} {{ sourceCopy().preservedAttachments }}</span>
+      }
     </div>
   </div>
   } @else if (step() === 'result' && result(); as result) {

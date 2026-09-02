@@ -36,6 +36,7 @@ export * from "./comment-reaction.js";
 export * from "./comment.js";
 export * from "./custom-field.js";
 export * from "./custom-field-option.js";
+export * from "./csv-import.js";
 export * from "./email-queue.js";
 export * from "./email-verification-code.js";
 export * from "./direct-realtime-outbox.js";

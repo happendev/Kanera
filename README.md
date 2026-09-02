@@ -125,9 +125,9 @@ Explore the full product tour at [kanera.app/features](https://www.kanera.app/fe
 
 ## Move to Kanera without starting over
 
-Kanera includes a guided Trello importer. Upload one board JSON export, map its lists, fields, and members, review the result, then confirm a controlled one-time import. Kanera can preserve attachment links and copy supported uploaded files when Trello is connected for the import. Your original Trello board stays unchanged, and later Trello changes are not synced automatically.
+Kanera includes guided importers for Trello JSON, Kanera board JSON exports, and CSV files. Upload an export, map its columns or workspace data, review the result, then confirm a controlled one-time import. Kanera can preserve attachment links and copy supported uploaded files when Trello is connected for the import. Your original board or file stays unchanged, and later source changes are not synced automatically.
 
-For Jira, ClickUp, Asana, monday.com, Notion, Linear, or an internal system, there is no native importer today. Start with one representative project so the source structure, mappings, users, history, and attachments can be reviewed before scoping an API-assisted migration.
+For Jira, ClickUp, Asana, monday.com, Notion, Linear, spreadsheets, or an internal system, export one representative project as CSV and use the CSV importer. Review its columns, users, dates, and multi-value fields before importing the full project.
 
 - [Import from Trello](https://www.kanera.app/trello-migration)
 - [Explore migration options](https://www.kanera.app/migration)
