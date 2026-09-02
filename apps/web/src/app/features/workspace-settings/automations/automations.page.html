@@ -231,32 +231,35 @@
             <span class="ac-block-hint">The event that starts this automation</span>
           </header>
           <div class="ac-trigger">
-            <label class="ac-field">
+            <div class="ac-field">
               <span class="ac-field-label">Event</span>
-              <select [value]="settings.automationTriggerTypeValue(automation)" (change)="settings.updateAutomationTrigger(automation.id, $any($event.target).value)">
-                <option value="card_enters_list" [selected]="settings.automationTriggerTypeValue(automation) === 'card_enters_list'">Card enters a list</option>
-                <option value="card_leaves_list" [selected]="settings.automationTriggerTypeValue(automation) === 'card_leaves_list'">Card leaves a list</option>
-                <option value="due_date_arrives" [selected]="settings.automationTriggerTypeValue(automation) === 'due_date_arrives'">Due date arrives</option>
-                <option value="due_date_approaching" [selected]="settings.automationTriggerTypeValue(automation) === 'due_date_approaching'">Due date is approaching</option>
-                <option value="card_becomes_inactive" [selected]="settings.automationTriggerTypeValue(automation) === 'card_becomes_inactive'">Card becomes inactive</option>
-                <option value="all_checklist_items_complete" [selected]="settings.automationTriggerTypeValue(automation) === 'all_checklist_items_complete'">All checklist items complete</option>
-                <option value="card_assigned_to_user" [selected]="settings.automationTriggerTypeValue(automation) === 'card_assigned_to_user'">Card assigned to a member</option>
-                <option value="card_marked_complete" [selected]="settings.automationTriggerTypeValue(automation) === 'card_marked_complete'">Card marked complete</option>
-                <option value="card_label_set" [selected]="settings.automationTriggerTypeValue(automation) === 'card_label_set'">Label added to a card</option>
-                <option value="custom_field_value_changed" [selected]="settings.automationTriggerTypeValue(automation) === 'custom_field_value_changed'">Custom field changes to a value</option>
-              </select>
-            </label>
+              <k-automation-select-dropdown
+                title="Choose an event"
+                ariaLabel="Event"
+                searchPlaceholder="Search events…"
+                emptyLabel="No matching events"
+                [groups]="eventPickerGroups"
+                [value]="settings.automationTriggerTypeValue(automation)"
+                (valueChange)="settings.updateAutomationTrigger(automation.id, $any($event))"
+              />
+            </div>
 
             @switch (automation.triggerType) {
               @case ('card_enters_list') {
-                <label class="ac-field">
+                <div class="ac-field">
                   <span class="ac-field-label">List</span>
-                  <select [value]="settings.automationTriggerListValue(automation)" (change)="settings.updateAutomationTriggerList(automation.id, $any($event.target).value)">
-                    @for (list of settings.lists(); track list.id) {
-                    <option [value]="list.id" [selected]="settings.automationTriggerListValue(automation) === list.id">{{ list.name }}</option>
-                    }
-                  </select>
-                </label>
+                  <k-automation-select-dropdown
+                    title="Choose a list"
+                    ariaLabel="List"
+                    placeholder="Choose a list"
+                    placeholderIcon="list"
+                    searchPlaceholder="Search lists…"
+                    emptyLabel="This workspace has no lists"
+                    [groups]="listPickerGroups()"
+                    [value]="settings.automationTriggerListValue(automation)"
+                    (valueChange)="settings.updateAutomationTriggerList(automation.id, $event)"
+                  />
+                </div>
                 <div class="ac-field ac-field-wide">
                   <span class="ac-field-label">Count a card as entering when it is</span>
                   <!-- The last remaining scope is locked rather than disabled. `disabled` dimmed the
@@ -281,14 +284,20 @@
                 </div>
               }
               @case ('card_leaves_list') {
-                <label class="ac-field">
+                <div class="ac-field">
                   <span class="ac-field-label">List</span>
-                  <select [value]="settings.automationTriggerListValue(automation)" (change)="settings.updateAutomationTriggerList(automation.id, $any($event.target).value)">
-                    @for (list of settings.lists(); track list.id) {
-                    <option [value]="list.id" [selected]="settings.automationTriggerListValue(automation) === list.id">{{ list.name }}</option>
-                    }
-                  </select>
-                </label>
+                  <k-automation-select-dropdown
+                    title="Choose a list"
+                    ariaLabel="List"
+                    placeholder="Choose a list"
+                    placeholderIcon="list"
+                    searchPlaceholder="Search lists…"
+                    emptyLabel="This workspace has no lists"
+                    [groups]="listPickerGroups()"
+                    [value]="settings.automationTriggerListValue(automation)"
+                    (valueChange)="settings.updateAutomationTriggerList(automation.id, $event)"
+                  />
+                </div>
                 <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> Runs whenever a card moves out of this list, including a move to another board.</p>
               }
               @case ('card_assigned_to_user') {
@@ -395,14 +404,17 @@
               <div class="aa-head">
                 <i class="ti ti-grip-vertical aa-grip" cdkDragHandle></i>
                 <span class="aa-step">{{ i + 1 }}</span>
-                <!-- Label and select are siblings in the .aa-head grid so the grip, step badge and
-                     remove button land on the control's row; explicit for/id keeps them associated. -->
-                <label class="aa-type-label" [attr.for]="'aa-type-' + automation.id + '-' + i">Action</label>
-                <select class="aa-type-select" [id]="'aa-type-' + automation.id + '-' + i" [value]="settings.automationActionTypeValue(action)" (change)="settings.updateAutomationActionType(automation.id, i, $any($event.target).value)">
-                  @for (type of settings.automationActionTypes; track type) {
-                  <option [value]="type" [selected]="settings.automationActionTypeValue(action) === type">{{ settings.automationActionLabel(type) }}</option>
-                  }
-                </select>
+                <span class="aa-type-label">Action</span>
+                <k-automation-select-dropdown
+                  class="aa-type-select"
+                  title="Choose an action"
+                  ariaLabel="Action"
+                  searchPlaceholder="Search actions…"
+                  emptyLabel="No matching actions"
+                  [groups]="actionPickerGroups"
+                  [value]="settings.automationActionTypeValue(action)"
+                  (valueChange)="settings.updateAutomationActionType(automation.id, i, $any($event))"
+                />
                 <button class="ghost icon aa-remove" type="button" (click)="settings.removeAutomationAction(automation.id, i)" aria-label="Remove action" kTooltip="Remove action"><i class="ti ti-x"></i></button>
               </div>
 
