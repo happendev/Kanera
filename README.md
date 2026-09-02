@@ -1,6 +1,10 @@
 <div align="center">
 
-# Kanera
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="apps/web/public/assets/logo/Kanera%20dark%20long.svg">
+  <source media="(prefers-color-scheme: light)" srcset="apps/web/public/assets/logo/Kanera%20light%20long.svg">
+  <img alt="Kanera" src="apps/web/public/assets/logo/Kanera%20light%20long.svg" width="425">
+</picture>
 
 **One clear view. Keep work moving.**
 
@@ -97,7 +101,7 @@ See the whole visible team or focus on one teammate without losing each card's b
 
 ### Automations keep routine work moving
 
-Build automations from a **When** trigger and ordered **Do** actions. Kanera can add labels, assign people, apply checklist templates, set due dates and custom fields, move cards, or mark work complete when predictable workflow events occur. Automations can belong to one standalone board or run across every board in a workspace.
+Build automations from a **When** trigger and ordered **Do** actions. Triggers can respond when cards enter or leave lists, a custom field changes to a selected value, a due date approaches or arrives, assignments and labels change, checklists or cards complete, or a card reaches the configured inactivity period. Kanera can then add labels, assign people, apply checklist templates, set due dates and custom fields, move cards, or mark work complete. Automations can belong to one standalone board or run across every board in a workspace.
 
 ![Kanera automation builder showing a trigger and ordered card actions](docs/readme-assets/automations.jpg)
 
@@ -121,9 +125,9 @@ Explore the full product tour at [kanera.app/features](https://www.kanera.app/fe
 
 ## Move to Kanera without starting over
 
-Kanera includes a guided Trello importer. Upload one board JSON export, map its lists, fields, and members, review the result, then confirm a controlled one-time import. Kanera can preserve attachment links and copy supported uploaded files when Trello is connected for the import. Your original Trello board stays unchanged, and later Trello changes are not synced automatically.
+Kanera includes guided importers for Trello JSON, Kanera board JSON exports, and CSV files. Upload an export, map its columns or workspace data, review the result, then confirm a controlled one-time import. Kanera can preserve attachment links and copy supported uploaded files when Trello is connected for the import. Your original board or file stays unchanged, and later source changes are not synced automatically.
 
-For Jira, ClickUp, Asana, monday.com, Notion, Linear, or an internal system, there is no native importer today. Start with one representative project so the source structure, mappings, users, history, and attachments can be reviewed before scoping an API-assisted migration.
+For Jira, ClickUp, Asana, monday.com, Notion, Linear, spreadsheets, or an internal system, export one representative project as CSV and use the CSV importer. Review its columns, users, dates, and multi-value fields before importing the full project.
 
 - [Import from Trello](https://www.kanera.app/trello-migration)
 - [Explore migration options](https://www.kanera.app/migration)
@@ -208,7 +212,7 @@ pnpm test:api:integration # Run API integration tests with isolated PostgreSQL
 - **Durable events:** board- and workspace-scoped events are recorded in an outbox for cross-process realtime delivery and webhooks.
 - **Integrations:** workspace API keys support external tools without exposing user credentials.
 - **Delivery outside the app:** chat destinations are webhook endpoints with a provider set, so Slack, Discord, Telegram, and Zulip reuse the webhook worker, retry policy, and delivery history. Personal notification channels run through the push queue, with HMAC-signed payloads for user-owned endpoints.
-- **Agent-native MCP:** OAuth-capable AI clients can connect with short-lived tokens, structured tool results, explicit safety annotations, and auditable access.
+- **Agent-native MCP:** OAuth-capable AI clients can connect with short-lived tokens, structured tool results, explicit safety annotations, and auditable access. An organisation admin can hand a connected agent a blank account and have it bootstrap workspaces and standalone boards from templates.
 
 - **Typed API client:** `@kanera/sdk` wraps the public API with card-key resolution, cursor iteration, idempotent retries, and webhook signature verification. See [packages/sdk/README.md](packages/sdk/README.md).
 - **Agent-native CLI:** `kanera` exposes the same tool layer as the MCP server to any agent that can run shell commands, with a machine-readable command catalog and exit codes that distinguish "not permitted" from "failed". Try it without a global install using `npx -y @kanera/cli commands`, or install it with `npm install --global @kanera/cli`.

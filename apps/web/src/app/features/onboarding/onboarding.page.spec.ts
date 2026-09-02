@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
 import type { AuthUser } from "../../core/auth/auth.service";
 import { AuthService } from "../../core/auth/auth.service";
+import { isOnboardingSkipped } from "../../core/auth/onboarding-skip";
 import { SocketService } from "../../core/realtime/socket.service";
 import { OnboardingPage } from "./onboarding.page";
 
@@ -81,6 +82,7 @@ describe("OnboardingPage", () => {
   });
 
   afterEach(() => {
+    localStorage.clear();
     TestBed.resetTestingModule();
   });
 
@@ -165,6 +167,42 @@ describe("OnboardingPage", () => {
     ]);
     expect(choices[0]?.classList.contains("is-primary")).toBe(true);
     expect(root.textContent).not.toContain("Boards in a workspace share one setup");
+  });
+
+  it("offers Skip for now to first-run users and remembers the choice for the shell guard", async () => {
+    const { component, fixture, navigateByUrl } = await render();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const skip = [...root.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Skip for now"));
+    expect(skip).toBeDefined();
+    expect(component.canCancel()).toBe(false);
+
+    // The same exit is available once a first-run user has drilled into a setup path.
+    component.chooseSetupKind("board");
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const footerSkip = [...root.querySelectorAll<HTMLButtonElement>(".ob-footer button")].find((button) => button.textContent?.includes("Skip for now"));
+    expect(footerSkip).toBeDefined();
+
+    footerSkip!.click();
+    await fixture.whenStable();
+
+    expect(isOnboardingSkipped({ id: "user-1", clientId: "client-1" })).toBe(true);
+    expect(navigateByUrl).toHaveBeenCalledWith("/");
+  });
+
+  it("shows Cancel rather than Skip once a workspace already exists", async () => {
+    const { fixture } = await render({ user: authUser({ hasWorkspace: true }) });
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.textContent).toContain("Cancel");
+    expect(root.textContent).not.toContain("Skip for now");
+    expect(isOnboardingSkipped({ id: "user-1", clientId: "client-1" })).toBe(false);
   });
 
   it("opens explicit New workspace navigation directly in workspace setup", async () => {
@@ -291,6 +329,7 @@ describe("OnboardingPage", () => {
       "Scheduled",
       "Live",
       "Reporting",
+      "Done",
     ]);
     expect(component.fields().map((field) => field.name)).toEqual([
       "Channel",
@@ -302,11 +341,10 @@ describe("OnboardingPage", () => {
     ]);
     expect(component.labels().map((label) => label.name)).toEqual([
       "Campaign",
-      "Social",
-      "Email",
-      "Content",
-      "Paid",
-      "Event",
+      "Launch",
+      "Evergreen",
+      "Brand",
+      "Urgent",
     ]);
   });
 
@@ -362,6 +400,7 @@ describe("OnboardingPage", () => {
       ["Scheduled", "calendar-event"],
       ["Live", "broadcast"],
       ["Reporting", "chart-bar"],
+      ["Done", "circle-check"],
     ]);
     expect(payload.customFields.find((field) => field.name === "Channel")?.options?.map((option) => option.label)).toEqual([
       "Social",

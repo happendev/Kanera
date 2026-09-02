@@ -7,7 +7,7 @@ import { db } from "../../db.js";
 import { assertBoardAccess, assertWorkspaceAccess, assignedCardVisibility } from "../../lib/access.js";
 import { recordActivity, recordCoalescedActivity } from "../../lib/activity.js";
 import { deleteAttachmentFiles } from "../../lib/attachment-cleanup.js";
-import { emitAutomationEffects, runListEntryAutomations, type AutomationEffects } from "../../lib/automations.js";
+import { emitAutomationEffects, runCardMoveAutomations, type AutomationEffects } from "../../lib/automations.js";
 import { invalidateQueuesForCards } from "../../lib/card-priority-invalidation.js";
 import { badRequest, notFound } from "../../lib/errors.js";
 import { clearNotificationsForCards, emitDeletedNotifications } from "../../lib/notifications.js";
@@ -219,15 +219,15 @@ export async function listRoutes(app: FastifyInstance) {
             updatedAt: new Date(),
           })
           .where(eq(cards.id, m.id));
-        collected.push(await runListEntryAutomations(tx, {
+        collected.push(await runCardMoveAutomations(tx, {
           cardId: m.id,
-          listId: body.targetListId,
+          fromListId: id,
+          toListId: body.targetListId,
           // Cards in a workspace-scoped list can span sibling boards, so the trigger context is
           // per-card rather than the request's optional board filter.
           boardId: m.boardId,
           workspaceId: source.workspaceId,
           clientId: req.auth.cid,
-          trigger: "move",
           triggerActorId: req.auth.sub,
         }));
       }

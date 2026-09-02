@@ -5,8 +5,17 @@ import { cards, type CardDueDateSlot } from "./card.js";
 import { lists } from "./list.js";
 import { workspaces } from "./workspace.js";
 
-export const AUTOMATION_TRIGGER_TYPES = ["card_enters_list", "due_date_arrives", "all_checklist_items_complete", "card_assigned_to_user", "card_marked_complete", "card_label_set"] as const;
+export const AUTOMATION_TRIGGER_TYPES = ["card_enters_list", "card_leaves_list", "due_date_arrives", "due_date_approaching", "card_becomes_inactive", "all_checklist_items_complete", "card_assigned_to_user", "card_marked_complete", "card_label_set", "custom_field_value_changed"] as const;
 export type AutomationTriggerType = (typeof AUTOMATION_TRIGGER_TYPES)[number];
+
+export type AutomationTriggerCustomFieldValue =
+  | { kind: "text"; text: string }
+  | { kind: "number"; number: number }
+  | { kind: "checkbox"; checked: boolean }
+  | { kind: "date"; date: string }
+  | { kind: "url"; url: string }
+  | { kind: "select"; optionId: string }
+  | { kind: "user"; userId: string };
 
 export const AUTOMATION_ACTION_TYPES = [
   "add_labels",
@@ -66,6 +75,9 @@ export const automations = pgTable(
     // a deleted trigger label leaves this automation in place but inert (its label can never be
     // re-added). The settings UI surfaces this as a "Deleted label" so an admin can re-point it.
     triggerLabelId: uuid("trigger_label_id"),
+    triggerCustomFieldId: uuid("trigger_custom_field_id"),
+    triggerCustomFieldValue: jsonb("trigger_custom_field_value").$type<AutomationTriggerCustomFieldValue>(),
+    triggerDaysBefore: integer("trigger_days_before"),
     applyOnCreate: boolean("apply_on_create").notNull().default(true),
     applyOnMove: boolean("apply_on_move").notNull().default(true),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
@@ -74,6 +86,7 @@ export const automations = pgTable(
   },
   (t) => [
     check("automations_trigger_type_ck", valueIn(t.triggerType, AUTOMATION_TRIGGER_TYPES)),
+    check("automations_trigger_days_before_ck", sql`${t.triggerDaysBefore} is null or (${t.triggerDaysBefore} between 1 and 3650)`),
     index("automations_workspace_id_position_idx").on(t.workspaceId, t.position),
     index("automations_active_workspace_position_idx")
       .on(t.workspaceId, t.position)
@@ -118,12 +131,34 @@ export const automationDueDateRuns = pgTable(
       .notNull()
       .references(() => cards.id, { onDelete: "cascade" }),
     dueDateLocalDate: text("due_date_local_date").notNull(),
+    triggerDaysBefore: integer("trigger_days_before").notNull().default(0),
     firedAt: timestamp("fired_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     primaryKey({ columns: [t.automationId, t.cardId] }),
+    check("automation_due_date_runs_trigger_days_before_ck", sql`${t.triggerDaysBefore} between 0 and 3650`),
     // The primary key is automation-first; archived-card deletion cascades from card_id.
     index("automation_due_date_runs_card_id_idx").on(t.cardId),
+  ],
+);
+
+export const automationInactiveRuns = pgTable(
+  "automation_inactive_run",
+  {
+    automationId: uuid("automation_id")
+      .notNull()
+      .references(() => automations.id, { onDelete: "cascade" }),
+    cardId: uuid("card_id")
+      .notNull()
+      .references(() => cards.id, { onDelete: "cascade" }),
+    // The event identity is the workspace-specific boundary, not merely cards.updated_at. If an
+    // admin changes inactiveCardsDays, the same untouched card can cross a genuinely new boundary.
+    inactiveAt: timestamp("inactive_at", { withTimezone: true }).notNull(),
+    firedAt: timestamp("fired_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.automationId, t.cardId] }),
+    index("automation_inactive_runs_card_id_idx").on(t.cardId),
   ],
 );
 
@@ -163,5 +198,6 @@ export const automationRuns = pgTable(
 export type Automation = typeof automations.$inferSelect;
 export type AutomationAction = typeof automationActions.$inferSelect;
 export type AutomationDueDateRun = typeof automationDueDateRuns.$inferSelect;
+export type AutomationInactiveRun = typeof automationInactiveRuns.$inferSelect;
 export type AutomationRunStats = typeof automationRunStats.$inferSelect;
 export type AutomationRun = typeof automationRuns.$inferSelect;

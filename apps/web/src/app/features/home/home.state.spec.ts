@@ -191,6 +191,22 @@ describe("HomeState", () => {
     expect(agendaCalls(f.get)).toBe(2);
   });
 
+  it("refetches once when a board or workspace is created elsewhere, ending the empty state", async () => {
+    // An agent bootstrapping a standalone board emits both user-room events back to back; home has
+    // no board rooms joined while empty, so these must trigger the refetch and be coalesced.
+    vi.useFakeTimers();
+    const f = setup();
+    await f.state.initialize();
+    expect(agendaCalls(f.get)).toBe(1);
+
+    f.socket.trigger("workspace:member:added", { workspaceId: "workspace-2", member: { userId: "user-1" } });
+    f.socket.trigger("board:created", { board: { id: "board-9", workspaceId: "workspace-2" } });
+    expect(agendaCalls(f.get)).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(200);
+    expect(agendaCalls(f.get)).toBe(2);
+  });
+
   it("removes a completed card optimistically, before the debounced refetch runs", async () => {
     vi.useFakeTimers();
     const f = setup();

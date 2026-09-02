@@ -23,6 +23,7 @@ export const DOCS_PATHS = [
   "checklist-templates",
   "completed-cards",
   "custom-fields",
+  "csv-import",
   "guests",
   "lists",
   "managing-users",

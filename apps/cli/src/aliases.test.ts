@@ -4,9 +4,15 @@ import { applyPositionals, COMMAND_ALIASES, matchAlias } from "./aliases.js";
 import { coerceArguments, coerceToSchema, openToolSession, type ToolSession } from "./tools.js";
 
 void test("a two-word alias is not shadowed by its one-word prefix", () => {
-  assert.equal(matchAlias(["card", "done", "MKT-42"])?.alias.tool, "kanera_set_card_completion");
+  assert.equal(matchAlias(["card", "done", "MKT-42"])?.alias.tool, "cards.set_completion");
   assert.deepEqual(matchAlias(["card", "done", "MKT-42"])?.rest, ["MKT-42"]);
-  assert.equal(matchAlias(["card", "MKT-42"])?.alias.tool, "kanera_get_card");
+  assert.equal(matchAlias(["card", "MKT-42"])?.alias.tool, "cards.get");
+});
+
+void test("board create is a setup alias, not a board read with stray arguments", () => {
+  const match = matchAlias(["board", "create", "ws-1", "Q4 launch"])!;
+  assert.equal(match.alias.tool, "boards.create");
+  assert.deepEqual(applyPositionals(match.alias, match.rest), { workspaceId: "ws-1", name: "Q4 launch" });
 });
 
 void test("positionals fill the alias arguments and defaults stay applied", () => {
@@ -67,7 +73,7 @@ void test("tool arguments reject unknown and missing top-level fields as usage e
     publicApiUrl: "http://127.0.0.1:9",
   });
   try {
-    const tool = session.tool("kanera_get_card");
+    const tool = session.tool("cards.get");
     assert.throws(() => coerceArguments(tool, {}), /missing required argument/u);
     assert.throws(() => coerceArguments(tool, { cardId: "MKT-42", typo: true }), /unknown argument/u);
   } finally {

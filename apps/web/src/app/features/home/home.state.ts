@@ -310,6 +310,13 @@ export class HomeState {
       [SERVER_EVENTS.CARD_CHECKLIST_DELETED]: refresh,
       [SERVER_EVENTS.BOARD_UPDATED]: refresh,
       [SERVER_EVENTS.BOARD_DELETED]: refresh,
+      // A board created elsewhere (another tab, or an AI agent bootstrapping via the public API)
+      // reaches the creator's user room as board:created and, for a new workspace or standalone
+      // board, workspace:member:added. Home joins no board rooms while it is empty, so these are the
+      // only signals that end the getting-started state without a reload. The debounce coalesces
+      // the pair into one refetch, which also updates boardCount.
+      [SERVER_EVENTS.BOARD_CREATED]: refresh,
+      [SERVER_EVENTS.WORKSPACE_MEMBER_ADDED]: refresh,
       [SERVER_EVENTS.WORKSPACE_DELETED]: refresh,
       // Access changes are refresh triggers, not local tree surgery: the server is the authority
       // on what the viewer can now see, and patching locally would silently diverge from it.

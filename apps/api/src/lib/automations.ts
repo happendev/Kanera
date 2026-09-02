@@ -5,6 +5,7 @@ import {
   ACTIVITY_ACTION,
   automationActions,
   automationDueDateRuns,
+  automationInactiveRuns,
   automationRunStats,
   automationRuns,
   automations,
@@ -27,12 +28,13 @@ import {
   type Automation,
   type AutomationAction,
   type AutomationRunStats,
+  type AutomationTriggerCustomFieldValue,
   type Card,
   type CardCustomFieldValue,
   type CardDueDateSlot,
   type CustomField,
 } from "@kanera/shared/schema";
-import { and, asc, desc, eq, inArray, isNull, lt, ne, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { db, type Db } from "../db.js";
 import { env } from "../env.js";
@@ -477,10 +479,11 @@ export async function loadAutomations(workspaceId: string, tx: Tx = db): Promise
   }));
 }
 
-// Custom fields are hard-deleted, and populate_custom_field actions reference fields inside their
-// jsonb config (no FK), so nothing cascades. When a field is deleted we proactively find any action
-// that targets it (`fieldId`) or copies from it (`value.sourceFieldId`), prune those now-inert
-// actions, and disable their automations so an admin must re-review before they fire again.
+// Custom fields are hard-deleted, and both trigger values and populate_custom_field actions keep
+// field ids without a FK, so nothing cascades. When a field is deleted we proactively find any
+// matching trigger plus any action that targets it (`fieldId`) or copies from it
+// (`value.sourceFieldId`). Actions are pruned; trigger configuration is retained so the editor can
+// explain why the disabled rule needs attention instead of silently changing its meaning.
 // Returns the ids of the automations that were disabled, so the caller can re-emit them.
 export async function disableAutomationsReferencingCustomField(tx: Tx, workspaceId: string, fieldId: string): Promise<string[]> {
   const referencingActions = await tx
@@ -492,13 +495,42 @@ export async function disableAutomationsReferencingCustomField(tx: Tx, workspace
       eq(automationActions.type, "populate_custom_field"),
       sql`(${automationActions.config} ->> 'fieldId' = ${fieldId} OR ${automationActions.config} -> 'value' ->> 'sourceFieldId' = ${fieldId})`,
     ));
-  if (referencingActions.length === 0) return [];
-
+  const referencingTriggers = await tx
+    .select({ id: automations.id })
+    .from(automations)
+    .where(and(
+      eq(automations.workspaceId, workspaceId),
+      eq(automations.triggerType, "custom_field_value_changed"),
+      eq(automations.triggerCustomFieldId, fieldId),
+      isNull(automations.archivedAt),
+    ));
+  const automationIds = Array.from(new Set([
+    ...referencingActions.map((row) => row.automationId),
+    ...referencingTriggers.map((row) => row.id),
+  ]));
+  if (automationIds.length === 0) return [];
   const actionIds = referencingActions.map((row) => row.id);
-  const automationIds = Array.from(new Set(referencingActions.map((row) => row.automationId)));
-  await tx.delete(automationActions).where(inArray(automationActions.id, actionIds));
+  if (actionIds.length > 0) await tx.delete(automationActions).where(inArray(automationActions.id, actionIds));
   await tx.update(automations).set({ enabled: false, updatedAt: new Date() }).where(inArray(automations.id, automationIds));
   return automationIds;
+}
+
+/** Disable selected-value triggers before their select option is archived. */
+export async function disableAutomationsReferencingCustomFieldOption(tx: Tx, workspaceId: string, optionId: string): Promise<string[]> {
+  const rows = await tx
+    .select({ id: automations.id })
+    .from(automations)
+    .where(and(
+      eq(automations.workspaceId, workspaceId),
+      eq(automations.triggerType, "custom_field_value_changed"),
+      isNull(automations.archivedAt),
+      sql`${automations.triggerCustomFieldValue} ->> 'kind' = 'select'`,
+      sql`${automations.triggerCustomFieldValue} ->> 'optionId' = ${optionId}`,
+    ));
+  if (rows.length === 0) return [];
+  const ids = rows.map((row) => row.id);
+  await tx.update(automations).set({ enabled: false, updatedAt: new Date() }).where(inArray(automations.id, ids));
+  return ids;
 }
 
 async function validWorkspaceLabels(tx: Tx, workspaceId: string, labelIds: string[]): Promise<{ id: string; name: string }[]> {
@@ -981,6 +1013,85 @@ export async function runListEntryAutomations(
   return applyTriggeredAutomations(tx, rows, opts);
 }
 
+export async function runCardMoveAutomations(
+  tx: Tx,
+  opts: { cardId: string; fromListId: string; toListId: string; boardId: string; workspaceId: string; clientId: string; triggerActorId?: string | null },
+): Promise<AutomationEffects> {
+  if (opts.fromListId === opts.toListId) return EMPTY_EFFECTS;
+  // Entry and exit rules share one ordered query so a single card move respects the workspace's
+  // authored automation order even when both sides of the transition have matching rules.
+  const rows = await tx
+    .select()
+    .from(automations)
+    .where(and(
+      eq(automations.workspaceId, opts.workspaceId),
+      eq(automations.enabled, true),
+      isNull(automations.archivedAt),
+      or(
+        and(
+          eq(automations.triggerType, "card_enters_list"),
+          eq(automations.triggerListId, opts.toListId),
+          eq(automations.applyOnMove, true),
+        ),
+        and(
+          eq(automations.triggerType, "card_leaves_list"),
+          eq(automations.triggerListId, opts.fromListId),
+        ),
+      ),
+    ))
+    .orderBy(asc(automations.position));
+  if (rows.length === 0) return EMPTY_EFFECTS;
+  return applyTriggeredAutomations(tx, rows, opts);
+}
+
+function customFieldTriggerMatches(
+  trigger: AutomationTriggerCustomFieldValue,
+  value: Partial<CardCustomFieldValue> | null | undefined,
+): boolean {
+  // An absent checkbox row is the product's visible unchecked/No state. Treat it as false so
+  // clearing a checked box can cross a configured `false` boundary, while creating an explicit
+  // false row from the same visible state remains a no-op for trigger purposes.
+  if (trigger.kind === "checkbox") return (value?.valueCheckbox ?? false) === trigger.checked;
+  if (!value) return false;
+  if (trigger.kind === "text") return value.valueText === trigger.text;
+  if (trigger.kind === "number") return value.valueNumber !== null && value.valueNumber !== undefined && Number(value.valueNumber) === trigger.number;
+  if (trigger.kind === "date") return value.valueDate === trigger.date;
+  if (trigger.kind === "url") return value.valueUrl === trigger.url;
+  if (trigger.kind === "select") return value.valueOptionIds?.includes(trigger.optionId) ?? false;
+  return value.valueUserIds?.includes(trigger.userId) ?? false;
+}
+
+export async function runCustomFieldValueChangedAutomations(
+  tx: Tx,
+  opts: {
+    cardId: string;
+    fieldId: string;
+    previousValue: Partial<CardCustomFieldValue> | null | undefined;
+    currentValue: Partial<CardCustomFieldValue> | null | undefined;
+    boardId: string;
+    workspaceId: string;
+    clientId: string;
+    triggerActorId?: string | null;
+  },
+): Promise<AutomationEffects> {
+  const rows = (await tx
+    .select()
+    .from(automations)
+    .where(and(
+      eq(automations.workspaceId, opts.workspaceId),
+      eq(automations.enabled, true),
+      isNull(automations.archivedAt),
+      eq(automations.triggerType, "custom_field_value_changed"),
+      eq(automations.triggerCustomFieldId, opts.fieldId),
+    ))
+    .orderBy(asc(automations.position)))
+    .filter((automation) => automation.triggerCustomFieldValue
+      && !customFieldTriggerMatches(automation.triggerCustomFieldValue, opts.previousValue)
+      && customFieldTriggerMatches(automation.triggerCustomFieldValue, opts.currentValue));
+  if (rows.length === 0) return EMPTY_EFFECTS;
+  return applyTriggeredAutomations(tx, rows, opts);
+}
+
 export async function runChecklistCompletionAutomations(
   tx: Tx,
   opts: { cardId: string; boardId: string; workspaceId: string; clientId: string; triggerActorId?: string | null },
@@ -1125,7 +1236,7 @@ export async function emitAutomationEffects(effects: AutomationEffects): Promise
 // query, so every overdue candidate is eventually processed regardless of backlog size.
 const DUE_DATE_SWEEP_BATCH_SIZE = 500;
 
-interface DueDateWorkspaceAutomation {
+interface ScheduledWorkspaceAutomation {
   automation: Automation;
   actions: AutomationAction[];
 }
@@ -1149,7 +1260,7 @@ export async function runDueDateAutomationSweep(
   // can own many overdue cards spanning several batches, and its automation set is
   // bounded by AUTOMATION_LIMIT, so we load each workspace once and reuse it. A
   // workspace with no due-date automations is cached as [] to avoid re-querying.
-  const automationsByWorkspace = new Map<string, DueDateWorkspaceAutomation[]>();
+  const automationsByWorkspace = new Map<string, ScheduledWorkspaceAutomation[]>();
   const ensureWorkspacesLoaded = async (workspaceIds: string[]): Promise<void> => {
     const missing = workspaceIds.filter((id) => !automationsByWorkspace.has(id));
     if (missing.length === 0) return;
@@ -1251,7 +1362,7 @@ export async function runDueDateAutomationSweep(
               .from(automationDueDateRuns)
               .where(and(eq(automationDueDateRuns.automationId, automation.id), eq(automationDueDateRuns.cardId, candidate.card.id)))
               .limit(1);
-            if (existing?.dueDateLocalDate === candidate.card.dueDateLocalDate) return EMPTY_EFFECTS;
+            if (existing?.dueDateLocalDate === candidate.card.dueDateLocalDate && existing.triggerDaysBefore === 0) return EMPTY_EFFECTS;
             const [card] = await tx.select().from(cards).where(eq(cards.id, candidate.card.id)).limit(1);
             if (!card?.dueDateLocalDate || !isDueDateOverdue(card, now)) return EMPTY_EFFECTS;
             const result = await applyAutomationActionsAndRecordStats(tx, automation.id, {
@@ -1264,10 +1375,10 @@ export async function runDueDateAutomationSweep(
             }, automationActions);
             await tx
               .insert(automationDueDateRuns)
-              .values({ automationId: automation.id, cardId: card.id, dueDateLocalDate: card.dueDateLocalDate })
+              .values({ automationId: automation.id, cardId: card.id, dueDateLocalDate: card.dueDateLocalDate, triggerDaysBefore: 0 })
               .onConflictDoUpdate({
                 target: [automationDueDateRuns.automationId, automationDueDateRuns.cardId],
-                set: { dueDateLocalDate: card.dueDateLocalDate, firedAt: new Date() },
+                set: { dueDateLocalDate: card.dueDateLocalDate, triggerDaysBefore: 0, firedAt: new Date() },
               });
             return result;
           });
@@ -1288,6 +1399,305 @@ export async function runDueDateAutomationSweep(
   return ran;
 }
 
+export async function runDueDateApproachingAutomationSweep(
+  log?: FastifyBaseLogger,
+  now = new Date(),
+  batchSize = DUE_DATE_SWEEP_BATCH_SIZE,
+): Promise<number> {
+  const broadCutoff = addDays(localDateInTimezone(now, "UTC"), 3651);
+  const broadFloor = addDays(localDateInTimezone(now, "UTC"), -1);
+  const automationsByWorkspace = new Map<string, ScheduledWorkspaceAutomation[]>();
+  const ensureWorkspacesLoaded = async (workspaceIds: string[]): Promise<void> => {
+    const missing = workspaceIds.filter((id) => !automationsByWorkspace.has(id));
+    if (missing.length === 0) return;
+    for (const id of missing) automationsByWorkspace.set(id, []);
+    const scheduled = await db
+      .select()
+      .from(automations)
+      .where(and(
+        inArray(automations.workspaceId, missing),
+        eq(automations.enabled, true),
+        isNull(automations.archivedAt),
+        eq(automations.triggerType, "due_date_approaching"),
+      ))
+      .orderBy(asc(automations.workspaceId), asc(automations.position));
+    if (scheduled.length === 0) return;
+    const actions = await db
+      .select()
+      .from(automationActions)
+      .where(inArray(automationActions.automationId, scheduled.map((automation) => automation.id)))
+      .orderBy(asc(automationActions.position));
+    const actionsByAutomation = new Map<string, AutomationAction[]>();
+    for (const action of actions) {
+      const list = actionsByAutomation.get(action.automationId);
+      if (list) list.push(action);
+      else actionsByAutomation.set(action.automationId, [action]);
+    }
+    for (const automation of scheduled) {
+      automationsByWorkspace.get(automation.workspaceId)!.push({ automation, actions: actionsByAutomation.get(automation.id) ?? [] });
+    }
+  };
+
+  let ran = 0;
+  let cursorDate: string | null = null;
+  let cursorId: string | null = null;
+  for (;;) {
+    const afterCursor: SQL | undefined = cursorDate && cursorId
+      ? sql`(${cards.dueDateLocalDate}, ${cards.id}) > (${cursorDate}::date, ${cursorId}::uuid)`
+      : undefined;
+    const candidates: DueDateCandidate[] = await db
+      .select({ card: cards, workspaceId: lists.workspaceId, clientId: workspaces.clientId })
+      .from(cards)
+      .innerJoin(lists, eq(lists.id, cards.listId))
+      .innerJoin(boards, eq(boards.id, cards.boardId))
+      .innerJoin(workspaces, eq(workspaces.id, lists.workspaceId))
+      .where(and(
+        isNull(cards.archivedAt),
+        isNull(cards.completedAt),
+        isNull(lists.archivedAt),
+        isNull(boards.archivedAt),
+        sql`${cards.dueDateLocalDate} is not null`,
+        sql`${cards.dueDateLocalDate} > ${broadFloor}`,
+        sql`${cards.dueDateLocalDate} <= ${broadCutoff}`,
+        afterCursor,
+        sql`exists (
+          select 1 from automation a
+          inner join automation_action aa on aa.automation_id = a.id
+          where a.workspace_id = ${lists.workspaceId}
+            and a.enabled = true
+            and a.archived_at is null
+            and a.trigger_type = 'due_date_approaching'
+            and not exists (
+              select 1 from automation_due_date_run adr
+              where adr.automation_id = a.id
+                and adr.card_id = ${cards.id}
+                and adr.due_date_local_date = ${cards.dueDateLocalDate}::text
+                and adr.trigger_days_before = a.trigger_days_before
+            )
+        )`,
+      ))
+      .orderBy(asc(cards.dueDateLocalDate), asc(cards.id))
+      .limit(batchSize);
+    if (candidates.length === 0) break;
+    const last = candidates[candidates.length - 1]!;
+    cursorDate = last.card.dueDateLocalDate;
+    cursorId = last.card.id;
+    await ensureWorkspacesLoaded(Array.from(new Set(candidates.map((candidate) => candidate.workspaceId))));
+
+    for (const candidate of candidates) {
+      if (!candidate.card.dueDateLocalDate) continue;
+      for (const { automation, actions: scheduledActions } of automationsByWorkspace.get(candidate.workspaceId) ?? []) {
+        const daysBefore = automation.triggerDaysBefore;
+        if (!daysBefore || scheduledActions.length === 0) continue;
+        const today = localDateInTimezone(now, candidate.card.dueDateTimezone || "UTC");
+        const approachDate = addDays(candidate.card.dueDateLocalDate, -daysBefore);
+        if (today < approachDate || today >= candidate.card.dueDateLocalDate) continue;
+        try {
+          const effects = await db.transaction(async (tx) => {
+            const [card] = await tx.select().from(cards).where(eq(cards.id, candidate.card.id)).for("update").limit(1);
+            if (!card?.dueDateLocalDate || card.archivedAt || card.completedAt) return EMPTY_EFFECTS;
+            const currentLocalDate = localDateInTimezone(now, card.dueDateTimezone || "UTC");
+            const currentApproachDate = addDays(card.dueDateLocalDate, -daysBefore);
+            if (currentLocalDate < currentApproachDate || currentLocalDate >= card.dueDateLocalDate) return EMPTY_EFFECTS;
+            const [existing] = await tx
+              .select()
+              .from(automationDueDateRuns)
+              .where(and(eq(automationDueDateRuns.automationId, automation.id), eq(automationDueDateRuns.cardId, card.id)))
+              .limit(1);
+            if (existing?.dueDateLocalDate === card.dueDateLocalDate && existing.triggerDaysBefore === daysBefore) return EMPTY_EFFECTS;
+            const result = await applyAutomationActionsAndRecordStats(tx, automation.id, {
+              card,
+              boardId: card.boardId,
+              workspaceId: candidate.workspaceId,
+              clientId: candidate.clientId,
+              fireDateLocalDate: currentLocalDate,
+              fireDate: now,
+            }, scheduledActions);
+            await tx
+              .insert(automationDueDateRuns)
+              .values({ automationId: automation.id, cardId: card.id, dueDateLocalDate: card.dueDateLocalDate, triggerDaysBefore: daysBefore, firedAt: now })
+              .onConflictDoUpdate({
+                target: [automationDueDateRuns.automationId, automationDueDateRuns.cardId],
+                set: { dueDateLocalDate: card.dueDateLocalDate, triggerDaysBefore: daysBefore, firedAt: now },
+              });
+            return result;
+          });
+          if (effects.effects.length > 0) {
+            await emitAutomationEffects(effects);
+            ran += 1;
+          }
+        } catch (err) {
+          log?.error({ err, automationId: automation.id, cardId: candidate.card.id }, "due date approaching automation failed");
+        }
+      }
+    }
+    if (candidates.length < batchSize) break;
+  }
+  return ran;
+}
+
+const INACTIVITY_SWEEP_BATCH_SIZE = 500;
+
+interface InactivityCandidate {
+  card: Card;
+  workspaceId: string;
+}
+
+/**
+ * Fires card_becomes_inactive once for each workspace-specific inactivity boundary.
+ *
+ * The ledger uses updatedAt + inactiveCardsDays as the event identity. Card activity advances
+ * updatedAt, while changing the workspace period moves the boundary; either can therefore create a
+ * new event without a persisted "inactive" flag that could drift from the existing derived status.
+ */
+export async function runInactivityAutomationSweep(
+  log?: FastifyBaseLogger,
+  now = new Date(),
+  batchSize = INACTIVITY_SWEEP_BATCH_SIZE,
+): Promise<number> {
+  const automationsByWorkspace = new Map<string, ScheduledWorkspaceAutomation[]>();
+  const ensureWorkspacesLoaded = async (workspaceIds: string[]): Promise<void> => {
+    const missing = workspaceIds.filter((id) => !automationsByWorkspace.has(id));
+    if (missing.length === 0) return;
+    for (const id of missing) automationsByWorkspace.set(id, []);
+    const inactiveAutomations = await db
+      .select()
+      .from(automations)
+      .where(and(
+        inArray(automations.workspaceId, missing),
+        eq(automations.enabled, true),
+        isNull(automations.archivedAt),
+        eq(automations.triggerType, "card_becomes_inactive"),
+      ))
+      .orderBy(asc(automations.workspaceId), asc(automations.position));
+    if (inactiveAutomations.length === 0) return;
+    const actions = await db
+      .select()
+      .from(automationActions)
+      .where(inArray(automationActions.automationId, inactiveAutomations.map((automation) => automation.id)))
+      .orderBy(asc(automationActions.position));
+    const actionsByAutomation = new Map<string, AutomationAction[]>();
+    for (const action of actions) {
+      const list = actionsByAutomation.get(action.automationId);
+      if (list) list.push(action);
+      else actionsByAutomation.set(action.automationId, [action]);
+    }
+    for (const automation of inactiveAutomations) {
+      automationsByWorkspace.get(automation.workspaceId)!.push({
+        automation,
+        actions: actionsByAutomation.get(automation.id) ?? [],
+      });
+    }
+  };
+
+  const seen = new Set<string>();
+  let ran = 0;
+  let cursorUpdatedAt: Date | null = null;
+  let cursorId: string | null = null;
+
+  for (;;) {
+    const afterCursor: SQL | undefined = cursorUpdatedAt && cursorId
+      ? sql`(${cards.updatedAt}, ${cards.id}) > (${cursorUpdatedAt}, ${cursorId}::uuid)`
+      : undefined;
+    const candidates: InactivityCandidate[] = await db
+      .select({
+        card: cards,
+        workspaceId: workspaces.id,
+      })
+      .from(cards)
+      .innerJoin(lists, eq(lists.id, cards.listId))
+      .innerJoin(boards, eq(boards.id, cards.boardId))
+      .innerJoin(workspaces, eq(workspaces.id, cards.workspaceId))
+      .where(and(
+        isNull(cards.archivedAt),
+        isNull(cards.completedAt),
+        isNull(lists.archivedAt),
+        isNull(boards.archivedAt),
+        // The explicit cast keeps PostgreSQL from inferring the bound Date as an interval merely
+        // because it appears on the left side of subtraction.
+        sql`${cards.updatedAt} <= ${now}::timestamptz - make_interval(days => ${workspaces.inactiveCardsDays})`,
+        afterCursor,
+        sql`exists (
+          select 1 from automation a
+          inner join automation_action aa on aa.automation_id = a.id
+          where a.workspace_id = ${workspaces.id}
+            and a.enabled = true
+            and a.archived_at is null
+            and a.trigger_type = 'card_becomes_inactive'
+            and not exists (
+              select 1 from automation_inactive_run air
+              where air.automation_id = a.id
+                and air.card_id = ${cards.id}
+                and air.inactive_at = ${cards.updatedAt} + make_interval(days => ${workspaces.inactiveCardsDays})
+            )
+        )`,
+      ))
+      .orderBy(asc(cards.updatedAt), asc(cards.id))
+      .limit(batchSize);
+    if (candidates.length === 0) break;
+
+    const last = candidates[candidates.length - 1]!;
+    cursorUpdatedAt = last.card.updatedAt;
+    cursorId = last.card.id;
+    await ensureWorkspacesLoaded(Array.from(new Set(candidates.map((candidate) => candidate.workspaceId))));
+
+    for (const candidate of candidates) {
+      if (seen.has(candidate.card.id)) continue;
+      seen.add(candidate.card.id);
+      for (const { automation, actions: inactiveActions } of automationsByWorkspace.get(candidate.workspaceId) ?? []) {
+        if (!inactiveActions.length) continue;
+        try {
+          const effects = await db.transaction(async (tx) => {
+            // Serialize the boundary check with both user edits and sibling inactivity rules. An
+            // earlier rule may make the card active again, in which case later rules must not fire.
+            const [card] = await tx.select().from(cards).where(eq(cards.id, candidate.card.id)).for("update").limit(1);
+            if (!card || card.archivedAt || card.completedAt) return EMPTY_EFFECTS;
+            const [workspace] = await tx
+              .select({ inactiveCardsDays: workspaces.inactiveCardsDays, clientId: workspaces.clientId })
+              .from(workspaces)
+              .where(eq(workspaces.id, candidate.workspaceId))
+              .limit(1);
+            if (!workspace) return EMPTY_EFFECTS;
+            const inactiveAt = new Date(card.updatedAt.getTime() + workspace.inactiveCardsDays * 24 * 60 * 60 * 1000);
+            if (inactiveAt.getTime() > now.getTime()) return EMPTY_EFFECTS;
+            const [existing] = await tx
+              .select({ inactiveAt: automationInactiveRuns.inactiveAt })
+              .from(automationInactiveRuns)
+              .where(and(eq(automationInactiveRuns.automationId, automation.id), eq(automationInactiveRuns.cardId, card.id)))
+              .limit(1);
+            if (existing?.inactiveAt.getTime() === inactiveAt.getTime()) return EMPTY_EFFECTS;
+            const result = await applyAutomationActionsAndRecordStats(tx, automation.id, {
+              card,
+              boardId: card.boardId,
+              workspaceId: candidate.workspaceId,
+              clientId: workspace.clientId,
+              fireDateLocalDate: localDateInTimezone(now, card.dueDateTimezone || "UTC"),
+              fireDate: now,
+            }, inactiveActions);
+            await tx
+              .insert(automationInactiveRuns)
+              .values({ automationId: automation.id, cardId: card.id, inactiveAt, firedAt: now })
+              .onConflictDoUpdate({
+                target: [automationInactiveRuns.automationId, automationInactiveRuns.cardId],
+                set: { inactiveAt, firedAt: now },
+              });
+            return result;
+          });
+          if (effects.effects.length > 0) {
+            await emitAutomationEffects(effects);
+            ran += 1;
+          }
+        } catch (err) {
+          log?.error({ err, automationId: automation.id, cardId: candidate.card.id }, "inactivity automation failed");
+        }
+      }
+    }
+
+    if (candidates.length < batchSize) break;
+  }
+  return ran;
+}
+
 export function startDueDateAutomationScheduler(log?: FastifyBaseLogger): () => Promise<void> {
   const dueDateSweep = startSweepScheduler({
     name: "due-date-automation",
@@ -1301,8 +1711,20 @@ export function startDueDateAutomationScheduler(log?: FastifyBaseLogger): () => 
     nextDelayMs: 24 * 60 * 60 * 1000,
     log,
   });
+  const inactivitySweep = startSweepScheduler({
+    name: "inactivity-automation",
+    task: () => runInactivityAutomationSweep(log),
+    nextDelayMs: 60 * 60 * 1000,
+    log,
+  });
+  const dueDateApproachingSweep = startSweepScheduler({
+    name: "due-date-approaching-automation",
+    task: () => runDueDateApproachingAutomationSweep(log),
+    nextDelayMs: 60 * 60 * 1000,
+    log,
+  });
   return async () => {
-    await Promise.all([dueDateSweep.stop(), cleanup.stop()]);
+    await Promise.all([dueDateSweep.stop(), dueDateApproachingSweep.stop(), inactivitySweep.stop(), cleanup.stop()]);
   };
 }
 

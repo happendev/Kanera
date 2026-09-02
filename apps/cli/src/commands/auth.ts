@@ -79,7 +79,7 @@ async function promptSecret(prompt: string): Promise<string> {
 async function describeSession(apiKey: string, url: string): Promise<SessionSummary> {
   const session = await openToolSession({ apiKey, publicApiUrl: url });
   try {
-    return await session.call("kanera_get_session", {}) as SessionSummary;
+    return await session.call("session.get", {}) as SessionSummary;
   } finally {
     await session.close();
   }

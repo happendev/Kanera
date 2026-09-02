@@ -4,6 +4,7 @@ import { Router } from "@angular/router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../api/api.client";
 import { AuthService } from "./auth.service";
+import { markOnboardingSkipped } from "./onboarding-skip";
 import { workspaceGuard } from "./workspace.guard";
 
 describe("workspaceGuard", () => {
@@ -14,7 +15,7 @@ describe("workspaceGuard", () => {
   };
 
   const hydrate = vi.fn(async () => undefined);
-  const user = vi.fn(() => ({ hasWorkspace: false }));
+  const user = vi.fn(() => ({ id: "user-1", clientId: "client-1", hasWorkspace: false }));
   const isOrgAdmin = vi.fn(() => true);
   const get = vi.fn<(_path: string) => Promise<GuardHome>>(() => Promise.resolve({ groups: [], guestGroups: [] }));
   const redirectTree = {} as UrlTree;
@@ -22,7 +23,8 @@ describe("workspaceGuard", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    user.mockReturnValue({ hasWorkspace: false });
+    localStorage.clear();
+    user.mockReturnValue({ id: "user-1", clientId: "client-1", hasWorkspace: false });
     isOrgAdmin.mockReturnValue(true);
     get.mockResolvedValue({ groups: [], guestGroups: [] });
     TestBed.configureTestingModule({
@@ -60,8 +62,24 @@ describe("workspaceGuard", () => {
     expect(createUrlTree).not.toHaveBeenCalled();
   });
 
+  it("lets an admin who skipped onboarding onto the blank home page without loading home content", async () => {
+    markOnboardingSkipped({ id: "user-1", clientId: "client-1" });
+
+    await expect(runGuard()).resolves.toBe(true);
+    expect(get).not.toHaveBeenCalled();
+    expect(createUrlTree).not.toHaveBeenCalled();
+  });
+
+  it("scopes the skip to the user and organisation that chose it", async () => {
+    markOnboardingSkipped({ id: "someone-else", clientId: "client-1" });
+    markOnboardingSkipped({ id: "user-1", clientId: "another-org" });
+
+    await expect(runGuard()).resolves.toBe(redirectTree);
+    expect(createUrlTree).toHaveBeenCalledWith(["/onboarding"]);
+  });
+
   it("does not load home content when a standard workspace already exists", async () => {
-    user.mockReturnValue({ hasWorkspace: true });
+    user.mockReturnValue({ id: "user-1", clientId: "client-1", hasWorkspace: true });
 
     await expect(runGuard()).resolves.toBe(true);
     expect(get).not.toHaveBeenCalled();

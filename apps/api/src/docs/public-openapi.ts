@@ -1287,6 +1287,9 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           triggerListId: nullable(uuid),
           triggerUserIds: nullable(arrayOf(uuid)),
           triggerLabelId: nullable(uuid),
+          triggerCustomFieldId: nullable(uuid),
+          triggerCustomFieldValue: nullable(zodSchema(dto.automationTriggerCustomFieldValue)),
+          triggerDaysBefore: nullable({ type: "integer", minimum: 1, maximum: 3650 }),
           applyOnCreate: { type: "boolean" },
           applyOnMove: { type: "boolean" },
           actions: arrayOf({ type: "object", additionalProperties: true }),
@@ -1409,7 +1412,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         ],
         responses: authedResponses({ "200": ok(arrayOf(ref("Workspace"))) }),
       }),
-      post: operation({ tags: ["Workspaces"], summary: "Create a workspace", description: "Set `kind` to `board` and include `initialBoard` to create a standalone board. The server mirrors the initial board name, icon, and icon color onto its hidden workspace. Callers may seed `lists`, `customFields`, and `labels` from their chosen workflow. An identity-wide personal key can select the owning organisation with `X-Kanera-Organisation-Id`; no new key is required.", operationId: "createWorkspace", parameters: [personalOrganisationHeader()], requestBody: jsonBody(ref("CreateWorkspaceBody")), responses: authedResponses({ "201": created(ref("CreatedWorkspace")) }) }),
+      post: operation({ tags: ["Workspaces"], summary: "Create a workspace", description: "Set `kind` to `board` and include `initialBoard` to create a standalone board. The server mirrors the initial board name, icon, and icon color onto its hidden workspace. Callers may seed `lists`, `customFields`, `labels`, `checklistTemplates`, starter `cards`, and `automations` (all name-referenced) so a workspace is usable from the first request. Requires an organisation admin or owner using a write-capable personal key or OAuth grant; workspace-scoped keys receive 403. An identity-wide personal key can select the owning organisation with `X-Kanera-Organisation-Id`; no new key is required.", operationId: "createWorkspace", parameters: [personalOrganisationHeader()], requestBody: jsonBody(ref("CreateWorkspaceBody")), responses: authedResponses({ "201": created(ref("CreatedWorkspace")) }) }),
     },
     "/workspaces/{id}": {
       get: operation({ tags: ["Workspaces"], summary: "Get workspace details", operationId: "getWorkspace", parameters: [idParam()], responses: authedResponses({ "200": ok(ref("WorkspaceDetail")) }) }),
@@ -1437,7 +1440,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       post: operation({
         tags: ["Automations"],
         summary: "Create an automation",
-        description: "Creates a workspace rule and its ordered actions atomically. Enabled rules require at least one action. Requires workspace-admin authority and a write-capable credential.",
+        description: "Creates a workspace rule and its ordered actions atomically. List-exit rules match the source list of a move; custom-field rules run only when an edit transitions into the configured typed value; approaching-due rules run once per due date and lead-time setting before the due day; inactivity rules run once per inactivity boundary. Enabled rules require at least one action. Requires workspace-admin authority and a write-capable credential.",
         operationId: "createAutomation",
         parameters: [idParam("wsId", "Workspace id.")],
         requestBody: jsonBody(ref("CreateAutomationBody")),

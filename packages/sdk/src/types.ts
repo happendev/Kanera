@@ -55,6 +55,100 @@ export interface Workspace {
   updatedAt: Timestamp;
 }
 
+/** Built-in workspace templates; `blank` seeds nothing. */
+export type WorkspaceTemplateId =
+  | "development-team"
+  | "marketing"
+  | "simple-todo"
+  | "product-team"
+  | "sales-crm"
+  | "operations-support"
+  | "project-delivery"
+  | "event-planning"
+  | "client-onboarding"
+  | "hiring-pipeline"
+  | "blank";
+
+export type WorkspaceSeedAutomationTrigger =
+  | { type: "card_enters_list"; listName: string; applyOnCreate?: boolean; applyOnMove?: boolean }
+  | { type: "due_date_arrives" }
+  | { type: "all_checklist_items_complete" }
+  | { type: "card_marked_complete" }
+  | { type: "card_label_set"; labelName: string }
+  | { type: "card_becomes_inactive" };
+
+export type WorkspaceSeedCustomFieldValue =
+  | { kind: "text"; text: string }
+  | { kind: "text_current_date"; format: "date" | "month" | "month_long_short_year" | "month_long_year" | "datetime" }
+  | { kind: "number"; number: number }
+  | { kind: "date"; source: "fixed"; date: string }
+  | { kind: "date"; source: "current" }
+  | { kind: "checkbox"; checked: boolean }
+  | { kind: "select"; optionLabels: string[] };
+
+export type WorkspaceSeedAutomationAction =
+  | { type: "add_labels"; labelNames: string[] }
+  | { type: "remove_labels"; labelNames: string[] }
+  | { type: "apply_checklists"; checklistTemplateTitles: string[] }
+  | { type: "set_due_date"; offsetDays: number; slot?: DueDateSlot }
+  | { type: "clear_due_date" }
+  | { type: "set_completion"; completed: boolean }
+  | { type: "move_to_list"; listName: string; placement?: "top" | "bottom" }
+  | { type: "move_to_top" }
+  | { type: "move_to_bottom" }
+  | { type: "populate_custom_field"; fieldName: string; onlyIfEmpty?: boolean; value: WorkspaceSeedCustomFieldValue };
+
+/**
+ * One-shot workspace bootstrap. Seed content references lists, labels, fields, and checklist
+ * templates by name; the API resolves them inside the same transaction.
+ *
+ * Requires an organisation admin or owner using a write-capable personal credential; workspace
+ * keys cannot create workspaces. Set `kind: "board"` with `initialBoard` for a standalone board.
+ */
+export interface CreateWorkspaceInput {
+  name: string;
+  kind?: WorkspaceKind;
+  /** Human card-key prefix such as `PROJ`; derived from the name when omitted. */
+  cardKeyPrefix?: string;
+  icon?: string | null;
+  initialBoard?: { name: string; icon?: string | null; iconColor?: ColorToken | null };
+  /** Ordered workflow lists. Empty or at least two entries. */
+  lists?: { name: string; icon?: string | null }[];
+  /** Plain list names; an alternative to `lists`. */
+  listNames?: string[];
+  customFields?: {
+    name: string;
+    icon?: string | null;
+    type: CustomFieldType;
+    allowMultiple?: boolean;
+    options?: { label: string; color?: ColorToken | null }[];
+  }[];
+  labels?: { name: string; color?: ColorToken | null }[];
+  checklistTemplates?: { title: string; items: string[] }[];
+  /** Starter cards; requires `initialBoard`. */
+  cards?: {
+    title: string;
+    description?: string;
+    listName: string;
+    labelNames?: string[];
+    checklistTemplateTitles?: string[];
+  }[];
+  automations?: { trigger: WorkspaceSeedAutomationTrigger; actions: WorkspaceSeedAutomationAction[] }[];
+}
+
+export interface CreatedWorkspace extends Workspace {
+  /** Present when the request included `initialBoard`. */
+  initialBoard?: Board;
+}
+
+export interface CreateBoardInput {
+  name: string;
+  groupId?: Uuid | null;
+  description?: string;
+  icon?: string | null;
+  iconColor?: ColorToken | null;
+}
+
 export interface List {
   id: Uuid;
   workspaceId: Uuid;

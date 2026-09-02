@@ -4,9 +4,9 @@ import { API_KEY_NAME_MAX_LENGTH } from "@kanera/shared/dto/name-limits";
 import type { PersonalApiKeyScope } from "@kanera/shared/schema";
 import { ApiClient, ApiError } from "../../../core/api/api.client";
 import { AuthService } from "../../../core/auth/auth.service";
-import { buildAgentSetupPrompt } from "../../../shared/agent-setup-prompt";
 import { ConfirmService } from "../../../shared/confirm.service";
-import { DocsLinkComponent, KANERA_DOCS_URL } from "../../../shared/docs-link.component";
+import { AgentConnectCardComponent } from "../../../shared/agent-connect-card/agent-connect-card.component";
+import { DocsLinkComponent } from "../../../shared/docs-link.component";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { AccountSettingsPage } from "../account-settings.page";
 
@@ -51,7 +51,7 @@ function sortPersonalApiKeys(keys: PersonalApiKeyRow[]): PersonalApiKeyRow[] {
 @Component({
   selector: "k-account-settings-api-keys",
   standalone: true,
-  imports: [DocsLinkComponent, TooltipDirective],
+  imports: [AgentConnectCardComponent, DocsLinkComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./api-keys.page.html",
   styleUrl: "./api-keys.page.scss",
@@ -60,7 +60,6 @@ export class AccountSettingsApiKeysPage implements OnInit {
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthService);
   private readonly confirm = inject(ConfirmService);
-  readonly agentSetupDocsUrl = `${KANERA_DOCS_URL}/ai-mcp-oauth`;
   protected readonly settings = inject(AccountSettingsPage);
 
   // Personal API keys are gated behind the same paid entitlement as workspace keys; the server still
@@ -68,8 +67,6 @@ export class AccountSettingsApiKeysPage implements OnInit {
   protected readonly apiAllowed = this.auth.apiAllowed;
   protected readonly personalApiKeys = signal<PersonalApiKeyRow[]>([]);
   protected readonly oauthConnections = signal<OauthConnectionRow[]>([]);
-  protected readonly mcpUrl = signal("");
-  protected readonly agentSetupCopied = signal(false);
   protected readonly newPersonalKeyLabel = signal("");
   // Defaults to write so the create flow behaves exactly as before; read is the explicit opt-in
   // for credentials handed to unattended agents.
@@ -84,14 +81,13 @@ export class AccountSettingsApiKeysPage implements OnInit {
   }
 
   async ngOnInit() {
-    const [keys, connections, config] = await Promise.all([
+    // The MCP address itself is fetched by <k-agent-connect-card>.
+    const [keys, connections] = await Promise.all([
       this.api.get<PersonalApiKeyRow[]>("/me/api-keys").catch(() => [] as PersonalApiKeyRow[]),
       this.api.get<OauthConnectionRow[]>("/me/oauth-connections").catch(() => [] as OauthConnectionRow[]),
-      this.api.get<{ mcpUrl: string }>("/me/agent-connection-config").catch(() => ({ mcpUrl: "" })),
     ]);
     this.personalApiKeys.set(keys);
     this.oauthConnections.set(connections);
-    this.mcpUrl.set(config.mcpUrl);
   }
 
   protected async createPersonalKey(e: Event) {
@@ -143,13 +139,6 @@ export class AccountSettingsApiKeysPage implements OnInit {
   protected async copyText(value: string | null) {
     if (!value || typeof navigator === "undefined") return;
     await navigator.clipboard?.writeText(value);
-  }
-
-  protected async copyAgentSetupPrompt() {
-    const url = this.mcpUrl();
-    if (!url || typeof navigator === "undefined" || !navigator.clipboard) return;
-    await navigator.clipboard.writeText(buildAgentSetupPrompt(url));
-    this.agentSetupCopied.set(true);
   }
 
   protected formatKeyLastUsed(value: string | Date | null | undefined): string {

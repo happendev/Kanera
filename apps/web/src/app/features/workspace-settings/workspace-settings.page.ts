@@ -6,7 +6,7 @@ import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, NavigationEnd, Router, RouterLink } from "@angular/router";
 import { AUTOMATION_ACTION_LIMIT, AUTOMATION_LIMIT } from "@kanera/shared/automation-limits";
 import type { ColorToken } from "@kanera/shared/colors";
-import type { AutomationActionBody, AutomationTriggerTypeDto, CustomFieldTypeName, DeletionImpactResponse, DueDateSlot } from "@kanera/shared/dto";
+import type { AutomationActionBody, AutomationTriggerCustomFieldValueDto, AutomationTriggerTypeDto, CustomFieldTypeName, DeletionImpactResponse, DueDateSlot } from "@kanera/shared/dto";
 import { API_KEY_NAME_MAX_LENGTH, CARD_LABEL_NAME_MAX_LENGTH, WORKSPACE_ENTITY_NAME_MAX_LENGTH } from "@kanera/shared/dto/name-limits";
 import type { ServerToClientEvents, WireAutomation, WireAutomationAction, WireCardLabel, WireChecklistTemplate, WireCustomField, WireCustomFieldOption } from "@kanera/shared/events";
 import type { Board, BoardGroup, List, Workspace, WorkspaceMember } from "@kanera/shared/schema";
@@ -783,6 +783,11 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly automationTextDateFormats = automationTextDateFormats;
   readonly automationDueDatePresets = automationDueDatePresets;
   readonly automationSetCustomFields = computed(() => this.fields().filter((field) => (automationSetCustomFieldTypes as readonly CustomFieldTypeName[]).includes(field.type)));
+  readonly automationTriggerCustomFields = computed(() => this.fields().filter((field) => {
+    if (field.type === "select") return field.options.length > 0;
+    if (field.type === "user") return this.automationMembers().length > 0;
+    return true;
+  }));
   readonly enabledAutomationCount = computed(() => this.automations().filter((automation) => automation.enabled).length);
   readonly automationRecipeGroups = automationRecipeGroups;
   /**
@@ -2166,7 +2171,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   automationTriggerTypeValue(automation: WireAutomation): AutomationTriggerTypeName {
-    return automation.triggerType === "due_date_arrives" || automation.triggerType === "all_checklist_items_complete" || automation.triggerType === "card_assigned_to_user" || automation.triggerType === "card_marked_complete" || automation.triggerType === "card_label_set" ? automation.triggerType : "card_enters_list";
+    return automation.triggerType === "card_leaves_list" || automation.triggerType === "due_date_arrives" || automation.triggerType === "due_date_approaching" || automation.triggerType === "card_becomes_inactive" || automation.triggerType === "all_checklist_items_complete" || automation.triggerType === "card_assigned_to_user" || automation.triggerType === "card_marked_complete" || automation.triggerType === "card_label_set" || automation.triggerType === "custom_field_value_changed" ? automation.triggerType : "card_enters_list";
   }
 
   automationTriggerListValue(automation: WireAutomation): string {
@@ -2178,6 +2183,26 @@ export class WorkspaceSettingsPage implements OnDestroy {
   automationTriggerLabelId(automation: WireAutomation): string { return automationTriggerLabelId(automation); }
 
   automationTriggerLabelMissing(automation: WireAutomation): boolean { return automationTriggerLabelMissing(automation, this.automationLookups()); }
+
+  automationTriggerDaysBefore(automation: WireAutomation): number { return automation.triggerDaysBefore ?? 3; }
+
+  automationTriggerCustomField(automation: WireAutomation): WireCustomField | null {
+    return this.fields().find((field) => field.id === automation.triggerCustomFieldId) ?? null;
+  }
+
+  automationTriggerCustomFieldValue(automation: WireAutomation): AutomationTriggerCustomFieldValueDto | null {
+    return automation.triggerCustomFieldValue ?? null;
+  }
+
+  automationTriggerCustomFieldMissing(automation: WireAutomation): boolean {
+    return Boolean(automation.triggerCustomFieldId) && !this.automationTriggerCustomField(automation);
+  }
+
+  automationTriggerCustomOptionMissing(automation: WireAutomation): boolean {
+    const field = this.automationTriggerCustomField(automation);
+    const value = automation.triggerCustomFieldValue;
+    return Boolean(field?.type === "select" && value?.kind === "select" && !field.options.some((option) => option.id === value.optionId));
+  }
 
   automationActionTypeValue(action: AutomationActionBody): string { return automationActionTypeValue(action); }
 
@@ -2295,11 +2320,15 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   automationTriggerEventLabel(automation: WireAutomation): string {
+    if (automation.triggerType === "card_leaves_list") return "Card leaves";
     if (automation.triggerType === "due_date_arrives") return "Due date arrives";
+    if (automation.triggerType === "due_date_approaching") return "Due date approaches";
+    if (automation.triggerType === "card_becomes_inactive") return "Card becomes inactive";
     if (automation.triggerType === "all_checklist_items_complete") return "All checklist items complete";
     if (automation.triggerType === "card_assigned_to_user") return "Card assigned to";
     if (automation.triggerType === "card_marked_complete") return "Card marked complete";
     if (automation.triggerType === "card_label_set") return "Label set to";
+    if (automation.triggerType === "custom_field_value_changed") return "Custom field changes to";
     if (automation.applyOnCreate && automation.applyOnMove) return "Card created or moved into";
     if (automation.applyOnCreate) return "Card created in";
     if (automation.applyOnMove) return "Card moved into";
@@ -2384,10 +2413,13 @@ export class WorkspaceSettingsPage implements OnDestroy {
   private normalizeAutomation(automation: WireAutomation): WireAutomation {
     return {
       ...automation,
-      triggerType: automation.triggerType === "due_date_arrives" || automation.triggerType === "all_checklist_items_complete" || automation.triggerType === "card_assigned_to_user" || automation.triggerType === "card_marked_complete" || automation.triggerType === "card_label_set" ? automation.triggerType : "card_enters_list",
-      triggerListId: automation.triggerType === "card_enters_list" ? automation.triggerListId : null,
+      triggerType: automation.triggerType === "card_leaves_list" || automation.triggerType === "due_date_arrives" || automation.triggerType === "due_date_approaching" || automation.triggerType === "card_becomes_inactive" || automation.triggerType === "all_checklist_items_complete" || automation.triggerType === "card_assigned_to_user" || automation.triggerType === "card_marked_complete" || automation.triggerType === "card_label_set" || automation.triggerType === "custom_field_value_changed" ? automation.triggerType : "card_enters_list",
+      triggerListId: automation.triggerType === "card_enters_list" || automation.triggerType === "card_leaves_list" ? automation.triggerListId : null,
       triggerUserIds: automation.triggerType === "card_assigned_to_user" ? this.stringList(automation.triggerUserIds) : null,
       triggerLabelId: automation.triggerType === "card_label_set" ? automation.triggerLabelId : null,
+      triggerCustomFieldId: automation.triggerType === "custom_field_value_changed" ? automation.triggerCustomFieldId : null,
+      triggerCustomFieldValue: automation.triggerType === "custom_field_value_changed" ? automation.triggerCustomFieldValue : null,
+      triggerDaysBefore: automation.triggerType === "due_date_approaching" ? automation.triggerDaysBefore : null,
       actions: automation.actions.map((action) => {
         const body = this.automationActionBody(action);
         return { ...action, type: body.type, config: body.config as WireAutomationAction["config"] };
@@ -2549,6 +2581,9 @@ export class WorkspaceSettingsPage implements OnDestroy {
       triggerListId: source.triggerListId,
       triggerUserIds: source.triggerUserIds,
       triggerLabelId: source.triggerLabelId,
+      triggerCustomFieldId: source.triggerCustomFieldId,
+      triggerCustomFieldValue: source.triggerCustomFieldValue,
+      triggerDaysBefore: source.triggerDaysBefore,
       applyOnCreate: source.applyOnCreate,
       applyOnMove: source.applyOnMove,
       actions,
@@ -2609,16 +2644,66 @@ export class WorkspaceSettingsPage implements OnDestroy {
   async updateAutomationTrigger(id: string, triggerType: AutomationTriggerTypeName) {
     const current = this.automations().find((automation) => automation.id === id);
     if (!current) return;
-    const triggerListId = triggerType === "card_enters_list" ? (current.triggerListId ?? this.lists()[0]?.id ?? null) : null;
+    const triggerListId = triggerType === "card_enters_list" || triggerType === "card_leaves_list" ? (current.triggerListId ?? this.lists()[0]?.id ?? null) : null;
     const triggerUserIds = triggerType === "card_assigned_to_user" ? (current.triggerUserIds?.length ? current.triggerUserIds : [this.automationMembers()[0]?.userId].filter((userId): userId is string => Boolean(userId))) : null;
     const triggerLabelId = triggerType === "card_label_set" ? (current.triggerLabelId ?? this.labels()[0]?.id ?? null) : null;
+    const triggerDaysBefore = triggerType === "due_date_approaching" ? (current.triggerDaysBefore ?? 3) : null;
+    const triggerCustomField = triggerType === "custom_field_value_changed"
+      ? (this.automationTriggerCustomField(current) ?? this.automationTriggerCustomFields()[0] ?? null)
+      : null;
+    const triggerCustomFieldValue = triggerCustomField
+      ? (current.triggerCustomFieldId === triggerCustomField.id && current.triggerCustomFieldValue?.kind === triggerCustomField.type
+        ? current.triggerCustomFieldValue
+        : this.defaultAutomationTriggerCustomFieldValue(triggerCustomField))
+      : null;
     if (triggerType === "card_label_set" && !triggerLabelId) return;
-    const updated = await this.api.patch<WireAutomation>(`/automations/${id}`, { triggerType, triggerListId, triggerUserIds, triggerLabelId });
+    if (triggerType === "custom_field_value_changed" && (!triggerCustomField || !triggerCustomFieldValue)) return;
+    const updated = await this.api.patch<WireAutomation>(`/automations/${id}`, {
+      triggerType,
+      triggerListId,
+      triggerUserIds,
+      triggerLabelId,
+      triggerCustomFieldId: triggerCustomField?.id ?? null,
+      triggerCustomFieldValue,
+      triggerDaysBefore,
+    });
     this.replaceAutomation(updated);
+  }
+
+  private defaultAutomationTriggerCustomFieldValue(field: WireCustomField): AutomationTriggerCustomFieldValueDto | null {
+    if (field.type === "text") return { kind: "text", text: "" };
+    if (field.type === "number") return { kind: "number", number: 0 };
+    if (field.type === "checkbox") return { kind: "checkbox", checked: true };
+    if (field.type === "date") return { kind: "date", date: new Date().toISOString().slice(0, 10) };
+    if (field.type === "url") return { kind: "url", url: "https://example.com" };
+    if (field.type === "select") return field.options[0]?.id ? { kind: "select", optionId: field.options[0].id } : null;
+    const userId = this.automationMembers()[0]?.userId;
+    return userId ? { kind: "user", userId } : null;
   }
 
   async updateAutomationTriggerList(id: string, triggerListId: string) {
     const updated = await this.api.patch<WireAutomation>(`/automations/${id}`, { triggerListId });
+    this.replaceAutomation(updated);
+  }
+
+  async updateAutomationTriggerDaysBefore(id: string, value: number) {
+    if (!Number.isFinite(value)) return;
+    const triggerDaysBefore = Math.min(3650, Math.max(1, Math.trunc(value)));
+    const updated = await this.api.patch<WireAutomation>(`/automations/${id}`, { triggerDaysBefore });
+    this.replaceAutomation(updated);
+  }
+
+  async updateAutomationTriggerCustomField(id: string, triggerCustomFieldId: string) {
+    const field = this.automationTriggerCustomFields().find((item) => item.id === triggerCustomFieldId);
+    if (!field) return;
+    const triggerCustomFieldValue = this.defaultAutomationTriggerCustomFieldValue(field);
+    if (!triggerCustomFieldValue) return;
+    const updated = await this.api.patch<WireAutomation>(`/automations/${id}`, { triggerCustomFieldId, triggerCustomFieldValue });
+    this.replaceAutomation(updated);
+  }
+
+  async updateAutomationTriggerCustomFieldValue(id: string, triggerCustomFieldValue: AutomationTriggerCustomFieldValueDto) {
+    const updated = await this.api.patch<WireAutomation>(`/automations/${id}`, { triggerCustomFieldValue });
     this.replaceAutomation(updated);
   }
 

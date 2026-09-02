@@ -84,6 +84,10 @@ export const cards = pgTable(
     index("cards_active_incomplete_due_date_idx")
       .on(t.dueDateLocalDate, t.id)
       .where(sql`${t.dueDateLocalDate} is not null and ${t.completedAt} is null and ${t.archivedAt} is null`),
+    // Inactivity automations page candidates by the canonical card-activity clock.
+    index("cards_active_incomplete_updated_at_idx")
+      .on(t.updatedAt, t.id)
+      .where(sql`${t.completedAt} is null and ${t.archivedAt} is null`),
     // Archived-card retention is global rather than board/list scoped.
     index("cards_archived_at_idx")
       .on(t.archivedAt)

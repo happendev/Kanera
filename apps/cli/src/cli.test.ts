@@ -59,7 +59,7 @@ void test("catalog and structured help work before authentication", async () => 
   const help = capture();
   assert.equal(await withoutAmbientCredential(() => run(["card", "--help", "--profile", "kanera-cli-test-absent-profile", "--json"], help.io)), EXIT.ok);
   const helpData = JSON.parse(help.out.join("")) as { data: { tool: string; inputSchema: unknown } };
-  assert.equal(helpData.data.tool, "kanera_get_card");
+  assert.equal(helpData.data.tool, "cards.get");
   assert.ok(helpData.data.inputSchema);
 });
 
@@ -82,7 +82,7 @@ void test("missing tool arguments and command help do not become generic failure
 
   const help = capture();
   assert.equal(await run(["card", "done", "--help", "--json"], help.io), EXIT.ok);
-  assert.equal((JSON.parse(help.out.join("")) as { data: { tool: string } }).data.tool, "kanera_set_card_completion");
+  assert.equal((JSON.parse(help.out.join("")) as { data: { tool: string } }).data.tool, "cards.set_completion");
 });
 
 void test("failures are written to stderr so redirected stdout stays clean", async () => {

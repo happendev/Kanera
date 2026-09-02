@@ -11,6 +11,7 @@ import { DEFAULT_WORKSPACE_TEMPLATE, WORKSPACE_TEMPLATES } from "@kanera/shared/
 import type { WorkspaceTemplate, WorkspaceTemplateId } from "@kanera/shared/workspace-templates";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
+import { markOnboardingSkipped } from "../../core/auth/onboarding-skip";
 import { SocketService } from "../../core/realtime/socket.service";
 import { ColorPickerComponent } from "../../shared/color-picker.component";
 import { IconPickerComponent } from "../../shared/icon-picker.component";
@@ -116,6 +117,9 @@ export class OnboardingPage implements OnInit {
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
   readonly canCancel = computed(() => !!this.auth.user()?.hasWorkspace);
+  // First-run users have nothing to cancel back to, so they get "Skip for now" instead: it records
+  // the choice (see onboarding-skip.ts) so workspaceGuard lets them onto the blank home page.
+  readonly canSkip = computed(() => !this.auth.user()?.hasWorkspace);
   readonly canReturnToSetupChoice = computed(() => !this.auth.user()?.hasWorkspace && this.mode() !== "workspace");
   readonly brandTitle = computed(() => {
     if (this.setupKind() === "choice") return "Get started";
@@ -409,6 +413,12 @@ export class OnboardingPage implements OnInit {
 
   async cancel() {
     if (this.busy()) return;
+    await this.router.navigateByUrl("/");
+  }
+
+  async skip() {
+    if (this.busy()) return;
+    markOnboardingSkipped(this.auth.user());
     await this.router.navigateByUrl("/");
   }
 

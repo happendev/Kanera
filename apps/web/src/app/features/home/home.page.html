@@ -119,20 +119,26 @@
          standalone-only or guest-only account has real work and must fall through to the full page
          below. It still suppresses every other section, because tiles reading zero would be noise
          for someone with nothing yet. -->
-    <div class="no-workspace-empty">
-      <i class="ti ti-layout-kanban no-workspace-icon"></i>
-      <h2>No boards yet</h2>
-      @if (isOrgAdmin()) {
-      <p>
-        @if (hasNoWorkspace()) {
-        Create a workspace when several boards should share one set of lists and fields, or a
-        standalone board when it should keep its own.
-        } @else {
-        Add a board to get started.
-        }
-      </p>
+    @if (isOrgAdmin()) {
+    <div class="get-started">
+      <div class="get-started-intro">
+        <i class="ti ti-layout-kanban no-workspace-icon"></i>
+        <h2>No boards yet</h2>
+        <p>
+          @if (hasNoWorkspace()) {
+          Set up your first board yourself, or connect an AI agent and let it create and configure
+          everything for you. A workspace shares one set of lists and fields across several boards; a
+          standalone board keeps its own.
+          } @else {
+          Your workspace is ready. Add a board to start working, or let a connected AI agent do it.
+          }
+        </p>
+      </div>
       <div class="no-boards-actions">
-        <button type="button" class="sm" (click)="newStandaloneBoard()">
+        <button type="button" class="sm" (click)="startGuidedSetup()">
+          <i class="ti ti-route"></i> Start guided setup
+        </button>
+        <button type="button" class="secondary sm" (click)="newStandaloneBoard()">
           <i class="ti ti-plus"></i> New standalone board
         </button>
         <button type="button" class="secondary sm" (click)="newWorkspace()">
@@ -145,10 +151,15 @@
         <span>{{ message }}</span>
       </p>
       }
-      } @else {
-      <p>You don't have access to any boards yet. Ask an administrator to add you to a workspace or board to get started.</p>
-      }
+      <k-agent-connect-card source="home" />
     </div>
+    } @else {
+    <div class="no-workspace-empty">
+      <i class="ti ti-layout-kanban no-workspace-icon"></i>
+      <h2>No boards yet</h2>
+      <p>You don't have access to any boards yet. Ask an administrator to add you to a workspace or board to get started.</p>
+    </div>
+    }
     } @else {
     @if (state.cachedAt(); as cachedAt) {
     <div class="offline-banner" role="status">

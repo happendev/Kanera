@@ -822,10 +822,8 @@
   font-weight: 600;
 }
 
-// Mirrors .aaf-field from the action-fields component so the type picker and the fields it governs
+// Mirrors .aaf-label from the action-fields component so the type picker and the fields it governs
 // share one label/control rhythm across the component boundary.
-// Mirrors .aaf-label / .aaf-field select in the action-fields component so the type picker and the
-// fields it governs share one label/control rhythm across the component boundary.
 .aa-type-label {
   grid-area: label;
   color: var(--text-muted);
@@ -837,22 +835,7 @@
 
 .aa-type-select {
   grid-area: select;
-  width: 100%;
-  height: 34px;
   min-width: 0;
-  padding: 0 9px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--field-bg);
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 500;
-
-  &:hover {
-    border-color: var(--border-strong);
-  }
-
-  @include field-focus;
 }
 
 .aa-remove {

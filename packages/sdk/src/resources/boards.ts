@@ -1,6 +1,6 @@
 import { paginateCursor, paginateOffset, type PageIterator } from "../pagination.js";
 import type {
-  AccessibleBoard, ActivityEvent, Board, BoardRole, Card, CustomField, Label, List, Member, Uuid, WorkspaceKind,
+  AccessibleBoard, ActivityEvent, Board, BoardRole, Card, CreateBoardInput, CustomField, Label, List, Member, Uuid, WorkspaceKind,
 } from "../types.js";
 import type { CallOptions, ResourceContext } from "./base.js";
 
@@ -50,6 +50,15 @@ export class Boards {
   iterate(options: { pageSize?: number } & CallOptions = {}): PageIterator<AccessibleBoard> {
     const { pageSize, ...call } = options;
     return paginateOffset((limit, offset) => this.list({ limit, offset, ...call }), pageSize);
+  }
+
+  /**
+   * Add a board to a standard workspace. The board shares the workspace's lists, custom fields,
+   * labels, and automations. Requires workspace-admin authority; a standalone workspace (kind
+   * `board`) owns exactly one board and rejects this call.
+   */
+  create(workspaceId: Uuid, body: CreateBoardInput, options: CallOptions = {}): Promise<Board> {
+    return this.ctx.http.post<Board>(`/api/v1/workspaces/${workspaceId}/boards`, body, options);
   }
 
   /**

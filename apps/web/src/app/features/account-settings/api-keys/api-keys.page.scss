@@ -1,10 +1,7 @@
 @use "../../../shared/page-styles";
 
-.agent-setup-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
+k-agent-connect-card {
+  display: block;
   margin-top: 12px;
 }
 

@@ -1,4 +1,4 @@
-import { kaneraBoardImports, trelloImports } from "@kanera/shared/schema";
+import { csvImports, kaneraBoardImports, trelloImports } from "@kanera/shared/schema";
 import { lt } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import type { Db } from "../db.js";
@@ -43,7 +43,7 @@ async function deleteImportSourceFiles(rows: ImportSourceFile[], log: FastifyBas
 
 export async function runImportCleanup({ db, log }: ImportCleanupDeps, now = new Date()): Promise<number> {
   const cutoff = new Date(now.getTime() - RETENTION_MS);
-  const [trelloRows, kaneraRows] = await db.transaction(async (tx) => {
+  const [trelloRows, kaneraRows, csvRows] = await db.transaction(async (tx) => {
     const deletedTrello = await tx
       .delete(trelloImports)
       .where(lt(trelloImports.createdAt, cutoff))
@@ -52,10 +52,14 @@ export async function runImportCleanup({ db, log }: ImportCleanupDeps, now = new
       .delete(kaneraBoardImports)
       .where(lt(kaneraBoardImports.createdAt, cutoff))
       .returning({ id: kaneraBoardImports.id, clientId: kaneraBoardImports.clientId, sourceFileKey: kaneraBoardImports.sourceFileKey });
-    return [deletedTrello, deletedKanera] as const;
+    const deletedCsv = await tx
+      .delete(csvImports)
+      .where(lt(csvImports.createdAt, cutoff))
+      .returning({ id: csvImports.id, clientId: csvImports.clientId, sourceFileKey: csvImports.sourceFileKey });
+    return [deletedTrello, deletedKanera, deletedCsv] as const;
   });
 
-  const rows = [...trelloRows, ...kaneraRows];
+  const rows = [...trelloRows, ...kaneraRows, ...csvRows];
   if (rows.length === 0) return 0;
   await deleteImportSourceFiles(rows, log);
   log.info({ deletedCount: rows.length }, "purged import sessions past retention");

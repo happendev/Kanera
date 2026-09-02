@@ -5,7 +5,7 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertWorkspaceAccess } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
-import { disableAutomationsReferencingCustomField, loadAutomation } from "../../lib/automations.js";
+import { disableAutomationsReferencingCustomField, disableAutomationsReferencingCustomFieldOption, loadAutomation } from "../../lib/automations.js";
 import { loadFieldOptions } from "../../lib/custom-fields.js";
 import { badRequest, conflict, notFound } from "../../lib/errors.js";
 import { moveOrderedEntity } from "../../lib/move-ordered-entity.js";
@@ -143,9 +143,8 @@ export async function customFieldRoutes(app: FastifyInstance) {
     const [current] = await db.select().from(customFields).where(eq(customFields.id, id)).limit(1);
     if (!current) throw notFound();
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
-    // Prune and disable automations that populate this field (as target or copy source) in the
-    // same transaction as the delete, so we never leave an enabled automation referencing a
-    // field that no longer exists.
+    // Prune populate actions and disable every action or selected-value trigger referencing this
+    // field in the same transaction as the delete, so no enabled rule silently becomes inert.
     const disabledAutomationIds = await db.transaction(async (tx) => {
       const affected = await disableAutomationsReferencingCustomField(tx, current.workspaceId, id);
       await tx.delete(customFields).where(eq(customFields.id, id));
@@ -278,21 +277,30 @@ export async function customFieldRoutes(app: FastifyInstance) {
     const { optionId } = req.params as { optionId: string };
     const { field, workspaceId } = await loadOptionField(optionId);
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
-    // Soft archive so cards still referencing the option keep resolving its label.
-    await db
-      .update(customFieldOptions)
-      .set({ archivedAt: new Date(), updatedAt: new Date() })
-      .where(eq(customFieldOptions.id, optionId));
-    await recordActivity(db, {
-      boardId: null,
-      workspaceId,
-      actorId: req.auth.sub,
-      entityType: "customField",
-      entityId: field.id,
-      action: "updated",
-      payload: { optionDeleted: optionId },
+    // Keep the option for historic card values, but disable selected-value triggers before it is
+    // archived so an enabled rule cannot become silently impossible to fire.
+    const disabledAutomationIds = await db.transaction(async (tx) => {
+      const affected = await disableAutomationsReferencingCustomFieldOption(tx, workspaceId, optionId);
+      await tx
+        .update(customFieldOptions)
+        .set({ archivedAt: new Date(), updatedAt: new Date() })
+        .where(eq(customFieldOptions.id, optionId));
+      await recordActivity(tx, {
+        boardId: null,
+        workspaceId,
+        actorId: req.auth.sub,
+        entityType: "customField",
+        entityId: field.id,
+        action: "updated",
+        payload: { optionDeleted: optionId },
+      });
+      return affected;
     });
     emitToWorkspace(workspaceId, "customFieldOption:deleted", { workspaceId, fieldId: field.id, optionId });
+    for (const automationId of disabledAutomationIds) {
+      const automation = await loadAutomation(automationId);
+      if (automation) await emitToWorkspaceAdmins(workspaceId, "automation:updated", { workspaceId, automation });
+    }
     return reply.status(204).send();
   });
 

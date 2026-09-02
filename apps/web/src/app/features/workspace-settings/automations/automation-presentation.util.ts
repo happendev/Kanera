@@ -195,6 +195,11 @@ function automationDueDateSummary(offsetDays: number, slot: DueDateSlot): string
  */
 export function automationTriggerTargetLabel(automation: WireAutomation, lookups: AutomationLookups): string | null {
   if (automation.triggerType === "due_date_arrives") return null;
+  if (automation.triggerType === "due_date_approaching") {
+    const days = automation.triggerDaysBefore ?? 1;
+    return `${days} ${days === 1 ? "day" : "days"} before`;
+  }
+  if (automation.triggerType === "card_becomes_inactive") return null;
   if (automation.triggerType === "all_checklist_items_complete") return null;
   if (automation.triggerType === "card_marked_complete") return null;
   if (automation.triggerType === "card_label_set") {
@@ -202,6 +207,19 @@ export function automationTriggerTargetLabel(automation: WireAutomation, lookups
   }
   if (automation.triggerType === "card_assigned_to_user") {
     return truncatedNames(automationTriggerUserIds(automation).map((id) => automationMemberName(id, lookups)), "selected users");
+  }
+  if (automation.triggerType === "custom_field_value_changed") {
+    const field = lookups.fields.find((item) => item.id === automation.triggerCustomFieldId);
+    const value = automation.triggerCustomFieldValue;
+    if (!field || !value) return "a selected value";
+    const rendered = value.kind === "text" ? value.text
+      : value.kind === "number" ? String(value.number)
+      : value.kind === "checkbox" ? (value.checked ? "Checked" : "Unchecked")
+      : value.kind === "date" ? value.date
+      : value.kind === "url" ? value.url
+      : value.kind === "select" ? field.options.find((option) => option.id === value.optionId)?.label ?? "Deleted option"
+      : automationMemberName(value.userId, lookups);
+    return `${field.name} = ${rendered}`;
   }
   return lookups.lists.find((item) => item.id === automation.triggerListId)?.name ?? "a list";
 }

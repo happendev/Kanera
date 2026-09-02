@@ -238,7 +238,7 @@ describe("BoardTableViewComponent", () => {
       .toBe(JSON.stringify({ title: 362 }));
   });
 
-  it("keeps a table label press as both the shared compression gesture and the cell edit trigger", () => {
+  it("opens the cell editor without collapsing labels when a table label is pressed", () => {
     const component = fixture().componentInstance;
     const labelHost = document.createElement("k-card-labels");
     const labelText = document.createElement("span");
@@ -252,7 +252,7 @@ describe("BoardTableViewComponent", () => {
 
     component.openLabelsCellPicker(card("card-1"), "labels", event);
 
-    expect(localStorage.getItem(STORAGE_KEYS.CARD_LABELS_COMPRESSED)).toBe("1");
+    expect(localStorage.getItem(STORAGE_KEYS.CARD_LABELS_COMPRESSED)).toBeNull();
     expect(component.pickerIsOpen("card-1", "labels")).toBe(true);
   });
 

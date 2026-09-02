@@ -1337,11 +1337,8 @@ export class BoardTableViewComponent implements OnDestroy {
 
   openLabelsCellPicker(card: AnyCard, col: string, event: MouseEvent) {
     // The cell remains the edit trigger, so k-card-labels is deliberately presentational here (a
-    // focusable chip inside this button would be invalid nested interaction). A direct press on its
-    // bar still owns the familiar route-wide compress/expand gesture before the picker opens.
-    if (!event.shiftKey && !this.rowIsLocked(card.id) && (event.target as HTMLElement | null)?.closest("k-card-labels")) {
-      this.menuCoordinator.setLabelsCompressed(!this.menuCoordinator.labelsCompressed());
-    }
+    // focusable chip inside this button would be invalid nested interaction). Table labels always
+    // stay expanded, so a press anywhere in the cell has only one meaning: open the label picker.
     this.openCellPicker(card, col, event);
   }
 

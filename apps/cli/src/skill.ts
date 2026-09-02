@@ -36,7 +36,7 @@ anything.** Do not attempt writes; say so instead. Write attempts exit with code
 \`\`\`bash
 kanera commands              # grouped, human-readable
 kanera commands --json       # every tool with its arguments and whether it mutates
-kanera help kanera_update_card
+kanera help cards.update
 \`\`\`
 
 Prefer this over guessing. Any tool in the catalog is callable as
@@ -64,6 +64,19 @@ kanera card done MKT-42
 kanera comment MKT-42 "Shipped in 1.4.0."
 \`\`\`
 
+## Setting up
+
+\`\`\`bash
+kanera templates --json                                        # what each template seeds
+kanera workspace create "Marketing" --templateId marketing --json
+kanera standalone create "Reading list" --templateId simple-todo --json
+kanera board create <workspaceId> "Q4 launch" --json
+\`\`\`
+
+Workspace and standalone-board creation needs a write-capable personal credential whose user is an
+organisation admin; a workspace-scoped key exits 4. Pass \`--templateId blank\` or explicit
+\`--lists\` for a minimal setup. Lists, fields, and labels are shared by every board in a workspace.
+
 ## Exit codes
 
 | Code | Meaning |
@@ -82,7 +95,7 @@ kanera comment MKT-42 "Shipped in 1.4.0."
 - Do not invent ids. Resolve them with \`kanera boards\`, \`kanera board\`, or \`kanera search\`.
 - Treat tools marked \`destructive\` as requiring an explicit user request; do not infer deletion,
   archival, replacement, or bulk mutation from a broader read or reporting request.
-- Deletion and workspace administration mostly live in the Kanera UI, not here.
+- Deletion and post-creation administration (renaming lists, fields, labels, members) live in the Kanera UI, not here.
 - Personal notes are private to their owner.
 `;
 }
@@ -91,7 +104,7 @@ kanera comment MKT-42 "Shipped in 1.4.0."
 export function agentsSection(): string {
   return `## Kanera
 
-Kanera work (boards, cards, comments, notes, priority queues) is reachable from the shell:
+Kanera work (workspace setup, boards, cards, comments, notes, priority queues) is reachable from the shell:
 
 \`\`\`bash
 kanera whoami --json         # check the credential and its scope first

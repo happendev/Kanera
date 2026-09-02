@@ -19,13 +19,13 @@ void test("falls back to JSON when the result is not a single list", () => {
 });
 
 void test("quiet mode emits only the data, so it can be piped", () => {
-  assert.equal(render("quiet", { ok: true, tool: "kanera_get_session", data: { scope: "read" } }), '{"scope":"read"}');
+  assert.equal(render("quiet", { ok: true, tool: "session.get", data: { scope: "read" } }), '{"scope":"read"}');
 });
 
 void test("json mode wraps the result in an envelope", () => {
-  const envelope = JSON.parse(render("json", { ok: true, tool: "kanera_get_card", data: { id: "c1" } })) as { ok: boolean; tool: string };
+  const envelope = JSON.parse(render("json", { ok: true, tool: "cards.get", data: { id: "c1" } })) as { ok: boolean; tool: string };
   assert.equal(envelope.ok, true);
-  assert.equal(envelope.tool, "kanera_get_card");
+  assert.equal(envelope.tool, "cards.get");
 });
 
 void test("human errors include the code and the hint", () => {

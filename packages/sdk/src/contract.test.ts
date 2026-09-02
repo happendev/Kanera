@@ -11,12 +11,14 @@ import type { createCommentBody } from "@kanera/shared/dto";
 import type { createNoteBody, updateNoteBody } from "@kanera/shared/dto";
 import type { agentSearchQueryBody } from "@kanera/shared/dto";
 import type { workFiltersSchema, workScopeSchema } from "@kanera/shared/dto";
+import type { createBoardBody, createWorkspaceBody } from "@kanera/shared/dto";
+import type { WorkspaceTemplateId as SharedWorkspaceTemplateId } from "@kanera/shared/workspace-templates";
 import type {
   CreateCardInput, CreateChecklistItemInput, CustomFieldValueInput, UpdateCardInput, UpdateChecklistItemInput,
 } from "./resources/cards.js";
 import type { CreateNoteInput, UpdateNoteInput } from "./resources/notes.js";
 import type { SearchInput } from "./resources/search.js";
-import type { WorkFilters, WorkScope } from "./types.js";
+import type { CreateBoardInput, CreateWorkspaceInput, WorkFilters, WorkScope, WorkspaceTemplateId } from "./types.js";
 
 /**
  * Compile-time drift guard.
@@ -32,6 +34,13 @@ import type { WorkFilters, WorkScope } from "./types.js";
  */
 type Extends<Actual extends Expected, Expected> = Actual;
 type AssertAssignable<Actual extends Expected, Expected> = Extends<Actual, Expected>;
+
+// Workspace and board bootstrap. Seed content is name-referenced; both directions of the template
+// id union are asserted so adding a template in packages/shared shows up here.
+type _CreateWorkspace = AssertAssignable<CreateWorkspaceInput, z.input<typeof createWorkspaceBody>>;
+type _CreateBoard = AssertAssignable<CreateBoardInput, z.input<typeof createBoardBody>>;
+type _TemplateIdForward = AssertAssignable<WorkspaceTemplateId, SharedWorkspaceTemplateId>;
+type _TemplateIdBackward = AssertAssignable<SharedWorkspaceTemplateId, WorkspaceTemplateId>;
 
 // Cards.
 type _CreateCard = AssertAssignable<CreateCardInput, z.input<typeof createCardBody>>;

@@ -19,7 +19,7 @@ import {
 } from "../../lib/activity.js";
 import { enqueueCardAssignedEmails, enqueueDueDateChangedEmails } from "../../lib/assignee-email-notifications.js";
 import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
-import { EMPTY_EFFECTS, emitAutomationEffects, runCardAssignedAutomations, runCardLabelSetAutomations, runCardMarkedCompleteAutomations, runChecklistCompletionAutomations, runListEntryAutomations, type AutomationEffects } from "../../lib/automations.js";
+import { EMPTY_EFFECTS, emitAutomationEffects, runCardAssignedAutomations, runCardLabelSetAutomations, runCardMarkedCompleteAutomations, runCardMoveAutomations, runChecklistCompletionAutomations, runCustomFieldValueChangedAutomations, runListEntryAutomations, type AutomationEffects } from "../../lib/automations.js";
 import { invalidateQueuesForCards } from "../../lib/card-priority-invalidation.js";
 import { applyChecklistTemplates } from "../../lib/checklist-templates.js";
 import { emitLaneRebalanced, positionForLaneInsert, rebalanceBoardLane } from "../../lib/board-lane.js";
@@ -1171,7 +1171,7 @@ export async function cardRoutes(
         previous: typeof cards.$inferSelect;
         card: typeof cards.$inferSelect;
         activity: ActivityEvent;
-        automationEffects: Awaited<ReturnType<typeof runListEntryAutomations>>;
+        automationEffects: Awaited<ReturnType<typeof runCardMoveAutomations>>;
       }[] = [];
       for (const [index, current] of movingCards.entries()) {
         const position = positions[index]!;
@@ -1189,13 +1189,13 @@ export async function cardRoutes(
           action: ACTIVITY_ACTION.MOVED,
           payload: { fromListId: current.listId, toListId: body.listId, prevPosition: current.position, position },
         });
-        const automationEffects = await runListEntryAutomations(tx, {
+        const automationEffects = await runCardMoveAutomations(tx, {
           cardId: current.id,
-          listId: body.listId,
+          fromListId: current.listId,
+          toListId: body.listId,
           boardId,
           workspaceId: ctx.workspaceId,
           clientId: req.auth.cid,
-          trigger: "move",
           triggerActorId: req.auth.sub,
         });
         rows.push({ previous: current, card: card!, activity, automationEffects });
@@ -1588,13 +1588,13 @@ export async function cardRoutes(
         })
         : null;
       const automationEffects = enteringNewList
-        ? await runListEntryAutomations(tx, {
+        ? await runCardMoveAutomations(tx, {
           cardId: id,
-          listId: body.listId,
+          fromListId,
+          toListId: body.listId,
           boardId: current.boardId,
           workspaceId: ctx.workspaceId,
           clientId: req.auth.cid,
-          trigger: "move",
           triggerActorId: req.auth.sub,
         })
         : { effects: [] };
@@ -1742,7 +1742,7 @@ export async function cardRoutes(
       .where(eq(cardAssignees.cardId, source.id));
     await ensureBoardMembershipForUsers(body.boardId, dstCtx.workspaceId, currentAssignees.map((a) => a.userId));
 
-    const { updated, activity, relocatedNotifications } = await db.transaction(async (tx) => {
+    const { updated, activity, relocatedNotifications, automationEffects } = await db.transaction(async (tx) => {
       const [updatedCard] = await tx
         .update(cards)
         .set({ boardId: body.boardId, listId: targetListId, position, updatedAt: new Date() })
@@ -1770,13 +1770,25 @@ export async function cardRoutes(
         workspaceId: dstCtx.workspaceId,
         clientId: dstCtx.clientId,
       });
-      return { updated: updatedCard, activity: moveActivity, relocatedNotifications: relocated };
+      const effects = fromListId === targetListId
+        ? EMPTY_EFFECTS
+        : await runCardMoveAutomations(tx, {
+          cardId: id,
+          fromListId,
+          toListId: targetListId,
+          boardId: body.boardId,
+          workspaceId: dstCtx.workspaceId,
+          clientId: dstCtx.clientId,
+          triggerActorId: req.auth.sub,
+        });
+      return { updated: updatedCard, activity: moveActivity, relocatedNotifications: relocated, automationEffects: effects };
     });
     await emitToBoard(fromBoardId, SERVER_EVENTS.CARD_DELETED, { boardId: fromBoardId, cardId: id });
     const wireUpdated = toWireCard(updated!, req.auth.cid);
     await emitToBoard(body.boardId, SERVER_EVENTS.CARD_CREATED, { boardId: body.boardId, card: wireUpdated });
     await emitRelocatedNotifications(relocatedNotifications);
     await emitCoalescedCardActivityFeedItem(body.boardId, id, activity);
+    await emitAutomationEffects(automationEffects);
 
     const [labelAssignments, assignees, attachmentRows] = await Promise.all([
       db.select({ labelId: cardLabelAssignments.labelId }).from(cardLabelAssignments).where(eq(cardLabelAssignments.cardId, id)),
@@ -1869,9 +1881,24 @@ export async function cardRoutes(
       else await assertValidOptionIds(field.id, deltaIds);
     }
 
+    const recordCustomFieldActivity = (tx: Parameters<Parameters<typeof db.transaction>[0]>[0], cardId: string, fromValue: string | null, toValue: string | null) =>
+      recordCoalescedActivity(tx, {
+        boardId,
+        workspaceId: ctx.workspaceId,
+        actorId: req.auth.sub,
+        entityType: "card",
+        entityId: cardId,
+        action: ACTIVITY_ACTION.CUSTOM_FIELD_VALUE_SET,
+        coalesceKey: `customField:${field.id}`,
+        windowMs: 60_000,
+        fromValue,
+        toValue,
+        payload: { fieldId: field.id, fieldName: field.name, fieldType: field.type, fromValue, toValue, bulk: true },
+      });
+    const clearedToValue = await describeCustomFieldValue(field, null);
     const changes = await db.transaction(async (tx) => {
-      const set: { value: typeof cardCustomFieldValues.$inferSelect; fromValue: string | null; toValue: string | null }[] = [];
-      const cleared: { cardId: string; fromValue: string | null }[] = [];
+      const set: { value: typeof cardCustomFieldValues.$inferSelect; activity: CoalescedActivityResult; automationEffects: AutomationEffects }[] = [];
+      const cleared: { cardId: string; activity: CoalescedActivityResult; automationEffects: AutomationEffects }[] = [];
       for (const card of targetCards) {
         const [currentValue] = await tx
           .select()
@@ -1909,7 +1936,19 @@ export async function cardRoutes(
           await tx
             .delete(cardCustomFieldValues)
             .where(and(eq(cardCustomFieldValues.cardId, card.id), eq(cardCustomFieldValues.fieldId, field.id)));
-          cleared.push({ cardId: card.id, fromValue });
+          await tx.update(cards).set({ updatedAt: new Date() }).where(eq(cards.id, card.id));
+          const activity = await recordCustomFieldActivity(tx, card.id, fromValue, clearedToValue);
+          const automationEffects = await runCustomFieldValueChangedAutomations(tx, {
+            cardId: card.id,
+            fieldId: field.id,
+            previousValue: currentValue,
+            currentValue: null,
+            boardId,
+            workspaceId: ctx.workspaceId,
+            clientId: ctx.clientId,
+            triggerActorId: req.auth.sub,
+          });
+          cleared.push({ cardId: card.id, activity, automationEffects });
           continue;
         }
 
@@ -1923,28 +1962,25 @@ export async function cardRoutes(
             set: { ...nextCols, updatedAt: new Date() },
           })
           .returning();
+        await tx.update(cards).set({ updatedAt: new Date() }).where(eq(cards.id, card.id));
         const toValue = await describeCustomFieldValue(field, nextCols, tx);
-        set.push({ value: value!, fromValue, toValue });
+        const activity = await recordCustomFieldActivity(tx, card.id, fromValue, toValue);
+        const automationEffects = await runCustomFieldValueChangedAutomations(tx, {
+          cardId: card.id,
+          fieldId: field.id,
+          previousValue: currentValue,
+          currentValue: value,
+          boardId,
+          workspaceId: ctx.workspaceId,
+          clientId: ctx.clientId,
+          triggerActorId: req.auth.sub,
+        });
+        set.push({ value: value!, activity, automationEffects });
       }
       return { set, cleared };
     });
 
-    const recordCustomFieldActivity = (cardId: string, fromValue: string | null, toValue: string | null) =>
-      recordCoalescedActivity(db, {
-        boardId,
-        workspaceId: ctx.workspaceId,
-        actorId: req.auth.sub,
-        entityType: "card",
-        entityId: cardId,
-        action: ACTIVITY_ACTION.CUSTOM_FIELD_VALUE_SET,
-        coalesceKey: `customField:${field.id}`,
-        windowMs: 60_000,
-        fromValue,
-        toValue,
-        payload: { fieldId: field.id, fieldName: field.name, fieldType: field.type, fromValue, toValue, bulk: true },
-      });
-
-    for (const { value, fromValue, toValue } of changes.set) {
+    for (const { value, activity, automationEffects } of changes.set) {
       emitToBoard(boardId, SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_SET, {
         boardId,
         cardId: value.cardId,
@@ -1957,14 +1993,13 @@ export async function cardRoutes(
         valueOptionIds: value.valueOptionIds,
         valueUserIds: value.valueUserIds,
       });
-      const activity = await recordCustomFieldActivity(value.cardId, fromValue, toValue);
       await emitCoalescedCardActivityFeedItem(boardId, value.cardId, activity);
+      await emitAutomationEffects(automationEffects);
     }
-    const clearedToValue = await describeCustomFieldValue(field, null);
-    for (const { cardId, fromValue } of changes.cleared) {
+    for (const { cardId, activity, automationEffects } of changes.cleared) {
       emitToBoard(boardId, SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_CLEARED, { boardId, cardId, fieldId: field.id });
-      const activity = await recordCustomFieldActivity(cardId, fromValue, clearedToValue);
       await emitCoalescedCardActivityFeedItem(boardId, cardId, activity);
+      await emitAutomationEffects(automationEffects);
     }
 
     return {
@@ -1997,41 +2032,50 @@ export async function cardRoutes(
     const fromValue = await describeCustomFieldValue(field, currentValue);
     const toValue = await describeCustomFieldValue(field, cols);
 
-    const [value] = await db
-      .insert(cardCustomFieldValues)
-      .values({ cardId: id, fieldId, ...cols, updatedAt: new Date() })
-      .onConflictDoUpdate({
-        target: [cardCustomFieldValues.cardId, cardCustomFieldValues.fieldId],
-        set: { ...cols, updatedAt: new Date() },
-      })
-      .returning();
+    const { value, activity, automationEffects } = await db.transaction(async (tx) => {
+      const [updatedValue] = await tx
+        .insert(cardCustomFieldValues)
+        .values({ cardId: id, fieldId, ...cols, updatedAt: new Date() })
+        .onConflictDoUpdate({
+          target: [cardCustomFieldValues.cardId, cardCustomFieldValues.fieldId],
+          set: { ...cols, updatedAt: new Date() },
+        })
+        .returning();
+      await tx.update(cards).set({ updatedAt: new Date() }).where(eq(cards.id, id));
+      const baseActivity = await recordCoalescedActivity(tx, {
+        boardId: card.boardId,
+        workspaceId: ctx.workspaceId,
+        actorId: req.auth.sub,
+        entityType: "card",
+        entityId: id,
+        action: ACTIVITY_ACTION.CUSTOM_FIELD_VALUE_SET,
+        coalesceKey: `customField:${fieldId}`,
+        windowMs: 60_000,
+        fromValue,
+        toValue,
+        payload: { fieldId, fieldName: field.name, fieldType: field.type, fromValue, toValue },
+      });
+      const effects = await runCustomFieldValueChangedAutomations(tx, {
+        cardId: id,
+        fieldId,
+        previousValue: currentValue,
+        currentValue: updatedValue,
+        boardId: card.boardId,
+        workspaceId: ctx.workspaceId,
+        clientId: ctx.clientId,
+        triggerActorId: req.auth.sub,
+      });
+      return { value: updatedValue!, activity: baseActivity, automationEffects: effects };
+    });
     emitToBoard(card.boardId, SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_SET, {
       boardId: card.boardId,
       cardId: id,
       fieldId,
       ...cols,
     });
-    const activity = await recordCoalescedActivity(db, {
-      boardId: card.boardId,
-      workspaceId: ctx.workspaceId,
-      actorId: req.auth.sub,
-      entityType: "card",
-      entityId: id,
-      action: ACTIVITY_ACTION.CUSTOM_FIELD_VALUE_SET,
-      coalesceKey: `customField:${fieldId}`,
-      windowMs: 60_000,
-      fromValue,
-      toValue,
-      payload: {
-        fieldId,
-        fieldName: field.name,
-        fieldType: field.type,
-        fromValue,
-        toValue,
-      },
-    });
-    emitCoalescedCardActivityFeedItem(card.boardId, id, activity);
-    return value!;
+    await emitCoalescedCardActivityFeedItem(card.boardId, id, activity);
+    await emitAutomationEffects(automationEffects);
+    return value;
   });
 
   app.patch("/boards/:boardId/checklist-items/bulk/descriptions", async (req) => {
@@ -2279,7 +2323,7 @@ export async function cardRoutes(
       return { checklist: { ...updated!, items: (await loadChecklistsForCard(id, tx)).find((c) => c.id === checklistId)?.items ?? [] }, activity };
     });
 
-    emitCoalescedCardActivityFeedItem(card.boardId, id, activity);
+    await emitCoalescedCardActivityFeedItem(card.boardId, id, activity);
     emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_UPDATED, { boardId: card.boardId, cardId: id, checklist });
     return checklist;
   });
@@ -3096,30 +3140,39 @@ export async function cardRoutes(
     const fromValue = await describeCustomFieldValue(field, currentValue);
     const toValue = await describeCustomFieldValue(field, null);
 
-    await db
-      .delete(cardCustomFieldValues)
-      .where(and(eq(cardCustomFieldValues.cardId, id), eq(cardCustomFieldValues.fieldId, fieldId)));
-    emitToBoard(card.boardId, SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_CLEARED, { boardId: card.boardId, cardId: id, fieldId });
-    const activity = await recordCoalescedActivity(db, {
-      boardId: card.boardId,
-      workspaceId: ctx.workspaceId,
-      actorId: req.auth.sub,
-      entityType: "card",
-      entityId: id,
-      action: ACTIVITY_ACTION.CUSTOM_FIELD_VALUE_SET,
-      coalesceKey: `customField:${fieldId}`,
-      windowMs: 60_000,
-      fromValue,
-      toValue,
-      payload: {
-        fieldId,
-        fieldName: field.name,
-        fieldType: field.type,
+    const { activity, automationEffects } = await db.transaction(async (tx) => {
+      await tx
+        .delete(cardCustomFieldValues)
+        .where(and(eq(cardCustomFieldValues.cardId, id), eq(cardCustomFieldValues.fieldId, fieldId)));
+      await tx.update(cards).set({ updatedAt: new Date() }).where(eq(cards.id, id));
+      const baseActivity = await recordCoalescedActivity(tx, {
+        boardId: card.boardId,
+        workspaceId: ctx.workspaceId,
+        actorId: req.auth.sub,
+        entityType: "card",
+        entityId: id,
+        action: ACTIVITY_ACTION.CUSTOM_FIELD_VALUE_SET,
+        coalesceKey: `customField:${fieldId}`,
+        windowMs: 60_000,
         fromValue,
         toValue,
-      },
+        payload: { fieldId, fieldName: field.name, fieldType: field.type, fromValue, toValue },
+      });
+      const effects = await runCustomFieldValueChangedAutomations(tx, {
+        cardId: id,
+        fieldId,
+        previousValue: currentValue,
+        currentValue: null,
+        boardId: card.boardId,
+        workspaceId: ctx.workspaceId,
+        clientId: ctx.clientId,
+        triggerActorId: req.auth.sub,
+      });
+      return { activity: baseActivity, automationEffects: effects };
     });
+    emitToBoard(card.boardId, SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_CLEARED, { boardId: card.boardId, cardId: id, fieldId });
     emitCoalescedCardActivityFeedItem(card.boardId, id, activity);
+    await emitAutomationEffects(automationEffects);
     return reply.status(204).send();
   });
 

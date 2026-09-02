@@ -1,0 +1,48 @@
+<section class="agent-card" [class.is-compact]="compact()">
+  @if (!compact()) {
+  <header class="agent-card-header">
+    <span class="agent-card-icon"><i class="ti ti-plug-connected"></i></span>
+    <div class="agent-card-heading">
+      <h3>Connect an AI agent @if (isHosted()) {<span class="pro-marker">Pro</span>}</h3>
+      <p>Let Claude, Copilot, Codex, ChatGPT, or another compatible agent set up boards and manage work for you. Paste the setup prompt into your agent; Kanera opens a browser sign-in, so no API key is needed.</p>
+    </div>
+  </header>
+  }
+
+  @if (!apiAllowed()) {
+  <div class="agent-card-callout" role="status">
+    <i class="ti ti-lock"></i>
+    <span>Connecting an AI agent is part of Kanera Pro.</span>
+    <button type="button" class="sm" (click)="upgrade()">See Pro</button>
+  </div>
+  } @else if (mcpUrl()) {
+  <div class="agent-card-actions">
+    <button type="button" class="sm" (click)="copyPrompt()">
+      <i [class]="copied() === 'prompt' ? 'ti ti-check' : 'ti ti-sparkles'"></i>
+      {{ copied() === 'prompt' ? "Setup prompt copied" : "Copy agent setup prompt" }}
+    </button>
+    <a class="ghost sm" [href]="docsUrl" target="_blank" rel="noopener noreferrer">
+      Setup guide <i class="ti ti-external-link"></i>
+    </a>
+  </div>
+  <div class="agent-card-address">
+    <i class="ti ti-world"></i>
+    <code>{{ mcpUrl() }}</code>
+    <button type="button" class="ghost icon" (click)="copyUrl()" aria-label="Copy MCP address" [kTooltip]="copied() === 'url' ? 'Copied' : 'Copy MCP address'">
+      <i [class]="copied() === 'url' ? 'ti ti-check' : 'ti ti-copy'"></i>
+    </button>
+  </div>
+  } @else if (!loading()) {
+  <div class="agent-card-actions">
+    <a class="ghost sm" [href]="docsUrl" target="_blank" rel="noopener noreferrer">
+      Setup guide <i class="ti ti-external-link"></i>
+    </a>
+  </div>
+  }
+
+  @if (showManageLink()) {
+  <a class="agent-card-manage" routerLink="/settings/api-keys">
+    Manage keys and connected agents <i class="ti ti-arrow-right"></i>
+  </a>
+  }
+</section>

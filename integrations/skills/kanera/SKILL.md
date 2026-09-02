@@ -32,14 +32,14 @@ Kanera works.
 
 ## Resolve context
 
-1. Call `kanera_get_session` to understand the credential scope and canonical Kanera URL.
-2. Use `kanera_list_accessible_boards` for complete board discovery, including standalone and guest boards. Use `kanera_list_workspaces` and `kanera_list_workspace_boards` for standard-workspace navigation.
-3. Use `kanera_search_docs` for product behavior, setup, permissions, or workflow guidance. Cite the canonical source URLs it returns.
-4. For an exact human card key or canonical card URL, call `kanera_get_card` directly. Use
-   `kanera_search` to resolve names, phrases, notes, comments, or attachment filenames. Never guess
+1. Call `session.get` to understand the credential scope and canonical Kanera URL.
+2. Use `boards.list_accessible` for complete board discovery, including standalone and guest boards. Use `workspaces.list` and `workspaces.list_boards` for standard-workspace navigation.
+3. Use `search.docs` for product behavior, setup, permissions, or workflow guidance. Cite the canonical source URLs it returns.
+4. For an exact human card key or canonical card URL, call `cards.get` directly. Use
+   `search.content` to resolve names, phrases, notes, comments, or attachment filenames. Never guess
    an ID.
 5. If a name resolves ambiguously, show the candidates and ask the user to choose.
-6. Call `kanera_get_board` for lists and configuration, then page only the needed lists with `kanera_get_cards_list`. Use `kanera_get_card` for full card detail.
+6. Call `boards.get` for lists and configuration, then page only the needed lists with `cards.list`. Use `cards.get` for full card detail.
 
 ## Respect the product model
 
@@ -50,11 +50,11 @@ Kanera works.
 
 ## Read and report
 
-- For a card's history, page `kanera_list_card_history`; it combines retained, user-visible activity and comments and accepts the human card key.
-- For current, completed, overdue, or stale work, page `kanera_query_work_cards`; use its scope, assignment, completion, `lastActivityBefore`, and `lastMovedBefore` filters instead of enumerating boards manually. For another person, use the team lens with exactly that person's assignee ID.
-- For portfolio status, use `kanera_get_portfolio_summary`. For detailed project status, combine its rollups with relevant card pages and histories. Separate observed facts from recommendations.
-- For a standup or one-on-one, use `kanera_query_work_history` for the requested actor and day, week, month, or exact range, then query active and completed cards with `kanera_query_work_cards`. Both tools cover every accessible board by default and accept a workspace-wide scope. Card creation alone is not completion, and blockers inferred from status, labels, due dates, or inactivity must be identified as inferences.
-- Resolve people with `kanera_list_workspace_members` for standard workspaces or `kanera_get_board` for standalone boards.
+- For a card's history, page `cards.list_history`; it combines retained, user-visible activity and comments and accepts the human card key.
+- For current, completed, overdue, or stale work, page `work.query_cards`; use its scope, assignment, completion, `lastActivityBefore`, and `lastMovedBefore` filters instead of enumerating boards manually. For another person, use the team lens with exactly that person's assignee ID.
+- For portfolio status, use `work.portfolio_summary`. For detailed project status, combine its rollups with relevant card pages and histories. Separate observed facts from recommendations.
+- For a standup or one-on-one, use `work.query_history` for the requested actor and day, week, month, or exact range, then query active and completed cards with `work.query_cards`. Both tools cover every accessible board by default and accept a workspace-wide scope. Card creation alone is not completion, and blockers inferred from status, labels, due dates, or inactivity must be identified as inferences.
+- Resolve people with `workspaces.list_members` for standard workspaces or `boards.get` for standalone boards.
 - Link important entities with the canonical web URLs returned by work, history, and search results.
 
 ## Make changes safely
@@ -63,7 +63,7 @@ Kanera works.
 - Direct users to the Kanera UI for workspace/board creation and configuration; do not attempt those operations through MCP.
 - Inspect the target entity immediately before a mutation when stale state could change the outcome.
 - Use list, label, and custom-field IDs from the target board's current configuration.
-- Pass a stable UUID as `idempotencyKey` to `kanera_create_card`, and reuse it if retrying after an ambiguous transport failure.
+- Pass a stable UUID as `idempotencyKey` to `cards.create`, and reuse it if retrying after an ambiguous transport failure.
 - Do not retry other non-idempotent creation tools after an ambiguous success.
 - Treat archive and available delete tools as destructive. State the exact target when user intent is not already explicit.
 - Kanera MCP cannot delete or administer boards, lists, labels, custom fields, notes, or note attachments. Tell the user to complete those actions in the Kanera UI instead of implying success.
