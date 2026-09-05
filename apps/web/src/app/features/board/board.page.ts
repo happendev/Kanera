@@ -1684,6 +1684,14 @@ export class BoardPage implements OnDestroy {
   }
 
   removeBoardMemberFromView(userId: string) {
+    if (userId === this.auth.user()?.id) {
+      const boardId = this.boardId();
+      this.state.clear();
+      this.workspaceService.removeBoard(boardId);
+      void this.offlineCache.revokeBoardAccess(boardId).catch(() => undefined);
+      void this.router.navigateByUrl("/");
+      return;
+    }
     // The mutation originates inside the popover, so update its parent header immediately instead
     // of relying on the durable realtime event making a round trip back to this same browser.
     this.state.removeBoardMember(userId);

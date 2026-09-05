@@ -311,6 +311,27 @@ describe("NotificationsPanelComponent", () => {
     vi.unstubAllGlobals();
   });
 
+  it.each([
+    ["none", undefined],
+    ["guest_capacity_freed", "A paid guest seat is now available"],
+    ["guest_capacity_retained", "Paid guest capacity remains in use"],
+  ])("renders a cardless board leave alert with %s", async (seatImpact, message) => {
+    const row = notification({ reason: "board_member_left", cardId: null, cardTitle: null, cardKey: null,
+      listId: null, listName: null, activity: activity({ entityType: "board", action: "removed", payload: { voluntary: true, seatImpact } }) });
+    service.items.set([row]);
+    component.toggle();
+    await fixture.whenStable();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(component.changeSummary(row).value).toBe(message);
+    expect(host.textContent).toContain("left this board");
+    expect(host.textContent).toContain("Ada");
+    if (message) expect(host.textContent).toContain(message);
+    const link = host.querySelector('a[aria-label="Open board Board"]') as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("/b/board-1");
+    await component.openNotification(row, new MouseEvent("click"));
+    expect(router.navigate).toHaveBeenCalledWith(["/b", "board-1"]);
+  });
+
   it("opens and loads the first page, then closes on escape", async () => {
     component.toggle();
     fixture.detectChanges();

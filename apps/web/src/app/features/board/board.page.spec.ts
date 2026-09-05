@@ -1267,6 +1267,17 @@ describe("BoardPage", () => {
     expect(component.sortedBoardMembers().map((row) => row.userId)).toEqual(["user-2", "guest-1", "guest-2", "user-1"]);
   });
 
+  it("clears local board state and offline access and navigates home after self-leave", async () => {
+    api.post.mockResolvedValueOnce(boardPayload());
+    const fixture = createInitializedBoardPage();
+    const component = fixture.componentInstance;
+    await vi.waitFor(() => expect(boardState(component).board()?.id).toBe("board-1"));
+    component.removeBoardMemberFromView("user-1");
+    expect(boardState(component).board()).toBeNull();
+    expect(offlineCache.revokeBoardAccess).toHaveBeenCalledWith("board-1");
+    expect(router.navigateByUrl).toHaveBeenCalledWith("/");
+  });
+
   it("removes another user from the board member header when their membership is removed", async () => {
     api.post.mockResolvedValueOnce({
       ...boardPayload(),

@@ -567,6 +567,12 @@ export class NotificationsPanelComponent {
 
   /** Delegates to the shared summariser so the drawer and watched-activity push bodies agree. */
   changeSummary(n: NotificationRow): ActivityChangeSummary {
+    if (n.reason === "board_member_left") {
+      const impact = (n.activity?.payload as { seatImpact?: string } | null)?.seatImpact;
+      return { icon: "ti ti-logout", text: "left this board", value: impact === "guest_capacity_freed"
+        ? "A paid guest seat is now available" : impact === "guest_capacity_retained"
+          ? "Paid guest capacity remains in use" : undefined };
+    }
     return summariseActivityChange(n);
   }
 

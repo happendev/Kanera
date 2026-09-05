@@ -765,6 +765,7 @@ describe("NotificationsService", () => {
     await service.loadFirstPage();
 
     socket.trigger("notification:created", { notification: notification({ id: "watching", reason: "watching" }) });
+    socket.trigger("notification:created", { notification: notification({ id: "board-left", reason: "board_member_left", cardId: null }) });
     socket.trigger("notification:created", { notification: notification({ id: "read-mention", reason: "mentioned", readAt: new Date("2026-05-21T01:00:00.000Z") }) });
     socket.trigger("notification:created", { notification: notification({ id: "duplicate", reason: "mentioned" }) });
     socket.trigger("notification:updated", { notification: notification({ id: "updated-mention", reason: "mentioned" }) });

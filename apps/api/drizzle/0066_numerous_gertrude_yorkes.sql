@@ -1,0 +1,2 @@
+ALTER TABLE "notification" DROP CONSTRAINT "notifications_reason_ck";--> statement-breakpoint
+ALTER TABLE "notification" ADD CONSTRAINT "notifications_reason_ck" CHECK ("notification"."reason" in ('assigned', 'watching', 'mentioned', 'overdue', 'checklist_item_overdue', 'board_member_left'));

@@ -1630,7 +1630,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     })),
     "/boards/{id}/members/{userId}": {
       patch: operation({ tags: ["Board Access"], summary: "Update a board member", description: "Changes an explicit board permission. Pinned inherited administrators cannot be changed here.", operationId: "updateBoardMember", parameters: [idParam(), idParam("userId")], requestBody: jsonBody(ref("UpdateBoardMemberBody")), responses: authedResponses({ "200": ok(ref("BoardMember")) }) }),
-      delete: operation({ tags: ["Board Access"], summary: "Remove a board member", description: "Removes explicit board access and cleans up board participation. Pinned inherited administrators cannot be removed here.", operationId: "removeBoardMember", parameters: [idParam(), idParam("userId")], responses: authedResponses({ "204": noContent }) }),
+      delete: operation({ tags: ["Board Access"], summary: "Remove a board member", description: "Removes explicit board access and cleans up board participation. Editors and observers, including guests, may remove themselves; removing another user requires workspace-admin access. Inherited workspace and organisation administrators cannot leave or be removed from individual boards.", operationId: "removeBoardMember", parameters: [idParam(), idParam("userId")], responses: authedResponses({ "204": noContent }) }),
     },
     "/workspaces/{id}/guests": pathItem("get", operation({
       tags: ["Board Access"],

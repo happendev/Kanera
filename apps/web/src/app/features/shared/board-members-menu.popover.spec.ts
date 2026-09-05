@@ -1,6 +1,7 @@
 import { provideZonelessChangeDetection } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import type { WireBoardMemberUser } from "@kanera/shared/events";
+import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { ApiClient } from "../../core/api/api.client";
 import { SocketService } from "../../core/realtime/socket.service";
 import { PanelStackService } from "../../shared/panel-stack.service";
@@ -35,6 +36,61 @@ describe("BoardMembersMenu", () => {
         { provide: SocketService, useValue: { connect: () => socket, joinBoard, joinWorkspace: () => vi.fn() } },
       ],
     });
+  });
+
+  it.each(["editor", "observer"] as const)("shows self-leave for a %s in either member section", async (role) => {
+    for (const clientId of ["owner", "guest-org"]) {
+      const fixture = TestBed.createComponent(BoardMembersMenu);
+      fixture.componentRef.setInput("boardId", "board-1");
+      fixture.componentRef.setInput("ownerClientId", "owner");
+      fixture.componentRef.setInput("currentUserId", "self");
+      const self = { ...member("self", clientId), role };
+      fixture.componentRef.setInput("members", [self, member("other", clientId)]);
+      await fixture.whenStable();
+      expect((fixture.nativeElement as HTMLElement).querySelectorAll(".bmp-leave")).toHaveLength(1);
+      expect(fixture.componentInstance.canLeave(member("other", clientId))).toBe(false);
+      expect(fixture.componentInstance.canLeave({ ...self, pinned: true })).toBe(false);
+      fixture.componentRef.setInput("canManage", true);
+      expect(fixture.componentInstance.canLeave(self)).toBe(false);
+      fixture.destroy();
+    }
+  });
+
+  it("keeps membership on cancellation, unsaved rejection, and API failure; emits success once", async () => {
+    const fixture = TestBed.createComponent(BoardMembersMenu);
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("currentUserId", "self");
+    const self = member("self", "owner");
+    const component = fixture.componentInstance;
+    const confirm = vi.mocked(TestBed.inject(ConfirmService).open);
+    const unsaved = vi.spyOn(TestBed.inject(UnsavedWorkService), "confirmNavigation");
+    const removed = vi.fn();
+    component.memberRemoved.subscribe(removed);
+    confirm.mockResolvedValue(false);
+    await component.leaveMembership(self);
+    expect(api.delete).not.toHaveBeenCalled();
+    expect(unsaved).not.toHaveBeenCalled();
+    confirm.mockResolvedValue(true);
+    unsaved.mockReturnValue(false);
+    await component.leaveMembership(self);
+    expect(api.delete).not.toHaveBeenCalled();
+    unsaved.mockReturnValue(true);
+    api.delete.mockRejectedValueOnce(new Error("Cannot leave"));
+    await component.leaveMembership(self);
+    expect(component.error()).toBe("Cannot leave");
+    expect(removed).not.toHaveBeenCalled();
+    let resolve!: () => void;
+    api.delete.mockImplementationOnce(() => new Promise<void>(done => { resolve = done; }));
+    const pending = component.leaveMembership(self);
+    await Promise.resolve();
+    expect(component.busy()).toBe(true);
+    await component.leaveMembership(self);
+    expect(api.delete).toHaveBeenCalledTimes(2);
+    resolve();
+    await pending;
+    expect(removed).toHaveBeenCalledExactlyOnceWith("self");
+    expect(component.busy()).toBe(false);
+    expect(component.confirmingRemoval()).toBe(false);
   });
 
   it("does not take ownership of a board room already managed by the board page", async () => {

@@ -10,9 +10,10 @@ import { lists } from "./list.js";
 import { users } from "./user.js";
 import { workspaces } from "./workspace.js";
 
-export const NOTIFICATION_REASONS = ["assigned", "watching", "mentioned", "overdue", "checklist_item_overdue"] as const;
+export const NOTIFICATION_REASONS = ["assigned", "watching", "mentioned", "overdue", "checklist_item_overdue", "board_member_left"] as const;
 export type NotificationReason = (typeof NOTIFICATION_REASONS)[number];
 export const NOTIFICATION_REASON = {
+  BOARD_MEMBER_LEFT: "board_member_left",
   ASSIGNED: "assigned",
   WATCHING: "watching",
   MENTIONED: "mentioned",
