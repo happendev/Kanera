@@ -1,3 +1,5 @@
+import { EmptyStateComponent } from "../../shared/empty-state.component";
+import { CdkTrapFocus } from "@angular/cdk/a11y";
 import type { ElementRef, OnDestroy, OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, viewChild } from "@angular/core";
 import type { CompletedCardsResponse } from "@kanera/shared/dto";
@@ -33,7 +35,7 @@ type CompletedCardGroup = {
 @Component({
   selector: "k-completed-cards-panel",
   standalone: true,
-  imports: [AnchoredPanelDirective, CardComponent, DateRangePickerPopover, TooltipDirective],
+  imports: [EmptyStateComponent, CdkTrapFocus, AnchoredPanelDirective, CardComponent, DateRangePickerPopover, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./completed-cards-panel.component.html",
   styleUrl: "./completed-cards-panel.component.scss",

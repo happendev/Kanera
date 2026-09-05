@@ -182,8 +182,6 @@ export interface PickerGroup {
       background: var(--surface-overlay);
       font-size: 10px;
       font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
 
       &:first-child { margin-top: 0; }
 
@@ -378,7 +376,6 @@ export interface PickerGroup {
          list. Same 10px the card tile and the Up next row give it. */
       font-size: 10px;
       font-variant-numeric: tabular-nums;
-      letter-spacing: 0.03em;
       opacity: 0.75;
     }
 
@@ -392,7 +389,7 @@ export interface PickerGroup {
       /* Pressure, not decoration: an overdue row has to be visible while scanning a long picker,
          which is the whole reason a due date is in this list at all. */
       &.is-danger { color: var(--danger); }
-      &.is-warning { color: var(--color-amber, #d97706); }
+      &.is-warning { color: var(--color-amber); }
     }
 
     /* The same chip a due date wears on an Up next row and a board tile, at the same 10px/600 — a
@@ -412,7 +409,7 @@ export interface PickerGroup {
       }
 
       &.is-warning {
-        background: color-mix(in srgb, var(--color-amber, #d97706) 12%, transparent);
+        background: color-mix(in srgb, var(--color-amber) 12%, transparent);
         border-color: transparent;
       }
     }

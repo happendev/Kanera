@@ -141,7 +141,7 @@ function startOfDay(date: Date): Date {
       background: var(--surface-overlay);
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-lg);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+      box-shadow: var(--shadow-lg);
       color: var(--text);
     }
 
@@ -291,7 +291,6 @@ function startOfDay(date: Date): Date {
       color: var(--text-muted);
       font-size: 11px;
       font-weight: 700;
-      text-transform: uppercase;
     }
 
     .dp-day {

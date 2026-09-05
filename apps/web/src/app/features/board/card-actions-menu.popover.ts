@@ -1,3 +1,4 @@
+import { MenuDirective } from "../../shared/menu.directive";
 import { ActionToastService } from "../../shared/action-toast.service";
 import {
   ChangeDetectionStrategy,
@@ -23,19 +24,19 @@ import type { DueDateSlotSelection } from "./due-date.util";
 @Component({
   selector: "k-card-actions-menu",
   standalone: true,
-  imports: [BoardPickerPopover, CardQuickEditPopover],
+  imports: [MenuDirective, BoardPickerPopover, CardQuickEditPopover],
   hostDirectives: [AnchoredPanelDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="cam-panel">
-      <button type="button" class="cam-item" (click)="openInNewTab($event)">
+    <div kMenu class="cam-panel">
+      <button type="button" class="k-menu-item cam-item" (click)="openInNewTab($event)">
         <i class="ti ti-external-link"></i>
         <span>Open in new tab</span>
       </button>
 
 
       <div class="cam-sub">
-        <button type="button" class="cam-item" [class.is-active]="quickEditOpen()" (click)="toggleQuickEdit($event)">
+        <button type="button" class="k-menu-item cam-item" [class.is-active]="quickEditOpen()" (click)="toggleQuickEdit($event)">
           <i class="ti ti-pencil"></i>
           <span>Quick edit…</span>
           <i class="ti ti-chevron-right cam-chev"></i>
@@ -54,18 +55,18 @@ import type { DueDateSlotSelection } from "./due-date.util";
       <!-- Directly under Quick edit: finishing a card is the most-used verb in this menu, and it
            belongs with the two that change the card rather than below the two that copy or follow
            it. -->
-      <button type="button" class="cam-item" (click)="toggleCompletion($event)" [disabled]="savingCompletion()">
+      <button type="button" class="k-menu-item cam-item" (click)="toggleCompletion($event)" [disabled]="savingCompletion()">
         <i [class]="completedAt() ? 'ti ti-circle' : 'ti ti-circle-check'"></i>
         <span>{{ completedAt() ? 'Mark incomplete' : 'Mark complete' }}</span>
       </button>
       @if (showCardWatchAction()) {
-      <button type="button" class="cam-item" (click)="toggleWatch($event)" [disabled]="savingWatch()">
+      <button type="button" class="k-menu-item cam-item" (click)="toggleWatch($event)" [disabled]="savingWatch()">
         <i [class]="isWatchingCard() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
         <span>{{ isWatchingCard() ? 'Stop watching' : 'Watch card' }}</span>
       </button>
       }
       @if (allowDuplicate()) {
-      <button type="button" class="cam-item" (click)="duplicate($event)" [disabled]="duplicating()">
+      <button type="button" class="k-menu-item cam-item" (click)="duplicate($event)" [disabled]="duplicating()">
         <i class="ti ti-copy"></i>
         <span>Duplicate card</span>
       </button>
@@ -73,7 +74,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
       @if (workspaceId()) {
         @if (allowCopyToBoard()) {
         <div class="cam-sub">
-          <button type="button" class="cam-item" [class.is-active]="copyOpen()" (click)="toggleCopy($event)">
+          <button type="button" class="k-menu-item cam-item" [class.is-active]="copyOpen()" (click)="toggleCopy($event)">
             <i class="ti ti-copy-plus"></i>
             <span>Copy to board…</span>
             <i class="ti ti-chevron-right cam-chev"></i>
@@ -95,7 +96,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
         }
         @if (canMoveToBoard()) {
         <div class="cam-sub">
-          <button type="button" class="cam-item" [class.is-active]="moveOpen()" (click)="toggleMove($event)">
+          <button type="button" class="k-menu-item cam-item" [class.is-active]="moveOpen()" (click)="toggleMove($event)">
             <i class="ti ti-arrow-right"></i>
             <span>Move to board…</span>
             <i class="ti ti-chevron-right cam-chev"></i>
@@ -112,19 +113,19 @@ import type { DueDateSlotSelection } from "./due-date.util";
         </div>
         }
       }
-      <button type="button" class="cam-item" (click)="copyCardLink($event)">
+      <button type="button" class="k-menu-item cam-item" (click)="copyCardLink($event)">
         <i class="ti ti-link"></i>
         <span>Copy card link</span>
       </button>
       @if (cardKey()) {
-      <button type="button" class="cam-item" (click)="copyCardKey($event)">
+      <button type="button" class="k-menu-item cam-item" (click)="copyCardKey($event)">
         <i class="ti ti-hash"></i>
         <span>Copy key</span>
       </button>
       }
       <div class="cam-sep"></div>
       @if (archivedAt()) {
-        <button type="button" class="cam-item" (click)="setArchived($event, false)" [disabled]="archiving()">
+        <button type="button" class="k-menu-item cam-item" (click)="setArchived($event, false)" [disabled]="archiving()">
           <i class="ti ti-archive-off"></i>
           <span>Unarchive card</span>
         </button>
@@ -135,7 +136,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
           <button type="button" class="cam-confirm-cancel" (click)="$event.preventDefault(); $event.stopPropagation(); confirmingDelete.set(false)">Cancel</button>
         </div>
       } @else {
-        <button type="button" class="cam-item cam-item-danger" (click)="$event.preventDefault(); $event.stopPropagation(); confirmingDelete.set(true)">
+        <button type="button" class="k-menu-item cam-item danger" (click)="$event.preventDefault(); $event.stopPropagation(); confirmingDelete.set(true)">
           <i class="ti ti-archive"></i>
           <span>Archive card</span>
         </button>
@@ -147,11 +148,14 @@ import type { DueDateSlotSelection } from "./due-date.util";
     `
     .cam-panel {
       background: var(--surface-overlay);
-      border: 1px solid var(--border);
+      border: 1px solid var(--overlay-border);
       border-radius: var(--radius);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+      box-shadow: var(--shadow-lg);
       padding: 4px;
       width: 100%;
+      max-height: var(--ap-max-height, 420px);
+      overflow-y: auto;
+      overscroll-behavior: contain;
       display: flex;
       flex-direction: column;
       gap: 1px;
@@ -161,67 +165,11 @@ import type { DueDateSlotSelection } from "./due-date.util";
       position: relative;
     }
 
-    .cam-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      width: 100%;
-      padding: 7px 10px;
-      border-radius: var(--radius-sm);
-      font-size: 13px;
-      color: var(--text);
-      background: transparent;
-      border: none;
-      cursor: pointer;
-      text-align: left;
-      transition: background 0.1s;
-
-      > i {
-        font-size: 14px;
-        flex-shrink: 0;
-        width: 16px;
-        color: var(--text-muted);
-      }
-
-      > span {
-        flex: 1;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .cam-chev {
-        color: var(--text-muted);
-        margin-left: auto;
-        font-size: 12px;
-      }
-
-      &:hover,
-      &.is-active {
-        background: var(--surface-hover);
-      }
-
-      &:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-
-      &.cam-item-danger {
-        color: var(--danger, #d33);
-
-        > i {
-          color: var(--danger, #d33);
-        }
-
-        &:hover {
-          background: color-mix(in srgb, var(--danger, #d33) 10%, transparent);
-        }
-      }
-    }
+    
 
     .cam-sep {
       height: 1px;
-      background: var(--border);
+      background: var(--overlay-separator);
       margin: 3px 0;
     }
 
@@ -248,19 +196,19 @@ import type { DueDateSlotSelection } from "./due-date.util";
       border-radius: var(--radius-sm);
       border: none;
       cursor: pointer;
-      background: var(--danger, #d33);
+      background: var(--danger);
       color: #fff;
       transition: opacity 0.1s;
       flex: 0 0 auto;
 
       &:hover:not(:disabled),
       &:active:not(:disabled) {
-        background: var(--danger, #d33);
+        background: var(--danger);
         opacity: 0.9;
       }
 
       &:focus-visible {
-        box-shadow: 0 0 0 2px var(--surface-overlay), 0 0 0 4px var(--danger, #d33);
+        box-shadow: 0 0 0 2px var(--surface-overlay), 0 0 0 4px var(--danger);
       }
 
       &:disabled {

@@ -1,3 +1,4 @@
+import { CdkTrapFocus } from "@angular/cdk/a11y";
 import { ChangeDetectionStrategy, Component, HostListener, input, signal } from "@angular/core";
 import { Subject } from "rxjs";
 
@@ -5,9 +6,10 @@ import { Subject } from "rxjs";
   selector: "k-confirm-dialog",
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [CdkTrapFocus],
   template: `
     <div class="backdrop" (click)="cancel()">
-      <div class="dialog" (click)="$event.stopPropagation()" role="dialog" [attr.aria-label]="title()" [attr.aria-busy]="loading()">
+      <div class="dialog" (click)="$event.stopPropagation()" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" [attr.aria-label]="title()" [attr.aria-busy]="loading()">
         <h3 class="title">{{ title() }}</h3>
         @if (message()) {
           <p class="message" [class.loading-message]="loading()">

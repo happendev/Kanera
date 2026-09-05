@@ -1,3 +1,4 @@
+import { MenuDirective } from "../../shared/menu.directive";
 import { ActionToastService } from "../../shared/action-toast.service";
 import type { OnDestroy} from "@angular/core";
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from "@angular/core";
@@ -54,6 +55,8 @@ import type { CfFilterCondition, FilterValue } from "./table-view/filter.types";
 import { FilterBarComponent } from "./table-view/filter-bar.component";
 import { groupCards } from "./table-view/group-by.util";
 import { GROUP_BY_OPTIONS, NULL_GROUP_KEY, type CardGroup, type GroupBy } from "./table-view/table-view.types";
+import { RouterLink } from "@angular/router";
+import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { KeyboardShortcutsService } from "../../core/keyboard/keyboard-shortcuts.service";
 import { readCompactCards, readCompletedFilter, readFilters, readGroupBy, readViewMode, writeCompactCards, writeCompletedFilter, writeFilters, writeGroupBy, writeViewMode, type StoredFilters, type ViewMode } from "./table-view/view-preference";
 import { NotesViewComponent } from "../notes/notes-view.component";
@@ -104,7 +107,7 @@ function localDateKey(offsetDays: number): string {
 @Component({
   selector: "k-board-page",
   standalone: true,
-  imports: [AnchoredPanelDirective, AvatarComponent, BoardBackgroundPopover, BoardCalendarViewComponent, BoardCanvasComponent, BoardGroupColumnComponent, BoardMembersMenu, BoardMirrorsDialogComponent, BoardTableViewComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, CardComposerDialogComponent, CardDetailComponent, CompletedCardsPanelComponent, DocsLinkComponent, FilterBarComponent, ListComponent, MirrorCreateDialogComponent, NotesViewComponent, PageHeaderComponent, PageToolbarComponent, SearchFieldComponent, SegmentedComponent, StatusToastComponent, TooltipDirective, WatcherPopoverComponent, WorkDoneViewComponent],
+  imports: [EmptyStateComponent, RouterLink, MenuDirective, AnchoredPanelDirective, AvatarComponent, BoardBackgroundPopover, BoardCalendarViewComponent, BoardCanvasComponent, BoardGroupColumnComponent, BoardMembersMenu, BoardMirrorsDialogComponent, BoardTableViewComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, CardComposerDialogComponent, CardDetailComponent, CompletedCardsPanelComponent, DocsLinkComponent, FilterBarComponent, ListComponent, MirrorCreateDialogComponent, NotesViewComponent, PageHeaderComponent, PageToolbarComponent, SearchFieldComponent, SegmentedComponent, StatusToastComponent, TooltipDirective, WatcherPopoverComponent, WorkDoneViewComponent],
   providers: [BoardState, BoardSocketBridge, BoardMenuCoordinator],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./board.page.html",
@@ -179,6 +182,19 @@ export class BoardPage implements OnDestroy {
       { id: "history", icon: "history", label: "Work done", disabled },
       { id: "notes", icon: "notebook", label: "Board Notes", disabled },
     ];
+  });
+
+  /**
+   * Where lists are configured for this board. Lists are workspace-scoped, so a standard board sends
+   * the admin to its workspace's settings; a standalone board owns its hidden workspace and has the
+   * same page under its own URL.
+   */
+  readonly listsSettingsUrl = computed(() => {
+    const board = this.state.board();
+    if (!board) return null;
+    return this.state.workspaceKind() === "board"
+      ? `/b/${board.id}/settings/lists`
+      : `/w/${board.workspaceId}/settings/lists`;
   });
 
   /** Board colour, falling back to the workspace accent, for the header's lead icon. */

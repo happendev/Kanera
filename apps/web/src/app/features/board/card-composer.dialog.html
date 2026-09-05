@@ -9,7 +9,7 @@
   (dragleave)="onDragLeave($event)"
   (drop)="onDrop($event)"
 >
-  <form class="cmp-dialog" role="dialog" aria-label="New card" [attr.aria-busy]="busy()" (click)="$event.stopPropagation()" (submit)="submit($event)">
+  <form class="cmp-dialog" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-label="New card" [attr.aria-busy]="busy()" (click)="$event.stopPropagation()" (submit)="submit($event)">
     @if (dragActive()) {
     <div class="cmp-drop" aria-hidden="true">
       <i class="ti ti-paperclip"></i>

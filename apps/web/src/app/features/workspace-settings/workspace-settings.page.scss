@@ -176,8 +176,6 @@
   border-bottom: 1px solid var(--border);
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   color: var(--text-muted);
 }
 
@@ -266,13 +264,6 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-}
-
-.org-user-empty {
-  padding: 12px 14px;
-  font-size: 13px;
-  color: var(--text-muted);
-  border-top: 1px solid var(--border);
 }
 
 .guest-info-note {
@@ -450,8 +441,6 @@
   border-bottom: 1px solid var(--border);
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   color: var(--text-muted);
 }
 
@@ -564,8 +553,6 @@
   width: 96px;
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   color: var(--text);
 }
 
@@ -745,7 +732,7 @@ button.list-rename-trigger {
   align-items: center;
   gap: 6px;
   margin: 0;
-  color: var(--danger, #e53e3e);
+  color: var(--danger);
   font-size: 13px;
   line-height: 1.4;
 
@@ -787,30 +774,6 @@ button.list-rename-trigger {
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--surface);
-}
-
-.integration-empty {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-height: 48px;
-  padding: 10px 12px;
-  color: var(--text-muted);
-  font-size: 13px;
-
-  i {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface-2);
-    color: var(--text-muted);
-    font-size: 15px;
-    flex-shrink: 0;
-  }
 }
 
 .integration-row,
@@ -929,8 +892,6 @@ button.list-rename-trigger {
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
 }
 
 .board-id-row {
@@ -1001,9 +962,9 @@ button.list-rename-trigger {
   justify-self: start;
   font-size: 12px;
   font-weight: 500;
-  color: var(--success, #16a34a);
-  background: color-mix(in srgb, var(--success, #16a34a) 9%, transparent);
-  border: 1px solid color-mix(in srgb, var(--success, #16a34a) 28%, transparent);
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--success) 28%, transparent);
   border-radius: 999px;
   padding: 2px 7px;
   text-transform: capitalize;
@@ -1392,8 +1353,6 @@ button.list-rename-trigger {
 .template-section-label {
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   color: var(--text-muted);
 
   &:not(:first-child) {

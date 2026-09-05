@@ -6,7 +6,7 @@
         <p class="settings-section-hint">Use groups to organize the sidebar. Boards without a group stay listed directly under Boards.</p>
         <k-docs-link path="boards" fragment="group-boards" label="Learn more about board groups" />
         <form class="board-form" (submit)="settings.createBoardGroup($event)">
-          <input name="boardGroup" placeholder="Group title" [value]="settings.newBoardGroupTitle()" (input)="settings.newBoardGroupTitle.set($any($event.target).value)" required style="flex:1" />
+          <input name="boardGroup" placeholder="Group title" [value]="settings.newBoardGroupTitle()" (input)="settings.newBoardGroupTitle.set($any($event.target).value)" required class="grow" />
           <button class="sm compact-add-button" type="submit" aria-label="Add group" kTooltip="Add group"><i class="ti ti-plus"></i><span class="mobile-hide">Add group</span></button>
         </form>
         <div class="boards board-groups" cdkDropList [cdkDropListData]="settings.boardGroups()" (cdkDropListDropped)="settings.dropBoardGroup($event)">
@@ -14,10 +14,10 @@
           <div cdkDrag class="board-tile">
             <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
             @if (settings.editingBoardGroupId() === group.id) {
-            <input class="inline-name-input" [value]="settings.editingBoardGroupTitle()" (input)="settings.editingBoardGroupTitle.set($any($event.target).value)" (blur)="settings.saveBoardGroupTitle(group.id)" (keydown.enter)="settings.saveBoardGroupTitle(group.id)"
-              (keydown.escape)="settings.cancelEditBoardGroup()" autofocus style="flex:1" />
+            <input class="inline-name-input grow" [value]="settings.editingBoardGroupTitle()" (input)="settings.editingBoardGroupTitle.set($any($event.target).value)" (blur)="settings.saveBoardGroupTitle(group.id)" (keydown.enter)="settings.saveBoardGroupTitle(group.id)"
+              (keydown.escape)="settings.cancelEditBoardGroup()" autofocus />
             } @else {
-            <span (click)="settings.startEditBoardGroup(group)" kTooltip="Click to rename" style="cursor:pointer;flex:1">{{ group.title }}</span>
+            <span (click)="settings.startEditBoardGroup(group)" kTooltip="Click to rename" class="grow" style="cursor:pointer">{{ group.title }}</span>
             }
             <div class="row-actions">
               <button class="ghost icon danger" (click)="settings.deleteBoardGroup(group.id)" aria-label="Delete group" kTooltip="Delete group">
@@ -38,7 +38,7 @@
         </div>
         <k-docs-link path="boards" label="Learn more about boards" />
         <form class="board-form" (submit)="settings.createBoard($event)">
-          <input name="board" placeholder="Board name" [value]="settings.newBoardName()" (input)="settings.newBoardName.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" required style="flex:1" />
+          <input name="board" placeholder="Board name" [value]="settings.newBoardName()" (input)="settings.newBoardName.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" required class="grow" />
           <button class="sm compact-add-button" type="submit" aria-label="Add board" kTooltip="Add board"><i class="ti ti-plus"></i><span class="mobile-hide">Add board</span></button>
         </form>
         @if (settings.boardLimitReached()) {
@@ -50,10 +50,10 @@
             <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
             <i [class]="'ti ti-' + (board.icon || 'layout-kanban') + ' board-icon'" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (settings.accentColor() ? 'var(--color-' + settings.accentColor() + ')' : null)"></i>
             @if (settings.editingBoardId() === board.id) {
-            <input class="inline-name-input" [value]="settings.editingBoardName()" (input)="settings.editingBoardName.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" (blur)="settings.saveBoardName(board.id)" (keydown.enter)="settings.saveBoardName(board.id)"
-              (keydown.escape)="settings.cancelEditBoard()" autofocus style="flex:1" />
+            <input class="inline-name-input grow" [value]="settings.editingBoardName()" (input)="settings.editingBoardName.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" (blur)="settings.saveBoardName(board.id)" (keydown.enter)="settings.saveBoardName(board.id)"
+              (keydown.escape)="settings.cancelEditBoard()" autofocus />
             } @else {
-            <span (click)="settings.startEditBoard(board)" kTooltip="Click to rename" style="cursor:pointer;flex:1">{{ board.name }}</span>
+            <span (click)="settings.startEditBoard(board)" kTooltip="Click to rename" class="grow" style="cursor:pointer">{{ board.name }}</span>
             }
             <div class="row-actions">
               <select class="board-group-select" [value]="board.groupId ?? ''" (change)="settings.updateBoardGroup(board.id, $any($event.target).value || null)" kTooltip="Board group" aria-label="Board group">

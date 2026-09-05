@@ -1,3 +1,4 @@
+import { CdkTrapFocus } from "@angular/cdk/a11y";
 import type { ElementRef } from "@angular/core";
 import {
   ChangeDetectionStrategy,
@@ -76,7 +77,7 @@ type CardFeedView =
 @Component({
   selector: "k-card-activity",
   standalone: true,
-  imports: [
+  imports: [CdkTrapFocus, 
     AnchoredPanelDirective,
     AvatarComponent,
     DraftBannerComponent,

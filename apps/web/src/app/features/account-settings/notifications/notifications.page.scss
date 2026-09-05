@@ -44,8 +44,6 @@
     color: var(--text-muted);
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
   }
 }
 
@@ -145,7 +143,6 @@ button.workspace-rule-picker-row {
   font-weight: 600;
 }
 
-.workspace-rule-empty,
 .standalone-rule-note {
   display: flex;
   align-items: flex-start;
@@ -320,8 +317,6 @@ button.workspace-rule-picker-row {
     background: var(--surface-2);
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
   }
 
   tbody th {

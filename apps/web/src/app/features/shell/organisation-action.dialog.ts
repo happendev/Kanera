@@ -8,13 +8,13 @@ export type CreateOrganisationResult = { accessToken: string; user: AuthUser };
 
 const DIALOG_STYLES = `
   :host { display: block; width: min(440px, calc(100vw - 32px)); }
-  .organisation-dialog { background: var(--surface, #fff); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 20px 50px rgb(0 0 0 / 18%); padding: 20px; }
+  .organisation-dialog { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 20px 50px rgb(0 0 0 / 18%); padding: 20px; }
   header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
   h2 { margin: 0 0 4px; color: var(--text); font-size: 18px; }
   p { margin: 0; color: var(--text-muted); font-size: 13px; line-height: 1.45; }
   label { display: grid; gap: 7px; color: var(--text); font-size: 13px; font-weight: 600; }
   input { width: 100%; }
-  .error { margin-top: 12px; color: var(--danger, #dc2626); }
+  .error { margin-top: 12px; color: var(--danger); }
   footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
 `;
 

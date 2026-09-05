@@ -51,8 +51,6 @@
 .user-seat-pool-label {
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--text-muted);
 }
 
@@ -105,8 +103,6 @@ $invite-columns: minmax(210px, 1.7fr) minmax(110px, 1.3fr) 84px 96px 72px;
   border-bottom: 1px solid var(--border);
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   color: var(--text-muted);
 
   // Single-line headers only; a wrapped two-line header misaligns the whole strip.
@@ -223,7 +219,7 @@ $invite-columns: minmax(210px, 1.7fr) minmax(110px, 1.3fr) 84px 96px 72px;
   // Links about to lapse are the one thing an admin needs to act on before it silently stops working.
   // Mixed with --text so the amber stays legible in both the light and dark themes.
   &.urgent {
-    color: color-mix(in srgb, var(--warning, #f59e0b) 78%, var(--text));
+    color: color-mix(in srgb, var(--warning) 78%, var(--text));
     font-weight: 600;
   }
 }
@@ -254,7 +250,7 @@ $invite-columns: minmax(210px, 1.7fr) minmax(110px, 1.3fr) 84px 96px 72px;
 }
 
 .invite-copied {
-  color: var(--success, #16a34a);
+  color: var(--success);
 }
 
 .guest-seat-list {

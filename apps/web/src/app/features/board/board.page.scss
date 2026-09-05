@@ -45,6 +45,16 @@
   border-radius: var(--radius-sm);
 }
 
+// The no-lists state sits where the first list would, top-left of the canvas, at a reading width
+// rather than stretching across the whole horizontal scroller.
+.board-empty {
+  align-self: flex-start;
+  flex: none;
+  width: min(440px, calc(100vw - 48px));
+  margin: var(--space-6) var(--space-5);
+  background: var(--surface);
+}
+
 .skeleton-list {
   display: flex;
   flex-direction: column;
@@ -94,21 +104,6 @@
     background: var(--accent-hover);
     border-color: var(--accent-hover);
     color: var(--accent-fg);
-  }
-}
-
-.board-menu-heading {
-  padding: 6px 8px 3px;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-
-  &:not(:first-child) {
-    margin-top: 4px;
-    border-top: 1px solid var(--border);
-    padding-top: 8px;
   }
 }
 
@@ -244,7 +239,7 @@
   }
   strong { font-size: 16px; }
   span { color: var(--text-muted); font-size: 10px; }
-  .needs-attention strong { color: var(--danger, #ef4444); }
+  .needs-attention strong { color: var(--danger); }
 }
 
 .board-overview-callout {
@@ -264,8 +259,6 @@
   color: var(--text-muted);
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: .06em;
-  text-transform: uppercase;
 }
 
 .board-overview-lists {
@@ -312,11 +305,6 @@
   width: var(--ap-width, 160px);
   max-height: var(--ap-max-height, none);
   overflow: hidden;
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface-overlay);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
   visibility: hidden;
   z-index: var(--z-panel);
 
@@ -345,7 +333,7 @@
   min-height: 0;
   padding: 4px;
   background: var(--surface-overlay);
-  border: 1px solid var(--border);
+  border: 1px solid var(--overlay-border);
   border-radius: var(--radius);
   box-shadow: 0 8px 24px rgb(0 0 0 / 14%);
   visibility: hidden;
@@ -356,15 +344,6 @@
     top: auto;
     bottom: var(--ap-bottom, auto);
   }
-}
-
-.group-by-menu-heading {
-  padding: 5px 8px 4px;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .group-by-menu-scroll {
@@ -429,48 +408,6 @@
   opacity: 0;
 
   .group-by-item.is-selected & { opacity: 1; }
-}
-
-.board-export-item {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
-  align-items: center;
-  justify-content: stretch;
-  gap: 8px;
-  min-height: 32px;
-  height: auto;
-  width: 100%;
-  padding: 7px 8px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text);
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-
-  i {
-    width: 16px;
-    color: var(--text-muted);
-    font-size: 16px;
-    text-align: center;
-  }
-
-  >span {
-    min-width: 0;
-    white-space: normal;
-    overflow-wrap: anywhere;
-    line-height: 1.35;
-  }
-
-  &:hover:not(:disabled) {
-    background: var(--surface-hover);
-  }
-
-  &:disabled {
-    cursor: default;
-    opacity: 0.6;
-  }
 }
 
 .mirror-menu-trigger.has-mirror {

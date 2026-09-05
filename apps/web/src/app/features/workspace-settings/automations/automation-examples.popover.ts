@@ -84,8 +84,6 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
         color: var(--text-muted);
         font-size: 11px;
         font-weight: 700;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
       }
 
       .ae-recipe {

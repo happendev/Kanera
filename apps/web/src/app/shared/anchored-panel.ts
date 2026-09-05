@@ -238,8 +238,10 @@ export const ANCHORED_HOST_STYLES = `
     max-height: var(--ap-max-height, 420px);
     box-sizing: border-box;
     visibility: hidden;
-    overflow: auto;
-    overscroll-behavior: contain;
+    /* The host is a positioning frame, not the visible panel. It must not clip: every consumer's
+       panel clamps itself to --ap-max-height and scrolls internally, and overflow: auto here was
+       cutting the panel's box-shadow off at the host edge, so menus rendered flat. */
+    overflow: visible;
   }
 
   /* Flipped above the anchor: pin the bottom edge so a short panel hugs its trigger. */
@@ -286,8 +288,6 @@ export const ANCHORED_PANEL_STYLES = `
     color: var(--text);
     font-size: 12px;
     font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
   }
 
   .ap-icon-button {

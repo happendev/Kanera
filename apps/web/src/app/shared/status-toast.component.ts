@@ -42,7 +42,7 @@ import { StatusToastStackService } from "./status-toast-stack.service";
       font-size: 16px;
     }
 
-    i.success { color: var(--success, #10b981); }
+    i.success { color: var(--success); }
 
     .message {
       overflow-wrap: anywhere;

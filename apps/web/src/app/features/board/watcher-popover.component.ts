@@ -53,7 +53,7 @@ import { AvatarComponent } from "../../shared/avatar.component";
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-lg);
       background: var(--surface-overlay);
-      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+      box-shadow: var(--shadow-lg);
     }
 
     .wp-toggle {
@@ -88,8 +88,6 @@ import { AvatarComponent } from "../../shared/avatar.component";
       color: var(--text-muted);
       font-size: 11px;
       font-weight: 700;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
     }
 
     .wp-list {

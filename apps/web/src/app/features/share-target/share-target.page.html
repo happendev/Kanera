@@ -13,7 +13,10 @@
     </k-page-header>
 
     @if (loading()) {
-    <k-empty-state icon="loader-2" title="Loading boards…" />
+    <div class="k-loading" role="status" aria-live="polite">
+      <i class="ti ti-loader-2"></i>
+      <span>Loading boards…</span>
+    </div>
     } @else if (groups().length === 0) {
     <k-empty-state icon="layout-kanban" title="No editable boards available" text="You need editor access to a board before captured items can become cards." />
     } @else {

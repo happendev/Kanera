@@ -1,3 +1,4 @@
+import { CdkTrapFocus } from "@angular/cdk/a11y";
 import type { OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from "@angular/core";
 import type { MirrorTargetBoard } from "@kanera/shared/dto";
@@ -9,9 +10,10 @@ import { BoardMirrorsService } from "./board-mirrors.service";
   selector: "k-mirror-create-dialog",
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [CdkTrapFocus],
   template: `
     <div class="backdrop" (click)="dismissed.emit()">
-      <section class="dialog" role="dialog" aria-modal="true" [attr.aria-label]="dialogTitle()" (click)="$event.stopPropagation()">
+      <section class="dialog" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-modal="true" [attr.aria-label]="dialogTitle()" (click)="$event.stopPropagation()">
         <header>
           <div>
             <h2>{{ dialogTitle() }}</h2>
@@ -86,7 +88,7 @@ import { BoardMirrorsService } from "./board-mirrors.service";
   `,
   styles: [`
     .backdrop { position: fixed; inset: 0; z-index: var(--z-modal, 1000); display: flex; align-items: center; justify-content: center; padding: 16px; background: rgb(0 0 0 / 52%); }
-    .dialog { width: min(560px, 100%); max-height: min(760px, 90vh); overflow: auto; background: var(--surface, #fff); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 20px 50px rgb(0 0 0 / 18%); padding: 20px; }
+    .dialog { width: min(560px, 100%); max-height: min(760px, 90vh); overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 20px 50px rgb(0 0 0 / 18%); padding: 20px; }
     header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
     h2 { margin: 0 0 4px; color: var(--text); font-size: 18px; }
     header p, .step-copy span { margin: 0; color: var(--text-muted); font-size: 13px; }
@@ -115,7 +117,7 @@ import { BoardMirrorsService } from "./board-mirrors.service";
     select[aria-invalid="true"] { border-color: var(--danger); outline-color: var(--danger); }
     .state { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 0; color: var(--text-muted); font-size: 13px; }
     .eligibility-note { display: flex; align-items: flex-start; gap: 6px; margin: 9px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.4; }
-    .eligibility-note i { margin-top: 1px; color: var(--success, #16a34a); }
+    .eligibility-note i { margin-top: 1px; color: var(--success); }
     .error { display: flex; align-items: center; gap: 6px; margin: 12px 0 0; color: var(--danger); font-size: 13px; }
     footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 22px; }
     @media (max-width: 560px) {

@@ -113,7 +113,7 @@
   color: var(--text);
 
   i {
-    color: var(--success, #16a34a);
+    color: var(--success);
   }
 }
 
@@ -498,7 +498,6 @@
   padding: 10px 16px;
 }
 
-.completed-empty,
 .completed-sentinel {
   min-height: 96px;
   padding: 14px 16px 24px;
@@ -508,14 +507,6 @@
   gap: 8px;
   color: var(--text-muted);
   text-align: center;
-}
-
-.completed-empty {
-  flex-direction: column;
-
-  i {
-    font-size: 24px;
-  }
 }
 
 @media (max-width: 640px) {

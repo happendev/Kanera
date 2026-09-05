@@ -60,7 +60,7 @@ type CreatedStandaloneBoard = Workspace & { initialBoard: Board };
   `,
   styles: [`
     :host { display: block; width: min(440px, calc(100vw - 32px)); }
-    .create-board-dialog { background: var(--surface, #fff); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 20px 50px rgb(0 0 0 / 18%); padding: 20px; }
+    .create-board-dialog { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 20px 50px rgb(0 0 0 / 18%); padding: 20px; }
     header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
     h2 { font-size: 18px; margin: 0 0 4px; }
     p { color: var(--muted-foreground); font-size: 13px; margin: 0; }
@@ -71,7 +71,7 @@ type CreatedStandaloneBoard = Workspace & { initialBoard: Board };
     .template-copy { display: flex; min-width: 0; flex-direction: column; gap: 3px; overflow: hidden; }
     .template-name { min-width: 0; color: var(--text); font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
     .template-description { min-width: 0; color: var(--text-muted); font-size: 12px; line-height: 1.35; white-space: normal; overflow-wrap: anywhere; }
-    .error { color: var(--danger, #dc2626); margin-top: 12px; }
+    .error { color: var(--danger); margin-top: 12px; }
     footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
   `],
 })

@@ -5,8 +5,8 @@
     @let inviteState = state();
     @switch (inviteState) {
     @case ("loading") {
-    <div class="loading">
-      <i class="ti ti-loader-2 spin"></i>
+    <div class="k-loading" role="status" aria-live="polite">
+      <i class="ti ti-loader-2"></i>
       <span>Loading invitation…</span>
     </div>
     }

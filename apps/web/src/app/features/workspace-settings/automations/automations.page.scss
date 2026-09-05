@@ -400,11 +400,11 @@
   }
 
   &.is-on {
-    color: var(--success, #16a34a);
+    color: var(--success);
 
     .ac-power-track {
-      border-color: var(--success, #16a34a);
-      background: var(--success, #16a34a);
+      border-color: var(--success);
+      background: var(--success);
     }
 
     .ac-power-knob {
@@ -416,8 +416,8 @@
     // Deepen the green rather than lightening toward the off state — hover should read as "more of
     // this", not as a preview of switching it off.
     &:hover .ac-power-track {
-      border-color: color-mix(in srgb, var(--success, #16a34a) 80%, var(--text));
-      background: color-mix(in srgb, var(--success, #16a34a) 80%, var(--text));
+      border-color: color-mix(in srgb, var(--success) 80%, var(--text));
+      background: color-mix(in srgb, var(--success) 80%, var(--text));
     }
   }
 }
@@ -887,8 +887,6 @@
   align-items: center;
   gap: 5px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   font-size: 11px;
 
   i {

@@ -1,3 +1,4 @@
+import { EmptyStateComponent } from "../../../shared/empty-state.component";
 import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/core";
 import type { OnInit } from "@angular/core";
 import { API_KEY_NAME_MAX_LENGTH } from "@kanera/shared/dto/name-limits";
@@ -51,7 +52,7 @@ function sortPersonalApiKeys(keys: PersonalApiKeyRow[]): PersonalApiKeyRow[] {
 @Component({
   selector: "k-account-settings-api-keys",
   standalone: true,
-  imports: [AgentConnectCardComponent, DocsLinkComponent, TooltipDirective],
+  imports: [EmptyStateComponent, AgentConnectCardComponent, DocsLinkComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./api-keys.page.html",
   styleUrl: "./api-keys.page.scss",

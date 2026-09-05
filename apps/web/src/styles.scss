@@ -271,14 +271,23 @@ k-list.is-drop-target {
   // Dark elevates to separate, light recesses, so this sits above --surface-2 here and
   // below it in the light blocks.
   --surface-3: #28354d;
-  --surface-hover: #2b3953;
+  --surface-hover: #2f3f5c;
   --surface-subtle: rgba(255, 255, 255, 0.035);
   // Fill for floating chrome that sits *above* the page: menus, popovers, pickers, context
   // menus, tooltips. Deliberately off --surface, because a menu opened over a sidebar or a
   // panel painted in --surface had only its border and shadow to separate it from what it
   // covered. Sits between --surface and --surface-2 so row hover (--surface-2) still reads
   // clearly inside the panel. Dialogs and drawers keep --surface — they come with a scrim.
-  --surface-overlay: #1d2739;
+  // Sits *above* --card-bg (--surface-2): a context menu opened over a card was darker than the card
+  // and receded into it. Dark separates by elevating, so floating chrome must be the lightest fill
+  // on screen bar row hover.
+  --surface-overlay: #253248;
+  // Edge of floating chrome. The page hairline (--border) is tuned to divide same-hue surfaces
+  // gently, which is exactly what a menu must not do; on dark it needs a clearly brighter edge.
+  --overlay-border: #3d5170;
+  // Dividers drawn *inside* floating chrome. --border is nearly the same value as the raised overlay
+  // fill on dark, so a separator painted with it disappeared.
+  --overlay-separator: #364a66;
 
   --border: #253449;
   --border-strong: #364a66;
@@ -378,7 +387,9 @@ k-list.is-drop-target {
   // --shadow / --shadow-lg were only ever declared in the light blocks, so every dark-mode
   // consumer rendered shadowless (CDK drag previews, card-detail popovers, the colour picker).
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.34), 0 1px 3px rgba(0, 0, 0, 0.24);
-  --shadow-lg: 0 12px 32px -8px rgba(0, 0, 0, 0.55);
+  // The 1px ring is the part that does the work on dark: a soft shadow alone vanishes against
+  // same-hue navy, and the ring gives the menu a hard edge the eye can find.
+  --shadow-lg: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 16px 40px -10px rgba(0, 0, 0, 0.7);
   --depth-edge: inset 0 1px 2px rgba(255, 255, 255, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.18);
 
   // ─── Kanban surfaces (semantic) ──────────────────────────────────────────────
@@ -575,6 +586,8 @@ k-list.is-drop-target {
     // overlay darker than its own hover would read inverted. Light separation therefore still
     // leans on the border and shadow; this only stops a menu from matching what it covers exactly.
     --surface-overlay: #f9fbfd;
+    --overlay-border: var(--border);
+    --overlay-separator: var(--border);
 
     --border: #dde2ea;
     --border-strong: #c8d0dc;
@@ -688,6 +701,8 @@ k-list.is-drop-target {
   --surface-subtle: rgba(0, 0, 0, 0.03);
   // Keep in sync with the @media light block above.
   --surface-overlay: #f9fbfd;
+  --overlay-border: var(--border);
+  --overlay-separator: var(--border);
 
   --border: #dde2ea;
   --border-strong: #c8d0dc;
@@ -873,13 +888,12 @@ p {
   margin: 0;
 }
 
+// No hover underline by default. Most anchors in the app are menu items, nav rows and button-styled
+// links, and an `a:hover` rule outranks their class selectors, so it would put an underline back on
+// every one of them. Prose surfaces that want an underline (markdown, legal copy) opt in locally.
 a {
   color: var(--accent);
   text-decoration: none;
-
-  &:hover {
-    text-decoration: underline;
-  }
 }
 
 // ─── Buttons ─────────────────────────────────────────────────────────────────
@@ -1171,8 +1185,6 @@ k-app-shell {
   font-size: 9px;
   font-weight: 750;
   line-height: 14px;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -1222,4 +1234,203 @@ k-app-shell {
   font-size: var(--text-xs);
   font-weight: 600;
   line-height: 1;
+}
+
+// ─── Menu vocabulary ─────────────────────────────────────────────────────────
+// The one look for every menu-shaped panel (context menus, action menus, the account popover, table
+// menus). Global, not component-scoped, because menus are rendered from a dozen components and used
+// to carry a dozen slightly different row heights and hover fills. Pair with the kMenu directive for
+// keyboard behaviour. Containers keep their own placement and width; this owns only the inside.
+.k-menu {
+  padding: var(--space-1);
+  border: 1px solid var(--overlay-border);
+  border-radius: var(--radius-md);
+  background: var(--surface-overlay);
+  box-shadow: var(--shadow-lg);
+}
+
+.k-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 32px;
+  height: auto;
+  padding: 6px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-base);
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: left;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--motion-fast), color var(--motion-fast);
+
+  > i,
+  > .ti {
+    flex: none;
+    width: 16px;
+    color: var(--text-muted);
+    font-size: 16px;
+    text-align: center;
+  }
+
+  > span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .k-kbd {
+    margin-left: auto;
+  }
+
+  // A focused row looks like a hovered row and nothing more. The menu autofocuses its first item on
+  // open, and Chrome flags programmatic focus as :focus-visible after any keyboard interaction, so
+  // the global button ring (a box-shadow, not an outline) would randomly appear on the first item.
+  &:hover:not(:disabled):not([aria-disabled="true"]),
+  &:focus-visible {
+    background: var(--surface-hover);
+    color: var(--text);
+    outline: none;
+    box-shadow: none;
+  }
+
+  &.is-selected {
+    color: var(--accent);
+  }
+
+  &.danger {
+    color: var(--danger);
+
+    > i { color: inherit; }
+
+    &:hover:not(:disabled) { background: var(--danger-bg); }
+  }
+
+  &:disabled,
+  &[aria-disabled="true"] {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
+.k-menu-heading {
+  padding: 8px var(--space-2) 4px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.k-menu-separator {
+  height: 1px;
+  margin: var(--space-1) 0;
+  background: var(--overlay-separator);
+}
+
+// ─── Icon button scale ────────────────────────────────────────────────────────
+// Three sizes, no others: 28 inside dense rows (table cells, checklist items, attachment rows), 32
+// as the default beside text, 36 in toolbars beside 36px controls.
+button.icon.sm {
+  width: 28px;
+  height: 28px;
+
+  i { font-size: 15px; }
+}
+
+button.icon.lg {
+  width: 36px;
+  height: 36px;
+}
+
+// ─── Layout utilities ─────────────────────────────────────────────────────────
+// The two inline styles templates kept reaching for. `.grow` is the flex filler; `.row` is a
+// horizontal control row at the standard gap.
+.grow {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.text-success {
+  color: var(--success);
+}
+
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+// Placeholder shimmer for anything that waits more than a beat. One recipe, so every loading screen
+// breathes at the same rate.
+.k-skeleton {
+  display: block;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: k-skeleton-shimmer 1.4s ease-in-out infinite;
+
+  &.is-text {
+    height: 12px;
+    width: 60%;
+  }
+
+  &.is-title {
+    height: 16px;
+    width: 40%;
+  }
+
+  &.is-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+  }
+
+  &.is-block {
+    height: 72px;
+    width: 100%;
+    border-radius: var(--radius-md);
+  }
+}
+
+@keyframes k-skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+// ─── Loading block ────────────────────────────────────────────────────────────
+// The one in-place "this area is loading" treatment: a spinning glyph over a short sentence, centred
+// in whatever it replaces. Prefer .k-skeleton when the shape of the incoming content is known; use
+// this when it is not (a fetch with an unknown number of rows, a redirect, an invitation lookup).
+.k-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 160px;
+  padding: var(--space-6);
+  color: var(--text-muted);
+  font-size: var(--text-base);
+  text-align: center;
+
+  > .ti {
+    font-size: 22px;
+  }
+
+  &.is-inline {
+    flex-direction: row;
+    min-height: 0;
+    padding: var(--space-3);
+
+    > .ti {
+      font-size: 16px;
+    }
+  }
 }

@@ -1,3 +1,4 @@
+import { CdkTrapFocus } from "@angular/cdk/a11y";
 import { ChangeDetectionStrategy, Component, HostListener, input, output } from "@angular/core";
 
 export interface UpgradePromptContent {
@@ -13,9 +14,10 @@ export interface UpgradePromptContent {
   selector: "k-upgrade-prompt-dialog",
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [CdkTrapFocus],
   template: `
     <div class="backdrop" (click)="dismissed.emit()">
-      <section class="dialog" (click)="$event.stopPropagation()" role="dialog" aria-modal="true" [attr.aria-label]="content().headline">
+      <section class="dialog" (click)="$event.stopPropagation()" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-modal="true" [attr.aria-label]="content().headline">
         <button class="close" type="button" aria-label="Close" (click)="dismissed.emit()"><i class="ti ti-x"></i></button>
         <span class="context-label">{{ content().attemptedAction }}</span>
         <h2>{{ content().headline }}</h2>
@@ -55,8 +57,8 @@ export interface UpgradePromptContent {
     .detail div { display:grid; gap:3px; }
     .detail span { color:var(--text-muted); font-size:11px; font-weight:650; letter-spacing:.03em; text-transform:uppercase; }
     .detail strong { color:var(--text); font-size:13px; font-weight:550; line-height:1.45; }
-    .value-detail > i { color:var(--success, #16a34a); }
-    .free-detail > i { color:var(--warning, #d97706); }
+    .value-detail > i { color:var(--success); }
+    .free-detail > i { color:var(--warning); }
     .actions { display:flex; justify-content:flex-end; gap:8px; margin-top:22px; }
     @media (max-width:520px) { .dialog { padding:22px; } .actions { align-items:stretch; flex-direction:column-reverse; } }
   `,

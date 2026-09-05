@@ -57,8 +57,8 @@
 
 // Completion stays visible in the deliberately stripped-down drag tile: it is status, not chrome.
 .card-drag-preview.is-completed {
-  background: color-mix(in srgb, var(--success, #16a34a) 10%, var(--card-bg));
-  border-color: color-mix(in srgb, var(--success, #16a34a) 32%, var(--border));
+  background: color-mix(in srgb, var(--success) 10%, var(--card-bg));
+  border-color: color-mix(in srgb, var(--success) 32%, var(--border));
 }
 
 .card-drag-preview-cover {
@@ -160,7 +160,7 @@ k-card-labels.card-drag-preview-labels {
 .card-drag-preview-complete-icon {
   flex: 0 0 auto;
   margin-right: 4px;
-  color: var(--success, #16a34a);
+  color: var(--success);
   font-size: 15px;
 }
 
@@ -321,18 +321,18 @@ h3 {
   }
 
   &.menu-item-danger {
-    color: var(--danger, #d33);
+    color: var(--danger);
 
     i {
-      color: var(--danger, #d33);
+      color: var(--danger);
     }
 
     &:hover {
-      background: color-mix(in srgb, var(--danger, #d33) 10%, transparent);
+      background: color-mix(in srgb, var(--danger) 10%, transparent);
     }
 
     &:active:not(:disabled) {
-      background: color-mix(in srgb, var(--danger, #d33) 16%, transparent);
+      background: color-mix(in srgb, var(--danger) 16%, transparent);
     }
   }
 }
@@ -399,18 +399,18 @@ h3 {
   border-radius: var(--radius-sm);
   border: none;
   cursor: pointer;
-  background: var(--danger, #d33);
+  background: var(--danger);
   color: #fff;
   transition: opacity var(--motion-fast);
 
   &:hover:not(:disabled),
   &:active:not(:disabled) {
-    background: var(--danger, #d33);
+    background: var(--danger);
     opacity: 0.9;
   }
 
   &:focus-visible {
-    box-shadow: 0 0 0 2px var(--surface-overlay), 0 0 0 4px var(--danger, #d33);
+    box-shadow: 0 0 0 2px var(--surface-overlay), 0 0 0 4px var(--danger);
   }
 
   &:disabled {

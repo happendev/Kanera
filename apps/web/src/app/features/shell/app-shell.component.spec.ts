@@ -405,7 +405,7 @@ describe("AppShellComponent board search", () => {
     expect(root.querySelector(".scratch-btn")).toBeNull();
     expect(root.querySelector(".queue-btn")).toBeNull();
     expect(root.querySelector(".bell-btn")).toBeNull();
-    expect(root.querySelectorAll(".utility-row .utility-btn").length).toBe(3);
+    expect(root.querySelectorAll(".utility-row .utility-btn").length).toBe(2);
     expect(root.style.getPropertyValue("--bell-clearance")).toBe("0px");
   });
 

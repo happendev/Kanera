@@ -1,3 +1,4 @@
+import { CdkTrapFocus } from "@angular/cdk/a11y";
 import { KeyboardShortcutsService } from "../../core/keyboard/keyboard-shortcuts.service";
 import { ActionToastService } from "../../shared/action-toast.service";
 import type { CdkDragDrop, CdkDragMove } from "@angular/cdk/drag-drop";
@@ -95,7 +96,7 @@ export function checklistDragScrollStep(pointerY: number, top: number, bottom: n
 @Component({
   selector: "k-card-detail",
   standalone: true,
-  imports: [
+  imports: [CdkTrapFocus, 
     NgOptimizedImage,
     NgTemplateOutlet,
     CdkDropList,

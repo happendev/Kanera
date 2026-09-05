@@ -91,7 +91,7 @@
     <div class="row-actions">
       <button class="ghost sm" (click)="settings.copyInviteUrl()" aria-label="Copy invite link">
         @if (settings.inviteCopied()) {
-        <i class="ti ti-check" style="color:var(--success,#16a34a)"></i> Copied
+        <i class="ti ti-check text-success"></i> Copied
         } @else {
         <i class="ti ti-copy"></i> Copy
         }
@@ -224,7 +224,7 @@
       </div>
     </div>
     } @empty {
-    <div class="org-user-empty">No members match "{{ settings.orgUserSearch() }}".</div>
+    <k-empty-state size="sm" icon="search-off" title="No members match" [text]="'Nothing matches “' + settings.orgUserSearch() + '”.'" />
     }
   </div>
 </div>

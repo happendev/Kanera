@@ -1,5 +1,5 @@
 <div class="completed-backdrop" [class.closing]="closing()" (click)="close()" aria-hidden="true"></div>
-<aside class="completed-panel" [class.closing]="closing()" role="dialog" aria-modal="true" aria-label="Completed cards">
+<aside class="completed-panel" [class.closing]="closing()" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-modal="true" aria-label="Completed cards">
   <header class="completed-header">
     <div class="completed-title">
       <i class="ti ti-circle-check"></i>
@@ -76,21 +76,16 @@
 
   <div class="completed-body">
     @if (loading()) {
-    <div class="completed-empty">
-      <i class="ti ti-loader-2 spin"></i>
-      <span>Loading completed cards</span>
+    <div class="k-loading" role="status" aria-live="polite">
+      <i class="ti ti-loader-2"></i>
+      <span>Loading completed cards…</span>
     </div>
     } @else if (error()) {
-    <div class="completed-empty">
-      <i class="ti ti-alert-circle"></i>
-      <span>{{ error() }}</span>
+    <k-empty-state size="sm" icon="alert-circle" [title]="error()!">
       <button class="ghost sm" type="button" (click)="reload()">Retry</button>
-    </div>
+    </k-empty-state>
     } @else if (cards().length === 0) {
-    <div class="completed-empty">
-      <i class="ti ti-circle-check"></i>
-      <span>No completed cards in this range</span>
-    </div>
+    <k-empty-state size="sm" icon="circle-check" title="No completed cards in this range" text="Widen the date range or clear filters to see more." />
     } @else {
     <div class="completed-list">
       @for (group of cardGroups(); track group.key) {

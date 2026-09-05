@@ -1,3 +1,4 @@
+import { EmptyStateComponent } from "../../shared/empty-state.component";
 import type {
   ElementRef,
   OnDestroy} from "@angular/core";
@@ -50,7 +51,7 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
 @Component({
   selector: "k-note-editor",
   standalone: true,
-  imports: [DescriptionEditorComponent, DescriptionViewerComponent, DraftBannerComponent, IconPickerComponent, ColorPickerComponent, TooltipDirective, AttachmentUploadListComponent, AvatarComponent],
+  imports: [EmptyStateComponent, DescriptionEditorComponent, DescriptionViewerComponent, DraftBannerComponent, IconPickerComponent, ColorPickerComponent, TooltipDirective, AttachmentUploadListComponent, AvatarComponent],
   // Component-scoped so each open note has its own upload queue.
   providers: [AttachmentUploadQueue],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -298,11 +299,7 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
         </div>
       </div>
     } @else {
-      <div class="ne-placeholder">
-        <span class="ne-ph-icon"><i class="ti ti-notebook"></i></span>
-        <span class="ne-ph-title">No note selected</span>
-        <span class="ne-ph-hint">Pick one from the tree or create a new note to start writing.</span>
-      </div>
+      <k-empty-state class="ne-placeholder" [plain]="true" icon="notebook" title="No note selected" text="Pick one from the tree or create a new note to start writing." />
     }
   `,
   styleUrl: "./note-editor.component.scss",

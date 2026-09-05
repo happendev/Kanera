@@ -68,12 +68,3 @@ k-agent-connect-card {
   }
 }
 
-.key-empty {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 14px;
-  color: var(--muted-foreground, var(--muted));
-  border: 1px dashed var(--border);
-  border-radius: var(--radius);
-}

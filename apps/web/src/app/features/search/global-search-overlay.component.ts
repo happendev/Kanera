@@ -1,3 +1,4 @@
+import { CdkTrapFocus } from "@angular/cdk/a11y";
 import type { ElementRef } from "@angular/core";
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, viewChild } from "@angular/core";
 import { Router } from "@angular/router";
@@ -32,10 +33,11 @@ type FlatResult =
   selector: "k-global-search-overlay",
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [CdkTrapFocus],
   template: `
     @if (search.isOpen()) {
       <div class="backdrop" (click)="search.close()">
-        <div class="panel" role="dialog" aria-label="Search" (click)="$event.stopPropagation()">
+        <div class="panel" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-label="Search" (click)="$event.stopPropagation()">
           <div class="search-row">
             <i class="ti ti-search"></i>
             <input
@@ -278,8 +280,6 @@ type FlatResult =
       gap: 6px;
       font-size: 11px;
       font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
       color: var(--text-muted);
       padding: 10px 12px 4px;
     }

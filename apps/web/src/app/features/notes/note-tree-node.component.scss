@@ -228,12 +228,12 @@
     }
 
     &.danger {
-      color: var(--danger, #d33);
+      color: var(--danger);
 
       > i { color: inherit; }
 
       &:hover {
-        background: color-mix(in srgb, var(--danger, #d33) 10%, transparent);
+        background: color-mix(in srgb, var(--danger) 10%, transparent);
       }
     }
   }

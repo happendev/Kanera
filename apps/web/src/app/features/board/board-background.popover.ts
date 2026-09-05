@@ -80,7 +80,7 @@ const GRADIENT_LABELS: Record<GradientToken, string> = {
       background: var(--surface-overlay);
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-lg);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+      box-shadow: var(--shadow-lg);
       padding: 12px;
       /* Width and the narrow-viewport clamp both come from placement now. */
       width: 100%;
@@ -99,8 +99,6 @@ const GRADIENT_LABELS: Record<GradientToken, string> = {
       font-size: 12px;
       font-weight: 600;
       color: var(--text);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
     }
 
     .bg-clear {

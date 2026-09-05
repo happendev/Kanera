@@ -266,8 +266,8 @@
   }
 
   &.due-soon {
-    color: var(--color-amber, #d97706);
-    background: color-mix(in srgb, var(--color-amber, #d97706) 12%, transparent);
+    color: var(--color-amber);
+    background: color-mix(in srgb, var(--color-amber) 12%, transparent);
     border-color: transparent;
   }
 }

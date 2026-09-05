@@ -595,7 +595,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       width: 14px;
       height: 14px;
       margin: 4px 0 0;
-      accent-color: var(--accent, #4f8cff);
+      accent-color: var(--accent);
     }
     .de-host .ProseMirror li[data-type="taskItem"] > div {
       flex: 1;
@@ -667,7 +667,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       margin: 8px 0;
     }
     .de-host .ProseMirror a {
-      color: var(--accent, #4f8cff);
+      color: var(--accent);
       text-decoration: underline;
     }
     .de-host .ProseMirror p.is-editor-empty:first-child::before {

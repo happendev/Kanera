@@ -142,7 +142,7 @@
           }
 
           @if (settings.customizedWorkspaceRuleGroups().length === 0 && settings.customizedStandaloneRuleGroups().length === 0 && !settings.workspaceRulePickerOpen() && !settings.workspaceRuleEditorGroup()) {
-          <div class="workspace-rule-empty"><i class="ti ti-adjustments-off"></i><span><strong>No custom rules</strong><small>Every workspace and standalone board currently uses your account defaults.</small></span></div>
+          <k-empty-state size="sm" icon="adjustments-off" title="No custom rules" text="Every workspace and standalone board currently uses your account defaults." />
           }
 
           @if (settings.workspaceRuleEditorGroup(); as group) {

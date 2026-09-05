@@ -120,15 +120,15 @@
 .drawer {
   position: fixed;
   top: 0;
-  right: 0;
+  left: var(--drawer-edge, 0px);
   bottom: 0;
   z-index: 71;
   display: flex;
   flex-direction: column;
-  width: min(var(--drawer-width), 100vw);
+  width: min(var(--drawer-width), calc(100vw - var(--drawer-edge, 0px)));
   background: var(--surface);
-  border-left: 1px solid var(--border);
-  box-shadow: -8px 0 24px rgb(0 0 0 / 18%);
+  border-right: 1px solid var(--border);
+  box-shadow: 8px 0 24px rgb(0 0 0 / 18%);
   animation: slide-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 
   // Fixed at top:0, so it sits under the iOS status bar. As the first flex item this spacer
@@ -147,7 +147,7 @@
 
 @keyframes slide-in {
   from {
-    transform: translateX(100%);
+    transform: translateX(-100%);
   }
 
   to {
@@ -162,7 +162,7 @@
   }
 
   to {
-    transform: translateX(40px);
+    transform: translateX(-40px);
     opacity: 0;
   }
 }
@@ -270,7 +270,7 @@
   }
 
   .is-due-soon {
-    color: var(--color-amber, #d97706);
+    color: var(--color-amber);
   }
 
   .pressure-sep {

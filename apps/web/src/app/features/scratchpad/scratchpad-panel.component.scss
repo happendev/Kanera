@@ -227,7 +227,7 @@
   }
 
   &.error {
-    color: var(--danger, #dc2626);
+    color: var(--danger);
   }
 }
 
@@ -619,14 +619,14 @@
     }
 
     &.danger {
-      color: var(--danger, #d33);
+      color: var(--danger);
 
       > i {
         color: inherit;
       }
 
       &:hover:not(:disabled) {
-        background: color-mix(in srgb, var(--danger, #d33) 10%, transparent);
+        background: color-mix(in srgb, var(--danger) 10%, transparent);
       }
     }
   }

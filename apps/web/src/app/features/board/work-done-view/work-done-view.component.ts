@@ -1,3 +1,4 @@
+import { EmptyStateComponent } from "../../../shared/empty-state.component";
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from "@angular/core";
 import type {
   WorkDoneDaySummary,
@@ -98,7 +99,7 @@ function toDateInputValue(date: Date): string {
 @Component({
   selector: "k-work-done-view",
   standalone: true,
-  imports: [
+  imports: [EmptyStateComponent, 
     ActivityStripComponent,
     DateRangePickerPopover,
     SegmentedComponent,

@@ -4,7 +4,7 @@
       </div>
       <k-docs-link class="spaced" path="checklist-templates" label="Learn more about checklist templates" />
       <form class="board-form" (submit)="settings.addTemplate($event)">
-        <input name="template" placeholder="Template settings.name (e.g. Design review)" [value]="settings.newTemplate()" (input)="settings.newTemplate.set($any($event.target).value)" required style="flex:1" />
+        <input name="template" placeholder="Template settings.name (e.g. Design review)" [value]="settings.newTemplate()" (input)="settings.newTemplate.set($any($event.target).value)" required class="grow" />
         <button class="sm compact-add-button" type="submit" aria-label="Add template" kTooltip="Add template"><i class="ti ti-plus"></i><span class="mobile-hide">Add template</span></button>
       </form>
       <div class="templates" cdkDropList [cdkDropListData]="settings.templates()" (cdkDropListDropped)="settings.dropTemplate($event)">
@@ -16,8 +16,8 @@
               <i class="ti" [class.ti-chevron-down]="settings.isTemplateExpanded(template.id)" [class.ti-chevron-right]="!settings.isTemplateExpanded(template.id)"></i>
             </button>
             @if (settings.editingTemplateId() === template.id) {
-            <input class="inline-name-input" [value]="settings.editingTemplateName()" (input)="settings.editingTemplateName.set($any($event.target).value)" (blur)="settings.saveTemplateName(template.id)" (keydown.enter)="settings.saveTemplateName(template.id)"
-              (keydown.escape)="settings.cancelEditTemplate()" autofocus style="flex:1" />
+            <input class="inline-name-input grow" [value]="settings.editingTemplateName()" (input)="settings.editingTemplateName.set($any($event.target).value)" (blur)="settings.saveTemplateName(template.id)" (keydown.enter)="settings.saveTemplateName(template.id)"
+              (keydown.escape)="settings.cancelEditTemplate()" autofocus />
             } @else {
             <button class="template-title" (click)="settings.startEditTemplate(template)" kTooltip="Click to rename">{{ template.title }}</button>
             }

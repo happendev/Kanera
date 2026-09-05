@@ -1,3 +1,4 @@
+import { MenuDirective } from "../../../shared/menu.directive";
 import type { CdkDragDrop } from "@angular/cdk/drag-drop";
 import { CdkDrag, CdkDragHandle, CdkDropList, CdkDropListGroup, moveItemInArray } from "@angular/cdk/drag-drop";
 import type { OnDestroy } from "@angular/core";
@@ -180,7 +181,7 @@ interface GroupByOption {
 @Component({
   selector: "k-board-table-view",
   standalone: true,
-  imports: [
+  imports: [MenuDirective, 
     AnchoredPanelDirective,
     AnchoredPickerPopover,
     AutofocusDirective,
@@ -1824,6 +1825,10 @@ export class BoardTableViewComponent implements OnDestroy {
     if (this.effectiveGroupBy() !== "list") return "Drag to reorder works when grouped by status";
     return "Drag to reorder works with manual sort";
   });
+
+  closeMenusForDrag(): void {
+    this.menuCoordinator.closeMenusForDrag();
+  }
 
   /**
    * Drop a row into its new place, and into a new list if it was released over another run's block.

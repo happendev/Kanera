@@ -57,7 +57,7 @@ import { AuthService, type AuthUser } from "../../core/auth/auth.service";
       font-family: monospace;
       font-size: 0.8125rem;
       padding: 0.5rem;
-      border: 1px solid var(--border, #e5e7eb);
+      border: 1px solid var(--border);
       border-radius: 8px;
       resize: vertical;
     }
@@ -69,7 +69,7 @@ import { AuthService, type AuthUser } from "../../core/auth/auth.service";
       margin-top: 0.75rem;
       padding: 0.5rem 1rem;
       border-radius: 8px;
-      border: 1px solid var(--border, #e5e7eb);
+      border: 1px solid var(--border);
       cursor: pointer;
     }
     .support-enter button:disabled {

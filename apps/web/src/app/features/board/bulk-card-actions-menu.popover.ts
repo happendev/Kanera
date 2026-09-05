@@ -189,11 +189,12 @@ const BULK_MENU_WIDTH = 232;
     .bcam-panel,
     .bcam-picker {
       background: var(--surface-overlay);
-      border: 1px solid var(--border);
+      border: 1px solid var(--overlay-border);
       border-radius: var(--radius);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+      box-shadow: var(--shadow-lg);
       padding: 4px;
       width: 232px;
+      max-height: var(--ap-max-height, 420px);
       display: flex;
       flex-direction: column;
       gap: 1px;
@@ -205,8 +206,6 @@ const BULK_MENU_WIDTH = 232;
       font-size: 12px;
       font-weight: 700;
       color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
 
       small {
         display: block;
@@ -266,6 +265,12 @@ const BULK_MENU_WIDTH = 232;
     .bcam-chev {
       margin-left: auto;
       font-size: 12px;
+    }
+
+    .bcam-panel,
+    .bcam-picker {
+      overflow-y: auto;
+      overscroll-behavior: contain;
     }
 
     .bcam-picker {
@@ -367,19 +372,19 @@ const BULK_MENU_WIDTH = 232;
     .bcam-sep {
       height: 1px;
       margin: 3px 0;
-      background: var(--border);
+      background: var(--overlay-separator);
     }
 
     .bcam-danger {
-      color: var(--danger, #d33);
+      color: var(--danger);
 
       > i {
-        color: var(--danger, #d33);
+        color: var(--danger);
       }
 
       &:hover:not(:disabled),
       &:active:not(:disabled) {
-        background: color-mix(in srgb, var(--danger, #d33) 10%, transparent);
+        background: color-mix(in srgb, var(--danger) 10%, transparent);
       }
     }
 
@@ -406,17 +411,17 @@ const BULK_MENU_WIDTH = 232;
     }
 
     .bcam-confirm-yes {
-      background: var(--danger, #d33);
+      background: var(--danger);
       color: #fff;
 
       &:hover:not(:disabled),
       &:active:not(:disabled) {
-        background: var(--danger, #d33);
+        background: var(--danger);
         opacity: 0.9;
       }
 
       &:focus-visible {
-        box-shadow: 0 0 0 2px var(--surface-overlay), 0 0 0 4px var(--danger, #d33);
+        box-shadow: 0 0 0 2px var(--surface-overlay), 0 0 0 4px var(--danger);
       }
     }
 

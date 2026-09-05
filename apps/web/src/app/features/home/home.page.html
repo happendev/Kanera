@@ -98,15 +98,15 @@
     <div class="home-skeleton" aria-busy="true" aria-label="Loading your day">
       <div class="focus-grid">
         @for (tile of skeletonTiles; track tile) {
-        <div class="skeleton skeleton-tile"></div>
+        <div class="k-skeleton is-block skeleton-tile"></div>
         }
       </div>
       <div class="agenda-panel">
         @for (row of skeletonRows; track row) {
-        <div class="skeleton skeleton-row"></div>
+        <div class="k-skeleton is-block skeleton-row"></div>
         }
       </div>
-      <div class="skeleton skeleton-panel"></div>
+      <div class="k-skeleton is-block skeleton-panel"></div>
     </div>
     } @else if (state.error(); as error) {
     <k-empty-state class="error-state" icon="alert-circle" [title]="error">

@@ -1,3 +1,4 @@
+import { EmptyStateComponent } from "../../../shared/empty-state.component";
 import type { OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
 import { ApiClient, ApiError } from "../../../core/api/api.client";
@@ -42,7 +43,7 @@ function extractErrorMessage(error: unknown): string {
 @Component({
   selector: "k-workspace-settings-integrations",
   standalone: true,
-  imports: [DocsLinkComponent, TooltipDirective],
+  imports: [EmptyStateComponent, DocsLinkComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./integrations.page.html",
   styleUrl: "./integrations.page.scss",

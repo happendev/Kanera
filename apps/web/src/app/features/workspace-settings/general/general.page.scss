@@ -27,7 +27,6 @@
   width: 180px;
   min-width: 0;
   max-width: 100%;
-  text-transform: uppercase;
 }
 
 .board-linking-toggle {
@@ -94,8 +93,6 @@
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 650;
-  letter-spacing: .04em;
-  text-transform: uppercase;
 }
 
 .health-signal-toggle {

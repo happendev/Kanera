@@ -151,7 +151,7 @@
 @if (canEditRole() && (canCreateCards() || canManageSeparators())) {
 <div class="list-add-actions">
   @if (canCreateCards()) {
-  <button class="add-card-btn add-card-primary ghost" [disabled]="cardDragging() || !canEdit()" (click)="startAdd.emit({ listId: list().id, atTop: false })">
+  <button class="add-card-btn add-card-primary ghost" [disabled]="cardDragging() || !canEdit()" [attr.aria-disabled]="!canEdit() ? 'true' : null" [kTooltip]="canEdit() ? '' : 'This board is view-only for you'" (click)="startAdd.emit({ listId: list().id, atTop: false })">
     <i class="ti ti-plus"></i>
     Add card
   </button>

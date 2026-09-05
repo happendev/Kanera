@@ -1,3 +1,5 @@
+import { EmptyStateComponent } from "../../shared/empty-state.component";
+import { MenuDirective } from "../../shared/menu.directive";
 import { ShortcutsSheetComponent } from "../../shared/shortcuts-sheet.component";
 import { KeyboardShortcutsService } from "../../core/keyboard/keyboard-shortcuts.service";
 import { Dialog } from "@angular/cdk/dialog";
@@ -91,7 +93,7 @@ type SidebarSwipe = {
 @Component({
   selector: "k-app-shell",
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, AnchoredPanelDirective, MyPrioritiesPanelComponent, NotificationsPanelComponent, ScratchpadPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent, ShortcutsSheetComponent],
+  imports: [EmptyStateComponent, MenuDirective, RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, AnchoredPanelDirective, MyPrioritiesPanelComponent, NotificationsPanelComponent, ScratchpadPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent, ShortcutsSheetComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./app-shell.component.html",
   styleUrl: "./app-shell.component.scss",
@@ -206,6 +208,23 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private readonly isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
   readonly notificationsPanel = viewChild(NotificationsPanelComponent);
   readonly prioritiesPanel = viewChild(MyPrioritiesPanelComponent);
+
+  /**
+   * Notifications and Up next open from the same edge into the same space, so only one may be open:
+   * opening one closes the other first. Both panels stay ignorant of each other; the shell, which
+   * owns both triggers, is the one place that knows there are two.
+   */
+  togglePanel(which: "notifications" | "priorities"): void {
+    const notifications = this.notificationsPanel();
+    const priorities = this.prioritiesPanel();
+    if (which === "notifications") {
+      if (priorities?.open()) priorities.close();
+      notifications?.toggle();
+    } else {
+      if (notifications?.open()) notifications.close();
+      priorities?.toggle();
+    }
+  }
   openShortcuts() {
     this.closeUserMenu();
     this.shortcutsOpen.set(true);
@@ -647,8 +666,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
       // the scratchpad's original chord for anyone who learned it.
       { keys: "mod+shift+.", label: "Open or close scratchpad", when: () => this.showScratchpad(), run: () => this.scratchpad.toggle() },
       { keys: ".", label: "Open or close scratchpad", when: () => this.showScratchpad(), run: () => this.scratchpad.toggle() },
-      { keys: "u", label: "Open or close Up next", run: () => this.prioritiesPanel()?.toggle() },
-      { keys: "n", label: "Open or close notifications", run: () => this.notificationsPanel()?.toggle() },
+      { keys: "u", label: "Open or close Up next", run: () => this.togglePanel("priorities") },
+      { keys: "n", label: "Open or close notifications", run: () => this.togglePanel("notifications") },
       { keys: "h", label: "Help & docs", run: () => window.open(this.docsUrl, "_blank", "noopener") },
       { keys: "[", label: "Collapse or expand sidebar", run: () => this.toggleSidebar() },
     ], this.destroyRef);

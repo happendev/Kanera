@@ -135,7 +135,7 @@ import { TooltipDirective } from "../../shared/tooltip.directive";
       border-radius: var(--radius-sm, 4px);
       color: var(--text);
       outline: none;
-      &:focus { border-color: var(--accent, #4f8cff); }
+      &:focus { border-color: var(--accent); }
     }
 
     .de-link-apply {
@@ -143,8 +143,8 @@ import { TooltipDirective } from "../../shared/tooltip.directive";
       padding: 0 10px;
       font-size: 12px;
       font-weight: 500;
-      background: var(--accent, #4f8cff);
-      border: 1px solid var(--accent, #4f8cff);
+      background: var(--accent);
+      border: 1px solid var(--accent);
       border-radius: var(--radius-sm, 4px);
       color: #fff;
       cursor: pointer;

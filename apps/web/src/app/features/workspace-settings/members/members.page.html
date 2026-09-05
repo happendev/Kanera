@@ -1,7 +1,7 @@
 <k-docs-link class="spaced" path="workspace-users" label="Learn more about workspace members" />
 @if (settings.availableOrgUsers().length > 0) {
 <form class="board-form" (submit)="settings.addMember($event)">
-  <select name="userId" [value]="settings.addMemberUserId()" (input)="settings.addMemberUserId.set($any($event.target).value)" required style="flex:1">
+  <select name="userId" [value]="settings.addMemberUserId()" (input)="settings.addMemberUserId.set($any($event.target).value)" required class="grow">
     <option [value]="''" disabled [selected]="!settings.addMemberUserId()">Select a user…</option>
     @for (user of settings.availableOrgUsers(); track user.id) {
     <option [value]="user.id" [selected]="user.id === settings.addMemberUserId()">{{ user.displayName }} ({{ user.email }})</option>
@@ -45,7 +45,7 @@
     </div>
   </div>
   } @empty {
-  <div class="org-user-empty">No members match "{{ settings.memberSearch() }}".</div>
+  <k-empty-state size="sm" icon="search-off" title="No members match" [text]="'Nothing matches “' + settings.memberSearch() + '”.'" />
   }
 </div>
 } @else {

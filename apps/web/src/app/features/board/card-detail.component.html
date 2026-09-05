@@ -372,10 +372,10 @@
            the activity feed loads separately with its own state. -->
       @if (!detailReady()) {
       <div class="detail-body-skeleton" aria-hidden="true">
-        <span class="detail-skeleton-label"></span>
-        <div class="detail-skeleton-block"></div>
-        <span class="detail-skeleton-label"></span>
-        <div class="detail-skeleton-block"></div>
+        <span class="k-skeleton is-text detail-skeleton-label"></span>
+        <div class="k-skeleton is-block detail-skeleton-block"></div>
+        <span class="k-skeleton is-text detail-skeleton-label"></span>
+        <div class="k-skeleton is-block detail-skeleton-block"></div>
       </div>
       } @else if (detailError() && !hasDetail()) {
       <div class="detail-body-error">
@@ -912,7 +912,7 @@
   @if (openChecklistItemChecklistId(); as checklistId) {
   @let itemPresentation = checklistItemPresentationById().get(item.id);
   <button type="button" class="checklist-item-panel-scrim" (click)="closeChecklistItemDetail()" aria-label="Close checklist item detail"></button>
-  <aside class="checklist-item-panel" role="dialog" aria-modal="true" [attr.aria-label]="'Checklist item detail: ' + item.text">
+  <aside class="checklist-item-panel" role="dialog" aria-modal="true" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" [attr.aria-label]="'Checklist item detail: ' + item.text">
     <div class="checklist-item-panel-header">
       <button type="button" class="ghost icon" (click)="closeChecklistItemDetail()" aria-label="Back to card" kTooltip="Back to card">
         <i class="ti ti-arrow-left"></i>

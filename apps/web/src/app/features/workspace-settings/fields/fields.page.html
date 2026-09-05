@@ -29,10 +29,10 @@
             <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
             <k-icon-picker [value]="field.icon" (valueChange)="settings.updateFieldIcon(field.id, $event)" />
             @if (settings.editingFieldId() === field.id) {
-            <input class="inline-name-input" [value]="settings.editingFieldName()" (input)="settings.editingFieldName.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" (blur)="settings.saveFieldName(field.id)" (keydown.enter)="settings.saveFieldName(field.id)"
-              (keydown.escape)="settings.cancelEditField()" autofocus style="flex:1" />
+            <input class="inline-name-input grow" [value]="settings.editingFieldName()" (input)="settings.editingFieldName.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" (blur)="settings.saveFieldName(field.id)" (keydown.enter)="settings.saveFieldName(field.id)"
+              (keydown.escape)="settings.cancelEditField()" autofocus />
             } @else {
-            <span (click)="settings.startEditField(field)" kTooltip="Click to rename" style="cursor:pointer;flex:1">{{ field.name }}</span>
+            <span (click)="settings.startEditField(field)" kTooltip="Click to rename" class="grow" style="cursor:pointer">{{ field.name }}</span>
             }
             <span class="field-type-badge">{{ field.type }}</span>
             @if ((field.type === 'select' || field.type === 'user') && field.allowMultiple) {

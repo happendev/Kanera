@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, output } from "@angular/core";
-import { A11yModule } from "@angular/cdk/a11y";
+import { CdkTrapFocus } from "@angular/cdk/a11y";
 import { KeyboardShortcutsService, formatShortcut } from "../core/keyboard/keyboard-shortcuts.service";
 
 interface ShortcutRow {
@@ -21,7 +21,7 @@ interface ShortcutGroup {
 @Component({
   selector: "k-shortcuts-sheet",
   standalone: true,
-  imports: [A11yModule],
+  imports: [CdkTrapFocus],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="ks-backdrop" (click)="closed.emit()" aria-hidden="true"></div>

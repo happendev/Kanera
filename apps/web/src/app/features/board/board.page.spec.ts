@@ -1249,7 +1249,11 @@ describe("BoardPage", () => {
     api.get.mockResolvedValueOnce(archive);
     const anchor = document.createElement("a");
     const click = vi.spyOn(anchor, "click").mockImplementation(() => undefined);
-    const createElement = vi.spyOn(document, "createElement").mockReturnValue(anchor);
+    // Only intercept the download anchor: Angular itself creates root and style elements through the
+    // same API while constructing the component, and those must stay real.
+    const realCreateElement = document.createElement.bind(document);
+    const createElement = vi.spyOn(document, "createElement").mockImplementation(((tag: string, options?: ElementCreationOptions) =>
+      tag === "a" ? anchor : realCreateElement(tag, options)) as typeof document.createElement);
     const createObjectUrl = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:board-export");
     const revokeObjectUrl = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
     const fixture = TestBed.createComponent(BoardPage);

@@ -1,3 +1,4 @@
+import { CdkTrapFocus } from "@angular/cdk/a11y";
 import type { ElementRef, OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, untracked, viewChild } from "@angular/core";
 import { ALLOWED_ATTACHMENT_MIME, ALLOWED_ATTACHMENT_EXTENSIONS, getAllowedAttachmentExtension } from "@kanera/shared/attachments";
@@ -77,7 +78,7 @@ interface PendingAttachment {
 @Component({
   selector: "k-card-composer",
   standalone: true,
-  imports: [
+  imports: [CdkTrapFocus, 
     AnchoredPanelDirective,
     AnchoredPickerPopover,
     AutofocusDirective,

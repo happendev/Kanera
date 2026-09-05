@@ -1,6 +1,10 @@
 :host {
   --sidebar-width: 260px;
   --sidebar-width-collapsed: 60px;
+  // The left edge the notifications and Up next drawers open from. Their triggers live in the
+  // sidebar, so the panel slides out flush against the rail rather than appearing on the far side
+  // of the screen; the value tracks the rail's current width so the seam is always closed.
+  --drawer-edge: var(--sidebar-width);
   display: grid;
   grid-template-columns: var(--sidebar-width) 1fr;
   // Row 1 is the (optional) support-session banner: "auto" collapses to 0 height when the
@@ -16,6 +20,7 @@
 }
 
 :host(:has(.sidebar.collapsed)) {
+  --drawer-edge: var(--sidebar-width-collapsed);
   grid-template-columns: var(--sidebar-width-collapsed) 1fr;
 }
 
@@ -66,6 +71,16 @@
 k-support-session-banner {
   grid-column: 1 / -1;
   grid-row: 1;
+}
+
+// While a notifications or Up next drawer is open, the rail stacks above it (the drawers sit at
+// z-index 70/71). Without this the fixed drawer paints over the rail as it slides in, so it looks
+// like it arrives from off-screen rather than emerging from beneath the sidebar it was opened from.
+// Scoped to that moment so the sidebar does not become a permanent stacking context that caps its
+// own anchored popovers against the rest of the page.
+:host(:has(.drawer)) .sidebar {
+  position: relative;
+  z-index: 72;
 }
 
 .sidebar {
@@ -119,11 +134,9 @@ k-support-session-banner {
   padding: 5px 12px;
   font-size: var(--text-xs);
   font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--color-amber, #d97706);
-  background: color-mix(in srgb, var(--color-amber, #d97706) 10%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--color-amber, #d97706) 20%, transparent);
+  color: var(--color-amber);
+  background: color-mix(in srgb, var(--color-amber) 10%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-amber) 20%, transparent);
   flex-shrink: 0;
 
   i {
@@ -188,8 +201,6 @@ k-support-session-banner {
   gap: 6px;
   font-size: var(--text-sm);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
   color: var(--text-muted);
   padding: 12px 0 4px 10px;
 
@@ -542,8 +553,6 @@ k-support-session-banner {
 .ws-subhead {
   font-size: var(--text-xs);
   font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   color: var(--text-muted);
   padding: 4px 10px 2px;
 }
@@ -560,8 +569,6 @@ k-support-session-banner {
   border-radius: var(--radius);
   font-size: var(--text-xs);
   font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   color: var(--text-muted);
   cursor: pointer;
   text-align: left;
@@ -601,9 +608,7 @@ k-support-session-banner {
   cursor: pointer;
   font-size: var(--text-xs);
   font-weight: 600;
-  letter-spacing: 0.04em;
   text-align: left;
-  text-transform: uppercase;
   justify-content: start;
 
   i {
@@ -773,46 +778,16 @@ k-support-session-banner {
   font-style: italic;
 }
 
-.ws-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  margin: 4px 10px 8px;
-  padding: 12px;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-subtle);
-
-  .ws-empty-icon {
-    font-size: 18px;
-    color: var(--text-muted);
-    margin-bottom: 2px;
-  }
-
-  .ws-empty-title {
-    font-size: var(--text-base);
-    font-weight: 600;
-    color: var(--text);
-  }
-
-  .ws-empty-text {
-    font-size: var(--text-sm);
-    color: var(--text-muted);
-    line-height: 1.4;
-  }
-}
-
 .workspace-limit-feedback {
   display: flex;
   align-items: flex-start;
   gap: 6px;
   margin: -4px 10px 8px;
   padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, var(--danger, #dc2626) 24%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--danger) 24%, var(--border));
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--danger, #dc2626) 7%, var(--surface));
-  color: var(--danger, #dc2626);
+  background: color-mix(in srgb, var(--danger) 7%, var(--surface));
+  color: var(--danger);
   font-size: var(--text-sm);
   line-height: 1.35;
 
@@ -820,20 +795,6 @@ k-support-session-banner {
     margin-top: 1px;
     flex-shrink: 0;
     font-size: var(--text-md);
-  }
-}
-
-.org-logo-block {
-  padding: 10px 16px 12px;
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
-
-  img {
-    display: block;
-    height: 26px;
-    max-width: 100%;
-    object-fit: contain;
-    object-position: left center;
   }
 }
 
@@ -939,6 +900,21 @@ k-support-session-banner {
   .utility-btn {
     flex: none;
     width: 100%;
+  }
+}
+
+
+.org-logo-block {
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+
+  img {
+    display: block;
+    height: 26px;
+    max-width: 100%;
+    object-fit: contain;
+    object-position: left center;
   }
 }
 
@@ -1052,7 +1028,7 @@ k-support-session-banner {
 .user-popover {
   width: var(--ap-width, min(320px, calc(100vw - 24px)));
   background: var(--surface-overlay);
-  border: 1px solid var(--border);
+  border: 1px solid var(--overlay-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg, 0 12px 24px rgba(0, 0, 0, 0.18));
   padding: 6px;
@@ -1157,12 +1133,6 @@ k-support-session-banner {
   }
 }
 
-.user-popover-divider {
-  height: 1px;
-  background: var(--border);
-  margin: 6px 2px;
-}
-
 // A labelled block of menu items. Consecutive groups separate with whitespace and
 // their own heading; a divider is reserved for the harder breaks (identity header,
 // and the trailing support/session group that carries no label).
@@ -1176,21 +1146,16 @@ k-support-session-banner {
   }
 }
 
-.popover-group-label {
-  padding: 2px 10px 4px;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
 .organisation-item {
   min-width: 0;
 
   &.active {
     background: var(--surface-2);
     font-weight: 600;
+  }
+
+  > .organisation-name {
+    flex: 1;
   }
 }
 
@@ -1236,11 +1201,6 @@ k-support-session-banner {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding: 6px;
-  background: var(--surface-overlay);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-lg, 0 12px 24px rgba(0, 0, 0, 0.18));
   overflow: auto;
   overscroll-behavior: contain;
 }
@@ -1267,7 +1227,11 @@ k-support-session-banner {
   font-size: var(--text-sm);
   font-weight: 500;
 
-  // Centred content, so drop the fixed leading slot that aligns list rows.
+  // Centred content, so drop the fixed leading slot that aligns list rows and the label's fill.
+  > span {
+    flex: none;
+  }
+
   > i:first-child {
     width: auto;
     font-size: 16px;
@@ -1283,7 +1247,11 @@ k-support-session-banner {
   }
 }
 
+// Explicit flex: the shared .k-menu-item rule gives every direct <span> flex: 1 so labels fill the
+// row, and the fallback avatar is a <span>. Without this it stretched into a wide pill.
+.k-menu-item > .organisation-avatar,
 .organisation-avatar {
+  flex: 0 0 22px;
   width: 22px;
   height: 22px;
   border: 1px solid var(--border);
@@ -1325,61 +1293,6 @@ k-support-session-banner {
   margin-left: auto;
 }
 
-.popover-item {
-  display: flex;
-  align-items: center;
-  // Override the global button centring so menu actions share the organisation row's left edge.
-  justify-content: flex-start;
-  gap: 10px;
-  // The global button reset pins height:36px; menu rows size to their own content so
-  // button rows and anchor rows share one rhythm.
-  height: auto;
-  min-height: 34px;
-  padding: 5px 10px;
-  line-height: 1.3;
-  border-radius: var(--radius-sm, 4px);
-  background: transparent;
-  border: none;
-  color: var(--text);
-  font-size: var(--text-base);
-  font-weight: 500;
-  text-align: left;
-  cursor: pointer;
-  width: 100%;
-
-  i {
-    color: var(--text-muted);
-    font-size: 16px;
-    flex-shrink: 0;
-  }
-
-  // Fixed leading slot so icons and organisation avatars put every label on the same
-  // text baseline column, across all groups.
-  > i:first-child,
-  > .organisation-avatar {
-    width: 22px;
-    text-align: center;
-  }
-
-  &:hover {
-    background: var(--surface-2);
-    text-decoration: none;
-    color: var(--text);
-  }
-
-  &.danger {
-    color: var(--danger, #e53e3e);
-
-    i {
-      color: var(--danger, #e53e3e);
-    }
-
-    &:hover {
-      background: color-mix(in srgb, var(--danger, #e53e3e) 12%, transparent);
-    }
-  }
-}
-
 .nav-context-menu {
   display: flex;
   flex-direction: column;
@@ -1387,52 +1300,9 @@ k-support-session-banner {
   width: var(--ap-width, 190px);
   padding: 5px;
   background: var(--surface-overlay);
-  border: 1px solid var(--border);
+  border: 1px solid var(--overlay-border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg, 0 12px 24px rgba(0, 0, 0, 0.18));
-}
-
-.nav-context-item {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
-  align-items: center;
-  column-gap: 9px;
-  width: 100%;
-  min-height: 32px;
-  padding: 0 9px;
-  border: 0;
-  border-radius: var(--radius-sm, 4px);
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--text-base);
-  font-weight: 500;
-  text-align: left;
-
-  i {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    color: var(--text-muted);
-    flex-shrink: 0;
-    font-size: 16px;
-  }
-
-  span {
-    min-width: 0;
-    text-align: left;
-  }
-
-  &:hover:not(:disabled) {
-    background: var(--surface-2);
-  }
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.55;
-  }
 }
 
 .shell-main {
@@ -1638,6 +1508,7 @@ k-support-session-banner {
 @media (max-width: 640px) {
   :host {
     --sidebar-width-collapsed: 52px;
+    --drawer-edge: var(--sidebar-width-collapsed);
     // Always show only the collapsed column width on mobile — the sidebar
     // overlays as a drawer instead of pushing the main content.
     grid-template-columns: var(--sidebar-width-collapsed) 1fr !important;

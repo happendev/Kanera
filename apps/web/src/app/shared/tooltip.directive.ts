@@ -7,6 +7,18 @@ import { ChangeDetectionStrategy, Component, Directive, ElementRef, HostListener
 export type TooltipPosition = "top" | "right" | "bottom" | "left";
 
 const SHOW_DELAY_MS = 300;
+/**
+ * After one tooltip has just been dismissed, the next shows without the delay. Sweeping the pointer
+ * across a toolbar then reads each hint instantly, the way native menus behave, instead of restarting
+ * a 300ms wait on every button.
+ */
+const WARM_WINDOW_MS = 450;
+let lastHiddenAt = 0;
+
+/** Test seam: the warm window is module state and would otherwise leak between specs. */
+export function resetTooltipWarmWindow(): void {
+  lastHiddenAt = 0;
+}
 const AUTO_HIDE_MS = 10_000;
 const TOOLTIP_OFFSET = 8;
 let nextTooltipId = 0;
@@ -125,7 +137,8 @@ export class TooltipDirective implements OnDestroy {
     if (this.dragActive()) return;
     if (!this.tooltipText() || this.kTooltipDisabled()) return;
     this.clearShowTimer();
-    this.showTimer = window.setTimeout(() => this.show(), SHOW_DELAY_MS);
+    const delay = Date.now() - lastHiddenAt < WARM_WINDOW_MS ? 0 : SHOW_DELAY_MS;
+    this.showTimer = window.setTimeout(() => this.show(), delay);
   }
 
   private truncationTargetOverflows(): boolean {
@@ -177,6 +190,7 @@ export class TooltipDirective implements OnDestroy {
   }
 
   private hide() {
+    if (this.overlayRef?.hasAttached()) lastHiddenAt = Date.now();
     this.clearShowTimer();
     this.clearHideTimer();
     this.detachDismissListeners();

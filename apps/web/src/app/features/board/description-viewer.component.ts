@@ -299,11 +299,11 @@ function normalizePlainText(value: string): string {
       height: 14px;
       margin: 0 7px 0 0;
       vertical-align: -2px;
-      accent-color: var(--accent, #4f8cff);
+      accent-color: var(--accent);
       pointer-events: none;
     }
 
-    .dv-body a { color: var(--accent, #4f8cff); text-decoration: underline; }
+    .dv-body a { color: var(--accent); text-decoration: underline; }
 
     .dv-body a.attachment-link-chip {
       display: inline-flex;
@@ -311,9 +311,9 @@ function normalizePlainText(value: string): string {
       gap: 6px;
       max-width: 100%;
       vertical-align: baseline;
-      border: 1px solid color-mix(in srgb, var(--accent, #4f8cff) 20%, var(--border));
+      border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
       border-radius: 999px;
-      background: color-mix(in srgb, var(--accent, #4f8cff) 7%, var(--surface));
+      background: color-mix(in srgb, var(--accent) 7%, var(--surface));
       color: var(--text);
       text-decoration: none;
       font-weight: 600;
@@ -324,13 +324,13 @@ function normalizePlainText(value: string): string {
     }
 
     .dv-body a.attachment-link-chip:hover {
-      border-color: color-mix(in srgb, var(--accent, #4f8cff) 38%, var(--border));
-      background: color-mix(in srgb, var(--accent, #4f8cff) 11%, var(--surface));
+      border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+      background: color-mix(in srgb, var(--accent) 11%, var(--surface));
     }
 
     .dv-body .attachment-link-chip i {
       flex: 0 0 auto;
-      color: color-mix(in srgb, var(--accent, #4f8cff) 78%, var(--text));
+      color: color-mix(in srgb, var(--accent) 78%, var(--text));
       font-size: 1.05em;
     }
 
@@ -381,9 +381,9 @@ function normalizePlainText(value: string): string {
       gap: 5px;
       max-width: 100%;
       vertical-align: baseline;
-      border: 1px solid color-mix(in srgb, var(--internal-link-color, var(--accent, #4f8cff)) 24%, var(--border));
+      border: 1px solid color-mix(in srgb, var(--internal-link-color, var(--accent)) 24%, var(--border));
       border-radius: 999px;
-      background: color-mix(in srgb, var(--internal-link-color, var(--accent, #4f8cff)) 8%, var(--surface));
+      background: color-mix(in srgb, var(--internal-link-color, var(--accent)) 8%, var(--surface));
       color: var(--text);
       text-decoration: none;
       font-weight: 600;
@@ -393,13 +393,13 @@ function normalizePlainText(value: string): string {
     }
 
     .dv-body a.internal-link-chip:hover {
-      border-color: color-mix(in srgb, var(--internal-link-color, var(--accent, #4f8cff)) 42%, var(--border));
-      background: color-mix(in srgb, var(--internal-link-color, var(--accent, #4f8cff)) 12%, var(--surface));
+      border-color: color-mix(in srgb, var(--internal-link-color, var(--accent)) 42%, var(--border));
+      background: color-mix(in srgb, var(--internal-link-color, var(--accent)) 12%, var(--surface));
     }
 
     .dv-body .internal-link-chip i {
       flex: 0 0 auto;
-      color: color-mix(in srgb, var(--internal-link-color, var(--accent, #4f8cff)) 75%, var(--text));
+      color: color-mix(in srgb, var(--internal-link-color, var(--accent)) 75%, var(--text));
       font-size: 1em;
     }
 

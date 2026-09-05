@@ -51,7 +51,7 @@
         <h3 class="settings-section-title"><i class="ti ti-id"></i><span>Display name</span></h3>
         <p class="settings-section-help">Shown to teammates across the workspace.</p>
         <div class="board-form">
-          <input name="displayName" placeholder="Your name" [value]="settings.displayName()" (input)="settings.displayName.set($any($event.target).value)" [disabled]="settings.nameSaving()" style="flex:1" />
+          <input name="displayName" placeholder="Your name" [value]="settings.displayName()" (input)="settings.displayName.set($any($event.target).value)" [disabled]="settings.nameSaving()" class="grow" />
           <button class="sm" type="button" (click)="settings.saveDisplayName()" [disabled]="settings.nameSaving() || !settings.displayName().trim() || settings.displayName().trim() === settings.user()?.displayName">
             {{ settings.nameSaving() ? "Saving..." : "Save" }}
           </button>
@@ -120,7 +120,7 @@
           }
         </p>
         <div class="board-form">
-          <input name="email" type="email" autocomplete="email" placeholder="you@example.com" [value]="settings.email()" (input)="settings.email.set($any($event.target).value)" [disabled]="settings.emailSaving() || settings.emailStep() === 'code'" style="flex:1" />
+          <input name="email" type="email" autocomplete="email" placeholder="you@example.com" [value]="settings.email()" (input)="settings.email.set($any($event.target).value)" [disabled]="settings.emailSaving() || settings.emailStep() === 'code'" class="grow" />
           @if (settings.emailStep() === 'idle') {
             <button class="sm" type="button" (click)="settings.requestEmailChange()" [disabled]="settings.emailSaving() || !settings.email().trim() || settings.email().trim() === settings.user()?.email">
               {{ settings.emailSaving() ? (settings.emailVerificationEnabled() ? "Sending..." : "Saving...") : (settings.emailVerificationEnabled() ? "Verify & save" : "Save") }}
@@ -130,7 +130,7 @@
         @if (settings.emailStep() === 'code') {
           <p class="settings-section-help">Enter the 6-digit code we sent to {{ settings.email() }}.</p>
           <div class="board-form">
-            <input name="emailCode" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="6" [value]="settings.emailCode()" (input)="settings.emailCode.set($any($event.target).value)" [disabled]="settings.emailSaving()" style="flex:1" />
+            <input name="emailCode" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="6" [value]="settings.emailCode()" (input)="settings.emailCode.set($any($event.target).value)" [disabled]="settings.emailSaving()" class="grow" />
             <button class="sm" type="button" (click)="settings.confirmEmailChange()" [disabled]="settings.emailSaving() || settings.emailCode().trim().length !== 6">
               {{ settings.emailSaving() ? "Saving..." : "Confirm" }}
             </button>

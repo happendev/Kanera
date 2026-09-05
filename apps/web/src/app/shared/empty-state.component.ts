@@ -12,7 +12,7 @@ import { ChangeDetectionStrategy, Component, input } from "@angular/core";
   selector: "k-empty-state",
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { "[class.is-sm]": "size() === 'sm'", role: "status" },
+  host: { "[class.is-sm]": "size() === 'sm'", "[class.is-plain]": "plain()", role: "status" },
   template: `
     <i class="es-icon ti" [class]="'es-icon ti ti-' + icon()" aria-hidden="true"></i>
     <p class="es-title">{{ title() }}</p>
@@ -36,6 +36,13 @@ import { ChangeDetectionStrategy, Component, input } from "@angular/core";
     :host.is-sm {
       padding: var(--space-4) var(--space-3);
       gap: 2px;
+    }
+
+    /* For a whole pane that is empty (an editor with nothing selected, a sidebar with no
+       workspaces): the surrounding surface is the frame, so the dashed box would be a box in a box. */
+    :host.is-plain {
+      border: 0;
+      padding-block: var(--space-8);
     }
 
     .es-icon {
@@ -83,4 +90,5 @@ export class EmptyStateComponent {
   readonly title = input.required<string>();
   readonly text = input<string | null>(null);
   readonly size = input<"sm" | "md">("md");
+  readonly plain = input(false);
 }

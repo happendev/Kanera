@@ -234,7 +234,7 @@ describe("HomePage", () => {
     // and rendered literally nothing.
     await render({ pending: true });
 
-    expect(host().querySelectorAll(".skeleton").length).toBeGreaterThan(0);
+    expect(host().querySelectorAll(".k-skeleton").length).toBeGreaterThan(0);
     expect(host().querySelector("main")!.textContent!.trim()).not.toBe("");
   });
 

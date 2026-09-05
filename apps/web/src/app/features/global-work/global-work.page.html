@@ -496,16 +496,14 @@
   }
 
   @if (state.loading() && state.response().cards.length === 0 && !state.portfolio()) {
-    <div class="loading-state">
-      <span class="spinner"></span>
+    <div class="k-loading" role="status" aria-live="polite">
+      <i class="ti ti-loader-2"></i>
       <span>Loading your cards…</span>
     </div>
   } @else if (state.error(); as error) {
-    <div class="empty-state error-state">
-      <i class="ti ti-alert-circle"></i>
-      <strong>{{ error }}</strong>
+    <k-empty-state class="error-state" icon="alert-circle" [title]="error">
       <button type="button" class="secondary" (click)="state.refresh()">Try again</button>
-    </div>
+    </k-empty-state>
   } @else {
     <!-- The display is the main track; the Up next queue docks beside it as a full-height sidebar
          (.has-up-next-dock on the page turns the layout into an app frame). Wrapping the portfolio

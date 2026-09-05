@@ -1,3 +1,4 @@
+import { EmptyStateComponent } from "../../../shared/empty-state.component";
 import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
 import { AvatarComponent } from "../../../shared/avatar.component";
 import { DocsLinkComponent } from "../../../shared/docs-link.component";
@@ -7,7 +8,7 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
 @Component({
   selector: "k-workspace-settings-guests",
   standalone: true,
-  imports: [AvatarComponent, DocsLinkComponent, TooltipDirective],
+  imports: [EmptyStateComponent, AvatarComponent, DocsLinkComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./guests.page.html",
   styleUrl: "./guests.page.scss",

@@ -1,3 +1,4 @@
+import { CdkTrapFocus } from "@angular/cdk/a11y";
 import type { OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, effect, inject, input, output, signal } from "@angular/core";
 import type { BoardMirrorRow } from "@kanera/shared/dto";
@@ -8,9 +9,10 @@ import { BoardMirrorsService } from "./board-mirrors.service";
   selector: "k-board-mirrors-dialog",
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [CdkTrapFocus],
   template: `
     <div class="backdrop" (click)="dismissed.emit()">
-      <section class="dialog" role="dialog" aria-modal="true" aria-label="Board mirrors" (click)="$event.stopPropagation()">
+      <section class="dialog" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-modal="true" aria-label="Board mirrors" (click)="$event.stopPropagation()">
         <header><div><h2>Board mirrors</h2><p>Manage incoming copies and outbound governance.</p></div><button type="button" class="icon" (click)="dismissed.emit()" aria-label="Close"><i class="ti ti-x"></i></button></header>
         @if (loading()) { <p class="loading"><i class="ti ti-loader-2 kanera-spin"></i> Loading mirrors…</p> }
         @else {

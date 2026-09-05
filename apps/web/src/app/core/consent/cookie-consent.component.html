@@ -16,7 +16,7 @@
   @if (preferencesOpen()) {
     <div class="consent-layer">
       <div class="consent-backdrop" aria-hidden="true"></div>
-      <div #dialog class="consent-dialog" role="dialog" aria-modal="true" aria-labelledby="cookie-preferences-title" aria-describedby="cookie-preferences-description" (keydown)="onDialogKeydown($event)">
+      <div #dialog class="consent-dialog" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-modal="true" aria-labelledby="cookie-preferences-title" aria-describedby="cookie-preferences-description" (keydown)="onDialogKeydown($event)">
         <header>
           <div>
             <h2 id="cookie-preferences-title">Cookie preferences</h2>

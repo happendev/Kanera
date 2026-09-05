@@ -29,7 +29,7 @@ import { AvatarComponent } from "../../shared/avatar.component";
         transform: translate(-50%, calc(-100% - 6px));
         background: var(--surface-overlay);
         color: var(--text);
-        border: 1px solid var(--border);
+        border: 1px solid var(--overlay-border);
         border-radius: var(--radius-md, 8px);
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
         padding: 6px;
@@ -56,7 +56,6 @@ import { AvatarComponent } from "../../shared/avatar.component";
         display: flex;
         align-items: center;
         justify-content: center;
-        text-transform: uppercase;
         overflow: hidden;
         flex-shrink: 0;
       }

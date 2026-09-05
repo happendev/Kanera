@@ -1,6 +1,7 @@
 // The shell drawers' shared chrome — scrim, header bar, empty state, close button.
 //
-// The notifications and Up-next drawers are deliberately one design: they open from the same edge,
+// The notifications and Up-next drawers are deliberately one design: they open from the same edge
+// (the sidebar's, where their triggers live),
 // at the same width, and a user who learns one has learned the other. That intent was previously
 // carried by a comment asking the next author to keep two copies in step, which is not a mechanism.
 // These mixins are.
@@ -9,9 +10,14 @@
 // near-neighbour but not the same recipe (lighter scrim, taller header, its own keyframes), so it
 // keeps its own chrome rather than being bent into this one.
 
+// Starts at the sidebar's edge, not the viewport's: the rail stays fully interactive while a drawer
+// is open, so the button that opened it is also the button that closes it.
 @mixin drawer-backdrop {
   position: fixed;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: var(--drawer-edge, 0px);
   z-index: 70;
   background: rgb(0 0 0 / 36%);
   animation: fade-in 0.16s ease-out;

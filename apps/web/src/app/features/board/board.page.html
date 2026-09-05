@@ -42,10 +42,13 @@
        unlike the icon cluster beside it: it is the one action on this row a first-time visitor is
        looking for. The label collapses to the icon only below the compact breakpoint. -->
   @if (state.board() !== null && state.canEditRole() && effectiveView() !== 'notes' && !showArchived()) {
-  <button phActions type="button" class="k-toolbar-btn k-toolbar-collapsible-label new-card-btn" [disabled]="!state.canEdit()" (click)="openComposer()" aria-label="New card" kTooltip="New card">
-    <i class="ti ti-plus"></i>
-    <span>New card</span>
-  </button>
+  <!-- A disabled button swallows pointer events, so the reason it is disabled lives on the wrapper. -->
+  <span phActions class="menu-anchor" [kTooltip]="state.canEdit() ? '' : 'You have view-only access to this board'">
+    <button type="button" class="k-toolbar-btn k-toolbar-collapsible-label new-card-btn" [disabled]="!state.canEdit()" (click)="openComposer()" aria-label="New card" [kTooltip]="state.canEdit() ? 'New card · C' : ''">
+      <i class="ti ti-plus"></i>
+      <span>New card</span>
+    </button>
+  </span>
   }
 
   <!-- Board-level chrome actions. These moved up from row 2 so that row is purely query controls. -->
@@ -111,16 +114,16 @@
         <i [class]="exportLoading() ? 'ti ti-loader-2 spin' : 'ti ti-dots'"></i>
       </button>
       @if (boardMenuOpen()) {
-      <div class="board-export-menu board-menu" role="menu" aria-label="Board menu" kAnchoredPanel [apAnchor]="boardMenuTrigger" [apPlacement]="boardMenuPlacement" (apDismissed)="boardMenuOpen.set(false)">
+      <div kMenu class="board-export-menu board-menu" role="menu" aria-label="Board menu" kAnchoredPanel [apAnchor]="boardMenuTrigger" [apPlacement]="boardMenuPlacement" (apDismissed)="boardMenuOpen.set(false)">
         @if (effectiveView() === 'board') {
-        <div class="board-menu-heading">Display</div>
-        <button type="button" class="board-export-item" role="menuitemcheckbox" [attr.aria-checked]="compactCards()" (click)="toggleCompactCards()">
+        <div class="k-menu-heading board-menu-heading">Display</div>
+        <button type="button" class="k-menu-item board-export-item" role="menuitemcheckbox" [attr.aria-checked]="compactCards()" (click)="toggleCompactCards()">
           <i class="ti" [class.ti-checkbox]="compactCards()" [class.ti-square]="!compactCards()"></i>
           <span>Compact cards</span>
         </button>
         }
         @if (state.canEdit()) {
-        <button type="button" class="board-export-item" role="menuitem" (click)="openBackgroundFromMenu()">
+        <button type="button" class="k-menu-item board-export-item" role="menuitem" (click)="openBackgroundFromMenu()">
           <i class="ti ti-palette"></i>
           <span>Change background</span>
         </button>
@@ -128,20 +131,20 @@
         <!-- Table owns its own export control; hide the board-level action so the two do not duplicate
              each other. -->
         @if (state.canEditRole() && !viewOwnsChrome()) {
-        <div class="board-menu-heading">Export</div>
-        <button type="button" class="board-export-item" role="menuitem" [disabled]="!!exportLoading()" (click)="exportBoardExcel()">
+        <div class="k-menu-heading board-menu-heading">Export</div>
+        <button type="button" class="k-menu-item board-export-item" role="menuitem" [disabled]="!!exportLoading()" (click)="exportBoardExcel()">
           <i class="ti ti-file-spreadsheet"></i>
           <span>Excel</span>
         </button>
-        <button type="button" class="board-export-item" role="menuitem" [disabled]="!!exportLoading()" (click)="exportBoardJson()">
+        <button type="button" class="k-menu-item board-export-item" role="menuitem" [disabled]="!!exportLoading()" (click)="exportBoardJson()">
           <i class="ti ti-braces"></i>
           <span>JSON</span>
         </button>
         }
         @if (mirrorMenuAvailable()) {
-        <div class="board-menu-heading">Mirrors</div>
-        <button type="button" class="board-export-item mirror-menu-trigger" role="menuitem" [disabled]="mirrorCreateBlocked()" (click)="openMirrorCreate()"><i [class]="mirrorCreateBlocked() ? 'ti ti-ban' : 'ti ti-copy-plus'"></i><span>{{ mirrorCreateLabel() }}</span></button>
-        <button type="button" class="board-export-item" role="menuitem" [disabled]="mirrorCount() === 0" (click)="openMirrorsDialog()"><i class="ti ti-copy-check"></i><span>{{ manageMirrorsLabel() }}</span></button>
+        <div class="k-menu-heading board-menu-heading">Mirrors</div>
+        <button type="button" class="k-menu-item board-export-item mirror-menu-trigger" role="menuitem" [disabled]="mirrorCreateBlocked()" (click)="openMirrorCreate()"><i [class]="mirrorCreateBlocked() ? 'ti ti-ban' : 'ti ti-copy-plus'"></i><span>{{ mirrorCreateLabel() }}</span></button>
+        <button type="button" class="k-menu-item board-export-item" role="menuitem" [disabled]="mirrorCount() === 0" (click)="openMirrorsDialog()"><i class="ti ti-copy-check"></i><span>{{ manageMirrorsLabel() }}</span></button>
         }
       </div>
       }
@@ -206,11 +209,11 @@
       </button>
       }
       @if (groupByMenuOpen()) {
-      <div class="group-by-menu" kAnchoredPanel [apAnchor]="groupByTrigger" [apPlacement]="groupByMenuPlacement" (apDismissed)="groupByMenuOpen.set(false)">
-        <div class="group-by-menu-heading">Columns</div>
+      <div kMenu class="group-by-menu" kAnchoredPanel [apAnchor]="groupByTrigger" [apPlacement]="groupByMenuPlacement" (apDismissed)="groupByMenuOpen.set(false)">
+        <div class="k-menu-heading group-by-menu-heading">Columns</div>
         <div class="group-by-menu-scroll">
           @for (option of kanbanGroupByOptions(); track option.value) {
-          <button type="button" class="group-by-item" [class.is-selected]="option.value === effectiveKanbanGroupBy()" [attr.aria-pressed]="option.value === effectiveKanbanGroupBy()" (click)="setKanbanGroupBy(option.value)">
+          <button type="button" class="k-menu-item group-by-item" [class.is-selected]="option.value === effectiveKanbanGroupBy()" [attr.aria-pressed]="option.value === effectiveKanbanGroupBy()" (click)="setKanbanGroupBy(option.value)">
             <i [class]="'ti ti-' + option.icon"></i>
             <span>{{ option.label }}</span>
             <i class="ti ti-check group-by-check" aria-hidden="true"></i>
@@ -343,6 +346,14 @@
     (cardDropped)="onGroupCardDrop($event)" (cardOpened)="openCardDetail($event)" (addRequested)="openComposerForGroup($event)"
     (bulkSelectionRequested)="onBulkSelectionRequested($event)" (bulkMenuRequested)="onBulkMenuRequested($event)" />
   }
+  } @else if (state.visibleLists().length === 0) {
+  <!-- A board with no lists renders nothing at all, which reads as broken rather than new. Lists are
+       workspace-scoped, so the fix lives in settings; admins get taken straight there. -->
+  <k-empty-state class="board-empty" icon="columns-3" title="This board has no lists yet" [text]="state.viewerIsWorkspaceAdmin() ? 'Lists are the columns cards move through, and every board in this workspace shares them. Add your first list to start capturing work.' : 'Lists are the columns cards move through. A workspace admin needs to add some before cards can be created here.'">
+    @if (state.viewerIsWorkspaceAdmin() && listsSettingsUrl(); as url) {
+    <a class="button" [routerLink]="url"><i class="ti ti-settings"></i> Set up lists</a>
+    }
+  </k-empty-state>
   } @else {
   @for (l of renderedLists(); track l.id) {
   <k-list [list]="l" [boardId]="boardId()" [allLists]="state.visibleLists()" [cards]="cardsByList().get(l.id) ?? []" [items]="itemsByList().get(l.id) ?? []" [filteredCardIds]="filteredCardIds()" [customFields]="state.customFields()"

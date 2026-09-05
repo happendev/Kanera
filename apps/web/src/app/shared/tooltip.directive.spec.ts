@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { TooltipDirective } from "./tooltip.directive";
+import { TooltipDirective, resetTooltipWarmWindow } from "./tooltip.directive";
 
 @Component({
   standalone: true,
@@ -40,6 +40,7 @@ class TruncationHostComponent {
 
 describe("TooltipDirective", () => {
   afterEach(() => {
+    resetTooltipWarmWindow();
     vi.useRealTimers();
     document.body.classList.remove("is-checklist-dragging");
     document.querySelectorAll(".cdk-overlay-container").forEach((el) => el.remove());

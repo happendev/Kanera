@@ -1,7 +1,8 @@
 import { signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { APP_DOM_EVENTS, STORAGE_KEYS } from "../../core/browser/browser-contracts";
+import { PanelStackService } from "../../shared/panel-stack.service";
 import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
 
 /**
@@ -18,6 +19,31 @@ describe("BoardMenuCoordinator", () => {
     coordinator = null;
     localStorage.clear();
     TestBed.resetTestingModule();
+  });
+
+  it("closes context menus and nested pickers when a drag starts", () => {
+    coordinator = create();
+    const open = signal(false);
+    coordinator.registerCardMenu("card-1", open);
+    coordinator.openCardMenu("card-1");
+    const panels = TestBed.inject(PanelStackService);
+    const host = document.createElement("div");
+    const nested = document.createElement("div");
+    host.append(nested);
+    const dismiss = vi.fn();
+    const dismissNested = vi.fn();
+    panels.register({ hostEl: host, dismiss });
+    panels.register({ hostEl: nested, dismiss: dismissNested });
+    document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: true }));
+    expect(open()).toBe(false);
+    expect(panels.depth).toBe(0);
+    expect(dismiss).toHaveBeenCalledWith("superseded");
+    expect(dismissNested).toHaveBeenCalledWith("superseded");
+    coordinator.openListMenu("list-1");
+    document.dispatchEvent(new CustomEvent(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: false }));
+    expect(coordinator.activeListMenuId()).toBe("list-1");
+    coordinator.closeMenusForDrag();
+    expect(coordinator.activeListMenuId()).toBeNull();
   });
 
   it("keeps card and list menus mutually exclusive without per-tile listeners", () => {

@@ -28,17 +28,14 @@
       <i class="ti ti-notes"></i>
     </button>
     }
-    <button type="button" class="utility-btn" [class.has-badge]="myPriorities.totalCount() > 0" (click)="prioritiesPanel()?.toggle()" [attr.aria-label]="'Up next' + (myPriorities.totalCount() > 0 ? ' (' + myPriorities.totalCount() + ' cards)' : '')" [attr.aria-expanded]="prioritiesPanel()?.open() ?? false" kTooltip="Up next · U">
+    <button type="button" class="utility-btn" [class.has-badge]="myPriorities.totalCount() > 0" (click)="togglePanel('priorities')" [attr.aria-label]="'Up next' + (myPriorities.totalCount() > 0 ? ' (' + myPriorities.totalCount() + ' cards)' : '')" [attr.aria-expanded]="prioritiesPanel()?.open() ?? false" kTooltip="Up next · U">
       <i class="ti ti-list-numbers"></i>
       @if (myPriorities.totalCount() > 0) { <span class="utility-badge">{{ myPriorities.totalCount() > 99 ? '99+' : myPriorities.totalCount() }}</span> }
     </button>
-    <button type="button" class="utility-btn" [class.has-badge]="notifications.unreadCount() > 0" [class.is-alert]="notifications.unreadCount() > 0" (click)="notificationsPanel()?.toggle()" [attr.aria-label]="'Notifications' + (notifications.unreadCount() > 0 ? ' (' + notifications.unreadCount() + ' unread)' : '')" [attr.aria-expanded]="notificationsPanel()?.open() ?? false" kTooltip="Notifications · N">
+    <button type="button" class="utility-btn" [class.has-badge]="notifications.unreadCount() > 0" [class.is-alert]="notifications.unreadCount() > 0" (click)="togglePanel('notifications')" [attr.aria-label]="'Notifications' + (notifications.unreadCount() > 0 ? ' (' + notifications.unreadCount() + ' unread)' : '')" [attr.aria-expanded]="notificationsPanel()?.open() ?? false" kTooltip="Notifications · N">
       <i [class]="notifications.unreadCount() > 0 ? 'ti ti-bell-ringing' : 'ti ti-bell'"></i>
       @if (notifications.unreadCount() > 0) { <span class="utility-badge is-accent">{{ notifications.unreadCount() > 99 ? '99+' : notifications.unreadCount() }}</span> }
     </button>
-    <a class="utility-btn" [href]="docsUrl" target="_blank" rel="noopener noreferrer" kTooltip="Help &amp; docs · H" aria-label="Help &amp; docs">
-      <i class="ti ti-help-circle"></i>
-    </a>
   </div>
 
 
@@ -115,16 +112,7 @@
     }
 
     @if (groups().length === 0 && guestGroups().length === 0 && !sidebarCollapsed()) {
-    <div class="ws-empty">
-      <i class="ti ti-lock ws-empty-icon"></i>
-      @if (isOrgAdmin()) {
-      <span class="ws-empty-title">No workspaces yet</span>
-      <span class="ws-empty-text">Create a workspace to get started.</span>
-      } @else {
-      <span class="ws-empty-title">No workspace access</span>
-      <span class="ws-empty-text">Ask an administrator to add you to a workspace.</span>
-      }
-    </div>
+    <k-empty-state class="ws-empty" size="sm" [plain]="true" icon="lock" [title]="isOrgAdmin() ? 'No workspaces yet' : 'No workspace access'" [text]="isOrgAdmin() ? 'Create a workspace to get started.' : 'Ask an administrator to add you to a workspace.'" />
     }
 
     @if (boardSearchTerm() && !hasBoardSearchMatches() && !sidebarCollapsed()) {
@@ -475,6 +463,7 @@
 
     @if (userMenuOpen()) {
     <div
+      kMenu
       class="user-popover"
       role="menu"
       kAnchoredPanel
@@ -502,14 +491,14 @@
         <img [ngSrc]="visibleOrgLogoUrl()!" [alt]="user()!.orgName || 'Logo'" width="160" height="40" />
       </div>
       }
-      <div class="user-popover-divider"></div>
+      <div class="k-menu-separator user-popover-divider"></div>
       @if (organisations().length > 0) {
       <!-- Switching, creating and joining organisations are occasional actions, so they collapse behind
            one row instead of pushing the everyday account items down the menu. The flyout is a DOM
            descendant of this panel, which is how PanelStackService derives it as a nested layer and
            keeps the account menu open while the submenu is up. -->
       <div class="popover-group organisation-switcher" role="group" aria-label="Organisation">
-        <button #organisationMenuTrigger type="button" class="popover-item organisation-trigger" [class.active]="organisationMenuOpen()"
+        <button #organisationMenuTrigger type="button" class="k-menu-item popover-item organisation-trigger" [class.active]="organisationMenuOpen()"
           [attr.aria-expanded]="organisationMenuOpen()" (click)="toggleOrganisationMenu()" role="menuitem">
           @if (activeOrganisation()?.logoUrl) {
           <img class="organisation-avatar" [ngSrc]="activeOrganisation()!.logoUrl!" [alt]="activeOrganisation()!.name" width="24" height="24" />
@@ -524,6 +513,7 @@
         </button>
         @if (organisationMenuOpen()) {
         <div
+          kMenu
           class="organisation-flyout"
           role="menu"
           aria-label="Organisations"
@@ -532,9 +522,9 @@
           [apPlacement]="organisationMenuPlacement"
           (apDismissed)="closeOrganisationMenu()"
         >
-          <div class="popover-group-label" aria-hidden="true">Organisations</div>
+          <div class="k-menu-heading popover-group-label" aria-hidden="true">Organisations</div>
           @for (organisation of organisations(); track organisation.clientId) {
-          <button type="button" class="popover-item organisation-item"
+          <button type="button" class="k-menu-item popover-item organisation-item"
             [class.active]="organisation.clientId === activeClientId()"
             [disabled]="!!switchingOrganisationId()"
             (click)="switchOrganisation(organisation.clientId)" role="menuitem">
@@ -552,11 +542,11 @@
           </button>
           }
           <div class="organisation-actions">
-            <button type="button" class="popover-item organisation-action" [disabled]="!!switchingOrganisationId()" (click)="createOrganisation()" role="menuitem">
+            <button type="button" class="k-menu-item popover-item organisation-action" [disabled]="!!switchingOrganisationId()" (click)="createOrganisation()" role="menuitem">
               <i class="ti ti-building-plus"></i>
               <span>Create organisation</span>
             </button>
-            <button type="button" class="popover-item organisation-action" (click)="joinOrganisation()" role="menuitem">
+            <button type="button" class="k-menu-item popover-item organisation-action" (click)="joinOrganisation()" role="menuitem">
               <i class="ti ti-link-plus"></i>
               <span>Join organisation</span>
             </button>
@@ -566,47 +556,47 @@
       </div>
       }
       <div class="popover-group" role="group" aria-label="Account">
-        <div class="popover-group-label" aria-hidden="true">Account</div>
-        <a class="popover-item" routerLink="/settings" (click)="closeUserMenu()" role="menuitem">
+        <div class="k-menu-heading popover-group-label" aria-hidden="true">Account</div>
+        <a class="k-menu-item popover-item" routerLink="/settings" (click)="closeUserMenu()" role="menuitem">
           <i class="ti ti-user-circle"></i>
           <span>Profile settings</span>
         </a>
-        <a class="popover-item" [routerLink]="['/settings', 'notifications']" (click)="closeUserMenu()" role="menuitem">
+        <a class="k-menu-item popover-item" [routerLink]="['/settings', 'notifications']" (click)="closeUserMenu()" role="menuitem">
           <i class="ti ti-bell"></i>
           <span>Notifications</span>
         </a>
       </div>
       @if (isOrgAdmin()) {
       <div class="popover-group" role="group" aria-label="Administration">
-        <div class="popover-group-label" aria-hidden="true">Administration</div>
-        <a class="popover-item" [routerLink]="['/settings', 'users']" (click)="closeUserMenu()" role="menuitem">
+        <div class="k-menu-heading popover-group-label" aria-hidden="true">Administration</div>
+        <a class="k-menu-item popover-item" [routerLink]="['/settings', 'users']" (click)="closeUserMenu()" role="menuitem">
           <i class="ti ti-users"></i>
           <span>Manage users</span>
         </a>
         @if (isHosted()) {
-        <a class="popover-item" [routerLink]="['/settings', 'account-plan']" (click)="closeUserMenu()" role="menuitem">
+        <a class="k-menu-item popover-item" [routerLink]="['/settings', 'account-plan']" (click)="closeUserMenu()" role="menuitem">
           <i class="ti ti-credit-card"></i>
           <span>Account plan</span>
         </a>
         }
-        <a class="popover-item" [routerLink]="['/settings', 'org']" (click)="closeUserMenu()" role="menuitem">
+        <a class="k-menu-item popover-item" [routerLink]="['/settings', 'org']" (click)="closeUserMenu()" role="menuitem">
           <i class="ti ti-building-skyscraper"></i>
           <span>Organisation settings</span>
         </a>
       </div>
       }
-      <div class="user-popover-divider"></div>
+      <div class="k-menu-separator user-popover-divider"></div>
       <div class="popover-group" role="group" aria-label="Support and session">
-        <a class="popover-item" [href]="docsUrl" target="_blank" rel="noopener noreferrer" (click)="closeUserMenu()" role="menuitem">
+        <a class="k-menu-item popover-item" [href]="docsUrl" target="_blank" rel="noopener noreferrer" (click)="closeUserMenu()" role="menuitem">
           <i class="ti ti-help-circle"></i>
           <span>Help &amp; docs</span>
         </a>
-        <button type="button" class="popover-item" (click)="openShortcuts()" role="menuitem">
+        <button type="button" class="k-menu-item popover-item" (click)="openShortcuts()" role="menuitem">
           <i class="ti ti-keyboard"></i>
           <span>Keyboard shortcuts</span>
           <kbd class="k-kbd popover-kbd">?</kbd>
         </button>
-        <button type="button" class="popover-item danger" (click)="logout()" role="menuitem">
+        <button type="button" class="k-menu-item popover-item danger" (click)="logout()" role="menuitem">
           <i class="ti ti-logout"></i>
           <span>Log out</span>
         </button>
@@ -617,6 +607,7 @@
 
   @if (navContextMenu(); as menu) {
   <div
+    kMenu
     class="nav-context-menu"
     role="menu"
     kAnchoredPanel
@@ -626,17 +617,17 @@
     (contextmenu)="$event.preventDefault()"
   >
     @if (!menu.isCurrentTarget) {
-    <button type="button" class="nav-context-item" role="menuitem" (click)="openNavContextTarget()">
+    <button type="button" class="k-menu-item nav-context-item" role="menuitem" (click)="openNavContextTarget()">
       <i class="ti ti-arrow-up-right"></i>
       <span>Open</span>
     </button>
     }
-    <button type="button" class="nav-context-item" role="menuitem" (click)="openNavContextTargetInNewTab()">
+    <button type="button" class="k-menu-item nav-context-item" role="menuitem" (click)="openNavContextTargetInNewTab()">
       <i class="ti ti-external-link"></i>
       <span>Open in new tab</span>
     </button>
     @if (menu.canMarkAllRead) {
-    <button type="button" class="nav-context-item" role="menuitem" (click)="markAllNavContextRead()" [disabled]="!notificationsOnline()">
+    <button type="button" class="k-menu-item nav-context-item" role="menuitem" (click)="markAllNavContextRead()" [disabled]="!notificationsOnline()">
       <i class="ti ti-mail-check"></i>
       <span>Mark all as read</span>
     </button>

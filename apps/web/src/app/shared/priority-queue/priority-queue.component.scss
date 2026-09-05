@@ -164,7 +164,7 @@
 
 .row-complete-icon {
   margin-right: 3px;
-  color: var(--success, #16a34a);
+  color: var(--success);
   font-size: 13px;
   vertical-align: -1px;
 }
@@ -280,8 +280,8 @@
   }
 
   &.due-soon {
-    color: var(--color-amber, #d97706);
-    background: color-mix(in srgb, var(--color-amber, #d97706) 12%, transparent);
+    color: var(--color-amber);
+    background: color-mix(in srgb, var(--color-amber) 12%, transparent);
     border-color: transparent;
   }
 }
@@ -358,11 +358,11 @@
 // button rather than swapping the icon — which also keeps the control recognisably itself, and
 // therefore obviously the way back.
 .panel-row.is-completed .row-tools .row-complete {
-  color: var(--accent-fg, #fff);
+  color: var(--accent-fg);
   background: var(--success);
 
   &:hover:not(:disabled) {
-    color: var(--accent-fg, #fff);
+    color: var(--accent-fg);
     background: color-mix(in srgb, var(--success) 84%, #000);
   }
 }

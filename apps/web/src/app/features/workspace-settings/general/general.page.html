@@ -12,11 +12,11 @@
   </span>
 </div>
 <div class="board-form">
-  <div style="display:flex;align-items:center;gap:8px">
+  <div class="row">
     <k-icon-picker [value]="settings.icon()" (valueChange)="settings.updateWorkspaceIcon($event)" />
     <k-color-picker [value]="settings.accentColor()" (valueChange)="settings.updateWorkspaceAccentColor($event)" />
     <input name="name" [attr.aria-label]="settings.entityLabelTitle() + ' name'" [placeholder]="settings.entityLabelTitle() + ' name'" [value]="settings.name()" (input)="settings.updateWorkspaceName($any($event.target).value)" (blur)="settings.saveWorkspaceNameNow()"
-      (keydown.enter)="settings.saveWorkspaceNameNow(); $event.preventDefault()" required style="flex:1" />
+      (keydown.enter)="settings.saveWorkspaceNameNow(); $event.preventDefault()" required class="grow" />
   </div>
 </div>
 @if (settings.isStandalone()) {
