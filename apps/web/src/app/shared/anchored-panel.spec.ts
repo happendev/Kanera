@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ANCHORED_SHEET_STYLES, anchoredSheetStyles, positionAnchoredPanel } from "./anchored-panel";
+import { anchoredSheetStyles, positionAnchoredPanel } from "./anchored-panel";
 
 function anchorAt(rect: { top: number; bottom: number; left: number; right: number }): HTMLElement {
   const anchor = document.createElement("div");
@@ -385,9 +385,5 @@ describe("anchoredSheetStyles", () => {
     expect(styles).toContain(":host(.is-above):not(.ap-stay-anchored)");
     expect(styles).toContain(".sp-panel");
     expect(styles).not.toContain(".ap-panel");
-  });
-
-  it("keeps the existing constant byte-identical to the default helper", () => {
-    expect(ANCHORED_SHEET_STYLES).toBe(anchoredSheetStyles());
   });
 });

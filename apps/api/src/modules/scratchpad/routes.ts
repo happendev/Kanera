@@ -1,5 +1,4 @@
 import { dto } from "@kanera/shared";
-import { getAllowedAttachmentExtension } from "@kanera/shared/attachments";
 import type { ScratchpadNoteAttachmentRow } from "@kanera/shared/dto";
 import { SERVER_EVENTS, type WireScratchpadNote } from "@kanera/shared/events";
 import {
@@ -12,9 +11,9 @@ import { and, asc, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
+import { readAttachmentUpload } from "../../lib/read-attachment-upload.js";
 import {
   assertCanUploadAttachment,
-  formatStorageBytes,
   getUploadEntitlements,
   isStorageFull,
   storageQuotaExceededError,
@@ -84,15 +83,6 @@ async function lockScratchpadForWrite(userId: string, clientId: string, tx: Tx):
  */
 function wire(note: ScratchpadNote): WireScratchpadNote {
   return { ...note, content: signEmbeddedMediaUrls(note.content, note.clientId) ?? "" };
-}
-
-function fileTooLargeError(maxFileBytes: number, attemptedBytes?: number) {
-  return new AppError(
-    400,
-    "FILE_TOO_LARGE",
-    `File is too large. The maximum file size is ${formatStorageBytes(maxFileBytes)}.`,
-    { limit: "fileSize", maxFileBytes, ...(attemptedBytes !== undefined ? { attemptedBytes } : {}) },
-  );
 }
 
 async function putAttachmentFile(storage: StorageProvider, key: string, body: Buffer, contentType: string) {
@@ -414,28 +404,7 @@ export async function scratchpadRoutes(app: FastifyInstance) {
     // Reject a full org before reading the body so it never wastes bandwidth on an unstorable file.
     if (isStorageFull(uploadEntitlements)) throw storageQuotaExceededError(uploadEntitlements);
 
-    const file = await req
-      .file({ limits: { fileSize: uploadEntitlements.maxFileBytes, files: 1 } })
-      .catch((err: unknown) => {
-        if ((err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE") {
-          throw fileTooLargeError(uploadEntitlements.maxFileBytes);
-        }
-        return null;
-      });
-    if (!file) throw badRequest("no file uploaded");
-
-    const ext = getAllowedAttachmentExtension(file.mimetype, file.filename);
-    if (!ext) throw badRequest("unsupported file type");
-
-    const buffer = await file.toBuffer().catch((err: unknown) => {
-      if ((err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE") {
-        throw fileTooLargeError(uploadEntitlements.maxFileBytes);
-      }
-      throw err;
-    });
-    if (buffer.byteLength > uploadEntitlements.maxFileBytes) {
-      throw fileTooLargeError(uploadEntitlements.maxFileBytes, buffer.byteLength);
-    }
+    const { file, ext, buffer } = await readAttachmentUpload(req, uploadEntitlements.maxFileBytes);
     await assertCanUploadAttachment(db, req.auth.cid, buffer.byteLength);
 
     const fileKey = scratchpadNoteAttachmentStorageKey(id, ext);

@@ -1,6 +1,5 @@
 import type { AttachmentSource, CardAttachmentRow } from "@kanera/shared/dto";
 import { ATTACHMENT_SOURCES } from "@kanera/shared/dto";
-import { getAllowedAttachmentExtension } from "@kanera/shared/attachments";
 import { ACTIVITY_ACTION, cardAttachments, cards, comments, users } from "@kanera/shared/schema";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
@@ -16,10 +15,11 @@ import {
 } from "../../lib/activity.js";
 import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
+import { readAttachmentUpload } from "../../lib/read-attachment-upload.js";
 import { touchCardActivity } from "../../lib/card-activity.js";
 import { fetchReactionsByComment } from "../../lib/comment-reactions.js";
 import { AppError, badRequest, forbidden, notFound } from "../../lib/errors.js";
-import { assertCanUploadAttachment, formatStorageBytes, getUploadEntitlements, isStorageFull, storageQuotaExceededError } from "../../lib/entitlements.js";
+import { assertCanUploadAttachment, getUploadEntitlements, isStorageFull, storageQuotaExceededError } from "../../lib/entitlements.js";
 import { stripAttachmentReferences } from "../../lib/strip-attachment-refs.js";
 import { dominantColorFromThumbnail, generateCoverImage, generateThumbnail, isProcessableImage } from "../../lib/image.js";
 import { signedAvatarUrl, signEmbeddedMediaUrls, unsignedMediaUrl } from "../../lib/media-keys.js";
@@ -112,15 +112,6 @@ async function putAttachmentFile(storage: StorageProvider, key: string, body: Bu
   }
 }
 
-function fileTooLargeError(maxFileBytes: number, attemptedBytes?: number) {
-  return new AppError(
-    400,
-    "FILE_TOO_LARGE",
-    `File is too large. The maximum file size is ${formatStorageBytes(maxFileBytes)}.`,
-    { limit: "fileSize", maxFileBytes, ...(attemptedBytes !== undefined ? { attemptedBytes } : {}) },
-  );
-}
-
 export async function cardAttachmentRoutes(app: FastifyInstance, options: { exposeCoverMetadata?: boolean } = {}) {
   const exposeCoverMetadata = options.exposeCoverMetadata ?? true;
   app.addHook("preHandler", app.authenticate);
@@ -173,28 +164,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
     // If the host org's storage pool is already full, reject before reading the upload body so a full
     // org never wastes bandwidth streaming a file that cannot be stored.
     if (isStorageFull(uploadEntitlements)) throw storageQuotaExceededError(uploadEntitlements);
-    const file = await req
-      .file({ limits: { fileSize: uploadEntitlements.maxFileBytes, files: 1 } })
-      .catch((err: unknown) => {
-        if ((err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE") {
-          throw fileTooLargeError(uploadEntitlements.maxFileBytes);
-        }
-        return null;
-      });
-    if (!file) throw badRequest("no file uploaded");
-
-    const ext = getAllowedAttachmentExtension(file.mimetype, file.filename);
-    if (!ext) throw badRequest("unsupported file type");
-
-    const buffer = await file.toBuffer().catch((err: unknown) => {
-      if ((err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE") {
-        throw fileTooLargeError(uploadEntitlements.maxFileBytes);
-      }
-      throw err;
-    });
-    if (buffer.byteLength > uploadEntitlements.maxFileBytes) {
-      throw fileTooLargeError(uploadEntitlements.maxFileBytes, buffer.byteLength);
-    }
+    const { file, ext, buffer } = await readAttachmentUpload(req, uploadEntitlements.maxFileBytes);
     await assertCanUploadAttachment(db, ctx.clientId, buffer.byteLength);
 
     const fileKey = cardAttachmentStorageKey(cardId, ext);

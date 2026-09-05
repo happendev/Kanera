@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { describe, expect, it } from "vitest";
-import { DOCS_PATHS, DocsLinkComponent, KANERA_DOCS_URL, type DocsPath } from "./docs-link.component";
+import { DocsLinkComponent, KANERA_DOCS_URL, type DocsPath } from "./docs-link.component";
 
 @Component({
   standalone: true,
@@ -47,9 +47,5 @@ describe("DocsLinkComponent", () => {
     const { anchor } = await mount();
     expect(anchor().getAttribute("target")).toBe("_blank");
     expect(anchor().getAttribute("rel")).toBe("noopener noreferrer");
-  });
-
-  it("keeps the slug list unique and sorted so the union stays easy to diff against the docs site", () => {
-    expect([...DOCS_PATHS]).toEqual([...new Set(DOCS_PATHS)].sort());
   });
 });

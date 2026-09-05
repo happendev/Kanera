@@ -8,5 +8,5 @@
     "inlineSources": true,
     "outDir": "dist"
   },
-  "exclude": ["src/**/*.test.ts"]
+  "exclude": ["src/**/*.test.ts", "src/**/*.typecheck.ts"]
 }
