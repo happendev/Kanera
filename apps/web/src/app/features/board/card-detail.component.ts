@@ -1,3 +1,4 @@
+import { ActionToastService } from "../../shared/action-toast.service";
 import type { CdkDragDrop, CdkDragMove } from "@angular/cdk/drag-drop";
 import { CdkDrag, CdkDragHandle, CdkDragPreview, CdkDropList, moveItemInArray, transferArrayItem } from "@angular/cdk/drag-drop";
 import { CdkScrollable } from "@angular/cdk/scrolling";
@@ -123,6 +124,7 @@ export function checklistDragScrollStep(pointerY: number, top: number, bottom: n
   styleUrl: "./card-detail.component.scss",
 })
 export class CardDetailComponent {
+  private readonly actionToasts = inject(ActionToastService);
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthService);
   private readonly editorDrafts = inject(EditorDrafts);
@@ -490,6 +492,7 @@ export class CardDetailComponent {
     this.duplicating.set(true);
     try {
       await this.api.post(`/cards/${this.card().id}/duplicate`, {});
+      this.actionToasts.success("Card duplicated.", "copy");
       this.actionsMenuOpen.set(false);
     } finally {
       this.duplicating.set(false);
@@ -514,6 +517,7 @@ export class CardDetailComponent {
     this.copyToBoardOpen.set(false);
     this.actionsMenuOpen.set(false);
     await this.api.post(`/cards/${this.card().id}/duplicate`, { boardId: target.boardId, listId: target.listId });
+      this.actionToasts.success("Card copied to the selected board.", "copy-plus");
   }
 
   async moveToBoard(target: BoardPickerPick) {
@@ -521,6 +525,7 @@ export class CardDetailComponent {
     this.moveToBoardOpen.set(false);
     this.actionsMenuOpen.set(false);
     await this.api.post(`/cards/${this.card().id}/move-to-board`, { boardId: target.boardId });
+    this.actionToasts.success("Card moved to the selected board.", "arrow-right");
     this.close.emit();
   }
 
@@ -2207,6 +2212,7 @@ export class CardDetailComponent {
     this.archiving.set(true);
     try {
       const card = await this.api.patch<WireCard>(`/cards/${this.card().id}/archive`, { archived });
+      this.actionToasts.success(archived ? "Card archived." : "Card restored.", archived ? "archive" : "archive-off");
       this.state.updateCard(card);
       this.confirmingDelete.set(false);
     } finally {

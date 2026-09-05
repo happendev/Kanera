@@ -12,7 +12,7 @@ import { StatusToastStackService } from "./status-toast-stack.service";
   template: `
     <ng-template #prompt>
       <div class="status-toast" role="status" aria-live="polite">
-        <i [class]="'ti ti-' + icon()"></i>
+        <i [class.success]="success()" [class]="'ti ti-' + icon()"></i>
         <span class="message">{{ message() }}</span>
         <ng-content />
       </div>
@@ -24,6 +24,8 @@ import { StatusToastStackService } from "./status-toast-stack.service";
     }
 
     .status-toast {
+      max-width: min(420px, calc(100vw - 32px));
+      box-sizing: border-box;
       display: flex;
       align-items: center;
       gap: 10px;
@@ -40,7 +42,11 @@ import { StatusToastStackService } from "./status-toast-stack.service";
       font-size: 16px;
     }
 
+    i.success { color: var(--success, #10b981); }
+
     .message {
+      overflow-wrap: anywhere;
+      min-width: 0;
       font-size: 13px;
       color: var(--text);
     }
@@ -63,6 +69,7 @@ export class StatusToastComponent implements AfterViewInit, OnDestroy {
   private readonly portalEffect: EffectRef;
   private delayTimer: number | null = null;
 
+  readonly success = input(false);
   readonly show = input(false);
   readonly delayMs = input(0);
   readonly bottomOffsetPx = input(16);

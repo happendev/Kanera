@@ -1,3 +1,4 @@
+import { ActionToastService } from "../../shared/action-toast.service";
 import type { OnDestroy} from "@angular/core";
 import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from "@angular/core";
 import { Router } from "@angular/router";
@@ -109,6 +110,7 @@ function localDateKey(offsetDays: number): string {
   styleUrl: "./board.page.scss",
 })
 export class BoardPage implements OnDestroy {
+  private readonly actionToasts = inject(ActionToastService);
   protected readonly state = inject(BoardState);
   private readonly socketBridge = inject(BoardSocketBridge);
   private readonly analytics = inject(AnalyticsService);
@@ -2085,6 +2087,7 @@ export class BoardPage implements OnDestroy {
         throw error;
       }
     }
+    if (cards.length > 1) this.actionToasts.success(`${cards.length} cards moved.`, "arrows-transfer-down");
   }
 
   private prepareDroppedCard(p: CardDropPayload): () => Promise<void> {

@@ -1,3 +1,4 @@
+import { ActionToastService } from "../../shared/action-toast.service";
 import type { CdkDragDrop, CdkDragMove} from "@angular/cdk/drag-drop";
 import { CdkDrag, CdkDragPreview, CdkDropList } from "@angular/cdk/drag-drop";
 import type { OnDestroy} from "@angular/core";
@@ -127,6 +128,7 @@ class CloseCardChecklistsBeforeDragDirective {
   styleUrl: "./list.component.scss",
 })
 export class ListComponent implements OnDestroy {
+  private readonly actionToasts = inject(ActionToastService);
   private readonly api = inject(ApiClient);
   private readonly notifications = inject(NotificationsService);
   private readonly menuCoordinator = inject(BoardMenuCoordinator);
@@ -560,9 +562,12 @@ export class ListComponent implements OnDestroy {
 
   async moveAllCards(targetListId: string) {
     if (!this.canEdit() || this.movingCards()) return;
+    const sourceName = this.list().name;
+    const targetName = this.allLists().find((list) => list.id === targetListId)?.name ?? "the selected list";
     this.movingCards.set(true);
     try {
       await this.api.post(`/lists/${this.list().id}/cards/move`, { targetListId, boardId: this.boardId() });
+      this.actionToasts.success(`Cards in ${sourceName} moved to ${targetName}.`, "arrows-transfer-down");
       this.menuOpen.set(false);
       this.showMoveListPicker.set(false);
     } finally {
@@ -575,6 +580,7 @@ export class ListComponent implements OnDestroy {
     this.clearing.set(true);
     try {
       await this.api.patch(`/lists/${this.list().id}/cards/archive`, { boardId: this.boardId() });
+      this.actionToasts.success(`Cards in ${this.list().name} archived.`, "archive");
       this.menuOpen.set(false);
       this.confirmClear.set(false);
     } finally {
@@ -587,6 +593,7 @@ export class ListComponent implements OnDestroy {
     this.savingCompletion.set(true);
     try {
       await this.api.post(`/boards/${this.boardId()}/lists/${this.list().id}/cards/completion`, { completed });
+      this.actionToasts.success(`Cards in ${this.list().name} ${completed ? "marked complete" : "reopened"}.`, completed ? "circle-check" : "circle");
       this.menuOpen.set(false);
     } finally {
       this.savingCompletion.set(false);

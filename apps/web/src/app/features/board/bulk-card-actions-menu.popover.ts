@@ -1,3 +1,4 @@
+import { ActionToastService } from "../../shared/action-toast.service";
 import { ChangeDetectionStrategy, Component, computed, ElementRef, inject, input, output, signal } from "@angular/core";
 import type { WireBoardMemberUser, WireCard, WireCardSummary, WireList } from "@kanera/shared/events";
 import type { Card, CardLabel, List } from "@kanera/shared/schema";
@@ -435,6 +436,7 @@ const BULK_MENU_WIDTH = 232;
 export class BulkCardActionsMenuPopover {
   private readonly panel = inject(AnchoredPanelDirective);
   private readonly hostRef = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly actionToasts = inject(ActionToastService);
   private readonly api = inject(ApiClient);
   private readonly state = inject(BULK_CARD_STORE, { optional: true }) ?? inject(BoardState);
 
@@ -545,7 +547,7 @@ export class BulkCardActionsMenuPopover {
   async setCompletion(event: MouseEvent, completed: boolean) {
     event.preventDefault();
     event.stopPropagation();
-    await this.run(async () => {
+    await this.run(completed ? "marked complete" : "reopened", completed ? "circle-check" : "circle", async () => {
       for (const [boardId, cardIds] of this.cardIdBatchesByBoard()) {
         const result = await this.api.patch<{ cards: WireCard[] }>(`/boards/${boardId}/cards/bulk/completion`, { cardIds, completed });
         for (const card of result.cards ?? []) this.state.updateCard(card);
@@ -554,7 +556,7 @@ export class BulkCardActionsMenuPopover {
   }
 
   async setDueDate(value: string, slot: DueDateSlotSelection) {
-    await this.run(async () => {
+    await this.run(value ? "due dates updated" : "due dates cleared", "calendar-event", async () => {
       const dueDateLocalDate = value || null;
       for (const [boardId, cardIds] of this.cardIdBatchesByBoard()) {
         const result = await this.api.patch<{ cards: WireCard[] }>(`/boards/${boardId}/cards/bulk/due-date`, {
@@ -570,7 +572,7 @@ export class BulkCardActionsMenuPopover {
   async toggleLabel(labelId: string) {
     if (!this.workspaceActionsEnabled()) return;
     const mode = this.labelState(labelId) === "all" ? "remove" : "add";
-    await this.run(async () => {
+    await this.run("labels updated", "tag", async () => {
       for (const cardId of this.cardIds()) {
         const current = this.state.labelIdsForCard(cardId);
         const next = mode === "add" ? Array.from(new Set([...current, labelId])) : current.filter((id) => id !== labelId);
@@ -584,7 +586,7 @@ export class BulkCardActionsMenuPopover {
 
   async toggleAssignee(userId: string) {
     const mode = this.assigneeState(userId) === "all" ? "remove" : "add";
-    await this.run(async () => {
+    await this.run("assignees updated", "users", async () => {
       for (const cardId of this.cardIds()) {
         const current = this.state.assigneeIdsForCard(cardId);
         const next = mode === "add" ? Array.from(new Set([...current, userId])) : current.filter((id) => id !== userId);
@@ -598,7 +600,7 @@ export class BulkCardActionsMenuPopover {
 
   async moveToList(listId: string) {
     if (!this.workspaceActionsEnabled()) return;
-    await this.run(async () => {
+    await this.run(`moved to ${this.lists().find((list) => list.id === listId)?.name ?? "the selected list"}`, "arrows-transfer-down", async () => {
       for (const [boardId, cardIds] of this.cardIdBatchesByBoard()) {
         const result = await this.api.post<{ cards: WireCard[] }>(`/boards/${boardId}/cards/bulk/move`, { cardIds, listId });
         for (const card of result.cards ?? []) this.state.moveCard(card.id, card.listId, card.position);
@@ -618,7 +620,7 @@ export class BulkCardActionsMenuPopover {
   async duplicate(event: MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
-    await this.run(async () => {
+    await this.run("duplicated", "copy", async () => {
       for (const [boardId, cardIds] of this.cardIdBatchesByBoard()) {
         const result = await this.api.post<{ cards: WireCard[] }>(`/boards/${boardId}/cards/bulk/duplicate`, { cardIds });
         for (const card of result.cards ?? []) this.state.addCard(card);
@@ -628,7 +630,7 @@ export class BulkCardActionsMenuPopover {
 
   async copyToBoard(target: BoardPickerPick) {
     this.copyBoardOpen.set(false);
-    await this.run(async () => {
+    await this.run("copied to the selected board", "copy-plus", async () => {
       for (const [boardId, cardIds] of this.cardIdBatchesByBoard()) {
         await this.api.post<{ cards: WireCard[] }>(`/boards/${boardId}/cards/bulk/duplicate`, {
           cardIds,
@@ -642,7 +644,7 @@ export class BulkCardActionsMenuPopover {
   async archive(event: MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
-    await this.run(async () => {
+    await this.run("archived", "archive", async () => {
       for (const [boardId, cardIds] of this.cardIdBatchesByBoard()) {
         const result = await this.api.patch<{ cards: WireCard[] }>(`/boards/${boardId}/cards/bulk/archive`, { cardIds, archived: true });
         for (const card of result.cards ?? []) this.state.updateCard(card);
@@ -650,11 +652,14 @@ export class BulkCardActionsMenuPopover {
     });
   }
 
-  private async run(fn: () => Promise<void>, closeAfter = true) {
+  private async run(action: string, icon: string, fn: () => Promise<void>, closeAfter = true) {
     if (this.saving()) return;
     this.saving.set(true);
+    const count = this.cardIds().length;
     try {
       await fn();
+      // Emit once after every board batch succeeds, never from realtime echoes.
+      if (count > 0) this.actionToasts.success(`${count} card${count === 1 ? "" : "s"} ${action}.`, icon);
       if (closeAfter) {
         this.done.emit();
         this.dismissed.emit();

@@ -1,3 +1,4 @@
+import { ActionToastService } from "../../shared/action-toast.service";
 import { provideZonelessChangeDetection } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import type { WireBoardMemberUser, WireCardSummary } from "@kanera/shared/events";
@@ -82,6 +83,26 @@ describe("BulkCardActionsMenuPopover", () => {
     fixture.detectChanges();
     return { fixture, patch, post };
   }
+
+  it("confirms only after all board batches succeed", async () => {
+    let finish!: (value: { cards: never[] }) => void;
+    const patch = vi.fn().mockResolvedValueOnce({ cards: [] }).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const { fixture } = await createComponent({ patch });
+    const toasts = TestBed.inject(ActionToastService);
+    const pending = fixture.componentInstance.archive(new MouseEvent("click"));
+    await Promise.resolve();
+    expect(toasts.messages()).toEqual([]);
+    finish({ cards: [] });
+    await pending;
+    expect(toasts.messages().map((toast) => toast.message)).toEqual(["3 cards archived."]);
+  });
+
+  it("does not announce success when a later board batch fails", async () => {
+    const patch = vi.fn().mockResolvedValueOnce({ cards: [] }).mockRejectedValueOnce(new Error("Failed"));
+    const { fixture } = await createComponent({ patch });
+    await expect(fixture.componentInstance.archive(new MouseEvent("click"))).rejects.toThrow("Failed");
+    expect(TestBed.inject(ActionToastService).messages()).toEqual([]);
+  });
 
   it("reads selection state and applies results through the host card store", async () => {
     const store: BulkCardStore = {

@@ -1,3 +1,4 @@
+import { ActionToastService } from "../../shared/action-toast.service";
 import type { OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, HostListener, computed, inject, input, output, signal } from "@angular/core";
 import type { CompactCardCustomFieldValue, WireBoardMemberUser, WireCard, WireCardSummary, WireCustomFieldOption } from "@kanera/shared/events";
@@ -317,6 +318,7 @@ type TriState = "all" | "mixed" | "none";
   `,
 })
 export class BulkCustomFieldsDialogComponent implements OnInit {
+  private readonly actionToasts = inject(ActionToastService);
   private readonly api = inject(ApiClient);
   private readonly state = inject(BoardState);
 
@@ -632,6 +634,7 @@ export class BulkCustomFieldsDialogComponent implements OnInit {
       this.applyNotice.set(`${skipped.size} card${skipped.size === 1 ? " was" : "s were"} skipped (archived).`);
       return;
     }
+    this.actionToasts.success("Custom fields updated for the selected cards.", "forms");
     this.done.emit();
     this.dismissed.emit();
   }
