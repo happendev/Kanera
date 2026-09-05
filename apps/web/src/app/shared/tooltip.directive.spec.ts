@@ -24,6 +24,18 @@ class TooltipHostComponent {
   readonly position = signal<"top" | "right" | "bottom" | "left">("top");
 }
 
+@Component({
+  standalone: true,
+  imports: [TooltipDirective],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    <a kTooltip="Quarterly Roadmap Planning" kTooltipTruncationTarget=".label">
+      <span class="label">Quarterly Roadmap Planning</span>
+    </a>
+  `,
+})
+class TruncationHostComponent {}
+
 describe("TooltipDirective", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -207,5 +219,30 @@ describe("TooltipDirective", () => {
     button.dispatchEvent(new Event("mouseenter"));
     vi.advanceTimersByTime(300);
     expect(document.querySelector(".k-tooltip")).toBeNull();
+  });
+  it("with a truncation target, shows only while that element overflows", () => {
+    vi.useFakeTimers();
+    const fixture = TestBed.configureTestingModule({
+      imports: [TruncationHostComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).createComponent(TruncationHostComponent);
+    fixture.detectChanges();
+
+    const link = fixture.nativeElement.querySelector("a") as HTMLAnchorElement;
+    const label = link.querySelector(".label") as HTMLSpanElement;
+    // jsdom lays nothing out, so both extents read 0: the label fits and the tooltip must stay away.
+    link.dispatchEvent(new Event("mouseenter"));
+    vi.advanceTimersByTime(400);
+    fixture.detectChanges();
+    expect(document.querySelector(".k-tooltip")).toBeNull();
+
+    link.dispatchEvent(new Event("mouseleave"));
+    vi.advanceTimersByTime(400);
+    Object.defineProperty(label, "scrollWidth", { value: 240, configurable: true });
+    Object.defineProperty(label, "clientWidth", { value: 120, configurable: true });
+    link.dispatchEvent(new Event("mouseenter"));
+    vi.advanceTimersByTime(400);
+    fixture.detectChanges();
+    expect(document.querySelector(".k-tooltip")?.textContent).toBe("Quarterly Roadmap Planning");
   });
 });

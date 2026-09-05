@@ -1266,14 +1266,35 @@
   }
 }
 
+// Key and title are siblings, not one run of text: a long key used to take its full width and the
+// ellipsis fell on the title alone. Now the key is bounded and the title is the only thing that trims.
 .tv-title {
-  overflow: hidden;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
   font-weight: 500;
+}
+
+.tv-title-text {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.tv-card-key { color: var(--text-muted); font-size: 11px; margin-right: 6px; font-weight: 400; }
+.tv-card-key {
+  flex: none;
+  max-width: 11ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
 
 .tv-cell-input {
   width: 100%;

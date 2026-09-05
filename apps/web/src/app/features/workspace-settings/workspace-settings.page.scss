@@ -372,6 +372,42 @@
   }
 }
 
+.autosave-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 24px;
+  margin-bottom: 8px;
+}
+
+.autosave-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.autosave-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  transition: opacity 0.15s;
+
+  &:empty { opacity: 0; }
+
+  i { font-size: 14px; }
+
+  &[data-state="saved"] { color: var(--success); background: color-mix(in srgb, var(--success) 10%, transparent); }
+  &[data-state="error"] { color: var(--danger); background: var(--danger-bg); }
+  &[data-state="saving"] { background: var(--surface-2); }
+}
+
 .guest-section-head {
   display: flex;
   align-items: center;
@@ -537,6 +573,33 @@
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.5;
+}
+
+// A rename trigger that looks like the label it renames. Opts out of the global button chrome (36px
+// accent fill) so the row reads as a name with a hover affordance, while staying focusable and
+// Enter/Space-operable — the clickable <span> it replaced was invisible to the keyboard.
+button.list-rename-trigger {
+  height: auto;
+  min-height: 28px;
+  padding: 2px 6px;
+  margin-left: -6px;
+  justify-content: flex-start;
+  gap: 6px;
+  background: transparent;
+  border-color: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: text;
+
+  &:hover:not(:disabled) {
+    background: var(--surface-2);
+    color: inherit;
+  }
+
+  &:focus-visible {
+    box-shadow: 0 0 0 2px var(--ring);
+  }
 }
 
 .settings-info-note {

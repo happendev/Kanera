@@ -140,6 +140,36 @@
   gap: 2px;
 }
 
+// The header's one primary action. Filled, where every other header control is ghost or outlined,
+// so it reads first; its label collapses to the icon below the compact breakpoint via
+// .k-toolbar-collapsible-label.
+.new-card-btn {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+
+  &:hover:not(:disabled) {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+    color: var(--accent-fg);
+  }
+}
+
+.board-menu-heading {
+  padding: 6px 8px 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+
+  &:not(:first-child) {
+    margin-top: 4px;
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+  }
+}
+
 .board-overview-trigger {
   // The radar identifies the overview; the beacon previews its current work-risk signal.
   --overview-signal: var(--text-muted);

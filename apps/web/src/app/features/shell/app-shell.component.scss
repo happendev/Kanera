@@ -321,7 +321,7 @@ k-support-session-banner {
   }
 
   &.active {
-    background: var(--surface-hover);
+    background: var(--nav-active-bg);
   }
 
   // Leading-mark slot. These rows lead with different things — Tabler glyphs at 15px
@@ -687,7 +687,7 @@ k-support-session-banner {
   }
 
   &.active {
-    background: var(--surface-hover);
+    background: var(--nav-active-bg);
     color: var(--nav-text-strong);
   }
 }

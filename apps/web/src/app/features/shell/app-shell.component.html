@@ -154,17 +154,17 @@
       </div>
       }
       <div class="ws-boards">
-        @if (!sidebarCollapsed() && group.boards.length > 0) {
+        @if (!sidebarCollapsed() && group.boards.length > 0 && showBoardsSubhead()) {
         <button class="ws-subhead-toggle" (click)="toggleBoards(group.workspace.id)" [attr.aria-expanded]="!!boardSearchTerm() || !boardsCollapsed()[group.workspace.id]">
           <i [class]="!boardSearchTerm() && boardsCollapsed()[group.workspace.id] ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
           <span>Boards</span>
         </button>
         }
-        @if (sidebarCollapsed() || boardSearchTerm() || !boardsCollapsed()[group.workspace.id]) {
+        @if (sidebarCollapsed() || boardSearchTerm() || !showBoardsSubhead() || !boardsCollapsed()[group.workspace.id]) {
         @if (sidebarCollapsed()) {
         @for (board of collapsedBoardLinks(group); track board.id) {
         <a class="board-link" [class.has-attention]="!isPlanDisabled(board) && boardAttentionCount(board.id) > 0" [class.is-plan-disabled]="isPlanDisabled(board)" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="isPlanDisabled(board) ? null : ['/b', board.id]" routerLinkActive="active"
-          [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : ''" (click)="onBoardLinkClick($event, board)"
+          [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : board.name" [kTooltipTruncationTarget]="isPlanDisabled(board) ? null : '.nav-label'" (click)="onBoardLinkClick($event, board)"
           (contextmenu)="isPlanDisabled(board) ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
           <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"
             [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
@@ -187,7 +187,7 @@
           @if (boardSearchTerm() || !isBoardGroupCollapsed(group.workspace.id, boardGroup.id)) {
           @for (board of boardGroup.boards; track board.id) {
           <a class="board-link" [class.has-attention]="!isPlanDisabled(board) && boardAttentionCount(board.id) > 0" [class.is-plan-disabled]="isPlanDisabled(board)" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="isPlanDisabled(board) ? null : ['/b', board.id]" routerLinkActive="active"
-            [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : ''" (click)="onBoardLinkClick($event, board)"
+            [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : board.name" [kTooltipTruncationTarget]="isPlanDisabled(board) ? null : '.nav-label'" (click)="onBoardLinkClick($event, board)"
             (contextmenu)="isPlanDisabled(board) ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
             <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"
               [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
@@ -205,7 +205,7 @@
         }
         @for (board of filteredUngroupedBoards(group); track board.id) {
         <a class="board-link" [class.has-attention]="!isPlanDisabled(board) && boardAttentionCount(board.id) > 0" [class.is-plan-disabled]="isPlanDisabled(board)" [style.--board-attention-color]="boardAttentionColor(board, group.workspace.id)" [routerLink]="isPlanDisabled(board) ? null : ['/b', board.id]" routerLinkActive="active"
-          [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : ''" (click)="onBoardLinkClick($event, board)"
+          [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : board.name" [kTooltipTruncationTarget]="isPlanDisabled(board) ? null : '.nav-label'" (click)="onBoardLinkClick($event, board)"
           (contextmenu)="isPlanDisabled(board) ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
           <i [class]="'ti ti-' + (board.icon || 'layout-kanban')"
             [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
@@ -254,7 +254,7 @@
     <!-- A collapsed standalone board is a nav item, not a workspace group. Keeping it out of
          .ws-group prevents the workspace separator from appearing between every board. -->
     <a class="board-link standalone-board-link collapsed-standalone-board-link" [class.has-attention]="!isPlanDisabled(board) && boardAttentionCount(board.id) > 0" [class.is-plan-disabled]="isPlanDisabled(board)" [style.--board-attention-color]="boardAttentionColor(board, item.homeGroup.workspace.id)" [routerLink]="isPlanDisabled(board) ? null : ['/b', board.id]" routerLinkActive="active"
-      [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : ''" (click)="onBoardLinkClick($event, board)"
+      [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : board.name" [kTooltipTruncationTarget]="isPlanDisabled(board) ? null : '.nav-label'" (click)="onBoardLinkClick($event, board)"
       (contextmenu)="isPlanDisabled(board) ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
       <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
       <span class="nav-label">{{ board.name }}</span>
@@ -277,7 +277,7 @@
       @for (item of standaloneGroup.boards; track item.board.id) {
       @let board = item.board;
       <div class="ws-row standalone-board-row">
-        <a class="board-link standalone-board-link" [class.has-attention]="!isPlanDisabled(board) && boardAttentionCount(board.id) > 0" [class.is-plan-disabled]="isPlanDisabled(board)" [style.--board-attention-color]="boardAttentionColor(board, item.homeGroup.workspace.id)" [routerLink]="isPlanDisabled(board) ? null : ['/b', board.id]" routerLinkActive="active" [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : ''" (click)="onBoardLinkClick($event, board)"
+        <a class="board-link standalone-board-link" [class.has-attention]="!isPlanDisabled(board) && boardAttentionCount(board.id) > 0" [class.is-plan-disabled]="isPlanDisabled(board)" [style.--board-attention-color]="boardAttentionColor(board, item.homeGroup.workspace.id)" [routerLink]="isPlanDisabled(board) ? null : ['/b', board.id]" routerLinkActive="active" [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : board.name" [kTooltipTruncationTarget]="isPlanDisabled(board) ? null : '.nav-label'" (click)="onBoardLinkClick($event, board)"
           (contextmenu)="isPlanDisabled(board) ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
           <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
           <span class="nav-label">{{ board.name }}</span>
@@ -303,7 +303,7 @@
     @let board = item.board;
     <div class="ws-group standalone-board-group">
     <div class="ws-row">
-      <a class="board-link standalone-board-link" [class.has-attention]="!isPlanDisabled(board) && boardAttentionCount(board.id) > 0" [class.is-plan-disabled]="isPlanDisabled(board)" [style.--board-attention-color]="boardAttentionColor(board, item.homeGroup.workspace.id)" [routerLink]="isPlanDisabled(board) ? null : ['/b', board.id]" routerLinkActive="active" [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : ''" (click)="onBoardLinkClick($event, board)"
+      <a class="board-link standalone-board-link" [class.has-attention]="!isPlanDisabled(board) && boardAttentionCount(board.id) > 0" [class.is-plan-disabled]="isPlanDisabled(board)" [style.--board-attention-color]="boardAttentionColor(board, item.homeGroup.workspace.id)" [routerLink]="isPlanDisabled(board) ? null : ['/b', board.id]" routerLinkActive="active" [attr.aria-label]="isPlanDisabled(board) ? planDisabledLabel(board) : boardAttentionLabel(board)" [attr.aria-disabled]="isPlanDisabled(board) ? 'true' : null" [kTooltip]="isPlanDisabled(board) ? planDisabledLabel(board) : board.name" [kTooltipTruncationTarget]="isPlanDisabled(board) ? null : '.nav-label'" (click)="onBoardLinkClick($event, board)"
         (contextmenu)="isPlanDisabled(board) ? suppressDisabledBoardEvent($event) : openNavContextMenu($event, { label: board.name, url: '/b/' + board.id, canMarkAllRead: true, clearBoardSearch: true })">
         <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
         <span class="nav-label">{{ board.name }}</span>

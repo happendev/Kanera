@@ -27,6 +27,12 @@
 
 // ─── Content ─────────────────────────────────────────────────────────────────
 
+// Settings pages are forms and tables, not a reading column, and above 900px they also spend 188px
+// of their width on the section navigation. Let them run wider than the default .content cap.
+.content.settings-content {
+  max-width: 1160px;
+}
+
 .content {
   max-width: 860px;
   width: 100%;
@@ -73,7 +79,8 @@
   gap: 8px;
   margin-bottom: 16px;
   padding: 14px;
-  background: var(--surface-2);
+  background: var(--inset-bg);
+  border: 1px solid var(--inset-border);
   border-radius: var(--radius);
 
   input,
@@ -111,6 +118,64 @@
 
   a {
     text-decoration: none;
+  }
+}
+
+// Above the tablet breakpoint the tab strip becomes a navigation column. Twelve workspace sections
+// wrapped onto two rows as a strip; a column scans top to bottom and gives every section a stable
+// place. The section content is whatever the page renders after the strip, so it is addressed as
+// "everything that is not the header or the tabs" rather than by wrapping it in a new element.
+// 900px is deliberate: below it the column would take more than a quarter of the card.
+@media (min-width: 900px) {
+  .settings-card {
+    display: grid;
+    grid-template-columns: 188px minmax(0, 1fr);
+    column-gap: 28px;
+    align-items: start;
+
+    > .settings-header {
+      grid-column: 1 / -1;
+    }
+
+    > .settings-tabs {
+      grid-column: 1;
+      position: sticky;
+      top: 16px;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 2px;
+      margin: 0;
+
+      a {
+        justify-content: flex-start;
+        height: 34px;
+        padding: 0 10px;
+        font-size: 13.5px;
+
+        i {
+          width: 18px;
+          font-size: 16px;
+        }
+      }
+
+      // The selected section is a quiet accent wash rather than the filled primary button the strip
+      // used, which in a column of a dozen rows read as a call to action instead of a location.
+      a.active,
+      a.active:hover:not(:disabled) {
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-weight: 600;
+      }
+
+      .pro-marker {
+        margin-left: auto;
+      }
+    }
+
+    > :not(.settings-header):not(.settings-tabs) {
+      grid-column: 2;
+      min-width: 0;
+    }
   }
 }
 

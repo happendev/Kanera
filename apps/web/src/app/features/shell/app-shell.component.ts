@@ -152,6 +152,12 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly groups = signal<HomeGroup[]>([]);
   // Old offline shells have no kind; treating that as standard keeps their existing presentation.
   readonly standardGroups = computed(() => this.groups().filter((group) => (group.workspace as { kind?: string }).kind !== "board"));
+  /**
+   * The per-workspace "Boards" collapse toggle earns its row only when there is more than one
+   * workspace to collapse between. With a single workspace it was a repeated label pushing the
+   * boards themselves further down, so the group renders expanded with no subhead.
+   */
+  readonly showBoardsSubhead = computed(() => this.standardGroups().length > 1);
   readonly standaloneGroups = computed(() => this.groups().filter((group) => (group.workspace as { kind?: string }).kind === "board"));
   readonly guestGroups = signal<GuestHomeGroup[]>([]);
   readonly standaloneBoardGroups = signal<StandaloneBoardGroup[]>([]);
@@ -1176,7 +1182,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   boardAttentionColor(board: Pick<Board, "iconColor">, workspaceId: string): string | null {
     const color = board.iconColor ?? this.accentColorForWorkspace(workspaceId);
-    return color ? `var(--color-${color})` : null;
+    // Fill behind --accent-fg text, so use the contrast-checked action tone where the theme has one.
+    return color ? `var(--color-${color}-accent, var(--color-${color}))` : null;
   }
 
   isBoardGroupCollapsed(workspaceId: string, groupId: string): boolean {

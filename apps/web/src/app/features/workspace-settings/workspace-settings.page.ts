@@ -687,6 +687,29 @@ export class WorkspaceSettingsPage implements OnDestroy {
   private readonly upgradePrompt = inject(UpgradePromptService);
   private readonly workspaceService = inject(WorkspaceService);
   private nameSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * The general section saves implicitly (debounced name, blur-to-save numbers, instant toggles)
+   * with no Save button, so this is the only signal that a change actually landed. "saved" holds
+   * briefly and then returns to idle so the indicator does not become permanent chrome.
+   */
+  readonly autosaveState = signal<"idle" | "saving" | "saved" | "error">("idle");
+  private autosaveSavedTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private async trackAutosave<T>(work: () => Promise<T>): Promise<T> {
+    if (this.autosaveSavedTimer) clearTimeout(this.autosaveSavedTimer);
+    this.autosaveState.set("saving");
+    try {
+      const result = await work();
+      this.autosaveState.set("saved");
+      this.autosaveSavedTimer = setTimeout(() => {
+        if (this.autosaveState() === "saved") this.autosaveState.set("idle");
+      }, 2500);
+      return result;
+    } catch (error) {
+      this.autosaveState.set("error");
+      throw error;
+    }
+  }
   private generalSettingsSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
   // The public input must match the route parameter while the resolved id remains writable for the
@@ -997,15 +1020,20 @@ export class WorkspaceSettingsPage implements OnDestroy {
       const color = this.accentColor();
       const style = this.el.nativeElement.style;
       if (color) {
-        style.setProperty("--accent", `var(--color-${color})`);
-        style.setProperty("--accent-hover", `color-mix(in srgb, var(--color-${color}), black 15%)`);
-        style.setProperty("--ring", `color-mix(in srgb, var(--color-${color}) 40%, transparent)`);
+        // The identity colour is decorative; the *-accent token is its contrast-checked action tone
+        // (light mode only — dark falls back to the identity colour and relies on --accent-ink).
+        const accent = `var(--color-${color}-accent, var(--color-${color}))`;
+        style.setProperty("--accent", accent);
+        style.setProperty("--accent-hover", `color-mix(in srgb, ${accent}, black 15%)`);
+        style.setProperty("--accent-fg", "var(--accent-ink)");
+        style.setProperty("--ring", `color-mix(in srgb, ${accent} 40%, transparent)`);
         // --accent-soft resolves its var(--accent) where it is *declared*, so the :root
         // definition would stay the default teal here. Rebind it with the accent itself.
         style.setProperty("--accent-soft", `color-mix(in srgb, var(--color-${color}) 8%, transparent)`);
       } else {
         style.removeProperty("--accent");
         style.removeProperty("--accent-hover");
+        style.removeProperty("--accent-fg");
         style.removeProperty("--ring");
         style.removeProperty("--accent-soft");
       }
@@ -1078,6 +1106,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   ngOnDestroy() {
+    if (this.autosaveSavedTimer) clearTimeout(this.autosaveSavedTimer);
     this.saveGeneralSettingsNow();
     // A debounced action save must not be lost because the admin navigated away mid-edit.
     this.flushAllAutomationActionSaves();
@@ -1525,7 +1554,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   private async patchWorkspace(patch: { name?: string; cardKeyPrefix?: string; icon?: string | null; accentColor?: ColorToken | null; completedCardsActiveDays?: number; inactiveCardsDays?: number; boardHealthEnabled?: boolean; boardHealthOverdueEnabled?: boolean; boardHealthUnassignedEnabled?: boolean; boardHealthInactiveEnabled?: boolean; boardLinkingEnabled?: boolean }) {
-    const ws = await this.api.patch<Workspace>(`/workspaces/${this.workspaceId()}`, patch);
+    const ws = await this.trackAutosave(() => this.api.patch<Workspace>(`/workspaces/${this.workspaceId()}`, patch));
     this.applyWorkspace(ws);
   }
 
@@ -1539,7 +1568,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     // A standalone board's visible identity is the board row. Use the same mutation as the Boards
     // settings rename so board clients receive the canonical event first; the API mirrors and emits
     // the hidden workspace row for settings and navigation consumers.
-    const board = await this.api.patch<Board>(`/boards/${standaloneBoardId}`, { name });
+    const board = await this.trackAutosave(() => this.api.patch<Board>(`/boards/${standaloneBoardId}`, { name }));
     this.boardList.update((boards) => boards.map((item) => item.id === board.id ? board : item));
     this.updateGuestBoard(board);
     this.workspace.update((workspace) => workspace ? { ...workspace, name: board.name, updatedAt: board.updatedAt } : workspace);
@@ -1637,7 +1666,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.boardHealthSaving.set(true);
     this.boardHealthError.set(null);
     try {
-      const updated = await this.api.patch<Workspace>(`/workspaces/${workspaceId}`, patch);
+      const updated = await this.trackAutosave(() => this.api.patch<Workspace>(`/workspaces/${workspaceId}`, patch));
       if (this.workspaceId() === workspaceId) this.applyWorkspace(updated);
     } catch {
       if (this.workspaceId() === workspaceId) {

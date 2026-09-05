@@ -1011,7 +1011,7 @@
           <form class="checklist-add" (submit)="createChecklist($event)">
             <input type="text" [value]="newChecklistTitle()" (input)="newChecklistTitle.set($any($event.target).value)" placeholder="Checklist title…" [disabled]="!canEdit()" (keydown.escape)="cancelAddChecklist()" autofocus />
             <button type="submit" class="sm" [disabled]="!canEdit()"><i class="ti ti-plus"></i>Add checklist</button>
-            <button type="button" class="ghost icon" (click)="cancelAddChecklist()"><i class="ti ti-x"></i></button>
+            <button type="button" class="ghost icon" (click)="cancelAddChecklist()" aria-label="Cancel new checklist" kTooltip="Cancel"><i class="ti ti-x"></i></button>
           </form>
           } @else {
           <button type="button" class="checklist-add-btn" [disabled]="!canEdit()" (click)="startAddChecklist(item.id)"><i class="ti ti-plus"></i>Add checklist</button>

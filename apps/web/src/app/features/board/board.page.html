@@ -37,6 +37,17 @@
   </div>
   }
 
+  <!-- The board-level entry to the same composer every column's "+" opens. Hidden on Notes, which
+       holds no cards, and while viewing the archive, where creating into it makes no sense. Labelled,
+       unlike the icon cluster beside it: it is the one action on this row a first-time visitor is
+       looking for. The label collapses to the icon only below the compact breakpoint. -->
+  @if (state.board() !== null && state.canEditRole() && effectiveView() !== 'notes' && !showArchived()) {
+  <button phActions type="button" class="k-toolbar-btn k-toolbar-collapsible-label new-card-btn" [disabled]="!state.canEdit()" (click)="openComposer()" aria-label="New card" kTooltip="New card">
+    <i class="ti ti-plus"></i>
+    <span>New card</span>
+  </button>
+  }
+
   <!-- Board-level chrome actions. These moved up from row 2 so that row is purely query controls. -->
   @if (state.board(); as board) {
   <span phIcons class="board-icon-cluster">
@@ -82,45 +93,6 @@
       }
     </span>
     }
-    <!-- The board-level entry to the same composer every column's "+" opens. Hidden on Notes, which
-         holds no cards, and while viewing the archive, where creating into it makes no sense. -->
-    @if (state.canEditRole() && effectiveView() !== 'notes' && !showArchived()) {
-    <button type="button" class="k-toolbar-icon-btn is-ghost new-card-btn" [disabled]="!state.canEdit()" (click)="openComposer()" aria-label="New card" kTooltip="New card">
-      <i class="ti ti-square-rounded-plus"></i>
-    </button>
-    }
-    @if (state.canEditRole() && boardLinkingEnabled() && (boardSyncAvailable() || state.hasMirrorsAtHydration())) {
-    <span class="menu-anchor mirror-menu-wrap">
-      <button #mirrorTrigger type="button" class="k-toolbar-icon-btn is-ghost mirror-menu-trigger" [class.is-open]="mirrorMenuOpen()" [class.has-mirror]="mirrorConfigured()" (click)="toggleMirrorMenu()" aria-label="Board mirrors" [kTooltip]="mirrorConfigured() ? 'Board mirrors · active' : 'Board mirrors'"><i class="ti ti-copy"></i></button>
-      @if (mirrorMenuOpen()) {
-      <div class="board-export-menu" kAnchoredPanel [apAnchor]="mirrorTrigger" [apPlacement]="mirrorMenuPlacement" (apDismissed)="mirrorMenuOpen.set(false)">
-        <button type="button" class="board-export-item" [disabled]="mirrorCreateBlocked()" (click)="openMirrorCreate()"><i [class]="mirrorCreateBlocked() ? 'ti ti-ban' : 'ti ti-copy-plus'"></i><span>{{ mirrorCreateLabel() }}</span></button>
-        <button type="button" class="board-export-item" [disabled]="mirrorCount() === 0" (click)="openMirrorsDialog()"><i class="ti ti-copy-check"></i><span>{{ manageMirrorsLabel() }}</span></button>
-      </div>
-      }
-    </span>
-    }
-    <!-- Table owns its own export control; hide the board-level action so the buttons do not
-         duplicate each other. -->
-    @if (state.canEditRole() && !viewOwnsChrome()) {
-    <span class="menu-anchor">
-      <button #exportTrigger type="button" class="k-toolbar-icon-btn is-ghost board-export-btn" [class.is-open]="exportMenuOpen()" [disabled]="!!exportLoading()" (click)="toggleExportMenu()" aria-label="Export board" kTooltip="Export board">
-        <i [class]="exportLoading() ? 'ti ti-loader-2 spin' : 'ti ti-download'"></i>
-      </button>
-      @if (exportMenuOpen()) {
-      <div class="board-export-menu" kAnchoredPanel [apAnchor]="exportTrigger" [apPlacement]="exportMenuPlacement" (apDismissed)="exportMenuOpen.set(false)">
-        <button type="button" class="board-export-item" [disabled]="!!exportLoading()" (click)="exportBoardExcel()">
-          <i class="ti ti-file-spreadsheet"></i>
-          <span>Excel</span>
-        </button>
-        <button type="button" class="board-export-item" [disabled]="!!exportLoading()" (click)="exportBoardJson()">
-          <i class="ti ti-braces"></i>
-          <span>JSON</span>
-        </button>
-      </div>
-      }
-    </span>
-    }
     <span class="menu-anchor watcher-popover-wrap">
       <button type="button" class="k-toolbar-icon-btn is-ghost watch-btn" [class.is-watching]="isWatchingBoard()" [class.is-open]="watcherPopoverOpen()" (click)="toggleBoardWatcherPopover()" [attr.aria-label]="isWatchingBoard() ? 'Board watchers' : 'Watch board'"
         [attr.aria-expanded]="watcherPopoverOpen()" kTooltip="Board watchers">
@@ -130,13 +102,53 @@
       <k-watcher-popover kind="board" [entityId]="boardId()" [workspaceId]="board.workspaceId" (dismissed)="watcherPopoverOpen.set(false)" />
       }
     </span>
-    @if (state.canEdit()) {
-    <button #backgroundTrigger type="button" class="k-toolbar-icon-btn is-ghost" (click)="toggleBackground()" aria-label="Change background" kTooltip="Change background" [class.is-open]="showBackground()">
-      <i class="ti ti-palette"></i>
-    </button>
-    @if (showBackground()) {
-    <k-board-background [boardId]="board.id" [value]="$any(board.backgroundGradient)" [anchor]="backgroundTrigger" (close)="showBackground.set(false)" />
-    }
+    <!-- Secondary board actions live behind one menu. Export, mirrors and background each used to be
+         an unlabelled icon of the same weight as the view switch and New card; grouping them leaves the
+         header with one identity cluster (overview, watchers, menu) and one primary action. -->
+    @if (boardMenuAvailable()) {
+    <span class="menu-anchor board-menu-wrap">
+      <button #boardMenuTrigger type="button" class="k-toolbar-icon-btn is-ghost board-menu-trigger" [class.is-open]="boardMenuOpen()" (click)="toggleBoardMenu()" aria-label="Board menu" [attr.aria-expanded]="boardMenuOpen()" [attr.aria-haspopup]="'menu'" kTooltip="Board menu">
+        <i [class]="exportLoading() ? 'ti ti-loader-2 spin' : 'ti ti-dots'"></i>
+      </button>
+      @if (boardMenuOpen()) {
+      <div class="board-export-menu board-menu" role="menu" aria-label="Board menu" kAnchoredPanel [apAnchor]="boardMenuTrigger" [apPlacement]="boardMenuPlacement" (apDismissed)="boardMenuOpen.set(false)">
+        @if (effectiveView() === 'board') {
+        <div class="board-menu-heading">Display</div>
+        <button type="button" class="board-export-item" role="menuitemcheckbox" [attr.aria-checked]="compactCards()" (click)="toggleCompactCards()">
+          <i class="ti" [class.ti-checkbox]="compactCards()" [class.ti-square]="!compactCards()"></i>
+          <span>Compact cards</span>
+        </button>
+        }
+        @if (state.canEdit()) {
+        <button type="button" class="board-export-item" role="menuitem" (click)="openBackgroundFromMenu()">
+          <i class="ti ti-palette"></i>
+          <span>Change background</span>
+        </button>
+        }
+        <!-- Table owns its own export control; hide the board-level action so the two do not duplicate
+             each other. -->
+        @if (state.canEditRole() && !viewOwnsChrome()) {
+        <div class="board-menu-heading">Export</div>
+        <button type="button" class="board-export-item" role="menuitem" [disabled]="!!exportLoading()" (click)="exportBoardExcel()">
+          <i class="ti ti-file-spreadsheet"></i>
+          <span>Excel</span>
+        </button>
+        <button type="button" class="board-export-item" role="menuitem" [disabled]="!!exportLoading()" (click)="exportBoardJson()">
+          <i class="ti ti-braces"></i>
+          <span>JSON</span>
+        </button>
+        }
+        @if (mirrorMenuAvailable()) {
+        <div class="board-menu-heading">Mirrors</div>
+        <button type="button" class="board-export-item mirror-menu-trigger" role="menuitem" [disabled]="mirrorCreateBlocked()" (click)="openMirrorCreate()"><i [class]="mirrorCreateBlocked() ? 'ti ti-ban' : 'ti ti-copy-plus'"></i><span>{{ mirrorCreateLabel() }}</span></button>
+        <button type="button" class="board-export-item" role="menuitem" [disabled]="mirrorCount() === 0" (click)="openMirrorsDialog()"><i class="ti ti-copy-check"></i><span>{{ manageMirrorsLabel() }}</span></button>
+        }
+      </div>
+      }
+      @if (showBackground()) {
+      <k-board-background [boardId]="board.id" [value]="$any(board.backgroundGradient)" [anchor]="boardMenuTrigger" (close)="showBackground.set(false)" />
+      }
+    </span>
     }
   </span>
   }

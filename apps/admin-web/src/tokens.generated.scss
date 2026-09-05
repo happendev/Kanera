@@ -32,6 +32,14 @@
   // full --text is near-black and reads far heavier than the muted board rows beside
   // it, so light mode softens this to a slate that still clearly outranks --text-muted.
   --nav-text-strong: var(--text);
+  // Selected sidebar row. Dark can reuse the hover step; light needs its own, darker value because
+  // --surface-hover there is one shade off the sidebar and a selected board barely registered.
+  --nav-active-bg: var(--surface-hover);
+  // Recessed form panels (settings .board-form). On dark, a solid --surface-2 block inside a
+  // --surface card read as a large navy slab competing with its own fields, so dark mode uses a faint
+  // wash plus a hairline instead; light keeps the filled tray, where it separates cleanly.
+  --inset-bg: var(--surface-subtle);
+  --inset-border: var(--border);
 
   // Field fill for inputs, textareas, and selects. Dark mode is deliberately unfilled
   // over its darker surfaces and must stay that way. Light mode fills with the
@@ -47,7 +55,13 @@
   // too stark.
   --accent: #0d9488;
   --accent-hover: #0f766e;
-  --accent-fg: #ffffff;
+  // Text on an accent fill. No hue bright enough to read as *text* on this dark canvas can also
+  // carry white text at AA (the default teal manages 3.7:1, the workspace blue 2.4:1), whereas dark
+  // ink clears 5:1 on every palette tone — so dark mode paints its filled buttons with page-coloured
+  // ink. board.page.ts / workspace-settings.page.ts rebind --accent-fg to this same token when a
+  // board or workspace colour takes over the accent.
+  --accent-ink: #0b111b;
+  --accent-fg: var(--accent-ink);
   // Faint accent wash for "this control is engaged" states (toolbar Filter/Group/Sort,
   // selected settings rows, plan highlights). Declared in every block that declares
   // --accent, including the per-board/per-workspace runtime rebinding in
@@ -230,7 +244,7 @@
   // light-OS device" bug: picking Dark set [data-theme="dark"] but this :root rule won.
   :root:not([data-theme]) {
     color-scheme: light;
-    --bg: #e3e8f0;
+    --bg: #e8ecf2;
     // Gradient tile — light mode
     --tile-scrim: rgba(255, 255, 255, 0.62);
     --tile-scrim-hover: rgba(255, 255, 255, 0.52);
@@ -261,12 +275,18 @@
     --muted: #52647a;
 
     --nav-text-strong: #334155;
+    --nav-active-bg: #dfe6ef;
+    --inset-bg: var(--surface-2);
+    --inset-border: transparent;
     --input-bg: var(--surface);
     --select-bg: var(--surface);
 
-    --accent: #0d9488;
-    --accent-hover: #0f766e;
-    --accent-fg: #ffffff;
+    // teal-700 rather than the dark theme's teal-600: white text on #0d9488 was 3.7:1, and on a
+    // light page the accent is also link/label text, where the deeper tone reads better anyway.
+    --accent: #0f766e;
+    --accent-hover: #115e59;
+    @include light-accent-palette;
+    --accent-fg: var(--accent-ink);
     // See the dark block: must be redeclared alongside every --accent declaration.
     --accent-soft: color-mix(in srgb, var(--accent) 8%, transparent);
 
@@ -277,7 +297,7 @@
     --success: #16a34a;
     --warning: #a16207;
 
-    --ring: rgba(13, 148, 136, 0.3);
+    --ring: rgba(15, 118, 110, 0.3);
 
     --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08), 0 1px 1px rgba(15, 23, 42, 0.04);
     --shadow: 0 2px 8px rgba(15, 23, 42, 0.10), 0 1px 3px rgba(15, 23, 42, 0.06);
@@ -341,7 +361,7 @@
 
 [data-theme="light"] {
   color-scheme: light;
-  --bg: #e3e8f0;
+  --bg: #e8ecf2;
   // Gradient tile — light mode
   --tile-scrim: rgba(255, 255, 255, 0.62);
   --tile-scrim-hover: rgba(255, 255, 255, 0.52);
@@ -366,12 +386,17 @@
   --muted: #52647a;
 
   --nav-text-strong: #334155;
+  --nav-active-bg: #dfe6ef;
+  --inset-bg: var(--surface-2);
+  --inset-border: transparent;
   --input-bg: var(--surface);
   --select-bg: var(--surface);
 
-  --accent: #0d9488;
-  --accent-hover: #0f766e;
-  --accent-fg: #ffffff;
+  // Keep in sync with the @media light block above.
+  --accent: #0f766e;
+  --accent-hover: #115e59;
+  @include light-accent-palette;
+  --accent-fg: var(--accent-ink);
   // See the dark block: must be redeclared alongside every --accent declaration.
   --accent-soft: color-mix(in srgb, var(--accent) 8%, transparent);
 
@@ -382,7 +407,7 @@
   --success: #16a34a;
   --warning: #a16207;
 
-  --ring: rgba(13, 148, 136, 0.3);
+  --ring: rgba(15, 118, 110, 0.3);
 
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08), 0 1px 1px rgba(15, 23, 42, 0.04);
   --shadow: 0 2px 8px rgba(15, 23, 42, 0.10), 0 1px 3px rgba(15, 23, 42, 0.06);

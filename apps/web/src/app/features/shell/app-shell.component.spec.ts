@@ -777,11 +777,13 @@ describe("AppShellComponent board search", () => {
 
   it("uses one height for every sidebar disclosure control", async () => {
     const productGroup = boardGroup();
+    // Two workspaces: the per-workspace "Boards" subhead only renders when there is more than one
+    // workspace to collapse between.
     await render({
       groups: [group({
         boardGroups: [productGroup],
         boards: [board({ groupId: productGroup.id })],
-      })],
+      }), group({ workspace: workspace({ id: "ws-2", name: "Second" }), boards: [board({ id: "ws-2-board", workspaceId: "ws-2" })] })],
       guestGroups: [],
       dueSoon: [],
       overdueChecklistItems: 0,
@@ -1217,7 +1219,7 @@ describe("AppShellComponent board search", () => {
     expect(boardLink?.textContent).toContain("Roadmap");
     expect(boardLink?.textContent).toContain("3");
     expect(boardLink?.getAttribute("aria-label")).toBe("Roadmap, 3 unread cards needing attention");
-    expect(boardLink?.style.getPropertyValue("--board-attention-color")).toBe("var(--color-red)");
+    expect(boardLink?.style.getPropertyValue("--board-attention-color")).toBe("var(--color-red-accent, var(--color-red))");
   });
 
   it("shows a board attention dot in the collapsed sidebar", async () => {

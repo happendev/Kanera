@@ -54,7 +54,7 @@ import type { CfFilterCondition, FilterValue } from "./table-view/filter.types";
 import { FilterBarComponent } from "./table-view/filter-bar.component";
 import { groupCards } from "./table-view/group-by.util";
 import { GROUP_BY_OPTIONS, NULL_GROUP_KEY, type CardGroup, type GroupBy } from "./table-view/table-view.types";
-import { readCompletedFilter, readFilters, readGroupBy, readViewMode, writeCompletedFilter, writeFilters, writeGroupBy, writeViewMode, type StoredFilters, type ViewMode } from "./table-view/view-preference";
+import { readCompactCards, readCompletedFilter, readFilters, readGroupBy, readViewMode, writeCompactCards, writeCompletedFilter, writeFilters, writeGroupBy, writeViewMode, type StoredFilters, type ViewMode } from "./table-view/view-preference";
 import { NotesViewComponent } from "../notes/notes-view.component";
 import { CompletedCardsPanelComponent } from "../completed-cards/completed-cards-panel.component";
 import { appendCompletedRangeParams, formatCompletedRangeDate } from "../completed-cards/completed-range.util";
@@ -108,6 +108,9 @@ function localDateKey(offsetDays: number): string {
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./board.page.html",
   styleUrl: "./board.page.scss",
+  // Cards read this through :host-context rather than an input threaded through k-list and the
+  // group columns: density is a page-level display choice, not per-card state.
+  host: { "[class.compact-cards]": "compactCards()" },
 })
 export class BoardPage implements OnDestroy {
   private readonly actionToasts = inject(ActionToastService);
@@ -270,18 +273,21 @@ export class BoardPage implements OnDestroy {
    */
   readonly viewerPriorityRanks = signal<Map<string, number>>(new Map());
   readonly workDoneRefreshVersion = signal(0);
-  readonly exportMenuOpen = signal(false);
+  /** The header's single secondary-actions menu: display, background, export and mirrors. */
+  readonly boardMenuOpen = signal(false);
   /**
-   * The two header menus share their chrome but not their width — the mirror menu's labels are longer.
    * Width lives here rather than in CSS so placement clamps against the box that is actually rendered;
-   * a CSS-only override would leave the panel wider than the position it was aligned for.
-   * `minHeight` is the real height of a two-item menu, so a header low on a short viewport does not
-   * flip it above the trigger for no reason.
+   * a CSS-only override would leave the panel wider than the position it was aligned for. 240px fits
+   * the longest mirror label without wrapping.
    */
-  readonly exportMenuPlacement: AnchoredPanelPlacement = { align: "end", width: 160, gap: 4, minHeight: 90, maxHeight: 240 };
-  readonly mirrorMenuPlacement: AnchoredPanelPlacement = { ...this.exportMenuPlacement, width: 240 };
+  readonly boardMenuPlacement: AnchoredPanelPlacement = { align: "end", width: 240, gap: 4, minHeight: 90, maxHeight: 420 };
   readonly exportLoading = signal<"json" | "xlsx" | null>(null);
-  readonly mirrorMenuOpen = signal(false);
+  /**
+   * Per-board, per-device tile density. Compact hides the metadata rows (custom-field badges and the
+   * description/checklist/comment indicators) so a lane shows more cards; title, labels, due date and
+   * assignees stay because they are what people scan a lane for.
+   */
+  readonly compactCards = signal(false);
   readonly mirrorCreateOpen = signal(false);
   readonly mirrorsDialogOpen = signal(false);
   readonly mirrorCount = signal(0);
@@ -289,6 +295,12 @@ export class BoardPage implements OnDestroy {
   readonly mirrorCanManage = signal(false);
   readonly mirrorRefreshVersion = signal(0);
   readonly mirrorConfigured = computed(() => this.mirrorCount() > 0);
+  readonly mirrorMenuAvailable = computed(() =>
+    this.state.canEditRole() && this.boardLinkingEnabled() && (this.boardSyncAvailable() || this.state.hasMirrorsAtHydration()));
+  /** The menu renders only when at least one of its sections would; an empty menu is worse than none. */
+  readonly boardMenuAvailable = computed(() =>
+    this.state.board() !== null
+    && (this.effectiveView() === "board" || this.state.canEdit() || (this.state.canEditRole() && !this.viewOwnsChrome()) || this.mirrorMenuAvailable()));
   readonly boardSyncAvailable = computed(() => {
     if (!this.state.boardSyncAllowed()) return false;
     // The board-open value describes the board owner and is essential for guest boards. When the
@@ -984,6 +996,7 @@ export class BoardPage implements OnDestroy {
       // `effectiveKanbanGroupBy`, so the preference survives a field being restored.
       const stored = readGroupBy(this.kanbanScopeKey());
       this.kanbanGroupBy.set(stored ?? "list");
+      this.compactCards.set(readCompactCards(this.kanbanScopeKey()));
     });
 
     effect(() => {
@@ -993,9 +1006,13 @@ export class BoardPage implements OnDestroy {
         : null;
       const style = this.el.nativeElement.style;
       if (color) {
-        style.setProperty("--accent", `var(--color-${color})`);
-        style.setProperty("--accent-hover", `color-mix(in srgb, var(--color-${color}), black 15%)`);
-        style.setProperty("--ring", `color-mix(in srgb, var(--color-${color}) 40%, transparent)`);
+        // The identity colour is decorative; the *-accent token is its contrast-checked action tone
+        // (light mode only — dark falls back to the identity colour and relies on --accent-ink).
+        const accent = `var(--color-${color}-accent, var(--color-${color}))`;
+        style.setProperty("--accent", accent);
+        style.setProperty("--accent-hover", `color-mix(in srgb, ${accent}, black 15%)`);
+        style.setProperty("--accent-fg", "var(--accent-ink)");
+        style.setProperty("--ring", `color-mix(in srgb, ${accent} 40%, transparent)`);
         // --accent-soft resolves its var(--accent) where it is *declared*, so the :root
         // definition would stay the default teal here. Rebind it with the board colour so
         // engaged toolbar controls tint with the board rather than the app accent.
@@ -1003,6 +1020,7 @@ export class BoardPage implements OnDestroy {
       } else {
         style.removeProperty("--accent");
         style.removeProperty("--accent-hover");
+        style.removeProperty("--accent-fg");
         style.removeProperty("--ring");
         style.removeProperty("--accent-soft");
       }
@@ -1703,19 +1721,25 @@ export class BoardPage implements OnDestroy {
     this.state.upsertBoardMember(member);
   }
 
-  toggleExportMenu() {
-    if (!this.state.canEditRole() || this.state.board() === null || this.exportLoading()) return;
-    this.exportMenuOpen.update((value) => !value);
+  toggleBoardMenu() {
+    if (this.state.board() === null) return;
+    this.boardMenuOpen.update((value) => !value);
   }
 
-  toggleMirrorMenu() {
-    if (!this.state.canEditRole()) return;
-    this.mirrorMenuOpen.update((open) => !open);
+  toggleCompactCards() {
+    const next = !this.compactCards();
+    this.compactCards.set(next);
+    writeCompactCards(this.kanbanScopeKey(), next);
+  }
+
+  openBackgroundFromMenu() {
+    this.boardMenuOpen.set(false);
+    this.toggleBackground();
   }
 
   openMirrorCreate() {
     if (this.mirrorCreateBlocked()) return;
-    this.mirrorMenuOpen.set(false);
+    this.boardMenuOpen.set(false);
     this.mirrorCreateOpen.set(true);
   }
 
@@ -1751,7 +1775,7 @@ export class BoardPage implements OnDestroy {
   }
 
   openMirrorsDialog() {
-    this.mirrorMenuOpen.set(false);
+    this.boardMenuOpen.set(false);
     this.mirrorsDialogOpen.set(true);
   }
 
@@ -1761,7 +1785,7 @@ export class BoardPage implements OnDestroy {
     try {
       const archive = await this.loadBoardExportArchive();
       downloadTextFile(JSON.stringify(archive, null, 2), "application/json", boardArchiveFileName(archive, "json"));
-      this.exportMenuOpen.set(false);
+      this.boardMenuOpen.set(false);
     } finally {
       this.exportLoading.set(null);
     }
@@ -1779,7 +1803,7 @@ export class BoardPage implements OnDestroy {
         columns: boardReportColumnWidths(rows),
         stickyRowsCount: 4,
       }).toFile(boardArchiveFileName(archive, "xlsx"));
-      this.exportMenuOpen.set(false);
+      this.boardMenuOpen.set(false);
     } finally {
       this.exportLoading.set(null);
     }

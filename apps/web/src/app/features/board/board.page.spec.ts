@@ -355,6 +355,45 @@ describe("BoardPage", () => {
     expect((fixture.nativeElement as HTMLElement).querySelector(".mirror-menu-trigger")).toBeNull();
   });
 
+  // The suite renders BoardPage with an empty template, so the menu is exercised through its state.
+  it("routes secondary header actions through one board menu", async () => {
+    const fixture = createInitializedBoardPage();
+    await vi.waitFor(() => expect(fixture.componentInstance.boardMenuAvailable()).toBe(true));
+    const page = fixture.componentInstance;
+    expect(page.boardMenuOpen()).toBe(false);
+
+    page.toggleBoardMenu();
+    expect(page.boardMenuOpen()).toBe(true);
+
+    // Picking an item that opens another surface closes the menu first so the two never stack.
+    page.openBackgroundFromMenu();
+    expect(page.boardMenuOpen()).toBe(false);
+    expect(page.showBackground()).toBe(true);
+
+    page.toggleBoardMenu();
+    page.openMirrorsDialog();
+    expect(page.boardMenuOpen()).toBe(false);
+    expect(page.mirrorsDialogOpen()).toBe(true);
+  });
+
+  it("persists compact card density per board and exposes it as a host class", async () => {
+    const fixture = createInitializedBoardPage();
+    await vi.waitFor(() => expect(fixture.componentInstance.boardMenuAvailable()).toBe(true));
+    const host = fixture.nativeElement as HTMLElement;
+    const key = viewPreferenceKey("compactCards", "board:board-1:kanban");
+    expect(host.classList.contains("compact-cards")).toBe(false);
+
+    fixture.componentInstance.toggleCompactCards();
+    fixture.detectChanges();
+    expect(host.classList.contains("compact-cards")).toBe(true);
+    expect(localStorage.getItem(key)).toBe("1");
+
+    fixture.componentInstance.toggleCompactCards();
+    fixture.detectChanges();
+    expect(host.classList.contains("compact-cards")).toBe(false);
+    expect(localStorage.getItem(key)).toBeNull();
+  });
+
   it("does not load mirror status when the board-open payload has no mirrors", async () => {
     const fixture = createInitializedBoardPage();
 

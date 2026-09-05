@@ -407,7 +407,7 @@ export class BoardTableViewComponent implements OnDestroy {
   readonly columnsAnchor = signal<HTMLElement | null>(null);
   readonly sortOpen = signal(false);
   readonly groupOpen = signal(false);
-  readonly exportOpen = signal(false);
+  readonly moreOpen = signal(false);
   readonly aggregateOpenFieldId = signal<string | null>(null);
   readonly creatingTask = signal(false);
   /** List whose run label is currently showing an inline composer, if any. */
@@ -987,11 +987,11 @@ export class BoardTableViewComponent implements OnDestroy {
   }
 
   /** One open menu at a time. Each keeps its own signal so a dismissal cannot close a sibling. */
-  toggleMenu(name: "group" | "sort" | "columns" | "export") {
+  toggleMenu(name: "group" | "sort" | "columns" | "more") {
     this.groupOpen.set(name === "group" ? !this.groupOpen() : false);
     this.sortOpen.set(name === "sort" ? !this.sortOpen() : false);
     this.columnsOpen.set(name === "columns" ? !this.columnsOpen() : false);
-    this.exportOpen.set(name === "export" ? !this.exportOpen() : false);
+    this.moreOpen.set(name === "more" ? !this.moreOpen() : false);
   }
 
   /** Both triggers route through here so the single panel instance follows whichever was clicked. */
@@ -1104,7 +1104,7 @@ export class BoardTableViewComponent implements OnDestroy {
     this.groupOpen.set(false);
     this.sortOpen.set(false);
     this.columnsOpen.set(false);
-    this.exportOpen.set(false);
+    this.moreOpen.set(false);
     this.aggregateOpenFieldId.set(null);
   }
 
@@ -2035,7 +2035,7 @@ export class BoardTableViewComponent implements OnDestroy {
   }
 
   exportCsv() {
-    this.exportOpen.set(false);
+    this.moreOpen.set(false);
     const columns = [TITLE_COLUMN_ID, ...this.visibleColumns()];
     const rows = [
       columns.map((column) => this.csvCell(this.columnLabel(column))),
@@ -2050,7 +2050,7 @@ export class BoardTableViewComponent implements OnDestroy {
    * script can read, rather than a grid a script has to parse back out of.
    */
   exportJson() {
-    this.exportOpen.set(false);
+    this.moreOpen.set(false);
     const payload = this.buildExportPayload();
     downloadTextFile(JSON.stringify(payload, null, 2), "application/json", this.exportFileName("json"));
   }
@@ -2064,7 +2064,7 @@ export class BoardTableViewComponent implements OnDestroy {
    * Loaded on demand. write-excel-file is ~100kB and most sessions never export.
    */
   async exportExcel() {
-    this.exportOpen.set(false);
+    this.moreOpen.set(false);
     const payload = this.buildExportPayload();
     const { default: writeXlsxFile } = await import("write-excel-file/browser");
     const sheets = buildWorkbookExport(payload).sheets;
@@ -2215,8 +2215,9 @@ export class BoardTableViewComponent implements OnDestroy {
   private widthForColumn(id: string): number {
     const defaults: Record<string, number> = {
       // The title cell also carries the card key as an inline prefix, so it needs more room than the
-      // title text alone would suggest before it starts ellipsing.
-      title: 340,
+      // title text alone would suggest before it starts ellipsing. 400 leaves a ~10-character key and
+      // still around 40 characters of title at the default type size.
+      title: 400,
       // Wide enough for the icon plus a two-word list name ("Awaiting Feedback", "Planning /
       // Review"): status is a scanning column and an ellipsed status is worth little.
       status: 176,

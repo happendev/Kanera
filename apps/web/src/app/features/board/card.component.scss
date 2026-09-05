@@ -851,3 +851,18 @@
     letter-spacing: -0.5px;
   }
 }
+
+// ─── Compact density ──────────────────────────────────────────────────────────
+// Set by the board page host (see BoardPage `host`). Only the metadata rows go: title, labels, due
+// date and assignees are what a lane is scanned for, the badges and indicators are what made a
+// populated lane fit two cards.
+:host-context(.compact-cards) {
+  .cf-badge,
+  .card-indicators {
+    display: none;
+  }
+
+  .card-footer:not(:has(.card-due, .assignee-stack)) {
+    display: none;
+  }
+}

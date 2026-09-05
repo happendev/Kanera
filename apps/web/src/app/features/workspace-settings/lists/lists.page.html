@@ -1,4 +1,14 @@
       <k-docs-link class="spaced" path="lists" label="Learn more about lists" />
+<div class="settings-info-note">
+  <i class="ti ti-info-circle"></i>
+  <span>
+    @if (settings.isStandalone()) {
+    These lists define this board's workflow.
+    } @else {
+    Lists are shared across every board in this workspace - all boards use the same set of lists.
+    }
+  </span>
+</div>
       <form class="board-form single-line-capture" (submit)="settings.addList($event)">
         <k-icon-picker [value]="settings.newListIcon() ?? 'list'" (valueChange)="settings.newListIcon.set($event)" />
         <k-color-picker [value]="settings.newListColor()" (valueChange)="settings.newListColor.set($event)" />
@@ -14,10 +24,10 @@
             <input class="inline-name-input" [value]="settings.editingListName()" (input)="settings.editingListName.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" (blur)="settings.saveListName(list.id)" (keydown.enter)="settings.saveListName(list.id)" (keydown.escape)="settings.cancelEditList()"
               autofocus style="flex:1" />
             } @else {
-            <span class="list-badge" [style.--list-color]="list.color ? 'var(--color-' + list.color + ')' : null" [class.has-color]="!!list.color" (click)="settings.startEditList(list)" kTooltip="Click to rename">
+            <button type="button" class="list-badge list-rename-trigger" [style.--list-color]="list.color ? 'var(--color-' + list.color + ')' : null" [class.has-color]="!!list.color" (click)="settings.startEditList(list)" [attr.aria-label]="'Rename ' + list.name" kTooltip="Click to rename">
               @if (list.icon) { <i [class]="'ti ti-' + list.icon" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i> }
               {{ list.name }}
-            </span>
+            </button>
             }
             <div class="row-actions">
               <k-icon-picker [value]="list.icon ?? 'list'" (valueChange)="settings.updateListStyle(list.id, { icon: $event })" />
@@ -33,13 +43,3 @@
         <span class="empty-hint">No lists yet.</span>
         }
       </div>
-<div class="settings-info-note">
-  <i class="ti ti-info-circle"></i>
-  <span>
-    @if (settings.isStandalone()) {
-    These lists define this board's workflow.
-    } @else {
-    Lists are shared across every board in this workspace - all boards use the same set of lists.
-    }
-  </span>
-</div>

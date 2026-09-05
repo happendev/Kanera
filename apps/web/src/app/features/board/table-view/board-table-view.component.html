@@ -203,44 +203,41 @@
       </button>
     }
 
-    <button
-      type="button"
-      class="tv-toolbar-btn"
-      kTooltip="Reset table layout"
-      aria-label="Reset table layout"
-      (click)="resetTable()"
-    >
-      <i class="ti ti-refresh"></i><span class="tv-toolbar-label">Reset</span>
-    </button>
-
-    @if (canEditRole()) {
-      <span class="tv-menu-wrap">
-        <button
-          type="button"
-          class="tv-toolbar-btn"
-          [class.is-open]="exportOpen()"
-          kTooltip="Export this table"
-          aria-label="Export this table"
-          (click)="toggleMenu('export')"
-        >
-          <i class="ti ti-download"></i><span class="tv-toolbar-label">Export</span>
-        </button>
-        @if (exportOpen()) {
-          <div class="ap-panel tv-small-menu" kAnchoredPanel [apPlacement]="{ align: 'end', width: 210, minHeight: 90 }" (apDismissed)="exportOpen.set(false)">
-            <p class="tv-panel-hint tv-export-scope">Exporting {{ exportScopeLabel() }}</p>
-            <button type="button" class="tv-menu-row" (click)="exportExcel()">
+    <!-- Reset and Export are rare, whole-sheet actions; behind one overflow menu they stop being a
+         third band of equally weighted controls beside the ones that shape the rows every day. -->
+    <span class="tv-menu-wrap">
+      <button
+        type="button"
+        class="tv-toolbar-btn tv-icon-btn"
+        [class.is-open]="moreOpen()"
+        kTooltip="More table actions"
+        aria-label="More table actions"
+        [attr.aria-haspopup]="'menu'"
+        [attr.aria-expanded]="moreOpen()"
+        (click)="toggleMenu('more')"
+      >
+        <i class="ti ti-dots"></i>
+      </button>
+      @if (moreOpen()) {
+        <div class="ap-panel tv-small-menu" role="menu" aria-label="More table actions" kAnchoredPanel [apPlacement]="{ align: 'end', width: 230, minHeight: 90 }" (apDismissed)="moreOpen.set(false)">
+          <button type="button" class="tv-menu-row" role="menuitem" (click)="resetTable()">
+            <i class="ti ti-refresh"></i><span>Reset table layout</span>
+          </button>
+          @if (canEditRole()) {
+            <p class="tv-panel-hint tv-export-scope">Export {{ exportScopeLabel() }}</p>
+            <button type="button" class="tv-menu-row" role="menuitem" (click)="exportExcel()">
               <i class="ti ti-file-spreadsheet"></i><span>Excel workbook</span>
             </button>
-            <button type="button" class="tv-menu-row" (click)="exportCsv()">
+            <button type="button" class="tv-menu-row" role="menuitem" (click)="exportCsv()">
               <i class="ti ti-file-type-csv"></i><span>CSV (this grid)</span>
             </button>
-            <button type="button" class="tv-menu-row" (click)="exportJson()">
+            <button type="button" class="tv-menu-row" role="menuitem" (click)="exportJson()">
               <i class="ti ti-file-code"></i><span>JSON</span>
             </button>
-          </div>
-        }
-      </span>
-    }
+          }
+        </div>
+      }
+    </span>
   </div>
 
   <!-- No (scroll) binding: incremental row mounting is driven by a coalesced listener attached
@@ -470,7 +467,7 @@
                   @if (unreadCount(card.id) > 0) {
                     <span class="tv-unread" [kTooltip]="unreadLabel(card.id)" [attr.aria-label]="unreadLabel(card.id)"></span>
                   }
-                  <span class="tv-title">@if (showCardKeys()) { <span class="tv-card-key">{{ card.key }}</span> }{{ card.title }}</span>
+                  <span class="tv-title">@if (showCardKeys()) { <span class="tv-card-key">{{ card.key }}</span> }<span class="tv-title-text">{{ card.title }}</span></span>
                 </button>
                 <button type="button" class="tv-open-btn tv-title-open tv-row-stop" aria-label="Open card" kTooltip="Open card" (click)="$event.stopPropagation(); cardOpened.emit(card.id)">
                   <i class="ti ti-arrows-maximize"></i>
