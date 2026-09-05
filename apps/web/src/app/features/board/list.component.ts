@@ -813,6 +813,24 @@ export class ListComponent implements OnDestroy {
     // settle onto it after drag cleanup re-enables scroll snapping.
     document.dispatchEvent(new CustomEvent<string>(APP_DOM_EVENTS.CARD_DROP_TARGET, { detail: targetListId }));
 
+    // Selected cards can originate in any lane. Find an anchor outside the selection;
+    // the page writes each move in sequence, so another moving card cannot be an anchor.
+    if (droppedItem.kind === "card" && this.bulkSelectedCardIds().has(droppedItem.card.id)
+      && this.bulkSelectedCardIds().size > 1) {
+      const order = committedItemOrderForDrop(targetItems, droppedItem, event.currentIndex);
+      const index = order.findIndex((candidate) => laneItemKey(candidate) === itemKey);
+      const stationary = (candidate: BoardLaneItem) =>
+        candidate.kind !== "card" || !this.bulkSelectedCardIds().has(candidate.card.id);
+      const following = order.slice(index + 1).find(stationary);
+      const preceding = order.slice(0, index).filter(stationary).at(-1);
+      this.cardDropped.emit({
+        cardId: droppedItem.card.id, toListId: targetListId,
+        ...(following ? { beforeItem: laneItemAnchor(following) }
+          : preceding ? { afterItem: laneItemAnchor(preceding) } : { beforeItem: null }),
+      });
+      return;
+    }
+
     const committedTargetItems = committedItemOrderForDrop(targetItems, droppedItem, event.currentIndex);
     if (event.previousContainer === event.container && sameItemOrder(targetItems, committedTargetItems)) return;
     suppressDropCommitTransitions(

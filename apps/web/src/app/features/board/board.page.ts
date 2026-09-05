@@ -734,6 +734,7 @@ export class BoardPage implements OnDestroy {
   ngOnDestroy() {
     document.removeEventListener("click", this.handleDocumentClick);
     document.removeEventListener("keydown", this.handleDocumentKeydown);
+    document.removeEventListener("keydown", this.handleSelectionEscape, true);
     window.removeEventListener("kanera:new-card", this.handlePaletteNewCard);
     this.clearSearchDebounce();
     this.cancelScheduledListGrowth();
@@ -872,6 +873,7 @@ export class BoardPage implements OnDestroy {
   constructor() {
     document.addEventListener("click", this.handleDocumentClick);
     document.addEventListener("keydown", this.handleDocumentKeydown);
+    document.addEventListener("keydown", this.handleSelectionEscape, true);
     window.addEventListener("kanera:new-card", this.handlePaletteNewCard);
     effect((onCleanup) => {
       if (!this.overviewOpen()) return;
@@ -1370,6 +1372,12 @@ export class BoardPage implements OnDestroy {
   private readonly handleDocumentClick = (event: MouseEvent) => this.onDocumentClick(event);
   private readonly handleDocumentKeydown = (event: KeyboardEvent) => this.onDocumentKeydown(event);
 
+  // Selection is page state, so Escape clears it even when a popover or drag
+  // consumes the key before bubbling. Let that surface still handle its own Escape.
+  private readonly handleSelectionEscape = (event: KeyboardEvent) => {
+    if (event.key === "Escape") this.clearBulkSelection();
+  };
+
   onDocumentClick(_event: MouseEvent) {
     if (this.skipNextDocumentClick) {
       this.skipNextDocumentClick = false;
@@ -1381,7 +1389,7 @@ export class BoardPage implements OnDestroy {
   }
 
   onDocumentKeydown(event: KeyboardEvent) {
-    if (event.key === "Escape" && this.bulkSelectedCount() > 0 && !this.openCardId() && !this.bulkMenuOpen()) {
+    if (event.key === "Escape" && this.bulkSelectedCount() > 0) {
       event.preventDefault();
       this.clearBulkSelection();
       return;
@@ -2061,9 +2069,27 @@ export class BoardPage implements OnDestroy {
 
   async onCardDrop(p: CardDropPayload) {
     if (!this.state.canEdit()) return;
-    const previousCards = this.state.snapshotCards();
+    const cards = this.bulkSelectedCardIds().has(p.cardId)
+      ? this.bulkSelectedCards() : [this.state.cardById(p.cardId)].filter((card) => card !== undefined && card !== null);
+    // Place each card against the preceding card's confirmed position. Preparing
+    // the whole selection up front makes later server positions reshuffle the group.
+    let next = p;
+    for (const card of cards) {
+      try {
+        await this.prepareDroppedCard({ ...next, cardId: card.id })();
+        next = { cardId: card.id, toListId: p.toListId, afterItem: { type: "card", id: card.id } };
+      } catch (error) {
+        // Earlier writes are durable and later cards have not moved. Restore only
+        // this card's position, preserving unrelated realtime updates.
+        this.state.moveCard(card.id, card.listId, card.position);
+        throw error;
+      }
+    }
+  }
+
+  private prepareDroppedCard(p: CardDropPayload): () => Promise<void> {
     const card = this.state.cardById(p.cardId);
-    if (!card) return;
+    if (!card) return async () => {};
     const beforeAnchor = p.beforeItem ?? (p.beforeCardId !== undefined && p.beforeCardId !== null ? { type: "card" as const, id: p.beforeCardId } : p.beforeCardId);
     const afterAnchor = p.afterItem ?? (p.afterCardId !== undefined && p.afterCardId !== null ? { type: "card" as const, id: p.afterCardId } : p.afterCardId);
     const beforeItem = beforeAnchor ? this.itemForAnchor(beforeAnchor) : beforeAnchor;
@@ -2072,17 +2098,14 @@ export class BoardPage implements OnDestroy {
 
     this.state.moveCard(p.cardId, p.toListId, optimisticPosition);
 
-    try {
+    return async () => {
       const moved = await this.api.post<{ id: string; listId: string; position: string }>(`/cards/${p.cardId}/move`, {
         listId: p.toListId,
         ...(p.beforeItem !== undefined ? { beforeItem: p.beforeItem } : p.beforeCardId !== undefined ? { beforeCardId: p.beforeCardId } : {}),
         ...(p.afterItem !== undefined ? { afterItem: p.afterItem } : p.afterCardId !== undefined ? { afterCardId: p.afterCardId } : {}),
       });
       this.state.moveCard(moved.id, moved.listId, moved.position);
-    } catch (error) {
-      this.state.restoreCards(previousCards);
-      throw error;
-    }
+    };
   }
 
   async onSeparatorDrop(p: SeparatorDropPayload) {

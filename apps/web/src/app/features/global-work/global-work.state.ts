@@ -841,9 +841,46 @@ export class GlobalWorkState {
       | { afterCardId: string | null }
       | { beforeCardId: string | null },
   ): Promise<void> {
+    await this.moveCards([cardId], listId, anchor);
+  }
+
+  async moveCards(
+    cardIds: string[],
+    listId: string,
+    anchor: Parameters<GlobalWorkState["moveCard"]>[2],
+  ): Promise<void> {
+    const ids = new Set(cardIds);
+    const originals = new Map(this.response().cards.filter((card) => ids.has(card.id)).map((card) => [card.id, card]));
+    let next = anchor;
+    // Derive each next position from the preceding confirmed move. Preparing all
+    // positions in advance makes the visible group reshuffle as responses settle.
+    for (const id of cardIds.filter((id) => originals.has(id))) {
+      try {
+        await this.prepareCardMove(id, listId, next)();
+        next = { afterItem: { type: "card", id } };
+      } catch (error) {
+        // Never replace the whole response: completed moves and unrelated realtime
+        // updates remain valid even when a later request in this batch fails.
+        this.response.update((response) => ({
+          ...response,
+          cards: response.cards.map((card) => {
+            const original = card.id === id ? originals.get(id) : undefined;
+            return original ? { ...card, listId: original.listId, position: original.position } : card;
+          }),
+        }));
+        throw error;
+      }
+    }
+  }
+
+  private prepareCardMove(
+    cardId: string,
+    listId: string,
+    anchor: Parameters<GlobalWorkState["moveCard"]>[2],
+  ): () => Promise<void> {
     const snapshot = this.response();
     const moving = snapshot.cards.find((card) => card.id === cardId);
-    if (!moving) return;
+    if (!moving) return async () => {};
     const lane = [
       ...snapshot.cards
         .filter((card) => card.id !== cardId && card.listId === listId)
@@ -880,13 +917,14 @@ export class GlobalWorkState {
         card.id === cardId ? { ...card, listId, position: optimisticPosition } : card
       ),
     }));
-    try {
+    const globalWorkUserId = this.focusedTargetUserId();
+    return async () => {
       const moved = await this.api.post<{ id: string; listId: string; position: string }>(
         `/cards/${cardId}/move`,
         {
           listId,
           ...itemAnchor,
-          ...(this.focusedTargetUserId() ? { globalWorkUserId: this.focusedTargetUserId() } : {}),
+          ...(globalWorkUserId ? { globalWorkUserId } : {}),
         },
       );
       this.response.update((response) => ({
@@ -895,10 +933,7 @@ export class GlobalWorkState {
           card.id === moved.id ? { ...card, listId: moved.listId, position: moved.position } : card
         ),
       }));
-    } catch (error) {
-      this.response.set(snapshot);
-      throw error;
-    }
+    };
   }
 
   /**

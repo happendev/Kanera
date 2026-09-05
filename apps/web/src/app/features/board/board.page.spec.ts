@@ -437,6 +437,21 @@ describe("BoardPage", () => {
     expect(component.composerSeed()).toEqual({ listId: "list-1", atTop: true });
   });
 
+  it("clears selection on Escape even when a panel consumes the event", () => {
+    const fixture = createInitializedBoardPage();
+    fixture.componentInstance.bulkSelectedCardIds.set(new Set(["card-1", "card-2"]));
+    fixture.componentInstance.bulkMenuPoint.set({ x: 10, y: 10 });
+    const consume = (event: Event) => event.stopPropagation();
+    document.addEventListener("keydown", consume, true);
+    try {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(fixture.componentInstance.bulkSelectedCount()).toBe(0);
+      expect(fixture.componentInstance.bulkMenuPoint()).toBeNull();
+    } finally {
+      document.removeEventListener("keydown", consume, true);
+    }
+  });
+
   it("clears bulk selection on a board-background click but leaves it alone for a click on a child", () => {
     const fixture = createInitializedBoardPage();
     const component = fixture.componentInstance;
@@ -897,6 +912,36 @@ describe("BoardPage", () => {
     }
   });
 
+  it("moves a selection from different lists in order and preserves successful writes on failure", async () => {
+    const fixture = createInitializedBoardPage();
+    const component = fixture.componentInstance;
+    const state = boardState(component);
+    await vi.waitFor(() => expect(state.canEdit()).toBe(true));
+    api.post.mockClear();
+    state.cards.set([
+      card({ id: "card-1", listId: "list-1" }),
+      card({ id: "card-2", listId: "list-2" }),
+      card({ id: "card-3", listId: "list-4" }),
+    ]);
+    component.bulkSelectedCardIds.set(new Set(["card-1", "card-2", "card-3"]));
+    const first = deferred<{ id: string; listId: string; position: string }>();
+    api.post.mockReturnValueOnce(first.promise).mockRejectedValueOnce(new Error("offline"));
+    const save = component.onCardDrop({ cardId: "card-2", toListId: "list-3", beforeItem: null });
+    // The remaining cards stay in their source lists until the preceding move settles.
+    expect(state.cards().map((card) => card.listId)).toEqual(["list-3", "list-2", "list-4"]);
+    expect(api.post).toHaveBeenCalledTimes(1);
+    first.resolve({ id: "card-1", listId: "list-3", position: "2000" });
+    await expect(save).rejects.toThrow("offline");
+    expect(api.post).toHaveBeenNthCalledWith(1, "/cards/card-1/move", { listId: "list-3", beforeItem: null });
+    expect(api.post).toHaveBeenNthCalledWith(2, "/cards/card-2/move", {
+      listId: "list-3", afterItem: { type: "card", id: "card-1" },
+    });
+    expect(state.cardById("card-1")?.listId).toBe("list-3");
+    expect(state.cardById("card-2")?.listId).toBe("list-2");
+    expect(state.cardById("card-3")?.listId).toBe("list-4");
+    expect(api.post).toHaveBeenCalledTimes(2);
+  });
+
   // Mobile drop-target settling moved with the rest of the card-drag plumbing into k-board; it is
   // covered by board-canvas.component.spec.ts, which also exercises the multi-canvas ownership guard
   // that this page-level version could not.
@@ -1068,7 +1113,9 @@ describe("BoardPage", () => {
       viewerRole: "editor",
     });
 
+    fixture.componentInstance.bulkSelectedCardIds.set(new Set(["card-1", "card-2"]));
     fixture.componentInstance.openCardDetail("card-1");
+    expect(fixture.componentInstance.bulkSelectedCount()).toBe(0);
 
     expect(router.navigate).toHaveBeenCalledWith(["/b", "board-1", "c", "card-1"], {
       queryParams: { cardId: null, lightboxAttachmentId: null },

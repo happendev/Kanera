@@ -1032,7 +1032,10 @@
 // The drag preview is cloned to the body, where --tv-grid-template no longer resolves, so the grid
 // would collapse into a column of stacked cells. Render it as a compact chip of the title instead —
 // the same shape the table drags — and let the placeholder show where it will land.
+.tv-drag-count { display: none; }
+
 .cdk-drag-preview.tv-row {
+  .tv-drag-count { display: inline; margin-right: 8px; }
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1861,4 +1864,9 @@ k-card-labels.tv-labels {
   .tv-actions-btn {
     opacity: 1;
   }
+}
+
+// Empty status groups still need a hit area; collapsed and read-only groups stay compact.
+.tv-run-rows:not(.cdk-drop-list-disabled):empty {
+  min-height: 36px;
 }

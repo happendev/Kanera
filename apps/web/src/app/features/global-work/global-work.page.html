@@ -733,6 +733,16 @@
           }
         </section>
 
+        @if (bulkSelectedCardIds().size) {
+          <div class="bulk-selection-bar">
+            <span>{{ bulkSelectedCardIds().size }} selected</span>
+            <button type="button" class="btn btn-sm" (click)="clearBulkSelection()">Clear selection</button>
+          </div>
+        }
+        @if (moveError(); as error) {
+          <div class="board-move-error" role="alert"><i class="ti ti-alert-circle"></i>{{ error }}</div>
+        }
+
         @if (effectiveDisplay() === "board") {
           <!-- Only the loading notice remains: it explains why dragging is inert until every
                matching card has arrived. The standing "how to prioritise" advice was removed. -->
@@ -741,9 +751,6 @@
               <span class="spinner"></span>
               <span><strong>Loading all matching cards…</strong> You can start dragging when the full list is ready.</span>
             </div>
-          }
-          @if (moveError(); as error) {
-            <div class="board-move-error"><i class="ti ti-alert-circle"></i>{{ error }}</div>
           }
           <div class="global-board-sections">
             @for (workspace of boardWorkspaces(); track workspace.id) {
@@ -797,7 +804,11 @@
                       [draggableCardIds]="draggableCardIds()"
                       [canCreateCards]="(editableBoardsByWorkspace().get(workspace.id) ?? []).length > 0"
                       [showBulkListActions]="false"
-                      [showSelectAllCards]="false"
+                      [showSelectAllCards]="true"
+                      [bulkSelectedCardIds]="bulkSelectedCardIds()"
+                      (bulkSelectionRequested)="onBulkSelectionRequested($event)"
+            (bulkMenuRequested)="onBulkMenuRequested($event)"
+                      (bulkListSelectionRequested)="onBulkListSelectionRequested($event)"
                       [showCardActions]="true"
                       [allowCardDuplicate]="true"
                       [allowCardCopyToBoard]="true"
@@ -889,7 +900,13 @@
             [editableCardIds]="roleEditableCardIds()"
             [showSearch]="false"
             [showFilterBar]="false"
-            [showRowSelection]="false"
+            [showRowSelection]="true"
+            [bulkSelectedCardIds]="bulkSelectedCardIds()"
+            (bulkSelectionRequested)="onBulkSelectionRequested($event)"
+            (bulkMenuRequested)="onBulkMenuRequested($event)"
+            (bulkListSelectionRequested)="onBulkListSelectionRequested($event)"
+            (bulkSelectionCleared)="clearBulkSelection()"
+            (cardDropped)="onTableCardDrop($event)"
             [canCreate]="false"
             [priorityVisibleByDefault]="upNextAvailable()"
             (hostPresentationChange)="state.setTablePresentation($event)"
@@ -1042,4 +1059,25 @@
     (created)="onCardCreated()"
     (dismissed)="closeComposer()"
   />
+}
+
+
+@if (bulkMenuPoint() && bulkSelectedCards().length) {
+  <k-bulk-card-actions-menu
+    [boardId]="bulkBoardId()"
+    [sourceWorkspaceId]="bulkWorkspaceId()"
+    [workspaceActionsEnabled]="bulkWorkspaceId() !== null"
+    [cardIds]="bulkSelectedIds()" [cards]="bulkSelectedCards()"
+    [lists]="bulkLists()" [labels]="bulkLabels()" [members]="bulkMembers()"
+    [currentUserId]="state.auth.user()?.id" [anchorPoint]="bulkMenuPoint()"
+    (dismissed)="bulkMenuPoint.set(null)" (done)="onBulkActionsDone()"
+    (editCustomFields)="openBulkCustomFields()" />
+}
+@if (bulkCustomFieldsOpen()) {
+  <k-bulk-custom-fields-dialog
+    [boardId]="bulkBoardId()"
+    [cardIds]="bulkSelectedIds()" [cards]="bulkSelectedCards()"
+    [customFields]="bulkCustomFields()" [members]="bulkMembers()"
+    [currentUserId]="state.auth.user()?.id"
+    (dismissed)="bulkCustomFieldsOpen.set(false)" (done)="onBulkActionsDone()" />
 }

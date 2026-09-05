@@ -44,6 +44,79 @@ const card = {
 };
 
 describe("GlobalWorkPage card routing", () => {
+  it("moves cards from multiple source lists and rejects a cross-workspace selection", async () => {
+    const moving = [card, { ...card, id: "second", listId: "another-list" }];
+    const state = {
+      cards: signal(moving), moveCards: vi.fn().mockResolvedValue(undefined),
+      initialize: vi.fn(), auth: { user: () => null }, focusedTargetUserId: () => null,
+    };
+    await TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ApiClient, useValue: {} },
+        { provide: Dialog, useValue: {} },
+        { provide: Router, useValue: {} },
+      ],
+    }).overrideComponent(GlobalWorkPage, {
+      set: { template: "", providers: [{ provide: GlobalWorkState, useValue: state }] },
+    }).compileComponents();
+    const fixture = TestBed.createComponent(GlobalWorkPage);
+    fixture.componentRef.setInput("lens", "team");
+    fixture.changeDetectorRef.detach();
+    const component = fixture.componentInstance;
+    vi.spyOn(component, "canDragCard").mockReturnValue(true);
+    vi.spyOn(component, "listsById").mockReturnValue(new Map([
+      ["destination", { id: "destination", workspaceId: card.workspaceId } as never],
+    ]));
+    component.bulkSelectedCardIds.set(new Set(moving.map((candidate) => candidate.id)));
+    component.onCardDrop({ cardId: card.id, toListId: "destination", beforeItem: null }, card.workspaceId);
+    expect(state.moveCards).toHaveBeenCalledWith([card.id, "second"], "destination", { beforeItem: null });
+    state.moveCards.mockClear();
+    state.cards.set([card, { ...moving[1]!, workspaceId: "other-workspace" }]);
+    component.onCardDrop({ cardId: card.id, toListId: "destination" }, card.workspaceId);
+    expect(state.moveCards).not.toHaveBeenCalled();
+    expect(component.moveError()).toContain("one workspace");
+  });
+
+  it("opens the selected-card menu and limits workspace actions to one workspace", async () => {
+    const cards = signal([card, { ...card, id: "second" }]);
+    const state = {
+      cards, interactionReady: () => true, initialize: vi.fn(),
+      auth: { user: () => null }, focusedTargetUserId: () => null,
+    };
+    await TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ApiClient, useValue: {} },
+        { provide: Dialog, useValue: {} },
+        { provide: Router, useValue: {} },
+      ],
+    }).overrideComponent(GlobalWorkPage, {
+      set: { template: "", providers: [{ provide: GlobalWorkState, useValue: state }] },
+    }).compileComponents();
+    const fixture = TestBed.createComponent(GlobalWorkPage);
+    fixture.componentRef.setInput("lens", "team");
+    const component = fixture.componentInstance;
+    vi.spyOn(component, "roleEditableCardIds").mockReturnValue(new Set([card.id, "second"]));
+    component.bulkSelectedCardIds.set(new Set([card.id, "second"]));
+    component.onBulkMenuRequested({ cardId: card.id, point: { x: 40, y: 60 } });
+    expect(component.bulkMenuPoint()).toEqual({ x: 40, y: 60 });
+    expect(component.bulkWorkspaceId()).toBe(card.workspaceId);
+    component.onDocumentKeydown(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(component.bulkMenuPoint()).toBeNull();
+    component.bulkSelectedCardIds.set(new Set([card.id, "second"]));
+    cards.set([card, { ...card, id: "second", workspaceId: "other-workspace" }]);
+    expect(component.bulkWorkspaceId()).toBeNull();
+    component.onBulkMenuRequested({ cardId: card.id, point: { x: 40, y: 60 } });
+    expect(component.bulkMenuPoint()).not.toBeNull();
+    component.clearBulkSelection();
+    vi.spyOn(component, "roleEditableCardIds").mockReturnValue(new Set([card.id]));
+    component.bulkSelectedCardIds.set(new Set([card.id, "second"]));
+    component.onBulkMenuRequested({ cardId: card.id, point: { x: 40, y: 60 } });
+    expect(component.bulkMenuPoint()).toBeNull();
+    expect(component.moveError()).toContain("editable cards");
+  });
+
   // The gate the table consumes as `editableCardIds`: a cross-board sheet mixes boards the viewer
   // edits with boards they only observe, and every editing affordance in it is per row. Completion
   // is presentation state and must not disable moving a card the viewer can otherwise edit.
@@ -395,7 +468,18 @@ describe("GlobalWorkPage card routing", () => {
     TestBed.tick();
     navigate.mockClear();
 
+    fixture.componentInstance.bulkSelectedCardIds.set(new Set([card.id, "second"]));
     fixture.componentInstance.openCard(card);
+    expect(fixture.componentInstance.bulkSelectedCardIds().size).toBe(0);
+    fixture.componentInstance.bulkSelectedCardIds.set(new Set([card.id, "second"]));
+    const consume = (event: Event) => event.stopPropagation();
+    document.addEventListener("keydown", consume, true);
+    try {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(fixture.componentInstance.bulkSelectedCardIds().size).toBe(0);
+    } finally {
+      document.removeEventListener("keydown", consume, true);
+    }
     expect(navigate).toHaveBeenCalledWith(["/my-cards", "c", card.id], {
       queryParams: { cardId: null },
       queryParamsHandling: "merge",

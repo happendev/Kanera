@@ -1384,3 +1384,12 @@ k-work-done-view {
     }
   }
 }
+
+.bulk-selection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 4px 16px 8px;
+  font-size: 13px;
+}

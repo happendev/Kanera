@@ -708,6 +708,39 @@ describe("GlobalWorkState", () => {
     });
   });
 
+  it("settles each card before placing the next and preserves unrelated updates on failure", async () => {
+    const { state, post } = setup();
+    await state.initialize("my");
+    const original = state.response().cards[0]!;
+    state.response.update((response) => ({
+      ...response,
+      cards: [
+        original,
+        { ...original, id: "second", listId: "source-2" },
+        { ...original, id: "third", listId: "source-3" },
+      ],
+    }));
+    let finishFirst!: (card: { id: string; listId: string; position: string }) => void;
+    post.mockClear();
+    post.mockReturnValueOnce(new Promise((resolve) => { finishFirst = resolve; }))
+      .mockRejectedValueOnce(new Error("offline"));
+    const save = state.moveCards([original.id, "second", "third"], "destination", { beforeCardId: null });
+    expect(state.response().cards.map((card) => card.listId)).toEqual(["destination", "source-2", "source-3"]);
+    expect(post).toHaveBeenCalledTimes(1);
+    // A realtime edit received while saving must survive the later move failure.
+    state.response.update((response) => ({
+      ...response, cards: response.cards.map((card) => ({ ...card, title: "Updated while saving" })),
+    }));
+    finishFirst({ id: original.id, listId: "destination", position: "500" });
+    await expect(save).rejects.toThrow("offline");
+    expect(state.response().cards.map((card) => card.listId)).toEqual(["destination", "source-2", "source-3"]);
+    expect(state.response().cards.every((card) => card.title === "Updated while saving")).toBe(true);
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(post).toHaveBeenLastCalledWith("/cards/second/move", expect.objectContaining({
+      listId: "destination", afterItem: { type: "card", id: original.id },
+    }));
+  });
+
   it("moves a Global Work separator through the mixed card lane", async () => {
     const separator = {
       id: "70000000-0000-4000-8000-000000000001",

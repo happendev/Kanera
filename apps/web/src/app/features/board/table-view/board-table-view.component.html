@@ -396,7 +396,8 @@
             class="tv-run-rows"
             cdkDropList
             [cdkDropListData]="group"
-            [cdkDropListDisabled]="!groupDragEnabled(group)"
+            [cdkDropListDisabled]="group.collapsed || !groupDragEnabled(group)"
+            [cdkDropListSortingDisabled]="hostCardGroups() === null && effectiveSortBy() !== 'position'"
             [cdkDropListEnterPredicate]="canEnterRun"
             (cdkDropListDropped)="onRowDrop($event)"
           >
@@ -410,7 +411,7 @@
             cdkDrag
             [cdkDragData]="card"
             [cdkDragStartDelay]="dragStartDelay"
-            [cdkDragDisabled]="!rowDragEnabled(group, card) || bulkSelectedCardIds().has(card.id)"
+            [cdkDragDisabled]="!rowDragEnabled(group, card) || (hostCardGroups() !== null && bulkSelectedCardIds().has(card.id))"
             (cdkDragStarted)="hostCardGroups() !== null && hostCardDragStarted.emit()"
             (cdkDragEnded)="hostCardGroups() !== null && hostCardDragEnded.emit()"
             (click)="onRowClick(card, $event)"
@@ -421,8 +422,11 @@
                  be a 403 on click. -->
             @let rowEditable = canEditCard(card);
             <div class="tv-cell tv-title-cell" data-col="title">
+              @if (bulkSelectedCardIds().has(card.id) && bulkSelectedCardIds().size > 1) {
+                <strong class="tv-drag-count">{{ bulkSelectedCardIds().size }} cards</strong>
+              }
               @if (rowDragEnabled(group, card)) {
-                <span class="tv-drag-handle tv-row-stop" cdkDragHandle kTooltip="Drag to reorder" aria-hidden="true">
+                <span class="tv-drag-handle tv-row-stop" cdkDragHandle kTooltip="Drag to move" aria-hidden="true">
                   <i class="ti ti-grip-vertical"></i>
                 </span>
               }

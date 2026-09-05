@@ -83,7 +83,7 @@
   (cdkDropListDropped)="onDrop($event)" (cdkDropListEntered)="onDropListEntered()" (cdkDropListExited)="receiving.set(false); draggingOut.set(true)">
   @for (item of renderedItems(); track item.kind === 'card' ? 'card:' + item.card.id : 'separator:' + item.separator.id) {
   @if (item.kind === 'card') {
-  <k-card cdkDrag kCloseCardChecklistsBeforeDrag #cardDrag="cdkDrag" [cdkDragStartDelay]="dragStartDelay" [cdkDragDisabled]="!canDragCard(item.card.id) || isBulkSelectedCard(item.card.id)" [cdkDragData]="item" (cdkDragStarted)="onDragStarted(cardDrag)" (cdkDragMoved)="onDragMoved($event)" (cdkDragEnded)="onDragEnded()" [card]="item.card" [customFields]="customFields()"
+  <k-card cdkDrag kCloseCardChecklistsBeforeDrag #cardDrag="cdkDrag" [cdkDragStartDelay]="dragStartDelay" [cdkDragDisabled]="!canDragCard(item.card.id)" [cdkDragData]="item" (cdkDragStarted)="onDragStarted(cardDrag)" (cdkDragMoved)="onDragMoved($event)" (cdkDragEnded)="onDragEnded()" [card]="item.card" [customFields]="customFields()"
     [customFieldValuesByField]="customFieldValuesForCard(item.card.id)" [labels]="labelsForCard(item.card.id)" [assignees]="assigneesForCard(item.card.id)" [coverUrl]="coverUrlForCard(item.card)" [attachmentCount]="attachmentCountForCard(item.card.id)"
     [commentCount]="commentCountForCard(item.card.id)" [coverPriority]="$first" [selected]="isSelectedCard(item.card.id)" [showActions]="showCardActions()" [allowDuplicate]="allowCardDuplicate()" [allowCopyToBoard]="allowCardCopyToBoard()" [allowMoveToBoard]="allowCardMoveToBoard()"
     [allowBoardNavigation]="allowBoardNavigation()" [bulkSelected]="isBulkSelectedCard(item.card.id)" [boardSummary]="boardSummaryForCard(item.card)"
@@ -97,6 +97,10 @@
       @let dragBoard = boardSummaryForCard(item.card);
       <div class="card-drag-preview" [class.has-cover]="dragCoverUrl" [class.is-completed]="item.card.completedAt"
         [style.--drag-cover-color]="coverColorForCard(item.card)">
+        @if (isBulkSelectedCard(item.card.id) && bulkSelectedCardIds().size > 1) {
+        <strong class="bulk-drag-count">{{ bulkSelectedCardIds().size }} cards</strong>
+      }
+
         @if (dragCoverUrl) {
         <div class="card-drag-preview-cover" aria-hidden="true"
           [style.aspect-ratio]="$any(item.card).coverImageWidth > 0 && $any(item.card).coverImageHeight > 0 ? $any(item.card).coverImageWidth + ' / ' + $any(item.card).coverImageHeight : null"

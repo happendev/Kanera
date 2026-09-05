@@ -5,6 +5,7 @@ import { ApiClient } from "../../core/api/api.client";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { BoardPickerPopover, type BoardPickerPick } from "./board-picker.popover";
 import { BoardState } from "./board-state";
+import { BULK_CARD_STORE } from "./bulk-card-store";
 import { cardIdBatchesByBoard, cardIdsByBoard } from "./bulk-card-batches.util";
 import { DatePickerPopover } from "./date-picker.popover";
 import type { DueDateSlotSelection } from "./due-date.util";
@@ -59,7 +60,7 @@ const BULK_MENU_WIDTH = 232;
       </div>
 
       <div class="bcam-sub">
-        <button #labelsTrigger type="button" class="bcam-item" [class.is-active]="labelsOpen()" (click)="toggleSub($event, 'labels')">
+        <button #labelsTrigger type="button" class="bcam-item" [class.is-active]="labelsOpen()" (click)="toggleSub($event, 'labels')" [disabled]="!workspaceActionsEnabled()" [title]="workspaceActionsEnabled() ? '' : 'Select cards from one workspace'">
           <i class="ti ti-tag"></i>
           <span>Labels</span>
           <i class="ti ti-chevron-right bcam-chev"></i>
@@ -115,7 +116,7 @@ const BULK_MENU_WIDTH = 232;
       </div>
 
       <div class="bcam-sub">
-        <button #listsTrigger type="button" class="bcam-item" [class.is-active]="listsOpen()" (click)="toggleSub($event, 'lists')">
+        <button #listsTrigger type="button" class="bcam-item" [class.is-active]="listsOpen()" (click)="toggleSub($event, 'lists')" [disabled]="!workspaceActionsEnabled()" [title]="workspaceActionsEnabled() ? '' : 'Select cards from one workspace'">
           <i class="ti ti-arrows-transfer-down"></i>
           <span>Move to list</span>
           <i class="ti ti-chevron-right bcam-chev"></i>
@@ -132,7 +133,7 @@ const BULK_MENU_WIDTH = 232;
         }
       </div>
 
-      <button type="button" class="bcam-item" (click)="openCustomFields($event)" [disabled]="saving()">
+      <button type="button" class="bcam-item" (click)="openCustomFields($event)" [disabled]="saving() || !workspaceActionsEnabled()" [title]="workspaceActionsEnabled() ? '' : 'Select cards from one workspace'">
         <i class="ti ti-forms"></i>
         <span>Custom fields...</span>
       </button>
@@ -435,7 +436,7 @@ export class BulkCardActionsMenuPopover {
   private readonly panel = inject(AnchoredPanelDirective);
   private readonly hostRef = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly api = inject(ApiClient);
-  private readonly state = inject(BoardState);
+  private readonly state = inject(BULK_CARD_STORE, { optional: true }) ?? inject(BoardState);
 
   readonly boardId = input.required<string>();
   readonly cardIds = input.required<string[]>();
@@ -444,6 +445,7 @@ export class BulkCardActionsMenuPopover {
   readonly labels = input.required<CardLabel[]>();
   readonly members = input.required<WireBoardMemberUser[]>();
   readonly sourceWorkspaceId = input<string | null>(null);
+  readonly workspaceActionsEnabled = input(true);
   readonly currentUserId = input<string | null | undefined>(null);
   readonly anchorPoint = input<{ x: number; y: number } | null>(null);
   readonly dismissed = output<void>();
@@ -491,10 +493,8 @@ export class BulkCardActionsMenuPopover {
       // Opened from a right-click on the selection, so the anchor is a cursor point.
       anchor: () => this.anchorPoint(),
       placement: () => {
-        if (!this.confirmArchive()) return { width: BULK_MENU_WIDTH, minHeight: 200 };
-
-        // Preserve the normal cursor-relative opening position. Once confirmation is rendered,
-        // allow only the extra height it actually needs to cross the cursor boundary.
+        // Fit the full action menu and shift it within the viewport rather than
+        // applying the shared 420px cap. Long picker submenus keep their own limits.
         const contentHeight = Math.max(1, this.hostRef.nativeElement.scrollHeight);
         return {
           width: BULK_MENU_WIDTH,
@@ -568,6 +568,7 @@ export class BulkCardActionsMenuPopover {
   }
 
   async toggleLabel(labelId: string) {
+    if (!this.workspaceActionsEnabled()) return;
     const mode = this.labelState(labelId) === "all" ? "remove" : "add";
     await this.run(async () => {
       for (const cardId of this.cardIds()) {
@@ -596,6 +597,7 @@ export class BulkCardActionsMenuPopover {
   }
 
   async moveToList(listId: string) {
+    if (!this.workspaceActionsEnabled()) return;
     await this.run(async () => {
       for (const [boardId, cardIds] of this.cardIdBatchesByBoard()) {
         const result = await this.api.post<{ cards: WireCard[] }>(`/boards/${boardId}/cards/bulk/move`, { cardIds, listId });
@@ -605,6 +607,7 @@ export class BulkCardActionsMenuPopover {
   }
 
   openCustomFields(event: MouseEvent) {
+    if (!this.workspaceActionsEnabled()) return;
     event.preventDefault();
     event.stopPropagation();
     // Hand off to the host page's dialog and close this flyout without clearing selection.

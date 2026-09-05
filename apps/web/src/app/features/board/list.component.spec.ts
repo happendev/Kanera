@@ -492,6 +492,38 @@ describe("ListComponent", () => {
     }]);
   });
 
+  it("allows selected cards to drag and skips selected destination anchors", async () => {
+    const cards = ["card-a", "card-b", "card-c"].map(summaryCard);
+    fixture.componentRef.setInput("cards", cards);
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("bulkSelectedCardIds", new Set(["card-a", "card-b", "other-lane-card"]));
+    const emitted: unknown[] = [];
+    fixture.componentInstance.cardDropped.subscribe((event) => emitted.push(event));
+    await fixture.whenStable();
+    expect(fixture.debugElement.queryAll(By.directive(CdkDrag))[0]!.injector.get(CdkDrag).disabled).toBe(false);
+    const container = { data: fixture.componentInstance.renderedItems() };
+    fixture.componentInstance.onDrop({
+      item: { data: { kind: "card", card: cards[0] } },
+      previousContainer: container, container, previousIndex: 0, currentIndex: 0,
+    } as never);
+    expect(emitted).toEqual([{
+      cardId: "card-a", toListId: "list-1", beforeItem: { type: "card", id: "card-c" },
+    }]);
+  });
+
+  it("uses the end of an empty destination for a selected group", async () => {
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("bulkSelectedCardIds", new Set(["card-a", "card-b"]));
+    const emitted: unknown[] = [];
+    fixture.componentInstance.cardDropped.subscribe((event) => emitted.push(event));
+    await fixture.whenStable();
+    fixture.componentInstance.onDrop({
+      item: { data: { kind: "card", card: summaryCard("card-a") } },
+      previousContainer: { data: [] }, container: { data: [] }, previousIndex: 0, currentIndex: 0,
+    } as never);
+    expect(emitted).toEqual([{ cardId: "card-a", toListId: "list-1", beforeItem: null }]);
+  });
+
   it("emits the rendered-slice boundary neighbor when dropping at the visible end", () => {
     const cards = Array.from({ length: 75 }, (_, i) => summaryCard(`card-${i}`));
     const emitted: unknown[] = [];

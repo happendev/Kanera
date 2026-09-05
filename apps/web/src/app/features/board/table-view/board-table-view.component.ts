@@ -1777,8 +1777,8 @@ export class BoardTableViewComponent implements OnDestroy {
   }
 
   /**
-   * Ordinary tables reorder only when grouped by list under manual sort: position is the only card
-   * order the user owns, and list is the only derived bucket a card can honestly be dropped into.
+   * List groups accept status moves under any sort. Only manual sort permits reordering
+   * inside a group; derived sorts still determine where a moved card renders.
    * A hosted relation is the other legal case; the host explicitly supplies both its order and the
    * rows the viewer may reorder, and receives a relation event instead of a card-position write.
    */
@@ -1786,7 +1786,7 @@ export class BoardTableViewComponent implements OnDestroy {
     this.canEdit() && (
       this.hostCardGroups() !== null
         ? [...this.hostReorderableCardIdsByGroup().values()].some((ids) => ids.size > 0)
-        : this.effectiveGroupBy() === "list" && this.effectiveSortBy() === "position"
+        : this.effectiveGroupBy() === "list"
     ),
   );
 
@@ -1796,14 +1796,24 @@ export class BoardTableViewComponent implements OnDestroy {
   }
 
   rowDragEnabled(group: TableRunGroup, card: AnyCard): boolean {
-    if (this.hostCardGroups() === null) return this.dragEnabled();
+    if (this.hostCardGroups() === null) return this.dragEnabled() && this.canEditCard(card);
     return this.groupDragEnabled(group)
       && (this.hostReorderableCardIdsByGroup().get(group.key)?.has(card.id) ?? false);
   }
 
-  /** Hosted relation rows may sort inside their source group, but never transfer across groups. */
-  readonly canEnterRun = (drag: CdkDrag, drop: CdkDropList): boolean =>
-    this.hostCardGroups() === null || drag.dropContainer === drop;
+  /** Hosted relations stay in their group; status drops must stay in the cards' workspace. */
+  readonly canEnterRun = (drag: CdkDrag<AnyCard>, drop: CdkDropList<TableRunGroup>): boolean => {
+    if (this.hostCardGroups() !== null) return drag.dropContainer === drop;
+    const card = drag.data;
+    if (!card || !this.canEditCard(card)) return false;
+    const selected = this.bulkSelectedCardIds();
+    const moving = selected.has(card.id) ? this.cards().filter((row) => selected.has(row.id)) : [card];
+    const workspaceId = this.lists().find((list) => list.id === drop.data?.listId)?.workspaceId;
+    // A consolidated table can show several workspaces. Reject the entire selection
+    // at the boundary rather than moving its editable subset into an unrelated list.
+    return moving.every((row) => this.canEditCard(row)
+      && (!this.crossBoard() || this.boardFor(row)?.workspaceId === workspaceId));
+  };
 
   /** Why the drag handles are absent, when the board is otherwise editable. */
   readonly dragDisabledHint = computed(() => {
@@ -1827,11 +1837,12 @@ export class BoardTableViewComponent implements OnDestroy {
    * cross-block drop and includes it on a reorder, so it is filtered either way before the
    * neighbours are read off it.
    */
-  onRowDrop(event: CdkDragDrop<TableRunGroup>) {
+  onRowDrop(event: CdkDragDrop<TableRunGroup, TableRunGroup, AnyCard>) {
     if (!this.dragEnabled()) return;
     const card = event.item.data as AnyCard | undefined;
     if (!card) return;
-    if (event.previousContainer === event.container && event.previousIndex === event.currentIndex) return;
+    if (event.previousContainer === event.container && event.previousIndex === event.currentIndex
+      && !(this.bulkSelectedCardIds().has(card.id) && this.bulkSelectedCardIds().size > 1)) return;
     if (this.hostCardGroups() !== null) {
       // Hosted groups describe relations rather than mutable card fields. A cross-group gesture has
       // no honest card write, and the enter predicate normally prevents it before this guard.
@@ -1848,9 +1859,20 @@ export class BoardTableViewComponent implements OnDestroy {
     }
     const target = event.container.data;
     const toListId = target.listId ?? card.listId;
+    if (!this.canEnterRun(event.item, event.container)) return;
+    if (this.effectiveSortBy() !== "position") {
+      // A date/title sort owns row order. Cross-list drops change status and append
+      // in manual order, without treating a sorted neighbour as a position anchor.
+      const selected = this.bulkSelectedCardIds();
+      const moving = selected.has(card.id) ? this.cards().filter((row) => selected.has(row.id)) : [card];
+      if (moving.every((row) => row.listId === toListId)) return;
+      this.cardDropped.emit({ cardId: card.id, toListId, beforeCardId: null });
+      return;
+    }
     const others = target.cards.filter((row) => row.id !== card.id);
-    const following = others[event.currentIndex] ?? null;
-    const preceding = others[event.currentIndex - 1] ?? null;
+    const selected = this.bulkSelectedCardIds().has(card.id) ? this.bulkSelectedCardIds() : new Set<string>();
+    const following = others.slice(event.currentIndex).find((row) => !selected.has(row.id)) ?? null;
+    const preceding = others.slice(0, event.currentIndex).filter((row) => !selected.has(row.id)).at(-1) ?? null;
     this.cardDropped.emit({
       cardId: card.id,
       toListId,

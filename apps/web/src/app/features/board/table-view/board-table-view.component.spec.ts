@@ -562,6 +562,15 @@ describe("BoardTableViewComponent", () => {
       } as never);
     }
 
+    it("skips selected destination rows when moving a group", () => {
+      const f = fixture(rows(), [field()], lists);
+      f.componentRef.setInput("bulkSelectedCardIds", new Set(["a1", "b1"]));
+      const emitted: unknown[] = [];
+      f.componentInstance.cardDropped.subscribe((payload) => emitted.push(payload));
+      drop(f.componentInstance, "a1", 0, { fromGroup: 0, toGroup: 1 });
+      expect(emitted).toEqual([{ cardId: "a1", toListId: "list-2", beforeCardId: "b2" }]);
+    });
+
     it("splits the rendered rows into one block per list run", () => {
       const groups = view().component.runGroups();
 
@@ -621,15 +630,17 @@ describe("BoardTableViewComponent", () => {
       expect(dropped).toEqual([]);
     });
 
-    it("only allows dragging under manual sort", () => {
+    it("allows sorted cross-list moves while refusing to reorder sorted rows", () => {
       const { component, dropped } = view();
       expect(component.dragEnabled()).toBe(true);
 
       component.setSort("title-asc");
       drop(component, "a2", 0, { from: 1 });
 
-      expect(component.dragEnabled()).toBe(false);
+      expect(component.dragEnabled()).toBe(true);
       expect(dropped).toEqual([]);
+      drop(component, "a2", 0, { fromGroup: 0, toGroup: 1 });
+      expect(dropped).toEqual([{ cardId: "a2", toListId: "list-2", beforeCardId: null }]);
     });
 
     // A list is the only bucket a dropped row can be written into; an assignee bucket would have to

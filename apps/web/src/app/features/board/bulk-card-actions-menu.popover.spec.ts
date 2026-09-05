@@ -3,6 +3,7 @@ import { TestBed } from "@angular/core/testing";
 import type { WireBoardMemberUser, WireCardSummary } from "@kanera/shared/events";
 import { describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
+import { BULK_CARD_STORE, type BulkCardStore } from "./bulk-card-store";
 import { BoardState } from "./board-state";
 import { BulkCardActionsMenuPopover } from "./bulk-card-actions-menu.popover";
 
@@ -42,6 +43,7 @@ function card(id: string, boardId: string, listId = "list-1"): WireCardSummary {
 
 describe("BulkCardActionsMenuPopover", () => {
   async function createComponent(options: {
+    store?: BulkCardStore;
     patch?: ReturnType<typeof vi.fn>;
     post?: ReturnType<typeof vi.fn>;
     members?: WireBoardMemberUser[];
@@ -54,6 +56,7 @@ describe("BulkCardActionsMenuPopover", () => {
       imports: [BulkCardActionsMenuPopover],
       providers: [
         provideZonelessChangeDetection(),
+        ...(options.store ? [{ provide: BULK_CARD_STORE, useValue: options.store }] : []),
         { provide: ApiClient, useValue: { patch, post, get: vi.fn(() => Promise.resolve([])) } },
         {
           provide: BoardState,
@@ -79,6 +82,26 @@ describe("BulkCardActionsMenuPopover", () => {
     fixture.detectChanges();
     return { fixture, patch, post };
   }
+
+  it("reads selection state and applies results through the host card store", async () => {
+    const store: BulkCardStore = {
+      labelIdsForCard: () => ["label-1"], assigneeIdsForCard: () => ["user-1"],
+      setCardLabels: vi.fn(), setCardAssignees: vi.fn(),
+      updateCard: vi.fn(), moveCard: vi.fn(), addCard: vi.fn(),
+    };
+    const moved = card("card-1", "board-1", "target");
+    const post = vi.fn().mockResolvedValue({ cards: [moved] });
+    const { fixture } = await createComponent({ store, post });
+    const component = fixture.componentInstance;
+    expect(component.labelState("label-1")).toBe("all");
+    expect(component.assigneeState("user-1")).toBe("all");
+    await component.moveToList("target");
+    expect(store.moveCard).toHaveBeenCalledWith("card-1", "target", moved.position);
+    fixture.componentRef.setInput("workspaceActionsEnabled", false);
+    post.mockClear();
+    await component.moveToList("other-workspace-list");
+    expect(post).not.toHaveBeenCalled();
+  });
 
   it("splits board-scoped bulk requests when selected cards span boards", async () => {
     const patch = vi.fn(() => Promise.resolve({ cards: [] }));
