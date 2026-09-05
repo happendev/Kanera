@@ -121,10 +121,34 @@
 }
 
 .nt-actions {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 2px;
-  flex: 0 0 auto;
+  flex: 0 0 0;
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+
+  // Match checklist rows: actions stay out of the content flow until the row is hovered or reached
+  // from the keyboard, while an open menu keeps its trigger visible for orientation and dismissal.
+  &.is-open,
+  &:focus-within {
+    flex-basis: 28px;
+    width: 28px;
+    opacity: 1;
+    overflow: visible;
+    pointer-events: auto;
+  }
+}
+
+.nt-row:hover .nt-actions {
+  flex-basis: 28px;
+  width: 28px;
+  opacity: 1;
+  overflow: visible;
+  pointer-events: auto;
 }
 
 .nt-act {
@@ -155,5 +179,73 @@
   &:disabled {
     cursor: not-allowed;
     opacity: 0.45;
+  }
+}
+
+.nt-actions-menu {
+  // Placement is owned by kAnchoredPanel; this block only supplies the standard app menu appearance.
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 168px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-overlay);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
+
+  button {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    width: 100%;
+    height: auto;
+    padding: 7px 10px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 400;
+    text-align: left;
+    cursor: pointer;
+
+    > i {
+      flex-shrink: 0;
+      width: 16px;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    > span {
+      flex: 1;
+      white-space: nowrap;
+    }
+
+    &:hover {
+      background: var(--surface-hover);
+    }
+
+    &.danger {
+      color: var(--danger, #d33);
+
+      > i { color: inherit; }
+
+      &:hover {
+        background: color-mix(in srgb, var(--danger, #d33) 10%, transparent);
+      }
+    }
+  }
+}
+
+@media (hover: none) {
+  // Touch has no hover reveal, so retain one compact action entry point instead of three buttons.
+  .nt-actions {
+    flex-basis: 28px;
+    width: 28px;
+    opacity: 1;
+    overflow: visible;
+    pointer-events: auto;
   }
 }
