@@ -88,27 +88,32 @@ async function boardPayload(
   assignedUserId?: string,
   cardQuery: { includeCards?: boolean; listId?: string; limit?: number; offset?: number } = {},
 ) {
-  const [board] = await db.select().from(boards).where(eq(boards.id, boardId)).limit(1);
-  if (!board) throw notFound();
-  const [workspace] = await db
+  // Board and workspace context are needed together; one join avoids a serial round trip on
+  // every open without changing the access check performed by the caller.
+  const [context] = await db
     .select({
-      clientId: workspaces.clientId,
-      kind: workspaces.kind,
-      completedCardsActiveDays: workspaces.completedCardsActiveDays,
-      inactiveCardsDays: workspaces.inactiveCardsDays,
-      boardHealthEnabled: workspaces.boardHealthEnabled,
-      boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
-      boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
-      boardHealthInactiveEnabled: workspaces.boardHealthInactiveEnabled,
-      boardLinkingEnabled: workspaces.boardLinkingEnabled,
-      plan: clients.plan,
-      billingStatus: clients.billingStatus,
+      board: boards,
+      workspace: {
+        clientId: workspaces.clientId,
+        kind: workspaces.kind,
+        completedCardsActiveDays: workspaces.completedCardsActiveDays,
+        inactiveCardsDays: workspaces.inactiveCardsDays,
+        boardHealthEnabled: workspaces.boardHealthEnabled,
+        boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
+        boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
+        boardHealthInactiveEnabled: workspaces.boardHealthInactiveEnabled,
+        boardLinkingEnabled: workspaces.boardLinkingEnabled,
+        plan: clients.plan,
+        billingStatus: clients.billingStatus,
+      },
     })
-    .from(workspaces)
+    .from(boards)
+    .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
     .innerJoin(clients, eq(clients.id, workspaces.clientId))
-    .where(eq(workspaces.id, board.workspaceId))
+    .where(eq(boards.id, boardId))
     .limit(1);
-  if (!workspace) throw notFound();
+  if (!context) throw notFound();
+  const { board, workspace } = context;
 
   const [boardLists, boardCardSummaries, boardSeparatorsRows, boardCustomFields, boardMemberRows, boardLabels, checklistTemplates, participatingMirrors, workspaceCardKeyPrefixRows] = await Promise.all([
     db
@@ -128,6 +133,7 @@ async function boardPayload(
       // Load one sentinel row beyond the public page size so hasMore is known without a count scan.
       limit: cardQuery.limit === undefined ? undefined : cardQuery.limit + 1,
       offset: cardQuery.offset,
+      shownCustomFieldsOnly: true,
     }),
     db
       .select()

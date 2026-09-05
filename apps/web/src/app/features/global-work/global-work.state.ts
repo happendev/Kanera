@@ -178,10 +178,20 @@ export class GlobalWorkState {
   readonly collapsedHistoryDayKeys = signal<string[]>([]);
   readonly collapsedChecklistGroupIds = signal<string[]>([]);
 
-  readonly cards = computed(() => this.response().cards.map((card) => ({
-    ...expandCardSummary(card),
-    workspaceId: card.workspaceId,
-  })));
+  // Realtime patches replace only the changed compact row. Preserve the other expanded objects
+  // so their OnPush tiles keep their inputs and derived values. Weak keys release removed pages;
+  // response rows must stay immutable (as in the optimistic/realtime update handlers below).
+  private readonly expandedCards = new WeakMap<WorkQueryResponse["cards"][number], WireCardSummary>();
+  private expandWorkCard(card: WorkQueryResponse["cards"][number]): WireCardSummary {
+    let expanded = this.expandedCards.get(card);
+    if (!expanded) {
+      expanded = { ...expandCardSummary(card), workspaceId: card.workspaceId };
+      this.expandedCards.set(card, expanded);
+    }
+    return expanded;
+  }
+  private readonly responseCards = computed(() => this.response().cards);
+  readonly cards = computed(() => this.responseCards().map((card) => this.expandWorkCard(card)));
   readonly separators = computed(() => this.response().separators);
   readonly separatorWorkspaceIds = computed(() => new Set(this.response().separatorWorkspaceIds));
   /**
@@ -234,10 +244,7 @@ export class GlobalWorkState {
    * applied reactively by the page.
    */
   private readonly teamPriorityCandidates = signal<WorkQueryResponse["cards"]>([]);
-  readonly teamPriorityCandidateCards = computed(() => this.teamPriorityCandidates().map((card) => ({
-    ...expandCardSummary(card),
-    workspaceId: card.workspaceId,
-  })));
+  readonly teamPriorityCandidateCards = computed(() => this.teamPriorityCandidates().map((card) => this.expandWorkCard(card)));
   /**
    * Single source of truth for "is this card ranked?". The tiles' rank pills and the "+ Up next"
    * affordance both derive from this one set, so a card can never simultaneously show a rank and

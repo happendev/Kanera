@@ -132,13 +132,6 @@
 // CDK drag previews are moved under <body>, outside component-scoped styles. Keep the active
 // dragged card's box the same size for measurement, but hide expensive chrome so only the title
 // paints while dragging. Non-dragged board cards remain fully rendered.
-body.is-card-dragging,
-body.is-card-dragging * {
-  // The preview has pointer-events disabled, so force the cursor on every possible element beneath
-  // it instead of letting the cursor flicker between each element's normal pointer/default state.
-  cursor: grabbing !important;
-}
-
 .cdk-drag-preview,
 .lists.is-card-dragging .cdk-drag-dragging {
   box-shadow: none !important;
@@ -1015,6 +1008,24 @@ k-up-next-panel .panel-rows k-card.cdk-drag-placeholder {
 
 .cdk-drag-animating {
   transition: transform 140ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+// The lightweight card preview is a div, so the large-board k-card transition rule does not
+// reach it. Keep release feedback short without changing list-reorder or sibling animations.
+.card-drag-preview.cdk-drag-animating {
+  transition-duration: 80ms;
+}
+
+// Large boards already suppress sibling/hover animations. Their matched-size preview can commit
+// directly; waiting for a settle transition adds latency on top of the larger DOM handoff.
+body.is-large-board .card-drag-preview.cdk-drag-animating {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-drag-preview.cdk-drag-animating {
+    transition: none;
+  }
 }
 
 .cards.cdk-drop-list-dragging k-card:not(.cdk-drag-placeholder) {

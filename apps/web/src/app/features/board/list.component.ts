@@ -48,7 +48,9 @@ const EMPTY_FIELD_VALUES = new Map<string, CardCustomFieldValue>();
 // list renders only a leading slice and grows it as the user scrolls toward the bottom.
 // The cap only ever grows, never shrinks, so cards already in the DOM —
 // including one mid-drag — are never unmounted, keeping CDK drag-drop indices aligned.
-const INITIAL_RENDER_CAP = 30;
+// Fifteen mixed-height tiles cover the viewport with overscan without mounting thirty tiles
+// in every newly revealed horizontal lane. The existing post-render fill handles tall screens.
+const INITIAL_RENDER_CAP = 15;
 const RENDER_CAP_PAGE = 60;
 const GROW_NEAR_BOTTOM_PX = 600;
 const LIST_DRAG_EDGE_SCROLL_MULTIPLIER = 2;
@@ -628,6 +630,7 @@ export class ListComponent implements OnDestroy {
   }
 
   ngOnDestroy() {
+    if (this.dragCoordinator.sourceListId() === this.list().id) this.dragCoordinator.end();
     this.cleanupDragCancel?.();
     if (this.clearCommittedDropTimeout !== null) window.clearTimeout(this.clearCommittedDropTimeout);
     this.stopEdgeScrollLoop();
@@ -643,7 +646,7 @@ export class ListComponent implements OnDestroy {
     this.cleanupDragCancel?.();
     this.cleanupDragCancel = this.listenForDragCancel();
     this.startEdgeScrollLoop();
-    this.dragCoordinator.start(this.list().id);
+    this.dragCoordinator.start(this.list().id, drag.element?.nativeElement);
   }
 
   onDragEnded() {

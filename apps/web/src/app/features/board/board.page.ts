@@ -64,16 +64,19 @@ import { MirrorCreateDialogComponent } from "../board-mirrors/mirror-create.dial
 import { BoardMirrorsDialogComponent } from "../board-mirrors/board-mirrors.dialog";
 import { BoardMirrorsService } from "../board-mirrors/board-mirrors.service";
 
+import { createSortedLaneProjection, createLaneItemsProjection } from "./lane-projection";
+
 type AnyCard = Card | WireCard | WireCardSummary;
+
 type BoardRiskFilter = "overdue" | "unassigned" | "inactive";
 const OFFLINE_COPY_PROMPT_DELAY_MS = 3000; // 3 seconds
 const SEARCH_DEBOUNCE_MS = 200;
 
-// Wide boards (30+ lists) only render a leading run of list columns and grow it as the user
-// scrolls right, mirroring the per-list card cap. The cap only ever grows, so a list (and any
-// card mid-drag) is never unmounted, keeping CDK's cross-list drop targets valid; edge-scroll
-// during a drag grows the cap and reveals the next list before the pointer reaches it.
+// Wide boards initially render a leading run of columns and grow it on idle scrolling.
+// Mounted columns stay available as CDK targets. Growth pauses during a drag because CDK takes
+// its receiving-list snapshot at drag start; newly registered lists cannot receive that gesture.
 const INITIAL_LISTS_CAP = 8;
+const EMPTY_LANE_CARDS: AnyCard[] = [];
 const GROW_NEAR_RIGHT_EDGE_PX = 800;
 const PRELOAD_NEAR_RIGHT_EDGE_PX = 1600;
 const LIST_GROWTH_IDLE_TIMEOUT_MS = 200;
@@ -194,9 +197,8 @@ export class BoardPage implements OnDestroy {
   readonly hiddenListCount = computed(() => Math.max(0, this.state.visibleLists().length - this.listRenderCap()));
 
   onListsScroll(el: HTMLElement) {
-    // New columns append to the right of existing ones, so the dragged card's context doesn't
-    // shift. Growing during a drag's horizontal edge-scroll lets a card reach a list column
-    // beyond the initial window (preserving cross-list drag on wide boards).
+    // Append columns ahead of idle horizontal traversal. During a gesture the scheduler defers
+    // growth until release so it cannot expose a new column that CDK cannot receive a drop in.
     const remaining = el.scrollWidth - el.scrollLeft - el.clientWidth;
     this.scheduleListGrowthNearRightEdge(el, remaining <= GROW_NEAR_RIGHT_EDGE_PX);
   }
@@ -420,33 +422,17 @@ export class BoardPage implements OnDestroy {
     return new Set(matching.map(c => c.id));
   });
 
+  private readonly projectCardLanes = createSortedLaneProjection<AnyCard>();
+  private readonly projectItemLanes = createLaneItemsProjection();
   readonly cardsByList = computed(() => {
-    const showArchived = this.showArchived();
-    const visibleListIds = new Set(this.state.visibleLists().map((list) => list.id));
-    const result = new Map<string, AnyCard[]>();
-    for (const listId of visibleListIds) result.set(listId, []);
-
-    // Walk the card set once, then sort each populated list. This keeps board
-    // view rendering linear in card count instead of filtering all cards per list.
-    for (const card of this.state.cards()) {
-      if (!visibleListIds.has(card.listId)) continue;
-      if (showArchived ? !card.archivedAt : card.archivedAt) continue;
-      result.get(card.listId)?.push(card);
-    }
-
-    for (const cards of result.values()) {
-      cards.sort((a, b) => Number(a.position) - Number(b.position));
-    }
-    return result;
+    const grouped = this.projectCardLanes(this.activeCards());
+    // Include empty live lists as drop targets, while retaining unchanged populated lane inputs.
+    return new Map(this.state.visibleLists().map((list) => [list.id, grouped.get(list.id) ?? EMPTY_LANE_CARDS]));
   });
 
-  readonly itemsByList = computed(() => {
-    const result = new Map<string, BoardLaneItem[]>();
-    for (const [listId, cards] of this.cardsByList()) {
-      result.set(listId, this.state.itemsForList(listId, cards));
-    }
-    return result;
-  });
+  readonly itemsByList = computed(() =>
+    this.projectItemLanes(this.cardsByList(), this.state.separators()),
+  );
 
   readonly activeCards = computed(() =>
     this.state.cards().filter((card) => this.showArchived() ? !!card.archivedAt : !card.archivedAt),

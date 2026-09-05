@@ -162,6 +162,7 @@ export class BoardGroupColumnComponent implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.dragCoordinator.sourceListId() === this.group().key) this.dragCoordinator.end();
     this.stopEdgeScrollLoop();
   }
 
@@ -232,9 +233,9 @@ export class BoardGroupColumnComponent implements OnDestroy {
 
   // ─── Drag ───────────────────────────────────────────────────────────────────
 
-  onDragStarted(): void {
+  onDragStarted(sourceElement?: HTMLElement): void {
     vibrateCardDragStart();
-    this.dragCoordinator.start(this.group().key);
+    this.dragCoordinator.start(this.group().key, sourceElement);
     this.startEdgeScrollLoop();
   }
 

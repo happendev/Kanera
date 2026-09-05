@@ -1337,6 +1337,23 @@ describe("BoardPage", () => {
     await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith(expectedUrl, {}));
   });
 
+  it("retains unrelated lane inputs when a card moves between lists", () => {
+    const fixture = TestBed.createComponent(BoardPage);
+    fixture.componentRef.setInput("boardId", "board-1");
+    const component = fixture.componentInstance;
+    const state = boardState(component);
+    state.hydrate({ ...boardPayload(), lists: [list(), list({ id: "list-2" }), list({ id: "list-3" })],
+      cards: [card({ id: "a" }), card({ id: "b", listId: "list-2" }), card({ id: "c", listId: "list-3" })],
+    });
+    const beforeCards = component.cardsByList();
+    const beforeItems = component.itemsByList();
+    state.moveCard("a", "list-2", "2500.0000000000");
+    expect(component.cardsByList().get("list-1")).toEqual([]);
+    expect(component.cardsByList().get("list-2")!.map(card => card.id)).toEqual(["b", "a"]);
+    expect(component.cardsByList().get("list-3")).toBe(beforeCards.get("list-3"));
+    expect(component.itemsByList().get("list-3")).toBe(beforeItems.get("list-3"));
+  });
+
   it("ignores stale archived-card loads after toggling archived cards back off", async () => {
     const archivedLoad = deferred<ReturnType<typeof boardPayload>>();
     const activeLoad = deferred<ReturnType<typeof boardPayload>>();

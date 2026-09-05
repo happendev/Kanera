@@ -819,6 +819,27 @@ describe("BoardTableViewComponent", () => {
       ]);
     });
 
+    it("reuses summaries across viewport changes and invalidates them when field values change", () => {
+      const view = billableBoard();
+      const component = view.componentInstance;
+      component.setAggregate("hours", "sum");
+      const before = component.runGroups()[0]!;
+      expect(component.aggregateValue("hours")).toBe("19");
+      component.rowRenderCap.set(1);
+      expect(component.runGroups()[0]!.summaries).toBe(before.summaries);
+      expect(component.runGroups()[0]!.cardIds).toBe(before.cardIds);
+      component.toggleGroupCollapsed(before.key);
+      expect(component.runGroups()[0]!.summaries).toBe(before.summaries);
+      const values = new Map(component.customFieldValuesByCardAndField());
+      const cardId = before.cardIds[0]!;
+      const fields = new Map(values.get(cardId));
+      fields.set("hours", { ...fields.get("hours")!, valueNumber: "100" });
+      values.set(cardId, fields);
+      view.componentRef.setInput("customFieldValuesByCardAndField", values);
+      expect(component.runGroups()[0]!.summaries).not.toBe(before.summaries);
+      expect(component.aggregateValue("hours")).not.toBe("19");
+    });
+
     it("breaks each group's subtotal down by the split dimension, and the sheet's below it", () => {
       const component = billableBoard().componentInstance;
       component.setAggregate("hours", "sum");

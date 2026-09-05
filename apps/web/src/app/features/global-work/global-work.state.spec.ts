@@ -400,6 +400,24 @@ function setup(options: {
 }
 
 describe("GlobalWorkState", () => {
+  it("preserves unaffected expanded rows across realtime patches and metadata updates", async () => {
+    const { state, socket } = setup({ cardsQuery: () => ({
+      ...response,
+      cards: [response.cards[0]!, { ...response.cards[0]!, id: "40000000-0000-4000-8000-000000000099" }],
+    }) });
+    await state.initialize("my");
+    const initial = state.cards();
+    socket.trigger("card:moved", { cardId: initial[0]!.id, toListId: "list-next", position: "2500" });
+    const patched = state.cards();
+    expect(patched[0]).not.toBe(initial[0]);
+    expect(patched[0]!.listId).toBe("list-next");
+    expect(patched[1]).toBe(initial[1]);
+    state.response.update((current) => ({ ...current, nextCursor: "next-page" }));
+    expect(state.cards()).toBe(patched);
+    state.response.update((current) => ({ ...current, cards: current.cards.slice(1) }));
+    expect(state.cards()).toEqual([initial[1]]);
+  });
+
   beforeEach(() => localStorage.clear());
   afterEach(() => {
     Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });

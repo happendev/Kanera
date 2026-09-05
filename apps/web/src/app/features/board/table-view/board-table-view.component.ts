@@ -1688,11 +1688,21 @@ export class BoardTableViewComponent implements OnDestroy {
    * of every group at once. Slices are always prefixes, which is what keeps CDK's drop indices and
    * the gutter row numbers lined up with the underlying group.
    */
-  readonly runGroups = computed<TableRunGroup[]>(() => {
+  // Summaries and full-group ids depend on data, not the viewport. Keeping them outside runGroups
+  // avoids re-scanning every card when scrolling grows the render cap or a group is collapsed.
+  private readonly groupData = computed(() => {
     const grouped = this.effectiveGroupBy() !== "none";
+    return this.groups().map((group) => ({
+      group,
+      cardIds: group.cards.map((card) => card.id),
+      summaries: grouped ? this.summaryRowsFor(group.cards, group.key) : [],
+    }));
+  });
+
+  readonly runGroups = computed<TableRunGroup[]>(() => {
     const collapsedKeys = this.collapsedGroups();
     let budget = this.rowRenderCap();
-    return this.groups().map((group) => {
+    return this.groupData().map(({ group, cardIds, summaries }) => {
       const total = group.cards.length;
       // A collapsed group draws no rows and spends none of the budget, so collapsing one is what
       // brings the groups below it into view rather than merely hiding what was already rendered.
@@ -1709,12 +1719,12 @@ export class BoardTableViewComponent implements OnDestroy {
         color: group.color,
         avatarUrl: group.avatarUrl ?? null,
         cards,
-        cardIds: group.cards.map((card) => card.id),
+        cardIds,
         total,
         // Subtotals are of the whole group, not the rendered slice: a total that grew as you scrolled
         // would be worse than no total at all. Suppressed when grouping is off, where the single
         // block's subtotal would just restate the sticky footer directly beneath it.
-        summaries: grouped ? this.summaryRowsFor(group.cards, group.key) : [],
+        summaries,
       };
     });
   });
@@ -2061,11 +2071,19 @@ export class BoardTableViewComponent implements OnDestroy {
   }
 
   /** The sticky footer's grand total for one numeric column, over the distinct cards in the view. */
+  private readonly aggregateValues = computed(() => {
+    const values = new Map<string, string>();
+    for (const [fieldId, metrics] of Object.entries(this.aggregateConfig())) {
+      const metric = metrics?.[0];
+      if (!metric) continue;
+      const value = this.metricOver(this.rows(), fieldId, metric);
+      values.set(fieldId, value === null ? "—" : formatAggregate(value));
+    }
+    return values;
+  });
+
   aggregateValue(fieldId: string): string {
-    const metric = this.aggregateFor(fieldId);
-    if (!metric) return "";
-    const value = this.metricOver(this.rows(), fieldId, metric);
-    return value === null ? "—" : formatAggregate(value);
+    return this.aggregateValues().get(fieldId) ?? "";
   }
 
   // ── Summaries ─────────────────────────────────────────────────────────────

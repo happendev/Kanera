@@ -19,6 +19,7 @@ import type { OfflineBoardSnapshot } from "../../core/offline/offline-cache.serv
 import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { DEFAULT_INACTIVE_CARDS_DAYS } from "@kanera/shared/workspace-defaults";
+import { createSortedLaneProjection } from "./lane-projection";
 
 export type AnyList = List | WireList;
 export type AnyCard = Card | WireCard | WireCardSummary;
@@ -190,22 +191,10 @@ export class BoardState {
     return this.cardsById().get(cardId);
   }
 
-  private readonly visibleCardsByList = computed(() => {
-    const map = new Map<string, AnyCard[]>();
-    for (const card of this.cards()) {
-      if (card.archivedAt) continue;
-      const cards = map.get(card.listId);
-      if (cards) {
-        cards.push(card);
-      } else {
-        map.set(card.listId, [card]);
-      }
-    }
-    for (const cards of map.values()) {
-      cards.sort((a, b) => Number(a.position) - Number(b.position));
-    }
-    return map;
-  });
+  private readonly projectVisibleCards = createSortedLaneProjection<AnyCard>();
+  private readonly visibleCardsByList = computed(() =>
+    this.projectVisibleCards(this.cards().filter((card) => !card.archivedAt)),
+  );
 
   readonly labelIdsByCard = computed(() => {
     const map = new Map<string, string[]>();
@@ -724,9 +713,12 @@ export class BoardState {
     // changes its identity and re-fires every derived computed (visibleCardsByList, etc.)
     // for no visible change. Only rebuild when the list or position actually differs.
     const current = this.cardById(cardId);
-    if (current && current.listId === listId && current.position === position) return;
+    if (!current || (current.listId === listId && current.position === position)) return;
+    // Move and activity are one publication. The socket echo must not follow this with an
+    // unconditional touch that republishes an already-applied optimistic move.
+    const updatedAt = new Date();
     this.cards.update((cs) =>
-      cs.map((c) => (c.id === cardId ? { ...c, listId, position } : c)),
+      cs.map((c) => (c.id === cardId ? { ...c, listId, position, updatedAt } : c)),
     );
     this.bumpCardMutationSeq();
   }
@@ -736,17 +728,20 @@ export class BoardState {
    * only their focused payload. Mirror that activity locally so stale-card UI clears immediately;
    * the next card payload supplies the authoritative server timestamp.
    */
-  touchCardActivity(cardId: string) {
-    const updatedAt = new Date();
-    this.cards.update((cards) => cards.map((card) => card.id === cardId ? { ...card, updatedAt } : card));
+  touchCardActivity(cardId: string, updateSummary = true) {
+    // Move events already published the summary timestamp (including optimistic moves). Only
+    // reconcile the cached detail then; a failed optimistic request never touches that cache.
+    const updatedAt = updateSummary ? new Date() : this.cardById(cardId)?.updatedAt;
+    if (!updatedAt) return;
+    if (updateSummary) this.cards.update((cards) => cards.map((card) => card.id === cardId ? { ...card, updatedAt } : card));
     this.detailedCards.update((details) => {
       const detail = details.get(cardId);
-      if (!detail) return details;
+      if (!detail || new Date(detail.card.updatedAt).getTime() === new Date(updatedAt).getTime()) return details;
       const next = new Map(details);
       next.set(cardId, { ...detail, card: { ...detail.card, updatedAt } });
       return next;
     });
-    this.bumpCardMutationSeq();
+    if (updateSummary) this.bumpCardMutationSeq();
   }
 
   addSeparator(separator: AnySeparator) {

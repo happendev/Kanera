@@ -38,7 +38,7 @@ import { BoardCanvasComponent } from "../board/board-canvas.component";
 import { BoardMenuCoordinator } from "../board/board-menu-coordinator.service";
 import { CardDragCoordinator } from "../board/card-drag-coordinator.service";
 import { BoardCalendarViewComponent } from "../board/calendar-view/board-calendar-view.component";
-import { BoardState, type AnySeparator, type BoardLaneItem } from "../board/board-state";
+import { BoardState, type AnySeparator } from "../board/board-state";
 import { CardComposerDialogComponent, type CardComposerSeed } from "../board/card-composer.dialog";
 import { formatDueDate, isOverdue } from "../board/due-date.util";
 import { FilterBarComponent } from "../board/table-view/filter-bar.component";
@@ -69,6 +69,7 @@ import { SaveViewPopover } from "./save-view.popover";
 import { TeamPrioritiesViewComponent, type TeamPriorityReorder } from "./team-priorities-view.component";
 import { UpNextPanelComponent, type UpNextAddableCard } from "./up-next-panel.component";
 import { boardPickerGroups, peoplePickerGroups, savedViewPickerGroups, scopePickerGroups } from "./work-pickers";
+import { createSortedLaneProjection, createLaneItemsProjection } from "../board/lane-projection";
 
 type GlobalCard = WireCardSummary & { workspaceId: string };
 type ChecklistGroup = {
@@ -578,43 +579,21 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly datedCardCount = computed(() =>
     this.state.cards().filter((card) => card.dueDateLocalDate).length
   );
-  readonly boardCardsByList = computed(() => {
-    const result = new Map<string, GlobalCard[]>();
-    for (const card of this.state.cards()) {
-      const lane = result.get(card.listId) ?? [];
-      lane.push(card);
-      result.set(card.listId, lane);
-    }
-    for (const lane of result.values()) {
-      // Card positions form one workspace-list lane even when the cards belong to different
-      // boards. This is the same order the move API updates, so source navigation rank must not
-      // be introduced as a second priority system here.
-      lane.sort((a, b) => Number(a.position) - Number(b.position) || a.id.localeCompare(b.id));
-    }
-    return result;
+  // Preserve the existing workspace-list ordering across boards, including the id tie-break.
+  private readonly projectCardLanes = createSortedLaneProjection<GlobalCard>(
+    (a, b) => Number(a.position) - Number(b.position) || a.id.localeCompare(b.id),
+  );
+  private readonly projectItemLanes = createLaneItemsProjection((a, b) => {
+    const left = a.kind === "card" ? a.card : a.separator;
+    const right = b.kind === "card" ? b.card : b.separator;
+    return Number(left.position) - Number(right.position)
+      || a.kind.localeCompare(b.kind)
+      || left.id.localeCompare(right.id);
   });
-  readonly boardItemsByList = computed(() => {
-    const result = new Map<string, BoardLaneItem[]>();
-    for (const [listId, cards] of this.boardCardsByList()) {
-      result.set(listId, cards.map((card) => ({ kind: "card", card })));
-    }
-    for (const separator of this.state.separators()) {
-      const items = result.get(separator.listId) ?? [];
-      items.push({ kind: "separator", separator });
-      result.set(separator.listId, items);
-    }
-    for (const items of result.values()) {
-      items.sort((a, b) => {
-        const aPosition = a.kind === "card" ? a.card.position : a.separator.position;
-        const bPosition = b.kind === "card" ? b.card.position : b.separator.position;
-        return Number(aPosition) - Number(bPosition)
-          || a.kind.localeCompare(b.kind)
-          || (a.kind === "card" ? a.card.id : a.separator.id)
-            .localeCompare(b.kind === "card" ? b.card.id : b.separator.id);
-      });
-    }
-    return result;
-  });
+  readonly boardCardsByList = computed(() => this.projectCardLanes(this.state.cards()));
+  readonly boardItemsByList = computed(() =>
+    this.projectItemLanes(this.boardCardsByList(), this.state.separators(), true),
+  );
   readonly boardListsByWorkspace = computed(() => {
     const result = new Map<string, WorkCatalogList[]>();
     for (const list of this.state.catalog().lists) {

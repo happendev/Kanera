@@ -34,6 +34,7 @@ function completedVisibilityPredicate(options: {
 async function loadCardSummariesFromFilteredCards(
   whereClause: SQL,
   page?: { limit: number; offset: number },
+  shownCustomFieldsOnly = false,
 ): Promise<CardSummaryRow[]> {
   const result = await db.execute<CardSummaryRow>(sql`
     with filtered_cards as materialized (
@@ -118,6 +119,9 @@ async function loadCardSummariesFromFilteredCards(
         ) as custom_field_values
       from card_custom_field_value cfv
       inner join filtered_cards fc on fc.id = cfv.card_id
+      ${shownCustomFieldsOnly ? sql`inner join custom_field cf
+        on cf.id = cfv.field_id and cf.workspace_id = fc.workspace_id
+        and cf.show_on_card = true and cf.archived_at is null` : sql``}
       group by cfv.card_id
     )
     select
@@ -180,6 +184,8 @@ export async function loadBoardCardSummaries(options: {
   listId?: string;
   limit?: number;
   offset?: number;
+  /** Board-open only: avoid aggregating and transferring values its compact payload discards. */
+  shownCustomFieldsOnly?: boolean;
 }): Promise<CardSummaryRow[]> {
   return loadCardSummariesFromFilteredCards(sql`
     c.board_id = ${options.boardId}
@@ -194,7 +200,7 @@ export async function loadBoardCardSummaries(options: {
         where vc.card_id = c.id and vi.assignee_id = ${options.assignedUserId}
       )
     )` : sql`true`}
-  `, options.limit === undefined ? undefined : { limit: options.limit, offset: options.offset ?? 0 });
+  `, options.limit === undefined ? undefined : { limit: options.limit, offset: options.offset ?? 0 }, options.shownCustomFieldsOnly);
 }
 
 export function toWireCardSummary(
@@ -205,12 +211,15 @@ export function toWireCardSummary(
   // the full set loads lazily for filters/List View. Pass null/undefined to inline all.
   customFieldIds?: ReadonlySet<string> | null,
 ): WireCardSummary {
-  const coverThumbnailUrl = signedAttachmentMediaUrl(row.coverThumbnailUrl);
-  const coverImageUrl = signedAttachmentMediaUrl(row.coverImageUrl);
-  const coverUrl = signedAttachmentMediaUrl(row.coverUrl);
   // Board summaries feed compact card tiles, so prefer the 400px derivative. Card detail loads
   // attachment rows separately and continues to use the full original/large image.
-  const summaryCoverUrl = coverThumbnailUrl ?? coverImageUrl ?? coverUrl;
+  // Sign only the derivative that is returned. Eagerly signing all three media references wastes
+  // URL parsing and HMAC work for two discarded URLs on every covered card in a board/work page.
+  const summaryCoverUrl = row.coverAttachmentId
+    ? signedAttachmentMediaUrl(row.coverThumbnailUrl)
+      ?? signedAttachmentMediaUrl(row.coverImageUrl)
+      ?? signedAttachmentMediaUrl(row.coverUrl)
+    : null;
 
   return {
     id: row.id,

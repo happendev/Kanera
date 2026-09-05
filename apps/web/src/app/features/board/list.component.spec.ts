@@ -230,9 +230,9 @@ describe("ListComponent", () => {
 
     const element = fixture.nativeElement as HTMLElement;
     // Initial cap renders far fewer than the 75 cards in the list.
-    expect(fixture.componentInstance.renderedCards().length).toBe(30);
-    expect(fixture.componentInstance.hiddenCardCount()).toBe(45);
-    expect(element.querySelectorAll("k-card").length).toBe(30);
+    expect(fixture.componentInstance.renderedCards().length).toBe(15);
+    expect(fixture.componentInstance.hiddenCardCount()).toBe(60);
+    expect(element.querySelectorAll("k-card").length).toBe(15);
 
     fixture.componentInstance.onCardsScroll({
       scrollHeight: 2000,
@@ -278,7 +278,7 @@ describe("ListComponent", () => {
       cardsEl.scrollTop = 1200;
 
       fixture.componentInstance.onDragStarted({} as never);
-      expect(fixture.componentInstance.renderedCards().length).toBe(30);
+      expect(fixture.componentInstance.renderedCards().length).toBe(15);
 
       fixture.componentInstance.onDragMoved({ pointerPosition: { x: 200, y: 399 } } as never);
       for (let i = 0; i < 5 && cardsEl.scrollTop === 1200; i += 1) {
@@ -316,14 +316,14 @@ describe("ListComponent", () => {
     fixture.componentRef.setInput("cards", cards);
     fixture.detectChanges();
 
-    expect(fixture.componentInstance.renderedCards().length).toBe(30);
+    expect(fixture.componentInstance.renderedCards().length).toBe(15);
 
     fixture.componentInstance.onDropListEntered();
     fixture.detectChanges();
 
     expect(fixture.componentInstance.receiving()).toBe(true);
-    expect(fixture.componentInstance.renderedCards().length).toBe(30);
-    expect(fixture.componentInstance.hiddenCardCount()).toBe(45);
+    expect(fixture.componentInstance.renderedCards().length).toBe(15);
+    expect(fixture.componentInstance.hiddenCardCount()).toBe(60);
   });
 
   it("keeps an incoming card rendered while a capped target waits for parent state", () => {
@@ -363,13 +363,13 @@ describe("ListComponent", () => {
     fixture.componentRef.setInput("canEdit", true);
     fixture.detectChanges();
 
-    expect(fixture.componentInstance.renderedCards().length).toBe(30);
+    expect(fixture.componentInstance.renderedCards().length).toBe(15);
 
     fixture.componentInstance.onDragStarted({} as never);
     fixture.detectChanges();
 
-    expect(fixture.componentInstance.renderedCards().length).toBe(30);
-    expect(fixture.componentInstance.hiddenCardCount()).toBe(270);
+    expect(fixture.componentInstance.renderedCards().length).toBe(15);
+    expect(fixture.componentInstance.hiddenCardCount()).toBe(285);
 
     fixture.componentInstance.onDragEnded();
   });
@@ -508,13 +508,13 @@ describe("ListComponent", () => {
       previousContainer: container,
       container,
       previousIndex: 0,
-      currentIndex: 29,
+      currentIndex: 14,
     } as never);
 
     expect(emitted).toEqual([{
       cardId: "card-0",
       toListId: "list-1",
-      afterItem: { type: "card", id: "card-29" },
+      afterItem: { type: "card", id: "card-14" },
     }]);
   });
 

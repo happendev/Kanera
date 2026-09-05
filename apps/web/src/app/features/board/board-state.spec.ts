@@ -569,6 +569,25 @@ describe("BoardState realtime regressions", () => {
     expect(state.checklistsForCard("card-1")[0]?.items[0]?.assigneeId).toBeNull();
   });
 
+  it("keeps an optimistic move's summary reference when its socket echo arrives", () => {
+    const socket = new SocketStub();
+    bridge.attach(socket.asSocket(), "board-1");
+    state.detailedCards.set(new Map([["card-1", createCardDetail()]]));
+    state.moveCard("card-1", "list-1", "2000.0000000000");
+    const optimistic = state.cards();
+    const timestamp = state.cardById("card-1")!.updatedAt;
+    const sequence = state.cardMutationSeq();
+    socket.trigger(SERVER_EVENTS.CARD_MOVED, {
+      boardId: "board-1", cardId: "card-1", fromListId: "list-1", toListId: "list-1",
+      position: "2000.0000000000", prevPosition: "1000.0000000000",
+    });
+    expect(state.cards()).toBe(optimistic);
+    expect(state.cardById("card-1")!.updatedAt).toBe(timestamp);
+    expect(state.cardMutationSeq()).toBe(sequence);
+    expect(state.detailedCards().get("card-1")!.card.updatedAt).toBe(timestamp);
+    expect(state.cardDetailRealtimeRevision("card-1")).toBe(1);
+  });
+
   it("advances the card detail revision for realtime moves and rebalances", () => {
     const socket = new SocketStub();
     bridge.attach(socket.asSocket(), "board-1");
