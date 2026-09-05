@@ -29,7 +29,9 @@ const SAVING_INDICATOR_DELAY_MS = 450;
 
 export const SCRATCHPAD_MIN_WIDTH = 320;
 export const SCRATCHPAD_MAX_WIDTH = 720;
-export const SCRATCHPAD_DEFAULT_WIDTH = 420;
+// Matches --drawer-width on the notifications and Up next drawers, so the three personal panels open
+// at one width until the user resizes this one.
+export const SCRATCHPAD_DEFAULT_WIDTH = 500;
 /** Bottom-sheet geometry. Tall enough to write in; never so tall the page behind it is unreachable. */
 export const SCRATCHPAD_MIN_SHEET_HEIGHT = 220;
 const SHEET_VIEWPORT_RESERVE = 72;

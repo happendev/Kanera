@@ -1,3 +1,4 @@
+import { EmptyStateComponent } from "../../shared/empty-state.component";
 import type { OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from "@angular/core";
 import { Router } from "@angular/router";
@@ -32,7 +33,7 @@ function isSharePayload(value: unknown): value is SharePayload {
 @Component({
   selector: "k-share-target",
   standalone: true,
-  imports: [PageHeaderComponent],
+  imports: [EmptyStateComponent, PageHeaderComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./share-target.page.html",
   styleUrls: ["../../shared/page-styles.scss", "./share-target.page.scss"],

@@ -400,10 +400,13 @@ describe("AppShellComponent board search", () => {
     await render(undefined, { user: { showScratchpad: false } });
 
     const root = fixture.nativeElement as HTMLElement;
+    // Triggers live in the sidebar utility row, so the panels paint no fixed buttons of their own and
+    // page headers reserve no clearance band.
     expect(root.querySelector(".scratch-btn")).toBeNull();
-    expect(root.querySelector(".queue-btn")).not.toBeNull();
-    expect(root.querySelector(".bell-btn")).not.toBeNull();
-    expect(root.style.getPropertyValue("--bell-clearance")).toBe("calc(108px + env(safe-area-inset-right))");
+    expect(root.querySelector(".queue-btn")).toBeNull();
+    expect(root.querySelector(".bell-btn")).toBeNull();
+    expect(root.querySelectorAll(".utility-row .utility-btn").length).toBe(3);
+    expect(root.style.getPropertyValue("--bell-clearance")).toBe("0px");
   });
 
   beforeEach(() => {

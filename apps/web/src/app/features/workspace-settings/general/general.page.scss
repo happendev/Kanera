@@ -151,7 +151,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
-  transition: border-color .15s, box-shadow .15s;
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
 }
 
 .standalone-group-control:focus-within,
@@ -230,7 +230,7 @@
   cursor: pointer;
   font-size: 13px;
   text-align: left;
-  transition: background-color .12s;
+  transition: background-color var(--motion-fast);
 }
 
 .standalone-group-option:hover,

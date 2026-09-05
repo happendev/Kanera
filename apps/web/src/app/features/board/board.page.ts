@@ -1,6 +1,6 @@
 import { ActionToastService } from "../../shared/action-toast.service";
 import type { OnDestroy} from "@angular/core";
-import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from "@angular/core";
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from "@angular/core";
 import { Router } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
 import type { CompactCardCustomFieldValue, CompactCardSummary, ServerToClientEvents, WireBoardMemberUser, WireCard, WireCardSummary, WireChecklistTemplate, WireSeparator } from "@kanera/shared/events";
@@ -54,6 +54,7 @@ import type { CfFilterCondition, FilterValue } from "./table-view/filter.types";
 import { FilterBarComponent } from "./table-view/filter-bar.component";
 import { groupCards } from "./table-view/group-by.util";
 import { GROUP_BY_OPTIONS, NULL_GROUP_KEY, type CardGroup, type GroupBy } from "./table-view/table-view.types";
+import { KeyboardShortcutsService } from "../../core/keyboard/keyboard-shortcuts.service";
 import { readCompactCards, readCompletedFilter, readFilters, readGroupBy, readViewMode, writeCompactCards, writeCompletedFilter, writeFilters, writeGroupBy, writeViewMode, type StoredFilters, type ViewMode } from "./table-view/view-preference";
 import { NotesViewComponent } from "../notes/notes-view.component";
 import { CompletedCardsPanelComponent } from "../completed-cards/completed-cards-panel.component";
@@ -130,6 +131,8 @@ export class BoardPage implements OnDestroy {
   private readonly boardMirrors = inject(BoardMirrorsService);
   private readonly panelStack = inject(PanelStackService);
   private readonly el = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly shortcuts = inject(KeyboardShortcutsService);
+  private readonly destroyRef = inject(DestroyRef);
 
   private readonly listsEl = viewChild<BoardCanvasComponent>('listsEl');
 
@@ -885,6 +888,18 @@ export class BoardPage implements OnDestroy {
   }
 
   constructor() {
+    // Page-level shortcuts. They win over the shell's while this page is mounted and unregister with
+    // it, so the sheet shows them only on a board. Guarded on a loaded board so nothing fires on the
+    // skeleton.
+    const ready = () => this.state.board() !== null;
+    const views: [string, ViewMode, string][] = [["1", "board", "Board view"], ["2", "table", "Table view"], ["3", "calendar", "Calendar view"], ["4", "history", "Work done"], ["5", "notes", "Board notes"]];
+    this.shortcuts.registerAll("Board", [
+      { keys: "c", label: "New card", when: () => ready() && this.state.canEdit() && this.effectiveView() !== "notes" && !this.showArchived(), run: () => this.openComposer() },
+      { keys: "/", label: "Search cards", when: () => ready() && this.viewHasQueryBar(), run: () => this.focusCardSearch() },
+      ...views.map(([key, mode, label]) => ({ keys: key, label, when: ready, run: () => this.setView(mode) })),
+      { keys: "w", label: "Board watchers", when: ready, run: () => this.toggleBoardWatcherPopover() },
+      { keys: "shift+d", label: "Toggle compact cards", when: () => ready() && this.effectiveView() === "board", run: () => this.toggleCompactCards() },
+    ], this.destroyRef);
     document.addEventListener("click", this.handleDocumentClick);
     document.addEventListener("keydown", this.handleDocumentKeydown);
     document.addEventListener("keydown", this.handleSelectionEscape, true);
@@ -1719,6 +1734,13 @@ export class BoardPage implements OnDestroy {
     // Membership drives both card and checklist assignment eligibility, so make the new grant
     // available to every picker immediately on the initiating page and on realtime peers.
     this.state.upsertBoardMember(member);
+  }
+
+  /** `/` puts the caret in the card search without the mouse; the field is the page's own, not the global one. */
+  focusCardSearch() {
+    const input = this.el.nativeElement.querySelector<HTMLInputElement>("k-search-field input");
+    input?.focus();
+    input?.select();
   }
 
   toggleBoardMenu() {

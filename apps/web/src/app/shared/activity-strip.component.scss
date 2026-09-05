@@ -196,7 +196,7 @@ button.activity-cell {
   height: 18px;
   padding: 0;
   cursor: pointer;
-  transition: outline-color 0.12s;
+  transition: outline-color var(--motion-fast);
   outline: 1px solid transparent;
   outline-offset: 1px;
 

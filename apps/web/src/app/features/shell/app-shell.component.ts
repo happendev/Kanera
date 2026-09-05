@@ -1,7 +1,9 @@
+import { ShortcutsSheetComponent } from "../../shared/shortcuts-sheet.component";
+import { KeyboardShortcutsService } from "../../core/keyboard/keyboard-shortcuts.service";
 import { Dialog } from "@angular/cdk/dialog";
 import { NgOptimizedImage } from "@angular/common";
 import type { OnDestroy, OnInit } from "@angular/core";
-import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, signal, viewChild, DestroyRef } from "@angular/core";
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from "@angular/router";
 import type { NotificationSettingsResponse } from "@kanera/shared/dto";
 import type { ServerToClientEvents } from "@kanera/shared/events";
@@ -89,7 +91,7 @@ type SidebarSwipe = {
 @Component({
   selector: "k-app-shell",
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, AnchoredPanelDirective, MyPrioritiesPanelComponent, NotificationsPanelComponent, ScratchpadPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, AnchoredPanelDirective, MyPrioritiesPanelComponent, NotificationsPanelComponent, ScratchpadPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent, ShortcutsSheetComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./app-shell.component.html",
   styleUrl: "./app-shell.component.scss",
@@ -97,7 +99,9 @@ type SidebarSwipe = {
     "[style.--sidebar-swipe-width]": "sidebarSwipeWidth() === null ? null : sidebarSwipeWidth() + 'px'",
     // Removing the left-most scratchpad trigger also shrinks the page-header exclusion band. The
     // bell and Up next keep their fixed positions, so their row stays aligned at every viewport size.
-    "[style.--bell-clearance]": "showScratchpad() ? null : 'calc(108px + env(safe-area-inset-right))'",
+    // The bell, Up next and scratchpad triggers live in the sidebar utility row, so no page header
+    // has to reserve a band for them. The token stays declared for the height contract only.
+    "[style.--bell-clearance]": "'0px'",
     // The dock is a real third grid column, so the shell — which owns the grid — has to know about
     // it. Suppressed on mobile, where the panel leaves the grid and becomes a bottom sheet.
     "[class.scratchpad-docked]": "showScratchpad() && scratchpad.open() && !isScratchpadSheet()",
@@ -116,9 +120,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private readonly auth = inject(AuthService);
   private readonly browserPush = inject(BrowserPushService);
   private readonly dialog = inject(Dialog);
-  private readonly notifications = inject(NotificationsService);
+  protected readonly notifications = inject(NotificationsService);
   private readonly pendingInvitations = inject(PendingInvitationsService);
-  private readonly myPriorities = inject(MyPrioritiesService);
+  protected readonly myPriorities = inject(MyPrioritiesService);
   protected readonly scratchpad = inject(ScratchpadService);
   protected readonly scratchpadResizing = signal(false);
   private readonly offlineCache = inject(OfflineCacheService);
@@ -129,9 +133,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private readonly upgradePrompt = inject(UpgradePromptService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   readonly search = inject(GlobalSearchService);
+  // Escape stays here rather than in the shortcuts registry: it must close shell chrome even while
+  // focus is in an input, which the registry's bare-key guard would prevent.
   private readonly handleDocumentKeydown = (event: KeyboardEvent) => {
     if (event.key === "Escape") this.onEscape();
-    this.onGlobalKeydown(event);
   };
   private readonly handleHostClick = (event: MouseEvent) => {
     if (!this.suppressSidebarClick) return;
@@ -198,6 +203,15 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly usingOfflineShell = signal(false);
   readonly user = this.auth.user;
   readonly showScratchpad = computed(() => this.user()?.showScratchpad ?? true);
+  private readonly isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
+  readonly notificationsPanel = viewChild(NotificationsPanelComponent);
+  readonly prioritiesPanel = viewChild(MyPrioritiesPanelComponent);
+  openShortcuts() {
+    this.closeUserMenu();
+    this.shortcutsOpen.set(true);
+  }
+
+  readonly scratchpadTooltip = computed(() => `${this.scratchpad.open() ? "Close scratchpad" : "Scratchpad"} · .`);
   readonly userMenuTooltip = computed(() => {
     const user = this.user();
     return user ? `${user.displayName} · ${user.email}` : "";
@@ -614,22 +628,42 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.closeMobileSidebar();
   }
 
-  // ⌘K / Ctrl+K opens the global spotlight search from anywhere in the app.
-  onGlobalKeydown(event: KeyboardEvent) {
-    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-      event.preventDefault();
-      this.search.open();
-    }
-    // ⌘⇧. / Ctrl+⇧. toggles the scratchpad. Like ⌘K above, this handler has no "is the user typing?"
-    // guard — and does not need one, because a modifier combo cannot be produced by ordinary typing.
-    // A bare key here would fire while writing in the scratchpad itself, which would be absurd.
-    if (this.showScratchpad() && (event.metaKey || event.ctrlKey) && event.shiftKey && (event.key === "." || event.key === ">")) {
-      event.preventDefault();
-      this.scratchpad.toggle();
-    }
+  readonly shortcutsOpen = signal(false);
+
+  private readonly shortcuts = inject(KeyboardShortcutsService);
+  private readonly destroyRef = inject(DestroyRef);
+
+  /**
+   * App-wide shortcuts. Registered once for the shell's lifetime; pages and panels layer their own on
+   * top and win while mounted. Bare letters here are safe because the dispatcher stands them down
+   * inside any editable element.
+   */
+  private registerGlobalShortcuts(): void {
+    const go = (url: string) => () => void this.router.navigateByUrl(url);
+    this.shortcuts.registerAll("Everywhere", [
+      { keys: "mod+k", label: "Search everything", run: () => this.search.open() },
+      { keys: "?", label: "Keyboard shortcuts", run: () => this.shortcutsOpen.set(true) },
+      // The four sidebar utility buttons, in their on-screen order, each on one letter. ⌘⇧. stays as
+      // the scratchpad's original chord for anyone who learned it.
+      { keys: "mod+shift+.", label: "Open or close scratchpad", when: () => this.showScratchpad(), run: () => this.scratchpad.toggle() },
+      { keys: ".", label: "Open or close scratchpad", when: () => this.showScratchpad(), run: () => this.scratchpad.toggle() },
+      { keys: "u", label: "Open or close Up next", run: () => this.prioritiesPanel()?.toggle() },
+      { keys: "n", label: "Open or close notifications", run: () => this.notificationsPanel()?.toggle() },
+      { keys: "h", label: "Help & docs", run: () => window.open(this.docsUrl, "_blank", "noopener") },
+      { keys: "[", label: "Collapse or expand sidebar", run: () => this.toggleSidebar() },
+    ], this.destroyRef);
+    this.shortcuts.registerAll("Go to", [
+      { keys: "g h", label: "Home", run: go("/") },
+      { keys: "g m", label: "My cards", run: go("/my-cards") },
+      { keys: "g t", label: "Team cards", run: go("/team-cards") },
+      { keys: "g p", label: "Portfolio", run: go("/portfolio") },
+      { keys: "g s", label: "Settings", run: go("/settings") },
+    ], this.destroyRef);
   }
 
   async ngOnInit() {
+    this.shortcuts.attach();
+    this.registerGlobalShortcuts();
     window.addEventListener("resize", this.onResize);
     this.host.nativeElement.addEventListener("click", this.handleHostClick, true);
     this.host.nativeElement.addEventListener("pointerdown", this.handleHostPointerDown, true);

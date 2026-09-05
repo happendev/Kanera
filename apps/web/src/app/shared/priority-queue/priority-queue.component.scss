@@ -57,7 +57,7 @@
   border: 1px solid transparent;
   border-radius: var(--radius);
   // On the base selector, not on .is-completed, so un-completing fades back symmetrically.
-  transition: background-color 0.14s ease, border-color 0.14s ease;
+  transition: background-color var(--motion-fast) ease, border-color var(--motion-fast) ease;
 
   &:hover {
     background: var(--surface-2);
@@ -101,7 +101,7 @@
   font-variant-numeric: tabular-nums;
   font-weight: 650;
   border-radius: 999px;
-  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+  transition: background-color var(--motion-fast) ease, border-color var(--motion-fast) ease, color var(--motion-fast) ease;
 
   @include rank.rank-heat(var(--card-bg));
 }
@@ -152,7 +152,7 @@
   line-height: 1.35;
   white-space: nowrap;
   text-overflow: ellipsis;
-  transition: color 0.14s ease;
+  transition: color var(--motion-fast) ease;
 }
 
 // Keep completed titles readable. The muted colour, green tick and tinted row already communicate
@@ -308,7 +308,7 @@
   transform: translateY(-50%) translateX(4px);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.12s ease, transform 0.12s ease;
+  transition: opacity var(--motion-fast) ease, transform var(--motion-fast) ease;
 
   button {
     display: inline-flex;
@@ -323,7 +323,7 @@
     background: none;
     border: 0;
     border-radius: var(--radius-sm);
-    transition: color 0.1s ease, background-color 0.1s ease;
+    transition: color var(--motion-fast) ease, background-color var(--motion-fast) ease;
 
     &:hover:not(:disabled) {
       color: var(--text);

@@ -1,3 +1,4 @@
+import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { ActionToastService } from "../../shared/action-toast.service";
 import type { OnDestroy, OnInit } from "@angular/core";
 import { DatePipe } from "@angular/common";
@@ -167,7 +168,7 @@ function priorityGroupKey(userId: string): string {
 @Component({
   selector: "k-global-work",
   standalone: true,
-  imports: [
+  imports: [EmptyStateComponent, 
     DatePipe,
     ActivityStripComponent,
     AnchoredPickerPopover,

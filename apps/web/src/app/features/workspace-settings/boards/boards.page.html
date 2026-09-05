@@ -27,7 +27,7 @@
           </div>
           }
           @if (settings.boardGroups().length === 0) {
-          <span class="empty-hint">No groups yet.</span>
+          <k-empty-state size="sm" icon="folders" title="No groups yet" text="Groups collect related boards under one heading in the sidebar." />
           }
         </div>
       </div>
@@ -79,7 +79,7 @@
           </div>
           }
           @if (settings.boardList().length === 0) {
-          <span class="empty-hint">No boards yet.</span>
+          <k-empty-state size="sm" icon="layout-kanban" title="No boards yet" text="Create a board above. It will share this workspace’s lists, fields and labels." />
           }
         </div>
 

@@ -2782,3 +2782,39 @@ button.member-avatar {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+// ─── Metadata band: one control height ───────────────────────────────────────
+// List, assignees, due date and board sit on one row and used to be a mix of 28px and 32px boxes
+// whose heights came from padding plus whatever text they held. Pin every control in the band to the
+// avatar's 32px so the row reads as one line. Label chips are deliberately exempt: they are content,
+// not controls, and their smaller size is what separates them from the add button beside them.
+.row-top {
+  --cd-control-h: 32px;
+
+  .move-list-btn,
+  .card-board-badge,
+  .member-avatar,
+  .member-add-btn,
+  .due-badge,
+  .due-add-btn,
+  .label-add-btn {
+    box-sizing: border-box;
+    height: var(--cd-control-h);
+    min-height: var(--cd-control-h);
+  }
+
+  .member-add-btn,
+  .label-add-btn {
+    width: var(--cd-control-h);
+  }
+
+  .move-list-btn,
+  .card-board-badge,
+  .due-badge,
+  .due-add-btn {
+    display: inline-flex;
+    align-items: center;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+}

@@ -140,7 +140,7 @@ input.comment-search-input {
   padding: 6px 30px 6px 28px;
   font-size: 13px;
   outline: none;
-  transition: border-color 0.12s;
+  transition: border-color var(--motion-fast);
 
   &:focus {
     border-color: var(--accent, var(--border-strong));
@@ -186,7 +186,7 @@ input.comment-search-input {
   cursor: text;
   text-align: left;
   white-space: normal;
-  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
 
   i {
     font-size: 14px;
@@ -312,7 +312,7 @@ input.comment-search-input {
 
   &.draft-preview {
     cursor: pointer;
-    transition: background-color 0.15s;
+    transition: background-color var(--motion-fast);
 
     &:hover:not(.is-readonly) {
       background: var(--surface-hover);
@@ -353,7 +353,7 @@ input.comment-search-input {
   border: 1px solid var(--border);
   border-radius: 11px;
   cursor: pointer;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  transition: background var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast);
 
   i {
     font-size: 13px;
@@ -389,7 +389,7 @@ input.comment-search-input {
   color: var(--text-muted);
   cursor: pointer;
   opacity: 0;
-  transition: background 0.12s, color 0.12s, opacity 0.15s;
+  transition: background var(--motion-fast), color var(--motion-fast), opacity var(--motion-fast);
 
   i {
     font-size: 14px;
@@ -406,7 +406,7 @@ input.comment-search-input {
   display: flex;
   gap: 2px;
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity var(--motion-fast);
 }
 
 button.xs {
@@ -418,7 +418,7 @@ button.xs {
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition: background var(--motion-fast), color var(--motion-fast);
 
   &:hover {
     background: var(--surface-hover);
@@ -575,7 +575,7 @@ button.xs {
 
   &.is-clickable {
     cursor: pointer;
-    transition: background 0.12s, border-color 0.12s, color 0.12s;
+    transition: background var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
 
     &:hover,
     &:focus-visible {
@@ -621,7 +621,7 @@ button.xs {
   font: inherit;
   font-size: 12px;
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  transition: background var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
 
   &:hover {
     background: var(--surface-hover);

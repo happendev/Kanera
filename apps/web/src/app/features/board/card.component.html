@@ -146,7 +146,7 @@
       </div>
       @for (field of customFields(); track field.id) {
       @if (field.showOnCard && hasBadge(field)) {
-      <span class="cf-badge">
+      <span class="cf-badge" [class.cf-badge--chips]="field.type === 'select'" [kTooltip]="field.name">
         <i [class]="'ti ti-' + field.icon"></i>
         <span class="cf-label">{{ field.name }}</span>
         @switch (field.type) {
@@ -156,7 +156,7 @@
         @case ('select') {
         <span class="cf-sep">&middot;</span>
         @for (option of selectedOptions(field); track option.id) {
-        <span class="cf-chip" [style.background]="option.color ? 'var(--color-' + option.color + ')' : 'var(--surface-2)'" [style.color]="option.color ? 'var(--color-' + option.color + '-cf, #fff)' : 'var(--text)'">{{ option.label }}</span>
+        <span class="cf-chip" [class.has-color]="!!option.color" [style.--option-color]="option.color ? 'var(--color-' + option.color + ')' : null">{{ option.label }}</span>
         }
         }
         @case ('user') {

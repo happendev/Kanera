@@ -102,7 +102,7 @@
 
   i {
     font-size: 14px;
-    transition: transform 120ms ease;
+    transition: transform var(--motion-fast) ease;
   }
 
   &:hover:not(:disabled) i { transform: translateX(2px); }
@@ -397,7 +397,7 @@
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 500;
-  transition: opacity 0.15s;
+  transition: opacity var(--motion-fast);
 
   &:empty { opacity: 0; }
 
@@ -642,7 +642,7 @@ button.list-rename-trigger {
   text-decoration: none;
   color: var(--text);
   margin-bottom: 20px;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color var(--motion-fast), background var(--motion-fast);
 
   >.ti:first-child {
     font-size: 20px;
@@ -1270,7 +1270,7 @@ button.list-rename-trigger {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
-  transition: border-color 0.15s;
+  transition: border-color var(--motion-fast);
 
   &:hover {
     border-color: var(--border-strong);
@@ -1434,7 +1434,7 @@ button.list-rename-trigger {
     flex-shrink: 0;
     cursor: grab;
     opacity: 0;
-    transition: opacity 0.12s;
+    transition: opacity var(--motion-fast);
   }
 
   &:hover .item-grip {
@@ -1500,7 +1500,7 @@ button.list-rename-trigger {
   border-radius: 999px;
   padding: 5px 12px;
   cursor: pointer;
-  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
 
   i:first-child {
     font-size: 13px;

@@ -40,6 +40,6 @@
         </div>
         }
         @if (settings.lists().length === 0) {
-        <span class="empty-hint">No lists yet.</span>
+        <k-empty-state size="sm" icon="list-details" title="No lists yet" text="Add a list above to define the columns every board shares." />
         }
       </div>

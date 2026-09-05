@@ -190,7 +190,7 @@
   border-radius: var(--radius);
   background: var(--surface);
   overflow: hidden;
-  transition: border-color 0.15s;
+  transition: border-color var(--motion-fast);
 
   &:hover {
     border-color: var(--border-strong);
@@ -430,7 +430,7 @@
   border: 1px solid var(--border-strong);
   border-radius: 999px;
   background: var(--surface-3);
-  transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast), box-shadow var(--motion-fast);
 }
 
 .ac-power-knob {
@@ -441,7 +441,7 @@
   height: 12px;
   border-radius: 50%;
   background: var(--text-muted);
-  transition: transform 0.15s, background-color 0.15s;
+  transition: transform var(--motion-fast), background-color var(--motion-fast);
 }
 
 .ac-failure {
@@ -698,7 +698,7 @@
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  transition: border-color 0.15s, background-color 0.15s, color 0.15s;
+  transition: border-color var(--motion-fast), background-color var(--motion-fast), color var(--motion-fast);
 
   i {
     font-size: 14px;

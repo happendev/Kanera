@@ -1,5 +1,5 @@
 import { CdkTrapFocus } from "@angular/cdk/a11y";
-import { ChangeDetectionStrategy, Component, computed, effect, HostListener, inject, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, effect, HostListener, inject, signal, input } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
 import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
 import { BodyScrollLockService } from "../../shared/body-scroll-lock.service";
@@ -36,6 +36,12 @@ export class MyPrioritiesPanelComponent {
   private readonly bodyScrollLock = inject(BodyScrollLockService);
 
   readonly open = signal(false);
+  /**
+   * True when the shell renders this panel's trigger in its sidebar utility row. The panel then
+   * paints no fixed button of its own; the shell calls toggle() directly.
+   */
+  readonly embedded = input(false);
+
   readonly closing = signal(false);
   /** One clock reading shared by the strip and every row for the whole open drawer session. */
   readonly dueReferenceTime = signal(Date.now());

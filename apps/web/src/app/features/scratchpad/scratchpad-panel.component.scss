@@ -53,7 +53,7 @@
   border: 1px solid var(--border);
   color: var(--text);
   cursor: pointer;
-  transition: background-color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transition: background-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease, border-color var(--motion-fast) ease;
 
   i {
     font-size: 18px;
@@ -110,7 +110,7 @@
   touch-action: none;
   // Nothing until you reach for it: a permanently visible grabber on a writing surface is noise.
   background: transparent;
-  transition: background-color 0.12s ease;
+  transition: background-color var(--motion-fast) ease;
 
   &:hover,
   &:focus-visible,
@@ -244,7 +244,7 @@
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition: background-color var(--motion-fast) ease, color var(--motion-fast) ease;
 
   i {
     font-size: 16px;
@@ -315,7 +315,7 @@
   &::-webkit-scrollbar-thumb {
     background: transparent;
     border-radius: 999px;
-    transition: background-color 0.12s ease;
+    transition: background-color var(--motion-fast) ease;
   }
 
   &:hover::-webkit-scrollbar-thumb,
@@ -370,7 +370,7 @@
   // the tab menu's Move left / Move right, which is also the keyboard path. Pointer drag still works
   // for mouse and pen, where there is no competing gesture.
   touch-action: pan-x;
-  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  transition: background-color var(--motion-fast) ease, color var(--motion-fast) ease, border-color var(--motion-fast) ease;
 
   &:focus-visible {
     outline: 2px solid var(--ring);
@@ -468,7 +468,7 @@
   flex: none;
   opacity: 0;
   cursor: pointer;
-  transition: opacity 0.12s ease, background-color 0.12s ease;
+  transition: opacity var(--motion-fast) ease, background-color var(--motion-fast) ease;
 
   i {
     font-size: 14px;
@@ -1027,7 +1027,7 @@
   margin: 0 auto;
   border-radius: 999px;
   background: var(--border-strong, var(--border));
-  transition: background-color 0.12s ease;
+  transition: background-color var(--motion-fast) ease;
 
   &.active {
     background: var(--accent);

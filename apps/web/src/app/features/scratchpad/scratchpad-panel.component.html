@@ -3,7 +3,7 @@
   button, the dock, and the sheet all read the same open signal. The popped-out page has no trigger:
   it is already the scratchpad, and a fixed floating button there would sit over its own header.
 -->
-@if (!isPage()) {
+@if (!isPage() && !embedded()) {
 <button
   type="button"
   class="scratch-btn"

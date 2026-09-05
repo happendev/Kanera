@@ -109,11 +109,9 @@
       <div class="skeleton skeleton-panel"></div>
     </div>
     } @else if (state.error(); as error) {
-    <div class="empty-state error-state">
-      <i class="ti ti-alert-circle"></i>
-      <strong>{{ error }}</strong>
+    <k-empty-state class="error-state" icon="alert-circle" [title]="error">
       <button type="button" class="secondary" (click)="state.retry()">Try again</button>
-    </div>
+    </k-empty-state>
     } @else if (hasNoBoards()) {
     <!-- Getting-started state, gated on accessible boards rather than on `hasWorkspace`: a
          standalone-only or guest-only account has real work and must fall through to the full page

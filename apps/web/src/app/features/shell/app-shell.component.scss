@@ -12,7 +12,7 @@
   height: 100dvh;
   overflow: hidden;
   background: var(--bg);
-  transition: grid-template-columns 0.18s ease;
+  transition: grid-template-columns var(--motion-base) ease;
 }
 
 :host(:has(.sidebar.collapsed)) {
@@ -56,7 +56,7 @@
 }
 
 :host(:has(.sidebar.swiping.settling)) {
-  transition: grid-template-columns 0.18s ease;
+  transition: grid-template-columns var(--motion-base) ease;
 }
 
 // k-support-session-banner is a direct grid child alongside .sidebar/.shell-main. Without an
@@ -117,7 +117,7 @@ k-support-session-banner {
   align-items: center;
   gap: 6px;
   padding: 5px 12px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -127,7 +127,7 @@ k-support-session-banner {
   flex-shrink: 0;
 
   i {
-    font-size: 13px;
+    font-size: var(--text-base);
   }
 }
 
@@ -186,7 +186,7 @@ k-support-session-banner {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -195,7 +195,7 @@ k-support-session-banner {
 
   .offline-copy {
     margin-left: auto;
-    font-size: 10px;
+    font-size: var(--text-xs);
     font-weight: 600;
     letter-spacing: 0;
     text-transform: none;
@@ -211,7 +211,7 @@ k-support-session-banner {
     width: 28px;
     height: 28px;
     padding: 0;
-    font-size: 14px;
+    font-size: var(--text-md);
     color: var(--text-muted);
     flex-shrink: 0;
 
@@ -243,7 +243,7 @@ k-support-session-banner {
   cursor: pointer;
   font: inherit;
   text-align: left;
-  transition: border-color 0.12s, box-shadow 0.12s, background 0.12s;
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast), background var(--motion-fast);
 
   &:hover {
     color: var(--text);
@@ -260,13 +260,13 @@ k-support-session-banner {
   >i {
     color: var(--text-muted);
     flex-shrink: 0;
-    font-size: 13px;
+    font-size: var(--text-base);
   }
 
   >span {
     flex: 1;
     min-width: 0;
-    font-size: 13px;
+    font-size: var(--text-base);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -274,7 +274,7 @@ k-support-session-banner {
 
   .search-kbd {
     flex-shrink: 0;
-    font-size: 11px;
+    font-size: var(--text-xs);
     color: var(--text-muted);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
@@ -289,10 +289,10 @@ k-support-session-banner {
   margin: 2px 4px 8px;
   padding: 8px 10px;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: var(--text-base);
 
   i {
-    font-size: 15px;
+    font-size: 16px;
   }
 }
 
@@ -312,7 +312,7 @@ k-support-session-banner {
   padding: 6px 10px;
   border-radius: var(--radius);
   color: var(--nav-text-strong);
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 500;
 
   &:hover {
@@ -338,11 +338,26 @@ k-support-session-banner {
     display: inline-flex;
     justify-content: center;
     color: var(--text-muted);
-    font-size: 15px;
+    font-size: 16px;
   }
 }
 
-.nav-help,
+// Revealed on hover or keyboard focus with a fine pointer; always present for touch. A gear on every
+// workspace header was chrome repeated once per workspace, and the destination is one click away
+// from the header itself.
+@media (hover: hover) and (pointer: fine) {
+  .ws-group .ws-settings {
+    opacity: 0;
+    transition: opacity var(--motion-fast);
+  }
+
+  .ws-group:hover .ws-settings,
+  .ws-group:focus-within .ws-settings,
+  .ws-settings.active {
+    opacity: 1;
+  }
+}
+
 .ws-settings {
   display: flex;
   align-items: center;
@@ -352,8 +367,8 @@ k-support-session-banner {
   flex-shrink: 0;
   border-radius: var(--radius);
   color: var(--text-muted);
-  font-size: 14px;
-  transition: background-color 0.15s, color 0.15s;
+  font-size: var(--text-md);
+  transition: background-color var(--motion-fast), color var(--motion-fast);
 
   &:hover {
     background: var(--surface-2);
@@ -368,11 +383,6 @@ k-support-session-banner {
   }
 }
 
-.nav-help {
-  align-self: stretch;
-  width: 33px;
-  height: auto;
-}
 
 .ws-group {
   display: flex;
@@ -401,7 +411,7 @@ k-support-session-banner {
   color: var(--nav-text-strong);
   border: none;
   border-radius: var(--radius);
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 500;
   justify-content: flex-start;
 
@@ -410,13 +420,13 @@ k-support-session-banner {
   }
 
   i {
-    font-size: 14px;
+    font-size: var(--text-md);
     color: var(--text-muted);
     flex-shrink: 0;
   }
 
   .ws-icon i {
-    font-size: 15px;
+    font-size: 16px;
     color: var(--accent);
   }
 
@@ -438,7 +448,7 @@ k-support-session-banner {
   border-radius: var(--radius-sm);
   padding: 1px 5px;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: 600;
   line-height: 1.4;
 }
@@ -530,7 +540,7 @@ k-support-session-banner {
 }
 
 .ws-subhead {
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -548,7 +558,7 @@ k-support-session-banner {
   background: transparent;
   border: none;
   border-radius: var(--radius);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -557,7 +567,7 @@ k-support-session-banner {
   text-align: left;
 
   i {
-    font-size: 11px;
+    font-size: var(--text-xs);
     flex-shrink: 0;
   }
 
@@ -589,7 +599,7 @@ k-support-session-banner {
   border-radius: var(--radius);
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-align: left;
@@ -597,7 +607,7 @@ k-support-session-banner {
   justify-content: start;
 
   i {
-    font-size: 11px;
+    font-size: var(--text-xs);
     flex-shrink: 0;
   }
 
@@ -666,10 +676,10 @@ k-support-session-banner {
   padding: 6px 10px;
   border-radius: var(--radius);
   color: var(--text-muted);
-  font-size: 14px;
+  font-size: var(--text-md);
 
   i {
-    font-size: 15px;
+    font-size: 16px;
     flex-shrink: 0;
   }
 
@@ -707,7 +717,7 @@ k-support-session-banner {
   border-radius: 999px;
   background: var(--board-attention-color, var(--accent));
   color: var(--accent-fg);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 700;
   line-height: 18px;
   flex-shrink: 0;
@@ -746,18 +756,18 @@ k-support-session-banner {
   border-radius: 999px;
   background: var(--surface-subtle);
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: 600;
   line-height: 16px;
   flex-shrink: 0;
 
   i {
-    font-size: 11px;
+    font-size: var(--text-xs);
   }
 }
 
 .board-empty {
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--text-muted);
   padding: 4px 10px;
   font-style: italic;
@@ -781,13 +791,13 @@ k-support-session-banner {
   }
 
   .ws-empty-title {
-    font-size: 13px;
+    font-size: var(--text-base);
     font-weight: 600;
     color: var(--text);
   }
 
   .ws-empty-text {
-    font-size: 12px;
+    font-size: var(--text-sm);
     color: var(--text-muted);
     line-height: 1.4;
   }
@@ -803,13 +813,13 @@ k-support-session-banner {
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--danger, #dc2626) 7%, var(--surface));
   color: var(--danger, #dc2626);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.35;
 
   i {
     margin-top: 1px;
     flex-shrink: 0;
-    font-size: 14px;
+    font-size: var(--text-md);
   }
 }
 
@@ -824,6 +834,111 @@ k-support-session-banner {
     max-width: 100%;
     object-fit: contain;
     object-position: left center;
+  }
+}
+
+.utility-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+// Bordered, filled squares rather than bare glyphs: as ghosts these read as leftovers under the
+// logo, when they are the four personal surfaces the sidebar exists to reach. Sized to the toolbar
+// control height so they line up with the collapse button beside the logo.
+.utility-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 0;
+  height: 36px;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
+
+  i {
+    font-size: 18px;
+  }
+
+  &:hover,
+  &:focus-visible {
+    background: var(--surface-hover);
+    border-color: var(--border-strong);
+    color: var(--nav-text-strong);
+    text-decoration: none;
+  }
+
+  // A button that has something for you stops being muted. The bell with unread activity takes the
+  // accent outright, which is the one place in the sidebar that colour is spent on state.
+  &.has-badge {
+    color: var(--nav-text-strong);
+  }
+
+  &.is-alert {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+    background: var(--accent-soft);
+    color: var(--accent);
+
+    // The unread badge breathes: a soft glow that swells and fades once every few seconds. The glyph
+    // itself never moves, so nothing catches the eye directly; the pulse only sits in peripheral vision.
+    .utility-badge {
+      animation: utility-badge-breathe 4s ease-in-out infinite;
+    }
+
+    &:hover .utility-badge {
+      animation-play-state: paused;
+    }
+  }
+
+  &.is-active {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+}
+
+.utility-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border: 2px solid var(--surface);
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text);
+  font-size: 10px; // below --text-xs on purpose: a count inside an 18px capsule
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  box-sizing: border-box;
+
+  &.is-accent {
+    background: var(--accent);
+    color: var(--accent-fg);
+  }
+}
+
+.sidebar.collapsed {
+  .utility-row {
+    flex-direction: column;
+    gap: var(--space-1);
+    padding-inline: 6px;
+  }
+
+  .utility-btn {
+    flex: none;
+    width: 100%;
   }
 }
 
@@ -892,7 +1007,7 @@ k-support-session-banner {
 }
 
 .user-name {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--text);
   white-space: nowrap;
@@ -905,7 +1020,7 @@ k-support-session-banner {
   align-items: center;
   gap: 5px;
   min-height: 18px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -913,7 +1028,7 @@ k-support-session-banner {
 
   i {
     flex-shrink: 0;
-    font-size: 12px;
+    font-size: var(--text-sm);
   }
 
   span:last-child {
@@ -926,8 +1041,8 @@ k-support-session-banner {
 .user-chev {
   flex-shrink: 0;
   color: var(--text-muted);
-  font-size: 14px;
-  transition: transform 0.15s ease;
+  font-size: var(--text-md);
+  transition: transform var(--motion-fast) ease;
 
   .user-block:not(.open) & {
     transform: rotate(180deg);
@@ -966,7 +1081,7 @@ k-support-session-banner {
 }
 
 .user-popover-name {
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--text);
   white-space: nowrap;
@@ -975,7 +1090,7 @@ k-support-session-banner {
 }
 
 .user-popover-email {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -986,7 +1101,7 @@ k-support-session-banner {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -994,7 +1109,7 @@ k-support-session-banner {
 
   i {
     flex-shrink: 0;
-    font-size: 13px;
+    font-size: var(--text-base);
   }
 
   span:last-child {
@@ -1064,7 +1179,7 @@ k-support-session-banner {
 .popover-group-label {
   padding: 2px 10px 4px;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -1106,13 +1221,13 @@ k-support-session-banner {
 
 .organisation-trigger-sub {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
 }
 
 .organisation-chev {
   flex-shrink: 0;
-  font-size: 14px;
+  font-size: var(--text-md);
 }
 
 // Mirrors .user-popover's chrome so the submenu reads as the same surface one level across.
@@ -1149,13 +1264,13 @@ k-support-session-banner {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm, 4px);
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   font-weight: 500;
 
   // Centred content, so drop the fixed leading slot that aligns list rows.
   > i:first-child {
     width: auto;
-    font-size: 15px;
+    font-size: 16px;
   }
 
   &:hover:not(:disabled) {
@@ -1184,7 +1299,7 @@ k-support-session-banner {
 
     i {
       color: var(--text-muted);
-      font-size: 14px;
+      font-size: var(--text-md);
     }
   }
 }
@@ -1206,6 +1321,10 @@ k-support-session-banner {
   animation: spin 0.8s linear infinite;
 }
 
+.popover-kbd {
+  margin-left: auto;
+}
+
 .popover-item {
   display: flex;
   align-items: center;
@@ -1222,7 +1341,7 @@ k-support-session-banner {
   background: transparent;
   border: none;
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   text-align: left;
   cursor: pointer;
@@ -1287,7 +1406,7 @@ k-support-session-banner {
   color: var(--text);
   cursor: pointer;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   text-align: left;
 
@@ -1298,7 +1417,7 @@ k-support-session-banner {
     width: 18px;
     color: var(--text-muted);
     flex-shrink: 0;
-    font-size: 15px;
+    font-size: 16px;
   }
 
   span {
@@ -1450,7 +1569,7 @@ k-support-session-banner {
     }
 
     i {
-      font-size: 9px;
+      font-size: var(--text-xs);
     }
   }
 
@@ -1471,7 +1590,7 @@ k-support-session-banner {
   .ws-me .board-link k-avatar {
     width: 22px;
     height: 22px;
-    font-size: 10px;
+    font-size: var(--text-xs);
   }
 
   .new-ws-icon {
@@ -1536,7 +1655,7 @@ k-support-session-banner {
     height: 36px;
 
     i {
-      font-size: 15px;
+      font-size: 16px;
     }
   }
 
@@ -1545,7 +1664,7 @@ k-support-session-banner {
     height: 36px;
 
     i {
-      font-size: 15px;
+      font-size: 16px;
     }
   }
 
@@ -1564,7 +1683,7 @@ k-support-session-banner {
     z-index: 199;
 
     &.settling {
-      transition: opacity 0.18s ease;
+      transition: opacity var(--motion-base) ease;
     }
   }
 
@@ -1594,7 +1713,18 @@ k-support-session-banner {
     }
 
     &.settling {
-      transition: transform 0.18s ease;
+      transition: transform var(--motion-base) ease;
     }
+  }
+}
+
+@keyframes utility-badge-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+  45% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .utility-btn.is-alert .utility-badge {
+    animation: none;
   }
 }

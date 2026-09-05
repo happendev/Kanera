@@ -14,7 +14,7 @@
   font-size: 13px;
   user-select: none;
   position: relative;
-  transition: background-color 0.12s, color 0.12s;
+  transition: background-color var(--motion-fast), color var(--motion-fast);
 
   &:hover {
     background: var(--surface-2);
@@ -129,7 +129,7 @@
   opacity: 0;
   overflow: hidden;
   pointer-events: none;
-  transition: opacity 0.12s ease;
+  transition: opacity var(--motion-fast) ease;
 
   // Match checklist rows: actions stay out of the content flow until the row is hovered or reached
   // from the keyboard, while an open menu keeps its trigger visible for orientation and dismissal.

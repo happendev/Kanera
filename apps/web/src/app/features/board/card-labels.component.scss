@@ -37,7 +37,7 @@
   line-height: 1.5;
   letter-spacing: 0.01em;
   cursor: pointer;
-  transition: filter 0.12s, background-color 0.12s, border-color 0.12s;
+  transition: filter var(--motion-fast), background-color var(--motion-fast), border-color var(--motion-fast);
 
   &:hover {
     background: color-mix(in srgb, var(--label-color) var(--label-chip-hover-bg-weight), transparent);
@@ -82,10 +82,10 @@
 // rest adopt the shared preference in one layout pass.
 .label-chip.is-toggle-origin {
   transition:
-    max-width 0.18s cubic-bezier(0.4, 0, 0.2, 1),
-    padding 0.18s cubic-bezier(0.4, 0, 0.2, 1),
-    border-radius 0.18s cubic-bezier(0.4, 0, 0.2, 1),
-    filter 0.12s;
+    max-width var(--motion-base) cubic-bezier(0.4, 0, 0.2, 1),
+    padding var(--motion-base) cubic-bezier(0.4, 0, 0.2, 1),
+    border-radius var(--motion-base) cubic-bezier(0.4, 0, 0.2, 1),
+    filter var(--motion-fast);
 }
 
 .label-chip-text {
@@ -97,7 +97,7 @@
 }
 
 .label-chip.is-toggle-origin .label-chip-text {
-  transition: opacity 0.1s ease;
+  transition: opacity var(--motion-fast) ease;
 }
 
 .label-chip.is-compressed .label-chip-text {

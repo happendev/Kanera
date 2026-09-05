@@ -41,7 +41,7 @@
   padding: 56px 24px 64px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
   // A reading column already stops this far short of the viewport's right edge, so a k-page-header
   // inside it only reserves the remainder of the fixed notifications bell's band. On a wide screen
   // the centring gutter makes that reservation moot; this is the narrow case, which is the one that
@@ -55,7 +55,7 @@
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 20px;
+  padding: var(--space-5);
 }
 
 // The settings card's title row is k-page-header in its "page" variant, including the tinted icon
@@ -68,7 +68,7 @@
   --ph-page-identity-align: center;
   --ph-page-badge-margin-top: 0px;
   display: block;
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
 }
 
 // ─── Inline forms ─────────────────────────────────────────────────────────────
@@ -76,8 +76,8 @@
 .board-form {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
   padding: 14px;
   background: var(--inset-bg);
   border: 1px solid var(--inset-border);
@@ -97,7 +97,7 @@
 .form-actions {
   display: flex;
   gap: 6px;
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
   flex-wrap: wrap;
 }
 
@@ -107,7 +107,7 @@
 .settings-tabs {
   display: flex;
   gap: 6px;
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
   flex-wrap: wrap;
   position: relative;
 
@@ -184,7 +184,7 @@
 .boards {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .board-tile {
@@ -201,7 +201,7 @@
   font-weight: 500;
   text-align: left;
   justify-content: flex-start;
-  transition: background-color 0.15s, border-color 0.15s;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast);
 
   &:hover {
     background: var(--surface-hover);
@@ -261,7 +261,7 @@
 
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
     margin-left: auto;
 
     k-icon-picker {
@@ -305,7 +305,7 @@
 }
 
 .danger-zone {
-  margin-top: 24px;
+  margin-top: var(--space-6);
   border: 1px solid var(--danger, #e53e3e);
   border-radius: var(--radius);
   padding: 14px;
@@ -333,8 +333,8 @@
   display: grid;
   grid-template-columns: 32px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  padding: 12px;
+  gap: var(--space-3);
+  padding: var(--space-3);
   border: 1px solid color-mix(in srgb, var(--danger, #e53e3e) 38%, var(--border));
   border-radius: var(--radius);
   background: color-mix(in srgb, var(--danger, #e53e3e) 6%, var(--surface));
@@ -403,7 +403,7 @@
   .no-workspace-icon {
     font-size: 36px;
     color: var(--text-muted);
-    margin-bottom: 4px;
+    margin-bottom: var(--space-1);
   }
 
   h2 {
@@ -467,7 +467,7 @@
 .member-search {
   display: block;
   width: 100%;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
 }
 
 // ─── Mobile overrides ─────────────────────────────────────────────────────────
@@ -538,7 +538,7 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    padding: 12px;
+    padding: var(--space-3);
 
     >k-icon-picker,
     >k-color-picker {
@@ -597,7 +597,7 @@
     &.single-line-capture {
       display: flex;
       flex-wrap: nowrap;
-      gap: 8px;
+      gap: var(--space-2);
 
       >k-icon-picker,
       >k-color-picker,
@@ -652,5 +652,5 @@
 }
 
 .cdk-drop-list-dragging .cdk-drag {
-  transition: transform 0.18s cubic-bezier(0, 0, 0.2, 1);
+  transition: transform var(--motion-base) cubic-bezier(0, 0, 0.2, 1);
 }

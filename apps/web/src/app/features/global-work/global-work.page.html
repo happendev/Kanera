@@ -835,11 +835,7 @@
                 }
               </section>
             } @empty {
-              <div class="empty-state">
-                <i class="ti ti-layout-kanban"></i>
-                <strong>No cards found</strong>
-                <span>Try changing your filters or choosing more boards.</span>
-              </div>
+              <k-empty-state icon="layout-kanban" title="No cards found" text="Try changing your filters or choosing more boards." />
             }
           </div>
         } @else if (effectiveDisplay() === "calendar") {
@@ -856,11 +852,7 @@
             (cardOpened)="openCardById($event)"
           />
           @if (!datedCardCount()) {
-            <div class="empty-state">
-              <i class="ti ti-calendar"></i>
-              <strong>No cards with a due date</strong>
-              <span>The calendar only shows dated cards. Switch to the table or board view to see the rest.</span>
-            </div>
+            <k-empty-state icon="calendar" title="No cards with a due date" text="The calendar only shows dated cards. Switch to the table or board view to see the rest." />
           }
         } @else {
           <!--

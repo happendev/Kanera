@@ -60,7 +60,7 @@
   color: var(--text);
   font-size: 14px;
   cursor: pointer;
-  transition: background-color 0.12s, color 0.12s, border-color 0.12s;
+  transition: background-color var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast);
 
   i {
     font-size: 15px;

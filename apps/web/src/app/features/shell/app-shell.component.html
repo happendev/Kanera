@@ -19,6 +19,29 @@
     </button>
   </div>
 
+  <!-- Personal surfaces that used to float over every page as fixed buttons. Living here, under the
+       logo, they no longer force a clearance band into every page header, and the top of the sidebar is
+       the one place to look for "mine": Up next, notifications, scratchpad, help. -->
+  <div class="utility-row" role="toolbar" aria-label="Personal tools">
+    @if (showScratchpad()) {
+    <button type="button" class="utility-btn" [class.is-active]="scratchpad.open()" (click)="scratchpad.toggle()" aria-label="Scratchpad" [attr.aria-expanded]="scratchpad.open()" [kTooltip]="scratchpadTooltip()">
+      <i class="ti ti-notes"></i>
+    </button>
+    }
+    <button type="button" class="utility-btn" [class.has-badge]="myPriorities.totalCount() > 0" (click)="prioritiesPanel()?.toggle()" [attr.aria-label]="'Up next' + (myPriorities.totalCount() > 0 ? ' (' + myPriorities.totalCount() + ' cards)' : '')" [attr.aria-expanded]="prioritiesPanel()?.open() ?? false" kTooltip="Up next · U">
+      <i class="ti ti-list-numbers"></i>
+      @if (myPriorities.totalCount() > 0) { <span class="utility-badge">{{ myPriorities.totalCount() > 99 ? '99+' : myPriorities.totalCount() }}</span> }
+    </button>
+    <button type="button" class="utility-btn" [class.has-badge]="notifications.unreadCount() > 0" [class.is-alert]="notifications.unreadCount() > 0" (click)="notificationsPanel()?.toggle()" [attr.aria-label]="'Notifications' + (notifications.unreadCount() > 0 ? ' (' + notifications.unreadCount() + ' unread)' : '')" [attr.aria-expanded]="notificationsPanel()?.open() ?? false" kTooltip="Notifications · N">
+      <i [class]="notifications.unreadCount() > 0 ? 'ti ti-bell-ringing' : 'ti ti-bell'"></i>
+      @if (notifications.unreadCount() > 0) { <span class="utility-badge is-accent">{{ notifications.unreadCount() > 99 ? '99+' : notifications.unreadCount() }}</span> }
+    </button>
+    <a class="utility-btn" [href]="docsUrl" target="_blank" rel="noopener noreferrer" kTooltip="Help &amp; docs · H" aria-label="Help &amp; docs">
+      <i class="ti ti-help-circle"></i>
+    </a>
+  </div>
+
+
   @if (environmentBannerLabel(); as environmentLabel) {
   @if (!sidebarCollapsed()) {
   <div class="dev-banner">
@@ -36,9 +59,6 @@
         <span class="nav-label">Home</span>
       </a>
       @if (!sidebarCollapsed()) {
-      <a class="nav-help" [href]="docsUrl" target="_blank" rel="noopener noreferrer" kTooltip="Help &amp; docs" aria-label="Help &amp; docs">
-        <i class="ti ti-help-circle"></i>
-      </a>
       }
     </div>
     <div class="nav-item-row">
@@ -581,6 +601,11 @@
           <i class="ti ti-help-circle"></i>
           <span>Help &amp; docs</span>
         </a>
+        <button type="button" class="popover-item" (click)="openShortcuts()" role="menuitem">
+          <i class="ti ti-keyboard"></i>
+          <span>Keyboard shortcuts</span>
+          <kbd class="k-kbd popover-kbd">?</kbd>
+        </button>
         <button type="button" class="popover-item danger" (click)="logout()" role="menuitem">
           <i class="ti ti-logout"></i>
           <span>Log out</span>
@@ -630,11 +655,14 @@
   are all fixed-position and take no grid cell.
 -->
 @if (showScratchpad()) {
-<k-scratchpad-panel (resizeStateChange)="scratchpadResizing.set($event)" />
+<k-scratchpad-panel [embedded]="true" (resizeStateChange)="scratchpadResizing.set($event)" />
 }
 
-<k-my-priorities-panel />
-<k-notifications-panel />
+<k-my-priorities-panel [embedded]="true" />
+<k-notifications-panel [embedded]="true" />
 <k-update-prompt />
 <k-disconnect-prompt />
 <k-global-search-overlay />
+@if (shortcutsOpen()) {
+<k-shortcuts-sheet (closed)="shortcutsOpen.set(false)" />
+}

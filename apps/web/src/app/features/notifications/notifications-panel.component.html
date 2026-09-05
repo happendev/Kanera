@@ -1,3 +1,4 @@
+@if (!embedded()) {
 <button type="button" class="bell-btn" (click)="toggle()" [class.has-unread]="unreadCount() > 0" [attr.aria-label]="'Notifications' + (unreadCount() > 0 ? ' (' + unreadCount() + ' unread)' : '')" [attr.aria-expanded]="open()"
   kTooltip="Notifications">
   <i [class]="unreadCount() > 0 ? 'ti ti-bell-ringing' : 'ti ti-bell'"></i>
@@ -5,13 +6,14 @@
   <span class="bell-badge">{{ unreadCount() > 99 ? '99+' : unreadCount() }}</span>
   }
 </button>
+}
 
 @if (open()) {
 <div class="drawer-backdrop" [class.closing]="closing()" (click)="close()" aria-hidden="true"></div>
 <aside class="drawer" [class.closing]="closing()" role="dialog" aria-modal="true" aria-label="Notifications" cdkTrapFocus [cdkTrapFocusAutoCapture]="true">
   <header class="drawer-header">
     <div class="drawer-title">
-      <i class="ti ti-bell"></i>
+      <i [class]="unreadCount() > 0 ? 'ti ti-bell-ringing' : 'ti ti-bell'"></i>
       <h2>Notifications</h2>
       @if (unreadCount() > 0) {
       <span class="title-count">{{ unreadCount() }}</span>

@@ -1,5 +1,6 @@
 <!-- Immediately left of the notifications bell, in the same fixed row: the two always-reachable
      personal surfaces sit together, "what's next" beside "what happened". -->
+@if (!embedded()) {
 <button
   type="button"
   class="queue-btn"
@@ -15,6 +16,7 @@
     <span class="queue-badge">{{ totalCount() > 99 ? "99+" : totalCount() }}</span>
   }
 </button>
+}
 
 @if (open()) {
 <div class="drawer-backdrop" [class.closing]="closing()" (click)="close()" aria-hidden="true"></div>

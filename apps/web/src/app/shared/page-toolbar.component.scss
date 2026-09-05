@@ -33,7 +33,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
   padding: 8px var(--pt-gutter, 16px);
 }
@@ -43,7 +43,7 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
 }
 
@@ -76,7 +76,7 @@
 .pt-tail {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
 }
 
@@ -101,7 +101,7 @@
     border: 1px solid var(--border);
     border-radius: var(--radius);
     cursor: pointer;
-    transition: background-color 0.12s, color 0.12s, border-color 0.12s;
+    transition: background-color var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast);
 
     i {
       font-size: 16px;
@@ -172,7 +172,7 @@
       // mattering.
       max-height: calc(100dvh - 160px);
       overflow-y: auto;
-      padding: 8px;
+      padding: var(--space-2);
       background: var(--surface-overlay);
       border: 1px solid var(--border);
       border-radius: var(--radius);

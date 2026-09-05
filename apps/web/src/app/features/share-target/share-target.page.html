@@ -13,16 +13,9 @@
     </k-page-header>
 
     @if (loading()) {
-    <div class="empty-state">
-      <i class="ti ti-loader-2"></i>
-      <p>Loading boards...</p>
-    </div>
+    <k-empty-state icon="loader-2" title="Loading boards…" />
     } @else if (groups().length === 0) {
-    <div class="empty-state">
-      <i class="ti ti-layout-kanban"></i>
-      <h2>No editable boards available</h2>
-      <p>You need editor access to a board before captured items can become cards.</p>
-    </div>
+    <k-empty-state icon="layout-kanban" title="No editable boards available" text="You need editor access to a board before captured items can become cards." />
     } @else {
     <form class="share-form" (submit)="$event.preventDefault(); save()">
       @if (!hasIncomingContent()) {

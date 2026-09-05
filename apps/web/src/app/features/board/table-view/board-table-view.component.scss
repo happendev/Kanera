@@ -197,7 +197,7 @@
   border: 1px solid var(--accent);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   cursor: pointer;
-  transition: background-color 0.12s, color 0.12s;
+  transition: background-color var(--motion-fast), color var(--motion-fast);
 
   i {
     font-size: 12px;
@@ -529,7 +529,7 @@
   color: var(--text-muted);
   opacity: 0;
   cursor: grab;
-  transition: opacity .12s;
+  transition: opacity var(--motion-fast);
 
   > i { font-size: 13px; }
   &:active { cursor: grabbing; }
@@ -631,7 +631,7 @@
   min-height: var(--tv-row-h);
   background: var(--surface);
   border-bottom: 1px solid var(--tv-line-row);
-  transition: background-color .1s;
+  transition: background-color var(--motion-fast);
 
   &:hover,
   &:hover .tv-title-cell {
@@ -885,7 +885,7 @@
   color: var(--text-muted);
   font-size: 14px;
   opacity: .55;
-  transition: opacity .12s ease;
+  transition: opacity var(--motion-fast) ease;
 }
 
 .tv-run-head.is-collapsed {
@@ -1071,7 +1071,7 @@
 
 .tv-body .cdk-drag-animating,
 .tv-body.cdk-drop-list-dragging .tv-row:not(.cdk-drag-placeholder) {
-  transition: transform 180ms cubic-bezier(0, 0, .2, 1);
+  transition: transform var(--motion-base) cubic-bezier(0, 0, .2, 1);
 }
 
 .tv-cell {
@@ -1101,7 +1101,7 @@
   color: var(--text-muted);
   font-size: 11px;
   opacity: .65;
-  transition: opacity .12s;
+  transition: opacity var(--motion-fast);
   pointer-events: none;
 }
 
@@ -1126,7 +1126,7 @@
 .tv-row-gutter,
 .tv-drag-handle {
   opacity: 0;
-  transition: opacity .12s;
+  transition: opacity var(--motion-fast);
 }
 
 .tv-row:hover .tv-row-gutter,
@@ -1151,7 +1151,7 @@
 
 .tv-actions-btn {
   opacity: 0;
-  transition: opacity .12s;
+  transition: opacity var(--motion-fast);
 }
 
 .tv-row:hover .tv-actions-btn,
@@ -1168,7 +1168,7 @@
   right: 4px;
   opacity: 0;
   background: inherit;
-  transition: opacity .12s;
+  transition: opacity var(--motion-fast);
 }
 
 .tv-row:hover .tv-title-open,

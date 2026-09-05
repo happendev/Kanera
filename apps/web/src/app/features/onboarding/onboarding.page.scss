@@ -75,7 +75,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: background 0.2s, border-color 0.2s, color 0.2s;
+  transition: background var(--motion-base), border-color var(--motion-base), color var(--motion-base);
 
   i {
     font-size: 13px;
@@ -486,7 +486,7 @@
   text-align: left;
   white-space: normal;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  transition: border-color var(--motion-fast), background var(--motion-fast), box-shadow var(--motion-fast);
 
   &:hover {
     border-color: var(--border-strong);
@@ -589,7 +589,7 @@
   font-weight: 500;
   color: var(--text);
   cursor: default;
-  transition: border-color 0.15s;
+  transition: border-color var(--motion-fast);
 
   &:hover {
     border-color: var(--border-strong);
@@ -992,5 +992,5 @@
 }
 
 .cdk-drop-list-dragging .cdk-drag {
-  transition: transform 0.18s cubic-bezier(0, 0, 0.2, 1);
+  transition: transform var(--motion-base) cubic-bezier(0, 0, 0.2, 1);
 }

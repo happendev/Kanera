@@ -340,32 +340,6 @@
   border-radius: var(--radius-lg);
 }
 
-.empty-state {
-  display: grid;
-  justify-items: center;
-  gap: 10px;
-  padding: 48px 16px;
-  text-align: center;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-
-  i {
-    color: var(--text-muted);
-    font-size: 26px;
-  }
-
-  strong {
-    color: var(--text);
-    font-size: 14px;
-    font-weight: 600;
-  }
-
-  &.error-state i {
-    color: var(--danger);
-  }
-}
-
 .offline-banner {
   display: flex;
   align-items: center;

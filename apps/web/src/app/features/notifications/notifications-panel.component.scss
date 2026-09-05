@@ -89,7 +89,7 @@
   justify-content: center;
   cursor: pointer;
   // box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+  transition: background-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
 
   i {
     font-size: 18px;
@@ -600,7 +600,7 @@
 .notif-group-chevron {
   color: var(--text-muted);
   font-size: 14px;
-  transition: transform 0.15s ease;
+  transition: transform var(--motion-fast) ease;
 }
 
 .notif-group.is-collapsed .notif-group-chevron {
@@ -618,7 +618,7 @@
   border-radius: var(--radius-md);
   cursor: pointer;
   background: var(--notif-read-bg);
-  transition: background-color 0.12s ease;
+  transition: background-color var(--motion-fast) ease;
   // Clips a block's full-bleed entry tray to the rounded corners. Safe for the card actions menu,
   // which is position: fixed and so is not clipped by an ancestor's overflow.
   overflow: hidden;
@@ -936,7 +936,7 @@
     min-height: 0;
     padding: 1px 7px;
     text-align: left;
-    transition: background-color 0.12s ease;
+    transition: background-color var(--motion-fast) ease;
     white-space: nowrap;
     width: fit-content;
     // Mixed toward --page-bg, not --surface: the chip has to stay visible on a
@@ -1132,7 +1132,7 @@
   cursor: pointer;
   padding: 0;
   position: relative;
-  transition: transform 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+  transition: transform var(--motion-fast) ease, border-color var(--motion-fast) ease, background-color var(--motion-fast) ease;
   flex-shrink: 0;
 
   // Enlarge the click/tap target (to 34px) without changing the visible dot size.

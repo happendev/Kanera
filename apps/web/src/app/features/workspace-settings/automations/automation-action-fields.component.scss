@@ -83,7 +83,7 @@
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  transition: border-color 0.15s, background-color 0.15s, color 0.15s;
+  transition: border-color var(--motion-fast), background-color var(--motion-fast), color var(--motion-fast);
 
   i {
     font-size: 15px;

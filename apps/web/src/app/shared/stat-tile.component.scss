@@ -25,7 +25,7 @@
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  transition: background 0.12s, border-color 0.12s;
+  transition: background var(--motion-fast), border-color var(--motion-fast);
 
   .stat-tile-label {
     display: flex;
@@ -62,7 +62,7 @@
     color: var(--text-muted);
     font-size: 15px;
     opacity: 0;
-    transition: opacity 0.12s;
+    transition: opacity var(--motion-fast);
 
     // There is no hover on a touch device, so the reveal-on-hover affordance simply never appeared
     // and the tiles did not read as tappable at all. Discoverability, not polish.

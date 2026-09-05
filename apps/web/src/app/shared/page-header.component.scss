@@ -24,7 +24,7 @@
   // will not fit. That ordering matters visually: a wrapped row still pays the clearance band on the
   // right, so its controls sit inset from the edge while the query bar below runs full width.
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
   // The bell's footprint measured from the *viewport's* right edge. A page whose header already
   // stops some distance short of that edge declares the distance as --ph-edge-gap and only pays the
@@ -50,7 +50,7 @@
   display: flex;
   align-items: center;
   flex: 1 1 0;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: min(72px, 100%);
 }
 
@@ -190,7 +190,7 @@
 
   .ph-title-row {
     align-items: baseline;
-    gap: 8px;
+    gap: var(--space-2);
   }
 
   .ph-title {
@@ -213,7 +213,7 @@
 :host(.is-page) {
   .ph-bar {
     align-items: flex-start;
-    gap: 12px;
+    gap: var(--space-3);
   }
 
   .ph-identity {
@@ -221,7 +221,7 @@
   }
 
   .ph-icon:not(.is-badge) {
-    margin-top: 4px;
+    margin-top: var(--space-1);
     font-size: 24px;
     color: var(--text-muted);
   }
@@ -232,7 +232,7 @@
 
   .ph-title-row {
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-1);
   }
 
   .ph-title {

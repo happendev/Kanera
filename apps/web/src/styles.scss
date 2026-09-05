@@ -222,7 +222,33 @@ k-list.is-drop-target {
 //      detail's tooltips (bare 1001) and the completed-cards drawer's (bare 7600). Layers that must
 //      cover their siblings but still let overlays through win on DOM order at the same token, since
 //      the overlay container and body-appended dialogs both attach after the app root.
+// ─── Scale tokens ────────────────────────────────────────────────────────────
+//
+// Spacing is a 4px scale with seven steps; type is four sizes plus one micro-label size; motion is two
+// durations and one curve. New styles should reach for these rather than inventing a value, and a
+// value outside the scale needs a comment saying why. Hierarchy comes from weight, colour and space,
+// not from a tenth font size — the shell alone used to carry ten.
 :root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  --text-xs: 11px; // uppercase micro-labels and counts only
+  --text-sm: 12px; // metadata, hints
+  --text-base: 13px; // controls, table cells, dense UI
+  --text-md: 14px; // body copy, navigation
+  --text-lg: 16px; // section headings
+
+  // Colour, opacity and border changes on hover; --motion-base for panels sliding or fading in.
+  // Layout properties are never transitioned.
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+
   --z-sticky: 20;
   --z-nav: 30;
   --z-panel: 300;
@@ -443,17 +469,33 @@ k-list.is-drop-target {
   --avatar-color-11-bg: rgba(148, 163, 184, 0.17);
   --avatar-color-11-fg: #c3cedb;
 
-  // ─── Board gradients ─────────────────────────────────────────────────────────
-  --gradient-sunrise: linear-gradient(135deg, #ffb347 0%, #ff5f5f 100%);
-  --gradient-ocean: linear-gradient(135deg, #2196f3 0%, #0d47a1 100%);
-  --gradient-forest: linear-gradient(135deg, #5a9660 0%, #1a3d22 100%);
-  --gradient-dusk: linear-gradient(135deg, #7c50b0 0%, #2e4599 100%);
-  --gradient-midnight: linear-gradient(135deg, #2a4a8a 0%, #080e28 100%);
-  --gradient-ember: linear-gradient(135deg, #d96828 0%, #721010 100%);
-  --gradient-mint: linear-gradient(135deg, #00bcd4 0%, #009688 100%);
-  --gradient-lavender: linear-gradient(135deg, #9b7fd4 0%, #4a2c8a 100%);
-  --gradient-peach: linear-gradient(135deg, #f48fb1 0%, #e91e63 100%);
-  --gradient-graphite: linear-gradient(135deg, #607d8b 0%, #263238 100%);
+  // ─── Board backgrounds ───────────────────────────────────────────────────────
+  // Rendered under --board-scrim (below), never raw: the scrim keeps header text readable and pulls
+  // every option toward the theme, so the stops here are tonal rather than saturated. The previous set
+  // used primary-coloured stops (#2196f3, #e91e63) that survived the dark scrim as neon and turned to
+  // chalk under the light one. Solids are single-colour gradients so `var(--gradient-*)` keeps working.
+  --gradient-sunrise: linear-gradient(135deg, #f2a65a 0%, #d9534f 100%);
+  --gradient-ocean: linear-gradient(135deg, #2f80b9 0%, #1b3f6e 100%);
+  --gradient-forest: linear-gradient(135deg, #4f8a5b 0%, #1f3d28 100%);
+  --gradient-dusk: linear-gradient(135deg, #7a5ba8 0%, #2f3f8a 100%);
+  --gradient-midnight: linear-gradient(135deg, #2b4470 0%, #0b1225 100%);
+  --gradient-ember: linear-gradient(135deg, #c96a3a 0%, #6b1d1d 100%);
+  --gradient-mint: linear-gradient(135deg, #3aa6a0 0%, #1f6f6a 100%);
+  --gradient-lavender: linear-gradient(135deg, #9a86c9 0%, #4f3a85 100%);
+  --gradient-peach: linear-gradient(135deg, #e69a9e 0%, #c2566d 100%);
+  --gradient-graphite: linear-gradient(135deg, #5f7280 0%, #263238 100%);
+  --gradient-obsidian: linear-gradient(135deg, #1a1d24 0%, #05060a 100%);
+  --gradient-slate: linear-gradient(#3b4757, #3b4757);
+  --gradient-stone: linear-gradient(#6b645c, #6b645c);
+  --gradient-sand: linear-gradient(#c9b48f, #c9b48f);
+  --gradient-sage: linear-gradient(#6f8a76, #6f8a76);
+  --gradient-charcoal: linear-gradient(#23272e, #23272e);
+
+  // Overlay painted above a board background. Dark deepens it, heaviest behind the header so the
+  // title stays readable; light lifts it toward the page so cards keep their contrast. Declared here
+  // and overridden in the light blocks so the board page and the picker preview agree.
+  --board-scrim: linear-gradient(to bottom, rgba(0, 0, 0, 0.55) 0, rgba(0, 0, 0, 0.32) 80px, rgba(0, 0, 0, 0.22) 100%);
+  --board-scrim-preview: linear-gradient(to bottom, rgba(0, 0, 0, 0.42), rgba(0, 0, 0, 0.22));
 
   // ─── Gradient tile theming ────────────────────────────────────────────────────
   --tile-scrim: rgba(0, 0, 0, 0.3);
@@ -513,6 +555,8 @@ k-list.is-drop-target {
     // Gradient tile — light mode
     --tile-scrim: rgba(255, 255, 255, 0.62);
     --tile-scrim-hover: rgba(255, 255, 255, 0.52);
+    --board-scrim: linear-gradient(to bottom, rgba(255, 255, 255, 0.72) 0, rgba(255, 255, 255, 0.5) 80px, rgba(255, 255, 255, 0.4) 100%);
+    --board-scrim-preview: linear-gradient(to bottom, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.4));
     --tile-gradient-fg: #0f172a;
     --tile-gradient-fg-muted: rgba(15, 23, 42, 0.65);
     --tile-gradient-btn: rgba(15, 23, 42, 0.55);
@@ -630,6 +674,8 @@ k-list.is-drop-target {
   // Gradient tile — light mode
   --tile-scrim: rgba(255, 255, 255, 0.62);
   --tile-scrim-hover: rgba(255, 255, 255, 0.52);
+  --board-scrim: linear-gradient(to bottom, rgba(255, 255, 255, 0.72) 0, rgba(255, 255, 255, 0.5) 80px, rgba(255, 255, 255, 0.4) 100%);
+  --board-scrim-preview: linear-gradient(to bottom, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.4));
   --tile-gradient-fg: #0f172a;
   --tile-gradient-fg-muted: rgba(15, 23, 42, 0.65);
   --tile-gradient-btn: rgba(15, 23, 42, 0.55);
@@ -855,7 +901,7 @@ a.sm {
   border-radius: var(--radius);
   cursor: pointer;
   white-space: nowrap;
-  transition: background-color 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
+  transition: background-color var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast), box-shadow var(--motion-fast), opacity var(--motion-fast);
 
   // default = primary
   background: var(--accent);
@@ -989,7 +1035,7 @@ select {
   background: transparent;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
   width: 100%;
 
   &::placeholder {
@@ -1145,4 +1191,35 @@ k-app-shell {
     font-size: 15px;
     flex-shrink: 0;
   }
+}
+
+// One reduced-motion rule for every transition and animation the app declares. Components that
+// need a specific fallback still keep their own rule; this is the floor.
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+// Keyboard hint chip used in tooltips, menus and the shortcuts sheet.
+.k-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 1;
 }

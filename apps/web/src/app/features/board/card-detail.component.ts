@@ -1,3 +1,4 @@
+import { KeyboardShortcutsService } from "../../core/keyboard/keyboard-shortcuts.service";
 import { ActionToastService } from "../../shared/action-toast.service";
 import type { CdkDragDrop, CdkDragMove } from "@angular/cdk/drag-drop";
 import { CdkDrag, CdkDragHandle, CdkDragPreview, CdkDropList, moveItemInArray, transferArrayItem } from "@angular/cdk/drag-drop";
@@ -142,6 +143,7 @@ export class CardDetailComponent {
   private readonly notifications = inject(NotificationsService);
   private readonly mirrors = inject(BoardMirrorsService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly shortcuts = inject(KeyboardShortcutsService);
   protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
   private readonly customFieldSaveKeys = new Map<string, string>();
   readonly imageLightbox = inject(ImageLightboxService);
@@ -457,6 +459,18 @@ export class CardDetailComponent {
   readonly currentList = computed(() => this.state.lists().find((l) => l.id === this.card().listId));
   readonly otherLists = computed(() => this.state.visibleLists().filter((l) => l.id !== this.card().listId));
 
+  /** The list popover anchors to its trigger; from the keyboard, find that trigger in the panel. */
+  openMoveToListFromKeyboard() {
+    if (this.moveToListOpen()) {
+      this.moveToListOpen.set(false);
+      return;
+    }
+    const trigger = this.panel()?.nativeElement.querySelector<HTMLElement>(".move-list-btn");
+    if (!trigger) return;
+    this.moveToListAnchor.set(trigger);
+    this.moveToListOpen.set(true);
+  }
+
   toggleMoveToList(e: MouseEvent) {
     const next = !this.moveToListOpen();
     if (next && e.currentTarget instanceof HTMLElement) this.moveToListAnchor.set(e.currentTarget);
@@ -710,6 +724,20 @@ export class CardDetailComponent {
   readonly detailReady = computed(() => this.hasDetail() || !this.detailLoading());
 
   constructor() {
+    // Card shortcuts, alive only while a card is open, so they sit above the board's bindings and
+    // the sheet shows them only then. Every action here is one the panel already exposes as a
+    // button; the shortcut just skips the pointer travel.
+    const editable = () => this.canEdit();
+    this.shortcuts.registerAll("Card", [
+      { keys: "e", label: "Edit title", when: editable, run: () => this.editTitle() },
+      { keys: "a", label: "Assign members", when: editable, run: () => this.memberPickerOpen.update((v) => !v) },
+      { keys: "l", label: "Edit labels", when: editable, run: () => this.labelPickerOpen.update((v) => !v) },
+      { keys: "d", label: "Set due date", when: editable, run: () => this.dueDatePickerOpen.update((v) => !v) },
+      { keys: "m", label: "Move to list", when: editable, run: () => this.openMoveToListFromKeyboard() },
+      { keys: "mod+enter", label: "Mark complete or incomplete", when: editable, run: () => void this.toggleCompletion() },
+      { keys: "s", label: "Watch or unwatch card", run: () => void this.toggleCardWatch() },
+      { keys: "mod+shift+c", label: "Copy card link", run: () => void this.copyCardLink() },
+    ], this.destroyRef);
     effect((onCleanup) => {
       this.unsavedWork.setDirty(this.unsavedDraftSource, this.recoveredDescriptionDraft());
       onCleanup(() => this.unsavedWork.setDirty(this.unsavedDraftSource, false));

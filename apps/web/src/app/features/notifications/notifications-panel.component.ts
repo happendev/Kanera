@@ -1,7 +1,7 @@
 import { NgOptimizedImage } from "@angular/common";
 import { CdkTrapFocus } from "@angular/cdk/a11y";
 import type { ElementRef} from "@angular/core";
-import { ChangeDetectionStrategy, Component, DestroyRef, HostListener, computed, effect, inject, signal, viewChild } from "@angular/core";
+import { ChangeDetectionStrategy, Component, DestroyRef, HostListener, computed, effect, inject, signal, viewChild, input } from "@angular/core";
 import { Router } from "@angular/router";
 import { summariseActivityChange } from "@kanera/shared/activity-summary";
 import { cardPath } from "@kanera/shared/card-links";
@@ -78,6 +78,12 @@ export class NotificationsPanelComponent {
   }
 
   readonly open = signal(false);
+  /**
+   * True when the shell renders this panel's trigger in its sidebar utility row. The panel then
+   * paints no fixed button of its own; the shell calls toggle() directly.
+   */
+  readonly embedded = input(false);
+
   readonly closing = signal(false);
   readonly items = this.notifications.items;
   readonly unreadCount = this.notifications.unreadCount;

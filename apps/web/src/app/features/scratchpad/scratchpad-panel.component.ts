@@ -103,6 +103,12 @@ export class ScratchpadPanelComponent implements OnDestroy {
   protected readonly notes = this.scratchpad.notes;
   protected readonly activeNote = this.scratchpad.activeNote;
   protected readonly open = this.scratchpad.open;
+  /**
+   * True when the shell renders this panel's trigger in its sidebar utility row. The panel then
+   * paints no fixed button of its own; the shell calls toggle() directly.
+   */
+  readonly embedded = input(false);
+
   protected readonly saveState = this.scratchpad.saveState;
   protected readonly loading = this.scratchpad.loading;
   protected readonly loadError = this.scratchpad.loadError;

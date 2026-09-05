@@ -9,7 +9,7 @@
   max-width: 270px;
   flex: 0 0 auto;
   max-height: 100%;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  transition: border-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
 }
 
 :host-context([data-theme="light"]) {
@@ -261,7 +261,7 @@ h3 {
   height: 28px;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.12s, color 0.12s, background-color 0.12s;
+  transition: opacity var(--motion-fast), color var(--motion-fast), background-color var(--motion-fast);
 
   .list-header:hover &,
   .list-header:focus-within &,
@@ -401,7 +401,7 @@ h3 {
   cursor: pointer;
   background: var(--danger, #d33);
   color: #fff;
-  transition: opacity 0.1s;
+  transition: opacity var(--motion-fast);
 
   &:hover:not(:disabled),
   &:active:not(:disabled) {
@@ -427,7 +427,7 @@ h3 {
   cursor: pointer;
   background: transparent;
   color: var(--text-muted);
-  transition: background 0.1s;
+  transition: background var(--motion-fast);
 
   &:hover {
     background: var(--list-bg-strong);
@@ -507,7 +507,7 @@ h3 {
   color: var(--text-muted);
   flex-shrink: 0;
   border-radius: var(--radius-sm);
-  transition: opacity 0.15s ease, color 0.1s ease, background 0.1s ease;
+  transition: opacity var(--motion-fast) ease, color var(--motion-fast) ease, background var(--motion-fast) ease;
 
   &:hover {
     color: var(--text);

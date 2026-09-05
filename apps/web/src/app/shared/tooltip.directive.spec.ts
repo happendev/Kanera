@@ -29,12 +29,14 @@ class TooltipHostComponent {
   imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <a kTooltip="Quarterly Roadmap Planning" kTooltipTruncationTarget=".label">
-      <span class="label">Quarterly Roadmap Planning</span>
+    <a [kTooltip]="name" kTooltipTruncationTarget=".label">
+      <span class="label">{{ name }}</span>
     </a>
   `,
 })
-class TruncationHostComponent {}
+class TruncationHostComponent {
+  readonly name = "Quarterly Roadmap Planning";
+}
 
 describe("TooltipDirective", () => {
   afterEach(() => {

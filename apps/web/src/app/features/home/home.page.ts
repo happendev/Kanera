@@ -1,3 +1,4 @@
+import { EmptyStateComponent } from "../../shared/empty-state.component";
 import type { OnInit } from "@angular/core";
 import { Dialog } from "@angular/cdk/dialog";
 import { DatePipe } from "@angular/common";
@@ -50,7 +51,7 @@ type AccountStatusBanner = {
 @Component({
   selector: "k-home",
   standalone: true,
-  imports: [ActivityStripComponent, AgendaGroupComponent, AgentConnectCardComponent, DatePipe, PageHeaderComponent, PriorityQueueComponent, RouterLink, StatTileComponent],
+  imports: [ActivityStripComponent, EmptyStateComponent, AgendaGroupComponent, AgentConnectCardComponent, DatePipe, PageHeaderComponent, PriorityQueueComponent, RouterLink, StatTileComponent],
   // BoardMenuCoordinator owns the shared "labels compressed" preference that k-card-labels reads.
   // It is deliberately not root-provided (it holds document listeners), so every surface rendering
   // board chips provides it — same as GlobalWorkPage.
