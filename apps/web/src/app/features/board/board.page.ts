@@ -146,6 +146,12 @@ export class BoardPage implements OnDestroy {
   readonly noteId = input<string | undefined>();
   /** Bound from the `view` query param, so it is whatever string the URL carried. */
   readonly view = input<string | undefined>();
+  /**
+   * Bound from the `compose` query param. The ⌘K palette sets `compose=card` when it sends the user
+   * here from another page so the card composer opens as soon as the board is editable; the param
+   * is then stripped so a reload or a shared link does not reopen it.
+   */
+  readonly compose = input<string | undefined>();
   readonly rememberedView = signal<ViewMode>("board");
   /** Resolved view mode: URL query param > localStorage > default board. */
   readonly effectiveView = computed<ViewMode>(() => {
@@ -921,6 +927,15 @@ export class BoardPage implements OnDestroy {
     document.addEventListener("keydown", this.handleDocumentKeydown);
     document.addEventListener("keydown", this.handleSelectionEscape, true);
     window.addEventListener("kanera:new-card", this.handlePaletteNewCard);
+    effect(() => {
+      if (this.compose() !== "card" || !ready()) return;
+      // canEdit also needs the socket, which connects a beat after the board renders, so wait for it
+      // rather than consuming the param on the skeleton and opening nothing. A viewer-only role can
+      // never satisfy it: strip the param and leave the composer closed.
+      if (this.state.canEditRole() && !this.state.canEdit()) return;
+      void this.router.navigate([], { queryParams: { compose: null }, queryParamsHandling: "merge", replaceUrl: true });
+      untracked(() => this.openComposer());
+    });
     effect((onCleanup) => {
       if (!this.overviewOpen()) return;
       // A computed cannot observe time passing. Refresh while the panel is open so due/inactivity

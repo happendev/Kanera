@@ -28,6 +28,8 @@ import { ScratchpadService } from "../scratchpad/scratchpad.service";
 import { OfflineCacheService, type GuestHomeGroup, type HomeGroup, type HomeResponse } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { GlobalSearchService } from "../../core/search/global-search.service";
+import { CommandPaletteService } from "../../core/search/command-palette.service";
+import { RecentBoardsService } from "../../core/recent-boards/recent-boards.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { AvatarComponent } from "../../shared/avatar.component";
@@ -124,6 +126,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private readonly auth = inject(AuthService);
   private readonly browserPush = inject(BrowserPushService);
   private readonly dialog = inject(Dialog);
+  private readonly palette = inject(CommandPaletteService);
+  private readonly recentBoards = inject(RecentBoardsService);
   protected readonly notifications = inject(NotificationsService);
   private readonly pendingInvitations = inject(PendingInvitationsService);
   protected readonly myPriorities = inject(MyPrioritiesService);
@@ -279,6 +283,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly searchShortcutLabel = signal<string | null>(this.readSearchShortcutLabel());
   readonly boardUnreadCounts = this.notifications.boardUnreadCounts;
   readonly notificationsOnline = this.notifications.online;
+  /** Offline the write would silently go nowhere, so the shortcut and palette verb stand down rather than lie. */
+  readonly canMarkAllRead = computed(() => this.notifications.unreadCount() > 0 && this.notificationsOnline());
   readonly userMenuOpen = signal(false);
   readonly organisationMenuOpen = signal(false);
   readonly navContextMenu = signal<NavContextMenu | null>(null);
@@ -685,6 +691,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
       { keys: ".", label: "Open or close scratchpad", when: () => this.showScratchpad(), run: () => this.scratchpad.toggle() },
       { keys: "u", label: "Open or close Up next", run: () => this.togglePanel("priorities") },
       { keys: "n", label: "Open or close notifications", run: () => this.togglePanel("notifications") },
+      { keys: "shift+n", label: "Mark all notifications as read", when: () => this.canMarkAllRead(), run: () => void this.notifications.markAllRead() },
       { keys: "h", label: "Help & docs", run: () => window.open(this.docsUrl, "_blank", "noopener") },
       { keys: "[", label: "Collapse or expand sidebar", run: () => this.toggleSidebar() },
     ], this.destroyRef);
@@ -697,9 +704,125 @@ export class AppShellComponent implements OnInit, OnDestroy {
     ], this.destroyRef);
   }
 
+  /**
+   * The ⌘K palette's verbs. Registered here rather than in the overlay because the shell is what owns
+   * the personal panels and the notification store. Order is display order: creation first, then
+   * toggles, so the palette reads as "do" before "go". Board and workspace creation stay on the sidebar
+   * "+" buttons only; they are rare, admin-only acts that do not belong one keystroke away.
+   */
+  private registerPaletteActions(): void {
+    this.palette.registerAll([
+      {
+        id: "new-card",
+        label: "Create a new card",
+        detail: () => {
+          const target = this.paletteNewCardTarget();
+          if (!target || target.here) return "Add work to this board";
+          const board = [...this.groups(), ...this.guestGroups()].flatMap((group) => group.boards).find((b) => b.id === target.boardId);
+          return board ? `Add work to ${board.name}` : "Add work to your most recent board";
+        },
+        icon: "square-rounded-plus",
+        keywords: ["add", "task"],
+        keys: () => (this.paletteNewCardTarget()?.here ? "c" : undefined),
+        when: () => this.paletteNewCardTarget() !== null,
+        run: () => this.paletteNewCard(),
+      },
+      {
+        id: "scratchpad",
+        label: "Open scratchpad",
+        detail: "Your personal notes, on every page",
+        icon: "note",
+        keywords: ["toggle", "notes"],
+        keys: ".",
+        when: () => this.showScratchpad() && !this.scratchpad.open(),
+        run: () => this.scratchpad.toggle(),
+      },
+      {
+        id: "scratchpad-close",
+        label: "Close scratchpad",
+        detail: "Hide your personal notes",
+        icon: "note-off",
+        keywords: ["toggle", "notes"],
+        keys: ".",
+        when: () => this.showScratchpad() && this.scratchpad.open(),
+        run: () => this.scratchpad.toggle(),
+      },
+      {
+        id: "notifications",
+        label: "Open notifications",
+        detail: "Mentions, assignments and watched activity",
+        icon: "bell",
+        keywords: ["inbox", "alerts"],
+        keys: "n",
+        run: () => this.togglePanel("notifications"),
+      },
+      {
+        id: "mark-all-read",
+        label: "Mark all notifications as read",
+        detail: "Clear every unread notification",
+        icon: "checks",
+        keywords: ["inbox", "clear"],
+        keys: "shift+n",
+        // Offline the write would silently queue nowhere, so the verb disappears rather than lying.
+        when: () => this.canMarkAllRead(),
+        run: () => void this.notifications.markAllRead(),
+      },
+      {
+        id: "up-next",
+        label: "Open Up next",
+        detail: "Your prioritised cards",
+        icon: "list-numbers",
+        keywords: ["priorities", "toggle"],
+        keys: "u",
+        run: () => this.togglePanel("priorities"),
+      },
+      {
+        id: "shortcuts",
+        label: "Keyboard shortcuts",
+        detail: "Every key the app listens for",
+        icon: "keyboard",
+        keywords: ["help", "keys"],
+        keys: "?",
+        run: () => this.shortcutsOpen.set(true),
+      },
+    ], this.destroyRef);
+  }
+
+  /**
+   * Which board "Create a new card" targets. On a board it is that board and the composer opens in
+   * place. Anywhere else it is the board opened most recently, falling back to the first board in the
+   * nav, so the verb still works from Home or My Cards. Null when the user has no board at all.
+   */
+  private paletteNewCardTarget(): { boardId: string; here: boolean } | null {
+    // Only boards the user may write to. `viewerRole` is the effective permission from /home/boards;
+    // observers (read-only guests) see the board but cannot add cards, so the verb must not offer it.
+    const editable = [...this.groups(), ...this.guestGroups()].flatMap((group) =>
+      group.boards.filter((board) => !this.isPlanDisabled(board) && (board as { viewerRole?: string }).viewerRole !== "observer"));
+    const current = /^\/b\/([^/?#]+)/.exec(this.router.url ?? "")?.[1];
+    if (current) return editable.some((board) => board.id === current) ? { boardId: current, here: true } : null;
+    const recent = this.recentBoards.boardIds().find((id) => editable.some((board) => board.id === id));
+    const boardId = recent ?? editable[0]?.id;
+    return boardId ? { boardId, here: false } : null;
+  }
+
+  private paletteNewCard(): void {
+    const target = this.paletteNewCardTarget();
+    if (!target) return;
+    if (target.here) {
+      // The palette lives above the routed page. This narrow event keeps it decoupled from the
+      // route-scoped BoardState while still opening the board's one canonical composer.
+      window.dispatchEvent(new CustomEvent("kanera:new-card"));
+      return;
+    }
+    // Off-board the page does not exist yet, so the request rides the URL and the board page opens
+    // the composer once it has loaded enough to know the user may edit.
+    void this.router.navigate(["/b", target.boardId], { queryParams: { compose: "card" } });
+  }
+
   async ngOnInit() {
     this.shortcuts.attach();
     this.registerGlobalShortcuts();
+    this.registerPaletteActions();
     window.addEventListener("resize", this.onResize);
     this.host.nativeElement.addEventListener("click", this.handleHostClick, true);
     this.host.nativeElement.addEventListener("pointerdown", this.handleHostPointerDown, true);

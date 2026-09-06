@@ -25,7 +25,7 @@ interface ShortcutGroup {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="ks-backdrop" (click)="closed.emit()" aria-hidden="true"></div>
-    <div class="ks-sheet" role="dialog" aria-modal="true" aria-labelledby="ks-title" cdkTrapFocus [cdkTrapFocusAutoCapture]="true">
+    <div class="ks-sheet" role="dialog" aria-modal="true" aria-labelledby="ks-title" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" (keydown.escape)="$event.preventDefault(); closed.emit()">
       <header class="ks-header">
         <h2 id="ks-title">Keyboard shortcuts</h2>
         <button type="button" class="ghost icon" (click)="closed.emit()" aria-label="Close" cdkFocusInitial>

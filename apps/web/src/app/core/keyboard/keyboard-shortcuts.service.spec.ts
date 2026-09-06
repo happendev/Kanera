@@ -32,6 +32,22 @@ describe("KeyboardShortcutsService", () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
+  it("opens `?` however the layout reports Shift+/ and keeps it away from a bare `/`", () => {
+    const search = vi.fn();
+    const help = vi.fn();
+    service.register({ keys: "/", label: "Search", group: "Board", run: search });
+    service.register({ keys: "?", label: "Help", group: "Everywhere", run: help });
+
+    press("?", { shiftKey: true });
+    press("/", { shiftKey: true });
+    expect(help).toHaveBeenCalledTimes(2);
+    expect(search).not.toHaveBeenCalled();
+
+    press("/");
+    expect(search).toHaveBeenCalledOnce();
+    expect(help).toHaveBeenCalledTimes(2);
+  });
+
   it("stands down for bare keys inside inputs but not for modifier chords", () => {
     const bare = vi.fn();
     const chord = vi.fn();

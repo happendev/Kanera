@@ -52,6 +52,16 @@ function parse(keys: ShortcutKeys): Parsed {
   };
 }
 
+/**
+ * Shifted forms of the punctuation keys on a US layout. Browsers usually report the shifted character
+ * in `event.key` ("?"), but some platform/layout combinations report the unshifted key with
+ * `shiftKey` set ("/" + Shift). Both must open the sheet, and neither must trigger a bare "/" binding.
+ */
+const SHIFTED_PUNCTUATION: Record<string, string> = {
+  "/": "?", ".": ">", ",": "<", ";": ":", "'": '"', "[": "{", "]": "}", "\\": "|", "-": "_", "=": "+", "`": "~",
+};
+const UNSHIFTED_PUNCTUATION = new Map(Object.entries(SHIFTED_PUNCTUATION).map(([plain, shifted]) => [shifted, plain]));
+
 function stepMatches(step: Parsed["steps"][number], event: KeyboardEvent): boolean {
   const mod = IS_APPLE ? event.metaKey : event.ctrlKey;
   const otherMod = IS_APPLE ? event.ctrlKey : event.metaKey;
@@ -60,7 +70,16 @@ function stepMatches(step: Parsed["steps"][number], event: KeyboardEvent): boole
   // Shift is only enforced when the binding names it: `?` already implies Shift on most layouts, and
   // demanding it explicitly would break layouts where it does not.
   if (step.shift && !event.shiftKey) return false;
-  return event.key.toLowerCase() === step.key;
+  const key = event.key.toLowerCase();
+  if (key === step.key) {
+    // A bare "/" binding must not fire on Shift+/ where the layout reports "/" rather than "?":
+    // the user asked for the shifted character, which is a different binding.
+    return step.shift || !event.shiftKey || !(key in SHIFTED_PUNCTUATION) || step.key === SHIFTED_PUNCTUATION[key];
+  }
+  // Shift+/ reported as "/" still means "?".
+  if (event.shiftKey && SHIFTED_PUNCTUATION[key] === step.key) return true;
+  // And a layout that reports "?" for a `shift+/` binding should still match it.
+  return step.shift && UNSHIFTED_PUNCTUATION.get(key) === step.key;
 }
 
 /** Human labels for the sheet and tooltips: `mod+shift+.` → ["⌘", "⇧", "."] or ["Ctrl", "Shift", "."]. */
