@@ -75,62 +75,68 @@
     </div>
     }
     <!--
-      The notifications / Up next drawer header recipe (`.drawer-header` + `.drawer-title`): 56px tall,
-      16px gutters, an 18px muted icon, a 15px/600 heading and a count pill. These three shell
-      surfaces have to read as one family, and a 48px header with a 13px title read as a lesser panel
-      sitting next to them.
+      One row, 56px, the notifications / Up next drawer header recipe exactly: glyph, heading, count
+      pill. The heading is the *current page's name* and is also the button that opens the page list,
+      so the panel is titled by what you are writing rather than by the word "Scratchpad", which the
+      glyph already says. There is no second row of tabs: a vertical list scales to the page cap,
+      shows names in full, and needs no drag code.
     -->
     <div class="header-row">
       <div class="header-title">
-        <!--
-          The popped-out tab is the one form with no app around it — no sidebar, no shell header, no
-          product mark anywhere on screen — so it carries one here. The dock does not: it is already
-          sitting inside the app, where a second Kanera logo beside the sidebar's would be noise. The
-          notes glyph is what the dock uses to say "this is the scratchpad", and the two are mutually
-          exclusive rather than stacked: the page's title text already says which panel this is.
-        -->
         @if (isPage()) {
         <k-logo variant="icon" [height]="24" />
         } @else {
         <i class="ti ti-notes" aria-hidden="true"></i>
         }
-        <h2>Scratchpad</h2>
-        @if (notes().length > 0) {
-        <span class="title-count">{{ notes().length }}</span>
+        @if (activeNote(); as note) {
+            @if (renamingId() === note.id) {
+            <!-- Native [value] + (input); no FormsModule anywhere in this repo. -->
+            <input
+              class="page-rename"
+              type="text"
+              maxlength="200"
+              placeholder="Page name"
+              aria-label="Page name"
+              [value]="note.title"
+              (input)="onRenameInput(note.id, $any($event.target).value)"
+              (keydown)="onRenameKeydown($event)"
+              (blur)="commitRename()"
+            />
+            } @else {
+            <button
+              type="button"
+              class="page-trigger"
+              aria-haspopup="menu"
+              [attr.aria-expanded]="pageList() !== null"
+              aria-controls="scratchpad-page-list"
+              kTooltip="Switch page"
+              (click)="togglePageList($event)"
+              (dblclick)="startRename(note.id, $event)"
+            >
+              <h2 class="page-trigger-label">{{ tabLabel(note) }}</h2>
+              <i class="ti ti-chevron-down" aria-hidden="true"></i>
+            </button>
+            }
+          @if (notes().length > 1) {
+          <span class="title-count" [kTooltip]="notes().length + ' pages'">{{ notes().length }}</span>
+          }
+        } @else {
+        <h2 class="page-trigger-label is-static">Scratchpad</h2>
         }
       </div>
 
       <div class="header-actions">
         <!--
-          One live region for the whole autosave lifecycle. "Saved" flashes and then goes quiet, so a
-          persistent label never competes with the writing.
+          Autosave is silent while it works: a "Saving…/Saved" label beside the writing was found to be
+          a distraction, and the page list already carries each page's last-updated time. Only a
+          failure earns a place in the header, because silently losing text is the one thing a
+          scratchpad must never do.
         -->
-        <span class="save-state" [class]="saveState()" role="status" aria-live="polite">
-          @switch (saveState()) {
-          @case ('saving') {
-          <i class="ti ti-loader-2 spin" aria-hidden="true"></i><span>Saving…</span>
-          }
-          @case ('saved') {
-          <i class="ti ti-check" aria-hidden="true"></i><span>Saved</span>
-          }
-          @case ('error') {
+        @if (saveState() === 'error') {
+        <span class="save-error" role="status" aria-live="polite" kTooltip="Your latest changes have not been saved. Check your connection.">
           <i class="ti ti-alert-triangle" aria-hidden="true"></i><span>Not saved</span>
-          }
-          }
         </span>
-        <!--
-          The active page's freshness — in the header rather than in a stripe of its own above the
-          editor, and sharing the save state's slot rather than sitting beside it. The two are one
-          thought ("is this page safe, and how fresh is it"), so only the resting half shows: reserving
-          room for both left a hole between the timestamp and the buttons, and reserving room for
-          neither made the timestamp jump sideways on every save. The long form is the tooltip.
-        -->
-        @if (activeNote(); as note) {
-        @if (saveState() === 'idle') {
-        <span class="page-meta" [kTooltip]="metaLine(note)">{{ updatedLine(note) }}</span>
         }
-        }
-
         <button
           type="button"
           class="icon-btn"
@@ -141,229 +147,119 @@
         >
           <i class="ti ti-plus"></i>
         </button>
-        <!--
-          Pop out and Close are the dock's pair; the popped-out page offers the inverse instead. Neither
-          form shows a control that would do nothing in it: a Close on a page whose tab it does not own
-          is a lie, and a Pop out on the popped-out page is a second copy of itself.
-        -->
-        @if (!isPage()) {
+        <!-- Everything rarer than "new page" lives here: page actions, then the panel's own. -->
         <button
           type="button"
           class="icon-btn"
-          kTooltip="Open in a new tab"
-          aria-label="Open scratchpad in a new tab"
-          (click)="popOut()"
+          aria-label="Scratchpad options"
+          aria-haspopup="menu"
+          [attr.aria-expanded]="panelMenu() !== null"
+          kTooltip="Options"
+          (click)="togglePanelMenu($event)"
         >
-          <i class="ti ti-external-link"></i>
+          <i class="ti ti-dots"></i>
         </button>
+        @if (!isPage()) {
         <button type="button" class="icon-btn" kTooltip="Close" aria-label="Close scratchpad" (click)="close()">
           <i class="ti ti-x"></i>
         </button>
-        } @else {
-        <button
-          type="button"
-          class="icon-btn"
-          kTooltip="Dock back in the app"
-          aria-label="Dock the scratchpad back in the app"
-          (click)="dockBack()"
-        >
-          <i class="ti ti-layout-sidebar-right-expand"></i>
-        </button>
         }
       </div>
     </div>
-
-    <!--
-      No standing explainer row here, unlike the Up next drawer. That panel is a queue you are handed;
-      this one is a blank page you write on, and a permanent sentence of chrome above a writing surface
-      is rent charged every session for something read once. The empty state below still introduces the
-      feature, which is the only moment it is news.
-    -->
-    @if (notes().length > 0) {
-    <div class="pages-row">
-      <button
-        type="button"
-        class="page-picker-trigger"
-        aria-label="Find a scratchpad page"
-        aria-haspopup="dialog"
-        [attr.aria-expanded]="pagePicker() !== null"
-        aria-controls="scratchpad-page-picker"
-        kTooltip="Find page"
-        (click)="togglePagePicker($event)"
-      >
-        <i class="ti ti-search" aria-hidden="true"></i>
-      </button>
-
-      <div class="tab-strip" #tabStrip role="tablist" aria-label="Scratchpad pages">
-        @for (note of notes(); track note.id) {
-        @if (renamingId() === note.id) {
-        <div class="tab renaming">
-        <!-- Native [value] + (input); no FormsModule anywhere in this repo. -->
-        <input
-          class="tab-rename"
-          type="text"
-          maxlength="200"
-          placeholder="Page name"
-          [value]="note.title"
-          (input)="onRenameInput(note.id, $any($event.target).value)"
-          (keydown)="onRenameKeydown($event)"
-          (blur)="commitRename()"
-          (click)="$event.stopPropagation()"
-        />
-        </div>
-        } @else {
-        <!--
-          A native button supplies focus and activation semantics; the tablist key handler adds the
-          WAI-ARIA Arrow/Home/End behavior. The options button is a sibling inside the same visual
-          pill, never a button nested inside the tab button.
-        -->
-        <div
-          class="tab-item"
-          role="presentation"
-          [class.active]="note.id === activeNote()?.id"
-          [class.dragging]="note.id === draggingId()"
-        >
-        <button
-          type="button"
-          class="tab"
-          role="tab"
-          [id]="tabId(note.id)"
-          [attr.data-note-id]="note.id"
-          [class.active]="note.id === activeNote()?.id"
-          [class.drop-before]="note.id === dropTargetId() && !dropAfter()"
-          [class.drop-after]="note.id === dropTargetId() && dropAfter()"
-          [attr.aria-selected]="note.id === activeNote()?.id"
-          aria-controls="scratchpad-page-panel"
-          [tabindex]="note.id === activeNote()?.id ? 0 : -1"
-          (click)="onTabClick(note.id, $event)"
-          (keydown)="onTabKeydown(note.id, $event)"
-          (pointerdown)="onTabPointerDown(note.id, $event)"
-          (pointermove)="onTabPointerMove($event)"
-          (pointerup)="onTabPointerUp($event)"
-          (pointercancel)="clearDrag()"
-          (dblclick)="startRename(note.id, $event)"
-        >
-          <span class="tab-label">{{ tabLabel(note) }}</span>
-        </button>
-        <button
-          type="button"
-          class="tab-menu-btn"
-          aria-label="Options for {{ tabLabel(note) }}"
-          aria-haspopup="menu"
-          [attr.aria-expanded]="menuOpenId() === note.id"
-          [tabindex]="note.id === activeNote()?.id ? 0 : -1"
-          kTooltip="Page options"
-          (click)="toggleMenu(note.id, $event)"
-        >
-          <i class="ti ti-dots" aria-hidden="true"></i>
-        </button>
-        </div>
-        }
-        }
-      </div>
-    </div>
-    }
   </header>
 
-  <!-- Fifty page pills cannot be scanned efficiently. This searchable switcher is the scalable
-       path while the tab strip remains the fast path for nearby pages. -->
-  @if (pagePicker(); as picker) {
+  <!-- The page list. A dialog rather than a menu when it carries a search field, so a real text input
+       can live inside without invalid menu semantics; kMenu still drives the arrows between rows. -->
+  @if (pageList(); as list) {
   <div
-    id="scratchpad-page-picker"
-    class="page-picker"
-    role="dialog"
-    aria-label="Find a scratchpad page"
+    id="scratchpad-page-list"
+    class="page-list"
+    [attr.role]="showPageSearch() ? 'dialog' : 'menu'"
+    aria-label="Scratchpad pages"
+    kMenu
+    [kMenuAutofocus]="!showPageSearch()"
     kAnchoredPanel
-    [apAnchor]="picker.anchor"
-    [apPlacement]="pagePickerPlacement"
-    (apDismissed)="closePagePicker()"
+    [apAnchor]="list.anchor"
+    [apPlacement]="pageListPlacement"
+    (apDismissed)="closePageList()"
   >
-    <label class="page-picker-search-wrap">
+    @if (showPageSearch()) {
+    <label class="page-list-search-wrap">
       <i class="ti ti-search" aria-hidden="true"></i>
       <span class="sr-only">Search pages</span>
       <input
-        class="page-picker-search"
+        class="page-list-search"
         type="search"
         placeholder="Search pages…"
         [value]="pageQuery()"
         (input)="pageQuery.set($any($event.target).value)"
-        (keydown)="onPagePickerSearchKeydown($event)"
+        (keydown)="onPageSearchKeydown($event)"
       />
     </label>
-    <div class="page-picker-results">
+    }
+    @if (!showPageSearch()) {
+    <div class="k-menu-heading">Pages</div>
+    }
+    <div class="page-list-rows">
       @for (note of filteredPages(); track note.id) {
       <button
         type="button"
-        class="page-picker-option"
-        [class.active]="note.id === activeNote()?.id"
-        [id]="pageOptionId(note.id)"
+        class="k-menu-item page-list-item"
+        [class.is-current]="note.id === activeNote()?.id"
+        role="menuitem"
         [attr.aria-current]="note.id === activeNote()?.id ? 'page' : null"
-        (click)="selectPageFromPicker(note.id)"
-        (keydown)="onPagePickerOptionKeydown(note.id, $event)"
+        (click)="selectPageFromList(note.id)"
       >
-        <span>{{ tabLabel(note) }}</span>
-        @if (note.id === activeNote()?.id) {
-        <i class="ti ti-check" aria-hidden="true"></i>
-        }
+        <!-- A fixed-width slot for the tick keeps every name on the same left edge, current or not. -->
+        <span class="page-list-mark"><i class="ti ti-check" aria-hidden="true"></i></span>
+        <span class="page-list-name">{{ tabLabel(note) }}</span>
+        <span class="page-list-when" [kTooltip]="metaLine(note)">{{ stampLine(note) }}</span>
       </button>
       } @empty {
-      <p class="page-picker-empty">No pages found</p>
+      <p class="page-list-empty">No pages found</p>
       }
     </div>
-  </div>
-  }
-
-  <!--
-    The tab menu lives OUTSIDE the tab strip, not inside the tab it belongs to. `.tab-strip` is an
-    overflow-x scroll container, and a scroll container clips absolutely-positioned descendants — a
-    menu nested in a tab renders below the strip's edge and is invisible. `kAnchoredPanel` positions it
-    against the `…` button's rect instead, and gives it the app's standard outside-click/Escape
-    dismissal through PanelStackService.
-  -->
-  @if (menu(); as open) {
-  <div
-    class="tab-menu k-menu"
-    role="menu"
-    kMenu
-    kAnchoredPanel
-    [apAnchor]="open.anchor"
-    [apPlacement]="menuPlacement"
-    (apDismissed)="closeMenu()"
-  >
-    <button type="button" class="k-menu-item" role="menuitem" (click)="startRename(open.note.id, $event)">
-      <i class="ti ti-pencil"></i><span>Rename</span>
-    </button>
-    <!-- The keyboard- and touch-reachable path to reordering; dragging is never the only way. -->
-    <button
-      type="button"
-      class="k-menu-item"
-      role="menuitem"
-      [disabled]="!canMove(open.note.id, -1)"
-      (click)="moveNoteBy(open.note.id, -1, $event)"
-    >
-      <i class="ti ti-arrow-left"></i><span>Move left</span>
-    </button>
-    <button
-      type="button"
-      class="k-menu-item"
-      role="menuitem"
-      [disabled]="!canMove(open.note.id, 1)"
-      (click)="moveNoteBy(open.note.id, 1, $event)"
-    >
-      <i class="ti ti-arrow-right"></i><span>Move right</span>
-    </button>
-    <button type="button" class="k-menu-item danger" role="menuitem" (click)="removeNote(open.note, $event)">
-      <i class="ti ti-trash"></i><span>Delete</span>
+    <div class="k-menu-separator" role="separator"></div>
+    <button type="button" class="k-menu-item" role="menuitem" [disabled]="atCapacity()" (click)="closePageList(); addNote()">
+      <i class="ti ti-plus"></i><span>New page</span>
     </button>
   </div>
   }
 
+  <!-- The `…` menu: the current page's actions first, then the panel's. Rendered outside the header so
+       kAnchoredPanel positions it against the button's rect with the app's standard dismissal. -->
+  @if (panelMenu(); as open) {
+  <div class="panel-menu" role="menu" aria-label="Scratchpad options" kMenu kAnchoredPanel [apAnchor]="open.anchor" [apPlacement]="panelMenuPlacement" (apDismissed)="closePanelMenu()">
+    @if (open.note; as note) {
+    <button type="button" class="k-menu-item" role="menuitem" (click)="startRename(note.id, $event)">
+      <i class="ti ti-pencil"></i><span>Rename page</span>
+    </button>
+    <button type="button" class="k-menu-item danger" role="menuitem" (click)="removeNote(note, $event)">
+      <i class="ti ti-trash"></i><span>Delete page</span>
+    </button>
+    <div class="k-menu-separator" role="separator"></div>
+    }
+    <!--
+      Pop out and Dock back are inverses and only the one that makes sense in this form is offered: a
+      Pop out on the popped-out page would be a second copy of itself.
+    -->
+    @if (!isPage()) {
+    <button type="button" class="k-menu-item" role="menuitem" (click)="popOut()">
+      <i class="ti ti-external-link"></i><span>Open in a new tab</span>
+    </button>
+    } @else {
+    <button type="button" class="k-menu-item" role="menuitem" (click)="dockBack()">
+      <i class="ti ti-layout-sidebar-right-expand"></i><span>Dock back in the app</span>
+    </button>
+    }
+  </div>
+  }
+
+  <!-- No tablist any more, so the body is a plain region named after the page it shows. -->
   <div
     class="panel-body"
-    [attr.id]="activeNote() ? 'scratchpad-page-panel' : null"
-    [attr.role]="activeNote() ? 'tabpanel' : null"
-    [attr.aria-labelledby]="activeNote() && renamingId() !== activeNote()!.id ? tabId(activeNote()!.id) : null"
-    [attr.aria-label]="activeNote() && renamingId() === activeNote()!.id ? tabLabel(activeNote()!) : null"
+    [attr.role]="activeNote() ? 'region' : null"
+    [attr.aria-label]="activeNote() ? tabLabel(activeNote()!) : null"
   >
     @if (showInitialLoading()) {
     <div class="panel-state k-loading">
@@ -376,14 +272,18 @@
       </k-empty-state>
     </div>
     } @else if (showEmptyState()) {
-    <div class="panel-state">
-      <k-empty-state plain icon="notes" title="Your scratchpad is empty" text="A private space for quick notes, todo lists and pasted screenshots. Only you can see it, and it saves as you type.">
-        <button type="button" class="sm" (click)="addNote()"><i class="ti ti-plus"></i><span>New page</span></button>
-      </k-empty-state>
-    </div>
+    <!--
+      A notepad's natural empty state is a blank page, not a boxed message. The whole surface is the
+      "new page" action, and the placeholder does the one line of teaching the editor's own
+      placeholder will repeat once a page exists.
+    -->
+    <button type="button" class="panel-blank" (click)="addNote()">
+      <span class="panel-blank-placeholder">Start typing. Paste a screenshot, drop a file, or write a list…</span>
+      <span class="panel-blank-hint">A private page only you can see. It saves as you type.</span>
+    </button>
     } @else if (activeNote(); as note) {
     <!--
-      A one-item @for keyed on the page id: switching tabs must destroy and rebuild the editor, since
+      A one-item @for keyed on the page id: switching pages must destroy and rebuild the editor, since
       TipTap holds its own document (and undo stack) and `value` is read only at init. Reusing one
       instance would leave the previous page's history reachable from the next page's Ctrl+Z.
 

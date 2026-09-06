@@ -493,20 +493,42 @@
     }
   }
 
-  // Collapse the tab bar into a single swipeable strip.
+  // Collapse the tab bar into a single swipeable strip. `kTabStrip` keeps the selected tab in
+  // view and marks which edges are reached so only the side that hides tabs is faded.
   .settings-tabs {
+    --tab-strip-bleed: var(--space-5); // matches .ws-card padding; overridden with the card below
     flex-wrap: nowrap;
     overflow-x: auto;
     scroll-snap-type: x proximity;
     -webkit-overflow-scrolling: touch;
-    // Bleed to the card edges so the strip can scroll past the padding.
-    margin-left: -4px;
-    margin-right: -4px;
-    padding-left: 4px;
-    padding-right: 28px;
-    // Hide the scrollbar; the row is clearly swipeable on touch.
+    // Bleed to the card edges so the strip scrolls flush with the card and the edge fades sit
+    // over the card padding instead of dimming the first or last tab.
+    margin-left: calc(-1 * var(--tab-strip-bleed));
+    margin-right: calc(-1 * var(--tab-strip-bleed));
+    padding-left: var(--tab-strip-bleed);
+    padding-right: var(--tab-strip-bleed);
+    scroll-padding-inline: var(--tab-strip-bleed);
+    // Hide the scrollbar; the fades say there is more and the row is swipeable on touch.
     scrollbar-width: none;
-    mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 32px), transparent 100%);
+    mask-image: linear-gradient(
+      90deg,
+      transparent 0,
+      #000 var(--tab-strip-bleed),
+      #000 calc(100% - var(--tab-strip-bleed) - 12px),
+      transparent 100%
+    );
+
+    &[data-scroll-start] {
+      mask-image: linear-gradient(90deg, #000 calc(100% - var(--tab-strip-bleed) - 12px), transparent 100%);
+    }
+
+    &[data-scroll-end] {
+      mask-image: linear-gradient(90deg, transparent 0, #000 var(--tab-strip-bleed), #000 100%);
+    }
+
+    &[data-scroll-start][data-scroll-end] {
+      mask-image: none;
+    }
 
     &::-webkit-scrollbar {
       display: none;
@@ -530,6 +552,10 @@
   // Reduce inner card padding on small screens.
   .ws-card {
     padding: 14px 12px;
+  }
+
+  .settings-tabs {
+    --tab-strip-bleed: 12px;
   }
 
   .board-form {

@@ -7,7 +7,7 @@
   // right in both themes: dark recedes darker than --surface, light recedes toward the page grey.
   //
   // The panel has exactly two planes and this is the rule that decides which is which: everything that
-  // is *chrome* — header, tabs, editor toolbar — sits on the band, and only the note itself
+  // is *chrome* — header, editor toolbar — sits on the band, and only the note itself
   // keeps --surface. Without that split the whole panel was one flat slab with a single hairline in it,
   // and the toolbar (the one element with its own --surface-2 fill) read as a stray strip.
   --scratch-band: color-mix(in srgb, var(--bg) 65%, var(--surface));
@@ -135,15 +135,6 @@
   container-name: scratch-header;
 }
 
-// Under this width the title, meta, save state and three buttons cannot all sit on one row, and a meta
-// truncated to "Upd…" is worse than no meta. It is the first thing to go: the save state, which says
-// whether the writing is safe, is the half of that row worth keeping on a narrow dock.
-@container scratch-header (max-width: 420px) {
-  .page-meta {
-    display: none;
-  }
-}
-
 // Matches `.drawer-header` in my-priorities-panel / notifications-panel exactly — 56px and 16px
 // gutters. The right gutter is 8px rather than 16 because the two icon buttons carry their own 8px of
 // internal padding, which is the same treatment the drawers' close button gets.
@@ -156,35 +147,97 @@
   padding: 0 8px 0 var(--scratch-gutter);
 }
 
-// `.drawer-title`, copied deliberately: same icon size, same heading weight, same count pill.
+// `.drawer-title`'s recipe for the glyph; the text beside it is two lines, an eyebrow and the page name.
 .header-title {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
 
-  i {
+  > i {
+    flex: none;
     font-size: 18px;
     color: var(--text-muted);
   }
+}
 
-  h2 {
-    margin: 0;
-    color: var(--text);
-    font-size: 15px;
-    font-weight: 600;
-  }
+// Same count pill as `.drawer-title .title-count` in the two drawers.
+.title-count {
+  flex: none;
+  padding: 1px 8px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
 
-  .title-count {
-    margin-left: 4px;
-    padding: 1px 8px;
+// The current page's name doubles as the page switcher. Styled as text with a chevron, not as a
+// button: it is the panel's heading first.
+.page-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  height: 30px;
+  min-width: 0;
+  margin: 0 0 0 -6px;
+  padding: 0 4px 0 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+
+  > i {
+    flex: none;
     color: var(--text-muted);
-    font-size: var(--text-xs);
-    font-weight: 600;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 999px;
+    font-size: 14px;
+    transition: transform var(--motion-fast) var(--ease-out);
   }
+
+  &:hover:not(:disabled),
+  &[aria-expanded="true"] {
+    background: var(--surface-2);
+  }
+
+  &[aria-expanded="true"] > i {
+    transform: rotate(180deg);
+  }
+}
+
+.page-trigger-label {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+
+  &.is-static {
+    padding: 1px 0;
+  }
+}
+
+.page-rename {
+  width: min(100%, 260px);
+  height: 30px;
+  margin-left: -6px;
+  padding: 0 6px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  outline: 0;
+  box-shadow: 0 0 0 2px var(--ring);
 }
 
 .header-actions {
@@ -192,42 +245,21 @@
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
-  // So `.page-meta` can ellipsise inside this row rather than forcing it wider than the header.
   min-width: 0;
 }
 
-// The page's freshness, in the save state's slot — never at the same time as it, so the two share one
-// right margin and one baseline instead of leaving a reserved gap between the timestamp and the
-// buttons. Truncates rather than pushing the buttons around.
-.page-meta {
-  min-width: 0;
-  margin-right: 4px;
-  overflow: hidden;
-  color: var(--text-subtle, var(--text-muted));
-  font-size: var(--text-xs);
-  line-height: 16px;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.save-state {
+.save-error {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
   margin-right: 4px;
   font-size: var(--text-xs);
   line-height: 16px;
-  color: var(--text-muted);
-  // Reserved height so the row never jumps as the label cycles idle → saving → saved.
-  min-height: 16px;
+  color: var(--danger);
   white-space: nowrap;
 
   i {
     font-size: var(--text-base);
-  }
-
-  &.error {
-    color: var(--danger);
   }
 }
 
@@ -261,415 +293,117 @@
   }
 }
 
-// ─── Tab strip ───────────────────────────────────────────────────────────────
+// ─── Page list and panel menu ────────────────────────────────────────────────
+// Both are anchored panels: placement is owned by kAnchoredPanel and appearance by `.k-menu` /
+// `.k-menu-item`, so only what is specific to these two lives here.
 
-// The left padding is the search button's inset, chosen so its 14px glyph starts on the header's 16px
-// gutter — `8 + (30 - 14) / 2`. The title icon above it starts there too, so the header reads as one
-// column rather than as three rows each with its own idea of where the left edge is.
-.pages-row {
-  display: flex;
-  // Top-aligned, not centred: `.tab-strip` is taller than its tabs (4px of top padding for the focus
-  // ring, 8px of bottom for the scrollbar track), so centring the search button in the row parked it
-  // 2px below the tabs it sits next to. Aligning to the top and repeating the strip's 4px inset on the
-  // button puts both boxes on the same line — see `.page-picker-trigger`.
-  align-items: flex-start;
-  min-width: 0;
-  // The search button is 30px around a 14px glyph, so back off half the difference to land the glyph
-  // on the gutter.
-  padding: 0 4px 0 calc(var(--scratch-gutter) - 8px);
+.panel-menu {
+  min-width: 200px;
 }
 
-.tab-strip {
-  display: flex;
-  align-items: stretch;
-  flex: 1;
-  gap: var(--space-1);
-  // The top padding is load-bearing, not spacing: `overflow-x: auto` clips at the padding box, and
-  // the global input focus style is a 3px `box-shadow` ring — with a 0 top padding the ring around
-  // the rename field was sliced off along the strip's top edge. The 8px left and 12px right leave
-  // room for the same ring at either end.
-  padding: 4px 12px 8px 8px;
-  // `scrollIntoView` stops as soon as the element reaches the padding box, which parks a scrolled-to
-  // tab exactly on the edge and clips the focus ring again. Scroll padding makes it stop short.
-  scroll-padding: 0 12px 0 8px;
-  min-width: 0;
-  overflow-x: auto;
-  // The strip scrolls; the panel body must never scroll sideways with it.
-  overscroll-behavior-x: contain;
-  // The thumb is transparent until the strip is hovered, but its 6px of track stays reserved so the
-  // tabs never shift when it appears. Drawn permanently it was a grey bar spanning the panel directly
-  // under the tabs, which reads as a stray divider rather than as a scrollbar — and the fade mask below
-  // is already the standing "there is more this way" cue.
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-
-  &:hover,
-  &:focus-within {
-    scrollbar-color: var(--border-strong) transparent;
-  }
-
-  &::-webkit-scrollbar {
-    height: 6px;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background: transparent;
-    border-radius: 999px;
-    transition: background-color var(--motion-fast) ease;
-  }
-
-  &:hover::-webkit-scrollbar-thumb,
-  &:focus-within::-webkit-scrollbar-thumb {
-    background: var(--border-strong);
-  }
-}
-
-// Fades the last 20px so a scrolled strip reads as "there is more this way" instead of as a tab
-// chopped in half — but never while a tab is being renamed. The mask applies to the whole strip
-// regardless of overflow, and over a rename field it clipped the field's own right edge, which reads
-// as a broken input rather than as a scroll hint. The hint is worth nothing in that moment anyway:
-// the renaming tab is the widest thing in the strip and is the thing being looked at.
-.tab-strip:not(:has(.tab.renaming)) {
-  mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent 100%);
-}
-
-// The settings tab bar's look (`.settings-tabs` in page-styles.scss, whose tabs are `button.ghost.sm`
-// / `button.sm.active`): 30px tall, 13px, `var(--radius)` corners, ghost when idle and a solid accent
-// pill when current. Matching it rather than inventing a third tab style is what makes the panel read
-// as part of the app instead of a widget bolted onto it.
-.tab-item {
-  position: relative;
-  display: inline-flex;
-  flex: none;
-  max-width: 168px;
-
-  &.dragging {
-    opacity: 0.45;
-  }
-}
-
-.tab {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  max-width: 168px;
-  padding: 0 6px 0 10px;
-  height: 30px;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--text-muted);
-  font-size: var(--text-base);
-  font-weight: 500;
-  cursor: pointer;
-  user-select: none;
-  // Horizontal panning stays with the browser, so a touch swipe scrolls the strip — by far the more
-  // common gesture — instead of being captured as a reorder. Touch reordering therefore goes through
-  // the tab menu's Move left / Move right, which is also the keyboard path. Pointer drag still works
-  // for mouse and pen, where there is no competing gesture.
-  touch-action: pan-x;
-  transition: background-color var(--motion-fast) ease, color var(--motion-fast) ease, border-color var(--motion-fast) ease;
-
-  &:focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 1px;
-  }
-
-  // Hover lifts an idle tab to the page's own colour rather than to another ramp step: on the recessed
-  // band, "raised" and "this is what the page under it looks like" want to be the same gesture.
-  &:hover:not(.active) {
-    background: var(--surface);
-    color: var(--text);
-  }
-
-  &.active {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--accent-fg);
-    // The settings tab bar's accent pill is still the shape — that parity is what keeps this reading as
-    // app chrome. The shadow is only what stops it sitting flat on the band it now sits on.
-    box-shadow: var(--shadow-sm);
-
-    &:hover {
-      background: var(--accent-hover);
-    }
-  }
-
-  &.dragging {
-    opacity: 0.45;
-    cursor: grabbing;
-  }
-
-  // While renaming, the pill stops being a label and becomes a field, sized by the input inside it.
-  // Deliberately `flex: 0 0 auto` and NOT `flex: 1 1 auto`: the strip is an overflowing scroll
-  // container, so there is usually no free space to grow into, and a growing tab holding a `width:
-  // 100%` input resolved to a circular constraint that collapsed the field to a stub — which read as
-  // an input that had lost its text rather than as a sizing bug.
-  &.renaming {
-    flex: 0 0 auto;
-    max-width: none;
-    padding: 0 3px;
-    background: transparent;
-    border-color: transparent;
-  }
-
-  // Drop indicator as a pseudo-element rather than a real gap, so neighbouring tabs never shift
-  // sideways while dragging over them.
-  &.drop-before::before,
-  &.drop-after::after {
-    content: "";
-    position: absolute;
-    top: 3px;
-    bottom: 3px;
-    width: 2px;
-    border-radius: 2px;
-    background: var(--accent);
-  }
-
-  &.drop-before::before {
-    left: -3px;
-  }
-
-  &.drop-after::after {
-    right: -3px;
-  }
-}
-
-.tab-item .tab {
-  // Reserve room inside the pill for the absolutely positioned sibling action. This keeps the
-  // ellipsis visually attached without nesting interactive controls or shifting tabs on selection.
-  padding-right: 30px;
-}
-
-.tab-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tab-menu-btn {
-  position: absolute;
-  top: 5px;
-  right: 4px;
-  z-index: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: inherit;
-  flex: none;
-  opacity: 0;
-  cursor: pointer;
-  transition: opacity var(--motion-fast) ease, background-color var(--motion-fast) ease;
-
-  i {
-    font-size: var(--text-md);
-  }
-
-  &:hover {
-    background: var(--surface-hover, var(--surface-2));
-  }
-}
-
-.tab-item:hover .tab-menu-btn,
-.tab-item:focus-within .tab-menu-btn,
-.tab-item.active .tab-menu-btn {
-  opacity: 0.75;
-}
-
-.tab-item.active .tab-menu-btn {
-  color: var(--accent-fg);
-
-  &:hover {
-    background: rgb(255 255 255 / 22%);
-  }
-}
-
-.page-picker-trigger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  // Same box as a tab, and the same 4px inset the strip gives them, so the two read as one row.
-  margin-top: 4px;
-  width: 30px;
-  height: 30px;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-
-  i {
-    font-size: var(--text-md);
-  }
-
-  &:hover,
-  &[aria-expanded="true"] {
-    background: var(--surface-2);
-    color: var(--text);
-  }
-}
-
-// `.tab input.tab-rename`, not `.tab-rename`. styles.scss pins every text input to `height: 36px` via
-// `input:not([type="checkbox"]):not([type="radio"])`, which out-specifies a lone class even with
-// Angular's encapsulation attribute — the field rendered 36px tall inside a 28px pill, overflowed it,
-// and had its focus ring sliced off by the strip. This selector wins; do not simplify it back.
-.tab input.tab-rename {
-  // A definite width, never a percentage: this input's containing block is a flex item inside a
-  // scrolling strip, so `width: 100%` there has nothing stable to resolve against. Wide enough for a
-  // real page name at 12px; longer names scroll inside the field as any input does. `box-sizing` is
-  // explicit so the border stays inside that width rather than hanging past the pill.
-  flex: none;
-  width: 176px;
-  min-width: 176px;
-  box-sizing: border-box;
-  height: 24px;
-  padding: 0 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  background: var(--input-bg, var(--surface));
-  color: var(--text);
-  font-size: var(--text-sm);
-  font-family: inherit;
-
-  // The global input focus ring, kept rather than suppressed — it is what says "this is the field you
-  // are typing in" while the tab around it goes transparent. The strip's padding is what stops it
-  // being clipped.
-  &:focus {
-    outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--ring);
-  }
-}
-
-.tab-menu {
-  // Deliberately NO position/top/left/z-index here: the global `.k-anchored-panel` class owns those
-  // (`position: fixed` + `--ap-top`/`--ap-left` written by the directive). Component styles are more
-  // specific than that global class, so declaring them here silently overrode the computed placement
-  // and parked the menu off-screen.
-  // Appearance and row behaviour come from the shared `.k-menu` / `.k-menu-item` primitives and the
-  // `kMenu` directive, so this menu cannot drift from the card and account menus.
+.page-list {
   display: flex;
   flex-direction: column;
-  // The placement asks for `width: "measure"`, which is the directive's contract for "this panel's own
-  // CSS owns its width" — so this min-width is the real width, and no `width`/`max-width` may be
-  // declared here or the directive's viewport clamp loses to it.
-  min-width: 168px;
+  // The anchored-panel class only clamps; the panel owns its width, and the list needs room for a
+  // name, a time and the tick on one line.
+  width: 300px;
+  max-width: 100%;
+  min-width: 0;
 }
 
-// Searchable page switcher: the tab strip stays fast for nearby pages, while this remains usable at
-// the 50-page cap. Appearance matches the anchored action menu above, but the search makes it a
-// dialog rather than a menu so a real text field can live inside without invalid menu semantics.
-.page-picker {
-  display: flex;
-  flex-direction: column;
-  min-width: 240px;
-  padding: 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface-overlay);
-  box-shadow: var(--shadow-lg);
-}
-
-.page-picker-search-wrap {
+.page-list-search-wrap {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--space-2);
   height: 32px;
-  padding: 0 9px;
+  margin: 0 0 var(--space-1);
+  padding: 0 var(--space-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text-muted);
 
-  > i {
-    flex: none;
-    font-size: var(--text-md);
-  }
-
   &:focus-within {
     border-color: var(--accent);
     box-shadow: 0 0 0 2px var(--ring);
   }
+
+  i {
+    flex: none;
+    font-size: 14px;
+  }
 }
 
-.page-picker-search-wrap input.page-picker-search {
+.page-list-search-wrap input.page-list-search {
   flex: 1;
   min-width: 0;
-  height: 30px;
+  height: 100%;
   padding: 0;
   border: 0;
-  outline: 0;
   background: transparent;
-  box-shadow: none;
   color: var(--text);
-  font: inherit;
   font-size: var(--text-base);
+  outline: 0;
+  box-shadow: none;
 }
 
-.page-picker-results {
+.page-list-rows {
   display: flex;
   flex-direction: column;
   gap: 1px;
   min-height: 0;
-  margin-top: 5px;
+  max-height: 300px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
-.page-picker-option {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex: none;
-  width: 100%;
-  height: 32px;
-  padding: 0 9px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text);
-  font-size: var(--text-base);
-  font-weight: 400;
-  text-align: left;
-  cursor: pointer;
+// Tick slot, name, time. The current page is marked by the tick and a slightly firmer name, never by
+// colouring the whole row: in a list you scan, accent text reads as a link, not a state.
+.page-list-item {
+  gap: var(--space-2);
+  min-height: 34px;
 
-  > span {
+  > .page-list-mark {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    color: var(--accent);
+    font-size: 14px;
+    visibility: hidden;
+  }
+
+  > .page-list-name {
+    flex: 1;
     min-width: 0;
     overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
+    text-overflow: ellipsis;
   }
 
-  > i {
+  > .page-list-when {
     flex: none;
     color: var(--text-muted);
-    font-size: var(--text-md);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
   }
 
-  &:hover,
-  &:focus-visible,
-  &.active {
-    background: var(--surface-hover, var(--surface-2));
+  &.is-current {
+    font-weight: 600;
+
+    > .page-list-mark {
+      visibility: visible;
+    }
   }
 }
 
-.page-picker-empty {
+.page-list-empty {
   margin: 0;
-  padding: 18px 10px;
+  padding: var(--space-3) var(--space-2);
   color: var(--text-muted);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   text-align: center;
 }
 
@@ -677,12 +411,12 @@
   position: absolute;
   width: 1px;
   height: 1px;
-  padding: 0;
   margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
+  padding: 0;
   border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 // ─── Body ────────────────────────────────────────────────────────────────────
@@ -770,8 +504,7 @@
   // Tighter than the card form's toolbar, purely to buy width. The toolbar wraps, and a dock through
   // most of its range fitted every tool but one — a lone Redo on a second row is more chrome and less
   // order than a slightly denser single row. Together these keep the full set on one line from about
-  // 500px up. Narrower docks still wrap, which is the right outcome there: every tool stays reachable
-  // without a sideways scroll, unlike the tab strip, where scrolling is the point.
+  // 500px up. Narrower docks still wrap, which is the right outcome there: every tool stays reachable.
   //
   // `padding: 0` is what makes the width real, and it is not cosmetic: styles.scss gives every button
   // `padding: 0 14px`, which `.de-tool` never overrides, so in a flex row `min-width: auto` floors each
@@ -796,6 +529,46 @@
 
 // The band behind every non-editor state, so the empty and loading screens sit on the same recessed
 // canvas the editor does. The state itself is the shared `k-empty-state` / `.k-loading`.
+// The empty notepad is a blank page: the whole surface creates the first page, and the text sits
+// exactly where the editor's placeholder will, so the click feels like the page was already there.
+.panel-blank {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: var(--space-2);
+  width: 100%;
+  height: auto;
+  padding: var(--space-5) var(--scratch-gutter, 20px);
+  border: 0;
+  border-radius: 0;
+  background: var(--surface);
+  text-align: left;
+  cursor: text;
+
+  &:hover:not(:disabled) {
+    background: var(--surface);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--ring);
+  }
+}
+
+.panel-blank-placeholder {
+  color: var(--text-muted);
+  font-size: var(--text-md);
+  line-height: 1.5;
+}
+
+.panel-blank-hint {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  opacity: 0.8;
+}
+
 .panel-state {
   flex: 1;
   display: flex;
@@ -814,7 +587,7 @@
 
 // `variant="page"`: the same panel filling its own browser tab. Only the frame changes — it stops being
 // a grid child of the shell and becomes the document — so everything here is an override of the dock's
-// geometry and nothing else. The header, tabs, menus and editor are deliberately untouched, because a
+// geometry and nothing else. The header, menus and editor are deliberately untouched, because a
 // popped-out notepad that looked different from the docked one would read as a second feature.
 :host(.as-page) {
   // The dock's `display: contents` is there so the fixed trigger and the grid-child panel can coexist
@@ -925,48 +698,22 @@
     }
   }
 
-  .tab {
-    height: 40px;
-    max-width: 200px;
-    padding-right: 6px;
+  .page-trigger {
+    min-height: 32px;
   }
 
-  // Grows with the tabs it sits beside: a 30px button next to a 40px pill is both a miss on a phone and
-  // visibly the odd one out in the row. Its glyph grows too, so the row's inset is re-derived from the
-  // gutter for a 16px icon in a 40px box rather than a 14px icon in a 30px one.
-  .pages-row {
-    padding-left: calc(var(--scratch-gutter) - 12px);
-  }
-
-  .page-picker-trigger {
-    width: 40px;
-    height: 40px;
-
-    i {
-      font-size: 16px;
-    }
-  }
-
-  // Same specificity note as the base rule above: a lone class loses to the global input height.
-  .tab input.tab-rename {
+  .page-rename {
     height: 32px;
-    font-size: var(--text-base);
   }
 
-  .tab-menu-btn {
-    width: 30px;
-    height: 30px;
-    // Always visible: there is no hover on touch, so an opacity-on-hover control is unreachable.
-    opacity: 0.75;
-  }
-
-  .tab-menu button {
-    padding: 12px 10px;
+  .page-list-item,
+  .panel-menu .k-menu-item {
+    min-height: 44px;
   }
 
   // The desktop dock buys its single-row toolbar with a 26px button; a thumb cannot spend that. The
   // sheet is narrow enough to wrap the toolbar regardless, so there is nothing to trade here. The
-  // toolbar's inset is re-derived for the bigger box, same as `.pages-row` above.
+  // toolbar's inset is re-derived for the bigger box.
   .scratch-editor ::ng-deep .de-tool {
     width: 32px;
     height: 32px;

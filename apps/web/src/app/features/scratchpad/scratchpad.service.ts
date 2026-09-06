@@ -442,51 +442,6 @@ export class ScratchpadService {
     };
   }
 
-  /**
-   * Reorder a tab. Optimistic, then reconciled by the server's authoritative position.
-   *
-   * `beforeNoteId: null` means "last" — the same anchor vocabulary the notes and card routes use.
-   */
-  async moveNote(noteId: string, anchor: { afterNoteId?: string | null; beforeNoteId?: string | null }): Promise<void> {
-    const snapshot = this._notes();
-    this.applyOptimisticMove(noteId, anchor);
-    try {
-      const moved = await this.api.patch<{ id: string; position: string }>(
-        `/scratchpad/notes/${noteId}/move`,
-        anchor,
-      );
-      this._notes.update((notes) =>
-        notes.map((note) => (note.id === moved.id ? { ...note, position: moved.position } : note)));
-    } catch {
-      this._notes.set(snapshot);
-      this.saveState.set("error");
-    }
-  }
-
-  /** Interpolate a local position so the tab strip settles before the round trip. */
-  private applyOptimisticMove(noteId: string, anchor: { afterNoteId?: string | null; beforeNoteId?: string | null }): void {
-    const ordered = this.notes().filter((note) => note.id !== noteId);
-    const anchorIndex = anchor.afterNoteId
-      ? ordered.findIndex((note) => note.id === anchor.afterNoteId) + 1
-      : anchor.beforeNoteId
-        ? ordered.findIndex((note) => note.id === anchor.beforeNoteId)
-        : anchor.afterNoteId === null
-          ? 0
-          : ordered.length;
-    if (anchorIndex < 0) return;
-    const prev = anchorIndex > 0 ? Number(ordered[anchorIndex - 1]?.position ?? 0) : null;
-    const next = anchorIndex < ordered.length ? Number(ordered[anchorIndex]?.position ?? 0) : null;
-    const position = prev === null && next === null
-      ? 1000
-      : prev === null
-        ? next! - 1000
-        : next === null
-          ? prev + 1000
-          : (prev + next) / 2;
-    this._notes.update((notes) =>
-      notes.map((note) => (note.id === noteId ? { ...note, position: position.toFixed(10) } : note)));
-  }
-
   // ── Autosave pipeline ──────────────────────────────────────────────────────
 
   /**

@@ -22,6 +22,7 @@ import { ThemeService } from "../../core/theme/theme.service";
 import { AutosaveTracker } from "../../shared/autosave-tracker";
 import { ConfirmService } from "../../shared/confirm.service";
 import { PageHeaderComponent } from "../../shared/page-header.component";
+import { TabStripDirective } from "../../shared/tab-strip.directive";
 import { SeatPaymentService } from "../../shared/seat-payment.service";
 import { ToastService } from "../../shared/toast.service";
 import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
@@ -197,7 +198,7 @@ function formatCents(value: number): string {
 @Component({
   selector: "k-account-settings",
   standalone: true,
-  imports: [PageHeaderComponent, RouterLink, AccountSettingsProfilePage, AccountSettingsNotificationsPage, AccountSettingsApiKeysPage, AccountSettingsUsersPage, AccountSettingsOrgPage, AccountSettingsPlanPage],
+  imports: [PageHeaderComponent, RouterLink, TabStripDirective, AccountSettingsProfilePage, AccountSettingsNotificationsPage, AccountSettingsApiKeysPage, AccountSettingsUsersPage, AccountSettingsOrgPage, AccountSettingsPlanPage],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: "./account-settings.page.html",

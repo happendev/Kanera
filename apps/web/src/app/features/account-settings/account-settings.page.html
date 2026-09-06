@@ -3,7 +3,7 @@
     <section class="ws-card settings-card">
       <k-page-header variant="page" class="settings-header" icon="settings" [iconBadge]="true" title="Settings" />
 
-      <div class="settings-tabs">
+      <div class="settings-tabs" kTabStrip>
         <a [class]="selectedTab() === 'profile' ? 'sm active' : 'ghost sm'" routerLink="profile"><i class="ti ti-user-circle"></i> Profile</a>
         <a [class]="selectedTab() === 'notifications' ? 'sm active' : 'ghost sm'" routerLink="notifications"><i class="ti ti-bell"></i> Notifications</a>
         <a [class]="selectedTab() === 'api-keys' ? 'sm active' : 'ghost sm'" routerLink="api-keys"><i class="ti ti-key"></i> API Keys @if (isHosted()) { <span class="pro-marker">Pro</span> }</a>
