@@ -13,6 +13,7 @@ import { ColorPickerComponent } from "../../shared/color-picker.component";
 import { IconPickerComponent } from "../../shared/icon-picker.component";
 import { ImportNavigationGuardService } from "./import-navigation-guard.service";
 import { findMatchingImportMember } from "./import-member-mapping.util";
+import { viewerTimeZone } from "../../shared/day-key.util";
 
 type MemberRow = WorkspaceMember & { email: string; displayName: string; avatarUrl: string | null };
 type Step = "upload" | "columns" | "lists" | "labels" | "fields" | "members" | "options" | "result";
@@ -284,7 +285,7 @@ export class TrelloImportPage implements OnDestroy {
         this.appliedCsvMappingJson = null;
         this.csvMapping.set({
           ...response.preview.suggestedMapping,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+          timezone: viewerTimeZone(),
           dateOrder: response.issues.ambiguousDateColumns.length
             ? navigator.language.toLocaleLowerCase().startsWith("en-us") ? "mdy" : "dmy"
             : "auto",

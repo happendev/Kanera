@@ -3,6 +3,7 @@
   [class.is-single-workspace-board]="effectiveDisplay() === 'board' && singleWorkspaceBoard()"
   [class.is-table-frame]="usesTableFrame()"
   [class.has-up-next-dock]="upNextOpen()"
+  [class.has-empty-collection]="effectiveDisplay() === 'board' && state.cards().length === 0"
 >
   <!--
     Both chrome rows pin as one block. Sticking them separately would need the query bar to know
@@ -496,16 +497,14 @@
   }
 
   @if (state.loading() && state.response().cards.length === 0 && !state.portfolio()) {
-    <div class="loading-state">
-      <span class="spinner"></span>
+    <div class="k-loading" role="status" aria-live="polite">
+      <i class="ti ti-loader-2"></i>
       <span>Loading your cards…</span>
     </div>
   } @else if (state.error(); as error) {
-    <div class="empty-state error-state">
-      <i class="ti ti-alert-circle"></i>
-      <strong>{{ error }}</strong>
+    <k-empty-state class="error-state" icon="alert-circle" [title]="error">
       <button type="button" class="secondary" (click)="state.refresh()">Try again</button>
-    </div>
+    </k-empty-state>
   } @else {
     <!-- The display is the main track; the Up next queue docks beside it as a full-height sidebar
          (.has-up-next-dock on the page turns the layout into an app frame). Wrapping the portfolio
@@ -733,6 +732,16 @@
           }
         </section>
 
+        @if (bulkSelectedCardIds().size) {
+          <div class="bulk-selection-bar">
+            <span>{{ bulkSelectedCardIds().size }} selected</span>
+            <button type="button" class="btn btn-sm" (click)="clearBulkSelection()">Clear selection</button>
+          </div>
+        }
+        @if (moveError(); as error) {
+          <div class="board-move-error" role="alert"><i class="ti ti-alert-circle"></i>{{ error }}</div>
+        }
+
         @if (effectiveDisplay() === "board") {
           <!-- Only the loading notice remains: it explains why dragging is inert until every
                matching card has arrived. The standing "how to prioritise" advice was removed. -->
@@ -741,9 +750,6 @@
               <span class="spinner"></span>
               <span><strong>Loading all matching cards…</strong> You can start dragging when the full list is ready.</span>
             </div>
-          }
-          @if (moveError(); as error) {
-            <div class="board-move-error"><i class="ti ti-alert-circle"></i>{{ error }}</div>
           }
           <div class="global-board-sections">
             @for (workspace of boardWorkspaces(); track workspace.id) {
@@ -797,7 +803,11 @@
                       [draggableCardIds]="draggableCardIds()"
                       [canCreateCards]="(editableBoardsByWorkspace().get(workspace.id) ?? []).length > 0"
                       [showBulkListActions]="false"
-                      [showSelectAllCards]="false"
+                      [showSelectAllCards]="true"
+                      [bulkSelectedCardIds]="bulkSelectedCardIds()"
+                      (bulkSelectionRequested)="onBulkSelectionRequested($event)"
+            (bulkMenuRequested)="onBulkMenuRequested($event)"
+                      (bulkListSelectionRequested)="onBulkListSelectionRequested($event)"
                       [showCardActions]="true"
                       [allowCardDuplicate]="true"
                       [allowCardCopyToBoard]="true"
@@ -824,11 +834,7 @@
                 }
               </section>
             } @empty {
-              <div class="empty-state">
-                <i class="ti ti-layout-kanban"></i>
-                <strong>No cards found</strong>
-                <span>Try changing your filters or choosing more boards.</span>
-              </div>
+              <k-empty-state class="work-empty-state" icon="layout-kanban" title="No cards found" text="Try changing your filters or choosing more boards." />
             }
           </div>
         } @else if (effectiveDisplay() === "calendar") {
@@ -845,11 +851,7 @@
             (cardOpened)="openCardById($event)"
           />
           @if (!datedCardCount()) {
-            <div class="empty-state">
-              <i class="ti ti-calendar"></i>
-              <strong>No cards with a due date</strong>
-              <span>The calendar only shows dated cards. Switch to the table or board view to see the rest.</span>
-            </div>
+            <k-empty-state icon="calendar" title="No cards with a due date" text="The calendar only shows dated cards. Switch to the table or board view to see the rest." />
           }
         } @else {
           <!--
@@ -889,7 +891,13 @@
             [editableCardIds]="roleEditableCardIds()"
             [showSearch]="false"
             [showFilterBar]="false"
-            [showRowSelection]="false"
+            [showRowSelection]="true"
+            [bulkSelectedCardIds]="bulkSelectedCardIds()"
+            (bulkSelectionRequested)="onBulkSelectionRequested($event)"
+            (bulkMenuRequested)="onBulkMenuRequested($event)"
+            (bulkListSelectionRequested)="onBulkListSelectionRequested($event)"
+            (bulkSelectionCleared)="clearBulkSelection()"
+            (cardDropped)="onTableCardDrop($event)"
             [canCreate]="false"
             [priorityVisibleByDefault]="upNextAvailable()"
             (hostPresentationChange)="state.setTablePresentation($event)"
@@ -1042,4 +1050,25 @@
     (created)="onCardCreated()"
     (dismissed)="closeComposer()"
   />
+}
+
+
+@if (bulkMenuPoint() && bulkSelectedCards().length) {
+  <k-bulk-card-actions-menu
+    [boardId]="bulkBoardId()"
+    [sourceWorkspaceId]="bulkWorkspaceId()"
+    [workspaceActionsEnabled]="bulkWorkspaceId() !== null"
+    [cardIds]="bulkSelectedIds()" [cards]="bulkSelectedCards()"
+    [lists]="bulkLists()" [labels]="bulkLabels()" [members]="bulkMembers()"
+    [currentUserId]="state.auth.user()?.id" [anchorPoint]="bulkMenuPoint()"
+    (dismissed)="bulkMenuPoint.set(null)" (done)="onBulkActionsDone()"
+    (editCustomFields)="openBulkCustomFields()" />
+}
+@if (bulkCustomFieldsOpen()) {
+  <k-bulk-custom-fields-dialog
+    [boardId]="bulkBoardId()"
+    [cardIds]="bulkSelectedIds()" [cards]="bulkSelectedCards()"
+    [customFields]="bulkCustomFields()" [members]="bulkMembers()"
+    [currentUserId]="state.auth.user()?.id"
+    (dismissed)="bulkCustomFieldsOpen.set(false)" (done)="onBulkActionsDone()" />
 }

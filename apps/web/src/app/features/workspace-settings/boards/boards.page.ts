@@ -1,3 +1,4 @@
+import { EmptyStateComponent } from "../../../shared/empty-state.component";
 import { CdkDrag, CdkDragHandle, CdkDropList } from "@angular/cdk/drag-drop";
 import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
 import { DocsLinkComponent } from "../../../shared/docs-link.component";
@@ -10,7 +11,7 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
 @Component({
   selector: "k-workspace-settings-boards",
   standalone: true,
-  imports: [BoardMembersMenu, CdkDrag, CdkDragHandle, CdkDropList, ColorPickerComponent, DocsLinkComponent, IconPickerComponent, TooltipDirective],
+  imports: [EmptyStateComponent, BoardMembersMenu, CdkDrag, CdkDragHandle, CdkDropList, ColorPickerComponent, DocsLinkComponent, IconPickerComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./boards.page.html",
   styleUrl: "./boards.page.scss",

@@ -1,10 +1,20 @@
 <div class="page">
   <main class="content">
-    <k-page-header
-      variant="page"
-      [title]="greeting() + ', ' + displayName()"
-      [subtitle]="today() | date: 'EEEE, d MMMM'"
-    />
+    <!-- The greeting sits in a light field of the marketing site's hero shapes: rings, dashes, dots and
+         ticks in the three brand hues. Decorative only, so it is aria-hidden, sits behind the header,
+         keeps to the right of the greeting text, and hides where the column is too narrow to stay
+         clear of it. -->
+    <div class="home-hero">
+      <div class="hero-scatter" aria-hidden="true">
+        @for (item of scatter; track $index) {
+        <span class="hero-scatter-item" [class]="'hero-scatter-item is-' + item.kind + ' is-' + item.accent" [style.left.%]="item.x" [style.top.%]="item.y" [style.--scatter-size.px]="item.size"
+          [style.--scatter-rotate.deg]="item.rotate ?? 0" [style.--scatter-delay.s]="-(($index * 1.7) % 9)">
+          @if (item.kind === 'check') { <i class="ti ti-check"></i> }
+        </span>
+        }
+      </div>
+      <k-page-header variant="page" [title]="greeting() + ', ' + displayName()" [subtitle]="today() | date: 'EEEE, d MMMM'" />
+    </div>
 
     @if (accountStatusBanner(); as account) {
     <div class="account-status-banner tone-{{ account.tone }}" role="status">
@@ -18,28 +28,28 @@
           {{ account.description }}
         </p>
         @if (account.kind === 'trial' && proUsage(); as usage) {
-          @if (usage.capabilityCount > 0) {
-          <div class="account-pro-value">
-            <p>Your team has used <strong>{{ usage.capabilityCount }}</strong> Pro capabilit{{ usage.capabilityCount === 1 ? 'y' : 'ies' }} this month</p>
-            <span>{{ proUsageDetail() }}</span>
-          </div>
-          }
+        @if (usage.capabilityCount > 0) {
+        <div class="account-pro-value">
+          <p>Your team has used <strong>{{ usage.capabilityCount }}</strong> Pro capabilit{{ usage.capabilityCount === 1 ? 'y' : 'ies' }} this month</p>
+          <span>{{ proUsageDetail() }}</span>
+        </div>
+        }
         }
         @if (account.kind === 'trial' && downgradePreview(); as preview) {
-          @if (preview.members.length || preview.boards.length || preview.features.length) {
-          <div class="downgrade-preview" role="note">
-            <strong>If you stay on Free, these specific items change</strong>
-            @if (preview.members.length) {
-            <span><b>Members being suspended:</b> {{ downgradeMemberNames() }}</span>
-            }
-            @if (preview.boards.length) {
-            <span><b>Boards being archived:</b> {{ downgradeBoardNames() }}</span>
-            }
-            @if (preview.features.length) {
-            <span><b>Features:</b> {{ preview.features.join('; ') }}</span>
-            }
-          </div>
+        @if (preview.members.length || preview.boards.length || preview.features.length) {
+        <div class="downgrade-preview" role="note">
+          <strong>If you stay on Free, these specific items change</strong>
+          @if (preview.members.length) {
+          <span><b>Members being suspended:</b> {{ downgradeMemberNames() }}</span>
           }
+          @if (preview.boards.length) {
+          <span><b>Boards being archived:</b> {{ downgradeBoardNames() }}</span>
+          }
+          @if (preview.features.length) {
+          <span><b>Features:</b> {{ preview.features.join('; ') }}</span>
+          }
+        </div>
+        }
         }
       </div>
       <a class="account-status-action" routerLink="/settings/account-plan">
@@ -98,22 +108,20 @@
     <div class="home-skeleton" aria-busy="true" aria-label="Loading your day">
       <div class="focus-grid">
         @for (tile of skeletonTiles; track tile) {
-        <div class="skeleton skeleton-tile"></div>
+        <div class="k-skeleton is-block skeleton-tile"></div>
         }
       </div>
       <div class="agenda-panel">
         @for (row of skeletonRows; track row) {
-        <div class="skeleton skeleton-row"></div>
+        <div class="k-skeleton is-block skeleton-row"></div>
         }
       </div>
-      <div class="skeleton skeleton-panel"></div>
+      <div class="k-skeleton is-block skeleton-panel"></div>
     </div>
     } @else if (state.error(); as error) {
-    <div class="empty-state error-state">
-      <i class="ti ti-alert-circle"></i>
-      <strong>{{ error }}</strong>
+    <k-empty-state class="error-state" icon="alert-circle" [title]="error">
       <button type="button" class="secondary" (click)="state.retry()">Try again</button>
-    </div>
+    </k-empty-state>
     } @else if (hasNoBoards()) {
     <!-- Getting-started state, gated on accessible boards rather than on `hasWorkspace`: a
          standalone-only or guest-only account has real work and must fall through to the full page
@@ -121,29 +129,47 @@
          for someone with nothing yet. -->
     @if (isOrgAdmin()) {
     <div class="get-started">
-      <div class="get-started-intro">
-        <i class="ti ti-layout-kanban no-workspace-icon"></i>
-        <h2>No boards yet</h2>
+      <div class="get-started-head">
+        <h2>Welcome to Kanera</h2>
         <p>
           @if (hasNoWorkspace()) {
-          Set up your first board yourself, or connect an AI agent and let it create and configure
-          everything for you. A workspace shares one set of lists and fields across several boards; a
-          standalone board keeps its own.
+          Choose how you want to start.
           } @else {
-          Your workspace is ready. Add a board to start working, or let a connected AI agent do it.
+          Your workspace is ready. Add a board to start working.
           }
         </p>
       </div>
-      <div class="no-boards-actions">
-        <button type="button" class="sm" (click)="startGuidedSetup()">
-          <i class="ti ti-route"></i> Start guided setup
-        </button>
-        <button type="button" class="secondary sm" (click)="newStandaloneBoard()">
-          <i class="ti ti-plus"></i> New standalone board
-        </button>
-        <button type="button" class="secondary sm" (click)="newWorkspace()">
-          <i class="ti ti-plus"></i> New workspace
-        </button>
+
+      <!-- Each option explains itself and acts in one card, so there is no separate row of buttons to
+           match back to a description. The two are peers: the choice is the whole point of this screen,
+           so neither is highlighted. The onboarding flow's own "which kind?" step is skipped because the
+           card already answered it. -->
+      <div class="no-boards-actions" [class.is-single]="!hasNoWorkspace()">
+        @if (hasNoWorkspace()) {
+        <div class="start-card">
+          <div class="start-card-icon"><i class="ti ti-layout-grid"></i></div>
+          <h3>Workspace</h3>
+          <p>Several boards that share one set of lists and fields. Best for a team.</p>
+          <div class="start-card-actions">
+            <button type="button" class="action-workspace" (click)="newWorkspace()">
+              <i class="ti ti-plus"></i> Create workspace
+            </button>
+          </div>
+        </div>
+        }
+        <div class="start-card">
+          <div class="start-card-icon"><i class="ti ti-layout-kanban"></i></div>
+          <h3>{{ hasNoWorkspace() ? 'Standalone board' : 'New board' }}</h3>
+          <p>{{ hasNoWorkspace() ? 'One board with its own lists and fields. Best for a single project.' : 'A board in this workspace, or a standalone one with its own lists and fields.' }}</p>
+          <div class="start-card-actions">
+            <button type="button" class="action-standalone" (click)="newStandaloneBoard()">
+              <i class="ti ti-plus"></i> New standalone board
+            </button>
+            @if (!hasNoWorkspace()) {
+            <button type="button" class="secondary action-workspace" (click)="newWorkspace()">New workspace</button>
+            }
+          </div>
+        </div>
       </div>
       @if (createLimitMessage(); as message) {
       <p class="workspace-limit-feedback" role="alert">
@@ -151,14 +177,12 @@
         <span>{{ message }}</span>
       </p>
       }
+
+      <div class="get-started-or" aria-hidden="true"><span>or let an agent do it</span></div>
       <k-agent-connect-card source="home" />
     </div>
     } @else {
-    <div class="no-workspace-empty">
-      <i class="ti ti-layout-kanban no-workspace-icon"></i>
-      <h2>No boards yet</h2>
-      <p>You don't have access to any boards yet. Ask an administrator to add you to a workspace or board to get started.</p>
-    </div>
+    <k-empty-state class="no-workspace-empty" icon="layout-kanban" title="No boards yet" text="You don't have access to any boards yet. Ask an administrator to add you to a workspace or board to get started." />
     }
     } @else {
     @if (state.cachedAt(); as cachedAt) {
@@ -177,55 +201,66 @@
         Changes will refresh after reconnecting.
       </span>
     </div>
-    } @else if (state.reconciling() && state.lastSyncedAt()) {
-    <div class="offline-banner" role="status">
-      <span class="spinner"></span>
-      <span>Reconnected. Refreshing your day…</span>
-    </div>
     }
+    <!-- Background refreshes stay silent: keep the current content visible while reconnecting,
+         returning to the tab, or polling. Only the initial load needs a loading indicator. -->
 
     <!-- Every tile always renders: a zero is information on a triage page, and a grid that changes
          column count as work appears is disorienting. Danger tone only when there is something.
          The three due tiles filter the agenda below; a tile with nothing to filter to, and the
          Done tile (whose detail is the progress panel), render as static readouts so nothing
          looks clickable unless clicking it visibly does something. -->
+    @if (showFirstRun()) {
+    <!-- Three steps, each a link into the place the step happens. Deliberately not a checklist that
+         tracks completion: the gate is "small organisation", and the card leaves when it is closed
+         or when the organisation outgrows it. -->
+    <section class="first-run" aria-labelledby="first-run-heading">
+      <div class="first-run-head">
+        <h2 id="first-run-heading" class="section-title">First steps</h2>
+        <button type="button" class="ghost icon sm" aria-label="Dismiss first steps" kTooltip="Dismiss" (click)="dismissFirstRun()">
+          <i class="ti ti-x"></i>
+        </button>
+      </div>
+      <div class="first-run-steps">
+        @if (firstRunListsLink(); as link) {
+        <a class="first-run-step" [routerLink]="link">
+          <span class="first-run-num">1</span>
+          <span class="first-run-body">
+            <span class="first-run-title">Shape your workflow</span>
+            <span class="first-run-text">Name the lists cards move through and add the fields your team tracks.</span>
+          </span>
+          <i class="ti ti-chevron-right"></i>
+        </a>
+        }
+        @if (firstRunBoardId(); as boardId) {
+        <button type="button" class="first-run-step" (click)="openBoard(boardId)">
+          <span class="first-run-num">2</span>
+          <span class="first-run-body">
+            <span class="first-run-title">Add your first cards</span>
+            <span class="first-run-text">Open a board and press C to create a card. Drag it between lists as it moves.</span>
+          </span>
+          <i class="ti ti-chevron-right"></i>
+        </button>
+        }
+        <a class="first-run-step" routerLink="/settings/users">
+          <span class="first-run-num">3</span>
+          <span class="first-run-body">
+            <span class="first-run-title">Bring your team</span>
+            <span class="first-run-text">Invite people to the organisation, then add them to workspaces or single boards.</span>
+          </span>
+          <i class="ti ti-chevron-right"></i>
+        </a>
+      </div>
+      <p class="first-run-foot">Press <kbd class="k-kbd">?</kbd> anywhere for keyboard shortcuts.</p>
+    </section>
+    }
     <section class="focus-grid" aria-label="Focus">
-      <k-stat-tile
-        label="Overdue"
-        icon="alert-triangle"
-        [value]="state.overdueTotal()"
-        [tone]="state.overdueTotal() > 0 ? 'danger' : 'neutral'"
-        [interactive]="state.overdueTotal() > 0"
-        [pressable]="true"
-        [active]="focusFilter() === 'overdue'"
-        (activated)="toggleFocus('overdue')"
-      />
-      <k-stat-tile
-        label="Due today"
-        icon="calendar-due"
-        [value]="state.dueTodayTotal()"
-        [interactive]="state.dueTodayTotal() > 0"
-        [pressable]="true"
-        [active]="focusFilter() === 'today'"
-        (activated)="toggleFocus('today')"
-      />
-      <k-stat-tile
-        label="Next 7 days"
-        icon="calendar-week"
-        [value]="state.dueWithin7DaysTotal()"
-        [interactive]="state.dueWithin7DaysTotal() > 0"
-        [pressable]="true"
-        [active]="focusFilter() === 'upcoming'"
-        (activated)="toggleFocus('upcoming')"
-      />
-      <k-stat-tile
-        label="Done this week"
-        icon="circle-check"
-        [value]="state.completedThisWeek()"
-        [tone]="state.completedThisWeek() > 0 ? 'success' : 'neutral'"
-        [delta]="state.weekDelta()"
-        [interactive]="false"
-      />
+      <k-stat-tile label="Overdue" icon="alert-triangle" [value]="state.overdueTotal()" [tone]="state.overdueTotal() > 0 ? 'danger' : 'neutral'" [interactive]="state.overdueTotal() > 0" [pressable]="true"
+        [active]="focusFilter() === 'overdue'" (activated)="toggleFocus('overdue')" />
+      <k-stat-tile label="Due today" icon="calendar-due" [value]="state.dueTodayTotal()" [interactive]="state.dueTodayTotal() > 0" [pressable]="true" [active]="focusFilter() === 'today'" (activated)="toggleFocus('today')" />
+      <k-stat-tile label="Next 7 days" icon="calendar-week" [value]="state.dueWithin7DaysTotal()" [interactive]="state.dueWithin7DaysTotal() > 0" [pressable]="true" [active]="focusFilter() === 'upcoming'"
+        (activated)="toggleFocus('upcoming')" />
+      <k-stat-tile label="Done this week" icon="circle-check" [value]="state.completedThisWeek()" [tone]="state.completedThisWeek() > 0 ? 'success' : 'neutral'" [delta]="state.weekDelta()" [interactive]="false" />
     </section>
 
     <!-- Directly under the focus tiles and above recent boards: "what do I do next" outranks both
@@ -238,27 +273,14 @@
         <a class="agenda-see-all" routerLink="/my-cards">See all <i class="ti ti-arrow-narrow-right"></i></a>
       </h2>
       @if (priorityError(); as message) {
-        <p class="priorities-error"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+      <p class="priorities-error"><i class="ti ti-alert-circle"></i>{{ message }}</p>
       }
       <!-- The same rows the shell drawer and the My Cards dock render, so the top of the queue reads
            identically wherever it is seen — and reordering here is the same gesture there. Capped at
            five: this is the head of the queue, and the block says how many more there are. -->
       <div class="agenda-panel priorities-panel">
-        <k-priority-queue
-          [priorities]="myPriorities.queue()"
-          [canDrag]="true"
-          [visibleLimit]="5"
-          [compact]="true"
-          [showAdd]="false"
-          [showDragHint]="false"
-          [allowQuickComplete]="true"
-          dropListId="home-priorities-drop"
-          dragLaneId="home-priorities"
-          (reordered)="onPriorityReordered($event)"
-          (removed)="onPriorityRemoved($event)"
-          (completed)="onPriorityCompleted($event)"
-          (cardOpened)="openPriorityCard($event)"
-        />
+        <k-priority-queue [priorities]="myPriorities.queue()" [canDrag]="true" [visibleLimit]="5" [compact]="true" [showAdd]="false" [showDragHint]="false" [allowQuickComplete]="true" dropListId="home-priorities-drop"
+          dragLaneId="home-priorities" (reordered)="onPriorityReordered($event)" (removed)="onPriorityRemoved($event)" (completed)="onPriorityCompleted($event)" (cardOpened)="openPriorityCard($event)" />
       </div>
     </section>
     } @else if (prioritiesOffline()) {
@@ -285,10 +307,7 @@
       <div class="recent-strip">
         @for (board of recentBoards(); track board.id) {
         <button type="button" class="recent-chip" (click)="openBoard(board.id)">
-          <i
-            class="ti ti-{{ board.icon || 'layout-kanban' }}"
-            [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"
-          ></i>
+          <i class="ti ti-{{ board.icon || 'layout-kanban' }}" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
           <span>{{ board.name }}</span>
         </button>
         }
@@ -316,13 +335,7 @@
       } @else {
       <div class="agenda-panel">
         @for (group of visibleGroups(); track group.bucket) {
-        <k-agenda-group
-          [bucket]="group.bucket"
-          [label]="group.label"
-          [items]="group.items"
-          [count]="group.count"
-          (itemActivated)="openItem($event)"
-        />
+        <k-agenda-group [bucket]="group.bucket" [label]="group.label" [items]="group.items" [count]="group.count" (itemActivated)="openItem($event)" />
         } @empty {
         <!-- A filter can outlive the work it matched (a realtime refresh empties the bucket), so
              say so and offer the way out rather than reading as "all clear". -->
@@ -342,11 +355,7 @@
         <div class="progress-figure">
           <strong>{{ state.completedThisWeek() }}</strong>
           <span class="progress-caption">card{{ state.completedThisWeek() === 1 ? '' : 's' }} completed in the last 7 days</span>
-          <span
-            class="progress-delta"
-            [class.is-up]="state.weekDelta() > 0"
-            [class.is-level]="state.weekDelta() === 0"
-          >
+          <span class="progress-delta" [class.is-up]="state.weekDelta() > 0" [class.is-level]="state.weekDelta() === 0">
             <i class="ti ti-{{ state.weekDelta() > 0 ? 'trending-up' : state.weekDelta() < 0 ? 'trending-down' : 'minus' }}"></i>
             @if (state.weekDelta() === 0) {
             Level with last week
@@ -356,11 +365,7 @@
           </span>
         </div>
         <div class="progress-strip">
-          <k-activity-strip
-            heading="Completed"
-            [series]="trendSeries()"
-            [windowDays]="visibleTrendDays()"
-          />
+          <k-activity-strip heading="Completed" [series]="trendSeries()" [windowDays]="visibleTrendDays()" />
           @if (state.trend().byDay.length === 0) {
           <p class="progress-empty">No cards completed in the last {{ visibleTrendDays() }} days.</p>
           }

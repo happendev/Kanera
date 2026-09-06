@@ -1,5 +1,3 @@
-import assert from "node:assert/strict";
-import test from "node:test";
 import type { z } from "zod";
 import type {
   bulkArchiveCardsBody, bulkPatchCardAssigneesBody, bulkPatchCardLabelsBody,
@@ -85,9 +83,3 @@ type _UpdateNote = AssertAssignable<UpdateNoteInput, z.input<typeof updateNoteBo
 type _Search = AssertAssignable<SearchInput, z.input<typeof agentSearchQueryBody>>;
 type _WorkScope = AssertAssignable<WorkScope, z.input<typeof workScopeSchema>>;
 type _WorkFilters = AssertAssignable<WorkFilters, z.input<typeof workFiltersSchema>>;
-
-void test("SDK input types still match the schemas the API validates with", () => {
-  // The assertions above are type-level; this keeps the file a real test so a broken import is
-  // reported by the runner as well as by tsc.
-  assert.ok(true);
-});

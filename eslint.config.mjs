@@ -122,7 +122,31 @@ export default tseslint.config(
       '@angular-eslint/no-output-native': 'warn',
       '@angular-eslint/prefer-on-push-component-change-detection': 'error',
       '@angular-eslint/prefer-output-readonly': 'error',
+      // Dates render through the named styles in apps/web/src/app/shared/date-format.ts so the same
+      // instant reads identically on the board, in activity, in notes, and on home.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "MemberExpression[object.name='Intl'][property.name='DateTimeFormat']",
+          message: 'Use formatDate/formatDateTime/formatTime from shared/date-format (or viewerTimeZone from shared/day-key.util).',
+        },
+        {
+          selector: "CallExpression[callee.property.name=/^toLocale(Date|Time)?String$/]",
+          message: 'Use formatDate/formatDateTime/formatTime from shared/date-format.',
+        },
+      ],
     },
+  },
+  {
+    // The formatter itself, the zone-arithmetic helper beside due dates, and the specs that compute
+    // locale-independent expectations are the only places allowed to call Intl directly.
+    files: [
+      'apps/web/src/app/shared/date-format.ts',
+      'apps/web/src/app/shared/day-key.util.ts',
+      'apps/web/src/app/features/board/due-date.util.ts',
+      'apps/web/**/*.spec.ts',
+    ],
+    rules: { 'no-restricted-syntax': 'off' },
   },
   {
     files: ['apps/admin-web/**/*.ts'],

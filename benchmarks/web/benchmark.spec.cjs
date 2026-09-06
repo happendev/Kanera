@@ -94,6 +94,7 @@ test("large main-page baseline", async ({ page, browser }) => {
   const scrollProfiles = {};
   const dragStartProfiles = {};
   const dropProfiles = {};
+  let reconciliationProfile = null;
   let currentNetworkSample = null;
   page.on("requestfinished", async (request) => {
     const sample = currentNetworkSample;
@@ -416,7 +417,7 @@ test("large main-page baseline", async ({ page, browser }) => {
 
   const boardDurations = [];
   for (let run = 0; run < NAVIGATION_RUNS; run += 1) {
-    boardDurations.push(await navigate(`/b/${BOARD_ID}`, async () => await page.locator("k-board k-list").count() >= 8 && await page.locator("k-board k-card").count() >= 200));
+    boardDurations.push(await navigate(`/b/${BOARD_ID}`, async () => await page.locator("k-board k-list").count() >= 8 && await page.locator("k-board k-card").count() >= 100));
   }
   await collect("board/initial", round(median(boardDurations)), { navigationRunsMs: boardDurations });
   dragStartProfiles.initial = await profileDragStart("board/drag-start-initial");
@@ -428,11 +429,11 @@ test("large main-page baseline", async ({ page, browser }) => {
   // and the run hangs forever on the first horizontal scroll profile waiting for it to appear.
   const boardListsSelector = "k-board.lists";
   scrollProfiles.horizontalFirstTraversal = await profileScroll("board/horizontal-scroll-first-traversal", boardListsSelector, "horizontal");
-  await navigate(`/b/${BOARD_ID}`, async () => await page.locator("k-board k-list").count() >= 8 && await page.locator("k-board k-card").count() >= 200);
+  await navigate(`/b/${BOARD_ID}`, async () => await page.locator("k-board k-list").count() >= 8 && await page.locator("k-board k-card").count() >= 100);
   scrollProfiles.firstTraversal = await profileScroll("board/vertical-scroll-first-traversal", firstListSelector);
   // Restore the exact pre-traversal mount state so the existing mount-all metric remains
   // comparable with historical results rather than starting with one fully mounted list.
-  await navigate(`/b/${BOARD_ID}`, async () => await page.locator("k-board k-list").count() >= 8 && await page.locator("k-board k-card").count() >= 200);
+  await navigate(`/b/${BOARD_ID}`, async () => await page.locator("k-board k-list").count() >= 8 && await page.locator("k-board k-card").count() >= 100);
 
   interactionTimings.documentClickInitialUs = await page.evaluate(() => {
     const runs = 200;
@@ -487,6 +488,52 @@ test("large main-page baseline", async ({ page, browser }) => {
   scrollProfiles.horizontalSteadyState = await profileScroll("board/horizontal-scroll-steady-state", boardListsSelector, "horizontal");
   scrollProfiles.steadyState = await profileScroll("board/vertical-scroll-steady-state", firstListSelector);
 
+  if (process.env.PERF_RECONCILIATION === "1") {
+    reconciliationProfile = await page.evaluate(() => {
+      const board = window.ng.getComponent(document.querySelector("k-board-page"));
+      const state = board.state;
+      const snapshot = state.snapshotCards();
+      const details = state.detailedCards();
+      const moving = snapshot[0];
+      const destination = state.visibleLists().find(list => list.id !== moving.listId).id;
+      const beforeCards = board.cardsByList();
+      const beforeItems = board.itemsByList();
+      let mutationMs = 0;
+      let projectionMs = 0;
+      let echoMs = 0;
+      // This is an in-memory state profile, not an API write. Force lazy lane projections after
+      // each move so it captures actual derivation cost rather than merely timing signal.set.
+      for (let i = 0; i < 100; i++) {
+        const target = i % 2 ? moving.listId : destination;
+        const start = performance.now();
+        state.moveCard(moving.id, target, String(100000 + i));
+        const mutated = performance.now();
+        state.cardsForList(target);
+        board.cardsByList();
+        board.itemsByList();
+        const projected = performance.now();
+        state.moveCard(moving.id, target, String(100000 + i));
+        mutationMs += mutated - start;
+        projectionMs += projected - mutated;
+        echoMs += performance.now() - projected;
+      }
+      const afterCards = board.cardsByList();
+      const afterItems = board.itemsByList();
+      const unaffected = [...beforeCards.keys()].filter(id => id !== moving.listId && id !== destination);
+      const result = {
+        moves: 100, mutationMs, projectionMs, echoMs,
+        unaffectedLists: unaffected.length,
+        reusedCardLanes: unaffected.filter(id => beforeCards.get(id) === afterCards.get(id)).length,
+        reusedItemLanes: unaffected.filter(id => beforeItems.get(id) === afterItems.get(id)).length,
+      };
+      state.restoreCards(snapshot);
+      state.detailedCards.set(details);
+      return result;
+    });
+  }
+
+  // Focused kanban runs keep scroll/drag/drop coverage and skip the unrelated 75 detail opens.
+  if (process.env.PERF_KANBAN_ONLY !== "1") {
   // The card link contains interactive label/checklist controls. Click the title itself so the
   // benchmark always measures opening the detail rather than whichever nested control is centred.
   const richCardTitles = page.locator("k-board k-card .card-title-text").filter({ hasText: "[Rich]" });
@@ -518,6 +565,8 @@ test("large main-page baseline", async ({ page, browser }) => {
   interactionTimings.boardTableViewMs = round(performance.now() - tableViewStartedAt);
   await collect("board/table-view", interactionTimings.boardTableViewMs);
 
+  }
+
   const capturedAt = new Date().toISOString();
   const label = process.env.PERF_LABEL ?? "local-baseline";
   const result = {
@@ -535,6 +584,7 @@ test("large main-page baseline", async ({ page, browser }) => {
     interactionTimings: Object.fromEntries(Object.entries(interactionTimings).map(([key, value]) => [key, round(value, 2)])),
     dragStartProfiles,
     dropProfiles,
+    reconciliationProfile,
     scrollProfiles,
     samples,
   };

@@ -400,6 +400,24 @@ function setup(options: {
 }
 
 describe("GlobalWorkState", () => {
+  it("preserves unaffected expanded rows across realtime patches and metadata updates", async () => {
+    const { state, socket } = setup({ cardsQuery: () => ({
+      ...response,
+      cards: [response.cards[0]!, { ...response.cards[0]!, id: "40000000-0000-4000-8000-000000000099" }],
+    }) });
+    await state.initialize("my");
+    const initial = state.cards();
+    socket.trigger("card:moved", { cardId: initial[0]!.id, toListId: "list-next", position: "2500" });
+    const patched = state.cards();
+    expect(patched[0]).not.toBe(initial[0]);
+    expect(patched[0]!.listId).toBe("list-next");
+    expect(patched[1]).toBe(initial[1]);
+    state.response.update((current) => ({ ...current, nextCursor: "next-page" }));
+    expect(state.cards()).toBe(patched);
+    state.response.update((current) => ({ ...current, cards: current.cards.slice(1) }));
+    expect(state.cards()).toEqual([initial[1]]);
+  });
+
   beforeEach(() => localStorage.clear());
   afterEach(() => {
     Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
@@ -688,6 +706,39 @@ describe("GlobalWorkState", () => {
       listId: "50000000-0000-4000-8000-000000000002",
       position: "500.0000000000",
     });
+  });
+
+  it("settles each card before placing the next and preserves unrelated updates on failure", async () => {
+    const { state, post } = setup();
+    await state.initialize("my");
+    const original = state.response().cards[0]!;
+    state.response.update((response) => ({
+      ...response,
+      cards: [
+        original,
+        { ...original, id: "second", listId: "source-2" },
+        { ...original, id: "third", listId: "source-3" },
+      ],
+    }));
+    let finishFirst!: (card: { id: string; listId: string; position: string }) => void;
+    post.mockClear();
+    post.mockReturnValueOnce(new Promise((resolve) => { finishFirst = resolve; }))
+      .mockRejectedValueOnce(new Error("offline"));
+    const save = state.moveCards([original.id, "second", "third"], "destination", { beforeCardId: null });
+    expect(state.response().cards.map((card) => card.listId)).toEqual(["destination", "source-2", "source-3"]);
+    expect(post).toHaveBeenCalledTimes(1);
+    // A realtime edit received while saving must survive the later move failure.
+    state.response.update((response) => ({
+      ...response, cards: response.cards.map((card) => ({ ...card, title: "Updated while saving" })),
+    }));
+    finishFirst({ id: original.id, listId: "destination", position: "500" });
+    await expect(save).rejects.toThrow("offline");
+    expect(state.response().cards.map((card) => card.listId)).toEqual(["destination", "source-2", "source-3"]);
+    expect(state.response().cards.every((card) => card.title === "Updated while saving")).toBe(true);
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(post).toHaveBeenLastCalledWith("/cards/second/move", expect.objectContaining({
+      listId: "destination", afterItem: { type: "card", id: original.id },
+    }));
   });
 
   it("moves a Global Work separator through the mixed card lane", async () => {
@@ -1654,4 +1705,21 @@ describe("GlobalWorkState priority queue", () => {
 
     expect(state.priorities()).toBeNull();
   });
+});
+
+it("persists every loaded Global Work page for offline reopening", async () => {
+  const first = response.cards[0]!;
+  const second = { ...first, id: "second-cached-card" };
+  const f = setup({ cardsQuery: ({ cursor }) => ({ ...response, cards: cursor ? [second] : [first], nextCursor: cursor ? null : "page-two" }) });
+  localStorage.clear();
+  await f.state.initialize("my");
+  f.state.definition.update((definition) => ({ ...definition, display: "table" }));
+  await f.state.queryFirstPage();
+  f.saveGlobalWork.mockClear();
+  await f.state.loadMore();
+  expect(f.saveGlobalWork).toHaveBeenCalled();
+  expect(f.saveGlobalWork).toHaveBeenLastCalledWith(
+    expect.any(String), expect.anything(), expect.anything(),
+    expect.objectContaining({ cards: [first, second] }), null, expect.anything(),
+  );
 });

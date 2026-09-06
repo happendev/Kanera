@@ -124,8 +124,8 @@ describe("MyPrioritiesPanelComponent", () => {
     f.fixture.detectChanges();
 
     expect(f.fixture.componentInstance.open()).toBe(true);
-    expect(host(f.fixture).querySelector(".drawer-explainer")?.textContent).toContain("personal priority queue");
-    expect(host(f.fixture).querySelector(".drawer-explainer")?.textContent).toContain("first card");
+    // No standing explainer once the queue has rows; the copy lives in the empty states.
+    expect(host(f.fixture).querySelector(".drawer-explainer")).toBeNull();
     expect(f.service.refresh).toHaveBeenCalled();
     // Two requests nobody who never opens the drawer should pay for.
     expect(f.service.loadAddCandidates).toHaveBeenCalled();
@@ -150,7 +150,7 @@ describe("MyPrioritiesPanelComponent", () => {
 
     const state = host(f.fixture).querySelector(".drawer-empty");
     expect(state?.textContent).toContain("offline");
-    expect(state?.querySelector(".empty-icon .ti-wifi-off")).not.toBeNull();
+    expect(state?.querySelector(".es-icon.ti-wifi-off")).not.toBeNull();
     // Rows are withheld entirely — this is the whole reason the queue is never cached.
     expect(host(f.fixture).querySelector(".panel-row")).toBeNull();
   });
@@ -169,8 +169,8 @@ describe("MyPrioritiesPanelComponent", () => {
     f.fixture.componentInstance.toggle();
     f.fixture.detectChanges();
 
-    expect(host(f.fixture).querySelector(".state-loader.ti-loader-2")).not.toBeNull();
-    expect(host(f.fixture).querySelector(".empty-title")).toBeNull();
+    expect(host(f.fixture).querySelector(".k-loading .ti-loader-2")).not.toBeNull();
+    expect(host(f.fixture).querySelector(".es-title")).toBeNull();
   });
 
   it("teaches the gesture when there is work to queue, and stays quiet when there is not", () => {
@@ -178,6 +178,8 @@ describe("MyPrioritiesPanelComponent", () => {
     f.fixture.componentInstance.toggle();
     f.fixture.detectChanges();
     expect(host(f.fixture).querySelector(".drawer-empty")?.textContent).toContain("Nothing in Up next");
+    // The explainer copy moved here from a permanent strip above the list.
+    expect(host(f.fixture).querySelector(".drawer-empty")?.textContent).toContain("first card");
     expect(host(f.fixture).querySelector(".state-actions")).toBeNull();
 
     f.service.addableCards.set([{ id: "card-9" }]);

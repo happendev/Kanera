@@ -1,3 +1,4 @@
+import { formatDate, formatTime } from "../../shared/date-format";
 import { DUE_DATE_SLOT_TIMES, dueDateSlotTimeLabel, type CardDueDateSlot } from "@kanera/shared/due-date-slots";
 
 // The slot vocabulary and its cut-off times are server-owned: the overdue badge here must agree
@@ -120,19 +121,9 @@ export function isDueSoon(
   return now.getTime() < dueMs && dueMs - now.getTime() <= 24 * 60 * 60 * 1000;
 }
 
-// `toLocaleDateString`/`toLocaleTimeString` construct a formatter internally on every call, so these
-// carry the same per-row cost as formatParts above. Both variants are hoisted for the same reason:
-// formatShortDate and formatDueDate run once per rendered row, per change-detection pass.
-const SHORT_DATE_FORMAT = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
-const SHORT_DATE_WITH_YEAR_FORMAT = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
-const SLOT_TIME_FORMAT = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
-
+/** "4 Mar" for a YYYY-MM-DD due date; the shared "short" style adds the year outside the current one. */
 export function formatShortDate(localDate: string): string {
-  const [year, month, day] = localDate.split("-").map(Number);
-  const d = new Date(year, month - 1, day);
-  const now = new Date();
-  // A date outside the current year is spelled out with it, so "Jan 3" can never read as this year.
-  return (d.getFullYear() !== now.getFullYear() ? SHORT_DATE_WITH_YEAR_FORMAT : SHORT_DATE_FORMAT).format(d);
+  return formatDate(localDate, "short");
 }
 
 export function dueDateSlotFor(
@@ -150,9 +141,8 @@ export function formatDueDate(
   const selectedSlot = dueDateSlotFor(slot);
   if (selectedSlot === "anyTime") return formatShortDate(localDate);
   const dueAt = zonedDateTimeToUtc(localDate, selectedSlot, timezone || "UTC");
-  const date = formatShortDate(`${dueAt.getFullYear()}-${String(dueAt.getMonth() + 1).padStart(2, "0")}-${String(dueAt.getDate()).padStart(2, "0")}`);
-  const time = SLOT_TIME_FORMAT.format(dueAt);
-  return `${date} · ${time}`;
+  // The slot is rendered in the viewer's zone, so the date shown is the viewer's local day for it.
+  return `${formatDate(dueAt, "short")} · ${formatTime(dueAt)}`;
 }
 
 export function dueDateInputValue(localDate: string | null | undefined): string {

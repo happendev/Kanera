@@ -13,9 +13,11 @@ import type { AppSocket } from "../../core/realtime/socket.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { AppTitleService } from "../../core/title/app-title.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
+import { ToastService } from "../../shared/toast.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
 import { WorkspaceSettingsPage } from "./workspace-settings.page";
+import { formatDateTime } from "../../shared/date-format";
 
 class SocketStub {
   private readonly handlers = new Map<string, (...args: unknown[]) => void>();
@@ -368,7 +370,7 @@ describe("WorkspaceSettingsPage", () => {
         },
         { provide: Router, useValue: { navigate: vi.fn() } },
         { provide: UpgradePromptService, useValue: { open: upgradePromptOpen } },
-        { provide: SocketService, useValue: { connect: vi.fn(() => socket.asSocket()), joinWorkspace: vi.fn(() => vi.fn()), displayedOnline: signal(true), reconnecting: signal(false), accessRefreshing: signal(false) } },
+        { provide: SocketService, useValue: { activeWorkspaceIds: signal(new Set<string>()), connect: vi.fn(() => socket.asSocket()), joinWorkspace: vi.fn(() => vi.fn()), displayedOnline: signal(true), reconnecting: signal(false), accessRefreshing: signal(false) } },
         { provide: WorkspaceService, useValue: { setActiveAccentColor: vi.fn(), updateAccentColor: vi.fn() } },
       ],
     }).compileComponents();
@@ -668,7 +670,7 @@ describe("WorkspaceSettingsPage", () => {
     await fixture.componentInstance.deleteWorkspace();
 
     expect(confirm.open).toHaveBeenCalledWith({
-      title: 'Are you sure you want to delete workspace "Delivery"?',
+      title: 'Delete workspace "Delivery"?',
       message: "This will permanently delete all boards, lists, attachments and cards inside it.",
       confirmLabel: "Delete workspace",
       confirmationText: "Delivery",
@@ -683,7 +685,7 @@ describe("WorkspaceSettingsPage", () => {
     await fixture.componentInstance.deleteWorkspace();
 
     expect(confirm.open).toHaveBeenCalledWith({
-      title: 'Are you sure you want to delete board "Solo Roadmap"?',
+      title: 'Delete board "Solo Roadmap"?',
       message: "This will permanently delete this board, its lists, cards, attachments and settings.",
       confirmLabel: "Delete board",
       confirmationText: "Solo Roadmap",
@@ -699,19 +701,30 @@ describe("WorkspaceSettingsPage", () => {
     expect(select?.value).toBe(group.id);
   });
 
-  it("shows the list card count before deleting a list", async () => {
-    const { api, confirm, loadedConfirmationMessage } = await render({ deletionImpactCount: 2 });
+  it("hides a deleted list at once, names the card count in the undo toast, and deletes only after it", async () => {
+    const { api, confirm } = await render({ deletionImpactCount: 2 });
     const component = fixture.componentInstance;
-    component.lists.set([workspaceList()]);
+    const list = workspaceList();
+    component.lists.set([list]);
+    const toasts = TestBed.inject(ToastService);
 
     await component.archiveList("list-1");
 
     expect(api.get).toHaveBeenCalledWith("/lists/list-1/deletion-impact");
-    expect(confirm.openAfterLoading).toHaveBeenCalledWith({
-      title: 'Delete list "Inbox"?',
-      loadingMessage: "Checking how many cards will be deleted...",
-    }, expect.any(Function));
-    expect(loadedConfirmationMessage()).toBe("2 cards will also be permanently deleted. Are you sure?");
+    expect(confirm.openAfterLoading).not.toHaveBeenCalled();
+    expect(component.lists()).toEqual([]);
+    expect(api.delete).not.toHaveBeenCalled();
+    expect(toasts.messages().map((toast) => toast.message)).toEqual(['List "Inbox" and 2 cards deleted.']);
+
+    // Undo restores the row without a request; letting the toast go commits the DELETE.
+    toasts.messages()[0]!.action!.run();
+    await Promise.resolve();
+    expect(component.lists()).toEqual([list]);
+    expect(api.delete).not.toHaveBeenCalled();
+
+    await component.archiveList("list-1");
+    toasts.flushPending();
+    await Promise.resolve();
     expect(api.delete).toHaveBeenCalledWith("/lists/list-1");
   });
 
@@ -829,13 +842,7 @@ describe("WorkspaceSettingsPage", () => {
     fixture.detectChanges();
 
     const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
-    const formattedLastUsed = new Intl.DateTimeFormat(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(new Date(lastUsedAt));
+    const formattedLastUsed = formatDateTime(lastUsedAt, "short");
     expect(text).toContain("Teammate sync");
     expect(text).toContain("Created by Integration Admin");
     expect(text).toContain("Last used");
@@ -910,13 +917,7 @@ describe("WorkspaceSettingsPage", () => {
     fixture.componentInstance.selectedTab.set("api");
     fixture.detectChanges();
 
-    const formattedLastSuccessful = new Intl.DateTimeFormat(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(new Date(lastSuccessfulAt));
+    const formattedLastSuccessful = formatDateTime(lastSuccessfulAt, "short");
     const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
     expect(text).toContain("CRM sync");
     expect(text).toContain("Last success");
@@ -1096,7 +1097,7 @@ describe("WorkspaceSettingsPage", () => {
     await flushAsyncEffects();
 
     const button = fixture.nativeElement.querySelector(".guest-form button[type='submit']") as HTMLButtonElement | null;
-    const note = fixture.nativeElement.querySelector(".guest-info-note") as HTMLElement | null;
+    const note = fixture.nativeElement.querySelector(".settings-info-note") as HTMLElement | null;
     expect(button?.textContent).toContain("Add guest access");
     expect(note?.textContent).toContain("first board is free");
     expect(note?.textContent).toContain("second board uses one purchased seat");
@@ -1210,6 +1211,11 @@ describe("WorkspaceSettingsPage", () => {
 
     api.delete.mockResolvedValueOnce({ paidGuestSeatRemoved: true });
     await component.removeGuest("board-2", "guest-1");
+    // The removal is deferred behind an undo toast; the seat flag updates once the DELETE responds.
+    expect(component.acceptedGuests().map((guest) => guest.boardId)).toEqual(["board-1"]);
+    TestBed.inject(ToastService).flushPending();
+    await Promise.resolve();
+    await Promise.resolve();
 
     expect(component.acceptedGuests().map((guest) => guest.boardId)).toEqual(["board-1"]);
     expect(component.acceptedGuests().filter((guest) => guest.userId === "guest-1").every((guest) => guest.paidGuestSeat === false)).toBe(true);
@@ -1227,7 +1233,7 @@ describe("WorkspaceSettingsPage", () => {
     await component.inviteGuest(new Event("submit"));
 
     expect(confirm.open).toHaveBeenCalledWith({
-      title: "This guest will use a paid seat",
+      title: "Use a paid seat for this guest?",
       message: expect.stringContaining("Adding their second board uses one of your purchased seats"),
       confirmLabel: "Use seat",
       danger: false,

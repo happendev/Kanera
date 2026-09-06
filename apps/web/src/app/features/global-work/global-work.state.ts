@@ -31,6 +31,7 @@ import {
   sanitizeGlobalWorkDefinition,
   writeGlobalWorkPreference,
 } from "./global-work-preference";
+import { viewerTimeZone } from "../../shared/day-key.util";
 
 const EMPTY_CATALOG: WorkCatalog = {
   organisations: [],
@@ -178,10 +179,20 @@ export class GlobalWorkState {
   readonly collapsedHistoryDayKeys = signal<string[]>([]);
   readonly collapsedChecklistGroupIds = signal<string[]>([]);
 
-  readonly cards = computed(() => this.response().cards.map((card) => ({
-    ...expandCardSummary(card),
-    workspaceId: card.workspaceId,
-  })));
+  // Realtime patches replace only the changed compact row. Preserve the other expanded objects
+  // so their OnPush tiles keep their inputs and derived values. Weak keys release removed pages;
+  // response rows must stay immutable (as in the optimistic/realtime update handlers below).
+  private readonly expandedCards = new WeakMap<WorkQueryResponse["cards"][number], WireCardSummary>();
+  private expandWorkCard(card: WorkQueryResponse["cards"][number]): WireCardSummary {
+    let expanded = this.expandedCards.get(card);
+    if (!expanded) {
+      expanded = { ...expandCardSummary(card), workspaceId: card.workspaceId };
+      this.expandedCards.set(card, expanded);
+    }
+    return expanded;
+  }
+  private readonly responseCards = computed(() => this.response().cards);
+  readonly cards = computed(() => this.responseCards().map((card) => this.expandWorkCard(card)));
   readonly separators = computed(() => this.response().separators);
   readonly separatorWorkspaceIds = computed(() => new Set(this.response().separatorWorkspaceIds));
   /**
@@ -234,10 +245,7 @@ export class GlobalWorkState {
    * applied reactively by the page.
    */
   private readonly teamPriorityCandidates = signal<WorkQueryResponse["cards"]>([]);
-  readonly teamPriorityCandidateCards = computed(() => this.teamPriorityCandidates().map((card) => ({
-    ...expandCardSummary(card),
-    workspaceId: card.workspaceId,
-  })));
+  readonly teamPriorityCandidateCards = computed(() => this.teamPriorityCandidates().map((card) => this.expandWorkCard(card)));
   /**
    * Single source of truth for "is this card ranked?". The tiles' rank pills and the "+ Up next"
    * affordance both derive from this one set, so a card can never simultaneously show a rank and
@@ -493,9 +501,11 @@ export class GlobalWorkState {
   async loadMore(): Promise<void> {
     const cursor = this.response().nextCursor;
     if (!cursor || this.loadingMore() || !this.interactionReady()) return;
+    const version = this.requestVersion;
     this.loadingMore.set(true);
     try {
       const page = await this.loadCards(cursor);
+      if (version !== this.requestVersion) return;
       const current = this.response();
       const seen = new Set(current.cards.map((card) => card.id));
       this.response.set({
@@ -506,6 +516,7 @@ export class GlobalWorkState {
         separators: current.separators,
         separatorWorkspaceIds: current.separatorWorkspaceIds,
       });
+      await this.persistCache();
     } finally {
       this.loadingMore.set(false);
     }
@@ -834,9 +845,46 @@ export class GlobalWorkState {
       | { afterCardId: string | null }
       | { beforeCardId: string | null },
   ): Promise<void> {
+    await this.moveCards([cardId], listId, anchor);
+  }
+
+  async moveCards(
+    cardIds: string[],
+    listId: string,
+    anchor: Parameters<GlobalWorkState["moveCard"]>[2],
+  ): Promise<void> {
+    const ids = new Set(cardIds);
+    const originals = new Map(this.response().cards.filter((card) => ids.has(card.id)).map((card) => [card.id, card]));
+    let next = anchor;
+    // Derive each next position from the preceding confirmed move. Preparing all
+    // positions in advance makes the visible group reshuffle as responses settle.
+    for (const id of cardIds.filter((id) => originals.has(id))) {
+      try {
+        await this.prepareCardMove(id, listId, next)();
+        next = { afterItem: { type: "card", id } };
+      } catch (error) {
+        // Never replace the whole response: completed moves and unrelated realtime
+        // updates remain valid even when a later request in this batch fails.
+        this.response.update((response) => ({
+          ...response,
+          cards: response.cards.map((card) => {
+            const original = card.id === id ? originals.get(id) : undefined;
+            return original ? { ...card, listId: original.listId, position: original.position } : card;
+          }),
+        }));
+        throw error;
+      }
+    }
+  }
+
+  private prepareCardMove(
+    cardId: string,
+    listId: string,
+    anchor: Parameters<GlobalWorkState["moveCard"]>[2],
+  ): () => Promise<void> {
     const snapshot = this.response();
     const moving = snapshot.cards.find((card) => card.id === cardId);
-    if (!moving) return;
+    if (!moving) return async () => {};
     const lane = [
       ...snapshot.cards
         .filter((card) => card.id !== cardId && card.listId === listId)
@@ -873,13 +921,14 @@ export class GlobalWorkState {
         card.id === cardId ? { ...card, listId, position: optimisticPosition } : card
       ),
     }));
-    try {
+    const globalWorkUserId = this.focusedTargetUserId();
+    return async () => {
       const moved = await this.api.post<{ id: string; listId: string; position: string }>(
         `/cards/${cardId}/move`,
         {
           listId,
           ...itemAnchor,
-          ...(this.focusedTargetUserId() ? { globalWorkUserId: this.focusedTargetUserId() } : {}),
+          ...(globalWorkUserId ? { globalWorkUserId } : {}),
         },
       );
       this.response.update((response) => ({
@@ -888,10 +937,7 @@ export class GlobalWorkState {
           card.id === moved.id ? { ...card, listId: moved.listId, position: moved.position } : card
         ),
       }));
-    } catch (error) {
-      this.response.set(snapshot);
-      throw error;
-    }
+    };
   }
 
   /**
@@ -1535,7 +1581,7 @@ export class GlobalWorkState {
       days: definition.portfolioDays,
       // The heatmap buckets by calendar day, so the server needs the viewer's zone to decide which
       // square a late-evening event belongs to.
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+      timeZone: viewerTimeZone(),
     });
   }
 

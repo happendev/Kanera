@@ -1,3 +1,4 @@
+import { CdkTrapFocus } from "@angular/cdk/a11y";
 import type { ElementRef, OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, untracked, viewChild } from "@angular/core";
 import { ALLOWED_ATTACHMENT_MIME, ALLOWED_ATTACHMENT_EXTENSIONS, getAllowedAttachmentExtension } from "@kanera/shared/attachments";
@@ -31,6 +32,7 @@ import { formatDueDate, type DueDateSlot } from "./due-date.util";
 import { LabelPickerPopover, type LabelPickerLabel } from "./label-picker.popover";
 import { MemberPickerPopover } from "./member-picker.popover";
 import { SelectPickerPopover } from "./select-picker.popover";
+import { viewerTimeZone } from "../../shared/day-key.util";
 
 type AnyCard = Card | WireCard | WireCardSummary;
 // Structural rather than the schema rows: the composer only reads these fields, so both a board's
@@ -77,7 +79,7 @@ interface PendingAttachment {
 @Component({
   selector: "k-card-composer",
   standalone: true,
-  imports: [
+  imports: [CdkTrapFocus, 
     AnchoredPanelDirective,
     AnchoredPickerPopover,
     AutofocusDirective,
@@ -278,7 +280,7 @@ export class CardComposerDialogComponent implements OnInit {
     const draft = this.draft();
     if (!draft.dueDateLocalDate) return null;
     // Timezone is assigned server-side on write; render the draft in the browser's own zone.
-    return formatDueDate(draft.dueDateLocalDate, draft.dueDateSlot, Intl.DateTimeFormat().resolvedOptions().timeZone);
+    return formatDueDate(draft.dueDateLocalDate, draft.dueDateSlot, viewerTimeZone());
   });
 
   readonly selectedChecklistTemplates = computed(() => {

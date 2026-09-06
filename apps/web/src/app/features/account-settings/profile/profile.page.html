@@ -48,16 +48,17 @@
       </div>
 
       <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-id"></i><span>Display name</span></h3>
-        <p class="settings-section-help">Shown to teammates across the workspace.</p>
+        <div class="section-heading-row">
+          <div>
+            <h3 class="settings-section-title"><i class="ti ti-id"></i><span>Display name</span></h3>
+            <p class="settings-section-help">Shown to teammates across the workspace.</p>
+          </div>
+          <k-autosave-status [state]="settings.nameAutosave.state()" />
+        </div>
         <div class="board-form">
-          <input name="displayName" placeholder="Your name" [value]="settings.displayName()" (input)="settings.displayName.set($any($event.target).value)" [disabled]="settings.nameSaving()" style="flex:1" />
-          <button class="sm" type="button" (click)="settings.saveDisplayName()" [disabled]="settings.nameSaving() || !settings.displayName().trim() || settings.displayName().trim() === settings.user()?.displayName">
-            {{ settings.nameSaving() ? "Saving..." : "Save" }}
-          </button>
+          <input name="displayName" placeholder="Your name" [value]="settings.displayName()" (input)="settings.displayName.set($any($event.target).value)" (blur)="settings.saveDisplayName()" (keydown.enter)="settings.saveDisplayName()" class="grow" />
         </div>
         @if (settings.nameError()) { <p class="form-error">{{ settings.nameError() }}</p> }
-        @if (settings.nameSavedAt() && !settings.nameError()) { <p class="form-success">Saved.</p> }
       </div>
 
       <div class="settings-section">
@@ -120,7 +121,7 @@
           }
         </p>
         <div class="board-form">
-          <input name="email" type="email" autocomplete="email" placeholder="you@example.com" [value]="settings.email()" (input)="settings.email.set($any($event.target).value)" [disabled]="settings.emailSaving() || settings.emailStep() === 'code'" style="flex:1" />
+          <input name="email" type="email" autocomplete="email" placeholder="you@example.com" [value]="settings.email()" (input)="settings.email.set($any($event.target).value)" [disabled]="settings.emailSaving() || settings.emailStep() === 'code'" class="grow" />
           @if (settings.emailStep() === 'idle') {
             <button class="sm" type="button" (click)="settings.requestEmailChange()" [disabled]="settings.emailSaving() || !settings.email().trim() || settings.email().trim() === settings.user()?.email">
               {{ settings.emailSaving() ? (settings.emailVerificationEnabled() ? "Sending..." : "Saving...") : (settings.emailVerificationEnabled() ? "Verify & save" : "Save") }}
@@ -130,7 +131,7 @@
         @if (settings.emailStep() === 'code') {
           <p class="settings-section-help">Enter the 6-digit code we sent to {{ settings.email() }}.</p>
           <div class="board-form">
-            <input name="emailCode" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="6" [value]="settings.emailCode()" (input)="settings.emailCode.set($any($event.target).value)" [disabled]="settings.emailSaving()" style="flex:1" />
+            <input name="emailCode" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="6" [value]="settings.emailCode()" (input)="settings.emailCode.set($any($event.target).value)" [disabled]="settings.emailSaving()" class="grow" />
             <button class="sm" type="button" (click)="settings.confirmEmailChange()" [disabled]="settings.emailSaving() || settings.emailCode().trim().length !== 6">
               {{ settings.emailSaving() ? "Saving..." : "Confirm" }}
             </button>
@@ -138,7 +139,6 @@
           </div>
         }
         @if (settings.emailError()) { <p class="form-error">{{ settings.emailError() }}</p> }
-        @if (settings.emailSavedAt() && !settings.emailError()) { <p class="form-success">Saved.</p> }
       </div>
 
       <div class="settings-section">
@@ -152,7 +152,7 @@
           @if (mfaQrUrl()) { <img [src]="mfaQrUrl()" width="200" height="200" alt="Authenticator setup QR code" /> }
           <div class="board-form"><input autocomplete="one-time-code" inputmode="numeric" placeholder="123456" [value]="mfaCode()" (input)="mfaCode.set($any($event.target).value)" /><button class="sm" type="button" (click)="confirmMfa()" [disabled]="mfaBusy()">Confirm</button></div>
         } @else {
-          <p class="form-success">Two-factor authentication is enabled.</p>
+          <p class="settings-section-help mfa-enabled"><i class="ti ti-shield-check"></i>Two-factor authentication is enabled.</p>
           <div class="settings-form"><input type="password" autocomplete="current-password" placeholder="Current password" [value]="mfaPassword()" (input)="mfaPassword.set($any($event.target).value)" /><input autocomplete="one-time-code" placeholder="Authenticator or recovery code" [value]="mfaCode()" (input)="mfaCode.set($any($event.target).value)" /><div class="logo-actions"><button class="sm" type="button" (click)="regenerateMfaCodes()" [disabled]="mfaBusy()">New recovery codes</button><button class="ghost sm" type="button" (click)="disableMfa()" [disabled]="mfaBusy()">Disable</button></div></div>
         }
         @if (mfaRecoveryCodes().length) { <p><strong>Save these recovery codes now. They will not be shown again.</strong></p><pre>{{ mfaRecoveryCodes().join('\n') }}</pre> }
@@ -191,7 +191,6 @@
             </div>
           </label>
           @if (passwordForm().touched() && passwordForm().errorSummary()[0]; as error) { <p class="form-error">{{ error.message }}</p> }
-          @if (passwordSuccess()) { <p class="form-success">{{ passwordSuccess() }}</p> }
           <div>
             <button class="sm" type="submit" [disabled]="passwordForm().submitting()">
               {{ passwordForm().submitting() ? "Saving..." : "Change password" }}

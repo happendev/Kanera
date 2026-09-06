@@ -1,3 +1,5 @@
+import { EmptyStateComponent } from "../../shared/empty-state.component";
+import { ToastService } from "../../shared/toast.service";
 import type { OnDestroy, OnInit } from "@angular/core";
 import { DatePipe } from "@angular/common";
 import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal } from "@angular/core";
@@ -38,11 +40,11 @@ import { BoardCanvasComponent } from "../board/board-canvas.component";
 import { BoardMenuCoordinator } from "../board/board-menu-coordinator.service";
 import { CardDragCoordinator } from "../board/card-drag-coordinator.service";
 import { BoardCalendarViewComponent } from "../board/calendar-view/board-calendar-view.component";
-import { BoardState, type AnySeparator, type BoardLaneItem } from "../board/board-state";
+import { BoardState, type AnySeparator } from "../board/board-state";
 import { CardComposerDialogComponent, type CardComposerSeed } from "../board/card-composer.dialog";
 import { formatDueDate, isOverdue } from "../board/due-date.util";
 import { FilterBarComponent } from "../board/table-view/filter-bar.component";
-import { ListComponent, type CardDropPayload, type SeparatorDropPayload, type StartAddPayload } from "../board/list.component";
+import { ListComponent, type BulkCardMenuPayload, type BulkCardSelectionPayload, type BulkListSelectionPayload, type CardDropPayload, type SeparatorDropPayload, type StartAddPayload } from "../board/list.component";
 import { WorkDoneViewComponent } from "../board/work-done-view/work-done-view.component";
 import { readWorkDoneLayout, writeWorkDoneLayout } from "../board/work-done-view/work-done-preferences";
 import { NARROW_WORK_DONE_LAYOUT_QUERY, type WorkDoneLayout } from "../board/work-done-view/work-done.types";
@@ -64,11 +66,17 @@ import type { FilterValue } from "../board/table-view/filter.types";
 import { DEFAULT_COMPLETION } from "./global-work-preference";
 import { GlobalCardDetailHostComponent } from "./global-card-detail-host.component";
 import { GlobalWorkState } from "./global-work.state";
+import { BulkCardActionsMenuPopover } from "../board/bulk-card-actions-menu.popover";
+import { BulkCustomFieldsDialogComponent } from "../board/bulk-custom-fields.dialog";
+import { BULK_CARD_STORE } from "../board/bulk-card-store";
+import { globalWorkBulkCardStore } from "./global-work-bulk-card-store";
 import { priorityAnchorAt, type PriorityAnchor } from "./priority-anchor";
 import { SaveViewPopover } from "./save-view.popover";
 import { TeamPrioritiesViewComponent, type TeamPriorityReorder } from "./team-priorities-view.component";
 import { UpNextPanelComponent, type UpNextAddableCard } from "./up-next-panel.component";
 import { boardPickerGroups, peoplePickerGroups, savedViewPickerGroups, scopePickerGroups } from "./work-pickers";
+import { createSortedLaneProjection, createLaneItemsProjection } from "../board/lane-projection";
+import { formatDate } from "../../shared/date-format";
 
 type GlobalCard = WireCardSummary & { workspaceId: string };
 type ChecklistGroup = {
@@ -161,7 +169,7 @@ function priorityGroupKey(userId: string): string {
 @Component({
   selector: "k-global-work",
   standalone: true,
-  imports: [
+  imports: [EmptyStateComponent, 
     DatePipe,
     ActivityStripComponent,
     AnchoredPickerPopover,
@@ -169,6 +177,8 @@ function priorityGroupKey(userId: string): string {
     BoardCalendarViewComponent,
     BoardCanvasComponent,
     BoardTableViewComponent,
+    BulkCardActionsMenuPopover,
+    BulkCustomFieldsDialogComponent,
     FilterBarComponent,
     ListComponent,
     PageHeaderComponent,
@@ -188,6 +198,7 @@ function priorityGroupKey(userId: string): string {
     GlobalWorkState,
     BoardState,
     BoardMenuCoordinator,
+    { provide: BULK_CARD_STORE, useFactory: globalWorkBulkCardStore, deps: [GlobalWorkState] },
     // The table's optimistic writes have to land in the query projection that is actually rendering
     // its rows, not in the bare BoardState this page provides for its other shared children.
     {
@@ -209,6 +220,7 @@ function priorityGroupKey(userId: string): string {
   styleUrl: "./global-work.page.scss",
 })
 export class GlobalWorkPage implements OnInit, OnDestroy {
+  private readonly toasts = inject(ToastService);
   readonly state = inject(GlobalWorkState);
   private readonly api = inject(ApiClient);
   private readonly router = inject(Router);
@@ -578,43 +590,21 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly datedCardCount = computed(() =>
     this.state.cards().filter((card) => card.dueDateLocalDate).length
   );
-  readonly boardCardsByList = computed(() => {
-    const result = new Map<string, GlobalCard[]>();
-    for (const card of this.state.cards()) {
-      const lane = result.get(card.listId) ?? [];
-      lane.push(card);
-      result.set(card.listId, lane);
-    }
-    for (const lane of result.values()) {
-      // Card positions form one workspace-list lane even when the cards belong to different
-      // boards. This is the same order the move API updates, so source navigation rank must not
-      // be introduced as a second priority system here.
-      lane.sort((a, b) => Number(a.position) - Number(b.position) || a.id.localeCompare(b.id));
-    }
-    return result;
+  // Preserve the existing workspace-list ordering across boards, including the id tie-break.
+  private readonly projectCardLanes = createSortedLaneProjection<GlobalCard>(
+    (a, b) => Number(a.position) - Number(b.position) || a.id.localeCompare(b.id),
+  );
+  private readonly projectItemLanes = createLaneItemsProjection((a, b) => {
+    const left = a.kind === "card" ? a.card : a.separator;
+    const right = b.kind === "card" ? b.card : b.separator;
+    return Number(left.position) - Number(right.position)
+      || a.kind.localeCompare(b.kind)
+      || left.id.localeCompare(right.id);
   });
-  readonly boardItemsByList = computed(() => {
-    const result = new Map<string, BoardLaneItem[]>();
-    for (const [listId, cards] of this.boardCardsByList()) {
-      result.set(listId, cards.map((card) => ({ kind: "card", card })));
-    }
-    for (const separator of this.state.separators()) {
-      const items = result.get(separator.listId) ?? [];
-      items.push({ kind: "separator", separator });
-      result.set(separator.listId, items);
-    }
-    for (const items of result.values()) {
-      items.sort((a, b) => {
-        const aPosition = a.kind === "card" ? a.card.position : a.separator.position;
-        const bPosition = b.kind === "card" ? b.card.position : b.separator.position;
-        return Number(aPosition) - Number(bPosition)
-          || a.kind.localeCompare(b.kind)
-          || (a.kind === "card" ? a.card.id : a.separator.id)
-            .localeCompare(b.kind === "card" ? b.card.id : b.separator.id);
-      });
-    }
-    return result;
-  });
+  readonly boardCardsByList = computed(() => this.projectCardLanes(this.state.cards()));
+  readonly boardItemsByList = computed(() =>
+    this.projectItemLanes(this.boardCardsByList(), this.state.separators(), true),
+  );
   readonly boardListsByWorkspace = computed(() => {
     const result = new Map<string, WorkCatalogList[]>();
     for (const list of this.state.catalog().lists) {
@@ -1112,6 +1102,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
 
   constructor() {
     document.addEventListener("keydown", this.handleDocumentKeydown);
+    document.addEventListener("keydown", this.handleSelectionEscape, true);
     effect(() => {
       // Keep the modal derived from the route so browser Back/Forward and pasted global-work links
       // behave like the existing board card detail. The visible query is preferred to avoid a
@@ -1135,12 +1126,20 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     document.removeEventListener("keydown", this.handleDocumentKeydown);
+    document.removeEventListener("keydown", this.handleSelectionEscape, true);
     if (this.queryTimer !== null) clearTimeout(this.queryTimer);
   }
 
   private readonly handleDocumentKeydown = (event: KeyboardEvent) => this.onDocumentKeydown(event);
 
+  // Selection is page state, so Escape clears it even when a popover or drag
+  // consumes the key before bubbling. Let that surface still handle its own Escape.
+  private readonly handleSelectionEscape = (event: KeyboardEvent) => {
+    if (event.key === "Escape") this.clearBulkSelection();
+  };
+
   onDocumentKeydown(event: KeyboardEvent): void {
+    if (event.key === "Escape") this.clearBulkSelection();
     if (event.key.toLowerCase() !== "f" || (!event.ctrlKey && !event.metaKey)) return;
     // Card detail owns its own focused surface; matching the board page, leave browser shortcuts
     // alone while that modal is open instead of pulling focus back into the page behind it.
@@ -2078,12 +2077,107 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     );
   }
 
+  readonly bulkSelectedCardIds = signal<Set<string>>(new Set());
+  private lastBulkSelectedCardId: string | null = null;
+  readonly bulkMenuPoint = signal<{ x: number; y: number } | null>(null);
+  readonly bulkCustomFieldsOpen = signal(false);
+  readonly bulkSelectedCards = computed(() => this.state.cards().filter((card) => this.bulkSelectedCardIds().has(card.id)));
+  readonly bulkBoardId = computed(() => this.bulkSelectedCards().at(0)?.boardId ?? "");
+  readonly bulkSelectedIds = computed(() => this.bulkSelectedCards().map((card) => card.id));
+  readonly bulkWorkspaceId = computed(() => {
+    const workspaces = new Set(this.bulkSelectedCards().map((card) => card.workspaceId));
+    return workspaces.size === 1 ? [...workspaces][0]! : null;
+  });
+  readonly bulkLists = computed(() => this.tableLists().filter((list) => list.workspaceId === this.bulkWorkspaceId()));
+  readonly bulkLabels = computed(() => this.tableLabels().filter((label) => label.workspaceId === this.bulkWorkspaceId()));
+  readonly bulkCustomFields = computed(() => this.tableCustomFields().filter((field) => field.workspaceId === this.bulkWorkspaceId()));
+  readonly bulkMembers = computed<WireBoardMemberUser[]>(() => {
+    const boardIds = [...new Set(this.bulkSelectedCards().map((card) => card.boardId))];
+    // An assignee must be eligible on every selected board, including guest boards.
+    return this.state.catalog().people.filter((person) => boardIds.every((id) => person.boardIds.includes(id)))
+      .map((person) => ({
+        userId: person.userId, displayName: person.displayName, avatarUrl: person.avatarUrl,
+        role: "editor" as const, source: "board" as const,
+      }));
+  });
+
+  onBulkMenuRequested(payload: BulkCardMenuPayload): void {
+    if (!this.bulkSelectedCardIds().has(payload.cardId)) return;
+    const cards = this.bulkSelectedCards();
+    // Do not silently apply a bulk action to only the editable part of a selection.
+    if (!this.state.interactionReady() || cards.length !== this.bulkSelectedCardIds().size
+      || cards.some((card) => !this.roleEditableCardIds().has(card.id))) {
+      this.moveError.set("Select editable cards to use bulk actions.");
+      return;
+    }
+    this.moveError.set(null);
+    this.bulkMenuPoint.set(payload.point);
+  }
+
+  openBulkCustomFields(): void {
+    if (!this.bulkWorkspaceId()) return;
+    this.bulkMenuPoint.set(null);
+    this.bulkCustomFieldsOpen.set(true);
+  }
+
+  onBulkActionsDone(): void {
+    this.clearBulkSelection();
+    this.state.reconcileCardsInBackground();
+  }
+
+
+  clearBulkSelection(): void {
+    this.bulkMenuPoint.set(null);
+    this.bulkCustomFieldsOpen.set(false);    this.bulkSelectedCardIds.set(new Set());
+    this.lastBulkSelectedCardId = null;
+  }
+
+  onBulkSelectionRequested(payload: BulkCardSelectionPayload): void {
+    this.bulkMenuPoint.set(null);
+    const next = new Set(this.bulkSelectedCardIds());
+    const from = payload.orderedCardIds.indexOf(this.lastBulkSelectedCardId ?? "");
+    const to = payload.orderedCardIds.indexOf(payload.cardId);
+    if (payload.shiftKey && from >= 0 && to >= 0) {
+      if (!payload.additive) next.clear();
+      for (const id of payload.orderedCardIds.slice(Math.min(from, to), Math.max(from, to) + 1)) next.add(id);
+    } else {
+      if (next.has(payload.cardId)) next.delete(payload.cardId);
+      else next.add(payload.cardId);
+      this.lastBulkSelectedCardId = payload.cardId;
+    }
+    this.bulkSelectedCardIds.set(next);
+  }
+
+  onBulkListSelectionRequested(payload: BulkListSelectionPayload): void {
+    this.bulkMenuPoint.set(null);
+    const next = payload.mode === "replace" ? new Set<string>() : new Set(this.bulkSelectedCardIds());
+    for (const id of payload.orderedCardIds) {
+      if (payload.mode === "remove") next.delete(id);
+      else next.add(id);
+    }
+    this.bulkSelectedCardIds.set(next);
+  }
+
+  onTableCardDrop(payload: CardDropPayload): void {
+    const workspaceId = this.listsById().get(payload.toListId)?.workspaceId;
+    if (workspaceId) this.moveDroppedCards(payload, workspaceId, (card) =>
+      this.state.interactionReady() && this.draggableCardIds().has(card.id));
+  }
+
   onCardDrop(payload: CardDropPayload, workspaceId: string): void {
+    this.moveDroppedCards(payload, workspaceId, (card) => this.canDragCard(card));
+  }
+
+  private moveDroppedCards(
+    payload: CardDropPayload,
+    workspaceId: string,
+    canMove: (card: GlobalCard) => boolean,
+  ): void {
     const card = this.state.cards().find((candidate) => candidate.id === payload.cardId);
     const targetList = this.listsById().get(payload.toListId);
     if (
       !card
-      || !this.canDragCard(card)
+      || !canMove(card)
       || card.workspaceId !== workspaceId
       || targetList?.workspaceId !== workspaceId
     ) return;
@@ -2095,9 +2189,20 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
         : payload.beforeCardId !== undefined
           ? { beforeItem: payload.beforeCardId ? { type: "card" as const, id: payload.beforeCardId } : null }
           : { afterItem: payload.afterCardId ? { type: "card" as const, id: payload.afterCardId } : null };
+    const moving = this.bulkSelectedCardIds().has(card.id)
+      ? this.state.cards().filter((candidate) => this.bulkSelectedCardIds().has(candidate.id))
+      : [card];
+    // Lists belong to a workspace, even when this view combines several boards.
+    // Reject the whole gesture rather than silently moving only part of the selection.
+    if (moving.some((candidate) => !canMove(candidate) || candidate.workspaceId !== workspaceId)) {
+      this.moveError.set("Select editable cards from one workspace to move them together.");
+      return;
+    }
     this.moveError.set(null);
-    void this.state.moveCard(card.id, payload.toListId, anchor).catch(() => {
-      this.moveError.set("We couldn’t move that card. Its previous position has been restored.");
+    void this.state.moveCards(moving.map((card) => card.id), payload.toListId, anchor).then(() => {
+      if (moving.length > 1) this.toasts.success(`${moving.length} cards moved.`, "arrows-transfer-down");
+    }).catch(() => {
+      this.moveError.set("We couldn’t finish moving the cards. Completed moves were kept; unsaved cards were restored.");
     });
   }
 
@@ -2141,6 +2246,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   }
 
   private showCard(card: WorkCard): void {
+    this.clearBulkSelection();
     // The card opens as a drawer over this page, not as a stack layer, and the card click that gets here
     // is stopped at the card (it has to be, or the canvas reads it as a background click). So close the
     // open popovers here rather than leaving one stranded behind the drawer. Every entry point into card
@@ -2337,10 +2443,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   }
 
   localDateLabel(value: string, style: "full" | "medium" = "medium"): string {
-    const date = new Date(`${value}T12:00:00`);
-    return date.toLocaleDateString(undefined, style === "full"
-      ? { weekday: "long", year: "numeric", month: "long", day: "numeric" }
-      : { year: "numeric", month: "short", day: "numeric" });
+    return formatDate(value, style === "full" ? "long" : "medium");
   }
 
   isChecklistOverdue(item: WireChecklistAssignment): boolean {

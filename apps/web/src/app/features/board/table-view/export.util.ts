@@ -14,6 +14,7 @@ import type {
   CardGroup,
   GroupBy,
 } from "./table-view.types";
+import { formatDateTime } from "../../../shared/date-format";
 
 const CARD_DETAIL_LINK_HEADER = "Card detail link";
 
@@ -540,8 +541,7 @@ function columnName(count: number): string {
 }
 
 function formatExportedAt(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  return formatDateTime(value, "medium") || value;
 }
 
 export function sanitizeExportFileName(value: string): string {

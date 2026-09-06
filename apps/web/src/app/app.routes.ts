@@ -141,7 +141,7 @@ export const routes: Routes = [
         path: "w/:workspaceId/settings",
         title: "Workspace Settings",
         canActivate: [workspaceSettingsGuard],
-        canDeactivate: [importNavigationCanDeactivateGuard],
+        canDeactivate: [importNavigationCanDeactivateGuard, unsavedWorkCanDeactivateGuard],
         loadComponent: () =>
           import("./features/workspace-settings/workspace-settings.page").then((m) => m.WorkspaceSettingsPage),
         children: [
@@ -165,7 +165,7 @@ export const routes: Routes = [
         title: "Board Settings",
         data: { standalone: true },
         canActivate: [standaloneBoardSettingsGuard],
-        canDeactivate: [importNavigationCanDeactivateGuard],
+        canDeactivate: [importNavigationCanDeactivateGuard, unsavedWorkCanDeactivateGuard],
         loadComponent: () =>
           import("./features/workspace-settings/workspace-settings.page").then((m) => m.WorkspaceSettingsPage),
         children: [
@@ -187,6 +187,8 @@ export const routes: Routes = [
       {
         path: "settings",
         title: "Settings",
+        // Settings autosave, so this only prompts for the few explicit-Save forms and drafts still awaiting a blur.
+        canDeactivate: [unsavedWorkCanDeactivateGuard],
         loadComponent: () =>
           import("./features/account-settings/account-settings.page").then((m) => m.AccountSettingsPage),
         children: [

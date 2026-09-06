@@ -1,3 +1,4 @@
+@if (!embedded()) {
 <button type="button" class="bell-btn" (click)="toggle()" [class.has-unread]="unreadCount() > 0" [attr.aria-label]="'Notifications' + (unreadCount() > 0 ? ' (' + unreadCount() + ' unread)' : '')" [attr.aria-expanded]="open()"
   kTooltip="Notifications">
   <i [class]="unreadCount() > 0 ? 'ti ti-bell-ringing' : 'ti ti-bell'"></i>
@@ -5,13 +6,14 @@
   <span class="bell-badge">{{ unreadCount() > 99 ? '99+' : unreadCount() }}</span>
   }
 </button>
+}
 
 @if (open()) {
 <div class="drawer-backdrop" [class.closing]="closing()" (click)="close()" aria-hidden="true"></div>
 <aside class="drawer" [class.closing]="closing()" role="dialog" aria-modal="true" aria-label="Notifications" cdkTrapFocus [cdkTrapFocusAutoCapture]="true">
   <header class="drawer-header">
     <div class="drawer-title">
-      <i class="ti ti-bell"></i>
+      <i [class]="unreadCount() > 0 ? 'ti ti-bell-ringing' : 'ti ti-bell'"></i>
       <h2>Notifications</h2>
       @if (unreadCount() > 0) {
       <span class="title-count">{{ unreadCount() }}</span>
@@ -85,60 +87,28 @@
 
   <div class="drawer-body" #drawerBody>
     @if (loading() && !hasAny() && !loadError()) {
-    <div class="drawer-empty">
-      <i class="ti ti-loader-2 kanera-spin" style="font-size: 28px; color: var(--text-muted)"></i>
-    </div>
+    <div class="k-loading drawer-empty"><i class="ti ti-loader-2 kanera-spin" aria-label="Loading notifications"></i></div>
     } @else if (loadError() && !hasAny()) {
-    <div class="drawer-empty">
-      <div class="empty-icon">
-        <i class="ti ti-wifi-off"></i>
-      </div>
-      <span class="empty-title">Notifications unavailable</span>
-      <span class="empty-text">{{ loadError() }}</span>
-    </div>
+    <k-empty-state class="drawer-empty" plain icon="wifi-off" title="Notifications unavailable" [text]="loadError()" />
     } @else if (!hasAny()) {
     @if (hasActiveFilters()) {
     <!-- A board/user filter is hiding notifications. Spell this out so the empty
          drawer isn't mistaken for "nothing here" when the bell badge shows unread. -->
-    <div class="drawer-empty">
-      <div class="empty-icon empty-icon--filtered">
-        <i class="ti ti-filter"></i>
-      </div>
-      <span class="empty-title">No notifications match your filters</span>
-      @if (unreadCount() > 0) {
-      <span class="empty-text">{{ unreadCount() }} unread {{ unreadCount() === 1 ? 'notification is' : 'notifications are' }} hidden by an active filter.</span>
-      } @else {
-      <span class="empty-text">Try clearing the board or user filter to see more.</span>
-      }
+    <k-empty-state class="drawer-empty" plain icon="filter" title="No notifications match your filters"
+      [text]="unreadCount() > 0 ? unreadCount() + ' unread ' + (unreadCount() === 1 ? 'notification is' : 'notifications are') + ' hidden by an active filter.' : 'Try clearing the board or user filter to see more.'">
       <button type="button" class="ghost empty-all-btn" (click)="clearFilters()">Clear filters</button>
-    </div>
+    </k-empty-state>
     } @else if (includeRead()) {
-    <div class="drawer-empty">
-      <div class="empty-icon">
-        <i class="ti ti-bell-z"></i>
-      </div>
-      <span class="empty-title">No notifications yet</span>
-      <span class="empty-text">When someone assigns you to a card, mentions you, or updates a list you're watching — it'll show up here.</span>
-    </div>
+    <k-empty-state class="drawer-empty" plain icon="bell-z" title="No notifications yet" text="When someone assigns you to a card, mentions you, or updates a list you're watching — it'll show up here." />
     } @else if (hasUnresolvedUnreadMismatch()) {
-    <div class="drawer-empty">
-      <div class="empty-icon">
-        <i class="ti ti-bell-exclamation"></i>
-      </div>
-      <span class="empty-title">Refreshing unread notifications</span>
-      <span class="empty-text">Try reopening the drawer in a moment.</span>
+    <k-empty-state class="drawer-empty" plain icon="bell-exclamation" title="Refreshing unread notifications" text="Try reopening the drawer in a moment.">
       <button type="button" class="ghost empty-all-btn" (click)="refreshNotifications()">
         <i class="ti ti-refresh"></i>
         Refresh
       </button>
-    </div>
+    </k-empty-state>
     } @else {
-    <div class="drawer-empty">
-      <div class="empty-icon empty-icon--done">
-        <i class="ti ti-checks"></i>
-      </div>
-      <span class="empty-title">You're all caught up</span>
-    </div>
+    <k-empty-state class="drawer-empty" plain tone="success" icon="checks" title="You're all caught up" />
     }
     } @else {
     @for (group of displayedGroups(); track group.key) {
@@ -171,7 +141,7 @@
       <!-- --board-color feeds the .board-link chip's tint; there is no left strip on the card. -->
       <li class="notif-item" [class.is-read]="n.readAt" [style.--board-color]="n.boardIconColor ? 'var(--color-' + n.boardIconColor + ')' : null"
         (contextmenu)="openCardActions($event, n)">
-        <a class="notif-card-link" [href]="notificationUrl(n)" (click)="openNotification(n, $event)" [attr.aria-label]="'Open card ' + (n.cardTitle ?? 'notification')"></a>
+        <a class="notif-card-link" [href]="notificationUrl(n)" (click)="openNotification(n, $event)" [attr.aria-label]="n.cardId ? 'Open card ' + (n.cardTitle ?? 'notification') : 'Open board ' + n.boardName"></a>
         <div class="notif-actor" [class.notif-actor--overdue]="n.reason === 'overdue'">
           @if (n.reason === 'overdue') {
           <i class="ti ti-calendar-exclamation"></i>

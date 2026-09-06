@@ -1,3 +1,4 @@
+import { ToastService } from "../../shared/toast.service";
 import type { CdkDragDrop, CdkDragMove} from "@angular/cdk/drag-drop";
 import { CdkDrag, CdkDragPreview, CdkDropList } from "@angular/cdk/drag-drop";
 import type { OnDestroy} from "@angular/core";
@@ -48,7 +49,9 @@ const EMPTY_FIELD_VALUES = new Map<string, CardCustomFieldValue>();
 // list renders only a leading slice and grows it as the user scrolls toward the bottom.
 // The cap only ever grows, never shrinks, so cards already in the DOM —
 // including one mid-drag — are never unmounted, keeping CDK drag-drop indices aligned.
-const INITIAL_RENDER_CAP = 30;
+// Fifteen mixed-height tiles cover the viewport with overscan without mounting thirty tiles
+// in every newly revealed horizontal lane. The existing post-render fill handles tall screens.
+const INITIAL_RENDER_CAP = 15;
 const RENDER_CAP_PAGE = 60;
 const GROW_NEAR_BOTTOM_PX = 600;
 const LIST_DRAG_EDGE_SCROLL_MULTIPLIER = 2;
@@ -125,6 +128,7 @@ class CloseCardChecklistsBeforeDragDirective {
   styleUrl: "./list.component.scss",
 })
 export class ListComponent implements OnDestroy {
+  private readonly toasts = inject(ToastService);
   private readonly api = inject(ApiClient);
   private readonly notifications = inject(NotificationsService);
   private readonly menuCoordinator = inject(BoardMenuCoordinator);
@@ -558,9 +562,12 @@ export class ListComponent implements OnDestroy {
 
   async moveAllCards(targetListId: string) {
     if (!this.canEdit() || this.movingCards()) return;
+    const sourceName = this.list().name;
+    const targetName = this.allLists().find((list) => list.id === targetListId)?.name ?? "the selected list";
     this.movingCards.set(true);
     try {
       await this.api.post(`/lists/${this.list().id}/cards/move`, { targetListId, boardId: this.boardId() });
+      this.toasts.success(`Cards in ${sourceName} moved to ${targetName}.`, "arrows-transfer-down");
       this.menuOpen.set(false);
       this.showMoveListPicker.set(false);
     } finally {
@@ -572,9 +579,23 @@ export class ListComponent implements OnDestroy {
     if (!this.canEdit() || this.clearing()) return;
     this.clearing.set(true);
     try {
-      await this.api.patch(`/lists/${this.list().id}/cards/archive`, { boardId: this.boardId() });
+      // The list route only returns a count, so remember which cards were visible here: Undo
+      // unarchives exactly those through the board's bulk endpoint rather than every archived card
+      // in the list (sibling boards share workspace lists).
+      const boardId = this.boardId();
+      const cardIds = this.cards().filter((card) => !card.archivedAt).map((card) => card.id);
+      const listName = this.list().name;
+      await this.api.patch(`/lists/${this.list().id}/cards/archive`, { boardId });
       this.menuOpen.set(false);
       this.confirmClear.set(false);
+      this.toasts.undoable({
+        message: `Cards in ${listName} archived.`,
+        icon: "archive",
+        undo: async () => {
+          if (cardIds.length === 0) return;
+          await this.api.patch(`/boards/${boardId}/cards/bulk/archive`, { cardIds, archived: false });
+        },
+      });
     } finally {
       this.clearing.set(false);
     }
@@ -585,6 +606,7 @@ export class ListComponent implements OnDestroy {
     this.savingCompletion.set(true);
     try {
       await this.api.post(`/boards/${this.boardId()}/lists/${this.list().id}/cards/completion`, { completed });
+      this.toasts.success(`Cards in ${this.list().name} ${completed ? "marked complete" : "reopened"}.`, completed ? "circle-check" : "circle");
       this.menuOpen.set(false);
     } finally {
       this.savingCompletion.set(false);
@@ -628,6 +650,7 @@ export class ListComponent implements OnDestroy {
   }
 
   ngOnDestroy() {
+    if (this.dragCoordinator.sourceListId() === this.list().id) this.dragCoordinator.end();
     this.cleanupDragCancel?.();
     if (this.clearCommittedDropTimeout !== null) window.clearTimeout(this.clearCommittedDropTimeout);
     this.stopEdgeScrollLoop();
@@ -643,7 +666,7 @@ export class ListComponent implements OnDestroy {
     this.cleanupDragCancel?.();
     this.cleanupDragCancel = this.listenForDragCancel();
     this.startEdgeScrollLoop();
-    this.dragCoordinator.start(this.list().id);
+    this.dragCoordinator.start(this.list().id, drag.element?.nativeElement);
   }
 
   onDragEnded() {
@@ -809,6 +832,24 @@ export class ListComponent implements OnDestroy {
     // The page owns the horizontal scroller. Preserve the actual receiving column so mobile can
     // settle onto it after drag cleanup re-enables scroll snapping.
     document.dispatchEvent(new CustomEvent<string>(APP_DOM_EVENTS.CARD_DROP_TARGET, { detail: targetListId }));
+
+    // Selected cards can originate in any lane. Find an anchor outside the selection;
+    // the page writes each move in sequence, so another moving card cannot be an anchor.
+    if (droppedItem.kind === "card" && this.bulkSelectedCardIds().has(droppedItem.card.id)
+      && this.bulkSelectedCardIds().size > 1) {
+      const order = committedItemOrderForDrop(targetItems, droppedItem, event.currentIndex);
+      const index = order.findIndex((candidate) => laneItemKey(candidate) === itemKey);
+      const stationary = (candidate: BoardLaneItem) =>
+        candidate.kind !== "card" || !this.bulkSelectedCardIds().has(candidate.card.id);
+      const following = order.slice(index + 1).find(stationary);
+      const preceding = order.slice(0, index).filter(stationary).at(-1);
+      this.cardDropped.emit({
+        cardId: droppedItem.card.id, toListId: targetListId,
+        ...(following ? { beforeItem: laneItemAnchor(following) }
+          : preceding ? { afterItem: laneItemAnchor(preceding) } : { beforeItem: null }),
+      });
+      return;
+    }
 
     const committedTargetItems = committedItemOrderForDrop(targetItems, droppedItem, event.currentIndex);
     if (event.previousContainer === event.container && sameItemOrder(targetItems, committedTargetItems)) return;

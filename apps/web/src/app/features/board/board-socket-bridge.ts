@@ -106,7 +106,7 @@ export class BoardSocketBridge {
           return;
         }
         state.moveCard(cardId, toListId, position);
-        state.touchCardActivity(cardId);
+        state.touchCardActivity(cardId, false);
         // A concurrent detail fetch contains the card's list/position too. Mark the move so that
         // stale detail cannot put the card back after this realtime event has been applied.
         state.noteCardDetailRealtimeMutation(cardId);

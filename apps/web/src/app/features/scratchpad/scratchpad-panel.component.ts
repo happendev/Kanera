@@ -3,7 +3,6 @@ import {
   Component,
   computed,
   effect,
-  type ElementRef,
   inject,
   input,
   type OnDestroy,
@@ -16,7 +15,9 @@ import { Router } from "@angular/router";
 import type { WireScratchpadNote } from "@kanera/shared/events";
 import type { AnchoredPanelPlacement } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
-import { ConfirmService } from "../../shared/confirm.service";
+import { ToastService } from "../../shared/toast.service";
+import { EmptyStateComponent } from "../../shared/empty-state.component";
+import { MenuDirective } from "../../shared/menu.directive";
 import { LogoComponent } from "../../shared/logo.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { DescriptionEditorComponent } from "../board/description-editor.component";
@@ -27,6 +28,7 @@ import {
   SCRATCHPAD_MIN_WIDTH,
   ScratchpadService,
 } from "./scratchpad.service";
+import { formatDateTime } from "../../shared/date-format";
 
 /** Below this the dock has no room to be a dock and becomes a bottom sheet. Matches the shell's
  * auto-collapse breakpoint, so the sidebar and the scratchpad change shape at the same width. */
@@ -62,13 +64,13 @@ export function openScratchpadPopoutWindow(url: string): Window | null {
  *
  * `variant="page"` is the popped-out form: the same component filling its own window or tab (see
  * `ScratchpadPage`). One component rather than two, because everything that makes this hard to get
- * right — the autosave bridge, the rename field, tab reordering with edge scroll, crash recovery — must
+ * right — the autosave bridge, the rename field, crash recovery — must
  * behave identically in both forms, and a second implementation would only diverge from this one.
  */
 @Component({
   selector: "k-scratchpad-panel",
   standalone: true,
-  imports: [AnchoredPanelDirective, DescriptionEditorComponent, LogoComponent, TooltipDirective],
+  imports: [AnchoredPanelDirective, DescriptionEditorComponent, EmptyStateComponent, LogoComponent, MenuDirective, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./scratchpad-panel.component.html",
   styleUrl: "./scratchpad-panel.component.scss",
@@ -82,7 +84,7 @@ export function openScratchpadPopoutWindow(url: string): Window | null {
 })
 export class ScratchpadPanelComponent implements OnDestroy {
   protected readonly scratchpad = inject(ScratchpadService);
-  private readonly confirm = inject(ConfirmService);
+  private readonly toasts = inject(ToastService);
   private readonly router = inject(Router);
 
   /**
@@ -103,6 +105,12 @@ export class ScratchpadPanelComponent implements OnDestroy {
   protected readonly notes = this.scratchpad.notes;
   protected readonly activeNote = this.scratchpad.activeNote;
   protected readonly open = this.scratchpad.open;
+  /**
+   * True when the shell renders this panel's trigger in its sidebar utility row. The panel then
+   * paints no fixed button of its own; the shell calls toggle() directly.
+   */
+  readonly embedded = input(false);
+
   protected readonly saveState = this.scratchpad.saveState;
   protected readonly loading = this.scratchpad.loading;
   protected readonly loadError = this.scratchpad.loadError;
@@ -112,58 +120,54 @@ export class ScratchpadPanelComponent implements OnDestroy {
   protected readonly isSheet = signal(this.matchesSheet());
   /** The bottom-sheet shape: narrow viewport *and* docked. A popped-out tab is a page at any width. */
   protected readonly isSheetForm = computed(() => this.isSheet() && !this.isPage());
-  /** Which tab is being renamed inline, if any. */
+  /** Whether the active page's name in the header is being edited inline. */
   protected readonly renamingId = signal<string | null>(null);
   /**
-   * The open tab menu, holding the `…` button it is anchored to.
-   *
-   * An anchor element rather than just an id because the menu is rendered outside the scrolling tab
-   * strip (see the template) and therefore has to be positioned against the button's live rect.
+   * The panel menu (`…`): actions on the current page plus the panel-level ones. Anchored to the
+   * button it opened from so kAnchoredPanel can place it against the live rect.
    */
-  protected readonly menuOpenId = signal<string | null>(null);
-  private readonly menuAnchor = signal<HTMLElement | null>(null);
-  protected readonly menu = computed(() => {
-    const id = this.menuOpenId();
-    const anchor = this.menuAnchor();
-    const note = this.notes().find((candidate) => candidate.id === id);
-    return id && anchor && note ? { note, anchor } : null;
+  private readonly panelMenuAnchor = signal<HTMLElement | null>(null);
+  protected readonly panelMenu = computed(() => {
+    const anchor = this.panelMenuAnchor();
+    return anchor ? { anchor, note: this.activeNote() } : null;
   });
-  protected readonly menuPlacement: AnchoredPanelPlacement = {
+  protected readonly panelMenuPlacement: AnchoredPanelPlacement = {
     side: "bottom",
     align: "end",
-    // The menu is four short rows; sizing from its own CSS keeps it the width of its labels instead of
-    // a number here drifting away from them. See `.tab-menu`, which owns the width.
+    // Sized from its own CSS so the width follows the labels. See `.panel-menu`.
     width: "measure",
-    maxHeight: 200,
+    maxHeight: 320,
     minHeight: 160,
     gap: 4,
     margin: 6,
   };
-  private readonly pagePickerAnchor = signal<HTMLElement | null>(null);
-  protected readonly pagePicker = computed(() => {
-    const anchor = this.pagePickerAnchor();
+  /**
+   * The page list, opened from the page name in the header. Replaces the old horizontal tab strip: a
+   * vertical list scales to the fifty-page cap, shows every name in full, and needs no drag code.
+   */
+  private readonly pageListAnchor = signal<HTMLElement | null>(null);
+  protected readonly pageList = computed(() => {
+    const anchor = this.pageListAnchor();
     return anchor ? { anchor } : null;
   });
   protected readonly pageQuery = signal("");
+  /** Search only earns its row once the list is long enough to need it. */
+  protected readonly showPageSearch = computed(() => this.notes().length > 5);
   protected readonly filteredPages = computed(() => {
     const query = this.pageQuery().trim().toLocaleLowerCase();
     if (!query) return this.notes();
     return this.notes().filter((note) => this.tabLabel(note).toLocaleLowerCase().includes(query));
   });
-  protected readonly pagePickerPlacement: AnchoredPanelPlacement = {
+  protected readonly pageListPlacement: AnchoredPanelPlacement = {
     side: "bottom",
     align: "start",
-    width: 280,
-    maxHeight: 360,
+    width: 300,
+    maxHeight: 400,
     minHeight: 120,
     gap: 4,
     margin: 6,
   };
   protected readonly resizing = signal(false);
-  protected readonly draggingId = signal<string | null>(null);
-  protected readonly dropTargetId = signal<string | null>(null);
-  /** True when the drop indicator belongs after the hovered tab rather than before it. */
-  protected readonly dropAfter = signal(false);
 
   protected readonly showEmptyState = computed(() =>
     !this.loading() && !this.loadError() && this.notes().length === 0,
@@ -202,26 +206,11 @@ export class ScratchpadPanelComponent implements OnDestroy {
   });
 
   @ViewChild(DescriptionEditorComponent) private editorComponent?: DescriptionEditorComponent;
-  @ViewChild("tabStrip") private tabStrip?: ElementRef<HTMLElement>;
 
-  /** How far the pointer must travel before a press on a tab becomes a reorder rather than a click. */
-  private static readonly DRAG_INTENT_PX = 6;
-  /** How close to an end of the strip a dragged tab starts scrolling it, and how fast at the very edge. */
-  private static readonly EDGE_SCROLL_ZONE_PX = 56;
-  private static readonly EDGE_SCROLL_MAX_PX = 16;
 
   private resizePointerId: number | null = null;
   private resizeStartX = 0;
   private resizeStartWidth = 0;
-  private dragPointerId: number | null = null;
-  private dragStartX = 0;
-  private dragCandidateId: string | null = null;
-  /** Latest pointer position during a tab drag, so the edge-scroll loop can hit-test without an event. */
-  private pointerX = 0;
-  private pointerY = 0;
-  private edgeScrollFrame: number | null = null;
-  /** Suppresses the synthetic click browsers dispatch after a completed pointer reorder. */
-  private suppressTabClick = false;
   private sheetPointerId: number | null = null;
   private sheetStartY = 0;
   private sheetStartHeight = 0;
@@ -260,12 +249,6 @@ export class ScratchpadPanelComponent implements OnDestroy {
           baseline: recovered === null ? null : note.content,
         });
       });
-      // The strip scrolls, so a page reached by any means other than clicking its own tab (restored
-      // from storage, a neighbour after a delete, a remote create) could be selected while its tab is
-      // out of view. Deferred a frame so the tab exists and has its final position.
-      requestAnimationFrame(() => {
-        document.querySelector(".tab.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
-      });
     });
     // Hand the service a bridge to whichever editor is mounted. Keyed by note id so an echo can never
     // be applied to the wrong page's document after a fast tab switch.
@@ -287,7 +270,6 @@ export class ScratchpadPanelComponent implements OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.stopEdgeScroll();
     this.sheetQueryList?.removeEventListener("change", this.onSheetChange);
     // Never leave text in a debounce that is about to be discarded with the component.
     this.scratchpad.flushAll();
@@ -318,8 +300,8 @@ export class ScratchpadPanelComponent implements OnDestroy {
    */
   protected popOut(): void {
     this.scratchpad.flushAll();
-    this.closeMenu();
-    this.closePagePicker();
+    this.closePanelMenu();
+    this.closePageList();
     this.renamingId.set(null);
     const url = this.router.serializeUrl(this.router.createUrlTree([SCRATCHPAD_ROUTE]));
     const popped = openScratchpadPopoutWindow(url);
@@ -354,8 +336,8 @@ export class ScratchpadPanelComponent implements OnDestroy {
   }
 
   protected selectNote(noteId: string): void {
-    this.closeMenu();
-    this.closePagePicker();
+    this.closePanelMenu();
+    this.closePageList();
     this.renamingId.set(null);
     this.scratchpad.setActiveNote(noteId);
   }
@@ -363,7 +345,7 @@ export class ScratchpadPanelComponent implements OnDestroy {
   protected async addNote(): Promise<void> {
     if (this.atCapacity()) return;
     const note = await this.scratchpad.createNote();
-    // Land straight in rename so a new tab gets a name while the intent is fresh. Leaving it blank is
+    // Land straight in rename so a new page gets a name while the intent is fresh. Leaving it blank is
     // fine too: the first thing typed into the page names it after the time (see `updateContent`).
     if (note) this.startRename(note.id);
   }
@@ -378,25 +360,21 @@ export class ScratchpadPanelComponent implements OnDestroy {
 
   protected startRename(noteId: string, event?: Event): void {
     event?.stopPropagation();
-    this.closeMenu();
+    this.closePanelMenu();
+    this.closePageList();
     this.renamingId.set(noteId);
     this.focusRenameInput();
   }
 
   /**
-   * Focus and select the rename field once it exists.
-   *
-   * `autofocus` is unreliable on an element inserted after page load, and pre-selecting matters here:
-   * a page auto-named after its timestamp should be replaceable by typing, not something to clear
-   * first. There is only ever one rename input in the strip, so a query is enough.
+   * Focus and select the rename field once it exists. `autofocus` is unreliable on an element inserted
+   * after page load, and pre-selecting matters: a page auto-named after its timestamp should be
+   * replaceable by typing, not something to clear first.
    */
   private focusRenameInput(): void {
     requestAnimationFrame(() => {
-      const input = document.querySelector<HTMLInputElement>(".tab-rename");
+      const input = document.querySelector<HTMLInputElement>(".page-rename");
       if (!input) return;
-      // The field is wider than the pill it replaced, so a tab near either end of a scrolled strip
-      // has to be brought fully into view before it is focused.
-      input.scrollIntoView({ block: "nearest", inline: "nearest" });
       input.focus();
       input.select();
     });
@@ -421,264 +399,73 @@ export class ScratchpadPanelComponent implements OnDestroy {
     }
   }
 
-  // ── Tab menu ───────────────────────────────────────────────────────────────
+  // ── Panel menu ─────────────────────────────────────────────────────────────
 
-  protected toggleMenu(noteId: string, event: Event): void {
+  protected togglePanelMenu(event: Event): void {
     event.stopPropagation();
-    this.closePagePicker();
-    const open = this.menuOpenId() === noteId;
-    this.menuAnchor.set(open ? null : (event.currentTarget as HTMLElement));
-    this.menuOpenId.set(open ? null : noteId);
+    this.closePageList();
+    const open = this.panelMenuAnchor() !== null;
+    this.panelMenuAnchor.set(open ? null : (event.currentTarget as HTMLElement));
   }
 
-  protected closeMenu(): void {
-    this.menuOpenId.set(null);
-    this.menuAnchor.set(null);
+  protected closePanelMenu(): void {
+    this.panelMenuAnchor.set(null);
   }
 
-  // ── Page switcher ─────────────────────────────────────────────────────────
+  // ── Page list ──────────────────────────────────────────────────────────────
 
-  protected togglePagePicker(event: Event): void {
+  protected togglePageList(event: Event): void {
     event.stopPropagation();
-    this.closeMenu();
-    const open = this.pagePickerAnchor() !== null;
-    this.pagePickerAnchor.set(open ? null : (event.currentTarget as HTMLElement));
+    this.closePanelMenu();
+    const open = this.pageListAnchor() !== null;
+    this.pageListAnchor.set(open ? null : (event.currentTarget as HTMLElement));
     this.pageQuery.set("");
-    if (!open) {
-      requestAnimationFrame(() => document.querySelector<HTMLInputElement>(".page-picker-search")?.focus());
+    if (!open && this.showPageSearch()) {
+      requestAnimationFrame(() => document.querySelector<HTMLInputElement>(".page-list-search")?.focus());
     }
   }
 
-  protected closePagePicker(): void {
-    this.pagePickerAnchor.set(null);
+  protected closePageList(): void {
+    this.pageListAnchor.set(null);
     this.pageQuery.set("");
   }
 
-  protected selectPageFromPicker(noteId: string): void {
+  protected selectPageFromList(noteId: string): void {
     this.selectNote(noteId);
-    requestAnimationFrame(() => this.focusTab(noteId));
+    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(".page-trigger")?.focus());
   }
 
-  protected onPagePickerSearchKeydown(event: KeyboardEvent): void {
+  /**
+   * The search field sits inside a kMenu, whose typeahead would otherwise steal every letter typed
+   * into it. Letters stay in the field; only the arrows and Enter are handed to the list.
+   */
+  protected onPageSearchKeydown(event: KeyboardEvent): void {
     if (event.key === "Enter") {
       const first = this.filteredPages()[0];
       if (!first) return;
       event.preventDefault();
-      this.selectPageFromPicker(first.id);
+      this.selectPageFromList(first.id);
       return;
     }
-    if (event.key !== "ArrowDown") return;
-    event.preventDefault();
-    document.querySelector<HTMLButtonElement>(".page-picker-option")?.focus();
-  }
-
-  protected onPagePickerOptionKeydown(noteId: string, event: KeyboardEvent): void {
-    const pages = this.filteredPages();
-    const current = pages.findIndex((note) => note.id === noteId);
-    if (current < 0) return;
-    const nextIndex = event.key === "ArrowDown"
-      ? Math.min(pages.length - 1, current + 1)
-      : event.key === "ArrowUp"
-        ? Math.max(0, current - 1)
-        : event.key === "Home"
-          ? 0
-          : event.key === "End"
-            ? pages.length - 1
-            : -1;
-    if (nextIndex < 0) return;
-    event.preventDefault();
-    document.getElementById(this.pageOptionId(pages[nextIndex]!.id))?.focus();
-  }
-
-  // ── Tab keyboard navigation ───────────────────────────────────────────────
-
-  protected onTabClick(noteId: string, event: MouseEvent): void {
-    if (this.suppressTabClick) {
+    if (event.key === "ArrowDown") {
       event.preventDefault();
+      event.stopPropagation();
+      document.querySelector<HTMLButtonElement>(".page-list-item")?.focus();
       return;
     }
-    this.selectNote(noteId);
-  }
-
-  protected onTabKeydown(noteId: string, event: KeyboardEvent): void {
-    if (event.altKey || event.ctrlKey || event.metaKey) return;
-    const notes = this.notes();
-    const current = notes.findIndex((note) => note.id === noteId);
-    if (current < 0) return;
-    const nextIndex = event.key === "ArrowRight"
-      ? (current + 1) % notes.length
-      : event.key === "ArrowLeft"
-        ? (current - 1 + notes.length) % notes.length
-        : event.key === "Home"
-          ? 0
-          : event.key === "End"
-            ? notes.length - 1
-            : -1;
-    if (nextIndex < 0) return;
-    event.preventDefault();
-    const nextId = notes[nextIndex]!.id;
-    this.selectNote(nextId);
-    requestAnimationFrame(() => this.focusTab(nextId));
-  }
-
-  private focusTab(noteId: string): void {
-    document.getElementById(this.tabId(noteId))?.focus();
+    if (event.key !== "Escape") event.stopPropagation();
   }
 
   protected async removeNote(note: WireScratchpadNote, event?: Event): Promise<void> {
     event?.stopPropagation();
-    this.closeMenu();
+    this.closePanelMenu();
     const label = note.title.trim() || "Untitled";
-    const confirmed = await this.confirm.open({
-      title: `Delete "${label}"?`,
-      message: "This page and anything pasted into it will be deleted. This cannot be undone.",
-      confirmLabel: "Delete page",
-      danger: true,
-    });
-    if (!confirmed) return;
-    await this.scratchpad.deleteNote(note.id);
+    // Undo instead of confirm: the page disappears at once and the DELETE waits for the toast.
+    const { restore, commit } = this.scratchpad.hideNote(note.id);
+    this.toasts.undoable({ message: `Page "${label}" deleted.`, icon: "trash", undo: restore, commit });
   }
 
-  // ── Tab reordering ─────────────────────────────────────────────────────────
-
-  /**
-   * Pointer-based drag, deliberately not the HTML5 `draggable` API.
-   *
-   * HTML5 drag-and-drop does not fire on touch at all, which would make tab order desktop-only —
-   * unacceptable for a panel whose mobile form is a first-class bottom sheet. Pointer events give one
-   * implementation for mouse, pen and touch, and match how the rest of the app drags things.
-   *
-   * A movement threshold separates a drag from a click, so tapping a tab still just selects it. The
-   * `…` menu additionally offers Move left / Move right, which is the keyboard- and
-   * screen-reader-reachable path to the same operation — dragging is never the only way.
-   */
-  protected onTabPointerDown(noteId: string, event: PointerEvent): void {
-    // Left button / primary contact only, and never from the menu button or the rename input.
-    if (event.button !== 0 || this.renamingId() === noteId) return;
-    const target = event.target as HTMLElement;
-    if (target.closest(".tab-menu-btn") || target.closest(".tab-menu")) return;
-    this.dragPointerId = event.pointerId;
-    this.dragStartX = event.clientX;
-    this.dragCandidateId = noteId;
-    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-  }
-
-  protected onTabPointerMove(event: PointerEvent): void {
-    if (this.dragPointerId !== event.pointerId || !this.dragCandidateId) return;
-    if (!this.draggingId()) {
-      if (Math.abs(event.clientX - this.dragStartX) < ScratchpadPanelComponent.DRAG_INTENT_PX) return;
-      this.draggingId.set(this.dragCandidateId);
-      this.startEdgeScroll();
-    }
-    this.pointerX = event.clientX;
-    this.pointerY = event.clientY;
-    this.updateDropTarget();
-  }
-
-  /**
-   * Resolve what the pointer is over. Split out of the move handler because the edge-scroll loop has
-   * to re-run it from a stationary pointer: the strip moves under the cursor, so the tab being
-   * hovered changes with no pointer event to announce it.
-   */
-  private updateDropTarget(): void {
-    // Pointer capture routes every move to the origin tab, so the tab under the cursor has to be
-    // hit-tested rather than read from the event target.
-    const element = document.elementFromPoint(this.pointerX, this.pointerY)?.closest<HTMLElement>(".tab");
-    const overId = element?.dataset["noteId"];
-    if (!overId || overId === this.draggingId()) {
-      this.dropTargetId.set(null);
-      return;
-    }
-    const rect = element!.getBoundingClientRect();
-    this.dropTargetId.set(overId);
-    // Past the midpoint means "after it", which is what lets a drag to the far end land last rather
-    // than second-to-last.
-    this.dropAfter.set(this.pointerX > rect.left + rect.width / 2);
-  }
-
-  /**
-   * Scroll the strip while a tab is held near either end.
-   *
-   * Without this a reorder is capped at what fits on screen: with ten pages open, dragging the last
-   * tab to the front is impossible, because the drop target has to be visible to be hit-tested and
-   * the strip will not scroll itself while the pointer is captured. Speed ramps with how far into the
-   * edge zone the pointer is, so a nudge creeps and a hard push moves.
-   */
-  private startEdgeScroll(): void {
-    if (this.edgeScrollFrame !== null) return;
-    const step = () => {
-      const strip = this.tabStrip?.nativeElement;
-      if (!strip || !this.draggingId()) {
-        this.edgeScrollFrame = null;
-        return;
-      }
-      const rect = strip.getBoundingClientRect();
-      const zone = ScratchpadPanelComponent.EDGE_SCROLL_ZONE_PX;
-      const max = ScratchpadPanelComponent.EDGE_SCROLL_MAX_PX;
-      let delta = 0;
-      if (this.pointerX < rect.left + zone) delta = -Math.ceil(((rect.left + zone - this.pointerX) / zone) * max);
-      else if (this.pointerX > rect.right - zone) delta = Math.ceil(((this.pointerX - (rect.right - zone)) / zone) * max);
-      if (delta !== 0) {
-        const before = strip.scrollLeft;
-        strip.scrollLeft += delta;
-        // Only worth re-hit-testing if the strip actually moved; at either end it cannot.
-        if (strip.scrollLeft !== before) this.updateDropTarget();
-      }
-      this.edgeScrollFrame = requestAnimationFrame(step);
-    };
-    this.edgeScrollFrame = requestAnimationFrame(step);
-  }
-
-  private stopEdgeScroll(): void {
-    if (this.edgeScrollFrame !== null) cancelAnimationFrame(this.edgeScrollFrame);
-    this.edgeScrollFrame = null;
-  }
-
-  protected async onTabPointerUp(event: PointerEvent): Promise<void> {
-    if (this.dragPointerId !== event.pointerId) return;
-    (event.currentTarget as HTMLElement).releasePointerCapture?.(event.pointerId);
-    const dragging = this.draggingId();
-    const target = this.dropTargetId();
-    const after = this.dropAfter();
-    this.dragPointerId = null;
-    this.dragCandidateId = null;
-    this.clearDrag();
-
-    // Below the threshold the native button's click selects the page, including keyboard and
-    // assistive-technology activation. Keeping selection out of pointerup avoids a pointer-only tab.
-    if (!dragging) return;
-    this.suppressTabClick = true;
-    setTimeout(() => { this.suppressTabClick = false; }, 0);
-    if (!target || target === dragging) return;
-    await this.scratchpad.moveNote(dragging, after ? { afterNoteId: target } : { beforeNoteId: target });
-  }
-
-  protected clearDrag(): void {
-    this.stopEdgeScroll();
-    this.draggingId.set(null);
-    this.dropTargetId.set(null);
-    this.dropAfter.set(false);
-  }
-
-  /** Menu-driven reorder: the touch- and keyboard-reachable equivalent of dragging a tab. */
-  protected async moveNoteBy(noteId: string, delta: -1 | 1, event?: Event): Promise<void> {
-    event?.stopPropagation();
-    this.closeMenu();
-    const ordered = this.notes();
-    const index = ordered.findIndex((note) => note.id === noteId);
-    const neighbour = ordered[index + delta];
-    if (!neighbour) return;
-    await this.scratchpad.moveNote(
-      noteId,
-      delta === -1 ? { beforeNoteId: neighbour.id } : { afterNoteId: neighbour.id },
-    );
-  }
-
-  protected canMove(noteId: string, delta: -1 | 1): boolean {
-    const index = this.notes().findIndex((note) => note.id === noteId);
-    return index >= 0 && this.notes()[index + delta] !== undefined;
-  }
-
+  /** Reorder from the panel menu (Move page up / down): reachable by pointer, touch and keyboard alike. */
   // ── Resize ─────────────────────────────────────────────────────────────────
 
   protected onResizePointerDown(event: PointerEvent): void {
@@ -771,35 +558,19 @@ export class ScratchpadPanelComponent implements OnDestroy {
     return note.title.trim() || "Untitled";
   }
 
-  protected tabId(noteId: string): string {
-    return `scratchpad-tab-${noteId}`;
-  }
-
-  protected pageOptionId(noteId: string): string {
-    return `scratchpad-page-option-${noteId}`;
-  }
-
-  /** `Created 3 Mar · Updated 10:42` — long-form only when it is not today. The header shows the
-   * short form below and keeps this as its tooltip: created-at is worth having, not worth a row. */
+  /** `Created 3 Mar · Updated 10:42` — the page list row's tooltip: created-at is worth having, not
+   * worth a column. */
   protected metaLine(note: WireScratchpadNote): string {
     return `Created ${this.formatStamp(note.createdAt)} · Updated ${this.formatStamp(note.updatedAt)}`;
   }
 
-  /** `Updated 10:42` — what fits beside the save state in the header row. */
-  protected updatedLine(note: WireScratchpadNote): string {
-    return `Updated ${this.formatStamp(note.updatedAt)}`;
+  /** Just the time or date, for the page list where an "Updated" prefix on every row is noise. */
+  protected stampLine(note: WireScratchpadNote): string {
+    return this.formatStamp(note.updatedAt);
   }
 
   private formatStamp(value: Date | string): string {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "—";
-    const today = new Date();
-    const sameDay = date.getDate() === today.getDate()
-      && date.getMonth() === today.getMonth()
-      && date.getFullYear() === today.getFullYear();
-    return sameDay
-      ? date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
-      : date.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+    return formatDateTime(value, "compact") || "—";
   }
 
   private matchesSheet(): boolean {

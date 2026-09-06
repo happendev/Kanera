@@ -89,11 +89,7 @@
 
   @if (error()) {
   <div class="wd-empty">
-    <div class="wd-empty-panel">
-      <i class="ti ti-alert-circle"></i>
-      <strong>{{ error() }}</strong>
-      <span>Try changing the period or refreshing the page.</span>
-    </div>
+    <k-empty-state class="wd-empty-panel" icon="alert-circle" [title]="error()!" text="Try changing the period or refreshing the page." />
   </div>
   } @else if (loading()) {
   <div class="wd-stream wd-skeleton-stream" aria-label="Loading work done">
@@ -107,11 +103,7 @@
   </div>
   } @else if (cardCount() === 0) {
   <div class="wd-empty">
-    <div class="wd-empty-panel">
-      <i class="ti ti-history"></i>
-      <strong>{{ emptyTitle() }}</strong>
-      <span>{{ emptyDescription() }}</span>
-    </div>
+    <k-empty-state class="wd-empty-panel" icon="history" [title]="emptyTitle()" [text]="emptyDescription()" />
   </div>
   } @else {
   <!-- Days with no activity are simply absent; the strip above shows where the gaps are. -->
@@ -132,5 +124,4 @@
   </div>
   }
 
-  <k-status-toast [show]="copied()" message="Copied to clipboard" icon="clipboard-check" />
 </section>

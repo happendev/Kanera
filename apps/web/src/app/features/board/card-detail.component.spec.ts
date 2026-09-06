@@ -34,6 +34,7 @@ describe("card detail checklist drag scrolling", () => {
 });
 import { DescriptionEditorComponent } from "./description-editor.component";
 import { ImageLightboxService } from "./image-lightbox.service";
+import { formatDate } from "../../shared/date-format";
 
 class SocketStub {
   connected = true;
@@ -3127,7 +3128,7 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.componentInstance.openChecklistItemDetail(item);
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector(".checklist-item-panel")?.textContent).toContain("Item context");
-    expect(fixture.nativeElement.querySelector(".checklist-item-panel")?.textContent).toContain("Jun 1");
+    expect(fixture.nativeElement.querySelector(".checklist-item-panel")?.textContent).toContain(formatDate("2026-06-01", "short"));
 
     (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(".checklist-item-panel-check")?.click();
     await vi.waitFor(() => expect(api.patch).toHaveBeenCalledWith(
@@ -3521,7 +3522,7 @@ describe("CardDetailComponent realtime regressions", () => {
 
     const panel = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(".checklist-item-panel");
     expect(panel?.textContent).toContain("Observer-visible context");
-    expect(panel?.textContent).toContain("Jun 1");
+    expect(panel?.textContent).toContain(formatDate("2026-06-01", "short"));
     expect(panel?.textContent).toContain("Observer-visible nested checklist");
     expect(panel?.textContent).toContain("Read-only sub-item");
     expect(panel?.querySelector(".checklist-hide-toggle")).not.toBeNull();

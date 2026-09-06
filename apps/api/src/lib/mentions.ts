@@ -1,6 +1,7 @@
 import { boardMembers, boards, cardMentions, type MentionSource } from "@kanera/shared/schema";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Db } from "../db.js";
+import { assignedCardVisibility } from "./access.js";
 
 type MentionDb = Pick<Db, "select" | "insert" | "delete">;
 
@@ -43,11 +44,27 @@ export async function replaceCardMentions(params: {
   // Only explicit board members may be mentioned. Board membership is the access model, so a
   // non-member must not be pulled into a card thread via an @mention.
   const boardRows = await tx
-    .select({ userId: boardMembers.userId })
+    .select({ userId: boardMembers.userId, assignedItemsOnly: boardMembers.assignedItemsOnly })
     .from(boardMembers)
     .where(and(eq(boardMembers.boardId, boardId), inArray(boardMembers.userId, mentionedIds)));
 
-  const allowed = new Set(boardRows.map((row) => row.userId));
+  // An assigned-items-only member can only be mentioned on a card they can already see. The
+  // mention row feeds the out-of-band email/push channel, which carries the card title, board name
+  // and comment excerpt with no later visibility check, so filtering here keeps that channel from
+  // leaking cards the restriction is meant to hide. (Inbox and realtime already filter downstream.)
+  const allowed = new Set<string>();
+  for (const row of boardRows) {
+    if (!row.assignedItemsOnly) {
+      allowed.add(row.userId);
+      continue;
+    }
+    const [visible] = await tx
+      .select({ ok: assignedCardVisibility(row.userId, sql`${cardId}::uuid`) })
+      .from(boards)
+      .where(eq(boards.id, boardId))
+      .limit(1);
+    if (visible?.ok) allowed.add(row.userId);
+  }
   const rows = mentionedIds
     .filter((userId) => allowed.has(userId))
     .map((userId) => ({ cardId, commentId, userId, source }));

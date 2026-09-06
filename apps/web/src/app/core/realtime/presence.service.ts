@@ -1,5 +1,8 @@
-import { Injectable, inject, signal } from "@angular/core";
-import { SocketService } from "./socket.service";
+import { DestroyRef, Injectable, effect, inject, signal } from "@angular/core";
+import { SocketService, type AppSocket } from "./socket.service";
+import { registerSocketHandlers } from "./socket-handlers";
+
+const LAST_ONLINE_HISTORY_LIMIT = 1_000;
 
 @Injectable({ providedIn: "root" })
 export class PresenceService {
@@ -7,7 +10,19 @@ export class PresenceService {
   private readonly onlineByWorkspace = signal(new Map<string, Set<string>>());
   private readonly lastOnlineAtByWorkspace = signal(new Map<string, Map<string, string | Date>>());
   private readonly watchedWorkspaces = new Map<string, { count: number; leave: () => void }>();
-  private listening = false;
+  private socket: AppSocket | null = null;
+  private detachListeners: (() => void) | null = null;
+
+  constructor() {
+    effect(() => {
+      const activeIds = this.sockets.activeWorkspaceIds();
+      // A page may still own the room after all its avatars unmount. Keep its snapshot until the
+      // final room owner leaves, but also prune on logout and reject late events for released rooms.
+      this.onlineByWorkspace.update((current) => new Map([...current].filter(([id]) => activeIds.has(id))));
+      this.lastOnlineAtByWorkspace.update((current) => new Map([...current].filter(([id]) => activeIds.has(id))));
+    });
+    inject(DestroyRef).onDestroy(() => this.detachListeners?.());
+  }
 
   isOnline(workspaceId: string | null | undefined, userId: string | null | undefined): boolean {
     if (!workspaceId || !userId) return false;
@@ -46,36 +61,45 @@ export class PresenceService {
   }
 
   private ensureListening(): void {
-    if (this.listening) return;
-    this.listening = true;
     // Keep socket setup lazy so plain avatars do not connect realtime presence.
     // The first opted-in k-avatar installs the shared listeners for the app.
     const socket = this.sockets.connect();
-    socket.on("presence:snapshot", ({ workspaceId, onlineUserIds }) => {
-      this.onlineByWorkspace.update((current) => {
-        const next = new Map(current);
-        next.set(workspaceId, new Set(onlineUserIds));
-        return next;
-      });
-    });
-    socket.on("presence:changed", ({ workspaceId, userId, online, lastOnlineAt }) => {
-      this.onlineByWorkspace.update((current) => {
-        const next = new Map(current);
-        const users = new Set(next.get(workspaceId) ?? []);
-        if (online) users.add(userId);
-        else users.delete(userId);
-        next.set(workspaceId, users);
-        return next;
-      });
-      if (!online && lastOnlineAt) {
-        this.lastOnlineAtByWorkspace.update((current) => {
+    if (this.socket === socket) return;
+    this.detachListeners?.();
+    this.socket = socket;
+    this.detachListeners = registerSocketHandlers(socket, {
+      "presence:snapshot": ({ workspaceId, onlineUserIds }) => {
+        if (!this.sockets.activeWorkspaceIds().has(workspaceId)) return;
+        this.onlineByWorkspace.update((current) => {
           const next = new Map(current);
-          const workspace = new Map(next.get(workspaceId) ?? []);
-          workspace.set(userId, lastOnlineAt);
-          next.set(workspaceId, workspace);
+          next.set(workspaceId, new Set(onlineUserIds));
           return next;
         });
-      }
+      },
+      "presence:changed": ({ workspaceId, userId, online, lastOnlineAt }) => {
+        if (!this.sockets.activeWorkspaceIds().has(workspaceId)) return;
+        this.onlineByWorkspace.update((current) => {
+          const next = new Map(current);
+          const users = new Set(next.get(workspaceId) ?? []);
+          if (online) users.add(userId);
+          else users.delete(userId);
+          next.set(workspaceId, users);
+          return next;
+        });
+        if (!online && lastOnlineAt) {
+          this.lastOnlineAtByWorkspace.update((current) => {
+            const next = new Map(current);
+            const workspace = new Map(next.get(workspaceId) ?? []);
+            // Member churn in a still-open workspace must not retain every historical user forever.
+            // Older timestamps can fall back to the user's profile metadata in the avatar.
+            workspace.delete(userId);
+            workspace.set(userId, lastOnlineAt);
+            if (workspace.size > LAST_ONLINE_HISTORY_LIMIT) workspace.delete(workspace.keys().next().value!);
+            next.set(workspaceId, workspace);
+            return next;
+          });
+        }
+      },
     });
   }
 }

@@ -1,3 +1,4 @@
+import { MenuDirective } from "../../../shared/menu.directive";
 import type { CdkDragDrop } from "@angular/cdk/drag-drop";
 import { CdkDrag, CdkDragHandle, CdkDropList, CdkDropListGroup, moveItemInArray } from "@angular/cdk/drag-drop";
 import type { OnDestroy } from "@angular/core";
@@ -180,7 +181,7 @@ interface GroupByOption {
 @Component({
   selector: "k-board-table-view",
   standalone: true,
-  imports: [
+  imports: [MenuDirective, 
     AnchoredPanelDirective,
     AnchoredPickerPopover,
     AutofocusDirective,
@@ -407,7 +408,7 @@ export class BoardTableViewComponent implements OnDestroy {
   readonly columnsAnchor = signal<HTMLElement | null>(null);
   readonly sortOpen = signal(false);
   readonly groupOpen = signal(false);
-  readonly exportOpen = signal(false);
+  readonly moreOpen = signal(false);
   readonly aggregateOpenFieldId = signal<string | null>(null);
   readonly creatingTask = signal(false);
   /** List whose run label is currently showing an inline composer, if any. */
@@ -987,11 +988,11 @@ export class BoardTableViewComponent implements OnDestroy {
   }
 
   /** One open menu at a time. Each keeps its own signal so a dismissal cannot close a sibling. */
-  toggleMenu(name: "group" | "sort" | "columns" | "export") {
+  toggleMenu(name: "group" | "sort" | "columns" | "more") {
     this.groupOpen.set(name === "group" ? !this.groupOpen() : false);
     this.sortOpen.set(name === "sort" ? !this.sortOpen() : false);
     this.columnsOpen.set(name === "columns" ? !this.columnsOpen() : false);
-    this.exportOpen.set(name === "export" ? !this.exportOpen() : false);
+    this.moreOpen.set(name === "more" ? !this.moreOpen() : false);
   }
 
   /** Both triggers route through here so the single panel instance follows whichever was clicked. */
@@ -1104,7 +1105,7 @@ export class BoardTableViewComponent implements OnDestroy {
     this.groupOpen.set(false);
     this.sortOpen.set(false);
     this.columnsOpen.set(false);
-    this.exportOpen.set(false);
+    this.moreOpen.set(false);
     this.aggregateOpenFieldId.set(null);
   }
 
@@ -1688,11 +1689,21 @@ export class BoardTableViewComponent implements OnDestroy {
    * of every group at once. Slices are always prefixes, which is what keeps CDK's drop indices and
    * the gutter row numbers lined up with the underlying group.
    */
-  readonly runGroups = computed<TableRunGroup[]>(() => {
+  // Summaries and full-group ids depend on data, not the viewport. Keeping them outside runGroups
+  // avoids re-scanning every card when scrolling grows the render cap or a group is collapsed.
+  private readonly groupData = computed(() => {
     const grouped = this.effectiveGroupBy() !== "none";
+    return this.groups().map((group) => ({
+      group,
+      cardIds: group.cards.map((card) => card.id),
+      summaries: grouped ? this.summaryRowsFor(group.cards, group.key) : [],
+    }));
+  });
+
+  readonly runGroups = computed<TableRunGroup[]>(() => {
     const collapsedKeys = this.collapsedGroups();
     let budget = this.rowRenderCap();
-    return this.groups().map((group) => {
+    return this.groupData().map(({ group, cardIds, summaries }) => {
       const total = group.cards.length;
       // A collapsed group draws no rows and spends none of the budget, so collapsing one is what
       // brings the groups below it into view rather than merely hiding what was already rendered.
@@ -1709,12 +1720,12 @@ export class BoardTableViewComponent implements OnDestroy {
         color: group.color,
         avatarUrl: group.avatarUrl ?? null,
         cards,
-        cardIds: group.cards.map((card) => card.id),
+        cardIds,
         total,
         // Subtotals are of the whole group, not the rendered slice: a total that grew as you scrolled
         // would be worse than no total at all. Suppressed when grouping is off, where the single
         // block's subtotal would just restate the sticky footer directly beneath it.
-        summaries: grouped ? this.summaryRowsFor(group.cards, group.key) : [],
+        summaries,
       };
     });
   });
@@ -1767,8 +1778,8 @@ export class BoardTableViewComponent implements OnDestroy {
   }
 
   /**
-   * Ordinary tables reorder only when grouped by list under manual sort: position is the only card
-   * order the user owns, and list is the only derived bucket a card can honestly be dropped into.
+   * List groups accept status moves under any sort. Only manual sort permits reordering
+   * inside a group; derived sorts still determine where a moved card renders.
    * A hosted relation is the other legal case; the host explicitly supplies both its order and the
    * rows the viewer may reorder, and receives a relation event instead of a card-position write.
    */
@@ -1776,7 +1787,7 @@ export class BoardTableViewComponent implements OnDestroy {
     this.canEdit() && (
       this.hostCardGroups() !== null
         ? [...this.hostReorderableCardIdsByGroup().values()].some((ids) => ids.size > 0)
-        : this.effectiveGroupBy() === "list" && this.effectiveSortBy() === "position"
+        : this.effectiveGroupBy() === "list"
     ),
   );
 
@@ -1786,14 +1797,24 @@ export class BoardTableViewComponent implements OnDestroy {
   }
 
   rowDragEnabled(group: TableRunGroup, card: AnyCard): boolean {
-    if (this.hostCardGroups() === null) return this.dragEnabled();
+    if (this.hostCardGroups() === null) return this.dragEnabled() && this.canEditCard(card);
     return this.groupDragEnabled(group)
       && (this.hostReorderableCardIdsByGroup().get(group.key)?.has(card.id) ?? false);
   }
 
-  /** Hosted relation rows may sort inside their source group, but never transfer across groups. */
-  readonly canEnterRun = (drag: CdkDrag, drop: CdkDropList): boolean =>
-    this.hostCardGroups() === null || drag.dropContainer === drop;
+  /** Hosted relations stay in their group; status drops must stay in the cards' workspace. */
+  readonly canEnterRun = (drag: CdkDrag<AnyCard>, drop: CdkDropList<TableRunGroup>): boolean => {
+    if (this.hostCardGroups() !== null) return drag.dropContainer === drop;
+    const card = drag.data;
+    if (!card || !this.canEditCard(card)) return false;
+    const selected = this.bulkSelectedCardIds();
+    const moving = selected.has(card.id) ? this.cards().filter((row) => selected.has(row.id)) : [card];
+    const workspaceId = this.lists().find((list) => list.id === drop.data?.listId)?.workspaceId;
+    // A consolidated table can show several workspaces. Reject the entire selection
+    // at the boundary rather than moving its editable subset into an unrelated list.
+    return moving.every((row) => this.canEditCard(row)
+      && (!this.crossBoard() || this.boardFor(row)?.workspaceId === workspaceId));
+  };
 
   /** Why the drag handles are absent, when the board is otherwise editable. */
   readonly dragDisabledHint = computed(() => {
@@ -1804,6 +1825,10 @@ export class BoardTableViewComponent implements OnDestroy {
     if (this.effectiveGroupBy() !== "list") return "Drag to reorder works when grouped by status";
     return "Drag to reorder works with manual sort";
   });
+
+  closeMenusForDrag(): void {
+    this.menuCoordinator.closeMenusForDrag();
+  }
 
   /**
    * Drop a row into its new place, and into a new list if it was released over another run's block.
@@ -1817,11 +1842,12 @@ export class BoardTableViewComponent implements OnDestroy {
    * cross-block drop and includes it on a reorder, so it is filtered either way before the
    * neighbours are read off it.
    */
-  onRowDrop(event: CdkDragDrop<TableRunGroup>) {
+  onRowDrop(event: CdkDragDrop<TableRunGroup, TableRunGroup, AnyCard>) {
     if (!this.dragEnabled()) return;
     const card = event.item.data as AnyCard | undefined;
     if (!card) return;
-    if (event.previousContainer === event.container && event.previousIndex === event.currentIndex) return;
+    if (event.previousContainer === event.container && event.previousIndex === event.currentIndex
+      && !(this.bulkSelectedCardIds().has(card.id) && this.bulkSelectedCardIds().size > 1)) return;
     if (this.hostCardGroups() !== null) {
       // Hosted groups describe relations rather than mutable card fields. A cross-group gesture has
       // no honest card write, and the enter predicate normally prevents it before this guard.
@@ -1838,9 +1864,20 @@ export class BoardTableViewComponent implements OnDestroy {
     }
     const target = event.container.data;
     const toListId = target.listId ?? card.listId;
+    if (!this.canEnterRun(event.item, event.container)) return;
+    if (this.effectiveSortBy() !== "position") {
+      // A date/title sort owns row order. Cross-list drops change status and append
+      // in manual order, without treating a sorted neighbour as a position anchor.
+      const selected = this.bulkSelectedCardIds();
+      const moving = selected.has(card.id) ? this.cards().filter((row) => selected.has(row.id)) : [card];
+      if (moving.every((row) => row.listId === toListId)) return;
+      this.cardDropped.emit({ cardId: card.id, toListId, beforeCardId: null });
+      return;
+    }
     const others = target.cards.filter((row) => row.id !== card.id);
-    const following = others[event.currentIndex] ?? null;
-    const preceding = others[event.currentIndex - 1] ?? null;
+    const selected = this.bulkSelectedCardIds().has(card.id) ? this.bulkSelectedCardIds() : new Set<string>();
+    const following = others.slice(event.currentIndex).find((row) => !selected.has(row.id)) ?? null;
+    const preceding = others.slice(0, event.currentIndex).filter((row) => !selected.has(row.id)).at(-1) ?? null;
     this.cardDropped.emit({
       cardId: card.id,
       toListId,
@@ -2003,7 +2040,7 @@ export class BoardTableViewComponent implements OnDestroy {
   }
 
   exportCsv() {
-    this.exportOpen.set(false);
+    this.moreOpen.set(false);
     const columns = [TITLE_COLUMN_ID, ...this.visibleColumns()];
     const rows = [
       columns.map((column) => this.csvCell(this.columnLabel(column))),
@@ -2018,7 +2055,7 @@ export class BoardTableViewComponent implements OnDestroy {
    * script can read, rather than a grid a script has to parse back out of.
    */
   exportJson() {
-    this.exportOpen.set(false);
+    this.moreOpen.set(false);
     const payload = this.buildExportPayload();
     downloadTextFile(JSON.stringify(payload, null, 2), "application/json", this.exportFileName("json"));
   }
@@ -2032,7 +2069,7 @@ export class BoardTableViewComponent implements OnDestroy {
    * Loaded on demand. write-excel-file is ~100kB and most sessions never export.
    */
   async exportExcel() {
-    this.exportOpen.set(false);
+    this.moreOpen.set(false);
     const payload = this.buildExportPayload();
     const { default: writeXlsxFile } = await import("write-excel-file/browser");
     const sheets = buildWorkbookExport(payload).sheets;
@@ -2061,11 +2098,19 @@ export class BoardTableViewComponent implements OnDestroy {
   }
 
   /** The sticky footer's grand total for one numeric column, over the distinct cards in the view. */
+  private readonly aggregateValues = computed(() => {
+    const values = new Map<string, string>();
+    for (const [fieldId, metrics] of Object.entries(this.aggregateConfig())) {
+      const metric = metrics?.[0];
+      if (!metric) continue;
+      const value = this.metricOver(this.rows(), fieldId, metric);
+      values.set(fieldId, value === null ? "—" : formatAggregate(value));
+    }
+    return values;
+  });
+
   aggregateValue(fieldId: string): string {
-    const metric = this.aggregateFor(fieldId);
-    if (!metric) return "";
-    const value = this.metricOver(this.rows(), fieldId, metric);
-    return value === null ? "—" : formatAggregate(value);
+    return this.aggregateValues().get(fieldId) ?? "";
   }
 
   // ── Summaries ─────────────────────────────────────────────────────────────
@@ -2175,8 +2220,9 @@ export class BoardTableViewComponent implements OnDestroy {
   private widthForColumn(id: string): number {
     const defaults: Record<string, number> = {
       // The title cell also carries the card key as an inline prefix, so it needs more room than the
-      // title text alone would suggest before it starts ellipsing.
-      title: 340,
+      // title text alone would suggest before it starts ellipsing. 400 leaves a ~10-character key and
+      // still around 40 characters of title at the default type size.
+      title: 400,
       // Wide enough for the icon plus a two-word list name ("Awaiting Feedback", "Planning /
       // Review"): status is a scanning column and an ellipsed status is worth little.
       status: 176,

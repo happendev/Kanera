@@ -19,6 +19,8 @@ const originalEnv = {
   appId: env.GITHUB_APP_ID,
   appSlug: env.GITHUB_APP_SLUG,
   privateKey: env.GITHUB_APP_PRIVATE_KEY,
+  clientId: env.GITHUB_APP_CLIENT_ID,
+  clientSecret: env.GITHUB_APP_CLIENT_SECRET,
 };
 const originalFetch = globalThis.fetch;
 
@@ -27,6 +29,8 @@ afterEach(() => {
   env.GITHUB_APP_ID = originalEnv.appId;
   env.GITHUB_APP_SLUG = originalEnv.appSlug;
   env.GITHUB_APP_PRIVATE_KEY = originalEnv.privateKey;
+  env.GITHUB_APP_CLIENT_ID = originalEnv.clientId;
+  env.GITHUB_APP_CLIENT_SECRET = originalEnv.clientSecret;
   globalThis.fetch = originalFetch;
 });
 
@@ -52,6 +56,48 @@ function configureHostedGitHubApp() {
   env.GITHUB_APP_ID = "3906152";
   env.GITHUB_APP_SLUG = "kanera-board";
   env.GITHUB_APP_PRIVATE_KEY = privateKey.export({ type: "pkcs1", format: "pem" }).toString();
+  env.GITHUB_APP_CLIENT_ID = "Iv1.kanera";
+  env.GITHUB_APP_CLIENT_SECRET = "kanera-client-secret";
+}
+
+// Simulates GitHub for the installation-binding flow: the App JWT can read installations 12345 and
+// 777, but the OAuth code "good-code" belongs to a GitHub user who can see installation 12345 only.
+function installGitHubFetchStub(requestedPaths: string[]) {
+  globalThis.fetch = (async (input, init) => {
+    const rawUrl = input instanceof Request ? input.url : input instanceof URL ? input.href : input;
+    const url = new URL(rawUrl);
+    requestedPaths.push(url.pathname + url.search);
+    if (url.hostname === "github.com" && url.pathname === "/login/oauth/access_token") {
+      const body = JSON.parse(typeof init?.body === "string" ? init.body : "{}") as { code?: string; client_id?: string; client_secret?: string };
+      if (body.client_id !== "Iv1.kanera" || body.client_secret !== "kanera-client-secret") return new Response(null, { status: 401 });
+      if (body.code !== "good-code") return Response.json({ error: "bad_verification_code" });
+      return Response.json({ access_token: "user-token", token_type: "bearer" });
+    }
+    if (url.pathname === "/user/installations") {
+      const auth = new Headers(init?.headers).get("authorization");
+      if (auth !== "Bearer user-token") return new Response(null, { status: 401 });
+      return Response.json({ installations: [{ id: 12345 }] });
+    }
+    if (url.pathname === "/app/installations/12345" || url.pathname === "/app/installations/777") {
+      const id = Number(url.pathname.split("/").pop());
+      return Response.json({
+        id,
+        account: { login: id === 12345 ? "acme" : "other-org", type: "Organization" },
+        repository_selection: "selected",
+      });
+    }
+    if (url.pathname === "/app/installations/12345/access_tokens") {
+      return Response.json({ token: "installation-token", expires_at: new Date(Date.now() + 60_000).toISOString() });
+    }
+    if (url.pathname === "/installation/repositories") {
+      return Response.json({
+        repositories: [
+          { name: "private-repo", full_name: "acme/private-repo", private: true, owner: { login: "acme" } },
+        ],
+      });
+    }
+    return new Response(null, { status: 404 });
+  }) as typeof fetch;
 }
 
 void test("hosted GitHub App config uses deployment env credentials", async () => {
@@ -179,35 +225,24 @@ void test("hosted org admins can complete and disconnect their GitHub App instal
   configureHostedGitHubApp();
 
   const requestedPaths: string[] = [];
-  globalThis.fetch = (async (input) => {
-    const rawUrl = input instanceof Request ? input.url : input instanceof URL ? input.href : input;
-    const url = new URL(rawUrl);
-    requestedPaths.push(url.pathname + url.search);
-    if (url.pathname === "/app/installations/12345") {
-      return Response.json({
-        id: 12345,
-        account: { login: "acme", type: "Organization" },
-        repository_selection: "selected",
-      });
-    }
-    if (url.pathname === "/app/installations/12345/access_tokens") {
-      return Response.json({ token: "installation-token", expires_at: new Date(Date.now() + 60_000).toISOString() });
-    }
-    if (url.pathname === "/installation/repositories") {
-      return Response.json({
-        repositories: [
-          { name: "private-repo", full_name: "acme/private-repo", private: true, owner: { login: "acme" } },
-        ],
-      });
-    }
-    return new Response(null, { status: 404 });
-  }) as typeof fetch;
+  installGitHubFetchStub(requestedPaths);
+
+  // Without the OAuth code the binding is refused outright: existence of the installation is not
+  // proof that this organisation may claim it.
+  const withoutCode = await app.inject({
+    method: "POST",
+    url: "/clients/me/github-app/installation",
+    headers: { authorization: `Bearer ${owner.accessToken}` },
+    payload: { installationId: "12345" },
+  });
+  assert.equal(withoutCode.statusCode, 400);
+  requestedPaths.length = 0;
 
   const complete = await app.inject({
     method: "POST",
     url: "/clients/me/github-app/installation",
     headers: { authorization: `Bearer ${owner.accessToken}` },
-    payload: { installationId: "12345" },
+    payload: { installationId: "12345", code: "good-code" },
   });
 
   assert.equal(complete.statusCode, 200);
@@ -218,6 +253,8 @@ void test("hosted org admins can complete and disconnect their GitHub App instal
     { owner: "acme", name: "private-repo", fullName: "acme/private-repo", private: true },
   ]);
   assert.deepEqual(requestedPaths, [
+    "/login/oauth/access_token",
+    "/user/installations?per_page=100&page=1",
     "/app/installations/12345",
     "/app/installations/12345/access_tokens",
     "/installation/repositories?per_page=100",
@@ -250,6 +287,65 @@ void test("hosted org admins can complete and disconnect their GitHub App instal
     .from(githubAppInstallations)
     .where(eq(githubAppInstallations.clientId, owner.user.clientId));
   assert.equal(rows.length, 0);
+});
+
+void test("an organisation cannot bind a GitHub installation its authorizing user cannot see", async () => {
+  const app = await buildIntegrationServer();
+  const owner = await signupOwner(app, "hosted-github-cross-tenant@example.com");
+  configureHostedGitHubApp();
+  installGitHubFetchStub([]);
+
+  // Installation 777 exists for the App but is not in the authorizing user's /user/installations.
+  const foreign = await app.inject({
+    method: "POST",
+    url: "/clients/me/github-app/installation",
+    headers: { authorization: `Bearer ${owner.accessToken}` },
+    payload: { installationId: "777", code: "good-code" },
+  });
+  assert.equal(foreign.statusCode, 403);
+
+  const replayed = await app.inject({
+    method: "POST",
+    url: "/clients/me/github-app/installation",
+    headers: { authorization: `Bearer ${owner.accessToken}` },
+    payload: { installationId: "12345", code: "stale-code" },
+  });
+  assert.equal(replayed.statusCode, 400);
+
+  const rows = await db
+    .select()
+    .from(githubAppInstallations)
+    .where(eq(githubAppInstallations.clientId, owner.user.clientId));
+  assert.equal(rows.length, 0);
+});
+
+void test("an installation already bound to another organisation cannot be rebound", async () => {
+  const app = await buildIntegrationServer();
+  const first = await signupOwner(app, "hosted-github-first@example.com");
+  const second = await signupOwner(app, "hosted-github-second@example.com");
+  configureHostedGitHubApp();
+  installGitHubFetchStub([]);
+
+  const bound = await app.inject({
+    method: "POST",
+    url: "/clients/me/github-app/installation",
+    headers: { authorization: `Bearer ${first.accessToken}` },
+    payload: { installationId: "12345", code: "good-code" },
+  });
+  assert.equal(bound.statusCode, 200);
+
+  // Even with a valid authorization, the same installation cannot be held by two organisations,
+  // and the failure is indistinguishable from an unknown installation.
+  const rebound = await app.inject({
+    method: "POST",
+    url: "/clients/me/github-app/installation",
+    headers: { authorization: `Bearer ${second.accessToken}` },
+    payload: { installationId: "12345", code: "good-code" },
+  });
+  assert.equal(rebound.statusCode, 400);
+  const rows = await db.select().from(githubAppInstallations).where(eq(githubAppInstallations.installationId, "12345"));
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]!.clientId, first.user.clientId);
 });
 
 void test("hosted mode still blocks GitHub App credential bootstrap routes", async () => {

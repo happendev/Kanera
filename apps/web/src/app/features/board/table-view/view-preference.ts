@@ -150,6 +150,16 @@ export function writeGroupBy(scope: string, value: GroupBy): void {
   writeString(viewPreferenceKey("groupBy", scope), value);
 }
 
+export function readCompactCards(scope: string): boolean {
+  return readString(viewPreferenceKey("compactCards", scope)) === "1";
+}
+
+export function writeCompactCards(scope: string, value: boolean): void {
+  const key = viewPreferenceKey("compactCards", scope);
+  if (value) writeString(key, "1");
+  else removeString(key);
+}
+
 export function readSortBy(scope: string): SortBy | null {
   return readString(viewPreferenceKey("sort", scope)) as SortBy | null;
 }

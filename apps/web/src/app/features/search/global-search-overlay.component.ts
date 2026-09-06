@@ -1,3 +1,4 @@
+import { CdkTrapFocus } from "@angular/cdk/a11y";
 import type { ElementRef } from "@angular/core";
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, viewChild } from "@angular/core";
 import { Router } from "@angular/router";
@@ -8,18 +9,13 @@ import type {
   CommentSearchResult,
   NoteSearchResult,
 } from "@kanera/shared/dto";
+import { actionMatchesQuery, CommandPaletteService, resolveDetail, type PaletteAction } from "../../core/search/command-palette.service";
+import { formatShortcut } from "../../core/keyboard/keyboard-shortcuts.service";
 import { GlobalSearchService } from "../../core/search/global-search.service";
 import { ThemeService } from "../../core/theme/theme.service";
 import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 
-type PaletteCommand = {
-  kind: "command";
-  id: string;
-  label: string;
-  detail: string;
-  icon: string;
-  run: () => void;
-};
+type PaletteCommand = Omit<PaletteAction, "detail" | "keys"> & { kind: "command"; detail: string; keys: string[][] | null };
 
 type FlatResult =
   | PaletteCommand
@@ -32,17 +28,18 @@ type FlatResult =
   selector: "k-global-search-overlay",
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [CdkTrapFocus],
   template: `
     @if (search.isOpen()) {
       <div class="backdrop" (click)="search.close()">
-        <div class="panel" role="dialog" aria-label="Search" (click)="$event.stopPropagation()">
+        <div class="panel" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-label="Search" (click)="$event.stopPropagation()">
           <div class="search-row">
             <i class="ti ti-search"></i>
             <input
               #searchInput
               type="text"
               class="search-input"
-              placeholder="Search cards, notes, comments, attachments…"
+              placeholder="Search or type a command…"
               autocomplete="off"
               spellcheck="false"
               role="combobox"
@@ -81,11 +78,19 @@ type FlatResult =
                       <span class="row-title">{{ command.label }}</span>
                       <span class="meta">{{ command.detail }}</span>
                     </span>
+                    @if (command.keys; as keys) {
+                      <span class="command-keys" aria-hidden="true">
+                        @for (step of keys; track $index; let last = $last) {
+                          @for (key of step; track $index) { <kbd class="k-kbd">{{ key }}</kbd> }
+                          @if (!last) { <span class="then">then</span> }
+                        }
+                      </span>
+                    }
                     <i class="ti ti-arrow-right command-arrow" aria-hidden="true"></i>
                   </button>
                 }
               }
-              @if (flat().length === 0 && !search.loading()) {
+              @if (flat().length === 0 && !search.loading() && hasQuery()) {
                 <div class="empty" role="status" aria-live="polite">
                   <i class="ti ti-mood-empty"></i>
                   <span>No results for "{{ search.query() }}"</span>
@@ -278,8 +283,6 @@ type FlatResult =
       gap: 6px;
       font-size: 11px;
       font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
       color: var(--text-muted);
       padding: 10px 12px 4px;
     }
@@ -307,6 +310,8 @@ type FlatResult =
     .row.active { background: var(--surface-hover); }
 
     .command-row { align-items: center; }
+    .command-keys { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
+    .command-keys .then { font-size: 10px; color: var(--text-muted); margin: 0 2px; }
     .command-arrow { color: var(--text-muted); opacity: 0; transition: opacity 120ms ease; }
     .command-row.active .command-arrow { opacity: 1; }
 
@@ -386,6 +391,38 @@ type FlatResult =
 
     .empty .ti { font-size: 24px; }
 
+    /* ─── Responsive ─────────────────────────────────────────────────────────
+       Phones: the palette becomes a near-full-height sheet pinned to the top so the on-screen
+       keyboard, which eats the bottom half, never hides the results. dvh tracks that keyboard. */
+    @media (max-width: 640px) {
+      .backdrop { padding: 8px; align-items: stretch; }
+      .panel { max-width: none; max-height: calc(100dvh - 16px); }
+      .search-row { padding: 12px 14px; }
+      .search-input { font-size: 16px; } /* iOS zooms into inputs below 16px */
+      .esc { display: none; }
+      .row { gap: 10px; padding: 10px; }
+      .command-arrow { display: none; }
+      .command-keys { display: none; } /* no physical keyboard to teach */
+    }
+
+    /* Touch pointers need taller rows than the mouse-density default, and no hover-only affordances. */
+    @media (pointer: coarse), (any-pointer: coarse) {
+      .row { min-height: 56px; }
+      .command-row { min-height: 48px; }
+      .command-arrow { display: none; }
+      .command-keys { display: none; }
+    }
+
+    /* Short landscape viewports: keep the search row visible and let results take what is left. */
+    @media (max-height: 520px) {
+      .backdrop { padding-top: 8px; }
+      .panel { max-height: calc(100dvh - 16px); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .backdrop, .panel { animation: none; }
+    }
+
     @keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
     @keyframes slide-in { from { opacity: 0; transform: scale(0.98) translateY(-6px) } to { opacity: 1; transform: none } }
     @keyframes spin { to { transform: rotate(360deg) } }
@@ -395,6 +432,7 @@ export class GlobalSearchOverlayComponent {
   readonly search = inject(GlobalSearchService);
   private readonly router = inject(Router);
   private readonly theme = inject(ThemeService);
+  private readonly palette = inject(CommandPaletteService);
   protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
 
   private readonly inputEl = viewChild<ElementRef<HTMLInputElement>>("searchInput");
@@ -407,30 +445,28 @@ export class GlobalSearchOverlayComponent {
   readonly hasQuery = computed(() => this.search.query().trim().length > 0);
   readonly showResults = computed(() => this.search.isOpen());
 
+  /**
+   * Actions first (create, toggle), navigation after, both filtered by the query so the same box that
+   * finds a card also finds "Create a new board" when you type "board". Content results follow below,
+   * so a query like "design" shows the matching verbs and the matching cards together.
+   */
   readonly commands = computed<PaletteCommand[]>(() => {
     const query = this.search.query().trim();
-    const commands: PaletteCommand[] = [
-      { kind: "command", id: "home", label: "Go to Home", detail: "Workspace overview", icon: "home", run: () => void this.router.navigate(["/"]) },
-      { kind: "command", id: "my-cards", label: "Go to My Cards", detail: "Your work across boards", icon: "user-check", run: () => void this.router.navigate(["/my-cards"]) },
-      { kind: "command", id: "team-cards", label: "Go to Team Cards", detail: "Team work across boards", icon: "users", run: () => void this.router.navigate(["/team-cards"]) },
-      { kind: "command", id: "portfolio", label: "Go to Portfolio", detail: "Board health and progress", icon: "chart-dots-3", run: () => void this.router.navigate(["/portfolio"]) },
-      { kind: "command", id: "settings", label: "Open Settings", detail: "Workspace and account preferences", icon: "settings", run: () => void this.router.navigate(["/settings"]) },
-      { kind: "command", id: "theme", label: `Switch to ${this.theme.theme() === "dark" ? "light" : "dark"} mode`, detail: "Change the interface theme", icon: this.theme.theme() === "dark" ? "sun" : "moon", run: () => this.theme.toggle() },
+    const dark = this.theme.theme() === "dark";
+    const navigation: PaletteAction[] = [
+      { id: "theme", label: `Switch to ${dark ? "light" : "dark"} mode`, detail: "Change the interface theme", icon: dark ? "sun" : "moon", keywords: ["theme", "toggle", "appearance", "dark", "light"], run: () => this.theme.toggle() },
+      { id: "home", label: "Go to Home", detail: "Workspace overview", icon: "home", keys: "g h", run: () => void this.router.navigate(["/"]) },
+      { id: "my-cards", label: "Go to My Cards", detail: "Your work across boards", icon: "user-check", keys: "g m", run: () => void this.router.navigate(["/my-cards"]) },
+      { id: "team-cards", label: "Go to Team Cards", detail: "Team work across boards", icon: "users", keys: "g t", run: () => void this.router.navigate(["/team-cards"]) },
+      { id: "portfolio", label: "Go to Portfolio", detail: "Board health and progress", icon: "chart-dots-3", keys: "g p", run: () => void this.router.navigate(["/portfolio"]) },
+      { id: "settings", label: "Open Settings", detail: "Workspace and account preferences", icon: "settings", keys: "g s", run: () => void this.router.navigate(["/settings"]) },
     ];
-    const boardMatch = /^\/b\/([^/?]+)/.exec(this.router.url ?? "");
-    if (boardMatch) {
-      commands.unshift({
-        kind: "command",
-        id: "new-card",
-        label: "Create a new card",
-        detail: "Add work to this board",
-        icon: "square-rounded-plus",
-        // The palette lives above the routed page. This narrow event keeps it decoupled from the
-        // route-scoped BoardState while still opening the board's one canonical composer.
-        run: () => window.dispatchEvent(new CustomEvent("kanera:new-card")),
+    return [...this.palette.actions(), ...navigation]
+      .filter((action) => (action.when?.() ?? true) && actionMatchesQuery(action, query))
+      .map((action): PaletteCommand => {
+        const keys = typeof action.keys === "function" ? action.keys() : action.keys;
+        return { ...action, kind: "command", detail: resolveDetail(action.detail), keys: keys ? formatShortcut(keys) : null };
       });
-    }
-    return query ? [] : commands;
   });
 
   // Group offsets into the flattened list used for keyboard navigation.

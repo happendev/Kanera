@@ -1,3 +1,6 @@
+import { CdkTrapFocus } from "@angular/cdk/a11y";
+import { KeyboardShortcutsService } from "../../core/keyboard/keyboard-shortcuts.service";
+import { ToastService } from "../../shared/toast.service";
 import type { CdkDragDrop, CdkDragMove } from "@angular/cdk/drag-drop";
 import { CdkDrag, CdkDragHandle, CdkDragPreview, CdkDropList, moveItemInArray, transferArrayItem } from "@angular/cdk/drag-drop";
 import { CdkScrollable } from "@angular/cdk/scrolling";
@@ -69,6 +72,7 @@ import { MemberPickerPopover } from "./member-picker.popover";
 import { SelectPickerPopover } from "./select-picker.popover";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
 import { BoardMirrorsService } from "../board-mirrors/board-mirrors.service";
+import { formatFeedTime } from "../../shared/date-format";
 
 const CHECKLIST_DRAG_SCROLL_EDGE_PX = 80;
 const CHECKLIST_DRAG_SCROLL_MAX_STEP_PX = 20;
@@ -93,7 +97,7 @@ export function checklistDragScrollStep(pointerY: number, top: number, bottom: n
 @Component({
   selector: "k-card-detail",
   standalone: true,
-  imports: [
+  imports: [CdkTrapFocus, 
     NgOptimizedImage,
     NgTemplateOutlet,
     CdkDropList,
@@ -123,6 +127,7 @@ export function checklistDragScrollStep(pointerY: number, top: number, bottom: n
   styleUrl: "./card-detail.component.scss",
 })
 export class CardDetailComponent {
+  private readonly toasts = inject(ToastService);
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthService);
   private readonly editorDrafts = inject(EditorDrafts);
@@ -140,6 +145,7 @@ export class CardDetailComponent {
   private readonly notifications = inject(NotificationsService);
   private readonly mirrors = inject(BoardMirrorsService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly shortcuts = inject(KeyboardShortcutsService);
   protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
   private readonly customFieldSaveKeys = new Map<string, string>();
   readonly imageLightbox = inject(ImageLightboxService);
@@ -262,6 +268,16 @@ export class CardDetailComponent {
   readonly members = input<WireBoardMemberUser[]>([]);
   readonly assigneeIds = input<string[]>([]);
   readonly attachments = input<CardAttachmentRow[]>([]);
+  /**
+   * Attachments whose delete is deferred behind an undo toast. They vanish from every surface
+   * (list, lightbox, cover) at once while the DELETE waits for the toast to expire; Undo just
+   * clears the id. Keyed locally because the store's rows are owned by the realtime feed.
+   */
+  private readonly pendingDeletedAttachmentIds = signal<ReadonlySet<string>>(new Set());
+  readonly visibleAttachments = computed(() => {
+    const hidden = this.pendingDeletedAttachmentIds();
+    return hidden.size === 0 ? this.attachments() : this.attachments().filter((a) => !hidden.has(a.id));
+  });
   readonly lightboxAttachmentId = input<string | null | undefined>();
   readonly checklists = input<WireCardChecklist[]>([]);
   readonly appliedChecklistTemplateIds = input<string[]>([]);
@@ -291,7 +307,7 @@ export class CardDetailComponent {
   readonly attachmentDragActive = signal(false);
   // Keep every format the shared lightbox can render in attachment order so navigation can cross
   // images, playback media, and documents without exposing download-only files in the sequence.
-  readonly lightboxAttachments = computed(() => this.attachments()
+  readonly lightboxAttachments = computed(() => this.visibleAttachments()
     .flatMap((attachment) => {
       const mediaType = attachmentPreviewType(attachment.mimeType, attachment.fileName);
       const src = visibleSignedMediaUrl(attachment.url);
@@ -308,7 +324,7 @@ export class CardDetailComponent {
     .map(({ id: _id, ...item }) => item));
   // Attachment presentation is stable until the attachment collection changes. Precomputing it
   // avoids repeating MIME, signed-URL, size, and date formatting work on unrelated signal updates.
-  readonly attachmentDisplayById = computed(() => new Map(this.attachments().map((attachment) => [
+  readonly attachmentDisplayById = computed(() => new Map(this.visibleAttachments().map((attachment) => [
     attachment.id,
     {
       isImage: this.isImageMime(attachment.mimeType),
@@ -351,7 +367,7 @@ export class CardDetailComponent {
     const card = this.card();
     const coverId = card.coverAttachmentId;
     const summaryCoverUrl = "coverUrl" in card ? card.coverUrl : null;
-    const resolved = coverId ? (this.attachments().find((a) => a.id === coverId)?.url ?? summaryCoverUrl) : summaryCoverUrl;
+    const resolved = coverId ? (this.visibleAttachments().find((a) => a.id === coverId)?.url ?? summaryCoverUrl) : summaryCoverUrl;
     // Suppress a cover whose signed token has already expired (e.g. from a
     // restored offline snapshot) so it does not render as a broken 404 before
     // the live card detail fetch supplies a freshly-signed URL. See
@@ -455,6 +471,18 @@ export class CardDetailComponent {
   readonly currentList = computed(() => this.state.lists().find((l) => l.id === this.card().listId));
   readonly otherLists = computed(() => this.state.visibleLists().filter((l) => l.id !== this.card().listId));
 
+  /** The list popover anchors to its trigger; from the keyboard, find that trigger in the panel. */
+  openMoveToListFromKeyboard() {
+    if (this.moveToListOpen()) {
+      this.moveToListOpen.set(false);
+      return;
+    }
+    const trigger = this.panel()?.nativeElement.querySelector<HTMLElement>(".move-list-btn");
+    if (!trigger) return;
+    this.moveToListAnchor.set(trigger);
+    this.moveToListOpen.set(true);
+  }
+
   toggleMoveToList(e: MouseEvent) {
     const next = !this.moveToListOpen();
     if (next && e.currentTarget instanceof HTMLElement) this.moveToListAnchor.set(e.currentTarget);
@@ -490,6 +518,7 @@ export class CardDetailComponent {
     this.duplicating.set(true);
     try {
       await this.api.post(`/cards/${this.card().id}/duplicate`, {});
+      this.toasts.success("Card duplicated.", "copy");
       this.actionsMenuOpen.set(false);
     } finally {
       this.duplicating.set(false);
@@ -514,6 +543,7 @@ export class CardDetailComponent {
     this.copyToBoardOpen.set(false);
     this.actionsMenuOpen.set(false);
     await this.api.post(`/cards/${this.card().id}/duplicate`, { boardId: target.boardId, listId: target.listId });
+      this.toasts.success("Card copied to the selected board.", "copy-plus");
   }
 
   async moveToBoard(target: BoardPickerPick) {
@@ -521,6 +551,7 @@ export class CardDetailComponent {
     this.moveToBoardOpen.set(false);
     this.actionsMenuOpen.set(false);
     await this.api.post(`/cards/${this.card().id}/move-to-board`, { boardId: target.boardId });
+    this.toasts.success("Card moved to the selected board.", "arrow-right");
     this.close.emit();
   }
 
@@ -531,7 +562,6 @@ export class CardDetailComponent {
   readonly editingDescription = signal(false);
   readonly editorInitialValue = signal("");
   readonly recoveredDescriptionDraft = signal(false);
-  readonly confirmingDelete = signal(false);
   readonly archiving = signal(false);
   readonly activeTab = signal<'detail' | 'comments'>('detail');
   readonly wideLayout = signal(false);
@@ -705,6 +735,20 @@ export class CardDetailComponent {
   readonly detailReady = computed(() => this.hasDetail() || !this.detailLoading());
 
   constructor() {
+    // Card shortcuts, alive only while a card is open, so they sit above the board's bindings and
+    // the sheet shows them only then. Every action here is one the panel already exposes as a
+    // button; the shortcut just skips the pointer travel.
+    const editable = () => this.canEdit();
+    this.shortcuts.registerAll("Card", [
+      { keys: "e", label: "Edit title", when: editable, run: () => this.editTitle() },
+      { keys: "a", label: "Assign members", when: editable, run: () => this.memberPickerOpen.update((v) => !v) },
+      { keys: "l", label: "Edit labels", when: editable, run: () => this.labelPickerOpen.update((v) => !v) },
+      { keys: "d", label: "Set due date", when: editable, run: () => this.dueDatePickerOpen.update((v) => !v) },
+      { keys: "m", label: "Move to list", when: editable, run: () => this.openMoveToListFromKeyboard() },
+      { keys: "mod+enter", label: "Mark complete or incomplete", when: editable, run: () => void this.toggleCompletion() },
+      { keys: "s", label: "Watch or unwatch card", run: () => void this.toggleCardWatch() },
+      { keys: "mod+shift+c", label: "Copy card link", run: () => void this.copyCardLink() },
+    ], this.destroyRef);
     effect((onCleanup) => {
       this.unsavedWork.setDirty(this.unsavedDraftSource, this.recoveredDescriptionDraft());
       onCleanup(() => this.unsavedWork.setDirty(this.unsavedDraftSource, false));
@@ -1018,8 +1062,8 @@ export class CardDetailComponent {
         if (this.detailRealtimeVersion === realtimeVersion) {
           this.applyPublishedDescription(detail.card.description ?? "");
         }
-        const boardSnapshot = this.state.snapshot();
-        if (boardSnapshot) void this.offlineCache.saveBoard(boardId, boardSnapshot).catch(() => undefined);
+        // BoardPage persists full collections. Global Work also hosts this component with only
+        // one card in BoardState, so saving its snapshot here would truncate a cached board.
         const cached = await this.offlineCache.loadCardDetail(cardId).catch(() => null);
         if (seq === this.detailLoadSeq) {
           void this.offlineCache.saveCardDetail(cardId, detail, cached?.feed ?? []).catch(() => undefined);
@@ -2166,8 +2210,29 @@ export class CardDetailComponent {
 
   async confirmDeleteAttachment(attachmentId: string, fileName: string) {
     if (!this.canEdit()) return;
-    if (!await this.confirm.open({ title: `Delete "${fileName}"?`, message: "This cannot be undone.", danger: true })) return;
-    await this.api.delete(`/cards/${this.card().id}/attachments/${attachmentId}`);
+    const cardId = this.card().id;
+    const setHidden = (hidden: boolean) => this.pendingDeletedAttachmentIds.update((ids) => {
+      const next = new Set(ids);
+      if (hidden) next.add(attachmentId); else next.delete(attachmentId);
+      return next;
+    });
+    // Undo instead of confirm: hide now, DELETE only once the toast is gone. The row comes back if
+    // the user undoes or the request fails; on success the realtime attachment:deleted event drops it
+    // from the store and the local hide becomes redundant.
+    setHidden(true);
+    this.toasts.undoable({
+      message: `"${fileName}" deleted.`,
+      icon: "trash",
+      undo: () => setHidden(false),
+      commit: async () => {
+        try {
+          await this.api.delete(`/cards/${cardId}/attachments/${attachmentId}`);
+        } catch {
+          setHidden(false);
+          this.toasts.info(`Couldn't delete "${fileName}".`, "alert-triangle");
+        }
+      },
+    });
   }
 
   formatBytes(n: number): string {
@@ -2206,27 +2271,29 @@ export class CardDetailComponent {
     if (!this.canArchive() || this.archiving()) return;
     this.archiving.set(true);
     try {
-      const card = await this.api.patch<WireCard>(`/cards/${this.card().id}/archive`, { archived });
+      const cardId = this.card().id;
+      const card = await this.api.patch<WireCard>(`/cards/${cardId}/archive`, { archived });
       this.state.updateCard(card);
-      this.confirmingDelete.set(false);
+      // Archive commits immediately and Undo issues the reverse PATCH; see card-actions-menu.
+      if (archived) {
+        this.toasts.undoable({
+          message: "Card archived.",
+          icon: "archive",
+          undo: async () => {
+            const restored = await this.api.patch<WireCard>(`/cards/${cardId}/archive`, { archived: false });
+            this.state.updateCard(restored);
+          },
+        });
+      } else {
+        this.toasts.success("Card restored.", "archive-off");
+      }
     } finally {
       this.archiving.set(false);
     }
   }
 
   formatFeedTime(createdAt: string | Date): string {
-    const date = new Date(createdAt as string);
-    const diffMs = Date.now() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60_000);
-    if (diffMins < 1) return "just now";
-    if (diffMins < 60) return `${diffMins} minute${diffMins === 1 ? "" : "s"} ago`;
-    return date.toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    return formatFeedTime(createdAt);
   }
 
 }

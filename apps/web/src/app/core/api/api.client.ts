@@ -15,6 +15,9 @@ export class ApiClient {
   private readonly reloadAfterOrganisationSwitch = inject(ORGANISATION_SWITCH_NAVIGATOR);
 
   async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    if (untracked(() => this.auth.offlineSession?.())) {
+      throw new ApiError(0, { message: "You’re viewing an offline copy. Reconnect to continue." });
+    }
     const method = (init.method ?? "GET").toUpperCase();
     // Point-in-time connectivity guard. Read it untracked: request() is frequently called from
     // within reactive contexts (e.g. BoardPage's board-load effect calls loadBoard() synchronously),
@@ -82,7 +85,7 @@ export class ApiClient {
     opts: { onProgress?: (pct: number) => void; signal?: AbortSignal } = {},
   ): Promise<T> {
     // Same point-in-time, untracked connectivity guard as request() (see note there).
-    if (!untracked(() => this.sockets.displayedOnline())) {
+    if (untracked(() => this.auth.offlineSession?.()) || !untracked(() => this.sockets.displayedOnline())) {
       throw new ApiError(0, { message: "You're offline - changes are paused" });
     }
 
@@ -188,8 +191,12 @@ export class ApiClient {
     return this.request<T>(path, { method: "PUT", body: JSON.stringify(body) });
   }
   delete<T>(path: string, body?: unknown) {
+    // keepalive lets a DELETE outlive its document. Undo toasts defer hard deletes until the toast
+    // expires, and ToastService flushes them on pagehide; without keepalive the browser would
+    // abort those requests and the "deleted" item would silently reappear on the next load.
     return this.request<T>(path, {
       method: "DELETE",
+      keepalive: true,
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
   }

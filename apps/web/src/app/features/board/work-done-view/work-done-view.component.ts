@@ -1,3 +1,4 @@
+import { EmptyStateComponent } from "../../../shared/empty-state.component";
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from "@angular/core";
 import type {
   WorkDoneDaySummary,
@@ -12,7 +13,7 @@ import type { WireCardSummary } from "@kanera/shared/events";
 import type { WorkViewLens } from "@kanera/shared/schema";
 import { ApiClient } from "../../../core/api/api.client";
 import { ActivityStripComponent, type ActivityStripSeries } from "../../../shared/activity-strip.component";
-import { StatusToastComponent } from "../../../shared/status-toast.component";
+import { ToastService } from "../../../shared/toast.service";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { addDays, localDateKey, startOfLocalDay, viewerTimeZone } from "../../../shared/day-key.util";
 import { mediaQuerySignal } from "../../../shared/media-query.signal";
@@ -33,6 +34,7 @@ import {
 import { WorkDoneDayComponent, type WorkDoneBoardSummary } from "./work-done-day.component";
 import { readWorkDonePreferences, updateWorkDonePreferences } from "./work-done-preferences";
 import type { CardDayDigest, WorkDoneDay, WorkDoneLayout, WorkDoneRangePreset } from "./work-done.types";
+import { formatDate, formatDateRange } from "../../../shared/date-format";
 
 type WorkDoneList = {
   id: string;
@@ -98,11 +100,10 @@ function toDateInputValue(date: Date): string {
 @Component({
   selector: "k-work-done-view",
   standalone: true,
-  imports: [
+  imports: [EmptyStateComponent, 
     ActivityStripComponent,
     DateRangePickerPopover,
     SegmentedComponent,
-    StatusToastComponent,
     TooltipDirective,
     WorkDoneDayComponent,
   ],
@@ -112,6 +113,7 @@ function toDateInputValue(date: Date): string {
 })
 export class WorkDoneViewComponent {
   private readonly api = inject(ApiClient);
+  private readonly toasts = inject(ToastService);
   // The board and global-work hosts provide BoardState in this view's DI scope, so
   // label/custom-field filters resolve against the same workspace catalogs the live board cards use.
   private readonly state = inject(BoardState, { optional: true });
@@ -155,7 +157,6 @@ export class WorkDoneViewComponent {
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly rangePickerOpen = signal(false);
-  readonly copied = signal(false);
   private readonly events = signal<WorkDoneEvent[]>([]);
   private readonly stripDays = signal<WorkDoneDaySummary[]>([]);
   private readonly localCollapsedDayKeys = signal<ReadonlySet<string>>(new Set());
@@ -308,12 +309,9 @@ export class WorkDoneViewComponent {
     if (from.getTime() === to.getTime()) {
       if (to.getTime() === this.today.getTime()) return "Today";
       if (to.getTime() === addDays(this.today, -1).getTime()) return "Yesterday";
-      return to.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+      return formatDate(to, "long");
     }
-    const sameMonth = from.getMonth() === to.getMonth() && from.getFullYear() === to.getFullYear();
-    const fromLabel = from.toLocaleDateString(undefined, sameMonth ? { day: "numeric" } : { day: "numeric", month: "short" });
-    const toLabel = to.toLocaleDateString(undefined, { day: "numeric", month: "short" });
-    return `${fromLabel} – ${toLabel}`;
+    return formatDateRange(from, to);
   });
 
   readonly fromInputValue = computed(() => toDateInputValue(this.from()));
@@ -469,8 +467,7 @@ export class WorkDoneViewComponent {
   private async copyText(text: string) {
     try {
       await navigator.clipboard.writeText(text);
-      this.copied.set(true);
-      window.setTimeout(() => this.copied.set(false), 2000);
+      this.toasts.success("Copied to clipboard.", "clipboard-check");
     } catch {
       this.error.set("Could not copy to the clipboard.");
     }

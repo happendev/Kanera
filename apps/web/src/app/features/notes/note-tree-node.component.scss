@@ -14,7 +14,7 @@
   font-size: 13px;
   user-select: none;
   position: relative;
-  transition: background-color 0.12s, color 0.12s;
+  transition: background-color var(--motion-fast), color var(--motion-fast);
 
   &:hover {
     background: var(--surface-2);
@@ -121,10 +121,34 @@
 }
 
 .nt-actions {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 2px;
-  flex: 0 0 auto;
+  flex: 0 0 0;
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition: opacity var(--motion-fast) ease;
+
+  // Match checklist rows: actions stay out of the content flow until the row is hovered or reached
+  // from the keyboard, while an open menu keeps its trigger visible for orientation and dismissal.
+  &.is-open,
+  &:focus-within {
+    flex-basis: 28px;
+    width: 28px;
+    opacity: 1;
+    overflow: visible;
+    pointer-events: auto;
+  }
+}
+
+.nt-row:hover .nt-actions {
+  flex-basis: 28px;
+  width: 28px;
+  opacity: 1;
+  overflow: visible;
+  pointer-events: auto;
 }
 
 .nt-act {
@@ -155,5 +179,22 @@
   &:disabled {
     cursor: not-allowed;
     opacity: 0.45;
+  }
+}
+
+.nt-actions-menu {
+  // Placement is owned by kAnchoredPanel; appearance and row behaviour by the shared `.k-menu` /
+  // `.k-menu-item` primitives and the `kMenu` directive. Only the width is this menu's own.
+  min-width: 168px;
+}
+
+@media (hover: none) {
+  // Touch has no hover reveal, so retain one compact action entry point instead of three buttons.
+  .nt-actions {
+    flex-basis: 28px;
+    width: 28px;
+    opacity: 1;
+    overflow: visible;
+    pointer-events: auto;
   }
 }

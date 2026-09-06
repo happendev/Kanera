@@ -112,23 +112,7 @@ textarea {
   font-size: 13px;
 }
 
-.empty-state {
-  display: grid;
-  justify-items: center;
-  gap: 10px;
-  padding: 48px 16px;
-  color: var(--muted-foreground);
-  text-align: center;
-}
 
-.empty-state i {
-  font-size: 28px;
-}
-
-.empty-state h2,
-.empty-state p {
-  margin: 0;
-}
 
 @media (max-width: 720px) {
   .share-target {

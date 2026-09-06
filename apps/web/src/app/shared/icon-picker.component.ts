@@ -123,9 +123,9 @@ const POPULAR_ICONS = [
     .ip-dropdown {
       width: var(--ap-width, 320px);
       background: var(--surface-overlay);
-      border: 1px solid var(--border);
+      border: 1px solid var(--overlay-border);
       border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-sm);
+      box-shadow: var(--shadow-lg);
       overflow: hidden;
     }
 
@@ -166,8 +166,6 @@ const POPULAR_ICONS = [
       font-size: 11px;
       font-weight: 500;
       color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
     }
 
     .ip-section-hint {

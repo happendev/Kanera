@@ -107,7 +107,7 @@
   font: inherit;
   font-size: 13px;
   cursor: pointer;
-  transition: background-color 0.12s, border-color 0.12s, color 0.12s;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
 
   i {
     color: var(--text-muted);
@@ -243,8 +243,6 @@
     color: var(--text-muted);
     font-size: 10px;
     font-weight: 650;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
   }
 }
 
@@ -341,7 +339,6 @@
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.02em;
-  text-transform: uppercase;
 }
 
 // A day with no cards is a full cell the same height as every other day in its row, so a week reads
@@ -427,7 +424,7 @@
   position: relative;
   box-sizing: border-box;
   container-type: inline-size;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color var(--motion-fast), background var(--motion-fast);
 
   &:hover {
     border-color: var(--border-strong);
@@ -675,7 +672,7 @@ k-card-labels.cal-label-row {
   display: block;
   height: 100%;
   background: var(--accent);
-  transition: width 0.2s ease;
+  transition: width var(--motion-base) ease;
 }
 
 .cal-card.is-completed .cal-progress-fill {

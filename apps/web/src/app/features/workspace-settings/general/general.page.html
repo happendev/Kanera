@@ -1,9 +1,12 @@
+<!-- Everything on this page saves as you go. The status chip is the visible contract for that; without
+     it a blur or toggle looked like it did nothing. Settings do not explain autosave in copy, the chip is the tell. -->
+<k-autosave-status [state]="settings.autosave.state()" />
 <div class="board-form">
-  <div style="display:flex;align-items:center;gap:8px">
+  <div class="row">
     <k-icon-picker [value]="settings.icon()" (valueChange)="settings.updateWorkspaceIcon($event)" />
     <k-color-picker [value]="settings.accentColor()" (valueChange)="settings.updateWorkspaceAccentColor($event)" />
-    <input name="name" [placeholder]="settings.entityLabelTitle() + ' name'" [value]="settings.name()" (input)="settings.updateWorkspaceName($any($event.target).value)" (blur)="settings.saveWorkspaceNameNow()"
-      (keydown.enter)="settings.saveWorkspaceNameNow(); $event.preventDefault()" required style="flex:1" />
+    <input name="name" [attr.aria-label]="settings.entityLabelTitle() + ' name'" [placeholder]="settings.entityLabelTitle() + ' name'" [value]="settings.name()" (input)="settings.updateWorkspaceName($any($event.target).value)" (blur)="settings.saveWorkspaceNameNow()"
+      (keydown.enter)="settings.saveWorkspaceNameNow(); $event.preventDefault()" required class="grow" />
   </div>
 </div>
 @if (settings.isStandalone()) {

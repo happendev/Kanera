@@ -127,3 +127,52 @@ void test("parallel invite acceptances serialize at the paid seat cap", async ()
     env.KANERA_DEPLOYMENT_MODE = previousMode;
   }
 });
+
+void test("a reusable invite link cannot lift a suspended membership", async () => {
+  const app = await buildIntegrationServer();
+  const suspended = await signup(app, "suspended-member@example.com", "Suspended Home Org");
+  const host = await signup(app, "suspending-host@example.com", "Suspending Host Org");
+  const token = await createInvite(app, host.accessToken, { orgRole: "admin" });
+
+  // Join once through the link, then get suspended by the platform (only staff and plan downgrades
+  // set member-level suspendedAt; org admins have no unsuspend endpoint).
+  const joined = await app.inject({
+    method: "POST",
+    url: "/invites/accept",
+    headers: { authorization: `Bearer ${suspended.accessToken}` },
+    payload: { token },
+  });
+  assert.equal(joined.statusCode, 200, joined.body);
+  await db.update(clientMembers).set({ suspendedAt: new Date(), clientRole: "member" }).where(and(
+    eq(clientMembers.clientId, host.user.clientId),
+    eq(clientMembers.userId, suspended.user.id),
+  ));
+
+  // The still-valid link must not clear the suspension or restore the admin role.
+  const retried = await app.inject({
+    method: "POST",
+    url: "/invites/accept",
+    headers: { authorization: `Bearer ${suspended.accessToken}` },
+    payload: { token },
+  });
+  assert.equal(retried.statusCode, 403, retried.body);
+  const [membership] = await db.select({ suspendedAt: clientMembers.suspendedAt, clientRole: clientMembers.clientRole })
+    .from(clientMembers)
+    .where(and(eq(clientMembers.clientId, host.user.clientId), eq(clientMembers.userId, suspended.user.id)))
+    .limit(1);
+  assert.ok(membership?.suspendedAt);
+  assert.equal(membership?.clientRole, "member");
+
+  // A removed (not suspended) member may still re-join through the link.
+  await db.update(clientMembers).set({ suspendedAt: null, removedAt: new Date() }).where(and(
+    eq(clientMembers.clientId, host.user.clientId),
+    eq(clientMembers.userId, suspended.user.id),
+  ));
+  const rejoined = await app.inject({
+    method: "POST",
+    url: "/invites/accept",
+    headers: { authorization: `Bearer ${suspended.accessToken}` },
+    payload: { token },
+  });
+  assert.equal(rejoined.statusCode, 200, rejoined.body);
+});

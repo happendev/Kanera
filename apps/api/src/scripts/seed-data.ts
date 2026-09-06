@@ -5,6 +5,8 @@ import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-label
 import {
   ACTIVITY_ACTION,
   activityEvents,
+  automationActions,
+  automations,
   boardMembers,
   boards,
   boardSeparators,
@@ -118,6 +120,15 @@ type SeedLabel = {
   color: ColorToken;
 };
 
+type SeedAutomation = {
+  enabled: boolean;
+  trigger: { type: "card_enters_list"; list: string };
+  actions: (
+    | { type: "add_assignees"; users: SeedUserKey[] }
+    | { type: "set_due_date"; offsetDays: number; slot: CardDueDateSlot }
+  )[];
+};
+
 type SeedAttachment = {
   asset: AssetKey;
   uploadedBy: SeedUserKey;
@@ -208,6 +219,7 @@ type SeedWorkspace = {
   lists: SeedList[];
   customFields: SeedCustomField[];
   labels: SeedLabel[];
+  automations?: SeedAutomation[];
   notes?: SeedNote[];
   boards: SeedBoard[];
   // When set, cards in this workspace are given a plausible "worked-in" history: their created and
@@ -476,6 +488,8 @@ export type SeedDatabaseOptions = {
    */
   requireBlankDatabase?: boolean;
   password?: string;
+  // Admin demo resets can preserve an existing credential without ever recovering its plaintext.
+  passwordHash?: string;
   paid?: boolean;
   analyticsExcluded?: boolean;
 };
@@ -2808,6 +2822,16 @@ function buildMarketingWorkspace(): SeedWorkspace {
       { name: "Internal Request", color: "gray" },
       { name: "Blocked", color: "red" },
     ],
+    automations: [
+      {
+        enabled: true,
+        trigger: { type: "card_enters_list", list: "Review & Approval" },
+        actions: [
+          { type: "add_assignees", users: ["amelia"] },
+          { type: "set_due_date", offsetDays: 2, slot: "endOfWorkDay" },
+        ],
+      },
+    ],
     notes: [
       {
         title: "Autumn Campaign Launch Plan",
@@ -4087,7 +4111,7 @@ async function createAttachmentRow(input: {
 export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<SeedDatabaseResult> {
   if (options.requireBlankDatabase ?? true) await assertBlankDatabase();
 
-  const passwordHash = await hashPassword(options.password ?? DEV_SEED_SHARED_PASSWORD);
+  const passwordHash = options.passwordHash ?? await hashPassword(options.password ?? DEV_SEED_SHARED_PASSWORD);
   const workspaceSeeds = buildWorkspaceSeeds();
   const summary: SeedSummary = {
     users: 0,
@@ -4122,7 +4146,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
       const [client] = await tx
         .insert(clients)
         .values({
-          name: "Happen Software",
+          name: "Happen Software Demo",
           storageConfig,
           analyticsExcluded: options.analyticsExcluded ?? false,
           // Keep hosted dev seeds aligned with real hosted signup: the seeded org starts as a
@@ -4719,6 +4743,36 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
           )
           .returning();
         const listByName = new Map(listRows.map((row) => [row.name, row]));
+
+        for (const [automationIndex, automationSeed] of (workspaceSeed.automations ?? []).entries()) {
+          const triggerList = listByName.get(automationSeed.trigger.list);
+          if (!triggerList) throw new Error(`Missing automation trigger list '${automationSeed.trigger.list}' in workspace '${workspaceSeed.name}'.`);
+          const [automation] = await tx
+            .insert(automations)
+            .values({
+              workspaceId: workspace!.id,
+              enabled: automationSeed.enabled,
+              position: positionForIndex(automationIndex),
+              triggerType: automationSeed.trigger.type,
+              triggerListId: triggerList.id,
+              applyOnCreate: false,
+              applyOnMove: true,
+              createdAt: addHours(workspaceCreatedAt, 2),
+              updatedAt: addHours(workspaceCreatedAt, 2),
+            })
+            .returning();
+
+          await tx.insert(automationActions).values(automationSeed.actions.map((action, actionIndex) => ({
+            automationId: automation!.id,
+            type: action.type,
+            config: action.type === "add_assignees"
+              ? { userIds: action.users.map((user) => userIdByKey.get(user)!) }
+              : { offsetDays: action.offsetDays, slot: action.slot },
+            position: positionForIndex(actionIndex),
+            createdAt: addHours(workspaceCreatedAt, 2),
+            updatedAt: addHours(workspaceCreatedAt, 2),
+          })));
+        }
 
         const customFieldRows = await tx
           .insert(customFields)

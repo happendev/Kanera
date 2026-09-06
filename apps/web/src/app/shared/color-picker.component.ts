@@ -99,9 +99,9 @@ const COLOR_LABELS: Record<ColorToken, string> = {
     .cp-dropdown {
       width: var(--ap-width, 258px);
       background: var(--surface-overlay);
-      border: 1px solid var(--border);
+      border: 1px solid var(--overlay-border);
       border-radius: var(--radius-lg);
-      box-shadow: var(--shadow);
+      box-shadow: var(--shadow-lg);
       padding: 10px;
       overflow: auto;
       overscroll-behavior: contain;

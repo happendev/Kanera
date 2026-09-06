@@ -83,7 +83,7 @@
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  transition: border-color 0.15s, background-color 0.15s, color 0.15s;
+  transition: border-color var(--motion-fast), background-color var(--motion-fast), color var(--motion-fast);
 
   i {
     font-size: 15px;
@@ -122,7 +122,7 @@
 
 .aaf-no-config i {
   font-size: 14px;
-  color: var(--success, #16a34a);
+  color: var(--success);
 }
 
 // Stacks earlier than the page's 640px breakpoint: these fields are nested one level deeper than the

@@ -2,13 +2,13 @@ import { dto } from "@kanera/shared";
 import type { BoardTransferTarget, CompletedCardsResponse, DeletionImpactResponse, WorkDoneResponse, WorkDoneSummaryResponse } from "@kanera/shared/dto";
 import type { CompactCardSummary } from "@kanera/shared/events";
 import { compactCardCustomFieldValue, compactCardSummary } from "@kanera/shared/events";
-import { boardGroups, boardMembers, boardMirrors, boards, boardSeparators, cardCustomFieldValues, cardKeyPrefixReservations, cardLabels, cards, cardSummaryView, clientMembers, clients, lists, standaloneBoardGroups, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { boardGroups, boardMembers, boardMirrors, boards, boardSeparators, cardCustomFieldValues, cardKeyPrefixReservations, cardLabels, cards, cardSummaryView, clientGuestSeats, clientMembers, clients, lists, notifications, standaloneBoardGroups, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS } from "@kanera/shared/workspace-defaults";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, notExists, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
-import { assignedCardVisibility, assertBoardAccess, assertBoardManageAccess, assertWorkspaceAccess } from "../../lib/access.js";
+import { assignedCardVisibility, assertOrgRole, assertBoardAccess, assertBoardManageAccess, assertWorkspaceAccess } from "../../lib/access.js";
 import { loadAccessibleBoards } from "../../lib/accessible-boards.js";
 import { emitActivityFeedItem, recordActivity } from "../../lib/activity.js";
 import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
@@ -25,11 +25,13 @@ import { loadWorkspaceCustomFields } from "../../lib/custom-fields.js";
 import { deleteAttachmentFiles } from "../../lib/attachment-cleanup.js";
 import { assertGuestBoardLimit } from "../../lib/board-guest-limits.js";
 import { seedBoardMembersFromWorkspace } from "../../lib/board-membership.js";
+import { enrichNotifications } from "../../lib/notifications.js";
 import { prunePaidGuestSeatIfBelowLimit } from "../../lib/paid-guest-seats.js";
 import { ANALYTICS_EVENT_VERSION, analyticsCountBand, capturePremiumFeatureUsed, productAnalytics } from "../../lib/product-analytics.js";
 import { reactivatePlanArchivedBoardsIfRoom } from "../../lib/plan-conversion.js";
-import { assertBoardLimit, assertGuestsAllowed, hasBoardSyncEntitlement } from "../../lib/tier-limits.js";
-import { badRequest, notFound } from "../../lib/errors.js";
+import { assertBoardLimit, assertGuestsAllowed, hasBoardSyncEntitlement, lockTenant } from "../../lib/tier-limits.js";
+import { badRequest, forbidden, notFound } from "../../lib/errors.js";
+import { moveStandaloneBoard } from "../../lib/move-standalone-board.js";
 import { moveOrderedEntity } from "../../lib/move-ordered-entity.js";
 import { deleteExternalLinks } from "../../lib/external-links.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
@@ -37,7 +39,7 @@ import { between, neighbourPositions as resolveNeighbourPositions } from "../../
 import { rebalanceBoardGroups, rebalanceBoards } from "../../lib/rebalance.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { deleteWorkspaceCascade } from "../../lib/workspace-delete.js";
-import { emitBoardRebalancedToVisibleUsers, emitCardPriorityInvalidated, emitToBoard, emitToBoardAudience, emitToUser, emitToWorkspace } from "../../realtime/emit.js";
+import { emitBoardRebalancedToVisibleUsers, emitCardPriorityInvalidated, emitToBoard, emitToBoardAudience, emitToUser, emitToUserDurable, emitToWorkspace } from "../../realtime/emit.js";
 import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
 
 type BoardMemberUser = {
@@ -88,27 +90,32 @@ async function boardPayload(
   assignedUserId?: string,
   cardQuery: { includeCards?: boolean; listId?: string; limit?: number; offset?: number } = {},
 ) {
-  const [board] = await db.select().from(boards).where(eq(boards.id, boardId)).limit(1);
-  if (!board) throw notFound();
-  const [workspace] = await db
+  // Board and workspace context are needed together; one join avoids a serial round trip on
+  // every open without changing the access check performed by the caller.
+  const [context] = await db
     .select({
-      clientId: workspaces.clientId,
-      kind: workspaces.kind,
-      completedCardsActiveDays: workspaces.completedCardsActiveDays,
-      inactiveCardsDays: workspaces.inactiveCardsDays,
-      boardHealthEnabled: workspaces.boardHealthEnabled,
-      boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
-      boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
-      boardHealthInactiveEnabled: workspaces.boardHealthInactiveEnabled,
-      boardLinkingEnabled: workspaces.boardLinkingEnabled,
-      plan: clients.plan,
-      billingStatus: clients.billingStatus,
+      board: boards,
+      workspace: {
+        clientId: workspaces.clientId,
+        kind: workspaces.kind,
+        completedCardsActiveDays: workspaces.completedCardsActiveDays,
+        inactiveCardsDays: workspaces.inactiveCardsDays,
+        boardHealthEnabled: workspaces.boardHealthEnabled,
+        boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
+        boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
+        boardHealthInactiveEnabled: workspaces.boardHealthInactiveEnabled,
+        boardLinkingEnabled: workspaces.boardLinkingEnabled,
+        plan: clients.plan,
+        billingStatus: clients.billingStatus,
+      },
     })
-    .from(workspaces)
+    .from(boards)
+    .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
     .innerJoin(clients, eq(clients.id, workspaces.clientId))
-    .where(eq(workspaces.id, board.workspaceId))
+    .where(eq(boards.id, boardId))
     .limit(1);
-  if (!workspace) throw notFound();
+  if (!context) throw notFound();
+  const { board, workspace } = context;
 
   const [boardLists, boardCardSummaries, boardSeparatorsRows, boardCustomFields, boardMemberRows, boardLabels, checklistTemplates, participatingMirrors, workspaceCardKeyPrefixRows] = await Promise.all([
     db
@@ -128,6 +135,7 @@ async function boardPayload(
       // Load one sentinel row beyond the public page size so hasMore is known without a count scan.
       limit: cardQuery.limit === undefined ? undefined : cardQuery.limit + 1,
       offset: cardQuery.offset,
+      shownCustomFieldsOnly: true,
     }),
     db
       .select()
@@ -751,7 +759,14 @@ export async function boardRoutes(app: FastifyInstance) {
     const body = dto.moveBoardBody.parse(req.body);
     const [current] = await db.select().from(boards).where(eq(boards.id, id)).limit(1);
     if (!current) throw notFound();
-    await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
+    const access = await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
+    const [workspace] = await db.select({ kind: workspaces.kind }).from(workspaces).where(eq(workspaces.id, current.workspaceId));
+    if (!workspace) throw notFound();
+    if (workspace.kind === "board") {
+      assertOrgRole(req.auth, "admin");
+      if (access.clientId !== req.auth.cid) throw forbidden();
+      return moveStandaloneBoard(access.clientId, req.auth.sub, id, body);
+    }
 
     const prevPosition = current.position;
     const { position, rebalancedPositions } = await moveOrderedEntity({
@@ -780,7 +795,7 @@ export async function boardRoutes(app: FastifyInstance) {
       position,
       prevPosition,
     }, { workspaceId: current.workspaceId });
-    return { id, position };
+    return { id, position, positions: rebalancedPositions ?? [] };
   });
 
   app.patch("/boards/:id/background", async (req) => {
@@ -1191,59 +1206,93 @@ export async function boardRoutes(app: FastifyInstance) {
 
   app.delete("/boards/:id/members/:userId", async (req, reply) => {
     const { id, userId } = req.params as { id: string; userId: string };
-    const ctx = await assertBoardManageAccess(req.auth, id);
-    const [member] = await db
-      .select({ role: boardMembers.role, pinned: boardMembers.pinned, orgRole: clientMembers.clientRole, clientId: users.clientId })
-      .from(boardMembers)
-      .innerJoin(users, eq(users.id, boardMembers.userId))
-      .leftJoin(clientMembers, and(
-        eq(clientMembers.clientId, ctx.clientId),
-        eq(clientMembers.userId, boardMembers.userId),
-        isNull(clientMembers.suspendedAt),
-        isNull(clientMembers.removedAt),
-      ))
-      .where(and(eq(boardMembers.boardId, id), eq(boardMembers.userId, userId)))
-      .limit(1);
-    if (!member) throw notFound();
-    // A workspace admin's pinned row cannot be removed board-by-board; change their workspace role.
-    if (member.pinned || member.orgRole === "owner" || member.orgRole === "admin") {
-      throw badRequest("cannot remove an inherited board admin");
-    }
-    const [workspace] = await db
-      .select({ kind: workspaces.kind })
-      .from(workspaces)
-      .where(eq(workspaces.id, ctx.workspaceId))
-      .limit(1);
-    if (!workspace) throw notFound();
+    const voluntary = userId === req.auth.sub;
+    const ctx = voluntary ? await assertBoardAccess(req.auth, id) : await assertBoardManageAccess(req.auth, id);
+    // Observer users may leave, but a read-only credential must never gain mutation authority.
+    if (req.auth.authKind === "apiKey" && req.auth.apiKeyScope === "read") throw forbidden("write-capable credential required");
     const cleanup = await db.transaction(async (tx) => {
+      // Serialize capacity changes with guest grants so the recorded seat impact is authoritative.
+      await lockTenant(ctx.clientId, tx);
+      const [member] = await tx
+        .select({ role: boardMembers.role, pinned: boardMembers.pinned, orgRole: clientMembers.clientRole, clientId: users.clientId })
+        .from(boardMembers)
+        .innerJoin(users, eq(users.id, boardMembers.userId))
+        .leftJoin(clientMembers, and(
+          eq(clientMembers.clientId, ctx.clientId),
+          eq(clientMembers.userId, boardMembers.userId),
+          isNull(clientMembers.suspendedAt),
+          isNull(clientMembers.removedAt),
+        ))
+        .where(and(eq(boardMembers.boardId, id), eq(boardMembers.userId, userId)))
+        .limit(1)
+        .for("update", { of: boardMembers });
+      if (!member) throw notFound();
+      // A workspace admin's pinned row cannot be removed board-by-board; change their workspace role.
+      if ((voluntary && ctx.isWorkspaceAdmin) || member.pinned || member.orgRole === "owner" || member.orgRole === "admin") {
+        throw badRequest("cannot remove an inherited board admin");
+      }
+      const [workspace] = await tx
+        .select({ kind: workspaces.kind })
+        .from(workspaces)
+        .where(eq(workspaces.id, ctx.workspaceId))
+        .limit(1);
+      if (!workspace) throw notFound();
       const participation = await cleanupUserBoardParticipation(tx, {
         userId,
         boardIds: [id],
         actorId: req.auth.sub,
       });
-      await recordActivity(tx, {
+      if (participation.removedBoardIds.length === 0) throw notFound();
+      const seat = await prunePaidGuestSeatIfBelowLimit({ hostClientId: ctx.clientId, userId, tx });
+      const [retainedSeat] = await tx.select({ userId: clientGuestSeats.userId }).from(clientGuestSeats)
+        .where(and(eq(clientGuestSeats.clientId, ctx.clientId), eq(clientGuestSeats.userId, userId)));
+      const seatImpact = seat.paidGuestSeatRemoved ? "guest_capacity_freed" : retainedSeat ? "guest_capacity_retained" : "none";
+      const activity = await recordActivity(tx, {
         boardId: id,
         workspaceId: ctx.workspaceId,
         actorId: req.auth.sub,
         entityType: "board",
         entityId: userId,
         action: "removed",
-        payload: { userId, role: member.role },
+        payload: { userId, role: member.role, ...(voluntary ? { voluntary: true, seatImpact } : {}) },
       });
+      const notificationIds: string[] = [];
+      if (voluntary) {
+        const workspaceAdmins = await tx.select({ userId: workspaceMembers.userId }).from(workspaceMembers)
+          .leftJoin(clientMembers, and(eq(clientMembers.clientId, ctx.clientId), eq(clientMembers.userId, workspaceMembers.userId)))
+          .where(and(eq(workspaceMembers.workspaceId, ctx.workspaceId), eq(workspaceMembers.role, "admin"),
+            isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt)));
+        const organisationAdmins = await tx.select({ userId: clientMembers.userId }).from(clientMembers)
+          .where(and(eq(clientMembers.clientId, ctx.clientId), inArray(clientMembers.clientRole, ["owner", "admin"]),
+            isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt)));
+        const adminIds = [...new Set([...workspaceAdmins, ...organisationAdmins].map(row => row.userId))];
+        // Administrative alerts bypass card preferences and delivery queues: durable, in-app only.
+        if (adminIds.length) {
+          const inserted = await tx.insert(notifications).values(adminIds.map(adminId => ({
+            userId: adminId, clientId: ctx.clientId, boardId: id, workspaceId: ctx.workspaceId,
+            activityId: activity.id, reason: "board_member_left" as const,
+          }))).returning({ id: notifications.id });
+          notificationIds.push(...inserted.map(row => row.id));
+        }
+      }
       const removedHiddenWorkspaceMember = workspace.kind === "board" && member.clientId === ctx.clientId
         ? await tx
           .delete(workspaceMembers)
           .where(and(eq(workspaceMembers.workspaceId, ctx.workspaceId), eq(workspaceMembers.userId, userId)))
           .returning({ userId: workspaceMembers.userId })
         : [];
-      return { ...participation, removedHiddenWorkspaceMember: removedHiddenWorkspaceMember.length > 0 };
+      return { ...participation, notificationIds, removedHiddenWorkspaceMember: removedHiddenWorkspaceMember.length > 0 };
     });
-    // Frees the pooled seat (used count) without reducing the purchased seat_limit / bill.
-    await prunePaidGuestSeatIfBelowLimit({ hostClientId: ctx.clientId, userId });
+
     if (cleanup.removedHiddenWorkspaceMember) {
       await emitToWorkspace(ctx.workspaceId, "workspace:member:removed", { workspaceId: ctx.workspaceId, userId });
     }
     await emitToBoard(id, "board:member:removed", { boardId: id, userId });
+    // Direct delivery reaches tabs outside the board room before their sockets are disconnected.
+    await emitToUserDurable(userId, "board:member:removed", { boardId: id, userId });
+    for (const notification of await enrichNotifications(db, cleanup.notificationIds)) {
+      await emitToUserDurable(notification.userId, "notification:created", { notification });
+    }
     for (const update of cleanup.assigneeUpdates) {
       await emitToBoard(id, "card:assignees:set", update);
     }

@@ -5,7 +5,7 @@ import { boards, cards, externalLinks, lists, notes } from "@kanera/shared/schem
 import { and, eq, like } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
-import { assertBoardAccess } from "../../lib/access.js";
+import { assertBoardAccess, assertCardAccess } from "../../lib/access.js";
 import { canReadNote, parseInternalUrl } from "../../lib/internal-links.js";
 import { resolveCardKey } from "../../lib/card-keys.js";
 
@@ -13,7 +13,7 @@ const MAX_URLS = 50;
 
 async function canResolveThroughAccessibleMirror(auth: Parameters<typeof assertBoardAccess>[0], sourceCardId: string): Promise<boolean> {
   const mirroredTargets = await db
-    .selectDistinct({ boardId: cards.boardId })
+    .selectDistinct({ id: cards.id, boardId: cards.boardId })
     .from(externalLinks)
     .innerJoin(cards, eq(cards.id, externalLinks.entityId))
     .where(and(
@@ -24,7 +24,9 @@ async function canResolveThroughAccessibleMirror(auth: Parameters<typeof assertB
     ));
   for (const target of mirroredTargets) {
     try {
-      await assertBoardAccess(auth, target.boardId);
+      // Card-level, not board-level: an assigned-items-only member must actually be able to see
+      // the destination mirror card before it can vouch for the source preview.
+      await assertCardAccess(auth, target);
       return true;
     } catch {
       // Try every linked destination without revealing inaccessible mirror targets.
@@ -109,7 +111,10 @@ export async function internalLinkRoutes(app: FastifyInstance) {
         if (!cardId || !boardId) return;
 
         try {
-          await assertBoardAccess(req.auth, boardId);
+          // Card-level access, matching every other helper in lib/internal-links.ts. Board-level
+          // access alone would let an assigned-items-only member enumerate sequential card keys
+          // and read the title/list of every card on the board.
+          await assertCardAccess(req.auth, { id: cardId, boardId });
         } catch {
           // A mirror provenance comment intentionally links back to its source. Allow the rich
           // card preview when this viewer can access a live destination card linked to that source;

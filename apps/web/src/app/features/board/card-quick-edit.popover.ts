@@ -114,9 +114,9 @@ import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
       flex-direction: column;
       gap: 10px;
       background: var(--surface-overlay);
-      border: 1px solid var(--border);
+      border: 1px solid var(--overlay-border);
       border-radius: var(--radius);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+      box-shadow: var(--shadow-lg);
       color: var(--text);
     }
 
@@ -128,8 +128,6 @@ import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
       font-size: 12px;
       font-weight: 700;
       color: var(--text);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
     }
 
     .cqe-field,

@@ -8,7 +8,7 @@ import {
 try {
   const { summary } = await seedDatabase();
   console.log("dev seed complete");
-  console.log("organisation: Happen Software");
+  console.log("organisation: Happen Software Demo");
   console.log(`users: ${summary.users}`);
   console.log(`workspaces: ${summary.workspaces}`);
   console.log(`boards: ${summary.boards}`);

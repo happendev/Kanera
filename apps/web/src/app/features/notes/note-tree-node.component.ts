@@ -1,5 +1,8 @@
 import { ChangeDetectionStrategy, Component, inject, input, output, signal } from "@angular/core";
 import { ActivatedRoute, Router } from "@angular/router";
+import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
+import { MenuDirective } from "../../shared/menu.directive";
+import type { AnchoredPanelPlacement } from "../../shared/anchored-panel";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import type { NoteTreeNode } from "./notes.types";
 
@@ -25,7 +28,7 @@ export interface NodeDropEvent {
 @Component({
   selector: "k-note-tree-node",
   standalone: true,
-  imports: [TooltipDirective],
+  imports: [AnchoredPanelDirective, MenuDirective, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div
@@ -60,18 +63,25 @@ export interface NodeDropEvent {
           <i class="nt-lock ti ti-lock" kTooltip="Being edited"></i>
         }
       </a>
-      <div class="nt-actions" (click)="$event.stopPropagation()">
-        @if (canAddChild()) {
-        <button class="nt-act" type="button" (click)="onNewChild()" [disabled]="!canEdit()" [kTooltip]="actionTitle('Add sub-note')" aria-label="Add sub-note">
-          <i class="ti ti-plus"></i>
+      <div class="nt-actions" [class.is-open]="actionsOpen()" (click)="$event.stopPropagation()">
+        <button #actionsTrigger class="nt-act" type="button" (click)="toggleActions()" [disabled]="!canEdit()" [kTooltip]="actionTitle('Note actions')" aria-label="Note actions" aria-haspopup="menu" [attr.aria-expanded]="actionsOpen()">
+          <i class="ti ti-dots"></i>
         </button>
+        @if (actionsOpen()) {
+        <div class="nt-actions-menu k-menu" kMenu kAnchoredPanel [apAnchor]="actionsTrigger" [apPlacement]="actionsMenuPlacement" (apDismissed)="actionsOpen.set(false)" role="menu">
+          @if (canAddChild()) {
+          <button type="button" class="k-menu-item" (click)="onNewChild(); actionsOpen.set(false)" role="menuitem">
+            <i class="ti ti-plus"></i><span>Add sub-note</span>
+          </button>
+          }
+          <button type="button" class="k-menu-item" (click)="onDuplicate(); actionsOpen.set(false)" role="menuitem">
+            <i class="ti ti-copy"></i><span>Duplicate</span>
+          </button>
+          <button class="k-menu-item danger" type="button" (click)="onDelete(); actionsOpen.set(false)" role="menuitem">
+            <i class="ti ti-trash"></i><span>Delete</span>
+          </button>
+        </div>
         }
-        <button class="nt-act" type="button" (click)="onDuplicate()" [disabled]="!canEdit()" [kTooltip]="actionTitle('Duplicate')" aria-label="Duplicate">
-          <i class="ti ti-copy"></i>
-        </button>
-        <button class="nt-act danger" type="button" (click)="onDelete()" [disabled]="!canEdit()" [kTooltip]="actionTitle('Delete')" aria-label="Delete">
-          <i class="ti ti-trash"></i>
-        </button>
       </div>
     </div>
     @if (node().children.length > 0 && isExpanded()) {
@@ -123,6 +133,16 @@ export class NoteTreeNodeComponent {
   readonly nodeDrop = output<NodeDropEvent>();
 
   readonly placement = signal<DropPlacement>("inside");
+  readonly actionsOpen = signal(false);
+  readonly actionsMenuPlacement: AnchoredPanelPlacement = {
+    side: "bottom",
+    align: "end",
+    width: "measure",
+    maxHeight: 160,
+    minHeight: 116,
+    gap: 4,
+    margin: 6,
+  };
 
   noteHref(noteId: string): string {
     const tree = this.router.createUrlTree([], {
@@ -154,6 +174,11 @@ export class NoteTreeNodeComponent {
 
   actionTitle(label: string): string {
     return this.canEdit() ? label : "You're offline - changes are paused";
+  }
+
+  toggleActions() {
+    if (!this.canEdit()) return;
+    this.actionsOpen.update((open) => !open);
   }
 
   onNewChild() {

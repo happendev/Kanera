@@ -79,10 +79,7 @@
             </div>
           </div>
           } @empty {
-          <div class="integration-empty">
-            <i class="ti ti-key-off"></i>
-            <span>No API keys</span>
-          </div>
+          <k-empty-state size="sm" icon="key-off" title="No API keys" />
           }
         </div>
       </div>
@@ -157,10 +154,7 @@
           </div>
           }
           } @empty {
-          <div class="integration-empty">
-            <i class="ti ti-webhook-off"></i>
-            <span>No custom webhooks yet</span>
-          </div>
+          <k-empty-state size="sm" icon="webhook-off" title="No custom webhooks yet" />
           }
         </div>
       </div>
@@ -183,7 +177,7 @@
         <div class="integration-list">
           @for (connection of settings.agentConnections(); track connection.clientId) {
           <div class="integration-row key-row"><i class="ti ti-robot integration-icon"></i><div class="integration-primary"><span>{{ connection.name }}</span><code>{{ connection.clientId }}</code></div><span class="field-type-badge">{{ connection.maxScope }}</span><span class="key-last-used"><small>Last used</small><span>{{ settings.formatApiKeyLastUsed(connection.lastUsedAt) }}</span></span><div class="row-actions"><button class="ghost icon danger" (click)="settings.deleteAgentConnection(connection.clientId)" aria-label="Delete agent connection" kTooltip="Delete agent connection"><i class="ti ti-trash"></i></button></div></div>
-          } @empty { <div class="integration-empty"><i class="ti ti-robot-off"></i><span>No unattended agents</span></div> }
+          } @empty { <k-empty-state size="sm" icon="robot-off" title="No unattended agents" /> }
         </div>
       </div>
 
@@ -216,10 +210,7 @@
             <button class="ghost icon" (click)="settings.copyText(board.id)" [attr.aria-label]="'Copy ' + board.name + ' board ID'" kTooltip="Copy board ID"><i class="ti ti-copy"></i></button>
           </div>
           } @empty {
-          <div class="integration-empty">
-            <i class="ti ti-layout-kanban"></i>
-            <span>No boards yet</span>
-          </div>
+          <k-empty-state size="sm" icon="layout-kanban" title="No boards yet" />
           }
         </div>
 

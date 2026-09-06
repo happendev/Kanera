@@ -62,7 +62,7 @@
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 0.12s, color 0.12s;
+  transition: background-color var(--motion-fast), color var(--motion-fast);
 
   i { font-size: 14px; }
 
@@ -107,7 +107,7 @@
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
-    transition: background-color 0.12s, color 0.12s, border-color 0.12s;
+    transition: background-color var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast);
 
     i { font-size: 14px; }
 
@@ -184,7 +184,7 @@
   border-radius: var(--radius);
   color: var(--text-muted);
   cursor: pointer;
-  transition: background-color 0.12s, color 0.12s;
+  transition: background-color var(--motion-fast), color var(--motion-fast);
 
   i { font-size: 16px; }
 
@@ -222,7 +222,7 @@
     z-index: 300;
     box-shadow: 4px 0 24px rgba(0, 0, 0, 0.25);
     transform: translateX(-100%);
-    transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: transform var(--motion-base) cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
   .nv-shell.sidebar-open .nv-sidebar {

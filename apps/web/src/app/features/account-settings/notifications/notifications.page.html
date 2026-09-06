@@ -4,6 +4,7 @@
             <h3 class="settings-section-title"><i class="ti ti-bell"></i><span>Notification channels</span></h3>
             <p class="settings-section-help">Choose how Kanera sends card updates to you.</p>
           </div>
+          <k-autosave-status [state]="settings.notificationAutosave.state()" />
         </div>
 
         @if (settings.notificationSettingsLoading() && !settings.notificationSettings()) {
@@ -142,7 +143,7 @@
           }
 
           @if (settings.customizedWorkspaceRuleGroups().length === 0 && settings.customizedStandaloneRuleGroups().length === 0 && !settings.workspaceRulePickerOpen() && !settings.workspaceRuleEditorGroup()) {
-          <div class="workspace-rule-empty"><i class="ti ti-adjustments-off"></i><span><strong>No custom rules</strong><small>Every workspace and standalone board currently uses your account defaults.</small></span></div>
+          <k-empty-state size="sm" icon="adjustments-off" title="No custom rules" text="Every workspace and standalone board currently uses your account defaults." />
           }
 
           @if (settings.workspaceRuleEditorGroup(); as group) {
@@ -153,7 +154,10 @@
                 <i class="ti" [class.ti-layout-kanban]="group.workspaceKind === 'board'" [class.ti-building-community]="group.workspaceKind !== 'board'"></i>
                 <span><strong>{{ group.workspaceName }}</strong>@if (settings.workspaceRuleContextLabel(group); as context) { <small>{{ context }}</small> }</span>
               </div>
-              <button type="button" class="icon-btn" aria-label="Close workspace rule editor" (click)="settings.closeWorkspaceRuleEditor()"><i class="ti ti-x"></i></button>
+              <span class="workspace-rule-editor-heading-actions">
+                <k-autosave-status [state]="settings.workspaceRuleAutosave.state()" />
+                <button type="button" class="icon-btn" aria-label="Close workspace rule editor" (click)="settings.closeWorkspaceRuleEditor()"><i class="ti ti-x"></i></button>
+              </span>
             </div>
 
             <div class="workspace-rule-master">
@@ -178,7 +182,7 @@
                       <th scope="col">
                         <label class="workspace-matrix-channel-heading">
                           <span>{{ channel.label }}</span>
-                          <input type="checkbox" [checked]="settings.workspaceRuleChannelChecked(rule, channel.key)" [indeterminate]="settings.workspaceRuleChannelIndeterminate(rule, channel.key)" (change)="settings.setWorkspaceRuleChannel(group.workspaceId, channel.key, $any($event.target).checked)" [disabled]="settings.workspaceRuleSaving() !== null" [attr.aria-label]="'Toggle all ' + channel.label + ' notification types'" />
+                          <input type="checkbox" [checked]="settings.workspaceRuleChannelChecked(rule, channel.key)" [indeterminate]="settings.workspaceRuleChannelIndeterminate(rule, channel.key)" (change)="settings.setWorkspaceRuleChannel(group.workspaceId, channel.key, $any($event.target).checked)" [attr.aria-label]="'Toggle all ' + channel.label + ' notification types'" />
                         </label>
                       </th>
                       }
@@ -191,7 +195,7 @@
                       @for (channel of settings.availableWorkspaceNotificationChannels(); track channel.key) {
                       <td>
                         @if (settings.workspaceTypeChannelGloballyAvailable(row.key, channel.key)) {
-                        <input class="workspace-matrix-checkbox" type="checkbox" [checked]="rule.types[row.key][channel.key]" (change)="settings.setWorkspaceRuleTypeChannel(group.workspaceId, row.key, channel.key, $any($event.target).checked)" [disabled]="settings.workspaceRuleSaving() !== null" [attr.aria-label]="row.label + ' via ' + channel.label" />
+                        <input class="workspace-matrix-checkbox" type="checkbox" [checked]="rule.types[row.key][channel.key]" (change)="settings.setWorkspaceRuleTypeChannel(group.workspaceId, row.key, channel.key, $any($event.target).checked)" [attr.aria-label]="row.label + ' via ' + channel.label" />
                         } @else {
                         <span class="workspace-matrix-unavailable" title="Disabled in account defaults" aria-label="Disabled in account defaults">—</span>
                         }
@@ -211,8 +215,7 @@
             <div class="workspace-rule-actions">
               @if (group.customized) { <button type="button" class="ghost sm danger-text" (click)="settings.resetWorkspaceRule(group.workspaceId)" [disabled]="settings.workspaceRuleSaving() !== null">Use account defaults</button> }
               <span></span>
-              <button type="button" class="ghost sm" (click)="settings.closeWorkspaceRuleEditor()" [disabled]="settings.workspaceRuleSaving() !== null">Cancel</button>
-              <button type="button" class="primary sm" (click)="settings.saveWorkspaceRule(group.workspaceId)" [disabled]="settings.workspaceRuleSaving() !== null">Save rule</button>
+              <button type="button" class="secondary sm" (click)="settings.closeWorkspaceRuleEditor()">Done</button>
             </div>
           </article>
           }
@@ -364,5 +367,4 @@
         }
 
         @if (settings.notificationSettingsError()) { <p class="form-error">{{ settings.notificationSettingsError() }}</p> }
-        @if (settings.notificationSettingsSuccess() && !settings.notificationSettingsError()) { <p class="form-success">{{ settings.notificationSettingsSuccess() }}</p> }
       </div>

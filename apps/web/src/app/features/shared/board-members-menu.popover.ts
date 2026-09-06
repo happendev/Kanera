@@ -1,7 +1,9 @@
 import type { OnDestroy, OnInit } from "@angular/core";
-import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input, output, signal } from "@angular/core";
 import type { ServerToClientEvents, WireBoardMemberUser } from "@kanera/shared/events";
+import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { ApiClient, ApiError } from "../../core/api/api.client";
+import { ToastService } from "../../shared/toast.service";
 import { SocketService, type AppSocket } from "../../core/realtime/socket.service";
 import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
@@ -141,12 +143,21 @@ function errorMessage(error: unknown): string {
             }
           </section>
         }
+        @if (leavingMember(); as member) {
+          <div class="bmp-footer">
+            <button class="bmp-leave" type="button" (click)="leaveMembership(member)" [disabled]="busy() || confirmingRemoval()">
+              <i class="ti ti-logout" aria-hidden="true"></i>
+              <span>Leave board</span>
+            </button>
+          </div>
+        }
       }
     </div>
   `,
   styles: [
     ANCHORED_HOST_STYLES,
     `
+    .bmp-footer{padding-top:8px;border-top:1px solid var(--border)}.bmp-leave{display:flex;align-items:center;justify-content:flex-start;gap:8px;width:100%;min-height:34px;padding:7px 8px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--danger);font:inherit;font-size:12px;text-align:left;cursor:pointer;transition:background .15s ease}.bmp-leave i{font-size:16px}.bmp-leave:not(:disabled):hover{background:color-mix(in srgb,var(--danger) 10%,transparent)}.bmp-leave:focus-visible{outline:2px solid var(--danger);outline-offset:2px}
     .bmp-panel{width:100%;max-height:min(520px,calc(100vh - 24px));overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding:12px;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-lg);box-shadow:0 8px 32px rgba(0,0,0,.25)}
     .bmp-add{display:grid;grid-template-columns:minmax(0,1fr) 36px;gap:6px}.bmp-add select,.bmp-role-select{min-width:0;height:36px;padding:0 9px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);font-size:12px;outline:0;transition:border-color .15s ease,box-shadow .15s ease}.bmp-add select:focus-visible,.bmp-role-select:focus-visible{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 18%,transparent)}.bmp-member-select{grid-column:1/-1;width:100%}.bmp-add .bmp-role-select{width:100%}.bmp-add button,.bmp-remove{border:0;border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text);cursor:pointer}.bmp-add button[type="submit"]{width:36px;height:36px;border:1px solid var(--border);font-size:14px}.bmp-add button[type="submit"]:not(:disabled):hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:color-mix(in srgb,var(--accent) 12%,var(--surface-2));color:var(--accent)}.bmp-add .bmp-add-access{grid-column:1/-1;width:100%;justify-content:flex-start;padding:0 9px;border:1px solid var(--border);background:transparent;color:var(--text-muted)}.bmp-add .bmp-add-access.is-active{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}.bmp-remove{width:28px;height:28px;color:var(--danger)}button:disabled,select:disabled{cursor:not-allowed;opacity:.55}.bmp-all-added{display:flex;align-items:center;gap:7px;padding:8px 9px;border-radius:var(--radius-sm);background:var(--surface-2);color:var(--text-muted);font-size:12px}.bmp-all-added i{color:var(--text)}
     .bmp-section{display:flex;flex-direction:column;gap:4px}.bmp-guests{padding-top:8px;border-top:1px solid var(--border)}.bmp-section-title{padding:0 4px 4px;color:var(--text-muted);font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}.bmp-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;min-height:44px;padding:6px;border-radius:var(--radius-sm)}.bmp-row:hover{background:var(--surface-2)}.bmp-identity{display:flex;min-width:0;align-items:center;gap:8px}.bmp-person{display:flex;min-width:0;flex:1;flex-direction:column;gap:1px}.bmp-name,.bmp-email{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bmp-name{color:var(--text);font-size:13px;font-weight:600}.bmp-email,.bmp-you{color:var(--text-muted);font-size:10px}.bmp-actions{display:flex;flex:0 0 auto;align-items:center;gap:4px}.bmp-access-toggle{display:inline-flex;width:28px;height:28px;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:var(--radius-sm);background:transparent;color:var(--text-muted);font-size:12px;cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease}.bmp-access-toggle:hover{background:var(--surface-2);color:var(--text)}.bmp-access-toggle.is-active{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}.bmp-access-readonly{display:inline-flex;width:22px;height:22px;align-items:center;justify-content:center;border-radius:999px;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);font-size:11px;transition:background .15s ease,box-shadow .15s ease}.bmp-access-readonly:hover,.bmp-access-readonly:focus-visible{background:color-mix(in srgb,var(--accent) 22%,transparent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 20%,transparent);outline:0}.bmp-role{color:var(--text-muted);font-size:11px;font-weight:600}.bmp-role-admin{padding:4px 7px;border-radius:999px;background:var(--surface-2)}.bmp-role-select{width:84px;height:28px}.bmp-empty,.bmp-error{margin:0;padding:6px;color:var(--text-muted);font-size:12px}.bmp-error{color:var(--danger)}
@@ -158,12 +169,17 @@ function errorMessage(error: unknown): string {
 export class BoardMembersMenu implements OnInit, OnDestroy {
   private readonly panel = inject(AnchoredPanelDirective);
   private readonly api = inject(ApiClient);
+  private readonly unsavedWork = inject(UnsavedWorkService);
   private readonly confirm = inject(ConfirmService);
+  private readonly toasts = inject(ToastService);
+  /** The deferred removal usually completes after the popover has closed; see removeMember. */
+  private destroyed = false;
   private readonly sockets = inject(SocketService);
   readonly boardId = input.required<string>(); readonly workspaceId = input<string | null>(null); readonly ownerClientId = input<string | null>(null); readonly boardRoomManaged = input(false);
   readonly currentUserId = input<string | null>(null); readonly canManage = input(false); readonly members = input<WireBoardMemberUser[]>([]); readonly dismissed = output<void>(); readonly memberAdded = output<WireBoardMemberUser>(); readonly memberRemoved = output<string>();
   readonly accessMembers = signal<BoardAccessMemberRow[]>([]); readonly roster = signal<BoardMemberCandidateRow[]>([]); readonly candidateScope = signal<"workspace" | "organisation">("workspace"); readonly loading = signal(false); readonly busy = signal(false); readonly confirmingRemoval = signal(false); readonly error = signal<string | null>(null); readonly addUserId = signal(""); readonly addRole = signal<BoardRole>("observer"); readonly addAssignedItemsOnly = signal(false);
   readonly renderedMembers = computed<RenderedMemberRow[]>(() => this.canManage() ? this.accessMembers() : this.members());
+  readonly leavingMember = computed(() => this.renderedMembers().find(member => this.canLeave(member)) ?? null);
   readonly localMembers = computed(() => {
     if (!this.ownerClientId()) return sortMembers(this.renderedMembers());
     return sortMembers(this.renderedMembers().filter((m) => m.isOrganisationMember));
@@ -176,12 +192,13 @@ export class BoardMembersMenu implements OnInit, OnDestroy {
   private socket: AppSocket | null = null; private leaveBoard?: () => void;
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => { this.destroyed = true; });
     this.panel.configure({
       placement: () => ({ width: 320, maxHeight: 520 }),
       // An outside click during a removal confirmation must not tear the popover down: the DELETE is
-      // still in flight and its success output has to reach the board page. Escape is still allowed,
-      // because that is an explicit "get me out of here".
-      canDismiss: (reason) => reason === "escape" || !this.confirmingRemoval(),
+      // still in flight and its success output has to reach the board page. Escape can dismiss the
+      // confirmation stage, but an active write must keep its success/error handler mounted.
+      canDismiss: (reason) => !this.busy() && (reason === "escape" || !this.confirmingRemoval()),
       onDismiss: () => this.dismissed.emit(),
     });
   }
@@ -204,23 +221,57 @@ export class BoardMembersMenu implements OnInit, OnDestroy {
   async addMember() { const userId = this.addUserId(); if (!userId || this.busy()) return; this.busy.set(true); this.error.set(null); try { await this.api.post(`/boards/${this.boardId()}/members`, { userId, role: this.addRole(), assignedItemsOnly: this.addAssignedItemsOnly() }); this.addUserId.set(""); this.addAssignedItemsOnly.set(false); await this.reload(false); const added = this.accessMembers().find((row) => row.userId === userId); if (added) this.memberAdded.emit({ userId: added.userId, displayName: added.displayName, avatarUrl: added.avatarUrl, lastOnlineAt: added.lastOnlineAt, role: added.role, source: "board", pinned: added.pinned, assignedItemsOnly: added.assignedItemsOnly, clientId: added.clientId, isOrganisationMember: added.isOrganisationMember }) } catch (e) { this.error.set(errorMessage(e)) } finally { this.busy.set(false) } }
   async changeRole(userId: string, role: BoardRole) { if (this.busy()) return; const previous = this.accessMembers(); this.accessMembers.update(rows => rows.map(row => row.userId === userId ? { ...row, role } : row)); this.busy.set(true); this.error.set(null); try { await this.api.patch(`/boards/${this.boardId()}/members/${userId}`, { role }) } catch (e) { this.accessMembers.set(previous); this.error.set(errorMessage(e)) } finally { this.busy.set(false) } }
   async changeRestriction(member: BoardAccessMemberRow, assignedItemsOnly: boolean) { if (this.busy()) return; const previous = this.accessMembers(); this.accessMembers.update(rows => rows.map(row => row.userId === member.userId ? { ...row, assignedItemsOnly } : row)); this.busy.set(true); this.error.set(null); try { await this.api.patch(`/boards/${this.boardId()}/members/${member.userId}`, { role: member.role, assignedItemsOnly }) } catch (e) { this.accessMembers.set(previous); this.error.set(errorMessage(e)) } finally { this.busy.set(false) } }
-  async removeMember(member: BoardAccessMemberRow) {
-    if (this.busy() || this.confirmingRemoval()) return;
+  canLeave(member: RenderedMemberRow): boolean {
+    return member.userId === this.currentUserId() && !this.canManage() && !member.pinned
+      && (member.role === "editor" || member.role === "observer");
+  }
+  async leaveMembership(member: RenderedMemberRow) {
+    if (!this.canLeave(member) || this.busy() || this.confirmingRemoval()) return;
     this.confirmingRemoval.set(true);
     try {
-      const confirmed = await this.confirm.open({ title: `Remove ${member.displayName}?`, message: "They will lose access to this board." });
-      if (!confirmed) return;
+      if (!await this.confirm.open({ title: "Leave this board?", confirmLabel: "Leave board", danger: true, message: "Your access, assignments, checklist assignments, watches, notifications, and Up Next entries will be removed. Admins will be notified. An admin must add or invite you to rejoin." })) return;
+      if (!this.unsavedWork.confirmNavigation()) return;
       this.busy.set(true);
       this.error.set(null);
       try {
         await this.api.delete(`/boards/${this.boardId()}/members/${member.userId}`);
-        this.accessMembers.update(rows => rows.filter(row => row.userId !== member.userId));
         this.memberRemoved.emit(member.userId);
-      } catch (e) {
-        this.error.set(errorMessage(e));
+      } catch (error) {
+        this.error.set(errorMessage(error));
       } finally {
         this.busy.set(false);
       }
+    } finally {
+      this.confirmingRemoval.set(false);
+    }
+  }
+  async removeMember(member: BoardAccessMemberRow) {
+    if (this.busy() || this.confirmingRemoval()) return;
+    this.confirmingRemoval.set(true);
+    try {
+      const boardId = this.boardId();
+      const index = this.accessMembers().indexOf(member);
+      const restore = () => this.accessMembers.update(rows =>
+        rows.some(row => row.userId === member.userId) ? rows : [...rows.slice(0, index), member, ...rows.slice(index)]);
+      // Undo instead of confirm: the row hides now and the DELETE waits for the toast. memberRemoved
+      // is only emitted once the removal is real, so the board page does not drop the member early.
+      this.error.set(null);
+      this.accessMembers.update(rows => rows.filter(row => row.userId !== member.userId));
+      this.toasts.undoable({
+        message: `${member.displayName} removed from the board.`,
+        icon: "user-minus",
+        undo: restore,
+        commit: async () => {
+          try {
+            await this.api.delete(`/boards/${boardId}/members/${member.userId}`);
+            // Fast path for the board page; realtime board:member:removed covers a closed popover.
+            if (!this.destroyed) this.memberRemoved.emit(member.userId);
+          } catch (e) {
+            restore();
+            this.toasts.info(`Couldn't remove ${member.displayName}: ${errorMessage(e)}`, "alert-triangle");
+          }
+        },
+      });
     } finally {
       // The confirm button click continues bubbling after its promise resolves. Keep the popover
       // mounted through the DELETE so its success output still reaches the board page.

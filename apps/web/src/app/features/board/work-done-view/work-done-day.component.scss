@@ -89,8 +89,6 @@
   flex: none;
   font-size: 11px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
 }
 
 .wd-day-date {
@@ -228,7 +226,7 @@
   column-gap: 10px;
   padding: 8px 10px;
   cursor: pointer;
-  transition: background-color 0.12s;
+  transition: background-color var(--motion-fast);
 
   &+& {
     border-top: 1px solid var(--border);

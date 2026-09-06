@@ -778,7 +778,9 @@ export async function cardRoutes(
         listId,
         boardId,
         workspaceId: ctx.workspaceId,
-        clientId: req.auth.cid,
+        // Automation quota belongs to the board's owning organisation, never the caller's home org:
+        // a cross-org guest's req.auth.cid would charge (and cap) the wrong tenant.
+        clientId: ctx.clientId,
         trigger: "create",
         triggerActorId: req.auth.sub,
       });
@@ -1195,7 +1197,7 @@ export async function cardRoutes(
           toListId: body.listId,
           boardId,
           workspaceId: ctx.workspaceId,
-          clientId: req.auth.cid,
+          clientId: ctx.clientId,
           triggerActorId: req.auth.sub,
         });
         rows.push({ previous: current, card: card!, activity, automationEffects });
@@ -1594,7 +1596,7 @@ export async function cardRoutes(
           toListId: body.listId,
           boardId: current.boardId,
           workspaceId: ctx.workspaceId,
-          clientId: req.auth.cid,
+          clientId: ctx.clientId,
           triggerActorId: req.auth.sub,
         })
         : { effects: [] };
@@ -1740,7 +1742,17 @@ export async function cardRoutes(
       .select({ userId: cardAssignees.userId })
       .from(cardAssignees)
       .where(eq(cardAssignees.cardId, source.id));
-    await ensureBoardMembershipForUsers(body.boardId, dstCtx.workspaceId, currentAssignees.map((a) => a.userId));
+    const currentAssigneeIds = currentAssignees.map((a) => a.userId);
+    const eligibleAssigneeIds = await ensureBoardMembershipForUsers(body.boardId, dstCtx.workspaceId, currentAssigneeIds);
+    // Assignment is board-scoped: anyone who is not a non-observer member of the destination board
+    // must be unassigned as part of the move. Leaving them on the card would keep sending them
+    // comment/due-date notifications for a card (and board) they can no longer open.
+    const eligibleAssigneeSet = new Set(eligibleAssigneeIds);
+    const droppedAssigneeIds = currentAssigneeIds.filter((userId) => !eligibleAssigneeSet.has(userId));
+    const droppedAssigneeNames = droppedAssigneeIds.length === 0 ? [] : (await db
+      .select({ displayName: users.displayName })
+      .from(users)
+      .where(inArray(users.id, droppedAssigneeIds))).map((row) => row.displayName);
 
     const { updated, activity, relocatedNotifications, automationEffects } = await db.transaction(async (tx) => {
       const [updatedCard] = await tx
@@ -1748,6 +1760,28 @@ export async function cardRoutes(
         .set({ boardId: body.boardId, listId: targetListId, position, updatedAt: new Date() })
         .where(eq(cards.id, id))
         .returning();
+      if (droppedAssigneeIds.length > 0) {
+        await tx.delete(cardAssignees).where(and(eq(cardAssignees.cardId, id), inArray(cardAssignees.userId, droppedAssigneeIds)));
+        const checklistIds = tx.select({ id: cardChecklists.id }).from(cardChecklists).where(eq(cardChecklists.cardId, id));
+        await tx.update(cardChecklistItems)
+          .set({ assigneeId: null })
+          .where(and(inArray(cardChecklistItems.checklistId, checklistIds), inArray(cardChecklistItems.assigneeId, droppedAssigneeIds)));
+        await recordActivity(tx, {
+          boardId: body.boardId,
+          workspaceId: dstCtx.workspaceId,
+          actorId: req.auth.sub,
+          entityType: "card",
+          entityId: id,
+          action: ACTIVITY_ACTION.ASSIGNEES_SET,
+          payload: {
+            assigneeIds: eligibleAssigneeIds,
+            removedAssigneeNames: droppedAssigneeNames,
+            fromValue: sortedIds(currentAssigneeIds),
+            toValue: sortedIds(eligibleAssigneeIds),
+            reason: "moved-to-board",
+          },
+        });
+      }
       const moveActivity = await recordCoalescedActivity(tx, {
         boardId: body.boardId,
         workspaceId: dstCtx.workspaceId,
@@ -1824,7 +1858,9 @@ export async function cardRoutes(
         labelIds: labelAssignments.map((l) => l.labelId),
       });
     }
-    if (assignees.length > 0) {
+    // Always broadcast when assignees were dropped, even if the final set is empty, so the
+    // destination board's clients do not keep a stale assignee list from the CARD_CREATED payload.
+    if (assignees.length > 0 || droppedAssigneeIds.length > 0) {
       emitToBoard(body.boardId, SERVER_EVENTS.CARD_ASSIGNEES_SET, {
         boardId: body.boardId,
         cardId: id,

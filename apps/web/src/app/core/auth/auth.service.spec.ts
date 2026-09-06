@@ -58,6 +58,7 @@ describe("authenticatedLandingPath", () => {
 // advance another test's clock.
 describe("AuthService logout refresh guard", { concurrent: false }, () => {
   afterEach(() => {
+    localStorage.removeItem("kanera:offline-identity");
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
@@ -204,5 +205,46 @@ describe("AuthService logout refresh guard", { concurrent: false }, () => {
     expect(auth.user()?.clientId).toBe("client-2");
     const [, init] = fetchCallsFor(auth.fetchMock, "/auth/refresh")[0]!;
     expect(init?.body).toBe(JSON.stringify({ clientId: "client-2" }));
+  });
+});
+
+describe("offline session recovery", () => {
+  afterEach(() => {
+    localStorage.removeItem("kanera:offline-identity");
+    vi.restoreAllMocks();
+  });
+
+  it("restores a bounded identity without persisting or granting a bearer token", async () => {
+    const first = new TestAuthService();
+    first.setSession("secret-token", user());
+    expect(localStorage.getItem("kanera:offline-identity")).not.toContain("secret-token");
+    const restored = new TestAuthService();
+    restored.fetchMock.mockRejectedValue(new TypeError("offline"));
+    await restored.hydrate();
+    expect(restored.user()?.id).toBe("user-1");
+    expect(restored.offlineSession()).toBe(true);
+    expect(restored.getAccessToken()).toBeNull();
+    restored.fetchMock.mockResolvedValue(new Response(JSON.stringify({ accessToken: "fresh", user: user() })));
+    await restored.refresh();
+    expect(restored.offlineSession()).toBe(false);
+    expect(restored.getAccessToken()).toBe("fresh");
+  });
+
+  it("never restores identity after an explicit cookie rejection", async () => {
+    new TestAuthService().setSession("old", user());
+    const restored = new TestAuthService();
+    restored.fetchMock.mockResolvedValue(new Response("{}", { status: 401 }));
+    await restored.hydrate();
+    expect(restored.user()).toBeNull();
+    expect(localStorage.getItem("kanera:offline-identity")).toBeNull();
+  });
+
+  it("rejects expired offline identities and clears identity on logout", async () => {
+    const auth = new TestAuthService();
+    auth.setSession("old", user());
+    localStorage.setItem("kanera:offline-identity", JSON.stringify({ user: user(), cachedAt: Date.now() - 8 * 86400000 }));
+    expect((auth as unknown as { restoreOfflineIdentity(): boolean }).restoreOfflineIdentity()).toBe(false);
+    auth.clearSession({ disableRefresh: true });
+    expect(localStorage.getItem("kanera:offline-identity")).toBeNull();
   });
 });

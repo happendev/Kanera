@@ -101,7 +101,7 @@ export async function sendHostedSeatCapacityEmail(
     activeSeatCount: context.seatLimit,
     purchasedSeatCount: context.seatLimit,
     previousPurchasedSeatCount: context.previousSeatLimit,
-    billingSummary: increased ? seatCapacitySummary() : null,
+    billingSummary: increased ? "The new capacity is available now and can be assigned to a member or guest." : null,
     dedupeKey: context.dedupeKey,
     impact: null,
   }, options);
@@ -357,8 +357,4 @@ function emptyImpact(): BillingImpactSummary {
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(date);
-}
-
-function seatCapacitySummary(): string {
-  return "The new capacity is available now and can be assigned to a member or guest.";
 }

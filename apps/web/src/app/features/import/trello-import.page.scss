@@ -189,8 +189,8 @@ input[type="text"],
   outline: 1px dashed transparent;
   outline-offset: 6px;
   transition:
-    background 0.12s,
-    outline-color 0.12s;
+    background var(--motion-fast),
+    outline-color var(--motion-fast);
 
   &.is-drag-active:not(.is-uploading) {
     background: color-mix(in srgb, var(--accent) 6%, var(--surface));
@@ -244,8 +244,8 @@ input[type="text"],
   transform: translateY(-2px);
   pointer-events: none;
   transition:
-    opacity 0.12s,
-    transform 0.12s;
+    opacity var(--motion-fast),
+    transform var(--motion-fast);
 }
 
 .upload-file-meta {
@@ -453,7 +453,7 @@ input[type="text"],
     height: 100%;
     border-radius: inherit;
     background: var(--accent);
-    transition: width 0.18s ease;
+    transition: width var(--motion-base) ease;
   }
 }
 

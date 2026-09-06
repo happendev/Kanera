@@ -3,7 +3,7 @@ import { TestBed } from "@angular/core/testing";
 import type { WorkCard, WorkCatalog } from "@kanera/shared/dto";
 import { expandCardSummary, type WireCardSummary } from "@kanera/shared/events";
 import { describe, expect, it, vi } from "vitest";
-import { ApiClient } from "../../core/api/api.client";
+import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
@@ -161,4 +161,31 @@ describe("GlobalCardDetailHostComponent", () => {
 
     fixture.destroy();
   });
+});
+
+it.each([403, 404])("closes the drawer on %s before looking up any cached board", async (status) => {
+  const cache = { loadBoard: vi.fn().mockResolvedValue({ board: { id: card.boardId } }), revokeBoardAccess: vi.fn().mockResolvedValue(undefined) };
+  const state = { hydrate: vi.fn(), clear: vi.fn(), cardsById: signal(new Map([[card.id, expandCardSummary(card)]])) };
+  await TestBed.configureTestingModule({ providers: [
+    provideZonelessChangeDetection(),
+    { provide: ApiClient, useValue: { get: vi.fn().mockRejectedValue(new ApiError(status, {})) } },
+    { provide: AuthService, useValue: { user: () => ({ id: "viewer" }) } },
+    { provide: OfflineCacheService, useValue: cache },
+    { provide: SocketService, useValue: { connect: () => ({ on: vi.fn(), off: vi.fn() }) } },
+  ] }).overrideComponent(GlobalCardDetailHostComponent, { set: { template: "", providers: [
+    { provide: BoardState, useValue: state },
+    { provide: BoardSocketBridge, useValue: { attach: () => vi.fn() } },
+  ] } }).compileComponents();
+  const fixture = TestBed.createComponent(GlobalCardDetailHostComponent);
+  fixture.componentRef.setInput("card", card);
+  fixture.componentRef.setInput("catalog", catalog);
+  const closed = vi.fn();
+  fixture.componentInstance.closed.subscribe(closed);
+  fixture.detectChanges();
+  await vi.waitFor(() => expect(closed).toHaveBeenCalled());
+  expect(cache.loadBoard).not.toHaveBeenCalled();
+  expect(cache.revokeBoardAccess).toHaveBeenCalledWith(card.boardId);
+  expect(state.clear).toHaveBeenCalled();
+  expect(fixture.componentInstance.ready()).toBe(false);
+  fixture.destroy();
 });

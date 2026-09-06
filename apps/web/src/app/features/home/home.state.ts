@@ -6,6 +6,7 @@ import { AuthService } from "../../core/auth/auth.service";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
 import { SocketService, type AppSocket } from "../../core/realtime/socket.service";
+import { viewerTimeZone } from "../../shared/day-key.util";
 
 /**
  * Bucket render order, and the trend window the server sends.
@@ -270,7 +271,7 @@ export class HomeState {
 
   private browserTimeZone(): string | null {
     try {
-      return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+      return viewerTimeZone();
     } catch {
       return null;
     }

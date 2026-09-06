@@ -1,5 +1,5 @@
 import { SERVER_EVENTS } from "@kanera/shared/events";
-import { boardSeparators, cards, type BoardSeparator } from "@kanera/shared/schema";
+import { boardSeparators, cards } from "@kanera/shared/schema";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { db, type Db } from "../db.js";
 import { emitToBoard } from "../realtime/emit.js";
@@ -24,10 +24,6 @@ type LaneItem = {
   boardId: string;
   position: string;
 };
-
-export function toWireSeparator(separator: BoardSeparator) {
-  return separator;
-}
 
 async function loadLaneItems(listId: string, boardId: string, tx: Tx): Promise<LaneItem[]> {
   // Callers often pass a transaction handle, which is backed by one pg client.

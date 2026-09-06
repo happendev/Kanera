@@ -1,6 +1,6 @@
 <div class="page">
-  <main class="content">
-    <section class="ws-card">
+  <main class="content settings-content">
+    <section class="ws-card settings-card">
       <k-page-header
         variant="page"
         class="settings-header"
@@ -11,7 +11,7 @@
       />
       <!-- Icons to match account settings: the two tab strips sit at the same place on the same card
            and read as one control, so one of them carrying glyphs and the other not was the tell. -->
-      <div class="settings-tabs" [attr.aria-label]="entityLabelTitle() + ' settings sections'">
+      <div class="settings-tabs" kTabStrip [attr.aria-label]="entityLabelTitle() + ' settings sections'">
         @for (tab of settingsTabs(); track tab.id) {
         <a [class]="selectedTab() === tab.id ? 'sm active' : 'ghost sm'" [routerLink]="tab.id"><i [class]="'ti ti-' + tab.icon"></i> {{ tab.label }} @if (tab.pro) { <span class="pro-marker">Pro</span> }</a>
         }

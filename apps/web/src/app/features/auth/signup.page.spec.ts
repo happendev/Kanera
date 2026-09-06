@@ -13,6 +13,7 @@ describe("SignupPage", () => {
   let setSession: ReturnType<typeof vi.fn>;
   let navigateByUrl: ReturnType<typeof vi.fn>;
   let emailVerificationEnabled: boolean;
+  let turnstileSiteKey: string | null;
   let signupsEnabled: boolean;
   let kaneraEnvironment: "development" | "test" | "staging" | "production";
   let deploymentMode: "self_hosted" | "hosted";
@@ -50,6 +51,7 @@ describe("SignupPage", () => {
 
   beforeEach(async () => {
     emailVerificationEnabled = false;
+    turnstileSiteKey = null;
     signupsEnabled = true;
     kaneraEnvironment = "production";
     deploymentMode = "hosted";
@@ -63,7 +65,7 @@ describe("SignupPage", () => {
     fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = urlFromRequest(input);
       if (url.endsWith("/auth/config")) {
-        return response({ emailVerificationEnabled, signupsEnabled, turnstileSiteKey: null, kaneraEnvironment, deploymentMode });
+        return response({ emailVerificationEnabled, signupsEnabled, turnstileSiteKey, kaneraEnvironment, deploymentMode });
       }
       if (url.includes("/invites/lookup")) {
         return response({ orgName: "Invite Org", orgRole: "member", workspaces: [] });
@@ -130,6 +132,35 @@ describe("SignupPage", () => {
     page.password.set("Abc12345");
     page.confirmPassword.set("Abc12345");
   }
+
+  it("requires a challenge before emailing a code and preserves signup readiness after resetting it", async () => {
+    turnstileSiteKey = "site-key";
+    emailVerificationEnabled = true;
+    const render = vi.fn((_container: HTMLElement, _options: { callback(token: string): void }) => "signup-widget");
+    const reset = vi.fn();
+    vi.stubGlobal("turnstile", { render, reset });
+    await createPage();
+    fillValidForm();
+    await vi.waitFor(() => expect(render).toHaveBeenCalled());
+
+    await fixture.componentInstance.submit(submitEvent());
+    expect(fixture.componentInstance.error()).toBe("Complete the security check to continue.");
+    expect(fetchMock.mock.calls.some(([input]) => urlFromRequest(input as RequestInfo | URL).endsWith("/auth/request-email-verification"))).toBe(false);
+
+    const options = render.mock.calls[0]![1];
+    options.callback("signup-token");
+    await fixture.whenStable();
+    expect(fixture.componentInstance.error()).toBeNull();
+    expect(fixture.componentInstance.turnstileReady()).toBe(true);
+    await fixture.componentInstance.submit(submitEvent());
+
+    const request = fetchMock.mock.calls.find(([input]) => urlFromRequest(input as RequestInfo | URL).endsWith("/auth/request-email-verification"));
+    expect(JSON.parse((request?.[1] as RequestInit).body as string).turnstileToken).toBe("signup-token");
+    expect(fixture.componentInstance.step()).toBe("code");
+    expect(fixture.componentInstance.turnstileToken()).toBeNull();
+    expect(fixture.componentInstance.turnstileReady()).toBe(true);
+    expect(reset).toHaveBeenCalledWith("signup-widget");
+  });
 
   it("creates the account directly when email verification is disabled", async () => {
     await createPage();

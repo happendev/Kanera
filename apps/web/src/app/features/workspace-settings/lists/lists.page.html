@@ -1,8 +1,18 @@
+      <div class="settings-info-note">
+        <i class="ti ti-info-circle"></i>
+        <span>
+          @if (settings.isStandalone()) {
+          These lists define this board's workflow.
+          } @else {
+          Lists are shared across every board in this workspace - all boards use the same set of lists.
+          }
+        </span>
+      </div>
       <k-docs-link class="spaced" path="lists" label="Learn more about lists" />
       <form class="board-form single-line-capture" (submit)="settings.addList($event)">
         <k-icon-picker [value]="settings.newListIcon() ?? 'list'" (valueChange)="settings.newListIcon.set($event)" />
         <k-color-picker [value]="settings.newListColor()" (valueChange)="settings.newListColor.set($event)" />
-        <input name="list" placeholder="List name" [value]="settings.newList()" (input)="settings.newList.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" required style="flex:1" />
+        <input name="list" placeholder="List name" [value]="settings.newList()" (input)="settings.newList.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" required class="grow" />
         <button class="sm compact-add-button" type="submit" aria-label="Add list" kTooltip="Add list"><i class="ti ti-plus"></i><span class="mobile-hide">Add list</span></button>
       </form>
       <div class="boards" cdkDropList [cdkDropListData]="settings.lists()" (cdkDropListDropped)="settings.dropList($event)">
@@ -11,13 +21,13 @@
           <div class="board-tile">
             <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
             @if (settings.editingListId() === list.id) {
-            <input class="inline-name-input" [value]="settings.editingListName()" (input)="settings.editingListName.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" (blur)="settings.saveListName(list.id)" (keydown.enter)="settings.saveListName(list.id)" (keydown.escape)="settings.cancelEditList()"
-              autofocus style="flex:1" />
+            <input class="inline-name-input grow" [value]="settings.editingListName()" (input)="settings.editingListName.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" (blur)="settings.saveListName(list.id)" (keydown.enter)="settings.saveListName(list.id)" (keydown.escape)="settings.cancelEditList()"
+              autofocus />
             } @else {
-            <span class="list-badge" [style.--list-color]="list.color ? 'var(--color-' + list.color + ')' : null" [class.has-color]="!!list.color" (click)="settings.startEditList(list)" kTooltip="Click to rename">
+            <button type="button" class="list-badge list-rename-trigger" [style.--list-color]="list.color ? 'var(--color-' + list.color + ')' : null" [class.has-color]="!!list.color" (click)="settings.startEditList(list)" [attr.aria-label]="'Rename ' + list.name" kTooltip="Click to rename">
               @if (list.icon) { <i [class]="'ti ti-' + list.icon" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i> }
               {{ list.name }}
-            </span>
+            </button>
             }
             <div class="row-actions">
               <k-icon-picker [value]="list.icon ?? 'list'" (valueChange)="settings.updateListStyle(list.id, { icon: $event })" />
@@ -30,16 +40,6 @@
         </div>
         }
         @if (settings.lists().length === 0) {
-        <span class="empty-hint">No lists yet.</span>
+        <k-empty-state size="sm" icon="list-details" title="No lists yet" text="Add a list above to define the columns every board shares." />
         }
       </div>
-<div class="settings-info-note">
-  <i class="ti ti-info-circle"></i>
-  <span>
-    @if (settings.isStandalone()) {
-    These lists define this board's workflow.
-    } @else {
-    Lists are shared across every board in this workspace - all boards use the same set of lists.
-    }
-  </span>
-</div>

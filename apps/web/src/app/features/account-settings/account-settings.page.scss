@@ -143,8 +143,6 @@
 .plan-trial-status-label {
   margin-bottom: 2px;
   color: var(--accent);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .plan-trial-days,
@@ -467,8 +465,6 @@
   font-size: 11px;
   font-weight: 700;
   line-height: 1.2;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .price-summary-savings {
@@ -506,28 +502,6 @@
   }
 }
 
-.settings-info-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 0;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.45;
-
-
-  i {
-    margin-top: 1px;
-    color: var(--accent);
-    font-size: 15px;
-    flex-shrink: 0;
-  }
-}
-
 .board-form.static {
   background: var(--surface-2);
   align-items: center;
@@ -562,19 +536,23 @@
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast), box-shadow var(--motion-fast);
 
   i {
     font-size: 16px;
   }
 
-  &:hover {
+  // `:not(:disabled)` is here for specificity, not semantics: the global `button:hover:not(:disabled)`
+  // rule (0,2,1) outranks a plain `.theme-option:hover` (0,2,0) and painted the accent fill under
+  // accent-coloured text, so the selected theme's label vanished on hover.
+  &:hover:not(:disabled) {
     background: var(--surface-2);
     color: var(--text);
     border-color: var(--border-strong);
   }
 
-  &.active {
+  &.active,
+  &.active:hover:not(:disabled) {
     background: var(--accent-soft);
     border-color: var(--accent);
     color: var(--accent);
@@ -632,8 +610,6 @@
     font-size: 12px;
     font-weight: 600;
     color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
   }
 
   input {
@@ -735,9 +711,9 @@
   white-space: nowrap;
 
   &.success {
-    border-color: color-mix(in srgb, var(--success, #16a34a) 40%, var(--border));
-    background: color-mix(in srgb, var(--success, #16a34a) 10%, var(--surface-2));
-    color: var(--success, #15803d);
+    border-color: color-mix(in srgb, var(--success) 40%, var(--border));
+    background: color-mix(in srgb, var(--success) 10%, var(--surface-2));
+    color: var(--success);
   }
 
   &.warning {
@@ -802,8 +778,8 @@
   background: var(--surface-2);
 
   &.success {
-    border-color: color-mix(in srgb, var(--success, #16a34a) 35%, var(--border));
-    background: color-mix(in srgb, var(--success, #16a34a) 8%, var(--surface-2));
+    border-color: color-mix(in srgb, var(--success) 35%, var(--border));
+    background: color-mix(in srgb, var(--success) 8%, var(--surface-2));
   }
 
   &.warning {
@@ -898,8 +874,6 @@
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .notification-grid-row {
@@ -967,8 +941,7 @@
   overflow: auto;
   overscroll-behavior: contain;
 
-  .form-error,
-  .form-success {
+  .form-error {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -1017,7 +990,7 @@
 }
 
 .form-error {
-  color: var(--danger, #e53e3e);
+  color: var(--danger);
   font-size: 13px;
   margin: 0;
 }
@@ -1066,33 +1039,35 @@
 }
 
 .seat-payment-notice--success {
-  border-color: color-mix(in srgb, var(--success, #16a34a) 45%, var(--border));
+  border-color: color-mix(in srgb, var(--success) 45%, var(--border));
 
   > i {
-    color: var(--success, #16a34a);
+    color: var(--success);
   }
 }
 
 .seat-payment-notice--warning {
-  border-color: color-mix(in srgb, var(--color-amber, #d97706) 45%, var(--border));
+  border-color: color-mix(in srgb, var(--color-amber) 45%, var(--border));
 
   > i {
-    color: var(--color-amber, #d97706);
+    color: var(--color-amber);
   }
 }
 
 .seat-payment-notice--error {
-  border-color: color-mix(in srgb, var(--danger, #e53e3e) 45%, var(--border));
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
 
   > i {
-    color: var(--danger, #e53e3e);
+    color: var(--danger);
   }
 }
 
-.form-success {
-  color: var(--success, #16a34a);
-  font-size: 13px;
-  margin: 0;
+.mfa-enabled {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  > i { color: var(--success); }
 }
 
 .storage-test-feedback {
@@ -1303,7 +1278,7 @@
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition: background var(--motion-fast), color var(--motion-fast);
 
   i {
     font-size: 15px;
@@ -1340,7 +1315,7 @@
 
   i {
     flex-shrink: 0;
-    color: var(--success, #16a34a);
+    color: var(--success);
   }
 }
 
@@ -1374,8 +1349,6 @@
 .ws-grant-label {
   font-size: 12px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   color: var(--text-muted);
 }
 
@@ -1453,8 +1426,6 @@
   border-bottom: 1px solid var(--border);
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   color: var(--text-muted);
 }
 
@@ -1543,13 +1514,6 @@
   justify-content: flex-end;
 }
 
-.org-user-empty {
-  padding: 12px 14px;
-  font-size: 13px;
-  color: var(--text-muted);
-  border-top: 1px solid var(--border);
-}
-
 .ws-badge {
   display: inline-flex;
   align-items: center;
@@ -1620,8 +1584,6 @@
   gap: 3px;
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   color: var(--text-muted);
 
   select {
@@ -1682,8 +1644,6 @@
   width: 52px;
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   color: var(--text);
 }
 

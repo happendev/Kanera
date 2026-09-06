@@ -15,6 +15,7 @@ import type { CardAssigneePresentation } from "../card.component";
 import { CardLabelsComponent, type CardLabelPresentation } from "../card-labels.component";
 import { openCardDetailInNewTab } from "../card-navigation.util";
 import { DUE_DATE_SLOT_OPTIONS, dueDateSlotFor, isOverdue, type DueDateSlot } from "../due-date.util";
+import { formatDate, formatDateRange } from "../../../shared/date-format";
 
 type AnyCard = Card | WireCard | WireCardSummary;
 type AnyList = List | WireList;
@@ -141,12 +142,8 @@ export class BoardCalendarViewComponent {
     }
     const start = startOfWeek(anchor);
     const end = addDays(start, 6);
-    const sameMonth = start.getMonth() === end.getMonth();
-    const sameYear = start.getFullYear() === end.getFullYear();
-    const startFmt = start.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    const endFmt = end.toLocaleDateString("en-US", sameMonth ? { day: "numeric" } : { month: "short", day: "numeric" });
-    const year = sameYear ? end.getFullYear() : `${start.getFullYear()} - ${end.getFullYear()}`;
-    return `${startFmt} – ${endFmt}, ${year}`;
+    // Always spell the year in the header: the week is the page's only date anchor.
+    return formatDateRange(start, end, { now: new Date(0) });
   });
 
   readonly visibleCards = computed(() => {
@@ -330,11 +327,11 @@ export class BoardCalendarViewComponent {
    * of a month grid belong to the neighbouring month. The full date is the cell's tooltip.
    */
   dayLabel(key: string): string {
-    return localDate(key).toLocaleDateString(undefined, { month: "long", day: "numeric" });
+    return formatDate(localDate(key), "short", { now: localDate(key) });
   }
 
   dayTooltip(key: string): string {
-    return localDate(key).toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+    return formatDate(localDate(key), "long");
   }
 
   summary(card: AnyCard): CardSummaryFields {
@@ -365,7 +362,7 @@ function paddingDay(key: string): CalendarDay {
 }
 
 function monthLabel(date: Date): string {
-  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  return formatDate(date, "monthYear");
 }
 
 /** Noon, so a local date key can never land on the previous day through a timezone offset. */

@@ -1,3 +1,5 @@
+import { EmptyStateComponent } from "../../shared/empty-state.component";
+import { CdkTrapFocus } from "@angular/cdk/a11y";
 import type { ElementRef, OnDestroy, OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, viewChild } from "@angular/core";
 import type { CompletedCardsResponse } from "@kanera/shared/dto";
@@ -23,6 +25,8 @@ import {
 } from "../board/table-view/export.util";
 import type { CardGroup } from "../board/table-view/table-view.types";
 import { DateRangePickerPopover } from "./date-range-picker.popover";
+import { formatDate } from "../../shared/date-format";
+import { localDateKey } from "../../shared/day-key.util";
 
 type CompletedCardGroup = {
   key: string;
@@ -33,7 +37,7 @@ type CompletedCardGroup = {
 @Component({
   selector: "k-completed-cards-panel",
   standalone: true,
-  imports: [AnchoredPanelDirective, CardComponent, DateRangePickerPopover, TooltipDirective],
+  imports: [EmptyStateComponent, CdkTrapFocus, AnchoredPanelDirective, CardComponent, DateRangePickerPopover, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./completed-cards-panel.component.html",
   styleUrl: "./completed-cards-panel.component.scss",
@@ -198,9 +202,7 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
 
   dateLabel(value: string): string {
     if (!value) return "Any date";
-    const [year, month, day] = value.split("-").map(Number);
-    if (!year || !month || !day) return value;
-    return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(year, month - 1, day));
+    return formatDate(value, "medium") || value;
   }
 
   dateRangeLabel(): string {
@@ -309,15 +311,12 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
 
   private completedDateKey(card: WireCardSummary): string {
     if (!card.completedAt) return "unknown";
-    const date = new Date(card.completedAt);
-    const parts = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
-    const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
-    return `${value("year")}-${value("month")}-${value("day")}`;
+    return localDateKey(new Date(card.completedAt));
   }
 
   private completedGroupDateLabel(card: WireCardSummary): string {
     if (!card.completedAt) return "Unknown date";
-    return new Intl.DateTimeFormat(undefined, { day: "numeric", month: "long", year: "numeric" }).format(new Date(card.completedAt));
+    return formatDate(card.completedAt, "long");
   }
 
   async reload() {

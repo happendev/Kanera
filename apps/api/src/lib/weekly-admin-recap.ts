@@ -6,6 +6,7 @@ import {
   EMAIL_QUEUE_STATUS,
   emailQueue,
   users,
+  workspaces,
   type BillingEmailQueueData,
   type WeeklyAdminRecapEmailQueueData,
   type WeeklyAdminRecapUpcomingGroup,
@@ -85,44 +86,67 @@ export async function buildWeeklyAdminRecap(
     seatEmailRows,
     upcomingRows,
   ] = await Promise.all([
-    countRows(database.select({ count: sql<number>`count(*)` }).from(users).where(and(gte(users.createdAt, lastMonday), lt(users.createdAt, thisMonday)))),
-    countRows(database.select({ count: sql<number>`count(*)` }).from(clients).where(and(gte(clients.createdAt, lastMonday), lt(clients.createdAt, thisMonday)))),
-    countRows(database.select({ count: sql<number>`count(*)` }).from(boards).where(and(gte(boards.createdAt, lastMonday), lt(boards.createdAt, thisMonday)))),
-    countRows(database.select({ count: sql<number>`count(*)` }).from(activityEvents).where(and(
-      eq(activityEvents.entityType, "workspaceMember"),
-      eq(activityEvents.action, "added"),
-      sql`${activityEvents.payload}->>'inviteId' is not null`,
-      gte(activityEvents.createdAt, lastMonday),
-      lt(activityEvents.createdAt, thisMonday),
-    ))),
-    countRows(database.select({ count: sql<number>`count(*)` }).from(boardInvitations).where(and(
-      gte(boardInvitations.acceptedAt, lastMonday),
-      lt(boardInvitations.acceptedAt, thisMonday),
-    ))),
+    countRows(database.select({ count: sql<number>`count(*)` }).from(users)
+      .innerJoin(clients, eq(clients.id, users.clientId))
+      .where(and(eq(clients.analyticsExcluded, false), gte(users.createdAt, lastMonday), lt(users.createdAt, thisMonday)))),
+    countRows(database.select({ count: sql<number>`count(*)` }).from(clients).where(and(eq(clients.analyticsExcluded, false), gte(clients.createdAt, lastMonday), lt(clients.createdAt, thisMonday)))),
+    countRows(database.select({ count: sql<number>`count(*)` }).from(boards)
+      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+      .innerJoin(clients, eq(clients.id, workspaces.clientId))
+      .where(and(eq(clients.analyticsExcluded, false), gte(boards.createdAt, lastMonday), lt(boards.createdAt, thisMonday)))),
+    countRows(database.select({ count: sql<number>`count(*)` }).from(activityEvents)
+      .innerJoin(clients, eq(clients.id, activityEvents.clientId))
+      .where(and(
+        eq(clients.analyticsExcluded, false),
+        eq(activityEvents.entityType, "workspaceMember"),
+        eq(activityEvents.action, "added"),
+        sql`${activityEvents.payload}->>'inviteId' is not null`,
+        gte(activityEvents.createdAt, lastMonday),
+        lt(activityEvents.createdAt, thisMonday),
+      ))),
+    countRows(database.select({ count: sql<number>`count(*)` }).from(boardInvitations)
+      .innerJoin(clients, eq(clients.id, boardInvitations.clientId))
+      .where(and(
+        eq(clients.analyticsExcluded, false),
+        gte(boardInvitations.acceptedAt, lastMonday),
+        lt(boardInvitations.acceptedAt, thisMonday),
+      ))),
     countRows(database.select({ count: sql<number>`count(*)` }).from(clients).where(and(
+      eq(clients.analyticsExcluded, false),
       gte(clients.analyticsSubscriptionStartedAt, lastMonday),
       lt(clients.analyticsSubscriptionStartedAt, thisMonday),
     ))),
-    countRows(database.select({ count: sql<number>`count(*)` }).from(users).where(isNull(users.deletedAt))),
-    countRows(database.select({ count: sql<number>`count(*)` }).from(clients).where(isNull(clients.deletedAt))),
-    countRows(database.select({ count: sql<number>`count(*)` }).from(boards).where(isNull(boards.archivedAt))),
+    countRows(database.select({ count: sql<number>`count(*)` }).from(users)
+      .innerJoin(clients, eq(clients.id, users.clientId))
+      .where(and(eq(clients.analyticsExcluded, false), isNull(users.deletedAt)))),
+    countRows(database.select({ count: sql<number>`count(*)` }).from(clients).where(and(eq(clients.analyticsExcluded, false), isNull(clients.deletedAt)))),
+    countRows(database.select({ count: sql<number>`count(*)` }).from(boards)
+      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+      .innerJoin(clients, eq(clients.id, workspaces.clientId))
+      .where(and(eq(clients.analyticsExcluded, false), isNull(boards.archivedAt)))),
     countRows(database.select({ count: sql<number>`count(*)` }).from(clients).where(and(
+      eq(clients.analyticsExcluded, false),
       isNull(clients.deletedAt),
       inArray(clients.billingStatus, ["active", "past_due"]),
     ))),
     countRows(database.select({ count: sql<number>`count(*)` }).from(clients).where(and(
+      eq(clients.analyticsExcluded, false),
       isNull(clients.deletedAt),
       eq(clients.billingStatus, "trialing"),
     ))),
     database.select({ count: sql<number>`coalesce(sum(${clients.seatLimit}), 0)` }).from(clients).where(and(
+      eq(clients.analyticsExcluded, false),
       isNull(clients.deletedAt),
       inArray(clients.billingStatus, ["active", "past_due"]),
     )),
-    database.select({ type: emailQueue.type, data: emailQueue.data, createdAt: emailQueue.createdAt }).from(emailQueue).where(and(
-      inArray(emailQueue.type, ["seat_billed", "upgraded_to_pro", "welcome_to_pro"]),
-      gte(emailQueue.createdAt, lastMonday),
-      lt(emailQueue.createdAt, thisMonday),
-    )),
+    database.select({ type: emailQueue.type, data: emailQueue.data, createdAt: emailQueue.createdAt }).from(emailQueue)
+      .innerJoin(clients, sql`${emailQueue.data}->>'clientId' = ${clients.id}::text`)
+      .where(and(
+        eq(clients.analyticsExcluded, false),
+        inArray(emailQueue.type, ["seat_billed", "upgraded_to_pro", "welcome_to_pro"]),
+        gte(emailQueue.createdAt, lastMonday),
+        lt(emailQueue.createdAt, thisMonday),
+      )),
     database.select({
       name: clients.name,
       seatLimit: clients.seatLimit,
@@ -130,6 +154,7 @@ export async function buildWeeklyAdminRecap(
       cancelAtPeriodEnd: clients.cancelAtPeriodEnd,
       currentPeriodEnd: clients.currentPeriodEnd,
     }).from(clients).where(and(
+      eq(clients.analyticsExcluded, false),
       isNull(clients.deletedAt),
       gte(clients.currentPeriodEnd, thisMonday),
       lt(clients.currentPeriodEnd, nextMonday),

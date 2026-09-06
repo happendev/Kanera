@@ -1,7 +1,7 @@
 <k-docs-link class="spaced" path="card-labels" label="Learn more about card labels" />
       <form class="board-form single-line-capture" (submit)="settings.addLabel($event)">
         <k-color-picker [value]="settings.newLabelColor()" (valueChange)="settings.newLabelColor.set($event)" />
-        <input name="label" placeholder="Label name" [value]="settings.newLabel()" (input)="settings.newLabel.set($any($event.target).value)" [maxLength]="settings.labelNameMaxLength" required style="flex:1" />
+        <input name="label" placeholder="Label name" [value]="settings.newLabel()" (input)="settings.newLabel.set($any($event.target).value)" [maxLength]="settings.labelNameMaxLength" required class="grow" />
         <button class="sm compact-add-button" type="submit" aria-label="Add label" kTooltip="Add label"><i class="ti ti-plus"></i><span class="mobile-hide">Add label</span></button>
       </form>
       <div class="boards" cdkDropList [cdkDropListData]="settings.labels()" (cdkDropListDropped)="settings.dropLabel($event)">
@@ -10,10 +10,10 @@
           <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
           <span class="label-dot" [style.background]="label.color ? 'var(--color-' + label.color + ')' : 'var(--border-strong)'"></span>
           @if (settings.editingLabelId() === label.id) {
-          <input class="inline-name-input" [value]="settings.editingLabelName()" (input)="settings.editingLabelName.set($any($event.target).value)" [maxLength]="settings.labelNameMaxLength" (blur)="settings.saveLabelName(label.id)" (keydown.enter)="settings.saveLabelName(label.id)"
-            (keydown.escape)="settings.cancelEditLabel()" autofocus style="flex:1" />
+          <input class="inline-name-input grow" [value]="settings.editingLabelName()" (input)="settings.editingLabelName.set($any($event.target).value)" [maxLength]="settings.labelNameMaxLength" (blur)="settings.saveLabelName(label.id)" (keydown.enter)="settings.saveLabelName(label.id)"
+            (keydown.escape)="settings.cancelEditLabel()" autofocus />
           } @else {
-          <span (click)="settings.startEditLabel(label)" kTooltip="Click to rename" style="cursor:pointer;flex:1">{{ label.name }}</span>
+          <span (click)="settings.startEditLabel(label)" kTooltip="Click to rename" class="grow" style="cursor:pointer">{{ label.name }}</span>
           }
           <div class="row-actions">
             <k-color-picker [value]="$any(label.color)" (valueChange)="settings.updateLabelColor(label.id, $event)" />
@@ -24,7 +24,7 @@
         </div>
         }
         @if (settings.labels().length === 0) {
-        <span class="empty-hint">No labels yet.</span>
+        <k-empty-state size="sm" icon="tag" title="No labels yet" text="Labels colour-code cards and are shared by every board here." />
         }
 
 </div>

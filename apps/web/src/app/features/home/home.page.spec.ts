@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { PendingInvitationsService } from "../../core/board-invitations/pending-invitations.service";
-import { organisationStorageKey, STORAGE_KEYS } from "../../core/browser/browser-contracts";
+import { firstRunDismissedKey, organisationStorageKey, STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import type { AppSocket } from "../../core/realtime/socket.service";
 import { SocketService } from "../../core/realtime/socket.service";
@@ -189,6 +189,7 @@ describe("HomePage", () => {
           provide: WorkspaceService,
           useValue: {
             boardSummaryFor: vi.fn((id: string) => BOARD_SUMMARIES[id] ?? null),
+            workspaceIdForBoard: vi.fn((id: string) => (BOARD_SUMMARIES[id] ? "ws-1" : null)),
             boards: signal(options.registeredBoards ?? []),
           },
         },
@@ -234,7 +235,7 @@ describe("HomePage", () => {
     // and rendered literally nothing.
     await render({ pending: true });
 
-    expect(host().querySelectorAll(".skeleton").length).toBeGreaterThan(0);
+    expect(host().querySelectorAll(".k-skeleton").length).toBeGreaterThan(0);
     expect(host().querySelector("main")!.textContent!.trim()).not.toBe("");
   });
 
@@ -689,30 +690,31 @@ describe("HomePage", () => {
   it("shows the getting-started empty state and suppresses the daily-driver sections", async () => {
     await render({ hasWorkspace: false, isOrgAdmin: true, response: payload({ boardCount: 0 }) });
 
-    expect(text()).toContain("No boards yet");
+    expect(text()).toContain("Welcome to Kanera");
     expect(host().querySelector(".focus-grid")).toBeNull();
     expect(host().querySelector(".agenda-panel")).toBeNull();
     expect(host().querySelector(".progress-panel")).toBeNull();
   });
 
-  it("offers guided setup and an agent connection to admins with nothing yet, but not to members", async () => {
+  it("offers workspace creation and an agent connection to admins with nothing yet, but not to members", async () => {
     await render({ hasWorkspace: false, isOrgAdmin: true, response: payload({ boardCount: 0 }) });
 
-    expect(text()).toContain("Start guided setup");
+    expect(text()).toContain("Create workspace");
     expect(host().querySelector("k-agent-connect-card")).not.toBeNull();
     expect(text()).toContain("https://mcp.example.test/mcp");
     expect(text()).toContain("Copy agent setup prompt");
 
     const router = TestBed.inject(Router);
     const navigate = vi.spyOn(router, "navigateByUrl").mockResolvedValue(true);
-    host().querySelector<HTMLButtonElement>(".no-boards-actions button:first-of-type")!.click();
-    expect(navigate).toHaveBeenCalledWith("/onboarding");
+    host().querySelector<HTMLButtonElement>(".no-boards-actions .action-workspace")!.click();
+    // Straight into the workspace flow: the card already made the workspace-or-standalone choice.
+    expect(navigate).toHaveBeenCalledWith("/onboarding?mode=workspace");
 
     TestBed.resetTestingModule();
     await render({ hasWorkspace: false, isOrgAdmin: false, response: payload({ boardCount: 0 }) });
     expect(text()).toContain("Ask an administrator");
     expect(host().querySelector("k-agent-connect-card")).toBeNull();
-    expect(text()).not.toContain("Start guided setup");
+    expect(text()).not.toContain("Create workspace");
   });
 
   it("gates the agent connection behind Pro when the plan has no API access", async () => {
@@ -737,13 +739,41 @@ describe("HomePage", () => {
       registeredBoards: [{ id: "board-1", name: "Roadmap", icon: null, iconColor: null }],
     });
 
-    expect(text()).not.toContain("No boards yet");
+    expect(text()).not.toContain("Welcome to Kanera");
     expect(host().querySelectorAll(".stat-tile")).toHaveLength(4);
     expect(host().querySelector(".agenda-panel")).not.toBeNull();
     expect(host().querySelector(".progress-panel")).not.toBeNull();
     // No visit history in this fixture, so the strip falls back to the registered board list.
     expect(text()).toContain("Recent boards");
     expect([...host().querySelectorAll(".recent-chip")].map((chip) => chip.textContent?.trim())).toEqual(["Roadmap"]);
+  });
+
+  it("shows admins of a small organisation the first steps card and hides it on dismiss", async () => {
+    await render({ isOrgAdmin: true, response: payload({ boardCount: 1 }) });
+    expect(host().querySelector(".first-run")).not.toBeNull();
+    expect(text()).toContain("First steps");
+
+    host().querySelector<HTMLButtonElement>(".first-run-head button")!.click();
+    fixture.detectChanges();
+    expect(host().querySelector(".first-run")).toBeNull();
+    // Remembered on this device for this user and organisation.
+    expect(localStorage.getItem(firstRunDismissedKey("user-1", "client-1"))).toBe("1");
+  });
+
+  it("does not show the first steps card once it was dismissed on this device", async () => {
+    localStorage.setItem(firstRunDismissedKey("user-1", "client-1"), "1");
+    await render({ isOrgAdmin: true, response: payload({ boardCount: 1 }) });
+    expect(host().querySelector(".first-run")).toBeNull();
+  });
+
+  it("keeps the first steps card away from members", async () => {
+    await render({ isOrgAdmin: false, response: payload({ boardCount: 1 }) });
+    expect(host().querySelector(".first-run")).toBeNull();
+  });
+
+  it("keeps the first steps card away from established organisations", async () => {
+    await render({ isOrgAdmin: true, response: payload({ boardCount: 4 }) });
+    expect(host().querySelector(".first-run")).toBeNull();
   });
 
   it("blocks workspace creation and explains the board limit", async () => {
@@ -754,7 +784,7 @@ describe("HomePage", () => {
       response: payload({ boardCount: 0 }),
     });
 
-    host().querySelector<HTMLButtonElement>(".no-boards-actions button:last-of-type")!.click();
+    host().querySelector<HTMLButtonElement>(".no-boards-actions .action-workspace")!.click();
     fixture.detectChanges();
 
     expect(text()).toContain("Your plan allows 0 boards. Upgrade to add another workspace.");
@@ -850,7 +880,7 @@ describe("HomePage", () => {
     });
 
     // Guided setup comes first and is never plan-gated; "New standalone board" is the second action.
-    host().querySelector<HTMLButtonElement>(".no-boards-actions button:nth-of-type(2)")!.click();
+    host().querySelector<HTMLButtonElement>(".no-boards-actions .action-standalone")!.click();
     fixture.detectChanges();
 
     expect(text()).toContain("Your plan allows 0 boards. Upgrade to add another board.");

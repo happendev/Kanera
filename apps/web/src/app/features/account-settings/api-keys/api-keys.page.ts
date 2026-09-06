@@ -1,3 +1,4 @@
+import { EmptyStateComponent } from "../../../shared/empty-state.component";
 import { ChangeDetectionStrategy, Component, inject, signal } from "@angular/core";
 import type { OnInit } from "@angular/core";
 import { API_KEY_NAME_MAX_LENGTH } from "@kanera/shared/dto/name-limits";
@@ -9,6 +10,7 @@ import { AgentConnectCardComponent } from "../../../shared/agent-connect-card/ag
 import { DocsLinkComponent } from "../../../shared/docs-link.component";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { AccountSettingsPage } from "../account-settings.page";
+import { formatDateTime } from "../../../shared/date-format";
 
 // Personal API keys are the caller's own, board-content-only credentials; the list carries no
 // workspace/creator fields (see the /me/api-keys response shape on the API). `scope` caps what the
@@ -51,7 +53,7 @@ function sortPersonalApiKeys(keys: PersonalApiKeyRow[]): PersonalApiKeyRow[] {
 @Component({
   selector: "k-account-settings-api-keys",
   standalone: true,
-  imports: [AgentConnectCardComponent, DocsLinkComponent, TooltipDirective],
+  imports: [EmptyStateComponent, AgentConnectCardComponent, DocsLinkComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./api-keys.page.html",
   styleUrl: "./api-keys.page.scss",
@@ -143,9 +145,7 @@ export class AccountSettingsApiKeysPage implements OnInit {
 
   protected formatKeyLastUsed(value: string | Date | null | undefined): string {
     if (!value) return "Never";
-    const date = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(date.getTime())) return "Never";
-    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
+    return formatDateTime(value, "short") || "Never";
   }
 }
 

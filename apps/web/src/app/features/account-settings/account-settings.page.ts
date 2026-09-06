@@ -1,5 +1,5 @@
 import type { OnDestroy, OnInit } from "@angular/core";
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked, ViewEncapsulation } from "@angular/core";
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, input, signal, untracked, ViewEncapsulation } from "@angular/core";
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, NavigationEnd, Router, RouterLink } from "@angular/router";
 import type { BillingInfoResponse, NotificationSettingsResponse, NotificationSettingType, NotificationWorkspaceRule, PersonalNotificationChannel, PersonalNotificationTestResponse, PublicClientResponse, SeatChangeResponse } from "@kanera/shared/dto";
@@ -13,14 +13,18 @@ import { ApiClient, ApiError } from "../../core/api/api.client";
 import type { AuthUser, OrgRole } from "../../core/auth/auth.service";
 import { AuthService } from "../../core/auth/auth.service";
 import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
+import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { BrowserPushService } from "../../core/notifications/browser-push.service";
 import { MentionSoundService } from "../../core/notifications/mention-sound.service";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { ThemeService } from "../../core/theme/theme.service";
+import { AutosaveTracker } from "../../shared/autosave-tracker";
 import { ConfirmService } from "../../shared/confirm.service";
 import { PageHeaderComponent } from "../../shared/page-header.component";
+import { TabStripDirective } from "../../shared/tab-strip.directive";
 import { SeatPaymentService } from "../../shared/seat-payment.service";
+import { ToastService } from "../../shared/toast.service";
 import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
 import { AccountSettingsPlanPage } from "./account-plan/account-plan.page";
 import { AccountSettingsApiKeysPage } from "./api-keys/api-keys.page";
@@ -28,6 +32,7 @@ import { AccountSettingsNotificationsPage } from "./notifications/notifications.
 import { AccountSettingsOrgPage } from "./org/org.page";
 import { AccountSettingsProfilePage } from "./profile/profile.page";
 import { AccountSettingsUsersPage } from "./users/users.page";
+import { formatDate, formatDateTime } from "../../shared/date-format";
 
 type Tab = "profile" | "notifications" | "api-keys" | "org" | "users" | "account-plan";
 const WORKSPACE_DEFAULTS_SAVE_DEBOUNCE_MS = 300;
@@ -169,12 +174,7 @@ const WORKSPACE_NOTIFICATION_CHANNELS = [
 }>;
 
 function formatBuildDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+  return formatDateTime(value, "medium") || value;
 }
 
 function formatBytes(value: number): string {
@@ -198,7 +198,7 @@ function formatCents(value: number): string {
 @Component({
   selector: "k-account-settings",
   standalone: true,
-  imports: [PageHeaderComponent, RouterLink, AccountSettingsProfilePage, AccountSettingsNotificationsPage, AccountSettingsApiKeysPage, AccountSettingsUsersPage, AccountSettingsOrgPage, AccountSettingsPlanPage],
+  imports: [PageHeaderComponent, RouterLink, TabStripDirective, AccountSettingsProfilePage, AccountSettingsNotificationsPage, AccountSettingsApiKeysPage, AccountSettingsUsersPage, AccountSettingsOrgPage, AccountSettingsPlanPage],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: "./account-settings.page.html",
@@ -210,6 +210,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   private readonly analytics = inject(AnalyticsService);
   private readonly auth = inject(AuthService);
   private readonly confirm = inject(ConfirmService);
+  private readonly toasts = inject(ToastService);
   private readonly offlineCache = inject(OfflineCacheService);
   private readonly seatPayment = inject(SeatPaymentService);
   private readonly upgradePrompt = inject(UpgradePromptService);
@@ -307,8 +308,8 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
 
   // Profile
   readonly displayName = signal("");
-  readonly nameSaving = signal(false);
-  readonly nameSavedAt = signal<number | null>(null);
+  /** The display name saves on blur/Enter; the chip fed by this is the only confirmation. */
+  readonly nameAutosave = new AutosaveTracker(inject(DestroyRef));
   readonly nameError = signal<string | null>(null);
   readonly cardKeysSaving = signal(false);
   readonly cardKeysError = signal<string | null>(null);
@@ -318,7 +319,6 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly email = signal("");
   readonly emailVerificationEnabled = signal(false);
   readonly emailSaving = signal(false);
-  readonly emailSavedAt = signal<number | null>(null);
   readonly emailError = signal<string | null>(null);
   // Email changes are verified: "idle" shows the address field; after a code is sent we
   // switch to "code" to collect it. The change only applies once the code is confirmed.
@@ -331,7 +331,8 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly notificationSettingsSaving = signal(false);
   readonly pushOptInAttempted = signal(false);
   readonly notificationSettingsError = signal<string | null>(null);
-  readonly notificationSettingsSuccess = signal<string | null>(null);
+  /** Toggles on the notifications tab save on change; the chip fed by this is their only confirmation. */
+  readonly notificationAutosave = new AutosaveTracker(inject(DestroyRef));
   readonly personalChannelBusy = signal<PersonalNotificationChannel | null>(null);
   readonly ntfyServerUrl = signal("");
   readonly ntfyTopic = signal("");
@@ -343,8 +344,40 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly notificationBoards = signal<NotificationBoardOption[]>([]);
   readonly workspaceRuleDrafts = signal(new Map<string, NotificationWorkspaceRule>());
   readonly workspaceRuleSaving = signal<string | null>(null);
+  /** Every matrix or pause change in the rule editor persists immediately; this chip sits in the editor heading. */
+  readonly workspaceRuleAutosave = new AutosaveTracker(inject(DestroyRef));
+  // Checkboxes stay enabled while a rule save is in flight so a burst of clicks is not dropped. A
+  // change that lands mid-save is queued here and the whole draft is re-sent once the current PUT
+  // settles, so the server always ends on the latest matrix.
+  private readonly workspaceRuleSaveQueued = new Set<string>();
   readonly workspaceRuleEditorId = signal<string | null>(null);
   readonly workspaceRulePickerOpen = signal(false);
+  private readonly unsavedWork = inject(UnsavedWorkService);
+  private readonly unsavedSettingsSource = Symbol("account-settings");
+  /**
+   * Settings autosave by default, so the only edits that can be lost are a display name typed but
+   * not yet blurred and personal-channel connection details, which keep an explicit Save because a
+   * half-typed URL or token must not be sent to the server. Both feed the shared unsaved-work
+   * service so route changes and tab closes prompt while they are pending.
+   */
+  private readonly settingsDraftDirty = computed(() => {
+    const user = this.user();
+    const nameDirty = Boolean(user) && this.displayName().trim() !== "" && this.displayName().trim() !== user?.displayName;
+    const channels = this.notificationSettings()?.personalChannels;
+    const channelDirty = Boolean(channels) && (
+      this.ntfyServerUrl().trim() !== (channels?.ntfy.serverUrl ?? "")
+      || this.ntfyTopic().trim() !== (channels?.ntfy.topic ?? "")
+      || this.ntfyToken() !== ""
+      || this.gotifyServerUrl().trim() !== (channels?.gotify.serverUrl ?? "")
+      || this.gotifyToken() !== ""
+      || this.personalWebhookUrl().trim() !== (channels?.webhook.url ?? "")
+    );
+    return nameDirty || channelDirty;
+  });
+  private readonly syncUnsavedSettings = effect((onCleanup) => {
+    this.unsavedWork.setDirty(this.unsavedSettingsSource, this.settingsDraftDirty());
+    onCleanup(() => this.unsavedWork.setDirty(this.unsavedSettingsSource, false));
+  });
   readonly availableWorkspaceNotificationChannels = computed(() => WORKSPACE_NOTIFICATION_CHANNELS.filter((channel) => this.workspaceChannelGloballyAvailable(channel.key)));
   readonly notificationWorkspaceGroups = computed<NotificationWorkspaceGroup[]>(() => {
     const settings = this.notificationSettings();
@@ -494,19 +527,18 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   });
   readonly orgName = signal("");
   readonly orgNameSaving = signal(false);
-  readonly orgNameSavedAt = signal<number | null>(null);
   readonly orgError = signal<string | null>(null);
   readonly defaultCompletedCardsActiveDays = signal(DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS);
   readonly defaultInactiveCardsDays = signal(DEFAULT_INACTIVE_CARDS_DAYS);
   readonly defaultBoardHealthEnabled = signal(true);
   readonly cardTimingDefaultsSaving = signal(false);
   readonly cardTimingDefaultsError = signal<string | null>(null);
-  readonly cardTimingDefaultsSavedAt = signal<number | null>(null);
+  /** The new-workspace defaults save on blur/toggle with no button, so they report through a chip. */
+  readonly cardTimingDefaultsAutosave = new AutosaveTracker(inject(DestroyRef));
   private cardTimingDefaultsSaveTimer: ReturnType<typeof setTimeout> | null = null;
   readonly pushEnabledDraft = signal(false);
   readonly pushSaving = signal(false);
   readonly pushError = signal<string | null>(null);
-  readonly pushSuccess = signal<string | null>(null);
   readonly logoUploading = signal(false);
   readonly logoError = signal<string | null>(null);
   readonly githubAppConfig = signal<GitHubAppConfig | null>(null);
@@ -528,9 +560,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly storageSaving = signal(false);
   readonly storageTesting = signal(false);
   readonly storageError = signal<string | null>(null);
-  readonly storageSavedAt = signal<number | null>(null);
   readonly storageTestError = signal<string | null>(null);
-  readonly storageTestSuccess = signal<string | null>(null);
   readonly storageBusy = computed(() => this.storageSaving() || this.storageTesting());
   readonly storageFromEnv = computed(() => this.client()?.storageConfigSource === "env");
 
@@ -551,9 +581,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly smtpSaving = signal(false);
   readonly smtpTesting = signal(false);
   readonly smtpError = signal<string | null>(null);
-  readonly smtpSuccess = signal<string | null>(null);
   readonly smtpTestError = signal<string | null>(null);
-  readonly smtpTestSuccess = signal<string | null>(null);
 
   constructor() {
     this.updateRouteTab();
@@ -928,24 +956,30 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     this.workspaceRuleDrafts.set(drafts);
   }
 
-  setWorkspaceRuleChannel(workspaceId: string, channel: WorkspaceNotificationChannel, checked: boolean): void {
+  // The rule editor autosaves: each setter updates the draft and persists it. Opening the editor
+  // for a workspace on account defaults therefore creates its rule on the first change, which is
+  // the intended meaning of "customize".
+  setWorkspaceRuleChannel(workspaceId: string, channel: WorkspaceNotificationChannel, checked: boolean): Promise<void> {
     this.updateWorkspaceRule(workspaceId, (rule) => ({
       ...rule,
       types: Object.fromEntries(
         NOTIFICATION_ROWS.map((row) => [row.key, { ...rule.types[row.key], [channel]: checked }]),
       ) as NotificationWorkspaceRule["types"],
     }));
+    return this.saveWorkspaceRule(workspaceId);
   }
 
-  setWorkspaceRuleTypeChannel(workspaceId: string, type: NotificationSettingType, channel: WorkspaceNotificationChannel, checked: boolean): void {
+  setWorkspaceRuleTypeChannel(workspaceId: string, type: NotificationSettingType, channel: WorkspaceNotificationChannel, checked: boolean): Promise<void> {
     this.updateWorkspaceRule(workspaceId, (rule) => ({
       ...rule,
       types: { ...rule.types, [type]: { ...rule.types[type], [channel]: checked } },
     }));
+    return this.saveWorkspaceRule(workspaceId);
   }
 
-  setWorkspaceRulePaused(workspaceId: string, paused: boolean): void {
+  setWorkspaceRulePaused(workspaceId: string, paused: boolean): Promise<void> {
     this.updateWorkspaceRule(workspaceId, (rule) => ({ ...rule, paused }));
+    return this.saveWorkspaceRule(workspaceId);
   }
 
   workspaceChannelGloballyAvailable(channel: WorkspaceNotificationChannel): boolean {
@@ -973,11 +1007,14 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   }
 
   async saveWorkspaceRule(workspaceId: string): Promise<void> {
-    if (this.workspaceRuleSaving()) return;
+    if (this.workspaceRuleSaving()) {
+      this.workspaceRuleSaveQueued.add(workspaceId);
+      return;
+    }
     const draft = this.workspaceRuleDraft(workspaceId);
     this.workspaceRuleSaving.set(workspaceId);
+    this.workspaceRuleAutosave.markSaving();
     this.notificationSettingsError.set(null);
-    this.notificationSettingsSuccess.set(null);
     try {
       const saved = await this.api.put<NotificationWorkspaceRule>(`/notifications/settings/workspaces/${workspaceId}`, {
         paused: draft.paused,
@@ -987,16 +1024,23 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         ...settings,
         workspaceRules: [...settings.workspaceRules.filter((rule) => rule.workspaceId !== workspaceId), saved],
       } : settings);
-      this.updateWorkspaceRule(workspaceId, () => this.cloneWorkspaceRule(saved));
-      this.notificationSettingsSuccess.set("Workspace notification rule saved.");
-      this.workspaceRuleEditorId.set(null);
+      // A change queued mid-flight means the draft is already ahead of this response; syncing it
+      // from `saved` would silently drop that click before the queued save re-sends it.
+      if (!this.workspaceRuleSaveQueued.has(workspaceId)) this.updateWorkspaceRule(workspaceId, () => this.cloneWorkspaceRule(saved));
+      this.workspaceRuleAutosave.markSaved();
     } catch (err) {
       // The compact editor closes and reopens across workspaces, so failed optimistic form state is
-      // rolled back explicitly instead of silently reappearing in a later session.
+      // rolled back explicitly instead of silently reappearing in a later session. Queued changes
+      // are dropped with it, since re-sending the restored rule would be a no-op write.
+      this.workspaceRuleSaveQueued.delete(workspaceId);
       this.restoreWorkspaceRuleDraft(workspaceId);
+      this.workspaceRuleAutosave.markError();
       this.notificationSettingsError.set(extractErrorMessage(err));
     } finally {
       this.workspaceRuleSaving.set(null);
+      const queued = [...this.workspaceRuleSaveQueued];
+      this.workspaceRuleSaveQueued.clear();
+      for (const queuedId of queued) void this.saveWorkspaceRule(queuedId);
     }
   }
 
@@ -1004,7 +1048,6 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     if (this.workspaceRuleSaving()) return;
     this.workspaceRuleSaving.set(workspaceId);
     this.notificationSettingsError.set(null);
-    this.notificationSettingsSuccess.set(null);
     try {
       await this.api.delete(`/notifications/settings/workspaces/${workspaceId}`);
       this.notificationSettings.update((settings) => settings ? {
@@ -1012,7 +1055,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         workspaceRules: settings.workspaceRules.filter((rule) => rule.workspaceId !== workspaceId),
       } : settings);
       this.updateWorkspaceRule(workspaceId, () => this.defaultWorkspaceRule(workspaceId));
-      this.notificationSettingsSuccess.set("Workspace now uses global notification defaults.");
+      this.toasts.success("Workspace now uses global notification defaults.");
       this.workspaceRuleEditorId.set(null);
     } catch (err) {
       this.notificationSettingsError.set(extractErrorMessage(err));
@@ -1025,16 +1068,17 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     const current = this.notificationSettings();
     if (!current || this.notificationSettingsSaving()) return;
     this.notificationSettingsSaving.set(true);
+    this.notificationAutosave.markSaving();
     this.notificationSettingsError.set(null);
-    this.notificationSettingsSuccess.set(null);
-    try {
+        try {
       const updated = await this.api.patch<NotificationSettingsResponse>("/notifications/settings", {
         personalChannels: { [channel]: { enabled: checked } },
       });
       this.applyNotificationSettings(updated);
-      this.notificationSettingsSuccess.set("Notification settings saved.");
+      this.notificationAutosave.markSaved();
     } catch (err) {
       this.notificationSettings.set(current);
+      this.notificationAutosave.markError();
       this.notificationSettingsError.set(extractErrorMessage(err));
     } finally {
       this.notificationSettingsSaving.set(false);
@@ -1045,7 +1089,6 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     if (this.personalChannelBusy()) return;
     this.personalChannelBusy.set(channel);
     this.notificationSettingsError.set(null);
-    this.notificationSettingsSuccess.set(null);
     try {
       const channelUpdate = channel === "ntfy"
         ? { serverUrl: this.ntfyServerUrl().trim() || null, topic: this.ntfyTopic().trim() || null, ...(this.ntfyToken() ? { token: this.ntfyToken() } : {}) }
@@ -1056,7 +1099,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         personalChannels: { [channel]: channelUpdate },
       });
       this.applyNotificationSettings(updated);
-      this.notificationSettingsSuccess.set(`${channel === "ntfy" ? "ntfy" : channel === "gotify" ? "Gotify" : "Webhook"} configuration saved.`);
+      this.toasts.success(`${channel === "ntfy" ? "ntfy" : channel === "gotify" ? "Gotify" : "Webhook"} configuration saved.`);
     } catch (err) {
       this.notificationSettingsError.set(extractErrorMessage(err));
     } finally {
@@ -1073,7 +1116,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         personalChannels: { [channel]: { token: null } },
       });
       this.applyNotificationSettings(updated);
-      this.notificationSettingsSuccess.set(`${channel === "ntfy" ? "ntfy" : "Gotify"} token removed.`);
+      this.toasts.success(`${channel === "ntfy" ? "ntfy" : "Gotify"} token removed.`);
     } catch (err) {
       this.notificationSettingsError.set(extractErrorMessage(err));
     } finally {
@@ -1099,7 +1142,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       const updated = await this.api.patch<NotificationSettingsResponse>("/notifications/settings", { personalChannels: { [channel]: channelUpdate } });
       this.generatedWebhookSecret.set(null);
       this.applyNotificationSettings(updated);
-      this.notificationSettingsSuccess.set("Notification channel removed.");
+      this.toasts.success("Notification channel removed.");
     } catch (err) {
       this.notificationSettingsError.set(extractErrorMessage(err));
     } finally {
@@ -1111,10 +1154,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     if (this.personalChannelBusy()) return;
     this.personalChannelBusy.set(channel);
     this.notificationSettingsError.set(null);
-    this.notificationSettingsSuccess.set(null);
     try {
       const result = await this.api.post<PersonalNotificationTestResponse>(`/notifications/channels/${channel}/test`, {});
-      if (result.delivered) this.notificationSettingsSuccess.set(`${channel === "ntfy" ? "ntfy" : channel === "gotify" ? "Gotify" : "Webhook"} test delivered.`);
+      if (result.delivered) this.toasts.success(`${channel === "ntfy" ? "ntfy" : channel === "gotify" ? "Gotify" : "Webhook"} test delivered.`);
       else this.notificationSettingsError.set(result.error ?? "Test delivery failed.");
     } catch (err) {
       this.notificationSettingsError.set(extractErrorMessage(err));
@@ -1135,7 +1177,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         ...settings,
         personalChannels: { ...settings.personalChannels, webhook: { ...settings.personalChannels.webhook, secretConfigured: true, configured: Boolean(settings.personalChannels.webhook.url) } },
       } : settings);
-      this.notificationSettingsSuccess.set("Webhook secret rotated.");
+      this.toasts.success("Webhook secret rotated.");
     } catch (err) {
       this.notificationSettingsError.set(extractErrorMessage(err));
     } finally {
@@ -1148,7 +1190,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     if (!secret) return;
     try {
       await navigator.clipboard.writeText(secret);
-      this.notificationSettingsSuccess.set("Webhook secret copied.");
+      this.toasts.success("Webhook secret copied.");
     } catch {
       this.notificationSettingsError.set("Could not copy the webhook secret. Copy it manually.");
     }
@@ -1158,16 +1200,18 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     const current = this.notificationSettings();
     if (!current || this.notificationSettingsSaving()) return;
     this.notificationSettingsSaving.set(true);
+    this.notificationAutosave.markSaving();
     this.notificationSettingsError.set(null);
-    this.notificationSettingsSuccess.set(null);
-    try {
+        try {
       if (channel === "push") {
         this.pushOptInAttempted.set(true);
         if (checked) {
           this.setPendingPushOptIn(true);
           await this.browserPush.subscribe();
           if (!this.browserPush.subscribed()) {
+            // Permission denied or dismissed: nothing was sent, so the chip goes quiet rather than "Saved".
             this.notificationSettings.set(current);
+            this.notificationAutosave.reset();
             return;
           }
         } else {
@@ -1180,9 +1224,10 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       });
       this.notificationSettings.set(updated);
       if (channel === "push") this.setPendingPushOptIn(false);
-      this.notificationSettingsSuccess.set("Notification settings saved.");
+      this.notificationAutosave.markSaved();
     } catch (err) {
       this.notificationSettings.set(current);
+      this.notificationAutosave.markError();
       this.notificationSettingsError.set(extractErrorMessage(err));
     } finally {
       this.notificationSettingsSaving.set(false);
@@ -1197,7 +1242,6 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
 
     this.notificationSettingsSaving.set(true);
     this.notificationSettingsError.set(null);
-    this.notificationSettingsSuccess.set(null);
     this.pushOptInAttempted.set(true);
     try {
       await this.browserPush.subscribe();
@@ -1205,7 +1249,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       const updated = await this.api.patch<NotificationSettingsResponse>("/notifications/settings", { pushEnabled: true });
       this.notificationSettings.set(updated);
       this.setPendingPushOptIn(false);
-      this.notificationSettingsSuccess.set("Push notifications enabled.");
+      this.toasts.success("Push notifications enabled.");
     } catch (err) {
       this.notificationSettingsError.set(extractErrorMessage(err));
     } finally {
@@ -1239,16 +1283,17 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     const current = this.notificationSettings();
     if (!current || this.notificationSettingsSaving()) return;
     this.notificationSettingsSaving.set(true);
+    this.notificationAutosave.markSaving();
     this.notificationSettingsError.set(null);
-    this.notificationSettingsSuccess.set(null);
-    try {
+        try {
       const updated = await this.api.patch<NotificationSettingsResponse>("/notifications/settings", {
         watchedActivityOutbound: checked,
       });
       this.notificationSettings.set(updated);
-      this.notificationSettingsSuccess.set("Notification settings saved.");
+      this.notificationAutosave.markSaved();
     } catch (err) {
       this.notificationSettings.set(current);
+      this.notificationAutosave.markError();
       this.notificationSettingsError.set(extractErrorMessage(err));
     } finally {
       this.notificationSettingsSaving.set(false);
@@ -1259,16 +1304,17 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     const current = this.notificationSettings();
     if (!current || this.notificationSettingsSaving()) return;
     this.notificationSettingsSaving.set(true);
+    this.notificationAutosave.markSaving();
     this.notificationSettingsError.set(null);
-    this.notificationSettingsSuccess.set(null);
-    try {
+        try {
       const updated = await this.api.patch<NotificationSettingsResponse>("/notifications/settings", {
         types: { [type]: { [channel]: checked } },
       });
       this.notificationSettings.set(updated);
-      this.notificationSettingsSuccess.set("Notification settings saved.");
+      this.notificationAutosave.markSaved();
     } catch (err) {
       this.notificationSettings.set(current);
+      this.notificationAutosave.markError();
       this.notificationSettingsError.set(extractErrorMessage(err));
     } finally {
       this.notificationSettingsSaving.set(false);
@@ -1277,7 +1323,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
 
   setMentionSoundEnabled(checked: boolean): void {
     this.mentionSound.setEnabled(checked);
-    this.notificationSettingsSuccess.set("Notification settings saved.");
+    this.notificationAutosave.markSaved();
     this.notificationSettingsError.set(null);
   }
 
@@ -1466,7 +1512,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   inviteExpiry(invite: OrgInvite): { label: string; tooltip: string; urgent: boolean } {
     if (!invite.expiresAt) return { label: "Never", tooltip: "This link stays valid until it is revoked.", urgent: false };
     const expiresAt = new Date(invite.expiresAt);
-    const absolute = expiresAt.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+    const absolute = formatDateTime(expiresAt, "medium");
     const days = Math.ceil((expiresAt.getTime() - Date.now()) / 86_400_000);
     if (days < 0) return { label: "Expired", tooltip: `Expired ${absolute}.`, urgent: true };
     if (days === 0) return { label: "Today", tooltip: `Expires ${absolute}.`, urgent: true };
@@ -1477,7 +1523,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   // Attribution resolves against the already-loaded roster; falls back to the bare date when the
   // creator has since been removed from the organisation.
   inviteCreatedLabel(invite: OrgInvite): string {
-    const created = new Date(invite.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    const created = formatDate(invite.createdAt, "medium");
     const author = this.orgUsers().find((u) => u.id === invite.createdById)?.displayName;
     return author ? `Created ${created} by ${author}` : `Created ${created}`;
   }
@@ -1486,20 +1532,22 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     return value.charAt(0).toUpperCase() + value.slice(1);
   }
 
-  async saveDisplayName() {
+  /** Runs on blur and Enter. An emptied field is restored rather than saved, since a blank name is invalid. */
+  async saveDisplayName(): Promise<void> {
     const next = this.displayName().trim();
     const current = this.user();
-    if (!current || !next || next === current.displayName) return;
-    this.nameSaving.set(true);
+    if (!current) return;
+    if (!next) {
+      this.displayName.set(current.displayName);
+      return;
+    }
+    if (next === current.displayName) return;
     this.nameError.set(null);
     try {
-      await this.api.patch("/auth/me", { displayName: next });
+      await this.nameAutosave.track(() => this.api.patch("/auth/me", { displayName: next }));
       this.auth.updateUser((u) => ({ ...u, displayName: next }));
-      this.nameSavedAt.set(Date.now());
     } catch (err) {
       this.nameError.set(extractErrorMessage(err));
-    } finally {
-      this.nameSaving.set(false);
     }
   }
 
@@ -1552,12 +1600,11 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     if (!current || !next || next === current.email) return;
     this.emailSaving.set(true);
     this.emailError.set(null);
-    this.emailSavedAt.set(null);
     try {
       if (!this.emailVerificationEnabled()) {
         await this.api.post("/auth/me/email", { email: next });
         this.auth.updateUser((u) => ({ ...u, email: next }));
-        this.emailSavedAt.set(Date.now());
+        this.toasts.success("Email address updated.");
         return;
       }
       await this.api.post("/auth/me/email/request-verification", { email: next });
@@ -1589,7 +1636,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       this.auth.updateUser((u) => ({ ...u, email: next }));
       this.emailStep.set("idle");
       this.emailCode.set("");
-      this.emailSavedAt.set(Date.now());
+      this.toasts.success("Email address updated.");
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         this.emailError.set("That email address is already registered.");
@@ -1883,7 +1930,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     try {
       const updated = await this.api.patch<PublicClientResponse>("/clients/me", { name: next });
       this.applyClient(updated);
-      this.orgNameSavedAt.set(Date.now());
+      this.toasts.success("Organisation name saved.");
       this.auth.updateUser((u) => ({ ...u, orgName: updated.name }));
     } catch (err) {
       this.orgError.set(extractErrorMessage(err));
@@ -1904,6 +1951,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     if (current.defaultCompletedCardsActiveDays === defaultCompletedCardsActiveDays && current.defaultInactiveCardsDays === defaultInactiveCardsDays && current.defaultBoardHealthEnabled === defaultBoardHealthEnabled) return;
 
     this.cardTimingDefaultsSaving.set(true);
+    this.cardTimingDefaultsAutosave.markSaving();
     this.cardTimingDefaultsError.set(null);
     try {
       this.applyClient(await this.api.patch<PublicClientResponse>("/clients/me", {
@@ -1911,11 +1959,12 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         defaultInactiveCardsDays,
         defaultBoardHealthEnabled,
       }));
-      this.cardTimingDefaultsSavedAt.set(Date.now());
+      this.cardTimingDefaultsAutosave.markSaved();
     } catch (err) {
       this.defaultCompletedCardsActiveDays.set(current.defaultCompletedCardsActiveDays);
       this.defaultInactiveCardsDays.set(current.defaultInactiveCardsDays);
       this.defaultBoardHealthEnabled.set(current.defaultBoardHealthEnabled);
+      this.cardTimingDefaultsAutosave.markError();
       this.cardTimingDefaultsError.set(extractErrorMessage(err));
     } finally {
       this.cardTimingDefaultsSaving.set(false);
@@ -1949,15 +1998,10 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
 
     this.pushSaving.set(true);
     this.pushError.set(null);
-    this.pushSuccess.set(null);
     try {
       const updated = await this.api.patch<PublicClientResponse>("/clients/me", { pushEnabled: next });
       this.applyClient(updated);
-      this.pushSuccess.set(
-        updated.pushEnabled
-          ? "Browser push enabled for this organisation."
-          : "Browser push disabled for this organisation.",
-      );
+      this.toasts.success(updated.pushEnabled ? "Browser push enabled for this organisation." : "Browser push disabled for this organisation.");
     } catch (err) {
       this.pushEnabledDraft.set(current.pushEnabled);
       this.pushError.set(extractErrorMessage(err));
@@ -2051,13 +2095,17 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     this.githubCompleting.set(true);
     this.githubError.set(null);
     try {
-      if (code) {
+      // GitHub sends `code` on two different redirects: the manifest conversion redirect (code only)
+      // and the post-install redirect when the App requests user authorization (code alongside
+      // installation_id). Only the former is a manifest code; the latter is an OAuth code the
+      // server needs to verify the installation binding.
+      if (code && !installationId) {
         const config = await this.api.post<GitHubAppConfig>("/clients/me/github-app/manifest/complete", {
           code,
           state: this.route.snapshot.queryParamMap.get("state") ?? undefined,
         });
         this.githubAppConfig.set(config);
-        if (!installationId && config.installUrl) {
+        if (config.installUrl) {
           this.continueToGitHubInstall(config);
           return;
         }
@@ -2065,6 +2113,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       if (installationId) {
         const installation = await this.api.post<GitHubAppInstallationRow>("/clients/me/github-app/installation", {
           installationId,
+          code: code ?? undefined,
         });
         this.githubInstallation.set(installation);
         const config = await this.api.get<GitHubAppConfig>("/clients/me/github-app/config");
@@ -2173,7 +2222,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     try {
       const updated = await this.api.patch<PublicClientResponse>("/clients/me", { storageConfig });
       this.applyClient(updated);
-      this.storageSavedAt.set(Date.now());
+      this.toasts.success("Storage settings saved.");
     } catch (err) {
       this.storageError.set(extractErrorMessage(err));
     } finally {
@@ -2187,11 +2236,10 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     if (!this.storageFromEnv() && (!storageConfig || storageConfig.kind !== "s3")) return;
 
     this.storageTestError.set(null);
-    this.storageTestSuccess.set(null);
     this.storageTesting.set(true);
     try {
       await this.api.post("/clients/me/storage/test", storageConfig ? { storageConfig } : {});
-      this.storageTestSuccess.set("Uploaded and deleted a 1KB test file.");
+      this.toasts.success("Storage test passed. Uploaded and deleted a 1KB test file.");
     } catch (err) {
       this.storageTestError.set(extractErrorMessage(err));
     } finally {
@@ -2204,12 +2252,11 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     const smtpConfig = this.buildSmtpConfig();
     if (!smtpConfig) return;
     this.smtpError.set(null);
-    this.smtpSuccess.set(null);
     this.smtpSaving.set(true);
     try {
       const updated = await this.api.patch<PublicClientResponse>("/clients/me", { smtpConfig });
       this.applyClient(updated);
-      this.smtpSuccess.set("SMTP settings saved.");
+      this.toasts.success("SMTP settings saved.");
     } catch (err) {
       this.smtpError.set(extractErrorMessage(err));
     } finally {
@@ -2220,12 +2267,11 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   async resetSmtpToEnv() {
     if (!this.isSelfHosted()) return;
     this.smtpError.set(null);
-    this.smtpSuccess.set(null);
     this.smtpSaving.set(true);
     try {
       const updated = await this.api.patch<PublicClientResponse>("/clients/me", { smtpConfig: null });
       this.applyClient(updated);
-      this.smtpSuccess.set(updated.smtpConfigSource === "env" ? "Using Docker environment SMTP settings." : "SMTP settings cleared.");
+      this.toasts.success(updated.smtpConfigSource === "env" ? "Using Docker environment SMTP settings." : "SMTP settings cleared.");
     } catch (err) {
       this.smtpError.set(extractErrorMessage(err));
     } finally {
@@ -2243,11 +2289,10 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       return;
     }
     this.smtpTestError.set(null);
-    this.smtpTestSuccess.set(null);
     this.smtpTesting.set(true);
     try {
       await this.api.post("/clients/me/smtp/test", smtpConfig ? { smtpConfig, to } : { to });
-      this.smtpTestSuccess.set(`Sent to ${to}.`);
+      this.toasts.success(`Test email sent to ${to}.`, "mail-check");
     } catch (err) {
       this.smtpTestError.set(extractErrorMessage(err));
     } finally {
@@ -2260,7 +2305,6 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     this.smtpTestOpen.update((open) => !open);
     if (!this.smtpTestTo()) this.smtpTestTo.set(this.user()?.email ?? "");
     this.smtpTestError.set(null);
-    this.smtpTestSuccess.set(null);
   }
 
   private buildSmtpConfig(errorTarget: "settings" | "test" = "settings"): SmtpConfig | null {

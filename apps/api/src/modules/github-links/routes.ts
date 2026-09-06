@@ -6,15 +6,18 @@ import { randomUUID } from "node:crypto";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { assertOrgRole, assertWorkspaceAccess } from "../../lib/access.js";
-import { badRequest, notFound } from "../../lib/errors.js";
+import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import {
   createInstallationAccessToken,
   convertGitHubManifest,
   envGitHubAppCredentials,
+  exchangeGitHubUserCode,
   type GitHubAppCredentials,
   githubApi,
   githubAppConfigured,
   githubAppInstallUrl,
+  githubUserAuthorizationConfigured,
+  githubUserCanAccessInstallation,
   loadInstallationInfo,
 } from "../../lib/github-app.js";
 import { decryptSecret, encryptSecret } from "../../lib/secrets.js";
@@ -97,6 +100,8 @@ function credentialsForApp(row: GitHubAppRow): GitHubAppCredentials {
     appId: decryptSecret(row.encryptedAppId),
     appSlug: row.appSlug,
     privateKey: decryptSecret(row.encryptedPrivateKey),
+    clientId: row.encryptedClientId ? decryptSecret(row.encryptedClientId) : null,
+    clientSecret: row.encryptedClientSecret ? decryptSecret(row.encryptedClientSecret) : null,
   };
 }
 
@@ -310,6 +315,10 @@ export async function githubLinkRoutes(app: FastifyInstance) {
       redirect_url: settingsUrl,
       setup_url: settingsUrl,
       setup_on_update: true,
+      // User authorization on install gives the binding route an OAuth code it can use to prove the
+      // completing user actually has access to the installation id they submit.
+      callback_urls: [settingsUrl],
+      request_oauth_on_install: true,
       public: false,
       default_permissions: {
         metadata: "read",
@@ -347,6 +356,8 @@ export async function githubLinkRoutes(app: FastifyInstance) {
       appSlug: converted.slug,
       encryptedPrivateKey: encryptSecret(converted.pem),
       encryptedWebhookSecret: converted.webhook_secret ? encryptSecret(converted.webhook_secret) : null,
+      encryptedClientId: converted.client_id ? encryptSecret(converted.client_id) : null,
+      encryptedClientSecret: converted.client_secret ? encryptSecret(converted.client_secret) : null,
       updatedAt: now,
     };
     const [row] = await db
@@ -376,8 +387,35 @@ export async function githubLinkRoutes(app: FastifyInstance) {
     if (!resolved) throw badRequest("GitHub App is not configured");
 
     const body = dto.completeGitHubInstallationBody.parse(req.body);
+
+    // Installation ids are small sequential integers and the App JWT can read every installation of
+    // the App, so "the installation exists" says nothing about who may bind it. Tie the binding to a
+    // verified GitHub identity: exchange the post-install OAuth code for a user token and require the
+    // installation to appear in that user's own `/user/installations`. Without OAuth credentials a
+    // hosted deployment (one App shared by all tenants) must refuse rather than trust the caller.
+    if (githubUserAuthorizationConfigured(resolved.credentials)) {
+      if (!body.code) throw badRequest("GitHub user authorization is required to connect an installation");
+      const userToken = await exchangeGitHubUserCode(body.code, resolved.credentials);
+      if (!userToken) throw badRequest("GitHub user authorization could not be verified");
+      if (!await githubUserCanAccessInstallation(userToken, body.installationId)) {
+        throw forbidden("this GitHub installation is not accessible to the authorizing GitHub user");
+      }
+    } else if (env.KANERA_DEPLOYMENT_MODE === "hosted") {
+      throw badRequest("GitHub App user authorization is not configured for this deployment");
+    }
+
+    // Uniform failure for an unknown installation and one already bound to another organisation, so
+    // the route cannot be used to enumerate which installation ids exist or who holds them.
+    const notBindable = () => badRequest("GitHub installation could not be verified");
+    const [heldByOther] = await db
+      .select({ clientId: githubAppInstallations.clientId })
+      .from(githubAppInstallations)
+      .where(eq(githubAppInstallations.installationId, body.installationId))
+      .limit(1);
+    if (heldByOther && heldByOther.clientId !== req.auth.cid) throw notBindable();
+
     const info = await loadInstallationInfo(body.installationId, resolved.credentials);
-    if (!info) throw badRequest("GitHub installation could not be verified");
+    if (!info) throw notBindable();
 
     const now = new Date();
     const values = {

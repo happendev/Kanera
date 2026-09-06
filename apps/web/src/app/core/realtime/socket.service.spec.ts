@@ -72,16 +72,27 @@ describe("SocketService", () => {
 
     const leaveFirst = service.joinWorkspace("workspace-1");
     const leaveSecond = service.joinWorkspace("workspace-1");
+    expect([...service.activeWorkspaceIds()]).toEqual(["workspace-1"]);
 
     expect(socket.emit).toHaveBeenCalledTimes(1);
     expect(socket.emit).toHaveBeenCalledWith("workspace:join", "workspace-1", expect.any(Function));
 
     leaveFirst();
+    expect([...service.activeWorkspaceIds()]).toEqual(["workspace-1"]);
     expect(socket.emit).toHaveBeenCalledTimes(1);
 
     leaveSecond();
+    expect(service.activeWorkspaceIds().size).toBe(0);
     expect(socket.emit).toHaveBeenCalledTimes(2);
     expect(socket.emit).toHaveBeenLastCalledWith("workspace:leave", "workspace-1");
+  });
+
+  it("clears active workspace ids on explicit disconnect", () => {
+    const service = TestBed.inject(SocketService);
+    service.joinWorkspace("workspace-1");
+    service.joinWorkspace("workspace-2");
+    service.disconnect();
+    expect(service.activeWorkspaceIds().size).toBe(0);
   });
 
   it("does not report offline while the initial socket connection is still pending", () => {

@@ -1,5 +1,13 @@
 import { DUE_DATE_SLOT_TIMES, type CardDueDateSlot } from "@kanera/shared/due-date-slots";
 
+import { dateTimeFormatter } from "./date-time-formatter.js";
+
+const dateFormatter = dateTimeFormatter({ year: "numeric", month: "2-digit", day: "2-digit" });
+const minuteFormatter = dateTimeFormatter({
+  year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", hour12: false, hourCycle: "h23",
+});
+
 export interface DueDateCandidate {
   dueDateLocalDate: string | null;
   dueDateSlot: CardDueDateSlot | null;
@@ -9,27 +17,9 @@ export interface DueDateCandidate {
 function localParts(now: Date, timezone: string): { date: string; hour: number; minute: number } {
   let parts: Intl.DateTimeFormatPart[];
   try {
-    parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: timezone || "UTC",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-      hourCycle: "h23",
-    }).formatToParts(now);
+    parts = minuteFormatter(timezone || "UTC").formatToParts(now);
   } catch {
-    parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "UTC",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-      hourCycle: "h23",
-    }).formatToParts(now);
+    parts = minuteFormatter("UTC").formatToParts(now);
   }
 
   const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
@@ -61,19 +51,9 @@ export function isDueDateOverdue(candidate: DueDateCandidate, now = new Date()):
 export function localDateInTimezone(date: Date, timezone: string): string {
   let parts: Intl.DateTimeFormatPart[];
   try {
-    parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: timezone || "UTC",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(date);
+    parts = dateFormatter(timezone || "UTC").formatToParts(date);
   } catch {
-    parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "UTC",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(date);
+    parts = dateFormatter("UTC").formatToParts(date);
   }
   const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
   return `${value("year")}-${value("month")}-${value("day")}`;

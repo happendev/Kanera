@@ -9,7 +9,7 @@
   max-width: 270px;
   flex: 0 0 auto;
   max-height: 100%;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  transition: border-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
 }
 
 :host-context([data-theme="light"]) {
@@ -57,8 +57,8 @@
 
 // Completion stays visible in the deliberately stripped-down drag tile: it is status, not chrome.
 .card-drag-preview.is-completed {
-  background: color-mix(in srgb, var(--success, #16a34a) 10%, var(--card-bg));
-  border-color: color-mix(in srgb, var(--success, #16a34a) 32%, var(--border));
+  background: color-mix(in srgb, var(--success) 10%, var(--card-bg));
+  border-color: color-mix(in srgb, var(--success) 32%, var(--border));
 }
 
 .card-drag-preview-cover {
@@ -160,7 +160,7 @@ k-card-labels.card-drag-preview-labels {
 .card-drag-preview-complete-icon {
   flex: 0 0 auto;
   margin-right: 4px;
-  color: var(--success, #16a34a);
+  color: var(--success);
   font-size: 15px;
 }
 
@@ -261,7 +261,7 @@ h3 {
   height: 28px;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.12s, color 0.12s, background-color 0.12s;
+  transition: opacity var(--motion-fast), color var(--motion-fast), background-color var(--motion-fast);
 
   .list-header:hover &,
   .list-header:focus-within &,
@@ -280,9 +280,9 @@ h3 {
   left: var(--ap-left, 0);
   z-index: var(--z-panel, 300);
   background: var(--surface-overlay);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--overlay-border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-lg, 0 4px 24px rgba(0, 0, 0, 0.35));
+  box-shadow: var(--shadow-lg);
   min-width: 160px;
   // A max-width is required now, not cosmetic. While the menu was `position: absolute` it shrank to fit
   // inside .list-header's box, so ~250px was an implicit ceiling; as a `fixed` panel the available width
@@ -321,18 +321,18 @@ h3 {
   }
 
   &.menu-item-danger {
-    color: var(--danger, #d33);
+    color: var(--danger);
 
     i {
-      color: var(--danger, #d33);
+      color: var(--danger);
     }
 
     &:hover {
-      background: color-mix(in srgb, var(--danger, #d33) 10%, transparent);
+      background: color-mix(in srgb, var(--danger) 10%, transparent);
     }
 
     &:active:not(:disabled) {
-      background: color-mix(in srgb, var(--danger, #d33) 16%, transparent);
+      background: color-mix(in srgb, var(--danger) 16%, transparent);
     }
   }
 }
@@ -357,9 +357,9 @@ h3 {
   left: var(--ap-left, 0);
   z-index: var(--z-panel, 300);
   background: var(--surface-overlay);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--overlay-border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-lg, 0 4px 24px rgba(0, 0, 0, 0.35));
+  box-shadow: var(--shadow-lg);
   min-width: 160px;
   max-width: 260px;
   max-height: var(--ap-max-height, 240px);
@@ -399,18 +399,18 @@ h3 {
   border-radius: var(--radius-sm);
   border: none;
   cursor: pointer;
-  background: var(--danger, #d33);
-  color: #fff;
-  transition: opacity 0.1s;
+  background: var(--danger);
+  color: var(--accent-fg);
+  transition: opacity var(--motion-fast);
 
   &:hover:not(:disabled),
   &:active:not(:disabled) {
-    background: var(--danger, #d33);
+    background: var(--danger);
     opacity: 0.9;
   }
 
   &:focus-visible {
-    box-shadow: 0 0 0 2px var(--surface-overlay), 0 0 0 4px var(--danger, #d33);
+    box-shadow: 0 0 0 2px var(--surface-overlay), 0 0 0 4px var(--danger);
   }
 
   &:disabled {
@@ -427,7 +427,7 @@ h3 {
   cursor: pointer;
   background: transparent;
   color: var(--text-muted);
-  transition: background 0.1s;
+  transition: background var(--motion-fast);
 
   &:hover {
     background: var(--list-bg-strong);
@@ -507,7 +507,7 @@ h3 {
   color: var(--text-muted);
   flex-shrink: 0;
   border-radius: var(--radius-sm);
-  transition: opacity 0.15s ease, color 0.1s ease, background 0.1s ease;
+  transition: opacity var(--motion-fast) ease, color var(--motion-fast) ease, background var(--motion-fast) ease;
 
   &:hover {
     color: var(--text);
@@ -555,4 +555,16 @@ h3 {
     width: 28px;
     height: 28px;
   }
+}
+
+.bulk-drag-count {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  display: block;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--color-primary, #18181b);
+  color: white;
 }

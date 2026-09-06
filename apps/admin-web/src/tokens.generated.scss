@@ -11,14 +11,23 @@
   // Dark elevates to separate, light recesses, so this sits above --surface-2 here and
   // below it in the light blocks.
   --surface-3: #28354d;
-  --surface-hover: #2b3953;
+  --surface-hover: #2f3f5c;
   --surface-subtle: rgba(255, 255, 255, 0.035);
   // Fill for floating chrome that sits *above* the page: menus, popovers, pickers, context
   // menus, tooltips. Deliberately off --surface, because a menu opened over a sidebar or a
   // panel painted in --surface had only its border and shadow to separate it from what it
   // covered. Sits between --surface and --surface-2 so row hover (--surface-2) still reads
   // clearly inside the panel. Dialogs and drawers keep --surface — they come with a scrim.
-  --surface-overlay: #1d2739;
+  // Sits *above* --card-bg (--surface-2): a context menu opened over a card was darker than the card
+  // and receded into it. Dark separates by elevating, so floating chrome must be the lightest fill
+  // on screen bar row hover.
+  --surface-overlay: #253248;
+  // Edge of floating chrome. The page hairline (--border) is tuned to divide same-hue surfaces
+  // gently, which is exactly what a menu must not do; on dark it needs a clearly brighter edge.
+  --overlay-border: #3d5170;
+  // Dividers drawn *inside* floating chrome. --border is nearly the same value as the raised overlay
+  // fill on dark, so a separator painted with it disappeared.
+  --overlay-separator: #364a66;
 
   --border: #253449;
   --border-strong: #364a66;
@@ -32,6 +41,14 @@
   // full --text is near-black and reads far heavier than the muted board rows beside
   // it, so light mode softens this to a slate that still clearly outranks --text-muted.
   --nav-text-strong: var(--text);
+  // Selected sidebar row. Dark can reuse the hover step; light needs its own, darker value because
+  // --surface-hover there is one shade off the sidebar and a selected board barely registered.
+  --nav-active-bg: var(--surface-hover);
+  // Recessed form panels (settings .board-form). On dark, a solid --surface-2 block inside a
+  // --surface card read as a large navy slab competing with its own fields, so dark mode uses a faint
+  // wash plus a hairline instead; light keeps the filled tray, where it separates cleanly.
+  --inset-bg: var(--surface-subtle);
+  --inset-border: var(--border);
 
   // Field fill for inputs, textareas, and selects. Dark mode is deliberately unfilled
   // over its darker surfaces and must stay that way. Light mode fills with the
@@ -47,7 +64,13 @@
   // too stark.
   --accent: #0d9488;
   --accent-hover: #0f766e;
-  --accent-fg: #ffffff;
+  // Text on an accent fill. No hue bright enough to read as *text* on this dark canvas can also
+  // carry white text at AA (the default teal manages 3.7:1, the workspace blue 2.4:1), whereas dark
+  // ink clears 5:1 on every palette tone — so dark mode paints its filled buttons with page-coloured
+  // ink. board.page.ts / workspace-settings.page.ts rebind --accent-fg to this same token when a
+  // board or workspace colour takes over the accent.
+  --accent-ink: #0b111b;
+  --accent-fg: var(--accent-ink);
   // Faint accent wash for "this control is engaged" states (toolbar Filter/Group/Sort,
   // selected settings rows, plan highlights). Declared in every block that declares
   // --accent, including the per-board/per-workspace runtime rebinding in
@@ -104,7 +127,9 @@
   // --shadow / --shadow-lg were only ever declared in the light blocks, so every dark-mode
   // consumer rendered shadowless (CDK drag previews, card-detail popovers, the colour picker).
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.34), 0 1px 3px rgba(0, 0, 0, 0.24);
-  --shadow-lg: 0 12px 32px -8px rgba(0, 0, 0, 0.55);
+  // The 1px ring is the part that does the work on dark: a soft shadow alone vanishes against
+  // same-hue navy, and the ring gives the menu a hard edge the eye can find.
+  --shadow-lg: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 16px 40px -10px rgba(0, 0, 0, 0.7);
   --depth-edge: inset 0 1px 2px rgba(255, 255, 255, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.18);
 
   // ─── Kanban surfaces (semantic) ──────────────────────────────────────────────
@@ -195,17 +220,33 @@
   --avatar-color-11-bg: rgba(148, 163, 184, 0.17);
   --avatar-color-11-fg: #c3cedb;
 
-  // ─── Board gradients ─────────────────────────────────────────────────────────
-  --gradient-sunrise: linear-gradient(135deg, #ffb347 0%, #ff5f5f 100%);
-  --gradient-ocean: linear-gradient(135deg, #2196f3 0%, #0d47a1 100%);
-  --gradient-forest: linear-gradient(135deg, #5a9660 0%, #1a3d22 100%);
-  --gradient-dusk: linear-gradient(135deg, #7c50b0 0%, #2e4599 100%);
-  --gradient-midnight: linear-gradient(135deg, #2a4a8a 0%, #080e28 100%);
-  --gradient-ember: linear-gradient(135deg, #d96828 0%, #721010 100%);
-  --gradient-mint: linear-gradient(135deg, #00bcd4 0%, #009688 100%);
-  --gradient-lavender: linear-gradient(135deg, #9b7fd4 0%, #4a2c8a 100%);
-  --gradient-peach: linear-gradient(135deg, #f48fb1 0%, #e91e63 100%);
-  --gradient-graphite: linear-gradient(135deg, #607d8b 0%, #263238 100%);
+  // ─── Board backgrounds ───────────────────────────────────────────────────────
+  // Rendered under --board-scrim (below), never raw: the scrim keeps header text readable and pulls
+  // every option toward the theme, so the stops here are tonal rather than saturated. The previous set
+  // used primary-coloured stops (#2196f3, #e91e63) that survived the dark scrim as neon and turned to
+  // chalk under the light one. Solids are single-colour gradients so `var(--gradient-*)` keeps working.
+  --gradient-sunrise: linear-gradient(135deg, #f2a65a 0%, #d9534f 100%);
+  --gradient-ocean: linear-gradient(135deg, #2f80b9 0%, #1b3f6e 100%);
+  --gradient-forest: linear-gradient(135deg, #4f8a5b 0%, #1f3d28 100%);
+  --gradient-dusk: linear-gradient(135deg, #7a5ba8 0%, #2f3f8a 100%);
+  --gradient-midnight: linear-gradient(135deg, #2b4470 0%, #0b1225 100%);
+  --gradient-ember: linear-gradient(135deg, #c96a3a 0%, #6b1d1d 100%);
+  --gradient-mint: linear-gradient(135deg, #3aa6a0 0%, #1f6f6a 100%);
+  --gradient-lavender: linear-gradient(135deg, #9a86c9 0%, #4f3a85 100%);
+  --gradient-peach: linear-gradient(135deg, #e69a9e 0%, #c2566d 100%);
+  --gradient-graphite: linear-gradient(135deg, #5f7280 0%, #263238 100%);
+  --gradient-obsidian: linear-gradient(135deg, #1a1d24 0%, #05060a 100%);
+  --gradient-slate: linear-gradient(#3b4757, #3b4757);
+  --gradient-stone: linear-gradient(#6b645c, #6b645c);
+  --gradient-sand: linear-gradient(#c9b48f, #c9b48f);
+  --gradient-sage: linear-gradient(#6f8a76, #6f8a76);
+  --gradient-charcoal: linear-gradient(#23272e, #23272e);
+
+  // Overlay painted above a board background. Dark deepens it, heaviest behind the header so the
+  // title stays readable; light lifts it toward the page so cards keep their contrast. Declared here
+  // and overridden in the light blocks so the board page and the picker preview agree.
+  --board-scrim: linear-gradient(to bottom, rgba(0, 0, 0, 0.55) 0, rgba(0, 0, 0, 0.32) 80px, rgba(0, 0, 0, 0.22) 100%);
+  --board-scrim-preview: linear-gradient(to bottom, rgba(0, 0, 0, 0.42), rgba(0, 0, 0, 0.22));
 
   // ─── Gradient tile theming ────────────────────────────────────────────────────
   --tile-scrim: rgba(0, 0, 0, 0.3);
@@ -230,10 +271,12 @@
   // light-OS device" bug: picking Dark set [data-theme="dark"] but this :root rule won.
   :root:not([data-theme]) {
     color-scheme: light;
-    --bg: #e3e8f0;
+    --bg: #e8ecf2;
     // Gradient tile — light mode
     --tile-scrim: rgba(255, 255, 255, 0.62);
     --tile-scrim-hover: rgba(255, 255, 255, 0.52);
+    --board-scrim: linear-gradient(to bottom, rgba(255, 255, 255, 0.72) 0, rgba(255, 255, 255, 0.5) 80px, rgba(255, 255, 255, 0.4) 100%);
+    --board-scrim-preview: linear-gradient(to bottom, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.4));
     --tile-gradient-fg: #0f172a;
     --tile-gradient-fg-muted: rgba(15, 23, 42, 0.65);
     --tile-gradient-btn: rgba(15, 23, 42, 0.55);
@@ -252,6 +295,8 @@
     // overlay darker than its own hover would read inverted. Light separation therefore still
     // leans on the border and shadow; this only stops a menu from matching what it covers exactly.
     --surface-overlay: #f9fbfd;
+    --overlay-border: var(--border);
+    --overlay-separator: var(--border);
 
     --border: #dde2ea;
     --border-strong: #c8d0dc;
@@ -261,12 +306,18 @@
     --muted: #52647a;
 
     --nav-text-strong: #334155;
+    --nav-active-bg: #dfe6ef;
+    --inset-bg: var(--surface-2);
+    --inset-border: transparent;
     --input-bg: var(--surface);
     --select-bg: var(--surface);
 
-    --accent: #0d9488;
-    --accent-hover: #0f766e;
-    --accent-fg: #ffffff;
+    // teal-700 rather than the dark theme's teal-600: white text on #0d9488 was 3.7:1, and on a
+    // light page the accent is also link/label text, where the deeper tone reads better anyway.
+    --accent: #0f766e;
+    --accent-hover: #115e59;
+    @include light-accent-palette;
+    --accent-fg: var(--accent-ink);
     // See the dark block: must be redeclared alongside every --accent declaration.
     --accent-soft: color-mix(in srgb, var(--accent) 8%, transparent);
 
@@ -277,7 +328,7 @@
     --success: #16a34a;
     --warning: #a16207;
 
-    --ring: rgba(13, 148, 136, 0.3);
+    --ring: rgba(15, 118, 110, 0.3);
 
     --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08), 0 1px 1px rgba(15, 23, 42, 0.04);
     --shadow: 0 2px 8px rgba(15, 23, 42, 0.10), 0 1px 3px rgba(15, 23, 42, 0.06);
@@ -341,10 +392,12 @@
 
 [data-theme="light"] {
   color-scheme: light;
-  --bg: #e3e8f0;
+  --bg: #e8ecf2;
   // Gradient tile — light mode
   --tile-scrim: rgba(255, 255, 255, 0.62);
   --tile-scrim-hover: rgba(255, 255, 255, 0.52);
+  --board-scrim: linear-gradient(to bottom, rgba(255, 255, 255, 0.72) 0, rgba(255, 255, 255, 0.5) 80px, rgba(255, 255, 255, 0.4) 100%);
+  --board-scrim-preview: linear-gradient(to bottom, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.4));
   --tile-gradient-fg: #0f172a;
   --tile-gradient-fg-muted: rgba(15, 23, 42, 0.65);
   --tile-gradient-btn: rgba(15, 23, 42, 0.55);
@@ -357,6 +410,8 @@
   --surface-subtle: rgba(0, 0, 0, 0.03);
   // Keep in sync with the @media light block above.
   --surface-overlay: #f9fbfd;
+  --overlay-border: var(--border);
+  --overlay-separator: var(--border);
 
   --border: #dde2ea;
   --border-strong: #c8d0dc;
@@ -366,12 +421,17 @@
   --muted: #52647a;
 
   --nav-text-strong: #334155;
+  --nav-active-bg: #dfe6ef;
+  --inset-bg: var(--surface-2);
+  --inset-border: transparent;
   --input-bg: var(--surface);
   --select-bg: var(--surface);
 
-  --accent: #0d9488;
-  --accent-hover: #0f766e;
-  --accent-fg: #ffffff;
+  // Keep in sync with the @media light block above.
+  --accent: #0f766e;
+  --accent-hover: #115e59;
+  @include light-accent-palette;
+  --accent-fg: var(--accent-ink);
   // See the dark block: must be redeclared alongside every --accent declaration.
   --accent-soft: color-mix(in srgb, var(--accent) 8%, transparent);
 
@@ -382,7 +442,7 @@
   --success: #16a34a;
   --warning: #a16207;
 
-  --ring: rgba(13, 148, 136, 0.3);
+  --ring: rgba(15, 118, 110, 0.3);
 
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08), 0 1px 1px rgba(15, 23, 42, 0.04);
   --shadow: 0 2px 8px rgba(15, 23, 42, 0.10), 0 1px 3px rgba(15, 23, 42, 0.06);

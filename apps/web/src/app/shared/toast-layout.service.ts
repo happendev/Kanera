@@ -9,7 +9,7 @@ type ToastEntry = {
 };
 
 @Injectable({ providedIn: "root" })
-export class StatusToastStackService {
+export class ToastLayoutService {
   private readonly entries = signal<ToastEntry[]>([]);
 
   register(id: symbol): void {

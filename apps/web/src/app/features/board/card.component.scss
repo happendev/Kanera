@@ -8,7 +8,7 @@
   padding: 6px 10px 8px;
   cursor: pointer;
   user-select: none;
-  transition: border-color 0.12s, box-shadow 0.12s, background-color 0.12s;
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast), background-color var(--motion-fast);
   position: relative;
   overflow: hidden;
   flex-shrink: 0;
@@ -22,7 +22,7 @@
   border-radius: inherit;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.12s, border-color 0.12s;
+  transition: opacity var(--motion-fast), border-color var(--motion-fast);
 }
 
 .card-actions-wrap {
@@ -55,12 +55,11 @@
   color: var(--text-muted);
   font-size: 10px;
   font-weight: 500;
-  letter-spacing: 0.03em;
   font-variant-numeric: tabular-nums;
   line-height: 1.3;
   white-space: nowrap;
   opacity: 0.7;
-  transition: opacity 0.12s;
+  transition: opacity var(--motion-fast);
 }
 
 :host:hover .card-key {
@@ -124,7 +123,7 @@
   color: var(--text-muted);
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.12s, background-color 0.12s, color 0.12s;
+  transition: opacity var(--motion-fast), background-color var(--motion-fast), color var(--motion-fast);
 
   i {
     font-size: 14px;
@@ -176,7 +175,7 @@
   font-size: 14px;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.12s, background-color 0.12s, color 0.12s;
+  transition: opacity var(--motion-fast), background-color var(--motion-fast), color var(--motion-fast);
 
   i {
     font-size: 14px;
@@ -234,9 +233,7 @@
   color: var(--text-muted);
   font-size: 9px;
   font-weight: 650;
-  letter-spacing: 0.05em;
   line-height: 1;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -291,13 +288,13 @@
 // accent stripe: a faint success-tinted wash plus a softly tinted border reads
 // as done, while the green check and muted title carry the explicit signal.
 :host.is-completed-card {
-  background: color-mix(in srgb, var(--success, #16a34a) 10%, var(--card-bg));
-  border-color: color-mix(in srgb, var(--success, #16a34a) 32%, var(--border));
+  background: color-mix(in srgb, var(--success) 10%, var(--card-bg));
+  border-color: color-mix(in srgb, var(--success) 32%, var(--border));
 }
 
 :host.is-completed-card:hover {
-  background: color-mix(in srgb, var(--success, #16a34a) 14%, var(--card-bg-hover));
-  border-color: color-mix(in srgb, var(--success, #16a34a) 45%, var(--border));
+  background: color-mix(in srgb, var(--success) 14%, var(--card-bg-hover));
+  border-color: color-mix(in srgb, var(--success) 45%, var(--border));
 }
 
 // In contexts where every card is already completed (the completed-cards
@@ -401,23 +398,35 @@
 }
 
 .card-complete-icon {
-  color: var(--success, #16a34a);
+  color: var(--success);
   font-size: 15px;
   margin-right: 4px;
   vertical-align: -2px;
 }
 
+// A badge is the field's *value* with its icon; the field name is a tooltip. Showing icon, name,
+// separator and value gave every field its own full-width row and made a populated lane fit two
+// cards. Badges now flow inline with the due date and indicators, one metadata row that wraps only
+// when it must.
 .cf-badge {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  border-radius: var(--radius-sm);
-  padding: 1px 0;
-  width: 100%;
+  gap: 3px;
+  max-width: 100%;
   min-width: 0;
+  padding: 1px 6px 1px 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--list-bg);
+  font-size: var(--text-xs);
+  line-height: 1.5;
   overflow: hidden;
   white-space: nowrap;
+}
+
+.cf-label,
+.cf-sep {
+  display: none;
 }
 
 .cf-badge>.ti {
@@ -437,10 +446,9 @@
 
 .cf-value {
   color: var(--text);
-  font-weight: 600;
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex: 1;
   min-width: 0;
 }
 
@@ -467,52 +475,76 @@
   }
 }
 
-// Coloured option pills for select fields on the card front.
+// Select options on the card front use the label chip's wash recipe (tinted fill, deepened ink)
+// rather than a solid fill: a saturated pill inside the badge frame read as a second, louder
+// container. The badge itself drops its own frame for select fields so the chips are the badge.
+.cf-badge--chips {
+  padding-inline: 0;
+  border-color: transparent;
+  background: transparent;
+  gap: 4px;
+}
+
 .cf-chip {
   display: inline-flex;
   align-items: center;
-  padding: 0 6px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
   border-radius: 999px;
-  font-size: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--text-xs);
   font-weight: 600;
   line-height: 16px;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   flex-shrink: 0;
+
+  &.has-color {
+    color: color-mix(in srgb, var(--option-color) var(--label-chip-ink-weight), var(--label-chip-ink-base));
+    background: color-mix(in srgb, var(--option-color) var(--label-chip-bg-weight), transparent);
+    border-color: color-mix(in srgb, var(--option-color) 19%, transparent);
+  }
 }
 
+// Shares the .cf-badge recipe (size, padding, full-ink value, muted icon) because it sits on the same
+// metadata row; a muted, larger due chip beside full-ink field badges read as two unrelated systems.
 .card-due {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 12px;
+  gap: 3px;
+  font-size: var(--text-xs);
   font-weight: 500;
-  color: var(--text-muted);
+  color: var(--text);
   background: var(--list-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 2px 7px;
+  padding: 1px 6px 1px 4px;
   line-height: 1.5;
   flex-shrink: 0;
 
   i {
+    color: var(--text-muted);
     font-size: 13px;
     line-height: 1;
     position: relative;
     top: -0.5px;
   }
 
+  // Risk states colour the whole chip, icon included, so the signal is not diluted by a grey icon.
+  &.overdue i, &.due-soon i { color: inherit; }
+
   &.overdue {
-    color: var(--danger, #d33);
-    background: color-mix(in srgb, var(--danger, #d33) 10%, transparent);
-    border-color: color-mix(in srgb, var(--danger, #d33) 25%, transparent);
+    color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
+    border-color: color-mix(in srgb, var(--danger) 25%, transparent);
   }
 
   &.due-soon {
-    color: var(--color-amber, #d97706);
-    background: color-mix(in srgb, var(--color-amber, #d97706) 12%, transparent);
-    border-color: color-mix(in srgb, var(--color-amber, #d97706) 30%, transparent);
+    color: var(--color-amber);
+    background: color-mix(in srgb, var(--color-amber) 12%, transparent);
+    border-color: color-mix(in srgb, var(--color-amber) 30%, transparent);
   }
 }
 
@@ -590,7 +622,7 @@
 .checklist-progress-fill {
   height: 100%;
   background: var(--accent);
-  transition: width 0.2s ease;
+  transition: width var(--motion-base) ease;
 }
 
 .card-checklists {
@@ -722,7 +754,7 @@
   // Green tick for a completed item, the same signal a completed card carries.
   &.checked,
   &.checked:hover:not(:disabled) {
-    color: var(--success, #16a34a);
+    color: var(--success);
   }
 
   &:focus-visible {
@@ -849,5 +881,20 @@
     color: var(--text-muted);
     font-size: 10px;
     letter-spacing: -0.5px;
+  }
+}
+
+// ─── Compact density ──────────────────────────────────────────────────────────
+// Set by the board page host (see BoardPage `host`). Only the metadata rows go: title, labels, due
+// date and assignees are what a lane is scanned for, the badges and indicators are what made a
+// populated lane fit two cards.
+:host-context(.compact-cards) {
+  .cf-badge,
+  .card-indicators {
+    display: none;
+  }
+
+  .card-footer:not(:has(.card-due, .assignee-stack)) {
+    display: none;
   }
 }

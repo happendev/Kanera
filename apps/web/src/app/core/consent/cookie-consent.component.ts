@@ -1,3 +1,4 @@
+import { CdkTrapFocus } from "@angular/cdk/a11y";
 import type { ElementRef } from "@angular/core";
 import { ChangeDetectionStrategy, Component, effect, inject, signal, viewChild } from "@angular/core";
 import { CookieConsentService } from "./cookie-consent.service";
@@ -6,6 +7,7 @@ import { CookieConsentService } from "./cookie-consent.service";
   selector: "k-cookie-consent",
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [CdkTrapFocus],
   templateUrl: "./cookie-consent.component.html",
   styleUrl: "./cookie-consent.component.scss",
 })

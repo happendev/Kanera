@@ -68,7 +68,7 @@ import type { UploadItem } from "./attachment-upload-queue.service";
         font-size: 12px;
       }
       .upl-row.is-error {
-        border-color: color-mix(in srgb, var(--danger, #d33) 45%, var(--border));
+        border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
       }
       .upl-row > .ti {
         flex: none;
@@ -76,7 +76,7 @@ import type { UploadItem } from "./attachment-upload-queue.service";
         color: var(--muted, #888);
       }
       .upl-row.is-error > .ti {
-        color: var(--danger, #d33);
+        color: var(--danger);
       }
       .upl-body {
         flex: 1;
@@ -110,11 +110,11 @@ import type { UploadItem } from "./attachment-upload-queue.service";
       .upl-fill {
         height: 100%;
         border-radius: inherit;
-        background: var(--accent, #4b7bec);
+        background: var(--accent);
         transition: width 0.15s ease;
       }
       .upl-error {
-        color: var(--danger, #d33);
+        color: var(--danger);
       }
       .upl-btn {
         flex: none;

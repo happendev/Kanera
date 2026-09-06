@@ -1,3 +1,4 @@
+import { CdkTrapFocus } from "@angular/cdk/a11y";
 import type { ElementRef } from "@angular/core";
 import {
   ChangeDetectionStrategy,
@@ -35,6 +36,7 @@ import { DescriptionViewerComponent } from "./description-viewer.component";
 import { formatDueDate, type DueDateSlotSelection } from "./due-date.util";
 import { ImageLightboxService } from "./image-lightbox.service";
 import { ReactionPopoverComponent } from "./reaction-popover.component";
+import { formatFeedTime } from "../../shared/date-format";
 
 const CARD_FEED_PAGE_SIZE = 50;
 
@@ -76,7 +78,7 @@ type CardFeedView =
 @Component({
   selector: "k-card-activity",
   standalone: true,
-  imports: [
+  imports: [CdkTrapFocus, 
     AnchoredPanelDirective,
     AvatarComponent,
     DraftBannerComponent,
@@ -1007,18 +1009,7 @@ export class CardActivityComponent {
   }
 
   formatFeedTime(createdAt: string | Date): string {
-    const date = new Date(createdAt as string);
-    const diffMs = Date.now() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60_000);
-    if (diffMins < 1) return "just now";
-    if (diffMins < 60) return `${diffMins} minute${diffMins === 1 ? "" : "s"} ago`;
-    return date.toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    return formatFeedTime(createdAt);
   }
 
   reactionFor(comment: CommentRow, type: ReactionType): CommentReactionSummary | undefined {

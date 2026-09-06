@@ -1,3 +1,4 @@
+import { EmptyStateComponent } from "../../shared/empty-state.component";
 import type {
   ElementRef,
   OnDestroy} from "@angular/core";
@@ -20,6 +21,7 @@ import type { BacklinkSummary, NoteBacklinksResponse } from "@kanera/shared/dto"
 import type { ColorToken } from "@kanera/shared/colors";
 import { AuthService } from "../../core/auth/auth.service";
 import { ApiClient, ApiError } from "../../core/api/api.client";
+import { ToastService } from "../../shared/toast.service";
 import { EditorDrafts } from "../../core/browser/editor-drafts";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { MediaDownloadService } from "../../core/media/media-download.service";
@@ -31,7 +33,6 @@ import { attachmentIconClass } from "../../shared/attachment-icons";
 import { attachmentPreviewType, type AttachmentPreviewType } from "../../shared/attachment-preview";
 import { AttachmentUploadListComponent } from "../../shared/attachments/attachment-upload-list.component";
 import { AttachmentUploadQueue } from "../../shared/attachments/attachment-upload-queue.service";
-import { ConfirmService } from "../../shared/confirm.service";
 import { DraftBannerComponent } from "../../shared/draft-banner.component";
 import { IconPickerComponent } from "../../shared/icon-picker.component";
 import { ColorPickerComponent } from "../../shared/color-picker.component";
@@ -41,6 +42,8 @@ import { DescriptionViewerComponent } from "../board/description-viewer.componen
 import { ImageLightboxService } from "../board/image-lightbox.service";
 import type { ImageLightboxItem } from "../board/image-lightbox.component";
 import { NotesState } from "./notes.service";
+import { formatDateTime } from "../../shared/date-format";
+import { viewerTimeZone } from "../../shared/day-key.util";
 
 const LOCK_HEARTBEAT_MS = 30_000; // 30 seconds
 const OFFLINE_DRAFT_MESSAGES = new Set([
@@ -50,7 +53,7 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
 @Component({
   selector: "k-note-editor",
   standalone: true,
-  imports: [DescriptionEditorComponent, DescriptionViewerComponent, DraftBannerComponent, IconPickerComponent, ColorPickerComponent, TooltipDirective, AttachmentUploadListComponent, AvatarComponent],
+  imports: [EmptyStateComponent, DescriptionEditorComponent, DescriptionViewerComponent, DraftBannerComponent, IconPickerComponent, ColorPickerComponent, TooltipDirective, AttachmentUploadListComponent, AvatarComponent],
   // Component-scoped so each open note has its own upload queue.
   providers: [AttachmentUploadQueue],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -298,11 +301,7 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
         </div>
       </div>
     } @else {
-      <div class="ne-placeholder">
-        <span class="ne-ph-icon"><i class="ti ti-notebook"></i></span>
-        <span class="ne-ph-title">No note selected</span>
-        <span class="ne-ph-hint">Pick one from the tree or create a new note to start writing.</span>
-      </div>
+      <k-empty-state class="ne-placeholder" [plain]="true" icon="notebook" title="No note selected" text="Pick one from the tree or create a new note to start writing." />
     }
   `,
   styleUrl: "./note-editor.component.scss",
@@ -315,7 +314,7 @@ export class NoteEditorComponent implements OnDestroy {
   private readonly unsavedWork = inject(UnsavedWorkService);
   private readonly mediaDownloads = inject(MediaDownloadService);
   private readonly unsavedDraftSource = Symbol("note-draft");
-  private readonly confirm = inject(ConfirmService);
+  private readonly toasts = inject(ToastService);
   private readonly sockets = inject(SocketService);
   readonly imageLightbox = inject(ImageLightboxService);
 
@@ -1028,10 +1027,27 @@ export class NoteEditorComponent implements OnDestroy {
   async confirmDeleteAttachment(attachmentId: string, fileName: string) {
     const n = this.note();
     if (!n || !this.canChangeAttachments()) return;
-    if (!await this.confirm.open({ title: `Delete "${fileName}"?`, message: "This cannot be undone.", danger: true })) return;
-    await this.api.delete(`/notes/${n.id}/attachments/${attachmentId}`);
-    this.attachments.update((rows) => rows.filter((row) => row.id !== attachmentId));
-    await this.notesState.fetchOne(n.id).catch(() => undefined);
+    const row = this.attachments().find((item) => item.id === attachmentId);
+    if (!row) return;
+    const index = this.attachments().indexOf(row);
+    const restore = () => this.attachments.update((rows) =>
+      rows.some((item) => item.id === attachmentId) ? rows : [...rows.slice(0, index), row, ...rows.slice(index)]);
+    // Undo instead of confirm: the row hides now and the DELETE waits for the toast (see card-detail).
+    this.attachments.update((rows) => rows.filter((item) => item.id !== attachmentId));
+    this.toasts.undoable({
+      message: `"${fileName}" deleted.`,
+      icon: "trash",
+      undo: restore,
+      commit: async () => {
+        try {
+          await this.api.delete(`/notes/${n.id}/attachments/${attachmentId}`);
+          await this.notesState.fetchOne(n.id).catch(() => undefined);
+        } catch {
+          restore();
+          this.toasts.info(`Couldn't delete "${fileName}".`, "alert-triangle");
+        }
+      },
+    });
   }
 
   openAttachmentImage(attachmentId: string, event?: Event): boolean {
@@ -1115,32 +1131,18 @@ export class NoteEditorComponent implements OnDestroy {
   }
 
   formatFeedTime(value: string | Date): string {
-    const date = typeof value === "string" ? new Date(value) : value;
-    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(date);
+    return formatDateTime(value, "short");
   }
 
   lastEditedTimeZone(): string {
     return this.auth.user()?.timezone?.trim()
-      || Intl.DateTimeFormat().resolvedOptions().timeZone
-      || "UTC";
+      || viewerTimeZone();
   }
 
   formatLastEditedAt(value: string | Date): string {
-    const date = typeof value === "string" ? new Date(value) : value;
-    try {
-      return new Intl.DateTimeFormat(undefined, {
-        dateStyle: "medium",
-        timeStyle: "short",
-        timeZone: this.lastEditedTimeZone(),
-      }).format(date);
-    } catch {
-      // A legacy/externally provisioned profile could contain a zone unsupported by this browser.
-      // Falling back to the browser zone is more useful than hiding the note's edit timestamp.
-      return new Intl.DateTimeFormat(undefined, {
-        dateStyle: "medium",
-        timeStyle: "short",
-      }).format(date);
-    }
+    // The shared formatter falls back to the browser zone when a profile carries a zone this
+    // browser does not know, so a legacy/externally provisioned profile still shows a timestamp.
+    return formatDateTime(value, "medium", { timeZone: this.lastEditedTimeZone() });
   }
 
   async downloadAttachment(url: string, fileName: string) {

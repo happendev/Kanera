@@ -1,9 +1,10 @@
-import { provideZonelessChangeDetection, signal } from "@angular/core";
+import { DestroyRef, provideZonelessChangeDetection, signal } from "@angular/core";
 import type { ComponentFixture } from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
 import { Router } from "@angular/router";
 import type { WireSearchResults } from "@kanera/shared/dto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { CommandPaletteService } from "../../core/search/command-palette.service";
 import { GlobalSearchService } from "../../core/search/global-search.service";
 import { ThemeService } from "../../core/theme/theme.service";
 import { GlobalSearchOverlayComponent } from "./global-search-overlay.component";
@@ -132,22 +133,42 @@ describe("GlobalSearchOverlayComponent", () => {
     expect(router.navigate).toHaveBeenCalledWith(["/b", "b1"], { queryParams: { view: "notes", noteId: "n2" } });
   });
 
-  it("offers contextual commands before a search and runs them from the same keyboard list", async () => {
+  it("lists registered actions before navigation and runs them from the same keyboard list", async () => {
+    const run = vi.fn();
+    TestBed.inject(CommandPaletteService).registerAll(
+      [{ id: "new-card", label: "Create a new card", detail: "Add work", icon: "plus", run }],
+      fixture.componentRef.injector.get(DestroyRef),
+    );
     search.query.set("");
-    router.url = "/b/board-1";
     await fixture.whenStable();
 
     expect(component.commands()[0]?.label).toBe("Create a new card");
     expect(component.flat()[0]?.kind).toBe("command");
 
     component.onKeydown(key("Enter"));
+    expect(run).toHaveBeenCalled();
     expect(search.close).toHaveBeenCalled();
   });
 
-  it("shows quick actions only while the search is empty", async () => {
+  it("filters commands by every query token and hides actions whose condition is false", async () => {
+    TestBed.inject(CommandPaletteService).registerAll(
+      [
+        { id: "new-board", label: "Create a new board", detail: "Standalone", icon: "plus", run: vi.fn() },
+        { id: "mark-read", label: "Mark all notifications as read", detail: "Clear", icon: "checks", when: () => false, run: vi.fn() },
+      ],
+      fixture.componentRef.injector.get(DestroyRef),
+    );
     search.query.set("");
     await fixture.whenStable();
-    expect(component.commands().length).toBeGreaterThan(1);
+    expect(component.commands().map((c) => c.id)).not.toContain("mark-read");
+
+    search.query.set("board new");
+    await fixture.whenStable();
+    expect(component.commands().map((c) => c.id)).toEqual(["new-board"]);
+
+    search.query.set("dark");
+    await fixture.whenStable();
+    expect(component.commands().map((c) => c.id)).toEqual(["theme"]);
 
     search.query.set(">");
     await fixture.whenStable();

@@ -1,9 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { createAdapter } from "@socket.io/redis-adapter";
 import { Server } from "socket.io";
-import { and, eq, inArray, isNull, notExists } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, notExists } from "drizzle-orm";
 import { CLIENT_EVENTS, SERVER_EVENTS, type ClientToServerEvents, type ServerToClientEvents } from "@kanera/shared/events";
-import { boardMembers, boards, clientMembers, clients, users, workspaceMembers, workspaces, type ClientRole } from "@kanera/shared/schema";
+import { boardMembers, boards, clientMembers, clients, supportSessions, users, workspaceMembers, workspaces, type ClientRole } from "@kanera/shared/schema";
 import { db } from "../db.js";
 import { env } from "../env.js";
 import type { AuthClaims } from "../auth/plugin.js";
@@ -19,6 +19,9 @@ interface SocketData {
   userId: string;
   clientId: string;
   role: ClientRole;
+  // Set only for sockets opened with a support-session token, so ending that session can
+  // disconnect exactly its sockets without kicking the impersonated owner's own sessions.
+  supportSessionId?: string;
 }
 
 function claimsFromSocket(data: SocketData): AuthClaims {
@@ -56,6 +59,26 @@ export function disconnectUserRealtimeSockets(userId: string): void {
     })
     .catch(() => {
       server.in(`user:${userId}`).disconnectSockets(true);
+    });
+}
+
+// Ending a support session revokes its HTTP token on the next request (the tenant plugin re-checks
+// the row), but an already-open socket would otherwise keep receiving tenant events until JWT expiry.
+// Match by session id, not user id: the operator acts as the org owner, whose real sockets must stay.
+export function disconnectSupportSessionSockets(sessionId: string): void {
+  const server = maybeGetIo();
+  if (!server) return;
+  for (const socket of server.sockets.sockets.values()) {
+    if (socket.data.supportSessionId === sessionId) socket.disconnect(true);
+  }
+  void server.fetchSockets()
+    .then((sockets) => {
+      for (const socket of sockets) {
+        if (socket.data.supportSessionId === sessionId) socket.disconnect(true);
+      }
+    })
+    .catch(() => {
+      // Other processes are unreachable; their sockets fall back to JWT expiry.
     });
 }
 
@@ -147,6 +170,27 @@ export async function setupIo(app: FastifyInstance): Promise<IoServer> {
         ))
         .limit(1);
       if (!currentUser) return next(new Error("unauthorized"));
+      // Mirror the HTTP tenant plugin: a support-session token is only valid while its row is
+      // un-ended and unexpired, so a force-ended session cannot reconnect with the same token.
+      if (claims.authKind === "support") {
+        const support = claims.support;
+        if (!support) return next(new Error("unauthorized"));
+        const [active] = await db
+          .select({ id: supportSessions.id })
+          .from(supportSessions)
+          .where(and(
+            eq(supportSessions.id, support.sessionId),
+            eq(supportSessions.adminUserId, support.byAdminId),
+            eq(supportSessions.adminEmail, support.byEmail),
+            eq(supportSessions.targetClientId, claims.cid),
+            eq(supportSessions.targetUserId, claims.sub),
+            isNull(supportSessions.endedAt),
+            gt(supportSessions.expiresAt, new Date()),
+          ))
+          .limit(1);
+        if (!active) return next(new Error("unauthorized"));
+        socket.data.supportSessionId = support.sessionId;
+      }
       socket.data.userId = claims.sub;
       socket.data.clientId = claims.cid;
       socket.data.role = currentUser.role;

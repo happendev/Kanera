@@ -6,7 +6,7 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertBoardAccess } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
-import { emitLaneRebalanced, positionForLaneInsert, rebalanceBoardLane, toWireSeparator } from "../../lib/board-lane.js";
+import { emitLaneRebalanced, positionForLaneInsert, rebalanceBoardLane } from "../../lib/board-lane.js";
 import { badRequest, notFound } from "../../lib/errors.js";
 import { emitToBoard } from "../../realtime/emit.js";
 
@@ -54,8 +54,8 @@ export async function separatorRoutes(app: FastifyInstance) {
     });
 
     if (rebalanced) await emitLaneRebalanced(boardId, listId, rebalanced);
-    await emitToBoard(boardId, SERVER_EVENTS.SEPARATOR_CREATED, { boardId, separator: toWireSeparator(separator) });
-    return reply.status(201).send(toWireSeparator(separator));
+    await emitToBoard(boardId, SERVER_EVENTS.SEPARATOR_CREATED, { boardId, separator });
+    return reply.status(201).send(separator);
   });
 
   app.patch("/separators/:id", async (req) => {
@@ -85,8 +85,8 @@ export async function separatorRoutes(app: FastifyInstance) {
       action: ACTIVITY_ACTION.UPDATED,
       payload: { title: separator.title, color: separator.color },
     });
-    await emitToBoard(current.boardId, SERVER_EVENTS.SEPARATOR_UPDATED, { boardId: current.boardId, separator: toWireSeparator(separator) });
-    return toWireSeparator(separator);
+    await emitToBoard(current.boardId, SERVER_EVENTS.SEPARATOR_UPDATED, { boardId: current.boardId, separator });
+    return separator;
   });
 
   app.post("/separators/:id/move", async (req) => {

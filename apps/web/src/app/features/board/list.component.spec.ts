@@ -230,9 +230,9 @@ describe("ListComponent", () => {
 
     const element = fixture.nativeElement as HTMLElement;
     // Initial cap renders far fewer than the 75 cards in the list.
-    expect(fixture.componentInstance.renderedCards().length).toBe(30);
-    expect(fixture.componentInstance.hiddenCardCount()).toBe(45);
-    expect(element.querySelectorAll("k-card").length).toBe(30);
+    expect(fixture.componentInstance.renderedCards().length).toBe(15);
+    expect(fixture.componentInstance.hiddenCardCount()).toBe(60);
+    expect(element.querySelectorAll("k-card").length).toBe(15);
 
     fixture.componentInstance.onCardsScroll({
       scrollHeight: 2000,
@@ -278,7 +278,7 @@ describe("ListComponent", () => {
       cardsEl.scrollTop = 1200;
 
       fixture.componentInstance.onDragStarted({} as never);
-      expect(fixture.componentInstance.renderedCards().length).toBe(30);
+      expect(fixture.componentInstance.renderedCards().length).toBe(15);
 
       fixture.componentInstance.onDragMoved({ pointerPosition: { x: 200, y: 399 } } as never);
       for (let i = 0; i < 5 && cardsEl.scrollTop === 1200; i += 1) {
@@ -316,14 +316,14 @@ describe("ListComponent", () => {
     fixture.componentRef.setInput("cards", cards);
     fixture.detectChanges();
 
-    expect(fixture.componentInstance.renderedCards().length).toBe(30);
+    expect(fixture.componentInstance.renderedCards().length).toBe(15);
 
     fixture.componentInstance.onDropListEntered();
     fixture.detectChanges();
 
     expect(fixture.componentInstance.receiving()).toBe(true);
-    expect(fixture.componentInstance.renderedCards().length).toBe(30);
-    expect(fixture.componentInstance.hiddenCardCount()).toBe(45);
+    expect(fixture.componentInstance.renderedCards().length).toBe(15);
+    expect(fixture.componentInstance.hiddenCardCount()).toBe(60);
   });
 
   it("keeps an incoming card rendered while a capped target waits for parent state", () => {
@@ -363,13 +363,13 @@ describe("ListComponent", () => {
     fixture.componentRef.setInput("canEdit", true);
     fixture.detectChanges();
 
-    expect(fixture.componentInstance.renderedCards().length).toBe(30);
+    expect(fixture.componentInstance.renderedCards().length).toBe(15);
 
     fixture.componentInstance.onDragStarted({} as never);
     fixture.detectChanges();
 
-    expect(fixture.componentInstance.renderedCards().length).toBe(30);
-    expect(fixture.componentInstance.hiddenCardCount()).toBe(270);
+    expect(fixture.componentInstance.renderedCards().length).toBe(15);
+    expect(fixture.componentInstance.hiddenCardCount()).toBe(285);
 
     fixture.componentInstance.onDragEnded();
   });
@@ -492,6 +492,38 @@ describe("ListComponent", () => {
     }]);
   });
 
+  it("allows selected cards to drag and skips selected destination anchors", async () => {
+    const cards = ["card-a", "card-b", "card-c"].map(summaryCard);
+    fixture.componentRef.setInput("cards", cards);
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("bulkSelectedCardIds", new Set(["card-a", "card-b", "other-lane-card"]));
+    const emitted: unknown[] = [];
+    fixture.componentInstance.cardDropped.subscribe((event) => emitted.push(event));
+    await fixture.whenStable();
+    expect(fixture.debugElement.queryAll(By.directive(CdkDrag))[0]!.injector.get(CdkDrag).disabled).toBe(false);
+    const container = { data: fixture.componentInstance.renderedItems() };
+    fixture.componentInstance.onDrop({
+      item: { data: { kind: "card", card: cards[0] } },
+      previousContainer: container, container, previousIndex: 0, currentIndex: 0,
+    } as never);
+    expect(emitted).toEqual([{
+      cardId: "card-a", toListId: "list-1", beforeItem: { type: "card", id: "card-c" },
+    }]);
+  });
+
+  it("uses the end of an empty destination for a selected group", async () => {
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("bulkSelectedCardIds", new Set(["card-a", "card-b"]));
+    const emitted: unknown[] = [];
+    fixture.componentInstance.cardDropped.subscribe((event) => emitted.push(event));
+    await fixture.whenStable();
+    fixture.componentInstance.onDrop({
+      item: { data: { kind: "card", card: summaryCard("card-a") } },
+      previousContainer: { data: [] }, container: { data: [] }, previousIndex: 0, currentIndex: 0,
+    } as never);
+    expect(emitted).toEqual([{ cardId: "card-a", toListId: "list-1", beforeItem: null }]);
+  });
+
   it("emits the rendered-slice boundary neighbor when dropping at the visible end", () => {
     const cards = Array.from({ length: 75 }, (_, i) => summaryCard(`card-${i}`));
     const emitted: unknown[] = [];
@@ -508,13 +540,13 @@ describe("ListComponent", () => {
       previousContainer: container,
       container,
       previousIndex: 0,
-      currentIndex: 29,
+      currentIndex: 14,
     } as never);
 
     expect(emitted).toEqual([{
       cardId: "card-0",
       toListId: "list-1",
-      afterItem: { type: "card", id: "card-29" },
+      afterItem: { type: "card", id: "card-14" },
     }]);
   });
 

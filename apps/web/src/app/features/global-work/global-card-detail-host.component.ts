@@ -125,6 +125,13 @@ export class GlobalCardDetailHostComponent implements OnInit, OnDestroy {
       this.attachRealtime();
       this.ready.set(true);
     } catch (error) {
+      if (error instanceof ApiError && (error.status === 403 || error.status === 404)) {
+        this.state.clear();
+        this.ready.set(false);
+        await this.offlineCache.revokeBoardAccess(card.boardId).catch(() => undefined);
+        this.closed.emit();
+        return;
+      }
       const cached = await this.offlineCache.loadBoard(card.boardId).catch(() => null);
       if (cached) {
         this.state.restoreSnapshot(cached);

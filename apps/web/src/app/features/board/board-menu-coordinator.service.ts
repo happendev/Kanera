@@ -2,6 +2,7 @@ import type { OnDestroy } from "@angular/core";
 import type { WritableSignal } from "@angular/core";
 import { inject, Injectable, signal, untracked } from "@angular/core";
 import { APP_DOM_EVENTS } from "../../core/browser/browser-contracts";
+import { PanelStackService } from "../../shared/panel-stack.service";
 import { CardLabelDisplayService } from "../../shared/card-label-display.service";
 
 /**
@@ -21,6 +22,7 @@ import { CardLabelDisplayService } from "../../shared/card-label-display.service
 @Injectable()
 export class BoardMenuCoordinator implements OnDestroy {
   private readonly labelDisplay = inject(CardLabelDisplayService);
+  private readonly panelStack = inject(PanelStackService);
 
   readonly activeCardMenuId = signal<string | null>(null);
   readonly activeListMenuId = signal<string | null>(null);
@@ -38,8 +40,21 @@ export class BoardMenuCoordinator implements OnDestroy {
     else this.closeCardMenu();
   };
 
+  private readonly onDragState = (event: Event) => {
+    if (event instanceof CustomEvent && event.detail === true) this.closeMenusForDrag();
+  };
+
   constructor() {
     document.addEventListener(APP_DOM_EVENTS.CARD_ACTIONS_MENU_OPEN, this.onCardMenuEvent);
+    document.addEventListener(APP_DOM_EVENTS.CARD_DRAG_STATE, this.onDragState);
+  }
+
+  closeMenusForDrag(): void {
+    // A drag does not produce the outside click that normally dismisses a context
+    // menu. Close the complete picker stack without clearing the card selection.
+    this.closeCardMenu();
+    this.closeListMenu();
+    this.panelStack.closeAll();
   }
 
   openCardMenu(cardId: string) {
@@ -84,5 +99,6 @@ export class BoardMenuCoordinator implements OnDestroy {
 
   ngOnDestroy() {
     document.removeEventListener(APP_DOM_EVENTS.CARD_ACTIONS_MENU_OPEN, this.onCardMenuEvent);
+    document.removeEventListener(APP_DOM_EVENTS.CARD_DRAG_STATE, this.onDragState);
   }
 }

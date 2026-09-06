@@ -58,6 +58,10 @@ async function serveMedia(req: FastifyRequest, reply: FastifyReply) {
     // Storage providers own their final key handling; the route only normalizes
     // unsafe characters within path segments while preserving nested keys.
     const key = params["*"].split("/").map((part) => decodeURIComponent(part).replace(/[^a-zA-Z0-9._-]/g, "_")).join("/");
+    // The character allowlist above keeps "." and "..", and Fastify does not collapse dot
+    // segments, so a raw request can carry a traversing key into the storage layer. The
+    // HMAC token already prevents forging one, but refuse it here as defence in depth.
+    if (hasDotSegment(key)) throw notFound();
     // Use 404 for any auth/token/storage miss so the route does not disclose
     // whether a tenant or object key exists.
     if (!query.t || !query.e || !verifyMediaToken({ clientId, key, t: query.t, e: query.e, s: query.s })) throw notFound();
@@ -101,6 +105,10 @@ async function serveMedia(req: FastifyRequest, reply: FastifyReply) {
       reply.header("Content-Disposition", attachmentDisposition(query.fn));
     }
     return reply.send(object.body);
+}
+
+export function hasDotSegment(key: string): boolean {
+  return key.split("/").some((part) => part === "" || part === "." || part === "..");
 }
 
 function parseRangeHeader(value: string | undefined): { start: number; end?: number } | null {

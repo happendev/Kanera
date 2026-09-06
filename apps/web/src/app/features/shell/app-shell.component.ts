@@ -1,9 +1,15 @@
+import { UnreadGlowDirective } from "./unread-glow.directive";
+import { MenuDirective } from "../../shared/menu.directive";
+import { ShortcutsSheetComponent } from "../../shared/shortcuts-sheet.component";
+import { KeyboardShortcutsService } from "../../core/keyboard/keyboard-shortcuts.service";
+import { CdkDrag, CdkDropList, type CdkDragDrop } from "@angular/cdk/drag-drop";
+import { CdkScrollable } from "@angular/cdk/scrolling";
 import { Dialog } from "@angular/cdk/dialog";
 import { NgOptimizedImage } from "@angular/common";
 import type { OnDestroy, OnInit } from "@angular/core";
-import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, signal, viewChild, DestroyRef } from "@angular/core";
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from "@angular/router";
-import type { NotificationSettingsResponse } from "@kanera/shared/dto";
+import type { MoveBoardResponse, NotificationSettingsResponse } from "@kanera/shared/dto";
 import type { ServerToClientEvents } from "@kanera/shared/events";
 import type { Board, BoardGroup, StandaloneBoardGroup } from "@kanera/shared/schema";
 import type { Subscription } from "rxjs";
@@ -19,9 +25,12 @@ import { MyPrioritiesService } from "../../core/priorities/my-priorities.service
 import { KANERA_DOCS_URL } from "../../shared/docs-link.component";
 import { ScratchpadPanelComponent } from "../scratchpad/scratchpad-panel.component";
 import { ScratchpadService } from "../scratchpad/scratchpad.service";
+import { ToastComponent } from "../../shared/toast.component";
 import { OfflineCacheService, type GuestHomeGroup, type HomeGroup, type HomeResponse } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { GlobalSearchService } from "../../core/search/global-search.service";
+import { CommandPaletteService } from "../../core/search/command-palette.service";
+import { RecentBoardsService } from "../../core/recent-boards/recent-boards.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { AvatarComponent } from "../../shared/avatar.component";
@@ -89,7 +98,7 @@ type SidebarSwipe = {
 @Component({
   selector: "k-app-shell",
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, AnchoredPanelDirective, MyPrioritiesPanelComponent, NotificationsPanelComponent, ScratchpadPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent],
+  imports: [UnreadGlowDirective,CdkDrag, CdkDropList, CdkScrollable, MenuDirective, RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, AnchoredPanelDirective, MyPrioritiesPanelComponent, NotificationsPanelComponent, ScratchpadPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, ToastComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent, ShortcutsSheetComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./app-shell.component.html",
   styleUrl: "./app-shell.component.scss",
@@ -97,7 +106,9 @@ type SidebarSwipe = {
     "[style.--sidebar-swipe-width]": "sidebarSwipeWidth() === null ? null : sidebarSwipeWidth() + 'px'",
     // Removing the left-most scratchpad trigger also shrinks the page-header exclusion band. The
     // bell and Up next keep their fixed positions, so their row stays aligned at every viewport size.
-    "[style.--bell-clearance]": "showScratchpad() ? null : 'calc(108px + env(safe-area-inset-right))'",
+    // The bell, Up next and scratchpad triggers live in the sidebar utility row, so no page header
+    // has to reserve a band for them. The token stays declared for the height contract only.
+    "[style.--bell-clearance]": "'0px'",
     // The dock is a real third grid column, so the shell — which owns the grid — has to know about
     // it. Suppressed on mobile, where the panel leaves the grid and becomes a bottom sheet.
     "[class.scratchpad-docked]": "showScratchpad() && scratchpad.open() && !isScratchpadSheet()",
@@ -116,12 +127,15 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private readonly auth = inject(AuthService);
   private readonly browserPush = inject(BrowserPushService);
   private readonly dialog = inject(Dialog);
-  private readonly notifications = inject(NotificationsService);
+  private readonly palette = inject(CommandPaletteService);
+  private readonly recentBoards = inject(RecentBoardsService);
+  protected readonly notifications = inject(NotificationsService);
   private readonly pendingInvitations = inject(PendingInvitationsService);
-  private readonly myPriorities = inject(MyPrioritiesService);
+  protected readonly myPriorities = inject(MyPrioritiesService);
   protected readonly scratchpad = inject(ScratchpadService);
   protected readonly scratchpadResizing = signal(false);
   private readonly offlineCache = inject(OfflineCacheService);
+  protected readonly offlineCacheError = computed(() => this.offlineCache.persistenceError?.() ?? null);
   private readonly panelStack = inject(PanelStackService);
   private readonly router = inject(Router);
   private readonly sockets = inject(SocketService);
@@ -129,9 +143,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private readonly upgradePrompt = inject(UpgradePromptService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   readonly search = inject(GlobalSearchService);
+  // Escape stays here rather than in the shortcuts registry: it must close shell chrome even while
+  // focus is in an input, which the registry's bare-key guard would prevent.
   private readonly handleDocumentKeydown = (event: KeyboardEvent) => {
     if (event.key === "Escape") this.onEscape();
-    this.onGlobalKeydown(event);
   };
   private readonly handleHostClick = (event: MouseEvent) => {
     if (!this.suppressSidebarClick) return;
@@ -152,6 +167,12 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly groups = signal<HomeGroup[]>([]);
   // Old offline shells have no kind; treating that as standard keeps their existing presentation.
   readonly standardGroups = computed(() => this.groups().filter((group) => (group.workspace as { kind?: string }).kind !== "board"));
+  /**
+   * The per-workspace "Boards" collapse toggle earns its row only when there is more than one
+   * workspace to collapse between. With a single workspace it was a repeated label pushing the
+   * boards themselves further down, so the group renders expanded with no subhead.
+   */
+  readonly showBoardsSubhead = computed(() => this.standardGroups().length > 1);
   readonly standaloneGroups = computed(() => this.groups().filter((group) => (group.workspace as { kind?: string }).kind === "board"));
   readonly guestGroups = signal<GuestHomeGroup[]>([]);
   readonly standaloneBoardGroups = signal<StandaloneBoardGroup[]>([]);
@@ -183,15 +204,41 @@ export class AppShellComponent implements OnInit, OnDestroy {
       }
       const containers: GuestContainer[] = [
         ...entry.standard.map((workspace): GuestContainer => ({ kind: "workspace", id: workspace.workspace.id, name: workspace.workspace.name, workspace })),
-        ...[...byGroup].map(([id, boards]): GuestContainer => ({ kind: "standaloneGroup", id, name: metadata.get(id)!.title, boards: boards.sort((a, b) => a.board.name.localeCompare(b.board.name)) })),
+        ...[...byGroup].map(([id, boards]): GuestContainer => ({ kind: "standaloneGroup", id, name: metadata.get(id)!.title, boards: boards.sort((a, b) => Number(a.board.position) - Number(b.board.position) || a.board.name.localeCompare(b.board.name)) })),
       ].sort((a, b) => a.name.localeCompare(b.name));
-      return { clientId, clientName: entry.clientName, containers, ungroupedStandaloneBoards: ungroupedStandaloneBoards.sort((a, b) => a.board.name.localeCompare(b.board.name)) };
+      return { clientId, clientName: entry.clientName, containers, ungroupedStandaloneBoards: ungroupedStandaloneBoards.sort((a, b) => Number(a.board.position) - Number(b.board.position) || a.board.name.localeCompare(b.board.name)) };
     }).filter((org) => org.containers.length > 0 || org.ungroupedStandaloneBoards.length > 0)
       .sort((a, b) => a.clientName.localeCompare(b.clientName));
   });
   readonly usingOfflineShell = signal(false);
   readonly user = this.auth.user;
   readonly showScratchpad = computed(() => this.user()?.showScratchpad ?? true);
+  private readonly isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
+  readonly notificationsPanel = viewChild(NotificationsPanelComponent);
+  readonly prioritiesPanel = viewChild(MyPrioritiesPanelComponent);
+
+  /**
+   * Notifications and Up next open from the same edge into the same space, so only one may be open:
+   * opening one closes the other first. Both panels stay ignorant of each other; the shell, which
+   * owns both triggers, is the one place that knows there are two.
+   */
+  togglePanel(which: "notifications" | "priorities"): void {
+    const notifications = this.notificationsPanel();
+    const priorities = this.prioritiesPanel();
+    if (which === "notifications") {
+      if (priorities?.open()) priorities.close();
+      notifications?.toggle();
+    } else {
+      if (notifications?.open()) notifications.close();
+      priorities?.toggle();
+    }
+  }
+  openShortcuts() {
+    this.closeUserMenu();
+    this.shortcutsOpen.set(true);
+  }
+
+  readonly scratchpadTooltip = computed(() => `${this.scratchpad.open() ? "Close scratchpad" : "Scratchpad"} · .`);
   readonly userMenuTooltip = computed(() => {
     const user = this.user();
     return user ? `${user.displayName} · ${user.email}` : "";
@@ -238,6 +285,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly searchShortcutLabel = signal<string | null>(this.readSearchShortcutLabel());
   readonly boardUnreadCounts = this.notifications.boardUnreadCounts;
   readonly notificationsOnline = this.notifications.online;
+  /** Offline the write would silently go nowhere, so the shortcut and palette verb stand down rather than lie. */
+  readonly canMarkAllRead = computed(() => this.notifications.unreadCount() > 0 && this.notificationsOnline());
   readonly userMenuOpen = signal(false);
   readonly organisationMenuOpen = signal(false);
   readonly navContextMenu = signal<NavContextMenu | null>(null);
@@ -358,7 +407,22 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.setSidebarCollapsed(next);
   }
 
+  private boardDragScrollTop: number | null = null;
+
+  onNavBoardDragStarted(): void {
+    const nav = this.host.nativeElement.querySelector<HTMLElement>(".nav");
+    // CDK reparents the original row and inserts a placeholder at pickup. Restore the scroll
+    // captured before that DOM change, before CDK measures the drop list and its scroller.
+    if (nav && this.boardDragScrollTop !== null) nav.scrollTop = this.boardDragScrollTop;
+    this.boardDragScrollTop = null;
+    // A long-press reorder now owns the touch; drawer scrolling must not fight CDK auto-scroll.
+    this.finishSidebarSwipe();
+  }
+
   onSidebarPointerDown(event: PointerEvent) {
+    const nav = this.host.nativeElement.querySelector<HTMLElement>(".nav");
+    this.boardDragScrollTop = event.target instanceof Element && nav?.contains(event.target)
+      && event.target.closest(".cdk-drag:not(.cdk-drag-disabled)") ? nav.scrollTop : null;
     if (event.pointerType !== "touch" || !event.isPrimary) return;
     // Anchored menus are rendered inside the sidebar's DOM tree even though they float over it.
     // Claiming their pointer stream for the drawer gesture makes touch taps target the shell instead
@@ -608,22 +672,159 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.closeMobileSidebar();
   }
 
-  // ⌘K / Ctrl+K opens the global spotlight search from anywhere in the app.
-  onGlobalKeydown(event: KeyboardEvent) {
-    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-      event.preventDefault();
-      this.search.open();
+  readonly shortcutsOpen = signal(false);
+
+  private readonly shortcuts = inject(KeyboardShortcutsService);
+  private readonly destroyRef = inject(DestroyRef);
+
+  /**
+   * App-wide shortcuts. Registered once for the shell's lifetime; pages and panels layer their own on
+   * top and win while mounted. Bare letters here are safe because the dispatcher stands them down
+   * inside any editable element.
+   */
+  private registerGlobalShortcuts(): void {
+    const go = (url: string) => () => void this.router.navigateByUrl(url);
+    this.shortcuts.registerAll("Everywhere", [
+      { keys: "mod+k", label: "Search everything", run: () => this.search.open() },
+      { keys: "?", label: "Keyboard shortcuts", run: () => this.shortcutsOpen.set(true) },
+      // The four sidebar utility buttons, in their on-screen order, each on one letter. ⌘⇧. stays as
+      // the scratchpad's original chord for anyone who learned it.
+      { keys: "mod+shift+.", label: "Open or close scratchpad", when: () => this.showScratchpad(), run: () => this.scratchpad.toggle() },
+      { keys: ".", label: "Open or close scratchpad", when: () => this.showScratchpad(), run: () => this.scratchpad.toggle() },
+      { keys: "u", label: "Open or close Up next", run: () => this.togglePanel("priorities") },
+      { keys: "n", label: "Open or close notifications", run: () => this.togglePanel("notifications") },
+      { keys: "shift+n", label: "Mark all notifications as read", when: () => this.canMarkAllRead(), run: () => void this.notifications.markAllRead() },
+      { keys: "h", label: "Help & docs", run: () => window.open(this.docsUrl, "_blank", "noopener") },
+      { keys: "[", label: "Collapse or expand sidebar", run: () => this.toggleSidebar() },
+    ], this.destroyRef);
+    this.shortcuts.registerAll("Go to", [
+      { keys: "g h", label: "Home", run: go("/") },
+      { keys: "g m", label: "My cards", run: go("/my-cards") },
+      { keys: "g t", label: "Team cards", run: go("/team-cards") },
+      { keys: "g p", label: "Portfolio", run: go("/portfolio") },
+      { keys: "g s", label: "Settings", run: go("/settings") },
+    ], this.destroyRef);
+  }
+
+  /**
+   * The ⌘K palette's verbs. Registered here rather than in the overlay because the shell is what owns
+   * the personal panels and the notification store. Order is display order: creation first, then
+   * toggles, so the palette reads as "do" before "go". Board and workspace creation stay on the sidebar
+   * "+" buttons only; they are rare, admin-only acts that do not belong one keystroke away.
+   */
+  private registerPaletteActions(): void {
+    this.palette.registerAll([
+      {
+        id: "new-card",
+        label: "Create a new card",
+        detail: () => {
+          const target = this.paletteNewCardTarget();
+          if (!target || target.here) return "Add work to this board";
+          const board = [...this.groups(), ...this.guestGroups()].flatMap((group) => group.boards).find((b) => b.id === target.boardId);
+          return board ? `Add work to ${board.name}` : "Add work to your most recent board";
+        },
+        icon: "square-rounded-plus",
+        keywords: ["add", "task"],
+        keys: () => (this.paletteNewCardTarget()?.here ? "c" : undefined),
+        when: () => this.paletteNewCardTarget() !== null,
+        run: () => this.paletteNewCard(),
+      },
+      {
+        id: "scratchpad",
+        label: "Open scratchpad",
+        detail: "Your personal notes, on every page",
+        icon: "note",
+        keywords: ["toggle", "notes"],
+        keys: ".",
+        when: () => this.showScratchpad() && !this.scratchpad.open(),
+        run: () => this.scratchpad.toggle(),
+      },
+      {
+        id: "scratchpad-close",
+        label: "Close scratchpad",
+        detail: "Hide your personal notes",
+        icon: "note-off",
+        keywords: ["toggle", "notes"],
+        keys: ".",
+        when: () => this.showScratchpad() && this.scratchpad.open(),
+        run: () => this.scratchpad.toggle(),
+      },
+      {
+        id: "notifications",
+        label: "Open notifications",
+        detail: "Mentions, assignments and watched activity",
+        icon: "bell",
+        keywords: ["inbox", "alerts"],
+        keys: "n",
+        run: () => this.togglePanel("notifications"),
+      },
+      {
+        id: "mark-all-read",
+        label: "Mark all notifications as read",
+        detail: "Clear every unread notification",
+        icon: "checks",
+        keywords: ["inbox", "clear"],
+        keys: "shift+n",
+        // Offline the write would silently queue nowhere, so the verb disappears rather than lying.
+        when: () => this.canMarkAllRead(),
+        run: () => void this.notifications.markAllRead(),
+      },
+      {
+        id: "up-next",
+        label: "Open Up next",
+        detail: "Your prioritised cards",
+        icon: "list-numbers",
+        keywords: ["priorities", "toggle"],
+        keys: "u",
+        run: () => this.togglePanel("priorities"),
+      },
+      {
+        id: "shortcuts",
+        label: "Keyboard shortcuts",
+        detail: "Every key the app listens for",
+        icon: "keyboard",
+        keywords: ["help", "keys"],
+        keys: "?",
+        run: () => this.shortcutsOpen.set(true),
+      },
+    ], this.destroyRef);
+  }
+
+  /**
+   * Which board "Create a new card" targets. On a board it is that board and the composer opens in
+   * place. Anywhere else it is the board opened most recently, falling back to the first board in the
+   * nav, so the verb still works from Home or My Cards. Null when the user has no board at all.
+   */
+  private paletteNewCardTarget(): { boardId: string; here: boolean } | null {
+    // Only boards the user may write to. `viewerRole` is the effective permission from /home/boards;
+    // observers (read-only guests) see the board but cannot add cards, so the verb must not offer it.
+    const editable = [...this.groups(), ...this.guestGroups()].flatMap((group) =>
+      group.boards.filter((board) => !this.isPlanDisabled(board) && (board as { viewerRole?: string }).viewerRole !== "observer"));
+    const current = /^\/b\/([^/?#]+)/.exec(this.router.url ?? "")?.[1];
+    if (current) return editable.some((board) => board.id === current) ? { boardId: current, here: true } : null;
+    const recent = this.recentBoards.boardIds().find((id) => editable.some((board) => board.id === id));
+    const boardId = recent ?? editable[0]?.id;
+    return boardId ? { boardId, here: false } : null;
+  }
+
+  private paletteNewCard(): void {
+    const target = this.paletteNewCardTarget();
+    if (!target) return;
+    if (target.here) {
+      // The palette lives above the routed page. This narrow event keeps it decoupled from the
+      // route-scoped BoardState while still opening the board's one canonical composer.
+      window.dispatchEvent(new CustomEvent("kanera:new-card"));
+      return;
     }
-    // ⌘⇧. / Ctrl+⇧. toggles the scratchpad. Like ⌘K above, this handler has no "is the user typing?"
-    // guard — and does not need one, because a modifier combo cannot be produced by ordinary typing.
-    // A bare key here would fire while writing in the scratchpad itself, which would be absurd.
-    if (this.showScratchpad() && (event.metaKey || event.ctrlKey) && event.shiftKey && (event.key === "." || event.key === ">")) {
-      event.preventDefault();
-      this.scratchpad.toggle();
-    }
+    // Off-board the page does not exist yet, so the request rides the URL and the board page opens
+    // the composer once it has loaded enough to know the user may edit.
+    void this.router.navigate(["/b", target.boardId], { queryParams: { compose: "card" } });
   }
 
   async ngOnInit() {
+    this.shortcuts.attach();
+    this.registerGlobalShortcuts();
+    this.registerPaletteActions();
     window.addEventListener("resize", this.onResize);
     this.host.nativeElement.addEventListener("click", this.handleHostClick, true);
     this.host.nativeElement.addEventListener("pointerdown", this.handleHostPointerDown, true);
@@ -1019,6 +1220,68 @@ export class AppShellComponent implements OnInit, OnDestroy {
     });
   }
 
+  readonly boardReorderPending = signal(false);
+  private readonly pendingBoardOrder = signal<Map<string, number> | null>(null);
+
+  private withPendingBoardOrder<T>(items: T[], boardOf: (item: T) => ShellBoard): T[] {
+    const ranks = this.pendingBoardOrder();
+    if (!ranks) return items;
+    // Keep server entities authoritative while holding the dropped visual order through partial
+    // rebalance echoes. Only this drop's siblings move; unrelated rows keep their current slots.
+    const siblings = items.filter((item) => ranks.has(boardOf(item).id))
+      .sort((a, b) => ranks.get(boardOf(a).id)! - ranks.get(boardOf(b).id)!);
+    let index = 0;
+    return items.map((item) => ranks.has(boardOf(item).id) ? siblings[index++] : item);
+  }
+  readonly boardReorderError = signal<string | null>(null);
+
+  canReorderBoards(workspace?: { role: string }): boolean {
+    return !this.usingOfflineShell() && !this.boardSearchTerm() && !this.boardReorderPending()
+      && (workspace ? this.canManageWorkspace(workspace) : this.isOrgAdmin());
+  }
+
+  // Collapsed navigation flattens named groups visually, but reordering must keep membership.
+  readonly canSortNavBoard = (index: number, drag: CdkDrag<ShellBoard>, drop: CdkDropList): boolean => {
+    const target = drop.getSortedItems()[index]?.data as ShellBoard | undefined;
+    return !!target && target.groupId === drag.data.groupId
+      && target.standaloneGroupId === drag.data.standaloneGroupId;
+  };
+
+  async dropNavBoard(event: CdkDragDrop<unknown>, items: Array<ShellBoard | StandaloneBoardNavItem>, workspace?: { role: string }): Promise<void> {
+    if (!this.canReorderBoards(workspace) || event.previousContainer !== event.container
+      || event.previousIndex === event.currentIndex) return;
+    const ordered = items.map((item) => "board" in item ? item.board : item);
+    const moved = ordered[event.previousIndex];
+    if (!moved || this.isPlanDisabled(moved)) return;
+    ordered.splice(event.previousIndex, 1);
+    ordered.splice(event.currentIndex, 0, moved);
+    const body = event.currentIndex === 0
+      ? { beforeBoardId: ordered[1]?.id ?? null }
+      : { afterBoardId: ordered[event.currentIndex - 1].id };
+    this.boardReorderPending.set(true);
+    this.boardReorderError.set(null);
+    // CDK removes its placeholder on drop. Commit the visible order synchronously so the real
+    // row occupies that slot immediately, even when the API takes seconds to respond.
+    this.pendingBoardOrder.set(new Map(ordered.map((board, index) => [board.id, index])));
+    try {
+      const result = await this.api.post<MoveBoardResponse>(`/boards/${moved.id}/move`, body);
+      const positions = new Map((result.positions ?? []).map((board) => [board.id, board.position]));
+      positions.set(result.id, result.position);
+      this.groups.update((groups) => groups.map((group) => {
+        if (!group.boards.some((board) => positions.has(board.id))) return group;
+        return { ...group, boards: sortBoards(group.boards.map((board) => {
+          const position = positions.get(board.id);
+          return position === undefined ? board : { ...board, position };
+        })) };
+      }));
+    } catch {
+      this.boardReorderError.set("Could not save the board order. Please try again.");
+    } finally {
+      this.pendingBoardOrder.set(null);
+      this.boardReorderPending.set(false);
+    }
+  }
+
   canManageWorkspace(workspace: { role: string }): boolean {
     return this.isOrgAdmin() || workspace.role === "admin";
   }
@@ -1039,6 +1302,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.groups();
     this.guestGroups();
     this.boardSearchTerm();
+    this.pendingBoardOrder();
     return {
       filtered: new WeakMap<object, ShellBoard[]>(),
       grouped: new WeakMap<object, SidebarBoardGroup[]>(),
@@ -1051,9 +1315,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
     const cached = cache.get(group);
     if (cached) return cached;
     const term = this.boardSearchTerm();
-    const result = term
+    const result = this.withPendingBoardOrder(term
       ? (group.boards as ShellBoard[]).filter((board) => board.name.toLocaleLowerCase().includes(term))
-      : group.boards as ShellBoard[];
+      : group.boards as ShellBoard[], (board) => board);
     cache.set(group, result);
     return result;
   }
@@ -1107,7 +1371,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
       .map((group) => ({
         id: group.id,
         title: group.title,
-        boards: (byGroupId.get(group.id) ?? []).sort((a, b) => a.board.name.localeCompare(b.board.name)),
+        boards: this.withPendingBoardOrder((byGroupId.get(group.id) ?? []).sort((a, b) => Number(a.board.position) - Number(b.board.position) || a.board.name.localeCompare(b.board.name)), (item) => item.board),
       }))
       .filter((group) => group.boards.length > 0)
       .sort((a, b) => a.title.localeCompare(b.title));
@@ -1115,10 +1379,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   standaloneNavigationUngrouped(groups: Array<HomeGroup | GuestHomeGroup>): StandaloneBoardNavItem[] {
     const knownIds = new Set(this.standaloneBoardGroups().map((group) => group.id));
-    return groups.flatMap((homeGroup) => this.filteredBoards(homeGroup)
+    return this.withPendingBoardOrder(groups.flatMap((homeGroup) => this.filteredBoards(homeGroup)
       .filter((board) => !board.standaloneGroupId || !knownIds.has(board.standaloneGroupId))
       .map((board) => ({ board, homeGroup })))
-      .sort((a, b) => a.board.name.localeCompare(b.board.name));
+      .sort((a, b) => Number(a.board.position) - Number(b.board.position) || a.board.name.localeCompare(b.board.name)), (item) => item.board);
   }
 
   guestCollapsedBoards(org: GuestOrganisation): StandaloneBoardNavItem[] {
@@ -1176,7 +1440,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   boardAttentionColor(board: Pick<Board, "iconColor">, workspaceId: string): string | null {
     const color = board.iconColor ?? this.accentColorForWorkspace(workspaceId);
-    return color ? `var(--color-${color})` : null;
+    // Fill behind --accent-fg text, so use the contrast-checked action tone where the theme has one.
+    return color ? `var(--color-${color}-accent, var(--color-${color}))` : null;
   }
 
   isBoardGroupCollapsed(workspaceId: string, groupId: string): boolean {

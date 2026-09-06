@@ -117,7 +117,15 @@ export const kaneraBoardImportArchive = z.looseObject({
   comments: z.array(z.looseObject({ id: z.uuid(), cardId: z.uuid(), authorId: z.uuid(), body: z.string() })),
   commentReactions: z.array(z.looseObject({ commentId: z.uuid(), userId: z.uuid(), reactionType: z.string() })),
   cardWatchers: z.array(z.looseObject({ cardId: z.uuid(), userId: z.uuid() })),
-  attachments: z.array(kaneraBoardArchiveEntity),
+  // The importer fetches/copies these, so the attacker-controllable parts must at least be
+  // well-formed: an absolute URL plus string metadata. Scheme/host policy is enforced server-side.
+  attachments: z.array(z.looseObject({
+    id: z.uuid(),
+    cardId: z.uuid(),
+    url: z.url(),
+    mimeType: z.string().min(1).max(255),
+    fileName: z.string().min(1).max(1024),
+  })),
 });
 export type KaneraBoardImportArchive = z.infer<typeof kaneraBoardImportArchive>;
 

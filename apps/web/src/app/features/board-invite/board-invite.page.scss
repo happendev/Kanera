@@ -25,18 +25,11 @@
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 40px 36px;
+
+  @media (max-width: 480px) {
+    padding: 28px 20px;
+  }
   text-align: center;
-}
-
-.loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  color: var(--text-muted);
-  font-size: 14px;
-
-  i { font-size: 28px; }
 }
 
 .invalid {
@@ -74,8 +67,6 @@
   display: inline-block;
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
   color: var(--text-muted);
   margin-bottom: 10px;
 }
@@ -115,6 +106,11 @@
   &--row {
     flex-direction: row;
     justify-content: center;
+  }
+
+  @media (max-width: 480px) {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 

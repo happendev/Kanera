@@ -37,7 +37,7 @@
     [cdkDragStartDelay]="dragStartDelay"
     [cdkDragDisabled]="!canEdit() || isBulkSelectedCard(card.id)"
     [cdkDragData]="card"
-    (cdkDragStarted)="onDragStarted()"
+    (cdkDragStarted)="onDragStarted($event.source.element.nativeElement)"
     (cdkDragMoved)="onDragMoved($event)"
     (cdkDragEnded)="onDragEnded()"
     [card]="card"

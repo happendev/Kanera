@@ -27,6 +27,12 @@
 
 // ─── Content ─────────────────────────────────────────────────────────────────
 
+// Settings pages are forms and tables, not a reading column, and above 900px they also spend 188px
+// of their width on the section navigation. Let them run wider than the default .content cap.
+.content.settings-content {
+  max-width: 1160px;
+}
+
 .content {
   max-width: 860px;
   width: 100%;
@@ -35,7 +41,7 @@
   padding: 56px 24px 64px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
   // A reading column already stops this far short of the viewport's right edge, so a k-page-header
   // inside it only reserves the remainder of the fixed notifications bell's band. On a wide screen
   // the centring gutter makes that reservation moot; this is the narrow case, which is the one that
@@ -49,7 +55,7 @@
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 20px;
+  padding: var(--space-5);
 }
 
 // The settings card's title row is k-page-header in its "page" variant, including the tinted icon
@@ -62,7 +68,7 @@
   --ph-page-identity-align: center;
   --ph-page-badge-margin-top: 0px;
   display: block;
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
 }
 
 // ─── Inline forms ─────────────────────────────────────────────────────────────
@@ -70,10 +76,11 @@
 .board-form {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
   padding: 14px;
-  background: var(--surface-2);
+  background: var(--inset-bg);
+  border: 1px solid var(--inset-border);
   border-radius: var(--radius);
 
   input,
@@ -90,7 +97,7 @@
 .form-actions {
   display: flex;
   gap: 6px;
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
   flex-wrap: wrap;
 }
 
@@ -100,7 +107,7 @@
 .settings-tabs {
   display: flex;
   gap: 6px;
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
   flex-wrap: wrap;
   position: relative;
 
@@ -114,12 +121,70 @@
   }
 }
 
+// Above the tablet breakpoint the tab strip becomes a navigation column. Twelve workspace sections
+// wrapped onto two rows as a strip; a column scans top to bottom and gives every section a stable
+// place. The section content is whatever the page renders after the strip, so it is addressed as
+// "everything that is not the header or the tabs" rather than by wrapping it in a new element.
+// 900px is deliberate: below it the column would take more than a quarter of the card.
+@media (min-width: 900px) {
+  .settings-card {
+    display: grid;
+    grid-template-columns: 188px minmax(0, 1fr);
+    column-gap: 28px;
+    align-items: start;
+
+    > .settings-header {
+      grid-column: 1 / -1;
+    }
+
+    > .settings-tabs {
+      grid-column: 1;
+      position: sticky;
+      top: 16px;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 2px;
+      margin: 0;
+
+      a {
+        justify-content: flex-start;
+        height: 34px;
+        padding: 0 10px;
+        font-size: 13.5px;
+
+        i {
+          width: 18px;
+          font-size: 16px;
+        }
+      }
+
+      // The selected section is a quiet accent wash rather than the filled primary button the strip
+      // used, which in a column of a dozen rows read as a call to action instead of a location.
+      a.active,
+      a.active:hover:not(:disabled) {
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-weight: 600;
+      }
+
+      .pro-marker {
+        margin-left: auto;
+      }
+    }
+
+    > :not(.settings-header):not(.settings-tabs) {
+      grid-column: 2;
+      min-width: 0;
+    }
+  }
+}
+
 // ─── Tile rows ────────────────────────────────────────────────────────────────
 
 .boards {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .board-tile {
@@ -136,7 +201,7 @@
   font-weight: 500;
   text-align: left;
   justify-content: flex-start;
-  transition: background-color 0.15s, border-color 0.15s;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast);
 
   &:hover {
     background: var(--surface-hover);
@@ -196,7 +261,7 @@
 
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
     margin-left: auto;
 
     k-icon-picker {
@@ -240,8 +305,8 @@
 }
 
 .danger-zone {
-  margin-top: 24px;
-  border: 1px solid var(--danger, #e53e3e);
+  margin-top: var(--space-6);
+  border: 1px solid var(--danger);
   border-radius: var(--radius);
   padding: 14px;
   display: flex;
@@ -252,9 +317,7 @@
 .danger-label {
   font-size: 13px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--danger, #e53e3e);
+  color: var(--danger);
 }
 
 // Danger zone internals are shared so every destructive settings surface
@@ -268,11 +331,11 @@
   display: grid;
   grid-template-columns: 32px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid color-mix(in srgb, var(--danger, #e53e3e) 38%, var(--border));
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--danger) 38%, var(--border));
   border-radius: var(--radius);
-  background: color-mix(in srgb, var(--danger, #e53e3e) 6%, var(--surface));
+  background: color-mix(in srgb, var(--danger) 6%, var(--surface));
 }
 
 .danger-action-icon {
@@ -281,10 +344,10 @@
   justify-content: center;
   width: 32px;
   height: 32px;
-  border: 1px solid color-mix(in srgb, var(--danger, #e53e3e) 32%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 32%, transparent);
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--danger, #e53e3e) 10%, transparent);
-  color: var(--danger, #e53e3e);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
   font-size: 17px;
 }
 
@@ -308,13 +371,13 @@
 }
 
 .danger-action-button {
-  color: var(--danger, #e53e3e);
-  border-color: color-mix(in srgb, var(--danger, #e53e3e) 60%, var(--border));
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 60%, var(--border));
 
   &:hover {
-    color: var(--danger, #e53e3e);
-    border-color: var(--danger, #e53e3e);
-    background: color-mix(in srgb, var(--danger, #e53e3e) 10%, transparent);
+    color: var(--danger);
+    border-color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
   }
 }
 
@@ -338,7 +401,7 @@
   .no-workspace-icon {
     font-size: 36px;
     color: var(--text-muted);
-    margin-bottom: 4px;
+    margin-bottom: var(--space-1);
   }
 
   h2 {
@@ -402,7 +465,7 @@
 .member-search {
   display: block;
   width: 100%;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
 }
 
 // ─── Mobile overrides ─────────────────────────────────────────────────────────
@@ -430,20 +493,42 @@
     }
   }
 
-  // Collapse the tab bar into a single swipeable strip.
+  // Collapse the tab bar into a single swipeable strip. `kTabStrip` keeps the selected tab in
+  // view and marks which edges are reached so only the side that hides tabs is faded.
   .settings-tabs {
+    --tab-strip-bleed: var(--space-5); // matches .ws-card padding; overridden with the card below
     flex-wrap: nowrap;
     overflow-x: auto;
     scroll-snap-type: x proximity;
     -webkit-overflow-scrolling: touch;
-    // Bleed to the card edges so the strip can scroll past the padding.
-    margin-left: -4px;
-    margin-right: -4px;
-    padding-left: 4px;
-    padding-right: 28px;
-    // Hide the scrollbar; the row is clearly swipeable on touch.
+    // Bleed to the card edges so the strip scrolls flush with the card and the edge fades sit
+    // over the card padding instead of dimming the first or last tab.
+    margin-left: calc(-1 * var(--tab-strip-bleed));
+    margin-right: calc(-1 * var(--tab-strip-bleed));
+    padding-left: var(--tab-strip-bleed);
+    padding-right: var(--tab-strip-bleed);
+    scroll-padding-inline: var(--tab-strip-bleed);
+    // Hide the scrollbar; the fades say there is more and the row is swipeable on touch.
     scrollbar-width: none;
-    mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 32px), transparent 100%);
+    mask-image: linear-gradient(
+      90deg,
+      transparent 0,
+      #000 var(--tab-strip-bleed),
+      #000 calc(100% - var(--tab-strip-bleed) - 12px),
+      transparent 100%
+    );
+
+    &[data-scroll-start] {
+      mask-image: linear-gradient(90deg, #000 calc(100% - var(--tab-strip-bleed) - 12px), transparent 100%);
+    }
+
+    &[data-scroll-end] {
+      mask-image: linear-gradient(90deg, transparent 0, #000 var(--tab-strip-bleed), #000 100%);
+    }
+
+    &[data-scroll-start][data-scroll-end] {
+      mask-image: none;
+    }
 
     &::-webkit-scrollbar {
       display: none;
@@ -469,11 +554,15 @@
     padding: 14px 12px;
   }
 
+  .settings-tabs {
+    --tab-strip-bleed: 12px;
+  }
+
   .board-form {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    padding: 12px;
+    padding: var(--space-3);
 
     >k-icon-picker,
     >k-color-picker {
@@ -532,7 +621,7 @@
     &.single-line-capture {
       display: flex;
       flex-wrap: nowrap;
-      gap: 8px;
+      gap: var(--space-2);
 
       >k-icon-picker,
       >k-color-picker,
@@ -587,5 +676,5 @@
 }
 
 .cdk-drop-list-dragging .cdk-drag {
-  transition: transform 0.18s cubic-bezier(0, 0, 0.2, 1);
+  transition: transform var(--motion-base) cubic-bezier(0, 0, 0.2, 1);
 }

@@ -1,7 +1,7 @@
 import { CARD_DUE_DATE_SLOTS } from "@kanera/shared/due-date-slots";
 import type { CdkDragDrop } from "@angular/cdk/drag-drop";
 import type { OnDestroy } from "@angular/core";
-import { ChangeDetectionStrategy, Component, ElementRef, ViewEncapsulation, computed, effect, inject, input, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, ViewEncapsulation, computed, effect, inject, input, signal } from "@angular/core";
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, NavigationEnd, Router, RouterLink } from "@angular/router";
 import { AUTOMATION_ACTION_LIMIT, AUTOMATION_LIMIT } from "@kanera/shared/automation-limits";
@@ -13,15 +13,18 @@ import type { Board, BoardGroup, List, Workspace, WorkspaceMember } from "@kaner
 import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS, DEFAULT_INACTIVE_CARDS_DAYS } from "@kanera/shared/workspace-defaults";
 import { filter } from "rxjs";
 import { ApiClient, ApiError } from "../../core/api/api.client";
+import { AutosaveTracker } from "../../shared/autosave-tracker";
+import { ToastService } from "../../shared/toast.service";
 import { KANERA_DOCS_URL } from "../../shared/docs-link.component";
 import type { CardLabelPresentation } from "../board/card-labels.component";
-import { formatRelativeTime } from "../board/table-view/table-columns.util";
+import { formatDateTime, formatRelativeTime } from "../../shared/date-format";
 import { AuthService } from "../../core/auth/auth.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { AppTitleService } from "../../core/title/app-title.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { PageHeaderComponent } from "../../shared/page-header.component";
+import { TabStripDirective } from "../../shared/tab-strip.directive";
 import { UpgradePromptService, type UpgradePromptReason } from "../../shared/upgrade-prompt.service";
 import { WorkspaceSettingsApiPage } from "./api/api.page";
 import { WorkspaceSettingsAutomationsPage } from "./automations/automations.page";
@@ -666,7 +669,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 @Component({
   selector: "k-workspace-settings",
   standalone: true,
-  imports: [PageHeaderComponent, RouterLink, WorkspaceSettingsGeneralPage, WorkspaceSettingsBoardsPage, WorkspaceSettingsListsPage, WorkspaceSettingsFieldsPage, WorkspaceSettingsTemplatesPage, WorkspaceSettingsAutomationsPage, WorkspaceSettingsLabelsPage, WorkspaceSettingsMembersPage, WorkspaceSettingsGuestsPage, WorkspaceSettingsIntegrationsPage, WorkspaceSettingsApiPage, WorkspaceSettingsImportPage],
+  imports: [PageHeaderComponent, RouterLink, TabStripDirective, WorkspaceSettingsGeneralPage, WorkspaceSettingsBoardsPage, WorkspaceSettingsListsPage, WorkspaceSettingsFieldsPage, WorkspaceSettingsTemplatesPage, WorkspaceSettingsAutomationsPage, WorkspaceSettingsLabelsPage, WorkspaceSettingsMembersPage, WorkspaceSettingsGuestsPage, WorkspaceSettingsIntegrationsPage, WorkspaceSettingsApiPage, WorkspaceSettingsImportPage],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: "./workspace-settings.page.html",
@@ -677,6 +680,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly inactiveCardsDaysDefault = DEFAULT_INACTIVE_CARDS_DAYS;
 
   private readonly api = inject(ApiClient);
+  private readonly toasts = inject(ToastService);
   private readonly appTitle = inject(AppTitleService);
   private readonly auth = inject(AuthService);
   private readonly confirm = inject(ConfirmService);
@@ -687,6 +691,12 @@ export class WorkspaceSettingsPage implements OnDestroy {
   private readonly upgradePrompt = inject(UpgradePromptService);
   private readonly workspaceService = inject(WorkspaceService);
   private nameSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * The general section saves implicitly (debounced name, blur-to-save numbers, instant toggles)
+   * with no Save button, so the chip fed by this tracker is the only signal that a change landed.
+   */
+  readonly autosave = new AutosaveTracker(inject(DestroyRef));
+
   private generalSettingsSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
   // The public input must match the route parameter while the resolved id remains writable for the
@@ -997,15 +1007,20 @@ export class WorkspaceSettingsPage implements OnDestroy {
       const color = this.accentColor();
       const style = this.el.nativeElement.style;
       if (color) {
-        style.setProperty("--accent", `var(--color-${color})`);
-        style.setProperty("--accent-hover", `color-mix(in srgb, var(--color-${color}), black 15%)`);
-        style.setProperty("--ring", `color-mix(in srgb, var(--color-${color}) 40%, transparent)`);
+        // The identity colour is decorative; the *-accent token is its contrast-checked action tone
+        // (light mode only — dark falls back to the identity colour and relies on --accent-ink).
+        const accent = `var(--color-${color}-accent, var(--color-${color}))`;
+        style.setProperty("--accent", accent);
+        style.setProperty("--accent-hover", `color-mix(in srgb, ${accent}, black 15%)`);
+        style.setProperty("--accent-fg", "var(--accent-ink)");
+        style.setProperty("--ring", `color-mix(in srgb, ${accent} 40%, transparent)`);
         // --accent-soft resolves its var(--accent) where it is *declared*, so the :root
         // definition would stay the default teal here. Rebind it with the accent itself.
         style.setProperty("--accent-soft", `color-mix(in srgb, var(--color-${color}) 8%, transparent)`);
       } else {
         style.removeProperty("--accent");
         style.removeProperty("--accent-hover");
+        style.removeProperty("--accent-fg");
         style.removeProperty("--ring");
         style.removeProperty("--accent-soft");
       }
@@ -1525,7 +1540,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   private async patchWorkspace(patch: { name?: string; cardKeyPrefix?: string; icon?: string | null; accentColor?: ColorToken | null; completedCardsActiveDays?: number; inactiveCardsDays?: number; boardHealthEnabled?: boolean; boardHealthOverdueEnabled?: boolean; boardHealthUnassignedEnabled?: boolean; boardHealthInactiveEnabled?: boolean; boardLinkingEnabled?: boolean }) {
-    const ws = await this.api.patch<Workspace>(`/workspaces/${this.workspaceId()}`, patch);
+    const ws = await this.autosave.track(() => this.api.patch<Workspace>(`/workspaces/${this.workspaceId()}`, patch));
     this.applyWorkspace(ws);
   }
 
@@ -1539,7 +1554,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     // A standalone board's visible identity is the board row. Use the same mutation as the Boards
     // settings rename so board clients receive the canonical event first; the API mirrors and emits
     // the hidden workspace row for settings and navigation consumers.
-    const board = await this.api.patch<Board>(`/boards/${standaloneBoardId}`, { name });
+    const board = await this.autosave.track(() => this.api.patch<Board>(`/boards/${standaloneBoardId}`, { name }));
     this.boardList.update((boards) => boards.map((item) => item.id === board.id ? board : item));
     this.updateGuestBoard(board);
     this.workspace.update((workspace) => workspace ? { ...workspace, name: board.name, updatedAt: board.updatedAt } : workspace);
@@ -1637,7 +1652,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.boardHealthSaving.set(true);
     this.boardHealthError.set(null);
     try {
-      const updated = await this.api.patch<Workspace>(`/workspaces/${workspaceId}`, patch);
+      const updated = await this.autosave.track(() => this.api.patch<Workspace>(`/workspaces/${workspaceId}`, patch));
       if (this.workspaceId() === workspaceId) this.applyWorkspace(updated);
     } catch {
       if (this.workspaceId() === workspaceId) {
@@ -1723,20 +1738,49 @@ export class WorkspaceSettingsPage implements OnDestroy {
     if (!list || this.deletionPreviewKey()) return;
     this.deletionPreviewKey.set(`list:${id}`);
     try {
-      const confirmed = await this.confirm.openAfterLoading({
-        title: `Delete list "${list.name}"?`,
-        loadingMessage: "Checking how many cards will be deleted...",
-      }, async () => {
-        const { cardCount } = await this.api.get<DeletionImpactResponse>(`/lists/${id}/deletion-impact`);
-        const cardLabel = cardCount === 1 ? "card" : "cards";
-        return `${cardCount} ${cardLabel} will also be permanently deleted. Are you sure?`;
+      // Deleting a list hard-deletes its cards, so the toast still names the count; the check is the
+      // same GET the old confirm dialog made, just without a modal in front of it.
+      const { cardCount } = await this.api.get<DeletionImpactResponse>(`/lists/${id}/deletion-impact`);
+      const cardLabel = cardCount === 1 ? "card" : "cards";
+      this.deferDelete({
+        message: cardCount > 0 ? `List "${list.name}" and ${cardCount} ${cardLabel} deleted.` : `List "${list.name}" deleted.`,
+        icon: "trash",
+        hide: () => this.lists.update((items) => items.filter((l) => l.id !== id)),
+        restore: () => this.lists.update((items) => this.insertBack(items, list, (l) => l.position)),
+        request: () => this.api.delete(`/lists/${id}`),
       });
-      if (!confirmed) return;
-      await this.api.delete(`/lists/${id}`);
-      this.lists.update((items) => items.filter((l) => l.id !== id));
     } finally {
       this.deletionPreviewKey.set(null);
     }
+  }
+
+  /**
+   * Undo instead of confirm for hard deletes. The row disappears at once and the DELETE is only sent
+   * when the toast expires or is dismissed; Undo puts the row back without the server ever hearing
+   * about it. A failed DELETE also restores the row so the UI never lies about what exists.
+   */
+  private deferDelete(options: { message: string; icon: string; hide: () => void; restore: () => void; request: () => Promise<unknown> }) {
+    options.hide();
+    this.toasts.undoable({
+      message: options.message,
+      icon: options.icon,
+      undo: options.restore,
+      commit: async () => {
+        try {
+          await options.request();
+        } catch (error) {
+          options.restore();
+          this.toasts.info(`Couldn't delete: ${extractErrorMessage(error)}`, "alert-triangle");
+        }
+      },
+    });
+  }
+
+  /** Re-insert a hidden row at its original sort position so Undo does not shuffle the list. */
+  private insertBack<T>(items: T[], item: T, key: (row: T) => string | number): T[] {
+    const value = Number(key(item));
+    const index = items.findIndex((row) => Number(key(row)) > value);
+    return index < 0 ? [...items, item] : [...items.slice(0, index), item, ...items.slice(index)];
   }
 
   startEditList(list: List) {
@@ -1924,12 +1968,13 @@ export class WorkspaceSettingsPage implements OnDestroy {
   async archiveField(id: string) {
     const field = this.fields().find((f) => f.id === id);
     if (!field) return;
-    if (!await this.confirm.open({
-      title: `Delete custom field "${field.name}"?`,
-      message: "This will permanently remove the field and all its values from every card in this workspace.",
-    })) return;
-    await this.api.delete(`/custom-fields/${id}`);
-    this.fields.update((items) => items.filter((f) => f.id !== id));
+    this.deferDelete({
+      message: `Custom field "${field.name}" deleted.`,
+      icon: "trash",
+      hide: () => this.fields.update((items) => items.filter((f) => f.id !== id)),
+      restore: () => this.fields.update((items) => this.insertBack(items, field, (f) => f.position)),
+      request: () => this.api.delete(`/custom-fields/${id}`),
+    });
   }
 
   updateNewField(value: string) {
@@ -2018,12 +2063,14 @@ export class WorkspaceSettingsPage implements OnDestroy {
   async deleteTemplate(id: string) {
     const template = this.templates().find((t) => t.id === id);
     if (!template) return;
-    if (!await this.confirm.open({
-      title: `Delete template "${template.title}"?`,
-      message: "New cards will no longer receive this checklist. Checklists already added to cards are kept.",
-    })) return;
-    await this.api.delete(`/checklist-templates/${id}`);
-    this.templates.update((ts) => ts.filter((t) => t.id !== id));
+    const index = this.templates().indexOf(template);
+    this.deferDelete({
+      message: `Template "${template.title}" deleted.`,
+      icon: "trash",
+      hide: () => this.templates.update((ts) => ts.filter((t) => t.id !== id)),
+      restore: () => this.templates.update((ts) => [...ts.slice(0, index), template, ...ts.slice(index)]),
+      request: () => this.api.delete(`/checklist-templates/${id}`),
+    });
   }
 
   newTemplateItemText(id: string): string {
@@ -3171,12 +3218,13 @@ export class WorkspaceSettingsPage implements OnDestroy {
   async deleteAutomation(id: string) {
     const automation = this.automations().find((item) => item.id === id);
     if (!automation) return;
-    if (!await this.confirm.open({
-      title: "Delete automation?",
-      message: "Future cards will no longer run this automation. Existing card changes are kept.",
-    })) return;
-    await this.api.delete(`/automations/${id}`);
-    this.automations.update((items) => items.filter((item) => item.id !== id));
+    this.deferDelete({
+      message: "Automation deleted.",
+      icon: "trash",
+      hide: () => this.automations.update((items) => items.filter((item) => item.id !== id)),
+      restore: () => this.automations.update((items) => this.sortAutomations([...items, automation])),
+      request: () => this.api.delete(`/automations/${id}`),
+    });
   }
 
   async addLabel(e: Event) {
@@ -3194,9 +3242,14 @@ export class WorkspaceSettingsPage implements OnDestroy {
   async archiveLabel(id: string) {
     const label = this.labels().find((l) => l.id === id);
     if (!label) return;
-    if (!await this.confirm.open({ title: `Delete label "${label.name}"?`, message: "This cannot be undone." })) return;
-    await this.api.delete(`/card-labels/${id}`);
-    this.labels.update((items) => items.filter((l) => l.id !== id));
+    const index = this.labels().indexOf(label);
+    this.deferDelete({
+      message: `Label "${label.name}" deleted.`,
+      icon: "trash",
+      hide: () => this.labels.update((items) => items.filter((l) => l.id !== id)),
+      restore: () => this.labels.update((items) => [...items.slice(0, index), label, ...items.slice(index)]),
+      request: () => this.api.delete(`/card-labels/${id}`),
+    });
   }
 
   startEditLabel(label: WireCardLabel) {
@@ -3278,12 +3331,15 @@ export class WorkspaceSettingsPage implements OnDestroy {
   async removeMember(userId: string) {
     const member = this.members().find((m) => m.userId === userId);
     if (!member || this.isInheritedWorkspaceAdmin(member)) return;
-    if (!await this.confirm.open({
-      title: `Remove ${member.displayName}?`,
-      message: "They will lose access to this workspace and all its boards.",
-    })) return;
-    await this.api.delete(`/workspaces/${this.workspaceId()}/members/${userId}`);
-    this.members.update((rows) => rows.filter((r) => r.userId !== userId));
+    const workspaceId = this.workspaceId();
+    const index = this.members().indexOf(member);
+    this.deferDelete({
+      message: `${member.displayName} removed from the workspace.`,
+      icon: "user-minus",
+      hide: () => this.members.update((rows) => rows.filter((r) => r.userId !== userId)),
+      restore: () => this.members.update((rows) => [...rows.slice(0, index), member, ...rows.slice(index)]),
+      request: () => this.api.delete(`/workspaces/${workspaceId}/members/${userId}`),
+    });
   }
 
   async inviteGuest(e: Event) {
@@ -3312,7 +3368,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
         // Paid guest seats come from the org's pre-purchased pool. Explain that before the mutation,
         // because the next request will allocate the seat immediately for existing external users.
         const confirmed = await this.confirm.open({
-          title: "This guest will use a paid seat",
+          title: "Use a paid seat for this guest?",
           message: "A guest's first board is free. Adding their second board uses one of your purchased seats; further boards reuse that seat. Your bill will not change right now, and the seat becomes available again when their access returns to one board.",
           confirmLabel: "Use seat",
           danger: false,
@@ -3397,25 +3453,22 @@ export class WorkspaceSettingsPage implements OnDestroy {
   async removeGuest(boardId: string, userId: string) {
     const guest = this.acceptedGuests().find((row) => row.boardId === boardId && row.userId === userId);
     if (!guest) return;
-    if (!await this.confirm.open({
-      title: `Remove ${guest.displayName}?`,
-      message: `They will lose access to "${guest.boardName}".`,
-    })) return;
-    const key = `${boardId}:${userId}`;
-    this.guestRemovingId.set(key);
+    const workspaceId = this.workspaceId();
+    const index = this.acceptedGuests().indexOf(guest);
     this.guestError.set(null);
-    try {
-      const result = await this.api.delete<RemoveGuestResponse>(`/workspaces/${this.workspaceId()}/guests/${boardId}/${userId}`);
-      this.acceptedGuests.update((rows) =>
-        rows
-          .filter((row) => !(row.boardId === boardId && row.userId === userId))
-          .map((row) => row.userId === userId && result?.paidGuestSeatRemoved ? { ...row, paidGuestSeat: false } : row),
-      );
-    } catch (error) {
-      this.guestError.set(extractErrorMessage(error));
-    } finally {
-      this.guestRemovingId.set(null);
-    }
+    this.deferDelete({
+      message: `${guest.displayName} removed from "${guest.boardName}".`,
+      icon: "user-minus",
+      hide: () => this.acceptedGuests.update((rows) => rows.filter((row) => !(row.boardId === boardId && row.userId === userId))),
+      restore: () => this.acceptedGuests.update((rows) => [...rows.slice(0, index), guest, ...rows.slice(index)]),
+      request: async () => {
+        const result = await this.api.delete<RemoveGuestResponse>(`/workspaces/${workspaceId}/guests/${boardId}/${userId}`);
+        // Losing their last paid board frees the seat; reflect that on the guest's other rows.
+        if (result?.paidGuestSeatRemoved) {
+          this.acceptedGuests.update((rows) => rows.map((row) => row.userId === userId ? { ...row, paidGuestSeat: false } : row));
+        }
+      },
+    });
   }
 
   async updateGuestAssignedItemsOnly(guest: AcceptedGuestRow, assignedItemsOnly: boolean) {
@@ -3488,7 +3541,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     // Deleting a workspace is a workspace-admin (or org-admin) action.
     if (!this.canManageApi()) return;
     if (!await this.confirm.open({
-      title: `Are you sure you want to delete ${this.entityLabel()} "${ws.name}"?`,
+      title: `Delete ${this.entityLabel()} "${ws.name}"?`,
       message: this.isStandalone()
         ? "This will permanently delete this board, its lists, cards, attachments and settings."
         : "This will permanently delete all boards, lists, attachments and cards inside it.",
@@ -3761,15 +3814,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
 
   formatApiKeyLastUsed(value: string | Date | null | undefined): string {
     if (!value) return "Never";
-    const date = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(date.getTime())) return "Never";
-    return new Intl.DateTimeFormat(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(date);
+    return formatDateTime(value, "short") || "Never";
   }
 
   formatWebhookLastSuccessful(value: string | Date | null | undefined): string {

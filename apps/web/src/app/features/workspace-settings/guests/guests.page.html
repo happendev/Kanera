@@ -1,4 +1,4 @@
-<div class="guest-info-note">
+<div class="settings-info-note">
         <i class="ti ti-info-circle"></i>
         <span>Guests are people outside this organisation who have access to selected boards only. Their first board is free; access to a second board uses one purchased seat, and further boards reuse that seat.</span>
       </div>
@@ -50,7 +50,7 @@
         </div>
         <button class="ghost sm" (click)="settings.copyGuestInviteUrl(settings.createdGuestInviteUrl())" aria-label="Copy guest invite link">
           @if (settings.guestInviteCopied()) {
-          <i class="ti ti-check" style="color:var(--success,#16a34a)"></i> Copied
+          <i class="ti ti-check text-success"></i> Copied
           } @else {
           <i class="ti ti-copy"></i> Copy
           }
@@ -98,7 +98,7 @@
             </button>
           </div>
           } @empty {
-          <div class="org-user-empty">No external board guests.</div>
+          <k-empty-state size="sm" icon="users" title="No external board guests" text="Guests are people from other organisations invited to specific boards." />
           }
         </div>
       </div>
@@ -133,7 +133,7 @@
             </div>
           </div>
           } @empty {
-          <div class="org-user-empty">No pending board invitations.</div>
+          <k-empty-state size="sm" icon="mail-off" title="No pending board invitations" />
           }
         </div>
       </div>

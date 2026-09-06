@@ -20,7 +20,7 @@
   font-size: 12px;
   text-decoration: none;
 
-  &:hover { text-decoration: underline; }
+  &:hover { color: var(--accent-hover, var(--accent)); }
 
   i { font-size: 12px; }
 }

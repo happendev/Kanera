@@ -87,7 +87,8 @@ export type SwitchOrgBody = z.infer<typeof switchOrgBody>;
 
 export const mfaCode = z.string().trim().min(6).max(32);
 export const mfaChallengeBody = z.object({ challengeToken: z.string().min(1), code: mfaCode });
-export const mfaEnrollmentStartBody = z.object({ currentPassword: z.string().min(1) });
+// `code` is required only when the caller already has an enabled factor (replacing it).
+export const mfaEnrollmentStartBody = z.object({ currentPassword: z.string().min(1), code: mfaCode.optional() });
 export const mfaEnrollmentConfirmBody = z.object({ code: mfaCode });
 export const mfaProtectedActionBody = z.object({ currentPassword: z.string().min(1), code: mfaCode });
 export const mfaChallengeResponse = z.object({ status: z.literal("mfa_required"), challengeToken: z.string() });

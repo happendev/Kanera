@@ -480,7 +480,7 @@ describe("WorkDoneViewComponent", () => {
   it("shows a filter-aware empty state when nothing matches", async () => {
     const native = await render({ events: [completedEvent] }, { filterMemberIds: ["nobody"] });
 
-    expect(native.querySelector(".wd-empty-panel strong")?.textContent?.trim()).toBe("No matching work done");
+    expect(native.querySelector(".wd-empty-panel .es-title")?.textContent?.trim()).toBe("No matching work done");
     expect(native.querySelectorAll(".wd-row")).toHaveLength(0);
   });
 

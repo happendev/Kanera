@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, ViewChild, computed, inject, signal
 import { disabled, form, FormField, submit, validate } from "@angular/forms/signals";
 import { RouterLink } from "@angular/router";
 import { PublicAuthClient } from "../../core/auth/public-auth.client";
+import { TurnstileChallenge } from "../../core/auth/turnstile-challenge";
 import { LogoComponent } from "../../shared/logo.component";
 
 interface AuthConfigResponse {
@@ -29,19 +30,13 @@ export class ForgotPasswordPage implements OnInit, AfterViewInit {
   private readonly workflowError = signal<string | null>(null);
   readonly error = computed(() => this.workflowError() ?? touchedFormError(this.forgotPasswordForm));
   readonly busy = computed(() => this.forgotPasswordForm().submitting());
-  readonly turnstileSiteKey = signal<string | null>(null);
-  readonly turnstileToken = signal<string | null>(null);
-  private turnstileElement: HTMLElement | null = null;
-  private turnstileWidgetId: string | null = null;
-  private viewReady = false;
+  private readonly turnstile = new TurnstileChallenge(this.workflowError);
+  readonly turnstileSiteKey = this.turnstile.siteKey;
+  readonly turnstileToken = this.turnstile.token;
 
   @ViewChild("turnstileContainer")
   set turnstileContainer(container: ElementRef<HTMLElement> | undefined) {
-    const next = container?.nativeElement ?? null;
-    if (this.turnstileElement === next) return;
-    this.turnstileElement = next;
-    this.turnstileWidgetId = null;
-    this.loadTurnstile();
+    this.turnstile.setElement(container?.nativeElement ?? null);
   }
 
   ngOnInit() {
@@ -49,7 +44,7 @@ export class ForgotPasswordPage implements OnInit, AfterViewInit {
       .then(async (res) => (res.ok ? parseAuthConfigResponse(await res.json()) : { turnstileSiteKey: null }))
       .then((config) => {
         this.turnstileSiteKey.set(config.turnstileSiteKey);
-        this.loadTurnstile();
+        this.turnstile.load();
       })
       .catch(() => this.turnstileSiteKey.set(null));
   }
@@ -59,99 +54,30 @@ export class ForgotPasswordPage implements OnInit, AfterViewInit {
     this.sent.set(false);
     this.workflowError.set(null);
     return submit(this.forgotPasswordForm, async () => {
-      if (!this.ensureTurnstileSolved()) return undefined;
+      if (!this.turnstile.ensureSolved()) return undefined;
       try {
         const res = await this.publicAuth.post("/auth/forgot-password", {
           email: this.email().trim(),
           ...(this.turnstileToken() ? { turnstileToken: this.turnstileToken() } : {}),
         });
         if (!res.ok) {
-          this.resetTurnstile();
+          this.turnstile.reset();
           return { kind: "server", message: "We could not create a reset link. Check the email and try again." };
         }
         this.sent.set(true);
-        this.resetTurnstile();
+        this.turnstile.reset();
         return undefined;
       } catch {
-        this.resetTurnstile();
+        this.turnstile.reset();
         return { kind: "server", message: "We could not create a reset link. Check your connection and try again." };
       }
     });
   }
 
   ngAfterViewInit() {
-    this.viewReady = true;
-    this.loadTurnstile();
+    this.turnstile.initialize();
   }
 
-  private ensureTurnstileSolved(): boolean {
-    if (!this.turnstileSiteKey()) return true;
-    if (this.turnstileToken()) return true;
-    this.workflowError.set("Complete the security check to continue.");
-    return false;
-  }
-
-  private loadTurnstile() {
-    if (!this.turnstileSiteKey() || !this.viewReady) return;
-    if (window.turnstile) {
-      this.renderTurnstile();
-      return;
-    }
-    const existing = document.querySelector<HTMLScriptElement>('script[data-kanera-turnstile="true"]');
-    if (existing) {
-      existing.addEventListener("load", () => this.renderTurnstile(), { once: true });
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-    script.async = true;
-    script.defer = true;
-    script.dataset["kaneraTurnstile"] = "true";
-    script.addEventListener("load", () => this.renderTurnstile(), { once: true });
-    script.addEventListener("error", () => this.workflowError.set("Security check could not load. Try refreshing the page."), { once: true });
-    document.head.appendChild(script);
-  }
-
-  private renderTurnstile() {
-    const siteKey = this.turnstileSiteKey();
-    const element = this.turnstileElement;
-    if (!siteKey || !element || !window.turnstile || this.turnstileWidgetId) return;
-    this.turnstileWidgetId = window.turnstile.render(element, {
-      sitekey: siteKey,
-      callback: (token: string) => {
-        this.turnstileToken.set(token);
-        if (this.workflowError() === "Complete the security check to continue.") this.workflowError.set(null);
-      },
-      "expired-callback": () => this.turnstileToken.set(null),
-      "error-callback": () => {
-        this.turnstileToken.set(null);
-        this.workflowError.set("Security check failed. Try again.");
-      },
-    });
-  }
-
-  private resetTurnstile() {
-    this.turnstileToken.set(null);
-    if (this.turnstileWidgetId && window.turnstile) {
-      window.turnstile.reset(this.turnstileWidgetId);
-    }
-  }
-}
-
-declare global {
-  interface Window {
-    turnstile?: {
-      render: (container: HTMLElement, options: TurnstileRenderOptions) => string;
-      reset: (widgetId: string) => void;
-    };
-  }
-}
-
-interface TurnstileRenderOptions {
-  sitekey: string;
-  callback: (token: string) => void;
-  "expired-callback": () => void;
-  "error-callback": () => void;
 }
 
 function parseAuthConfigResponse(value: unknown): AuthConfigResponse {

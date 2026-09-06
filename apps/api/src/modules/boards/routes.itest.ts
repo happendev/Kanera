@@ -542,6 +542,20 @@ void test("board open omits non-showOnCard custom-field values, which load from 
   const selectedBody = selected.json<CustomFieldValuesResponse>();
   assert.equal(selectedBody.customFieldValues.length, 2);
   assert.ok(selectedBody.customFieldValues.every((value) => value.cardId === card!.id));
+
+  // The board-open projection is narrowed in SQL; other summary consumers must still get every
+  // value. Exercise the loader directly so a later serializer filter cannot hide a regression.
+  const { loadBoardCardSummaries } = await import("../../lib/card-summary.js");
+  const options = { boardId: board!.id, includeCompleted: true, includeArchived: false, completedCardsActiveDays: 7 };
+  const [completeRows, shownRows] = await Promise.all([
+    loadBoardCardSummaries(options),
+    loadBoardCardSummaries({ ...options, shownCustomFieldsOnly: true }),
+  ]);
+  assert.equal(completeRows.find((row) => row.id === card!.id)!.customFieldValues.length, 2);
+  assert.deepEqual(shownRows.find((row) => row.id === card!.id)!.customFieldValues.map((value) => value.fieldId), [shownField!.id]);
+  await db.update(customFields).set({ archivedAt: new Date() }).where(eq(customFields.id, shownField!.id));
+  const archivedRows = await loadBoardCardSummaries({ ...options, shownCustomFieldsOnly: true });
+  assert.ok(archivedRows.every((row) => row.customFieldValues.length === 0));
 });
 
 void test("board export returns a complete all-card archive with signed attachments", async () => {

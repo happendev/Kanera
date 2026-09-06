@@ -40,7 +40,7 @@ import { beginMfaEnrollment, createMfaChallenge, enableMfa, getMfaCredential, re
 import { ANALYTICS_EVENT_VERSION, productAnalytics } from "../lib/product-analytics.js";
 import { captureWorkspaceMemberJoined } from "../lib/analytics-milestones.js";
 import { isClientAdminRole, resolveActiveOrganisation, resolveActiveOrganisationContext, type ActiveOrganisation } from "../lib/client-membership.js";
-import { disconnectUserRealtimeSockets } from "../realtime/io.js";
+import { disconnectSupportSessionSockets, disconnectUserRealtimeSockets } from "../realtime/io.js";
 import { authUserPayload as meResponseFor, issueUserSession as issueSession, REFRESH_COOKIE, refreshCookieOptions } from "./session.js";
 
 const ALLOWED_AVATAR_MIME = new Set(["image/png", "image/jpeg", "image/webp"]);
@@ -844,10 +844,20 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.get("/auth/mfa", { preHandler: app.authenticate }, async (req) => ({ enabled: !!(await getMfaCredential({ kind: "user", id: req.auth.sub }))?.enabledAt }));
 
-  app.post("/auth/mfa/enroll", { preHandler: app.authenticate }, async (req) => {
+  // Rate limited like the other second-factor routes: enrollment is password-gated, and when a
+  // factor is already enabled it also consumes a code, so it must share the login throttle.
+  app.post("/auth/mfa/enroll", { preHandler: [app.authenticate, authRateLimit("mfa")] }, async (req) => {
     const body = dto.mfaEnrollmentStartBody.parse(req.body);
     const [user] = await db.select({ email: users.email, passwordHash: users.passwordHash }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
     if (!user || !(await verifyPassword(user.passwordHash, body.currentPassword))) throw unauthorized("invalid password");
+    // beginMfaEnrollment replaces the existing credential, which would silently leave the account
+    // without an enabled factor if the new enrollment is abandoned. Replacing an enabled factor is
+    // therefore equivalent to disabling it and must clear the same bar: a valid current code, with
+    // the per-credential lockout applied.
+    const existing = await getMfaCredential({ kind: "user", id: req.auth.sub });
+    if (existing?.enabledAt) {
+      if (!body.code || !(await verifyMfaLoginCode(existing, body.code))) throw unauthorized("invalid verification code");
+    }
     const result = await beginMfaEnrollment({ kind: "user", id: req.auth.sub }, user.email);
     return { secret: result.secret, otpauthUri: result.otpauthUri };
   });
@@ -968,6 +978,7 @@ export async function authRoutes(app: FastifyInstance) {
       .update(supportSessions)
       .set({ endedAt: new Date() })
       .where(and(eq(supportSessions.id, id), isNull(supportSessions.endedAt)));
+    disconnectSupportSessionSockets(id);
     return { ok: true };
   });
 

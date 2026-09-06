@@ -27,6 +27,7 @@ Use the hosted service and get started in minutes, or self-host Kanera on your o
 - **Set clear priorities.** Use Home and a ranked Up next queue to keep urgent work visible across every board.
 - **Make progress visible.** Review what was created, moved, completed, or checked off without chasing another status update.
 - **Keep knowledge nearby.** Use personal, workspace, and board notes for decisions, processes, references, and project context, with Scratchpad ready for quick capture.
+- **Stay in flow from the keyboard.** Open search and personal tools, jump between core pages, switch board views, create cards, and update an open card with contextual shortcuts. Press `?` to see what is available.
 - **Automate and integrate.** Handle repetitive updates with trigger-based automations, post card activity into Slack, Discord, Telegram, or Zulip, and connect other tools through the REST API, webhooks, and MCP server.
 - **Get told what matters, where you want it.** Choose per notification type whether an update reaches email, browser push, ntfy, Gotify, or your own webhook, then add per-workspace exceptions so one busy board does not drown out the rest.
 - **Work together in real time.** Stay current with live updates, mentions, activity history, and controlled guest access.
@@ -62,6 +63,12 @@ Start with overdue work, items due today, the next seven days, and recent progre
 Move cards through lists while keeping labels, assignees, due dates, checklist progress, and visual covers in view. Boards in a workspace share the same ordered lists, so stages such as Intake, In progress, Review, and Done remain consistent across related projects.
 
 ![Kanera Autumn Campaign Launch board showing cards organised into shared lists](docs/readme-assets/board.jpg)
+
+### Keyboard shortcuts keep routine actions close
+
+Press `?` to open a shortcut sheet that reflects the current screen. Use two-key sequences to jump to Home, My Cards, Team Cards, Portfolio, or Settings; single keys to open Scratchpad, Up next, notifications, and board tools; and contextual card shortcuts for assignment, labels, due dates, lists, completion, watching, and copying links. Letter shortcuts automatically stand down while you type.
+
+![Kanera keyboard shortcut sheet showing global, navigation, board, and open-card actions](docs/readme-assets/keyboard-shortcuts.jpg)
 
 ### Up next keeps priorities in order
 
@@ -109,7 +116,7 @@ Build automations from a **When** trigger and ordered **Do** actions. Triggers c
 
 Review a daily history of cards created, moved, and completed, plus finished checklist items. Use it on a board, My Cards, or Team Cards for standups, async updates, progress reviews, and client check-ins.
 
-![Kanera Team Cards Work Done view filtered to Ben Ortega across accessible boards](docs/readme-assets/work-done.jpg)
+![Kanera Work Done view showing a daily history of card and checklist progress](docs/readme-assets/work-done.jpg)
 
 ### Portfolio rolls work up without losing its source
 

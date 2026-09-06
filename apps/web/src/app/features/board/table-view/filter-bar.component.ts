@@ -551,9 +551,9 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       gap: 6px;
       padding: 8px;
       background: var(--surface-overlay);
-      border: 1px solid var(--border-strong);
+      border: 1px solid var(--overlay-border);
       border-radius: var(--radius-lg);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+      box-shadow: var(--shadow-lg);
     }
 
     .fb-panel.is-positioned { visibility: visible; }
@@ -581,8 +581,6 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       font-size: 12px;
       font-weight: 700;
       color: var(--text);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
     }
 
     .fb-back, .fb-remove {
@@ -617,8 +615,6 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       font-size: 11px;
       font-weight: 700;
       color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
       padding: 6px 4px 2px;
     }
 
@@ -635,8 +631,6 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       color: var(--text-muted);
       font-size: 10px;
       font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;

@@ -83,6 +83,28 @@ void test("organisation admin views distinguish purchased seats, members, and pa
   assert.equal(accessByEmail["free-guest@test.local"], "free_guest");
 });
 
+void test("organisation admin list excludes analytics-excluded demo tenants", async () => {
+  const demo = await signupOrg("Seeded Demo Organisation", "demo-org-owner@test.local");
+  await db.update(clients).set({ analyticsExcluded: true }).where(eq(clients.id, demo.clientId));
+
+  const adminApp = await buildAdminIntegrationServer();
+  await createAdmin("demo-org-admin@test.local", "admin-password");
+  const { accessToken } = await loginAdmin(adminApp, "demo-org-admin@test.local", "admin-password");
+  const response = await adminApp.inject({
+    method: "GET",
+    url: "/admin/orgs?q=Seeded%20Demo%20Organisation",
+    headers: adminAuthHeader(accessToken),
+  });
+
+  assert.equal(response.statusCode, 200, response.body);
+  assert.deepEqual(response.json<{ items: unknown[]; total: number }>(), {
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 25,
+  });
+});
+
 void test("POST /admin/orgs/:id/suspend sets suspendedAt, writes an audit row, and blocks tenant login", async () => {
   const { tenantApp, clientId } = await signupOrg("Suspend Co", "suspend-owner@test.local");
 

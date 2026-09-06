@@ -1,9 +1,11 @@
-import { provideZonelessChangeDetection } from "@angular/core";
+import { provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import type { WireBoardMemberUser } from "@kanera/shared/events";
+import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { ApiClient } from "../../core/api/api.client";
 import { SocketService } from "../../core/realtime/socket.service";
 import { PanelStackService } from "../../shared/panel-stack.service";
+import { ToastService } from "../../shared/toast.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { BoardMembersMenu, type BoardAccessMemberRow } from "./board-members-menu.popover";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -32,9 +34,64 @@ describe("BoardMembersMenu", () => {
         provideZonelessChangeDetection(),
         { provide: ApiClient, useValue: api },
         { provide: ConfirmService, useValue: { open: vi.fn() } },
-        { provide: SocketService, useValue: { connect: () => socket, joinBoard, joinWorkspace: () => vi.fn() } },
+        { provide: SocketService, useValue: { activeWorkspaceIds: signal(new Set<string>()), connect: () => socket, joinBoard, joinWorkspace: () => vi.fn() } },
       ],
     });
+  });
+
+  it.each(["editor", "observer"] as const)("shows self-leave for a %s in either member section", async (role) => {
+    for (const clientId of ["owner", "guest-org"]) {
+      const fixture = TestBed.createComponent(BoardMembersMenu);
+      fixture.componentRef.setInput("boardId", "board-1");
+      fixture.componentRef.setInput("ownerClientId", "owner");
+      fixture.componentRef.setInput("currentUserId", "self");
+      const self = { ...member("self", clientId), role };
+      fixture.componentRef.setInput("members", [self, member("other", clientId)]);
+      await fixture.whenStable();
+      expect((fixture.nativeElement as HTMLElement).querySelectorAll(".bmp-leave")).toHaveLength(1);
+      expect(fixture.componentInstance.canLeave(member("other", clientId))).toBe(false);
+      expect(fixture.componentInstance.canLeave({ ...self, pinned: true })).toBe(false);
+      fixture.componentRef.setInput("canManage", true);
+      expect(fixture.componentInstance.canLeave(self)).toBe(false);
+      fixture.destroy();
+    }
+  });
+
+  it("keeps membership on cancellation, unsaved rejection, and API failure; emits success once", async () => {
+    const fixture = TestBed.createComponent(BoardMembersMenu);
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("currentUserId", "self");
+    const self = member("self", "owner");
+    const component = fixture.componentInstance;
+    const confirm = vi.mocked(TestBed.inject(ConfirmService).open);
+    const unsaved = vi.spyOn(TestBed.inject(UnsavedWorkService), "confirmNavigation");
+    const removed = vi.fn();
+    component.memberRemoved.subscribe(removed);
+    confirm.mockResolvedValue(false);
+    await component.leaveMembership(self);
+    expect(api.delete).not.toHaveBeenCalled();
+    expect(unsaved).not.toHaveBeenCalled();
+    confirm.mockResolvedValue(true);
+    unsaved.mockReturnValue(false);
+    await component.leaveMembership(self);
+    expect(api.delete).not.toHaveBeenCalled();
+    unsaved.mockReturnValue(true);
+    api.delete.mockRejectedValueOnce(new Error("Cannot leave"));
+    await component.leaveMembership(self);
+    expect(component.error()).toBe("Cannot leave");
+    expect(removed).not.toHaveBeenCalled();
+    let resolve!: () => void;
+    api.delete.mockImplementationOnce(() => new Promise<void>(done => { resolve = done; }));
+    const pending = component.leaveMembership(self);
+    await Promise.resolve();
+    expect(component.busy()).toBe(true);
+    await component.leaveMembership(self);
+    expect(api.delete).toHaveBeenCalledTimes(2);
+    resolve();
+    await pending;
+    expect(removed).toHaveBeenCalledExactlyOnceWith("self");
+    expect(component.busy()).toBe(false);
+    expect(component.confirmingRemoval()).toBe(false);
   });
 
   it("does not take ownership of a board room already managed by the board page", async () => {
@@ -279,26 +336,54 @@ describe("BoardMembersMenu", () => {
     const removed = vi.fn();
     fixture.componentInstance.memberRemoved.subscribe(removed);
     fixture.componentInstance.accessMembers.set([row]);
-    TestBed.inject(ConfirmService).open = vi.fn(() => Promise.resolve(true));
     api.delete.mockResolvedValue(undefined);
+    const toasts = TestBed.inject(ToastService);
 
     await fixture.componentInstance.removeMember(row);
 
+    // The row hides immediately but nothing is told until the undo window closes: the board page
+    // must not drop a member the user may still restore.
     expect(fixture.componentInstance.accessMembers()).toEqual([]);
+    expect(api.delete).not.toHaveBeenCalled();
+    expect(removed).not.toHaveBeenCalled();
+
+    toasts.flushPending();
+    await Promise.resolve();
+    expect(api.delete).toHaveBeenCalledWith("/boards/board-1/members/member");
     expect(removed).toHaveBeenCalledWith("member");
   });
 
-  it("stays mounted until removal finishes so the parent receives success", async () => {
+  it("puts the member back when the removal is undone", async () => {
     const row: BoardAccessMemberRow = { boardId: "board-1", userId: "member", clientId: "owner", displayName: "Member", email: "member@example.com", avatarUrl: null, role: "editor", pinned: false, addedAt: new Date() };
+    const fixture = TestBed.createComponent(BoardMembersMenu);
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentInstance.accessMembers.set([row]);
+    const toasts = TestBed.inject(ToastService);
+
+    await fixture.componentInstance.removeMember(row);
+    toasts.messages()[0]!.action!.run();
+    await Promise.resolve();
+
+    expect(fixture.componentInstance.accessMembers()).toEqual([row]);
+    expect(api.delete).not.toHaveBeenCalled();
+    expect(toasts.messages()).toEqual([]);
+  });
+
+  it("stays mounted until leaving finishes so the parent receives success", async () => {
+    // Leaving is the one membership change that still confirms (an admin must re-add you), so it is
+    // the flow that exercises the popover's dismissal veto.
+    const row = member("member", "owner");
     let resolveConfirmation!: (confirmed: boolean) => void;
     let resolveDelete!: () => void;
     TestBed.inject(ConfirmService).open = vi.fn(() => new Promise<boolean>((resolve) => { resolveConfirmation = resolve }));
+    vi.spyOn(TestBed.inject(UnsavedWorkService), "confirmNavigation").mockReturnValue(true);
     api.delete.mockImplementation(() => new Promise<void>((resolve) => { resolveDelete = resolve }));
     api.get.mockImplementation((path: string) => Promise.resolve(path.endsWith("/member-candidates")
       ? { scope: "workspace", members: [] }
       : []));
     const fixture = TestBed.createComponent(BoardMembersMenu);
     fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("currentUserId", "member");
     // Render, so the panel directive has registered itself as a stack layer and the outside clicks
     // below are actually arbitrated rather than hitting an empty stack.
     await fixture.whenStable();
@@ -321,7 +406,7 @@ describe("BoardMembersMenu", () => {
         stopPropagation: () => undefined,
       } as unknown as Event);
 
-    const removal = fixture.componentInstance.removeMember(row);
+    const removal = fixture.componentInstance.leaveMembership(row);
     outsideClick();
     expect(dismissed).not.toHaveBeenCalled();
     expect(stack.depth).toBe(1);

@@ -48,7 +48,7 @@
   color: var(--text-muted);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.15s, border-color 0.15s, background-color 0.15s;
+  transition: opacity var(--motion-fast), border-color var(--motion-fast), background-color var(--motion-fast);
 
   &.is-visible {
     opacity: 1;

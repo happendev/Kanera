@@ -1,5 +1,7 @@
+import { MenuDirective } from "../../shared/menu.directive";
+import { ToastService } from "../../shared/toast.service";
 import type { OnDestroy} from "@angular/core";
-import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from "@angular/core";
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from "@angular/core";
 import { Router } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
 import type { CompactCardCustomFieldValue, CompactCardSummary, ServerToClientEvents, WireBoardMemberUser, WireCard, WireCardSummary, WireChecklistTemplate, WireSeparator } from "@kanera/shared/events";
@@ -27,7 +29,7 @@ import { PageToolbarComponent } from "../../shared/page-toolbar.component";
 import { mediaQuerySignal } from "../../shared/media-query.signal";
 import { SearchFieldComponent } from "../../shared/search-field.component";
 import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
-import { StatusToastComponent } from "../../shared/status-toast.component";
+import { ToastComponent } from "../../shared/toast.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { BoardBackgroundPopover } from "./board-background.popover";
 import { BoardCanvasComponent } from "./board-canvas.component";
@@ -53,7 +55,10 @@ import type { CfFilterCondition, FilterValue } from "./table-view/filter.types";
 import { FilterBarComponent } from "./table-view/filter-bar.component";
 import { groupCards } from "./table-view/group-by.util";
 import { GROUP_BY_OPTIONS, NULL_GROUP_KEY, type CardGroup, type GroupBy } from "./table-view/table-view.types";
-import { readCompletedFilter, readFilters, readGroupBy, readViewMode, writeCompletedFilter, writeFilters, writeGroupBy, writeViewMode, type StoredFilters, type ViewMode } from "./table-view/view-preference";
+import { RouterLink } from "@angular/router";
+import { EmptyStateComponent } from "../../shared/empty-state.component";
+import { KeyboardShortcutsService } from "../../core/keyboard/keyboard-shortcuts.service";
+import { readCompactCards, readCompletedFilter, readFilters, readGroupBy, readViewMode, writeCompactCards, writeCompletedFilter, writeFilters, writeGroupBy, writeViewMode, type StoredFilters, type ViewMode } from "./table-view/view-preference";
 import { NotesViewComponent } from "../notes/notes-view.component";
 import { CompletedCardsPanelComponent } from "../completed-cards/completed-cards-panel.component";
 import { appendCompletedRangeParams, formatCompletedRangeDate } from "../completed-cards/completed-range.util";
@@ -64,16 +69,20 @@ import { MirrorCreateDialogComponent } from "../board-mirrors/mirror-create.dial
 import { BoardMirrorsDialogComponent } from "../board-mirrors/board-mirrors.dialog";
 import { BoardMirrorsService } from "../board-mirrors/board-mirrors.service";
 
+import { createSortedLaneProjection, createLaneItemsProjection } from "./lane-projection";
+import { formatRelativeTime } from "../../shared/date-format";
+
 type AnyCard = Card | WireCard | WireCardSummary;
+
 type BoardRiskFilter = "overdue" | "unassigned" | "inactive";
 const OFFLINE_COPY_PROMPT_DELAY_MS = 3000; // 3 seconds
 const SEARCH_DEBOUNCE_MS = 200;
 
-// Wide boards (30+ lists) only render a leading run of list columns and grow it as the user
-// scrolls right, mirroring the per-list card cap. The cap only ever grows, so a list (and any
-// card mid-drag) is never unmounted, keeping CDK's cross-list drop targets valid; edge-scroll
-// during a drag grows the cap and reveals the next list before the pointer reaches it.
+// Wide boards initially render a leading run of columns and grow it on idle scrolling.
+// Mounted columns stay available as CDK targets. Growth pauses during a drag because CDK takes
+// its receiving-list snapshot at drag start; newly registered lists cannot receive that gesture.
 const INITIAL_LISTS_CAP = 8;
+const EMPTY_LANE_CARDS: AnyCard[] = [];
 const GROW_NEAR_RIGHT_EDGE_PX = 800;
 const PRELOAD_NEAR_RIGHT_EDGE_PX = 1600;
 const LIST_GROWTH_IDLE_TIMEOUT_MS = 200;
@@ -99,13 +108,17 @@ function localDateKey(offsetDays: number): string {
 @Component({
   selector: "k-board-page",
   standalone: true,
-  imports: [AnchoredPanelDirective, AvatarComponent, BoardBackgroundPopover, BoardCalendarViewComponent, BoardCanvasComponent, BoardGroupColumnComponent, BoardMembersMenu, BoardMirrorsDialogComponent, BoardTableViewComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, CardComposerDialogComponent, CardDetailComponent, CompletedCardsPanelComponent, DocsLinkComponent, FilterBarComponent, ListComponent, MirrorCreateDialogComponent, NotesViewComponent, PageHeaderComponent, PageToolbarComponent, SearchFieldComponent, SegmentedComponent, StatusToastComponent, TooltipDirective, WatcherPopoverComponent, WorkDoneViewComponent],
+  imports: [EmptyStateComponent, RouterLink, MenuDirective, AnchoredPanelDirective, AvatarComponent, BoardBackgroundPopover, BoardCalendarViewComponent, BoardCanvasComponent, BoardGroupColumnComponent, BoardMembersMenu, BoardMirrorsDialogComponent, BoardTableViewComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, CardComposerDialogComponent, CardDetailComponent, CompletedCardsPanelComponent, DocsLinkComponent, FilterBarComponent, ListComponent, MirrorCreateDialogComponent, NotesViewComponent, PageHeaderComponent, PageToolbarComponent, SearchFieldComponent, SegmentedComponent, ToastComponent, TooltipDirective, WatcherPopoverComponent, WorkDoneViewComponent],
   providers: [BoardState, BoardSocketBridge, BoardMenuCoordinator],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./board.page.html",
   styleUrl: "./board.page.scss",
+  // Cards read this through :host-context rather than an input threaded through k-list and the
+  // group columns: density is a page-level display choice, not per-card state.
+  host: { "[class.compact-cards]": "compactCards()" },
 })
 export class BoardPage implements OnDestroy {
+  private readonly toasts = inject(ToastService);
   protected readonly state = inject(BoardState);
   private readonly socketBridge = inject(BoardSocketBridge);
   private readonly analytics = inject(AnalyticsService);
@@ -122,6 +135,8 @@ export class BoardPage implements OnDestroy {
   private readonly boardMirrors = inject(BoardMirrorsService);
   private readonly panelStack = inject(PanelStackService);
   private readonly el = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly shortcuts = inject(KeyboardShortcutsService);
+  private readonly destroyRef = inject(DestroyRef);
 
   private readonly listsEl = viewChild<BoardCanvasComponent>('listsEl');
 
@@ -131,6 +146,12 @@ export class BoardPage implements OnDestroy {
   readonly noteId = input<string | undefined>();
   /** Bound from the `view` query param, so it is whatever string the URL carried. */
   readonly view = input<string | undefined>();
+  /**
+   * Bound from the `compose` query param. The ⌘K palette sets `compose=card` when it sends the user
+   * here from another page so the card composer opens as soon as the board is editable; the param
+   * is then stripped so a reload or a shared link does not reopen it.
+   */
+  readonly compose = input<string | undefined>();
   readonly rememberedView = signal<ViewMode>("board");
   /** Resolved view mode: URL query param > localStorage > default board. */
   readonly effectiveView = computed<ViewMode>(() => {
@@ -170,6 +191,19 @@ export class BoardPage implements OnDestroy {
     ];
   });
 
+  /**
+   * Where lists are configured for this board. Lists are workspace-scoped, so a standard board sends
+   * the admin to its workspace's settings; a standalone board owns its hidden workspace and has the
+   * same page under its own URL.
+   */
+  readonly listsSettingsUrl = computed(() => {
+    const board = this.state.board();
+    if (!board) return null;
+    return this.state.workspaceKind() === "board"
+      ? `/b/${board.id}/settings/lists`
+      : `/w/${board.workspaceId}/settings/lists`;
+  });
+
   /** Board colour, falling back to the workspace accent, for the header's lead icon. */
   readonly boardIconColor = computed(() => {
     const board = this.state.board();
@@ -194,9 +228,8 @@ export class BoardPage implements OnDestroy {
   readonly hiddenListCount = computed(() => Math.max(0, this.state.visibleLists().length - this.listRenderCap()));
 
   onListsScroll(el: HTMLElement) {
-    // New columns append to the right of existing ones, so the dragged card's context doesn't
-    // shift. Growing during a drag's horizontal edge-scroll lets a card reach a list column
-    // beyond the initial window (preserving cross-list drag on wide boards).
+    // Append columns ahead of idle horizontal traversal. During a gesture the scheduler defers
+    // growth until release so it cannot expose a new column that CDK cannot receive a drop in.
     const remaining = el.scrollWidth - el.scrollLeft - el.clientWidth;
     this.scheduleListGrowthNearRightEdge(el, remaining <= GROW_NEAR_RIGHT_EDGE_PX);
   }
@@ -266,18 +299,21 @@ export class BoardPage implements OnDestroy {
    */
   readonly viewerPriorityRanks = signal<Map<string, number>>(new Map());
   readonly workDoneRefreshVersion = signal(0);
-  readonly exportMenuOpen = signal(false);
+  /** The header's single secondary-actions menu: display, background, export and mirrors. */
+  readonly boardMenuOpen = signal(false);
   /**
-   * The two header menus share their chrome but not their width — the mirror menu's labels are longer.
    * Width lives here rather than in CSS so placement clamps against the box that is actually rendered;
-   * a CSS-only override would leave the panel wider than the position it was aligned for.
-   * `minHeight` is the real height of a two-item menu, so a header low on a short viewport does not
-   * flip it above the trigger for no reason.
+   * a CSS-only override would leave the panel wider than the position it was aligned for. 240px fits
+   * the longest mirror label without wrapping.
    */
-  readonly exportMenuPlacement: AnchoredPanelPlacement = { align: "end", width: 160, gap: 4, minHeight: 90, maxHeight: 240 };
-  readonly mirrorMenuPlacement: AnchoredPanelPlacement = { ...this.exportMenuPlacement, width: 240 };
+  readonly boardMenuPlacement: AnchoredPanelPlacement = { align: "end", width: 240, gap: 4, minHeight: 90, maxHeight: 420 };
   readonly exportLoading = signal<"json" | "xlsx" | null>(null);
-  readonly mirrorMenuOpen = signal(false);
+  /**
+   * Per-board, per-device tile density. Compact hides the metadata rows (custom-field badges and the
+   * description/checklist/comment indicators) so a lane shows more cards; title, labels, due date and
+   * assignees stay because they are what people scan a lane for.
+   */
+  readonly compactCards = signal(false);
   readonly mirrorCreateOpen = signal(false);
   readonly mirrorsDialogOpen = signal(false);
   readonly mirrorCount = signal(0);
@@ -285,6 +321,12 @@ export class BoardPage implements OnDestroy {
   readonly mirrorCanManage = signal(false);
   readonly mirrorRefreshVersion = signal(0);
   readonly mirrorConfigured = computed(() => this.mirrorCount() > 0);
+  readonly mirrorMenuAvailable = computed(() =>
+    this.state.canEditRole() && this.boardLinkingEnabled() && (this.boardSyncAvailable() || this.state.hasMirrorsAtHydration()));
+  /** The menu renders only when at least one of its sections would; an empty menu is worse than none. */
+  readonly boardMenuAvailable = computed(() =>
+    this.state.board() !== null
+    && (this.effectiveView() === "board" || this.state.canEdit() || (this.state.canEditRole() && !this.viewOwnsChrome()) || this.mirrorMenuAvailable()));
   readonly boardSyncAvailable = computed(() => {
     if (!this.state.boardSyncAllowed()) return false;
     // The board-open value describes the board owner and is essential for guest boards. When the
@@ -310,7 +352,7 @@ export class BoardPage implements OnDestroy {
   readonly offlineTooltip = computed(() => this.state.canEdit() || this.state.online() ? null : "You're offline - changes are paused");
   readonly offlineCopyLabel = computed(() => {
     const cachedAt = this.offlineBoardCachedAt();
-    return cachedAt ? `Offline copy from ${this.formatRelativeTime(cachedAt)}` : "";
+    return cachedAt ? `Offline copy from ${formatRelativeTime(cachedAt)}` : "";
   });
   readonly offlineCopyPromptDelayMs = OFFLINE_COPY_PROMPT_DELAY_MS;
 
@@ -420,33 +462,17 @@ export class BoardPage implements OnDestroy {
     return new Set(matching.map(c => c.id));
   });
 
+  private readonly projectCardLanes = createSortedLaneProjection<AnyCard>();
+  private readonly projectItemLanes = createLaneItemsProjection();
   readonly cardsByList = computed(() => {
-    const showArchived = this.showArchived();
-    const visibleListIds = new Set(this.state.visibleLists().map((list) => list.id));
-    const result = new Map<string, AnyCard[]>();
-    for (const listId of visibleListIds) result.set(listId, []);
-
-    // Walk the card set once, then sort each populated list. This keeps board
-    // view rendering linear in card count instead of filtering all cards per list.
-    for (const card of this.state.cards()) {
-      if (!visibleListIds.has(card.listId)) continue;
-      if (showArchived ? !card.archivedAt : card.archivedAt) continue;
-      result.get(card.listId)?.push(card);
-    }
-
-    for (const cards of result.values()) {
-      cards.sort((a, b) => Number(a.position) - Number(b.position));
-    }
-    return result;
+    const grouped = this.projectCardLanes(this.activeCards());
+    // Include empty live lists as drop targets, while retaining unchanged populated lane inputs.
+    return new Map(this.state.visibleLists().map((list) => [list.id, grouped.get(list.id) ?? EMPTY_LANE_CARDS]));
   });
 
-  readonly itemsByList = computed(() => {
-    const result = new Map<string, BoardLaneItem[]>();
-    for (const [listId, cards] of this.cardsByList()) {
-      result.set(listId, this.state.itemsForList(listId, cards));
-    }
-    return result;
-  });
+  readonly itemsByList = computed(() =>
+    this.projectItemLanes(this.cardsByList(), this.state.separators()),
+  );
 
   readonly activeCards = computed(() =>
     this.state.cards().filter((card) => this.showArchived() ? !!card.archivedAt : !card.archivedAt),
@@ -670,6 +696,17 @@ export class BoardPage implements OnDestroy {
     });
   }
 
+  private pendingCacheSnapshot: Omit<OfflineBoardSnapshot, "boardId" | "cachedAt"> | null = null;
+  private cacheSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private flushPendingCacheSnapshot() {
+    if (this.cacheSaveTimer !== null) clearTimeout(this.cacheSaveTimer);
+    this.cacheSaveTimer = null;
+    const snapshot = this.pendingCacheSnapshot;
+    this.pendingCacheSnapshot = null;
+    if (snapshot) this.saveBoardSnapshot(snapshot);
+  }
+
   private saveCurrentBoardSnapshot() {
     const snapshot = this.state.snapshot();
     if (snapshot) this.saveBoardSnapshot(snapshot);
@@ -746,8 +783,13 @@ export class BoardPage implements OnDestroy {
   }
 
   ngOnDestroy() {
+    if (this.cacheSaveTimer !== null) clearTimeout(this.cacheSaveTimer);
+    this.cacheSaveTimer = null;
+    this.pendingCacheSnapshot = null;
+    if (!this.offlineBoardCachedAt()) this.saveCurrentBoardSnapshot();
     document.removeEventListener("click", this.handleDocumentClick);
     document.removeEventListener("keydown", this.handleDocumentKeydown);
+    document.removeEventListener("keydown", this.handleSelectionEscape, true);
     window.removeEventListener("kanera:new-card", this.handlePaletteNewCard);
     this.clearSearchDebounce();
     this.cancelScheduledListGrowth();
@@ -884,9 +926,31 @@ export class BoardPage implements OnDestroy {
   }
 
   constructor() {
+    // Page-level shortcuts. They win over the shell's while this page is mounted and unregister with
+    // it, so the sheet shows them only on a board. Guarded on a loaded board so nothing fires on the
+    // skeleton.
+    const ready = () => this.state.board() !== null;
+    const views: [string, ViewMode, string][] = [["1", "board", "Board view"], ["2", "table", "Table view"], ["3", "calendar", "Calendar view"], ["4", "history", "Work done"], ["5", "notes", "Board notes"]];
+    this.shortcuts.registerAll("Board", [
+      { keys: "c", label: "New card", when: () => ready() && this.state.canEdit() && this.effectiveView() !== "notes" && !this.showArchived(), run: () => this.openComposer() },
+      { keys: "/", label: "Search cards", when: () => ready() && this.viewHasQueryBar(), run: () => this.focusCardSearch() },
+      ...views.map(([key, mode, label]) => ({ keys: key, label, when: ready, run: () => this.setView(mode) })),
+      { keys: "w", label: "Board watchers", when: ready, run: () => this.toggleBoardWatcherPopover() },
+      { keys: "shift+d", label: "Toggle compact cards", when: () => ready() && this.effectiveView() === "board", run: () => this.toggleCompactCards() },
+    ], this.destroyRef);
     document.addEventListener("click", this.handleDocumentClick);
     document.addEventListener("keydown", this.handleDocumentKeydown);
+    document.addEventListener("keydown", this.handleSelectionEscape, true);
     window.addEventListener("kanera:new-card", this.handlePaletteNewCard);
+    effect(() => {
+      if (this.compose() !== "card" || !ready()) return;
+      // canEdit also needs the socket, which connects a beat after the board renders, so wait for it
+      // rather than consuming the param on the skeleton and opening nothing. A viewer-only role can
+      // never satisfy it: strip the param and leave the composer closed.
+      if (this.state.canEditRole() && !this.state.canEdit()) return;
+      void this.router.navigate([], { queryParams: { compose: null }, queryParamsHandling: "merge", replaceUrl: true });
+      untracked(() => this.openComposer());
+    });
     effect((onCleanup) => {
       if (!this.overviewOpen()) return;
       // A computed cannot observe time passing. Refresh while the panel is open so due/inactivity
@@ -994,6 +1058,7 @@ export class BoardPage implements OnDestroy {
       // `effectiveKanbanGroupBy`, so the preference survives a field being restored.
       const stored = readGroupBy(this.kanbanScopeKey());
       this.kanbanGroupBy.set(stored ?? "list");
+      this.compactCards.set(readCompactCards(this.kanbanScopeKey()));
     });
 
     effect(() => {
@@ -1003,9 +1068,13 @@ export class BoardPage implements OnDestroy {
         : null;
       const style = this.el.nativeElement.style;
       if (color) {
-        style.setProperty("--accent", `var(--color-${color})`);
-        style.setProperty("--accent-hover", `color-mix(in srgb, var(--color-${color}), black 15%)`);
-        style.setProperty("--ring", `color-mix(in srgb, var(--color-${color}) 40%, transparent)`);
+        // The identity colour is decorative; the *-accent token is its contrast-checked action tone
+        // (light mode only — dark falls back to the identity colour and relies on --accent-ink).
+        const accent = `var(--color-${color}-accent, var(--color-${color}))`;
+        style.setProperty("--accent", accent);
+        style.setProperty("--accent-hover", `color-mix(in srgb, ${accent}, black 15%)`);
+        style.setProperty("--accent-fg", "var(--accent-ink)");
+        style.setProperty("--ring", `color-mix(in srgb, ${accent} 40%, transparent)`);
         // --accent-soft resolves its var(--accent) where it is *declared*, so the :root
         // definition would stay the default teal here. Rebind it with the board colour so
         // engaged toolbar controls tint with the board rather than the app accent.
@@ -1013,6 +1082,7 @@ export class BoardPage implements OnDestroy {
       } else {
         style.removeProperty("--accent");
         style.removeProperty("--accent-hover");
+        style.removeProperty("--accent-fg");
         style.removeProperty("--ring");
         style.removeProperty("--accent-soft");
       }
@@ -1021,8 +1091,19 @@ export class BoardPage implements OnDestroy {
 
     effect(() => {
       const snapshot = this.state.snapshot();
-      if (!snapshot || this.offlineBoardCachedAt()) return;
-      untracked(() => this.saveBoardSnapshot(snapshot));
+      if (!snapshot || this.offlineBoardCachedAt()) {
+        // Access revocation clears state; never flush a pending copy after that boundary.
+        this.pendingCacheSnapshot = null;
+        if (this.cacheSaveTimer !== null) clearTimeout(this.cacheSaveTimer);
+        this.cacheSaveTimer = null;
+        return;
+      }
+      if (this.pendingCacheSnapshot && this.pendingCacheSnapshot.board.id !== snapshot.board.id) {
+        untracked(() => this.flushPendingCacheSnapshot());
+      }
+      this.pendingCacheSnapshot = snapshot;
+      // A fixed window coalesces bursts without starving storage on a continuously active board.
+      this.cacheSaveTimer ??= setTimeout(() => untracked(() => this.flushPendingCacheSnapshot()), 250);
     });
 
     // Filters, List/Table View columns, and export need every field's values, not just the
@@ -1059,6 +1140,7 @@ export class BoardPage implements OnDestroy {
       let cancelled = false;
       let hydrated = false;
       let joinedOnce = false;
+      let initialLoadFinished = false;
       let refreshInFlight = false;
       let refreshQueued = false;
       let pageViewCaptured = false;
@@ -1118,6 +1200,8 @@ export class BoardPage implements OnDestroy {
         this.offlineBoardCachedAt.set(null);
         hydrated = true;
         this.saveCurrentBoardSnapshot();
+        // Warm omitted field values once per board load so switching views remains useful offline.
+        this.ensureCustomFieldValuesLoaded();
       };
       const applyCachedBoard = (snapshot: OfflineBoardSnapshot) => {
         if (cancelled) return;
@@ -1195,14 +1279,16 @@ export class BoardPage implements OnDestroy {
           return;
         }
         if (!cancelled) void this.router.navigateByUrl("/");
-      });
+      }).finally(() => { initialLoadFinished = true; });
 
       const detach = this.socketBridge.attach(socket, boardId, {
         viewerUserId: this.auth.user()?.id ?? null,
         onJoined: () => {
           if (!joinedOnce) {
             joinedOnce = true;
-            return;
+            // A cold offline start has never joined a room: its first successful join must
+            // refresh the restored snapshot too.
+            if (!initialLoadFinished || !this.offlineBoardCachedAt()) return;
           }
           refreshBoard();
         },
@@ -1368,21 +1454,16 @@ export class BoardPage implements OnDestroy {
       });
   }
 
-  private formatRelativeTime(value: string): string {
-    const diffMs = Date.now() - new Date(value).getTime();
-    const mins = Math.max(0, Math.floor(diffMs / 60_000));
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"} ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
-    const days = Math.floor(hours / 24);
-    return `${days} day${days === 1 ? "" : "s"} ago`;
-  }
-
   private skipNextDocumentClick = false;
 
   private readonly handleDocumentClick = (event: MouseEvent) => this.onDocumentClick(event);
   private readonly handleDocumentKeydown = (event: KeyboardEvent) => this.onDocumentKeydown(event);
+
+  // Selection is page state, so Escape clears it even when a popover or drag
+  // consumes the key before bubbling. Let that surface still handle its own Escape.
+  private readonly handleSelectionEscape = (event: KeyboardEvent) => {
+    if (event.key === "Escape") this.clearBulkSelection();
+  };
 
   onDocumentClick(_event: MouseEvent) {
     if (this.skipNextDocumentClick) {
@@ -1395,7 +1476,7 @@ export class BoardPage implements OnDestroy {
   }
 
   onDocumentKeydown(event: KeyboardEvent) {
-    if (event.key === "Escape" && this.bulkSelectedCount() > 0 && !this.openCardId() && !this.bulkMenuOpen()) {
+    if (event.key === "Escape" && this.bulkSelectedCount() > 0) {
       event.preventDefault();
       this.clearBulkSelection();
       return;
@@ -1688,6 +1769,14 @@ export class BoardPage implements OnDestroy {
   }
 
   removeBoardMemberFromView(userId: string) {
+    if (userId === this.auth.user()?.id) {
+      const boardId = this.boardId();
+      this.state.clear();
+      this.workspaceService.removeBoard(boardId);
+      void this.offlineCache.revokeBoardAccess(boardId).catch(() => undefined);
+      void this.router.navigateByUrl("/");
+      return;
+    }
     // The mutation originates inside the popover, so update its parent header immediately instead
     // of relying on the durable realtime event making a round trip back to this same browser.
     this.state.removeBoardMember(userId);
@@ -1699,19 +1788,32 @@ export class BoardPage implements OnDestroy {
     this.state.upsertBoardMember(member);
   }
 
-  toggleExportMenu() {
-    if (!this.state.canEditRole() || this.state.board() === null || this.exportLoading()) return;
-    this.exportMenuOpen.update((value) => !value);
+  /** `/` puts the caret in the card search without the mouse; the field is the page's own, not the global one. */
+  focusCardSearch() {
+    const input = this.el.nativeElement.querySelector<HTMLInputElement>("k-search-field input");
+    input?.focus();
+    input?.select();
   }
 
-  toggleMirrorMenu() {
-    if (!this.state.canEditRole()) return;
-    this.mirrorMenuOpen.update((open) => !open);
+  toggleBoardMenu() {
+    if (this.state.board() === null) return;
+    this.boardMenuOpen.update((value) => !value);
+  }
+
+  toggleCompactCards() {
+    const next = !this.compactCards();
+    this.compactCards.set(next);
+    writeCompactCards(this.kanbanScopeKey(), next);
+  }
+
+  openBackgroundFromMenu() {
+    this.boardMenuOpen.set(false);
+    this.toggleBackground();
   }
 
   openMirrorCreate() {
     if (this.mirrorCreateBlocked()) return;
-    this.mirrorMenuOpen.set(false);
+    this.boardMenuOpen.set(false);
     this.mirrorCreateOpen.set(true);
   }
 
@@ -1747,7 +1849,7 @@ export class BoardPage implements OnDestroy {
   }
 
   openMirrorsDialog() {
-    this.mirrorMenuOpen.set(false);
+    this.boardMenuOpen.set(false);
     this.mirrorsDialogOpen.set(true);
   }
 
@@ -1757,7 +1859,7 @@ export class BoardPage implements OnDestroy {
     try {
       const archive = await this.loadBoardExportArchive();
       downloadTextFile(JSON.stringify(archive, null, 2), "application/json", boardArchiveFileName(archive, "json"));
-      this.exportMenuOpen.set(false);
+      this.boardMenuOpen.set(false);
     } finally {
       this.exportLoading.set(null);
     }
@@ -1775,7 +1877,7 @@ export class BoardPage implements OnDestroy {
         columns: boardReportColumnWidths(rows),
         stickyRowsCount: 4,
       }).toFile(boardArchiveFileName(archive, "xlsx"));
-      this.exportMenuOpen.set(false);
+      this.boardMenuOpen.set(false);
     } finally {
       this.exportLoading.set(null);
     }
@@ -2075,9 +2177,28 @@ export class BoardPage implements OnDestroy {
 
   async onCardDrop(p: CardDropPayload) {
     if (!this.state.canEdit()) return;
-    const previousCards = this.state.snapshotCards();
+    const cards = this.bulkSelectedCardIds().has(p.cardId)
+      ? this.bulkSelectedCards() : [this.state.cardById(p.cardId)].filter((card) => card !== undefined && card !== null);
+    // Place each card against the preceding card's confirmed position. Preparing
+    // the whole selection up front makes later server positions reshuffle the group.
+    let next = p;
+    for (const card of cards) {
+      try {
+        await this.prepareDroppedCard({ ...next, cardId: card.id })();
+        next = { cardId: card.id, toListId: p.toListId, afterItem: { type: "card", id: card.id } };
+      } catch (error) {
+        // Earlier writes are durable and later cards have not moved. Restore only
+        // this card's position, preserving unrelated realtime updates.
+        this.state.moveCard(card.id, card.listId, card.position);
+        throw error;
+      }
+    }
+    if (cards.length > 1) this.toasts.success(`${cards.length} cards moved.`, "arrows-transfer-down");
+  }
+
+  private prepareDroppedCard(p: CardDropPayload): () => Promise<void> {
     const card = this.state.cardById(p.cardId);
-    if (!card) return;
+    if (!card) return async () => {};
     const beforeAnchor = p.beforeItem ?? (p.beforeCardId !== undefined && p.beforeCardId !== null ? { type: "card" as const, id: p.beforeCardId } : p.beforeCardId);
     const afterAnchor = p.afterItem ?? (p.afterCardId !== undefined && p.afterCardId !== null ? { type: "card" as const, id: p.afterCardId } : p.afterCardId);
     const beforeItem = beforeAnchor ? this.itemForAnchor(beforeAnchor) : beforeAnchor;
@@ -2086,17 +2207,14 @@ export class BoardPage implements OnDestroy {
 
     this.state.moveCard(p.cardId, p.toListId, optimisticPosition);
 
-    try {
+    return async () => {
       const moved = await this.api.post<{ id: string; listId: string; position: string }>(`/cards/${p.cardId}/move`, {
         listId: p.toListId,
         ...(p.beforeItem !== undefined ? { beforeItem: p.beforeItem } : p.beforeCardId !== undefined ? { beforeCardId: p.beforeCardId } : {}),
         ...(p.afterItem !== undefined ? { afterItem: p.afterItem } : p.afterCardId !== undefined ? { afterCardId: p.afterCardId } : {}),
       });
       this.state.moveCard(moved.id, moved.listId, moved.position);
-    } catch (error) {
-      this.state.restoreCards(previousCards);
-      throw error;
-    }
+    };
   }
 
   async onSeparatorDrop(p: SeparatorDropPayload) {

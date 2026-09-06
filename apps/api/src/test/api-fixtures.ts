@@ -112,14 +112,3 @@ export async function seedWorkspace(
 
   return { id: workspace.id, cardKeyPrefix: workspace.cardKeyPrefix, boardId: board.id, listId: list.id };
 }
-
-/** Sign up an owner and give them a workspace — the most common integration preamble of all. */
-export async function seedOwnerWithWorkspace(
-  app: FastifyInstance,
-  seed: string,
-  workspaceName = "Delivery",
-): Promise<{ owner: SignedUpOwner; workspace: SeededWorkspace }> {
-  const owner = await signupOwner(app, { seed });
-  const workspace = await seedWorkspace(app, owner, workspaceName);
-  return { owner, workspace };
-}

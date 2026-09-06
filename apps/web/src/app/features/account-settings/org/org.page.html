@@ -26,8 +26,13 @@
 </div>
 
 <div class="settings-section">
-  <h3 class="settings-section-title"><i class="ti ti-clock-cog"></i><span>New workspace defaults</span></h3>
-  <p class="settings-section-help">Applied when a workspace or standalone board is created. Existing workspaces keep their own settings.</p>
+  <div class="section-heading-row">
+    <div>
+      <h3 class="settings-section-title"><i class="ti ti-clock-cog"></i><span>New workspace defaults</span></h3>
+      <p class="settings-section-help">Applied when a workspace or standalone board is created. Existing workspaces keep their own settings.</p>
+    </div>
+    <k-autosave-status [state]="settings.cardTimingDefaultsAutosave.state()" />
+  </div>
   <div class="settings-form">
     <label class="settings-field">
       <span class="settings-field-label"><i class="ti ti-circle-check"></i>Show completed cards for</span>
@@ -53,7 +58,6 @@
     <k-docs-link path="board-health" fragment="organisation-default" label="Learn how the organisation default affects new workspaces" />
   </div>
   @if (settings.cardTimingDefaultsError()) { <p class="form-error">{{ settings.cardTimingDefaultsError() }}</p> }
-  @if (settings.cardTimingDefaultsSavedAt() && !settings.cardTimingDefaultsError()) { <p class="form-success">Saved.</p> }
 </div>
 
 <div class="settings-section">
@@ -72,13 +76,12 @@
   <h3 class="settings-section-title"><i class="ti ti-building-skyscraper"></i><span>Organisation name</span></h3>
   <k-docs-link path="organisations" label="Learn more about organisations" />
   <div class="board-form">
-    <input name="orgName" placeholder="Organisation name" [value]="settings.orgName()" (input)="settings.orgName.set($any($event.target).value)" [disabled]="!settings.isClientAdmin() || settings.orgNameSaving()" style="flex:1" />
+    <input name="orgName" placeholder="Organisation name" [value]="settings.orgName()" (input)="settings.orgName.set($any($event.target).value)" [disabled]="!settings.isClientAdmin() || settings.orgNameSaving()" class="grow" />
     <button class="sm" type="button" (click)="settings.saveOrgName()" [disabled]="!settings.isClientAdmin() || settings.orgNameSaving() || !settings.orgName().trim() || settings.orgName().trim() === settings.client()?.name">
       {{ settings.orgNameSaving() ? "Saving..." : "Save" }}
     </button>
   </div>
   @if (settings.orgError()) { <p class="form-error">{{ settings.orgError() }}</p> }
-  @if (settings.orgNameSavedAt() && !settings.orgError()) { <p class="form-success">Saved.</p> }
 </div>
 
 @if (settings.githubAppConfig()?.configured || settings.isSelfHosted()) {
@@ -159,7 +162,6 @@
   </label>
 
   @if (settings.pushError()) { <p class="form-error">{{ settings.pushError() }}</p> }
-  @if (settings.pushSuccess() && !settings.pushError()) { <p class="form-success">{{ settings.pushSuccess() }}</p> }
 
   <div class="button-row">
     <button class="sm" type="button" (click)="settings.savePushEnabled()" [disabled]="!settings.isClientAdmin() || settings.pushSaving() || settings.pushEnabledDraft() === settings.client()?.pushEnabled">
@@ -220,12 +222,8 @@
   }
 
   @if (settings.storageError()) { <p class="form-error">{{ settings.storageError() }}</p> }
-  @if (settings.storageSavedAt() && !settings.storageError()) { <p class="form-success">Saved.</p> }
   @if (settings.storageTestError()) {
   <p class="form-error storage-test-feedback"><i class="ti ti-circle-x"></i>{{ settings.storageTestError() }}</p>
-  }
-  @if (settings.storageTestSuccess() && !settings.storageTestError()) {
-  <p class="form-success storage-test-feedback"><i class="ti ti-circle-check"></i>{{ settings.storageTestSuccess() }}</p>
   }
 
   <div class="button-row">
@@ -319,7 +317,6 @@
   </div>
 
   @if (settings.smtpError()) { <p class="form-error">{{ settings.smtpError() }}</p> }
-  @if (settings.smtpSuccess() && !settings.smtpError()) { <p class="form-success">{{ settings.smtpSuccess() }}</p> }
 
   <div class="button-row">
     <button class="sm" type="button" (click)="settings.saveSmtp()" [disabled]="!settings.isClientAdmin() || settings.smtpSaving() || settings.smtpTesting() || settings.smtpFromEnv()">
@@ -338,9 +335,6 @@
         </label>
         @if (settings.smtpTestError()) {
         <p class="form-error"><i class="ti ti-circle-x"></i>{{ settings.smtpTestError() }}</p>
-        }
-        @if (settings.smtpTestSuccess() && !settings.smtpTestError()) {
-        <p class="form-success"><i class="ti ti-circle-check"></i>{{ settings.smtpTestSuccess() }}</p>
         }
         <button class="sm smtp-send-button" type="button" (click)="settings.testSmtp()" [disabled]="settings.smtpTesting() || !settings.smtpTestTo().trim()">
           @if (settings.smtpTesting()) {

@@ -1,0 +1,2 @@
+ALTER TABLE "board" DROP CONSTRAINT "boards_background_gradient_ck";--> statement-breakpoint
+ALTER TABLE "board" ADD CONSTRAINT "boards_background_gradient_ck" CHECK ("board"."background_gradient" in ('sunrise', 'ocean', 'forest', 'dusk', 'midnight', 'ember', 'mint', 'lavender', 'peach', 'graphite', 'obsidian', 'slate', 'stone', 'sand', 'sage', 'charcoal'));

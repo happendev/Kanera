@@ -63,7 +63,8 @@ interface DeviceContext {
   `,
   styles: [`
     :host { min-height: 100vh; display: grid; place-items: center; background: var(--background); padding: 1rem; }
-    .device-card { width: min(480px, 100%); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; background: var(--card); box-shadow: 0 12px 40px rgb(0 0 0 / .08); }
+    .device-card { width: min(480px, 100%); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; background: var(--card); box-shadow: var(--shadow-lg); }
+    @media (max-width: 480px) { .device-card { padding: 1.25rem; } .actions { flex-direction: column; align-items: stretch; } }
     .device-icon { font-size: 2rem; }
     h1 { margin: .75rem 0; font-size: 1.35rem; }
     p, li { color: var(--muted-foreground); line-height: 1.5; }

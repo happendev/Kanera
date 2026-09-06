@@ -69,7 +69,7 @@ import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
       background: var(--surface-overlay);
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-lg);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+      box-shadow: var(--shadow-lg);
       padding: 10px;
       width: 100%;
       max-height: var(--ap-max-height, 340px);
@@ -89,8 +89,6 @@ import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
       font-size: 12px;
       font-weight: 600;
       color: var(--text);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
     }
 
     .lp-hint {

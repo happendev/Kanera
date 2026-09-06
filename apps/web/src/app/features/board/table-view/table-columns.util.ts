@@ -155,25 +155,7 @@ export function columnWidthsEqual(a: ColumnWidths, b: ColumnWidths): boolean {
   return aKeys.every((key) => a[key] === b[key]);
 }
 
-/**
- * "3d ago" for a Created / Updated cell. Shared by the List and Table views so the same timestamp
- * never renders two different ways depending on which view you opened.
- */
-export function formatRelativeTime(value: string | Date | null | undefined): string {
-  if (!value) return "";
-  const time = value instanceof Date ? value.getTime() : new Date(value).getTime();
-  if (Number.isNaN(time)) return "";
-  const mins = Math.round((Date.now() - time) / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.round(days / 30);
-  if (months < 12) return `${months}mo ago`;
-  return `${Math.round(months / 12)}y ago`;
-}
+export { formatRelativeTime } from "../../../shared/date-format";
 
 export function cssEscape(value: string): string {
   if (typeof CSS !== "undefined" && typeof CSS.escape === "function") return CSS.escape(value);

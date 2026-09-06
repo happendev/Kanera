@@ -249,6 +249,42 @@ k-page-toolbar.priority-toolbar {
   min-width: 0;
 }
 
+// An empty board result sits at the top of the collection canvas and keeps the same constrained
+// dashed panel, icon and typography as the other page-level empty states in the system.
+.work-page.has-empty-collection {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding-bottom: 0;
+
+  .work-content,
+  .work-main,
+  .global-board-sections {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .work-content {
+    align-items: stretch;
+  }
+
+  .work-main {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .global-board-sections {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .work-empty-state {
+    align-self: start;
+    justify-self: center;
+    width: min(440px, 100%);
+  }
+}
+
 // Static, not sticky: the frame layout below (`.has-up-next-dock`) gives the column its exact
 // height, so the dock never has to guess at the chrome or shell height. Its earlier sticky
 // treatment estimated both (top: 116px against 100vh) and was wrong whenever either differed —
@@ -508,22 +544,6 @@ input {
 // itself (above). Frame mode already zeroes this margin; the rule is harmless there.
 .work-chrome:has(+ .offline-banner) {
   margin-bottom: 0;
-}
-
-.loading-state,
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 200px;
-  color: var(--text-muted);
-  text-align: center;
-
-  >i {
-    font-size: 28px;
-  }
 }
 
 .spinner {
@@ -917,8 +937,6 @@ k-work-done-view {
     gap: 6px;
     font-size: 11.5px;
     font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
 
     i {
       color: var(--text-muted);
@@ -1164,7 +1182,7 @@ k-work-done-view {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color var(--motion-fast), background var(--motion-fast);
 
   &:hover {
     border-color: var(--border-strong);
@@ -1383,4 +1401,13 @@ k-work-done-view {
       min-height: 44px;
     }
   }
+}
+
+.bulk-selection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 4px 16px 8px;
+  font-size: 13px;
 }

@@ -1,3 +1,5 @@
+import { CdkTrapFocus } from "@angular/cdk/a11y";
+import { ToastService } from "../../shared/toast.service";
 import type { OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, HostListener, computed, inject, input, output, signal } from "@angular/core";
 import type { CompactCardCustomFieldValue, WireBoardMemberUser, WireCard, WireCardSummary, WireCustomFieldOption } from "@kanera/shared/events";
@@ -40,11 +42,11 @@ type TriState = "all" | "mixed" | "none";
 @Component({
   selector: "k-bulk-custom-fields-dialog",
   standalone: true,
-  imports: [AvatarComponent],
+  imports: [CdkTrapFocus, AvatarComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="backdrop" (click)="dismiss()">
-      <div class="dialog" (click)="$event.stopPropagation()" role="dialog" aria-label="Edit custom fields" [attr.aria-busy]="loading() || saving()">
+      <div class="dialog" (click)="$event.stopPropagation()" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-label="Edit custom fields" [attr.aria-busy]="loading() || saving()">
         <header class="head">
           <div>
             <h3 class="title">Edit custom fields</h3>
@@ -298,8 +300,8 @@ type TriState = "all" | "mixed" | "none";
       padding: 4px 6px;
       border-radius: var(--radius-sm);
     }
-    .clear-btn:hover { background: var(--surface-hover); color: var(--danger, #d33); }
-    .clear-btn.on { color: var(--danger, #d33); font-weight: 600; }
+    .clear-btn:hover { background: var(--surface-hover); color: var(--danger); }
+    .clear-btn.on { color: var(--danger); font-weight: 600; }
     .empty { margin: 0; padding: 14px 8px; color: var(--text-muted); font-size: 13px; text-align: center; }
     .notice {
       display: flex;
@@ -317,6 +319,7 @@ type TriState = "all" | "mixed" | "none";
   `,
 })
 export class BulkCustomFieldsDialogComponent implements OnInit {
+  private readonly toasts = inject(ToastService);
   private readonly api = inject(ApiClient);
   private readonly state = inject(BoardState);
 
@@ -632,6 +635,7 @@ export class BulkCustomFieldsDialogComponent implements OnInit {
       this.applyNotice.set(`${skipped.size} card${skipped.size === 1 ? " was" : "s were"} skipped (archived).`);
       return;
     }
+    this.toasts.success("Custom fields updated for the selected cards.", "forms");
     this.done.emit();
     this.dismissed.emit();
   }

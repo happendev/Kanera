@@ -1,8 +1,10 @@
+import { ToastService } from "../../shared/toast.service";
 import { provideZonelessChangeDetection } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import type { WireBoardMemberUser, WireCardSummary } from "@kanera/shared/events";
 import { describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
+import { BULK_CARD_STORE, type BulkCardStore } from "./bulk-card-store";
 import { BoardState } from "./board-state";
 import { BulkCardActionsMenuPopover } from "./bulk-card-actions-menu.popover";
 
@@ -42,6 +44,7 @@ function card(id: string, boardId: string, listId = "list-1"): WireCardSummary {
 
 describe("BulkCardActionsMenuPopover", () => {
   async function createComponent(options: {
+    store?: BulkCardStore;
     patch?: ReturnType<typeof vi.fn>;
     post?: ReturnType<typeof vi.fn>;
     members?: WireBoardMemberUser[];
@@ -54,6 +57,7 @@ describe("BulkCardActionsMenuPopover", () => {
       imports: [BulkCardActionsMenuPopover],
       providers: [
         provideZonelessChangeDetection(),
+        ...(options.store ? [{ provide: BULK_CARD_STORE, useValue: options.store }] : []),
         { provide: ApiClient, useValue: { patch, post, get: vi.fn(() => Promise.resolve([])) } },
         {
           provide: BoardState,
@@ -79,6 +83,54 @@ describe("BulkCardActionsMenuPopover", () => {
     fixture.detectChanges();
     return { fixture, patch, post };
   }
+
+  it("confirms only after all board batches succeed", async () => {
+    let finish!: (value: { cards: never[] }) => void;
+    const patch = vi.fn().mockResolvedValueOnce({ cards: [] }).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const { fixture } = await createComponent({ patch });
+    const toasts = TestBed.inject(ToastService);
+    const pending = fixture.componentInstance.archive(new MouseEvent("click"));
+    await Promise.resolve();
+    expect(toasts.messages()).toEqual([]);
+    finish({ cards: [] });
+    await pending;
+    expect(toasts.messages().map((toast) => toast.message)).toEqual(["3 cards archived."]);
+    // Archive is undoable: the toast's action re-issues the bulk PATCH with archived: false.
+    expect(toasts.messages()[0]!.action?.label).toBe("Undo");
+    patch.mockResolvedValueOnce({ cards: [] }).mockResolvedValueOnce({ cards: [] });
+    toasts.messages()[0]!.action!.run();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(patch.mock.calls.slice(2).map(([, body]) => (body as { archived: boolean }).archived)).toEqual([false, false]);
+    expect(toasts.messages()).toEqual([]);
+  });
+
+  it("does not announce success when a later board batch fails", async () => {
+    const patch = vi.fn().mockResolvedValueOnce({ cards: [] }).mockRejectedValueOnce(new Error("Failed"));
+    const { fixture } = await createComponent({ patch });
+    await expect(fixture.componentInstance.archive(new MouseEvent("click"))).rejects.toThrow("Failed");
+    expect(TestBed.inject(ToastService).messages()).toEqual([]);
+  });
+
+  it("reads selection state and applies results through the host card store", async () => {
+    const store: BulkCardStore = {
+      labelIdsForCard: () => ["label-1"], assigneeIdsForCard: () => ["user-1"],
+      setCardLabels: vi.fn(), setCardAssignees: vi.fn(),
+      updateCard: vi.fn(), moveCard: vi.fn(), addCard: vi.fn(),
+    };
+    const moved = card("card-1", "board-1", "target");
+    const post = vi.fn().mockResolvedValue({ cards: [moved] });
+    const { fixture } = await createComponent({ store, post });
+    const component = fixture.componentInstance;
+    expect(component.labelState("label-1")).toBe("all");
+    expect(component.assigneeState("user-1")).toBe("all");
+    await component.moveToList("target");
+    expect(store.moveCard).toHaveBeenCalledWith("card-1", "target", moved.position);
+    fixture.componentRef.setInput("workspaceActionsEnabled", false);
+    post.mockClear();
+    await component.moveToList("other-workspace-list");
+    expect(post).not.toHaveBeenCalled();
+  });
 
   it("splits board-scoped bulk requests when selected cards span boards", async () => {
     const patch = vi.fn(() => Promise.resolve({ cards: [] }));

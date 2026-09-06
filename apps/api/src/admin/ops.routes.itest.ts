@@ -55,11 +55,51 @@ void test("ops health reports purchased Pro seats instead of paid-organisation m
       displayName: `Pro Member ${index}`,
     })),
   );
+  const [demoClient] = await db.insert(clients).values({
+    name: "Excluded Demo Metrics",
+    analyticsExcluded: true,
+    plan: "paid",
+    billingStatus: "active",
+    seatLimit: 99,
+  }).returning();
+  const [demoUser] = await insertTestUsers(db, {
+    clientId: demoClient!.id,
+    email: "excluded-demo-metrics@test.local",
+    passwordHash: "x",
+    displayName: "Excluded Demo User",
+  });
+  await db.insert(emailQueue).values({
+    toEmail: demoUser!.email,
+    subject: "Excluded demo failure",
+    type: "welcome",
+    data: { displayName: demoUser!.displayName, loginUrl: "https://example.test/login" },
+    status: EMAIL_QUEUE_STATUS.error,
+  });
+  await db.insert(pushQueue).values({
+    clientId: demoClient!.id,
+    userId: demoUser!.id,
+    reason: "test",
+    payload: { notification: { title: "Demo", body: "Demo", data: { kind: "test" } } },
+    status: PUSH_QUEUE_STATUS.error,
+  });
 
   const response = await app.inject({ method: "GET", url: "/admin/ops/health?days=30", headers });
 
   assert.equal(response.statusCode, 200, response.body);
-  assert.equal(response.json<{ planAccess: { proSeats: number } }>().planAccess.proSeats, 10);
+  const health = response.json<{
+    orgs: { total: number };
+    users: { total: number };
+    planAccess: { proSeats: number };
+    trends: Array<{ registrations: number }>;
+    emailQueue: { error: number };
+    pushQueue: { error: number };
+  }>();
+  assert.equal(health.orgs.total, 1);
+  assert.equal(health.users.total, 22);
+  assert.equal(health.planAccess.proSeats, 10);
+  assert.equal(health.trends[health.trends.length - 1]?.registrations, 22);
+  assert.equal(health.emailQueue.error, 0);
+  assert.equal(health.pushQueue.error, 0);
   assert.ok(response.json<{ pushQueue: Record<string, unknown> }>().pushQueue);
 });
 

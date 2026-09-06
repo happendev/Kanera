@@ -569,6 +569,25 @@ describe("BoardState realtime regressions", () => {
     expect(state.checklistsForCard("card-1")[0]?.items[0]?.assigneeId).toBeNull();
   });
 
+  it("keeps an optimistic move's summary reference when its socket echo arrives", () => {
+    const socket = new SocketStub();
+    bridge.attach(socket.asSocket(), "board-1");
+    state.detailedCards.set(new Map([["card-1", createCardDetail()]]));
+    state.moveCard("card-1", "list-1", "2000.0000000000");
+    const optimistic = state.cards();
+    const timestamp = state.cardById("card-1")!.updatedAt;
+    const sequence = state.cardMutationSeq();
+    socket.trigger(SERVER_EVENTS.CARD_MOVED, {
+      boardId: "board-1", cardId: "card-1", fromListId: "list-1", toListId: "list-1",
+      position: "2000.0000000000", prevPosition: "1000.0000000000",
+    });
+    expect(state.cards()).toBe(optimistic);
+    expect(state.cardById("card-1")!.updatedAt).toBe(timestamp);
+    expect(state.cardMutationSeq()).toBe(sequence);
+    expect(state.detailedCards().get("card-1")!.card.updatedAt).toBe(timestamp);
+    expect(state.cardDetailRealtimeRevision("card-1")).toBe(1);
+  });
+
   it("advances the card detail revision for realtime moves and rebalances", () => {
     const socket = new SocketStub();
     bridge.attach(socket.asSocket(), "board-1");
@@ -1359,6 +1378,20 @@ describe("BoardState recent-card retention across a stale hydrate", () => {
       viewerRole: "editor",
     });
     expect(state.hasCard("card-2")).toBe(false);
+  });
+
+  it("preserves field completeness and treats legacy snapshots as incomplete", () => {
+    state.customFieldValuesComplete.set(false);
+    const snapshot = { ...state.snapshot(), boardId: "board-1", cachedAt: "2026-05-21T00:00:00.000Z" } as OfflineBoardSnapshot;
+    expect(snapshot.customFieldValuesComplete).toBe(false);
+    state.restoreSnapshot(snapshot);
+    expect(state.customFieldValuesComplete()).toBe(false);
+    state.restoreSnapshot({ ...snapshot, customFieldValuesComplete: true });
+    expect(state.customFieldValuesComplete()).toBe(true);
+    const legacy = { ...snapshot };
+    delete legacy.customFieldValuesComplete;
+    state.restoreSnapshot(legacy);
+    expect(state.customFieldValuesComplete()).toBe(false);
   });
 
   it("retains a recent card when restoring an older offline snapshot", () => {

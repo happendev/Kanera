@@ -1,16 +1,19 @@
+import { CdkTrapFocus } from "@angular/cdk/a11y";
 import type { OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, effect, inject, input, output, signal } from "@angular/core";
 import type { BoardMirrorRow } from "@kanera/shared/dto";
 import { ApiError } from "../../core/api/api.client";
 import { BoardMirrorsService } from "./board-mirrors.service";
+import { formatDateTime } from "../../shared/date-format";
 
 @Component({
   selector: "k-board-mirrors-dialog",
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [CdkTrapFocus],
   template: `
     <div class="backdrop" (click)="dismissed.emit()">
-      <section class="dialog" role="dialog" aria-modal="true" aria-label="Board mirrors" (click)="$event.stopPropagation()">
+      <section class="dialog" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-modal="true" aria-label="Board mirrors" (click)="$event.stopPropagation()">
         <header><div><h2>Board mirrors</h2><p>Manage incoming copies and outbound governance.</p></div><button type="button" class="icon" (click)="dismissed.emit()" aria-label="Close"><i class="ti ti-x"></i></button></header>
         @if (loading()) { <p class="loading"><i class="ti ti-loader-2 kanera-spin"></i> Loading mirrors…</p> }
         @else {
@@ -185,7 +188,7 @@ export class BoardMirrorsDialogComponent implements OnInit {
   }
   statusLabel(mirror: BoardMirrorRow) { return mirror.planBlocked ? "Pro required" : mirror.sourceDisabledAt ? "Disabled by source" : mirror.pausedAt ? "Paused" : mirror.lastError ? "Needs attention" : "Active"; }
   hasArchivedTarget(mirror: BoardMirrorRow) { return mirror.lists.some((list) => list.targetListArchived); }
-  syncLine(mirror: BoardMirrorRow) { return mirror.planBlocked ? "Plan-blocked; no changes are being copied" : mirror.lastError ? mirror.lastError : mirror.lastSyncAt ? `Last checked ${new Date(mirror.lastSyncAt).toLocaleString()}` : "Waiting for first sync"; }
+  syncLine(mirror: BoardMirrorRow) { return mirror.planBlocked ? "Plan-blocked; no changes are being copied" : mirror.lastError ? mirror.lastError : mirror.lastSyncAt ? `Last checked ${formatDateTime(mirror.lastSyncAt, "medium")}` : "Waiting for first sync"; }
   private errorMessage(error: unknown, fallback: string) { return error instanceof ApiError && error.body && typeof error.body === "object" && "message" in error.body ? String(error.body.message) : fallback; }
   async togglePause(mirror: BoardMirrorRow) { this.busyId.set(mirror.id); await this.mirrors.update(this.boardId(), mirror.id, { paused: !mirror.pausedAt }).then(() => this.refresh()).catch((error: unknown) => { this.error.set(this.errorMessage(error, "The mirror state could not be changed.")); this.busyId.set(null); }); }
   async toggleSource(mirror: BoardMirrorRow) { this.busyId.set(mirror.id); const request = mirror.sourceDisabledAt ? this.mirrors.sourceEnable(this.boardId(), mirror.id) : this.mirrors.sourceDisable(this.boardId(), mirror.id); await request.then(() => this.refresh()).catch((error: unknown) => { this.error.set(this.errorMessage(error, "Outbound governance could not be changed.")); this.busyId.set(null); }); }

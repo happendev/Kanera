@@ -7,6 +7,7 @@ import { organisationStorageKey, STORAGE_KEYS } from "../browser/browser-contrac
 import { registerSocketHandlers } from "../realtime/socket-handlers";
 import { SocketService } from "../realtime/socket.service";
 import { MentionSoundService } from "./mention-sound.service";
+import { localDateKey, viewerTimeZone } from "../../shared/day-key.util";
 
 const PAGE_SIZE = 25;
 const READ_NOTIFICATION_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 10,080 minutes
@@ -96,12 +97,14 @@ export class NotificationsService {
     if (this.initialised()) return;
     this.restoreOrganisationPreferences();
     this.initialised.set(true);
-    void this.refreshUnreadCount();
-    void this.refreshOrganisationUnreadCounts();
-    void this.refreshBoardUnreadCounts();
-    void this.refreshCardUnreadCounts();
-    void this.loadWatchedCards();
-    void this.loadWatchedBoards();
+    // Offline startup still attaches realtime so counts recover on reconnect. These optional
+    // reads must not surface unhandled rejections while the shell restores its cached directory.
+    void this.refreshUnreadCount().catch(() => undefined);
+    void this.refreshOrganisationUnreadCounts().catch(() => undefined);
+    void this.refreshBoardUnreadCounts().catch(() => undefined);
+    void this.refreshCardUnreadCounts().catch(() => undefined);
+    void this.loadWatchedCards().catch(() => undefined);
+    void this.loadWatchedBoards().catch(() => undefined);
     this.attachSocket();
   }
 
@@ -254,7 +257,7 @@ export class NotificationsService {
   private async fetchGroupCounts(includeRead = this.includeRead()): Promise<NotificationGroupCountsResponse> {
     const params = new URLSearchParams({
       groupBy: this.groupBy(),
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+      timeZone: viewerTimeZone(),
     });
     if (includeRead) params.set("includeRead", "true");
     const boardId = this.boardFilter();
@@ -428,15 +431,7 @@ export class NotificationsService {
   }
 
   private localDateKey(value: string | Date): string {
-    const date = typeof value === "string" ? new Date(value) : value;
-    const parts = new Intl.DateTimeFormat("en", {
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(date);
-    const valueFor = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
-    return `${valueFor("year")}-${valueFor("month")}-${valueFor("day")}`;
+    return localDateKey(typeof value === "string" ? new Date(value) : value);
   }
 
   async markRead(id: string): Promise<void> {

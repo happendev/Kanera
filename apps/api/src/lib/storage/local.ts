@@ -9,7 +9,18 @@ import type { StorageProvider } from "./types.js";
 const workspaceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../..");
 
 function safeLocalKey(key: string): string {
-  return key.split("/").map((part) => part.replace(/[^a-zA-Z0-9._-]/g, "_")).join("/");
+  const parts = key.split("/").map((part) => part.replace(/[^a-zA-Z0-9._-]/g, "_"));
+  // "." and ".." survive the character allowlist, so reject them explicitly: a traversing key
+  // would otherwise let path.join() escape the tenant directory.
+  if (parts.some((part) => part === "" || part === "." || part === "..")) throw new Error("invalid storage key");
+  return parts.join("/");
+}
+
+// Final containment check on the resolved path; belt-and-braces alongside safeLocalKey.
+function resolveWithin(clientDir: string, safeKey: string): string {
+  const filePath = path.resolve(clientDir, safeKey);
+  if (filePath !== clientDir && !filePath.startsWith(clientDir + path.sep)) throw new Error("invalid storage key");
+  return filePath;
 }
 
 export function resolveLocalUploadsRoot(uploadsDir = env.UPLOADS_DIR): string {
@@ -24,22 +35,22 @@ export function createLocalStorage(clientId: string): StorageProvider {
   if (!safeClientId || safeClientId === "_" || safeClientId === "__") {
     throw new Error("invalid storage client id");
   }
-  const clientDir = path.join(rootDir, safeClientId);
+  const clientDir = path.resolve(rootDir, safeClientId);
 
   return {
     async put(key, body) {
       const safeKey = safeLocalKey(key);
-      await mkdir(path.dirname(path.join(clientDir, safeKey)), { recursive: true });
-      await writeFile(path.join(clientDir, safeKey), body);
+      await mkdir(path.dirname(resolveWithin(clientDir, safeKey)), { recursive: true });
+      await writeFile(resolveWithin(clientDir, safeKey), body);
       return { key };
     },
     async get(key) {
       const safeKey = safeLocalKey(key);
-      return readFile(path.join(clientDir, safeKey));
+      return readFile(resolveWithin(clientDir, safeKey));
     },
     async getObject(key, range) {
       const safeKey = safeLocalKey(key);
-      const filePath = path.join(clientDir, safeKey);
+      const filePath = resolveWithin(clientDir, safeKey);
       const info = await stat(filePath);
       const start = range?.start ?? 0;
       const end = range?.end ?? info.size - 1;
@@ -51,7 +62,7 @@ export function createLocalStorage(clientId: string): StorageProvider {
     },
     async delete(key) {
       const safeKey = safeLocalKey(key);
-      await rm(path.join(clientDir, safeKey), { force: true });
+      await rm(resolveWithin(clientDir, safeKey), { force: true });
     },
     async deleteAll() {
       await rm(clientDir, { recursive: true, force: true });

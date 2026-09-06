@@ -1,5 +1,4 @@
 import { dto } from "@kanera/shared";
-import { getAllowedAttachmentExtension } from "@kanera/shared/attachments";
 import type { ColorToken } from "@kanera/shared/colors";
 import { NOTE_ATTACHMENT_SOURCES, type NoteAttachmentRow, type NoteAttachmentSource } from "@kanera/shared/dto";
 import type { ServerToClientEvents, WireNote, WireNoteLock } from "@kanera/shared/events";
@@ -9,8 +8,9 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
 import { assertBoardAccess, assertWorkspaceAccess, assertWriteCapableCredential } from "../../lib/access.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
+import { readAttachmentUpload } from "../../lib/read-attachment-upload.js";
 import { AppError, badRequest, conflict, forbidden, notFound } from "../../lib/errors.js";
-import { assertCanUploadAttachment, formatStorageBytes, getUploadEntitlements, isStorageFull, storageQuotaExceededError } from "../../lib/entitlements.js";
+import { assertCanUploadAttachment, getUploadEntitlements, isStorageFull, storageQuotaExceededError } from "../../lib/entitlements.js";
 import { signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, unsignedMediaUrl } from "../../lib/media-keys.js";
 import { between, positionAtIndex } from "../../lib/position.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
@@ -227,15 +227,6 @@ function sameInstant(a: Date | string, b: Date | string): boolean {
   const base = new Date(a).getTime();
   const value = new Date(b).getTime();
   return value >= base && value < base + 1;
-}
-
-function fileTooLargeError(maxFileBytes: number, attemptedBytes?: number) {
-  return new AppError(
-    400,
-    "FILE_TOO_LARGE",
-    `File is too large. The maximum file size is ${formatStorageBytes(maxFileBytes)}.`,
-    { limit: "fileSize", maxFileBytes, ...(attemptedBytes !== undefined ? { attemptedBytes } : {}) },
-  );
 }
 
 async function putAttachmentFile(storage: StorageProvider, key: string, body: Buffer, contentType: string) {
@@ -800,28 +791,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
     // If the host org's storage pool is already full, reject before reading the upload body so a full
     // org never wastes bandwidth streaming a file that cannot be stored.
     if (isStorageFull(uploadEntitlements)) throw storageQuotaExceededError(uploadEntitlements);
-    const file = await req
-      .file({ limits: { fileSize: uploadEntitlements.maxFileBytes, files: 1 } })
-      .catch((err: unknown) => {
-        if ((err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE") {
-          throw fileTooLargeError(uploadEntitlements.maxFileBytes);
-        }
-        return null;
-      });
-    if (!file) throw badRequest("no file uploaded");
-
-    const ext = getAllowedAttachmentExtension(file.mimetype, file.filename);
-    if (!ext) throw badRequest("unsupported file type");
-
-    const buffer = await file.toBuffer().catch((err: unknown) => {
-      if ((err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE") {
-        throw fileTooLargeError(uploadEntitlements.maxFileBytes);
-      }
-      throw err;
-    });
-    if (buffer.byteLength > uploadEntitlements.maxFileBytes) {
-      throw fileTooLargeError(uploadEntitlements.maxFileBytes, buffer.byteLength);
-    }
+    const { file, ext, buffer } = await readAttachmentUpload(req, uploadEntitlements.maxFileBytes);
     await assertCanUploadAttachment(db, ownerClientId, buffer.byteLength);
 
     const fileKey = noteAttachmentStorageKey(id, ext);

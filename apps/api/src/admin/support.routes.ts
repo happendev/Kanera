@@ -7,6 +7,7 @@ import { env } from "../env.js";
 import { clientIpForRequest } from "../lib/client-ip.js";
 import { forbidden, notFound } from "../lib/errors.js";
 import { resolveSupportTargetOwner } from "../lib/support-session.js";
+import { disconnectSupportSessionSockets } from "../realtime/io.js";
 import { writeAdminAudit } from "./audit.js";
 import { signSupportToken } from "./plugin.js";
 
@@ -121,6 +122,8 @@ export async function adminSupportRoutes(app: FastifyInstance) {
         details: { sessionId: id },
       });
     });
+    // The row check above only covers HTTP; drop any live realtime sockets for this session too.
+    disconnectSupportSessionSockets(id);
     return { ok: true };
   });
 

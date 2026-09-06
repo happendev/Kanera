@@ -7,41 +7,6 @@
 }
 
 // ─── Empty state ─────────────────────────────────────────────────────────────
-.ne-placeholder {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  color: var(--text-muted);
-  font-size: 14px;
-  padding: 48px 32px;
-  text-align: center;
-
-  .ne-ph-icon {
-    width: 56px;
-    height: 56px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 999px;
-    background: var(--surface-2);
-    color: var(--text-muted);
-    font-size: 24px;
-    margin-bottom: 4px;
-  }
-
-  .ne-ph-title {
-    color: var(--text);
-    font-size: 15px;
-    font-weight: 600;
-  }
-
-  .ne-ph-hint {
-    font-size: 13px;
-  }
-}
 
 // ─── Editor surface ──────────────────────────────────────────────────────────
 .ne-shell {
@@ -256,7 +221,7 @@
   background: transparent;
   color: var(--text);
   border-radius: var(--radius);
-  transition: border-color 0.12s, background-color 0.12s;
+  transition: border-color var(--motion-fast), background-color var(--motion-fast);
 
   &:hover:not(:disabled) {
     border-color: var(--border);
@@ -406,7 +371,7 @@
   border: 1px solid transparent;
   border-radius: var(--radius);
   cursor: pointer;
-  transition: background-color 0.12s, border-color 0.12s;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast);
   background: var(--surface);
 
   &:hover {
@@ -464,7 +429,7 @@
   border: 1px dashed var(--border);
   border-radius: var(--radius);
   background: var(--surface);
-  transition: border-color 0.12s, background-color 0.12s;
+  transition: border-color var(--motion-fast), background-color var(--motion-fast);
 
   &.is-drag-active:not(.is-uploading) {
     border-color: var(--accent);
@@ -661,4 +626,10 @@
     grid-column: 2;
     justify-self: end;
   }
+}
+
+// The empty pane fills the editor column and centres itself vertically.
+.ne-placeholder {
+  flex: 1;
+  align-content: center;
 }

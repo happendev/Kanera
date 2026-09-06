@@ -7,6 +7,18 @@ import { ChangeDetectionStrategy, Component, Directive, ElementRef, HostListener
 export type TooltipPosition = "top" | "right" | "bottom" | "left";
 
 const SHOW_DELAY_MS = 300;
+/**
+ * After one tooltip has just been dismissed, the next shows without the delay. Sweeping the pointer
+ * across a toolbar then reads each hint instantly, the way native menus behave, instead of restarting
+ * a 300ms wait on every button.
+ */
+const WARM_WINDOW_MS = 450;
+let lastHiddenAt = 0;
+
+/** Test seam: the warm window is module state and would otherwise leak between specs. */
+export function resetTooltipWarmWindow(): void {
+  lastHiddenAt = 0;
+}
 const AUTO_HIDE_MS = 10_000;
 const TOOLTIP_OFFSET = 8;
 let nextTooltipId = 0;
@@ -45,6 +57,12 @@ export class TooltipDirective implements OnDestroy {
   readonly kTooltip = input<string | null | undefined>("");
   readonly kTooltipPosition = input<TooltipPosition>("top");
   readonly kTooltipDisabled = input(false);
+  /**
+   * CSS selector for a descendant (or `:host` for the element itself) whose text may ellipse. When
+   * set, the tooltip shows only while that element is actually overflowing, so a full-name tooltip
+   * on every sidebar row costs nothing until a name is cut short.
+   */
+  readonly kTooltipTruncationTarget = input<string | null>(null);
 
   constructor() {
     effect(() => {
@@ -119,14 +137,24 @@ export class TooltipDirective implements OnDestroy {
     if (this.dragActive()) return;
     if (!this.tooltipText() || this.kTooltipDisabled()) return;
     this.clearShowTimer();
-    this.showTimer = window.setTimeout(() => this.show(), SHOW_DELAY_MS);
+    const delay = Date.now() - lastHiddenAt < WARM_WINDOW_MS ? 0 : SHOW_DELAY_MS;
+    this.showTimer = window.setTimeout(() => this.show(), delay);
+  }
+
+  private truncationTargetOverflows(): boolean {
+    const selector = this.kTooltipTruncationTarget();
+    if (!selector) return true;
+    const host = this.elementRef.nativeElement;
+    const target = selector === ":host" ? host : host.querySelector<HTMLElement>(selector);
+    // A missing target means nothing can be cut short, so there is nothing the tooltip would add.
+    return !!target && target.scrollWidth > target.clientWidth + 1;
   }
 
   private show() {
     this.clearShowTimer();
     if (this.dragActive()) return;
     const text = this.tooltipText();
-    if (!text || this.kTooltipDisabled()) return;
+    if (!text || this.kTooltipDisabled() || !this.truncationTargetOverflows()) return;
 
     // Only a visible tooltip needs the global dismissal hooks.
     this.attachDismissListeners();
@@ -162,6 +190,7 @@ export class TooltipDirective implements OnDestroy {
   }
 
   private hide() {
+    if (this.overlayRef?.hasAttached()) lastHiddenAt = Date.now();
     this.clearShowTimer();
     this.clearHideTimer();
     this.detachDismissListeners();

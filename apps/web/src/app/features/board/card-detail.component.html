@@ -106,17 +106,10 @@
       </div>
       }
     </div>
-    @if (confirmingDelete()) {
-    <div class="delete-confirm">
-      <span>Archive card?</span>
-      <button class="destructive sm" (click)="setArchived(true)" [disabled]="archiving() || !canEdit()">Archive</button>
-      <button class="ghost sm" (click)="confirmingDelete.set(false)">Cancel</button>
-    </div>
-    } @else {
-    <button class="ghost icon danger" (click)="confirmingDelete.set(true)" [disabled]="!canEdit()" aria-label="Archive card" kTooltip="Archive card">
+    <!-- No inline confirm: archiving fires at once and the toast offers Undo. -->
+    <button class="ghost icon danger" (click)="setArchived(true)" [disabled]="archiving() || !canEdit()" aria-label="Archive card" kTooltip="Archive card">
       <i class="ti ti-archive"></i>
     </button>
-    }
     }
     }
     <button class="ghost icon close-btn" (click)="requestClose()" aria-label="Close">
@@ -372,10 +365,10 @@
            the activity feed loads separately with its own state. -->
       @if (!detailReady()) {
       <div class="detail-body-skeleton" aria-hidden="true">
-        <span class="detail-skeleton-label"></span>
-        <div class="detail-skeleton-block"></div>
-        <span class="detail-skeleton-label"></span>
-        <div class="detail-skeleton-block"></div>
+        <span class="k-skeleton is-text detail-skeleton-label"></span>
+        <div class="k-skeleton is-block detail-skeleton-block"></div>
+        <span class="k-skeleton is-text detail-skeleton-label"></span>
+        <div class="k-skeleton is-block detail-skeleton-block"></div>
       </div>
       } @else if (detailError() && !hasDetail()) {
       <div class="detail-body-error">
@@ -714,7 +707,7 @@
         <form class="checklist-add" (submit)="createChecklist($event)">
           <input #addChecklistInput type="text" [value]="newChecklistTitle()" (input)="newChecklistTitle.set($any($event.target).value)" placeholder="Checklist title…" [disabled]="!canEdit()" (keydown.escape)="cancelAddChecklist()" autofocus />
           <button type="submit" class="sm" [disabled]="!canEdit()"><i class="ti ti-plus"></i>Add checklist</button>
-          <button type="button" class="ghost icon" (click)="cancelAddChecklist()" kTooltip="Cancel"><i class="ti ti-x"></i></button>
+          <button type="button" class="ghost icon" (click)="cancelAddChecklist()" aria-label="Cancel new checklist" kTooltip="Cancel"><i class="ti ti-x"></i></button>
         </form>
         } @else {
         <button type="button" class="checklist-add-btn" [disabled]="!canEdit()" (click)="startAddChecklist()">
@@ -793,8 +786,8 @@
         <div class="section-label">
           <i class="ti ti-paperclip"></i>
           Attachments
-          @if (attachments().length) {
-          <span class="count">{{ attachments().length }}</span>
+          @if (visibleAttachments().length) {
+          <span class="count">{{ visibleAttachments().length }}</span>
           }
         </div>
 
@@ -817,9 +810,9 @@
         <k-attachment-upload-list [items]="uploads.items()" (retry)="uploads.retry($event)" (dismiss)="uploads.dismiss($event)" />
         }
 
-        @if (attachments().length) {
+        @if (visibleAttachments().length) {
         <ul class="attach-list">
-          @for (a of attachments(); track a.id) {
+          @for (a of visibleAttachments(); track a.id) {
           @let attachmentDisplay = attachmentDisplayById().get(a.id);
           <li class="attach-row">
             @if (attachmentDisplay?.isImage) {
@@ -912,7 +905,7 @@
   @if (openChecklistItemChecklistId(); as checklistId) {
   @let itemPresentation = checklistItemPresentationById().get(item.id);
   <button type="button" class="checklist-item-panel-scrim" (click)="closeChecklistItemDetail()" aria-label="Close checklist item detail"></button>
-  <aside class="checklist-item-panel" role="dialog" aria-modal="true" [attr.aria-label]="'Checklist item detail: ' + item.text">
+  <aside class="checklist-item-panel" role="dialog" aria-modal="true" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" [attr.aria-label]="'Checklist item detail: ' + item.text">
     <div class="checklist-item-panel-header">
       <button type="button" class="ghost icon" (click)="closeChecklistItemDetail()" aria-label="Back to card" kTooltip="Back to card">
         <i class="ti ti-arrow-left"></i>
@@ -1011,7 +1004,7 @@
           <form class="checklist-add" (submit)="createChecklist($event)">
             <input type="text" [value]="newChecklistTitle()" (input)="newChecklistTitle.set($any($event.target).value)" placeholder="Checklist title…" [disabled]="!canEdit()" (keydown.escape)="cancelAddChecklist()" autofocus />
             <button type="submit" class="sm" [disabled]="!canEdit()"><i class="ti ti-plus"></i>Add checklist</button>
-            <button type="button" class="ghost icon" (click)="cancelAddChecklist()"><i class="ti ti-x"></i></button>
+            <button type="button" class="ghost icon" (click)="cancelAddChecklist()" aria-label="Cancel new checklist" kTooltip="Cancel"><i class="ti ti-x"></i></button>
           </form>
           } @else {
           <button type="button" class="checklist-add-btn" [disabled]="!canEdit()" (click)="startAddChecklist(item.id)"><i class="ti ti-plus"></i>Add checklist</button>

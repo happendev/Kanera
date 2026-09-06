@@ -290,6 +290,7 @@ describe("NotificationsPanelComponent", () => {
           // the shared presence listeners, which the block's actor stack and any user-activity row
           // both do.
           useValue: {
+            activeWorkspaceIds: signal(new Set<string>()),
             online: signal(true),
             pauseForOrganisationSwitch,
             resumeAfterOrganisationSwitch,
@@ -309,6 +310,27 @@ describe("NotificationsPanelComponent", () => {
   afterEach(() => {
     document.body.classList.remove("k-no-scroll");
     vi.unstubAllGlobals();
+  });
+
+  it.each([
+    ["none", undefined],
+    ["guest_capacity_freed", "A paid guest seat is now available"],
+    ["guest_capacity_retained", "Paid guest capacity remains in use"],
+  ])("renders a cardless board leave alert with %s", async (seatImpact, message) => {
+    const row = notification({ reason: "board_member_left", cardId: null, cardTitle: null, cardKey: null,
+      listId: null, listName: null, activity: activity({ entityType: "board", action: "removed", payload: { voluntary: true, seatImpact } }) });
+    service.items.set([row]);
+    component.toggle();
+    await fixture.whenStable();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(component.changeSummary(row).value).toBe(message);
+    expect(host.textContent).toContain("left this board");
+    expect(host.textContent).toContain("Ada");
+    if (message) expect(host.textContent).toContain(message);
+    const link = host.querySelector('a[aria-label="Open board Board"]') as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("/b/board-1");
+    await component.openNotification(row, new MouseEvent("click"));
+    expect(router.navigate).toHaveBeenCalledWith(["/b", "board-1"]);
   });
 
   it("opens and loads the first page, then closes on escape", async () => {
@@ -364,7 +386,7 @@ describe("NotificationsPanelComponent", () => {
 
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector(".kanera-spin")).toBeNull();
-    expect(host.querySelector(".empty-title")?.textContent?.trim()).toBe("Notifications unavailable");
+    expect(host.querySelector(".es-title")?.textContent?.trim()).toBe("Notifications unavailable");
     expect(host.textContent).toContain("You're offline. Reconnect to refresh notifications.");
   });
 
@@ -377,7 +399,7 @@ describe("NotificationsPanelComponent", () => {
 
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector(".notif-item")).not.toBeNull();
-    expect(host.querySelector(".empty-title")?.textContent?.trim()).not.toBe("Notifications unavailable");
+    expect(host.querySelector(".es-title")?.textContent?.trim()).not.toBe("Notifications unavailable");
   });
 
   it("hides redundant organisation context for a user with one organisation", () => {
@@ -434,7 +456,7 @@ describe("NotificationsPanelComponent", () => {
     fixture.detectChanges();
 
     const host = fixture.nativeElement as HTMLElement;
-    expect(host.querySelector(".empty-title")?.textContent?.trim()).toBe("Refreshing unread notifications");
+    expect(host.querySelector(".es-title")?.textContent?.trim()).toBe("Refreshing unread notifications");
     expect(host.textContent).not.toContain("You're all caught up");
 
     service.loadFirstPage.mockClear();

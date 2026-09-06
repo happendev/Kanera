@@ -6,6 +6,7 @@ import { scratchpadActiveNoteKey, STORAGE_KEYS } from "../../core/browser/browse
 import { EditorDrafts } from "../../core/browser/editor-drafts";
 import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
 import { SocketService } from "../../core/realtime/socket.service";
+import { formatDate, formatTime } from "../../shared/date-format";
 
 /**
  * Autosave debounce. Long enough that ordinary typing produces one request per pause rather than one
@@ -29,7 +30,9 @@ const SAVING_INDICATOR_DELAY_MS = 450;
 
 export const SCRATCHPAD_MIN_WIDTH = 320;
 export const SCRATCHPAD_MAX_WIDTH = 720;
-export const SCRATCHPAD_DEFAULT_WIDTH = 420;
+// Matches --drawer-width on the notifications and Up next drawers, so the three personal panels open
+// at one width until the user resizes this one.
+export const SCRATCHPAD_DEFAULT_WIDTH = 500;
 /** Bottom-sheet geometry. Tall enough to write in; never so tall the page behind it is unreachable. */
 export const SCRATCHPAD_MIN_SHEET_HEIGHT = 220;
 const SHEET_VIEWPORT_RESERVE = 72;
@@ -401,70 +404,42 @@ export class ScratchpadService {
   /** `11 Aug at 14:32` in the user's locale — a name you can place in time without opening the page. */
   private defaultTitle(): string {
     const now = new Date();
-    const day = now.toLocaleDateString(undefined, { day: "numeric", month: "short" });
-    const time = now.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-    return `${day} at ${time}`;
-  }
-
-  async deleteNote(noteId: string): Promise<void> {
-    // Cancel any queued save first: a PATCH landing after the DELETE would 404 and flip the
-    // indicator to "error" for a page the user has already discarded.
-    this.cancelPending(noteId);
-    const snapshot = this._notes();
-    this._notes.update((notes) => notes.filter((note) => note.id !== noteId));
-    this.forget(noteId);
-    if (this.activeNoteId() === noteId) this.selectNeighbour(snapshot, noteId);
-    try {
-      await this.api.delete(`/scratchpad/notes/${noteId}`);
-    } catch {
-      this._notes.set(snapshot);
-      this.saveState.set("error");
-    }
+    return `${formatDate(now, "short")} at ${formatTime(now)}`;
   }
 
   /**
-   * Reorder a tab. Optimistic, then reconciled by the server's authoritative position.
-   *
-   * `beforeNoteId: null` means "last" — the same anchor vocabulary the notes and card routes use.
+   * Take a page off the strip without deleting it yet. Returns the handles an undo toast needs:
+   * `restore` puts the page back exactly as it was (including any unsaved edit, which is re-queued
+   * for saving) and `commit` sends the DELETE. Nothing about the page is forgotten until commit, so
+   * Undo is lossless.
    */
-  async moveNote(noteId: string, anchor: { afterNoteId?: string | null; beforeNoteId?: string | null }): Promise<void> {
+  hideNote(noteId: string): { restore: () => void; commit: () => Promise<void> } {
+    const note = this._notes().find((row) => row.id === noteId);
+    // Cancel any queued save first: a PATCH landing after the DELETE would 404 and flip the
+    // indicator to "error" for a page the user has already discarded.
+    const unsaved = this.pending.get(noteId);
+    this.cancelPending(noteId);
     const snapshot = this._notes();
-    this.applyOptimisticMove(noteId, anchor);
-    try {
-      const moved = await this.api.patch<{ id: string; position: string }>(
-        `/scratchpad/notes/${noteId}/move`,
-        anchor,
-      );
-      this._notes.update((notes) =>
-        notes.map((note) => (note.id === moved.id ? { ...note, position: moved.position } : note)));
-    } catch {
-      this._notes.set(snapshot);
-      this.saveState.set("error");
-    }
-  }
-
-  /** Interpolate a local position so the tab strip settles before the round trip. */
-  private applyOptimisticMove(noteId: string, anchor: { afterNoteId?: string | null; beforeNoteId?: string | null }): void {
-    const ordered = this.notes().filter((note) => note.id !== noteId);
-    const anchorIndex = anchor.afterNoteId
-      ? ordered.findIndex((note) => note.id === anchor.afterNoteId) + 1
-      : anchor.beforeNoteId
-        ? ordered.findIndex((note) => note.id === anchor.beforeNoteId)
-        : anchor.afterNoteId === null
-          ? 0
-          : ordered.length;
-    if (anchorIndex < 0) return;
-    const prev = anchorIndex > 0 ? Number(ordered[anchorIndex - 1]?.position ?? 0) : null;
-    const next = anchorIndex < ordered.length ? Number(ordered[anchorIndex]?.position ?? 0) : null;
-    const position = prev === null && next === null
-      ? 1000
-      : prev === null
-        ? next! - 1000
-        : next === null
-          ? prev + 1000
-          : (prev + next) / 2;
-    this._notes.update((notes) =>
-      notes.map((note) => (note.id === noteId ? { ...note, position: position.toFixed(10) } : note)));
+    this._notes.update((notes) => notes.filter((row) => row.id !== noteId));
+    if (this.activeNoteId() === noteId) this.selectNeighbour(snapshot, noteId);
+    const restore = () => {
+      if (!note || this._notes().some((row) => row.id === noteId)) return;
+      this._notes.update((notes) => [...notes, note]);
+      if (unsaved) this.queueSave(noteId, unsaved);
+      this.setActiveNote(noteId);
+    };
+    return {
+      restore,
+      commit: async () => {
+        try {
+          await this.api.delete(`/scratchpad/notes/${noteId}`);
+          this.forget(noteId);
+        } catch {
+          restore();
+          this.saveState.set("error");
+        }
+      },
+    };
   }
 
   // ── Autosave pipeline ──────────────────────────────────────────────────────

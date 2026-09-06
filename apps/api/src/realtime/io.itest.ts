@@ -546,3 +546,52 @@ void test("socket handshake rejects suspended users", async () => {
     .where(eq(clientMembers.userId, member.id));
   assert.ok(stillSuspended?.suspendedAt);
 });
+
+void test("self-leave reaches board and non-board tabs before disconnecting every departing session", async () => {
+  const { app, url } = await listenWithRealtime();
+  const owner = await signupOwner(app, "leave-realtime-owner@example.com");
+  const workspace = await createWorkspace(app, owner.accessToken);
+  const [board] = await db.insert(boards).values({ workspaceId: workspace.id, name: "Leave realtime", position: "1000" }).returning();
+  const [member] = await insertTestUsers(db, { clientId: owner.user.clientId, email: "leave-realtime-member@example.com", passwordHash: "x", displayName: "Member" }).returning();
+  assert.ok(board && member);
+  await db.insert(boardMembers).values({ boardId: board.id, userId: member.id, role: "observer" });
+  const token = app.jwt.sign({ sub: member.id, cid: owner.user.clientId, role: "member" });
+  const boardTab = await connectSocket(url, token);
+  const homeTab = await connectSocket(url, token);
+  const adminTab = await connectSocket(url, owner.accessToken);
+  try {
+    assert.equal(await new Promise<boolean>(resolve => boardTab.emit("board:join", board.id, resolve)), true);
+    assert.equal(await new Promise<boolean>(resolve => adminTab.emit("board:join", board.id, resolve)), true);
+    const histories = [boardTab, homeTab].map(socket => {
+      const events: string[] = [];
+      socket.on("board:member:removed", (payload) => {
+        assert.deepEqual(payload, { boardId: board.id, userId: member.id });
+        events.push("removed");
+      });
+      socket.on("disconnect", () => events.push("disconnected"));
+      return events;
+    });
+    const boardEvent = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("admin board event timed out")), 2_000);
+      adminTab.once("board:member:removed", payload => {
+        clearTimeout(timer);
+        assert.deepEqual(payload, { boardId: board.id, userId: member.id });
+        resolve();
+      });
+    });
+    const disconnected = Promise.all([waitForDisconnect(boardTab), waitForDisconnect(homeTab)]);
+    const result = await app.inject({ method: "DELETE", url: `/boards/${board.id}/members/${member.id}`, headers: { authorization: `Bearer ${token}` } });
+    assert.equal(result.statusCode, 204, result.body);
+    assert.deepEqual(await disconnected, ["io server disconnect", "io server disconnect"]);
+    await boardEvent;
+    for (const history of histories) {
+      assert.equal(history[0], "removed");
+      assert.equal(history.at(-1), "disconnected");
+    }
+    assert.equal(adminTab.connected, true);
+  } finally {
+    boardTab.close();
+    homeTab.close();
+    adminTab.close();
+  }
+});

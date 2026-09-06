@@ -239,7 +239,7 @@
 
 @if (selectedDescriptionDiff(); as selected) {
 <div class="description-diff-backdrop" role="presentation" (click)="closeDescriptionDiff()">
-  <section class="description-diff-modal" role="dialog" aria-modal="true" aria-labelledby="description-diff-title" (click)="$event.stopPropagation()">
+  <section class="description-diff-modal" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-modal="true" aria-labelledby="description-diff-title" (click)="$event.stopPropagation()">
     <header class="description-diff-modal-header">
       <div>
         <h2 id="description-diff-title"><i class="ti ti-arrows-diff"></i> Description changes</h2>

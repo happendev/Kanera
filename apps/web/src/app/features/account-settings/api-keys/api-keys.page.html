@@ -14,7 +14,7 @@
             <button type="button" class="ghost icon danger" (click)="revokeOauthConnection(connection.id)" aria-label="Disconnect agent" kTooltip="Disconnect agent"><i class="ti ti-plug-connected-x"></i></button>
           </div>
           } @empty {
-          <div class="key-empty"><i class="ti ti-robot-off"></i><span>No connected AI agents yet</span></div>
+          <k-empty-state size="sm" icon="robot-off" title="No connected AI agents yet" />
           }
         </div>
       </div>
@@ -30,7 +30,7 @@
         <k-docs-link path="api" fragment="create-a-personal-api-key" label="Learn more about personal API keys" />
         @if (apiAllowed()) {
         <form class="board-form" (submit)="createPersonalKey($event)">
-          <input name="personalKeyLabel" placeholder="Label (optional, e.g. 'CI script')" [maxLength]="apiKeyNameMaxLength" [value]="newPersonalKeyLabel()" (input)="newPersonalKeyLabel.set($any($event.target).value); personalKeyError.set(null)" style="flex:1" />
+          <input name="personalKeyLabel" placeholder="Label (optional, e.g. 'CI script')" [maxLength]="apiKeyNameMaxLength" [value]="newPersonalKeyLabel()" (input)="newPersonalKeyLabel.set($any($event.target).value); personalKeyError.set(null)" class="grow" />
           <select name="personalKeyScope" aria-label="Key scope" [value]="newPersonalKeyScope()" (input)="newPersonalKeyScope.set($any($event.target).value); personalKeyError.set(null)">
             <option value="write">Write</option>
             <option value="read">Read only</option>
@@ -67,7 +67,7 @@
             <button type="button" class="ghost icon danger" (click)="deletePersonalKey(key.id)" aria-label="Delete key"><i class="ti ti-trash"></i></button>
           </div>
           } @empty {
-          <div class="key-empty"><i class="ti ti-key-off"></i><span>No personal keys yet</span></div>
+          <k-empty-state size="sm" icon="key-off" title="No personal keys yet" />
           }
         </div>
       </div>

@@ -74,14 +74,10 @@ interface ChatCandidate {
   toListId?: string;
 }
 
-function recordValue(record: Record<string, unknown>, key: string): unknown {
-  return record[key];
-}
-
 function chatCandidatesForEvent(event: EventOutbox): { cardId: string | null; candidates: ChatCandidate[] } {
   const payload = event.payload as unknown as Record<string, unknown>;
   if (event.eventType === "card:created") {
-    const card = recordValue(payload, "card") as Record<string, unknown> | undefined;
+    const card = payload.card as Record<string, unknown> | undefined;
     return {
       cardId: typeof card?.id === "string" ? card.id : null,
       candidates: card ? [{
@@ -92,7 +88,7 @@ function chatCandidatesForEvent(event: EventOutbox): { cardId: string | null; ca
     };
   }
   if (event.eventType === "comment:created") {
-    const comment = recordValue(payload, "comment") as Record<string, unknown> | undefined;
+    const comment = payload.comment as Record<string, unknown> | undefined;
     return {
       cardId: typeof payload.cardId === "string" ? payload.cardId : null,
       candidates: comment ? [{
@@ -105,7 +101,7 @@ function chatCandidatesForEvent(event: EventOutbox): { cardId: string | null; ca
   if (event.eventType !== "card:feedItem:created" && event.eventType !== "card:feedItem:updated") {
     return { cardId: null, candidates: [] };
   }
-  const item = recordValue(payload, "item") as Record<string, unknown> | undefined;
+  const item = payload.item as Record<string, unknown> | undefined;
   if (!item || item.type !== "activity") return { cardId: null, candidates: [] };
   const activity = item.data as Record<string, unknown> | undefined;
   if (!activity || activity.entityType !== "card") return { cardId: null, candidates: [] };
@@ -397,7 +393,10 @@ export async function deliverWebhookDelivery(
       };
     }
     await assertResolvedHostAllowed(requestUrl);
-    const response = await fetch(requestUrl, { ...requestInit, signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS) });
+    // `redirect: "error"`: the SSRF check above only covers the configured URL, so following a
+    // 3xx would let a public host bounce the request (and its captured response body) to a
+    // private or metadata address. Receivers must answer at the configured URL directly.
+    const response = await fetch(requestUrl, { ...requestInit, redirect: "error", signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS) });
     const responseBody = responseExcerpt(await response.text().catch(() => ""));
     let success = response.status >= 200 && response.status < 300;
     if (success && target.provider === "telegram") {

@@ -102,7 +102,7 @@
 
   i {
     font-size: 14px;
-    transition: transform 120ms ease;
+    transition: transform var(--motion-fast) ease;
   }
 
   &:hover:not(:disabled) i { transform: translateX(2px); }
@@ -176,8 +176,6 @@
   border-bottom: 1px solid var(--border);
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   color: var(--text-muted);
 }
 
@@ -268,31 +266,6 @@
   justify-content: flex-end;
 }
 
-.org-user-empty {
-  padding: 12px 14px;
-  font-size: 13px;
-  color: var(--text-muted);
-  border-top: 1px solid var(--border);
-}
-
-.guest-info-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 0 0 12px;
-  padding: 0 2px;
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.45;
-
-  i {
-    color: var(--accent);
-    font-size: 16px;
-    margin-top: 1px;
-    flex-shrink: 0;
-  }
-}
-
 .guest-form {
   display: grid;
   grid-template-columns: minmax(160px, 0.9fr) minmax(220px, 1.2fr) 120px auto;
@@ -372,6 +345,10 @@
   }
 }
 
+k-autosave-status {
+  margin-bottom: 8px;
+}
+
 .guest-section-head {
   display: flex;
   align-items: center;
@@ -414,8 +391,6 @@
   border-bottom: 1px solid var(--border);
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   color: var(--text-muted);
 }
 
@@ -528,8 +503,6 @@
   width: 96px;
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   color: var(--text);
 }
 
@@ -539,25 +512,30 @@
   line-height: 1.5;
 }
 
-.settings-info-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 0;
-  margin-top: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.45;
+// A rename trigger that looks like the label it renames. Opts out of the global button chrome (36px
+// accent fill) so the row reads as a name with a hover affordance, while staying focusable and
+// Enter/Space-operable — the clickable <span> it replaced was invisible to the keyboard.
+button.list-rename-trigger {
+  height: auto;
+  min-height: 28px;
+  padding: 2px 6px;
+  margin-left: -6px;
+  justify-content: flex-start;
+  gap: 6px;
+  background: transparent;
+  border-color: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: text;
 
-  i {
-    margin-top: 1px;
-    color: var(--accent);
-    font-size: 15px;
-    flex-shrink: 0;
+  &:hover:not(:disabled) {
+    background: var(--surface-2);
+    color: inherit;
+  }
+
+  &:focus-visible {
+    box-shadow: 0 0 0 2px var(--ring);
   }
 }
 
@@ -579,7 +557,7 @@
   text-decoration: none;
   color: var(--text);
   margin-bottom: 20px;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color var(--motion-fast), background var(--motion-fast);
 
   >.ti:first-child {
     font-size: 20px;
@@ -682,7 +660,7 @@
   align-items: center;
   gap: 6px;
   margin: 0;
-  color: var(--danger, #e53e3e);
+  color: var(--danger);
   font-size: 13px;
   line-height: 1.4;
 
@@ -724,30 +702,6 @@
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--surface);
-}
-
-.integration-empty {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-height: 48px;
-  padding: 10px 12px;
-  color: var(--text-muted);
-  font-size: 13px;
-
-  i {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface-2);
-    color: var(--text-muted);
-    font-size: 15px;
-    flex-shrink: 0;
-  }
 }
 
 .integration-row,
@@ -866,8 +820,6 @@
   color: var(--text-muted);
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
 }
 
 .board-id-row {
@@ -938,9 +890,9 @@
   justify-self: start;
   font-size: 12px;
   font-weight: 500;
-  color: var(--success, #16a34a);
-  background: color-mix(in srgb, var(--success, #16a34a) 9%, transparent);
-  border: 1px solid color-mix(in srgb, var(--success, #16a34a) 28%, transparent);
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--success) 28%, transparent);
   border-radius: 999px;
   padding: 2px 7px;
   text-transform: capitalize;
@@ -1207,7 +1159,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
-  transition: border-color 0.15s;
+  transition: border-color var(--motion-fast);
 
   &:hover {
     border-color: var(--border-strong);
@@ -1329,8 +1281,6 @@
 .template-section-label {
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   color: var(--text-muted);
 
   &:not(:first-child) {
@@ -1371,7 +1321,7 @@
     flex-shrink: 0;
     cursor: grab;
     opacity: 0;
-    transition: opacity 0.12s;
+    transition: opacity var(--motion-fast);
   }
 
   &:hover .item-grip {
@@ -1437,7 +1387,7 @@
   border-radius: 999px;
   padding: 5px 12px;
   cursor: pointer;
-  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
 
   i:first-child {
     font-size: 13px;

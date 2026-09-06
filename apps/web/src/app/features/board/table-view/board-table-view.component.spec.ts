@@ -562,6 +562,15 @@ describe("BoardTableViewComponent", () => {
       } as never);
     }
 
+    it("skips selected destination rows when moving a group", () => {
+      const f = fixture(rows(), [field()], lists);
+      f.componentRef.setInput("bulkSelectedCardIds", new Set(["a1", "b1"]));
+      const emitted: unknown[] = [];
+      f.componentInstance.cardDropped.subscribe((payload) => emitted.push(payload));
+      drop(f.componentInstance, "a1", 0, { fromGroup: 0, toGroup: 1 });
+      expect(emitted).toEqual([{ cardId: "a1", toListId: "list-2", beforeCardId: "b2" }]);
+    });
+
     it("splits the rendered rows into one block per list run", () => {
       const groups = view().component.runGroups();
 
@@ -621,15 +630,17 @@ describe("BoardTableViewComponent", () => {
       expect(dropped).toEqual([]);
     });
 
-    it("only allows dragging under manual sort", () => {
+    it("allows sorted cross-list moves while refusing to reorder sorted rows", () => {
       const { component, dropped } = view();
       expect(component.dragEnabled()).toBe(true);
 
       component.setSort("title-asc");
       drop(component, "a2", 0, { from: 1 });
 
-      expect(component.dragEnabled()).toBe(false);
+      expect(component.dragEnabled()).toBe(true);
       expect(dropped).toEqual([]);
+      drop(component, "a2", 0, { fromGroup: 0, toGroup: 1 });
+      expect(dropped).toEqual([{ cardId: "a2", toListId: "list-2", beforeCardId: null }]);
     });
 
     // A list is the only bucket a dropped row can be written into; an assignee bucket would have to
@@ -817,6 +828,27 @@ describe("BoardTableViewComponent", () => {
         [{ key: "list:list-1:total", label: "Total", values: { "cf:hours": "14" } }],
         [{ key: "list:list-2:total", label: "Total", values: { "cf:hours": "5" } }],
       ]);
+    });
+
+    it("reuses summaries across viewport changes and invalidates them when field values change", () => {
+      const view = billableBoard();
+      const component = view.componentInstance;
+      component.setAggregate("hours", "sum");
+      const before = component.runGroups()[0]!;
+      expect(component.aggregateValue("hours")).toBe("19");
+      component.rowRenderCap.set(1);
+      expect(component.runGroups()[0]!.summaries).toBe(before.summaries);
+      expect(component.runGroups()[0]!.cardIds).toBe(before.cardIds);
+      component.toggleGroupCollapsed(before.key);
+      expect(component.runGroups()[0]!.summaries).toBe(before.summaries);
+      const values = new Map(component.customFieldValuesByCardAndField());
+      const cardId = before.cardIds[0]!;
+      const fields = new Map(values.get(cardId));
+      fields.set("hours", { ...fields.get("hours")!, valueNumber: "100" });
+      values.set(cardId, fields);
+      view.componentRef.setInput("customFieldValuesByCardAndField", values);
+      expect(component.runGroups()[0]!.summaries).not.toBe(before.summaries);
+      expect(component.aggregateValue("hours")).not.toBe("19");
     });
 
     it("breaks each group's subtotal down by the split dimension, and the sheet's below it", () => {

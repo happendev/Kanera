@@ -113,7 +113,7 @@
   color: var(--text);
 
   i {
-    color: var(--success, #16a34a);
+    color: var(--success);
   }
 }
 
@@ -321,7 +321,7 @@
   background-repeat: no-repeat;
   background-position: right 8px center;
   cursor: pointer;
-  transition: background-color 0.12s, border-color 0.12s, color 0.12s;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
 
   i {
     flex: 0 0 auto;
@@ -485,7 +485,7 @@
 .completed-group-chevron {
   color: var(--text-muted);
   font-size: 14px;
-  transition: transform 0.15s ease;
+  transition: transform var(--motion-fast) ease;
 }
 
 .completed-group.is-collapsed .completed-group-chevron {
@@ -498,7 +498,6 @@
   padding: 10px 16px;
 }
 
-.completed-empty,
 .completed-sentinel {
   min-height: 96px;
   padding: 14px 16px 24px;
@@ -508,14 +507,6 @@
   gap: 8px;
   color: var(--text-muted);
   text-align: center;
-}
-
-.completed-empty {
-  flex-direction: column;
-
-  i {
-    font-size: 24px;
-  }
 }
 
 @media (max-width: 640px) {

@@ -355,6 +355,45 @@ describe("BoardPage", () => {
     expect((fixture.nativeElement as HTMLElement).querySelector(".mirror-menu-trigger")).toBeNull();
   });
 
+  // The suite renders BoardPage with an empty template, so the menu is exercised through its state.
+  it("routes secondary header actions through one board menu", async () => {
+    const fixture = createInitializedBoardPage();
+    await vi.waitFor(() => expect(fixture.componentInstance.boardMenuAvailable()).toBe(true));
+    const page = fixture.componentInstance;
+    expect(page.boardMenuOpen()).toBe(false);
+
+    page.toggleBoardMenu();
+    expect(page.boardMenuOpen()).toBe(true);
+
+    // Picking an item that opens another surface closes the menu first so the two never stack.
+    page.openBackgroundFromMenu();
+    expect(page.boardMenuOpen()).toBe(false);
+    expect(page.showBackground()).toBe(true);
+
+    page.toggleBoardMenu();
+    page.openMirrorsDialog();
+    expect(page.boardMenuOpen()).toBe(false);
+    expect(page.mirrorsDialogOpen()).toBe(true);
+  });
+
+  it("persists compact card density per board and exposes it as a host class", async () => {
+    const fixture = createInitializedBoardPage();
+    await vi.waitFor(() => expect(fixture.componentInstance.boardMenuAvailable()).toBe(true));
+    const host = fixture.nativeElement as HTMLElement;
+    const key = viewPreferenceKey("compactCards", "board:board-1:kanban");
+    expect(host.classList.contains("compact-cards")).toBe(false);
+
+    fixture.componentInstance.toggleCompactCards();
+    fixture.detectChanges();
+    expect(host.classList.contains("compact-cards")).toBe(true);
+    expect(localStorage.getItem(key)).toBe("1");
+
+    fixture.componentInstance.toggleCompactCards();
+    fixture.detectChanges();
+    expect(host.classList.contains("compact-cards")).toBe(false);
+    expect(localStorage.getItem(key)).toBeNull();
+  });
+
   it("does not load mirror status when the board-open payload has no mirrors", async () => {
     const fixture = createInitializedBoardPage();
 
@@ -435,6 +474,21 @@ describe("BoardPage", () => {
     component.onStartAdd({ listId: "list-1", atTop: true });
 
     expect(component.composerSeed()).toEqual({ listId: "list-1", atTop: true });
+  });
+
+  it("clears selection on Escape even when a panel consumes the event", () => {
+    const fixture = createInitializedBoardPage();
+    fixture.componentInstance.bulkSelectedCardIds.set(new Set(["card-1", "card-2"]));
+    fixture.componentInstance.bulkMenuPoint.set({ x: 10, y: 10 });
+    const consume = (event: Event) => event.stopPropagation();
+    document.addEventListener("keydown", consume, true);
+    try {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(fixture.componentInstance.bulkSelectedCount()).toBe(0);
+      expect(fixture.componentInstance.bulkMenuPoint()).toBeNull();
+    } finally {
+      document.removeEventListener("keydown", consume, true);
+    }
   });
 
   it("clears bulk selection on a board-background click but leaves it alone for a click on a child", () => {
@@ -897,6 +951,36 @@ describe("BoardPage", () => {
     }
   });
 
+  it("moves a selection from different lists in order and preserves successful writes on failure", async () => {
+    const fixture = createInitializedBoardPage();
+    const component = fixture.componentInstance;
+    const state = boardState(component);
+    await vi.waitFor(() => expect(state.canEdit()).toBe(true));
+    api.post.mockClear();
+    state.cards.set([
+      card({ id: "card-1", listId: "list-1" }),
+      card({ id: "card-2", listId: "list-2" }),
+      card({ id: "card-3", listId: "list-4" }),
+    ]);
+    component.bulkSelectedCardIds.set(new Set(["card-1", "card-2", "card-3"]));
+    const first = deferred<{ id: string; listId: string; position: string }>();
+    api.post.mockReturnValueOnce(first.promise).mockRejectedValueOnce(new Error("offline"));
+    const save = component.onCardDrop({ cardId: "card-2", toListId: "list-3", beforeItem: null });
+    // The remaining cards stay in their source lists until the preceding move settles.
+    expect(state.cards().map((card) => card.listId)).toEqual(["list-3", "list-2", "list-4"]);
+    expect(api.post).toHaveBeenCalledTimes(1);
+    first.resolve({ id: "card-1", listId: "list-3", position: "2000" });
+    await expect(save).rejects.toThrow("offline");
+    expect(api.post).toHaveBeenNthCalledWith(1, "/cards/card-1/move", { listId: "list-3", beforeItem: null });
+    expect(api.post).toHaveBeenNthCalledWith(2, "/cards/card-2/move", {
+      listId: "list-3", afterItem: { type: "card", id: "card-1" },
+    });
+    expect(state.cardById("card-1")?.listId).toBe("list-3");
+    expect(state.cardById("card-2")?.listId).toBe("list-2");
+    expect(state.cardById("card-3")?.listId).toBe("list-4");
+    expect(api.post).toHaveBeenCalledTimes(2);
+  });
+
   // Mobile drop-target settling moved with the rest of the card-drag plumbing into k-board; it is
   // covered by board-canvas.component.spec.ts, which also exercises the multi-canvas ownership guard
   // that this page-level version could not.
@@ -1068,7 +1152,9 @@ describe("BoardPage", () => {
       viewerRole: "editor",
     });
 
+    fixture.componentInstance.bulkSelectedCardIds.set(new Set(["card-1", "card-2"]));
     fixture.componentInstance.openCardDetail("card-1");
+    expect(fixture.componentInstance.bulkSelectedCount()).toBe(0);
 
     expect(router.navigate).toHaveBeenCalledWith(["/b", "board-1", "c", "card-1"], {
       queryParams: { cardId: null, lightboxAttachmentId: null },
@@ -1163,7 +1249,11 @@ describe("BoardPage", () => {
     api.get.mockResolvedValueOnce(archive);
     const anchor = document.createElement("a");
     const click = vi.spyOn(anchor, "click").mockImplementation(() => undefined);
-    const createElement = vi.spyOn(document, "createElement").mockReturnValue(anchor);
+    // Only intercept the download anchor: Angular itself creates root and style elements through the
+    // same API while constructing the component, and those must stay real.
+    const realCreateElement = document.createElement.bind(document);
+    const createElement = vi.spyOn(document, "createElement").mockImplementation(((tag: string, options?: ElementCreationOptions) =>
+      tag === "a" ? anchor : realCreateElement(tag, options)) as typeof document.createElement);
     const createObjectUrl = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:board-export");
     const revokeObjectUrl = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
     const fixture = TestBed.createComponent(BoardPage);
@@ -1218,6 +1308,17 @@ describe("BoardPage", () => {
 
     await vi.waitFor(() => expect(component.sortedBoardMembers().length).toBe(4));
     expect(component.sortedBoardMembers().map((row) => row.userId)).toEqual(["user-2", "guest-1", "guest-2", "user-1"]);
+  });
+
+  it("clears local board state and offline access and navigates home after self-leave", async () => {
+    api.post.mockResolvedValueOnce(boardPayload());
+    const fixture = createInitializedBoardPage();
+    const component = fixture.componentInstance;
+    await vi.waitFor(() => expect(boardState(component).board()?.id).toBe("board-1"));
+    component.removeBoardMemberFromView("user-1");
+    expect(boardState(component).board()).toBeNull();
+    expect(offlineCache.revokeBoardAccess).toHaveBeenCalledWith("board-1");
+    expect(router.navigateByUrl).toHaveBeenCalledWith("/");
   });
 
   it("removes another user from the board member header when their membership is removed", async () => {
@@ -1335,6 +1436,23 @@ describe("BoardPage", () => {
     fixture.detectChanges();
     await vi.waitFor(() => expect(component.completedFrom()).toBe("2026-01-01"));
     await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith(expectedUrl, {}));
+  });
+
+  it("retains unrelated lane inputs when a card moves between lists", () => {
+    const fixture = TestBed.createComponent(BoardPage);
+    fixture.componentRef.setInput("boardId", "board-1");
+    const component = fixture.componentInstance;
+    const state = boardState(component);
+    state.hydrate({ ...boardPayload(), lists: [list(), list({ id: "list-2" }), list({ id: "list-3" })],
+      cards: [card({ id: "a" }), card({ id: "b", listId: "list-2" }), card({ id: "c", listId: "list-3" })],
+    });
+    const beforeCards = component.cardsByList();
+    const beforeItems = component.itemsByList();
+    state.moveCard("a", "list-2", "2500.0000000000");
+    expect(component.cardsByList().get("list-1")).toEqual([]);
+    expect(component.cardsByList().get("list-2")!.map(card => card.id)).toEqual(["b", "a"]);
+    expect(component.cardsByList().get("list-3")).toBe(beforeCards.get("list-3"));
+    expect(component.itemsByList().get("list-3")).toBe(beforeItems.get("list-3"));
   });
 
   it("ignores stale archived-card loads after toggling archived cards back off", async () => {

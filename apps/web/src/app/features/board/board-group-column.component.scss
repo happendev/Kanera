@@ -11,7 +11,7 @@
   background: var(--list-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  transition: border-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
 }
 
 :host-context([data-theme="light"]) {
@@ -171,8 +171,8 @@ h3 {
 
 // Completion stays visible in the deliberately stripped-down drag tile: it is status, not chrome.
 .card-drag-preview.is-completed {
-  background: color-mix(in srgb, var(--success, #16a34a) 10%, var(--card-bg));
-  border-color: color-mix(in srgb, var(--success, #16a34a) 32%, var(--border));
+  background: color-mix(in srgb, var(--success) 10%, var(--card-bg));
+  border-color: color-mix(in srgb, var(--success) 32%, var(--border));
 }
 
 k-card-labels.card-drag-preview-labels {
@@ -208,7 +208,7 @@ k-card-labels.card-drag-preview-labels {
 .card-drag-preview-complete-icon {
   flex: 0 0 auto;
   margin-right: 4px;
-  color: var(--success, #16a34a);
+  color: var(--success);
   font-size: 15px;
 }
 

@@ -87,6 +87,9 @@ export async function adminOrgRoutes(app: FastifyInstance) {
   app.get("/orgs", async (req) => {
     const query = dto.adminListOrgsQuery.parse(req.query);
     const filters = [
+      // Seed/demo tenants remain fully usable through the dedicated demo tooling, but must never
+      // leak into the customer organisation directory or its billing totals.
+      eq(clients.analyticsExcluded, false),
       query.q ? ilike(clients.name, `%${query.q}%`) : undefined,
       query.plan ? eq(clients.plan, query.plan) : undefined,
       query.billingStatus ? eq(clients.billingStatus, query.billingStatus) : undefined,

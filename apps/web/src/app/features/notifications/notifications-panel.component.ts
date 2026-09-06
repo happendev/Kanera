@@ -1,7 +1,7 @@
 import { NgOptimizedImage } from "@angular/common";
 import { CdkTrapFocus } from "@angular/cdk/a11y";
 import type { ElementRef} from "@angular/core";
-import { ChangeDetectionStrategy, Component, DestroyRef, HostListener, computed, effect, inject, signal, viewChild } from "@angular/core";
+import { ChangeDetectionStrategy, Component, DestroyRef, HostListener, computed, effect, inject, signal, viewChild, input } from "@angular/core";
 import { Router } from "@angular/router";
 import { summariseActivityChange } from "@kanera/shared/activity-summary";
 import { cardPath } from "@kanera/shared/card-links";
@@ -15,10 +15,10 @@ import { NotificationsService } from "../../core/notifications/notifications.ser
 import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../shared/avatar.component";
+import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { attachmentIconClass } from "../../shared/attachment-icons";
 import { BodyScrollLockService } from "../../shared/body-scroll-lock.service";
 import { CardKeyDisplayService } from "../../shared/card-key-display.service";
-import { dayGroupLabel } from "../../shared/day-key.util";
 import { SearchFieldComponent } from "../../shared/search-field.component";
 import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
@@ -27,6 +27,7 @@ import { openCardDetailInNewTab } from "../board/card-navigation.util";
 import { BoardState } from "../board/board-state";
 import { DescriptionViewerComponent } from "../board/description-viewer.component";
 import { buildFeedEntries, type ActivityChangeSummary, type NotificationCluster, type NotificationFeedEntry } from "./notification-clusters";
+import { dayGroupLabel, formatFeedTime } from "../../shared/date-format";
 
 interface NotificationGroupView {
   key: string;
@@ -47,7 +48,7 @@ const SEARCH_DEBOUNCE_MS = 200;
 @Component({
   selector: "k-notifications-panel",
   standalone: true,
-  imports: [CdkTrapFocus, NgOptimizedImage, AvatarComponent, DescriptionViewerComponent, CardActionsMenuPopover, SearchFieldComponent, SegmentedComponent, TooltipDirective],
+  imports: [CdkTrapFocus, NgOptimizedImage, AvatarComponent, EmptyStateComponent, DescriptionViewerComponent, CardActionsMenuPopover, SearchFieldComponent, SegmentedComponent, TooltipDirective],
   providers: [BoardState],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./notifications-panel.component.html",
@@ -78,6 +79,12 @@ export class NotificationsPanelComponent {
   }
 
   readonly open = signal(false);
+  /**
+   * True when the shell renders this panel's trigger in its sidebar utility row. The panel then
+   * paints no fixed button of its own; the shell calls toggle() directly.
+   */
+  readonly embedded = input(false);
+
   readonly closing = signal(false);
   readonly items = this.notifications.items;
   readonly unreadCount = this.notifications.unreadCount;
@@ -260,11 +267,15 @@ export class NotificationsPanelComponent {
   /** Bound so `buildFeedEntries` can precompute each block entry's action line without a closure per row. */
   private readonly summariseRow = (row: NotificationRow): ActivityChangeSummary => this.changeSummary(row);
 
+  /** Where focus came from when the drawer opened, so closing hands it back rather than to <body>. */
+  private returnFocusTo: HTMLElement | null = null;
+
   toggle(): void {
     if (this.open()) {
       this.close();
       return;
     }
+    this.returnFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     this.closing.set(false);
     this.open.set(true);
     void this.loadDrawer();
@@ -281,6 +292,14 @@ export class NotificationsPanelComponent {
     setTimeout(() => {
       this.open.set(false);
       this.closing.set(false);
+      // Same rule as the Up next drawer: the focus trap leaves focus on a removed node, so the browser
+      // drops it on <body> and the next Tab restarts from the top. Hand it back to the opener unless
+      // something else took focus deliberately, such as opening a notification's card.
+      const target = this.returnFocusTo;
+      this.returnFocusTo = null;
+      if (target?.isConnected && (document.activeElement === document.body || document.activeElement === null)) {
+        target.focus({ preventScroll: true });
+      }
     }, 110);
   }
 
@@ -553,20 +572,17 @@ export class NotificationsPanelComponent {
   }
 
   relativeTime(value: string | Date): string {
-    const ts = typeof value === "string" ? new Date(value).getTime() : value.getTime();
-    const diff = Date.now() - ts;
-    const minute = 60_000;
-    const hour = 60 * minute;
-    const day = 24 * hour;
-    if (diff < minute) return "just now";
-    if (diff < hour) return `${Math.floor(diff / minute)}m ago`;
-    if (diff < day) return `${Math.floor(diff / hour)}h ago`;
-    if (diff < 7 * day) return `${Math.floor(diff / day)}d ago`;
-    return new Date(ts).toLocaleDateString();
+    return formatFeedTime(value);
   }
 
   /** Delegates to the shared summariser so the drawer and watched-activity push bodies agree. */
   changeSummary(n: NotificationRow): ActivityChangeSummary {
+    if (n.reason === "board_member_left") {
+      const impact = (n.activity?.payload as { seatImpact?: string } | null)?.seatImpact;
+      return { icon: "ti ti-logout", text: "left this board", value: impact === "guest_capacity_freed"
+        ? "A paid guest seat is now available" : impact === "guest_capacity_retained"
+          ? "Paid guest capacity remains in use" : undefined };
+    }
     return summariseActivityChange(n);
   }
 

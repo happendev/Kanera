@@ -73,17 +73,16 @@
         </button>
       }
       @if (columnsOpen()) {
-        <div
-          class="ap-panel tv-columns-menu"
+        <div kMenu class="ap-panel tv-columns-menu"
           kAnchoredPanel
           [apAnchor]="columnsAnchor()"
           [apPlacement]="{ align: 'end', width: 310, maxHeight: 520 }"
           (apDismissed)="columnsOpen.set(false)"
         >
-          <div class="tv-panel-title">Show / hide</div>
+          <div class="k-menu-heading tv-panel-title">Show / hide</div>
           <div class="tv-columns-list">
             @for (column of pickableColumns(); track column.id) {
-              <button type="button" class="tv-menu-row" (click)="toggleColumn(column.id)">
+              <button type="button" class="k-menu-item tv-menu-row" (click)="toggleColumn(column.id)">
                 <i [class]="'ti ti-' + column.icon"></i>
                 <span>{{ column.label }}</span>
                 @if (column.visible) { <i class="ti ti-check"></i> }
@@ -129,11 +128,11 @@
         </button>
       }
       @if (groupOpen()) {
-        <div class="ap-panel tv-group-menu" kAnchoredPanel [apPlacement]="{ align: 'start', width: 250, maxHeight: 480 }" (apDismissed)="groupOpen.set(false)">
+        <div kMenu class="ap-panel tv-group-menu" kAnchoredPanel [apPlacement]="{ align: 'start', width: 250, maxHeight: 480 }" (apDismissed)="groupOpen.set(false)">
           @if (!hostGroupBy()) {
-            <div class="tv-panel-title">Group by</div>
+            <div class="k-menu-heading tv-panel-title">Group by</div>
             @for (option of groupByOptions(); track option.value) {
-              <button type="button" class="tv-menu-row" [class.is-selected]="groupBy() === option.value" (click)="setGroupBy(option.value)">
+              <button type="button" class="k-menu-item tv-menu-row" [class.is-selected]="groupBy() === option.value" (click)="setGroupBy(option.value)">
                 <i [class]="'ti ti-' + option.icon"></i>
                 <span>{{ option.label }}</span>
                 @if (groupBy() === option.value) { <i class="ti ti-check"></i> }
@@ -142,12 +141,12 @@
           }
           <!-- The second dimension is a property of the summaries, not of the rows, so it lives beside
                the grouping it cross-tabs against rather than behind a separate toolbar button. -->
-          <div class="tv-panel-title" [class.tv-panel-title-split]="!hostGroupBy()">Break summaries down by</div>
+          <div class="k-menu-heading tv-panel-title" [class.tv-panel-title-split]="!hostGroupBy()">Break summaries down by</div>
           @if (!hasSummaries()) {
             <p class="tv-panel-hint">Choose Sum or Average in the footer of a visible number column to enable breakdowns.</p>
           } @else {
           @for (option of availableSplitByOptions(); track option.value) {
-            <button type="button" class="tv-menu-row" [class.is-selected]="aggregateSplitBy() === option.value" (click)="setSplitBy(option.value)">
+            <button type="button" class="k-menu-item tv-menu-row" [class.is-selected]="aggregateSplitBy() === option.value" (click)="setSplitBy(option.value)">
               <i [class]="'ti ti-' + option.icon"></i>
               <span>{{ option.label }}</span>
               @if (aggregateSplitBy() === option.value) { <i class="ti ti-check"></i> }
@@ -179,9 +178,9 @@
           </button>
         }
         @if (sortOpen()) {
-          <div class="ap-panel tv-small-menu" kAnchoredPanel [apPlacement]="{ align: 'end', width: 230 }" (apDismissed)="sortOpen.set(false)">
+          <div kMenu class="ap-panel tv-small-menu" kAnchoredPanel [apPlacement]="{ align: 'end', width: 230 }" (apDismissed)="sortOpen.set(false)">
             @for (option of sortOptions; track option.value) {
-              <button type="button" class="tv-menu-row" [class.is-selected]="sortBy() === option.value" (click)="setSort(option.value)">
+              <button type="button" class="k-menu-item tv-menu-row" [class.is-selected]="sortBy() === option.value" (click)="setSort(option.value)">
                 <span>{{ option.label }}</span>
                 @if (sortBy() === option.value) { <i class="ti ti-check"></i> }
               </button>
@@ -203,44 +202,41 @@
       </button>
     }
 
-    <button
-      type="button"
-      class="tv-toolbar-btn"
-      kTooltip="Reset table layout"
-      aria-label="Reset table layout"
-      (click)="resetTable()"
-    >
-      <i class="ti ti-refresh"></i><span class="tv-toolbar-label">Reset</span>
-    </button>
-
-    @if (canEditRole()) {
-      <span class="tv-menu-wrap">
-        <button
-          type="button"
-          class="tv-toolbar-btn"
-          [class.is-open]="exportOpen()"
-          kTooltip="Export this table"
-          aria-label="Export this table"
-          (click)="toggleMenu('export')"
-        >
-          <i class="ti ti-download"></i><span class="tv-toolbar-label">Export</span>
-        </button>
-        @if (exportOpen()) {
-          <div class="ap-panel tv-small-menu" kAnchoredPanel [apPlacement]="{ align: 'end', width: 210, minHeight: 90 }" (apDismissed)="exportOpen.set(false)">
-            <p class="tv-panel-hint tv-export-scope">Exporting {{ exportScopeLabel() }}</p>
-            <button type="button" class="tv-menu-row" (click)="exportExcel()">
+    <!-- Reset and Export are rare, whole-sheet actions; behind one overflow menu they stop being a
+         third band of equally weighted controls beside the ones that shape the rows every day. -->
+    <span class="tv-menu-wrap">
+      <button
+        type="button"
+        class="tv-toolbar-btn tv-icon-btn"
+        [class.is-open]="moreOpen()"
+        kTooltip="More table actions"
+        aria-label="More table actions"
+        [attr.aria-haspopup]="'menu'"
+        [attr.aria-expanded]="moreOpen()"
+        (click)="toggleMenu('more')"
+      >
+        <i class="ti ti-dots"></i>
+      </button>
+      @if (moreOpen()) {
+        <div kMenu class="ap-panel tv-small-menu" role="menu" aria-label="More table actions" kAnchoredPanel [apPlacement]="{ align: 'end', width: 230, minHeight: 90 }" (apDismissed)="moreOpen.set(false)">
+          <button type="button" class="k-menu-item tv-menu-row" role="menuitem" (click)="resetTable()">
+            <i class="ti ti-refresh"></i><span>Reset table layout</span>
+          </button>
+          @if (canEditRole()) {
+            <p class="tv-panel-hint tv-export-scope">Export {{ exportScopeLabel() }}</p>
+            <button type="button" class="k-menu-item tv-menu-row" role="menuitem" (click)="exportExcel()">
               <i class="ti ti-file-spreadsheet"></i><span>Excel workbook</span>
             </button>
-            <button type="button" class="tv-menu-row" (click)="exportCsv()">
+            <button type="button" class="k-menu-item tv-menu-row" role="menuitem" (click)="exportCsv()">
               <i class="ti ti-file-type-csv"></i><span>CSV (this grid)</span>
             </button>
-            <button type="button" class="tv-menu-row" (click)="exportJson()">
+            <button type="button" class="k-menu-item tv-menu-row" role="menuitem" (click)="exportJson()">
               <i class="ti ti-file-code"></i><span>JSON</span>
             </button>
-          </div>
-        }
-      </span>
-    }
+          }
+        </div>
+      }
+    </span>
   </div>
 
   <!-- No (scroll) binding: incremental row mounting is driven by a coalesced listener attached
@@ -290,6 +286,7 @@
             cdkDrag
             cdkDragLockAxis="x"
             [cdkDragData]="col"
+            (cdkDragStarted)="closeMenusForDrag()"
           >
             <!-- Drag is handle-scoped so a pointerdown on the resize strip still resizes: both
                  gestures start on pointerdown and would otherwise fire together. -->
@@ -396,7 +393,8 @@
             class="tv-run-rows"
             cdkDropList
             [cdkDropListData]="group"
-            [cdkDropListDisabled]="!groupDragEnabled(group)"
+            [cdkDropListDisabled]="group.collapsed || !groupDragEnabled(group)"
+            [cdkDropListSortingDisabled]="hostCardGroups() === null && effectiveSortBy() !== 'position'"
             [cdkDropListEnterPredicate]="canEnterRun"
             (cdkDropListDropped)="onRowDrop($event)"
           >
@@ -410,8 +408,8 @@
             cdkDrag
             [cdkDragData]="card"
             [cdkDragStartDelay]="dragStartDelay"
-            [cdkDragDisabled]="!rowDragEnabled(group, card) || bulkSelectedCardIds().has(card.id)"
-            (cdkDragStarted)="hostCardGroups() !== null && hostCardDragStarted.emit()"
+            [cdkDragDisabled]="!rowDragEnabled(group, card) || (hostCardGroups() !== null && bulkSelectedCardIds().has(card.id))"
+            (cdkDragStarted)="closeMenusForDrag(); hostCardGroups() !== null && hostCardDragStarted.emit()"
             (cdkDragEnded)="hostCardGroups() !== null && hostCardDragEnded.emit()"
             (click)="onRowClick(card, $event)"
             (contextmenu)="onRowContextMenu(card, $event)"
@@ -421,8 +419,11 @@
                  be a 403 on click. -->
             @let rowEditable = canEditCard(card);
             <div class="tv-cell tv-title-cell" data-col="title">
+              @if (bulkSelectedCardIds().has(card.id) && bulkSelectedCardIds().size > 1) {
+                <strong class="tv-drag-count">{{ bulkSelectedCardIds().size }} cards</strong>
+              }
               @if (rowDragEnabled(group, card)) {
-                <span class="tv-drag-handle tv-row-stop" cdkDragHandle kTooltip="Drag to reorder" aria-hidden="true">
+                <span class="tv-drag-handle tv-row-stop" cdkDragHandle kTooltip="Drag to move" aria-hidden="true">
                   <i class="ti ti-grip-vertical"></i>
                 </span>
               }
@@ -466,7 +467,7 @@
                   @if (unreadCount(card.id) > 0) {
                     <span class="tv-unread" [kTooltip]="unreadLabel(card.id)" [attr.aria-label]="unreadLabel(card.id)"></span>
                   }
-                  <span class="tv-title">@if (showCardKeys()) { <span class="tv-card-key">{{ card.key }}</span> }{{ card.title }}</span>
+                  <span class="tv-title">@if (showCardKeys()) { <span class="tv-card-key">{{ card.key }}</span> }<span class="tv-title-text">{{ card.title }}</span></span>
                 </button>
                 <button type="button" class="tv-open-btn tv-title-open tv-row-stop" aria-label="Open card" kTooltip="Open card" (click)="$event.stopPropagation(); cardOpened.emit(card.id)">
                   <i class="ti ti-arrows-maximize"></i>
@@ -829,10 +830,10 @@
                   <!-- maxHeight matches the three rows this menu actually renders. Left at the 420px
                        default the placement helper reserves height the panel never uses, so the
                        bottom-pinned flip above the footer lands ~300px away from its trigger. -->
-                  <div class="ap-panel tv-aggregate-menu" kAnchoredPanel [apPlacement]="{ side: 'top', align: 'end', width: 150, minHeight: 100, maxHeight: 118 }" (apDismissed)="aggregateOpenFieldId.set(null)">
-                    <button type="button" class="tv-menu-row" (click)="setAggregate(field.id, null)">None</button>
-                    <button type="button" class="tv-menu-row" (click)="setAggregate(field.id, 'sum')">Sum</button>
-                    <button type="button" class="tv-menu-row" (click)="setAggregate(field.id, 'avg')">Average</button>
+                  <div kMenu class="ap-panel tv-aggregate-menu" kAnchoredPanel [apPlacement]="{ side: 'top', align: 'end', width: 150, minHeight: 100, maxHeight: 118 }" (apDismissed)="aggregateOpenFieldId.set(null)">
+                    <button type="button" class="k-menu-item tv-menu-row" (click)="setAggregate(field.id, null)">None</button>
+                    <button type="button" class="k-menu-item tv-menu-row" (click)="setAggregate(field.id, 'sum')">Sum</button>
+                    <button type="button" class="k-menu-item tv-menu-row" (click)="setAggregate(field.id, 'avg')">Average</button>
                   </div>
                 }
               }

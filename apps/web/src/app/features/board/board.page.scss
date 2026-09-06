@@ -14,70 +14,12 @@
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  transition: background 200ms ease;
+  transition: background var(--motion-base) ease;
 
-  // No custom background: break up the flat --bg canvas with a faint dot grid.
-  // Barely-visible white dots in dark mode; the light override below swaps to
-  // dark dots. Kept very low-alpha so it reads as texture, not decoration.
-  &:not(.has-gradient) {
-    background-image: radial-gradient(var(--board-dot, rgba(255, 255, 255, 0.025)) 1px, transparent 1px);
-    background-size: 22px 22px;
-    background-position: -1px -1px;
-    // Fade the dot grid toward the center so it concentrates in the two bottom
-    // corners rather than reading as a uniform field. Circular masks (vmax radius,
-    // so they stay round and scale with the viewport) glow at each bottom corner
-    // and fall off upward; the layers combine additively (default mask-composite: add).
-    -webkit-mask-image:
-      radial-gradient(circle at 0% 100%, #000 0%, transparent 40vmax),
-      radial-gradient(circle at 100% 100%, #000 0%, transparent 40vmax);
-    mask-image:
-      radial-gradient(circle at 0% 100%, #000 0%, transparent 40vmax),
-      radial-gradient(circle at 100% 100%, #000 0%, transparent 40vmax);
-    -webkit-mask-repeat: no-repeat;
-    mask-repeat: no-repeat;
-  }
-
-  // Dark mode: stronger scrim at the top (header area) fading to a lighter
-  // overlay for the board body — ensures header text is always readable.
+  // Only a chosen background paints anything; the default board is the flat --bg canvas. The scrim
+  // is a shared token so the picker's swatches preview exactly what the page will render.
   &.has-gradient {
-    background:
-      linear-gradient(to bottom,
-        rgba(0, 0, 0, 0.55) 0,
-        rgba(0, 0, 0, 0.3) 80px,
-        rgba(0, 0, 0, 0.2) 100%),
-      var(--board-gradient);
-  }
-}
-
-// Light mode: darker dots so the grid stays faintly visible on the light canvas.
-// Explicit light theme, or (below) OS-light when no explicit theme is set. Dark is
-// the default (:root, no [data-theme]), so we must NOT use a bare :not([data-theme="dark"])
-// here or it would win in dark mode and wash the dots out.
-:host-context([data-theme="light"]) .board-bg:not(.has-gradient) {
-  --board-dot: rgba(15, 23, 42, 0.04);
-}
-
-:host-context([data-theme="light"]) .board-bg.has-gradient {
-  background:
-    linear-gradient(to bottom,
-      rgba(255, 255, 255, 0.7) 0,
-      rgba(255, 255, 255, 0.45) 80px,
-      rgba(255, 255, 255, 0.3) 100%),
-    var(--board-gradient);
-}
-
-@media (prefers-color-scheme: light) {
-  :host-context(:not([data-theme="dark"])) .board-bg:not(.has-gradient) {
-    --board-dot: rgba(15, 23, 42, 0.08);
-  }
-
-  :host-context(:not([data-theme="dark"])) .board-bg.has-gradient {
-    background:
-      linear-gradient(to bottom,
-        rgba(255, 255, 255, 0.7) 0,
-        rgba(255, 255, 255, 0.45) 80px,
-        rgba(255, 255, 255, 0.3) 100%),
-      var(--board-gradient);
+    background: var(--board-scrim), var(--board-gradient);
   }
 }
 
@@ -101,6 +43,16 @@
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
   border-radius: var(--radius-sm);
+}
+
+// The no-lists state sits where the first list would, top-left of the canvas, at a reading width
+// rather than stretching across the whole horizontal scroller.
+.board-empty {
+  align-self: flex-start;
+  flex: none;
+  width: min(440px, calc(100vw - 48px));
+  margin: var(--space-6) var(--space-5);
+  background: var(--surface);
 }
 
 .skeleton-list {
@@ -140,6 +92,21 @@
   gap: 2px;
 }
 
+// The header's one primary action. Filled, where every other header control is ghost or outlined,
+// so it reads first; its label collapses to the icon below the compact breakpoint via
+// .k-toolbar-collapsible-label.
+.new-card-btn {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+
+  &:hover:not(:disabled) {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+    color: var(--accent-fg);
+  }
+}
+
 .board-overview-trigger {
   // The radar identifies the overview; the beacon previews its current work-risk signal.
   --overview-signal: var(--text-muted);
@@ -172,7 +139,7 @@
   border: 1.5px solid var(--surface);
   border-radius: 50%;
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--overview-signal) 22%, transparent);
-  transition: box-shadow 0.12s;
+  transition: box-shadow var(--motion-fast);
 }
 
 .board-overview {
@@ -188,9 +155,18 @@
   visibility: hidden;
   color: var(--text);
   background: var(--surface-overlay);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--overlay-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg, 0 12px 36px rgb(0 0 0 / 22%));
+  box-shadow: var(--shadow-lg);
+
+  // Everything inside sits on --surface-overlay, not on the page. The page tokens (--surface-2,
+  // --border) are tuned against --surface and on dark are *darker* than the overlay fill, so tiles
+  // and buttons painted with them receded into the panel and its divider vanished. Inner chrome
+  // therefore uses a translucent lift over whatever the overlay is, plus the overlay's own
+  // separator hairline, which reads correctly in both themes.
+  --ov-tile-bg: var(--surface-subtle);
+  --ov-tile-bg-hover: color-mix(in srgb, var(--text) 8%, transparent);
+  --ov-tile-border: var(--overlay-separator);
 
   &.is-positioned { visibility: visible; }
   &.is-above { top: auto; bottom: var(--ap-bottom, auto); }
@@ -216,26 +192,26 @@
   color: var(--text-muted) !important;
   font-size: 12px !important;
   font-weight: 700;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  background: var(--ov-tile-bg);
+  border: 1px solid var(--ov-tile-border);
   border-radius: 999px;
 
   &[data-risk="onTrack"] {
     color: var(--success) !important;
-    background: color-mix(in srgb, var(--success) 8%, var(--surface-2));
-    border-color: color-mix(in srgb, var(--success) 28%, var(--border));
+    background: color-mix(in srgb, var(--success) 10%, var(--surface-overlay));
+    border-color: color-mix(in srgb, var(--success) 32%, var(--ov-tile-border));
   }
 
   &[data-risk="needsAttention"] {
     color: var(--warning) !important;
-    background: color-mix(in srgb, var(--warning) 8%, var(--surface-2));
-    border-color: color-mix(in srgb, var(--warning) 28%, var(--border));
+    background: color-mix(in srgb, var(--warning) 10%, var(--surface-overlay));
+    border-color: color-mix(in srgb, var(--warning) 32%, var(--ov-tile-border));
   }
 
   &[data-risk="atRisk"] {
     color: var(--danger) !important;
-    background: color-mix(in srgb, var(--danger) 8%, var(--surface-2));
-    border-color: color-mix(in srgb, var(--danger) 28%, var(--border));
+    background: color-mix(in srgb, var(--danger) 10%, var(--surface-overlay));
+    border-color: color-mix(in srgb, var(--danger) 32%, var(--ov-tile-border));
   }
 }
 
@@ -258,21 +234,33 @@
     min-width: 0;
     padding: 9px 7px;
     text-align: center;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
+    color: var(--text);
+    background: var(--ov-tile-bg);
+    border: 1px solid var(--ov-tile-border);
     border-radius: var(--radius);
     cursor: pointer;
 
-    &:hover:not(:disabled), &.is-active {
-      background: var(--accent-soft);
-      border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+    &:hover:not(:disabled) {
+      background: var(--ov-tile-bg-hover);
+      border-color: var(--border-strong);
     }
 
-    &:disabled { cursor: default; opacity: .55; }
+    &.is-active {
+      background: color-mix(in srgb, var(--accent) 14%, var(--surface-overlay));
+      border-color: color-mix(in srgb, var(--accent) 45%, var(--ov-tile-border));
+      strong { color: var(--accent); }
+    }
+
+    // A zero count is still information, so the tile keeps its frame; only the copy fades. Fading the
+    // whole tile (border and fill included) turned it into an undifferentiated smudge on dark.
+    &:disabled {
+      cursor: default;
+      strong, span { opacity: .45; }
+    }
   }
   strong { font-size: 16px; }
   span { color: var(--text-muted); font-size: 10px; }
-  .needs-attention strong { color: var(--danger, #ef4444); }
+  .needs-attention strong { color: var(--danger); }
 }
 
 .board-overview-callout {
@@ -283,7 +271,8 @@
   padding: 8px 10px;
   color: var(--text-muted);
   font-size: 11px;
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-overlay));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--ov-tile-border));
   border-radius: var(--radius);
 }
 
@@ -292,8 +281,6 @@
   color: var(--text-muted);
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: .06em;
-  text-transform: uppercase;
 }
 
 .board-overview-lists {
@@ -312,7 +299,7 @@
   gap: 6px;
   margin-top: 12px;
   padding-top: 10px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--ov-tile-border);
 
   button {
     display: inline-flex;
@@ -321,14 +308,14 @@
     gap: 6px;
     height: 32px;
     color: var(--text);
-    background: var(--surface-2);
-    border: 1px solid var(--border);
+    background: var(--ov-tile-bg);
+    border: 1px solid var(--ov-tile-border);
     border-radius: var(--radius);
     font: inherit;
     font-size: 11px;
     cursor: pointer;
   }
-  button:hover { background: var(--surface-hover); border-color: var(--border-strong); }
+  button:hover { background: var(--ov-tile-bg-hover); border-color: var(--border-strong); }
 }
 
 // Used by both the export and the mirror menu. Placement comes from kAnchoredPanel, which clamps to
@@ -340,11 +327,6 @@
   width: var(--ap-width, 160px);
   max-height: var(--ap-max-height, none);
   overflow: hidden;
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface-overlay);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
   visibility: hidden;
   z-index: var(--z-panel);
 
@@ -373,9 +355,9 @@
   min-height: 0;
   padding: 4px;
   background: var(--surface-overlay);
-  border: 1px solid var(--border);
+  border: 1px solid var(--overlay-border);
   border-radius: var(--radius);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 14%);
+  box-shadow: var(--shadow-lg);
   visibility: hidden;
 
   &.is-positioned { visibility: visible; }
@@ -384,15 +366,6 @@
     top: auto;
     bottom: var(--ap-bottom, auto);
   }
-}
-
-.group-by-menu-heading {
-  padding: 5px 8px 4px;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .group-by-menu-scroll {
@@ -459,48 +432,6 @@
   .group-by-item.is-selected & { opacity: 1; }
 }
 
-.board-export-item {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
-  align-items: center;
-  justify-content: stretch;
-  gap: 8px;
-  min-height: 32px;
-  height: auto;
-  width: 100%;
-  padding: 7px 8px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text);
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-
-  i {
-    width: 16px;
-    color: var(--text-muted);
-    font-size: 16px;
-    text-align: center;
-  }
-
-  >span {
-    min-width: 0;
-    white-space: normal;
-    overflow-wrap: anywhere;
-    line-height: 1.35;
-  }
-
-  &:hover:not(:disabled) {
-    background: var(--surface-hover);
-  }
-
-  &:disabled {
-    cursor: default;
-    opacity: 0.6;
-  }
-}
-
 .mirror-menu-trigger.has-mirror {
   color: var(--accent);
 
@@ -526,7 +457,7 @@
   background: transparent;
   color: var(--text);
   cursor: pointer;
-  transition: border-color 0.12s, background-color 0.12s;
+  transition: border-color var(--motion-fast), background-color var(--motion-fast);
 
   &:hover {
     border-color: var(--border-strong);

@@ -32,6 +32,97 @@
 
 // ─── Header ─────────────────────────────────────────────────────────────────
 
+// The greeting's frame. Relative so the scatter can be absolutely placed against it; the header
+// itself is lifted above the shapes.
+.home-hero {
+  position: relative;
+
+  > k-page-header {
+    position: relative;
+    z-index: 1;
+  }
+}
+
+.hero-scatter {
+  position: absolute;
+  inset: -16px 0 -12px;
+  z-index: 0;
+  pointer-events: none;
+
+  // Below this the column is a phone or a narrow split view and the greeting spans the width.
+  @container (max-width: 720px) {
+    display: none;
+  }
+}
+
+.hero-scatter-item {
+  position: absolute;
+  width: var(--scatter-size);
+  height: var(--scatter-size);
+  color: var(--color-teal);
+  // Quieter than the marketing hero: this is a working page, not a landing page.
+  opacity: 0.28;
+  transform: translate(-50%, -50%) rotate(var(--scatter-rotate));
+  // Keep the welcome motion finite: even transform-only loops keep producing frames while
+  // someone leaves Home open. Return to the static transform after one staggered cycle.
+  animation: hero-scatter-drift 9s ease-in-out 1;
+  animation-delay: var(--scatter-delay, 0s);
+
+  &.is-sky { color: var(--color-sky); }
+  &.is-indigo { color: var(--color-indigo); }
+
+  &.is-dot {
+    border-radius: 999px;
+    background: currentColor;
+    opacity: 0.34;
+  }
+
+  &.is-ring {
+    border: 2px solid currentColor;
+    border-radius: 999px;
+  }
+
+  &.is-square {
+    border: 2px solid currentColor;
+    border-radius: 3px;
+  }
+
+  &.is-dash {
+    height: 2px;
+    border-radius: 2px;
+    background: currentColor;
+  }
+
+  &.is-arc {
+    border: 2px solid currentColor;
+    border-color: currentColor transparent transparent transparent;
+    border-radius: 999px;
+  }
+
+  &.is-check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.34;
+
+    .ti {
+      font-size: var(--scatter-size);
+      font-weight: 700;
+    }
+  }
+}
+
+@keyframes hero-scatter-drift {
+  0%, 100% { transform: translate(-50%, -50%) rotate(var(--scatter-rotate)); }
+  50% { transform: translate(-50%, calc(-50% - 6px)) rotate(var(--scatter-rotate)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-scatter-item {
+    animation: none;
+  }
+}
+
 // Home's greeting is k-page-header in its "page" variant — a reading-column title, not a chrome bar.
 // The display size, the stacked subtitle and the drop to 22px on a phone all come from the shared
 // component, which is what keeps this heading the same size as the settings pages' headings.
@@ -340,32 +431,6 @@
   border-radius: var(--radius-lg);
 }
 
-.empty-state {
-  display: grid;
-  justify-items: center;
-  gap: 10px;
-  padding: 48px 16px;
-  text-align: center;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-
-  i {
-    color: var(--text-muted);
-    font-size: 26px;
-  }
-
-  strong {
-    color: var(--text);
-    font-size: 14px;
-    font-weight: 600;
-  }
-
-  &.error-state i {
-    color: var(--danger);
-  }
-}
-
 .offline-banner {
   display: flex;
   align-items: center;
@@ -468,8 +533,6 @@
   font-size: 10.5px;
   font-weight: 700;
   line-height: 16px;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
 }
 
 .account-status-title {
@@ -522,64 +585,121 @@
 // the dashed-surface look of .no-workspace-empty but leaves the card left-aligned inside it.
 .get-started {
   display: grid;
-  gap: 16px;
-  padding: 28px 16px;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius);
+  gap: var(--space-5);
+  max-width: 880px;
+  margin-inline: auto;
+  padding: var(--space-6) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   background: var(--surface);
-  text-align: center;
 
-  k-agent-connect-card {
-    text-align: left;
+  @media (min-width: 640px) {
+    padding: var(--space-8) var(--space-6);
   }
 }
 
-.get-started-intro {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-
-  .no-workspace-icon {
-    font-size: 36px;
-    color: var(--text-muted);
-  }
+.get-started-head {
+  display: grid;
+  gap: var(--space-1);
+  text-align: center;
 
   h2 {
     margin: 0;
-    font-size: 18px;
+    font-size: 22px;
+    font-weight: 650;
+    letter-spacing: var(--tracking-tight);
+    color: var(--text);
+  }
+
+  p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: var(--text-md);
+  }
+}
+
+// Two option cards side by side where there is room, the primary first. Below 640px they stack, the
+// primary still on top.
+.no-boards-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-3);
+  text-align: left;
+
+  &.is-single {
+    max-width: 420px;
+    margin-inline: auto;
+  }
+}
+
+.start-card {
+  display: grid;
+  // Icon, title, copy, actions: the copy row absorbs the height difference so the action rows of
+  // neighbouring cards sit on one line.
+  grid-template-rows: auto auto 1fr auto;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+
+  h3 {
+    margin: 0;
+    font-size: var(--text-lg);
     font-weight: 600;
     color: var(--text);
   }
 
   p {
-    max-width: 560px;
     margin: 0;
-    font-size: 14px;
-    line-height: 1.5;
     color: var(--text-muted);
+    font-size: var(--text-base);
+    line-height: 1.45;
   }
 }
 
-@media (min-width: 640px) {
-  .get-started {
-    max-width: 720px;
-    margin-inline: auto;
-    padding: 40px 32px;
-  }
+.start-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 18px;
 }
 
-// The create paths are offered side by side; the shared .no-workspace-empty rule puts top margin
-// on bare buttons, which would misalign a row, so the wrapper owns the spacing instead.
-.no-boards-actions {
+.start-card-actions {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 6px;
+  align-items: center;
+  align-self: end;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
 
   button {
     margin-top: 0;
+  }
+}
+
+// A labelled rule between "do it yourself" and "let an agent do it": the agent card is a third way
+// to start, not a footer, and the line says so without a third card competing for the choice.
+.get-started-or {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+
+  &::before,
+  &::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--border);
   }
 }
 
@@ -737,4 +857,99 @@
     // progress panel becoming a second horizontal scrolling surface on very small phones.
     overflow-x: hidden;
   }
+}
+
+
+// ─── First steps ─────────────────────────────────────────────────────────────
+// A short, closable card above the focus tiles for admins of a new organisation. Each step is one
+// row that links into the place the step happens; the row is a plain surface tile so it reads as
+// navigation, not as a checklist with state.
+.first-run {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.first-run-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  .section-title {
+    margin: 0;
+  }
+}
+
+.first-run-steps {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.first-run-step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  height: auto;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  text-decoration: none;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast);
+
+  > .ti {
+    flex: none;
+    color: var(--text-muted);
+    font-size: 16px;
+  }
+
+  &:hover:not(:disabled) {
+    background: var(--surface-2);
+    border-color: var(--border);
+    text-decoration: none;
+  }
+}
+
+.first-run-num {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.first-run-body {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 1px;
+}
+
+.first-run-title {
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.first-run-text {
+  color: var(--text-muted);
+  font-size: var(--text-base);
+  line-height: 1.4;
+}
+
+.first-run-foot {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
 }

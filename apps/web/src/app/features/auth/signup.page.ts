@@ -5,37 +5,11 @@ import { ActivatedRoute, Router, RouterLink } from "@angular/router";
 import type { BoardInvitationLookupResponse } from "@kanera/shared/dto";
 import { AuthService } from "../../core/auth/auth.service";
 import { PublicAuthClient } from "../../core/auth/public-auth.client";
+import { TurnstileChallenge } from "../../core/auth/turnstile-challenge";
+import { parseAuthResponse } from "../../core/auth/auth-response";
 import { LogoComponent } from "../../shared/logo.component";
 import { ThemeService } from "../../core/theme/theme.service";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
-
-interface AuthResponse {
-  accessToken: string;
-  user: {
-    id: string;
-    clientId: string;
-    email: string;
-    displayName: string;
-    avatarUrl: string | null;
-    orgName: string;
-    logoUrl: string | null;
-    deploymentMode: "self_hosted" | "hosted";
-    kaneraEnvironment: "development" | "test" | "staging" | "production";
-    hasWorkspace: boolean;
-    isClientAdmin: boolean;
-    boardInviteRedirect?: string | null;
-    role: "owner" | "admin" | "member";
-    timezone: string;
-    storageUsage: {
-      usedBytes: number;
-      quotaBytes: number | null;
-      remainingBytes: number | null;
-      limited: boolean;
-      maxFileBytes: number;
-    };
-    analyticsExcluded?: boolean;
-  };
-}
 
 interface InviteSummaryResponse {
   orgName: string;
@@ -152,19 +126,13 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
   readonly kaneraEnvironment = signal<KaneraEnvironment>("production");
   readonly deploymentMode = signal<DeploymentMode>("self_hosted");
   readonly environmentBannerLabel = computed(() => environmentBannerLabel(this.kaneraEnvironment()));
-  readonly turnstileSiteKey = signal<string | null>(null);
-  readonly turnstileToken = signal<string | null>(null);
   readonly turnstileReady = signal(false);
-  private turnstileElement: HTMLElement | null = null;
-  private turnstileWidgetId: string | null = null;
-  private viewReady = false;
+  private readonly turnstile = new TurnstileChallenge(this.workflowError, () => this.turnstileReady.set(true));
+  readonly turnstileSiteKey = this.turnstile.siteKey;
+  readonly turnstileToken = this.turnstile.token;
   @ViewChild("turnstileContainer")
   set turnstileContainer(container: ElementRef<HTMLElement> | undefined) {
-    const next = container?.nativeElement ?? null;
-    if (this.turnstileElement === next) return;
-    this.turnstileElement = next;
-    this.turnstileWidgetId = null;
-    this.loadTurnstile();
+    this.turnstile.setElement(container?.nativeElement ?? null);
   }
 
   // Two-step signup: collect the form ("details"), email a code, then confirm it ("code").
@@ -200,7 +168,7 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
         this.turnstileSiteKey.set(config.turnstileSiteKey);
         this.kaneraEnvironment.set(config.kaneraEnvironment);
         this.deploymentMode.set(config.deploymentMode);
-        this.loadTurnstile();
+        this.turnstile.load();
       })
       .catch(() => {
         this.emailVerificationEnabled.set(false);
@@ -244,7 +212,7 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
     if (this.publicSignupBlocked()) return;
     this.workflowError.set(null);
     return submit(this.signupForm, async () => {
-      if (!this.ensureTurnstileSolved()) return undefined;
+      if (!this.turnstile.ensureSolved()) return undefined;
       if (!this.registrationStartedTracked) {
         this.registrationStartedTracked = true;
         const marketingAlreadyTracked = document.cookie.split(";")
@@ -269,7 +237,7 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
       if (!sent) return undefined;
       this.verificationForm().reset({ code: "" });
       this.step.set("code");
-      this.resetTurnstile();
+      this.turnstile.reset();
       return undefined;
     });
   }
@@ -281,7 +249,7 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
     if (this.publicSignupBlocked()) return;
     this.workflowError.set(null);
     return submit(this.verificationForm, async () => {
-      if (!this.emailVerificationEnabled() && !this.ensureTurnstileSolved()) return undefined;
+      if (!this.emailVerificationEnabled() && !this.turnstile.ensureSolved()) return undefined;
       await this.createAccount(this.code().trim());
       return undefined;
     });
@@ -290,7 +258,7 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
   async resend() {
     if (this.resendBusy() || this.resendCooldown() > 0) return;
     if (this.publicSignupBlocked()) return;
-    if (!this.ensureTurnstileSolved()) return;
+    if (!this.turnstile.ensureSolved()) return;
     this.resendBusy.set(true);
     try {
       await this.requestCode(this.email().trim());
@@ -319,11 +287,11 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
       const body: unknown = await res.json().catch(() => null);
       if (await this.redirectExistingInviteAccount(body)) return false;
       this.workflowError.set(errorMessage(body) ?? "Could not send verification code");
-      this.resetTurnstile();
+      this.turnstile.reset();
       return false;
     }
     this.startResendCooldown();
-    this.resetTurnstile();
+    this.turnstile.reset();
     return true;
   }
 
@@ -348,17 +316,17 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
       const body: unknown = await res.json().catch(() => null);
       const code = body && typeof body === "object" ? (body as Record<string, unknown>)["code"] : null;
       if (await this.redirectExistingInviteAccount(body)) {
-        this.resetTurnstile();
+        this.turnstile.reset();
         return;
       } else if (code === "SEAT_LIMIT_REACHED") {
         this.workflowError.set("This organisation has no available seats. Ask an admin to purchase more seats before you can accept this invitation.");
       } else {
         this.workflowError.set(errorMessage(body) ?? "Signup failed");
       }
-      this.resetTurnstile();
+      this.turnstile.reset();
       return;
     }
-    this.resetTurnstile();
+    this.turnstile.reset();
     const json = parseAuthResponse(await res.json());
     this.auth.setSession(json.accessToken, json.user);
     this.analytics.setSuppressed(json.user.analyticsExcluded === true);
@@ -416,127 +384,15 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
   }
 
   ngAfterViewInit() {
-    this.viewReady = true;
-    this.loadTurnstile();
+    this.turnstile.initialize();
   }
 
-  private ensureTurnstileSolved(): boolean {
-    if (!this.turnstileSiteKey()) return true;
-    if (this.turnstileToken()) return true;
-    this.workflowError.set("Complete the security check to continue.");
-    return false;
-  }
-
-  private loadTurnstile() {
-    if (!this.turnstileSiteKey() || !this.viewReady) return;
-    if (window.turnstile) {
-      this.renderTurnstile();
-      return;
-    }
-    const existing = document.querySelector<HTMLScriptElement>('script[data-kanera-turnstile="true"]');
-    if (existing) {
-      existing.addEventListener("load", () => this.renderTurnstile(), { once: true });
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-    script.async = true;
-    script.defer = true;
-    script.dataset["kaneraTurnstile"] = "true";
-    script.addEventListener("load", () => this.renderTurnstile(), { once: true });
-    script.addEventListener("error", () => this.workflowError.set("Security check could not load. Try refreshing the page."), { once: true });
-    document.head.appendChild(script);
-  }
-
-  private renderTurnstile() {
-    const siteKey = this.turnstileSiteKey();
-    const element = this.turnstileElement;
-    if (!siteKey || !element || !window.turnstile || this.turnstileWidgetId) return;
-    this.turnstileWidgetId = window.turnstile.render(element, {
-      sitekey: siteKey,
-      callback: (token: string) => {
-        this.turnstileToken.set(token);
-        this.turnstileReady.set(true);
-        if (this.workflowError() === "Complete the security check to continue.") this.workflowError.set(null);
-      },
-      "expired-callback": () => this.turnstileToken.set(null),
-      "error-callback": () => {
-        this.turnstileToken.set(null);
-        this.workflowError.set("Security check failed. Try again.");
-      },
-    });
-  }
-
-  private resetTurnstile() {
-    this.turnstileToken.set(null);
-    if (this.turnstileWidgetId && window.turnstile) {
-      window.turnstile.reset(this.turnstileWidgetId);
-    }
-  }
-}
-
-declare global {
-  interface Window {
-    turnstile?: {
-      render: (container: HTMLElement, options: TurnstileRenderOptions) => string;
-      reset: (widgetId: string) => void;
-    };
-  }
-}
-
-interface TurnstileRenderOptions {
-  sitekey: string;
-  callback: (token: string) => void;
-  "expired-callback": () => void;
-  "error-callback": () => void;
 }
 
 function errorMessage(body: unknown): string | null {
   if (!body || typeof body !== "object" || !("message" in body)) return null;
   const message = body.message;
   return typeof message === "string" ? message : null;
-}
-
-function parseAuthResponse(value: unknown): AuthResponse {
-  if (!value || typeof value !== "object") throw new Error("Invalid auth response");
-  const response = value as Partial<AuthResponse>;
-  if (typeof response.accessToken !== "string" || !isAuthUser(response.user)) {
-    throw new Error("Invalid auth response");
-  }
-  return { accessToken: response.accessToken, user: response.user };
-}
-
-function isAuthUser(value: unknown): value is AuthResponse["user"] {
-  if (!value || typeof value !== "object") return false;
-  const user = value as Partial<AuthResponse["user"]>;
-  return (
-    typeof user.id === "string" &&
-    typeof user.clientId === "string" &&
-    typeof user.email === "string" &&
-    typeof user.displayName === "string" &&
-    (typeof user.avatarUrl === "string" || user.avatarUrl === null) &&
-    typeof user.orgName === "string" &&
-    (typeof user.logoUrl === "string" || user.logoUrl === null) &&
-    (user.deploymentMode === "self_hosted" || user.deploymentMode === "hosted") &&
-    (user.kaneraEnvironment === "development" || user.kaneraEnvironment === "test" || user.kaneraEnvironment === "staging" || user.kaneraEnvironment === "production") &&
-    typeof user.hasWorkspace === "boolean" &&
-    typeof user.timezone === "string" &&
-    isStorageUsage(user.storageUsage) &&
-    (user.role === "owner" || user.role === "admin" || user.role === "member")
-    // boardInviteRedirect and isClientAdmin are optional — no strict check needed
-  );
-}
-
-function isStorageUsage(value: unknown): value is AuthResponse["user"]["storageUsage"] {
-  if (!value || typeof value !== "object") return false;
-  const usage = value as Partial<AuthResponse["user"]["storageUsage"]>;
-  return (
-    typeof usage.usedBytes === "number" &&
-    (typeof usage.quotaBytes === "number" || usage.quotaBytes === null) &&
-    (typeof usage.remainingBytes === "number" || usage.remainingBytes === null) &&
-    typeof usage.limited === "boolean" &&
-    typeof usage.maxFileBytes === "number"
-  );
 }
 
 function parseInviteSummaryResponse(value: unknown): InviteSummaryResponse {
