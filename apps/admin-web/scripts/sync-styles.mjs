@@ -2,8 +2,9 @@
 // styles.scss into a generated partial here, so both apps share ONE source of truth for colors, radii,
 // shadows, etc. — without a fragile symlink or hand-duplicated palette. Run on prebuild/prestart/prelint.
 //
-// It extracts three brace-balanced top-level blocks by selector:
+// It extracts the shared mixin plus three brace-balanced top-level blocks by selector:
 //   :root, [data-theme="dark"] { … }
+//   @mixin light-accent-palette { … }
 //   @media (prefers-color-scheme: light) { … }
 //   [data-theme="light"] { … }
 // If the tenant file is restructured, this fails loudly rather than silently emitting stale tokens.
@@ -37,6 +38,9 @@ function extractBlock(marker) {
 
 const blocks = [
   extractBlock(":root,"),
+  // The light theme blocks include this mixin. Keep it ahead of those consumers because Sass
+  // resolves mixins lexically when compiling the generated admin stylesheet.
+  extractBlock("@mixin light-accent-palette"),
   extractBlock("@media (prefers-color-scheme: light)"),
   extractBlock('[data-theme="light"]'),
 ];
