@@ -267,11 +267,15 @@ export class NotificationsPanelComponent {
   /** Bound so `buildFeedEntries` can precompute each block entry's action line without a closure per row. */
   private readonly summariseRow = (row: NotificationRow): ActivityChangeSummary => this.changeSummary(row);
 
+  /** Where focus came from when the drawer opened, so closing hands it back rather than to <body>. */
+  private returnFocusTo: HTMLElement | null = null;
+
   toggle(): void {
     if (this.open()) {
       this.close();
       return;
     }
+    this.returnFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     this.closing.set(false);
     this.open.set(true);
     void this.loadDrawer();
@@ -288,6 +292,14 @@ export class NotificationsPanelComponent {
     setTimeout(() => {
       this.open.set(false);
       this.closing.set(false);
+      // Same rule as the Up next drawer: the focus trap leaves focus on a removed node, so the browser
+      // drops it on <body> and the next Tab restarts from the top. Hand it back to the opener unless
+      // something else took focus deliberately, such as opening a notification's card.
+      const target = this.returnFocusTo;
+      this.returnFocusTo = null;
+      if (target?.isConnected && (document.activeElement === document.body || document.activeElement === null)) {
+        target.focus({ preventScroll: true });
+      }
     }, 110);
   }
 
