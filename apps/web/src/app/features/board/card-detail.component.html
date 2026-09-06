@@ -106,17 +106,10 @@
       </div>
       }
     </div>
-    @if (confirmingDelete()) {
-    <div class="delete-confirm">
-      <span>Archive card?</span>
-      <button class="destructive sm" (click)="setArchived(true)" [disabled]="archiving() || !canEdit()">Archive</button>
-      <button class="ghost sm" (click)="confirmingDelete.set(false)">Cancel</button>
-    </div>
-    } @else {
-    <button class="ghost icon danger" (click)="confirmingDelete.set(true)" [disabled]="!canEdit()" aria-label="Archive card" kTooltip="Archive card">
+    <!-- No inline confirm: archiving fires at once and the toast offers Undo. -->
+    <button class="ghost icon danger" (click)="setArchived(true)" [disabled]="archiving() || !canEdit()" aria-label="Archive card" kTooltip="Archive card">
       <i class="ti ti-archive"></i>
     </button>
-    }
     }
     }
     <button class="ghost icon close-btn" (click)="requestClose()" aria-label="Close">
@@ -793,8 +786,8 @@
         <div class="section-label">
           <i class="ti ti-paperclip"></i>
           Attachments
-          @if (attachments().length) {
-          <span class="count">{{ attachments().length }}</span>
+          @if (visibleAttachments().length) {
+          <span class="count">{{ visibleAttachments().length }}</span>
           }
         </div>
 
@@ -817,9 +810,9 @@
         <k-attachment-upload-list [items]="uploads.items()" (retry)="uploads.retry($event)" (dismiss)="uploads.dismiss($event)" />
         }
 
-        @if (attachments().length) {
+        @if (visibleAttachments().length) {
         <ul class="attach-list">
-          @for (a of attachments(); track a.id) {
+          @for (a of visibleAttachments(); track a.id) {
           @let attachmentDisplay = attachmentDisplayById().get(a.id);
           <li class="attach-row">
             @if (attachmentDisplay?.isImage) {

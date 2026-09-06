@@ -399,9 +399,23 @@ export class CardActionsMenuPopover {
     this.archiving.set(true);
     try {
       const card = await this.api.patch<WireCard>(`/cards/${this.cardId()}/archive`, { archived });
-      this.actionToasts.success(archived ? "Card archived." : "Card restored.", archived ? "archive" : "archive-off");
       this.state?.updateCard(card);
       this.close.emit();
+      // Archive commits immediately (other clients see it via realtime) and Undo issues the reverse
+      // PATCH, so there is nothing to confirm up front. The closure outlives this popover on purpose.
+      if (archived) {
+        const cardId = this.cardId();
+        this.actionToasts.undoable({
+          message: "Card archived.",
+          icon: "archive",
+          undo: async () => {
+            const restored = await this.api.patch<WireCard>(`/cards/${cardId}/archive`, { archived: false });
+            this.state?.updateCard(restored);
+          },
+        });
+      } else {
+        this.actionToasts.success("Card restored.", "archive-off");
+      }
     } finally {
       this.archiving.set(false);
     }

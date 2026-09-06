@@ -13,6 +13,7 @@ import type { Board, BoardGroup, List, Workspace, WorkspaceMember } from "@kaner
 import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS, DEFAULT_INACTIVE_CARDS_DAYS } from "@kanera/shared/workspace-defaults";
 import { filter } from "rxjs";
 import { ApiClient, ApiError } from "../../core/api/api.client";
+import { ActionToastService } from "../../shared/action-toast.service";
 import { KANERA_DOCS_URL } from "../../shared/docs-link.component";
 import type { CardLabelPresentation } from "../board/card-labels.component";
 import { formatDateTime, formatRelativeTime } from "../../shared/date-format";
@@ -677,6 +678,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly inactiveCardsDaysDefault = DEFAULT_INACTIVE_CARDS_DAYS;
 
   private readonly api = inject(ApiClient);
+  private readonly actionToasts = inject(ActionToastService);
   private readonly appTitle = inject(AppTitleService);
   private readonly auth = inject(AuthService);
   private readonly confirm = inject(ConfirmService);
@@ -1752,20 +1754,49 @@ export class WorkspaceSettingsPage implements OnDestroy {
     if (!list || this.deletionPreviewKey()) return;
     this.deletionPreviewKey.set(`list:${id}`);
     try {
-      const confirmed = await this.confirm.openAfterLoading({
-        title: `Delete list "${list.name}"?`,
-        loadingMessage: "Checking how many cards will be deleted...",
-      }, async () => {
-        const { cardCount } = await this.api.get<DeletionImpactResponse>(`/lists/${id}/deletion-impact`);
-        const cardLabel = cardCount === 1 ? "card" : "cards";
-        return `${cardCount} ${cardLabel} will also be permanently deleted. Are you sure?`;
+      // Deleting a list hard-deletes its cards, so the toast still names the count; the check is the
+      // same GET the old confirm dialog made, just without a modal in front of it.
+      const { cardCount } = await this.api.get<DeletionImpactResponse>(`/lists/${id}/deletion-impact`);
+      const cardLabel = cardCount === 1 ? "card" : "cards";
+      this.deferDelete({
+        message: cardCount > 0 ? `List "${list.name}" and ${cardCount} ${cardLabel} deleted.` : `List "${list.name}" deleted.`,
+        icon: "trash",
+        hide: () => this.lists.update((items) => items.filter((l) => l.id !== id)),
+        restore: () => this.lists.update((items) => this.insertBack(items, list, (l) => l.position)),
+        request: () => this.api.delete(`/lists/${id}`),
       });
-      if (!confirmed) return;
-      await this.api.delete(`/lists/${id}`);
-      this.lists.update((items) => items.filter((l) => l.id !== id));
     } finally {
       this.deletionPreviewKey.set(null);
     }
+  }
+
+  /**
+   * Undo instead of confirm for hard deletes. The row disappears at once and the DELETE is only sent
+   * when the toast expires or is dismissed; Undo puts the row back without the server ever hearing
+   * about it. A failed DELETE also restores the row so the UI never lies about what exists.
+   */
+  private deferDelete(options: { message: string; icon: string; hide: () => void; restore: () => void; request: () => Promise<unknown> }) {
+    options.hide();
+    this.actionToasts.undoable({
+      message: options.message,
+      icon: options.icon,
+      undo: options.restore,
+      commit: async () => {
+        try {
+          await options.request();
+        } catch (error) {
+          options.restore();
+          this.actionToasts.info(`Couldn't delete: ${extractErrorMessage(error)}`, "alert-triangle");
+        }
+      },
+    });
+  }
+
+  /** Re-insert a hidden row at its original sort position so Undo does not shuffle the list. */
+  private insertBack<T>(items: T[], item: T, key: (row: T) => string | number): T[] {
+    const value = Number(key(item));
+    const index = items.findIndex((row) => Number(key(row)) > value);
+    return index < 0 ? [...items, item] : [...items.slice(0, index), item, ...items.slice(index)];
   }
 
   startEditList(list: List) {
@@ -1953,12 +1984,13 @@ export class WorkspaceSettingsPage implements OnDestroy {
   async archiveField(id: string) {
     const field = this.fields().find((f) => f.id === id);
     if (!field) return;
-    if (!await this.confirm.open({
-      title: `Delete custom field "${field.name}"?`,
-      message: "This will permanently remove the field and all its values from every card in this workspace.",
-    })) return;
-    await this.api.delete(`/custom-fields/${id}`);
-    this.fields.update((items) => items.filter((f) => f.id !== id));
+    this.deferDelete({
+      message: `Custom field "${field.name}" deleted.`,
+      icon: "trash",
+      hide: () => this.fields.update((items) => items.filter((f) => f.id !== id)),
+      restore: () => this.fields.update((items) => this.insertBack(items, field, (f) => f.position)),
+      request: () => this.api.delete(`/custom-fields/${id}`),
+    });
   }
 
   updateNewField(value: string) {
@@ -2047,12 +2079,14 @@ export class WorkspaceSettingsPage implements OnDestroy {
   async deleteTemplate(id: string) {
     const template = this.templates().find((t) => t.id === id);
     if (!template) return;
-    if (!await this.confirm.open({
-      title: `Delete template "${template.title}"?`,
-      message: "New cards will no longer receive this checklist. Checklists already added to cards are kept.",
-    })) return;
-    await this.api.delete(`/checklist-templates/${id}`);
-    this.templates.update((ts) => ts.filter((t) => t.id !== id));
+    const index = this.templates().indexOf(template);
+    this.deferDelete({
+      message: `Template "${template.title}" deleted.`,
+      icon: "trash",
+      hide: () => this.templates.update((ts) => ts.filter((t) => t.id !== id)),
+      restore: () => this.templates.update((ts) => [...ts.slice(0, index), template, ...ts.slice(index)]),
+      request: () => this.api.delete(`/checklist-templates/${id}`),
+    });
   }
 
   newTemplateItemText(id: string): string {
@@ -3200,12 +3234,13 @@ export class WorkspaceSettingsPage implements OnDestroy {
   async deleteAutomation(id: string) {
     const automation = this.automations().find((item) => item.id === id);
     if (!automation) return;
-    if (!await this.confirm.open({
-      title: "Delete automation?",
-      message: "Future cards will no longer run this automation. Existing card changes are kept.",
-    })) return;
-    await this.api.delete(`/automations/${id}`);
-    this.automations.update((items) => items.filter((item) => item.id !== id));
+    this.deferDelete({
+      message: "Automation deleted.",
+      icon: "trash",
+      hide: () => this.automations.update((items) => items.filter((item) => item.id !== id)),
+      restore: () => this.automations.update((items) => this.sortAutomations([...items, automation])),
+      request: () => this.api.delete(`/automations/${id}`),
+    });
   }
 
   async addLabel(e: Event) {
@@ -3223,9 +3258,14 @@ export class WorkspaceSettingsPage implements OnDestroy {
   async archiveLabel(id: string) {
     const label = this.labels().find((l) => l.id === id);
     if (!label) return;
-    if (!await this.confirm.open({ title: `Delete label "${label.name}"?`, message: "This cannot be undone." })) return;
-    await this.api.delete(`/card-labels/${id}`);
-    this.labels.update((items) => items.filter((l) => l.id !== id));
+    const index = this.labels().indexOf(label);
+    this.deferDelete({
+      message: `Label "${label.name}" deleted.`,
+      icon: "trash",
+      hide: () => this.labels.update((items) => items.filter((l) => l.id !== id)),
+      restore: () => this.labels.update((items) => [...items.slice(0, index), label, ...items.slice(index)]),
+      request: () => this.api.delete(`/card-labels/${id}`),
+    });
   }
 
   startEditLabel(label: WireCardLabel) {
@@ -3307,12 +3347,15 @@ export class WorkspaceSettingsPage implements OnDestroy {
   async removeMember(userId: string) {
     const member = this.members().find((m) => m.userId === userId);
     if (!member || this.isInheritedWorkspaceAdmin(member)) return;
-    if (!await this.confirm.open({
-      title: `Remove ${member.displayName}?`,
-      message: "They will lose access to this workspace and all its boards.",
-    })) return;
-    await this.api.delete(`/workspaces/${this.workspaceId()}/members/${userId}`);
-    this.members.update((rows) => rows.filter((r) => r.userId !== userId));
+    const workspaceId = this.workspaceId();
+    const index = this.members().indexOf(member);
+    this.deferDelete({
+      message: `${member.displayName} removed from the workspace.`,
+      icon: "user-minus",
+      hide: () => this.members.update((rows) => rows.filter((r) => r.userId !== userId)),
+      restore: () => this.members.update((rows) => [...rows.slice(0, index), member, ...rows.slice(index)]),
+      request: () => this.api.delete(`/workspaces/${workspaceId}/members/${userId}`),
+    });
   }
 
   async inviteGuest(e: Event) {
@@ -3426,25 +3469,22 @@ export class WorkspaceSettingsPage implements OnDestroy {
   async removeGuest(boardId: string, userId: string) {
     const guest = this.acceptedGuests().find((row) => row.boardId === boardId && row.userId === userId);
     if (!guest) return;
-    if (!await this.confirm.open({
-      title: `Remove ${guest.displayName}?`,
-      message: `They will lose access to "${guest.boardName}".`,
-    })) return;
-    const key = `${boardId}:${userId}`;
-    this.guestRemovingId.set(key);
+    const workspaceId = this.workspaceId();
+    const index = this.acceptedGuests().indexOf(guest);
     this.guestError.set(null);
-    try {
-      const result = await this.api.delete<RemoveGuestResponse>(`/workspaces/${this.workspaceId()}/guests/${boardId}/${userId}`);
-      this.acceptedGuests.update((rows) =>
-        rows
-          .filter((row) => !(row.boardId === boardId && row.userId === userId))
-          .map((row) => row.userId === userId && result?.paidGuestSeatRemoved ? { ...row, paidGuestSeat: false } : row),
-      );
-    } catch (error) {
-      this.guestError.set(extractErrorMessage(error));
-    } finally {
-      this.guestRemovingId.set(null);
-    }
+    this.deferDelete({
+      message: `${guest.displayName} removed from "${guest.boardName}".`,
+      icon: "user-minus",
+      hide: () => this.acceptedGuests.update((rows) => rows.filter((row) => !(row.boardId === boardId && row.userId === userId))),
+      restore: () => this.acceptedGuests.update((rows) => [...rows.slice(0, index), guest, ...rows.slice(index)]),
+      request: async () => {
+        const result = await this.api.delete<RemoveGuestResponse>(`/workspaces/${workspaceId}/guests/${boardId}/${userId}`);
+        // Losing their last paid board frees the seat; reflect that on the guest's other rows.
+        if (result?.paidGuestSeatRemoved) {
+          this.acceptedGuests.update((rows) => rows.map((row) => row.userId === userId ? { ...row, paidGuestSeat: false } : row));
+        }
+      },
+    });
   }
 
   async updateGuestAssignedItemsOnly(guest: AcceptedGuestRow, assignedItemsOnly: boolean) {

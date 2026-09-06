@@ -21,6 +21,7 @@ import type { BacklinkSummary, NoteBacklinksResponse } from "@kanera/shared/dto"
 import type { ColorToken } from "@kanera/shared/colors";
 import { AuthService } from "../../core/auth/auth.service";
 import { ApiClient, ApiError } from "../../core/api/api.client";
+import { ActionToastService } from "../../shared/action-toast.service";
 import { EditorDrafts } from "../../core/browser/editor-drafts";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { MediaDownloadService } from "../../core/media/media-download.service";
@@ -32,7 +33,6 @@ import { attachmentIconClass } from "../../shared/attachment-icons";
 import { attachmentPreviewType, type AttachmentPreviewType } from "../../shared/attachment-preview";
 import { AttachmentUploadListComponent } from "../../shared/attachments/attachment-upload-list.component";
 import { AttachmentUploadQueue } from "../../shared/attachments/attachment-upload-queue.service";
-import { ConfirmService } from "../../shared/confirm.service";
 import { DraftBannerComponent } from "../../shared/draft-banner.component";
 import { IconPickerComponent } from "../../shared/icon-picker.component";
 import { ColorPickerComponent } from "../../shared/color-picker.component";
@@ -314,7 +314,7 @@ export class NoteEditorComponent implements OnDestroy {
   private readonly unsavedWork = inject(UnsavedWorkService);
   private readonly mediaDownloads = inject(MediaDownloadService);
   private readonly unsavedDraftSource = Symbol("note-draft");
-  private readonly confirm = inject(ConfirmService);
+  private readonly actionToasts = inject(ActionToastService);
   private readonly sockets = inject(SocketService);
   readonly imageLightbox = inject(ImageLightboxService);
 
@@ -1027,10 +1027,27 @@ export class NoteEditorComponent implements OnDestroy {
   async confirmDeleteAttachment(attachmentId: string, fileName: string) {
     const n = this.note();
     if (!n || !this.canChangeAttachments()) return;
-    if (!await this.confirm.open({ title: `Delete "${fileName}"?`, message: "This cannot be undone.", danger: true })) return;
-    await this.api.delete(`/notes/${n.id}/attachments/${attachmentId}`);
-    this.attachments.update((rows) => rows.filter((row) => row.id !== attachmentId));
-    await this.notesState.fetchOne(n.id).catch(() => undefined);
+    const row = this.attachments().find((item) => item.id === attachmentId);
+    if (!row) return;
+    const index = this.attachments().indexOf(row);
+    const restore = () => this.attachments.update((rows) =>
+      rows.some((item) => item.id === attachmentId) ? rows : [...rows.slice(0, index), row, ...rows.slice(index)]);
+    // Undo instead of confirm: the row hides now and the DELETE waits for the toast (see card-detail).
+    this.attachments.update((rows) => rows.filter((item) => item.id !== attachmentId));
+    this.actionToasts.undoable({
+      message: `"${fileName}" deleted.`,
+      icon: "trash",
+      undo: restore,
+      commit: async () => {
+        try {
+          await this.api.delete(`/notes/${n.id}/attachments/${attachmentId}`);
+          await this.notesState.fetchOne(n.id).catch(() => undefined);
+        } catch {
+          restore();
+          this.actionToasts.info(`Couldn't delete "${fileName}".`, "alert-triangle");
+        }
+      },
+    });
   }
 
   openAttachmentImage(attachmentId: string, event?: Event): boolean {

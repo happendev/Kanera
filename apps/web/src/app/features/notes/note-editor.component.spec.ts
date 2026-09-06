@@ -8,6 +8,7 @@ import type { AuthUser } from "../../core/auth/auth.service";
 import { AuthService } from "../../core/auth/auth.service";
 import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { SocketService } from "../../core/realtime/socket.service";
+import { ActionToastService } from "../../shared/action-toast.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { DescriptionEditorComponent } from "../board/description-editor.component";
 import { ImageLightboxService } from "../board/image-lightbox.service";
@@ -477,15 +478,30 @@ describe("NoteEditorComponent locking", () => {
     expect(fixture.componentInstance.attachmentDragActive()).toBe(false);
   });
 
-  it("deletes attachments after confirmation", async () => {
+  it("hides a deleted attachment at once and only sends the DELETE when the undo toast is gone", async () => {
     fixture.componentRef.setInput("note", createNote({ editingUserId: null, editingExpiresAt: null }));
     fixture.componentInstance.attachments.set([createAttachment()]);
     fixture.detectChanges();
+    const toasts = TestBed.inject(ActionToastService);
 
     await fixture.componentInstance.confirmDeleteAttachment("attachment-1", "spec.txt");
     fixture.detectChanges();
 
-    expect(confirm.open).toHaveBeenCalledWith(expect.objectContaining({ title: 'Delete "spec.txt"?' }));
+    expect(confirm.open).not.toHaveBeenCalled();
+    expect(fixture.componentInstance.attachments()).toEqual([]);
+    expect(api.delete).not.toHaveBeenCalled();
+    expect(toasts.messages().map((toast) => toast.message)).toEqual(['"spec.txt" deleted.']);
+
+    // Undo restores the row without any request.
+    toasts.messages()[0]!.action!.run();
+    await Promise.resolve();
+    expect(fixture.componentInstance.attachments().map((row) => row.id)).toEqual(["attachment-1"]);
+    expect(api.delete).not.toHaveBeenCalled();
+
+    // Letting the toast go through commits the delete.
+    await fixture.componentInstance.confirmDeleteAttachment("attachment-1", "spec.txt");
+    toasts.flushPending();
+    await Promise.resolve();
     expect(api.delete).toHaveBeenCalledWith("/notes/note-1/attachments/attachment-1");
     expect(fixture.componentInstance.attachments()).toEqual([]);
   });

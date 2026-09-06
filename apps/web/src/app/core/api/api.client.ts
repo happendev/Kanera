@@ -188,8 +188,12 @@ export class ApiClient {
     return this.request<T>(path, { method: "PUT", body: JSON.stringify(body) });
   }
   delete<T>(path: string, body?: unknown) {
+    // keepalive lets a DELETE outlive its document. Undo toasts defer hard deletes until the toast
+    // expires, and ActionToastService flushes them on pagehide; without keepalive the browser would
+    // abort those requests and the "deleted" item would silently reappear on the next load.
     return this.request<T>(path, {
       method: "DELETE",
+      keepalive: true,
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
   }

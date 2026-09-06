@@ -407,20 +407,39 @@ export class ScratchpadService {
     return `${formatDate(now, "short")} at ${formatTime(now)}`;
   }
 
-  async deleteNote(noteId: string): Promise<void> {
+  /**
+   * Take a page off the strip without deleting it yet. Returns the handles an undo toast needs:
+   * `restore` puts the page back exactly as it was (including any unsaved edit, which is re-queued
+   * for saving) and `commit` sends the DELETE. Nothing about the page is forgotten until commit, so
+   * Undo is lossless.
+   */
+  hideNote(noteId: string): { restore: () => void; commit: () => Promise<void> } {
+    const note = this._notes().find((row) => row.id === noteId);
     // Cancel any queued save first: a PATCH landing after the DELETE would 404 and flip the
     // indicator to "error" for a page the user has already discarded.
+    const unsaved = this.pending.get(noteId);
     this.cancelPending(noteId);
     const snapshot = this._notes();
-    this._notes.update((notes) => notes.filter((note) => note.id !== noteId));
-    this.forget(noteId);
+    this._notes.update((notes) => notes.filter((row) => row.id !== noteId));
     if (this.activeNoteId() === noteId) this.selectNeighbour(snapshot, noteId);
-    try {
-      await this.api.delete(`/scratchpad/notes/${noteId}`);
-    } catch {
-      this._notes.set(snapshot);
-      this.saveState.set("error");
-    }
+    const restore = () => {
+      if (!note || this._notes().some((row) => row.id === noteId)) return;
+      this._notes.update((notes) => [...notes, note]);
+      if (unsaved) this.queueSave(noteId, unsaved);
+      this.setActiveNote(noteId);
+    };
+    return {
+      restore,
+      commit: async () => {
+        try {
+          await this.api.delete(`/scratchpad/notes/${noteId}`);
+          this.forget(noteId);
+        } catch {
+          restore();
+          this.saveState.set("error");
+        }
+      },
+    };
   }
 
   /**

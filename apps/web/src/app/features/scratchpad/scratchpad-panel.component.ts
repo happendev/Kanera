@@ -16,7 +16,7 @@ import { Router } from "@angular/router";
 import type { WireScratchpadNote } from "@kanera/shared/events";
 import type { AnchoredPanelPlacement } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
-import { ConfirmService } from "../../shared/confirm.service";
+import { ActionToastService } from "../../shared/action-toast.service";
 import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { MenuDirective } from "../../shared/menu.directive";
 import { LogoComponent } from "../../shared/logo.component";
@@ -85,7 +85,7 @@ export function openScratchpadPopoutWindow(url: string): Window | null {
 })
 export class ScratchpadPanelComponent implements OnDestroy {
   protected readonly scratchpad = inject(ScratchpadService);
-  private readonly confirm = inject(ConfirmService);
+  private readonly actionToasts = inject(ActionToastService);
   private readonly router = inject(Router);
 
   /**
@@ -538,14 +538,9 @@ export class ScratchpadPanelComponent implements OnDestroy {
     event?.stopPropagation();
     this.closeMenu();
     const label = note.title.trim() || "Untitled";
-    const confirmed = await this.confirm.open({
-      title: `Delete "${label}"?`,
-      message: "This page and anything pasted into it will be deleted. This cannot be undone.",
-      confirmLabel: "Delete page",
-      danger: true,
-    });
-    if (!confirmed) return;
-    await this.scratchpad.deleteNote(note.id);
+    // Undo instead of confirm: the tab disappears at once and the DELETE waits for the toast.
+    const { restore, commit } = this.scratchpad.hideNote(note.id);
+    this.actionToasts.undoable({ message: `Page "${label}" deleted.`, icon: "trash", undo: restore, commit });
   }
 
   // ── Tab reordering ─────────────────────────────────────────────────────────

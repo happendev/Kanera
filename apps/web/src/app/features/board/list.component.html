@@ -60,18 +60,11 @@
       }
       @if (showBulkListActions()) {
       <div class="menu-sep"></div>
-      @if (confirmClear()) {
-      <div class="menu-confirm">
-        <span class="menu-confirm-label">Archive all cards?</span>
-        <button type="button" class="menu-confirm-yes" (click)="archiveCards()" [disabled]="clearing()">Archive</button>
-        <button type="button" class="menu-confirm-cancel" (click)="confirmClear.set(false)">Cancel</button>
-      </div>
-      } @else {
-      <button class="menu-item ghost menu-item-danger" (click)="confirmClear.set(true)">
+      <!-- No inline confirm: the action fires at once and the toast offers Undo. -->
+      <button class="menu-item ghost menu-item-danger" (click)="archiveCards()" [disabled]="clearing()">
         <i class="ti ti-archive"></i>
         Archive all cards
       </button>
-      }
       }
     </div>
     }

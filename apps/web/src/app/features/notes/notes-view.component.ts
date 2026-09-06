@@ -19,7 +19,7 @@ import { AuthService } from "../../core/auth/auth.service";
 import { ApiError } from "../../core/api/api.client";
 import { notesSelectionKey, notesTabKey } from "../../core/browser/browser-contracts";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
-import { ConfirmService } from "../../shared/confirm.service";
+import { ActionToastService } from "../../shared/action-toast.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { NoteEditorComponent } from "./note-editor.component";
 import { NotesTreeComponent, type NoteMoveRequest } from "./notes-tree.component";
@@ -117,7 +117,7 @@ export class NotesViewComponent implements OnInit, OnChanges, OnDestroy {
   protected readonly state = inject(NotesState);
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthService);
-  private readonly confirmService = inject(ConfirmService);
+  private readonly actionToasts = inject(ActionToastService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly unsavedWork = inject(UnsavedWorkService);
@@ -320,21 +320,27 @@ export class NotesViewComponent implements OnInit, OnChanges, OnDestroy {
     const note = this.state.notes().find((n) => n.id === id);
     const title = note?.title?.trim() || "Untitled";
     const hasChildren = this.state.notes().some((n) => n.parentNoteId === id);
-    const confirmed = await this.confirmService.open({
-      title: `Delete "${title}"?`,
-      message: hasChildren
-        ? "This note and all of its sub-notes will be permanently deleted."
-        : "This note will be permanently deleted.",
-      confirmLabel: "Delete",
-      danger: true,
+    // Undo instead of confirm: the note (and its sub-notes) leave the tree at once and the DELETE
+    // waits for the toast. Undo restores the rows and the selection.
+    const wasSelected = this.state.selectedId() === id;
+    const { restore, commit } = this.state.hideNote(id);
+    if (this.state.selectedId() === null) this.restoreSectionSelection(this.activeTab());
+    this.actionToasts.undoable({
+      message: hasChildren ? `Note "${title}" and its sub-notes deleted.` : `Note "${title}" deleted.`,
+      icon: "trash",
+      undo: () => {
+        restore();
+        if (wasSelected) this.writeSelectedNoteToUrl(id);
+      },
+      commit: async () => {
+        try {
+          await commit();
+        } catch (err) {
+          console.error("Failed to delete note", err);
+          this.actionToasts.info(`Couldn't delete "${title}".`, "alert-triangle");
+        }
+      },
     });
-    if (!confirmed) return;
-    try {
-      await this.state.deleteNote(id);
-      if (this.state.selectedId() === null) this.restoreSectionSelection(this.activeTab());
-    } catch (err) {
-      console.error("Failed to delete note", err);
-    }
   }
 
   async moveNote(request: NoteMoveRequest) {

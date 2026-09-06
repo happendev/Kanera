@@ -1,8 +1,9 @@
 import type { OnDestroy, OnInit } from "@angular/core";
-import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input, output, signal } from "@angular/core";
 import type { ServerToClientEvents, WireBoardMemberUser } from "@kanera/shared/events";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { ApiClient, ApiError } from "../../core/api/api.client";
+import { ActionToastService } from "../../shared/action-toast.service";
 import { SocketService, type AppSocket } from "../../core/realtime/socket.service";
 import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
@@ -170,6 +171,9 @@ export class BoardMembersMenu implements OnInit, OnDestroy {
   private readonly api = inject(ApiClient);
   private readonly unsavedWork = inject(UnsavedWorkService);
   private readonly confirm = inject(ConfirmService);
+  private readonly actionToasts = inject(ActionToastService);
+  /** The deferred removal usually completes after the popover has closed; see removeMember. */
+  private destroyed = false;
   private readonly sockets = inject(SocketService);
   readonly boardId = input.required<string>(); readonly workspaceId = input<string | null>(null); readonly ownerClientId = input<string | null>(null); readonly boardRoomManaged = input(false);
   readonly currentUserId = input<string | null>(null); readonly canManage = input(false); readonly members = input<WireBoardMemberUser[]>([]); readonly dismissed = output<void>(); readonly memberAdded = output<WireBoardMemberUser>(); readonly memberRemoved = output<string>();
@@ -188,6 +192,7 @@ export class BoardMembersMenu implements OnInit, OnDestroy {
   private socket: AppSocket | null = null; private leaveBoard?: () => void;
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => { this.destroyed = true; });
     this.panel.configure({
       placement: () => ({ width: 320, maxHeight: 520 }),
       // An outside click during a removal confirmation must not tear the popover down: the DELETE is
@@ -244,19 +249,29 @@ export class BoardMembersMenu implements OnInit, OnDestroy {
     if (this.busy() || this.confirmingRemoval()) return;
     this.confirmingRemoval.set(true);
     try {
-      const confirmed = await this.confirm.open({ title: `Remove ${member.displayName}?`, message: "They will lose access to this board." });
-      if (!confirmed) return;
-      this.busy.set(true);
+      const boardId = this.boardId();
+      const index = this.accessMembers().indexOf(member);
+      const restore = () => this.accessMembers.update(rows =>
+        rows.some(row => row.userId === member.userId) ? rows : [...rows.slice(0, index), member, ...rows.slice(index)]);
+      // Undo instead of confirm: the row hides now and the DELETE waits for the toast. memberRemoved
+      // is only emitted once the removal is real, so the board page does not drop the member early.
       this.error.set(null);
-      try {
-        await this.api.delete(`/boards/${this.boardId()}/members/${member.userId}`);
-        this.accessMembers.update(rows => rows.filter(row => row.userId !== member.userId));
-        this.memberRemoved.emit(member.userId);
-      } catch (e) {
-        this.error.set(errorMessage(e));
-      } finally {
-        this.busy.set(false);
-      }
+      this.accessMembers.update(rows => rows.filter(row => row.userId !== member.userId));
+      this.actionToasts.undoable({
+        message: `${member.displayName} removed from the board.`,
+        icon: "user-minus",
+        undo: restore,
+        commit: async () => {
+          try {
+            await this.api.delete(`/boards/${boardId}/members/${member.userId}`);
+            // Fast path for the board page; realtime board:member:removed covers a closed popover.
+            if (!this.destroyed) this.memberRemoved.emit(member.userId);
+          } catch (e) {
+            restore();
+            this.actionToasts.info(`Couldn't remove ${member.displayName}: ${errorMessage(e)}`, "alert-triangle");
+          }
+        },
+      });
     } finally {
       // The confirm button click continues bubbling after its promise resolves. Keep the popover
       // mounted through the DELETE so its success output still reaches the board page.

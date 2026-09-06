@@ -268,6 +268,16 @@ export class CardDetailComponent {
   readonly members = input<WireBoardMemberUser[]>([]);
   readonly assigneeIds = input<string[]>([]);
   readonly attachments = input<CardAttachmentRow[]>([]);
+  /**
+   * Attachments whose delete is deferred behind an undo toast. They vanish from every surface
+   * (list, lightbox, cover) at once while the DELETE waits for the toast to expire; Undo just
+   * clears the id. Keyed locally because the store's rows are owned by the realtime feed.
+   */
+  private readonly pendingDeletedAttachmentIds = signal<ReadonlySet<string>>(new Set());
+  readonly visibleAttachments = computed(() => {
+    const hidden = this.pendingDeletedAttachmentIds();
+    return hidden.size === 0 ? this.attachments() : this.attachments().filter((a) => !hidden.has(a.id));
+  });
   readonly lightboxAttachmentId = input<string | null | undefined>();
   readonly checklists = input<WireCardChecklist[]>([]);
   readonly appliedChecklistTemplateIds = input<string[]>([]);
@@ -297,7 +307,7 @@ export class CardDetailComponent {
   readonly attachmentDragActive = signal(false);
   // Keep every format the shared lightbox can render in attachment order so navigation can cross
   // images, playback media, and documents without exposing download-only files in the sequence.
-  readonly lightboxAttachments = computed(() => this.attachments()
+  readonly lightboxAttachments = computed(() => this.visibleAttachments()
     .flatMap((attachment) => {
       const mediaType = attachmentPreviewType(attachment.mimeType, attachment.fileName);
       const src = visibleSignedMediaUrl(attachment.url);
@@ -314,7 +324,7 @@ export class CardDetailComponent {
     .map(({ id: _id, ...item }) => item));
   // Attachment presentation is stable until the attachment collection changes. Precomputing it
   // avoids repeating MIME, signed-URL, size, and date formatting work on unrelated signal updates.
-  readonly attachmentDisplayById = computed(() => new Map(this.attachments().map((attachment) => [
+  readonly attachmentDisplayById = computed(() => new Map(this.visibleAttachments().map((attachment) => [
     attachment.id,
     {
       isImage: this.isImageMime(attachment.mimeType),
@@ -357,7 +367,7 @@ export class CardDetailComponent {
     const card = this.card();
     const coverId = card.coverAttachmentId;
     const summaryCoverUrl = "coverUrl" in card ? card.coverUrl : null;
-    const resolved = coverId ? (this.attachments().find((a) => a.id === coverId)?.url ?? summaryCoverUrl) : summaryCoverUrl;
+    const resolved = coverId ? (this.visibleAttachments().find((a) => a.id === coverId)?.url ?? summaryCoverUrl) : summaryCoverUrl;
     // Suppress a cover whose signed token has already expired (e.g. from a
     // restored offline snapshot) so it does not render as a broken 404 before
     // the live card detail fetch supplies a freshly-signed URL. See
@@ -552,7 +562,6 @@ export class CardDetailComponent {
   readonly editingDescription = signal(false);
   readonly editorInitialValue = signal("");
   readonly recoveredDescriptionDraft = signal(false);
-  readonly confirmingDelete = signal(false);
   readonly archiving = signal(false);
   readonly activeTab = signal<'detail' | 'comments'>('detail');
   readonly wideLayout = signal(false);
@@ -2201,8 +2210,29 @@ export class CardDetailComponent {
 
   async confirmDeleteAttachment(attachmentId: string, fileName: string) {
     if (!this.canEdit()) return;
-    if (!await this.confirm.open({ title: `Delete "${fileName}"?`, message: "This cannot be undone.", danger: true })) return;
-    await this.api.delete(`/cards/${this.card().id}/attachments/${attachmentId}`);
+    const cardId = this.card().id;
+    const setHidden = (hidden: boolean) => this.pendingDeletedAttachmentIds.update((ids) => {
+      const next = new Set(ids);
+      if (hidden) next.add(attachmentId); else next.delete(attachmentId);
+      return next;
+    });
+    // Undo instead of confirm: hide now, DELETE only once the toast is gone. The row comes back if
+    // the user undoes or the request fails; on success the realtime attachment:deleted event drops it
+    // from the store and the local hide becomes redundant.
+    setHidden(true);
+    this.actionToasts.undoable({
+      message: `"${fileName}" deleted.`,
+      icon: "trash",
+      undo: () => setHidden(false),
+      commit: async () => {
+        try {
+          await this.api.delete(`/cards/${cardId}/attachments/${attachmentId}`);
+        } catch {
+          setHidden(false);
+          this.actionToasts.info(`Couldn't delete "${fileName}".`, "alert-triangle");
+        }
+      },
+    });
   }
 
   formatBytes(n: number): string {
@@ -2241,10 +2271,22 @@ export class CardDetailComponent {
     if (!this.canArchive() || this.archiving()) return;
     this.archiving.set(true);
     try {
-      const card = await this.api.patch<WireCard>(`/cards/${this.card().id}/archive`, { archived });
-      this.actionToasts.success(archived ? "Card archived." : "Card restored.", archived ? "archive" : "archive-off");
+      const cardId = this.card().id;
+      const card = await this.api.patch<WireCard>(`/cards/${cardId}/archive`, { archived });
       this.state.updateCard(card);
-      this.confirmingDelete.set(false);
+      // Archive commits immediately and Undo issues the reverse PATCH; see card-actions-menu.
+      if (archived) {
+        this.actionToasts.undoable({
+          message: "Card archived.",
+          icon: "archive",
+          undo: async () => {
+            const restored = await this.api.patch<WireCard>(`/cards/${cardId}/archive`, { archived: false });
+            this.state.updateCard(restored);
+          },
+        });
+      } else {
+        this.actionToasts.success("Card restored.", "archive-off");
+      }
     } finally {
       this.archiving.set(false);
     }

@@ -145,11 +145,34 @@ export class NotesState {
     this.persistSnapshot();
   }
 
-  async deleteNote(id: string): Promise<void> {
+  /**
+   * Take a note and its sub-notes out of the tree without deleting them yet. Returns the handles an
+   * undo toast needs: `restore` puts every removed row back and re-selects the note, `commit` sends
+   * the DELETE (the server cascades to descendants). A failed commit restores the rows so the tree
+   * never shows less than what exists.
+   */
+  hideNote(id: string): { restore: () => void; commit: () => Promise<void> } {
     this.assertOnline();
-    await this.api.delete(`/notes/${id}`);
-    this.removeWithDescendants(id);
+    const removed = this.removeWithDescendants(id);
+    const wasSelected = removed.some((n) => n.id === this.selectedId()) || this.selectedId() === null;
     this.persistSnapshot();
+    const restore = () => {
+      const present = new Set(this.notes().map((n) => n.id));
+      this.notes.update((rows) => [...rows, ...removed.filter((n) => !present.has(n.id))]);
+      if (wasSelected) this.selectedId.set(id);
+      this.persistSnapshot();
+    };
+    return {
+      restore,
+      commit: async () => {
+        try {
+          await this.api.delete(`/notes/${id}`);
+        } catch (error) {
+          restore();
+          throw error;
+        }
+      },
+    };
   }
 
   async fetchOne(id: string): Promise<WireNote> {
@@ -243,7 +266,9 @@ export class NotesState {
     );
   }
 
-  private removeWithDescendants(id: string) {
+  /** Drops the note and every descendant from the tree; returns the removed rows for restore. */
+  private removeWithDescendants(id: string): WireNote[] {
+    let removed: WireNote[] = [];
     this.notes.update((rows) => {
       const toRemove = new Set<string>([id]);
       let added = true;
@@ -256,11 +281,13 @@ export class NotesState {
           }
         }
       }
+      removed = rows.filter((n) => toRemove.has(n.id));
       return rows.filter((n) => !toRemove.has(n.id));
     });
     if (this.selectedId() && this.notes().every((n) => n.id !== this.selectedId())) {
       this.selectedId.set(null);
     }
+    return removed;
   }
 
   private isCurrentScope(note: { workspaceId: string; boardId: string | null }): boolean {

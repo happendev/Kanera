@@ -649,22 +649,30 @@ export class BulkCardActionsMenuPopover {
   async archive(event: MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
-    await this.run("archived", "archive", async () => {
-      for (const [boardId, cardIds] of this.cardIdBatchesByBoard()) {
-        const result = await this.api.patch<{ cards: WireCard[] }>(`/boards/${boardId}/cards/bulk/archive`, { cardIds, archived: true });
+    // Snapshot the batches now: the selection is cleared when the menu closes, and Undo must restore
+    // exactly the cards that were archived, board by board.
+    const batches = this.cardIdBatchesByBoard();
+    const setArchived = async (archived: boolean) => {
+      for (const [boardId, cardIds] of batches) {
+        const result = await this.api.patch<{ cards: WireCard[] }>(`/boards/${boardId}/cards/bulk/archive`, { cardIds, archived });
         for (const card of result.cards ?? []) this.state.updateCard(card);
       }
-    });
+    };
+    await this.run("archived", "archive", () => setArchived(true), true, () => setArchived(false));
   }
 
-  private async run(action: string, icon: string, fn: () => Promise<void>, closeAfter = true) {
+  private async run(action: string, icon: string, fn: () => Promise<void>, closeAfter = true, undo?: () => Promise<void>) {
     if (this.saving()) return;
     this.saving.set(true);
     const count = this.cardIds().length;
     try {
       await fn();
       // Emit once after every board batch succeeds, never from realtime echoes.
-      if (count > 0) this.actionToasts.success(`${count} card${count === 1 ? "" : "s"} ${action}.`, icon);
+      if (count > 0) {
+        const message = `${count} card${count === 1 ? "" : "s"} ${action}.`;
+        if (undo) this.actionToasts.undoable({ message, icon, undo });
+        else this.actionToasts.success(message, icon);
+      }
       if (closeAfter) {
         this.done.emit();
         this.dismissed.emit();

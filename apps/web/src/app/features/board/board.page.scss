@@ -159,6 +159,15 @@
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
 
+  // Everything inside sits on --surface-overlay, not on the page. The page tokens (--surface-2,
+  // --border) are tuned against --surface and on dark are *darker* than the overlay fill, so tiles
+  // and buttons painted with them receded into the panel and its divider vanished. Inner chrome
+  // therefore uses a translucent lift over whatever the overlay is, plus the overlay's own
+  // separator hairline, which reads correctly in both themes.
+  --ov-tile-bg: var(--surface-subtle);
+  --ov-tile-bg-hover: color-mix(in srgb, var(--text) 8%, transparent);
+  --ov-tile-border: var(--overlay-separator);
+
   &.is-positioned { visibility: visible; }
   &.is-above { top: auto; bottom: var(--ap-bottom, auto); }
 }
@@ -183,26 +192,26 @@
   color: var(--text-muted) !important;
   font-size: 12px !important;
   font-weight: 700;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  background: var(--ov-tile-bg);
+  border: 1px solid var(--ov-tile-border);
   border-radius: 999px;
 
   &[data-risk="onTrack"] {
     color: var(--success) !important;
-    background: color-mix(in srgb, var(--success) 8%, var(--surface-2));
-    border-color: color-mix(in srgb, var(--success) 28%, var(--border));
+    background: color-mix(in srgb, var(--success) 10%, var(--surface-overlay));
+    border-color: color-mix(in srgb, var(--success) 32%, var(--ov-tile-border));
   }
 
   &[data-risk="needsAttention"] {
     color: var(--warning) !important;
-    background: color-mix(in srgb, var(--warning) 8%, var(--surface-2));
-    border-color: color-mix(in srgb, var(--warning) 28%, var(--border));
+    background: color-mix(in srgb, var(--warning) 10%, var(--surface-overlay));
+    border-color: color-mix(in srgb, var(--warning) 32%, var(--ov-tile-border));
   }
 
   &[data-risk="atRisk"] {
     color: var(--danger) !important;
-    background: color-mix(in srgb, var(--danger) 8%, var(--surface-2));
-    border-color: color-mix(in srgb, var(--danger) 28%, var(--border));
+    background: color-mix(in srgb, var(--danger) 10%, var(--surface-overlay));
+    border-color: color-mix(in srgb, var(--danger) 32%, var(--ov-tile-border));
   }
 }
 
@@ -225,17 +234,29 @@
     min-width: 0;
     padding: 9px 7px;
     text-align: center;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
+    color: var(--text);
+    background: var(--ov-tile-bg);
+    border: 1px solid var(--ov-tile-border);
     border-radius: var(--radius);
     cursor: pointer;
 
-    &:hover:not(:disabled), &.is-active {
-      background: var(--accent-soft);
-      border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+    &:hover:not(:disabled) {
+      background: var(--ov-tile-bg-hover);
+      border-color: var(--border-strong);
     }
 
-    &:disabled { cursor: default; opacity: .55; }
+    &.is-active {
+      background: color-mix(in srgb, var(--accent) 14%, var(--surface-overlay));
+      border-color: color-mix(in srgb, var(--accent) 45%, var(--ov-tile-border));
+      strong { color: var(--accent); }
+    }
+
+    // A zero count is still information, so the tile keeps its frame; only the copy fades. Fading the
+    // whole tile (border and fill included) turned it into an undifferentiated smudge on dark.
+    &:disabled {
+      cursor: default;
+      strong, span { opacity: .45; }
+    }
   }
   strong { font-size: 16px; }
   span { color: var(--text-muted); font-size: 10px; }
@@ -250,7 +271,8 @@
   padding: 8px 10px;
   color: var(--text-muted);
   font-size: 11px;
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-overlay));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--ov-tile-border));
   border-radius: var(--radius);
 }
 
@@ -277,7 +299,7 @@
   gap: 6px;
   margin-top: 12px;
   padding-top: 10px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--ov-tile-border);
 
   button {
     display: inline-flex;
@@ -286,14 +308,14 @@
     gap: 6px;
     height: 32px;
     color: var(--text);
-    background: var(--surface-2);
-    border: 1px solid var(--border);
+    background: var(--ov-tile-bg);
+    border: 1px solid var(--ov-tile-border);
     border-radius: var(--radius);
     font: inherit;
     font-size: 11px;
     cursor: pointer;
   }
-  button:hover { background: var(--surface-hover); border-color: var(--border-strong); }
+  button:hover { background: var(--ov-tile-bg-hover); border-color: var(--border-strong); }
 }
 
 // Used by both the export and the mirror menu. Placement comes from kAnchoredPanel, which clamps to

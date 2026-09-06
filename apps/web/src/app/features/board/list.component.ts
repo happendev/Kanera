@@ -579,10 +579,23 @@ export class ListComponent implements OnDestroy {
     if (!this.canEdit() || this.clearing()) return;
     this.clearing.set(true);
     try {
-      await this.api.patch(`/lists/${this.list().id}/cards/archive`, { boardId: this.boardId() });
-      this.actionToasts.success(`Cards in ${this.list().name} archived.`, "archive");
+      // The list route only returns a count, so remember which cards were visible here: Undo
+      // unarchives exactly those through the board's bulk endpoint rather than every archived card
+      // in the list (sibling boards share workspace lists).
+      const boardId = this.boardId();
+      const cardIds = this.cards().filter((card) => !card.archivedAt).map((card) => card.id);
+      const listName = this.list().name;
+      await this.api.patch(`/lists/${this.list().id}/cards/archive`, { boardId });
       this.menuOpen.set(false);
       this.confirmClear.set(false);
+      this.actionToasts.undoable({
+        message: `Cards in ${listName} archived.`,
+        icon: "archive",
+        undo: async () => {
+          if (cardIds.length === 0) return;
+          await this.api.patch(`/boards/${boardId}/cards/bulk/archive`, { cardIds, archived: false });
+        },
+      });
     } finally {
       this.clearing.set(false);
     }

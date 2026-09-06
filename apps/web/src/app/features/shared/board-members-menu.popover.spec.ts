@@ -5,6 +5,7 @@ import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { ApiClient } from "../../core/api/api.client";
 import { SocketService } from "../../core/realtime/socket.service";
 import { PanelStackService } from "../../shared/panel-stack.service";
+import { ActionToastService } from "../../shared/action-toast.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { BoardMembersMenu, type BoardAccessMemberRow } from "./board-members-menu.popover";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -335,26 +336,54 @@ describe("BoardMembersMenu", () => {
     const removed = vi.fn();
     fixture.componentInstance.memberRemoved.subscribe(removed);
     fixture.componentInstance.accessMembers.set([row]);
-    TestBed.inject(ConfirmService).open = vi.fn(() => Promise.resolve(true));
     api.delete.mockResolvedValue(undefined);
+    const toasts = TestBed.inject(ActionToastService);
 
     await fixture.componentInstance.removeMember(row);
 
+    // The row hides immediately but nothing is told until the undo window closes: the board page
+    // must not drop a member the user may still restore.
     expect(fixture.componentInstance.accessMembers()).toEqual([]);
+    expect(api.delete).not.toHaveBeenCalled();
+    expect(removed).not.toHaveBeenCalled();
+
+    toasts.flushPending();
+    await Promise.resolve();
+    expect(api.delete).toHaveBeenCalledWith("/boards/board-1/members/member");
     expect(removed).toHaveBeenCalledWith("member");
   });
 
-  it("stays mounted until removal finishes so the parent receives success", async () => {
+  it("puts the member back when the removal is undone", async () => {
     const row: BoardAccessMemberRow = { boardId: "board-1", userId: "member", clientId: "owner", displayName: "Member", email: "member@example.com", avatarUrl: null, role: "editor", pinned: false, addedAt: new Date() };
+    const fixture = TestBed.createComponent(BoardMembersMenu);
+    fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentInstance.accessMembers.set([row]);
+    const toasts = TestBed.inject(ActionToastService);
+
+    await fixture.componentInstance.removeMember(row);
+    toasts.messages()[0]!.action!.run();
+    await Promise.resolve();
+
+    expect(fixture.componentInstance.accessMembers()).toEqual([row]);
+    expect(api.delete).not.toHaveBeenCalled();
+    expect(toasts.messages()).toEqual([]);
+  });
+
+  it("stays mounted until leaving finishes so the parent receives success", async () => {
+    // Leaving is the one membership change that still confirms (an admin must re-add you), so it is
+    // the flow that exercises the popover's dismissal veto.
+    const row = member("member", "owner");
     let resolveConfirmation!: (confirmed: boolean) => void;
     let resolveDelete!: () => void;
     TestBed.inject(ConfirmService).open = vi.fn(() => new Promise<boolean>((resolve) => { resolveConfirmation = resolve }));
+    vi.spyOn(TestBed.inject(UnsavedWorkService), "confirmNavigation").mockReturnValue(true);
     api.delete.mockImplementation(() => new Promise<void>((resolve) => { resolveDelete = resolve }));
     api.get.mockImplementation((path: string) => Promise.resolve(path.endsWith("/member-candidates")
       ? { scope: "workspace", members: [] }
       : []));
     const fixture = TestBed.createComponent(BoardMembersMenu);
     fixture.componentRef.setInput("boardId", "board-1");
+    fixture.componentRef.setInput("currentUserId", "member");
     // Render, so the panel directive has registered itself as a stack layer and the outside clicks
     // below are actually arbitrated rather than hitting an empty stack.
     await fixture.whenStable();
@@ -377,7 +406,7 @@ describe("BoardMembersMenu", () => {
         stopPropagation: () => undefined,
       } as unknown as Event);
 
-    const removal = fixture.componentInstance.removeMember(row);
+    const removal = fixture.componentInstance.leaveMembership(row);
     outsideClick();
     expect(dismissed).not.toHaveBeenCalled();
     expect(stack.depth).toBe(1);

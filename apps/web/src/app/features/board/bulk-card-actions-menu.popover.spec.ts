@@ -95,6 +95,14 @@ describe("BulkCardActionsMenuPopover", () => {
     finish({ cards: [] });
     await pending;
     expect(toasts.messages().map((toast) => toast.message)).toEqual(["3 cards archived."]);
+    // Archive is undoable: the toast's action re-issues the bulk PATCH with archived: false.
+    expect(toasts.messages()[0]!.action?.label).toBe("Undo");
+    patch.mockResolvedValueOnce({ cards: [] }).mockResolvedValueOnce({ cards: [] });
+    toasts.messages()[0]!.action!.run();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(patch.mock.calls.slice(2).map(([, body]) => (body as { archived: boolean }).archived)).toEqual([false, false]);
+    expect(toasts.messages()).toEqual([]);
   });
 
   it("does not announce success when a later board batch fails", async () => {

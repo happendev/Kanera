@@ -424,20 +424,6 @@
     font-size: 14px;
   }
 }
-
-.delete-confirm {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-
-  span {
-    font-size: 12px;
-    color: var(--text-muted);
-    white-space: nowrap;
-  }
-}
-
 // The board's source label in its detail-section mirrors the "Move to list"
 // trigger so the two read as the same kind of control.
 .card-board-badge {
