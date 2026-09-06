@@ -3,15 +3,14 @@ import type { AutosaveState } from "./autosave-tracker";
 
 /**
  * Save-state chip for forms without a Save button. Renders nothing while idle so it only draws the
- * eye when something is happening. Pass `hint` to render the "saves automatically" sentence beside
- * it; hosts that already explain this in their section copy leave it off.
+ * eye when something is happening. It is the whole autosave contract: settings copy deliberately
+ * never says "saves automatically", the chip appearing after a change is what tells the user.
  */
 @Component({
   selector: "k-autosave-status",
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    @if (hint(); as hint) { <p class="hint">{{ hint }}</p> }
     <span class="chip" [attr.data-state]="state()" role="status" aria-live="polite">
       @switch (state()) {
         @case ('saving') { <i class="ti ti-loader-2 spin" aria-hidden="true"></i><span>Saving…</span> }
@@ -21,8 +20,7 @@ import type { AutosaveState } from "./autosave-tracker";
     </span>
   `,
   styles: `
-    :host { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 24px; }
-    .hint { margin: 0; color: var(--text-muted); font-size: 12.5px; }
+    :host { display: flex; align-items: center; justify-content: flex-end; min-height: 24px; }
     .chip {
       display: inline-flex; align-items: center; gap: 5px; margin-left: auto; min-height: 22px; padding: 0 8px;
       border-radius: 999px; color: var(--text-muted); font-size: 12px; font-weight: 500; white-space: nowrap;
@@ -39,5 +37,4 @@ import type { AutosaveState } from "./autosave-tracker";
 })
 export class AutosaveStatusComponent {
   readonly state = input.required<AutosaveState>();
-  readonly hint = input<string | null>(null);
 }

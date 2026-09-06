@@ -96,7 +96,7 @@
       }
       @if (editingId() === destination.id) {
       <div class="destination-editor">
-        <label><span>Name</span><input [value]="editingName()" (input)="editingName.set($any($event.target).value)" /></label>
+        <label><span>Name</span><input [value]="editingName()" (input)="editingName.set($any($event.target).value)" (blur)="saveEdit()" (keydown.enter)="saveEdit()" /></label>
         <fieldset class="post-when-types compact">
           <legend>Post when</legend>
           <div>
@@ -107,12 +107,12 @@
           </div>
         </fieldset>
         @if (editingEvents().has('priority_changed')) {
-        <label><span>Priority custom field</span><select [value]="editingPriorityFieldId()" (input)="editingPriorityFieldId.set($any($event.target).value)">
+        <label><span>Priority custom field</span><select [value]="editingPriorityFieldId()" (input)="setEditingPriorityField($any($event.target).value)">
             <option value="" [selected]="!editingPriorityFieldId()">Choose a field</option>
             @for (field of priorityFields(); track field.id) { <option [value]="field.id" [selected]="editingPriorityFieldId() === field.id">{{ field.name }}</option> }
           </select></label>
         }
-        <div class="editor-actions"><button class="primary sm" type="button" (click)="saveEdit(destination)">Save</button><button class="ghost sm" type="button" (click)="editingId.set(null)">Cancel</button></div>
+        <div class="editor-actions"><k-autosave-status [state]="editAutosave.state()" /><button class="secondary sm" type="button" (click)="finishEdit()">Done</button></div>
       </div>
       }
 

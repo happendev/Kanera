@@ -374,13 +374,18 @@ describe("AccountSettingsPage", () => {
     const component = fixture.componentInstance;
     const group = component.notificationWorkspaceGroups()[0]!;
     component.editWorkspaceRule(group);
-    component.setWorkspaceRuleChannel(group.workspaceId, "push", false);
-    component.setWorkspaceRuleTypeChannel(group.workspaceId, "cardAssigned", "email", false);
+    // Each change autosaves. The second change lands while the first PUT is in flight, so it is
+    // queued and the full draft is re-sent once the first settles.
+    const first = component.setWorkspaceRuleChannel(group.workspaceId, "push", false);
+    const second = component.setWorkspaceRuleTypeChannel(group.workspaceId, "cardAssigned", "email", false);
     fixture.detectChanges();
     expect(root.textContent).toContain("This rule applies to every board in the workspace");
-    await component.saveWorkspaceRule(group.workspaceId);
+    expect(root.textContent).toContain("Done");
+    expect(root.textContent).not.toContain("Save rule");
+    await Promise.all([first, second]);
+    await fixture.whenStable();
 
-    expect(api.put).toHaveBeenCalledWith("/notifications/settings/workspaces/workspace-1", {
+    expect(api.put).toHaveBeenLastCalledWith("/notifications/settings/workspaces/workspace-1", {
       paused: false,
       types: {
         cardAssigned: { email: false, push: false, ntfy: true, gotify: true, webhook: true },
@@ -498,13 +503,13 @@ describe("AccountSettingsPage", () => {
     await createPage();
     const component = fixture.componentInstance;
     const group = component.notificationWorkspaceGroups()[0]!;
-    component.setWorkspaceRuleTypeChannel(group.workspaceId, "cardAssigned", "email", false);
     api.put.mockRejectedValueOnce(new Error("Save failed"));
 
-    await component.saveWorkspaceRule(group.workspaceId);
+    await component.setWorkspaceRuleTypeChannel(group.workspaceId, "cardAssigned", "email", false);
 
     expect(component.workspaceRuleDraft(group.workspaceId).types.cardAssigned.email).toBe(true);
     expect(component.notificationSettingsError()).toBe("Save failed");
+    expect(component.workspaceRuleAutosave.state()).toBe("error");
   });
 
   it("renders org storage usage on the account plan tab", async () => {

@@ -13,6 +13,7 @@ import { ApiClient, ApiError } from "../../core/api/api.client";
 import type { AuthUser, OrgRole } from "../../core/auth/auth.service";
 import { AuthService } from "../../core/auth/auth.service";
 import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
+import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { BrowserPushService } from "../../core/notifications/browser-push.service";
 import { MentionSoundService } from "../../core/notifications/mention-sound.service";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
@@ -306,7 +307,8 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
 
   // Profile
   readonly displayName = signal("");
-  readonly nameSaving = signal(false);
+  /** The display name saves on blur/Enter; the chip fed by this is the only confirmation. */
+  readonly nameAutosave = new AutosaveTracker(inject(DestroyRef));
   readonly nameError = signal<string | null>(null);
   readonly cardKeysSaving = signal(false);
   readonly cardKeysError = signal<string | null>(null);
@@ -341,8 +343,40 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly notificationBoards = signal<NotificationBoardOption[]>([]);
   readonly workspaceRuleDrafts = signal(new Map<string, NotificationWorkspaceRule>());
   readonly workspaceRuleSaving = signal<string | null>(null);
+  /** Every matrix or pause change in the rule editor persists immediately; this chip sits in the editor heading. */
+  readonly workspaceRuleAutosave = new AutosaveTracker(inject(DestroyRef));
+  // Checkboxes stay enabled while a rule save is in flight so a burst of clicks is not dropped. A
+  // change that lands mid-save is queued here and the whole draft is re-sent once the current PUT
+  // settles, so the server always ends on the latest matrix.
+  private readonly workspaceRuleSaveQueued = new Set<string>();
   readonly workspaceRuleEditorId = signal<string | null>(null);
   readonly workspaceRulePickerOpen = signal(false);
+  private readonly unsavedWork = inject(UnsavedWorkService);
+  private readonly unsavedSettingsSource = Symbol("account-settings");
+  /**
+   * Settings autosave by default, so the only edits that can be lost are a display name typed but
+   * not yet blurred and personal-channel connection details, which keep an explicit Save because a
+   * half-typed URL or token must not be sent to the server. Both feed the shared unsaved-work
+   * service so route changes and tab closes prompt while they are pending.
+   */
+  private readonly settingsDraftDirty = computed(() => {
+    const user = this.user();
+    const nameDirty = Boolean(user) && this.displayName().trim() !== "" && this.displayName().trim() !== user?.displayName;
+    const channels = this.notificationSettings()?.personalChannels;
+    const channelDirty = Boolean(channels) && (
+      this.ntfyServerUrl().trim() !== (channels?.ntfy.serverUrl ?? "")
+      || this.ntfyTopic().trim() !== (channels?.ntfy.topic ?? "")
+      || this.ntfyToken() !== ""
+      || this.gotifyServerUrl().trim() !== (channels?.gotify.serverUrl ?? "")
+      || this.gotifyToken() !== ""
+      || this.personalWebhookUrl().trim() !== (channels?.webhook.url ?? "")
+    );
+    return nameDirty || channelDirty;
+  });
+  private readonly syncUnsavedSettings = effect((onCleanup) => {
+    this.unsavedWork.setDirty(this.unsavedSettingsSource, this.settingsDraftDirty());
+    onCleanup(() => this.unsavedWork.setDirty(this.unsavedSettingsSource, false));
+  });
   readonly availableWorkspaceNotificationChannels = computed(() => WORKSPACE_NOTIFICATION_CHANNELS.filter((channel) => this.workspaceChannelGloballyAvailable(channel.key)));
   readonly notificationWorkspaceGroups = computed<NotificationWorkspaceGroup[]>(() => {
     const settings = this.notificationSettings();
@@ -921,24 +955,30 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     this.workspaceRuleDrafts.set(drafts);
   }
 
-  setWorkspaceRuleChannel(workspaceId: string, channel: WorkspaceNotificationChannel, checked: boolean): void {
+  // The rule editor autosaves: each setter updates the draft and persists it. Opening the editor
+  // for a workspace on account defaults therefore creates its rule on the first change, which is
+  // the intended meaning of "customize".
+  setWorkspaceRuleChannel(workspaceId: string, channel: WorkspaceNotificationChannel, checked: boolean): Promise<void> {
     this.updateWorkspaceRule(workspaceId, (rule) => ({
       ...rule,
       types: Object.fromEntries(
         NOTIFICATION_ROWS.map((row) => [row.key, { ...rule.types[row.key], [channel]: checked }]),
       ) as NotificationWorkspaceRule["types"],
     }));
+    return this.saveWorkspaceRule(workspaceId);
   }
 
-  setWorkspaceRuleTypeChannel(workspaceId: string, type: NotificationSettingType, channel: WorkspaceNotificationChannel, checked: boolean): void {
+  setWorkspaceRuleTypeChannel(workspaceId: string, type: NotificationSettingType, channel: WorkspaceNotificationChannel, checked: boolean): Promise<void> {
     this.updateWorkspaceRule(workspaceId, (rule) => ({
       ...rule,
       types: { ...rule.types, [type]: { ...rule.types[type], [channel]: checked } },
     }));
+    return this.saveWorkspaceRule(workspaceId);
   }
 
-  setWorkspaceRulePaused(workspaceId: string, paused: boolean): void {
+  setWorkspaceRulePaused(workspaceId: string, paused: boolean): Promise<void> {
     this.updateWorkspaceRule(workspaceId, (rule) => ({ ...rule, paused }));
+    return this.saveWorkspaceRule(workspaceId);
   }
 
   workspaceChannelGloballyAvailable(channel: WorkspaceNotificationChannel): boolean {
@@ -966,9 +1006,13 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   }
 
   async saveWorkspaceRule(workspaceId: string): Promise<void> {
-    if (this.workspaceRuleSaving()) return;
+    if (this.workspaceRuleSaving()) {
+      this.workspaceRuleSaveQueued.add(workspaceId);
+      return;
+    }
     const draft = this.workspaceRuleDraft(workspaceId);
     this.workspaceRuleSaving.set(workspaceId);
+    this.workspaceRuleAutosave.markSaving();
     this.notificationSettingsError.set(null);
     try {
       const saved = await this.api.put<NotificationWorkspaceRule>(`/notifications/settings/workspaces/${workspaceId}`, {
@@ -979,16 +1023,23 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         ...settings,
         workspaceRules: [...settings.workspaceRules.filter((rule) => rule.workspaceId !== workspaceId), saved],
       } : settings);
-      this.updateWorkspaceRule(workspaceId, () => this.cloneWorkspaceRule(saved));
-      this.toasts.success("Workspace notification rule saved.");
-      this.workspaceRuleEditorId.set(null);
+      // A change queued mid-flight means the draft is already ahead of this response; syncing it
+      // from `saved` would silently drop that click before the queued save re-sends it.
+      if (!this.workspaceRuleSaveQueued.has(workspaceId)) this.updateWorkspaceRule(workspaceId, () => this.cloneWorkspaceRule(saved));
+      this.workspaceRuleAutosave.markSaved();
     } catch (err) {
       // The compact editor closes and reopens across workspaces, so failed optimistic form state is
-      // rolled back explicitly instead of silently reappearing in a later session.
+      // rolled back explicitly instead of silently reappearing in a later session. Queued changes
+      // are dropped with it, since re-sending the restored rule would be a no-op write.
+      this.workspaceRuleSaveQueued.delete(workspaceId);
       this.restoreWorkspaceRuleDraft(workspaceId);
+      this.workspaceRuleAutosave.markError();
       this.notificationSettingsError.set(extractErrorMessage(err));
     } finally {
       this.workspaceRuleSaving.set(null);
+      const queued = [...this.workspaceRuleSaveQueued];
+      this.workspaceRuleSaveQueued.clear();
+      for (const queuedId of queued) void this.saveWorkspaceRule(queuedId);
     }
   }
 
@@ -1480,20 +1531,22 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     return value.charAt(0).toUpperCase() + value.slice(1);
   }
 
-  async saveDisplayName() {
+  /** Runs on blur and Enter. An emptied field is restored rather than saved, since a blank name is invalid. */
+  async saveDisplayName(): Promise<void> {
     const next = this.displayName().trim();
     const current = this.user();
-    if (!current || !next || next === current.displayName) return;
-    this.nameSaving.set(true);
+    if (!current) return;
+    if (!next) {
+      this.displayName.set(current.displayName);
+      return;
+    }
+    if (next === current.displayName) return;
     this.nameError.set(null);
     try {
-      await this.api.patch("/auth/me", { displayName: next });
+      await this.nameAutosave.track(() => this.api.patch("/auth/me", { displayName: next }));
       this.auth.updateUser((u) => ({ ...u, displayName: next }));
-      this.toasts.success("Display name saved.");
     } catch (err) {
       this.nameError.set(extractErrorMessage(err));
-    } finally {
-      this.nameSaving.set(false);
     }
   }
 

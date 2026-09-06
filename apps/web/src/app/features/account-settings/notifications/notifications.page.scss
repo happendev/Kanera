@@ -359,9 +359,15 @@ button.workspace-rule-picker-row {
   line-height: 1.4;
 }
 
+.workspace-rule-editor-heading-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .workspace-rule-actions {
   display: grid;
-  grid-template-columns: auto 1fr auto auto;
+  grid-template-columns: auto 1fr auto;
   gap: 8px;
 
   .danger-text {
@@ -650,14 +656,10 @@ button.workspace-rule-picker-row {
   }
 
   .workspace-rule-actions {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
 
     > span {
       display: none;
-    }
-
-    .danger-text {
-      grid-column: 1 / -1;
     }
   }
 

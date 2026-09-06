@@ -4,6 +4,7 @@ import { disabled, form, FormField, minLength, required, submit, validate } from
 import { ApiClient, ApiError } from "../../../core/api/api.client";
 import { AuthService } from "../../../core/auth/auth.service";
 import { CookieConsentService } from "../../../core/consent/cookie-consent.service";
+import { AutosaveStatusComponent } from "../../../shared/autosave-status.component";
 import { AvatarComponent } from "../../../shared/avatar.component";
 import { DocsLinkComponent } from "../../../shared/docs-link.component";
 import { mfaQrDataUrl } from "../../../shared/mfa-qr";
@@ -13,7 +14,7 @@ import { AccountSettingsPage } from "../account-settings.page";
 @Component({
   selector: "k-account-settings-profile",
   standalone: true,
-  imports: [AvatarComponent, DocsLinkComponent, FormField],
+  imports: [AutosaveStatusComponent, AvatarComponent, DocsLinkComponent, FormField],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./profile.page.html",
   styleUrl: "./profile.page.scss",

@@ -48,13 +48,15 @@
       </div>
 
       <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-id"></i><span>Display name</span></h3>
-        <p class="settings-section-help">Shown to teammates across the workspace.</p>
+        <div class="section-heading-row">
+          <div>
+            <h3 class="settings-section-title"><i class="ti ti-id"></i><span>Display name</span></h3>
+            <p class="settings-section-help">Shown to teammates across the workspace.</p>
+          </div>
+          <k-autosave-status [state]="settings.nameAutosave.state()" />
+        </div>
         <div class="board-form">
-          <input name="displayName" placeholder="Your name" [value]="settings.displayName()" (input)="settings.displayName.set($any($event.target).value)" [disabled]="settings.nameSaving()" class="grow" />
-          <button class="sm" type="button" (click)="settings.saveDisplayName()" [disabled]="settings.nameSaving() || !settings.displayName().trim() || settings.displayName().trim() === settings.user()?.displayName">
-            {{ settings.nameSaving() ? "Saving..." : "Save" }}
-          </button>
+          <input name="displayName" placeholder="Your name" [value]="settings.displayName()" (input)="settings.displayName.set($any($event.target).value)" (blur)="settings.saveDisplayName()" (keydown.enter)="settings.saveDisplayName()" class="grow" />
         </div>
         @if (settings.nameError()) { <p class="form-error">{{ settings.nameError() }}</p> }
       </div>

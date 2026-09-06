@@ -1,6 +1,9 @@
 import { EmptyStateComponent } from "../../../shared/empty-state.component";
 import type { OnInit } from "@angular/core";
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, signal } from "@angular/core";
+import { UnsavedWorkService } from "../../../core/browser/unsaved-work.service";
+import { AutosaveStatusComponent } from "../../../shared/autosave-status.component";
+import { AutosaveTracker } from "../../../shared/autosave-tracker";
 import { ApiClient, ApiError } from "../../../core/api/api.client";
 import { ConfirmService } from "../../../shared/confirm.service";
 import { DocsLinkComponent } from "../../../shared/docs-link.component";
@@ -45,7 +48,7 @@ function extractErrorMessage(error: unknown): string {
 @Component({
   selector: "k-workspace-settings-integrations",
   standalone: true,
-  imports: [EmptyStateComponent, DocsLinkComponent, TooltipDirective],
+  imports: [AutosaveStatusComponent, EmptyStateComponent, DocsLinkComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./integrations.page.html",
   styleUrl: "./integrations.page.scss",
@@ -90,6 +93,28 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
   readonly editingName = signal("");
   readonly editingEvents = signal<ReadonlySet<ChatEvent>>(new Set());
   readonly editingPriorityFieldId = signal("");
+  /** The destination editor autosaves; the chip fed by this is its only confirmation. */
+  readonly editAutosave = new AutosaveTracker(inject(DestroyRef));
+  private readonly unsavedWork = inject(UnsavedWorkService);
+  private readonly unsavedEditSource = Symbol("chat-destination-edit");
+  /**
+   * The editor draft differs from the saved row only while a change could not be sent: an empty
+   * name, no events, or "priority changed" without a mapped field. Those are the edits a route
+   * change or tab close would lose, so they mark unsaved work until the draft becomes valid.
+   */
+  private readonly editDirty = computed(() => {
+    const id = this.editingId();
+    const row = id ? this.destinations().find((destination) => destination.id === id) : undefined;
+    if (!row) return false;
+    const events = [...this.editingEvents()].sort();
+    return this.editingName().trim() !== row.name
+      || events.join() !== [...row.eventTypes].sort().join()
+      || (this.editingPriorityFieldId() || null) !== row.priorityFieldId;
+  });
+  private readonly syncUnsavedEdit = effect((onCleanup) => {
+    this.unsavedWork.setDirty(this.unsavedEditSource, this.editDirty());
+    onCleanup(() => this.unsavedWork.setDirty(this.unsavedEditSource, false));
+  });
   readonly reconnectingId = signal<string | null>(null);
   readonly reconnectWebhookUrl = signal("");
   readonly reconnectBotToken = signal("");
@@ -127,6 +152,12 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
     if (event === "priority_changed" && !checked) {
       (editing ? this.editingPriorityFieldId : this.priorityFieldId).set("");
     }
+    if (editing) void this.saveEdit();
+  }
+
+  setEditingPriorityField(fieldId: string): void {
+    this.editingPriorityFieldId.set(fieldId);
+    void this.saveEdit();
   }
 
   async create(event: Event): Promise<void> {
@@ -177,22 +208,51 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
     this.editingName.set(destination.name);
     this.editingEvents.set(new Set(destination.eventTypes));
     this.editingPriorityFieldId.set(destination.priorityFieldId ?? "");
+    this.editAutosave.reset();
     this.reconnectingId.set(null);
     this.clearMessages();
   }
 
-  async saveEdit(destination: ChatDestinationRow): Promise<void> {
-    if (!this.editingName().trim() || this.editingEvents().size === 0) return;
+  /**
+   * Autosave for the open destination editor: runs on name blur and on every event or field change.
+   * An invalid draft is kept on screen with a hint instead of being sent; the next valid change
+   * sends the whole draft, so nothing is lost as long as the editor stays open.
+   */
+  async saveEdit(): Promise<void> {
+    const id = this.editingId();
+    const row = id ? this.destinations().find((destination) => destination.id === id) : undefined;
+    if (!row || !this.editDirty()) return;
+    if (!this.editingName().trim()) {
+      this.error.set("Give the destination a name.");
+      return;
+    }
+    if (this.editingEvents().size === 0) {
+      this.error.set("Choose at least one event to post.");
+      return;
+    }
     if (this.editingEvents().has("priority_changed") && !this.editingPriorityFieldId()) {
       this.error.set("Choose a Priority custom field.");
       return;
     }
-    const saved = await this.patch(destination.id, {
+    // A concurrent PATCH (a fast second click) reuses busyId; let it finish and the caller's
+    // next change re-sends the complete draft.
+    if (this.busyId() === row.id) return;
+    this.editAutosave.markSaving();
+    const saved = await this.patch(row.id, {
       name: this.editingName().trim(),
       eventTypes: [...this.editingEvents()],
       priorityFieldId: this.editingPriorityFieldId() || null,
     });
-    if (saved) this.editingId.set(null);
+    if (saved) this.editAutosave.markSaved();
+    else this.editAutosave.markError();
+  }
+
+  /** Closes the editor. A draft that could not be saved is dropped, but only after the user confirms. */
+  finishEdit(): void {
+    if (!this.unsavedWork.confirm(this.editDirty())) return;
+    this.editingId.set(null);
+    this.editAutosave.reset();
+    this.clearMessages();
   }
 
   startReconnect(destination: ChatDestinationRow): void {
