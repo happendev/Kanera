@@ -369,7 +369,7 @@ describe("WorkspaceSettingsPage", () => {
         },
         { provide: Router, useValue: { navigate: vi.fn() } },
         { provide: UpgradePromptService, useValue: { open: upgradePromptOpen } },
-        { provide: SocketService, useValue: { connect: vi.fn(() => socket.asSocket()), joinWorkspace: vi.fn(() => vi.fn()), displayedOnline: signal(true), reconnecting: signal(false), accessRefreshing: signal(false) } },
+        { provide: SocketService, useValue: { activeWorkspaceIds: signal(new Set<string>()), connect: vi.fn(() => socket.asSocket()), joinWorkspace: vi.fn(() => vi.fn()), displayedOnline: signal(true), reconnecting: signal(false), accessRefreshing: signal(false) } },
         { provide: WorkspaceService, useValue: { setActiveAccentColor: vi.fn(), updateAccentColor: vi.fn() } },
       ],
     }).compileComponents();

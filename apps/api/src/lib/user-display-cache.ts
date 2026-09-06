@@ -2,6 +2,7 @@ import { users, workspaces } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import { db } from "../db.js";
 import { env } from "../env.js";
+import { ExpiringCache } from "./expiring-cache.js";
 
 export interface UserDisplayMetadata {
   displayName: string;
@@ -9,7 +10,7 @@ export interface UserDisplayMetadata {
   clientId: string;
 }
 
-const userDisplayCache = new Map<string, { metadata: UserDisplayMetadata; expiresAt: number }>();
+const userDisplayCache = new ExpiringCache<UserDisplayMetadata>(10_000);
 
 function cacheKey(workspaceId: string, userId: string): string {
   return `${workspaceId}:${userId}`;
@@ -17,22 +18,12 @@ function cacheKey(workspaceId: string, userId: string): string {
 
 export function getCachedUserDisplay(workspaceId: string, userId: string): UserDisplayMetadata | null {
   if (env.USER_DISPLAY_CACHE_TTL_MS === 0) return null;
-  const key = cacheKey(workspaceId, userId);
-  const cached = userDisplayCache.get(key);
-  if (!cached) return null;
-  if (cached.expiresAt <= Date.now()) {
-    userDisplayCache.delete(key);
-    return null;
-  }
-  return cached.metadata;
+  return userDisplayCache.get(cacheKey(workspaceId, userId)) ?? null;
 }
 
 export function setCachedUserDisplay(workspaceId: string, userId: string, metadata: UserDisplayMetadata): void {
   if (env.USER_DISPLAY_CACHE_TTL_MS === 0) return;
-  userDisplayCache.set(cacheKey(workspaceId, userId), {
-    metadata,
-    expiresAt: Date.now() + env.USER_DISPLAY_CACHE_TTL_MS,
-  });
+  userDisplayCache.set(cacheKey(workspaceId, userId), metadata, Date.now() + env.USER_DISPLAY_CACHE_TTL_MS);
 }
 
 export async function getUserDisplay(workspaceId: string, userId: string): Promise<UserDisplayMetadata | null> {

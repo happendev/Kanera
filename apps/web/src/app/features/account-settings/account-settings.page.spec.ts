@@ -273,7 +273,7 @@ describe("AccountSettingsPage", () => {
             permissionLabel: vi.fn(() => ""),
           },
         },
-        { provide: SocketService, useValue: { connect: vi.fn(() => socket.asSocket()), joinWorkspace: vi.fn(() => vi.fn()), disconnect: socketDisconnect } },
+        { provide: SocketService, useValue: { activeWorkspaceIds: signal(new Set<string>()), connect: vi.fn(() => socket.asSocket()), joinWorkspace: vi.fn(() => vi.fn()), disconnect: socketDisconnect } },
         { provide: ThemeService, useValue: { theme: signal("dark"), setTheme: vi.fn() } },
       ],
     }).compileComponents();

@@ -7,24 +7,13 @@
     <div class="home-hero">
       <div class="hero-scatter" aria-hidden="true">
         @for (item of scatter; track $index) {
-        <span
-          class="hero-scatter-item"
-          [class]="'hero-scatter-item is-' + item.kind + ' is-' + item.accent"
-          [style.left.%]="item.x"
-          [style.top.%]="item.y"
-          [style.--scatter-size.px]="item.size"
-          [style.--scatter-rotate.deg]="item.rotate ?? 0"
-          [style.--scatter-delay.s]="-(($index * 1.7) % 9)"
-        >
+        <span class="hero-scatter-item" [class]="'hero-scatter-item is-' + item.kind + ' is-' + item.accent" [style.left.%]="item.x" [style.top.%]="item.y" [style.--scatter-size.px]="item.size"
+          [style.--scatter-rotate.deg]="item.rotate ?? 0" [style.--scatter-delay.s]="-(($index * 1.7) % 9)">
           @if (item.kind === 'check') { <i class="ti ti-check"></i> }
         </span>
         }
       </div>
-      <k-page-header
-        variant="page"
-        [title]="greeting() + ', ' + displayName()"
-        [subtitle]="today() | date: 'EEEE, d MMMM'"
-      />
+      <k-page-header variant="page" [title]="greeting() + ', ' + displayName()" [subtitle]="today() | date: 'EEEE, d MMMM'" />
     </div>
 
     @if (accountStatusBanner(); as account) {
@@ -39,28 +28,28 @@
           {{ account.description }}
         </p>
         @if (account.kind === 'trial' && proUsage(); as usage) {
-          @if (usage.capabilityCount > 0) {
-          <div class="account-pro-value">
-            <p>Your team has used <strong>{{ usage.capabilityCount }}</strong> Pro capabilit{{ usage.capabilityCount === 1 ? 'y' : 'ies' }} this month</p>
-            <span>{{ proUsageDetail() }}</span>
-          </div>
-          }
+        @if (usage.capabilityCount > 0) {
+        <div class="account-pro-value">
+          <p>Your team has used <strong>{{ usage.capabilityCount }}</strong> Pro capabilit{{ usage.capabilityCount === 1 ? 'y' : 'ies' }} this month</p>
+          <span>{{ proUsageDetail() }}</span>
+        </div>
+        }
         }
         @if (account.kind === 'trial' && downgradePreview(); as preview) {
-          @if (preview.members.length || preview.boards.length || preview.features.length) {
-          <div class="downgrade-preview" role="note">
-            <strong>If you stay on Free, these specific items change</strong>
-            @if (preview.members.length) {
-            <span><b>Members being suspended:</b> {{ downgradeMemberNames() }}</span>
-            }
-            @if (preview.boards.length) {
-            <span><b>Boards being archived:</b> {{ downgradeBoardNames() }}</span>
-            }
-            @if (preview.features.length) {
-            <span><b>Features:</b> {{ preview.features.join('; ') }}</span>
-            }
-          </div>
+        @if (preview.members.length || preview.boards.length || preview.features.length) {
+        <div class="downgrade-preview" role="note">
+          <strong>If you stay on Free, these specific items change</strong>
+          @if (preview.members.length) {
+          <span><b>Members being suspended:</b> {{ downgradeMemberNames() }}</span>
           }
+          @if (preview.boards.length) {
+          <span><b>Boards being archived:</b> {{ downgradeBoardNames() }}</span>
+          }
+          @if (preview.features.length) {
+          <span><b>Features:</b> {{ preview.features.join('; ') }}</span>
+          }
+        </div>
+        }
         }
       </div>
       <a class="account-status-action" routerLink="/settings/account-plan">
@@ -144,7 +133,7 @@
         <h2>Welcome to Kanera</h2>
         <p>
           @if (hasNoWorkspace()) {
-          Choose how you want to start. You can add the other kind later.
+          Choose how you want to start.
           } @else {
           Your workspace is ready. Add a board to start working.
           }
@@ -266,42 +255,12 @@
     </section>
     }
     <section class="focus-grid" aria-label="Focus">
-      <k-stat-tile
-        label="Overdue"
-        icon="alert-triangle"
-        [value]="state.overdueTotal()"
-        [tone]="state.overdueTotal() > 0 ? 'danger' : 'neutral'"
-        [interactive]="state.overdueTotal() > 0"
-        [pressable]="true"
-        [active]="focusFilter() === 'overdue'"
-        (activated)="toggleFocus('overdue')"
-      />
-      <k-stat-tile
-        label="Due today"
-        icon="calendar-due"
-        [value]="state.dueTodayTotal()"
-        [interactive]="state.dueTodayTotal() > 0"
-        [pressable]="true"
-        [active]="focusFilter() === 'today'"
-        (activated)="toggleFocus('today')"
-      />
-      <k-stat-tile
-        label="Next 7 days"
-        icon="calendar-week"
-        [value]="state.dueWithin7DaysTotal()"
-        [interactive]="state.dueWithin7DaysTotal() > 0"
-        [pressable]="true"
-        [active]="focusFilter() === 'upcoming'"
-        (activated)="toggleFocus('upcoming')"
-      />
-      <k-stat-tile
-        label="Done this week"
-        icon="circle-check"
-        [value]="state.completedThisWeek()"
-        [tone]="state.completedThisWeek() > 0 ? 'success' : 'neutral'"
-        [delta]="state.weekDelta()"
-        [interactive]="false"
-      />
+      <k-stat-tile label="Overdue" icon="alert-triangle" [value]="state.overdueTotal()" [tone]="state.overdueTotal() > 0 ? 'danger' : 'neutral'" [interactive]="state.overdueTotal() > 0" [pressable]="true"
+        [active]="focusFilter() === 'overdue'" (activated)="toggleFocus('overdue')" />
+      <k-stat-tile label="Due today" icon="calendar-due" [value]="state.dueTodayTotal()" [interactive]="state.dueTodayTotal() > 0" [pressable]="true" [active]="focusFilter() === 'today'" (activated)="toggleFocus('today')" />
+      <k-stat-tile label="Next 7 days" icon="calendar-week" [value]="state.dueWithin7DaysTotal()" [interactive]="state.dueWithin7DaysTotal() > 0" [pressable]="true" [active]="focusFilter() === 'upcoming'"
+        (activated)="toggleFocus('upcoming')" />
+      <k-stat-tile label="Done this week" icon="circle-check" [value]="state.completedThisWeek()" [tone]="state.completedThisWeek() > 0 ? 'success' : 'neutral'" [delta]="state.weekDelta()" [interactive]="false" />
     </section>
 
     <!-- Directly under the focus tiles and above recent boards: "what do I do next" outranks both
@@ -314,27 +273,14 @@
         <a class="agenda-see-all" routerLink="/my-cards">See all <i class="ti ti-arrow-narrow-right"></i></a>
       </h2>
       @if (priorityError(); as message) {
-        <p class="priorities-error"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+      <p class="priorities-error"><i class="ti ti-alert-circle"></i>{{ message }}</p>
       }
       <!-- The same rows the shell drawer and the My Cards dock render, so the top of the queue reads
            identically wherever it is seen — and reordering here is the same gesture there. Capped at
            five: this is the head of the queue, and the block says how many more there are. -->
       <div class="agenda-panel priorities-panel">
-        <k-priority-queue
-          [priorities]="myPriorities.queue()"
-          [canDrag]="true"
-          [visibleLimit]="5"
-          [compact]="true"
-          [showAdd]="false"
-          [showDragHint]="false"
-          [allowQuickComplete]="true"
-          dropListId="home-priorities-drop"
-          dragLaneId="home-priorities"
-          (reordered)="onPriorityReordered($event)"
-          (removed)="onPriorityRemoved($event)"
-          (completed)="onPriorityCompleted($event)"
-          (cardOpened)="openPriorityCard($event)"
-        />
+        <k-priority-queue [priorities]="myPriorities.queue()" [canDrag]="true" [visibleLimit]="5" [compact]="true" [showAdd]="false" [showDragHint]="false" [allowQuickComplete]="true" dropListId="home-priorities-drop"
+          dragLaneId="home-priorities" (reordered)="onPriorityReordered($event)" (removed)="onPriorityRemoved($event)" (completed)="onPriorityCompleted($event)" (cardOpened)="openPriorityCard($event)" />
       </div>
     </section>
     } @else if (prioritiesOffline()) {
@@ -361,10 +307,7 @@
       <div class="recent-strip">
         @for (board of recentBoards(); track board.id) {
         <button type="button" class="recent-chip" (click)="openBoard(board.id)">
-          <i
-            class="ti ti-{{ board.icon || 'layout-kanban' }}"
-            [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"
-          ></i>
+          <i class="ti ti-{{ board.icon || 'layout-kanban' }}" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
           <span>{{ board.name }}</span>
         </button>
         }
@@ -392,13 +335,7 @@
       } @else {
       <div class="agenda-panel">
         @for (group of visibleGroups(); track group.bucket) {
-        <k-agenda-group
-          [bucket]="group.bucket"
-          [label]="group.label"
-          [items]="group.items"
-          [count]="group.count"
-          (itemActivated)="openItem($event)"
-        />
+        <k-agenda-group [bucket]="group.bucket" [label]="group.label" [items]="group.items" [count]="group.count" (itemActivated)="openItem($event)" />
         } @empty {
         <!-- A filter can outlive the work it matched (a realtime refresh empties the bucket), so
              say so and offer the way out rather than reading as "all clear". -->
@@ -418,11 +355,7 @@
         <div class="progress-figure">
           <strong>{{ state.completedThisWeek() }}</strong>
           <span class="progress-caption">card{{ state.completedThisWeek() === 1 ? '' : 's' }} completed in the last 7 days</span>
-          <span
-            class="progress-delta"
-            [class.is-up]="state.weekDelta() > 0"
-            [class.is-level]="state.weekDelta() === 0"
-          >
+          <span class="progress-delta" [class.is-up]="state.weekDelta() > 0" [class.is-level]="state.weekDelta() === 0">
             <i class="ti ti-{{ state.weekDelta() > 0 ? 'trending-up' : state.weekDelta() < 0 ? 'trending-down' : 'minus' }}"></i>
             @if (state.weekDelta() === 0) {
             Level with last week
@@ -432,11 +365,7 @@
           </span>
         </div>
         <div class="progress-strip">
-          <k-activity-strip
-            heading="Completed"
-            [series]="trendSeries()"
-            [windowDays]="visibleTrendDays()"
-          />
+          <k-activity-strip heading="Completed" [series]="trendSeries()" [windowDays]="visibleTrendDays()" />
           @if (state.trend().byDay.length === 0) {
           <p class="progress-empty">No cards completed in the last {{ visibleTrendDays() }} days.</p>
           }

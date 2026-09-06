@@ -1,5 +1,6 @@
 import type { FastifyBaseLogger } from "fastify";
 import { env, type Env } from "../env.js";
+import { ExpiringCache } from "./expiring-cache.js";
 
 // slow_request is intentionally not an alert type: request latency is alerted on in aggregate by
 // Grafana (p95 rule) and the per-request detail lives in the "slow request" log line (shipped to Loki).
@@ -39,7 +40,7 @@ interface SendOpsAlertOptions {
   now?: () => number;
 }
 
-const throttleUntilByKey = new Map<string, number>();
+const throttleUntilByKey = new ExpiringCache<true>(10_000);
 let testDefaults: SendOpsAlertOptions | null = null;
 
 // The destination is a single Slack-compatible incoming webhook. Slack accepts the payload natively,
@@ -143,9 +144,8 @@ function shouldThrottle(alert: OpsAlert, throttleMs: number, now: number): boole
   if (throttleMs === 0) return false;
   // One throttle per alert so the same alert does not spam the channel.
   const key = alert.throttleKey ?? defaultThrottleKey(alert);
-  const throttledUntil = throttleUntilByKey.get(key) ?? 0;
-  if (throttledUntil > now) return true;
-  throttleUntilByKey.set(key, now + throttleMs);
+  if (throttleUntilByKey.get(key, now)) return true;
+  throttleUntilByKey.set(key, true, now + throttleMs, now);
   return false;
 }
 

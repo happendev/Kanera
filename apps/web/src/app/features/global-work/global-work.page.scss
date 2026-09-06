@@ -249,9 +249,8 @@ k-page-toolbar.priority-toolbar {
   min-width: 0;
 }
 
-// An empty board result belongs in the collection's whole canvas, not in a full-width strip at its
-// top. The frame owns the centring while the empty state keeps the same constrained dashed panel,
-// icon and typography as the other page-level empty states in the system.
+// An empty board result sits at the top of the collection canvas and keeps the same constrained
+// dashed panel, icon and typography as the other page-level empty states in the system.
 .work-page.has-empty-collection {
   display: flex;
   flex-direction: column;
@@ -280,7 +279,7 @@ k-page-toolbar.priority-toolbar {
   }
 
   .work-empty-state {
-    align-self: center;
+    align-self: start;
     justify-self: center;
     width: min(440px, 100%);
   }

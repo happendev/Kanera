@@ -43,6 +43,7 @@ class ApiClientStub {
 }
 
 class SocketServiceStub {
+  readonly activeWorkspaceIds = signal(new Set<string>());
   readonly displayedOnline = signal(true);
   readonly socket = { on: vi.fn(), off: vi.fn() };
   connect() {

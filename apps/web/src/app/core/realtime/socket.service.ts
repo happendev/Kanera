@@ -23,6 +23,9 @@ export class SocketService {
   private readonly socketFactory = inject(SOCKET_IO);
   private socket: AppSocket | null = null;
   private readonly workspaceRoomRefs = new Map<string, number>();
+  private readonly workspaceRoomIds = signal<ReadonlySet<string>>(new Set());
+  // Presence snapshots belong to the room lifetime, which can outlive an individual avatar.
+  readonly activeWorkspaceIds = this.workspaceRoomIds.asReadonly();
   private readonly joinedWorkspaceRooms = new Set<string>();
   private readonly boardRoomRefs = new Map<string, number>();
   private readonly joinedBoardRooms = new Set<string>();
@@ -149,6 +152,7 @@ export class SocketService {
     const currentCount = this.workspaceRoomRefs.get(workspaceId) ?? 0;
     if (currentCount === 0) {
       this.workspaceRoomRefs.set(workspaceId, 1);
+      this.workspaceRoomIds.set(new Set(this.workspaceRoomRefs.keys()));
       this.emitWorkspaceJoin(this.connect(), workspaceId);
     } else {
       this.workspaceRoomRefs.set(workspaceId, currentCount + 1);
@@ -165,6 +169,7 @@ export class SocketService {
         return;
       }
       this.workspaceRoomRefs.delete(workspaceId);
+      this.workspaceRoomIds.set(new Set(this.workspaceRoomRefs.keys()));
       this.joinedWorkspaceRooms.delete(workspaceId);
       this.socket?.emit(CLIENT_EVENTS.WORKSPACE_LEAVE, workspaceId);
     };
@@ -281,6 +286,7 @@ export class SocketService {
     this.clearReconnectWatchdog();
     this.socket = null;
     this.workspaceRoomRefs.clear();
+    this.workspaceRoomIds.set(new Set());
     this.joinedWorkspaceRooms.clear();
     this.boardRoomRefs.clear();
     this.joinedBoardRooms.clear();

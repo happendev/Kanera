@@ -1,13 +1,13 @@
 import type { GitHubInstalledRepository } from "@kanera/shared/schema";
 import { createPrivateKey, sign } from "node:crypto";
 import { env } from "../env.js";
+import { ExpiringCache } from "./expiring-cache.js";
 
 const GITHUB_API = "https://api.github.com";
 const GITHUB_API_VERSION = "2026-03-10";
 const TOKEN_REFRESH_SKEW_MS = 60_000; // 60 seconds
 
-type TokenCacheEntry = { token: string; expiresAtMs: number };
-const installationTokenCache = new Map<string, TokenCacheEntry>();
+const installationTokenCache = new ExpiringCache<string>(1_000);
 
 export type GitHubAppCredentials = {
   appId: string;
@@ -92,7 +92,7 @@ export async function createInstallationAccessToken(installationId: string, cred
 
   const cacheKey = `${credentials.appId}:${installationId}`;
   const cached = installationTokenCache.get(cacheKey);
-  if (cached && cached.expiresAtMs - TOKEN_REFRESH_SKEW_MS > Date.now()) return cached.token;
+  if (cached) return cached;
 
   const jwt = createGitHubAppJwt(credentials);
   const response = await githubJson<{ token: string; expires_at: string }>(
@@ -102,10 +102,7 @@ export async function createInstallationAccessToken(installationId: string, cred
   );
   if (!response?.token) return null;
 
-  installationTokenCache.set(cacheKey, {
-    token: response.token,
-    expiresAtMs: new Date(response.expires_at).getTime(),
-  });
+  installationTokenCache.set(cacheKey, response.token, new Date(response.expires_at).getTime() - TOKEN_REFRESH_SKEW_MS);
   return response.token;
 }
 

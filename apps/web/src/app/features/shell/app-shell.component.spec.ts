@@ -332,6 +332,7 @@ describe("AppShellComponent board search", () => {
         {
           provide: SocketService,
           useValue: {
+            activeWorkspaceIds: signal(new Set<string>()),
             connect: vi.fn(() => socket.asSocket()),
             joinWorkspace,
             joinBoard,

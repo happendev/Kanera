@@ -290,6 +290,7 @@ describe("NotificationsPanelComponent", () => {
           // the shared presence listeners, which the block's actor stack and any user-activity row
           // both do.
           useValue: {
+            activeWorkspaceIds: signal(new Set<string>()),
             online: signal(true),
             pauseForOrganisationSwitch,
             resumeAfterOrganisationSwitch,

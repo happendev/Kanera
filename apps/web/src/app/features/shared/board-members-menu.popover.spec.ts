@@ -1,4 +1,4 @@
-import { provideZonelessChangeDetection } from "@angular/core";
+import { provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import type { WireBoardMemberUser } from "@kanera/shared/events";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
@@ -33,7 +33,7 @@ describe("BoardMembersMenu", () => {
         provideZonelessChangeDetection(),
         { provide: ApiClient, useValue: api },
         { provide: ConfirmService, useValue: { open: vi.fn() } },
-        { provide: SocketService, useValue: { connect: () => socket, joinBoard, joinWorkspace: () => vi.fn() } },
+        { provide: SocketService, useValue: { activeWorkspaceIds: signal(new Set<string>()), connect: () => socket, joinBoard, joinWorkspace: () => vi.fn() } },
       ],
     });
   });
