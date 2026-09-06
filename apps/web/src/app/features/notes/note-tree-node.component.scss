@@ -192,7 +192,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface-overlay);
-  box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
+  box-shadow: var(--shadow-lg);
 
   button {
     display: flex;

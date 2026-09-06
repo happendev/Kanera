@@ -870,6 +870,16 @@ k-support-session-banner {
   }
 }
 
+// Up next carries due pressure on its badge: red says "something queued is already late", which is
+// the one fact worth surfacing before the drawer is opened. Deliberately not the accent, which in the
+// sidebar means unread.
+.utility-badge.is-danger {
+  background: var(--danger);
+  // Same ink rule as the accent badge: dark mode's danger red is light, so the readable ink on it is
+  // dark, and hard-coded white washed out.
+  color: var(--accent-fg);
+}
+
 .utility-badge {
   position: absolute;
   top: -6px;
@@ -1033,7 +1043,7 @@ k-support-session-banner {
   background: var(--surface-overlay);
   border: 1px solid var(--overlay-border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-lg, 0 12px 24px rgba(0, 0, 0, 0.18));
+  box-shadow: var(--shadow-lg);
   padding: 6px;
   display: flex;
   flex-direction: column;
@@ -1305,7 +1315,7 @@ k-support-session-banner {
   background: var(--surface-overlay);
   border: 1px solid var(--overlay-border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-lg, 0 12px 24px rgba(0, 0, 0, 0.18));
+  box-shadow: var(--shadow-lg);
 }
 
 .shell-main {

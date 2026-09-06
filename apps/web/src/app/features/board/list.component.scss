@@ -280,9 +280,9 @@ h3 {
   left: var(--ap-left, 0);
   z-index: var(--z-panel, 300);
   background: var(--surface-overlay);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--overlay-border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-lg, 0 4px 24px rgba(0, 0, 0, 0.35));
+  box-shadow: var(--shadow-lg);
   min-width: 160px;
   // A max-width is required now, not cosmetic. While the menu was `position: absolute` it shrank to fit
   // inside .list-header's box, so ~250px was an implicit ceiling; as a `fixed` panel the available width
@@ -357,9 +357,9 @@ h3 {
   left: var(--ap-left, 0);
   z-index: var(--z-panel, 300);
   background: var(--surface-overlay);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--overlay-border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-lg, 0 4px 24px rgba(0, 0, 0, 0.35));
+  box-shadow: var(--shadow-lg);
   min-width: 160px;
   max-width: 260px;
   max-height: var(--ap-max-height, 240px);
@@ -400,7 +400,7 @@ h3 {
   border: none;
   cursor: pointer;
   background: var(--danger);
-  color: #fff;
+  color: var(--accent-fg);
   transition: opacity var(--motion-fast);
 
   &:hover:not(:disabled),

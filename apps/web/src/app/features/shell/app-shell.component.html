@@ -28,9 +28,9 @@
       <i class="ti ti-notes"></i>
     </button>
     }
-    <button type="button" class="utility-btn" [class.has-badge]="myPriorities.totalCount() > 0" (click)="togglePanel('priorities')" [attr.aria-label]="'Up next' + (myPriorities.totalCount() > 0 ? ' (' + myPriorities.totalCount() + ' cards)' : '')" [attr.aria-expanded]="prioritiesPanel()?.open() ?? false" kTooltip="Up next · U">
+    <button type="button" class="utility-btn" [class.has-badge]="myPriorities.totalCount() > 0" (click)="togglePanel('priorities')" [attr.aria-label]="'Up next' + (myPriorities.totalCount() > 0 ? ' (' + myPriorities.totalCount() + ' cards' + (myPriorities.overdueCount() > 0 ? ', ' + myPriorities.overdueCount() + ' overdue' : '') + ')' : '')" [attr.aria-expanded]="prioritiesPanel()?.open() ?? false" [kTooltip]="myPriorities.overdueCount() > 0 ? 'Up next · ' + myPriorities.overdueCount() + ' overdue · U' : 'Up next · U'">
       <i class="ti ti-list-numbers"></i>
-      @if (myPriorities.totalCount() > 0) { <span class="utility-badge">{{ myPriorities.totalCount() > 99 ? '99+' : myPriorities.totalCount() }}</span> }
+      @if (myPriorities.totalCount() > 0) { <span class="utility-badge" [class.is-danger]="myPriorities.overdueCount() > 0">{{ myPriorities.totalCount() > 99 ? '99+' : myPriorities.totalCount() }}</span> }
     </button>
     <button type="button" class="utility-btn" [class.has-badge]="notifications.unreadCount() > 0" [class.is-alert]="notifications.unreadCount() > 0" (click)="togglePanel('notifications')" [attr.aria-label]="'Notifications' + (notifications.unreadCount() > 0 ? ' (' + notifications.unreadCount() + ' unread)' : '')" [attr.aria-expanded]="notificationsPanel()?.open() ?? false" kTooltip="Notifications · N">
       <i [class]="notifications.unreadCount() > 0 ? 'ti ti-bell-ringing' : 'ti ti-bell'"></i>

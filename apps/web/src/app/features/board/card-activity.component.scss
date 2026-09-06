@@ -112,7 +112,7 @@
   background: var(--surface-overlay);
   border: 1px solid var(--overlay-border);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-popover, 0 10px 30px rgb(0 0 0 / 16%));
+  box-shadow: var(--shadow-lg);
 }
 
 .comment-search-field {
@@ -653,7 +653,7 @@ button.xs {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
-  box-shadow: var(--shadow-lg, 0 22px 60px rgb(0 0 0 / 32%));
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
 

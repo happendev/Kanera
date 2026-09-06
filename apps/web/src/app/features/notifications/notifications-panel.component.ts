@@ -15,6 +15,7 @@ import { NotificationsService } from "../../core/notifications/notifications.ser
 import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../shared/avatar.component";
+import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { attachmentIconClass } from "../../shared/attachment-icons";
 import { BodyScrollLockService } from "../../shared/body-scroll-lock.service";
 import { CardKeyDisplayService } from "../../shared/card-key-display.service";
@@ -47,7 +48,7 @@ const SEARCH_DEBOUNCE_MS = 200;
 @Component({
   selector: "k-notifications-panel",
   standalone: true,
-  imports: [CdkTrapFocus, NgOptimizedImage, AvatarComponent, DescriptionViewerComponent, CardActionsMenuPopover, SearchFieldComponent, SegmentedComponent, TooltipDirective],
+  imports: [CdkTrapFocus, NgOptimizedImage, AvatarComponent, EmptyStateComponent, DescriptionViewerComponent, CardActionsMenuPopover, SearchFieldComponent, SegmentedComponent, TooltipDirective],
   providers: [BoardState],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./notifications-panel.component.html",

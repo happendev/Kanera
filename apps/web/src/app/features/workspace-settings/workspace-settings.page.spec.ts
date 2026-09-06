@@ -1096,7 +1096,7 @@ describe("WorkspaceSettingsPage", () => {
     await flushAsyncEffects();
 
     const button = fixture.nativeElement.querySelector(".guest-form button[type='submit']") as HTMLButtonElement | null;
-    const note = fixture.nativeElement.querySelector(".guest-info-note") as HTMLElement | null;
+    const note = fixture.nativeElement.querySelector(".settings-info-note") as HTMLElement | null;
     expect(button?.textContent).toContain("Add guest access");
     expect(note?.textContent).toContain("first board is free");
     expect(note?.textContent).toContain("second board uses one purchased seat");

@@ -977,7 +977,7 @@ a.ghost {
 
 button.destructive {
   background: var(--danger);
-  color: #fff;
+  color: var(--accent-fg);
 
   &:hover:not(:disabled) {
     background: var(--danger);
@@ -1325,6 +1325,41 @@ k-app-shell {
   color: var(--text-muted);
   font-size: var(--text-xs);
   font-weight: 600;
+}
+
+// ─── Settings info note ──────────────────────────────────────────────────────
+// The boxed one-sentence explainer at the top of a settings tab. One recipe for every tab: it used
+// to exist as four near-copies (boxed here, a bare muted line there), so tabs read as different
+// designs and sat at different distances from the form beneath them.
+.settings-info-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: var(--text-base);
+  line-height: 1.45;
+
+  > i {
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: var(--accent);
+    font-size: 15px;
+  }
+
+  > span {
+    min-width: 0;
+  }
+}
+
+// Inside a gapped grid the gap is the spacing; a margin on top of it double-spaces the first row.
+.automations-page > .settings-info-note,
+.chat-integrations-page > .settings-info-note {
+  margin-bottom: 0;
 }
 
 .k-menu-separator {

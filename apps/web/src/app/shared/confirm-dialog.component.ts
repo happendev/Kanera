@@ -96,7 +96,7 @@ import { Subject } from "rxjs";
     button.danger {
       background: var(--danger);
       border-color: var(--danger);
-      color: #fff;
+      color: var(--accent-fg);
       &:hover { opacity: 0.9; }
     }
 

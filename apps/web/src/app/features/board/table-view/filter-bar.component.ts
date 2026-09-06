@@ -551,9 +551,9 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       gap: 6px;
       padding: 8px;
       background: var(--surface-overlay);
-      border: 1px solid var(--border-strong);
+      border: 1px solid var(--overlay-border);
       border-radius: var(--radius-lg);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+      box-shadow: var(--shadow-lg);
     }
 
     .fb-panel.is-positioned { visibility: visible; }

@@ -266,24 +266,6 @@
   justify-content: flex-end;
 }
 
-.guest-info-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 0 0 12px;
-  padding: 0 2px;
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.45;
-
-  i {
-    color: var(--accent);
-    font-size: 16px;
-    margin-top: 1px;
-    flex-shrink: 0;
-  }
-}
-
 .guest-form {
   display: grid;
   grid-template-columns: minmax(160px, 0.9fr) minmax(220px, 1.2fr) 120px auto;
@@ -586,28 +568,6 @@ button.list-rename-trigger {
 
   &:focus-visible {
     box-shadow: 0 0 0 2px var(--ring);
-  }
-}
-
-.settings-info-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 0;
-  margin-top: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.45;
-
-  i {
-    margin-top: 1px;
-    color: var(--accent);
-    font-size: 15px;
-    flex-shrink: 0;
   }
 }
 

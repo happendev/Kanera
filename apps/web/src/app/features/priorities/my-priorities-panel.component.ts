@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, HostListener, inj
 import { Router, RouterLink } from "@angular/router";
 import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
 import { BodyScrollLockService } from "../../shared/body-scroll-lock.service";
+import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { PriorityQueueComponent } from "../../shared/priority-queue/priority-queue.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { isDueSoon, isOverdue } from "../board/due-date.util";
@@ -25,7 +26,7 @@ const CLOSE_ANIMATION_MS = 110;
 @Component({
   selector: "k-my-priorities-panel",
   standalone: true,
-  imports: [CdkTrapFocus, PriorityQueueComponent, RouterLink, TooltipDirective],
+  imports: [CdkTrapFocus, EmptyStateComponent, PriorityQueueComponent, RouterLink, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./my-priorities-panel.component.html",
   styleUrl: "./my-priorities-panel.component.scss",
@@ -141,11 +142,15 @@ export class MyPrioritiesPanelComponent {
     });
   }
 
+  /** Where focus came from when the drawer opened, so closing hands it back rather than to <body>. */
+  private returnFocusTo: HTMLElement | null = null;
+
   toggle(): void {
     if (this.open()) {
       this.close();
       return;
     }
+    this.returnFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     this.actionError.set(null);
     this.closing.set(false);
     // A computed cannot observe wall-clock time. Refresh this dependency explicitly on each open so
@@ -163,6 +168,14 @@ export class MyPrioritiesPanelComponent {
     setTimeout(() => {
       this.open.set(false);
       this.closing.set(false);
+      // The focus trap leaves focus on a now-removed node, so the browser drops it on <body> and the
+      // next Tab starts from the top of the page. Hand it back to the opener when nothing else has
+      // taken it in the meantime (opening a card, for instance, moves focus on purpose).
+      const target = this.returnFocusTo;
+      this.returnFocusTo = null;
+      if (target?.isConnected && (document.activeElement === document.body || document.activeElement === null)) {
+        target.focus({ preventScroll: true });
+      }
     }, CLOSE_ANIMATION_MS);
   }
 

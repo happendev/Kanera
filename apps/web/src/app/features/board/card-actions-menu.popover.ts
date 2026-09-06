@@ -197,7 +197,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
       border: none;
       cursor: pointer;
       background: var(--danger);
-      color: #fff;
+      color: var(--accent-fg);
       transition: opacity 0.1s;
       flex: 0 0 auto;
 

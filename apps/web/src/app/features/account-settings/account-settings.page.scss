@@ -502,28 +502,6 @@
   }
 }
 
-.settings-info-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin: 0;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.45;
-
-
-  i {
-    margin-top: 1px;
-    color: var(--accent);
-    font-size: 15px;
-    flex-shrink: 0;
-  }
-}
-
 .board-form.static {
   background: var(--surface-2);
   align-items: center;

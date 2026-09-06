@@ -17,6 +17,8 @@ import type { WireScratchpadNote } from "@kanera/shared/events";
 import type { AnchoredPanelPlacement } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { ConfirmService } from "../../shared/confirm.service";
+import { EmptyStateComponent } from "../../shared/empty-state.component";
+import { MenuDirective } from "../../shared/menu.directive";
 import { LogoComponent } from "../../shared/logo.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { DescriptionEditorComponent } from "../board/description-editor.component";
@@ -68,7 +70,7 @@ export function openScratchpadPopoutWindow(url: string): Window | null {
 @Component({
   selector: "k-scratchpad-panel",
   standalone: true,
-  imports: [AnchoredPanelDirective, DescriptionEditorComponent, LogoComponent, TooltipDirective],
+  imports: [AnchoredPanelDirective, DescriptionEditorComponent, EmptyStateComponent, LogoComponent, MenuDirective, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./scratchpad-panel.component.html",
   styleUrl: "./scratchpad-panel.component.scss",

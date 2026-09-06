@@ -125,7 +125,7 @@ const POPULAR_ICONS = [
       background: var(--surface-overlay);
       border: 1px solid var(--overlay-border);
       border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-sm);
+      box-shadow: var(--shadow-lg);
       overflow: hidden;
     }
 

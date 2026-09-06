@@ -2162,7 +2162,7 @@ button.member-avatar {
   background: var(--surface-overlay);
   border: 1px solid var(--overlay-border);
   border-radius: var(--radius);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-lg);
   padding: 4px;
   display: flex;
   flex-direction: column;
@@ -2264,7 +2264,7 @@ button.member-avatar {
   background: var(--surface-overlay);
   border: 1px solid var(--overlay-border);
   border-radius: var(--radius);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-lg);
   padding: 4px;
   display: flex;
   flex-direction: column;

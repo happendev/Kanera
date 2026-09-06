@@ -34,11 +34,8 @@
     </button>
   </header>
 
-  <p class="drawer-explainer">
-    <i class="ti ti-info-circle"></i>
-    <span>Your personal priority queue for assigned cards. The first card is what you plan to work on next.</span>
-  </p>
-
+  <!-- No standing explainer above the list: the empty states below carry the "what is this" copy, which
+       is the only moment it is news. Once cards are queued, the queue explains itself. -->
   @if (actionError(); as message) {
     <p class="drawer-error"><i class="ti ti-alert-circle"></i>{{ message }}</p>
   }
@@ -73,26 +70,13 @@
     @if (!online()) {
       <!-- Never a cached order. A stale sequence reads as an instruction, and the reader has no way
            to tell it is last week's — so offline shows nothing rather than something wrong. -->
-      <div class="drawer-empty">
-        <div class="empty-icon">
-          <i class="ti ti-wifi-off"></i>
-        </div>
-        <span class="empty-title">Up next unavailable</span>
-        <span class="empty-text">You’re offline. Up next is hidden until you reconnect, so you never follow a stale order.</span>
-      </div>
+      <k-empty-state class="drawer-empty" plain icon="wifi-off" title="Up next unavailable" text="You’re offline. Up next is hidden until you reconnect, so you never follow a stale order." />
     } @else if (showInitialLoading()) {
-      <div class="drawer-empty">
-        <i class="ti ti-loader-2 kanera-spin state-loader" aria-label="Loading Up next"></i>
-      </div>
+      <div class="k-loading drawer-empty"><i class="ti ti-loader-2 kanera-spin" aria-label="Loading Up next"></i></div>
     } @else if (loadError(); as message) {
-      <div class="drawer-empty">
-        <div class="empty-icon">
-          <i class="ti ti-alert-circle"></i>
-        </div>
-        <span class="empty-title">Couldn’t load Up next</span>
-        <span class="empty-text">{{ message }}</span>
+      <k-empty-state class="drawer-empty" plain icon="alert-circle" title="Couldn’t load Up next" [text]="message">
         <button type="button" class="ghost empty-all-btn" (click)="retry()">Try again</button>
-      </div>
+      </k-empty-state>
     } @else if (showRows()) {
       <!-- A drop-list id of its own: the drawer can be open over the My Cards dock, and CDK resolves
            connected lists by id, so two mounted surfaces must never share one. -->
@@ -115,13 +99,10 @@
     } @else if (showEmptyWithWork()) {
       <!-- Assigned work but nothing sequenced: the one empty state worth teaching, since the queue
            is only useful once something is in it. -->
-      <div class="drawer-empty">
-        <div class="empty-icon">
-          <i class="ti ti-list-numbers"></i>
-        </div>
-        <span class="empty-title">Nothing in Up next yet</span>
-        <span class="empty-text">Pick the cards you want to do first, in the order you want to do them.</span>
+      <k-empty-state class="drawer-empty" plain icon="list-numbers" title="Nothing in Up next yet" text="Your personal queue for assigned cards. The first card is what you plan to work on next. Pick the cards you want to do first, in the order you want to do them.">
         <div class="state-actions">
+          <!-- In this state the shared queue renders nothing but its "Add card" footer, which is exactly
+               the affordance this state exists to offer. -->
           <k-priority-queue
             class="empty-add"
             [priorities]="queue()"
@@ -133,18 +114,12 @@
             dragLaneId="my-priorities-drawer"
             (added)="onAdded($event)"
           />
-          <a class="empty-all-btn" routerLink="/my-cards" (click)="close()">Open My Cards</a>
         </div>
-      </div>
+      </k-empty-state>
     } @else {
-      <div class="drawer-empty">
-        <div class="empty-icon">
-          <i class="ti ti-list-numbers"></i>
-        </div>
-        <span class="empty-title">Nothing in Up next</span>
-        <span class="empty-text">Cards assigned to you can be queued here to say what gets done first.</span>
+      <k-empty-state class="drawer-empty" plain icon="list-numbers" title="Nothing in Up next" text="Your personal queue for assigned cards. The first card is what you plan to work on next.">
         <a class="empty-all-btn" routerLink="/my-cards" (click)="close()">Open My Cards</a>
-      </div>
+      </k-empty-state>
     }
   </div>
 </aside>

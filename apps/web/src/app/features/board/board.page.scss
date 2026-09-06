@@ -155,9 +155,9 @@
   visibility: hidden;
   color: var(--text);
   background: var(--surface-overlay);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--overlay-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg, 0 12px 36px rgb(0 0 0 / 22%));
+  box-shadow: var(--shadow-lg);
 
   &.is-positioned { visibility: visible; }
   &.is-above { top: auto; bottom: var(--ap-bottom, auto); }
@@ -335,7 +335,7 @@
   background: var(--surface-overlay);
   border: 1px solid var(--overlay-border);
   border-radius: var(--radius);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 14%);
+  box-shadow: var(--shadow-lg);
   visibility: hidden;
 
   &.is-positioned { visibility: visible; }

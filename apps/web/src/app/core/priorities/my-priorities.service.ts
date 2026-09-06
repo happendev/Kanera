@@ -1,4 +1,5 @@
 import { computed, effect, inject, Injectable, signal } from "@angular/core";
+import { isOverdue } from "../../features/board/due-date.util";
 import { cardPath } from "@kanera/shared/card-links";
 import type {
   WorkCatalog,
@@ -76,6 +77,23 @@ export class MyPrioritiesService {
   readonly totalCount = computed(() => this.queue()?.totalCount ?? 0);
   readonly canReorder = computed(() => this.queue()?.canReorder ?? false);
   readonly atCapacity = computed(() => this.totalCount() >= MAX_UP_NEXT_ENTRIES);
+
+  /**
+   * Queued cards already past their due date. Drives the red tint on the sidebar badge so due
+   * pressure is visible without opening the drawer. Evaluated against the clock at the moment the
+   * queue last changed: a computed cannot watch wall time, and the badge already repaints on every
+   * queue mutation and realtime echo, which is as often as it needs to.
+   */
+  readonly overdueCount = computed(() => {
+    const now = new Date();
+    let overdue = 0;
+    for (const item of this.items()) {
+      const card = item.card;
+      if (!card || card.completedAt || card.archivedAt) continue;
+      if (isOverdue(card.dueDateLocalDate ?? null, card.dueDateSlot ?? null, card.dueDateTimezone ?? null, now)) overdue += 1;
+    }
+    return overdue;
+  });
   /** Single source of truth for "is this card ranked?" wherever the viewer's own queue is read. */
   readonly rankedCardIds = computed(
     () => new Set(this.items().flatMap((item) => (item.card ? [item.card.id] : []))),

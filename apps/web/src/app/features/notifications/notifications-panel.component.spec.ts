@@ -385,7 +385,7 @@ describe("NotificationsPanelComponent", () => {
 
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector(".kanera-spin")).toBeNull();
-    expect(host.querySelector(".empty-title")?.textContent?.trim()).toBe("Notifications unavailable");
+    expect(host.querySelector(".es-title")?.textContent?.trim()).toBe("Notifications unavailable");
     expect(host.textContent).toContain("You're offline. Reconnect to refresh notifications.");
   });
 
@@ -398,7 +398,7 @@ describe("NotificationsPanelComponent", () => {
 
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector(".notif-item")).not.toBeNull();
-    expect(host.querySelector(".empty-title")?.textContent?.trim()).not.toBe("Notifications unavailable");
+    expect(host.querySelector(".es-title")?.textContent?.trim()).not.toBe("Notifications unavailable");
   });
 
   it("hides redundant organisation context for a user with one organisation", () => {
@@ -455,7 +455,7 @@ describe("NotificationsPanelComponent", () => {
     fixture.detectChanges();
 
     const host = fixture.nativeElement as HTMLElement;
-    expect(host.querySelector(".empty-title")?.textContent?.trim()).toBe("Refreshing unread notifications");
+    expect(host.querySelector(".es-title")?.textContent?.trim()).toBe("Refreshing unread notifications");
     expect(host.textContent).not.toContain("You're all caught up");
 
     service.loadFirstPage.mockClear();

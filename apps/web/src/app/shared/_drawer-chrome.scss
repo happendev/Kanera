@@ -34,16 +34,6 @@
   border-bottom: 1px solid var(--border);
 }
 
-@mixin drawer-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 64px 32px;
-  text-align: center;
-}
-
 @mixin drawer-close-btn {
   width: 30px;
   height: 30px;

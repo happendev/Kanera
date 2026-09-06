@@ -704,7 +704,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-md, 8px);
       background: var(--surface-overlay);
-      box-shadow: 0 14px 36px rgba(15, 23, 42, 0.16);
+      box-shadow: var(--shadow-lg);
       padding: 4px;
       overscroll-behavior: contain;
     }
@@ -715,7 +715,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-md, 8px);
       background: var(--surface-overlay);
-      box-shadow: 0 14px 36px rgba(15, 23, 42, 0.16);
+      box-shadow: var(--shadow-lg);
       padding: 6px;
     }
 

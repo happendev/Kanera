@@ -322,19 +322,21 @@
   -->
   @if (menu(); as open) {
   <div
-    class="tab-menu"
+    class="tab-menu k-menu"
     role="menu"
+    kMenu
     kAnchoredPanel
     [apAnchor]="open.anchor"
     [apPlacement]="menuPlacement"
     (apDismissed)="closeMenu()"
   >
-    <button type="button" role="menuitem" (click)="startRename(open.note.id, $event)">
+    <button type="button" class="k-menu-item" role="menuitem" (click)="startRename(open.note.id, $event)">
       <i class="ti ti-pencil"></i><span>Rename</span>
     </button>
     <!-- The keyboard- and touch-reachable path to reordering; dragging is never the only way. -->
     <button
       type="button"
+      class="k-menu-item"
       role="menuitem"
       [disabled]="!canMove(open.note.id, -1)"
       (click)="moveNoteBy(open.note.id, -1, $event)"
@@ -343,13 +345,14 @@
     </button>
     <button
       type="button"
+      class="k-menu-item"
       role="menuitem"
       [disabled]="!canMove(open.note.id, 1)"
       (click)="moveNoteBy(open.note.id, 1, $event)"
     >
       <i class="ti ti-arrow-right"></i><span>Move right</span>
     </button>
-    <button type="button" role="menuitem" class="danger" (click)="removeNote(open.note, $event)">
+    <button type="button" class="k-menu-item danger" role="menuitem" (click)="removeNote(open.note, $event)">
       <i class="ti ti-trash"></i><span>Delete</span>
     </button>
   </div>
@@ -363,31 +366,20 @@
     [attr.aria-label]="activeNote() && renamingId() === activeNote()!.id ? tabLabel(activeNote()!) : null"
   >
     @if (showInitialLoading()) {
-    <div class="panel-state">
-      <i class="ti ti-loader-2 kanera-spin state-loader" aria-hidden="true"></i>
+    <div class="panel-state k-loading">
+      <i class="ti ti-loader-2 kanera-spin" aria-label="Loading scratchpad"></i>
     </div>
     } @else if (loadError()) {
     <div class="panel-state">
-      <div class="state-icon">
-        <i class="ti ti-cloud-off" aria-hidden="true"></i>
-      </div>
-      <span class="state-title">Scratchpad unavailable</span>
-      <span class="state-hint">{{ loadError() }}</span>
-      <button type="button" class="state-action" (click)="scratchpad.refresh()">Try again</button>
+      <k-empty-state plain icon="cloud-off" title="Scratchpad unavailable" [text]="loadError()">
+        <button type="button" class="sm" (click)="scratchpad.refresh()">Try again</button>
+      </k-empty-state>
     </div>
     } @else if (showEmptyState()) {
     <div class="panel-state">
-      <div class="state-icon">
-        <i class="ti ti-notes" aria-hidden="true"></i>
-      </div>
-      <span class="state-title">Your scratchpad is empty</span>
-      <span class="state-hint">
-        A private space for quick notes, todo lists and pasted screenshots. Only you can see it, and it
-        saves as you type.
-      </span>
-      <button type="button" class="state-action" (click)="addNote()">
-        <i class="ti ti-plus"></i><span>New page</span>
-      </button>
+      <k-empty-state plain icon="notes" title="Your scratchpad is empty" text="A private space for quick notes, todo lists and pasted screenshots. Only you can see it, and it saves as you type.">
+        <button type="button" class="sm" (click)="addNote()"><i class="ti ti-plus"></i><span>New page</span></button>
+      </k-empty-state>
     </div>
     } @else if (activeNote(); as note) {
     <!--

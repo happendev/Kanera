@@ -1,6 +1,4 @@
 .chat-integrations-page { display: grid; gap: 1rem; }
-.integration-info-note { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 12px; padding: 0 2px; color: var(--text-muted); font-size: 13px; line-height: 1.45; }
-.integration-info-note i { flex-shrink: 0; margin-top: 1px; color: var(--accent); font-size: 16px; }
 .chat-destination-form, .chat-destination-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
 .chat-destination-form { display: grid; gap: 1rem; padding: 1rem; }
 .provider-picker { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .5rem; }

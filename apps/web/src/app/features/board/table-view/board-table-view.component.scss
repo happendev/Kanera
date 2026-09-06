@@ -244,9 +244,9 @@
   overscroll-behavior: contain;
   color: var(--text);
   background: var(--surface-overlay);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--overlay-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg, 0 8px 32px rgb(0 0 0 / 25%));
+  box-shadow: var(--shadow-lg);
 
   &.is-positioned {
     visibility: visible;

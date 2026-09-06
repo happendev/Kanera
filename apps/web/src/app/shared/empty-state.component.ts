@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input } from "@angular/core";
+import { booleanAttribute, ChangeDetectionStrategy, Component, input } from "@angular/core";
 
 /**
  * The one empty state. Every list, table group, panel and settings tab that can be empty renders
@@ -12,7 +12,7 @@ import { ChangeDetectionStrategy, Component, input } from "@angular/core";
   selector: "k-empty-state",
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { "[class.is-sm]": "size() === 'sm'", "[class.is-plain]": "plain()", role: "status" },
+  host: { "[class.is-sm]": "size() === 'sm'", "[class.is-plain]": "plain()", "[class.is-success]": "tone() === 'success'", role: "status" },
   template: `
     <i class="es-icon ti" [class]="'es-icon ti ti-' + icon()" aria-hidden="true"></i>
     <p class="es-title">{{ title() }}</p>
@@ -58,6 +58,13 @@ import { ChangeDetectionStrategy, Component, input } from "@angular/core";
       font-size: 18px;
     }
 
+    /* The one empty state that earns colour is "nothing left to do", and it reads as completion
+       (--success) rather than as the workspace accent, which inside a drawer means unread. */
+    :host.is-success .es-icon {
+      background: color-mix(in srgb, var(--success) 10%, transparent);
+      color: var(--success);
+    }
+
     :host.is-sm .es-icon {
       width: 28px;
       height: 28px;
@@ -90,5 +97,6 @@ export class EmptyStateComponent {
   readonly title = input.required<string>();
   readonly text = input<string | null>(null);
   readonly size = input<"sm" | "md">("md");
-  readonly plain = input(false);
+  readonly plain = input(false, { transform: booleanAttribute });
+  readonly tone = input<"neutral" | "success">("neutral");
 }

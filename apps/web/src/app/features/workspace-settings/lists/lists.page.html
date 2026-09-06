@@ -1,14 +1,14 @@
+      <div class="settings-info-note">
+        <i class="ti ti-info-circle"></i>
+        <span>
+          @if (settings.isStandalone()) {
+          These lists define this board's workflow.
+          } @else {
+          Lists are shared across every board in this workspace - all boards use the same set of lists.
+          }
+        </span>
+      </div>
       <k-docs-link class="spaced" path="lists" label="Learn more about lists" />
-<div class="settings-info-note">
-  <i class="ti ti-info-circle"></i>
-  <span>
-    @if (settings.isStandalone()) {
-    These lists define this board's workflow.
-    } @else {
-    Lists are shared across every board in this workspace - all boards use the same set of lists.
-    }
-  </span>
-</div>
       <form class="board-form single-line-capture" (submit)="settings.addList($event)">
         <k-icon-picker [value]="settings.newListIcon() ?? 'list'" (valueChange)="settings.newListIcon.set($event)" />
         <k-color-picker [value]="settings.newListColor()" (valueChange)="settings.newListColor.set($event)" />

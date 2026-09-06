@@ -412,7 +412,7 @@ const BULK_MENU_WIDTH = 232;
 
     .bcam-confirm-yes {
       background: var(--danger);
-      color: #fff;
+      color: var(--accent-fg);
 
       &:hover:not(:disabled),
       &:active:not(:disabled) {
