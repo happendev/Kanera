@@ -8,7 +8,7 @@ import type { AuthUser } from "../../core/auth/auth.service";
 import { AuthService } from "../../core/auth/auth.service";
 import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { SocketService } from "../../core/realtime/socket.service";
-import { ActionToastService } from "../../shared/action-toast.service";
+import { ToastService } from "../../shared/toast.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { DescriptionEditorComponent } from "../board/description-editor.component";
 import { ImageLightboxService } from "../board/image-lightbox.service";
@@ -482,7 +482,7 @@ describe("NoteEditorComponent locking", () => {
     fixture.componentRef.setInput("note", createNote({ editingUserId: null, editingExpiresAt: null }));
     fixture.componentInstance.attachments.set([createAttachment()]);
     fixture.detectChanges();
-    const toasts = TestBed.inject(ActionToastService);
+    const toasts = TestBed.inject(ToastService);
 
     await fixture.componentInstance.confirmDeleteAttachment("attachment-1", "spec.txt");
     fixture.detectChanges();

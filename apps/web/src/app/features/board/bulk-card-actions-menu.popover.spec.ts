@@ -1,4 +1,4 @@
-import { ActionToastService } from "../../shared/action-toast.service";
+import { ToastService } from "../../shared/toast.service";
 import { provideZonelessChangeDetection } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import type { WireBoardMemberUser, WireCardSummary } from "@kanera/shared/events";
@@ -88,7 +88,7 @@ describe("BulkCardActionsMenuPopover", () => {
     let finish!: (value: { cards: never[] }) => void;
     const patch = vi.fn().mockResolvedValueOnce({ cards: [] }).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
     const { fixture } = await createComponent({ patch });
-    const toasts = TestBed.inject(ActionToastService);
+    const toasts = TestBed.inject(ToastService);
     const pending = fixture.componentInstance.archive(new MouseEvent("click"));
     await Promise.resolve();
     expect(toasts.messages()).toEqual([]);
@@ -109,7 +109,7 @@ describe("BulkCardActionsMenuPopover", () => {
     const patch = vi.fn().mockResolvedValueOnce({ cards: [] }).mockRejectedValueOnce(new Error("Failed"));
     const { fixture } = await createComponent({ patch });
     await expect(fixture.componentInstance.archive(new MouseEvent("click"))).rejects.toThrow("Failed");
-    expect(TestBed.inject(ActionToastService).messages()).toEqual([]);
+    expect(TestBed.inject(ToastService).messages()).toEqual([]);
   });
 
   it("reads selection state and applies results through the host card store", async () => {

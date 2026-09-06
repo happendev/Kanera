@@ -21,7 +21,7 @@ import type { BacklinkSummary, NoteBacklinksResponse } from "@kanera/shared/dto"
 import type { ColorToken } from "@kanera/shared/colors";
 import { AuthService } from "../../core/auth/auth.service";
 import { ApiClient, ApiError } from "../../core/api/api.client";
-import { ActionToastService } from "../../shared/action-toast.service";
+import { ToastService } from "../../shared/toast.service";
 import { EditorDrafts } from "../../core/browser/editor-drafts";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { MediaDownloadService } from "../../core/media/media-download.service";
@@ -314,7 +314,7 @@ export class NoteEditorComponent implements OnDestroy {
   private readonly unsavedWork = inject(UnsavedWorkService);
   private readonly mediaDownloads = inject(MediaDownloadService);
   private readonly unsavedDraftSource = Symbol("note-draft");
-  private readonly actionToasts = inject(ActionToastService);
+  private readonly toasts = inject(ToastService);
   private readonly sockets = inject(SocketService);
   readonly imageLightbox = inject(ImageLightboxService);
 
@@ -1034,7 +1034,7 @@ export class NoteEditorComponent implements OnDestroy {
       rows.some((item) => item.id === attachmentId) ? rows : [...rows.slice(0, index), row, ...rows.slice(index)]);
     // Undo instead of confirm: the row hides now and the DELETE waits for the toast (see card-detail).
     this.attachments.update((rows) => rows.filter((item) => item.id !== attachmentId));
-    this.actionToasts.undoable({
+    this.toasts.undoable({
       message: `"${fileName}" deleted.`,
       icon: "trash",
       undo: restore,
@@ -1044,7 +1044,7 @@ export class NoteEditorComponent implements OnDestroy {
           await this.notesState.fetchOne(n.id).catch(() => undefined);
         } catch {
           restore();
-          this.actionToasts.info(`Couldn't delete "${fileName}".`, "alert-triangle");
+          this.toasts.info(`Couldn't delete "${fileName}".`, "alert-triangle");
         }
       },
     });

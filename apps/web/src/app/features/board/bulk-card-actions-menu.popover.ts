@@ -1,4 +1,4 @@
-import { ActionToastService } from "../../shared/action-toast.service";
+import { ToastService } from "../../shared/toast.service";
 import { ChangeDetectionStrategy, Component, computed, ElementRef, inject, input, output, signal } from "@angular/core";
 import type { WireBoardMemberUser, WireCard, WireCardSummary, WireList } from "@kanera/shared/events";
 import type { Card, CardLabel, List } from "@kanera/shared/schema";
@@ -441,7 +441,7 @@ const BULK_MENU_WIDTH = 232;
 export class BulkCardActionsMenuPopover {
   private readonly panel = inject(AnchoredPanelDirective);
   private readonly hostRef = inject<ElementRef<HTMLElement>>(ElementRef);
-  private readonly actionToasts = inject(ActionToastService);
+  private readonly toasts = inject(ToastService);
   private readonly api = inject(ApiClient);
   private readonly state = inject(BULK_CARD_STORE, { optional: true }) ?? inject(BoardState);
 
@@ -670,8 +670,8 @@ export class BulkCardActionsMenuPopover {
       // Emit once after every board batch succeeds, never from realtime echoes.
       if (count > 0) {
         const message = `${count} card${count === 1 ? "" : "s"} ${action}.`;
-        if (undo) this.actionToasts.undoable({ message, icon, undo });
-        else this.actionToasts.success(message, icon);
+        if (undo) this.toasts.undoable({ message, icon, undo });
+        else this.toasts.success(message, icon);
       }
       if (closeAfter) {
         this.done.emit();

@@ -1,16 +1,16 @@
 import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
 import { UpdatesService } from "../core/updates/updates.service";
-import { StatusToastComponent } from "./status-toast.component";
+import { ToastComponent } from "./toast.component";
 
 @Component({
   selector: "k-update-prompt",
   standalone: true,
-  imports: [StatusToastComponent],
+  imports: [ToastComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <k-status-toast [show]="updates.updateAvailable()" icon="refresh" message="Update available">
+    <k-toast [show]="updates.updateAvailable()" icon="refresh" message="Update available">
       <button type="button" class="sm" (click)="updates.applyUpdate()">Refresh</button>
-    </k-status-toast>
+    </k-toast>
   `,
 })
 export class UpdatePromptComponent {

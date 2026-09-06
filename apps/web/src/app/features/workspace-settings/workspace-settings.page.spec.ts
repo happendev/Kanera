@@ -13,7 +13,7 @@ import type { AppSocket } from "../../core/realtime/socket.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { AppTitleService } from "../../core/title/app-title.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
-import { ActionToastService } from "../../shared/action-toast.service";
+import { ToastService } from "../../shared/toast.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
 import { WorkspaceSettingsPage } from "./workspace-settings.page";
@@ -706,7 +706,7 @@ describe("WorkspaceSettingsPage", () => {
     const component = fixture.componentInstance;
     const list = workspaceList();
     component.lists.set([list]);
-    const toasts = TestBed.inject(ActionToastService);
+    const toasts = TestBed.inject(ToastService);
 
     await component.archiveList("list-1");
 
@@ -1213,7 +1213,7 @@ describe("WorkspaceSettingsPage", () => {
     await component.removeGuest("board-2", "guest-1");
     // The removal is deferred behind an undo toast; the seat flag updates once the DELETE responds.
     expect(component.acceptedGuests().map((guest) => guest.boardId)).toEqual(["board-1"]);
-    TestBed.inject(ActionToastService).flushPending();
+    TestBed.inject(ToastService).flushPending();
     await Promise.resolve();
     await Promise.resolve();
 

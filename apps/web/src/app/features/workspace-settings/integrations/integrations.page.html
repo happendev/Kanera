@@ -64,7 +64,6 @@
   }
 
   @if (error()) { <p class="form-error"><i class="ti ti-alert-circle"></i>{{ error() }}</p> }
-  @if (success()) { <p class="form-success"><i class="ti ti-check"></i>{{ success() }}</p> }
 
   <div class="chat-destination-list">
     @for (destination of destinations(); track destination.id) {

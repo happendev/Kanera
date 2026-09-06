@@ -57,7 +57,6 @@
           </button>
         </div>
         @if (settings.nameError()) { <p class="form-error">{{ settings.nameError() }}</p> }
-        @if (settings.nameSavedAt() && !settings.nameError()) { <p class="form-success">Saved.</p> }
       </div>
 
       <div class="settings-section">
@@ -138,7 +137,6 @@
           </div>
         }
         @if (settings.emailError()) { <p class="form-error">{{ settings.emailError() }}</p> }
-        @if (settings.emailSavedAt() && !settings.emailError()) { <p class="form-success">Saved.</p> }
       </div>
 
       <div class="settings-section">
@@ -152,7 +150,7 @@
           @if (mfaQrUrl()) { <img [src]="mfaQrUrl()" width="200" height="200" alt="Authenticator setup QR code" /> }
           <div class="board-form"><input autocomplete="one-time-code" inputmode="numeric" placeholder="123456" [value]="mfaCode()" (input)="mfaCode.set($any($event.target).value)" /><button class="sm" type="button" (click)="confirmMfa()" [disabled]="mfaBusy()">Confirm</button></div>
         } @else {
-          <p class="form-success">Two-factor authentication is enabled.</p>
+          <p class="settings-section-help mfa-enabled"><i class="ti ti-shield-check"></i>Two-factor authentication is enabled.</p>
           <div class="settings-form"><input type="password" autocomplete="current-password" placeholder="Current password" [value]="mfaPassword()" (input)="mfaPassword.set($any($event.target).value)" /><input autocomplete="one-time-code" placeholder="Authenticator or recovery code" [value]="mfaCode()" (input)="mfaCode.set($any($event.target).value)" /><div class="logo-actions"><button class="sm" type="button" (click)="regenerateMfaCodes()" [disabled]="mfaBusy()">New recovery codes</button><button class="ghost sm" type="button" (click)="disableMfa()" [disabled]="mfaBusy()">Disable</button></div></div>
         }
         @if (mfaRecoveryCodes().length) { <p><strong>Save these recovery codes now. They will not be shown again.</strong></p><pre>{{ mfaRecoveryCodes().join('\n') }}</pre> }
@@ -191,7 +189,6 @@
             </div>
           </label>
           @if (passwordForm().touched() && passwordForm().errorSummary()[0]; as error) { <p class="form-error">{{ error.message }}</p> }
-          @if (passwordSuccess()) { <p class="form-success">{{ passwordSuccess() }}</p> }
           <div>
             <button class="sm" type="submit" [disabled]="passwordForm().submitting()">
               {{ passwordForm().submitting() ? "Saving..." : "Change password" }}

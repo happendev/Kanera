@@ -5,7 +5,7 @@ import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { ApiClient } from "../../core/api/api.client";
 import { SocketService } from "../../core/realtime/socket.service";
 import { PanelStackService } from "../../shared/panel-stack.service";
-import { ActionToastService } from "../../shared/action-toast.service";
+import { ToastService } from "../../shared/toast.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { BoardMembersMenu, type BoardAccessMemberRow } from "./board-members-menu.popover";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -337,7 +337,7 @@ describe("BoardMembersMenu", () => {
     fixture.componentInstance.memberRemoved.subscribe(removed);
     fixture.componentInstance.accessMembers.set([row]);
     api.delete.mockResolvedValue(undefined);
-    const toasts = TestBed.inject(ActionToastService);
+    const toasts = TestBed.inject(ToastService);
 
     await fixture.componentInstance.removeMember(row);
 
@@ -358,7 +358,7 @@ describe("BoardMembersMenu", () => {
     const fixture = TestBed.createComponent(BoardMembersMenu);
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentInstance.accessMembers.set([row]);
-    const toasts = TestBed.inject(ActionToastService);
+    const toasts = TestBed.inject(ToastService);
 
     await fixture.componentInstance.removeMember(row);
     toasts.messages()[0]!.action!.run();

@@ -1,7 +1,7 @@
 import { CARD_DUE_DATE_SLOTS } from "@kanera/shared/due-date-slots";
 import type { CdkDragDrop } from "@angular/cdk/drag-drop";
 import type { OnDestroy } from "@angular/core";
-import { ChangeDetectionStrategy, Component, ElementRef, ViewEncapsulation, computed, effect, inject, input, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, ViewEncapsulation, computed, effect, inject, input, signal } from "@angular/core";
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, NavigationEnd, Router, RouterLink } from "@angular/router";
 import { AUTOMATION_ACTION_LIMIT, AUTOMATION_LIMIT } from "@kanera/shared/automation-limits";
@@ -13,7 +13,8 @@ import type { Board, BoardGroup, List, Workspace, WorkspaceMember } from "@kaner
 import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS, DEFAULT_INACTIVE_CARDS_DAYS } from "@kanera/shared/workspace-defaults";
 import { filter } from "rxjs";
 import { ApiClient, ApiError } from "../../core/api/api.client";
-import { ActionToastService } from "../../shared/action-toast.service";
+import { AutosaveTracker } from "../../shared/autosave-tracker";
+import { ToastService } from "../../shared/toast.service";
 import { KANERA_DOCS_URL } from "../../shared/docs-link.component";
 import type { CardLabelPresentation } from "../board/card-labels.component";
 import { formatDateTime, formatRelativeTime } from "../../shared/date-format";
@@ -678,7 +679,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly inactiveCardsDaysDefault = DEFAULT_INACTIVE_CARDS_DAYS;
 
   private readonly api = inject(ApiClient);
-  private readonly actionToasts = inject(ActionToastService);
+  private readonly toasts = inject(ToastService);
   private readonly appTitle = inject(AppTitleService);
   private readonly auth = inject(AuthService);
   private readonly confirm = inject(ConfirmService);
@@ -691,27 +692,10 @@ export class WorkspaceSettingsPage implements OnDestroy {
   private nameSaveTimer: ReturnType<typeof setTimeout> | null = null;
   /**
    * The general section saves implicitly (debounced name, blur-to-save numbers, instant toggles)
-   * with no Save button, so this is the only signal that a change actually landed. "saved" holds
-   * briefly and then returns to idle so the indicator does not become permanent chrome.
+   * with no Save button, so the chip fed by this tracker is the only signal that a change landed.
    */
-  readonly autosaveState = signal<"idle" | "saving" | "saved" | "error">("idle");
-  private autosaveSavedTimer: ReturnType<typeof setTimeout> | null = null;
+  readonly autosave = new AutosaveTracker(inject(DestroyRef));
 
-  private async trackAutosave<T>(work: () => Promise<T>): Promise<T> {
-    if (this.autosaveSavedTimer) clearTimeout(this.autosaveSavedTimer);
-    this.autosaveState.set("saving");
-    try {
-      const result = await work();
-      this.autosaveState.set("saved");
-      this.autosaveSavedTimer = setTimeout(() => {
-        if (this.autosaveState() === "saved") this.autosaveState.set("idle");
-      }, 2500);
-      return result;
-    } catch (error) {
-      this.autosaveState.set("error");
-      throw error;
-    }
-  }
   private generalSettingsSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
   // The public input must match the route parameter while the resolved id remains writable for the
@@ -1108,7 +1092,6 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   ngOnDestroy() {
-    if (this.autosaveSavedTimer) clearTimeout(this.autosaveSavedTimer);
     this.saveGeneralSettingsNow();
     // A debounced action save must not be lost because the admin navigated away mid-edit.
     this.flushAllAutomationActionSaves();
@@ -1556,7 +1539,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   private async patchWorkspace(patch: { name?: string; cardKeyPrefix?: string; icon?: string | null; accentColor?: ColorToken | null; completedCardsActiveDays?: number; inactiveCardsDays?: number; boardHealthEnabled?: boolean; boardHealthOverdueEnabled?: boolean; boardHealthUnassignedEnabled?: boolean; boardHealthInactiveEnabled?: boolean; boardLinkingEnabled?: boolean }) {
-    const ws = await this.trackAutosave(() => this.api.patch<Workspace>(`/workspaces/${this.workspaceId()}`, patch));
+    const ws = await this.autosave.track(() => this.api.patch<Workspace>(`/workspaces/${this.workspaceId()}`, patch));
     this.applyWorkspace(ws);
   }
 
@@ -1570,7 +1553,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     // A standalone board's visible identity is the board row. Use the same mutation as the Boards
     // settings rename so board clients receive the canonical event first; the API mirrors and emits
     // the hidden workspace row for settings and navigation consumers.
-    const board = await this.trackAutosave(() => this.api.patch<Board>(`/boards/${standaloneBoardId}`, { name }));
+    const board = await this.autosave.track(() => this.api.patch<Board>(`/boards/${standaloneBoardId}`, { name }));
     this.boardList.update((boards) => boards.map((item) => item.id === board.id ? board : item));
     this.updateGuestBoard(board);
     this.workspace.update((workspace) => workspace ? { ...workspace, name: board.name, updatedAt: board.updatedAt } : workspace);
@@ -1668,7 +1651,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.boardHealthSaving.set(true);
     this.boardHealthError.set(null);
     try {
-      const updated = await this.trackAutosave(() => this.api.patch<Workspace>(`/workspaces/${workspaceId}`, patch));
+      const updated = await this.autosave.track(() => this.api.patch<Workspace>(`/workspaces/${workspaceId}`, patch));
       if (this.workspaceId() === workspaceId) this.applyWorkspace(updated);
     } catch {
       if (this.workspaceId() === workspaceId) {
@@ -1777,7 +1760,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
    */
   private deferDelete(options: { message: string; icon: string; hide: () => void; restore: () => void; request: () => Promise<unknown> }) {
     options.hide();
-    this.actionToasts.undoable({
+    this.toasts.undoable({
       message: options.message,
       icon: options.icon,
       undo: options.restore,
@@ -1786,7 +1769,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
           await options.request();
         } catch (error) {
           options.restore();
-          this.actionToasts.info(`Couldn't delete: ${extractErrorMessage(error)}`, "alert-triangle");
+          this.toasts.info(`Couldn't delete: ${extractErrorMessage(error)}`, "alert-triangle");
         }
       },
     });

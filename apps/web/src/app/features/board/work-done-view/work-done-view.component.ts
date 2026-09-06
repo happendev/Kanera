@@ -13,7 +13,7 @@ import type { WireCardSummary } from "@kanera/shared/events";
 import type { WorkViewLens } from "@kanera/shared/schema";
 import { ApiClient } from "../../../core/api/api.client";
 import { ActivityStripComponent, type ActivityStripSeries } from "../../../shared/activity-strip.component";
-import { StatusToastComponent } from "../../../shared/status-toast.component";
+import { ToastService } from "../../../shared/toast.service";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { addDays, localDateKey, startOfLocalDay, viewerTimeZone } from "../../../shared/day-key.util";
 import { mediaQuerySignal } from "../../../shared/media-query.signal";
@@ -104,7 +104,6 @@ function toDateInputValue(date: Date): string {
     ActivityStripComponent,
     DateRangePickerPopover,
     SegmentedComponent,
-    StatusToastComponent,
     TooltipDirective,
     WorkDoneDayComponent,
   ],
@@ -114,6 +113,7 @@ function toDateInputValue(date: Date): string {
 })
 export class WorkDoneViewComponent {
   private readonly api = inject(ApiClient);
+  private readonly toasts = inject(ToastService);
   // The board and global-work hosts provide BoardState in this view's DI scope, so
   // label/custom-field filters resolve against the same workspace catalogs the live board cards use.
   private readonly state = inject(BoardState, { optional: true });
@@ -157,7 +157,6 @@ export class WorkDoneViewComponent {
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly rangePickerOpen = signal(false);
-  readonly copied = signal(false);
   private readonly events = signal<WorkDoneEvent[]>([]);
   private readonly stripDays = signal<WorkDoneDaySummary[]>([]);
   private readonly localCollapsedDayKeys = signal<ReadonlySet<string>>(new Set());
@@ -468,8 +467,7 @@ export class WorkDoneViewComponent {
   private async copyText(text: string) {
     try {
       await navigator.clipboard.writeText(text);
-      this.copied.set(true);
-      window.setTimeout(() => this.copied.set(false), 2000);
+      this.toasts.success("Copied to clipboard.", "clipboard-check");
     } catch {
       this.error.set("Could not copy to the clipboard.");
     }

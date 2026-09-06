@@ -1,6 +1,6 @@
 import { CdkTrapFocus } from "@angular/cdk/a11y";
 import { KeyboardShortcutsService } from "../../core/keyboard/keyboard-shortcuts.service";
-import { ActionToastService } from "../../shared/action-toast.service";
+import { ToastService } from "../../shared/toast.service";
 import type { CdkDragDrop, CdkDragMove } from "@angular/cdk/drag-drop";
 import { CdkDrag, CdkDragHandle, CdkDragPreview, CdkDropList, moveItemInArray, transferArrayItem } from "@angular/cdk/drag-drop";
 import { CdkScrollable } from "@angular/cdk/scrolling";
@@ -127,7 +127,7 @@ export function checklistDragScrollStep(pointerY: number, top: number, bottom: n
   styleUrl: "./card-detail.component.scss",
 })
 export class CardDetailComponent {
-  private readonly actionToasts = inject(ActionToastService);
+  private readonly toasts = inject(ToastService);
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthService);
   private readonly editorDrafts = inject(EditorDrafts);
@@ -518,7 +518,7 @@ export class CardDetailComponent {
     this.duplicating.set(true);
     try {
       await this.api.post(`/cards/${this.card().id}/duplicate`, {});
-      this.actionToasts.success("Card duplicated.", "copy");
+      this.toasts.success("Card duplicated.", "copy");
       this.actionsMenuOpen.set(false);
     } finally {
       this.duplicating.set(false);
@@ -543,7 +543,7 @@ export class CardDetailComponent {
     this.copyToBoardOpen.set(false);
     this.actionsMenuOpen.set(false);
     await this.api.post(`/cards/${this.card().id}/duplicate`, { boardId: target.boardId, listId: target.listId });
-      this.actionToasts.success("Card copied to the selected board.", "copy-plus");
+      this.toasts.success("Card copied to the selected board.", "copy-plus");
   }
 
   async moveToBoard(target: BoardPickerPick) {
@@ -551,7 +551,7 @@ export class CardDetailComponent {
     this.moveToBoardOpen.set(false);
     this.actionsMenuOpen.set(false);
     await this.api.post(`/cards/${this.card().id}/move-to-board`, { boardId: target.boardId });
-    this.actionToasts.success("Card moved to the selected board.", "arrow-right");
+    this.toasts.success("Card moved to the selected board.", "arrow-right");
     this.close.emit();
   }
 
@@ -2220,7 +2220,7 @@ export class CardDetailComponent {
     // the user undoes or the request fails; on success the realtime attachment:deleted event drops it
     // from the store and the local hide becomes redundant.
     setHidden(true);
-    this.actionToasts.undoable({
+    this.toasts.undoable({
       message: `"${fileName}" deleted.`,
       icon: "trash",
       undo: () => setHidden(false),
@@ -2229,7 +2229,7 @@ export class CardDetailComponent {
           await this.api.delete(`/cards/${cardId}/attachments/${attachmentId}`);
         } catch {
           setHidden(false);
-          this.actionToasts.info(`Couldn't delete "${fileName}".`, "alert-triangle");
+          this.toasts.info(`Couldn't delete "${fileName}".`, "alert-triangle");
         }
       },
     });
@@ -2276,7 +2276,7 @@ export class CardDetailComponent {
       this.state.updateCard(card);
       // Archive commits immediately and Undo issues the reverse PATCH; see card-actions-menu.
       if (archived) {
-        this.actionToasts.undoable({
+        this.toasts.undoable({
           message: "Card archived.",
           icon: "archive",
           undo: async () => {
@@ -2285,7 +2285,7 @@ export class CardDetailComponent {
           },
         });
       } else {
-        this.actionToasts.success("Card restored.", "archive-off");
+        this.toasts.success("Card restored.", "archive-off");
       }
     } finally {
       this.archiving.set(false);

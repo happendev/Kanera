@@ -25,7 +25,7 @@ import { MyPrioritiesService } from "../../core/priorities/my-priorities.service
 import { KANERA_DOCS_URL } from "../../shared/docs-link.component";
 import { ScratchpadPanelComponent } from "../scratchpad/scratchpad-panel.component";
 import { ScratchpadService } from "../scratchpad/scratchpad.service";
-import { StatusToastComponent } from "../../shared/status-toast.component";
+import { ToastComponent } from "../../shared/toast.component";
 import { OfflineCacheService, type GuestHomeGroup, type HomeGroup, type HomeResponse } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { GlobalSearchService } from "../../core/search/global-search.service";
@@ -98,7 +98,7 @@ type SidebarSwipe = {
 @Component({
   selector: "k-app-shell",
   standalone: true,
-  imports: [UnreadGlowDirective,CdkDrag, CdkDropList, CdkScrollable, MenuDirective, RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, AnchoredPanelDirective, MyPrioritiesPanelComponent, NotificationsPanelComponent, ScratchpadPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, StatusToastComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent, ShortcutsSheetComponent],
+  imports: [UnreadGlowDirective,CdkDrag, CdkDropList, CdkScrollable, MenuDirective, RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, AnchoredPanelDirective, MyPrioritiesPanelComponent, NotificationsPanelComponent, ScratchpadPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, ToastComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent, ShortcutsSheetComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./app-shell.component.html",
   styleUrl: "./app-shell.component.scss",

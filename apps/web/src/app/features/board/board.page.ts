@@ -1,5 +1,5 @@
 import { MenuDirective } from "../../shared/menu.directive";
-import { ActionToastService } from "../../shared/action-toast.service";
+import { ToastService } from "../../shared/toast.service";
 import type { OnDestroy} from "@angular/core";
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from "@angular/core";
 import { Router } from "@angular/router";
@@ -29,7 +29,7 @@ import { PageToolbarComponent } from "../../shared/page-toolbar.component";
 import { mediaQuerySignal } from "../../shared/media-query.signal";
 import { SearchFieldComponent } from "../../shared/search-field.component";
 import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
-import { StatusToastComponent } from "../../shared/status-toast.component";
+import { ToastComponent } from "../../shared/toast.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { BoardBackgroundPopover } from "./board-background.popover";
 import { BoardCanvasComponent } from "./board-canvas.component";
@@ -108,7 +108,7 @@ function localDateKey(offsetDays: number): string {
 @Component({
   selector: "k-board-page",
   standalone: true,
-  imports: [EmptyStateComponent, RouterLink, MenuDirective, AnchoredPanelDirective, AvatarComponent, BoardBackgroundPopover, BoardCalendarViewComponent, BoardCanvasComponent, BoardGroupColumnComponent, BoardMembersMenu, BoardMirrorsDialogComponent, BoardTableViewComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, CardComposerDialogComponent, CardDetailComponent, CompletedCardsPanelComponent, DocsLinkComponent, FilterBarComponent, ListComponent, MirrorCreateDialogComponent, NotesViewComponent, PageHeaderComponent, PageToolbarComponent, SearchFieldComponent, SegmentedComponent, StatusToastComponent, TooltipDirective, WatcherPopoverComponent, WorkDoneViewComponent],
+  imports: [EmptyStateComponent, RouterLink, MenuDirective, AnchoredPanelDirective, AvatarComponent, BoardBackgroundPopover, BoardCalendarViewComponent, BoardCanvasComponent, BoardGroupColumnComponent, BoardMembersMenu, BoardMirrorsDialogComponent, BoardTableViewComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, CardComposerDialogComponent, CardDetailComponent, CompletedCardsPanelComponent, DocsLinkComponent, FilterBarComponent, ListComponent, MirrorCreateDialogComponent, NotesViewComponent, PageHeaderComponent, PageToolbarComponent, SearchFieldComponent, SegmentedComponent, ToastComponent, TooltipDirective, WatcherPopoverComponent, WorkDoneViewComponent],
   providers: [BoardState, BoardSocketBridge, BoardMenuCoordinator],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./board.page.html",
@@ -118,7 +118,7 @@ function localDateKey(offsetDays: number): string {
   host: { "[class.compact-cards]": "compactCards()" },
 })
 export class BoardPage implements OnDestroy {
-  private readonly actionToasts = inject(ActionToastService);
+  private readonly toasts = inject(ToastService);
   protected readonly state = inject(BoardState);
   private readonly socketBridge = inject(BoardSocketBridge);
   private readonly analytics = inject(AnalyticsService);
@@ -2193,7 +2193,7 @@ export class BoardPage implements OnDestroy {
         throw error;
       }
     }
-    if (cards.length > 1) this.actionToasts.success(`${cards.length} cards moved.`, "arrows-transfer-down");
+    if (cards.length > 1) this.toasts.success(`${cards.length} cards moved.`, "arrows-transfer-down");
   }
 
   private prepareDroppedCard(p: CardDropPayload): () => Promise<void> {

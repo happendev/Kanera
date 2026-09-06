@@ -4,6 +4,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@a
 import { ApiClient, ApiError } from "../../../core/api/api.client";
 import { ConfirmService } from "../../../shared/confirm.service";
 import { DocsLinkComponent } from "../../../shared/docs-link.component";
+import { ToastService } from "../../../shared/toast.service";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { WorkspaceSettingsPage } from "../workspace-settings.page";
 import { formatDateTime } from "../../../shared/date-format";
@@ -53,6 +54,7 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
   protected readonly settings = inject(WorkspaceSettingsPage);
   private readonly api = inject(ApiClient);
   private readonly confirm = inject(ConfirmService);
+  private readonly toasts = inject(ToastService);
 
   readonly providers = [
     { value: "slack" as const, label: "Slack", icon: "brand-slack" },
@@ -76,7 +78,6 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
   readonly loading = signal(true);
   readonly busyId = signal<string | null>(null);
   readonly error = signal<string | null>(null);
-  readonly success = signal<string | null>(null);
   readonly provider = signal<ChatProvider>("slack");
   readonly name = signal("");
   readonly webhookUrl = signal("");
@@ -163,7 +164,7 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
       this.threadId.set("");
       this.priorityFieldId.set("");
       this.selectedEvents.set(new Set(DEFAULT_EVENTS));
-      this.success.set(`${this.providerLabel(provider)} destination created.`);
+      this.toasts.success(`${this.providerLabel(provider)} destination created.`);
     } catch (error) {
       this.error.set(extractErrorMessage(error));
     } finally {
@@ -218,7 +219,7 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
       this.reconnectBotToken.set("");
       this.reconnectChatId.set("");
       this.reconnectThreadId.set("");
-      this.success.set("Connection replaced.");
+      this.toasts.success("Connection replaced.");
     }
   }
 
@@ -231,7 +232,7 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
     this.clearMessages();
     try {
       const delivery = await this.api.post<TestDeliveryResponse>(`/workspaces/${this.settings.workspaceId()}/chat-destinations/${destination.id}/test`, {});
-      if (delivery.status === "success") this.success.set(`Test delivered to ${destination.name}.`);
+      if (delivery.status === "success") this.toasts.success(`Test delivered to ${destination.name}.`);
       else this.error.set(delivery.lastError ?? "The test delivery failed.");
     } catch (error) {
       this.error.set(extractErrorMessage(error));
@@ -290,6 +291,5 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
 
   private clearMessages(): void {
     this.error.set(null);
-    this.success.set(null);
   }
 }

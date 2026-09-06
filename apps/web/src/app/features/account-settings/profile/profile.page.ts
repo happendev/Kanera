@@ -7,6 +7,7 @@ import { CookieConsentService } from "../../../core/consent/cookie-consent.servi
 import { AvatarComponent } from "../../../shared/avatar.component";
 import { DocsLinkComponent } from "../../../shared/docs-link.component";
 import { mfaQrDataUrl } from "../../../shared/mfa-qr";
+import { ToastService } from "../../../shared/toast.service";
 import { AccountSettingsPage } from "../account-settings.page";
 
 @Component({
@@ -20,6 +21,7 @@ import { AccountSettingsPage } from "../account-settings.page";
 export class AccountSettingsProfilePage implements OnDestroy, OnInit {
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthService);
+  private readonly toasts = inject(ToastService);
   protected readonly consent = inject(CookieConsentService);
   protected readonly settings = inject(AccountSettingsPage);
 
@@ -71,7 +73,6 @@ export class AccountSettingsProfilePage implements OnDestroy, OnInit {
   protected readonly showCurrentPassword = signal(false);
   protected readonly showNewPassword = signal(false);
   protected readonly showConfirmPassword = signal(false);
-  protected readonly passwordSuccess = signal<string | null>(null);
 
   private canvas: HTMLCanvasElement | null = null;
   private avatarImage: HTMLImageElement | null = null;
@@ -122,7 +123,6 @@ export class AccountSettingsProfilePage implements OnDestroy, OnInit {
 
   protected changePassword(event: Event) {
     event.preventDefault();
-    this.passwordSuccess.set(null);
     return submit(this.passwordForm, async (passwordForm) => {
       const password = this.passwordModel();
       try {
@@ -131,7 +131,7 @@ export class AccountSettingsProfilePage implements OnDestroy, OnInit {
           newPassword: password.newPassword,
         });
         passwordForm().reset({ currentPassword: "", newPassword: "", confirmPassword: "" });
-        this.passwordSuccess.set("Password changed. You'll be signed out on the next refresh.");
+        this.toasts.success("Password changed. You'll be signed out on the next refresh.", "lock-check");
         return undefined;
       } catch (error) {
         return {

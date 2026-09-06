@@ -19,7 +19,7 @@ import { AuthService } from "../../core/auth/auth.service";
 import { ApiError } from "../../core/api/api.client";
 import { notesSelectionKey, notesTabKey } from "../../core/browser/browser-contracts";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
-import { ActionToastService } from "../../shared/action-toast.service";
+import { ToastService } from "../../shared/toast.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { NoteEditorComponent } from "./note-editor.component";
 import { NotesTreeComponent, type NoteMoveRequest } from "./notes-tree.component";
@@ -117,7 +117,7 @@ export class NotesViewComponent implements OnInit, OnChanges, OnDestroy {
   protected readonly state = inject(NotesState);
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthService);
-  private readonly actionToasts = inject(ActionToastService);
+  private readonly toasts = inject(ToastService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly unsavedWork = inject(UnsavedWorkService);
@@ -325,7 +325,7 @@ export class NotesViewComponent implements OnInit, OnChanges, OnDestroy {
     const wasSelected = this.state.selectedId() === id;
     const { restore, commit } = this.state.hideNote(id);
     if (this.state.selectedId() === null) this.restoreSectionSelection(this.activeTab());
-    this.actionToasts.undoable({
+    this.toasts.undoable({
       message: hasChildren ? `Note "${title}" and its sub-notes deleted.` : `Note "${title}" deleted.`,
       icon: "trash",
       undo: () => {
@@ -337,7 +337,7 @@ export class NotesViewComponent implements OnInit, OnChanges, OnDestroy {
           await commit();
         } catch (err) {
           console.error("Failed to delete note", err);
-          this.actionToasts.info(`Couldn't delete "${title}".`, "alert-triangle");
+          this.toasts.info(`Couldn't delete "${title}".`, "alert-triangle");
         }
       },
     });

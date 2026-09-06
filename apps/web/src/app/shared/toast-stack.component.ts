@@ -1,22 +1,24 @@
 import { ChangeDetectionStrategy, Component, inject } from "@angular/core";
-import { ActionToastService } from "./action-toast.service";
-import { StatusToastComponent } from "./status-toast.component";
+import { ToastService } from "./toast.service";
+import { ToastComponent } from "./toast.component";
 
 @Component({
-  selector: "k-action-toasts",
+  // Renders the ToastService queue. Mounted once in the root component so toasts survive route
+  // changes and menu teardown.
+  selector: "k-toast-stack",
   standalone: true,
-  imports: [StatusToastComponent],
+  imports: [ToastComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    @for (toast of toasts.messages(); track toast.id) {
-      <k-status-toast [show]="true" [icon]="toast.icon" [success]="toast.success" [message]="toast.message">
+    @for (toast of toasts.rendered(); track toast.id) {
+      <k-toast [show]="!toast.leaving" [icon]="toast.icon" [variant]="toast.variant" [message]="toast.message">
         @if (toast.action; as action) {
           <button type="button" class="action" (click)="action.run()">{{ action.label }}</button>
         }
         <button type="button" class="close" aria-label="Dismiss notification" (click)="toasts.dismiss(toast.id)">
           <i class="ti ti-x" aria-hidden="true"></i>
         </button>
-      </k-status-toast>
+      </k-toast>
     }
   `,
   styles: `
@@ -28,6 +30,6 @@ import { StatusToastComponent } from "./status-toast.component";
     .action:hover { color: var(--accent); background: var(--surface-hover); }
   `,
 })
-export class ActionToastsComponent {
-  readonly toasts = inject(ActionToastService);
+export class ToastStackComponent {
+  readonly toasts = inject(ToastService);
 }

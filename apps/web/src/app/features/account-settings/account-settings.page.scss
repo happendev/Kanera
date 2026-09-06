@@ -941,8 +941,7 @@
   overflow: auto;
   overscroll-behavior: contain;
 
-  .form-error,
-  .form-success {
+  .form-error {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -1063,10 +1062,12 @@
   }
 }
 
-.form-success {
-  color: var(--success);
-  font-size: 13px;
-  margin: 0;
+.mfa-enabled {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  > i { color: var(--success); }
 }
 
 .storage-test-feedback {

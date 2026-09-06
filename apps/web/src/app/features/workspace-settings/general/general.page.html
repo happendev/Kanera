@@ -1,16 +1,6 @@
 <!-- Everything on this page saves as you go. The status chip is the visible contract for that:
      Profile settings have Save buttons, and without it the same gesture here looked like it did nothing. -->
-<div class="autosave-row">
-  <p class="settings-section-hint autosave-hint">Changes on this page save automatically.</p>
-  @let autosave = settings.autosaveState();
-  <span class="autosave-status" [attr.data-state]="autosave" role="status" aria-live="polite">
-    @switch (autosave) {
-      @case ('saving') { <i class="ti ti-loader-2 spin"></i><span>Saving…</span> }
-      @case ('saved') { <i class="ti ti-check"></i><span>Saved</span> }
-      @case ('error') { <i class="ti ti-alert-circle"></i><span>Not saved</span> }
-    }
-  </span>
-</div>
+<k-autosave-status [state]="settings.autosave.state()" hint="Changes on this page save automatically." />
 <div class="board-form">
   <div class="row">
     <k-icon-picker [value]="settings.icon()" (valueChange)="settings.updateWorkspaceIcon($event)" />

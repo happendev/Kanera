@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input
 import type { ServerToClientEvents, WireBoardMemberUser } from "@kanera/shared/events";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { ApiClient, ApiError } from "../../core/api/api.client";
-import { ActionToastService } from "../../shared/action-toast.service";
+import { ToastService } from "../../shared/toast.service";
 import { SocketService, type AppSocket } from "../../core/realtime/socket.service";
 import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
@@ -171,7 +171,7 @@ export class BoardMembersMenu implements OnInit, OnDestroy {
   private readonly api = inject(ApiClient);
   private readonly unsavedWork = inject(UnsavedWorkService);
   private readonly confirm = inject(ConfirmService);
-  private readonly actionToasts = inject(ActionToastService);
+  private readonly toasts = inject(ToastService);
   /** The deferred removal usually completes after the popover has closed; see removeMember. */
   private destroyed = false;
   private readonly sockets = inject(SocketService);
@@ -257,7 +257,7 @@ export class BoardMembersMenu implements OnInit, OnDestroy {
       // is only emitted once the removal is real, so the board page does not drop the member early.
       this.error.set(null);
       this.accessMembers.update(rows => rows.filter(row => row.userId !== member.userId));
-      this.actionToasts.undoable({
+      this.toasts.undoable({
         message: `${member.displayName} removed from the board.`,
         icon: "user-minus",
         undo: restore,
@@ -268,7 +268,7 @@ export class BoardMembersMenu implements OnInit, OnDestroy {
             if (!this.destroyed) this.memberRemoved.emit(member.userId);
           } catch (e) {
             restore();
-            this.actionToasts.info(`Couldn't remove ${member.displayName}: ${errorMessage(e)}`, "alert-triangle");
+            this.toasts.info(`Couldn't remove ${member.displayName}: ${errorMessage(e)}`, "alert-triangle");
           }
         },
       });

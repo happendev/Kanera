@@ -1,5 +1,5 @@
 import { EmptyStateComponent } from "../../shared/empty-state.component";
-import { ActionToastService } from "../../shared/action-toast.service";
+import { ToastService } from "../../shared/toast.service";
 import type { OnDestroy, OnInit } from "@angular/core";
 import { DatePipe } from "@angular/common";
 import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal } from "@angular/core";
@@ -220,7 +220,7 @@ function priorityGroupKey(userId: string): string {
   styleUrl: "./global-work.page.scss",
 })
 export class GlobalWorkPage implements OnInit, OnDestroy {
-  private readonly actionToasts = inject(ActionToastService);
+  private readonly toasts = inject(ToastService);
   readonly state = inject(GlobalWorkState);
   private readonly api = inject(ApiClient);
   private readonly router = inject(Router);
@@ -2200,7 +2200,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     }
     this.moveError.set(null);
     void this.state.moveCards(moving.map((card) => card.id), payload.toListId, anchor).then(() => {
-      if (moving.length > 1) this.actionToasts.success(`${moving.length} cards moved.`, "arrows-transfer-down");
+      if (moving.length > 1) this.toasts.success(`${moving.length} cards moved.`, "arrows-transfer-down");
     }).catch(() => {
       this.moveError.set("We couldn’t finish moving the cards. Completed moves were kept; unsaved cards were restored.");
     });

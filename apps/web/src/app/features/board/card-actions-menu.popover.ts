@@ -1,5 +1,5 @@
 import { MenuDirective } from "../../shared/menu.directive";
-import { ActionToastService } from "../../shared/action-toast.service";
+import { ToastService } from "../../shared/toast.service";
 import {
   ChangeDetectionStrategy,
   Component,
@@ -239,7 +239,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
 })
 export class CardActionsMenuPopover {
   private readonly panel = inject(AnchoredPanelDirective);
-  private readonly actionToasts = inject(ActionToastService);
+  private readonly toasts = inject(ToastService);
   private readonly api = inject(ApiClient);
   private readonly router = inject(Router);
   private readonly state = inject(BoardState, { optional: true });
@@ -341,7 +341,7 @@ export class CardActionsMenuPopover {
     this.duplicating.set(true);
     try {
       await this.api.post(`/cards/${this.cardId()}/duplicate`, {});
-      this.actionToasts.success("Card duplicated.", "copy");
+      this.toasts.success("Card duplicated.", "copy");
       this.close.emit();
     } finally {
       this.duplicating.set(false);
@@ -380,14 +380,14 @@ export class CardActionsMenuPopover {
   async onCopyPick(target: BoardPickerPick) {
     this.copyOpen.set(false);
     await this.api.post(`/cards/${this.cardId()}/duplicate`, { boardId: target.boardId, listId: target.listId });
-      this.actionToasts.success("Card copied to the selected board.", "copy-plus");
+      this.toasts.success("Card copied to the selected board.", "copy-plus");
     this.close.emit();
   }
 
   async onMovePick(target: BoardPickerPick) {
     this.moveOpen.set(false);
     await this.api.post(`/cards/${this.cardId()}/move-to-board`, { boardId: target.boardId });
-    this.actionToasts.success("Card moved to the selected board.", "arrow-right");
+    this.toasts.success("Card moved to the selected board.", "arrow-right");
     this.moved.emit();
     this.close.emit();
   }
@@ -405,7 +405,7 @@ export class CardActionsMenuPopover {
       // PATCH, so there is nothing to confirm up front. The closure outlives this popover on purpose.
       if (archived) {
         const cardId = this.cardId();
-        this.actionToasts.undoable({
+        this.toasts.undoable({
           message: "Card archived.",
           icon: "archive",
           undo: async () => {
@@ -414,7 +414,7 @@ export class CardActionsMenuPopover {
           },
         });
       } else {
-        this.actionToasts.success("Card restored.", "archive-off");
+        this.toasts.success("Card restored.", "archive-off");
       }
     } finally {
       this.archiving.set(false);

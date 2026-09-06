@@ -1,14 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from "@angular/core";
 import { SocketService } from "../core/realtime/socket.service";
-import { StatusToastComponent } from "./status-toast.component";
+import { ToastComponent } from "./toast.component";
 
 @Component({
   selector: "k-disconnect-prompt",
   standalone: true,
-  imports: [StatusToastComponent],
+  imports: [ToastComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <k-status-toast [show]="sockets.accessRefreshing() || !sockets.displayedOnline()" [icon]="icon()" [message]="message()" />
+    <k-toast [show]="sockets.accessRefreshing() || !sockets.displayedOnline()" [icon]="icon()" [message]="message()" />
   `,
 })
 export class DisconnectPromptComponent {

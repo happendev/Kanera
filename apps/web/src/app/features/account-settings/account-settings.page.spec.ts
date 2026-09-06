@@ -15,6 +15,7 @@ import type { AppSocket } from "../../core/realtime/socket.service";
 import { ThemeService } from "../../core/theme/theme.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { SeatPaymentService } from "../../shared/seat-payment.service";
+import { ToastService } from "../../shared/toast.service";
 import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
 import { AccountSettingsPage } from "./account-settings.page";
 
@@ -1534,7 +1535,9 @@ describe("AccountSettingsPage", () => {
     });
 
     finishRequest();
-    await vi.waitFor(() => expect(passwordSection?.textContent).toContain("Password changed."));
+    // Explicit saves confirm through the shared toast stack, not inline copy.
+    const toasts = TestBed.inject(ToastService);
+    await vi.waitFor(() => expect(toasts.messages().map((toast) => toast.message)).toContain("Password changed. You'll be signed out on the next refresh."));
     fixture.detectChanges();
     expect(inputs.every((input) => input.value === "")).toBe(true);
     expect(submitButton?.textContent).toContain("Change password");

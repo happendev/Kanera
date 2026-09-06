@@ -28,6 +28,13 @@
 
 .k-toast-panel {
   z-index: var(--z-toast, 1100);
+  // The global position strategy writes the stack offset as margin-bottom; easing it lets the
+  // remaining toasts slide into place when one above or below them leaves.
+  transition: margin-bottom var(--motion-base) cubic-bezier(0.16, 1, 0.3, 1);
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
 }
 
 // Plain elements can opt into the same placement contract as popover component hosts by applying
