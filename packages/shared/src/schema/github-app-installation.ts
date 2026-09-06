@@ -26,6 +26,11 @@ export const githubApp = pgTable(
     appSlug: text("app_slug").notNull(),
     encryptedPrivateKey: text("encrypted_private_key").notNull(),
     encryptedWebhookSecret: text("encrypted_webhook_secret"),
+    // OAuth client credentials returned by the manifest conversion. They let the installation
+    // binding step verify, through GitHub user authorization, that the person completing setup can
+    // actually see the installation they are claiming. Null on rows created before this existed.
+    encryptedClientId: text("encrypted_client_id"),
+    encryptedClientSecret: text("encrypted_client_secret"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -53,7 +58,13 @@ export const githubAppInstallations = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("github_app_installation_client_uq").on(t.clientId)],
+  (t) => [
+    uniqueIndex("github_app_installation_client_uq").on(t.clientId),
+    // One GitHub installation belongs to exactly one organisation. This is the database-level
+    // backstop for the user-authorization check in the binding route: even if that check is
+    // bypassed or unavailable, a second org cannot claim an installation another org already holds.
+    uniqueIndex("github_app_installation_installation_uq").on(t.installationId),
+  ],
 );
 
 export type GitHubAppInstallation = typeof githubAppInstallations.$inferSelect;

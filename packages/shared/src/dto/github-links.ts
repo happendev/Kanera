@@ -72,6 +72,9 @@ export interface ResolveGitHubLinksResponse {
 
 export const completeGitHubInstallationBody = z.object({
   installationId: z.string().trim().min(1).max(64).regex(/^\d+$/),
+  // OAuth code GitHub appends to the post-install redirect when the App requests user
+  // authorization during installation. Required whenever the deployment can verify it.
+  code: z.string().trim().min(1).max(256).optional(),
 });
 export type CompleteGitHubInstallationBody = z.infer<typeof completeGitHubInstallationBody>;
 

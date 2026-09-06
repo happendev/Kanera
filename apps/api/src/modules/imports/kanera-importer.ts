@@ -29,8 +29,10 @@ import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Db } from "../../db.js";
 import { recordActivity } from "../../lib/activity.js";
 import { allocateCardKeys } from "../../lib/card-keys.js";
+import { env } from "../../env.js";
 import { badRequest } from "../../lib/errors.js";
-import { unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
+import { parseMediaReference, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
+import { assertResolvedHostAllowed } from "../../lib/ssrf.js";
 import { between, positionAtIndex } from "../../lib/position.js";
 import { seedBoardMembersFromWorkspace } from "../../lib/board-membership.js";
 import type { StorageProvider } from "../../lib/storage/index.js";
@@ -341,6 +343,33 @@ function mappedFieldValue(value: BoardExportArchive["cardCustomFieldValues"][num
   };
 }
 
+const REMOTE_ATTACHMENT_TIMEOUT_MS = 30_000;
+
+// Archive attachment URLs are attacker-controlled input (the archive is a user upload), so this is
+// an SSRF surface. Exports from this deployment reference our own `/api/media/...` objects: copy
+// those straight out of the tenant's storage namespace with no HTTP at all. Anything else (an
+// archive from another Kanera deployment) goes over HTTP with the same guards as webhook delivery:
+// http(s) only, no loopback/private/metadata targets (checked after DNS resolution), no redirect
+// following, a timeout, and the deployment's attachment byte cap.
+async function readArchiveAttachment(ctx: ImportContext, rawUrl: string): Promise<Buffer> {
+  const local = parseMediaReference(rawUrl, ctx.clientId);
+  if (local) return ctx.storage.get(local.key);
+
+  const url = new URL(rawUrl);
+  if (url.protocol !== "https:" && !(env.NODE_ENV !== "production" && url.protocol === "http:")) {
+    throw new Error("attachment url must use https");
+  }
+  if (url.username || url.password) throw new Error("attachment url must not contain credentials");
+  await assertResolvedHostAllowed(url.toString());
+  const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(REMOTE_ATTACHMENT_TIMEOUT_MS) });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const declared = Number(response.headers.get("content-length") ?? "0");
+  if (declared > env.ATTACHMENT_MAX_BYTES) throw new Error("attachment too large");
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.byteLength > env.ATTACHMENT_MAX_BYTES) throw new Error("attachment too large");
+  return buffer;
+}
+
 async function copyAttachments(ctx: ImportContext, cardIdBySourceId: Map<string, string>, commentIdBySourceId: Map<string, string>): Promise<{ rows: CardAttachmentRow[]; coverUpdates: Map<string, string> }> {
   const rows: CardAttachmentRow[] = [];
   const coverUpdates = new Map<string, string>();
@@ -362,9 +391,7 @@ async function copyAttachments(ctx: ImportContext, cardIdBySourceId: Map<string,
     const ext = getAllowedAttachmentExtension(attachment.mimeType, attachment.fileName);
     if (!ext) return { warning: `Skipped attachment "${attachment.fileName}" because its file type is unsupported.` };
     try {
-      const response = await fetch(attachment.url);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const buffer = Buffer.from(await response.arrayBuffer());
+      const buffer = await readArchiveAttachment(ctx, attachment.url);
       const fileKey = cardAttachmentStorageKey(cardId, ext);
       await ctx.storage.put(fileKey, buffer, attachment.mimeType);
       return { attachment, cardId, fileKey, byteSize: buffer.byteLength };

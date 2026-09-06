@@ -477,6 +477,13 @@
       "when": 1788642110644,
       "tag": "0067_faithful_talos",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1788658513553,
+      "tag": "0068_whole_texas_twister",
+      "breakpoints": true
     }
   ]
 }

@@ -2051,13 +2051,17 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     this.githubCompleting.set(true);
     this.githubError.set(null);
     try {
-      if (code) {
+      // GitHub sends `code` on two different redirects: the manifest conversion redirect (code only)
+      // and the post-install redirect when the App requests user authorization (code alongside
+      // installation_id). Only the former is a manifest code; the latter is an OAuth code the
+      // server needs to verify the installation binding.
+      if (code && !installationId) {
         const config = await this.api.post<GitHubAppConfig>("/clients/me/github-app/manifest/complete", {
           code,
           state: this.route.snapshot.queryParamMap.get("state") ?? undefined,
         });
         this.githubAppConfig.set(config);
-        if (!installationId && config.installUrl) {
+        if (config.installUrl) {
           this.continueToGitHubInstall(config);
           return;
         }
@@ -2065,6 +2069,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       if (installationId) {
         const installation = await this.api.post<GitHubAppInstallationRow>("/clients/me/github-app/installation", {
           installationId,
+          code: code ?? undefined,
         });
         this.githubInstallation.set(installation);
         const config = await this.api.get<GitHubAppConfig>("/clients/me/github-app/config");

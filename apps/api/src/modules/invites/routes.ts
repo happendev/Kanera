@@ -93,11 +93,19 @@ export async function inviteRoutes(app: FastifyInstance) {
           ))
           .limit(1);
         if (!invite) throw unauthorized("invalid invite");
-        const [existing] = await tx.select({ active: sql<boolean>`${clientMembers.suspendedAt} is null and ${clientMembers.removedAt} is null` })
+        const [existing] = await tx.select({
+          active: sql<boolean>`${clientMembers.suspendedAt} is null and ${clientMembers.removedAt} is null`,
+          suspended: sql<boolean>`${clientMembers.suspendedAt} is not null`,
+        })
           .from(clientMembers)
           .where(and(eq(clientMembers.clientId, invite.clientId), eq(clientMembers.userId, req.auth.sub)))
           .limit(1);
         if (existing?.active) throw conflict("you are already a member of this organisation");
+        // A suspension is imposed by platform staff or a plan downgrade and org admins have no
+        // unsuspend endpoint, so it must be terminal here: a reusable invite link must not silently
+        // clear it (and possibly promote the member to the link's role). Only removed members may
+        // re-join through an invite.
+        if (existing?.suspended) throw forbidden("your membership of this organisation is suspended");
 
         // A paid guest already occupies one seat. Release that seat under the tenant lock before
         // counting capacity so conversion remains a net-zero seat change; transaction rollback

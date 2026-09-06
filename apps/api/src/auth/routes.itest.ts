@@ -431,3 +431,26 @@ void test("POST /auth/refresh treats old rotated token reuse outside the grace w
   const stillActive = await db.select().from(refreshTokens).where(isNull(refreshTokens.revokedAt));
   assert.equal(stillActive.length, 0);
 });
+
+// Enrollment replaces the stored credential, so without this gate a stolen session plus password
+// could silently strip an enabled second factor by starting and abandoning a new enrollment.
+void test("POST /auth/mfa/enroll requires a valid code before replacing an enabled factor", async () => {
+  const { app, accessToken, userId, email, password } = await signupUser();
+  const { secret } = await enrollMfa(app, accessToken, email, password);
+  const [before] = await db.select().from(mfaCredentials).where(eq(mfaCredentials.userId, userId));
+  assert.ok(before?.enabledAt);
+
+  const withoutCode = await app.inject({ method: "POST", url: "/auth/mfa/enroll", headers: authHeader(accessToken), payload: { currentPassword: password } });
+  assert.equal(withoutCode.statusCode, 401);
+  const wrongCode = await app.inject({ method: "POST", url: "/auth/mfa/enroll", headers: authHeader(accessToken), payload: { currentPassword: password, code: "000000" } });
+  assert.equal(wrongCode.statusCode, 401);
+  const [unchanged] = await db.select().from(mfaCredentials).where(eq(mfaCredentials.userId, userId));
+  assert.equal(unchanged?.id, before.id, "the enabled credential survives rejected attempts");
+  assert.ok(unchanged?.enabledAt);
+
+  const withCode = await app.inject({ method: "POST", url: "/auth/mfa/enroll", headers: authHeader(accessToken), payload: { currentPassword: password, code: nextTotp(secret, email) } });
+  assert.equal(withCode.statusCode, 200);
+  const [replaced] = await db.select().from(mfaCredentials).where(eq(mfaCredentials.userId, userId));
+  assert.notEqual(replaced?.id, before.id);
+  assert.equal(replaced?.enabledAt, null, "a fresh enrollment starts unconfirmed");
+});

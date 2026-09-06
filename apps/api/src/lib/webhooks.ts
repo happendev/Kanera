@@ -393,7 +393,10 @@ export async function deliverWebhookDelivery(
       };
     }
     await assertResolvedHostAllowed(requestUrl);
-    const response = await fetch(requestUrl, { ...requestInit, signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS) });
+    // `redirect: "error"`: the SSRF check above only covers the configured URL, so following a
+    // 3xx would let a public host bounce the request (and its captured response body) to a
+    // private or metadata address. Receivers must answer at the configured URL directly.
+    const response = await fetch(requestUrl, { ...requestInit, redirect: "error", signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS) });
     const responseBody = responseExcerpt(await response.text().catch(() => ""));
     let success = response.status >= 200 && response.status < 300;
     if (success && target.provider === "telegram") {

@@ -293,3 +293,28 @@ void test("card events enqueue a formatted chat snapshot alongside generic webho
   assert.equal(priorityDelivery.payload.fromValue, "Low");
   assert.equal(priorityDelivery.payload.toValue, "High");
 });
+
+// The SSRF check covers only the configured URL, so delivery must refuse to follow redirects that
+// could bounce the request to a private or metadata address.
+void test("webhook delivery never follows redirects", async () => {
+  const originalFetch = globalThis.fetch;
+  let captured: RequestInit | undefined;
+  globalThis.fetch = async (_input, init) => {
+    captured = init;
+    return new Response("ok", { status: 200 });
+  };
+  try {
+    const { workspace, endpoint } = await seedFixture();
+    const [delivery] = await db.insert(webhookDeliveries).values({
+      endpointId: endpoint.id,
+      workspaceId: workspace.id,
+      eventType: "card:created",
+      payload: { id: randomUUID(), type: "card:created", workspaceId: workspace.id, occurredAt: new Date().toISOString(), data: {} },
+    }).returning();
+    const result = await deliverWebhookDelivery(delivery!, endpoint);
+    assert.equal(result.status, "success");
+    assert.equal(captured?.redirect, "error");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

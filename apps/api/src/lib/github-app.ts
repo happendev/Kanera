@@ -13,6 +13,9 @@ export type GitHubAppCredentials = {
   appId: string;
   appSlug: string;
   privateKey: string;
+  // OAuth client credentials; present when the App can verify user authorization during install.
+  clientId?: string | null;
+  clientSecret?: string | null;
 };
 
 export type GitHubInstallationInfo = {
@@ -33,7 +36,13 @@ export function envGitHubAppCredentials(): GitHubAppCredentials | null {
     appId: env.GITHUB_APP_ID!,
     appSlug: env.GITHUB_APP_SLUG!,
     privateKey: env.GITHUB_APP_PRIVATE_KEY!,
+    clientId: env.GITHUB_APP_CLIENT_ID ?? null,
+    clientSecret: env.GITHUB_APP_CLIENT_SECRET ?? null,
   };
+}
+
+export function githubUserAuthorizationConfigured(credentials: GitHubAppCredentials | null): credentials is GitHubAppCredentials & { clientId: string; clientSecret: string } {
+  return Boolean(credentials?.clientId && credentials.clientSecret);
 }
 
 export function githubAppInstallUrl(credentials: Pick<GitHubAppCredentials, "appSlug"> | null = envGitHubAppCredentials()): string | null {
@@ -149,9 +158,46 @@ export type GitHubManifestConversionResponse = {
   id: number;
   slug: string;
   pem: string;
+  client_id?: string;
+  client_secret?: string;
   webhook_secret?: string;
   html_url?: string;
 };
+
+/**
+ * Exchange the `code` GitHub appends to the post-install redirect (when the App requests user
+ * authorization during installation) for a user access token. Returns null when GitHub rejects
+ * the code, including replayed or expired codes.
+ */
+export async function exchangeGitHubUserCode(code: string, credentials: GitHubAppCredentials): Promise<string | null> {
+  if (!githubUserAuthorizationConfigured(credentials)) return null;
+  const response = await fetch("https://github.com/login/oauth/access_token", {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json", "User-Agent": "Kanera" },
+    body: JSON.stringify({ client_id: credentials.clientId, client_secret: credentials.clientSecret, code }),
+  });
+  if (!response.ok) return null;
+  const payload = (await response.json().catch(() => null)) as { access_token?: string; error?: string } | null;
+  return payload?.access_token && !payload.error ? payload.access_token : null;
+}
+
+type GitHubUserInstallationsResponse = { installations?: Array<{ id: number }> };
+
+/**
+ * True when the authenticated GitHub user can see `installationId` in `GET /user/installations`.
+ * This is what ties an installation to the person binding it: installation ids are small sequential
+ * integers and the App can read any of its installations, so the App JWT alone proves nothing
+ * about who is asking.
+ */
+export async function githubUserCanAccessInstallation(userToken: string, installationId: string): Promise<boolean> {
+  for (let page = 1; page <= 5; page += 1) {
+    const response = await githubJson<GitHubUserInstallationsResponse>(`/user/installations?per_page=100&page=${page}`, userToken);
+    const installations = response?.installations ?? [];
+    if (installations.some((installation) => String(installation.id) === installationId)) return true;
+    if (installations.length < 100) return false;
+  }
+  return false;
+}
 
 export async function convertGitHubManifest(code: string): Promise<GitHubManifestConversionResponse | null> {
   return githubJson<GitHubManifestConversionResponse>(`/app-manifests/${encodeURIComponent(code)}/conversions`, undefined, {

@@ -159,12 +159,16 @@ export async function listRoutes(app: FastifyInstance) {
     // whole-list move must honor that just like the single-card move does via assertCardAccess.
     // The workspace-admin path (no boardId) is never restricted.
     let assignedItemsOnly = false;
+    // Automation quota is charged to the workspace's owning organisation (see the trigger below),
+    // so capture it from the access context rather than the caller's home org.
+    let owningClientId: string;
     if (body.boardId) {
       const access = await assertBoardAccess(req.auth, body.boardId, "editor");
       if (access.workspaceId !== source.workspaceId) throw badRequest("board not in same workspace");
       assignedItemsOnly = access.assignedItemsOnly;
+      owningClientId = access.clientId;
     } else {
-      await assertWorkspaceAccess(req.auth, source.workspaceId, "admin");
+      owningClientId = (await assertWorkspaceAccess(req.auth, source.workspaceId, "admin")).clientId;
     }
 
     if (body.targetListId === id) throw badRequest("targetListId must differ from source list");
@@ -227,7 +231,8 @@ export async function listRoutes(app: FastifyInstance) {
           // per-card rather than the request's optional board filter.
           boardId: m.boardId,
           workspaceId: source.workspaceId,
-          clientId: req.auth.cid,
+          // Cross-org guests must not have their home org charged for the host's automations.
+          clientId: owningClientId,
           triggerActorId: req.auth.sub,
         }));
       }

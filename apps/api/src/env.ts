@@ -245,6 +245,12 @@ export function createEnvironmentSchema(options: EnvironmentSchemaOptions = {}) 
   GITHUB_APP_ID: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   GITHUB_APP_SLUG: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   GITHUB_APP_PRIVATE_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  // OAuth client credentials of the same GitHub App. When set, binding an installation to an
+  // organisation requires the completing user to authorize with GitHub so the server can confirm
+  // they can see that installation. Hosted deployments (one App shared by every tenant) refuse to
+  // bind installations without them.
+  GITHUB_APP_CLIENT_ID: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  GITHUB_APP_CLIENT_SECRET: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   TRELLO_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   SMTP_HOST: z.preprocess(emptyToUndefined, z.string().optional()),
   SMTP_PORT: z.preprocess(emptyToUndefined, z.coerce.number().int().min(1).max(65535).optional()),

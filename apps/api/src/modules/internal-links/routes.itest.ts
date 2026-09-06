@@ -1,7 +1,7 @@
 import "../../test/setup.integration.js";
 import { insertTestUsers } from "../../test/user-fixtures.js";
 import { cardPath } from "@kanera/shared/card-links";
-import { boardMembers, boards, cards, externalLinks, internalLinks, lists, notes, workspaceMembers } from "@kanera/shared/schema";
+import { boardMembers, boards, cardAssignees, cards, externalLinks, internalLinks, lists, notes, workspaceMembers } from "@kanera/shared/schema";
 import { and, eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -411,4 +411,73 @@ void test("POST /internal-links/resolve includes links from boards the user belo
   const body = response.json();
   assert.equal(body.links[cardUrl]?.title, "Secret card");
   assert.equal(body.links[`/b/${privateBoard.id}`]?.title, "Private Roadmap");
+});
+
+void test("POST /internal-links/resolve hides unassigned cards from assigned-items-only members", async () => {
+  const app = await buildIntegrationServer();
+
+  const signup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: {
+      orgName: "Acme Restricted Links",
+      email: "owner-restricted-links@example.com",
+      password: "Abc12345",
+      displayName: "Owner",
+    },
+  });
+  assert.equal(signup.statusCode, 200);
+  const { accessToken, user: owner } = signup.json();
+
+  const workspaceCreated = await app.inject({
+    method: "POST",
+    url: "/workspaces",
+    headers: { authorization: `Bearer ${accessToken}` },
+    payload: { name: "Delivery" },
+  });
+  assert.equal(workspaceCreated.statusCode, 201);
+  const workspace = workspaceCreated.json();
+  const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
+  assert.ok(list);
+
+  const [board] = await db.insert(boards).values({ workspaceId: workspace.id, name: "Client Board", position: "1000.0000000000" }).returning();
+  assert.ok(board);
+  await db.insert(boardMembers).values({ boardId: board.id, userId: owner.id, role: "editor" });
+
+  const [assignedCard] = await db.insert(cards).values({
+    listId: list.id, boardId: board.id, title: "Visible to guest", position: "1000.0000000000", createdById: owner.id,
+  }).returning();
+  const [hiddenCard] = await db.insert(cards).values({
+    listId: list.id, boardId: board.id, title: "Hidden from guest", position: "2000.0000000000", createdById: owner.id,
+  }).returning();
+  assert.ok(assignedCard && hiddenCard);
+
+  const [guest] = await insertTestUsers(db, {
+    clientId: owner.clientId,
+    email: "guest-restricted-links@example.com",
+    passwordHash: "test",
+    displayName: "Guest",
+  }).returning();
+  assert.ok(guest);
+  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: guest.id, role: "member" });
+  await db.insert(boardMembers).values({ boardId: board.id, userId: guest.id, role: "editor", assignedItemsOnly: true });
+  await db.insert(cardAssignees).values({ cardId: assignedCard.id, userId: guest.id });
+  const guestToken = app.jwt.sign({ sub: guest.id, cid: owner.clientId, role: "member" });
+
+  // Card keys are sequential, so a restricted member can guess them; resolving must apply the same
+  // card-level visibility rule as the card routes and not just board access.
+  const assignedUrl = `/b/${board.id}/c/${assignedCard.id}`;
+  const hiddenUrl = `/b/${board.id}/c/${hiddenCard.id}`;
+  const hiddenKeyUrl = cardPath(hiddenCard.organisationKey, hiddenCard.key);
+  const response = await app.inject({
+    method: "POST",
+    url: "/internal-links/resolve",
+    headers: { authorization: `Bearer ${guestToken}` },
+    payload: { urls: [assignedUrl, hiddenUrl, hiddenKeyUrl] },
+  });
+  assert.equal(response.statusCode, 200);
+  const body = response.json();
+  assert.equal(body.links[assignedUrl]?.title, "Visible to guest");
+  assert.equal(body.links[hiddenUrl], undefined);
+  assert.equal(body.links[hiddenKeyUrl], undefined);
 });

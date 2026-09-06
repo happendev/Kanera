@@ -75,7 +75,7 @@ you expose it through a Dokploy domain, so public API rate limits use the real
 client IP.
 
 For GitHub private repository link previews, register a GitHub App for this
-deployment (see the GitHub App section below) and add the three `GITHUB_APP_*`
+deployment (see the GitHub App section below) and add the `GITHUB_APP_*`
 variables. Leave them unset to instead bootstrap an App in-app via Settings →
 Organisation after deploy. **Redeploy after saving any env var changes** — Dokploy
 does not hot-reload running containers.
@@ -307,6 +307,8 @@ Leave them unset to instead bootstrap an App from Settings > Organisation.
 |---|---:|---|
 | `GITHUB_APP_ID` | No | GitHub App id. |
 | `GITHUB_APP_SLUG` | No | GitHub App slug from its install URL. |
+| `GITHUB_APP_CLIENT_ID` | Hosted | App OAuth client id. Enable "Request user authorization (OAuth) during installation" on the App and set its Callback URL to `${WEB_ORIGIN}/settings/org`; Kanera uses the resulting authorization to confirm the connecting user can see the installation. |
+| `GITHUB_APP_CLIENT_SECRET` | Hosted | An OAuth client secret for the App. Required alongside `GITHUB_APP_CLIENT_ID`. |
 | `GITHUB_APP_PRIVATE_KEY` | No | App private key PEM with newlines escaped as `\n`. Paste as a single line — Dokploy's env editor reads one value per line, so a raw multi-line PEM will be silently truncated. Run `awk 'NF {sub(/\r/, ""); printf "%s\\n",$0;}' your-key.pem` to get the correctly escaped form. |
 | `TRELLO_API_KEY` | No | Trello app API key for authenticated Trello attachment imports. See `trello_import.md`. |
 
