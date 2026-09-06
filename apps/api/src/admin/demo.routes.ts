@@ -5,7 +5,7 @@ import { eq, inArray } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { randomUUID } from "node:crypto";
 import { db, pool } from "../db.js";
-import { conflict, forbidden } from "../lib/errors.js";
+import { badRequest, conflict, forbidden } from "../lib/errors.js";
 import {
   createStorageForConfig,
   getConfiguredS3StorageConfig,
@@ -119,11 +119,22 @@ async function withDemoResetLock<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
-async function resetDemo(req: FastifyRequest, password: string): Promise<AdminDemoResetResponse> {
+async function resetDemo(req: FastifyRequest, password?: string): Promise<AdminDemoResetResponse> {
   return withDemoResetLock(async () => {
-    const operationId = randomUUID();
     const existingClients = await findDemoClients();
     const existingClientIds = existingClients.map((client) => client.id);
+    const [existingCredential] = password ? [] : await db
+      .select({ passwordHash: users.passwordHash })
+      .from(users)
+      .where(eq(users.email, DEMO_SEED_PRIMARY_EMAIL))
+      .limit(1);
+    if (!password && !existingCredential) {
+      // Resolve the reusable credential before audit/storage/database mutation: a blank first-time
+      // reset must fail without partially deleting or creating any demo state.
+      throw badRequest("enter a demo password because no existing demo password is available");
+    }
+
+    const operationId = randomUUID();
     const clientIdsToPurge = [...new Set([...existingClientIds, ...await pendingPurgeClientIds()])];
     await db.transaction(async (tx) => {
       // Record the attempt before touching external storage so even a failed purge remains visible to
@@ -172,6 +183,7 @@ async function resetDemo(req: FastifyRequest, password: string): Promise<AdminDe
     const seeded = await seedDatabase({
       requireBlankDatabase: false,
       password,
+      passwordHash: password ? undefined : existingCredential!.passwordHash,
       paid: true,
       analyticsExcluded: true,
     });
@@ -198,7 +210,8 @@ async function resetDemo(req: FastifyRequest, password: string): Promise<AdminDe
     return {
       ok: true,
       primaryEmail: DEMO_SEED_PRIMARY_EMAIL,
-      password,
+      password: password ?? null,
+      passwordReused: password === undefined,
       loginEmails: DEMO_SEED_LOGIN_EMAILS,
       clientIds: [seeded.primaryClientId, seeded.guestClientId],
       summary: seeded.summary,

@@ -263,14 +263,19 @@ export interface AdminDemoStatus {
 }
 
 export const adminDemoResetBody = z.object({
-  password: z.string().min(8).max(200),
+  // Omitted/blank means "reuse the current demo credential". The API resolves that to the
+  // existing one-way password hash and rejects it when no demo credential exists yet.
+  password: z.preprocess((value) => value === "" ? undefined : value, z.string().min(8).max(200).optional()),
 });
 export type AdminDemoResetBody = z.infer<typeof adminDemoResetBody>;
 
 export interface AdminDemoResetResponse {
   ok: true;
   primaryEmail: string;
-  password: string;
+  // A reused password cannot be recovered from its hash, so only newly supplied credentials are
+  // returned to the admin console.
+  password: string | null;
+  passwordReused: boolean;
   loginEmails: string[];
   clientIds: string[];
   summary: {

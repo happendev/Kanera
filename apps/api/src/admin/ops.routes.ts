@@ -55,30 +55,60 @@ export async function adminOpsRoutes(app: FastifyInstance) {
   // Grouped health snapshot across the durable queues plus org/user totals. Read-only.
   app.get("/ops/health", async (req) => {
     const { days } = dto.adminHealthQuery.parse(req.query);
+    // Queue rows are retained for troubleshooting, but demo-owned traffic is not a production
+    // health signal. Email rows need both checks because older/general templates may identify the
+    // tenant only through their recipient rather than a clientId in the JSON payload.
+    const includedEmail = sql`not exists (
+      select 1 from ${clients} excluded_client
+      where excluded_client.analytics_excluded = true
+        and excluded_client.id::text = ${emailQueue.data}->>'clientId'
+    ) and not exists (
+      select 1 from ${users} excluded_user
+      join ${clients} excluded_home on excluded_home.id = excluded_user.client_id and excluded_home.analytics_excluded = true
+      where lower(excluded_user.email) = lower(${emailQueue.toEmail})
+    )`;
+    const includedPush = sql`not exists (
+      select 1 from ${clients} excluded_client
+      where excluded_client.id = ${pushQueue.clientId} and excluded_client.analytics_excluded = true
+    )`;
+    const includedWebhook = sql`not exists (
+      select 1 from workspace excluded_workspace
+      join client excluded_client on excluded_client.id = excluded_workspace.client_id and excluded_client.analytics_excluded = true
+      where excluded_workspace.id = ${webhookDeliveries.workspaceId}
+    )`;
+    const includedOutbox = sql`not exists (
+      select 1 from workspace excluded_workspace
+      join client excluded_client on excluded_client.id = excluded_workspace.client_id and excluded_client.analytics_excluded = true
+      where excluded_workspace.id = ${eventOutbox.workspaceId}
+    )`;
     const emailRows = await db
       .select({ status: emailQueue.status, count: sql<number>`count(*)::int` })
       .from(emailQueue)
+      .where(includedEmail)
       .groupBy(emailQueue.status);
     const webhookRows = await db
       .select({ status: webhookDeliveries.status, count: sql<number>`count(*)::int` })
       .from(webhookDeliveries)
+      .where(includedWebhook)
       .groupBy(webhookDeliveries.status);
     const pushRows = await db
       .select({ status: pushQueue.status, count: sql<number>`count(*)::int` })
       .from(pushQueue)
+      .where(includedPush)
       .groupBy(pushQueue.status);
     const [pushPending] = await db
       .select({
         oldestQueuedAt: sql<Date | null>`min(${pushQueue.createdAt}) filter (where ${pushQueue.status} in ('queued', 'immediate'))`,
       })
-      .from(pushQueue);
+      .from(pushQueue)
+      .where(includedPush);
     // Outbox has no status column — a row is "pending" until BOTH realtime + webhook fanout complete.
     const [outboxPendingRow] = await db
       .select({ outboxPending: sql<number>`count(*)::int` })
       .from(eventOutbox)
-      .where(or(eq(eventOutbox.realtimeDispatched, false), eq(eventOutbox.webhooksEnqueued, false)));
+      .where(and(includedOutbox, or(eq(eventOutbox.realtimeDispatched, false), eq(eventOutbox.webhooksEnqueued, false))));
     const outboxPending = outboxPendingRow?.outboxPending ?? 0;
-    const [outboxTotalRow] = await db.select({ outboxTotal: sql<number>`count(*)::int` }).from(eventOutbox);
+    const [outboxTotalRow] = await db.select({ outboxTotal: sql<number>`count(*)::int` }).from(eventOutbox).where(includedOutbox);
     const outboxTotal = outboxTotalRow?.outboxTotal ?? 0;
 
     const emptyTotals = { total: 0, suspended: 0, deleted: 0 };
@@ -88,16 +118,21 @@ export async function adminOpsRoutes(app: FastifyInstance) {
         suspended: sql<number>`count(*) filter (where ${clients.suspendedAt} is not null)::int`,
         deleted: sql<number>`count(*) filter (where ${clients.deletedAt} is not null)::int`,
       })
-      .from(clients);
+      .from(clients)
+      .where(eq(clients.analyticsExcluded, false));
     const [userTotals = emptyTotals] = await db
       .select({
         total: sql<number>`count(*)::int`,
         suspended: sql<number>`count(*) filter (where exists (
-          select 1 from ${clientMembers} cm where cm.user_id = ${users.id} and cm.suspended_at is not null and cm.removed_at is null
+          select 1 from ${clientMembers} cm
+          join ${clients} membership_client on membership_client.id = cm.client_id and membership_client.analytics_excluded = false
+          where cm.user_id = ${users.id} and cm.suspended_at is not null and cm.removed_at is null
         ))::int`,
         deleted: sql<number>`count(*) filter (where ${users.deletedAt} is not null)::int`,
       })
-      .from(users);
+      .from(users)
+      .innerJoin(clients, eq(clients.id, users.clientId))
+      .where(eq(clients.analyticsExcluded, false));
     const [planMembers = { freeUsers: 0, trialUsers: 0 }] = await db
       .select({
         // Trialing is a paid entitlement tier, but the portal splits it out so growth/conversion is visible.
@@ -107,7 +142,7 @@ export async function adminOpsRoutes(app: FastifyInstance) {
       .from(clientMembers)
       .innerJoin(users, eq(users.id, clientMembers.userId))
       .innerJoin(clients, eq(clientMembers.clientId, clients.id))
-      .where(and(isNull(users.deletedAt), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt), isNull(clients.deletedAt)));
+      .where(and(isNull(users.deletedAt), isNull(clientMembers.suspendedAt), isNull(clientMembers.removedAt), isNull(clients.deletedAt), eq(clients.analyticsExcluded, false)));
     const [proSeats = { proSeats: 0 }] = await db
       .select({
         // Purchased capacity, not current organisation headcount, is what Stripe bills and therefore
@@ -116,7 +151,7 @@ export async function adminOpsRoutes(app: FastifyInstance) {
         proSeats: sql<number>`coalesce(sum(${clients.seatLimit}) filter (where ${clients.plan} = 'paid' and ${clients.billingStatus} in ('active', 'past_due')), 0)::int`,
       })
       .from(clients)
-      .where(isNull(clients.deletedAt));
+      .where(and(isNull(clients.deletedAt), eq(clients.analyticsExcluded, false)));
     const planAccess = { ...planMembers, ...proSeats };
 
     // Keep the dashboard total aligned with tenant quota accounting: card, note, and scratchpad
@@ -124,13 +159,19 @@ export async function adminOpsRoutes(app: FastifyInstance) {
     // This enumeration must match `getOrgStorageUsage` in lib/entitlements.ts.
     const [cardStorage] = await db
       .select({ bytes: sql<string>`coalesce(sum(${cardAttachments.byteSize}), 0)::bigint` })
-      .from(cardAttachments);
+      .from(cardAttachments)
+      .innerJoin(clients, eq(clients.id, cardAttachments.clientId))
+      .where(eq(clients.analyticsExcluded, false));
     const [noteStorage] = await db
       .select({ bytes: sql<string>`coalesce(sum(${noteAttachments.byteSize}), 0)::bigint` })
-      .from(noteAttachments);
+      .from(noteAttachments)
+      .innerJoin(clients, eq(clients.id, noteAttachments.clientId))
+      .where(eq(clients.analyticsExcluded, false));
     const [scratchpadStorage] = await db
       .select({ bytes: sql<string>`coalesce(sum(${scratchpadNoteAttachments.byteSize}), 0)::bigint` })
-      .from(scratchpadNoteAttachments);
+      .from(scratchpadNoteAttachments)
+      .innerJoin(clients, eq(clients.id, scratchpadNoteAttachments.clientId))
+      .where(eq(clients.analyticsExcluded, false));
     const storageUsedBytes = Number(cardStorage?.bytes ?? 0)
       + Number(noteStorage?.bytes ?? 0)
       + Number(scratchpadStorage?.bytes ?? 0);
@@ -138,19 +179,21 @@ export async function adminOpsRoutes(app: FastifyInstance) {
     type TrendRow = { date: string; activeUsers: number; registrations: number; cards: number; boards: number; automationEffectful: number; automationNoop: number; automationFailed: number };
     // Generate the calendar first so quiet days remain visible instead of disappearing from the chart.
     // Active users reflects the latest presence timestamp we retain; historical sessions are not stored.
+    // Every product metric resolves through its owning tenant so analytics-excluded demo data cannot
+    // inflate a chart even though the demo remains live and exercises normal application paths.
     const trendRows = await db.execute<TrendRow>(sql`
       with days as (
         select generate_series(current_date - (${days - 1} * interval '1 day'), current_date, interval '1 day')::date as day
       )
       select
         to_char(days.day, 'YYYY-MM-DD') as date,
-        (select count(*)::int from "user" u where u.last_online_at >= days.day and u.last_online_at < days.day + interval '1 day') as "activeUsers",
-        (select count(*)::int from "user" u where u.created_at >= days.day and u.created_at < days.day + interval '1 day') as registrations,
-        (select count(*)::int from card c where c.created_at >= days.day and c.created_at < days.day + interval '1 day') as cards,
-        (select count(*)::int from board b where b.created_at >= days.day and b.created_at < days.day + interval '1 day') as boards,
-        (select count(*)::int from automation_run ar where ar.outcome = 'effectful' and ar.ran_at >= days.day and ar.ran_at < days.day + interval '1 day') as "automationEffectful",
-        (select count(*)::int from automation_run ar where ar.outcome = 'noop' and ar.ran_at >= days.day and ar.ran_at < days.day + interval '1 day') as "automationNoop",
-        (select count(*)::int from automation_run ar where ar.outcome = 'failed' and ar.ran_at >= days.day and ar.ran_at < days.day + interval '1 day') as "automationFailed"
+        (select count(*)::int from "user" u join client uc on uc.id = u.client_id and uc.analytics_excluded = false where u.last_online_at >= days.day and u.last_online_at < days.day + interval '1 day') as "activeUsers",
+        (select count(*)::int from "user" u join client uc on uc.id = u.client_id and uc.analytics_excluded = false where u.created_at >= days.day and u.created_at < days.day + interval '1 day') as registrations,
+        (select count(*)::int from card c join board cb on cb.id = c.board_id join workspace cw on cw.id = cb.workspace_id join client cc on cc.id = cw.client_id and cc.analytics_excluded = false where c.created_at >= days.day and c.created_at < days.day + interval '1 day') as cards,
+        (select count(*)::int from board b join workspace bw on bw.id = b.workspace_id join client bc on bc.id = bw.client_id and bc.analytics_excluded = false where b.created_at >= days.day and b.created_at < days.day + interval '1 day') as boards,
+        (select count(*)::int from automation_run ar join automation a on a.id = ar.automation_id join workspace aw on aw.id = a.workspace_id join client ac on ac.id = aw.client_id and ac.analytics_excluded = false where ar.outcome = 'effectful' and ar.ran_at >= days.day and ar.ran_at < days.day + interval '1 day') as "automationEffectful",
+        (select count(*)::int from automation_run ar join automation a on a.id = ar.automation_id join workspace aw on aw.id = a.workspace_id join client ac on ac.id = aw.client_id and ac.analytics_excluded = false where ar.outcome = 'noop' and ar.ran_at >= days.day and ar.ran_at < days.day + interval '1 day') as "automationNoop",
+        (select count(*)::int from automation_run ar join automation a on a.id = ar.automation_id join workspace aw on aw.id = a.workspace_id join client ac on ac.id = aw.client_id and ac.analytics_excluded = false where ar.outcome = 'failed' and ar.ran_at >= days.day and ar.ran_at < days.day + interval '1 day') as "automationFailed"
       from days
       order by days.day
     `);

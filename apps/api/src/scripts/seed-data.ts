@@ -488,6 +488,8 @@ export type SeedDatabaseOptions = {
    */
   requireBlankDatabase?: boolean;
   password?: string;
+  // Admin demo resets can preserve an existing credential without ever recovering its plaintext.
+  passwordHash?: string;
   paid?: boolean;
   analyticsExcluded?: boolean;
 };
@@ -4109,7 +4111,7 @@ async function createAttachmentRow(input: {
 export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<SeedDatabaseResult> {
   if (options.requireBlankDatabase ?? true) await assertBlankDatabase();
 
-  const passwordHash = await hashPassword(options.password ?? DEV_SEED_SHARED_PASSWORD);
+  const passwordHash = options.passwordHash ?? await hashPassword(options.password ?? DEV_SEED_SHARED_PASSWORD);
   const workspaceSeeds = buildWorkspaceSeeds();
   const summary: SeedSummary = {
     users: 0,
@@ -4144,7 +4146,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
       const [client] = await tx
         .insert(clients)
         .values({
-          name: "Happen Software",
+          name: "Happen Software Demo",
           storageConfig,
           analyticsExcluded: options.analyticsExcluded ?? false,
           // Keep hosted dev seeds aligned with real hosted signup: the seeded org starts as a

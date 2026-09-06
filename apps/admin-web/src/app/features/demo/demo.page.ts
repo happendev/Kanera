@@ -32,11 +32,14 @@ import { ToastService } from "../../shared/toast.service";
               autocomplete="new-password"
               minlength="8"
               maxlength="200"
-              placeholder="At least 8 characters"
+              [placeholder]="status()?.exists ? 'Leave blank to keep the existing password' : 'At least 8 characters'"
               [value]="password()"
               (input)="password.set($any($event.target).value)"
             />
-            <small class="muted">Used by every seeded login. It remains the same on future resets when you enter the same value.</small>
+            <small class="muted">
+              Used by every seeded login.
+              {{ status()?.exists ? "Leave blank to keep the existing password, or enter a new one to replace it." : "A password is required when creating the demo for the first time." }}
+            </small>
           </label>
         </div>
         <button class="btn btn-danger" type="button" [disabled]="loading() || resetting() || !passwordValid()" (click)="reset()">
@@ -74,7 +77,7 @@ import { ToastService } from "../../shared/toast.service";
         <div class="panel-head">
           <div>
             <h2>New demo credentials</h2>
-            <p class="muted">These credentials use the password you set for this reset.</p>
+            <p class="muted">{{ created.passwordReused ? "The existing demo password was preserved." : "These credentials use the new password you set for this reset." }}</p>
           </div>
           <button class="btn" type="button" (click)="copyCredentials(created)">
             <i class="ti ti-copy"></i>
@@ -87,7 +90,7 @@ import { ToastService } from "../../shared/toast.service";
         </div>
         <div class="primary">
           <span class="label">Shared strong password</span>
-          <code>{{ created.password }}</code>
+          <code>{{ created.password ?? "Unchanged from the previous demo" }}</code>
         </div>
         <details>
           <summary>All {{ created.loginEmails.length }} login emails</summary>
@@ -149,7 +152,12 @@ export class DemoPage implements OnInit {
   readonly status = signal<AdminDemoStatus | null>(null);
   readonly result = signal<AdminDemoResetResponse | null>(null);
   readonly password = signal("");
-  readonly passwordValid = computed(() => this.password().length >= 8 && this.password().length <= 200);
+  readonly passwordValid = computed(() => {
+    const password = this.password();
+    return password.length === 0
+      ? this.status()?.exists === true
+      : password.length >= 8 && password.length <= 200;
+  });
 
   async ngOnInit(): Promise<void> {
     await this.load();
@@ -167,7 +175,7 @@ export class DemoPage implements OnInit {
     this.resetting.set(true);
     this.result.set(null);
     try {
-      const body: AdminDemoResetBody = { password: this.password() };
+      const body: AdminDemoResetBody = this.password() ? { password: this.password() } : {};
       const created = await this.api.post<AdminDemoResetResponse>("/admin/demo/reset", body);
       this.result.set(created);
       this.toasts.success("Demo data is ready");
@@ -182,7 +190,7 @@ export class DemoPage implements OnInit {
   async copyCredentials(created: AdminDemoResetResponse): Promise<void> {
     const text = [
       `Primary login: ${created.primaryEmail}`,
-      `Password: ${created.password}`,
+      created.password ? `Password: ${created.password}` : "Password: unchanged from the previous demo",
       "",
       "All login emails:",
       ...created.loginEmails,

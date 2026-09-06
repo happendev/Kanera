@@ -46,6 +46,28 @@ void test("user admin views expose Free/Pro membership and paid guest relationsh
   ]);
 });
 
+void test("user admin list excludes identities owned by analytics-excluded demo tenants", async () => {
+  const demo = await signupOrg("Seeded Demo Users", "demo-user-owner@test.local");
+  await db.update(clients).set({ analyticsExcluded: true }).where(eq(clients.id, demo.clientId));
+
+  const adminApp = await buildAdminIntegrationServer();
+  await createAdmin("demo-user-admin@test.local", "admin-password");
+  const { accessToken } = await loginAdmin(adminApp, "demo-user-admin@test.local", "admin-password");
+  const response = await adminApp.inject({
+    method: "GET",
+    url: "/admin/users?q=demo-user-owner%40test.local",
+    headers: adminAuthHeader(accessToken),
+  });
+
+  assert.equal(response.statusCode, 200, response.body);
+  assert.deepEqual(response.json<{ items: unknown[]; total: number }>(), {
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 25,
+  });
+});
+
 void test("POST /admin/users/:id/suspend sets membership suspendedAt, revokes refresh tokens, and audits", async () => {
   const { userId } = await signupOrg("User Suspend Co", "member-owner@test.local");
 

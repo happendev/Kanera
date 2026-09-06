@@ -123,6 +123,9 @@ export async function adminUserRoutes(app: FastifyInstance) {
   app.get("/users", async (req) => {
     const query = dto.adminListUsersQuery.parse(req.query);
     const filters = [
+      // A global identity is owned by exactly one home organisation. Use that durable ownership
+      // boundary to keep demo identities out even if they also have guest access elsewhere.
+      sql`exists (select 1 from ${clients} home_client where home_client.id = ${users.clientId} and home_client.analytics_excluded = false)`,
       query.q ? or(
         ilike(users.email, `%${query.q}%`),
         ilike(users.displayName, `%${query.q}%`),

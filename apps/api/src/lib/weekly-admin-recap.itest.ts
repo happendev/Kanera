@@ -93,6 +93,66 @@ void test("weekly admin recap aggregates the prior week, groups upcoming billing
     },
   ]);
 
+  // This mirrors the hosted admin-demo reset: the rows exercise normal product and billing paths,
+  // but the tenant-level marker must remove every one of them from the operational recap.
+  const [demoClient] = await db.insert(clients).values({
+    name: "Seeded Demo",
+    analyticsExcluded: true,
+    plan: "paid",
+    billingStatus: "active",
+    seatLimit: 50,
+    analyticsSubscriptionStartedAt: new Date("2026-05-20T12:00:00Z"),
+    currentPeriodEnd: new Date("2026-05-28T12:00:00Z"),
+    createdAt: new Date("2026-05-19T12:00:00Z"),
+  }).returning();
+  const [demoUser] = await db.insert(users).values({
+    clientId: demoClient!.id,
+    activeClientId: demoClient!.id,
+    email: "seeded-demo@example.com",
+    passwordHash: "x",
+    displayName: "Demo User",
+    createdAt: new Date("2026-05-19T12:00:00Z"),
+  }).returning();
+  const [demoWorkspace] = await db.insert(workspaces).values({ clientId: demoClient!.id, name: "Demo Workspace" }).returning();
+  const [demoBoard] = await db.insert(boards).values({
+    workspaceId: demoWorkspace!.id,
+    name: "Demo Board",
+    position: "1000.0000000000",
+    createdAt: new Date("2026-05-21T12:00:00Z"),
+  }).returning();
+  await db.insert(activityEvents).values({
+    clientId: demoClient!.id,
+    actorId: demoUser!.id,
+    entityType: "workspaceMember",
+    entityId: demoUser!.id,
+    action: "added",
+    payload: { inviteId: "00000000-0000-0000-0000-000000000002" },
+    createdAt: new Date("2026-05-22T12:00:00Z"),
+  });
+  await db.insert(boardInvitations).values({
+    clientId: demoClient!.id,
+    boardId: demoBoard!.id,
+    email: "demo-guest@example.com",
+    tokenHash: "weekly-recap-demo-token",
+    invitedById: demoUser!.id,
+    acceptedAt: new Date("2026-05-23T12:00:00Z"),
+    acceptedByUserId: demoUser!.id,
+  });
+  await db.insert(emailQueue).values({
+    toEmail: "seeded-demo@example.com",
+    subject: "Demo Pro active",
+    type: "upgraded_to_pro",
+    data: {
+      clientId: demoClient!.id,
+      displayName: "Demo User",
+      orgName: "Seeded Demo",
+      settingsUrl: "https://app.example.com/settings/account-plan",
+      dedupeKey: "demo-upgrade",
+      purchasedSeatCount: 50,
+    } satisfies BillingEmailQueueData,
+    createdAt: new Date("2026-05-20T12:00:00Z"),
+  });
+
   const deps = { db, adminEmail: "ops@example.com", adminUrl: "https://admin.example.com", log };
   assert.equal(await runWeeklyAdminRecapSweep(deps, new Date("2026-05-25T06:59:00Z")), 0);
   assert.equal(await runWeeklyAdminRecapSweep(deps, new Date("2026-05-25T07:00:00Z")), 1);
@@ -109,6 +169,14 @@ void test("weekly admin recap aggregates the prior week, groups upcoming billing
     boardsCreated: 1,
     subscriptionsStarted: 1,
     seatsPurchased: 6,
+  });
+  assert.deepEqual(data.snapshot, {
+    activeAccounts: 1,
+    activeOrganisations: 1,
+    activeBoards: 1,
+    paidOrganisations: 1,
+    trialOrganisations: 0,
+    purchasedSeats: 6,
   });
   assert.deepEqual(data.upcoming.renewals, [{
     dateLabel: "27 May 2026",

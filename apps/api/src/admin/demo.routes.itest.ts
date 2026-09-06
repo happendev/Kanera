@@ -40,6 +40,19 @@ void test("demo reset creates paid seed data with images and hard-purges the pre
     .values({ name: "Keep Me", storageConfig: { kind: "local" } })
     .returning({ id: clients.id });
 
+  const missingExistingPassword = await app.inject({
+    method: "POST",
+    url: "/admin/demo/reset",
+    headers,
+    payload: {},
+  });
+  assert.equal(missingExistingPassword.statusCode, 400);
+  assert.equal(
+    missingExistingPassword.json<{ message: string }>().message,
+    "enter a demo password because no existing demo password is available",
+  );
+  assert.equal(await db.$count(adminAuditLogs, eq(adminAuditLogs.action, "demo.reset.started")), 0);
+
   const invalid = await app.inject({
     method: "POST",
     url: "/admin/demo/reset",
@@ -53,13 +66,15 @@ void test("demo reset creates paid seed data with images and hard-purges the pre
   assert.equal(first.statusCode, 200, first.body);
   const firstBody = first.json<{
     primaryEmail: string;
-    password: string;
+    password: string | null;
+    passwordReused: boolean;
     loginEmails: string[];
     clientIds: string[];
     summary: { attachments: number; cardCovers: number };
   }>();
   assert.equal(firstBody.primaryEmail, "amelia@kanera.test");
   assert.equal(firstBody.password, demoPassword);
+  assert.equal(firstBody.passwordReused, false);
   assert.equal(firstBody.loginEmails.length, 11);
   assert.equal(firstBody.clientIds.length, 2);
   assert.ok(firstBody.summary.attachments > 0);
@@ -68,6 +83,7 @@ void test("demo reset creates paid seed data with images and hard-purges the pre
   const demoClients = await db
     .select({
       id: clients.id,
+      name: clients.name,
       plan: clients.plan,
       billingStatus: clients.billingStatus,
       analyticsExcluded: clients.analyticsExcluded,
@@ -79,6 +95,7 @@ void test("demo reset creates paid seed data with images and hard-purges the pre
       eq(clients.billingStatus, "active"),
     ));
   assert.equal(demoClients.length, 2);
+  assert.ok(demoClients.some((client) => client.name === "Happen Software Demo"));
 
   const seededDueDates = await db
     .select({ dueDate: cards.dueDateLocalDate })
@@ -103,7 +120,7 @@ void test("demo reset creates paid seed data with images and hard-purges the pre
     .where(eq(users.email, firstBody.primaryEmail))
     .limit(1);
   assert.ok(owner);
-  assert.equal(await verifyPassword(owner.passwordHash, firstBody.password), true);
+  assert.equal(await verifyPassword(owner.passwordHash, demoPassword), true);
 
   const ownerStorage = await getStorageForClient(owner.clientId);
   const avatarKey = storageKeyFromMediaUrl(owner.avatarUrl, owner.clientId);
@@ -175,10 +192,11 @@ void test("demo reset creates paid seed data with images and hard-purges the pre
     resource: "https://api.kanera.test",
   }).returning({ id: oauthGrants.id });
 
-  const second = await app.inject({ method: "POST", url: "/admin/demo/reset", headers, payload: { password: demoPassword } });
+  const second = await app.inject({ method: "POST", url: "/admin/demo/reset", headers, payload: {} });
   assert.equal(second.statusCode, 200, second.body);
-  const secondBody = second.json<{ password: string; clientIds: string[] }>();
-  assert.equal(secondBody.password, firstBody.password);
+  const secondBody = second.json<{ password: string | null; passwordReused: boolean; clientIds: string[] }>();
+  assert.equal(secondBody.password, null);
+  assert.equal(secondBody.passwordReused, true);
   assert.ok(secondBody.clientIds.every((id) => !oldClientIds.includes(id)));
 
   assert.equal(
@@ -199,8 +217,8 @@ void test("demo reset creates paid seed data with images and hard-purges the pre
     .where(eq(users.email, firstBody.primaryEmail))
     .limit(1);
   assert.ok(newOwner);
-  assert.equal(await verifyPassword(newOwner.passwordHash, secondBody.password), true);
-  assert.equal(await verifyPassword(newOwner.passwordHash, firstBody.password), true);
+  assert.equal(newOwner.passwordHash, owner.passwordHash, "blank reset reuses the existing one-way credential hash");
+  assert.equal(await verifyPassword(newOwner.passwordHash, demoPassword), true);
   assert.equal(await db.$count(adminAuditLogs, eq(adminAuditLogs.action, "demo.reset.started")), 2);
   assert.equal(await db.$count(adminAuditLogs, eq(adminAuditLogs.action, "demo.reset")), 2);
 });
