@@ -2,12 +2,14 @@ import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { MenuDirective } from "../../shared/menu.directive";
 import { ShortcutsSheetComponent } from "../../shared/shortcuts-sheet.component";
 import { KeyboardShortcutsService } from "../../core/keyboard/keyboard-shortcuts.service";
+import { CdkDrag, CdkDropList, type CdkDragDrop } from "@angular/cdk/drag-drop";
+import { CdkScrollable } from "@angular/cdk/scrolling";
 import { Dialog } from "@angular/cdk/dialog";
 import { NgOptimizedImage } from "@angular/common";
 import type { OnDestroy, OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, signal, viewChild, DestroyRef } from "@angular/core";
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from "@angular/router";
-import type { NotificationSettingsResponse } from "@kanera/shared/dto";
+import type { MoveBoardResponse, NotificationSettingsResponse } from "@kanera/shared/dto";
 import type { ServerToClientEvents } from "@kanera/shared/events";
 import type { Board, BoardGroup, StandaloneBoardGroup } from "@kanera/shared/schema";
 import type { Subscription } from "rxjs";
@@ -93,7 +95,7 @@ type SidebarSwipe = {
 @Component({
   selector: "k-app-shell",
   standalone: true,
-  imports: [EmptyStateComponent, MenuDirective, RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, AnchoredPanelDirective, MyPrioritiesPanelComponent, NotificationsPanelComponent, ScratchpadPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent, ShortcutsSheetComponent],
+  imports: [CdkDrag, CdkDropList, CdkScrollable, EmptyStateComponent, MenuDirective, RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, AnchoredPanelDirective, MyPrioritiesPanelComponent, NotificationsPanelComponent, ScratchpadPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent, ShortcutsSheetComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./app-shell.component.html",
   styleUrl: "./app-shell.component.scss",
@@ -196,9 +198,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
       }
       const containers: GuestContainer[] = [
         ...entry.standard.map((workspace): GuestContainer => ({ kind: "workspace", id: workspace.workspace.id, name: workspace.workspace.name, workspace })),
-        ...[...byGroup].map(([id, boards]): GuestContainer => ({ kind: "standaloneGroup", id, name: metadata.get(id)!.title, boards: boards.sort((a, b) => a.board.name.localeCompare(b.board.name)) })),
+        ...[...byGroup].map(([id, boards]): GuestContainer => ({ kind: "standaloneGroup", id, name: metadata.get(id)!.title, boards: boards.sort((a, b) => Number(a.board.position) - Number(b.board.position) || a.board.name.localeCompare(b.board.name)) })),
       ].sort((a, b) => a.name.localeCompare(b.name));
-      return { clientId, clientName: entry.clientName, containers, ungroupedStandaloneBoards: ungroupedStandaloneBoards.sort((a, b) => a.board.name.localeCompare(b.board.name)) };
+      return { clientId, clientName: entry.clientName, containers, ungroupedStandaloneBoards: ungroupedStandaloneBoards.sort((a, b) => Number(a.board.position) - Number(b.board.position) || a.board.name.localeCompare(b.board.name)) };
     }).filter((org) => org.containers.length > 0 || org.ungroupedStandaloneBoards.length > 0)
       .sort((a, b) => a.clientName.localeCompare(b.clientName));
   });
@@ -397,7 +399,22 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.setSidebarCollapsed(next);
   }
 
+  private boardDragScrollTop: number | null = null;
+
+  onNavBoardDragStarted(): void {
+    const nav = this.host.nativeElement.querySelector<HTMLElement>(".nav");
+    // CDK reparents the original row and inserts a placeholder at pickup. Restore the scroll
+    // captured before that DOM change, before CDK measures the drop list and its scroller.
+    if (nav && this.boardDragScrollTop !== null) nav.scrollTop = this.boardDragScrollTop;
+    this.boardDragScrollTop = null;
+    // A long-press reorder now owns the touch; drawer scrolling must not fight CDK auto-scroll.
+    this.finishSidebarSwipe();
+  }
+
   onSidebarPointerDown(event: PointerEvent) {
+    const nav = this.host.nativeElement.querySelector<HTMLElement>(".nav");
+    this.boardDragScrollTop = event.target instanceof Element && nav?.contains(event.target)
+      && event.target.closest(".cdk-drag:not(.cdk-drag-disabled)") ? nav.scrollTop : null;
     if (event.pointerType !== "touch" || !event.isPrimary) return;
     // Anchored menus are rendered inside the sidebar's DOM tree even though they float over it.
     // Claiming their pointer stream for the drawer gesture makes touch taps target the shell instead
@@ -1078,6 +1095,68 @@ export class AppShellComponent implements OnInit, OnDestroy {
     });
   }
 
+  readonly boardReorderPending = signal(false);
+  private readonly pendingBoardOrder = signal<Map<string, number> | null>(null);
+
+  private withPendingBoardOrder<T>(items: T[], boardOf: (item: T) => ShellBoard): T[] {
+    const ranks = this.pendingBoardOrder();
+    if (!ranks) return items;
+    // Keep server entities authoritative while holding the dropped visual order through partial
+    // rebalance echoes. Only this drop's siblings move; unrelated rows keep their current slots.
+    const siblings = items.filter((item) => ranks.has(boardOf(item).id))
+      .sort((a, b) => ranks.get(boardOf(a).id)! - ranks.get(boardOf(b).id)!);
+    let index = 0;
+    return items.map((item) => ranks.has(boardOf(item).id) ? siblings[index++] : item);
+  }
+  readonly boardReorderError = signal<string | null>(null);
+
+  canReorderBoards(workspace?: { role: string }): boolean {
+    return !this.usingOfflineShell() && !this.boardSearchTerm() && !this.boardReorderPending()
+      && (workspace ? this.canManageWorkspace(workspace) : this.isOrgAdmin());
+  }
+
+  // Collapsed navigation flattens named groups visually, but reordering must keep membership.
+  readonly canSortNavBoard = (index: number, drag: CdkDrag<ShellBoard>, drop: CdkDropList): boolean => {
+    const target = drop.getSortedItems()[index]?.data as ShellBoard | undefined;
+    return !!target && target.groupId === drag.data.groupId
+      && target.standaloneGroupId === drag.data.standaloneGroupId;
+  };
+
+  async dropNavBoard(event: CdkDragDrop<unknown>, items: Array<ShellBoard | StandaloneBoardNavItem>, workspace?: { role: string }): Promise<void> {
+    if (!this.canReorderBoards(workspace) || event.previousContainer !== event.container
+      || event.previousIndex === event.currentIndex) return;
+    const ordered = items.map((item) => "board" in item ? item.board : item);
+    const moved = ordered[event.previousIndex];
+    if (!moved || this.isPlanDisabled(moved)) return;
+    ordered.splice(event.previousIndex, 1);
+    ordered.splice(event.currentIndex, 0, moved);
+    const body = event.currentIndex === 0
+      ? { beforeBoardId: ordered[1]?.id ?? null }
+      : { afterBoardId: ordered[event.currentIndex - 1].id };
+    this.boardReorderPending.set(true);
+    this.boardReorderError.set(null);
+    // CDK removes its placeholder on drop. Commit the visible order synchronously so the real
+    // row occupies that slot immediately, even when the API takes seconds to respond.
+    this.pendingBoardOrder.set(new Map(ordered.map((board, index) => [board.id, index])));
+    try {
+      const result = await this.api.post<MoveBoardResponse>(`/boards/${moved.id}/move`, body);
+      const positions = new Map((result.positions ?? []).map((board) => [board.id, board.position]));
+      positions.set(result.id, result.position);
+      this.groups.update((groups) => groups.map((group) => {
+        if (!group.boards.some((board) => positions.has(board.id))) return group;
+        return { ...group, boards: sortBoards(group.boards.map((board) => {
+          const position = positions.get(board.id);
+          return position === undefined ? board : { ...board, position };
+        })) };
+      }));
+    } catch {
+      this.boardReorderError.set("Could not save the board order. Please try again.");
+    } finally {
+      this.pendingBoardOrder.set(null);
+      this.boardReorderPending.set(false);
+    }
+  }
+
   canManageWorkspace(workspace: { role: string }): boolean {
     return this.isOrgAdmin() || workspace.role === "admin";
   }
@@ -1098,6 +1177,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.groups();
     this.guestGroups();
     this.boardSearchTerm();
+    this.pendingBoardOrder();
     return {
       filtered: new WeakMap<object, ShellBoard[]>(),
       grouped: new WeakMap<object, SidebarBoardGroup[]>(),
@@ -1110,9 +1190,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
     const cached = cache.get(group);
     if (cached) return cached;
     const term = this.boardSearchTerm();
-    const result = term
+    const result = this.withPendingBoardOrder(term
       ? (group.boards as ShellBoard[]).filter((board) => board.name.toLocaleLowerCase().includes(term))
-      : group.boards as ShellBoard[];
+      : group.boards as ShellBoard[], (board) => board);
     cache.set(group, result);
     return result;
   }
@@ -1166,7 +1246,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
       .map((group) => ({
         id: group.id,
         title: group.title,
-        boards: (byGroupId.get(group.id) ?? []).sort((a, b) => a.board.name.localeCompare(b.board.name)),
+        boards: this.withPendingBoardOrder((byGroupId.get(group.id) ?? []).sort((a, b) => Number(a.board.position) - Number(b.board.position) || a.board.name.localeCompare(b.board.name)), (item) => item.board),
       }))
       .filter((group) => group.boards.length > 0)
       .sort((a, b) => a.title.localeCompare(b.title));
@@ -1174,10 +1254,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   standaloneNavigationUngrouped(groups: Array<HomeGroup | GuestHomeGroup>): StandaloneBoardNavItem[] {
     const knownIds = new Set(this.standaloneBoardGroups().map((group) => group.id));
-    return groups.flatMap((homeGroup) => this.filteredBoards(homeGroup)
+    return this.withPendingBoardOrder(groups.flatMap((homeGroup) => this.filteredBoards(homeGroup)
       .filter((board) => !board.standaloneGroupId || !knownIds.has(board.standaloneGroupId))
       .map((board) => ({ board, homeGroup })))
-      .sort((a, b) => a.board.name.localeCompare(b.board.name));
+      .sort((a, b) => Number(a.board.position) - Number(b.board.position) || a.board.name.localeCompare(b.board.name)), (item) => item.board);
   }
 
   guestCollapsedBoards(org: GuestOrganisation): StandaloneBoardNavItem[] {

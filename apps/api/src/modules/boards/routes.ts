@@ -8,7 +8,7 @@ import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, notEx
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
-import { assignedCardVisibility, assertBoardAccess, assertBoardManageAccess, assertWorkspaceAccess } from "../../lib/access.js";
+import { assignedCardVisibility, assertOrgRole, assertBoardAccess, assertBoardManageAccess, assertWorkspaceAccess } from "../../lib/access.js";
 import { loadAccessibleBoards } from "../../lib/accessible-boards.js";
 import { emitActivityFeedItem, recordActivity } from "../../lib/activity.js";
 import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
@@ -31,6 +31,7 @@ import { ANALYTICS_EVENT_VERSION, analyticsCountBand, capturePremiumFeatureUsed,
 import { reactivatePlanArchivedBoardsIfRoom } from "../../lib/plan-conversion.js";
 import { assertBoardLimit, assertGuestsAllowed, hasBoardSyncEntitlement, lockTenant } from "../../lib/tier-limits.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
+import { moveStandaloneBoard } from "../../lib/move-standalone-board.js";
 import { moveOrderedEntity } from "../../lib/move-ordered-entity.js";
 import { deleteExternalLinks } from "../../lib/external-links.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
@@ -758,7 +759,14 @@ export async function boardRoutes(app: FastifyInstance) {
     const body = dto.moveBoardBody.parse(req.body);
     const [current] = await db.select().from(boards).where(eq(boards.id, id)).limit(1);
     if (!current) throw notFound();
-    await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
+    const access = await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
+    const [workspace] = await db.select({ kind: workspaces.kind }).from(workspaces).where(eq(workspaces.id, current.workspaceId));
+    if (!workspace) throw notFound();
+    if (workspace.kind === "board") {
+      assertOrgRole(req.auth, "admin");
+      if (access.clientId !== req.auth.cid) throw forbidden();
+      return moveStandaloneBoard(access.clientId, req.auth.sub, id, body);
+    }
 
     const prevPosition = current.position;
     const { position, rebalancedPositions } = await moveOrderedEntity({
@@ -787,7 +795,7 @@ export async function boardRoutes(app: FastifyInstance) {
       position,
       prevPosition,
     }, { workspaceId: current.workspaceId });
-    return { id, position };
+    return { id, position, positions: rebalancedPositions ?? [] };
   });
 
   app.patch("/boards/:id/background", async (req) => {

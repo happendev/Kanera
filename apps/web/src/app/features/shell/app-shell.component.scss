@@ -181,6 +181,9 @@ k-support-session-banner {
   // otherwise make the horizontal axis scrollable too when a nested row rounds past the gutter.
   overflow-x: hidden;
   overflow-y: auto;
+  // Drag previews and placeholders replace visible rows; browser scroll anchoring must not
+  // choose a different row and move the user's viewport during pickup or sorting.
+  overflow-anchor: none;
   padding: 12px 8px;
   display: flex;
   flex-direction: column;
@@ -478,7 +481,7 @@ k-support-session-banner {
 // A grouped standalone board keeps its settings action, but the board target itself should
 // hover exactly like a board inside a workspace. Indent the row as one unit and let each link
 // own its hover surface instead of highlighting the empty gap and settings action together.
-.standalone-nav-group>.standalone-board-row {
+.standalone-nav-group>.nav-board-drop-list>.standalone-board-row {
   margin-left: 15px;
 
   &:hover {
@@ -1599,3 +1602,10 @@ k-support-session-banner {
     animation: none;
   }
 }
+
+// Preview stays in the sidebar so its inherited theme and compact row styling survive dragging.
+.nav-board-drop-list .cdk-drag:not(.cdk-drag-disabled) { cursor: grab; }
+.nav-board-drop-list .cdk-drag-placeholder { opacity: .25; }
+.nav-board-drop-list.cdk-drop-list-dragging .cdk-drag:not(.cdk-drag-placeholder):not(.cdk-drag-preview),
+.cdk-drag-animating { transition: transform 140ms cubic-bezier(.2, 0, 0, 1); }
+.cdk-drag-preview { box-sizing: border-box; background: var(--surface); border-radius: 6px; box-shadow: 0 4px 12px rgb(0 0 0 / 15%); }

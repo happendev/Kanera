@@ -1,4 +1,5 @@
 import { provideZonelessChangeDetection, signal } from "@angular/core";
+import type { CdkDragDrop } from "@angular/cdk/drag-drop";
 import { Dialog } from "@angular/cdk/dialog";
 import type { ComponentFixture} from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
@@ -190,6 +191,7 @@ describe("AppShellComponent board search", () => {
       ...options.browserPush,
     };
     const api = {
+      post: vi.fn().mockResolvedValue({ id: "board-2", position: "500.0000000000" }),
       get: vi.fn((path: string) => {
         if (path === "/home/boards") return Promise.resolve(response);
         return Promise.resolve(notificationSettings);
@@ -367,6 +369,93 @@ describe("AppShellComponent board search", () => {
     fixture.detectChanges();
     return { api, browserPush, authUser, dialog, notifications, socket, joinBoard, joinWorkspace, workspaceService, switchOrg, pauseForOrganisationSwitch, resumeAfterOrganisationSwitch, navigateAfterOrganisationSwitch };
   }
+
+  it("preserves the scrolled viewport at pickup without locking subsequent drag scrolling", async () => {
+    await render();
+    const root = fixture.nativeElement as HTMLElement;
+    const nav = root.querySelector<HTMLElement>(".nav")!;
+    const boardLink = root.querySelector<HTMLElement>(".ws-boards .cdk-drag")!;
+    nav.scrollTop = 420;
+    dispatchPointer(boardLink, "pointerdown", 1, 100, 500, "mouse");
+    // Model a browser scroll-anchor adjustment when CDK replaces the focused row.
+    nav.scrollTop = 0;
+    component.onNavBoardDragStarted();
+    expect(nav.scrollTop).toBe(420);
+    nav.scrollTop = 480;
+    component.onNavBoardDragStarted();
+    expect(nav.scrollTop).toBe(480);
+  });
+
+  it("hands touch scrolling over to drag-drop after a long-press pickup", async () => {
+    await render();
+    const root = fixture.nativeElement as HTMLElement;
+    const nav = root.querySelector<HTMLElement>(".nav")!;
+    const boardLink = root.querySelector<HTMLElement>(".ws-boards .cdk-drag")!;
+    nav.scrollTop = 420;
+    dispatchPointer(boardLink, "pointerdown", 2, 100, 500);
+    component.onNavBoardDragStarted();
+    nav.scrollTop = 460;
+    dispatchPointer(root, "pointermove", 2, 100, 400);
+    expect(nav.scrollTop).toBe(460);
+  });
+
+  it("settles a drop immediately, saves without reloading and rolls back a rejected move", async () => {
+    const boards = [board(), board({ id: "board-2", position: "2000.0000000000" })];
+    const home = group({ boards });
+    const { api } = await render({ groups: [home], guestGroups: [], dueSoon: [], overdueChecklistItems: 0 });
+    const homeReads = api.get.mock.calls.filter(([path]) => path === "/home/boards").length;
+    const container = {};
+    const event = { previousIndex: 1, currentIndex: 0, container, previousContainer: container } as CdkDragDrop<unknown>;
+    let finish!: (value: { id: string; position: string }) => void;
+    api.post.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const saving = component.dropNavBoard(event, boards, home.workspace);
+    expect(component.filteredBoards(component.groups()[0]).map((board) => board.id)).toEqual(["board-2", "board-1"]);
+    expect(api.post).toHaveBeenCalledWith("/boards/board-2/move", { beforeBoardId: "board-1" });
+    finish({ id: "board-2", position: "500.0000000000" });
+    await saving;
+    expect(component.filteredBoards(component.groups()[0]).map((board) => board.id)).toEqual(["board-2", "board-1"]);
+    expect(api.get.mock.calls.filter(([path]) => path === "/home/boards")).toHaveLength(homeReads);
+    api.post.mockRejectedValueOnce(new Error("offline"));
+    await component.dropNavBoard(event, component.filteredBoards(component.groups()[0]), home.workspace);
+    expect(component.boardReorderError()).toContain("Could not save");
+    expect(component.filteredBoards(component.groups()[0]).map((board) => board.id)).toEqual(["board-2", "board-1"]);
+    expect(component.boardReorderPending()).toBe(false);
+  });
+
+  it("holds standalone order through partial rebalance echoes until the save reconciles all positions", async () => {
+    const first = group({ workspace: workspace({ kind: "board" }), boards: [board({ name: "Alpha", position: "1000" })] });
+    const second = group({ workspace: workspace({ kind: "board", id: "workspace-2" }), boards: [board({ id: "board-2", workspaceId: "workspace-2", name: "Beta", position: "1000" })] });
+    const { api, socket } = await render({ groups: [first, second], guestGroups: [], dueSoon: [], overdueChecklistItems: 0 }, { isOrgAdmin: true });
+    const container = {};
+    const event = { previousIndex: 1, currentIndex: 0, container, previousContainer: container } as CdkDragDrop<unknown>;
+    let finish!: (value: unknown) => void;
+    api.post.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const saving = component.dropNavBoard(event, component.ownUngroupedStandaloneBoards());
+    const names = () => component.ownUngroupedStandaloneBoards().map((item) => item.board.name);
+    expect(names()).toEqual(["Beta", "Alpha"]);
+    socket.emitServer("board:rebalanced", { workspaceId: "workspace-2", positions: [{ id: "board-2", position: "2000" }] });
+    expect(names()).toEqual(["Beta", "Alpha"]);
+    finish({ id: "board-2", position: "500", positions: [{ id: "board-1", position: "1000" }] });
+    await saving;
+    expect(names()).toEqual(["Beta", "Alpha"]);
+  });
+
+  it("restricts ordering to admins and disables ambiguous search results", async () => {
+    await render(undefined, { isOrgAdmin: false });
+    expect(component.canReorderBoards(workspace({ role: "member" }))).toBe(false);
+    expect(component.canReorderBoards(workspace({ role: "admin" }))).toBe(true);
+    expect(component.canReorderBoards()).toBe(false);
+    component.boardSearch.set("Roadmap");
+    expect(component.canReorderBoards(workspace())).toBe(false);
+  });
+
+  it("sorts standalone boards by saved position across hidden workspaces", async () => {
+    const first = group({ workspace: workspace({ kind: "board" }), boards: [board({ name: "Zulu", position: "1000" })] });
+    const second = group({ workspace: workspace({ kind: "board", id: "workspace-2" }), boards: [board({ id: "board-2", workspaceId: "workspace-2", name: "Alpha", position: "2000" })] });
+    await render({ groups: [first, second], guestGroups: [], dueSoon: [], overdueChecklistItems: 0 }, { isOrgAdmin: true });
+    expect(component.ownUngroupedStandaloneBoards().map((item) => item.board.name)).toEqual(["Zulu", "Alpha"]);
+    expect(component.canReorderBoards()).toBe(true);
+  });
 
   function text(): string {
     return (fixture.nativeElement as HTMLElement).textContent?.replace(/\s+/g, " ").trim() ?? "";

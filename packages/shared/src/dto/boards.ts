@@ -36,6 +36,13 @@ export const moveBoardBody = z.object({
 });
 export type MoveBoardBody = z.infer<typeof moveBoardBody>;
 
+export interface MoveBoardResponse {
+  id: string;
+  position: string;
+  /** Siblings normalised by this move, so clients can reconcile without reloading navigation. */
+  positions?: Array<{ id: string; position: string }>;
+}
+
 export const createBoardGroupBody = z.object({
   title: z.string().min(1).max(GENERAL_NAME_MAX_LENGTH),
 });
