@@ -285,6 +285,7 @@
 <k-board-mirrors-dialog [boardId]="boardId()" [refreshVersion]="mirrorRefreshVersion()" (mirrorCountChange)="mirrorCount.set($event)" (dismissed)="mirrorsDialogOpen.set(false)" />
 }
 
+<k-status-toast [show]="!state.online() && !state.customFieldValuesComplete()" icon="cloud-off" message="Some custom fields are not cached. Their values and filters may be incomplete until you reconnect." />
 <k-status-toast [show]="!!offlineBoardCachedAt()" [delayMs]="offlineCopyPromptDelayMs" icon="cloud-off" [message]="offlineCopyLabel()" />
 
 @if (showArchived() && effectiveView() !== 'history') {

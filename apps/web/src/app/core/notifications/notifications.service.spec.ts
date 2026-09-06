@@ -211,6 +211,14 @@ describe("NotificationsService", () => {
     expect(service.loadError()).toBe("You're offline. Reconnect to refresh notifications.");
   });
 
+  it("tolerates failed optional requests during offline shell startup", async () => {
+    api.get.mockRejectedValue(new Error("offline"));
+    service.initialise();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.get).toHaveBeenCalledWith("/notifications/unread-count");
+    expect(service.unreadCount()).toBe(0);
+  });
+
   it("loads board unread counts", async () => {
     await service.refreshBoardUnreadCounts();
 

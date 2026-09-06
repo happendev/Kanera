@@ -257,3 +257,18 @@ describe("ApiClient.createCard retries", () => {
     expect(post).toHaveBeenCalledTimes(1);
   });
 });
+
+it("blocks requests and uploads from an unvalidated offline identity even before the socket updates", async () => {
+  const fetch = vi.fn();
+  vi.stubGlobal("fetch", fetch);
+  TestBed.configureTestingModule({ providers: [
+    provideZonelessChangeDetection(), ApiClient,
+    { provide: AuthService, useValue: { offlineSession: signal(true) } },
+    { provide: SocketService, useValue: { displayedOnline: signal(true) } },
+  ] });
+  const api = TestBed.inject(ApiClient);
+  await expect(api.request("/cards", { method: "POST" })).rejects.toMatchObject({ status: 0 });
+  await expect(api.upload("/cards/a/attachments", new FormData())).rejects.toMatchObject({ status: 0 });
+  expect(fetch).not.toHaveBeenCalled();
+  vi.unstubAllGlobals();
+});

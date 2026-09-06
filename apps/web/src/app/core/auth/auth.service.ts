@@ -62,6 +62,9 @@ interface RefreshResult {
   retryable: boolean;
 }
 
+const OFFLINE_IDENTITY_KEY = STORAGE_KEYS.OFFLINE_IDENTITY;
+const OFFLINE_IDENTITY_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
 const HYDRATION_RETRY_DELAYS_MS = [250, 500, 1_000, 2_000] as const;
 
 @Injectable({ providedIn: "root" })
@@ -73,6 +76,8 @@ export class AuthService {
   private refreshDisabled = false;
   private readonly _organisationSwitchPending = signal(false);
   private readonly _supportSession = signal<{ sessionId: string; orgName: string } | null>(null);
+
+  readonly offlineSession = signal(false);
 
   readonly user = this._user.asReadonly();
   // Remains true after a successful switch until the hard navigation replaces this app instance.
@@ -121,6 +126,9 @@ export class AuthService {
 
   setSession(accessToken: string, user: AuthUser): void {
     this.refreshDisabled = false;
+    this.offlineSession.set(false);
+    // Persist identity only: cookies and bearer tokens remain the server authentication boundary.
+    try { localStorage.setItem(OFFLINE_IDENTITY_KEY, JSON.stringify({ user, cachedAt: Date.now() })); } catch { /* Storage is optional. */ }
     this.accessToken = accessToken;
     this._user.set(user);
     void this.syncTimezone(user);
@@ -132,6 +140,7 @@ export class AuthService {
   // auto-refresh, or it would silently swap the browser back to the operator's own org via their
   // kanera_rt cookie. When the token lapses the operator re-mints from the portal.
   enterSupportSession(accessToken: string, user: AuthUser, session: { sessionId: string; orgName: string }): void {
+    this.forgetOfflineIdentity();
     // Suppress analytics before publishing the impersonated customer identity.
     this._supportSession.set(session);
     this.accessToken = accessToken;
@@ -168,7 +177,26 @@ export class AuthService {
     if (current) this._user.set(mutator(current));
   }
 
+  private forgetOfflineIdentity(): void {
+    this.offlineSession.set(false);
+    try { localStorage.removeItem(OFFLINE_IDENTITY_KEY); } catch { /* Storage is optional. */ }
+  }
+
+  private restoreOfflineIdentity(): boolean {
+    if (this.refreshDisabled) return false;
+    try {
+      const cached = JSON.parse(localStorage.getItem(OFFLINE_IDENTITY_KEY) ?? "null") as { user?: AuthUser; cachedAt?: number } | null;
+      if (!cached?.user?.id || !cached.user.clientId || typeof cached.cachedAt !== "number"
+        || cached.cachedAt > Date.now() || Date.now() - cached.cachedAt > OFFLINE_IDENTITY_MAX_AGE_MS) return false;
+      this.accessToken = null;
+      this.offlineSession.set(true);
+      this._user.set(cached.user);
+      return true;
+    } catch { return false; }
+  }
+
   clearSession(options: { disableRefresh?: boolean; broadcast?: boolean } = {}): void {
+    this.forgetOfflineIdentity();
     if (options.disableRefresh) this.refreshDisabled = true;
     this.accessToken = null;
     this._user.set(null);
@@ -190,6 +218,7 @@ export class AuthService {
         const requestedClientId = this._user()?.activeClientId ?? this._user()?.clientId;
         let res = await this.request(`${environment.apiUrl}/auth/refresh`, {
           method: "POST",
+          signal: AbortSignal.timeout(5_000),
           credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(requestedClientId ? { clientId: requestedClientId } : {}),
@@ -200,6 +229,7 @@ export class AuthService {
         if (res.status === 403 && requestedClientId) {
           res = await this.request(`${environment.apiUrl}/auth/refresh`, {
             method: "POST",
+            signal: AbortSignal.timeout(5_000),
             credentials: "include",
             headers: { "Content-Type": "application/json" },
             body: "{}",
@@ -261,7 +291,11 @@ export class AuthService {
     if (this._user()) return;
     if (this.hydrateInFlight) return this.hydrateInFlight;
     this.hydrateInFlight = (async () => {
+      // A browser-declared outage can open cached routes immediately. A failed transport below
+      // also supports outages where navigator.onLine still reports a working network interface.
+      if (typeof navigator !== "undefined" && !navigator.onLine && this.restoreOfflineIdentity()) return;
       let result = await this.refreshOnce();
+      if (result.retryable && this.restoreOfflineIdentity()) return;
       // Dev rebuilds can reload the browser while the API watcher is briefly between processes.
       // Keep route guards pending through that transient gap, but never retry a rejected cookie.
       for (const delay of HYDRATION_RETRY_DELAYS_MS) {

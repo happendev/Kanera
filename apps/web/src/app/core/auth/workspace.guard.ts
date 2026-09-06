@@ -15,6 +15,8 @@ export const workspaceGuard: CanActivateFn = async () => {
   await auth.hydrate();
   const user = auth.user();
   if (!user) return router.createUrlTree(["/login"]);
+  // Offline identity can only expose cached content; onboarding requires a live directory.
+  if (auth.offlineSession?.()) return true;
   if (!user.hasWorkspace && auth.isOrgAdmin()) {
     // Checked before the home fetch so a skipped user pays nothing extra on every shell entry.
     if (isOnboardingSkipped(user)) return true;

@@ -665,6 +665,7 @@
 <k-notifications-panel [embedded]="true" />
 <k-update-prompt />
 <k-disconnect-prompt />
+<k-status-toast [show]="!!offlineCacheError()" icon="cloud-off" [message]="offlineCacheError() ?? ''" />
 <k-global-search-overlay />
 @if (shortcutsOpen()) {
 <k-shortcuts-sheet (closed)="shortcutsOpen.set(false)" />

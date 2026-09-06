@@ -1380,6 +1380,20 @@ describe("BoardState recent-card retention across a stale hydrate", () => {
     expect(state.hasCard("card-2")).toBe(false);
   });
 
+  it("preserves field completeness and treats legacy snapshots as incomplete", () => {
+    state.customFieldValuesComplete.set(false);
+    const snapshot = { ...state.snapshot(), boardId: "board-1", cachedAt: "2026-05-21T00:00:00.000Z" } as OfflineBoardSnapshot;
+    expect(snapshot.customFieldValuesComplete).toBe(false);
+    state.restoreSnapshot(snapshot);
+    expect(state.customFieldValuesComplete()).toBe(false);
+    state.restoreSnapshot({ ...snapshot, customFieldValuesComplete: true });
+    expect(state.customFieldValuesComplete()).toBe(true);
+    const legacy = { ...snapshot };
+    delete legacy.customFieldValuesComplete;
+    state.restoreSnapshot(legacy);
+    expect(state.customFieldValuesComplete()).toBe(false);
+  });
+
   it("retains a recent card when restoring an older offline snapshot", () => {
     const snapshot = { ...state.snapshot(), boardId: "board-1", cachedAt: "2026-05-21T00:00:00.000Z" } as OfflineBoardSnapshot;
     state.addCard(createCardSummary({ id: "card-2" }));

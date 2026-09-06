@@ -1,7 +1,7 @@
 import { Injectable, computed, inject, signal } from "@angular/core";
 import type { ColorToken } from "@kanera/shared/colors";
 import type { ServerToClientEvents, WireNote, WireNoteLock } from "@kanera/shared/events";
-import { ApiClient } from "../../core/api/api.client";
+import { ApiClient, ApiError } from "../../core/api/api.client";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import type { NoteScopeValue } from "./notes.types";
@@ -29,6 +29,9 @@ export class NotesState {
   private ctx: ScopeContext | null = null;
   private detach: (() => void) | null = null;
   private initVersion = 0;
+  private mutationVersion = 0;
+  private refreshVersion = 0;
+  private reconnectPending = false;
 
   readonly loading = signal(false);
   readonly notes = signal<WireNote[]>([]);
@@ -52,6 +55,8 @@ export class NotesState {
     this.selectedId.set(null);
     this.locks.set({});
     this.loading.set(true);
+    this.attachSocket();
+    const mutation = this.mutationVersion;
     try {
       const [personal, team] = await Promise.all([
         this.fetchScope("personal", ctx),
@@ -60,18 +65,53 @@ export class NotesState {
       // Route components can be reused while their board/workspace inputs change. Ignore a slower
       // response from the previous notes section so it cannot replace the current section's notes.
       if (initVersion !== this.initVersion) return;
-      this.notes.set([...personal, ...team]);
-      this.persistSnapshot();
+      if (mutation !== this.mutationVersion) { this.reconnectPending = true; }
+      else {
+        this.notes.set([...personal, ...team]);
+        this.persistSnapshot();
+      }
     } catch (error) {
+      if (error instanceof ApiError && [403, 404].includes(error.status)) {
+        if (ctx.boardId) await this.offlineCache.revokeBoardAccess(ctx.boardId);
+        throw error;
+      }
       const cached = await this.offlineCache.loadNotes(ctx.workspaceId, ctx.boardId).catch(() => null);
       if (initVersion !== this.initVersion) return;
       if (!cached) throw error;
       this.notes.set(cached.notes);
     } finally {
-      if (initVersion === this.initVersion) this.loading.set(false);
+      if (initVersion === this.initVersion) {
+        this.loading.set(false);
+        if (this.reconnectPending) { this.reconnectPending = false; void this.reconcile(); }
+      }
     }
     if (initVersion !== this.initVersion) return;
-    this.attachSocket();
+  }
+
+  // Socket events missed during an outage are not replayed. Replace both scopes after rejoining,
+  // retaining the selection and refusing to overwrite mutations received during the request.
+  private async reconcile(): Promise<void> {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const initVersion = this.initVersion;
+    const request = ++this.refreshVersion;
+    const mutation = this.mutationVersion;
+    try {
+      const [personal, team] = await Promise.all([this.fetchScope("personal", ctx), this.fetchScope("team", ctx)]);
+      if (initVersion !== this.initVersion || request !== this.refreshVersion) return;
+      if (mutation !== this.mutationVersion) { void this.reconcile(); return; }
+      this.notes.set([...personal, ...team]);
+      this.locks.set({});
+      if (!this.notes().some((note) => note.id === this.selectedId())) this.selectedId.set(null);
+      this.persistSnapshot();
+    } catch (error) {
+      if (initVersion !== this.initVersion || request !== this.refreshVersion) return;
+      if (error instanceof ApiError && [403, 404].includes(error.status)) {
+        this.notes.set([]);
+        this.selectedId.set(null);
+        if (ctx.boardId) await this.offlineCache.revokeBoardAccess(ctx.boardId).catch(() => undefined);
+      }
+    }
   }
 
   dispose() {
@@ -234,6 +274,7 @@ export class NotesState {
   }
 
   private persistSnapshot() {
+    this.mutationVersion++;
     if (!this.ctx) return;
     void this.offlineCache.saveNotes(this.ctx.workspaceId, this.ctx.boardId, this.notes()).catch(() => undefined);
   }
@@ -298,6 +339,14 @@ export class NotesState {
   private attachSocket() {
     const socket = this.sockets.connect();
     let leaveWorkspace: (() => void) | null = null;
+    const onConnect = () => {
+      if (this.loading()) this.reconnectPending = true;
+      else void this.reconcile();
+    };
+    const onVisible = () => { if (document.visibilityState === "visible") onConnect(); };
+    socket.on("connect", onConnect);
+    document.addEventListener("visibilitychange", onVisible);
+    const leaveBoard = this.ctx?.boardId ? this.sockets.joinBoard(this.ctx.boardId) : null;
     // Workspace-scoped team notes ride on the workspace room; board-scoped notes
     // ride on the board room (which the board page already joins).
     if (!this.ctx?.boardId && this.ctx) {
@@ -351,6 +400,9 @@ export class NotesState {
     }
 
     this.detach = () => {
+      socket.off("connect", onConnect);
+      document.removeEventListener("visibilitychange", onVisible);
+      leaveBoard?.();
       for (const [event, handler] of Object.entries(handlers)) {
         socket.off(event as keyof ServerToClientEvents, handler as never);
       }

@@ -38,7 +38,7 @@ export class SocketService {
   readonly accessRefreshing = signal(false);
   readonly lastDisconnectReason = signal<Socket.DisconnectReason | null>(null);
   private readonly connectionProblem = signal(false);
-  readonly online = computed(() => this.browserOnline() && !this.connectionProblem());
+  readonly online = computed(() => this.browserOnline() && !this.connectionProblem() && !this.auth.offlineSession?.());
   readonly displayedOnline = signal(true);
 
   constructor() {
@@ -66,6 +66,10 @@ export class SocketService {
     this.destroyRef.onDestroy(() => this.clearReconnectWatchdog());
 
     effect((onCleanup) => {
+      if (this.auth.offlineSession?.()) {
+        this.displayedOnline.set(false);
+        return;
+      }
       if (this.online()) {
         this.displayedOnline.set(true);
         return;

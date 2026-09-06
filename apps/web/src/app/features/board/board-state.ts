@@ -1172,6 +1172,7 @@ export class BoardState {
       separators: this.separators(),
       customFields: this.customFields(),
       customFieldValues: this.customFieldValues(),
+      customFieldValuesComplete: this.customFieldValuesComplete(),
       cardLabels: this.cardLabels(),
       checklistTemplates: this.checklistTemplates(),
       cardLabelAssignments: this.cardLabelAssignments(),
@@ -1224,8 +1225,8 @@ export class BoardState {
     this.separators.set(snapshot.separators ?? []);
     this.customFields.set(snapshot.customFields);
     this.customFieldValues.set(snapshot.customFieldValues);
-    // Offline can't fetch the rest, so treat the cached values as authoritative.
-    this.customFieldValuesComplete.set(true);
+    // Older/summary-only snapshots cannot vouch for fields omitted by board-open.
+    this.customFieldValuesComplete.set(snapshot.customFieldValuesComplete === true);
     this.cardLabels.set(snapshot.cardLabels);
     this.checklistTemplates.set(snapshot.checklistTemplates ?? []);
     this.cardLabelAssignments.set(retained.length ? [...snapshot.cardLabelAssignments, ...retainedLabelAssignments] : snapshot.cardLabelAssignments);

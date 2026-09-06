@@ -1062,8 +1062,8 @@ export class CardDetailComponent {
         if (this.detailRealtimeVersion === realtimeVersion) {
           this.applyPublishedDescription(detail.card.description ?? "");
         }
-        const boardSnapshot = this.state.snapshot();
-        if (boardSnapshot) void this.offlineCache.saveBoard(boardId, boardSnapshot).catch(() => undefined);
+        // BoardPage persists full collections. Global Work also hosts this component with only
+        // one card in BoardState, so saving its snapshot here would truncate a cached board.
         const cached = await this.offlineCache.loadCardDetail(cardId).catch(() => null);
         if (seq === this.detailLoadSeq) {
           void this.offlineCache.saveCardDetail(cardId, detail, cached?.feed ?? []).catch(() => undefined);

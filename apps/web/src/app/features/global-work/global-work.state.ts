@@ -501,9 +501,11 @@ export class GlobalWorkState {
   async loadMore(): Promise<void> {
     const cursor = this.response().nextCursor;
     if (!cursor || this.loadingMore() || !this.interactionReady()) return;
+    const version = this.requestVersion;
     this.loadingMore.set(true);
     try {
       const page = await this.loadCards(cursor);
+      if (version !== this.requestVersion) return;
       const current = this.response();
       const seen = new Set(current.cards.map((card) => card.id));
       this.response.set({
@@ -514,6 +516,7 @@ export class GlobalWorkState {
         separators: current.separators,
         separatorWorkspaceIds: current.separatorWorkspaceIds,
       });
+      await this.persistCache();
     } finally {
       this.loadingMore.set(false);
     }

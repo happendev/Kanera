@@ -1706,3 +1706,20 @@ describe("GlobalWorkState priority queue", () => {
     expect(state.priorities()).toBeNull();
   });
 });
+
+it("persists every loaded Global Work page for offline reopening", async () => {
+  const first = response.cards[0]!;
+  const second = { ...first, id: "second-cached-card" };
+  const f = setup({ cardsQuery: ({ cursor }) => ({ ...response, cards: cursor ? [second] : [first], nextCursor: cursor ? null : "page-two" }) });
+  localStorage.clear();
+  await f.state.initialize("my");
+  f.state.definition.update((definition) => ({ ...definition, display: "table" }));
+  await f.state.queryFirstPage();
+  f.saveGlobalWork.mockClear();
+  await f.state.loadMore();
+  expect(f.saveGlobalWork).toHaveBeenCalled();
+  expect(f.saveGlobalWork).toHaveBeenLastCalledWith(
+    expect.any(String), expect.anything(), expect.anything(),
+    expect.objectContaining({ cards: [first, second] }), null, expect.anything(),
+  );
+});

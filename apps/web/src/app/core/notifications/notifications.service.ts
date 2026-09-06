@@ -97,12 +97,14 @@ export class NotificationsService {
     if (this.initialised()) return;
     this.restoreOrganisationPreferences();
     this.initialised.set(true);
-    void this.refreshUnreadCount();
-    void this.refreshOrganisationUnreadCounts();
-    void this.refreshBoardUnreadCounts();
-    void this.refreshCardUnreadCounts();
-    void this.loadWatchedCards();
-    void this.loadWatchedBoards();
+    // Offline startup still attaches realtime so counts recover on reconnect. These optional
+    // reads must not surface unhandled rejections while the shell restores its cached directory.
+    void this.refreshUnreadCount().catch(() => undefined);
+    void this.refreshOrganisationUnreadCounts().catch(() => undefined);
+    void this.refreshBoardUnreadCounts().catch(() => undefined);
+    void this.refreshCardUnreadCounts().catch(() => undefined);
+    void this.loadWatchedCards().catch(() => undefined);
+    void this.loadWatchedBoards().catch(() => undefined);
     this.attachSocket();
   }
 

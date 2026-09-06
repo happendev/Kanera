@@ -80,3 +80,31 @@ describe("NotesState.hideNote", () => {
     expect(state.notes().map((n) => n.id)).toEqual(["other"]);
   });
 });
+
+describe("NotesState reconnect", () => {
+  it("replaces both scopes after missed creates, updates and deletes", async () => {
+    const handlers = new Map<string, () => void>();
+    let team = [createNote({ id: "deleted" }), createNote({ id: "changed", title: "Before" })];
+    const api = { get: vi.fn(async (path: string) => path.includes("scope=team") ? team : []) };
+    const saveNotes = vi.fn().mockResolvedValue(undefined);
+    TestBed.configureTestingModule({ providers: [
+      provideZonelessChangeDetection(), NotesState,
+      { provide: ApiClient, useValue: api },
+      { provide: OfflineCacheService, useValue: { saveNotes } },
+      { provide: SocketService, useValue: {
+        displayedOnline: signal(true), joinWorkspace: () => vi.fn(),
+        connect: () => ({ on: (name: string, handler: () => void) => handlers.set(name, handler), off: vi.fn() }),
+      } },
+    ] });
+    const state = TestBed.inject(NotesState);
+    await state.init({ workspaceId: "workspace-1", boardId: null });
+    state.selectedId.set("deleted");
+    team = [createNote({ id: "changed", title: "After" }), createNote({ id: "created" })];
+    handlers.get("connect")!();
+    await vi.waitFor(() => expect(state.notes().map((note) => note.id)).toEqual(["changed", "created"]));
+    expect(state.notes()[0]?.title).toBe("After");
+    expect(state.selectedId()).toBeNull();
+    expect(saveNotes).toHaveBeenLastCalledWith("workspace-1", null, team);
+    state.dispose();
+  });
+});

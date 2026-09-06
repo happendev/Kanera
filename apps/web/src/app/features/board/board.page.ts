@@ -696,6 +696,17 @@ export class BoardPage implements OnDestroy {
     });
   }
 
+  private pendingCacheSnapshot: Omit<OfflineBoardSnapshot, "boardId" | "cachedAt"> | null = null;
+  private cacheSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private flushPendingCacheSnapshot() {
+    if (this.cacheSaveTimer !== null) clearTimeout(this.cacheSaveTimer);
+    this.cacheSaveTimer = null;
+    const snapshot = this.pendingCacheSnapshot;
+    this.pendingCacheSnapshot = null;
+    if (snapshot) this.saveBoardSnapshot(snapshot);
+  }
+
   private saveCurrentBoardSnapshot() {
     const snapshot = this.state.snapshot();
     if (snapshot) this.saveBoardSnapshot(snapshot);
@@ -772,6 +783,10 @@ export class BoardPage implements OnDestroy {
   }
 
   ngOnDestroy() {
+    if (this.cacheSaveTimer !== null) clearTimeout(this.cacheSaveTimer);
+    this.cacheSaveTimer = null;
+    this.pendingCacheSnapshot = null;
+    if (!this.offlineBoardCachedAt()) this.saveCurrentBoardSnapshot();
     document.removeEventListener("click", this.handleDocumentClick);
     document.removeEventListener("keydown", this.handleDocumentKeydown);
     document.removeEventListener("keydown", this.handleSelectionEscape, true);
@@ -1076,8 +1091,19 @@ export class BoardPage implements OnDestroy {
 
     effect(() => {
       const snapshot = this.state.snapshot();
-      if (!snapshot || this.offlineBoardCachedAt()) return;
-      untracked(() => this.saveBoardSnapshot(snapshot));
+      if (!snapshot || this.offlineBoardCachedAt()) {
+        // Access revocation clears state; never flush a pending copy after that boundary.
+        this.pendingCacheSnapshot = null;
+        if (this.cacheSaveTimer !== null) clearTimeout(this.cacheSaveTimer);
+        this.cacheSaveTimer = null;
+        return;
+      }
+      if (this.pendingCacheSnapshot && this.pendingCacheSnapshot.board.id !== snapshot.board.id) {
+        untracked(() => this.flushPendingCacheSnapshot());
+      }
+      this.pendingCacheSnapshot = snapshot;
+      // A fixed window coalesces bursts without starving storage on a continuously active board.
+      this.cacheSaveTimer ??= setTimeout(() => untracked(() => this.flushPendingCacheSnapshot()), 250);
     });
 
     // Filters, List/Table View columns, and export need every field's values, not just the
@@ -1114,6 +1140,7 @@ export class BoardPage implements OnDestroy {
       let cancelled = false;
       let hydrated = false;
       let joinedOnce = false;
+      let initialLoadFinished = false;
       let refreshInFlight = false;
       let refreshQueued = false;
       let pageViewCaptured = false;
@@ -1173,6 +1200,8 @@ export class BoardPage implements OnDestroy {
         this.offlineBoardCachedAt.set(null);
         hydrated = true;
         this.saveCurrentBoardSnapshot();
+        // Warm omitted field values once per board load so switching views remains useful offline.
+        this.ensureCustomFieldValuesLoaded();
       };
       const applyCachedBoard = (snapshot: OfflineBoardSnapshot) => {
         if (cancelled) return;
@@ -1250,14 +1279,16 @@ export class BoardPage implements OnDestroy {
           return;
         }
         if (!cancelled) void this.router.navigateByUrl("/");
-      });
+      }).finally(() => { initialLoadFinished = true; });
 
       const detach = this.socketBridge.attach(socket, boardId, {
         viewerUserId: this.auth.user()?.id ?? null,
         onJoined: () => {
           if (!joinedOnce) {
             joinedOnce = true;
-            return;
+            // A cold offline start has never joined a room: its first successful join must
+            // refresh the restored snapshot too.
+            if (!initialLoadFinished || !this.offlineBoardCachedAt()) return;
           }
           refreshBoard();
         },

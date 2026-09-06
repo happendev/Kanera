@@ -21,6 +21,7 @@ export const STORAGE_KEYS = {
   COLLAPSED_CHECKLISTS: "kanera:collapsed-checklists",
   EDITOR_DRAFTS: "kanera:editor-drafts",
   HIDE_COMPLETED_CHECKLIST_ITEMS: "kanera:hide-completed-checklist-items",
+  OFFLINE_IDENTITY: "kanera:offline-identity",
   LOGOUT_SYNC: "kanera-auth-logout",
   NOTES_SELECTION_PREFIX: "kanera.notes.selection",
   NOTES_TAB_PREFIX: "kanera.notes.tab",
