@@ -1,4 +1,4 @@
-import { EmptyStateComponent } from "../../shared/empty-state.component";
+import { UnreadGlowDirective } from "./unread-glow.directive";
 import { MenuDirective } from "../../shared/menu.directive";
 import { ShortcutsSheetComponent } from "../../shared/shortcuts-sheet.component";
 import { KeyboardShortcutsService } from "../../core/keyboard/keyboard-shortcuts.service";
@@ -97,7 +97,7 @@ type SidebarSwipe = {
 @Component({
   selector: "k-app-shell",
   standalone: true,
-  imports: [CdkDrag, CdkDropList, CdkScrollable, EmptyStateComponent, MenuDirective, RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, AnchoredPanelDirective, MyPrioritiesPanelComponent, NotificationsPanelComponent, ScratchpadPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent, ShortcutsSheetComponent],
+  imports: [UnreadGlowDirective,CdkDrag, CdkDropList, CdkScrollable, MenuDirective, RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, AnchoredPanelDirective, MyPrioritiesPanelComponent, NotificationsPanelComponent, ScratchpadPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent, ShortcutsSheetComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./app-shell.component.html",
   styleUrl: "./app-shell.component.scss",

@@ -183,60 +183,9 @@
 }
 
 .nt-actions-menu {
-  // Placement is owned by kAnchoredPanel; this block only supplies the standard app menu appearance.
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
+  // Placement is owned by kAnchoredPanel; appearance and row behaviour by the shared `.k-menu` /
+  // `.k-menu-item` primitives and the `kMenu` directive. Only the width is this menu's own.
   min-width: 168px;
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface-overlay);
-  box-shadow: var(--shadow-lg);
-
-  button {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 8px;
-    width: 100%;
-    height: auto;
-    padding: 7px 10px;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--text);
-    font-size: 13px;
-    font-weight: 400;
-    text-align: left;
-    cursor: pointer;
-
-    > i {
-      flex-shrink: 0;
-      width: 16px;
-      color: var(--text-muted);
-      font-size: 14px;
-    }
-
-    > span {
-      flex: 1;
-      white-space: nowrap;
-    }
-
-    &:hover {
-      background: var(--surface-hover);
-    }
-
-    &.danger {
-      color: var(--danger);
-
-      > i { color: inherit; }
-
-      &:hover {
-        background: color-mix(in srgb, var(--danger) 10%, transparent);
-      }
-    }
-  }
 }
 
 @media (hover: none) {

@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, input, output, signal } from "@angular/core";
 import { ActivatedRoute, Router } from "@angular/router";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
+import { MenuDirective } from "../../shared/menu.directive";
 import type { AnchoredPanelPlacement } from "../../shared/anchored-panel";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import type { NoteTreeNode } from "./notes.types";
@@ -27,7 +28,7 @@ export interface NodeDropEvent {
 @Component({
   selector: "k-note-tree-node",
   standalone: true,
-  imports: [AnchoredPanelDirective, TooltipDirective],
+  imports: [AnchoredPanelDirective, MenuDirective, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div
@@ -67,16 +68,16 @@ export interface NodeDropEvent {
           <i class="ti ti-dots"></i>
         </button>
         @if (actionsOpen()) {
-        <div class="nt-actions-menu" kAnchoredPanel [apAnchor]="actionsTrigger" [apPlacement]="actionsMenuPlacement" (apDismissed)="actionsOpen.set(false)" role="menu">
+        <div class="nt-actions-menu k-menu" kMenu kAnchoredPanel [apAnchor]="actionsTrigger" [apPlacement]="actionsMenuPlacement" (apDismissed)="actionsOpen.set(false)" role="menu">
           @if (canAddChild()) {
-          <button type="button" (click)="onNewChild(); actionsOpen.set(false)" role="menuitem">
+          <button type="button" class="k-menu-item" (click)="onNewChild(); actionsOpen.set(false)" role="menuitem">
             <i class="ti ti-plus"></i><span>Add sub-note</span>
           </button>
           }
-          <button type="button" (click)="onDuplicate(); actionsOpen.set(false)" role="menuitem">
+          <button type="button" class="k-menu-item" (click)="onDuplicate(); actionsOpen.set(false)" role="menuitem">
             <i class="ti ti-copy"></i><span>Duplicate</span>
           </button>
-          <button class="danger" type="button" (click)="onDelete(); actionsOpen.set(false)" role="menuitem">
+          <button class="k-menu-item danger" type="button" (click)="onDelete(); actionsOpen.set(false)" role="menuitem">
             <i class="ti ti-trash"></i><span>Delete</span>
           </button>
         </div>

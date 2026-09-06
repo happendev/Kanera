@@ -3341,7 +3341,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
         // Paid guest seats come from the org's pre-purchased pool. Explain that before the mutation,
         // because the next request will allocate the seat immediately for existing external users.
         const confirmed = await this.confirm.open({
-          title: "This guest will use a paid seat",
+          title: "Use a paid seat for this guest?",
           message: "A guest's first board is free. Adding their second board uses one of your purchased seats; further boards reuse that seat. Your bill will not change right now, and the seat becomes available again when their access returns to one board.",
           confirmLabel: "Use seat",
           danger: false,
@@ -3517,7 +3517,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     // Deleting a workspace is a workspace-admin (or org-admin) action.
     if (!this.canManageApi()) return;
     if (!await this.confirm.open({
-      title: `Are you sure you want to delete ${this.entityLabel()} "${ws.name}"?`,
+      title: `Delete ${this.entityLabel()} "${ws.name}"?`,
       message: this.isStandalone()
         ? "This will permanently delete this board, its lists, cards, attachments and settings."
         : "This will permanently delete all boards, lists, attachments and cards inside it.",

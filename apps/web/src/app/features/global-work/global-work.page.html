@@ -3,6 +3,7 @@
   [class.is-single-workspace-board]="effectiveDisplay() === 'board' && singleWorkspaceBoard()"
   [class.is-table-frame]="usesTableFrame()"
   [class.has-up-next-dock]="upNextOpen()"
+  [class.has-empty-collection]="effectiveDisplay() === 'board' && state.cards().length === 0"
 >
   <!--
     Both chrome rows pin as one block. Sticking them separately would need the query bar to know
@@ -833,7 +834,7 @@
                 }
               </section>
             } @empty {
-              <k-empty-state icon="layout-kanban" title="No cards found" text="Try changing your filters or choosing more boards." />
+              <k-empty-state class="work-empty-state" icon="layout-kanban" title="No cards found" text="Try changing your filters or choosing more boards." />
             }
           </div>
         } @else if (effectiveDisplay() === "calendar") {

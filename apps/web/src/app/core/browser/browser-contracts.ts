@@ -26,6 +26,7 @@ export const STORAGE_KEYS = {
   NOTES_TAB_PREFIX: "kanera.notes.tab",
   NOTIFICATION_BOARD_FILTER: "kanera:notif-board-filter",
   ONBOARDING_SKIPPED_PREFIX: "kanera.onboarding.skipped",
+  FIRST_RUN_DISMISSED_PREFIX: "kanera.first-run.dismissed",
   NOTIFICATION_GROUP_BY: "kanera:notif-group-by",
   MENTION_SOUND_ENABLED: "kanera:mention-sound-enabled",
   NOTIFICATION_USER_FILTER: "kanera:notif-user-filter",
@@ -52,6 +53,7 @@ export type StorageKey =
   | `kanera.notes.selection:${string}:${string}:${"personal" | "team"}`
   | `kanera.notes.tab:${string}:${string}`
   | `kanera.onboarding.skipped:${string}:${string}`
+  | `kanera.first-run.dismissed:${string}:${string}`
   | `kanera.scratchpad.active:${string}:${string}`
   | `kanera.view.${"aggregates" | "aggregateSplit" | "background" | "columnOrder" | "columnWidths" | "columns" | "compactCards" | "completed" | "definition" | "filters" | "groupBy" | "mode" | "showSeparators" | "sort" | "upNextSeen"}:${string}`;
 
@@ -66,6 +68,14 @@ export function organisationStorageKey(key: StorageKey, clientId: string | null 
  */
 export function onboardingSkippedKey(userId: string, clientId: string): StorageKey {
   return `${STORAGE_KEYS.ONBOARDING_SKIPPED_PREFIX}:${userId}:${clientId}`;
+}
+
+/**
+ * Remembers that an admin closed the "first steps" card on home. Keyed like onboardingSkippedKey:
+ * per user and organisation, so a shared machine or an organisation switch each keep their own.
+ */
+export function firstRunDismissedKey(userId: string, clientId: string): StorageKey {
+  return `${STORAGE_KEYS.FIRST_RUN_DISMISSED_PREFIX}:${userId}:${clientId}`;
 }
 
 export function notesTabKey(scopeId: string, workspaceId: string): StorageKey {

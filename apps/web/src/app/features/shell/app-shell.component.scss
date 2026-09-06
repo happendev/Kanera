@@ -852,10 +852,9 @@ k-support-session-banner {
     background: var(--accent-soft);
     color: var(--accent);
 
-    // The unread badge breathes: a soft glow that swells and fades once every few seconds. The glyph
-    // itself never moves, so nothing catches the eye directly; the pulse only sits in peripheral vision.
-    .utility-badge {
-      animation: utility-badge-breathe 4s ease-in-out infinite;
+    // The directive enables one pulse every 30 seconds, only while visible and motion is allowed.
+    .utility-badge.is-pulsing {
+      animation: utility-badge-breathe 4s ease-in-out 1;
     }
 
     &:hover .utility-badge {
@@ -1608,7 +1607,7 @@ k-support-session-banner {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .utility-btn.is-alert .utility-badge {
+  .utility-btn.is-alert .utility-badge.is-pulsing {
     animation: none;
   }
 }

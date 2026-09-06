@@ -669,7 +669,7 @@ describe("WorkspaceSettingsPage", () => {
     await fixture.componentInstance.deleteWorkspace();
 
     expect(confirm.open).toHaveBeenCalledWith({
-      title: 'Are you sure you want to delete workspace "Delivery"?',
+      title: 'Delete workspace "Delivery"?',
       message: "This will permanently delete all boards, lists, attachments and cards inside it.",
       confirmLabel: "Delete workspace",
       confirmationText: "Delivery",
@@ -684,7 +684,7 @@ describe("WorkspaceSettingsPage", () => {
     await fixture.componentInstance.deleteWorkspace();
 
     expect(confirm.open).toHaveBeenCalledWith({
-      title: 'Are you sure you want to delete board "Solo Roadmap"?',
+      title: 'Delete board "Solo Roadmap"?',
       message: "This will permanently delete this board, its lists, cards, attachments and settings.",
       confirmLabel: "Delete board",
       confirmationText: "Solo Roadmap",
@@ -1216,7 +1216,7 @@ describe("WorkspaceSettingsPage", () => {
     await component.inviteGuest(new Event("submit"));
 
     expect(confirm.open).toHaveBeenCalledWith({
-      title: "This guest will use a paid seat",
+      title: "Use a paid seat for this guest?",
       message: expect.stringContaining("Adding their second board uses one of your purchased seats"),
       confirmLabel: "Use seat",
       danger: false,

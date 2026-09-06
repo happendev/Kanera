@@ -249,6 +249,43 @@ k-page-toolbar.priority-toolbar {
   min-width: 0;
 }
 
+// An empty board result belongs in the collection's whole canvas, not in a full-width strip at its
+// top. The frame owns the centring while the empty state keeps the same constrained dashed panel,
+// icon and typography as the other page-level empty states in the system.
+.work-page.has-empty-collection {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding-bottom: 0;
+
+  .work-content,
+  .work-main,
+  .global-board-sections {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .work-content {
+    align-items: stretch;
+  }
+
+  .work-main {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .global-board-sections {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .work-empty-state {
+    align-self: center;
+    justify-self: center;
+    width: min(440px, 100%);
+  }
+}
+
 // Static, not sticky: the frame layout below (`.has-up-next-dock`) gives the column its exact
 // height, so the dock never has to guess at the chrome or shell height. Its earlier sticky
 // treatment estimated both (top: 116px against 100vh) and was wrong whenever either differed —

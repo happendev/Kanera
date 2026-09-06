@@ -1327,6 +1327,18 @@ k-app-shell {
   font-weight: 600;
 }
 
+// ─── Legacy token aliases ────────────────────────────────────────────────────
+// A handful of surfaces (OAuth consent and device pages, share target, the standalone-board dialog,
+// the list separator) were written against shadcn's token names. Undefined, those resolved to
+// transparent and inherited colour, so the consent card a new integration user lands on had no
+// fill at all. Alias rather than rewrite: the names map one-to-one onto ours.
+:root {
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--surface);
+  --muted-foreground: var(--text-muted);
+}
+
 // ─── Settings info note ──────────────────────────────────────────────────────
 // The boxed one-sentence explainer at the top of a settings tab. One recipe for every tab: it used
 // to exist as four near-copies (boxed here, a bare muted line there), so tabs read as different

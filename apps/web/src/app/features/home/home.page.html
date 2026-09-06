@@ -1,10 +1,31 @@
 <div class="page">
   <main class="content">
-    <k-page-header
-      variant="page"
-      [title]="greeting() + ', ' + displayName()"
-      [subtitle]="today() | date: 'EEEE, d MMMM'"
-    />
+    <!-- The greeting sits in a light field of the marketing site's hero shapes: rings, dashes, dots and
+         ticks in the three brand hues. Decorative only, so it is aria-hidden, sits behind the header,
+         keeps to the right of the greeting text, and hides where the column is too narrow to stay
+         clear of it. -->
+    <div class="home-hero">
+      <div class="hero-scatter" aria-hidden="true">
+        @for (item of scatter; track $index) {
+        <span
+          class="hero-scatter-item"
+          [class]="'hero-scatter-item is-' + item.kind + ' is-' + item.accent"
+          [style.left.%]="item.x"
+          [style.top.%]="item.y"
+          [style.--scatter-size.px]="item.size"
+          [style.--scatter-rotate.deg]="item.rotate ?? 0"
+          [style.--scatter-delay.s]="-(($index * 1.7) % 9)"
+        >
+          @if (item.kind === 'check') { <i class="ti ti-check"></i> }
+        </span>
+        }
+      </div>
+      <k-page-header
+        variant="page"
+        [title]="greeting() + ', ' + displayName()"
+        [subtitle]="today() | date: 'EEEE, d MMMM'"
+      />
+    </div>
 
     @if (accountStatusBanner(); as account) {
     <div class="account-status-banner tone-{{ account.tone }}" role="status">
@@ -119,29 +140,47 @@
          for someone with nothing yet. -->
     @if (isOrgAdmin()) {
     <div class="get-started">
-      <div class="get-started-intro">
-        <i class="ti ti-layout-kanban no-workspace-icon"></i>
-        <h2>No boards yet</h2>
+      <div class="get-started-head">
+        <h2>Welcome to Kanera</h2>
         <p>
           @if (hasNoWorkspace()) {
-          Set up your first board yourself, or connect an AI agent and let it create and configure
-          everything for you. A workspace shares one set of lists and fields across several boards; a
-          standalone board keeps its own.
+          Choose how you want to start. You can add the other kind later.
           } @else {
-          Your workspace is ready. Add a board to start working, or let a connected AI agent do it.
+          Your workspace is ready. Add a board to start working.
           }
         </p>
       </div>
-      <div class="no-boards-actions">
-        <button type="button" class="sm" (click)="startGuidedSetup()">
-          <i class="ti ti-route"></i> Start guided setup
-        </button>
-        <button type="button" class="secondary sm" (click)="newStandaloneBoard()">
-          <i class="ti ti-plus"></i> New standalone board
-        </button>
-        <button type="button" class="secondary sm" (click)="newWorkspace()">
-          <i class="ti ti-plus"></i> New workspace
-        </button>
+
+      <!-- Each option explains itself and acts in one card, so there is no separate row of buttons to
+           match back to a description. The two are peers: the choice is the whole point of this screen,
+           so neither is highlighted. The onboarding flow's own "which kind?" step is skipped because the
+           card already answered it. -->
+      <div class="no-boards-actions" [class.is-single]="!hasNoWorkspace()">
+        @if (hasNoWorkspace()) {
+        <div class="start-card">
+          <div class="start-card-icon"><i class="ti ti-layout-grid"></i></div>
+          <h3>Workspace</h3>
+          <p>Several boards that share one set of lists and fields. Best for a team.</p>
+          <div class="start-card-actions">
+            <button type="button" class="action-workspace" (click)="newWorkspace()">
+              <i class="ti ti-plus"></i> Create workspace
+            </button>
+          </div>
+        </div>
+        }
+        <div class="start-card">
+          <div class="start-card-icon"><i class="ti ti-layout-kanban"></i></div>
+          <h3>{{ hasNoWorkspace() ? 'Standalone board' : 'New board' }}</h3>
+          <p>{{ hasNoWorkspace() ? 'One board with its own lists and fields. Best for a single project.' : 'A board in this workspace, or a standalone one with its own lists and fields.' }}</p>
+          <div class="start-card-actions">
+            <button type="button" class="action-standalone" (click)="newStandaloneBoard()">
+              <i class="ti ti-plus"></i> New standalone board
+            </button>
+            @if (!hasNoWorkspace()) {
+            <button type="button" class="secondary action-workspace" (click)="newWorkspace()">New workspace</button>
+            }
+          </div>
+        </div>
       </div>
       @if (createLimitMessage(); as message) {
       <p class="workspace-limit-feedback" role="alert">
@@ -149,14 +188,12 @@
         <span>{{ message }}</span>
       </p>
       }
+
+      <div class="get-started-or" aria-hidden="true"><span>or let an agent do it</span></div>
       <k-agent-connect-card source="home" />
     </div>
     } @else {
-    <div class="no-workspace-empty">
-      <i class="ti ti-layout-kanban no-workspace-icon"></i>
-      <h2>No boards yet</h2>
-      <p>You don't have access to any boards yet. Ask an administrator to add you to a workspace or board to get started.</p>
-    </div>
+    <k-empty-state class="no-workspace-empty" icon="layout-kanban" title="No boards yet" text="You don't have access to any boards yet. Ask an administrator to add you to a workspace or board to get started." />
     }
     } @else {
     @if (state.cachedAt(); as cachedAt) {
@@ -175,18 +212,59 @@
         Changes will refresh after reconnecting.
       </span>
     </div>
-    } @else if (state.reconciling() && state.lastSyncedAt()) {
-    <div class="offline-banner" role="status">
-      <span class="spinner"></span>
-      <span>Reconnected. Refreshing your day…</span>
-    </div>
     }
+    <!-- Background refreshes stay silent: keep the current content visible while reconnecting,
+         returning to the tab, or polling. Only the initial load needs a loading indicator. -->
 
     <!-- Every tile always renders: a zero is information on a triage page, and a grid that changes
          column count as work appears is disorienting. Danger tone only when there is something.
          The three due tiles filter the agenda below; a tile with nothing to filter to, and the
          Done tile (whose detail is the progress panel), render as static readouts so nothing
          looks clickable unless clicking it visibly does something. -->
+    @if (showFirstRun()) {
+    <!-- Three steps, each a link into the place the step happens. Deliberately not a checklist that
+         tracks completion: the gate is "small organisation", and the card leaves when it is closed
+         or when the organisation outgrows it. -->
+    <section class="first-run" aria-labelledby="first-run-heading">
+      <div class="first-run-head">
+        <h2 id="first-run-heading" class="section-title">First steps</h2>
+        <button type="button" class="ghost icon sm" aria-label="Dismiss first steps" kTooltip="Dismiss" (click)="dismissFirstRun()">
+          <i class="ti ti-x"></i>
+        </button>
+      </div>
+      <div class="first-run-steps">
+        @if (firstRunListsLink(); as link) {
+        <a class="first-run-step" [routerLink]="link">
+          <span class="first-run-num">1</span>
+          <span class="first-run-body">
+            <span class="first-run-title">Shape your workflow</span>
+            <span class="first-run-text">Name the lists cards move through and add the fields your team tracks.</span>
+          </span>
+          <i class="ti ti-chevron-right"></i>
+        </a>
+        }
+        @if (firstRunBoardId(); as boardId) {
+        <button type="button" class="first-run-step" (click)="openBoard(boardId)">
+          <span class="first-run-num">2</span>
+          <span class="first-run-body">
+            <span class="first-run-title">Add your first cards</span>
+            <span class="first-run-text">Open a board and press C to create a card. Drag it between lists as it moves.</span>
+          </span>
+          <i class="ti ti-chevron-right"></i>
+        </button>
+        }
+        <a class="first-run-step" routerLink="/settings/users">
+          <span class="first-run-num">3</span>
+          <span class="first-run-body">
+            <span class="first-run-title">Bring your team</span>
+            <span class="first-run-text">Invite people to the organisation, then add them to workspaces or single boards.</span>
+          </span>
+          <i class="ti ti-chevron-right"></i>
+        </a>
+      </div>
+      <p class="first-run-foot">Press <kbd class="k-kbd">?</kbd> anywhere for keyboard shortcuts.</p>
+    </section>
+    }
     <section class="focus-grid" aria-label="Focus">
       <k-stat-tile
         label="Overdue"

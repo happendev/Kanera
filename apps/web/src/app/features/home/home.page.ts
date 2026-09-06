@@ -13,11 +13,13 @@ import { describeAcceptInvitationError, PendingInvitationsService } from "../../
 import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
 import { RecentBoardsService } from "../../core/recent-boards/recent-boards.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
+import { firstRunDismissedKey } from "../../core/browser/browser-contracts";
 import { ActivityStripComponent, type ActivityStripSeries } from "../../shared/activity-strip.component";
 import { AgentConnectCardComponent } from "../../shared/agent-connect-card/agent-connect-card.component";
 import { mediaQuerySignal } from "../../shared/media-query.signal";
 import { PageHeaderComponent } from "../../shared/page-header.component";
 import { StatTileComponent } from "../../shared/stat-tile.component";
+import { TooltipDirective } from "../../shared/tooltip.directive";
 import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
 import { BoardMenuCoordinator } from "../board/board-menu-coordinator.service";
 import { PriorityQueueComponent } from "../../shared/priority-queue/priority-queue.component";
@@ -48,10 +50,28 @@ type AccountStatusBanner = {
   actionLabel: string;
 };
 
+type ScatterKind = "ring" | "dash" | "square" | "dot" | "arc" | "check";
+interface ScatterItem { kind: ScatterKind; x: number; y: number; size: number; rotate?: number; accent: "teal" | "sky" | "indigo" }
+
+const HERO_SCATTER: readonly ScatterItem[] = [
+  { kind: "ring", x: 52, y: 8, size: 12, accent: "teal" },
+  { kind: "dash", x: 60, y: 30, size: 30, rotate: -24, accent: "sky" },
+  { kind: "dot", x: 56, y: 62, size: 6, accent: "indigo" },
+  { kind: "check", x: 66, y: 74, size: 16, rotate: -8, accent: "teal" },
+  { kind: "square", x: 72, y: 14, size: 14, rotate: 18, accent: "indigo" },
+  { kind: "arc", x: 78, y: 52, size: 20, rotate: 160, accent: "sky" },
+  { kind: "dot", x: 84, y: 26, size: 7, accent: "teal" },
+  { kind: "dash", x: 88, y: 78, size: 26, rotate: 20, accent: "indigo" },
+  { kind: "ring", x: 93, y: 10, size: 9, accent: "sky" },
+  { kind: "check", x: 96, y: 44, size: 14, rotate: 10, accent: "sky" },
+  { kind: "dot", x: 98, y: 88, size: 5, accent: "teal" },
+  { kind: "square", x: 63, y: 92, size: 10, rotate: -12, accent: "teal" },
+];
+
 @Component({
   selector: "k-home",
   standalone: true,
-  imports: [ActivityStripComponent, EmptyStateComponent, AgendaGroupComponent, AgentConnectCardComponent, DatePipe, PageHeaderComponent, PriorityQueueComponent, RouterLink, StatTileComponent],
+  imports: [ActivityStripComponent, EmptyStateComponent, AgendaGroupComponent, AgentConnectCardComponent, DatePipe, PageHeaderComponent, PriorityQueueComponent, RouterLink, StatTileComponent, TooltipDirective],
   // BoardMenuCoordinator owns the shared "labels compressed" preference that k-card-labels reads.
   // It is deliberately not root-provided (it holds document listeners), so every surface rendering
   // board chips provides it — same as GlobalWorkPage.
@@ -75,6 +95,13 @@ export class HomePage implements OnInit {
   readonly state = inject(HomeState);
 
   readonly isOrgAdmin = this.auth.isOrgAdmin;
+
+  /**
+   * The decorative shapes behind the greeting. Positions are percentages of the hero box and are
+   * kept to the right of ~45%, where the greeting and date never reach, plus a few at the far left
+   * edge that sit outside the reading column's text. Same vocabulary as the marketing site's hero.
+   */
+  readonly scatter = HERO_SCATTER;
   /** Placeholder rows for the loading skeleton; the count only has to look like the real layout. */
   readonly skeletonRows = [0, 1, 2, 3];
   readonly skeletonTiles = [0, 1, 2, 3];
@@ -99,6 +126,50 @@ export class HomePage implements OnInit {
    * the loading and error branches, because an unloaded payload also counts zero.
    */
   readonly hasNoBoards = computed(() => this.state.boardCount() === 0);
+
+  /**
+   * The "first steps" card: the only guidance between the onboarding wizard and a working team.
+   * Admins only, since every step is an admin action, and only while the organisation is small
+   * enough that the steps are plausibly undone — past three boards it is noise. Dismissal is
+   * per device (see firstRunDismissedKey); a fresh device shows it again, which is fine because
+   * the same small-org gate still applies.
+   */
+  private readonly firstRunDismissed = signal(this.readFirstRunDismissed());
+  readonly showFirstRun = computed(() =>
+    this.isOrgAdmin() && !this.hasNoBoards() && this.state.boardCount() <= 3 && !this.firstRunDismissed());
+  /** The board the first-run steps point at: most recently visited, else the first registered. */
+  readonly firstRunBoardId = computed(() => this.recentBoards()[0]?.id ?? null);
+  /** Lists and fields live on the workspace; a standalone board carries its own under /b/:id. */
+  readonly firstRunListsLink = computed<string[] | null>(() => {
+    const boardId = this.firstRunBoardId();
+    if (!boardId) return null;
+    const workspaceId = this.workspaceService.workspaceIdForBoard(boardId);
+    return workspaceId ? ["/w", workspaceId, "settings", "lists"] : ["/b", boardId, "settings", "lists"];
+  });
+
+  private firstRunKey(): string | null {
+    const user = this.auth.user();
+    return user ? firstRunDismissedKey(user.id, user.activeClientId ?? user.clientId) : null;
+  }
+
+  private readFirstRunDismissed(): boolean {
+    const key = this.firstRunKey();
+    try {
+      return !!key && localStorage.getItem(key) === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  dismissFirstRun(): void {
+    this.firstRunDismissed.set(true);
+    const key = this.firstRunKey();
+    try {
+      if (key) localStorage.setItem(key, "1");
+    } catch {
+      // Storage blocked: the card comes back next visit, which is the harmless failure.
+    }
+  }
 
   readonly greeting = computed(() => {
     const hour = new Date().getHours();
@@ -404,10 +475,6 @@ export class HomePage implements OnInit {
    * enforces its own board headroom, and onboardingGuard admits a no-workspace admin regardless of
    * the "skipped" flag, which only workspaceGuard consults.
    */
-  startGuidedSetup(): void {
-    void this.router.navigateByUrl("/onboarding");
-  }
-
   newWorkspace(): void {
     if (this.boardLimitReached()) {
       this.createAttempted.set("workspace");
