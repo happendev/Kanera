@@ -72,6 +72,7 @@ import { MemberPickerPopover } from "./member-picker.popover";
 import { SelectPickerPopover } from "./select-picker.popover";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
 import { BoardMirrorsService } from "../board-mirrors/board-mirrors.service";
+import { formatFeedTime } from "../../shared/date-format";
 
 const CHECKLIST_DRAG_SCROLL_EDGE_PX = 80;
 const CHECKLIST_DRAG_SCROLL_MAX_STEP_PX = 20;
@@ -2250,18 +2251,7 @@ export class CardDetailComponent {
   }
 
   formatFeedTime(createdAt: string | Date): string {
-    const date = new Date(createdAt as string);
-    const diffMs = Date.now() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60_000);
-    if (diffMins < 1) return "just now";
-    if (diffMins < 60) return `${diffMins} minute${diffMins === 1 ? "" : "s"} ago`;
-    return date.toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    return formatFeedTime(createdAt);
   }
 
 }

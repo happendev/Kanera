@@ -70,6 +70,7 @@ import { BoardMirrorsDialogComponent } from "../board-mirrors/board-mirrors.dial
 import { BoardMirrorsService } from "../board-mirrors/board-mirrors.service";
 
 import { createSortedLaneProjection, createLaneItemsProjection } from "./lane-projection";
+import { formatRelativeTime } from "../../shared/date-format";
 
 type AnyCard = Card | WireCard | WireCardSummary;
 
@@ -345,7 +346,7 @@ export class BoardPage implements OnDestroy {
   readonly offlineTooltip = computed(() => this.state.canEdit() || this.state.online() ? null : "You're offline - changes are paused");
   readonly offlineCopyLabel = computed(() => {
     const cachedAt = this.offlineBoardCachedAt();
-    return cachedAt ? `Offline copy from ${this.formatRelativeTime(cachedAt)}` : "";
+    return cachedAt ? `Offline copy from ${formatRelativeTime(cachedAt)}` : "";
   });
   readonly offlineCopyPromptDelayMs = OFFLINE_COPY_PROMPT_DELAY_MS;
 
@@ -1405,17 +1406,6 @@ export class BoardPage implements OnDestroy {
       .finally(() => {
         if (this.cfValuesInFlightForBoard === boardId) this.cfValuesInFlightForBoard = null;
       });
-  }
-
-  private formatRelativeTime(value: string): string {
-    const diffMs = Date.now() - new Date(value).getTime();
-    const mins = Math.max(0, Math.floor(diffMs / 60_000));
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"} ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
-    const days = Math.floor(hours / 24);
-    return `${days} day${days === 1 ? "" : "s"} ago`;
   }
 
   private skipNextDocumentClick = false;

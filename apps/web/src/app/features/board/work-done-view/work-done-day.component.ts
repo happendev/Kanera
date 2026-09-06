@@ -6,6 +6,7 @@ import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { CardLabelsComponent, type CardLabelPresentation } from "../card-labels.component";
 import { iconForType, verbForType } from "./work-done-grouping";
 import type { CardDayDigest, WorkDoneActor, WorkDoneDay } from "./work-done.types";
+import { formatTime } from "../../../shared/date-format";
 
 export type WorkDoneBoardSummary = { id: string; name: string; icon: string | null; iconColor: string | null };
 
@@ -130,6 +131,6 @@ export class WorkDoneDayComponent {
 
   /** Time of the card's last event that day, in the viewer's locale. */
   timeFor(digest: CardDayDigest): string {
-    return new Date(digest.lastAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    return formatTime(digest.lastAt);
   }
 }

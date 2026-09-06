@@ -19,7 +19,6 @@ import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { attachmentIconClass } from "../../shared/attachment-icons";
 import { BodyScrollLockService } from "../../shared/body-scroll-lock.service";
 import { CardKeyDisplayService } from "../../shared/card-key-display.service";
-import { dayGroupLabel } from "../../shared/day-key.util";
 import { SearchFieldComponent } from "../../shared/search-field.component";
 import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
@@ -28,6 +27,7 @@ import { openCardDetailInNewTab } from "../board/card-navigation.util";
 import { BoardState } from "../board/board-state";
 import { DescriptionViewerComponent } from "../board/description-viewer.component";
 import { buildFeedEntries, type ActivityChangeSummary, type NotificationCluster, type NotificationFeedEntry } from "./notification-clusters";
+import { dayGroupLabel, formatFeedTime } from "../../shared/date-format";
 
 interface NotificationGroupView {
   key: string;
@@ -560,16 +560,7 @@ export class NotificationsPanelComponent {
   }
 
   relativeTime(value: string | Date): string {
-    const ts = typeof value === "string" ? new Date(value).getTime() : value.getTime();
-    const diff = Date.now() - ts;
-    const minute = 60_000;
-    const hour = 60 * minute;
-    const day = 24 * hour;
-    if (diff < minute) return "just now";
-    if (diff < hour) return `${Math.floor(diff / minute)}m ago`;
-    if (diff < day) return `${Math.floor(diff / hour)}h ago`;
-    if (diff < 7 * day) return `${Math.floor(diff / day)}d ago`;
-    return new Date(ts).toLocaleDateString();
+    return formatFeedTime(value);
   }
 
   /** Delegates to the shared summariser so the drawer and watched-activity push bodies agree. */

@@ -15,7 +15,7 @@ import { filter } from "rxjs";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { KANERA_DOCS_URL } from "../../shared/docs-link.component";
 import type { CardLabelPresentation } from "../board/card-labels.component";
-import { formatRelativeTime } from "../board/table-view/table-columns.util";
+import { formatDateTime, formatRelativeTime } from "../../shared/date-format";
 import { AuthService } from "../../core/auth/auth.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { AppTitleService } from "../../core/title/app-title.service";
@@ -3790,15 +3790,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
 
   formatApiKeyLastUsed(value: string | Date | null | undefined): string {
     if (!value) return "Never";
-    const date = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(date.getTime())) return "Never";
-    return new Intl.DateTimeFormat(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(date);
+    return formatDateTime(value, "short") || "Never";
   }
 
   formatWebhookLastSuccessful(value: string | Date | null | undefined): string {

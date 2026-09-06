@@ -32,6 +32,7 @@ import { formatDueDate, type DueDateSlot } from "./due-date.util";
 import { LabelPickerPopover, type LabelPickerLabel } from "./label-picker.popover";
 import { MemberPickerPopover } from "./member-picker.popover";
 import { SelectPickerPopover } from "./select-picker.popover";
+import { viewerTimeZone } from "../../shared/day-key.util";
 
 type AnyCard = Card | WireCard | WireCardSummary;
 // Structural rather than the schema rows: the composer only reads these fields, so both a board's
@@ -279,7 +280,7 @@ export class CardComposerDialogComponent implements OnInit {
     const draft = this.draft();
     if (!draft.dueDateLocalDate) return null;
     // Timezone is assigned server-side on write; render the draft in the browser's own zone.
-    return formatDueDate(draft.dueDateLocalDate, draft.dueDateSlot, Intl.DateTimeFormat().resolvedOptions().timeZone);
+    return formatDueDate(draft.dueDateLocalDate, draft.dueDateSlot, viewerTimeZone());
   });
 
   readonly selectedChecklistTemplates = computed(() => {

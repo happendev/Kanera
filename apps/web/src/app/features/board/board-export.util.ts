@@ -1,6 +1,7 @@
 import type { BoardExportArchive } from "@kanera/shared/dto";
 import type { Cell } from "write-excel-file/browser";
 import { sanitizeExportFileName, timestampForFileName } from "./table-view/export.util";
+import { formatDateTime } from "../../shared/date-format";
 
 type WorkbookCell = string | number | boolean | null;
 
@@ -147,8 +148,7 @@ function dateValue(value: string | Date | null): string | null {
 }
 
 function formatDate(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  return formatDateTime(value, "medium") || value;
 }
 
 function plainText(value: string | null): string | null {

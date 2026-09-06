@@ -76,6 +76,7 @@ import { TeamPrioritiesViewComponent, type TeamPriorityReorder } from "./team-pr
 import { UpNextPanelComponent, type UpNextAddableCard } from "./up-next-panel.component";
 import { boardPickerGroups, peoplePickerGroups, savedViewPickerGroups, scopePickerGroups } from "./work-pickers";
 import { createSortedLaneProjection, createLaneItemsProjection } from "../board/lane-projection";
+import { formatDate } from "../../shared/date-format";
 
 type GlobalCard = WireCardSummary & { workspaceId: string };
 type ChecklistGroup = {
@@ -2442,10 +2443,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   }
 
   localDateLabel(value: string, style: "full" | "medium" = "medium"): string {
-    const date = new Date(`${value}T12:00:00`);
-    return date.toLocaleDateString(undefined, style === "full"
-      ? { weekday: "long", year: "numeric", month: "long", day: "numeric" }
-      : { year: "numeric", month: "short", day: "numeric" });
+    return formatDate(value, style === "full" ? "long" : "medium");
   }
 
   isChecklistOverdue(item: WireChecklistAssignment): boolean {

@@ -1,5 +1,6 @@
 import type { WorkDoneEvent, WorkDoneEventType } from "@kanera/shared/dto";
-import { dayFullLabel, dayGroupLabel, localDateKey } from "../../../shared/day-key.util";
+import { dayFullLabel, dayGroupLabel } from "../../../shared/date-format";
+import { localDateKey } from "../../../shared/day-key.util";
 import type {
   CardDayDigest,
   WorkDoneActor,

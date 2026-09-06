@@ -6,6 +6,7 @@ import { scratchpadActiveNoteKey, STORAGE_KEYS } from "../../core/browser/browse
 import { EditorDrafts } from "../../core/browser/editor-drafts";
 import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
 import { SocketService } from "../../core/realtime/socket.service";
+import { formatDate, formatTime } from "../../shared/date-format";
 
 /**
  * Autosave debounce. Long enough that ordinary typing produces one request per pause rather than one
@@ -403,9 +404,7 @@ export class ScratchpadService {
   /** `11 Aug at 14:32` in the user's locale — a name you can place in time without opening the page. */
   private defaultTitle(): string {
     const now = new Date();
-    const day = now.toLocaleDateString(undefined, { day: "numeric", month: "short" });
-    const time = now.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-    return `${day} at ${time}`;
+    return `${formatDate(now, "short")} at ${formatTime(now)}`;
   }
 
   async deleteNote(noteId: string): Promise<void> {

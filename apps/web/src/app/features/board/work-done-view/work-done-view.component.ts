@@ -34,6 +34,7 @@ import {
 import { WorkDoneDayComponent, type WorkDoneBoardSummary } from "./work-done-day.component";
 import { readWorkDonePreferences, updateWorkDonePreferences } from "./work-done-preferences";
 import type { CardDayDigest, WorkDoneDay, WorkDoneLayout, WorkDoneRangePreset } from "./work-done.types";
+import { formatDate, formatDateRange } from "../../../shared/date-format";
 
 type WorkDoneList = {
   id: string;
@@ -309,12 +310,9 @@ export class WorkDoneViewComponent {
     if (from.getTime() === to.getTime()) {
       if (to.getTime() === this.today.getTime()) return "Today";
       if (to.getTime() === addDays(this.today, -1).getTime()) return "Yesterday";
-      return to.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+      return formatDate(to, "long");
     }
-    const sameMonth = from.getMonth() === to.getMonth() && from.getFullYear() === to.getFullYear();
-    const fromLabel = from.toLocaleDateString(undefined, sameMonth ? { day: "numeric" } : { day: "numeric", month: "short" });
-    const toLabel = to.toLocaleDateString(undefined, { day: "numeric", month: "short" });
-    return `${fromLabel} – ${toLabel}`;
+    return formatDateRange(from, to);
   });
 
   readonly fromInputValue = computed(() => toDateInputValue(this.from()));

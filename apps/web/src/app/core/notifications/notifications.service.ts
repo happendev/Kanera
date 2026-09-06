@@ -7,6 +7,7 @@ import { organisationStorageKey, STORAGE_KEYS } from "../browser/browser-contrac
 import { registerSocketHandlers } from "../realtime/socket-handlers";
 import { SocketService } from "../realtime/socket.service";
 import { MentionSoundService } from "./mention-sound.service";
+import { localDateKey, viewerTimeZone } from "../../shared/day-key.util";
 
 const PAGE_SIZE = 25;
 const READ_NOTIFICATION_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 10,080 minutes
@@ -254,7 +255,7 @@ export class NotificationsService {
   private async fetchGroupCounts(includeRead = this.includeRead()): Promise<NotificationGroupCountsResponse> {
     const params = new URLSearchParams({
       groupBy: this.groupBy(),
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+      timeZone: viewerTimeZone(),
     });
     if (includeRead) params.set("includeRead", "true");
     const boardId = this.boardFilter();
@@ -428,15 +429,7 @@ export class NotificationsService {
   }
 
   private localDateKey(value: string | Date): string {
-    const date = typeof value === "string" ? new Date(value) : value;
-    const parts = new Intl.DateTimeFormat("en", {
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(date);
-    const valueFor = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
-    return `${valueFor("year")}-${valueFor("month")}-${valueFor("day")}`;
+    return localDateKey(typeof value === "string" ? new Date(value) : value);
   }
 
   async markRead(id: string): Promise<void> {

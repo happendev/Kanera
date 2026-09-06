@@ -29,6 +29,7 @@ import {
   SCRATCHPAD_MIN_WIDTH,
   ScratchpadService,
 } from "./scratchpad.service";
+import { formatDateTime } from "../../shared/date-format";
 
 /** Below this the dock has no room to be a dock and becomes a bottom sheet. Matches the shell's
  * auto-collapse breakpoint, so the sidebar and the scratchpad change shape at the same width. */
@@ -799,15 +800,7 @@ export class ScratchpadPanelComponent implements OnDestroy {
   }
 
   private formatStamp(value: Date | string): string {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "—";
-    const today = new Date();
-    const sameDay = date.getDate() === today.getDate()
-      && date.getMonth() === today.getMonth()
-      && date.getFullYear() === today.getFullYear();
-    return sameDay
-      ? date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
-      : date.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+    return formatDateTime(value, "compact") || "—";
   }
 
   private matchesSheet(): boolean {

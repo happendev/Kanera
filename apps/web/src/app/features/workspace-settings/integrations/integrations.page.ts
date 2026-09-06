@@ -6,6 +6,7 @@ import { ConfirmService } from "../../../shared/confirm.service";
 import { DocsLinkComponent } from "../../../shared/docs-link.component";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { WorkspaceSettingsPage } from "../workspace-settings.page";
+import { formatDateTime } from "../../../shared/date-format";
 
 type ChatProvider = "slack" | "discord" | "telegram" | "zulip";
 type ChatEvent = "card_created" | "status_changed" | "priority_changed" | "title_changed" | "description_changed" | "comment_created";
@@ -258,9 +259,7 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
 
   formatDate(value: string | Date | null): string {
     if (!value) return "Never";
-    const date = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(date.getTime())) return "Never";
-    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
+    return formatDateTime(value, "short") || "Never";
   }
 
   private async load(): Promise<void> {

@@ -13,6 +13,7 @@ import { DescriptionEditorComponent } from "../board/description-editor.componen
 import { ImageLightboxService } from "../board/image-lightbox.service";
 import { NoteEditorComponent } from "./note-editor.component";
 import { NotesState } from "./notes.service";
+import { formatDateTime } from "../../shared/date-format";
 
 class NotesStateStub {
   lock: WireNoteLock | null = null;
@@ -118,11 +119,7 @@ describe("NoteEditorComponent locking", () => {
     }));
     fixture.detectChanges();
 
-    const expectedDate = new Intl.DateTimeFormat(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-      timeZone: "UTC",
-    }).format(lastEditedAt);
+    const expectedDate = formatDateTime(lastEditedAt, "medium", { timeZone: "UTC" });
     expect(native().textContent).toContain("Last edited by Ada Lovelace");
     expect(native().textContent).toContain(expectedDate);
     const time = native().querySelector<HTMLTimeElement>(".ne-last-edit time");

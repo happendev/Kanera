@@ -15,6 +15,7 @@ import { MediaDownloadService } from "../../core/media/media-download.service";
 import type { AttachmentPreviewType } from "../../shared/attachment-preview";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { DescriptionViewerComponent } from "./description-viewer.component";
+import { formatDate } from "../../shared/date-format";
 
 const MARKDOWN_PREVIEW_MAX_BYTES = 2 * 1024 * 1024;
 
@@ -660,7 +661,7 @@ export class ImageLightboxComponent implements OnDestroy {
   }
 
   formatDate(value: string | Date): string {
-    return new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    return formatDate(value, "medium");
   }
 
   async downloadActiveImage() {

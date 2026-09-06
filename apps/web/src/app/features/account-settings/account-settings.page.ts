@@ -28,6 +28,7 @@ import { AccountSettingsNotificationsPage } from "./notifications/notifications.
 import { AccountSettingsOrgPage } from "./org/org.page";
 import { AccountSettingsProfilePage } from "./profile/profile.page";
 import { AccountSettingsUsersPage } from "./users/users.page";
+import { formatDate, formatDateTime } from "../../shared/date-format";
 
 type Tab = "profile" | "notifications" | "api-keys" | "org" | "users" | "account-plan";
 const WORKSPACE_DEFAULTS_SAVE_DEBOUNCE_MS = 300;
@@ -169,12 +170,7 @@ const WORKSPACE_NOTIFICATION_CHANNELS = [
 }>;
 
 function formatBuildDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date);
+  return formatDateTime(value, "medium") || value;
 }
 
 function formatBytes(value: number): string {
@@ -1466,7 +1462,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   inviteExpiry(invite: OrgInvite): { label: string; tooltip: string; urgent: boolean } {
     if (!invite.expiresAt) return { label: "Never", tooltip: "This link stays valid until it is revoked.", urgent: false };
     const expiresAt = new Date(invite.expiresAt);
-    const absolute = expiresAt.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+    const absolute = formatDateTime(expiresAt, "medium");
     const days = Math.ceil((expiresAt.getTime() - Date.now()) / 86_400_000);
     if (days < 0) return { label: "Expired", tooltip: `Expired ${absolute}.`, urgent: true };
     if (days === 0) return { label: "Today", tooltip: `Expires ${absolute}.`, urgent: true };
@@ -1477,7 +1473,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   // Attribution resolves against the already-loaded roster; falls back to the bare date when the
   // creator has since been removed from the organisation.
   inviteCreatedLabel(invite: OrgInvite): string {
-    const created = new Date(invite.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    const created = formatDate(invite.createdAt, "medium");
     const author = this.orgUsers().find((u) => u.id === invite.createdById)?.displayName;
     return author ? `Created ${created} by ${author}` : `Created ${created}`;
   }

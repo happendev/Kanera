@@ -42,6 +42,8 @@ import { DescriptionViewerComponent } from "../board/description-viewer.componen
 import { ImageLightboxService } from "../board/image-lightbox.service";
 import type { ImageLightboxItem } from "../board/image-lightbox.component";
 import { NotesState } from "./notes.service";
+import { formatDateTime } from "../../shared/date-format";
+import { viewerTimeZone } from "../../shared/day-key.util";
 
 const LOCK_HEARTBEAT_MS = 30_000; // 30 seconds
 const OFFLINE_DRAFT_MESSAGES = new Set([
@@ -1112,32 +1114,18 @@ export class NoteEditorComponent implements OnDestroy {
   }
 
   formatFeedTime(value: string | Date): string {
-    const date = typeof value === "string" ? new Date(value) : value;
-    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(date);
+    return formatDateTime(value, "short");
   }
 
   lastEditedTimeZone(): string {
     return this.auth.user()?.timezone?.trim()
-      || Intl.DateTimeFormat().resolvedOptions().timeZone
-      || "UTC";
+      || viewerTimeZone();
   }
 
   formatLastEditedAt(value: string | Date): string {
-    const date = typeof value === "string" ? new Date(value) : value;
-    try {
-      return new Intl.DateTimeFormat(undefined, {
-        dateStyle: "medium",
-        timeStyle: "short",
-        timeZone: this.lastEditedTimeZone(),
-      }).format(date);
-    } catch {
-      // A legacy/externally provisioned profile could contain a zone unsupported by this browser.
-      // Falling back to the browser zone is more useful than hiding the note's edit timestamp.
-      return new Intl.DateTimeFormat(undefined, {
-        dateStyle: "medium",
-        timeStyle: "short",
-      }).format(date);
-    }
+    // The shared formatter falls back to the browser zone when a profile carries a zone this
+    // browser does not know, so a legacy/externally provisioned profile still shows a timestamp.
+    return formatDateTime(value, "medium", { timeZone: this.lastEditedTimeZone() });
   }
 
   async downloadAttachment(url: string, fileName: string) {

@@ -2,6 +2,7 @@ import { Injectable, signal, computed } from "@angular/core";
 import type { Entitlements } from "@kanera/shared/dto";
 import { environment } from "../../../environments/environment";
 import { STORAGE_KEYS } from "../browser/browser-contracts";
+import { viewerTimeZone } from "../../shared/day-key.util";
 
 export type OrgRole = "owner" | "admin" | "member";
 export type KaneraEnvironment = "development" | "test" | "staging" | "production";
@@ -309,7 +310,7 @@ export class AuthService {
   }
 
   private async syncTimezone(user: AuthUser): Promise<void> {
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    const timezone = viewerTimeZone();
     if (user.timezone === timezone) return;
     try {
       const res = await this.request(`${environment.apiUrl}/auth/me`, {

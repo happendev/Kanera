@@ -4,6 +4,7 @@ import { TooltipDirective } from "../../shared/tooltip.directive";
 import { WEEKDAY_LABELS, startOfWeek } from "../../shared/week-start";
 import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
+import { formatDate } from "../../shared/date-format";
 
 type CalendarDay = {
   date: Date;
@@ -357,7 +358,7 @@ export class DateRangePickerPopover implements OnInit {
   }
 
   readonly monthLabel = computed(() =>
-    this.visibleMonth().toLocaleDateString(undefined, { month: "long", year: "numeric" }),
+    formatDate(this.visibleMonth(), "monthYear"),
   );
   readonly draftLabel = computed(() => this.rangeLabel(this.draftFrom(), this.draftTo()));
 
@@ -444,7 +445,7 @@ export class DateRangePickerPopover implements OnInit {
   }
 
   ariaLabel(date: Date): string {
-    return date.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+    return formatDate(date, "long");
   }
 
   private initialVisibleMonth(): Date {
@@ -462,7 +463,7 @@ export class DateRangePickerPopover implements OnInit {
 
   private dateLabel(value: string): string {
     const date = fromDateInputValue(value);
-    return date ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date) : value;
+    return date ? formatDate(date, "medium") : value;
   }
 
 }

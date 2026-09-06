@@ -14,6 +14,7 @@ import { TooltipDirective } from "../../shared/tooltip.directive";
 import { WEEKDAY_LABELS, startOfWeek } from "../../shared/week-start";
 import { dueDateSlotTimeLabel } from "@kanera/shared/due-date-slots";
 import { DUE_DATE_SLOT_OPTIONS, type DueDateSlot, type DueDateSlotSelection } from "./due-date.util";
+import { formatDate } from "../../shared/date-format";
 
 type CalendarDay = {
   date: Date;
@@ -434,7 +435,7 @@ export class DatePickerPopover implements OnInit {
   readonly slotOptions = DUE_DATE_SLOT_OPTIONS;
   readonly shortcuts = (() => {
     const today = startOfDay(new Date());
-    const fmt = (d: Date) => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    const fmt = (d: Date) => formatDate(d, "short");
     const add = (days: number) => { const d = new Date(today); d.setDate(d.getDate() + days); return d; };
     return [
       { label: "Today", days: 0, dateLabel: fmt(add(0)) },
@@ -470,7 +471,7 @@ export class DatePickerPopover implements OnInit {
   }
 
   readonly monthLabel = computed(() =>
-    this.visibleMonth().toLocaleDateString(undefined, { month: "long", year: "numeric" }),
+    formatDate(this.visibleMonth(), "monthYear"),
   );
 
   readonly days = computed<CalendarDay[]>(() => {
@@ -535,7 +536,7 @@ export class DatePickerPopover implements OnInit {
   }
 
   ariaLabel(date: Date): string {
-    return date.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+    return formatDate(date, "long");
   }
 
   slotIcon(slot: DueDateSlot): string {

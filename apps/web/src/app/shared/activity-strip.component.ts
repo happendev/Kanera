@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from "@angular/core";
 import { TooltipDirective } from "./tooltip.directive";
 import { addDays, localDateKey, parseDateKey } from "./day-key.util";
+import { formatDate } from "./date-format";
 
 /** One metric to plot. Counts are keyed by local YYYY-MM-DD day; missing days render as zero. */
 export interface ActivityStripSeries {
@@ -49,11 +50,7 @@ export function buildActivityStripCells(
       date,
       count,
       level: count === 0 ? 0 : (Math.min(4, Math.ceil((count / Math.max(peak, 1)) * 4)) as 1 | 2 | 3 | 4),
-      label: `${count} ${count === 1 ? series.noun : `${series.noun}s`} · ${day.toLocaleDateString(undefined, {
-        weekday: "short",
-        day: "numeric",
-        month: "short",
-      })}`,
+      label: `${count} ${count === 1 ? series.noun : `${series.noun}s`} · ${formatDate(day, "weekday", { now: day })}`,
       // Monday starts a new week: a stronger left edge keeps the eye from losing its place across
       // dozens of otherwise undifferentiated columns.
       weekStart: day.getDay() === 1,
@@ -181,7 +178,7 @@ export class ActivityStripComponent {
       // The window rarely starts on the 1st; the opening column is labelled anyway so the strip is
       // never left without a date anchor on its left edge.
       return index === 0 || cell.date.endsWith("-01")
-        ? parseDateKey(cell.date).toLocaleDateString(undefined, { month: "short" })
+        ? formatDate(cell.date, "month")
         : "";
     }) ?? [];
   });

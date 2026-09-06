@@ -31,6 +31,7 @@ import {
   sanitizeGlobalWorkDefinition,
   writeGlobalWorkPreference,
 } from "./global-work-preference";
+import { viewerTimeZone } from "../../shared/day-key.util";
 
 const EMPTY_CATALOG: WorkCatalog = {
   organisations: [],
@@ -1577,7 +1578,7 @@ export class GlobalWorkState {
       days: definition.portfolioDays,
       // The heatmap buckets by calendar day, so the server needs the viewer's zone to decide which
       // square a late-evening event belongs to.
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+      timeZone: viewerTimeZone(),
     });
   }
 

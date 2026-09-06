@@ -16,6 +16,7 @@ import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
 import { WorkspaceSettingsPage } from "./workspace-settings.page";
+import { formatDateTime } from "../../shared/date-format";
 
 class SocketStub {
   private readonly handlers = new Map<string, (...args: unknown[]) => void>();
@@ -829,13 +830,7 @@ describe("WorkspaceSettingsPage", () => {
     fixture.detectChanges();
 
     const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
-    const formattedLastUsed = new Intl.DateTimeFormat(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(new Date(lastUsedAt));
+    const formattedLastUsed = formatDateTime(lastUsedAt, "short");
     expect(text).toContain("Teammate sync");
     expect(text).toContain("Created by Integration Admin");
     expect(text).toContain("Last used");
@@ -910,13 +905,7 @@ describe("WorkspaceSettingsPage", () => {
     fixture.componentInstance.selectedTab.set("api");
     fixture.detectChanges();
 
-    const formattedLastSuccessful = new Intl.DateTimeFormat(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(new Date(lastSuccessfulAt));
+    const formattedLastSuccessful = formatDateTime(lastSuccessfulAt, "short");
     const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
     expect(text).toContain("CRM sync");
     expect(text).toContain("Last success");
