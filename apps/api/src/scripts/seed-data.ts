@@ -143,6 +143,14 @@ type SeedComment = {
   unreadFor?: SeedUserKey[];
 };
 
+type SeedNotificationActivity = {
+  actor: SeedUserKey;
+  recipient: SeedUserKey;
+  action: "assignees:set" | "customFieldValue:set";
+  payload: Record<string, unknown>;
+  hoursAfterCreation: number;
+};
+
 type SeedChecklistItem = {
   text: string;
   assignee?: SeedUserKey;
@@ -173,6 +181,7 @@ type SeedCard = {
   checklists?: SeedChecklist[];
   comments?: SeedComment[];
   watchers?: SeedUserKey[];
+  notificationActivities?: SeedNotificationActivity[];
   completedBy?: SeedUserKey;
   completedDaysAgo?: number;
   createdDaysAgo?: number;
@@ -1183,6 +1192,8 @@ function buildMarketingWorkspace(): SeedWorkspace {
     checklists?: SeedChecklist[];
     comments?: SeedComment[];
     watchers?: SeedUserKey[];
+    additionalAssignees?: SeedUserKey[];
+    notificationActivities?: SeedNotificationActivity[];
   };
 
   type MarketingCardGroup = {
@@ -1257,7 +1268,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
       description: note(...card.description),
       list: group.list,
       createdBy: card.createdBy ?? (group.list === "Ideas & Requests" ? "grace" : assignee),
-      assignees: [assignee],
+      assignees: [assignee, ...(card.additionalAssignees ?? [])],
       labels: card.labels ?? labelsForMarketingCard(title),
       dueOffsetDays: card.dueOffsetDays,
       dueDateSlot: card.dueDateSlot,
@@ -1266,6 +1277,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
       checklists: card.checklists,
       comments: card.comments,
       watchers: card.watchers,
+      notificationActivities: card.notificationActivities,
       createdDaysAgo: card.createdDaysAgo ?? (isDone ? 18 + index * 3 : 4 + index),
       ...(isDone ? { completedBy: assignee, completedDaysAgo: 3 + index * 2 } : {}),
       ...(isHero ? {
@@ -1366,11 +1378,39 @@ function buildMarketingWorkspace(): SeedWorkspace {
         {
           title: "Build the launch measurement sheet",
           assignee: "leo",
+          additionalAssignees: ["amelia"],
           description: [
             "Bring landing conversion, email engagement, partner referrals, and demo requests into one launch view with last quarter as the baseline.",
           ],
           createdBy: "ben",
+          createdDaysAgo: 1,
           labels: ["Campaign", "Analytics"],
+          fieldValues: { Campaign: "Commercial" },
+          comments: [{
+            author: "ben",
+            hoursAfterCreation: 20,
+            body: "Please advise if the campaign setup is correct before we share it.",
+            mentions: ["amelia"],
+            unreadFor: ["amelia"],
+          }],
+          // Keep the demo inbox representative after every reseed: this card produces one unread
+          // burst with a comment and ordinary card changes, alongside the overdue reminders.
+          notificationActivities: [
+            {
+              actor: "ben",
+              recipient: "amelia",
+              action: "customFieldValue:set",
+              payload: { fieldName: "Campaign", toValue: "Commercial" },
+              hoursAfterCreation: 19.75,
+            },
+            {
+              actor: "ben",
+              recipient: "amelia",
+              action: "assignees:set",
+              payload: { addedAssigneeNames: ["Amelia Hart"] },
+              hoursAfterCreation: 19.5,
+            },
+          ],
         },
       ],
     },
@@ -5381,6 +5421,36 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
                 }))).onConflictDoNothing();
                 summary.notifications += notificationReasonByUser.size;
               }
+            }
+
+            for (const notificationSeed of cardSeed.notificationActivities ?? []) {
+              const notificationCreatedAt = addHours(cardCreatedAt, notificationSeed.hoursAfterCreation);
+              const [activity] = await tx.insert(activityEvents).values({
+                boardId: board!.id,
+                workspaceId: workspace!.id,
+                actorId: userIdByKey.get(notificationSeed.actor)!,
+                entityType: "card",
+                entityId: card!.id,
+                action: notificationSeed.action,
+                payload: notificationSeed.payload,
+                createdAt: notificationCreatedAt,
+                updatedAt: notificationCreatedAt,
+              }).returning();
+              await tx.insert(notifications).values({
+                clientId: client!.id,
+                userId: userIdByKey.get(notificationSeed.recipient)!,
+                activityId: activity!.id,
+                cardId: card!.id,
+                listId: listRow.id,
+                boardId: board!.id,
+                workspaceId: workspace!.id,
+                reason: "watching",
+                createdAt: notificationCreatedAt,
+              });
+              summary.notifications += 1;
+              latestCardTimestamp = notificationCreatedAt > latestCardTimestamp
+                ? notificationCreatedAt
+                : latestCardTimestamp;
             }
 
             if (latestCardTimestamp > cardCreatedAt || coverAttachmentId) {

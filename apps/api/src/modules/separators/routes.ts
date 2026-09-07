@@ -21,10 +21,18 @@ export async function separatorRoutes(app: FastifyInstance) {
     if (!list || list.workspaceId !== ctx.workspaceId) throw badRequest("target list not in board workspace");
 
     const { separator, rebalanced } = await db.transaction(async (tx) => {
+      // Cards and separators share one numeric lane. Resolve the initial typed anchor before the
+      // insert so an exact agent-driven create is one atomic activity/event, not create-then-move.
       const result = await positionForLaneInsert({
         listId,
         boardId,
-        ...(body.atTop ? { afterItem: null } : { beforeItem: null }),
+        ...(body.afterItem !== undefined
+          ? { afterItem: body.afterItem }
+          : body.beforeItem !== undefined
+            ? { beforeItem: body.beforeItem }
+            : body.atTop
+              ? { afterItem: null }
+              : { beforeItem: null }),
         tx,
       });
       const [separator] = await tx

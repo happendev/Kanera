@@ -70,6 +70,24 @@ const solo = await kanera.workspaces.create({
 await kanera.boards.create(workspace.id, { name: "Events" });
 ```
 
+## Board separators
+
+Separators are first-class, board-owned items in a workflow list's ordering lane. They can carry a
+title and color, and their anchors can target either cards or other separators.
+
+```ts
+const separator = await kanera.separators.create(boardId, listId, {
+  title: "This week",
+  color: "blue",
+  anchor: { side: "before", item: { type: "card", id: cardId } },
+});
+
+await kanera.cards.move("MKT-42", {
+  listId,
+  anchor: { side: "after", item: { type: "separator", id: separator.id } },
+});
+```
+
 ## Card references
 
 Anywhere a card is named, you may pass a UUID, a human key such as `MKT-42`, or a canonical card

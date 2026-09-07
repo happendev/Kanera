@@ -3213,7 +3213,18 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("renders item metadata pickers only inside the open item detail drawer", async () => {
-    const item = createChecklistItemFixture({ dueDateLocalDate: "2026-06-01", dueDateSlot: "morning" });
+    const assignee = {
+      userId: "user-2",
+      displayName: "Amelia Hart",
+      avatarUrl: null,
+      role: "editor" as const,
+      source: "workspace" as const,
+    };
+    const item = createChecklistItemFixture({
+      assigneeId: assignee.userId,
+      dueDateLocalDate: "2026-06-01",
+      dueDateSlot: "morning",
+    });
     const checklist = createChecklistFixture({ items: [item] });
     const fixture = TestBed.createComponent(CardDetailComponent);
 
@@ -3223,7 +3234,7 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.componentRef.setInput("customFieldValues", []);
     fixture.componentRef.setInput("cardLabels", []);
     fixture.componentRef.setInput("cardLabelIds", []);
-    fixture.componentRef.setInput("members", []);
+    fixture.componentRef.setInput("members", [assignee]);
     fixture.componentRef.setInput("checklists", [checklist]);
     fixture.detectChanges();
     await settleDetail(fixture);
@@ -3233,6 +3244,10 @@ describe("CardDetailComponent realtime regressions", () => {
 
     const root = fixture.nativeElement as HTMLElement;
     const panel = root.querySelector<HTMLElement>(".checklist-item-panel");
+    const dueDate = panel?.querySelector<HTMLElement>(".checklist-item-due");
+    const assignedUser = panel?.querySelector<HTMLElement>(".checklist-item-panel-assignee");
+    expect(getComputedStyle(dueDate!).height).toBe(getComputedStyle(assignedUser!).height);
+
     panel?.querySelector<HTMLButtonElement>(".checklist-item-due")?.click();
     fixture.detectChanges();
 

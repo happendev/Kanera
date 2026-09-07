@@ -127,6 +127,11 @@ export const publicWebhookEventTypes = [
   "card:moved",
   "card:rebalanced",
   "card:deleted",
+  "separator:created",
+  "separator:updated",
+  "separator:moved",
+  "separator:rebalanced",
+  "separator:deleted",
   "card:customFieldValue:set",
   "card:customFieldValue:cleared",
   "card:labels:set",
@@ -202,7 +207,7 @@ const cursorPaginationParams = [
   queryParam("cursor", { type: "string", minLength: 1 }, "Opaque nextCursor from the previous page."),
 ];
 
-const publicApiDescription = `Kanera's public API lets you build integrations around the same workspace, board, card, note, comment, attachment, activity, and external-link data that users manage in the app.
+const publicApiDescription = `Kanera's public API lets you build integrations around the same workspace, board, card, separator, note, comment, attachment, activity, and external-link data that users manage in the app.
 
 ## Quickstart
 
@@ -349,6 +354,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     { name: "Boards", description: "Create, open, reorder, update, and remove boards. Remember that lists and custom fields belong to the workspace, not to individual boards." },
     { name: "Board Access", description: "Manage organisation-member permissions and cross-organisation guest access for boards. Standalone boards use these board-level permissions without exposing their hidden workspace roster." },
     { name: "Lists", description: "Manage the shared workflow lists for a workspace. Moving a list changes its position everywhere in that workspace." },
+    { name: "Separators", description: "Manage board-owned, titled dividers inside a workflow list's mixed card lane, including exact card-or-separator positioning." },
     { name: "Automations", description: "Manage workspace-scoped rules and inspect their retained execution outcomes. Automation administration requires workspace-admin authority." },
     { name: "Notes", description: "Read and manage workspace notes and board notes, including lock/unlock behavior for collaborative editing." },
     { name: "Cards", description: "Create and update cards, move them through workspace lists, manage checklist data, labels, assignees, completion, and custom field values." },
@@ -611,11 +617,12 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       },
       BoardDetail: {
         type: "object",
-        required: ["board", "lists", "customFields", "cardLabels", "members"],
+        required: ["board", "lists", "separators", "customFields", "cardLabels", "members"],
         properties: {
           board: ref("Board"),
           lists: arrayOf(ref("List")),
           cards: arrayOf(ref("Card")),
+          separators: arrayOf(ref("BoardSeparator")),
           cardPage: {
             type: "object",
             required: ["offset", "limit", "hasMore"],
@@ -645,6 +652,22 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           updatedAt: dateTime,
         },
         additionalProperties: true,
+      },
+      BoardSeparator: {
+        type: "object",
+        required: ["id", "boardId", "listId", "title", "color", "position", "createdById", "createdAt", "updatedAt"],
+        properties: {
+          id: uuid,
+          boardId: uuid,
+          listId: uuid,
+          title: { type: "string", maxLength: 500 },
+          color: nullable({ type: "string" }),
+          position,
+          createdById: uuid,
+          createdAt: dateTime,
+          updatedAt: dateTime,
+        },
+        additionalProperties: false,
       },
       Card: {
         type: "object",
@@ -1269,6 +1292,9 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       CreateListBody: zodSchema(dto.createListBody),
       UpdateListBody: zodSchema(dto.updateListBody),
       MoveListBody: zodSchema(dto.moveListBody),
+      CreateSeparatorBody: zodSchema(dto.createSeparatorBody),
+      UpdateSeparatorBody: zodSchema(dto.updateSeparatorBody),
+      MoveSeparatorBody: zodSchema(dto.moveSeparatorBody),
       MoveListCardsBody: zodSchema(dto.moveListCardsBody),
       ArchiveListCardsBody: zodSchema(dto.archiveListCardsBody),
       CreateAutomationBody: zodSchema(dto.createAutomationBody),
@@ -1681,6 +1707,28 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     "/lists/{id}/cards/move": pathItem("post", operation({ tags: ["Lists"], summary: "Move cards between lists in bulk", operationId: "moveListCards", parameters: [idParam()], requestBody: jsonBody(ref("MoveListCardsBody")), responses: authedResponses({ "200": ok({ type: "object", required: ["moved"], properties: { moved: { type: "integer" } } }) }) })),
     "/lists/{id}/cards/archive": pathItem("patch", operation({ tags: ["Lists"], summary: "Archive cards in a list", operationId: "archiveListCards", parameters: [idParam()], requestBody: jsonBody(ref("ArchiveListCardsBody")), responses: authedResponses({ "200": ok({ type: "object", properties: { archived: { type: "integer" } }, required: ["archived"] }) }) })),
     "/lists/{id}/move": pathItem("post", operation({ tags: ["Lists"], summary: "Move a list", operationId: "moveList", parameters: [idParam()], requestBody: jsonBody(ref("MoveListBody")), responses: authedResponses({ "200": ok(ref("List")) }) })),
+    "/boards/{boardId}/lists/{listId}/separators": pathItem("post", operation({
+      tags: ["Separators"],
+      summary: "Create a board-list separator",
+      description: "Creates a titled, optionally colored separator at an exact card-or-separator anchor, or at the bottom when no position is supplied.",
+      operationId: "createBoardSeparator",
+      parameters: [idParam("boardId"), idParam("listId", "Workflow-list id.")],
+      requestBody: jsonBody(ref("CreateSeparatorBody")),
+      responses: authedResponses({ "201": created(ref("BoardSeparator")) }),
+    })),
+    "/separators/{id}": {
+      patch: operation({ tags: ["Separators"], summary: "Update a board separator", operationId: "updateBoardSeparator", parameters: [idParam()], requestBody: jsonBody(ref("UpdateSeparatorBody")), responses: authedResponses({ "200": ok(ref("BoardSeparator")) }) }),
+      delete: operation({ tags: ["Separators"], summary: "Delete a board separator", description: "Deletes the separator without deleting or moving cards.", operationId: "deleteBoardSeparator", parameters: [idParam()], responses: authedResponses({ "204": noContent }) }),
+    },
+    "/separators/{id}/move": pathItem("post", operation({
+      tags: ["Separators"],
+      summary: "Move a board separator",
+      description: "Moves the separator within any workflow list in the same workspace, relative to a card, separator, or list edge.",
+      operationId: "moveBoardSeparator",
+      parameters: [idParam()],
+      requestBody: jsonBody(ref("MoveSeparatorBody")),
+      responses: authedResponses({ "200": ok({ type: "object", required: ["id", "listId", "position"], properties: { id: uuid, listId: uuid, position }, additionalProperties: false }) }),
+    })),
     "/workspaces/{wsId}/notes": {
       get: operation({
         tags: ["Notes"],

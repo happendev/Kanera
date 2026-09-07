@@ -62,6 +62,9 @@ interface PublicOpenApiTestDocument {
     "/boards/{boardId}/lists/{id}/cards": {
       post: object;
     };
+    "/boards/{boardId}/lists/{listId}/separators": { post: object };
+    "/separators/{id}": { patch: object; delete: object };
+    "/separators/{id}/move": { post: object };
     "/workspaces/{id}/external-links": {
       get: object;
       post: object;
@@ -239,6 +242,13 @@ void test("public API docs expose Scalar docs, Swagger UI, and OpenAPI JSON", as
   assert.ok(spec.components.schemas.WorkPriorityItem?.properties?.rank);
   assert.equal(spec.paths["/workspaces/{workspaceId}/assignees/cards"], undefined);
   assert.ok(spec.paths["/boards/{boardId}/lists/{id}/cards"].post);
+  assert.ok(spec.paths["/boards/{boardId}/lists/{listId}/separators"].post);
+  assert.ok(spec.paths["/separators/{id}"].patch);
+  assert.ok(spec.paths["/separators/{id}"].delete);
+  assert.ok(spec.paths["/separators/{id}/move"].post);
+  assert.ok(spec.components.schemas.BoardSeparator);
+  assert.ok(spec.components.schemas.CreateSeparatorBody?.properties?.afterItem);
+  assert.ok(spec.components.schemas.MoveSeparatorBody?.properties?.beforeItem);
   assert.ok(spec.paths["/workspaces/{id}/external-links"].get);
   assert.ok(spec.paths["/workspaces/{id}/external-links"].post);
   assert.ok(spec.paths["/workspaces/{wsId}/automations"].get);
@@ -286,6 +296,7 @@ void test("public API docs expose Scalar docs, Swagger UI, and OpenAPI JSON", as
   assert.equal(webhookTypesResponse.statusCode, 200);
   const webhookTypes = webhookTypesResponse.json<{ eventTypes: string[] }>();
   assert.ok(webhookTypes.eventTypes.includes("card:created"));
+  assert.ok(webhookTypes.eventTypes.includes("separator:created"));
   assert.ok(webhookTypes.eventTypes.includes("workspace:updated"));
 });
 

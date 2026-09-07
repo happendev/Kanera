@@ -45,6 +45,11 @@ export const COMMAND_ALIASES: CommandAlias[] = [
   { path: ["card", "archive"], tool: "cards.archive", summary: "Archive a card", positionals: ["cardId"], group: "Cards" },
   { path: ["card", "history"], tool: "cards.list_history", summary: "List a card's activity and comments", positionals: ["cardId"], group: "Cards" },
 
+  { path: ["separator", "create"], tool: "separators.create", summary: "Add a titled, optionally colored divider to a board list", positionals: ["boardId", "listId", "title"], group: "Cards" },
+  { path: ["separator", "update"], tool: "separators.update", summary: "Change a separator's title or color", positionals: ["separatorId"], group: "Cards" },
+  { path: ["separator", "move"], tool: "separators.move", summary: "Move a separator relative to a card, separator, or list edge", positionals: ["separatorId", "listId"], group: "Cards" },
+  { path: ["separator", "delete"], tool: "separators.delete", summary: "Delete a separator without changing cards", positionals: ["separatorId"], group: "Cards" },
+
   { path: ["comment"], tool: "comments.add", summary: "Comment on a card", positionals: ["cardId", "body"], group: "Discussion" },
   { path: ["comments"], tool: "comments.list", summary: "List a card's comments", positionals: ["cardId"], group: "Discussion" },
   { path: ["activity"], tool: "activity.list", summary: "List a board's recent activity", positionals: ["boardId"], group: "Discussion" },

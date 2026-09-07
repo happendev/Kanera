@@ -130,6 +130,11 @@ export const moveCardBody = z
     (v) => !(v.afterCardId !== undefined && v.afterItem !== undefined) && !(v.beforeCardId !== undefined && v.beforeItem !== undefined),
     "use either legacy card anchors or typed item anchors",
   );
+// Unlike moveSeparatorBody, an after and a before anchor may be sent together: clients that know
+// both neighbours of a drop send the adjacent pair, and the lane helper resolves it from the after
+// side alone (its own next neighbour is that before anchor). The after side therefore takes
+// precedence, so a non-adjacent pair positions by the after anchor and ignores the before one.
+// Do not tighten this into one-anchor-only; the adjacent-pair form is part of the public contract.
 export type MoveCardBody = z.infer<typeof moveCardBody>;
 
 export const setCardAssigneesBody = z.object({

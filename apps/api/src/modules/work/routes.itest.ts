@@ -266,6 +266,88 @@ void test("Global Work separators organise one person's merged lane without beco
   assert.equal(deletedResponse.statusCode, 204);
 });
 
+void test("Global Work separators can be created at a typed lane anchor inside the viewer's own lane", async () => {
+  const f = await seed();
+  // The seed leaves two of the viewer's cards on the same position. Separate them so the
+  // assertions below describe the requested anchor rather than the sort's id tie-break.
+  await db.update(cards).set({ position: "4000.0000000000" }).where(eq(cards.id, f.restrictedMine.id));
+  const laneUrl = `/work/workspaces/${f.homeWorkspace.id}/users/${f.viewer.id}/lists/${f.homeList.id}/separators`;
+  // Lane order is now: "My shared card" (1000), "Viewer focus" separator (1500),
+  // "My restricted card" (4000).
+
+  const afterCard = await f.app.inject({
+    method: "POST",
+    url: laneUrl,
+    headers: auth(f.viewerToken),
+    payload: { title: "After my shared card", afterItem: { type: "card", id: f.mine.id } },
+  });
+  assert.equal(afterCard.statusCode, 201);
+  const afterCardPosition = Number(afterCard.json<{ position: string }>().position);
+  assert.ok(afterCardPosition > 1000 && afterCardPosition < 1500);
+
+  const beforeCard = await f.app.inject({
+    method: "POST",
+    url: laneUrl,
+    headers: auth(f.viewerToken),
+    payload: { title: "Before my restricted card", beforeItem: { type: "card", id: f.restrictedMine.id } },
+  });
+  assert.equal(beforeCard.statusCode, 201);
+  const beforeCardPosition = Number(beforeCard.json<{ position: string }>().position);
+  assert.ok(beforeCardPosition > 1500 && beforeCardPosition < 4000);
+
+  // A card on a board the viewer can open but that is not in this personal lane is not a legal
+  // anchor: the lane's access boundary, not board visibility, decides what can be anchored to.
+  const unassignedAnchor = await f.app.inject({
+    method: "POST",
+    url: laneUrl,
+    headers: auth(f.viewerToken),
+    payload: { title: "Anchored to someone else's card", beforeItem: { type: "card", id: f.teammateCard.id } },
+  });
+  assert.equal(unassignedAnchor.statusCode, 400);
+
+  // Another person's Global Work separator lives in their lane, so it cannot anchor this one.
+  const otherLaneAnchor = await f.app.inject({
+    method: "POST",
+    url: laneUrl,
+    headers: auth(f.viewerToken),
+    payload: { title: "Anchored to a teammate's separator", afterItem: { type: "separator", id: f.teammateSeparator.id } },
+  });
+  assert.equal(otherLaneAnchor.statusCode, 400);
+
+  // The DTO refuses ambiguous placement rather than silently preferring one anchor.
+  const bothAnchors = await f.app.inject({
+    method: "POST",
+    url: laneUrl,
+    headers: auth(f.viewerToken),
+    payload: {
+      title: "Ambiguous",
+      afterItem: { type: "card", id: f.mine.id },
+      beforeItem: { type: "card", id: f.restrictedMine.id },
+    },
+  });
+  assert.equal(bothAnchors.statusCode, 400);
+
+  const anchorWithAtTop = await f.app.inject({
+    method: "POST",
+    url: laneUrl,
+    headers: auth(f.viewerToken),
+    payload: { title: "Ambiguous", atTop: true, afterItem: { type: "card", id: f.mine.id } },
+  });
+  assert.equal(anchorWithAtTop.statusCode, 400);
+
+  const stored = await db
+    .select({ title: globalWorkSeparators.title })
+    .from(globalWorkSeparators)
+    .where(and(
+      eq(globalWorkSeparators.targetUserId, f.viewer.id),
+      eq(globalWorkSeparators.listId, f.homeList.id),
+    ));
+  assert.deepEqual(
+    stored.map((row) => row.title).sort(),
+    ["After my shared card", "Before my restricted card", "Viewer focus"],
+  );
+});
+
 void test("my lens keeps recently completed cards and hides them only when asked", async () => {
   const f = await seed();
   const day = 24 * 60 * 60 * 1000;

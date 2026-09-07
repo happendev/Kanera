@@ -11,7 +11,15 @@ export const createSeparatorBody = z.object({
   title: z.string().max(500).optional(),
   color: colorTokenSchema.nullable().optional(),
   atTop: z.boolean().optional(),
-});
+  afterItem: separatorAnchorItem.nullable().optional(),
+  beforeItem: separatorAnchorItem.nullable().optional(),
+}).refine(
+  (v) => !(v.afterItem !== undefined && v.beforeItem !== undefined),
+  "provide at most one of afterItem or beforeItem",
+).refine(
+  (v) => !(v.atTop !== undefined && (v.afterItem !== undefined || v.beforeItem !== undefined)),
+  "use either atTop or a typed item anchor",
+);
 export type CreateSeparatorBody = z.infer<typeof createSeparatorBody>;
 
 export const updateSeparatorBody = z.object({
@@ -29,5 +37,9 @@ export const moveSeparatorBody = z
   .refine(
     (v) => v.afterItem !== undefined || v.beforeItem !== undefined,
     "provide afterItem or beforeItem",
+  )
+  .refine(
+    (v) => !(v.afterItem !== undefined && v.beforeItem !== undefined),
+    "provide only one of afterItem or beforeItem",
   );
 export type MoveSeparatorBody = z.infer<typeof moveSeparatorBody>;
