@@ -1439,27 +1439,44 @@ describe("GlobalWorkState priority queue", () => {
     expect(state.cards().length).toBeGreaterThan(0);
   });
 
-  it("loads every readable queue on the team lens and refreshes on any target's invalidation", async () => {
-    vi.useFakeTimers();
-    try {
-      const { state, socket, get } = setup();
-      const batchGets = () => get.mock.calls.filter(([path]) => path === "/work/priorities");
-      await state.initialize("team");
-      await vi.advanceTimersByTimeAsync(0);
+  it.each(["table", "priorities"] as const)("loads only the queues needed by the saved %s display", async (display) => {
+    const { state, get } = setup();
+    writeGlobalWorkPreference(VIEWER_ID, "team", {
+      definition: { ...cachedDefinition, display }, selectedViewId: null, drilldownLabel: null,
+    });
+    await state.initialize("team");
+    expect(state.definition().display).toBe(display);
+    expect(get.mock.calls.filter(([path]) => path === "/work/priorities"))
+      .toHaveLength(display === "priorities" ? 1 : 0);
+    expect(state.loading()).toBe(false);
+    expect(state.cards().length).toBeGreaterThan(0);
+  });
 
-      // The lanes display reads this ambiently, so the batch rides initialize — a display switch
-      // does not re-query.
-      expect(batchGets()).toHaveLength(1);
-      expect(state.teamPriorities()?.queues.map((lane) => lane.target.userId)).toEqual([VIEWER_ID, TEAMMATE_ID]);
+  it("loads team queues only on entering Priority view and refreshes them on invalidation", async () => {
+    const { state, socket, get } = setup();
+    const batchGets = () => get.mock.calls.filter(([path]) => path === "/work/priorities");
+    await state.initialize("team");
+    expect(batchGets()).toHaveLength(0);
+    state.setDisplay("table");
+    await state.refresh();
+    expect(batchGets()).toHaveLength(0);
+    expect(state.cards().length).toBeGreaterThan(0);
 
-      // Nobody is focused, but the lanes show every readable queue — a teammate's ping is
-      // relevant here, unlike on My Cards (see "ignores other people's" below).
-      socket.trigger(SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId: TEAMMATE_ID });
-      await vi.advanceTimersByTimeAsync(180);
-      expect(batchGets()).toHaveLength(2);
-    } finally {
-      vi.useRealTimers();
-    }
+    state.setDisplay("priorities");
+    await vi.waitFor(() => expect(state.loading()).toBe(false));
+    expect(batchGets()).toHaveLength(1);
+    expect(state.teamPriorities()?.queues.map((lane) => lane.target.userId)).toEqual([VIEWER_ID, TEAMMATE_ID]);
+
+    socket.trigger(SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId: TEAMMATE_ID });
+    await vi.waitFor(() => expect(batchGets()).toHaveLength(2));
+    await vi.waitFor(() => expect(state.reconciling()).toBe(false));
+
+    state.setDisplay("table");
+    const version = state.reconciliationVersion();
+    socket.trigger(SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId: TEAMMATE_ID });
+    await vi.waitFor(() => expect(state.reconciliationVersion()).toBeGreaterThan(version));
+    await state.refresh();
+    expect(batchGets()).toHaveLength(2);
   });
 
   it("loads a filter-independent add-candidate pool when Team Cards enters Priority view", async () => {
@@ -1496,6 +1513,8 @@ describe("GlobalWorkState priority queue", () => {
   it("reorders one lane optimistically and folds the server's queue back into the batch", async () => {
     const { state, post } = setup();
     await state.initialize("team");
+    state.setDisplay("priorities");
+    await vi.waitFor(() => expect(state.loading()).toBe(false));
     const laneOf = () => state.teamPriorities()!.queues.find((lane) => lane.target.userId === TEAMMATE_ID)!.queue;
     const [first, second] = laneOf().items;
 
@@ -1521,6 +1540,8 @@ describe("GlobalWorkState priority queue", () => {
   it("adds to one team lane optimistically and settles only that lane", async () => {
     const { state, post } = setup();
     await state.initialize("team");
+    state.setDisplay("priorities");
+    await vi.waitFor(() => expect(state.loading()).toBe(false));
     const candidate = {
       ...response.cards[0]!,
       id: "40000000-0000-4000-8000-000000000019",
@@ -1559,6 +1580,8 @@ describe("GlobalWorkState priority queue", () => {
   it("restores the exact lane snapshot when a lane removal is rejected", async () => {
     const { state, setOffline } = setup();
     await state.initialize("team");
+    state.setDisplay("priorities");
+    await vi.waitFor(() => expect(state.loading()).toBe(false));
     const snapshot = state.teamPriorities();
 
     setOffline(true);

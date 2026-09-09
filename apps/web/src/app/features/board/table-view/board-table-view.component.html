@@ -4,6 +4,7 @@
 <section
   class="tv-view"
   [class.is-embedded]="embedded()"
+  [attr.aria-busy]="loading()"
   [style.--tv-grid-template]="gridTemplate()"
   [style.--tv-gutter-w]="dragEnabled() ? '44px' : '28px'"
 >
@@ -303,10 +304,14 @@
       </div>
 
       @if (loading()) {
+        <div class="k-loading is-inline" role="status" aria-live="polite">
+          <i class="ti ti-loader-2" aria-hidden="true"></i>
+          <span>Loading cards…</span>
+        </div>
         @for (_ of [1, 2, 3, 4, 5, 6, 7, 8]; track $index) {
           <div class="tv-row-grid tv-skeleton-row">
-            <span class="skeleton"></span>
-            @for (__ of visibleColumns(); track $index) { <span class="skeleton"></span> }
+            <span class="k-skeleton"></span>
+            @for (__ of visibleColumns(); track $index) { <span class="k-skeleton"></span> }
             <span></span>
           </div>
         }
