@@ -357,7 +357,7 @@
   </k-empty-state>
   } @else {
   @for (l of renderedLists(); track l.id) {
-  <k-list [list]="l" [boardId]="boardId()" [allLists]="state.visibleLists()" [cards]="cardsByList().get(l.id) ?? []" [items]="itemsByList().get(l.id) ?? []" [filteredCardIds]="filteredCardIds()" [customFields]="state.customFields()"
+  <k-list [list]="l" [boardId]="boardId()" [allLists]="state.visibleLists()" [cards]="cardsByList().get(l.id) ?? []" [items]="itemsByList().get(l.id) ?? []" [filteredCardIds]="filteredCardIds()" [hideDetachedSeparators]="isFiltered()" [customFields]="state.customFields()"
     [customFieldValuesByCardAndField]="state.customFieldValuesByCardAndField()" [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [attachmentCountByCard]="state.attachmentCountByCard()"
     [coverAttachmentById]="state.coverAttachmentById()" [commentCounts]="state.commentCounts()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [canEditRole]="state.canEditRole() && !showArchived()"
     [bulkSelectedCardIds]="bulkSelectedCardIds()" [priorityRanksByCard]="viewerPriorityRanks()"

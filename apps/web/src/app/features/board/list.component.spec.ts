@@ -492,6 +492,55 @@ describe("ListComponent", () => {
     }]);
   });
 
+  it.each(["board", "global-work"])("keeps only separators touching filtered cards in %s lanes", async (surface) => {
+    const cards = ["match-a", "hidden", "match-b"].map(summaryCard);
+    const separator = (id: string): BoardLaneItem => ({ kind: "separator", separator: {
+      id, boardId: "board-1", listId: "list-1", title: "Section", color: null,
+      position: "1500", createdById: "user-1", createdAt: new Date(), updatedAt: new Date(),
+    } });
+    const items: BoardLaneItem[] = [
+      separator("leading-empty"), separator("before-a"), { kind: "card", card: cards[0]! },
+      separator("after-a"), { kind: "card", card: cards[1]! }, separator("middle-empty"),
+      separator("before-b"), { kind: "card", card: cards[2]! },
+      separator("after-b"), separator("trailing-empty"),
+    ];
+    const matches = new Set(["match-a", "match-b"]);
+    // Boards filter locally; Global Work supplies cards already filtered by the API.
+    fixture.componentRef.setInput("cards", surface === "board" ? cards : cards.filter(card => matches.has(card.id)));
+    fixture.componentRef.setInput("items", surface === "board" ? items : items.filter(item => item.kind !== "card" || matches.has(item.card.id)));
+    fixture.componentRef.setInput("filteredCardIds", surface === "board" ? matches : null);
+    fixture.componentRef.setInput("hideDetachedSeparators", true);
+    await fixture.whenStable();
+    expect(laneCardIds(fixture.componentInstance.renderedItems())).toEqual([
+      "before-a", "match-a", "after-a", "before-b", "match-b", "after-b",
+    ]);
+    expect(fixture.debugElement.queryAll(By.css("k-separator"))).toHaveLength(4);
+
+    fixture.componentRef.setInput("items", [...items]);
+    fixture.componentRef.setInput("cards", []);
+    fixture.componentRef.setInput("filteredCardIds", null);
+    await fixture.whenStable();
+    expect(fixture.componentInstance.renderedItems()).toEqual([]);
+    expect(fixture.debugElement.queryAll(By.css("k-separator"))).toHaveLength(0);
+
+    fixture.componentRef.setInput("hideDetachedSeparators", false);
+    fixture.componentRef.setInput("cards", cards);
+    await fixture.whenStable();
+    expect(laneCardIds(fixture.componentInstance.renderedItems())).toEqual(laneCardIds(items));
+
+    fixture.componentRef.setInput("hideDetachedSeparators", true);
+    await fixture.whenStable();
+    const emitted: unknown[] = [];
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentInstance.cardDropped.subscribe(event => emitted.push(event));
+    const container = { data: fixture.componentInstance.renderedItems() };
+    fixture.componentInstance.onDrop({
+      item: { data: { kind: "card", card: cards[0] } },
+      previousContainer: { data: [] }, container, previousIndex: 0, currentIndex: 0,
+    } as never);
+    expect(emitted).toEqual([{ cardId: "match-a", toListId: "list-1", beforeItem: { type: "separator", id: "before-a" } }]);
+  });
+
   it("allows selected cards to drag and skips selected destination anchors", async () => {
     const cards = ["card-a", "card-b", "card-c"].map(summaryCard);
     fixture.componentRef.setInput("cards", cards);

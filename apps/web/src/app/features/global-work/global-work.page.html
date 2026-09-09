@@ -827,6 +827,7 @@
                       [allLists]="listsForWorkspace(workspace.id)"
                       [cards]="boardCardsByList().get(list.id) ?? []"
                       [items]="boardItemsByList().get(list.id) ?? []"
+                      [hideDetachedSeparators]="toolbarFilterActive()"
                       [customFields]="customFieldsForWorkspace(workspace.id)"
                       [customFieldValuesByCardAndField]="boardCustomFieldValues()"
                       [labelsByCard]="boardLabelsByCard()"

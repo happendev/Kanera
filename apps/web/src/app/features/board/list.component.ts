@@ -163,6 +163,7 @@ export class ListComponent implements OnDestroy {
   readonly coverAttachmentById = input<Map<string, CardAttachmentRow>>(new Map());
   readonly commentCounts = input<Map<string, number>>(new Map());
   readonly filteredCardIds = input<Set<string> | null>(null);
+  readonly hideDetachedSeparators = input(false);
   readonly selectedCardId = input<string | null>(null);
   readonly bulkSelectedCardIds = input<Set<string>>(new Set());
   readonly canEdit = input<boolean>(true);
@@ -247,11 +248,18 @@ export class ListComponent implements OnDestroy {
   readonly renderedItems = computed(() => {
     const renderedCardIds = new Set(this.renderedCards().map((card) => card.id));
     const committedDropItemKey = this.committedDropItemKey();
-    return this.displayedItems().filter((item) =>
+    const items = this.displayedItems().filter((item) =>
       item.kind === "separator"
       || renderedCardIds.has(item.card.id)
       || laneItemKey(item) === committedDropItemKey,
     );
+    if (!this.hideDetachedSeparators()) return items;
+    // Check adjacency after hiding nonmatching cards, in a single pass over the original
+    // visible sequence: removing a separator must not make another separator qualify.
+    // Apply this to the items shared by the DOM and CDK so drop indices stay aligned.
+    return items.filter((item, index) => item.kind === "card"
+      || items[index - 1]?.kind === "card"
+      || items[index + 1]?.kind === "card");
   });
   readonly hiddenCardCount = computed(() => Math.max(0, this.displayedCards().length - this.renderedCards().length));
 
