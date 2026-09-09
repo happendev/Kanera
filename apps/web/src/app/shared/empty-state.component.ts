@@ -24,6 +24,7 @@ import { booleanAttribute, ChangeDetectionStrategy, Component, input } from "@an
   styles: `
     :host {
       display: grid;
+      align-content: center;
       justify-items: center;
       gap: var(--space-1);
       padding: var(--space-8) var(--space-4);

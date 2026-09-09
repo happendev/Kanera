@@ -205,7 +205,7 @@ export interface PickerGroup {
       margin-top: 7px;
       padding-left: 20px;
       color: var(--text-muted);
-      background: none;
+      background: var(--picker-nested-group-background, none);
       font-size: 10.5px;
       font-weight: 600;
       letter-spacing: 0.02em;
@@ -224,17 +224,15 @@ export interface PickerGroup {
       flex: none;
       align-items: center;
       gap: 6px;
-      /* Weight, a rule and air — deliberately no tinted fill. A filled heading band and a filled
-         hover row are two filled bands a shade apart, and the reader cannot tell which one the
-         pointer is on. The hovered row is the only thing in this list that fills, so hover is never
-         ambiguous. The background is still painted, opaquely and in the panel's own colour, because
-         rows scroll underneath a sticky heading. */
+      /* Opaque because rows scroll underneath the sticky heading. Callers with deeper hierarchies
+         can give parent, child and row layers distinct fills through the picker custom properties;
+         the defaults preserve the quiet shared-picker treatment. */
       margin-top: 12px;
       min-height: 26px;
       padding: 6px 8px;
       color: var(--text);
-      background: var(--surface-overlay);
-      border-bottom: 1px solid var(--border);
+      background: var(--picker-parent-background, var(--surface-overlay));
+      border-bottom: 1px solid var(--picker-parent-border, var(--overlay-separator));
       font-size: 11.5px;
       font-weight: 700;
       letter-spacing: 0.02em;
@@ -275,7 +273,7 @@ export interface PickerGroup {
       color: var(--text);
       text-align: left;
       white-space: normal;
-      background: transparent;
+      background: var(--picker-row-background, transparent);
       border: 0;
       border-radius: var(--radius-sm);
       font-size: 13px;
@@ -311,7 +309,9 @@ export interface PickerGroup {
         bottom: 0;
         left: 13px;
         width: 1px;
-        background: var(--border);
+        /* This rail lives inside floating chrome. The page border nearly matches the raised panel
+           in dark mode, so use the overlay separator that is tuned to remain visible in both themes. */
+        background: var(--picker-group-rail, var(--overlay-separator));
       }
     }
 

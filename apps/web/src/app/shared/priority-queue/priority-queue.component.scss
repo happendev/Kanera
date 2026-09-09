@@ -448,6 +448,17 @@
   margin-top: 4px;
 }
 
+// The add picker is a three-level tree (board → list → card), so each level gets a distinct neutral
+// surface. These custom properties cross the anchored picker's component boundary without changing
+// the shared picker's quieter defaults elsewhere in the app.
+k-anchored-picker {
+  --picker-parent-background: var(--surface-3);
+  --picker-parent-border: var(--overlay-separator);
+  --picker-group-rail: var(--overlay-separator);
+  --picker-nested-group-background: color-mix(in srgb, var(--surface-2) 72%, transparent);
+  --picker-row-background: color-mix(in srgb, var(--surface-2) 32%, transparent);
+}
+
 // Undoes the global button reset (36px, accent hover). Styled like a list's "add card" affordance:
 // quiet at rest, clearly a button on hover, full width so it cannot be missed on touch screens.
 .panel-add {
