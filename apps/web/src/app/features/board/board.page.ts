@@ -1502,7 +1502,7 @@ export class BoardPage implements OnDestroy {
   onStartAdd(p: StartAddPayload) {
     this.listsEl()?.centerListForMobile(p.listId);
     this.skipNextDocumentClick = true;
-    this.openComposer({ listId: p.listId, atTop: p.atTop });
+    this.openComposer({ listId: p.listId, atTop: p.atTop, ...(p.afterItem ? { afterItem: p.afterItem } : {}) });
   }
 
   // ─── Card composer ──────────────────────────────────────────────────────────

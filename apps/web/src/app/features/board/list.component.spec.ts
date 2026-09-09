@@ -164,6 +164,27 @@ describe("ListComponent", () => {
     expect(element.querySelector(".add-card-primary")).toBeNull();
   });
 
+  it("offers an in-between add only to card creators and anchors it after the hovered item", () => {
+    fixture.componentRef.setInput("cards", [summaryCard("first"), summaryCard("second"), summaryCard("third")]);
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("canEditRole", true);
+    fixture.componentRef.setInput("canCreateCards", true);
+    fixture.detectChanges();
+
+    const emitted: unknown[] = [];
+    fixture.componentInstance.startAdd.subscribe((payload) => emitted.push(payload));
+    // One strip per gap; the lane footer already covers "after the last card".
+    const strips = fixture.debugElement.queryAll(By.css(".lane-insert"));
+    expect(strips).toHaveLength(2);
+    (strips[0].nativeElement as HTMLButtonElement).click();
+    expect(emitted).toEqual([{ listId: "list-1", atTop: false, afterItem: { type: "card", id: "first" } }]);
+
+    // Readers and view-only members never see the affordance.
+    fixture.componentRef.setInput("canCreateCards", false);
+    fixture.detectChanges();
+    expect(fixture.debugElement.queryAll(By.css(".lane-insert"))).toHaveLength(0);
+  });
+
   it("does not expose completion setup from reused board list UI", () => {
     fixture.detectChanges();
     fixture.componentInstance.toggleMenu();

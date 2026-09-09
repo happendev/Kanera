@@ -1337,7 +1337,16 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
    * from the list's workspace and stays changeable in the dialog.
    */
   onStartAdd(payload: StartAddPayload): void {
-    this.openComposer({ listId: payload.listId, atTop: payload.atTop });
+    // An in-between anchor from a lane must resolve in the same lane the user was looking at. With
+    // one person in focus that lane is their merged Global Work lane (personal separators and all);
+    // otherwise it is the plain list lane, which is what the anchor's card ids mean anyway.
+    const globalWorkUserId = payload.afterItem ? this.state.focusedTargetUserId() : null;
+    this.openComposer({
+      listId: payload.listId,
+      atTop: payload.atTop,
+      ...(payload.afterItem ? { afterItem: payload.afterItem } : {}),
+      ...(globalWorkUserId ? { globalWorkUserId } : {}),
+    });
   }
 
   private firstEditableBoardForList(listId: string): string | null {

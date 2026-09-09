@@ -132,6 +132,14 @@
   <k-separator cdkDrag #separatorDrag="cdkDrag" #separatorEditor [cdkDragStartDelay]="dragStartDelay" [cdkDragDisabled]="!canEdit() || separatorEditor.editing()" [cdkDragData]="item" (cdkDragStarted)="onDragStarted(separatorDrag)" (cdkDragMoved)="onDragMoved($event)" (cdkDragEnded)="onDragEnded()" [separator]="item.separator" [canEdit]="canEdit() && canManageSeparators()" [canEditRole]="canEditRole() && canManageSeparators()" [autoEdit]="autoEditSeparatorId() === item.separator.id"
     (updated)="updateSeparator($event)" (deleteRequested)="deleteSeparator($event)" />
   }
+  <!-- Hover "+" between two lane items. Not a cdkDrag, so CDK ignores it for drop indices; it is
+       hidden while a drag is active because CDK only transforms drag items during sorting. The
+       footer button still covers "below the last item", so nothing renders after $last. -->
+  @if (showInsertBetween() && !$last) {
+  <button type="button" class="lane-insert" [disabled]="cardDragging()" (click)="startAddAfter(item, $event)" aria-label="Add card here">
+    <span class="lane-insert-plus" aria-hidden="true"><i class="ti ti-plus"></i></span>
+  </button>
+  }
   } @empty {
   <div class="list-empty-hint" aria-hidden="true"></div>
   }

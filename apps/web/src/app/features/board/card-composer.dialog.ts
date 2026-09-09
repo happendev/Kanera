@@ -17,7 +17,7 @@ import { hasMarkdownContent } from "../../shared/markdown-content";
 import type { PickerGroup } from "../../shared/picker-list.component";
 import { PickerListComponent } from "../../shared/picker-list.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
-import type { AnyCustomField } from "./board-state";
+import type { AnyCustomField, LaneAnchor } from "./board-state";
 import {
   emptyComposerDraft,
   draftHasContent,
@@ -60,6 +60,17 @@ export interface CardComposerSeed {
    * change that, so the opening surface still decides.
    */
   atTop?: boolean;
+  /**
+   * Insert directly after this lane item instead of at an edge (the hover "+" between two cards).
+   * Only meaningful for the seeded list: if the user retargets the list in the dialog the anchor
+   * is dropped and the card falls back to the bottom.
+   */
+  afterItem?: LaneAnchor;
+  /**
+   * Resolve `afterItem` inside this person's merged Global Work lane, whose visible neighbours span
+   * boards and personal separators. Dropped alongside the anchor.
+   */
+  globalWorkUserId?: string;
 }
 
 /** Which popover is currently open. Only one at a time; the key is the property it edits. */
@@ -159,6 +170,11 @@ export class CardComposerDialogComponent implements OnInit {
   readonly attachmentError = signal<string | null>(null);
   /** Insert position for the create call; see CardComposerSeed.atTop. Not user content, so not drafted. */
   private readonly atTop = signal(false);
+  /** Lane anchor for the create call; see CardComposerSeed.afterItem. Not drafted either. */
+  private readonly afterItem = signal<LaneAnchor | null>(null);
+  private readonly globalWorkUserId = signal<string | null>(null);
+  /** The list the anchor belongs to. An anchor never travels to a different list. */
+  private readonly anchorListId = signal<string | null>(null);
   /** Last board the pruning effect reconciled against, so it only reacts to an actual change. */
   private lastTarget: { boardId: string; workspaceId: string | null } | null = null;
 
@@ -214,6 +230,9 @@ export class CardComposerDialogComponent implements OnInit {
     const base = stored ?? emptyComposerDraft();
     this.recoveredDraft.set(Boolean(stored && draftHasContent(stored)));
     this.atTop.set(this.seed()?.atTop ?? false);
+    this.afterItem.set(this.seed()?.afterItem ?? null);
+    this.globalWorkUserId.set(this.seed()?.globalWorkUserId ?? null);
+    this.anchorListId.set(this.seed()?.listId ?? null);
     // The seed wins over the draft for the properties it names. The user pointed at that column a
     // moment ago; a week-old draft's list must not silently override where they just clicked.
     const draft = this.applySeed(base, this.seed());
@@ -639,6 +658,20 @@ export class CardComposerDialogComponent implements OnInit {
    * field in card detail. The cost is that the card appears first and its properties land a moment
    * later — acceptable, and visible to every connected client in the same order.
    */
+  /**
+   * Where the create lands. The anchor only applies while the card is still headed for the list it
+   * was picked in, and a Global Work anchor only while the lane's person is still an assignee;
+   * otherwise the server would reject the anchor, so fall back to the plain edge placement.
+   */
+  private insertPlacement(listId: string, assigneeIds: string[]): { atTop?: true; afterItem?: LaneAnchor; globalWorkUserId?: string } {
+    const afterItem = this.afterItem();
+    const globalWorkUserId = this.globalWorkUserId();
+    if (afterItem && this.anchorListId() === listId && (!globalWorkUserId || assigneeIds.includes(globalWorkUserId))) {
+      return { afterItem, ...(globalWorkUserId ? { globalWorkUserId } : {}) };
+    }
+    return this.atTop() ? { atTop: true } : {};
+  }
+
   async submit(event?: Event): Promise<void> {
     event?.preventDefault();
     if (!this.canSubmit()) return;
@@ -655,7 +688,7 @@ export class CardComposerDialogComponent implements OnInit {
       const card = await this.api.createCard<AnyCard>(`/boards/${this.boardId()}/lists/${listId}/cards`, {
         title: draft.title.trim(),
         clientToken: crypto.randomUUID(),
-        ...(this.atTop() ? { atTop: true } : {}),
+        ...this.insertPlacement(listId, draft.assigneeIds),
         // A description of only blank lines is dropped rather than saved: it would give the card a
         // description that renders as nothing.
         ...(hasMarkdownContent(draft.description) ? { description: draft.description.trim() } : {}),
@@ -675,6 +708,9 @@ export class CardComposerDialogComponent implements OnInit {
 
       writeComposerDraft(this.storageKey(), null);
       this.recoveredDraft.set(false);
+      // A run of "create another" from an in-between "+" should read top to bottom in the order
+      // typed, so each subsequent card anchors after the one just created.
+      if (this.afterItem() && this.anchorListId() === listId) this.afterItem.set({ type: "card", id: card.id });
       if (this.createAnother()) {
         // Keep the column context (list plus whatever the column seeded) and clear only the content,
         // which is what makes a run of related cards fast to enter.

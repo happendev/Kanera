@@ -1,14 +1,19 @@
 import { paginateCursor, type PageIterator } from "../pagination.js";
 import type {
   Attachment, BulkArchiveResult, BulkCardResult, Card, CardDetail, Checklist, ChecklistItem, DueDateSlot, LocalDate,
-  LanePositionAnchor, PositionAnchor, Uuid,
+  LaneItemReference, LanePositionAnchor, PositionAnchor, Uuid,
 } from "../types.js";
 import type { CallOptions, ResourceContext } from "./base.js";
 
 export interface CreateCardInput {
   title: string;
   description?: string;
+  /** Insert at the top of the list. Mutually exclusive with `afterItem` / `beforeItem`. */
   atTop?: boolean;
+  /** Insert directly after this card or separator in the list's lane. */
+  afterItem?: LaneItemReference | null;
+  /** Insert directly before this card or separator in the list's lane. */
+  beforeItem?: LaneItemReference | null;
   assigneeIds?: Uuid[];
 }
 

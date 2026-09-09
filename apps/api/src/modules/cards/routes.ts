@@ -671,6 +671,21 @@ export async function cardRoutes(
     // card creation rather than relying on a follow-up client request.
     if (ctx.assignedItemsOnly && !assigneeIds.includes(req.auth.sub)) assigneeIds.push(req.auth.sub);
     if (list.workspaceId !== ctx.workspaceId) throw badRequest("target list not in board workspace");
+    if (body.globalWorkUserId && !options.allowGlobalWorkLayoutMoves) {
+      // Public integrations create against real board lanes only; see the same guard on move.
+      throw badRequest("Global Work layout anchors are not available through this API");
+    }
+    if (body.globalWorkUserId) {
+      await assertGlobalWorkSeparatorContext({
+        auth: req.auth,
+        workspaceId: ctx.workspaceId,
+        targetUserId: body.globalWorkUserId,
+        listId,
+      });
+      // The card only appears in that person's lane if it is assigned to them, so an anchored
+      // position there is meaningless otherwise.
+      if (!assigneeIds.includes(body.globalWorkUserId)) throw badRequest("card must be assigned to the Global Work user");
+    }
 
     if (body.clientToken) {
       const [existing] = await db.select().from(cards).where(eq(cards.clientToken, body.clientToken)).limit(1);
@@ -691,10 +706,6 @@ export async function cardRoutes(
       }
     }
 
-    const position = body.atTop
-      ? await topPositionForList(boardId, listId)
-      : await bottomPositionForList(boardId, listId);
-
     const result = await db.transaction(async (tx) => {
       if (body.clientToken) {
         // Serialize idempotent replays before touching the workspace counter. A concurrent retry
@@ -708,6 +719,30 @@ export async function cardRoutes(
           return { kind: "replayed", card: existing } as const;
         }
       }
+      // Cards and separators share one numeric lane, so an anchored create resolves through the same
+      // helper as separator creates and card moves. Edges (atTop / default bottom) are the null
+      // anchor forms of the same helper.
+      const anchor = body.afterItem !== undefined
+        ? { afterItem: body.afterItem }
+        : body.beforeItem !== undefined
+          ? { beforeItem: body.beforeItem }
+          : body.atTop
+            ? { afterItem: null }
+            : { beforeItem: null };
+      const positionResult = body.globalWorkUserId
+        ? {
+            position: await positionForGlobalWorkLaneInsert({
+              auth: req.auth,
+              workspaceId: ctx.workspaceId,
+              targetUserId: body.globalWorkUserId,
+              listId,
+              ...anchor,
+              tx,
+            }),
+            needsRebalance: false,
+          }
+        : await positionForLaneInsert({ listId, boardId, ...anchor, tx });
+      const position = positionResult.position;
       const [identity] = await allocateCardKeys(tx, ctx.workspaceId, 1);
       const [card] = await tx
         .insert(cards)
@@ -796,13 +831,20 @@ export async function cardRoutes(
             triggerActorId: req.auth.sub,
           })
         : { effects: [] };
+      // Rebalance after the row exists so the new card takes part in the renumbering; the emit
+      // below still goes out before card:created, matching the rebalance-before-move invariant.
+      const rebalanced = positionResult.needsRebalance ? await rebalanceBoardLane(listId, boardId, tx) : null;
       const [finalCard] = await tx.select().from(cards).where(eq(cards.id, card.id)).limit(1);
-      return { kind: "created", card, finalCard: finalCard ?? card, activity, automationEffects, assignmentAutomationEffects } as const;
+      // card:created keeps the pre-automation snapshot (automation effects emit their own events)
+      // but must carry the rebalanced position, or clients would place it by a stale number.
+      const createdCard = rebalanced && finalCard ? { ...card, position: finalCard.position } : card;
+      return { kind: "created", card: createdCard, finalCard: finalCard ?? card, activity, automationEffects, assignmentAutomationEffects, rebalanced } as const;
     });
     if (result.kind === "replayed") {
       return reply.status(201).send(toWireCard(result.card, req.auth.cid));
     }
-    const { card, finalCard, activity, automationEffects, assignmentAutomationEffects } = result;
+    const { card, finalCard, activity, automationEffects, assignmentAutomationEffects, rebalanced } = result;
+    if (rebalanced) await emitLaneRebalanced(boardId, listId, rebalanced);
     if (assigneeIds.length > 0) {
       await enqueueCardAssignedEmails({
         tx: db,

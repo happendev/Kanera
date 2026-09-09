@@ -1163,8 +1163,10 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     title: z.string().min(1).max(500),
     description: z.string().max(50000).optional(),
     atTop: z.boolean().optional(),
+    afterItem: laneItemReference.optional().describe("Create directly after this card or separator in the list. Mutually exclusive with atTop and beforeItem."),
+    beforeItem: laneItemReference.optional().describe("Create directly before this card or separator in the list. Mutually exclusive with atTop and afterItem."),
     idempotencyKey: uuid.optional().describe("Stable UUID reused when retrying this create after an ambiguous failure."),
-  }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/lists/${a.listId}/cards`, { title: a.title, description: a.description, atTop: a.atTop }), ctx);
+  }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/lists/${a.listId}/cards`, { title: a.title, description: a.description, atTop: a.atTop, afterItem: a.afterItem, beforeItem: a.beforeItem }), ctx);
   registerKaneraTool(server, "cards.update", "Update one or more card content fields. The required changes object cannot be empty. Requires board editor access and a write-capable credential.", {
     cardId: cardReference,
     changes: cardUpdateChanges,

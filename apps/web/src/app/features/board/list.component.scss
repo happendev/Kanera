@@ -499,6 +499,134 @@ h3 {
 
 // ─── Add card ─────────────────────────────────────────────────────────────────
 
+// The insert strip between two lane items. At rest its 12px hit box is pulled back by negative
+// margins so it and the two flex gaps around it net out to the lane's normal 6px gap (overlapping
+// each neighbouring card edge by 3px, which is what makes a 6px gap comfortably hoverable). On hover
+// the box grows downward, easing the cards apart, and the line + badge sit centred in the opened gap.
+// The top edge stays put, so the cursor that triggered the hover stays inside the growing box.
+.lane-insert {
+  --lane-insert-rest: 12px;
+  --lane-insert-open: 32px;
+  --lane-insert-accent: color-mix(in srgb, var(--accent) 40%, transparent);
+
+  position: relative;
+  z-index: 2;
+  display: block;
+  flex-shrink: 0;
+  width: 100%;
+  height: var(--lane-insert-rest);
+  min-height: 0;
+  margin: -9px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  // A short delay on the way in stops the lane rippling while the pointer travels down a list.
+  transition: height var(--motion-base) cubic-bezier(0.2, 0.8, 0.2, 1) 60ms;
+
+  // Centred divider line, drawn from the middle so it stays centred while the box grows.
+  &::after {
+    content: "";
+    position: absolute;
+    left: 6px;
+    right: 6px;
+    top: 50%;
+    height: 1px;
+    transform: translateY(-50%) scaleX(0.6);
+    background: var(--lane-insert-accent);
+    opacity: 0;
+    transition: opacity var(--motion-fast) ease 60ms, transform var(--motion-base) cubic-bezier(0.2, 0.8, 0.2, 1) 60ms;
+  }
+
+  &:hover:not(:disabled),
+  &:focus-visible {
+    height: var(--lane-insert-open);
+
+    &::after {
+      opacity: 1;
+      transform: translateY(-50%) scaleX(1);
+    }
+  }
+
+  // The global button rules paint every bare <button> in the accent colour, including on hover and
+  // focus; this strip is invisible chrome whose only visuals are the line and the plus badge.
+  &,
+  &:hover:not(:disabled),
+  &:focus-visible {
+    background: none;
+    box-shadow: none;
+    outline: none;
+  }
+
+  &:disabled {
+    cursor: default;
+    &::after,
+    .lane-insert-plus { opacity: 0; }
+  }
+}
+
+.lane-insert-plus {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  // Filled accent dot with a surface halo so it reads as a marker on the line, not as a button.
+  background: var(--accent);
+  color: var(--accent-fg);
+  box-shadow: 0 0 0 3px var(--list-bg, var(--bg));
+  transform: translate(-50%, -50%) scale(0.7);
+  opacity: 0;
+  transition: opacity var(--motion-fast) ease 60ms, transform var(--motion-base) cubic-bezier(0.2, 0.8, 0.2, 1) 60ms;
+  pointer-events: none;
+
+  i { font-size: 11px; line-height: 1; }
+
+  .lane-insert:hover:not(:disabled) &,
+  .lane-insert:focus-visible & {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+// Coarse pointers have no hover; the footer and list-menu "Add card" remain the touch path.
+@media (hover: none) {
+  .lane-insert { display: none; }
+}
+
+// Reduced motion: no transitions, and no opening gap either, since the cards sliding apart is the
+// movement. The line and marker simply appear in the resting 6px gap, overlapping the card edges.
+@media (prefers-reduced-motion: reduce) {
+  .lane-insert,
+  .lane-insert::after,
+  .lane-insert-plus {
+    transition: none;
+  }
+
+  .lane-insert:hover:not(:disabled),
+  .lane-insert:focus-visible {
+    height: var(--lane-insert-rest);
+
+    &::after {
+      transform: translateY(-50%);
+    }
+  }
+
+  .lane-insert-plus {
+    transform: translate(-50%, -50%);
+  }
+}
+
+:host(.is-drag-active) .lane-insert {
+  visibility: hidden;
+}
+
 .add-card-btn {
   min-width: 0;
   height: 32px;
