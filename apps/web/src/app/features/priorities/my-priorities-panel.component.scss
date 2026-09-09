@@ -279,6 +279,7 @@
 // frame; the dashed box would be a box in a box.
 .drawer-empty {
   flex: 1;
+  align-content: start;
   padding: 64px 32px;
 }
 
