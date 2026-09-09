@@ -27,14 +27,15 @@
         @if (lens() !== "portfolio" && creationTargetUserId()) {
           <button
             type="button"
-            class="k-toolbar-btn k-toolbar-collapsible-label"
+            class="k-toolbar-btn k-toolbar-collapsible-label is-primary"
             [class.is-open]="composerOpen()"
             [disabled]="!state.interactionReady() || editableBoards().length === 0"
-            kTooltip="Create card"
+            aria-label="New card"
+            kTooltip="New card"
             (click)="openComposer()"
           >
             <i class="ti ti-plus"></i>
-            <span>Create card</span>
+            <span>New card</span>
           </button>
         }
         <div class="menu-anchor">
@@ -56,6 +57,43 @@
             <k-save-view (closed)="closeMenu('save')" />
           }
         </div>
+        <!-- Display choices behind one menu, as on the board. Compact cards only means something on
+             the kanban display; the background paints every display, so it is always offered. -->
+        @if (displayMenuAvailable()) {
+          <div class="menu-anchor">
+            <button
+              #displayMenuTrigger
+              type="button"
+              class="k-toolbar-icon-btn is-ghost"
+              [class.is-open]="openMenu() === 'display'"
+              aria-label="Display menu"
+              [attr.aria-expanded]="openMenu() === 'display'"
+              [attr.aria-haspopup]="'menu'"
+              kTooltip="Display menu"
+              (click)="toggleMenu('display')"
+            >
+              <i class="ti ti-dots"></i>
+            </button>
+            @if (openMenu() === "display") {
+              <div kMenu class="display-menu" role="menu" aria-label="Display menu" kAnchoredPanel [apAnchor]="displayMenuTrigger" [apPlacement]="displayMenuPlacement" (apDismissed)="closeMenu('display')">
+                <div class="k-menu-heading display-menu-heading">Display</div>
+                @if (effectiveDisplay() === "board") {
+                  <button type="button" class="k-menu-item display-menu-item" role="menuitemcheckbox" [attr.aria-checked]="compactCards()" (click)="toggleCompactCards()">
+                    <i class="ti" [class.ti-checkbox]="compactCards()" [class.ti-square]="!compactCards()"></i>
+                    <span>Compact cards</span>
+                  </button>
+                }
+                <button type="button" class="k-menu-item display-menu-item" role="menuitem" (click)="openBackgroundFromMenu()">
+                  <i class="ti ti-palette"></i>
+                  <span>Change background</span>
+                </button>
+              </div>
+            }
+            @if (showBackground()) {
+              <k-board-background title="Page background" [value]="background()" [anchor]="displayMenuTrigger" (selected)="selectBackground($event)" (close)="showBackground.set(false)" />
+            }
+          </div>
+        }
       </div>
 
       <!--

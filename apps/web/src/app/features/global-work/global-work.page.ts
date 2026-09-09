@@ -18,11 +18,15 @@ import type {
   WorkSort,
 } from "@kanera/shared/dto";
 import { expandCardSummary, type WireBoardMemberUser, type WireCardDetail, type WireCardSummary, type WireChecklistAssignment, type WireCustomField } from "@kanera/shared/events";
+import type { GradientToken } from "@kanera/shared/colors";
 import type { WorkViewLens } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
 import { viewPreferenceKey } from "../../core/browser/browser-contracts";
 import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
+import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
+import type { AnchoredPanelPlacement } from "../../shared/anchored-panel";
 import { AnchoredPickerPopover } from "../../shared/anchored-picker.popover";
+import { MenuDirective } from "../../shared/menu.directive";
 import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { PageHeaderComponent } from "../../shared/page-header.component";
 import { PageToolbarComponent } from "../../shared/page-toolbar.component";
@@ -36,6 +40,7 @@ import { TooltipDirective } from "../../shared/tooltip.directive";
 import { ActivityStripComponent, type ActivityStripSeries } from "../../shared/activity-strip.component";
 import { StatTileComponent } from "../../shared/stat-tile.component";
 import { AvatarComponent } from "../../shared/avatar.component";
+import { BoardBackgroundPopover } from "../board/board-background.popover";
 import { BoardCanvasComponent } from "../board/board-canvas.component";
 import { BoardMenuCoordinator } from "../board/board-menu-coordinator.service";
 import { CardDragCoordinator } from "../board/card-drag-coordinator.service";
@@ -47,6 +52,7 @@ import { FilterBarComponent } from "../board/table-view/filter-bar.component";
 import { ListComponent, type BulkCardMenuPayload, type BulkCardSelectionPayload, type BulkListSelectionPayload, type CardDropPayload, type SeparatorDropPayload, type StartAddPayload } from "../board/list.component";
 import { WorkDoneViewComponent } from "../board/work-done-view/work-done-view.component";
 import { readWorkDoneLayout, writeWorkDoneLayout } from "../board/work-done-view/work-done-preferences";
+import { readBackground, readCompactCards, writeBackground, writeCompactCards } from "../board/table-view/view-preference";
 import { NARROW_WORK_DONE_LAYOUT_QUERY, type WorkDoneLayout } from "../board/work-done-view/work-done.types";
 import { BoardTableViewComponent, type HostedTableCardReorder } from "../board/table-view/board-table-view.component";
 import { TABLE_CARD_STORE, type TableCardStore } from "../board/table-view/table-card-store";
@@ -88,7 +94,7 @@ type ChecklistGroup = {
   items: WireChecklistAssignment[];
 };
 /** Which toolbar/header popover is open. Only one at a time, so opening one dismisses the rest. */
-type WorkMenu = "save" | "source" | "team" | "view" | "group" | "sort" | "period";
+type WorkMenu = "save" | "display" | "source" | "team" | "view" | "group" | "sort" | "period";
 type PortfolioMetric = "active" | "overdue" | "dueSoon" | "unassigned" | "inactive" | "completed" | "overdueChecklistItems";
 type PriorityLayout = "grid" | "table";
 type PortfolioRow = {
@@ -172,7 +178,10 @@ function priorityGroupKey(userId: string): string {
   imports: [EmptyStateComponent, 
     DatePipe,
     ActivityStripComponent,
+    AnchoredPanelDirective,
     AnchoredPickerPopover,
+    BoardBackgroundPopover,
+    MenuDirective,
     AvatarComponent,
     BoardCalendarViewComponent,
     BoardCanvasComponent,
@@ -216,6 +225,12 @@ function priorityGroupKey(userId: string): string {
     },
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  // Same hook the board page exposes: card.component's compact rules key off an ancestor class.
+  host: {
+    "[class.compact-cards]": "compactCards()",
+    "[class.has-gradient]": "!!background()",
+    "[style.--work-gradient]": "background() ? 'var(--gradient-' + background() + ')' : null",
+  },
   templateUrl: "./global-work.page.html",
   styleUrl: "./global-work.page.scss",
 })
@@ -233,6 +248,16 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly cardId = input<string | undefined>();
 
   readonly openMenu = signal<WorkMenu | null>(null);
+  readonly displayMenuPlacement: AnchoredPanelPlacement = { align: "end", width: 240, gap: 4, minHeight: 90, maxHeight: 420 };
+  readonly showBackground = signal(false);
+  /**
+   * Per-lens, per-device display choices, independent of every board and of each other: My Cards and
+   * Team Cards are different reading contexts, so one being compact says nothing about the other.
+   * Both are read on init from the lens's own scope rather than mirrored from any source board.
+   */
+  readonly compactCards = signal(false);
+  readonly background = signal<GradientToken | null>(null);
+  readonly displayMenuAvailable = computed(() => this.lens() !== "portfolio");
   readonly selectedCard = signal<WorkCard | null>(null);
   readonly selectedCardHost = computed(() => {
     const card = this.selectedCard();
@@ -1121,7 +1146,29 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.compactCards.set(readCompactCards(this.displayScopeKey()));
+    this.background.set(readBackground(this.displayScopeKey()));
     void this.state.initialize(this.lens());
+  }
+
+  private displayScopeKey(): string {
+    return `globalWork:${this.lens()}`;
+  }
+
+  toggleCompactCards(): void {
+    const next = !this.compactCards();
+    this.compactCards.set(next);
+    writeCompactCards(this.displayScopeKey(), next);
+  }
+
+  openBackgroundFromMenu(): void {
+    this.closeMenu("display");
+    this.showBackground.set(true);
+  }
+
+  selectBackground(token: GradientToken | null): void {
+    this.background.set(token);
+    writeBackground(this.displayScopeKey(), token);
   }
 
   ngOnDestroy(): void {
@@ -1207,7 +1254,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
    * other panels' dismissal) to react to it normally.
    */
   toggleMenu(menu: WorkMenu): void {
-    if (!this.state.interactionReady() && menu !== "group") return;
+    // Display choices are device-local and never touch the query, so they need not wait for it.
+    if (!this.state.interactionReady() && menu !== "group" && menu !== "display") return;
     this.openMenu.update((current) => (current === menu ? null : menu));
   }
 

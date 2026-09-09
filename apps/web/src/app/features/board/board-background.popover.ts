@@ -28,7 +28,7 @@ const GRADIENT_LABELS: Record<GradientToken, string> = {
   template: `
     <div class="bg-panel">
       <div class="bg-head">
-        <span class="bg-title">Board background</span>
+        <span class="bg-title">{{ title() }}</span>
         <button type="button" class="bg-clear" [disabled]="!value()" (click)="select(null)">
           <i class="ti ti-ban"></i> Clear
         </button>
@@ -187,10 +187,17 @@ export class BoardBackgroundPopover {
     });
   }
 
-  readonly boardId = input.required<string>();
+  /**
+   * Two modes share this picker. With a `boardId` a choice is a board property saved to the server
+   * and fanned out to every viewer. Without one (My Cards / Team Cards) the choice is the host's own
+   * per-device preference, so the picker only reports it through `selected` and the host persists it.
+   */
+  readonly boardId = input<string | null>(null);
+  readonly title = input("Board background");
   readonly value = input<GradientToken | null>(null);
   readonly anchor = input<HTMLElement | null>(null);
   readonly close = output<void>();
+  readonly selected = output<GradientToken | null>();
 
 
   label(token: GradientToken): string {
@@ -198,7 +205,12 @@ export class BoardBackgroundPopover {
   }
 
   async select(token: GradientToken | null) {
-    await this.api.patch(`/boards/${this.boardId()}/background`, {
+    const boardId = this.boardId();
+    if (boardId === null) {
+      this.selected.emit(token);
+      return;
+    }
+    await this.api.patch(`/boards/${boardId}/background`, {
       backgroundGradient: token,
     });
   }
