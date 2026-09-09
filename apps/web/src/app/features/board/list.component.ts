@@ -80,6 +80,8 @@ export interface SeparatorDropPayload {
 export interface StartAddPayload {
   listId: string;
   atTop: boolean;
+  /** Set by the hover "+" between two lane items: the new card lands directly after this item. */
+  afterItem?: LaneAnchor;
 }
 
 export interface BulkCardSelectionPayload {
@@ -163,6 +165,7 @@ export class ListComponent implements OnDestroy {
   readonly coverAttachmentById = input<Map<string, CardAttachmentRow>>(new Map());
   readonly commentCounts = input<Map<string, number>>(new Map());
   readonly filteredCardIds = input<Set<string> | null>(null);
+  readonly hideDetachedSeparators = input(false);
   readonly selectedCardId = input<string | null>(null);
   readonly bulkSelectedCardIds = input<Set<string>>(new Set());
   readonly canEdit = input<boolean>(true);
@@ -247,11 +250,18 @@ export class ListComponent implements OnDestroy {
   readonly renderedItems = computed(() => {
     const renderedCardIds = new Set(this.renderedCards().map((card) => card.id));
     const committedDropItemKey = this.committedDropItemKey();
-    return this.displayedItems().filter((item) =>
+    const items = this.displayedItems().filter((item) =>
       item.kind === "separator"
       || renderedCardIds.has(item.card.id)
       || laneItemKey(item) === committedDropItemKey,
     );
+    if (!this.hideDetachedSeparators()) return items;
+    // Check adjacency after hiding nonmatching cards, in a single pass over the original
+    // visible sequence: removing a separator must not make another separator qualify.
+    // Apply this to the items shared by the DOM and CDK so drop indices stay aligned.
+    return items.filter((item, index) => item.kind === "card"
+      || items[index - 1]?.kind === "card"
+      || items[index + 1]?.kind === "card");
   });
   readonly hiddenCardCount = computed(() => Math.max(0, this.displayedCards().length - this.renderedCards().length));
 
@@ -611,6 +621,19 @@ export class ListComponent implements OnDestroy {
     } finally {
       this.savingCompletion.set(false);
     }
+  }
+
+  /** The in-between "+" needs create rights on this lane; view-only boards and readers never see it. */
+  readonly showInsertBetween = computed(() => this.canEditRole() && this.canCreateCards() && this.canEdit());
+
+  startAddAfter(item: BoardLaneItem, event?: MouseEvent) {
+    if (this.cardDragging()) return;
+    // A pointer click leaves focus on the strip; when the composer closes and hands focus back, the
+    // typing in between makes the browser treat it as keyboard focus and the strip stays lit via
+    // :focus-visible until the next click. Blur pointer activations only (detail is 0 for keyboard)
+    // so keyboard users keep their focus ring and position.
+    if (event && event.detail > 0) (event.currentTarget as HTMLElement | null)?.blur();
+    this.startAdd.emit({ listId: this.list().id, atTop: false, afterItem: laneItemAnchor(item) });
   }
 
   onAddCardFromMenu() {

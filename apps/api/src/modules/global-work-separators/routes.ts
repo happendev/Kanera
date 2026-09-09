@@ -178,7 +178,13 @@ export async function globalWorkSeparatorRoutes(app: FastifyInstance) {
         workspaceId,
         targetUserId,
         listId,
-        ...(body.atTop ? { afterItem: null } : { beforeItem: null }),
+        ...(body.afterItem !== undefined
+          ? { afterItem: body.afterItem }
+          : body.beforeItem !== undefined
+            ? { beforeItem: body.beforeItem }
+            : body.atTop
+              ? { afterItem: null }
+              : { beforeItem: null }),
         tx,
       });
       const [created] = await tx

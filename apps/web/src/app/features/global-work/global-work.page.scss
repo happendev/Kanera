@@ -7,6 +7,14 @@
   height: 100%;
   overflow: auto;
   background: var(--bg);
+  transition: background var(--motion-base) ease;
+
+  // Painted on the scroll container itself so the gradient stays put while the content scrolls;
+  // the board page uses an absolute layer because its canvas scrolls inside the host, not the host.
+  // Same scrim token as the board so the picker's swatches preview exactly what renders here.
+  &.has-gradient {
+    background: var(--board-scrim), var(--work-gradient);
+  }
 }
 
 // A dense operational page, not a reading column: chrome is kept cheap so the cards, tables and
@@ -92,6 +100,25 @@
   align-items: center;
   flex: none;
   gap: 6px;
+}
+
+// Mirrors the board's .board-export-menu: kAnchoredPanel supplies the fixed-position variables.
+.display-menu {
+  position: fixed;
+  top: var(--ap-top, 0);
+  left: var(--ap-left, 0);
+  width: var(--ap-width, 160px);
+  max-height: var(--ap-max-height, none);
+  overflow: hidden;
+  visibility: hidden;
+  z-index: var(--z-panel);
+
+  &.is-positioned { visibility: visible; }
+
+  &.is-above {
+    top: auto;
+    bottom: var(--ap-bottom, auto);
+  }
 }
 
 .up-next-toggle {
@@ -445,7 +472,11 @@ k-page-toolbar.priority-toolbar {
   }
 }
 
-button,
+// Shared chrome is excluded: this scoped rule outranks the global `.k-menu-item` and toolbar-styles
+// typography (the emulated-encapsulation attribute adds specificity), and inheriting the page font
+// made the Display menu and every header/toolbar control render at body size and regular weight
+// instead of matching the board page's 13px medium.
+button:not(.k-menu-item, .k-toolbar-btn, .k-toolbar-trigger, .k-toolbar-icon-btn),
 input {
   font: inherit;
 }

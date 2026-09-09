@@ -92,21 +92,6 @@
   gap: 2px;
 }
 
-// The header's one primary action. Filled, where every other header control is ghost or outlined,
-// so it reads first; its label collapses to the icon below the compact breakpoint via
-// .k-toolbar-collapsible-label.
-.new-card-btn {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-fg);
-
-  &:hover:not(:disabled) {
-    background: var(--accent-hover);
-    border-color: var(--accent-hover);
-    color: var(--accent-fg);
-  }
-}
-
 .board-overview-trigger {
   // The radar identifies the overview; the beacon previews its current work-risk signal.
   --overview-signal: var(--text-muted);

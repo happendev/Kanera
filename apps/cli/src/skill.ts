@@ -62,6 +62,8 @@ kanera card create "Draft the brief" --boardId <id> --listId <id>
 kanera card update MKT-42 --changes.title "Revised title"
 kanera card done MKT-42
 kanera comment MKT-42 "Shipped in 1.4.0."
+kanera separator create <boardId> <listId> "This week" --color blue
+kanera separator move <separatorId> <listId> --anchor.side before --anchor.item.type card --anchor.item.id <cardId>
 \`\`\`
 
 ## Setting up

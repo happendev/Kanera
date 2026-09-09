@@ -10,9 +10,25 @@ export const createCardBody = z.object({
   title: z.string().min(1).max(500),
   description: z.string().max(50000).optional(),
   atTop: z.boolean().optional(),
+  // Typed lane anchors let a card be created directly between two existing lane items (the board's
+  // hover "+" between cards) as one atomic create, instead of create-at-edge followed by a move.
+  afterItem: separatorAnchorItem.nullable().optional(),
+  beforeItem: separatorAnchorItem.nullable().optional(),
+  // App-only: resolve the anchors inside one person's merged Global Work lane, where the visible
+  // neighbours come from several boards and personal separators. Rejected by the public API.
+  globalWorkUserId: z.uuid().optional(),
   assigneeIds: z.array(z.uuid()).optional(),
   clientToken: z.uuid().optional(),
-});
+}).refine(
+  (v) => !(v.afterItem !== undefined && v.beforeItem !== undefined),
+  "provide at most one of afterItem or beforeItem",
+).refine(
+  (v) => !(v.atTop !== undefined && (v.afterItem !== undefined || v.beforeItem !== undefined)),
+  "use either atTop or a typed item anchor",
+).refine(
+  (v) => v.globalWorkUserId === undefined || v.afterItem !== undefined || v.beforeItem !== undefined,
+  "globalWorkUserId requires a typed item anchor",
+);
 export type CreateCardBody = z.infer<typeof createCardBody>;
 
 export const updateCardBody = z.object({
@@ -130,6 +146,11 @@ export const moveCardBody = z
     (v) => !(v.afterCardId !== undefined && v.afterItem !== undefined) && !(v.beforeCardId !== undefined && v.beforeItem !== undefined),
     "use either legacy card anchors or typed item anchors",
   );
+// Unlike moveSeparatorBody, an after and a before anchor may be sent together: clients that know
+// both neighbours of a drop send the adjacent pair, and the lane helper resolves it from the after
+// side alone (its own next neighbour is that before anchor). The after side therefore takes
+// precedence, so a non-adjacent pair positions by the after anchor and ignores the before one.
+// Do not tighten this into one-anchor-only; the adjacent-pair form is part of the public contract.
 export type MoveCardBody = z.infer<typeof moveCardBody>;
 
 export const setCardAssigneesBody = z.object({

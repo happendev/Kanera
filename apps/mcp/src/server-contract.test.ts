@@ -135,7 +135,7 @@ const allToolCases: ToolCase[] = [
   { name: "cards.get_content", args: { boardId: B, cardIds: [C] }, method: "POST", path: `/api/v1/boards/${B}/cards/content/query`, body: { cardIds: [C] } },
   { name: "cards.create", args: { boardId: B, listId: L, title: "Title", description: "Body", atTop: true, idempotencyKey: C }, method: "POST", path: `/api/v1/boards/${B}/lists/${L}/cards`, body: { title: "Title", description: "Body", atTop: true } },
   { name: "cards.update", args: { cardId: C, changes: { title: "New", dueDateLocalDate: "2026-07-01", dueDateSlot: "morning" } }, method: "PATCH", path: `/api/v1/cards/${C}`, body: { title: "New", dueDateLocalDate: "2026-07-01", dueDateSlot: "morning" } },
-  { name: "cards.move", args: { cardId: C, listId: L, anchor: { side: "before", id: C } }, method: "POST", path: `/api/v1/cards/${C}/move`, body: { listId: L, beforeCardId: C } },
+  { name: "cards.move", args: { cardId: C, listId: L, anchor: { side: "before", item: { type: "separator", id: O } } }, method: "POST", path: `/api/v1/cards/${C}/move`, body: { listId: L, beforeItem: { type: "separator", id: O } } },
   { name: "cards.archive", args: { cardId: C, archived: true }, method: "PATCH", path: `/api/v1/cards/${C}/archive`, body: { archived: true } },
   { name: "cards.set_assignees", args: { cardId: C, userIds: [U] }, method: "PUT", path: `/api/v1/cards/${C}/assignees`, body: { userIds: [U] } },
   { name: "cards.set_labels", args: { cardId: C, labelIds: [L] }, method: "PUT", path: `/api/v1/cards/${C}/labels`, body: { labelIds: [L] } },
@@ -150,6 +150,10 @@ const allToolCases: ToolCase[] = [
   { name: "lists.set_card_completion", args: { boardId: B, listId: L, completed: true }, method: "POST", path: `/api/v1/boards/${B}/lists/${L}/cards/completion`, body: { completed: true } },
   { name: "lists.move_cards", args: { sourceListId: L, targetListId: F, boardId: B }, method: "POST", path: `/api/v1/lists/${L}/cards/move`, body: { targetListId: F, boardId: B } },
   { name: "lists.archive_cards", args: { listId: L, boardId: B }, method: "PATCH", path: `/api/v1/lists/${L}/cards/archive`, body: { boardId: B } },
+  { name: "separators.create", args: { boardId: B, listId: L, title: "This week", color: "blue", anchor: { side: "before", item: { type: "card", id: C } } }, method: "POST", path: `/api/v1/boards/${B}/lists/${L}/separators`, body: { title: "This week", color: "blue", beforeItem: { type: "card", id: C } } },
+  { name: "separators.update", args: { separatorId: O, changes: { title: "Next week", color: null } }, method: "PATCH", path: `/api/v1/separators/${O}`, body: { title: "Next week", color: null } },
+  { name: "separators.move", args: { separatorId: O, listId: L, anchor: { side: "after", item: { type: "card", id: C } } }, method: "POST", path: `/api/v1/separators/${O}/move`, body: { listId: L, afterItem: { type: "card", id: C } } },
+  { name: "separators.delete", args: { separatorId: O }, method: "DELETE", path: `/api/v1/separators/${O}` },
   { name: "cards.set_custom_field_value", args: { cardId: C, fieldId: F, value: { type: "text", value: "High" } }, method: "PUT", path: `/api/v1/cards/${C}/custom-fields/${F}`, body: { valueText: "High" } },
   { name: "comments.add", args: { cardId: C, body: "Hello" }, method: "POST", path: `/api/v1/cards/${C}/comments`, body: { body: "Hello" } },
   { name: "kanera_bulk_add_comments", args: { boardId: B, comments: [{ cardId: C, body: "Hello" }] }, method: "POST", path: `/api/v1/boards/${B}/comments/bulk/create`, body: { comments: [{ cardId: C, body: "Hello" }] } },
@@ -305,7 +309,7 @@ const multipartToolCases: MultipartToolCase[] = [{
 void test("every MCP tool maps to the expected public API request", async () => {
   const server = internals();
   const expectedNames = [...new Set([...toolCases, ...noRequestToolCases, ...multiRequestToolCases, ...multipartToolCases].map((item) => item.name))].sort();
-  assert.equal(expectedNames.length, 81);
+  assert.equal(expectedNames.length, 85);
   assert.deepEqual(Object.keys(server._registeredTools).sort(), expectedNames);
 
   const originalFetch = globalThis.fetch;
@@ -489,6 +493,10 @@ void test("every MCP tool declares structured output and explicit safety annotat
   assert.equal(tools["priorities.add"]?.annotations?.destructiveHint, false);
   assert.equal(tools["priorities.add"]?.annotations?.idempotentHint, false);
   assert.equal(tools["priorities.remove"]?.annotations?.destructiveHint, true);
+  assert.equal(tools["separators.create"]?.annotations?.destructiveHint, false);
+  assert.equal(tools["separators.create"]?.annotations?.idempotentHint, false);
+  assert.equal(tools["separators.move"]?.annotations?.destructiveHint, true);
+  assert.equal(tools["separators.delete"]?.annotations?.destructiveHint, true);
   assert.equal(tools["automations.list"]?.annotations?.readOnlyHint, true);
   assert.equal(tools["automations.list_executions"]?.annotations?.readOnlyHint, true);
   assert.equal(tools["automations.create"]?.annotations?.destructiveHint, false);
@@ -529,6 +537,9 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     const updateItem = tools.find((tool) => tool.name === "checklists.update_item");
     const updateCard = byName.get("cards.update");
     const moveCard = byName.get("cards.move");
+    const createSeparator = byName.get("separators.create");
+    const updateSeparator = byName.get("separators.update");
+    const moveSeparator = byName.get("separators.move");
     const createNote = byName.get("notes.create");
     const customFieldValue = byName.get("cards.set_custom_field_value");
     const getCardsContent = byName.get("cards.get_content");
@@ -544,6 +555,18 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     assert.ok(updateItem.inputSchema.properties?.changes, "non-empty checklist changes are nested and required");
     assert.ok(updateCard?.inputSchema.properties?.changes, "non-empty card changes are nested and required");
     assert.ok(moveCard?.inputSchema.properties?.anchor, "card movement has one required anchor");
+    assert.ok(createSeparator?.inputSchema.properties?.anchor, "separator creation advertises an exact mixed-lane anchor");
+    assert.ok(updateSeparator?.inputSchema.properties?.changes, "non-empty separator changes are nested and required");
+    assert.ok(moveSeparator?.inputSchema.properties?.anchor, "separator movement advertises a mixed-lane anchor");
+
+    // Kanera's edge convention is the inverse of the intuitive reading: a null anchor with side
+    // "after" is the TOP and "before" is the BOTTOM. A model cannot infer that, so every anchored
+    // tool must state it in its own schema rather than leaving "that edge" to a guess.
+    for (const name of ["cards.move", "separators.create", "separators.move", "checklists.move", "checklists.move_item", "priorities.add", "priorities.move"]) {
+      const anchor = JSON.stringify(byName.get(name)?.inputSchema.properties?.anchor ?? null);
+      assert.ok(anchor.includes("means the top"), `${name} says a null anchor with side "after" is the top`);
+      assert.ok(anchor.includes("means the bottom"), `${name} says a null anchor with side "before" is the bottom`);
+    }
     assert.ok(createNote?.inputSchema.properties?.target, "note creation has one explicit target");
     assert.ok(customFieldValue?.inputSchema.properties?.value, "custom-field values use a typed value union");
     assert.ok(byName.get("workspaces.list")?.inputSchema.properties?.cursor, "workspace discovery is paginated");
@@ -562,8 +585,10 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     // V2.3 adds the four bootstrap tools (templates, workspace, standalone board, board), whose
     // typed list/field/label seed schemas cost roughly 12k characters. Complete parameter
     // descriptions add deliberate routing context inside nested inputs and union arms.
+    // First-class separator create/update/move/delete tools and mixed-lane anchors add roughly 4k,
+    // and every anchor description spells out which edge a null anchor selects.
     const serializedToolCatalogLength = JSON.stringify(tools).length;
-    assert.ok(serializedToolCatalogLength <= 190_000, `the default tool catalog stays within its 190k-character budget (received ${serializedToolCatalogLength})`);
+    assert.ok(serializedToolCatalogLength <= 200_000, `the default tool catalog stays within its 200k-character budget (received ${serializedToolCatalogLength})`);
     for (const name of [
       "kanera_bulk_add_comments",
       "kanera_bulk_delete_comments",

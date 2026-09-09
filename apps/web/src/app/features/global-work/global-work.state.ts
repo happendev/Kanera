@@ -228,8 +228,8 @@ export class GlobalWorkState {
   /**
    * Every queue this viewer may read — the Team Cards lanes display, one lane per teammate.
    *
-   * Loaded whenever the team lens is active rather than when the lanes display is selected,
-   * because `setDisplay` deliberately does not re-query; the batch is one request. Deliberately
+   * Loaded only for the Priority display; `setDisplay` queries it on entry. Hydrating every
+   * teammate’s queue must not hold up the ordinary board or table projection. Deliberately
    * absent from the offline cache: like the docked panel, a stale sequence reads as an
    * instruction, so the lanes display is withheld on a cached snapshot instead of showing last
    * week's order.
@@ -1431,7 +1431,7 @@ export class GlobalWorkState {
    * so unlike `loadPriorities` there is no cross-user 403 to absorb here.
    */
   private loadTeamPriorities(): Promise<WorkPriorityQueuesResponse | null> {
-    if (this.lens() !== "team") return Promise.resolve(null);
+    if (this.lens() !== "team" || this.definition().display !== "priorities") return Promise.resolve(null);
     return this.api.get<WorkPriorityQueuesResponse>("/work/priorities");
   }
 

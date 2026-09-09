@@ -107,6 +107,10 @@ export class DragScrollDirective implements OnDestroy {
     const target = event.target;
     // Controls own their own pointer gestures (caret placement, range dragging, link drag).
     if (target instanceof Element && target.closest("input, textarea, select, a")) return;
+    // A tile that can be picked up owns its press too: CDK starts a card drag from the same
+    // mousedown, and scrolling the grid underneath a lifted card would leave it over the wrong day.
+    // Disabled tiles stay scroll handles, so a read-only calendar still drags across as a whole.
+    if (target instanceof Element && target.closest(".cdk-drag:not(.cdk-drag-disabled)")) return;
     this.drag = { startX: event.clientX, startScrollLeft: el.scrollLeft, moved: false };
     window.addEventListener("mousemove", this.onMouseMove);
     window.addEventListener("mouseup", this.onMouseUp);

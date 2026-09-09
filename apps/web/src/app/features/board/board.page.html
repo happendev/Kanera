@@ -44,7 +44,7 @@
   @if (state.board() !== null && state.canEditRole() && effectiveView() !== 'notes' && !showArchived()) {
   <!-- A disabled button swallows pointer events, so the reason it is disabled lives on the wrapper. -->
   <span phActions class="menu-anchor" [kTooltip]="state.canEdit() ? '' : 'You have view-only access to this board'">
-    <button type="button" class="k-toolbar-btn k-toolbar-collapsible-label new-card-btn" [disabled]="!state.canEdit()" (click)="openComposer()" aria-label="New card" [kTooltip]="state.canEdit() ? 'New card · C' : ''">
+    <button type="button" class="k-toolbar-btn k-toolbar-collapsible-label is-primary new-card-btn" [disabled]="!state.canEdit()" (click)="openComposer()" aria-label="New card" [kTooltip]="state.canEdit() ? 'New card · C' : ''">
       <i class="ti ti-plus"></i>
       <span>New card</span>
     </button>
@@ -357,7 +357,7 @@
   </k-empty-state>
   } @else {
   @for (l of renderedLists(); track l.id) {
-  <k-list [list]="l" [boardId]="boardId()" [allLists]="state.visibleLists()" [cards]="cardsByList().get(l.id) ?? []" [items]="itemsByList().get(l.id) ?? []" [filteredCardIds]="filteredCardIds()" [customFields]="state.customFields()"
+  <k-list [list]="l" [boardId]="boardId()" [allLists]="state.visibleLists()" [cards]="cardsByList().get(l.id) ?? []" [items]="itemsByList().get(l.id) ?? []" [filteredCardIds]="filteredCardIds()" [hideDetachedSeparators]="isFiltered()" [customFields]="state.customFields()"
     [customFieldValuesByCardAndField]="state.customFieldValuesByCardAndField()" [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [attachmentCountByCard]="state.attachmentCountByCard()"
     [coverAttachmentById]="state.coverAttachmentById()" [commentCounts]="state.commentCounts()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [canEditRole]="state.canEditRole() && !showArchived()"
     [bulkSelectedCardIds]="bulkSelectedCardIds()" [priorityRanksByCard]="viewerPriorityRanks()"

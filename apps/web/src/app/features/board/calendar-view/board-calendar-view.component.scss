@@ -344,19 +344,26 @@
 // A day with no cards is a full cell the same height as every other day in its row, so a week reads
 // as seven days rather than a mix of cards and holes. Only its type recedes; its date stays put at
 // the top of the cell, in line with the dates of the days beside it.
+// Same header-plus-column shape as a populated day, so a placeholder dragged into an empty day
+// sits under the date with the same padding a card would have.
 .calendar-slot-empty {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  flex-direction: column;
   min-width: 0;
-  padding: 8px 11px;
   background: var(--list-bg);
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 600;
   overflow: hidden;
 
-  > span:first-child {
+  > header {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 11px;
+  }
+
+  > header > span:first-child {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -383,6 +390,9 @@
   align-content: start;
   gap: 7px;
   padding: 4px 8px 8px;
+  // Fills the cell below its header so a card released anywhere in the body is over the drop list.
+  flex: 1;
+  min-height: 0;
 }
 
 .skeleton-day {
@@ -782,4 +792,40 @@ k-card-labels.cal-label-row {
     --cal-panel-pad-y: 8px;
     --cal-panel-pad-x: 8px;
   }
+}
+
+// ---- Rescheduling by drag ------------------------------------------------------------------------
+
+// CDK moves the preview under <body>; emulated encapsulation still reaches it through the clone's
+// content attribute, so the tile keeps its own look and just lifts.
+.cal-card.cdk-drag-preview {
+  box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.25));
+  border-color: var(--border-strong);
+  cursor: grabbing;
+  transform: rotate(1.5deg);
+}
+
+// A dashed ghost follows the pointer into whichever day it is over (CDK moves the placeholder
+// between containers even with sorting off), so the cell that will receive the card is unmistakable.
+.cal-card.cdk-drag-placeholder {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--accent) 50%, var(--border));
+  opacity: 1;
+
+  * {
+    visibility: hidden;
+  }
+}
+
+.cal-card.is-rescheduling {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+// The day under the pointer during a drag. Tracked by the component from enter/exit events rather
+// than CDK's `cdk-drop-list-receiving`, which flags every connected cell for the whole drag.
+.calendar-day.is-drop-target,
+.calendar-slot-empty.is-drop-target {
+  background: color-mix(in srgb, var(--accent) 8%, var(--list-bg));
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
 }

@@ -179,13 +179,26 @@ const bulkChecklistItemChanges = z.union([
   bulkChecklistItemFields.extend({ assigneeId: checklistAssigneeId }),
   bulkChecklistItemFields.extend({ dueDateLocalDate: cardDueDate }),
 ]);
+// Every Kanera anchor shares one edge convention, and it is the opposite of the intuitive reading:
+// a null anchor with side "after" means "after nothing", which is the TOP, and side "before" means
+// "before nothing", which is the BOTTOM. State the direction in each description; a model that
+// guesses gets the inverse and silently misplaces the entity.
+const NULL_ANCHOR_EDGES = "Pass null for an edge: side \"after\" with null means the top, side \"before\" with null means the bottom.";
 const positionAnchor = z.object({
   side: z.enum(["after", "before"]).describe("Place the entity after or before the anchor id."),
-  id: uuid.nullable().describe("Anchor entity id; null means the selected edge."),
+  id: uuid.nullable().describe(`Anchor entity id. ${NULL_ANCHOR_EDGES}`),
+});
+const laneItemReference = z.object({
+  type: z.enum(["card", "separator"]).describe("Kind of board-lane item used as the anchor."),
+  id: uuid.describe("Card or separator UUID returned by cards.list or boards.get."),
+});
+const lanePositionAnchor = z.object({
+  side: z.enum(["after", "before"]).describe("Place the item after or before the selected lane item."),
+  item: laneItemReference.nullable().describe(`Card or separator anchor. ${NULL_ANCHOR_EDGES}`),
 });
 const priorityAnchor = z.object({
-  side: z.enum(["after", "before"]).describe("Place the priority entry after or before the anchor id."),
-  id: uuid.nullable().describe("Priority-entry id from priorities.list; null means that edge of the queue."),
+  side: z.enum(["after", "before"]).describe(`Place the priority entry after or before the anchor id. ${NULL_ANCHOR_EDGES}`),
+  id: uuid.nullable().describe("Priority-entry id from priorities.list; null selects an edge of the queue."),
 });
 const CARD_KEY_PATTERN = /^[A-Z][A-Z0-9]{1,9}-[1-9][0-9]*$/iu;
 const ORGANISATION_KEY_PATTERN = /^[A-F0-9]{16}$/iu;
@@ -198,7 +211,7 @@ type ToolArgs<T extends z.ZodRawShape> = z.infer<z.ZodObject<T>>;
 const inputParameterDescriptions: Record<string, string> = {
   active: "Whether the selected state should be active (true) or removed (false).",
   afterNoteId: "Sibling note UUID to place this note after; omit or pass null when unused.",
-  anchor: "Explicit before/after position anchor; a null anchor id selects that edge.",
+  anchor: `Explicit before/after position anchor. ${NULL_ANCHOR_EDGES}`,
   archived: "Whether the card should be archived (true) or active (false).",
   attachmentId: "Attachment UUID; pass null only where removing the current cover is supported.",
   attachmentIds: "Attachment UUIDs already uploaded to the card and owned by the acting user.",
@@ -245,6 +258,7 @@ const inputParameterDescriptions: Record<string, string> = {
   sort: "Result ordering selected from the advertised enum values.",
   source: "Attachment placement or origin selected from the advertised enum values.",
   sourceListId: "Source workflow-list UUID returned by boards.get.",
+  separatorId: "Board separator UUID returned by boards.get or separators.create.",
   target: "Destination kind and matching workspace or board UUID.",
   targetBoardId: "Destination board UUID; omit to keep the source board.",
   targetListId: "Destination workflow-list UUID returned by boards.get.",
@@ -301,6 +315,18 @@ const seedCustomField = z.object({
   })).max(100).optional().describe("Select options; valid only for select fields."),
 });
 const seedLabel = z.object({ name: seedName, color: colorToken.nullable().optional().describe("Kanera color token, or null for no color.") });
+const separatorTitle = z.string().max(500).describe("Separator heading, up to 500 characters; pass an empty string for an unlabelled divider.");
+const separatorColor = colorToken.nullable().describe("Kanera color token, or null for no color.");
+const separatorFields = z.object({
+  title: separatorTitle.optional(),
+  color: separatorColor.optional(),
+});
+// The update route refuses a body with neither field. Express "at least one" as a union so the
+// schema itself rejects an empty update instead of spending a round trip on a 400.
+const separatorChanges = z.union([
+  separatorFields.extend({ title: separatorTitle }),
+  separatorFields.extend({ color: separatorColor }),
+]);
 // Shared by workspace and standalone-board bootstrap. Explicit arrays replace the template's; the
 // template's starter cards and automations are then narrowed to whatever survived (see
 // workspaceTemplateSeedPayload) so an agent trimming a template cannot produce an invalid request.
@@ -439,7 +465,7 @@ function client(ctx: KaneraMcpContext, options: { signal?: AbortSignal; idempote
   });
 }
 
-const serverDescription = "Bootstrap Kanera workspaces and boards from templates, read configuration, and manage automations, cards, checklists, comments, notes, attachments, activity, work reporting, and \"Up next\" priority queues.";
+const serverDescription = "Bootstrap Kanera workspaces and boards from templates, read configuration, and manage automations, cards, list separators, checklists, comments, notes, attachments, activity, work reporting, and \"Up next\" priority queues.";
 const serverIcons = [{
   src: "https://www.kanera.app/assets/favicon/android-chrome-512x512.png",
   mimeType: "image/png" as const,
@@ -532,6 +558,10 @@ const toolBehaviors: Record<string, ToolBehavior> = {
   "lists.set_card_completion": CHANGE,
   "lists.move_cards": CHANGE,
   "lists.archive_cards": CHANGE,
+  "separators.create": ADD,
+  "separators.update": CHANGE,
+  "separators.move": CHANGE,
+  "separators.delete": CHANGE,
   "cards.set_assignees": CHANGE,
   "cards.set_labels": CHANGE,
   "cards.set_custom_field_value": CHANGE,
@@ -768,7 +798,7 @@ const collectionPageSchema = {
 function boundedConfiguration<T extends Record<string, unknown>>(value: T, limit = 100): T {
   const result: Record<string, unknown> = { ...value };
   const truncatedCollections: Array<{ field: string; total: number; returned: number }> = [];
-  for (const field of ["lists", "customFields", "cardLabels", "checklistTemplates", "members", "automations", "boards", "notes", "attachments", "cards"] as const) {
+  for (const field of ["lists", "customFields", "cardLabels", "checklistTemplates", "members", "automations", "boards", "notes", "attachments", "cards", "separators"] as const) {
     const fieldValue = result[field];
     if (!Array.isArray(fieldValue)) continue;
     const rows: unknown[] = fieldValue;
@@ -839,6 +869,11 @@ async function standaloneBoardContext(api: KaneraClient, boardId: string) {
 
 function priorityAnchorBody(anchor: z.infer<typeof priorityAnchor>): { afterId: string | null } | { beforeId: string | null } {
   return anchor.side === "after" ? { afterId: anchor.id } : { beforeId: anchor.id };
+}
+
+function laneAnchorBody(anchor: z.infer<typeof lanePositionAnchor>):
+  { afterItem: z.infer<typeof laneItemReference> | null } | { beforeItem: z.infer<typeof laneItemReference> | null } {
+  return anchor.side === "after" ? { afterItem: anchor.item } : { beforeItem: anchor.item };
 }
 
 // The priority routes are addressed by target user so admins can curate a teammate's queue, but the
@@ -1128,19 +1163,23 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     title: z.string().min(1).max(500),
     description: z.string().max(50000).optional(),
     atTop: z.boolean().optional(),
+    afterItem: laneItemReference.optional().describe("Create directly after this card or separator in the list. Mutually exclusive with atTop and beforeItem."),
+    beforeItem: laneItemReference.optional().describe("Create directly before this card or separator in the list. Mutually exclusive with atTop and afterItem."),
     idempotencyKey: uuid.optional().describe("Stable UUID reused when retrying this create after an ambiguous failure."),
-  }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/lists/${a.listId}/cards`, { title: a.title, description: a.description, atTop: a.atTop }), ctx);
+  }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/lists/${a.listId}/cards`, { title: a.title, description: a.description, atTop: a.atTop, afterItem: a.afterItem, beforeItem: a.beforeItem }), ctx);
   registerKaneraTool(server, "cards.update", "Update one or more card content fields. The required changes object cannot be empty. Requires board editor access and a write-capable credential.", {
     cardId: cardReference,
     changes: cardUpdateChanges,
   }, async (a, api) => api.patch(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}`, a.changes), ctx);
-  registerKaneraTool(server, "cards.move", "Move or reorder a card using one explicit before/after anchor; a null anchor id means that edge. Requires board editor access and a write-capable credential.", {
+  registerKaneraTool(server, "cards.move", "Move or reorder a card using one explicit before/after anchor. Use the typed item form to position it relative to either a card or separator; the card-only id form remains supported. A null anchor means the top for side \"after\" and the bottom for side \"before\". Requires board editor access and a write-capable credential.", {
     cardId: cardReference,
     listId: uuid,
-    anchor: positionAnchor,
+    anchor: z.union([lanePositionAnchor, positionAnchor]).describe("Typed card-or-separator anchor, or the legacy card-only anchor shape."),
   }, async (a, api) => api.post(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/move`, {
     listId: a.listId,
-    ...(a.anchor.side === "after" ? { afterCardId: a.anchor.id } : { beforeCardId: a.anchor.id }),
+    ...("item" in a.anchor
+      ? laneAnchorBody(a.anchor)
+      : a.anchor.side === "after" ? { afterCardId: a.anchor.id } : { beforeCardId: a.anchor.id }),
   }), ctx);
   registerKaneraTool(server, "cards.duplicate", "Copy a card, optionally into another editable board and list. Requires board editor access at the source and destination. This is not idempotent; do not retry after an ambiguous success.", {
     cardId: cardReference,
@@ -1233,6 +1272,32 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     listId: uuid,
     boardId: uuid,
   }, (a, api) => api.patch(`/api/v1/lists/${a.listId}/cards/archive`, { boardId: a.boardId }), ctx);
+  registerKaneraTool(server, "separators.create", "Create a titled, optionally colored separator in one board/list's mixed card lane. Supply an anchor for an exact initial position; omit it to append at the bottom. Separators belong to the board even though workflow lists are workspace-scoped. Requires board editor access and a write-capable credential.", {
+    boardId: uuid,
+    listId: uuid.describe("Workflow-list UUID returned by boards.get."),
+    title: separatorTitle.optional(),
+    color: separatorColor.optional(),
+    anchor: lanePositionAnchor.optional().describe("Optional exact initial position relative to a card or separator; omit to append at the bottom."),
+  }, (a, api) => api.post(`/api/v1/boards/${a.boardId}/lists/${a.listId}/separators`, {
+    title: a.title,
+    color: a.color,
+    ...(a.anchor ? laneAnchorBody(a.anchor) : {}),
+  }), ctx);
+  registerKaneraTool(server, "separators.update", "Change a board separator's title and/or color. Requires board editor access and a write-capable credential.", {
+    separatorId: uuid,
+    changes: separatorChanges,
+  }, (a, api) => api.patch(`/api/v1/separators/${a.separatorId}`, a.changes), ctx);
+  registerKaneraTool(server, "separators.move", "Move or reorder a board separator within any workflow list in the same workspace, anchored to a card, another separator, or a list edge. Requires board editor access and a write-capable credential.", {
+    separatorId: uuid,
+    listId: uuid.describe("Destination workflow-list UUID returned by boards.get."),
+    anchor: lanePositionAnchor,
+  }, (a, api) => api.post(`/api/v1/separators/${a.separatorId}/move`, {
+    listId: a.listId,
+    ...laneAnchorBody(a.anchor),
+  }), ctx);
+  registerKaneraTool(server, "separators.delete", "Delete a board separator without deleting or moving any cards. This is destructive and requires board editor access with a write-capable credential.", {
+    separatorId: uuid,
+  }, (a, api) => api.delete(`/api/v1/separators/${a.separatorId}`), ctx);
   registerKaneraTool(server, "cards.set_assignees", "Replace all assignees on a card. Requires board editor access and a write-capable credential.", { cardId: cardReference, userIds: z.array(uuid).max(100) }, async (a, api) =>
     api.put(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/assignees`, { userIds: a.userIds }), ctx);
   registerKaneraTool(server, "cards.set_labels", "Replace all labels on a card. Requires board editor access and a write-capable credential.", { cardId: cardReference, labelIds: z.array(uuid).max(100) }, async (a, api) =>
@@ -1296,7 +1361,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     api.patch(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/checklists/${a.checklistId}`, { title: a.title }), ctx);
   registerKaneraTool(server, "checklists.delete", "Delete a checklist and its items. This is destructive and requires board editor access with a write-capable credential.", { cardId: cardReference, checklistId: uuid }, async (a, api) =>
     api.delete(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/checklists/${a.checklistId}`), ctx);
-  registerKaneraTool(server, "checklists.move", "Reorder a checklist using one explicit before/after anchor; a null anchor id means that edge. Requires board editor access and a write-capable credential.", {
+  registerKaneraTool(server, "checklists.move", "Reorder a checklist using one explicit before/after anchor; a null anchor id means the top for side \"after\" and the bottom for side \"before\". Requires board editor access and a write-capable credential.", {
     cardId: cardReference,
     checklistId: uuid,
     anchor: positionAnchor,
@@ -1317,7 +1382,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
   }, async (a, api) => api.patch(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/checklists/${a.checklistId}/items/bulk`, a.changes), ctx);
   registerKaneraTool(server, "checklists.delete_item", "Delete a checklist item. This is destructive and requires board editor access with a write-capable credential.", { cardId: cardReference, checklistId: uuid, itemId: uuid }, async (a, api) =>
     api.delete(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/checklists/${a.checklistId}/items/${a.itemId}`), ctx);
-  registerKaneraTool(server, "checklists.move_item", "Move or reorder a checklist item, optionally into another checklist, using one explicit anchor. A null anchor id means that edge. Requires board editor access and a write-capable credential.", {
+  registerKaneraTool(server, "checklists.move_item", "Move or reorder a checklist item, optionally into another checklist, using one explicit anchor. A null anchor id means the top for side \"after\" and the bottom for side \"before\". Requires board editor access and a write-capable credential.", {
     cardId: cardReference,
     checklistId: uuid.describe("Source checklist id."),
     itemId: uuid,
@@ -1379,7 +1444,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
       ...priorityAnchorBody(a.anchor ?? { side: "before", id: null }),
     });
   }, ctx);
-  registerKaneraTool(server, "priorities.move", "Move one \"Up next\" queue entry using one explicit before/after anchor; a null anchor id means that edge. Requires a write-capable credential. Returns the updated queue.", {
+  registerKaneraTool(server, "priorities.move", "Move one \"Up next\" queue entry using one explicit before/after anchor; a null anchor id means the top for side \"after\" and the bottom for side \"before\". Requires a write-capable credential. Returns the updated queue.", {
     priorityId: uuid.describe("The queue entry id from priorities.list."),
     anchor: priorityAnchor,
   }, (a, api) => api.post(`/api/v1/card-priorities/${a.priorityId}/move`, priorityAnchorBody(a.anchor)), ctx);

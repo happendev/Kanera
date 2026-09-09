@@ -3033,3 +3033,59 @@ void test("bulk checklist descriptions validate atomically, emit per-item events
 
   await f.app.close();
 });
+
+void test("cards are created at typed lane anchors and never through Global Work anchors on the public API", async () => {
+  const app = await buildIntegrationServer();
+  const { auth } = await signupOwner(app, {
+    orgName: "Anchored Creates",
+    email: "anchored-create-owner@example.com",
+    displayName: "Owner",
+  });
+
+  const workspaceResponse = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Delivery" } });
+  assert.equal(workspaceResponse.statusCode, 201);
+  const workspace = workspaceResponse.json<{ id: string }>();
+  const [list] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).limit(1);
+  assert.ok(list);
+  const boardResponse = await app.inject({ method: "POST", url: `/workspaces/${workspace.id}/boards`, headers: auth, payload: { name: "Launch" } });
+  assert.equal(boardResponse.statusCode, 201);
+  const board = boardResponse.json<{ id: string }>();
+
+  const createCard = async (payload: Record<string, unknown>) => {
+    const response = await app.inject({ method: "POST", url: `/boards/${board.id}/lists/${list.id}/cards`, headers: auth, payload });
+    return response;
+  };
+  const first = (await createCard({ title: "First" })).json<{ id: string; position: string }>();
+  const second = (await createCard({ title: "Second" })).json<{ id: string; position: string }>();
+
+  // The board's hover "+" between two cards: the new card lands strictly between its neighbours.
+  const betweenResponse = await createCard({ title: "Between", afterItem: { type: "card", id: first.id } });
+  assert.equal(betweenResponse.statusCode, 201);
+  const between = betweenResponse.json<{ id: string; position: string }>();
+  assert.ok(Number(between.position) > Number(first.position));
+  assert.ok(Number(between.position) < Number(second.position));
+
+  const beforeResponse = await createCard({ title: "Before first", beforeItem: { type: "card", id: first.id } });
+  assert.equal(beforeResponse.statusCode, 201);
+  assert.ok(Number(beforeResponse.json<{ position: string }>().position) < Number(first.position));
+
+  const ordered = await db.select({ title: cards.title }).from(cards).where(eq(cards.listId, list.id)).orderBy(asc(cards.position));
+  assert.deepEqual(ordered.map((card) => card.title), ["Before first", "First", "Between", "Second"]);
+
+  // Anchors and edges are exclusive, and an unknown anchor is a client error, not a silent bottom insert.
+  assert.equal((await createCard({ title: "Conflict", atTop: true, afterItem: { type: "card", id: first.id } })).statusCode, 400);
+  assert.equal((await createCard({ title: "Missing", afterItem: { type: "card", id: randomUUID() } })).statusCode, 400);
+
+  // The Global Work lane mode is reserved for the app server; see the identical guard on move.
+  const publicApp = await buildPublicApiServer();
+  const publicResponse = await publicApp.inject({
+    method: "POST",
+    url: `/api/v1/boards/${board.id}/lists/${list.id}/cards`,
+    headers: auth,
+    payload: { title: "Nope", afterItem: { type: "card", id: first.id }, globalWorkUserId: randomUUID() },
+  });
+  assert.equal(publicResponse.statusCode, 400);
+
+  await publicApp.close();
+  await app.close();
+});

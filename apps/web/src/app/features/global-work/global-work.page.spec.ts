@@ -5,6 +5,7 @@ import { Router } from "@angular/router";
 import type { WorkDisplayMode, WorkPrioritiesResponse, WorkPriorityQueuesResponse } from "@kanera/shared/dto";
 import { describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
+import { viewPreferenceKey } from "../../core/browser/browser-contracts";
 import { workDonePreferencesStorageKey } from "../board/work-done-view/work-done-preferences";
 import { DEFAULT_COMPLETION } from "./global-work-preference";
 import { GlobalWorkPage } from "./global-work.page";
@@ -819,6 +820,64 @@ describe("GlobalWorkPage card routing", () => {
     expect(fixture.componentInstance.datedCardCount()).toBe(0);
 
     fixture.destroy();
+  });
+});
+
+describe("GlobalWorkPage display preferences", () => {
+  async function createLensPage(lens: "my" | "team") {
+    const state = {
+      auth: { user: () => null },
+      focusedTargetUserId: () => null,
+      cards: signal([]),
+      response: signal({ cards: [], checklistItems: [], totals: { cards: 0, overdue: 0, dueSoon: 0, completed: 0, checklistItems: 0, overdueChecklistItems: 0 }, nextCursor: null }),
+      initialize: vi.fn(() => Promise.resolve()),
+      queryFirstPage: vi.fn(() => Promise.resolve()),
+      reconcileCardsInBackground: vi.fn(),
+    };
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ApiClient, useValue: { get: vi.fn() } },
+        { provide: Dialog, useValue: {} },
+        { provide: Router, useValue: { navigate: vi.fn(() => Promise.resolve(true)) } },
+      ],
+    })
+      .overrideComponent(GlobalWorkPage, { set: { template: "", providers: [{ provide: GlobalWorkState, useValue: state }] } })
+      .compileComponents();
+    const fixture = TestBed.createComponent(GlobalWorkPage);
+    fixture.componentRef.setInput("lens", lens);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it("keeps compact cards and background per lens, independent of each other and of boards", async () => {
+    localStorage.clear();
+    const my = await createLensPage("my");
+    const host = my.nativeElement as HTMLElement;
+    expect(host.classList.contains("compact-cards")).toBe(false);
+
+    my.componentInstance.toggleCompactCards();
+    my.componentInstance.selectBackground("ocean");
+    my.detectChanges();
+    expect(host.classList.contains("compact-cards")).toBe(true);
+    expect(host.classList.contains("has-gradient")).toBe(true);
+    expect(host.style.getPropertyValue("--work-gradient")).toBe("var(--gradient-ocean)");
+    expect(localStorage.getItem(viewPreferenceKey("compactCards", "globalWork:my"))).toBe("1");
+    expect(localStorage.getItem(viewPreferenceKey("background", "globalWork:my"))).toBe("ocean");
+
+    // Team Cards reads its own scope: nothing chosen on My Cards leaks across.
+    const team = await createLensPage("team");
+    expect(team.componentInstance.compactCards()).toBe(false);
+    expect(team.componentInstance.background()).toBeNull();
+
+    // And a fresh My Cards restores what was chosen there.
+    const myAgain = await createLensPage("my");
+    expect(myAgain.componentInstance.compactCards()).toBe(true);
+    expect(myAgain.componentInstance.background()).toBe("ocean");
+
+    myAgain.componentInstance.selectBackground(null);
+    expect(localStorage.getItem(viewPreferenceKey("background", "globalWork:my"))).toBeNull();
   });
 });
 

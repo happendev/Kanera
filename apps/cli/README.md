@@ -40,6 +40,8 @@ kanera work              # your assignments across every accessible board
 kanera card MKT-42       # a card, by key, id, or URL
 kanera card done MKT-42  # mark it complete
 kanera comment MKT-42 "Shipped."
+kanera separator create <boardId> <listId> "This week" --color blue
+kanera separator move <separatorId> <listId> --anchor.side before --anchor.item.type card --anchor.item.id <cardId>
 kanera workspace create "Marketing" --templateId marketing   # bootstrap a workspace (org admin)
 kanera standalone create "Reading list" --templateId simple-todo
 kanera doctor            # diagnose credentials and connectivity

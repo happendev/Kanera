@@ -11,7 +11,7 @@ import {
   users,
   workspaces,
 } from "@kanera/shared/schema";
-import { and, asc, eq, inArray, isNull, type SQL } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 import { db } from "../db.js";
 import { toWireCardSummary } from "./card-summary.js";
 
@@ -52,7 +52,16 @@ export function priorityQueueRows(where: SQL | undefined) {
   return db
     .select()
     .from(cardPriorities)
-    .innerJoin(cardSummaryView, eq(cardSummaryView.id, cardPriorities.cardId))
+    // Keep hydration correlated to one queued card. A flattened join let PostgreSQL rescan the
+    // entire lateral-aggregate summary view for every entry (31 × 1,600 cards in the dev seed).
+    // The id is unique; LIMIT 1 preserves that result while preventing the expensive flattening.
+    .innerJoinLateral(
+      db.select().from(cardSummaryView)
+        .where(eq(cardSummaryView.id, cardPriorities.cardId))
+        .limit(1)
+        .as("card_summary_view"),
+      sql`true`,
+    )
     .innerJoin(workspaces, eq(workspaces.id, cardSummaryView.workspaceId))
     .innerJoin(boards, eq(boards.id, cardSummaryView.boardId))
     .innerJoin(lists, eq(lists.id, cardSummaryView.listId))

@@ -1402,6 +1402,8 @@
 }
 
 .checklist-item-meta-row {
+  --checklist-item-meta-height: 32px;
+
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1413,13 +1415,21 @@
     max-width: none;
     flex: 0 0 auto;
   }
+
+  // The compact checklist row uses 26px metadata controls, but the detail drawer has room for
+  // full chips. Keep its due date level with the 32px assigned-user chip beside it.
+  .checklist-item-due {
+    height: var(--checklist-item-meta-height);
+    min-height: var(--checklist-item-meta-height);
+  }
 }
 
 .checklist-item-panel-assignee {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-height: 32px;
+  height: var(--checklist-item-meta-height);
+  min-height: var(--checklist-item-meta-height);
   padding: 3px 8px 3px 3px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md, 8px);

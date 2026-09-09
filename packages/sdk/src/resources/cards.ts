@@ -1,14 +1,19 @@
 import { paginateCursor, type PageIterator } from "../pagination.js";
 import type {
   Attachment, BulkArchiveResult, BulkCardResult, Card, CardDetail, Checklist, ChecklistItem, DueDateSlot, LocalDate,
-  PositionAnchor, Uuid,
+  LaneItemReference, LanePositionAnchor, PositionAnchor, Uuid,
 } from "../types.js";
 import type { CallOptions, ResourceContext } from "./base.js";
 
 export interface CreateCardInput {
   title: string;
   description?: string;
+  /** Insert at the top of the list. Mutually exclusive with `afterItem` / `beforeItem`. */
   atTop?: boolean;
+  /** Insert directly after this card or separator in the list's lane. */
+  afterItem?: LaneItemReference | null;
+  /** Insert directly before this card or separator in the list's lane. */
+  beforeItem?: LaneItemReference | null;
   assigneeIds?: Uuid[];
 }
 
@@ -35,8 +40,11 @@ export interface UpdateChecklistItemInput {
 
 export interface MoveCardInput {
   listId: Uuid;
-  /** Exactly one anchor. A null id means the edge of the list. */
-  anchor: PositionAnchor;
+  /**
+   * A typed lane anchor can target either a card or separator; the legacy card-only form remains
+   * supported. A null anchor means the top for `side: "after"` and the bottom for `side: "before"`.
+   */
+  anchor: PositionAnchor | LanePositionAnchor;
 }
 
 /**
@@ -95,7 +103,9 @@ export class Cards {
   }
 
   async move(card: string, body: MoveCardInput, options: CallOptions = {}): Promise<Card> {
-    const anchorBody = body.anchor.side === "after" ? { afterCardId: body.anchor.id } : { beforeCardId: body.anchor.id };
+    const anchorBody = "item" in body.anchor
+      ? body.anchor.side === "after" ? { afterItem: body.anchor.item } : { beforeItem: body.anchor.item }
+      : body.anchor.side === "after" ? { afterCardId: body.anchor.id } : { beforeCardId: body.anchor.id };
     return this.ctx.http.post<Card>(`/api/v1/cards/${await this.ctx.resolveCard(card)}/move`, {
       listId: body.listId,
       ...anchorBody,

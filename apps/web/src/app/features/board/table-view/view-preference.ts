@@ -160,6 +160,22 @@ export function writeCompactCards(scope: string, value: boolean): void {
   else removeString(key);
 }
 
+/**
+ * Page background for collections that have no board row to persist one on (My Cards, Team Cards).
+ * A board's background is a shared board property; these are per-lens, per-device choices, so they
+ * live beside the other view preferences rather than on the server.
+ */
+export function readBackground(scope: string): GradientToken | null {
+  const raw = readString(viewPreferenceKey("background", scope));
+  return raw && (GRADIENT_TOKENS as readonly string[]).includes(raw) ? raw as GradientToken : null;
+}
+
+export function writeBackground(scope: string, value: GradientToken | null): void {
+  const key = viewPreferenceKey("background", scope);
+  if (value) writeString(key, value);
+  else removeString(key);
+}
+
 export function readSortBy(scope: string): SortBy | null {
   return readString(viewPreferenceKey("sort", scope)) as SortBy | null;
 }

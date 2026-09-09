@@ -10,7 +10,7 @@
 
 export type Uuid = string;
 
-/** The closed palette Kanera assigns to lists, labels, notes, and custom-field options. */
+/** The closed palette Kanera assigns to lists, separators, labels, notes, and custom-field options. */
 export type ColorToken =
   | "rose" | "pink" | "red" | "orange" | "amber" | "yellow"
   | "lime" | "green" | "emerald" | "teal" | "cyan" | "sky" | "blue" | "indigo"
@@ -157,6 +157,19 @@ export interface List {
   color: ColorToken | null;
   position: string;
   archivedAt: Timestamp | null;
+}
+
+/** A titled, optionally colored divider in one board/list's mixed card lane. */
+export interface BoardSeparator {
+  id: Uuid;
+  boardId: Uuid;
+  listId: Uuid;
+  title: string;
+  color: ColorToken | null;
+  position: string;
+  createdById: Uuid;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 }
 
 export interface Label {
@@ -426,7 +439,27 @@ export interface CursorPage<T> {
 /** Before/after anchors. A null id means the edge of the list. */
 export interface PositionAnchor {
   side: "before" | "after";
+  /**
+   * Anchor id, or null for an edge. The edge follows `side` and it is the inverse of the intuitive
+   * reading: `{ side: "after", id: null }` is the TOP, `{ side: "before", id: null }` is the BOTTOM.
+   */
   id: Uuid | null;
+}
+
+/** A card or separator in a board list's shared ordering lane. */
+export interface LaneItemReference {
+  type: "card" | "separator";
+  id: Uuid;
+}
+
+/** Before/after anchor in a mixed card-and-separator lane. */
+export interface LanePositionAnchor {
+  side: "before" | "after";
+  /**
+   * Card or separator to anchor against, or null for an edge. As with {@link PositionAnchor}, a
+   * null item means the TOP for `side: "after"` and the BOTTOM for `side: "before"`.
+   */
+  item: LaneItemReference | null;
 }
 
 export interface WorkScope {

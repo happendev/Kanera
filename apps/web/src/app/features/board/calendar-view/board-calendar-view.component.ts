@@ -1,8 +1,11 @@
-import { NgTemplateOutlet } from "@angular/common";
+import { CdkDrag, type CdkDragDrop, CdkDropList, CdkDropListGroup } from "@angular/cdk/drag-drop";
+import { CdkScrollable } from "@angular/cdk/scrolling";
 import { ChangeDetectionStrategy, Component, ElementRef, Injector, afterNextRender, computed, effect, inject, input, output, signal } from "@angular/core";
 import type { Card, List } from "@kanera/shared/schema";
 import type { WireCard, WireCardSummary, WireList } from "@kanera/shared/events";
+import { ApiClient } from "../../../core/api/api.client";
 import { APP_DOM_EVENTS } from "../../../core/browser/browser-contracts";
+import { ToastService } from "../../../shared/toast.service";
 import { WorkspaceService } from "../../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../../shared/avatar.component";
 import { CardKeyDisplayService } from "../../../shared/card-key-display.service";
@@ -10,12 +13,15 @@ import { DragScrollDirective, ScrollSyncGroup } from "../../../shared/drag-scrol
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { WEEKDAY_LABELS, startOfWeek, weekdayIndex } from "../../../shared/week-start";
 import { SegmentedComponent, type SegmentedOption } from "../../../shared/segmented.component";
+import { BoardState } from "../board-state";
 import { CardActionsMenuPopover } from "../card-actions-menu.popover";
+import { CARD_DRAG_START_DELAY } from "../card-drag-scroll";
 import type { CardAssigneePresentation } from "../card.component";
 import { CardLabelsComponent, type CardLabelPresentation } from "../card-labels.component";
 import { openCardDetailInNewTab } from "../card-navigation.util";
 import { DUE_DATE_SLOT_OPTIONS, dueDateSlotFor, isOverdue, type DueDateSlot } from "../due-date.util";
 import { formatDate, formatDateRange } from "../../../shared/date-format";
+import { boardStateCardStore, TABLE_CARD_STORE, type TableCardStore } from "../table-view/table-card-store";
 
 type AnyCard = Card | WireCard | WireCardSummary;
 type AnyList = List | WireList;
@@ -62,7 +68,7 @@ interface CalendarMonth {
 @Component({
   selector: "k-board-calendar-view",
   standalone: true,
-  imports: [NgTemplateOutlet, AvatarComponent, CardActionsMenuPopover, CardLabelsComponent, DragScrollDirective, SegmentedComponent, TooltipDirective],
+  imports: [CdkDrag, CdkDropList, CdkDropListGroup, CdkScrollable, AvatarComponent, CardActionsMenuPopover, CardLabelsComponent, DragScrollDirective, SegmentedComponent, TooltipDirective],
   // One group per calendar instance, so the month panels of this calendar stay on the same weekday
   // columns without reaching into a calendar rendered elsewhere on the page.
   providers: [ScrollSyncGroup],
@@ -79,6 +85,15 @@ export class BoardCalendarViewComponent {
   private readonly element = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
   private readonly scrollGroup = inject(ScrollSyncGroup);
+  private readonly api = inject(ApiClient);
+  private readonly toasts = inject(ToastService);
+  /**
+   * Where a rescheduled card lands before its realtime echo, so the tile jumps to the new day on
+   * release rather than a round trip later. Same seam the table uses: Global Work provides its
+   * query projection, a board falls back to `BoardState`, and a bare test harness has neither.
+   */
+  private readonly cardStore: TableCardStore | null = inject(TABLE_CARD_STORE, { optional: true })
+    ?? (() => { const state = inject(BoardState, { optional: true }); return state ? boardStateCardStore(state, this.api) : null; })();
   protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
   private centredOnToday = false;
 
@@ -90,6 +105,11 @@ export class BoardCalendarViewComponent {
   readonly filteredCardIds = input<Set<string> | null>(null);
   readonly selectedCardId = input<string | null>(null);
   readonly canEdit = input<boolean>(true);
+  /**
+   * Cards the viewer may reschedule when `canEdit` is on; `null` means all of them. Global Work
+   * spans boards with different roles, so a read-only board's cards must not lift off the grid.
+   */
+  readonly editableCardIds = input<Set<string> | null>(null);
   readonly loading = input<boolean>(false);
   readonly navigation = input<"paged" | "stacked">("paged");
 
@@ -105,6 +125,12 @@ export class BoardCalendarViewComponent {
   readonly activeActionsCardId = signal<string | null>(null);
   readonly actionsMenuPoint = signal<{ x: number; y: number } | null>(null);
   readonly weekdayLabels = WEEKDAY_LABELS;
+  /** Touch waits, so a finger can still scroll the grid; the mouse has drag-scroll on the cell background. */
+  readonly dragStartDelay = CARD_DRAG_START_DELAY;
+  /** The day the lifted tile is over, for the drop highlight. */
+  readonly dropTargetDayKey = signal<string | null>(null);
+  /** Ids mid-flight to the API; the tile shows its new day already and must not be dragged again until settled. */
+  readonly reschedulingCardIds = signal<Set<string>>(new Set());
   readonly skeletonDays = Array.from({ length: 35 }, (_, i) => i);
   readonly skeletonCards = [0, 1];
 
@@ -284,6 +310,55 @@ export class BoardCalendarViewComponent {
     this.activeActionsCardId.set(null);
   }
 
+  canEditCard(card: AnyCard): boolean {
+    if (!this.canEdit()) return false;
+    const editable = this.editableCardIds();
+    return editable === null || editable.has(card.id);
+  }
+
+  canDragCard(card: AnyCard): boolean {
+    return this.canEditCard(card) && !this.reschedulingCardIds().has(card.id);
+  }
+
+  /**
+   * A tile released on another day keeps its time slot and moves its due date to that day. The drop
+   * list data is the day key, so an empty slot and a populated cell are the same target.
+   */
+  async onCardDropped(event: CdkDragDrop<string, string, AnyCard>) {
+    const card = event.item.data;
+    const dueDateLocalDate = event.container.data;
+    if (!card || !dueDateLocalDate || dueDateLocalDate === card.dueDateLocalDate) return;
+    if (!this.canDragCard(card)) return;
+
+    // The store re-renders the tile in its new cell immediately; the PATCH echo then converges on
+    // the same value. On failure the card goes back where it was so the grid never lies.
+    this.cardStore?.updateCard({ ...card, dueDateLocalDate });
+    this.markRescheduling(card.id, true);
+    try {
+      const updated = await this.api.patch<AnyCard>(`/cards/${card.id}`, {
+        dueDateLocalDate,
+        // Preserve the slot: only the day changed. A card that never had a slot stays "any time".
+        dueDateSlot: dueDateSlotFor(card.dueDateSlot),
+      });
+      this.cardStore?.updateCard(updated);
+    } catch (error) {
+      this.cardStore?.updateCard(card);
+      this.toasts.error("Could not change the due date");
+      throw error;
+    } finally {
+      this.markRescheduling(card.id, false);
+    }
+  }
+
+  private markRescheduling(cardId: string, active: boolean): void {
+    this.reschedulingCardIds.update((ids) => {
+      const next = new Set(ids);
+      if (active) next.add(cardId);
+      else next.delete(cardId);
+      return next;
+    });
+  }
+
   workspaceIdFor(card: AnyCard): string | null {
     return this.workspaces.workspaceIdForBoard(card.boardId);
   }
@@ -308,12 +383,6 @@ export class BoardCalendarViewComponent {
     return !card.archivedAt && !card.completedAt && isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone);
   }
 
-  slotLabel(card: AnyCard): string {
-    const slot = dueDateSlotFor(card.dueDateSlot);
-    if (slot === "anyTime") return "";
-    return DUE_DATE_SLOT_OPTIONS.find((option) => option.value === slot)?.shortLabel ?? "";
-  }
-
   slotTime(card: AnyCard): string {
     const slot = dueDateSlotFor(card.dueDateSlot);
     if (slot === "anyTime") return "";
@@ -324,14 +393,10 @@ export class BoardCalendarViewComponent {
    * Day-cell heading: "1 July". No weekday — the cell sits under a labelled weekday column, so
    * repeating it in all 35 cells is noise. The month is spelled out rather than abbreviated: a day
    * column is 233px at its narrowest, so there is room, and it stays at all because the padding weeks
-   * of a month grid belong to the neighbouring month. The full date is the cell's tooltip.
+   * of a month grid belong to the neighbouring month.
    */
   dayLabel(key: string): string {
     return formatDate(localDate(key), "short", { now: localDate(key) });
-  }
-
-  dayTooltip(key: string): string {
-    return formatDate(localDate(key), "long");
   }
 
   summary(card: AnyCard): CardSummaryFields {

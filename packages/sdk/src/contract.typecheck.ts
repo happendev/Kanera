@@ -7,6 +7,7 @@ import type {
 import type { createCardPriorityBody, moveCardPriorityBody } from "@kanera/shared/dto";
 import type { createCommentBody } from "@kanera/shared/dto";
 import type { createNoteBody, updateNoteBody } from "@kanera/shared/dto";
+import type { createSeparatorBody, moveSeparatorBody, updateSeparatorBody } from "@kanera/shared/dto";
 import type { agentSearchQueryBody } from "@kanera/shared/dto";
 import type { workFiltersSchema, workScopeSchema } from "@kanera/shared/dto";
 import type { createBoardBody, createWorkspaceBody } from "@kanera/shared/dto";
@@ -16,6 +17,7 @@ import type {
 } from "./resources/cards.js";
 import type { CreateNoteInput, UpdateNoteInput } from "./resources/notes.js";
 import type { SearchInput } from "./resources/search.js";
+import type { UpdateSeparatorInput } from "./resources/separators.js";
 import type { CreateBoardInput, CreateWorkspaceInput, WorkFilters, WorkScope, WorkspaceTemplateId } from "./types.js";
 
 /**
@@ -45,6 +47,21 @@ type _CreateCard = AssertAssignable<CreateCardInput, z.input<typeof createCardBo
 type _UpdateCard = AssertAssignable<UpdateCardInput, z.input<typeof updateCardBody>>;
 // move() translates its PositionAnchor into the anchor fields the API expects.
 type _MoveCard = AssertAssignable<{ listId: string; beforeCardId: string | null }, z.input<typeof moveCardBody>>;
+type _MoveCardBySeparator = AssertAssignable<
+  { listId: string; afterItem: { type: "separator"; id: string } },
+  z.input<typeof moveCardBody>
+>;
+
+// Separators. create() and move() translate the SDK's one-anchor shape into these API fields.
+type _CreateSeparator = AssertAssignable<
+  { title: string; color: null; beforeItem: { type: "card"; id: string } },
+  z.input<typeof createSeparatorBody>
+>;
+type _UpdateSeparator = AssertAssignable<UpdateSeparatorInput, z.input<typeof updateSeparatorBody>>;
+type _MoveSeparator = AssertAssignable<
+  { listId: string; afterItem: { type: "separator"; id: string } },
+  z.input<typeof moveSeparatorBody>
+>;
 
 // Checklists. The item label is `text`; a live run against the API is what caught `title` here.
 type _CreateChecklist = AssertAssignable<{ title: string; parentItemId?: string | null }, z.input<typeof createChecklistBody>>;

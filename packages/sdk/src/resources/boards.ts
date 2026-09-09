@@ -1,6 +1,7 @@
 import { paginateCursor, paginateOffset, type PageIterator } from "../pagination.js";
 import type {
-  AccessibleBoard, ActivityEvent, Board, BoardRole, Card, CreateBoardInput, CustomField, Label, List, Member, Uuid, WorkspaceKind,
+  AccessibleBoard, ActivityEvent, Board, BoardRole, BoardSeparator, Card, CreateBoardInput, CustomField, Label, List, Member,
+  Uuid, WorkspaceKind,
 } from "../types.js";
 import type { CallOptions, ResourceContext } from "./base.js";
 
@@ -10,7 +11,7 @@ export interface BoardDetail {
   /** Named `cardLabels`, not `labels`: these are the labels assignable to this board's cards. */
   cardLabels: Label[];
   customFields: CustomField[];
-  separators: unknown[];
+  separators: BoardSeparator[];
   checklistTemplates: unknown[];
   members: Member[];
   workspaceKind: WorkspaceKind;

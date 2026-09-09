@@ -6,6 +6,7 @@ import { Cards } from "./resources/cards.js";
 import { Comments } from "./resources/comments.js";
 import { Notes } from "./resources/notes.js";
 import { Search } from "./resources/search.js";
+import { Separators } from "./resources/separators.js";
 import { Work } from "./resources/work.js";
 import { Automations, Workspaces } from "./resources/workspaces.js";
 import type { Session } from "./types.js";
@@ -35,6 +36,7 @@ export class Kanera {
   readonly comments: Comments;
   readonly notes: Notes;
   readonly search: Search;
+  readonly separators: Separators;
   readonly work: Work;
   readonly automations: Automations;
 
@@ -51,6 +53,7 @@ export class Kanera {
     this.comments = new Comments(ctx);
     this.notes = new Notes(ctx);
     this.search = new Search(ctx);
+    this.separators = new Separators(ctx);
     this.work = new Work(ctx);
     this.automations = new Automations(ctx);
   }
@@ -84,6 +87,10 @@ export {
 export { Comments } from "./resources/comments.js";
 export { Notes, type CreateNoteInput, type NoteTarget, type UpdateNoteInput } from "./resources/notes.js";
 export { Search, type SearchInput } from "./resources/search.js";
+export {
+  Separators,
+  type CreateSeparatorInput, type MoveSeparatorInput, type SeparatorMoveResult, type UpdateSeparatorInput,
+} from "./resources/separators.js";
 export { Work, type WorkCardsInput, type WorkHistoryInput } from "./resources/work.js";
 export { Automations, Workspaces, type Automation, type WorkspaceDetail } from "./resources/workspaces.js";
 export * from "./types.js";
