@@ -847,7 +847,8 @@
             [assigneesByCard]="boardAssigneesByCard()"
             [boardSummariesById]="boardsById()"
             [selectedCardId]="selectedCard()?.id ?? null"
-            [canEdit]="false"
+            [canEdit]="state.interactionReady()"
+            [editableCardIds]="roleEditableCardIds()"
             (cardOpened)="openCardById($event)"
           />
           @if (!datedCardCount()) {

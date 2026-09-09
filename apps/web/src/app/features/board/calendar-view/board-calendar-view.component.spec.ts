@@ -3,7 +3,10 @@ import { TestBed } from "@angular/core/testing";
 import { By } from "@angular/platform-browser";
 import type { WireBoardMemberUser, WireCardSummary } from "@kanera/shared/events";
 import { describe, expect, it, vi } from "vitest";
+import type { CdkDragDrop } from "@angular/cdk/drag-drop";
+import { ApiClient } from "../../../core/api/api.client";
 import { DragScrollDirective } from "../../../shared/drag-scroll.directive";
+import { TABLE_CARD_STORE, type TableCardStore } from "../table-view/table-card-store";
 import { BoardMenuCoordinator } from "../board-menu-coordinator.service";
 import { BoardCalendarViewComponent } from "./board-calendar-view.component";
 
@@ -305,5 +308,76 @@ describe("BoardCalendarViewComponent", () => {
     fixture.componentInstance.openCard("card-1");
 
     expect(opened).toHaveBeenCalledWith("card-1");
+  });
+
+  describe("rescheduling by drag", () => {
+    function drop(card: WireCardSummary, dayKey: string): CdkDragDrop<string, string, WireCardSummary> {
+      return { item: { data: card }, container: { data: dayKey } } as unknown as CdkDragDrop<string, string, WireCardSummary>;
+    }
+
+    async function createWithStore(patch: ReturnType<typeof vi.fn>, cards = [card()]) {
+      const store: TableCardStore = {
+        updateCard: vi.fn(),
+        setCardAssignees: vi.fn(),
+        setCardLabels: vi.fn(),
+        moveCardToList: vi.fn(),
+      };
+      await TestBed.configureTestingModule({
+        imports: [BoardCalendarViewComponent],
+        providers: [
+          provideZonelessChangeDetection(),
+          BoardMenuCoordinator,
+          { provide: ApiClient, useValue: { patch } },
+          { provide: TABLE_CARD_STORE, useValue: store },
+        ],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(BoardCalendarViewComponent);
+      fixture.componentRef.setInput("cards", cards);
+      fixture.componentInstance.anchorDate.set(new Date(2026, 4, 15));
+      fixture.detectChanges();
+      return { fixture, store };
+    }
+
+    it("moves the card to the released day optimistically, keeps its slot, and settles on the response", async () => {
+      const dragged = card({ dueDateSlot: "morning" });
+      const settled = { ...dragged, dueDateLocalDate: "2026-05-22" };
+      const patch = vi.fn().mockResolvedValue(settled);
+      const { fixture, store } = await createWithStore(patch, [dragged]);
+
+      await fixture.componentInstance.onCardDropped(drop(dragged, "2026-05-22"));
+
+      expect(store.updateCard).toHaveBeenNthCalledWith(1, { ...dragged, dueDateLocalDate: "2026-05-22" });
+      expect(patch).toHaveBeenCalledWith("/cards/card-1", { dueDateLocalDate: "2026-05-22", dueDateSlot: "morning" });
+      expect(store.updateCard).toHaveBeenLastCalledWith(settled);
+      expect(fixture.componentInstance.reschedulingCardIds().has("card-1")).toBe(false);
+    });
+
+    it("reverts the optimistic move when the request fails", async () => {
+      const dragged = card();
+      const patch = vi.fn().mockRejectedValue(new Error("offline"));
+      const { fixture, store } = await createWithStore(patch, [dragged]);
+
+      await expect(fixture.componentInstance.onCardDropped(drop(dragged, "2026-05-22"))).rejects.toThrow("offline");
+
+      expect(store.updateCard).toHaveBeenLastCalledWith(dragged);
+      expect(fixture.componentInstance.reschedulingCardIds().has("card-1")).toBe(false);
+    });
+
+    it("ignores a release on the card's own day and cards the viewer cannot edit", async () => {
+      const dragged = card();
+      const patch = vi.fn();
+      const { fixture, store } = await createWithStore(patch, [dragged]);
+
+      await fixture.componentInstance.onCardDropped(drop(dragged, "2026-05-20"));
+      fixture.componentRef.setInput("editableCardIds", new Set<string>());
+      fixture.detectChanges();
+      await fixture.componentInstance.onCardDropped(drop(dragged, "2026-05-22"));
+
+      expect(patch).not.toHaveBeenCalled();
+      expect(store.updateCard).not.toHaveBeenCalled();
+      // The tile is rendered but not liftable, so the month can still be drag-scrolled from it.
+      const tile = (fixture.nativeElement as HTMLElement).querySelector(".cal-card");
+      expect(tile?.classList.contains("cdk-drag-disabled")).toBe(true);
+    });
   });
 });
