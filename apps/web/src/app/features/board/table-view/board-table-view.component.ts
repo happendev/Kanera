@@ -317,8 +317,8 @@ export class BoardTableViewComponent implements OnDestroy {
   readonly hostOwnsComposer = input(false);
   /** Off when the embedding host has no useful grouping or summary-breakdown controls. */
   readonly showGroupingControl = input(true);
-  /** Lets an embedding host promote Labels into its default column set without changing boards. */
-  readonly labelsVisibleByDefault = input(false);
+  /** Labels are part of every table's default scan; a host may still opt out explicitly. */
+  readonly labelsVisibleByDefault = input(true);
   /** Lets a priority-focused host show the viewer/group-specific queue position by default. */
   readonly priorityVisibleByDefault = input(false);
   /** Off where the host has no bulk-selection handlers wired. */
@@ -936,10 +936,10 @@ export class BoardTableViewComponent implements OnDestroy {
   }
 
   /**
-   * Status, assignees and due date are on by default: who / what state / by when is what a table is
-   * normally opened to scan. Labels and Up next order stay off unless an embedding host explicitly
-   * promotes them for its workflow. Board is on where it exists, since it is the first question a
-   * cross-board row raises.
+   * Status, assignees, due date and labels are on by default: who / what state / by when / how it is
+   * categorised is what a table is normally opened to scan. Up next order stays off unless an
+   * embedding host explicitly promotes it for its workflow. Board is on where it exists, since it is
+   * the first question a cross-board row raises.
    *
    * Custom fields default on for one workspace — a workspace that defined a field wants to see it —
    * and off across several. Every workspace's fields together is a wall of columns most of which are

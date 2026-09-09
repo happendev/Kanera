@@ -135,10 +135,17 @@ describe("BoardTableViewComponent", () => {
     return fixture;
   }
 
-  it("shows title, status, assignees, due date, and every custom field by default, including showOnCard=false", () => {
+  it("shows title, status, assignees, due date, labels, and every custom field by default, including showOnCard=false", () => {
     const component = fixture().componentInstance;
 
-    expect(["title", ...component.visibleColumns()]).toEqual(["title", "status", "assignees", "due", "cf:field-1"]);
+    expect(["title", ...component.visibleColumns()]).toEqual([
+      "title",
+      "status",
+      "assignees",
+      "due",
+      "labels",
+      "cf:field-1",
+    ]);
   });
 
   it("offers Up next order on board tables without showing it by default", () => {
@@ -170,13 +177,12 @@ describe("BoardTableViewComponent", () => {
     component.toggleColumn("labels");
 
     expect(localStorage.getItem(viewPreferenceKey("columns", "board:board-1"))).toBe(JSON.stringify({ labels: true }));
-    expect(localStorage.getItem(viewPreferenceKey("columns", "board:board-1:table"))).toContain('"labels":true');
+    expect(localStorage.getItem(viewPreferenceKey("columns", "board:board-1:table"))).toContain('"labels":false');
   });
 
   it("restores column visibility and order, grouping, and sorting when the board table is reopened", () => {
     const firstVisit = fixture();
     const first = firstVisit.componentInstance;
-    first.toggleColumn("labels");
     first.onColumnDrop({ previousIndex: 3, currentIndex: 0 } as never);
     first.setGroupBy("completion");
     first.setSort("title-desc");

@@ -395,10 +395,14 @@
   pointer-events: none;
 }
 
-// Scrolls away with the rows rather than pinning to the top. Positioned only so its z-index applies:
-// it has to paint over the edge guard to reach the scroller's left edge.
+// Pinned to the top of the scrollport so a long sheet never loses the column labels: the containing
+// block is .tv-table, which spans the whole scroll height, so the band follows the vertical scroll
+// while the title cell inside it keeps its own horizontal pin. z 8 puts it over the edge guard (6),
+// the footer (7) and everything that scrolls beneath it, so it reaches the scroller's left edge and
+// nothing in the rows paints through it.
 .tv-header {
-  position: relative;
+  position: sticky;
+  top: 0;
   z-index: 8;
   height: var(--tv-head-h);
   background: var(--surface-2);
@@ -431,12 +435,14 @@
   gap: 6px;
   height: var(--tv-head-h);
   color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 700;
+  // 10px read as fine print next to 13.5px cells; 12px is still clearly a label but legible at a glance.
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .01em;
   user-select: none;
 
   >i {
-    font-size: 12px;
+    font-size: 13px;
     opacity: .8;
   }
 
@@ -509,8 +515,8 @@
   border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
   box-shadow: 0 12px 24px rgb(0 0 0 / 35%);
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
 
   .tv-col-drag-handle,
   .tv-col-resize { display: none; }
