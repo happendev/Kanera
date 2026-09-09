@@ -197,6 +197,9 @@ export class ScratchpadPanelComponent implements OnDestroy {
    * a seed is owed.
    */
   private readonly seedNoteId = computed(() => {
+    // Closing unmounts the editor while the deferred panel survives. Clear its seed so reopening
+    // starts from the latest saved/draft text instead of the content from the first open.
+    if (!this.visible()) return null;
     const id = this.scratchpad.activeNoteId();
     return id && this.notes().some((note) => note.id === id) ? id : null;
   });

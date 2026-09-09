@@ -7,7 +7,7 @@ import { CdkScrollable } from "@angular/cdk/scrolling";
 import { Dialog } from "@angular/cdk/dialog";
 import { NgOptimizedImage } from "@angular/common";
 import type { OnDestroy, OnInit } from "@angular/core";
-import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, signal, viewChild, DestroyRef } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, signal, untracked, viewChild, DestroyRef } from "@angular/core";
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from "@angular/router";
 import type { MoveBoardResponse, NotificationSettingsResponse } from "@kanera/shared/dto";
 import type { ServerToClientEvents } from "@kanera/shared/events";
@@ -214,8 +214,22 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly user = this.auth.user;
   readonly showScratchpad = computed(() => this.user()?.showScratchpad ?? true);
   private readonly isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
-  readonly notificationsPanel = viewChild(NotificationsPanelComponent);
-  readonly prioritiesPanel = viewChild(MyPrioritiesPanelComponent);
+  // String queries keep the component classes out of the eager shell import graph. The types
+  // still describe their public API without preventing Angular from deferring the components.
+  readonly notificationsPanel = viewChild<NotificationsPanelComponent>("notificationsPanel");
+  readonly prioritiesPanel = viewChild<MyPrioritiesPanelComponent>("prioritiesPanel");
+  readonly pendingPanel = signal<"notifications" | "priorities" | null>(null);
+
+  private readonly openDeferredPanel = effect(() => {
+    const pending = this.pendingPanel();
+    const panel = pending === "notifications" ? this.notificationsPanel()
+      : pending === "priorities" ? this.prioritiesPanel() : undefined;
+    if (!panel) return;
+    // A first click can precede the lazy component's creation. Consume only the latest request,
+    // so switching triggers or pressing Escape during download never opens a stale drawer.
+    this.pendingPanel.set(null);
+    untracked(() => panel.toggle());
+  });
 
   /**
    * Notifications and Up next open from the same edge into the same space, so only one may be open:
@@ -223,15 +237,13 @@ export class AppShellComponent implements OnInit, OnDestroy {
    * owns both triggers, is the one place that knows there are two.
    */
   togglePanel(which: "notifications" | "priorities"): void {
-    const notifications = this.notificationsPanel();
-    const priorities = this.prioritiesPanel();
-    if (which === "notifications") {
-      if (priorities?.open()) priorities.close();
-      notifications?.toggle();
-    } else {
-      if (notifications?.open()) notifications.close();
-      priorities?.toggle();
-    }
+    const wasPending = this.pendingPanel() === which;
+    this.pendingPanel.set(null);
+    const other = which === "notifications" ? this.prioritiesPanel() : this.notificationsPanel();
+    if (other?.open()) other.close();
+    const panel = which === "notifications" ? this.notificationsPanel() : this.prioritiesPanel();
+    if (panel) panel.toggle();
+    else if (!wasPending) this.pendingPanel.set(which);
   }
   openShortcuts() {
     this.closeUserMenu();
@@ -666,6 +678,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   onEscape() {
+    this.pendingPanel.set(null);
+    this.shortcutsOpen.set(false);
     this.search.close();
     this.closeUserMenu();
     this.closeNavContextMenu();
@@ -822,6 +836,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit() {
+    // Badges and their realtime subscriptions belong to the shell, not to the deferred drawers.
+    // Initialise before any panel opens; both services are idempotent when a drawer later mounts.
+    this.notifications.initialise();
+    this.myPriorities.initialise();
     this.shortcuts.attach();
     this.registerGlobalShortcuts();
     this.registerPaletteActions();

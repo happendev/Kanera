@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection, signal } from "@angular/core";
 import type { CdkDragDrop } from "@angular/cdk/drag-drop";
 import { Dialog } from "@angular/cdk/dialog";
 import type { ComponentFixture} from "@angular/core/testing";
-import { TestBed } from "@angular/core/testing";
+import { DeferBlockBehavior, DeferBlockState, TestBed } from "@angular/core/testing";
 import { provideRouter, Router } from "@angular/router";
 import type { Entitlements } from "@kanera/shared/dto";
 import type { Board, BoardGroup, Workspace } from "@kanera/shared/schema";
@@ -13,6 +13,7 @@ import { AuthService } from "../../core/auth/auth.service";
 import type { AuthOrganisation } from "../../core/auth/auth.service";
 import { organisationStorageKey, STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { BrowserPushService } from "../../core/notifications/browser-push.service";
+import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { OfflineCacheService, type GuestHomeGroup, type HomeGroup, type HomeResponse } from "../../core/offline/offline-cache.service";
 import type { AppSocket } from "../../core/realtime/socket.service";
@@ -288,6 +289,7 @@ describe("AppShellComponent board search", () => {
     const dialog = { open: vi.fn() };
     await TestBed.configureTestingModule({
       imports: [AppShellComponent],
+      deferBlockBehavior: DeferBlockBehavior.Manual,
       providers: [
         provideZonelessChangeDetection(),
         { provide: Dialog, useValue: dialog },
@@ -370,6 +372,73 @@ describe("AppShellComponent board search", () => {
     fixture.detectChanges();
     return { api, browserPush, authUser, dialog, notifications, socket, joinBoard, joinWorkspace, workspaceService, switchOrg, pauseForOrganisationSwitch, resumeAfterOrganisationSwitch, navigateAfterOrganisationSwitch };
   }
+
+  it("initialises badge data before drawers load and keeps closed-panel badges reactive", async () => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+    const { notifications } = await render();
+    const priorities = TestBed.inject(MyPrioritiesService);
+    expect(notifications.initialise).toHaveBeenCalledOnce();
+    expect(priorities.initialised()).toBe(true);
+    expect(component.notificationsPanel()).toBeUndefined();
+    expect(component.prioritiesPanel()).toBeUndefined();
+
+    notifications.unreadCount.set(5);
+    priorities.queue.set({ targetUserId: "user-1", items: [], totalCount: 3, hiddenCount: 0,
+      canReorder: true, reorderableWorkspaceIds: [] });
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('[aria-label^="Notifications"] .utility-badge')?.textContent?.trim()).toBe("5");
+    expect(root.querySelector('[aria-label^="Up next"] .utility-badge')?.textContent?.trim()).toBe("3");
+    notifications.unreadCount.set(2);
+    fixture.detectChanges();
+    expect(root.querySelector('[aria-label^="Notifications"] .utility-badge')?.textContent?.trim()).toBe("2");
+    expect(component.notificationsPanel()).toBeUndefined();
+    expect(component.prioritiesPanel()).toBeUndefined();
+    vi.unstubAllGlobals();
+  });
+
+  it("opens a deferred drawer on the first click and retains it for subsequent toggles", async () => {
+    await render();
+    expect(component.notificationsPanel()).toBeUndefined();
+    expect(component.prioritiesPanel()).toBeUndefined();
+    component.togglePanel("notifications");
+    const blocks = await fixture.getDeferBlocks();
+    await blocks[2]!.render(DeferBlockState.Complete);
+    await fixture.whenStable();
+    const panel = component.notificationsPanel()!;
+    expect(panel.open()).toBe(true);
+    expect(component.pendingPanel()).toBeNull();
+    const toggle = vi.spyOn(panel, "toggle");
+    component.togglePanel("notifications");
+    expect(toggle).toHaveBeenCalledOnce();
+    expect(component.notificationsPanel()).toBe(panel);
+  });
+
+  it("does not open a stale drawer when another trigger wins during loading", async () => {
+    await render();
+    component.togglePanel("notifications");
+    component.togglePanel("priorities");
+    const blocks = await fixture.getDeferBlocks();
+    await blocks[2]!.render(DeferBlockState.Complete);
+    await fixture.whenStable();
+    expect(component.notificationsPanel()!.open()).toBe(false);
+    await blocks[1]!.render(DeferBlockState.Complete);
+    await fixture.whenStable();
+    expect(component.prioritiesPanel()!.open()).toBe(true);
+    expect(component.notificationsPanel()!.open()).toBe(false);
+  });
+
+  it.each(["escape", "repeat click"])("cancels a pending drawer on %s", async (cancel) => {
+    await render();
+    component.togglePanel("notifications");
+    if (cancel === "escape") component.onEscape();
+    else component.togglePanel("notifications");
+    const blocks = await fixture.getDeferBlocks();
+    await blocks[2]!.render(DeferBlockState.Complete);
+    await fixture.whenStable();
+    expect(component.notificationsPanel()!.open()).toBe(false);
+    expect(component.pendingPanel()).toBeNull();
+  });
 
   it("preserves the scrolled viewport at pickup without locking subsequent drag scrolling", async () => {
     await render();
