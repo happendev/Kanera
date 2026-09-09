@@ -28,11 +28,11 @@
       <i class="ti ti-notes"></i>
     </button>
     }
-    <button type="button" class="utility-btn" [class.has-badge]="myPriorities.totalCount() > 0" (click)="togglePanel('priorities')" [attr.aria-label]="'Up next' + (myPriorities.totalCount() > 0 ? ' (' + myPriorities.totalCount() + ' cards' + (myPriorities.overdueCount() > 0 ? ', ' + myPriorities.overdueCount() + ' overdue' : '') + ')' : '')" [attr.aria-expanded]="prioritiesPanel()?.open() ?? false" [kTooltip]="myPriorities.overdueCount() > 0 ? 'Up next · ' + myPriorities.overdueCount() + ' overdue · U' : 'Up next · U'">
+    <button type="button" class="utility-btn" [class.has-badge]="myPriorities.totalCount() > 0" (click)="togglePanel('priorities')" [attr.aria-label]="'Up next' + (myPriorities.totalCount() > 0 ? ' (' + myPriorities.totalCount() + ' cards' + (myPriorities.overdueCount() > 0 ? ', ' + myPriorities.overdueCount() + ' overdue' : '') + ')' : '')" [attr.aria-expanded]="pendingPanel() === 'priorities' || (prioritiesPanel()?.open() ?? false)" [kTooltip]="myPriorities.overdueCount() > 0 ? 'Up next · ' + myPriorities.overdueCount() + ' overdue · U' : 'Up next · U'">
       <i class="ti ti-list-numbers"></i>
       @if (myPriorities.totalCount() > 0) { <span class="utility-badge" [class.is-danger]="myPriorities.overdueCount() > 0">{{ myPriorities.totalCount() > 99 ? '99+' : myPriorities.totalCount() }}</span> }
     </button>
-    <button type="button" class="utility-btn" [class.has-badge]="notifications.unreadCount() > 0" [class.is-alert]="notifications.unreadCount() > 0" (click)="togglePanel('notifications')" [attr.aria-label]="'Notifications' + (notifications.unreadCount() > 0 ? ' (' + notifications.unreadCount() + ' unread)' : '')" [attr.aria-expanded]="notificationsPanel()?.open() ?? false" kTooltip="Notifications · N">
+    <button type="button" class="utility-btn" [class.has-badge]="notifications.unreadCount() > 0" [class.is-alert]="notifications.unreadCount() > 0" (click)="togglePanel('notifications')" [attr.aria-label]="'Notifications' + (notifications.unreadCount() > 0 ? ' (' + notifications.unreadCount() + ' unread)' : '')" [attr.aria-expanded]="pendingPanel() === 'notifications' || (notificationsPanel()?.open() ?? false)" kTooltip="Notifications · N">
       <i [class]="notifications.unreadCount() > 0 ? 'ti ti-bell-ringing' : 'ti ti-bell'"></i>
       @if (notifications.unreadCount() > 0) { <span kUnreadGlow class="utility-badge is-accent">{{ notifications.unreadCount() > 99 ? '99+' : notifications.unreadCount() }}</span> }
     </button>
@@ -658,15 +658,26 @@
   are all fixed-position and take no grid cell.
 -->
 @if (showScratchpad()) {
+<!-- Retain the panel after its first open so autosave and close/resize cleanup keep their lifetime. -->
+@defer (when scratchpad.open()) {
 <k-scratchpad-panel [embedded]="true" (resizeStateChange)="scratchpadResizing.set($event)" />
 }
+}
 
-<k-my-priorities-panel [embedded]="true" />
-<k-notifications-panel [embedded]="true" />
+@defer (when pendingPanel() === 'priorities') {
+<k-my-priorities-panel #prioritiesPanel [embedded]="true" />
+}
+@defer (when pendingPanel() === 'notifications') {
+<k-notifications-panel #notificationsPanel [embedded]="true" />
+}
 <k-update-prompt />
 <k-disconnect-prompt />
 <k-toast [show]="!!offlineCacheError()" icon="cloud-off" [message]="offlineCacheError() ?? ''" />
+@defer (when search.isOpen()) {
 <k-global-search-overlay />
+}
+@defer (when shortcutsOpen()) {
 @if (shortcutsOpen()) {
 <k-shortcuts-sheet (closed)="shortcutsOpen.set(false)" />
+}
 }
