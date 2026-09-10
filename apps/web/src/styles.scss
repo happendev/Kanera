@@ -383,9 +383,6 @@ k-list.is-drop-target {
   --accent-pink-hover: #d569a0;
   --accent-graphite: #cbd5e1;
   --accent-graphite-hover: #b4c1d2;
-  // Alpha the focus ring is mixed at. A token because the [data-accent] blocks are family-agnostic
-  // and each family tuned its own ring weight; keep it matching the --ring literal above.
-  --ring-strength: 45%;
 
   --danger: #f87171;
   --danger-bg: rgba(248, 113, 113, 0.1);
@@ -401,7 +398,12 @@ k-list.is-drop-target {
   // already write var(--warning, #a16207), so declare it in all three theme blocks.
   --warning: #fbbf24;
 
-  --ring: rgba(13, 148, 136, 0.45); // matches --accent (#0d9488)
+  // Derived, never a literal: --accent is repointed on this same element by the [data-accent]
+  // blocks, and a var(--accent) inside a custom property resolves against the element's winning
+  // value — so the ring follows the chosen accent with no second declaration to keep in step.
+  // --ring-strength is the per-family alpha; carbon inherits this one.
+  --ring-strength: 45%;
+  --ring: color-mix(in srgb, var(--accent) var(--ring-strength), transparent);
 
   --radius: 6px;
   --radius-sm: 4px;
@@ -681,7 +683,6 @@ k-list.is-drop-target {
   --accent-pink-hover: #9d174d;
   --accent-graphite: #475569;
   --accent-graphite-hover: #334155;
-  --ring-strength: 30%;
 
   --danger: #dc2626;
   --danger-bg: rgba(220, 38, 38, 0.07);
@@ -690,7 +691,8 @@ k-list.is-drop-target {
   --success: #16a34a;
   --warning: #a16207;
 
-  --ring: rgba(15, 118, 110, 0.3);
+  --ring-strength: 30%;
+  --ring: color-mix(in srgb, var(--accent) var(--ring-strength), transparent);
 
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08), 0 1px 1px rgba(15, 23, 42, 0.04);
   --shadow: 0 2px 8px rgba(15, 23, 42, 0.10), 0 1px 3px rgba(15, 23, 42, 0.06);
@@ -810,8 +812,8 @@ k-list.is-drop-target {
   --accent-fg: var(--accent-ink);
   // Must be redeclared wherever --accent is; a single :root definition would stay locked to teal.
   --accent-soft: color-mix(in srgb, var(--accent) 9%, transparent);
-  --ring: rgba(163, 80, 42, 0.32); // matches --accent (#a3502a)
-  --ring-strength: 32%; // keep in step with the literal above
+  // Only the alpha differs from the light base; --ring itself is derived there.
+  --ring-strength: 32%;
 
   // Kanban: warm tray, near-white cards. Pinned rather than tracking --surface-2 for the reason
   // given in the light base — that token sits too close under --surface to hold cards apart.
@@ -887,7 +889,6 @@ k-list.is-drop-target {
   --accent-fg: var(--accent-ink);
   // Must be redeclared wherever --accent is; a single :root definition would stay locked to teal.
   --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
-  --ring: rgba(110, 158, 212, 0.45); // matches --accent (#6e9ed4)
 
   --danger: #f85149;
   --danger-bg: rgba(248, 81, 73, 0.1);
@@ -907,17 +908,16 @@ k-list.is-drop-target {
 // *after* them in source order; that ordering is the entire mechanism by which they win.
 // [data-accent="default"] deliberately has no block: the theme's own --accent stands.
 //
-// --accent-fg, --accent-ink and --accent-soft are deliberately NOT restated. They are declared on
-// this same element by the theme block, and a var(--accent) inside a custom property resolves
-// against the element's *winning* --accent, so they follow this override for free — and --accent-soft
-// keeps each theme's own mix percentage instead of being flattened to one. (The per-board and
+// --accent-fg, --accent-ink, --accent-soft and --ring are deliberately NOT restated. They are
+// declared on this same element by the theme block, and a var(--accent) inside a custom property
+// resolves against the element's *winning* --accent, so they follow this override for free — and
+// each keeps its theme's own mix percentage instead of being flattened to one. (The per-board and
 // per-workspace overrides in board.page.ts / workspace-settings.page.ts must restate them only
 // because those set --accent on a *descendant*, where the :root declarations have already been
 // substituted.)
 @mixin accent-choice($name) {
   --accent: var(--accent-#{$name});
   --accent-hover: var(--accent-#{$name}-hover);
-  --ring: color-mix(in srgb, var(--accent-#{$name}) var(--ring-strength), transparent);
 }
 
 [data-accent="blue"] {

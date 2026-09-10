@@ -43,6 +43,8 @@ export async function authUserPayload(userId: string, requestedClientId?: string
       timezone: users.timezone,
       showCardKeys: users.showCardKeys,
       showScratchpad: users.showScratchpad,
+      theme: users.theme,
+      accent: users.accent,
     })
     .from(users)
     .where(eq(users.id, userId))
@@ -63,6 +65,8 @@ export async function authUserPayload(userId: string, requestedClientId?: string
     timezone: identity.timezone,
     showCardKeys: identity.showCardKeys,
     showScratchpad: identity.showScratchpad,
+    theme: identity.theme,
+    accent: identity.accent,
     orgName: active.name,
     logoUrl: active.logoUrl,
     deploymentMode: env.KANERA_DEPLOYMENT_MODE,

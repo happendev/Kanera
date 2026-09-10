@@ -41,6 +41,7 @@ import { ANALYTICS_EVENT_VERSION, productAnalytics } from "../lib/product-analyt
 import { captureWorkspaceMemberJoined } from "../lib/analytics-milestones.js";
 import { isClientAdminRole, resolveActiveOrganisation, resolveActiveOrganisationContext, type ActiveOrganisation } from "../lib/client-membership.js";
 import { disconnectSupportSessionSockets, disconnectUserRealtimeSockets } from "../realtime/io.js";
+import { emitToUser } from "../realtime/emit.js";
 import { authUserPayload as meResponseFor, issueUserSession as issueSession, REFRESH_COOKIE, refreshCookieOptions } from "./session.js";
 
 const ALLOWED_AVATAR_MIME = new Set(["image/png", "image/jpeg", "image/webp"]);
@@ -995,13 +996,21 @@ export async function authRoutes(app: FastifyInstance) {
     if (body.timezone !== undefined) updates.timezone = normalizeTimezone(body.timezone);
     if (body.showCardKeys !== undefined) updates.showCardKeys = body.showCardKeys;
     if (body.showScratchpad !== undefined) updates.showScratchpad = body.showScratchpad;
+    if (body.theme !== undefined) updates.theme = body.theme;
+    if (body.accent !== undefined) updates.accent = body.accent;
     if (Object.keys(updates).length > 0) {
       await db
         .update(users)
         .set({ ...updates, updatedAt: new Date() })
         .where(eq(users.id, req.auth.sub));
     }
-    return meResponseFor(req.auth.sub, req.auth.cid);
+    const me = await meResponseFor(req.auth.sub, req.auth.cid);
+    // Appearance is account-scoped, so the user's other devices have to follow the change rather
+    // than wait for their next session load. User-scoped on purpose — see the event contract.
+    if (body.theme !== undefined || body.accent !== undefined) {
+      emitToUser(req.auth.sub, "user:appearance:updated", { theme: me.theme, accent: me.accent });
+    }
+    return me;
   });
 
   // Step 1 of a verified email change: email a code to the NEW address so we confirm the

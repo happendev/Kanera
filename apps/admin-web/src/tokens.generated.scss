@@ -116,9 +116,6 @@
   --accent-pink-hover: #d569a0;
   --accent-graphite: #cbd5e1;
   --accent-graphite-hover: #b4c1d2;
-  // Alpha the focus ring is mixed at. A token because the [data-accent] blocks are family-agnostic
-  // and each family tuned its own ring weight; keep it matching the --ring literal above.
-  --ring-strength: 45%;
 
   --danger: #f87171;
   --danger-bg: rgba(248, 113, 113, 0.1);
@@ -134,7 +131,12 @@
   // already write var(--warning, #a16207), so declare it in all three theme blocks.
   --warning: #fbbf24;
 
-  --ring: rgba(13, 148, 136, 0.45); // matches --accent (#0d9488)
+  // Derived, never a literal: --accent is repointed on this same element by the [data-accent]
+  // blocks, and a var(--accent) inside a custom property resolves against the element's winning
+  // value — so the ring follows the chosen accent with no second declaration to keep in step.
+  // --ring-strength is the per-family alpha; carbon inherits this one.
+  --ring-strength: 45%;
+  --ring: color-mix(in srgb, var(--accent) var(--ring-strength), transparent);
 
   --radius: 6px;
   --radius-sm: 4px;

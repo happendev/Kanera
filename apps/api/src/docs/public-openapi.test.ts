@@ -69,7 +69,7 @@ const ENTITIES: { name: string; table: unknown; synthetic?: string[]; omitted?: 
     // Credentials, per-user UI preferences, and soft-deletion bookkeeping are never public.
     omitted: [
       "activeClientId", "emailVerifiedAt", "passwordHash", "timezone", "showCardKeys",
-      "showScratchpad", "lastOnlineAt", "deletedAt", "needsOrganisationOnLoginAt",
+      "showScratchpad", "theme", "accent", "lastOnlineAt", "deletedAt", "needsOrganisationOnLoginAt",
     ],
   },
   {

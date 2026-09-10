@@ -1,3 +1,4 @@
+import type { Accent, Theme } from "../appearance.js";
 import type { BoardMirrorRow } from "../dto/board-mirrors.js";
 import type { WorkPriorityQueueSnapshot } from "../dto/card-priorities.js";
 import type { CardAttachmentRow } from "../dto/card-attachments.js";
@@ -761,6 +762,17 @@ export interface ServerToClientEvents {
   }) => void;
   "scratchpadNote:deleted": (payload: { clientId: string; noteId: string }) => void;
 
+  /**
+   * Appearance is an account preference, not a device one, so a change on one device has to reach
+   * the user's other sessions. Emitted with `emitToUser` for the same reason as the scratchpad
+   * events above: it is personal, and a board/workspace room would push it to teammates and to the
+   * org's webhook subscribers. No organisation id, unlike the scratchpad payloads — appearance
+   * belongs to the identity, so it applies whichever organisation a session is currently viewing.
+   * Carries the resulting pair rather than the field that changed, so a session that missed an
+   * earlier event still converges.
+   */
+  "user:appearance:updated": (payload: { theme: Theme | null; accent: Accent | null }) => void;
+
   "notification:created": (payload: { notification: NotificationRow }) => void;
   "notification:updated": (payload: { notification: NotificationRow }) => void;
   "notification:deleted": (payload: { notificationIds: string[] }) => void;
@@ -899,6 +911,7 @@ export const SERVER_EVENTS = {
   CLIENT_UPDATED: "client:updated",
   CLIENT_ENTITLEMENTS_CHANGED: "client:entitlements:changed",
   USER_PROFILE_UPDATED: "user:profile:updated",
+  USER_APPEARANCE_UPDATED: "user:appearance:updated",
   WORKSPACE_UPDATED: "workspace:updated",
   WORKSPACE_DELETED: "workspace:deleted",
   WORKSPACE_MEMBER_ADDED: "workspace:member:added",
