@@ -39,7 +39,9 @@ import { cardAttachmentRoutes } from "./modules/cards/attachments.routes.js";
 import { cardRoutes } from "./modules/cards/routes.js";
 import { commentRoutes } from "./modules/comments/routes.js";
 import { customFieldRoutes } from "./modules/custom-fields/routes.js";
+import { agentRunRoutes } from "./modules/agent-runs/routes.js";
 import { externalLinkRoutes } from "./modules/external-links/routes.js";
+import { webhookEndpointRoutes } from "./modules/integrations/webhook-endpoint.routes.js";
 import { listRoutes } from "./modules/lists/routes.js";
 import { mediaRoutes } from "./modules/media/routes.js";
 import { noteRoutes } from "./modules/notes/routes.js";
@@ -328,6 +330,9 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
     await api.register((instance) => cardAttachmentRoutes(instance, { exposeCoverMetadata: false }));
     await api.register(customFieldRoutes);
     await api.register(externalLinkRoutes);
+    // Agent runs are the "someone is working on this now" signal for AI agents; the same handlers
+    // serve the web app so activity, realtime, and access checks stay identical.
+    await api.register(agentRunRoutes);
     await api.register(cardLabelRoutes);
     await api.register(commentRoutes);
     await api.register(activityRoutes);
@@ -335,6 +340,10 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
     // the same handlers keeps validation, audit activity, realtime outbox writes, and plan limits
     // identical for MCP/public-API changes and first-party UI changes.
     await api.register(automationRoutes);
+    // Webhook endpoint CRUD: workspace admins manage every endpoint; a write-capable non-admin
+    // credential (workspace key, personal key, or OAuth agent grant) manages endpoints scoped to its
+    // own connection. Delivery itself stays on the worker's webhook pipeline.
+    await api.register(webhookEndpointRoutes);
     await api.register(agentWorkRoutes);
     await api.register(agentWorkQueryRoutes);
   }, { prefix });

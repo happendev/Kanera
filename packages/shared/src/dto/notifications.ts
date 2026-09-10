@@ -146,6 +146,9 @@ export const listNotificationsQuery = z.object({
   cursor: z.string().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(30),
   includeRead: z.coerce.boolean().default(false),
+  // The drawer's Agent tab: only notifications whose activity was performed by an AI agent acting
+  // for someone. Combines with includeRead so the tab can show the agent's read history too.
+  agentOnly: z.coerce.boolean().default(false),
   boardId: z.uuid().optional(),
   actorId: z.uuid().optional(),
   q: z.string().trim().min(1).max(200).optional(),
@@ -230,4 +233,10 @@ export interface WatcherUser {
   userId: string;
   displayName: string;
   avatarUrl: string | null;
+}
+
+/** Drives the Agent tab in the notifications drawer: hidden entirely while `total` is 0. */
+export interface NotificationAgentCounts {
+  total: number;
+  unread: number;
 }

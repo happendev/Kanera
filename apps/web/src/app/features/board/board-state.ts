@@ -1,6 +1,7 @@
 import { Injectable, computed, inject, signal } from "@angular/core";
 import type {
   CardAttachmentRow,
+  WireAgentRun,
   WireBoardMemberUser,
   WireCard,
   WireCardChecklist,
@@ -33,6 +34,8 @@ const EMPTY_MEMBERS: WireBoardMemberUser[] = [];
 const EMPTY_IDS: string[] = [];
 const EMPTY_ATTACHMENTS: CardAttachmentRow[] = [];
 const EMPTY_CHECKLISTS: WireCardChecklist[] = [];
+const EMPTY_AGENT_RUNS: WireAgentRun[] = [];
+const LIVE_AGENT_RUN_STATUSES = new Set<WireAgentRun["status"]>(["running", "blocked"]);
 const EMPTY_FIELD_VALUES = new Map<string, CardCustomFieldValue>();
 
 /**
@@ -103,6 +106,10 @@ export class BoardState {
   readonly cardAssignees = signal<CardAssignee[]>([]);
   readonly cardAttachments = signal<CardAttachmentRow[]>([]);
   readonly commentCounts = signal<Map<string, number>>(new Map());
+  // Agent runs by run id. Seeded with the board's live runs at open (a separate request, so boards
+  // without agents pay nothing) and with a card's full history when its detail opens; realtime
+  // agentRun:* events upsert. Ended runs stay so a just-finished run does not vanish from detail.
+  readonly agentRuns = signal<Map<string, WireAgentRun>>(new Map());
   readonly viewerRole = signal<BoardRole | null>(null);
   readonly viewerIsWorkspaceAdmin = signal(false);
   readonly viewerAssignedItemsOnly = signal(false);
@@ -389,6 +396,67 @@ export class BoardState {
     return this.attachmentsByCard().get(cardId) ?? EMPTY_ATTACHMENTS;
   }
 
+  private readonly agentRunsByCard = computed(() => {
+    const map = new Map<string, WireAgentRun[]>();
+    for (const run of this.agentRuns().values()) {
+      const runs = map.get(run.cardId);
+      if (runs) runs.push(run);
+      else map.set(run.cardId, [run]);
+    }
+    for (const runs of map.values()) runs.sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
+    return map;
+  });
+
+  /** Every run known for the card, newest first. */
+  agentRunsForCard(cardId: string): WireAgentRun[] {
+    return this.agentRunsByCard().get(cardId) ?? EMPTY_AGENT_RUNS;
+  }
+
+  /** Runs currently in flight: these drive the "agent working" chip on the card tile. */
+  liveAgentRunsForCard(cardId: string): WireAgentRun[] {
+    const runs = this.agentRunsForCard(cardId);
+    return runs.length === 0 ? runs : runs.filter((run) => LIVE_AGENT_RUN_STATUSES.has(run.status));
+  }
+
+  upsertAgentRun(run: WireAgentRun) {
+    this.agentRuns.update((runs) => {
+      const existing = runs.get(run.id);
+      // Events can arrive out of order across reconnects; never let an older snapshot win.
+      if (existing && String(existing.updatedAt) > String(run.updatedAt)) return runs;
+      const next = new Map(runs);
+      next.set(run.id, run);
+      return next;
+    });
+  }
+
+  mergeAgentRuns(incoming: WireAgentRun[]) {
+    if (incoming.length === 0) return;
+    this.agentRuns.update((runs) => {
+      const next = new Map(runs);
+      for (const run of incoming) {
+        const existing = next.get(run.id);
+        if (!existing || String(existing.updatedAt) <= String(run.updatedAt)) next.set(run.id, run);
+      }
+      return next;
+    });
+  }
+
+  /**
+   * Board-open seed: the server's live-run list is authoritative, so any run we still hold as live
+   * but the server no longer does (ended while we were offline) is dropped rather than left spinning.
+   */
+  setBoardLiveAgentRuns(live: WireAgentRun[]) {
+    const liveIds = new Set(live.map((run) => run.id));
+    this.agentRuns.update((runs) => {
+      const next = new Map<string, WireAgentRun>();
+      for (const run of runs.values()) {
+        if (!LIVE_AGENT_RUN_STATUSES.has(run.status) || liveIds.has(run.id)) next.set(run.id, run);
+      }
+      for (const run of live) next.set(run.id, run);
+      return next;
+    });
+  }
+
   checklistsForCard(cardId: string): WireCardChecklist[] {
     return this.detailedCards().get(cardId)?.checklists ?? EMPTY_CHECKLISTS;
   }
@@ -647,6 +715,7 @@ export class BoardState {
     this.cardAssignees.set([]);
     this.cardAttachments.set([]);
     this.commentCounts.set(new Map());
+    this.agentRuns.set(new Map());
     this.expandedChecklistCardIds.set(new Set());
     this.resetAppliedEventIds();
   }

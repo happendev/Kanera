@@ -19,6 +19,19 @@ export interface Automation {
   actions: unknown[];
 }
 
+/** One retained run of an automation, newest first from {@link Automations.executions}. */
+export interface AutomationExecution {
+  id: Uuid;
+  outcome: "effectful" | "noop" | "failed";
+  /** The card the run acted on; null once the card is deleted or for runs older than this field. */
+  cardId: Uuid | null;
+  /** The action that failed, or the rule's first action for successful and no-op runs. */
+  actionType: string | null;
+  /** Truncated failure message; null unless outcome is `failed`. */
+  error: string | null;
+  ranAt: string;
+}
+
 export class Workspaces {
   constructor(private readonly ctx: ResourceContext) {}
 
@@ -88,7 +101,7 @@ export class Automations {
   executions(
     automationId: Uuid,
     options: { cursor?: string; limit?: number } & CallOptions = {},
-  ): Promise<{ items: unknown[]; nextCursor: string | null }> {
+  ): Promise<{ items: AutomationExecution[]; nextCursor: string | null }> {
     const { cursor, limit, ...call } = options;
     return this.ctx.http.get(`/api/v1/automations/${automationId}/executions`, { ...call, query: { cursor, limit } });
   }

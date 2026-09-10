@@ -305,6 +305,10 @@ async function authenticateMcpToken(raw: string, resource: string): Promise<Auth
     // rotate every 15 min, so keying on row.id would hand a fresh rate-limit bucket to any agent that
     // refreshes, defeating the per-key limit. grantId/familyId are stable across the whole connection.
     apiKeyId: `oauth_grant_${row.token.grantId ?? row.token.familyId}`,
+    // Interactive grants are AI agents acting for the user. Carry the grant + client name so the
+    // auth plugin records actorKind "agent" (see plugin.ts); tokens minted before grants were bound
+    // have no grantId and fall back to plain owner attribution.
+    ...(row.token.grantId ? { agentGrantId: row.token.grantId, agentName: row.client.name } : {}),
     // Interactive MCP OAuth is always resource-write-capable. The client decides whether a write
     // tool may run; Kanera still evaluates the represented user's live role on every resource.
     // Keeping this unconditional also upgrades access tokens minted before this policy changed.

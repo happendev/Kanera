@@ -1,6 +1,6 @@
 import { dto } from "@kanera/shared";
 import { clients, customFields, oauthClients, oauthTokens, users, webhookDeliveries, webhookEndpoints, workspaceApiKeys, workspaces, type ChatDestinationProvider } from "@kanera/shared/schema";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, inArray, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { randomBytes } from "node:crypto";
 import { db } from "../../db.js";
@@ -17,6 +17,7 @@ import { chatDestinationConnectionSummary, encryptChatDestinationConfig, testCha
 import { newServiceClientId, newServiceClientSecret } from "../../oauth/routes.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
 import { capturePremiumFeatureUsed } from "../../lib/product-analytics.js";
+import { webhookEndpointRoutes } from "./webhook-endpoint.routes.js";
 
 const API_KEY_ENV_TOKEN = {
   production: "live",
@@ -82,26 +83,6 @@ function shapePersonalApiKey(row: typeof workspaceApiKeys.$inferSelect & { orgNa
     scope: row.scope,
     lastUsedAt: row.lastUsedAt,
     revokedAt: row.revokedAt,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  };
-}
-
-function shapeEndpoint(row: WebhookEndpointWithStats) {
-  const lastSuccessfulAt = row.lastSuccessfulAt
-    ? row.lastSuccessfulAt instanceof Date
-      ? row.lastSuccessfulAt
-      : new Date(row.lastSuccessfulAt)
-    : null;
-  const safeLastSuccessfulAt = lastSuccessfulAt && !Number.isNaN(lastSuccessfulAt.getTime()) ? lastSuccessfulAt : null;
-  return {
-    id: row.id,
-    workspaceId: row.workspaceId,
-    name: row.name,
-    url: row.url,
-    eventTypes: row.eventTypes,
-    enabled: row.enabled,
-    lastSuccessfulAt: safeLastSuccessfulAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -455,180 +436,16 @@ export async function integrationRoutes(app: FastifyInstance) {
     return reply.status(204).send();
   });
 
-  app.get("/workspaces/:id/webhooks", async (req) => {
-    const { id: workspaceId } = req.params as { id: string };
-    await assertWorkspaceAccess(req.auth, workspaceId, "admin");
-    const rows = await db
-      .select({
-        id: webhookEndpoints.id,
-        workspaceId: webhookEndpoints.workspaceId,
-        createdById: webhookEndpoints.createdById,
-        provider: webhookEndpoints.provider,
-        name: webhookEndpoints.name,
-        url: webhookEndpoints.url,
-        encryptedSecret: webhookEndpoints.encryptedSecret,
-        encryptedConfig: webhookEndpoints.encryptedConfig,
-        priorityFieldId: webhookEndpoints.priorityFieldId,
-        eventTypes: webhookEndpoints.eventTypes,
-        enabled: webhookEndpoints.enabled,
-        createdAt: webhookEndpoints.createdAt,
-        updatedAt: webhookEndpoints.updatedAt,
-        lastSuccessfulAt: sql<Date | null>`max(${webhookDeliveries.deliveredAt})`,
-      })
-      .from(webhookEndpoints)
-      .leftJoin(webhookDeliveries, and(
-        eq(webhookDeliveries.endpointId, webhookEndpoints.id),
-        eq(webhookDeliveries.status, "success"),
-      ))
-      .where(and(eq(webhookEndpoints.workspaceId, workspaceId), eq(webhookEndpoints.provider, "generic")))
-      .groupBy(
-        webhookEndpoints.id,
-        webhookEndpoints.workspaceId,
-        webhookEndpoints.createdById,
-        webhookEndpoints.provider,
-        webhookEndpoints.name,
-        webhookEndpoints.url,
-        webhookEndpoints.encryptedSecret,
-        webhookEndpoints.encryptedConfig,
-        webhookEndpoints.priorityFieldId,
-        webhookEndpoints.eventTypes,
-        webhookEndpoints.enabled,
-        webhookEndpoints.createdAt,
-        webhookEndpoints.updatedAt,
-      )
-      .orderBy(desc(webhookEndpoints.createdAt));
-    return rows.map(shapeEndpoint);
-  });
-
-  app.post("/workspaces/:id/webhooks", async (req, reply) => {
-    const { id: workspaceId } = req.params as { id: string };
-    const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
-    await assertWebhooksAllowed(clientId);
-    const body = dto.createWebhookEndpointBody.parse(req.body);
-    assertWebhookUrlAllowed(body.url);
-    const secret = newWebhookSecret();
-    const [row] = await db
-      .insert(webhookEndpoints)
-      .values({
-        workspaceId,
-        createdById: req.auth.sub,
-        provider: "generic",
-        name: body.name,
-        url: body.url,
-        eventTypes: body.eventTypes,
-        enabled: body.enabled,
-        encryptedSecret: encryptSecret(secret),
-      })
-      .returning();
-    void capturePremiumFeatureUsed({
-      organizationId: clientId,
-      workspaceId,
-      actorId: req.auth.sub,
-      premiumFeature: "integrations",
-      supportSession: req.auth.authKind === "support",
-    });
-    return reply.status(201).send({ ...shapeEndpoint(row!), secret });
-  });
-
-  app.patch("/workspaces/:workspaceId/webhooks/:endpointId", async (req) => {
-    const { workspaceId, endpointId } = req.params as { workspaceId: string; endpointId: string };
-    const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
-    const body = dto.updateWebhookEndpointBody.parse(req.body);
-    if (body.url !== undefined) assertWebhookUrlAllowed(body.url);
-    // Webhooks are a paid-only feature. A downgrade disables existing endpoints; gate the enable
-    // transition so a free org cannot turn a disabled endpoint back on (mirrors the automations gate).
-    if (body.enabled === true) await assertWebhooksAllowed(clientId);
-    const [row] = await db
-      .update(webhookEndpoints)
-      .set({
-        ...(body.name !== undefined && { name: body.name }),
-        ...(body.url !== undefined && { url: body.url }),
-        ...(body.eventTypes !== undefined && { eventTypes: body.eventTypes }),
-        ...(body.enabled !== undefined && { enabled: body.enabled }),
-        updatedAt: new Date(),
-      })
-      .where(and(eq(webhookEndpoints.id, endpointId), eq(webhookEndpoints.workspaceId, workspaceId), eq(webhookEndpoints.provider, "generic")))
-      .returning();
-    if (!row) throw notFound("webhook not found");
-    return shapeEndpoint(row);
-  });
-
-  app.post("/workspaces/:workspaceId/webhooks/:endpointId/secret", async (req) => {
-    const { workspaceId, endpointId } = req.params as { workspaceId: string; endpointId: string };
-    await assertWorkspaceAccess(req.auth, workspaceId, "admin");
-    const secret = newWebhookSecret();
-    const [row] = await db
-      .update(webhookEndpoints)
-      .set({ encryptedSecret: encryptSecret(secret), updatedAt: new Date() })
-      .where(and(eq(webhookEndpoints.id, endpointId), eq(webhookEndpoints.workspaceId, workspaceId), eq(webhookEndpoints.provider, "generic")))
-      .returning();
-    if (!row) throw notFound("webhook not found");
-    return { ...shapeEndpoint(row), secret };
-  });
-
-  app.delete("/workspaces/:workspaceId/webhooks/:endpointId", async (req, reply) => {
-    const { workspaceId, endpointId } = req.params as { workspaceId: string; endpointId: string };
-    await assertWorkspaceAccess(req.auth, workspaceId, "admin");
-    await db.delete(webhookEndpoints).where(and(eq(webhookEndpoints.id, endpointId), eq(webhookEndpoints.workspaceId, workspaceId), eq(webhookEndpoints.provider, "generic")));
-    return reply.status(204).send();
-  });
-
-  app.get("/workspaces/:workspaceId/webhooks/:endpointId/deliveries", async (req) => {
-    const { workspaceId, endpointId } = req.params as { workspaceId: string; endpointId: string };
-    const query = dto.listWebhookDeliveriesQuery.parse(req.query ?? {});
-    await assertWorkspaceAccess(req.auth, workspaceId, "admin");
-    const [endpoint] = await db
-      .select({ id: webhookEndpoints.id })
-      .from(webhookEndpoints)
-      .where(and(eq(webhookEndpoints.id, endpointId), eq(webhookEndpoints.workspaceId, workspaceId), eq(webhookEndpoints.provider, "generic")))
-      .limit(1);
-    if (!endpoint) throw notFound("webhook not found");
-    return db
-      .select()
-      .from(webhookDeliveries)
-      .where(eq(webhookDeliveries.endpointId, endpointId))
-      .orderBy(desc(webhookDeliveries.createdAt))
-      .limit(query.limit);
-  });
-
-  app.post("/workspaces/:workspaceId/webhooks/:endpointId/deliveries/:deliveryId/retry", async (req) => {
-    const { workspaceId, endpointId, deliveryId } = req.params as { workspaceId: string; endpointId: string; deliveryId: string };
-    const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
-    await assertWebhooksAllowed(clientId);
-    const [endpoint] = await db
-      .select()
-      .from(webhookEndpoints)
-      .where(and(eq(webhookEndpoints.id, endpointId), eq(webhookEndpoints.workspaceId, workspaceId), eq(webhookEndpoints.provider, "generic")))
-      .limit(1);
-    if (!endpoint) throw notFound("webhook not found");
-    const [delivery] = await db
-      .select()
-      .from(webhookDeliveries)
-      .where(and(eq(webhookDeliveries.id, deliveryId), eq(webhookDeliveries.endpointId, endpointId)))
-      .limit(1);
-    if (!delivery) throw notFound("delivery not found");
-    if (delivery.status !== "failed") throw badRequest("only failed webhook deliveries can be retried");
-    return deliverWebhookDelivery(delivery, endpoint);
-  });
+  // Generic webhook endpoint CRUD lives in its own module because the public API registers it too
+  // (agents subscribe to events with connection-scoped endpoints); see webhook-endpoint.routes.ts.
+  await app.register(webhookEndpointRoutes);
 
   app.get("/workspaces/:id/chat-destinations", async (req) => {
     const { id: workspaceId } = req.params as { id: string };
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const rows = await db
       .select({
-        id: webhookEndpoints.id,
-        workspaceId: webhookEndpoints.workspaceId,
-        createdById: webhookEndpoints.createdById,
-        provider: webhookEndpoints.provider,
-        name: webhookEndpoints.name,
-        url: webhookEndpoints.url,
-        encryptedSecret: webhookEndpoints.encryptedSecret,
-        encryptedConfig: webhookEndpoints.encryptedConfig,
-        priorityFieldId: webhookEndpoints.priorityFieldId,
-        eventTypes: webhookEndpoints.eventTypes,
-        enabled: webhookEndpoints.enabled,
-        createdAt: webhookEndpoints.createdAt,
-        updatedAt: webhookEndpoints.updatedAt,
+        ...getTableColumns(webhookEndpoints),
         lastSuccessfulAt: sql<Date | null>`max(${webhookDeliveries.deliveredAt})`,
       })
       .from(webhookEndpoints)

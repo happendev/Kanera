@@ -8,7 +8,7 @@ import { PublicAuthClient } from "../../core/auth/public-auth.client";
 import { TurnstileChallenge } from "../../core/auth/turnstile-challenge";
 import { parseAuthResponse } from "../../core/auth/auth-response";
 import { LogoComponent } from "../../shared/logo.component";
-import { ThemeService } from "../../core/theme/theme.service";
+import { ThemeService, type Theme } from "../../core/theme/theme.service";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
 
 interface InviteSummaryResponse {
@@ -144,7 +144,7 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
   private resendTimer: ReturnType<typeof setInterval> | null = null;
   private registrationStartedTracked = false;
 
-  setTheme(theme: "light" | "dark") {
+  setTheme(theme: Theme) {
     this.theme.setTheme(theme);
   }
 

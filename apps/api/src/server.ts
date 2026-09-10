@@ -52,6 +52,7 @@ import { checklistTemplateRoutes } from "./modules/checklist-templates/routes.js
 import { clientUserRoutes } from "./modules/clients/users.js";
 import { commentRoutes } from "./modules/comments/routes.js";
 import { customFieldRoutes } from "./modules/custom-fields/routes.js";
+import { agentRunRoutes } from "./modules/agent-runs/routes.js";
 import { externalLinkRoutes } from "./modules/external-links/routes.js";
 import { githubLinkRoutes } from "./modules/github-links/routes.js";
 import { importRoutes } from "./modules/imports/routes.js";
@@ -304,6 +305,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
   await app.register(checklistTemplateRoutes);
   await app.register(automationRoutes);
   await app.register(externalLinkRoutes);
+  await app.register(agentRunRoutes);
   await app.register(githubLinkRoutes);
   await app.register(cardLabelRoutes);
   await app.register(inviteRoutes);

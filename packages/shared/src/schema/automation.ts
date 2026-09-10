@@ -30,6 +30,10 @@ export const AUTOMATION_ACTION_TYPES = [
   "move_to_top",
   "move_to_bottom",
   "populate_custom_field",
+  // Outbound actions: they leave the card alone and instead tell someone (a comment on the card's
+  // own feed) or something (a workspace webhook endpoint) that the trigger fired.
+  "post_comment",
+  "call_webhook",
 ] as const;
 export type AutomationActionType = (typeof AUTOMATION_ACTION_TYPES)[number];
 
@@ -57,6 +61,13 @@ export type AutomationActionConfig =
         // apply time, not stored here.
         | { kind: "field"; sourceFieldId: string };
     }
+  // post_comment: Markdown with `{{card.title}}`-style placeholders resolved per card at run time
+  // (see AUTOMATION_COMMENT_TEMPLATE_VARIABLES in the automations lib).
+  | { template: string }
+  // call_webhook: a `webhook_endpoint` row in the same workspace. Referencing the endpoint rather than
+  // a raw URL is deliberate: the endpoint already owns the signing secret, the SSRF-checked URL, the
+  // enabled flag, and the delivery log, so an automation never has to duplicate any of that.
+  | { endpointId: string }
   | Record<string, never>;
 
 export const automations = pgTable(
@@ -186,10 +197,20 @@ export const automationRuns = pgTable(
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
     automationId: uuid("automation_id").notNull().references(() => automations.id, { onDelete: "cascade" }),
     outcome: text("outcome", { enum: AUTOMATION_RUN_OUTCOMES }).notNull(),
+    // Which card the run acted on. SET NULL rather than CASCADE so a card's deletion does not
+    // silently erase the automation's run history and skew its counters versus this table.
+    cardId: uuid("card_id").references(() => cards.id, { onDelete: "set null" }),
+    // For failed runs, the action that threw. For effectful/no-op runs, the first action of the
+    // rule so a reader can see what kind of rule ran without joining automation_action. Open text
+    // rather than a CHECK: retired action types must keep reading in historical rows.
+    actionType: text("action_type"),
+    // Truncated failure message; null unless outcome is "failed".
+    error: text("error"),
     ranAt: timestamp("ran_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     check("automation_runs_outcome_ck", valueIn(t.outcome, AUTOMATION_RUN_OUTCOMES)),
+    index("automation_runs_card_id_idx").on(t.cardId).where(sql`${t.cardId} is not null`),
     index("automation_runs_ran_at_idx").on(t.ranAt),
     index("automation_runs_automation_id_ran_at_idx").on(t.automationId, t.ranAt),
   ],

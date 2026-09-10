@@ -62,7 +62,10 @@
   // the per-board override (board.page.ts derives hover as the board color mixed
   // 15% toward black). The bright #14b8a6 was the previous resting value and read
   // too stark.
-  --accent: #0d9488;
+  // Held as its own token so the accent picker's "Default" swatch can still preview the theme's
+  // signature colour while a named accent has taken over --accent. Every theme block declares it.
+  --accent-default: #0d9488;
+  --accent: var(--accent-default);
   --accent-hover: #0f766e;
   // Text on an accent fill. No hue bright enough to read as *text* on this dark canvas can also
   // carry white text at AA (the default teal manages 3.7:1, the workspace blue 2.4:1), whereas dark
@@ -79,6 +82,41 @@
   // stay locked to the default teal on a board with a custom colour.
   --accent-soft: color-mix(in srgb, var(--accent) 8%, transparent);
 
+  // Dark-family accent options, consumed by the [data-accent] blocks near the end of this file.
+  // Carbon inherits these unchanged — same element, and it restates only --accent-default.
+  // Blue, Violet, Pink and Graphite were picked in the same brightness band as carbon's signature
+  // blue (~7-8:1 against the page) rather than at full brightness: the accent is a large button
+  // fill as often as it is link text, and a brighter hue turns a primary button into a glowing
+  // slab. Those four clear 4.5:1 both as a fill carrying --accent-ink and as text on --bg,
+  // --surface and --surface-2 in both dark themes; Graphite sits well clear of --text-muted
+  // (#a3b5cc) so a neutral accent still reads as an accent, and none lands on --danger,
+  // --success or --warning.
+  //
+  // Blue and Green occupy one slot in the picker, never both at once — carbon's own accent is a
+  // blue, so it offers Green and every other theme offers Blue (THEME_COOL_ACCENT in
+  // theme.service.ts). Both tones are still declared for both families: the slot swaps per theme,
+  // so either value has to be ready under any of them.
+  //
+  // Green is Kanera's signature teal — deliberately the same value Dark shows as its Default, so
+  // the product has one green identity rather than two. Carbon is the only theme that offers it
+  // today, as the counterpart to its blue default; a dark-family theme whose own default is this
+  // teal would need its own value here, or Green and Default would be the same swatch.
+  //
+  // This is the one option below AA, accepted as a deliberate product call: on carbon it reads
+  // 5.05:1 as a fill and as text on the page, but 4.17:1 as text on a card and 3.46:1 on the hover
+  // fill. It is exactly the shortfall the shipped dark default already carries — the two are the
+  // same colour — so fixing one means fixing both.
+  --accent-blue: #6f9df0;
+  --accent-blue-hover: #5d89da;
+  --accent-green: #0d9488;
+  --accent-green-hover: #0f766e;
+  --accent-violet: #a58af2;
+  --accent-violet-hover: #9174e0;
+  --accent-pink: #e87fb4;
+  --accent-pink-hover: #d569a0;
+  --accent-graphite: #cbd5e1;
+  --accent-graphite-hover: #b4c1d2;
+
   --danger: #f87171;
   --danger-bg: rgba(248, 113, 113, 0.1);
   --danger-border: rgba(248, 113, 113, 0.2);
@@ -93,7 +131,12 @@
   // already write var(--warning, #a16207), so declare it in all three theme blocks.
   --warning: #fbbf24;
 
-  --ring: rgba(13, 148, 136, 0.45); // matches --accent (#0d9488)
+  // Derived, never a literal: --accent is repointed on this same element by the [data-accent]
+  // blocks, and a var(--accent) inside a custom property resolves against the element's winning
+  // value — so the ring follows the chosen accent with no second declaration to keep in step.
+  // --ring-strength is the per-family alpha; carbon inherits this one.
+  --ring-strength: 45%;
+  --ring: color-mix(in srgb, var(--accent) var(--ring-strength), transparent);
 
   --radius: 6px;
   --radius-sm: 4px;
@@ -294,235 +337,10 @@
   // explicit user/JS choice. That cascade collision was the "toggle does nothing on a
   // light-OS device" bug: picking Dark set [data-theme="dark"] but this :root rule won.
   :root:not([data-theme]) {
-    color-scheme: light;
-    --bg: #e8ecf2;
-    // Gradient tile — light mode
-    --tile-scrim: rgba(255, 255, 255, 0.62);
-    --tile-scrim-hover: rgba(255, 255, 255, 0.52);
-    --board-scrim: linear-gradient(to bottom, rgba(255, 255, 255, 0.72) 0, rgba(255, 255, 255, 0.5) 80px, rgba(255, 255, 255, 0.4) 100%);
-    --board-scrim-preview: linear-gradient(to bottom, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.4));
-    --tile-gradient-fg: #0f172a;
-    --tile-gradient-fg-muted: rgba(15, 23, 42, 0.65);
-    --tile-gradient-btn: rgba(15, 23, 42, 0.55);
-    --tile-gradient-btn-hover-bg: rgba(0, 0, 0, 0.08);
-    // Deliberately off pure white: #ffffff is the one value with no headroom left, so a highlight,
-    // a white image edge or a nested panel has nothing to separate against. Keep every light
-    // surface a shade below it. The ramp recesses (each step darker) — the reverse of dark mode.
-    --surface: #fcfdff;
-    --surface-2: #f5f7fb;
-    --surface-3: #eef1f6;
-    --surface-hover: #eaeff6;
-    --surface-subtle: rgba(0, 0, 0, 0.03);
-    // Floating chrome — see the dark block. Light mode recesses instead of lifting (no surface may
-    // reach pure white, and #fcfdff has no usable headroom below it anyway), so the step is small
-    // and deliberately stays above --surface-2: menu row hover fills with --surface-2, and an
-    // overlay darker than its own hover would read inverted. Light separation therefore still
-    // leans on the border and shadow; this only stops a menu from matching what it covers exactly.
-    --surface-overlay: #f9fbfd;
-    --overlay-border: var(--border);
-    --overlay-separator: var(--border);
-
-    --border: #dde2ea;
-    --border-strong: #c8d0dc;
-
-    --text: #0f172a;
-    --text-muted: #52647a;
-    --muted: #52647a;
-
-    --nav-text-strong: #334155;
-    --nav-active-bg: #dfe6ef;
-    --inset-bg: var(--surface-2);
-    --inset-border: transparent;
-    --input-bg: var(--surface);
-    --select-bg: var(--surface);
-
-    // teal-700 rather than the dark theme's teal-600: white text on #0d9488 was 3.7:1, and on a
-    // light page the accent is also link/label text, where the deeper tone reads better anyway.
-    --accent: #0f766e;
-    --accent-hover: #115e59;
-    @include light-accent-palette;
-    --accent-fg: var(--accent-ink);
-    // See the dark block: must be redeclared alongside every --accent declaration.
-    --accent-soft: color-mix(in srgb, var(--accent) 8%, transparent);
-
-    --danger: #dc2626;
-    --danger-bg: rgba(220, 38, 38, 0.07);
-    --danger-border: rgba(220, 38, 38, 0.2);
-
-    --success: #16a34a;
-    --warning: #a16207;
-
-    --ring: rgba(15, 118, 110, 0.3);
-
-    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08), 0 1px 1px rgba(15, 23, 42, 0.04);
-    --shadow: 0 2px 8px rgba(15, 23, 42, 0.10), 0 1px 3px rgba(15, 23, 42, 0.06);
-    --shadow-lg: 0 10px 30px -8px rgba(15, 23, 42, 0.18);
-    --depth-edge: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 0 0 1px rgba(0, 0, 0, 0.04);
-
-    // Flip the kanban hierarchy: gray "tray" lists, near-white "elevated" cards.
-    // --list-bg is pinned rather than tracking --surface-2: that token is also the inset/chrome
-    // fill and sits close under --surface, which is not enough separation for a tray holding cards.
-    --list-bg: #eff3f9;
-    --list-bg-strong: #dde4ed;
-    --card-bg: var(--surface);
-    --card-bg-hover: #f4f7fc;
-
-    // Soft off-white tint for chrome (toolbars, notes doc, card-detail body)
-    // instead of the heavier page gray.
-    --app-tint: #f4f6f9;
-    // Muted surfaces recede toward the page gray for visible contrast vs white.
-    --page-bg: var(--bg);
-
-    --label-chip-ink-base: #0f172a;
-    --label-chip-ink-weight: 50%;
-    --label-chip-bg-weight: 18%;
-    --label-chip-hover-bg-weight: 23%;
-
-    // Label palette is shared with dark mode: no overrides here, so both themes
-    // inherit the single --color-* (and --color-*-cf) palette from the base :root
-    // block above. Label components derive their theme-aware foreground and wash
-    // from these same identity colours instead of replacing the user's selection.
-
-    --avatar-color-0-bg: #dff8f4;
-    --avatar-color-0-fg: #0f766e;
-    --avatar-color-1-bg: #e3efff;
-    --avatar-color-1-fg: #1d4ed8;
-    --avatar-color-2-bg: #eee8ff;
-    --avatar-color-2-fg: #6d28d9;
-    --avatar-color-3-bg: #fde7f2;
-    --avatar-color-3-fg: #be185d;
-    --avatar-color-4-bg: #ffeddc;
-    --avatar-color-4-fg: #c2410c;
-    --avatar-color-5-bg: #fdf4cf;
-    --avatar-color-5-fg: #a16207;
-    --avatar-color-6-bg: #e2f7e8;
-    --avatar-color-6-fg: #15803d;
-    --avatar-color-7-bg: #dff5fb;
-    --avatar-color-7-fg: #0e7490;
-    --avatar-color-8-bg: #e8ebff;
-    --avatar-color-8-fg: #4338ca;
-    --avatar-color-9-bg: #fee5e9;
-    --avatar-color-9-fg: #be123c;
-    --avatar-color-10-bg: #edf8d7;
-    --avatar-color-10-fg: #4d7c0f;
-    --avatar-color-11-bg: #e9eef5;
-    --avatar-color-11-fg: #475569;
-
-    --scrollbar-thumb: rgba(0, 0, 0, 0.15);
-    --scrollbar-thumb-hover: rgba(0, 0, 0, 0.3);
-    --scrollbar-track: transparent;
+    @include light-base-tokens;
   }
 }
 
 [data-theme="light"] {
-  color-scheme: light;
-  --bg: #e8ecf2;
-  // Gradient tile — light mode
-  --tile-scrim: rgba(255, 255, 255, 0.62);
-  --tile-scrim-hover: rgba(255, 255, 255, 0.52);
-  --board-scrim: linear-gradient(to bottom, rgba(255, 255, 255, 0.72) 0, rgba(255, 255, 255, 0.5) 80px, rgba(255, 255, 255, 0.4) 100%);
-  --board-scrim-preview: linear-gradient(to bottom, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.4));
-  --tile-gradient-fg: #0f172a;
-  --tile-gradient-fg-muted: rgba(15, 23, 42, 0.65);
-  --tile-gradient-btn: rgba(15, 23, 42, 0.55);
-  --tile-gradient-btn-hover-bg: rgba(0, 0, 0, 0.08);
-  // Keep in sync with the @media light block above; see the rationale comment there.
-  --surface: #fcfdff;
-  --surface-2: #f5f7fb;
-  --surface-3: #eef1f6;
-  --surface-hover: #eaeff6;
-  --surface-subtle: rgba(0, 0, 0, 0.03);
-  // Keep in sync with the @media light block above.
-  --surface-overlay: #f9fbfd;
-  --overlay-border: var(--border);
-  --overlay-separator: var(--border);
-
-  --border: #dde2ea;
-  --border-strong: #c8d0dc;
-
-  --text: #0f172a;
-  --text-muted: #52647a;
-  --muted: #52647a;
-
-  --nav-text-strong: #334155;
-  --nav-active-bg: #dfe6ef;
-  --inset-bg: var(--surface-2);
-  --inset-border: transparent;
-  --input-bg: var(--surface);
-  --select-bg: var(--surface);
-
-  // Keep in sync with the @media light block above.
-  --accent: #0f766e;
-  --accent-hover: #115e59;
-  @include light-accent-palette;
-  --accent-fg: var(--accent-ink);
-  // See the dark block: must be redeclared alongside every --accent declaration.
-  --accent-soft: color-mix(in srgb, var(--accent) 8%, transparent);
-
-  --danger: #dc2626;
-  --danger-bg: rgba(220, 38, 38, 0.07);
-  --danger-border: rgba(220, 38, 38, 0.2);
-
-  --success: #16a34a;
-  --warning: #a16207;
-
-  --ring: rgba(15, 118, 110, 0.3);
-
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08), 0 1px 1px rgba(15, 23, 42, 0.04);
-  --shadow: 0 2px 8px rgba(15, 23, 42, 0.10), 0 1px 3px rgba(15, 23, 42, 0.06);
-  --shadow-lg: 0 10px 30px -8px rgba(15, 23, 42, 0.18);
-  --depth-edge: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 0 0 1px rgba(0, 0, 0, 0.04);
-
-  // Flip the kanban hierarchy: gray "tray" lists, near-white "elevated" cards.
-  // --list-bg is pinned rather than tracking --surface-2: that token is also the inset/chrome
-  // fill and sits close under --surface, which is not enough separation for a tray holding cards.
-  --list-bg: #eff3f9;
-  --list-bg-strong: #dde4ed;
-  --card-bg: var(--surface);
-  --card-bg-hover: #f4f7fc;
-
-  // Soft off-white tint for chrome (toolbars, notes doc, card-detail body)
-  // instead of the heavier page gray.
-  --app-tint: #f4f6f9;
-  // Muted surfaces recede toward the page gray for visible contrast vs white.
-  --page-bg: var(--bg);
-
-  --label-chip-ink-base: #0f172a;
-  --label-chip-ink-weight: 50%;
-  --label-chip-bg-weight: 18%;
-  --label-chip-hover-bg-weight: 23%;
-
-  // Label palette is shared with dark mode: no overrides here, so both themes
-  // inherit the single --color-* (and --color-*-cf) palette from the base :root
-  // block above. Label components derive their theme-aware foreground and wash
-  // from these same identity colours instead of replacing the user's selection.
-
-  --avatar-color-0-bg: #dff8f4;
-  --avatar-color-0-fg: #0f766e;
-  --avatar-color-1-bg: #e3efff;
-  --avatar-color-1-fg: #1d4ed8;
-  --avatar-color-2-bg: #eee8ff;
-  --avatar-color-2-fg: #6d28d9;
-  --avatar-color-3-bg: #fde7f2;
-  --avatar-color-3-fg: #be185d;
-  --avatar-color-4-bg: #ffeddc;
-  --avatar-color-4-fg: #c2410c;
-  --avatar-color-5-bg: #fdf4cf;
-  --avatar-color-5-fg: #a16207;
-  --avatar-color-6-bg: #e2f7e8;
-  --avatar-color-6-fg: #15803d;
-  --avatar-color-7-bg: #dff5fb;
-  --avatar-color-7-fg: #0e7490;
-  --avatar-color-8-bg: #e8ebff;
-  --avatar-color-8-fg: #4338ca;
-  --avatar-color-9-bg: #fee5e9;
-  --avatar-color-9-fg: #be123c;
-  --avatar-color-10-bg: #edf8d7;
-  --avatar-color-10-fg: #4d7c0f;
-  --avatar-color-11-bg: #e9eef5;
-  --avatar-color-11-fg: #475569;
-
-  --scrollbar-thumb: rgba(0, 0, 0, 0.15);
-  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.3);
-  --scrollbar-track: transparent;
+  @include light-base-tokens;
 }

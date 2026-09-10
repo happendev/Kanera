@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
-import { boolean, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { ACCENTS, THEMES } from "../appearance.js";
 import { citext } from "./_citext.js";
+import { valueIn } from "./_value-check.js";
 import { clients } from "./client.js";
 
 export const users = pgTable(
@@ -30,6 +32,13 @@ export const users = pgTable(
     // The scratchpad is optional personal chrome. Keep this account-scoped so hiding it follows the
     // person across devices, while the default preserves the existing experience for every user.
     showScratchpad: boolean("show_scratchpad").notNull().default(true),
+    // Appearance is account-scoped so it follows the person across devices; the browser keeps a copy
+    // in localStorage only so index.html can paint the right theme before Angular boots. Null means
+    // "never chosen on this account": the device cache or the OS preference stands, and nothing is
+    // written until the user actually picks one — so shipping this does not restyle existing users,
+    // and signing in on a fresh machine does not overwrite what was chosen elsewhere.
+    theme: text("theme", { enum: THEMES }),
+    accent: text("accent", { enum: ACCENTS }),
     lastOnlineAt: timestamp("last_online_at", { withTimezone: true }),
     // Set by a platform admin to soft-delete the user. Hides them from tenant listings and blocks auth;
     // the row is retained so historical author/audit references stay valid. Recoverable until purged.
@@ -44,6 +53,9 @@ export const users = pgTable(
   (t) => [
     uniqueIndex("users_email_uq").on(t.email),
     index("users_client_id_created_at_idx").on(t.clientId, t.createdAt),
+    // NULL passes a CHECK, which is what keeps "not chosen" representable alongside the closed set.
+    check("users_theme_ck", valueIn(t.theme, THEMES)),
+    check("users_accent_ck", valueIn(t.accent, ACCENTS)),
   ],
 );
 

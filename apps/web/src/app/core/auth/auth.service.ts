@@ -1,5 +1,6 @@
 import { Injectable, signal, computed } from "@angular/core";
 import type { Entitlements } from "@kanera/shared/dto";
+import type { Accent, Theme } from "@kanera/shared/appearance";
 import { environment } from "../../../environments/environment";
 import { STORAGE_KEYS } from "../browser/browser-contracts";
 import { viewerTimeZone } from "../../shared/day-key.util";
@@ -25,6 +26,10 @@ export interface AuthUser {
   timezone: string;
   showCardKeys?: boolean;
   showScratchpad?: boolean;
+  // Account-scoped appearance. Null/undefined means never chosen here, in which case the device
+  // cache or the OS preference stands — see ThemeService.hydrate().
+  theme?: Theme | null;
+  accent?: Accent | null;
   storageUsage?: {
     usedBytes: number;
     quotaBytes: number | null;

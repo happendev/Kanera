@@ -313,7 +313,7 @@ export interface CardDetail {
   linkedNotes: { id: Uuid; title: string }[];
 }
 
-export type CommentAuthorKind = "user" | "apiKey" | "system";
+export type CommentAuthorKind = "user" | "apiKey" | "agent" | "system";
 
 export interface Comment {
   id: Uuid;
@@ -322,9 +322,38 @@ export interface Comment {
   authorKind: CommentAuthorKind;
   apiKeyId: Uuid | null;
   apiKeyName: string | null;
+  /** Set when `authorKind` is `agent`: the connected agent that wrote this for `authorId`. */
+  agentName?: string | null;
   body: string;
   editedAt: Timestamp | null;
   createdAt: Timestamp;
+}
+
+/**
+ * `running` / `blocked` are live; `succeeded` / `failed` / `cancelled` are terminal and immutable;
+ * `stalled` is set by Kanera when a live run stops heartbeating and may still be closed.
+ */
+export type AgentRunStatus = "running" | "blocked" | "succeeded" | "failed" | "cancelled" | "stalled";
+
+/** One agent's work session on a card. Shows an "agent working" chip on the card while live. */
+export interface AgentRun {
+  id: Uuid;
+  workspaceId: Uuid;
+  boardId: Uuid;
+  cardId: Uuid;
+  /** The person the agent acts for. */
+  userId: Uuid;
+  agentGrantId: Uuid | null;
+  agentName: string;
+  status: AgentRunStatus;
+  title: string;
+  summary: string | null;
+  externalUrl: string | null;
+  startedAt: Timestamp;
+  heartbeatAt: Timestamp;
+  endedAt: Timestamp | null;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
 }
 
 export type NoteScope = "personal" | "team";

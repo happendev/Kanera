@@ -1,3 +1,4 @@
+import type { Accent, Theme } from "../appearance.js";
 import type { BoardMirrorRow } from "../dto/board-mirrors.js";
 import type { WorkPriorityQueueSnapshot } from "../dto/card-priorities.js";
 import type { CardAttachmentRow } from "../dto/card-attachments.js";
@@ -10,6 +11,7 @@ import type {
 import type { ActivityFeedEvent, CardFeedItem, CommentRow } from "../dto/comments.js";
 import type { NotificationRow } from "../dto/notifications.js";
 import type {
+  AgentRun,
   Board,
   BoardGroup,
   BoardMember,
@@ -272,7 +274,8 @@ export interface WireCardDetail {
   appliedChecklistTemplateIds: string[];
   linkedNotes: LinkedInternalSummary[];
 }
-export type WireComment = Omit<Comment, "searchVector"> & {
+// agentGrantId is an internal audit link; clients only need agentName to label agent-written comments.
+export type WireComment = Omit<Comment, "searchVector" | "agentGrantId"> & {
   authorName: string;
   authorAvatarUrl: string | null;
   reactions: CommentReactionSummary[];
@@ -333,6 +336,11 @@ export interface WireNoteLock {
   editingExpiresAt: string;
 }
 export type WireCardAssignee = CardAssignee;
+/**
+ * One agent's in-flight (or finished) work session on a card. Full entity on every event so a
+ * board can render the "agent working" chip from the payload alone, without a detail fetch.
+ */
+export type WireAgentRun = AgentRun;
 export interface WireBoardMemberUser {
   userId: string;
   displayName: string;
@@ -455,6 +463,18 @@ export interface ServerToClientEvents {
     positions: { id: string; position: string }[];
   }) => void;
   "automation:deleted": (payload: { workspaceId: string; automationId: string }) => void;
+  // Emitted by the call_webhook automation action. It rides the board outbox like every other
+  // event so the durable delivery pipeline (retries, delivery log) handles it; the webhook enqueue
+  // step delivers it to `endpointId` only, ignoring that endpoint's eventTypes filter. Web clients
+  // receive and ignore it.
+  "automation:webhook:called": (payload: {
+    boardId: string;
+    cardId: string;
+    automationId: string;
+    endpointId: string;
+    card: WireCard;
+    list: { id: string; name: string } | null;
+  }) => void;
 
   "card:created": (payload: { boardId: string; card: CompactWireCard }) => void;
   "card:updated": (payload: { boardId: string; card: CompactWireCard }) => void;
@@ -705,6 +725,12 @@ export interface ServerToClientEvents {
     positions: { id: string; position: string }[];
   }) => void;
   "note:deleted": (payload: { noteId: string }) => void;
+  // Board-scoped. `started` and `updated` both carry the whole run; a terminal or stalled status in
+  // `updated` is how clients learn a run ended (there is no separate ended event, so a client that
+  // missed intermediate updates still converges from the last one).
+  "agentRun:started": (payload: { boardId: string; cardId: string; run: WireAgentRun }) => void;
+  "agentRun:updated": (payload: { boardId: string; cardId: string; run: WireAgentRun }) => void;
+
   "note:locked": (payload: WireNoteLock) => void;
   "note:unlocked": (payload: { noteId: string }) => void;
   "note:attachment:created": (payload: { note: WireNote; attachment: NoteAttachmentRow }) => void;
@@ -735,6 +761,17 @@ export interface ServerToClientEvents {
     positions: { id: string; position: string }[];
   }) => void;
   "scratchpadNote:deleted": (payload: { clientId: string; noteId: string }) => void;
+
+  /**
+   * Appearance is an account preference, not a device one, so a change on one device has to reach
+   * the user's other sessions. Emitted with `emitToUser` for the same reason as the scratchpad
+   * events above: it is personal, and a board/workspace room would push it to teammates and to the
+   * org's webhook subscribers. No organisation id, unlike the scratchpad payloads — appearance
+   * belongs to the identity, so it applies whichever organisation a session is currently viewing.
+   * Carries the resulting pair rather than the field that changed, so a session that missed an
+   * earlier event still converges.
+   */
+  "user:appearance:updated": (payload: { theme: Theme | null; accent: Accent | null }) => void;
 
   "notification:created": (payload: { notification: NotificationRow }) => void;
   "notification:updated": (payload: { notification: NotificationRow }) => void;
@@ -803,6 +840,7 @@ export const SERVER_EVENTS = {
   AUTOMATION_MOVED: "automation:moved",
   AUTOMATION_REBALANCED: "automation:rebalanced",
   AUTOMATION_DELETED: "automation:deleted",
+  AUTOMATION_WEBHOOK_CALLED: "automation:webhook:called",
   CARD_CREATED: "card:created",
   CARD_UPDATED: "card:updated",
   CARD_MOVED: "card:moved",
@@ -873,6 +911,7 @@ export const SERVER_EVENTS = {
   CLIENT_UPDATED: "client:updated",
   CLIENT_ENTITLEMENTS_CHANGED: "client:entitlements:changed",
   USER_PROFILE_UPDATED: "user:profile:updated",
+  USER_APPEARANCE_UPDATED: "user:appearance:updated",
   WORKSPACE_UPDATED: "workspace:updated",
   WORKSPACE_DELETED: "workspace:deleted",
   WORKSPACE_MEMBER_ADDED: "workspace:member:added",
@@ -888,6 +927,8 @@ export const SERVER_EVENTS = {
   NOTE_MOVED: "note:moved",
   NOTE_REBALANCED: "note:rebalanced",
   NOTE_DELETED: "note:deleted",
+  AGENT_RUN_STARTED: "agentRun:started",
+  AGENT_RUN_UPDATED: "agentRun:updated",
   NOTE_LOCKED: "note:locked",
   NOTE_UNLOCKED: "note:unlocked",
   NOTE_ATTACHMENT_CREATED: "note:attachment:created",

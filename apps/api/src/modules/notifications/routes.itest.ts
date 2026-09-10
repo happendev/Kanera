@@ -346,6 +346,83 @@ void test("notifications list defaults to unread, supports includeRead, cursor p
   assert.equal(count.json().count, 3);
 });
 
+void test("the Agent tab: agentOnly filters to agent-attributed activity and agent-counts drives the tab", async () => {
+  const f = await seed();
+  // Nothing agent-related yet: the drawer must not offer the tab.
+  const before = await f.app.inject({ method: "GET", url: "/notifications/agent-counts", headers: { authorization: `Bearer ${f.memberToken}` } });
+  assert.equal(before.statusCode, 200);
+  assert.deepEqual(before.json(), { total: 0, unread: 0 });
+
+  const [agentActivity] = await db.insert(activityEvents).values({
+    boardId: f.publicBoard.id,
+    workspaceId: f.workspace.id,
+    actorId: f.owner.id,
+    actorKind: "agent",
+    agentName: "Claude",
+    entityType: "card",
+    entityId: f.publicCard.id,
+    action: "completed",
+    payload: {},
+  }).returning();
+  const [agentUnread] = await insertTestNotifications(db, {
+    userId: f.member.id,
+    activityId: agentActivity!.id,
+    cardId: f.publicCard.id,
+    listId: f.publicCard.listId,
+    boardId: f.publicBoard.id,
+    workspaceId: f.workspace.id,
+    reason: "watching",
+    createdAt: new Date(Date.now() + 3000),
+  }).returning();
+  // One notification per (user, activity), so the read row needs its own agent activity.
+  const [agentReadActivity] = await db.insert(activityEvents).values({
+    boardId: f.publicBoard.id,
+    workspaceId: f.workspace.id,
+    actorId: f.owner.id,
+    actorKind: "agent",
+    agentName: "Claude",
+    entityType: "card",
+    entityId: f.publicCard.id,
+    action: "moved",
+    payload: {},
+  }).returning();
+  const [agentRead] = await insertTestNotifications(db, {
+    userId: f.member.id,
+    activityId: agentReadActivity!.id,
+    cardId: f.publicCard.id,
+    listId: f.publicCard.listId,
+    boardId: f.publicBoard.id,
+    workspaceId: f.workspace.id,
+    reason: "watching",
+    readAt: new Date(),
+    createdAt: new Date(Date.now() + 2000),
+  }).returning();
+
+  const counts = await f.app.inject({ method: "GET", url: "/notifications/agent-counts", headers: { authorization: `Bearer ${f.memberToken}` } });
+  assert.deepEqual(counts.json(), { total: 2, unread: 1 });
+
+  // The Agent tab is read-inclusive and excludes every human/system notification in the seed.
+  const agentTab = await f.app.inject({ method: "GET", url: "/notifications?includeRead=true&agentOnly=true", headers: { authorization: `Bearer ${f.memberToken}` } });
+  assert.equal(agentTab.statusCode, 200);
+  assert.deepEqual(agentTab.json().items.map((n: { id: string }) => n.id), [agentUnread!.id, agentRead!.id]);
+  assert.equal(agentTab.json().items[0].activity.actorKind, "agent");
+  assert.equal(agentTab.json().items[0].activity.agentName, "Claude");
+
+  // Unread stays exactly as before, agent rows included, so the badge math is unchanged.
+  const unread = await f.app.inject({ method: "GET", url: "/notifications/unread?limit=10", headers: { authorization: `Bearer ${f.memberToken}` } });
+  assert.ok(unread.json().items.some((n: { id: string }) => n.id === agentUnread!.id));
+  assert.ok(unread.json().items.some((n: { id: string }) => n.id === f.unread.id));
+
+  // Group-by-user keys agent rows as "agent:<grant or name>:<person>", never as "system".
+  const groups = await f.app.inject({
+    method: "GET",
+    url: `/notifications/group-counts?groupBy=user&includeRead=true&agentOnly=true&timeZone=${encodeURIComponent("UTC")}`,
+    headers: { authorization: `Bearer ${f.memberToken}` },
+  });
+  assert.equal(groups.statusCode, 200);
+  assert.deepEqual(groups.json().groups, [{ key: `agent:Claude:${f.owner.id}`, count: 2 }]);
+});
+
 void test("keyset pagination does not skip notifications that share a createdAt across a page boundary", async () => {
   const f = await seed();
   // Three unread notifications at the exact same instant, older than the seeded

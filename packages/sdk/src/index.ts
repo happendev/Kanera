@@ -5,8 +5,10 @@ import { Boards, Lists } from "./resources/boards.js";
 import { Cards } from "./resources/cards.js";
 import { Comments } from "./resources/comments.js";
 import { Notes } from "./resources/notes.js";
+import { Runs } from "./resources/runs.js";
 import { Search } from "./resources/search.js";
 import { Separators } from "./resources/separators.js";
+import { WebhookEndpoints } from "./resources/webhook-endpoints.js";
 import { Work } from "./resources/work.js";
 import { Automations, Workspaces } from "./resources/workspaces.js";
 import type { Session } from "./types.js";
@@ -35,10 +37,12 @@ export class Kanera {
   readonly cards: Cards;
   readonly comments: Comments;
   readonly notes: Notes;
+  readonly runs: Runs;
   readonly search: Search;
   readonly separators: Separators;
   readonly work: Work;
   readonly automations: Automations;
+  readonly webhookEndpoints: WebhookEndpoints;
 
   constructor(options: KaneraClientOptions) {
     this.http = new KaneraHttpClient(options);
@@ -52,10 +56,12 @@ export class Kanera {
     this.cards = new Cards(ctx);
     this.comments = new Comments(ctx);
     this.notes = new Notes(ctx);
+    this.runs = new Runs(ctx);
     this.search = new Search(ctx);
     this.separators = new Separators(ctx);
     this.work = new Work(ctx);
     this.automations = new Automations(ctx);
+    this.webhookEndpoints = new WebhookEndpoints(ctx);
   }
 
   /**
@@ -86,13 +92,18 @@ export {
 } from "./resources/cards.js";
 export { Comments } from "./resources/comments.js";
 export { Notes, type CreateNoteInput, type NoteTarget, type UpdateNoteInput } from "./resources/notes.js";
+export { Runs, type StartRunInput, type UpdateRunInput } from "./resources/runs.js";
 export { Search, type SearchInput } from "./resources/search.js";
 export {
   Separators,
   type CreateSeparatorInput, type MoveSeparatorInput, type SeparatorMoveResult, type UpdateSeparatorInput,
 } from "./resources/separators.js";
 export { Work, type WorkCardsInput, type WorkHistoryInput } from "./resources/work.js";
-export { Automations, Workspaces, type Automation, type WorkspaceDetail } from "./resources/workspaces.js";
+export { Automations, Workspaces, type Automation, type AutomationExecution, type WorkspaceDetail } from "./resources/workspaces.js";
+export {
+  WebhookEndpoints,
+  type CreatedWebhookEndpoint, type CreateWebhookEndpointInput, type UpdateWebhookEndpointInput, type WebhookDelivery, type WebhookEndpoint,
+} from "./resources/webhook-endpoints.js";
 export * from "./types.js";
 export {
   parseWebhook, verifyWebhookSignature, WebhookVerificationError,

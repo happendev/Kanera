@@ -1,4 +1,4 @@
-import type { WireAutomation, WireAutomationRunStats, WireCard, WireCardChecklist } from "@kanera/shared/events";
+import type { WireAutomation, WireAutomationRunStats, WireCard, WireCardChecklist, WireComment } from "@kanera/shared/events";
 import { cardPath } from "@kanera/shared/card-links";
 import { SERVER_EVENTS } from "@kanera/shared/events";
 import {
@@ -18,10 +18,12 @@ import {
   cardLabelAssignments,
   cardLabels,
   cards,
+  comments,
   customFieldOptions,
   customFields,
   lists,
   users,
+  webhookEndpoints,
   workspaceMembers,
   workspaces,
   type ActivityEvent,
@@ -69,6 +71,11 @@ export type AutomationEffect =
   // queueLifecycleChanged marks a completion flip: the emit pass must also ping any "Up next"
   // queue holding the card, which plain field updates (e.g. the due-date action) never require.
   | ({ type: "cardUpdated"; boardId: string; card: WireCard; activity: ActivityEvent; notify?: boolean; queueLifecycleChanged?: boolean } & AutomationEffectMetadata)
+  | ({ type: "commentCreated"; boardId: string; cardId: string; comment: WireComment; activity: ActivityEvent } & AutomationEffectMetadata)
+  // The webhook is not called here. The emit pass publishes this to the board outbox and the
+  // webhook enqueue step turns it into exactly one delivery row for `endpointId`, so the call
+  // inherits the same retries, signing, and delivery log as event subscriptions.
+  | { type: "webhookCalled"; boardId: string; cardId: string; automationId: string; endpointId: string; card: WireCard; list: { id: string; name: string } | null }
   | ({
       type: "cardMoved";
       boardId: string;
@@ -84,6 +91,33 @@ export type AutomationEffect =
 export interface AutomationEffects {
   effects: AutomationEffect[];
 }
+
+/**
+ * Wraps an action failure with the action that threw so the run row can name it. The engine's
+ * callers only ever see the cause: `applyAutomationActionsAndRecordStats` unwraps before rethrowing,
+ * so route error handling is unchanged.
+ */
+class AutomationActionError extends Error {
+  constructor(readonly actionType: string, readonly cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.name = "AutomationActionError";
+  }
+}
+
+/** Placeholders accepted by the post_comment template; anything else is left verbatim. */
+export const AUTOMATION_COMMENT_TEMPLATE_VARIABLES = [
+  "card.title",
+  "card.key",
+  "card.url",
+  "card.dueDate",
+  "list.name",
+  "board.name",
+  "workspace.name",
+] as const;
+
+// Comments an automation writes are labelled with this name in the card feed (system-authored
+// comments display `apiKeyName` as the author), mirroring "Board mirror" for mirrored comments.
+const AUTOMATION_COMMENT_AUTHOR_NAME = "Automation";
 
 interface AutomationRunContext {
   card: Card;
@@ -105,7 +139,13 @@ function automationFailureMessage(err: unknown): string {
   return message.slice(0, AUTOMATION_FAILURE_MESSAGE_LIMIT);
 }
 
-async function recordAutomationRunStats(tx: Tx, automationId: string, outcome: AutomationRunStatsOutcome, err?: unknown): Promise<void> {
+interface AutomationRunDetails {
+  cardId: string | null;
+  // See automation_run.action_type: the failing action for failed runs, otherwise the rule's first action.
+  actionType: string | null;
+}
+
+async function recordAutomationRunStats(tx: Tx, automationId: string, outcome: AutomationRunStatsOutcome, details: AutomationRunDetails, err?: unknown): Promise<void> {
   const now = new Date();
   const isEffectful = outcome === "effectful";
   const isNoop = outcome === "noop";
@@ -113,7 +153,7 @@ async function recordAutomationRunStats(tx: Tx, automationId: string, outcome: A
   const failureMessage = isFailed ? automationFailureMessage(err) : null;
   // Keep append-only history beside the lifetime counters so operational dashboards can report
   // honest daily outcomes; both writes share the caller's transaction for successful/no-op runs.
-  await tx.insert(automationRuns).values({ automationId, outcome, ranAt: now });
+  await tx.insert(automationRuns).values({ automationId, outcome, cardId: details.cardId, actionType: details.actionType, error: failureMessage, ranAt: now });
   await tx
     .insert(automationRunStats)
     .values({
@@ -146,11 +186,11 @@ async function recordAutomationRunStats(tx: Tx, automationId: string, outcome: A
     });
 }
 
-async function recordAutomationFailureStats(automationId: string, err: unknown): Promise<void> {
+async function recordAutomationFailureStats(automationId: string, details: AutomationRunDetails, err: unknown): Promise<void> {
   try {
     // Failed actions are recorded for diagnostics but do not consume a monthly execution: their
     // effects and the quota reservation in the caller's transaction are both rolled back.
-    await recordAutomationRunStats(db, automationId, "failed", err);
+    await recordAutomationRunStats(db, automationId, "failed", details, err);
   } catch {
     // Analytics should never mask the original automation failure.
   }
@@ -901,28 +941,143 @@ async function applyPopulateCustomFieldAction(tx: Tx, ctx: AutomationRunContext,
   return { type: "customFieldValueSet", boardId: ctx.boardId, cardId: ctx.card.id, fieldId, value: cols, activity, suppressNotificationUserId: ctx.triggerActorId };
 }
 
+/**
+ * Resolves the user a system-authored automation comment is stored under. `comment.author_id` is a
+ * non-null FK, and the feed labels the row with `apiKeyName` ("Automation") rather than the person,
+ * so this only needs to be a stable member of the workspace: the user whose change fired the rule
+ * when there is one, otherwise the longest-standing workspace admin (scheduled sweeps have no actor).
+ */
+async function automationCommentAuthorId(tx: Tx, ctx: AutomationRunContext): Promise<string | null> {
+  if (ctx.triggerActorId) return ctx.triggerActorId;
+  const [admin] = await tx
+    .select({ userId: workspaceMembers.userId })
+    .from(workspaceMembers)
+    .innerJoin(users, eq(users.id, workspaceMembers.userId))
+    .where(and(eq(workspaceMembers.workspaceId, ctx.workspaceId), eq(workspaceMembers.role, "admin"), isNull(users.deletedAt)))
+    .orderBy(asc(workspaceMembers.userId))
+    .limit(1);
+  return admin?.userId ?? null;
+}
+
+async function automationTemplateContext(tx: Tx, ctx: AutomationRunContext): Promise<{ list: { id: string; name: string } | null; boardName: string; workspaceName: string }> {
+  const [row] = await tx
+    .select({ listId: lists.id, listName: lists.name, boardName: boards.name, workspaceName: workspaces.name })
+    .from(boards)
+    .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+    .leftJoin(lists, eq(lists.id, ctx.card.listId))
+    .where(eq(boards.id, ctx.boardId))
+    .limit(1);
+  return {
+    list: row?.listId && row.listName !== null ? { id: row.listId, name: row.listName } : null,
+    boardName: row?.boardName ?? "",
+    workspaceName: row?.workspaceName ?? "",
+  };
+}
+
+/**
+ * Substitutes `{{variable}}` placeholders from AUTOMATION_COMMENT_TEMPLATE_VARIABLES. Unknown
+ * placeholders are left as typed so an admin sees their typo in the posted comment instead of a
+ * silently blank value; values are inserted as plain text (the comment body is Markdown, and a card
+ * title is not allowed to inject formatting).
+ */
+export function renderAutomationCommentTemplate(template: string, values: Record<(typeof AUTOMATION_COMMENT_TEMPLATE_VARIABLES)[number], string>): string {
+  return template.replace(/\{\{\s*([a-zA-Z.]+)\s*\}\}/g, (match, name: string) =>
+    (AUTOMATION_COMMENT_TEMPLATE_VARIABLES as readonly string[]).includes(name) ? values[name as keyof typeof values] : match,
+  );
+}
+
+async function applyPostCommentAction(tx: Tx, ctx: AutomationRunContext, action: AutomationAction): Promise<AutomationEffect | null> {
+  const template = "template" in action.config && typeof action.config.template === "string" ? action.config.template : "";
+  if (!template.trim()) return null;
+  const authorId = await automationCommentAuthorId(tx, ctx);
+  // A workspace with no admins left cannot own the comment row; skip rather than fail the trigger.
+  if (!authorId) return null;
+  const context = await automationTemplateContext(tx, ctx);
+  const body = renderAutomationCommentTemplate(template, {
+    "card.title": ctx.card.title,
+    "card.key": ctx.card.key,
+    "card.url": cardUrl(ctx.card.organisationKey, ctx.card.key),
+    "card.dueDate": ctx.card.dueDateLocalDate ?? "",
+    "list.name": context.list?.name ?? "",
+    "board.name": context.boardName,
+    "workspace.name": context.workspaceName,
+  });
+  const [comment] = await tx
+    .insert(comments)
+    .values({ cardId: ctx.card.id, authorId, authorKind: "system", apiKeyName: AUTOMATION_COMMENT_AUTHOR_NAME, body })
+    .returning();
+  await tx.update(cards).set({ updatedAt: new Date() }).where(eq(cards.id, ctx.card.id));
+  const activity = await recordActivity(tx, {
+    boardId: ctx.boardId,
+    workspaceId: ctx.workspaceId,
+    actorId: null,
+    actorKind: "system",
+    entityType: "comment",
+    entityId: comment!.id,
+    action: ACTIVITY_ACTION.CREATED,
+    payload: { cardId: ctx.card.id, automationActionId: action.id },
+  });
+  const { searchVector: _searchVector, agentGrantId: _agentGrantId, ...rest } = comment!;
+  const wireComment: WireComment = { ...rest, authorName: AUTOMATION_COMMENT_AUTHOR_NAME, authorAvatarUrl: null, reactions: [] };
+  return { type: "commentCreated", boardId: ctx.boardId, cardId: ctx.card.id, comment: wireComment, activity, suppressNotificationUserId: ctx.triggerActorId };
+}
+
+async function applyCallWebhookAction(tx: Tx, ctx: AutomationRunContext, action: AutomationAction): Promise<AutomationEffect | null> {
+  const endpointId = "endpointId" in action.config && typeof action.config.endpointId === "string" ? action.config.endpointId : "";
+  if (!endpointId) return null;
+  const [endpoint] = await tx
+    .select({ id: webhookEndpoints.id, enabled: webhookEndpoints.enabled })
+    .from(webhookEndpoints)
+    .where(and(eq(webhookEndpoints.id, endpointId), eq(webhookEndpoints.workspaceId, ctx.workspaceId), eq(webhookEndpoints.provider, "generic")))
+    .limit(1);
+  // A deleted endpoint is a configuration error the admin needs to see in the run history, so it
+  // fails the run. A merely disabled endpoint is an intentional pause: no-op, exactly like event
+  // subscriptions stop delivering while an endpoint is switched off.
+  if (!endpoint) throw new Error("webhook endpoint no longer exists");
+  if (!endpoint.enabled) return null;
+  const context = await automationTemplateContext(tx, ctx);
+  return {
+    type: "webhookCalled",
+    boardId: ctx.boardId,
+    cardId: ctx.card.id,
+    automationId: action.automationId,
+    endpointId: endpoint.id,
+    card: toWireCard(ctx.card, ctx.clientId),
+    list: context.list,
+  };
+}
+
 async function applyAutomationActions(tx: Tx, ctx: AutomationRunContext, actions: AutomationAction[]): Promise<AutomationEffects> {
   const effects: AutomationEffect[] = [];
   for (const action of actions) {
-    if (action.type === "apply_checklists") {
-      effects.push(...await applyChecklistsAction(tx, ctx, action));
-      continue;
+    try {
+      if (action.type === "apply_checklists") {
+        effects.push(...await applyChecklistsAction(tx, ctx, action));
+        continue;
+      }
+      const effect =
+        action.type === "add_labels" || action.type === "remove_labels"
+          ? await applyLabelsAction(tx, ctx, action)
+          : action.type === "add_assignees" || action.type === "remove_assignees"
+            ? await applyAssigneesAction(tx, ctx, action)
+            : action.type === "set_due_date" || action.type === "clear_due_date"
+              ? await applyDueDateAction(tx, ctx, action)
+              : action.type === "set_completion"
+                ? await applyCompletionAction(tx, ctx, action)
+                : action.type === "move_to_list" || action.type === "move_to_top" || action.type === "move_to_bottom"
+                  ? await applyMoveAction(tx, ctx, action)
+                  : action.type === "populate_custom_field"
+                    ? await applyPopulateCustomFieldAction(tx, ctx, action)
+                    : action.type === "post_comment"
+                      ? await applyPostCommentAction(tx, ctx, action)
+                      : action.type === "call_webhook"
+                        ? await applyCallWebhookAction(tx, ctx, action)
+                        : null;
+      if (effect) effects.push(effect);
+    } catch (err) {
+      // Name the action in the run row; the caller unwraps so callers still see the real error.
+      throw err instanceof AutomationActionError ? err : new AutomationActionError(action.type, err);
     }
-    const effect =
-      action.type === "add_labels" || action.type === "remove_labels"
-        ? await applyLabelsAction(tx, ctx, action)
-        : action.type === "add_assignees" || action.type === "remove_assignees"
-          ? await applyAssigneesAction(tx, ctx, action)
-          : action.type === "set_due_date" || action.type === "clear_due_date"
-            ? await applyDueDateAction(tx, ctx, action)
-            : action.type === "set_completion"
-              ? await applyCompletionAction(tx, ctx, action)
-              : action.type === "move_to_list" || action.type === "move_to_top" || action.type === "move_to_bottom"
-                ? await applyMoveAction(tx, ctx, action)
-                : action.type === "populate_custom_field"
-                  ? await applyPopulateCustomFieldAction(tx, ctx, action)
-                  : null;
-    if (effect) effects.push(effect);
   }
   return { effects };
 }
@@ -933,11 +1088,13 @@ async function applyAutomationActionsAndRecordStats(tx: Tx, automationId: string
   if (!await claimAutomationExecution(ctx.clientId, tx, ctx.fireDate)) return EMPTY_EFFECTS;
   try {
     const result = await applyAutomationActions(tx, ctx, actions);
-    await recordAutomationRunStats(tx, automationId, result.effects.length > 0 ? "effectful" : "noop");
+    await recordAutomationRunStats(tx, automationId, result.effects.length > 0 ? "effectful" : "noop", { cardId: ctx.card.id, actionType: actions[0]?.type ?? null });
     return result;
   } catch (err) {
-    await recordAutomationFailureStats(automationId, err);
-    throw err;
+    const actionType = err instanceof AutomationActionError ? err.actionType : actions[0]?.type ?? null;
+    const cause = err instanceof AutomationActionError ? err.cause : err;
+    await recordAutomationFailureStats(automationId, { cardId: ctx.card.id, actionType }, cause);
+    throw cause;
   }
 }
 
@@ -1209,6 +1366,22 @@ export async function emitAutomationEffects(effects: AutomationEffects): Promise
         ...effect.value,
       });
       await emitActivityFeedItem(effect.boardId, effect.cardId, effect.activity, { suppressNotificationUserId: effect.suppressNotificationUserId });
+    } else if (effect.type === "commentCreated") {
+      // Same pair the comment route emits. Mentions, comment emails, and watcher notifications are
+      // deliberately not fanned out: an automation comment is informational and system-authored,
+      // and the recordActivity row already exists for audit.
+      await emitToBoard(effect.boardId, SERVER_EVENTS.COMMENT_CREATED, { boardId: effect.boardId, cardId: effect.cardId, comment: effect.comment });
+      await emitToBoard(effect.boardId, SERVER_EVENTS.CARD_FEED_ITEM_CREATED, { boardId: effect.boardId, cardId: effect.cardId, item: { type: "comment", data: effect.comment } });
+    } else if (effect.type === "webhookCalled") {
+      // Durable outbox publish; the webhook enqueue step routes this to effect.endpointId only.
+      await emitToBoard(effect.boardId, SERVER_EVENTS.AUTOMATION_WEBHOOK_CALLED, {
+        boardId: effect.boardId,
+        cardId: effect.cardId,
+        automationId: effect.automationId,
+        endpointId: effect.endpointId,
+        card: effect.card,
+        list: effect.list,
+      });
     } else if (effect.type === "cardUpdated") {
       await emitToBoard(effect.boardId, SERVER_EVENTS.CARD_UPDATED, { boardId: effect.boardId, card: effect.card });
       await emitActivityFeedItem(effect.boardId, effect.card.id, effect.activity, { notify: effect.notify, suppressNotificationUserId: effect.suppressNotificationUserId });

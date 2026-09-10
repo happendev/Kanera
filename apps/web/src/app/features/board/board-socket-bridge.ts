@@ -90,6 +90,16 @@ export class BoardSocketBridge {
         state.lists.update((ls) => ls.filter((l) => l.id !== listId));
       },
 
+      // Both run events carry the full run; a terminal/stalled status in `updated` ends it. Runs are
+      // card-scoped detail state, but the tile chip reads them too, so they are stored on BoardState
+      // rather than inside the detail object.
+      [SERVER_EVENTS.AGENT_RUN_STARTED]: ({ boardId: eventBoardId, cardId, run }) => {
+        if (eventBoardId === boardId && acceptsCard(cardId)) state.upsertAgentRun(run);
+      },
+      [SERVER_EVENTS.AGENT_RUN_UPDATED]: ({ boardId: eventBoardId, cardId, run }) => {
+        if (eventBoardId === boardId && acceptsCard(cardId)) state.upsertAgentRun(run);
+      },
+
       [SERVER_EVENTS.CARD_CREATED]: ({ boardId: eventBoardId, card }) => {
         if (eventBoardId === boardId && acceptsCard(card.id)) state.addCard(expandWireCard(card));
       },

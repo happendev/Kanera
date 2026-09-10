@@ -4,7 +4,7 @@ import type { OnDestroy} from "@angular/core";
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, input, signal, untracked, viewChild } from "@angular/core";
 import { Router } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
-import type { CompactCardCustomFieldValue, CompactCardSummary, ServerToClientEvents, WireBoardMemberUser, WireCard, WireCardSummary, WireChecklistTemplate, WireSeparator } from "@kanera/shared/events";
+import type { CompactCardCustomFieldValue, CompactCardSummary, ServerToClientEvents, WireAgentRun, WireBoardMemberUser, WireCard, WireCardSummary, WireChecklistTemplate, WireSeparator } from "@kanera/shared/events";
 import { expandCardCustomFieldValue, expandCardSummary, SERVER_EVENTS } from "@kanera/shared/events";
 import type { BoardExportArchive, WorkDoneEventType, WorkPrioritiesResponse } from "@kanera/shared/dto";
 import type { Board, BoardRole, BoardSeparator, Card, CardCustomFieldValue, CardLabel, CustomField, List } from "@kanera/shared/schema";
@@ -1192,6 +1192,12 @@ export class BoardPage implements OnDestroy {
       const applyBoard = (data: Awaited<ReturnType<typeof this.loadBoard>>) => {
         if (cancelled) return;
         this.state.hydrate(data);
+        // Live agent runs ride a separate request so the board-open hot path stays unchanged for
+        // the many boards no agent ever touches. Best-effort: a failure just means no chips until
+        // the next agentRun:* event arrives.
+        void this.api.get<{ runs: WireAgentRun[] }>(`/boards/${boardId}/agent-runs`)
+          .then((payload) => { if (!cancelled) this.state.setBoardLiveAgentRuns(payload.runs); })
+          .catch(() => undefined);
         if (!pageViewCaptured && data.workspaceClientId) {
           // The authorised payload carries the board owner's org, not a cross-org guest's home org.
           this.analytics.pageCurrentRoute(data.workspaceClientId);

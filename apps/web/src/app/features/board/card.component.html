@@ -98,6 +98,11 @@
       <i [class]="'ti ti-' + attention.icon"></i>
     </span>
     }
+    @if (agentRunLabel(); as agentLabel) {
+    <span class="card-agent-run" [class.is-blocked]="agentRunBlocked()" [kTooltip]="agentLabel" [attr.aria-label]="agentLabel">
+      <i class="ti ti-sparkles"></i>
+    </span>
+    }
     <span class="card-title-text">{{ card().title }}</span>
   </div>
 

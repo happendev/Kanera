@@ -12,13 +12,14 @@
   transition: border-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
 }
 
-:host-context([data-theme="light"]) {
+:host-context([data-theme="light"]),
+:host-context([data-theme="paper"]) {
   box-shadow: none;
   border-color: var(--border-strong);
 }
 
 @media (prefers-color-scheme: light) {
-  :host-context(:not([data-theme="dark"])) {
+  :host-context(:not([data-theme])) {
     box-shadow: none;
     border-color: var(--border-strong);
   }

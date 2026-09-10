@@ -43,9 +43,11 @@
 }
 
 // Light mode's ramp recesses instead of elevating, so the read/unread pair swaps ends and the run
-// shade needs far less black. A mixin because this has to be declared under two selectors: dark is
-// the :root default and sets no [data-theme], so a bare :not([data-theme="dark"]) would win in dark
-// mode too — and the two copies drifting apart is exactly the bug that costs an afternoon.
+// shade needs far less black. A mixin because this has to be declared under two rules — the
+// light-family themes, and the pre-boot window before index.html stamps [data-theme] — and the two
+// copies drifting apart is exactly the bug that costs an afternoon. The media guard is
+// :not([data-theme]), not :not([data-theme="dark"]): the latter also matched the dark-family
+// carbon theme and repainted it in light chrome on a light-OS device.
 @mixin notif-light-tokens {
   --notif-read-bg: var(--surface-2);
   --notif-read-bg-hover: var(--surface-3);
@@ -55,12 +57,13 @@
   --notif-run-shade: rgba(0, 0, 0, 0.05);
 }
 
-:host-context([data-theme="light"]) {
+:host-context([data-theme="light"]),
+:host-context([data-theme="paper"]) {
   @include notif-light-tokens;
 }
 
 @media (prefers-color-scheme: light) {
-  :host-context(:not([data-theme="dark"])) {
+  :host-context(:not([data-theme])) {
     @include notif-light-tokens;
   }
 }
@@ -1188,4 +1191,24 @@
       font-size: 15px;
     }
   }
+}
+
+// "via <agent>" marker beside the actor name on agent-attributed rows: same treatment as the card
+// activity feed so agent work reads identically everywhere it appears.
+.via-agent {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  white-space: nowrap;
+  vertical-align: baseline;
+
+  i { font-size: 12px; }
 }

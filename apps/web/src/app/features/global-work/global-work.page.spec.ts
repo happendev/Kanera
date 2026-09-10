@@ -224,6 +224,7 @@ describe("GlobalWorkPage card routing", () => {
         people: [{ userId: targetUserId, organisationId: "org", displayName: "Me", avatarUrl: null, boardIds: [card.boardId, otherBoardId] }],
       }),
       interactionReady: signal(true),
+      definition: signal({ filters: { assigneeIds: [] as string[] } }),
       initialize: vi.fn(() => Promise.resolve()),
       reconcileCardsInBackground: vi.fn(),
     } as unknown as GlobalWorkState & { catalog: ReturnType<typeof signal> };
@@ -254,6 +255,16 @@ describe("GlobalWorkPage card routing", () => {
     // The catalog lists "Elsewhere" first, so this is only right if the list's workspace decided it.
     expect(page.composerBoardId()).toBe(card.boardId);
     expect(page.composerSeed()).toMatchObject({ listId: card.listId, atTop: true, assigneeIds: [targetUserId] });
+    expect(page.composerDraftKey()).toBe(`global-work:my:${targetUserId}`);
+
+    const teammateId = "60000000-0000-4000-8000-000000000010";
+    fixture.componentRef.setInput("lens", "team");
+    state.definition.set({ filters: { assigneeIds: [teammateId] } } as never);
+    fixture.detectChanges();
+    TestBed.tick();
+    expect(page.composerSeed().assigneeIds).toEqual([teammateId]);
+    expect(page.composerDraftKey()).toBe(`global-work:team:${teammateId}`);
+    expect(page.composerDraftKey()).not.toContain(targetUserId);
 
     page.closeComposer();
     expect(page.composerOpen()).toBe(false);

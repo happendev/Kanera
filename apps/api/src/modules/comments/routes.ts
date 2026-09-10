@@ -177,16 +177,23 @@ function assertIntegrationEmbeddedMediaStoredLocally(markdown: string, clientId:
   }
 }
 
-function commentAttribution(auth: { authKind?: string; apiKeyKind?: string; apiKeyId?: string; apiKeyName?: string }) {
-  // Personal credentials act as their owning user. In particular, personal OAuth uses a synthetic
-  // apiKeyId solely as a stable rate-limit key, so it must never reach the UUID FK on comment rows.
+function commentAttribution(auth: { authKind?: string; apiKeyKind?: string; apiKeyId?: string; apiKeyName?: string; agentGrantId?: string; agentName?: string }) {
+  // An AI agent acting through an interactive OAuth grant: the comment belongs to the person
+  // (authorId) but is labelled as agent-written. The synthetic OAuth apiKeyId is a rate-limit key
+  // only and must never reach the UUID FK on comment rows.
+  if (auth.apiKeyKind === "personal" && auth.agentGrantId) {
+    return { authorKind: "agent" as const, apiKeyId: null, apiKeyName: null, agentGrantId: auth.agentGrantId, agentName: auth.agentName ?? "AI agent" };
+  }
+  // Other personal credentials act as their owning user.
   if (auth.authKind !== "apiKey" || auth.apiKeyKind === "personal") {
-    return { authorKind: "user" as const, apiKeyId: null, apiKeyName: null };
+    return { authorKind: "user" as const, apiKeyId: null, apiKeyName: null, agentGrantId: null, agentName: null };
   }
   return {
     authorKind: "apiKey" as const,
     apiKeyId: auth.apiKeyId ?? null,
     apiKeyName: auth.apiKeyName ?? "API key",
+    agentGrantId: null,
+    agentName: null,
   };
 }
 
@@ -194,7 +201,8 @@ function canMutateComment(
   comment: { authorId: string; authorKind: string; apiKeyId: string | null },
   auth: { sub: string; authKind?: string; apiKeyId?: string },
 ) {
-  if (comment.authorKind === "user") return comment.authorId === auth.sub;
+  // The person an agent acts for owns the agent's comments, and the agent (same sub) can edit them.
+  if (comment.authorKind === "user" || comment.authorKind === "agent") return comment.authorId === auth.sub;
   return comment.authorKind === "apiKey"
     && auth.authKind === "apiKey"
     && comment.apiKeyId !== null
@@ -255,6 +263,7 @@ async function selectCommentRows(commentIds: string[], clientId: string): Promis
       authorKind: comments.authorKind,
       apiKeyId: comments.apiKeyId,
       apiKeyName: comments.apiKeyName,
+      agentName: comments.agentName,
       authorName: sql<string>`case when ${comments.authorKind} = 'system' then 'Kanera' when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
       authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} in ('system', 'apiKey') then null else ${users.avatarUrl} end`,
       authorClientId: users.clientId,
@@ -332,6 +341,7 @@ export async function commentRoutes(app: FastifyInstance) {
           authorKind: comments.authorKind,
           apiKeyId: comments.apiKeyId,
           apiKeyName: comments.apiKeyName,
+          agentName: comments.agentName,
           authorName: sql<string>`case when ${comments.authorKind} = 'system' then 'Kanera' when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
           authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} in ('system', 'apiKey') then null else ${users.avatarUrl} end`,
           authorClientId: users.clientId,
@@ -411,6 +421,7 @@ export async function commentRoutes(app: FastifyInstance) {
         authorKind: comments.authorKind,
         apiKeyId: comments.apiKeyId,
         apiKeyName: comments.apiKeyName,
+        agentName: comments.agentName,
         authorName: sql<string>`case when ${comments.authorKind} = 'system' then 'Kanera' when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
         authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} in ('system', 'apiKey') then null else ${users.avatarUrl} end`,
         authorClientId: users.clientId,

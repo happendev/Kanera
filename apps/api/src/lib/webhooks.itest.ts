@@ -246,6 +246,8 @@ void test("card events enqueue a formatted chat snapshot alongside generic webho
     apiKeyName: null,
     supportSessionId: null,
     supportActorEmail: null,
+    agentGrantId: null,
+    agentName: null,
     entityType: "card" as const,
     entityId: card!.id,
     feedVisible: true,

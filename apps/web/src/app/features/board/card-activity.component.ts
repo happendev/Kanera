@@ -139,11 +139,20 @@ export class CardActivityComponent {
     }
     return null;
   });
+  // Feed rows the panel will actually draw; the header count uses this too so it never promises
+  // rows the reader cannot find.
+  // - Aggregate rows left by older mirror workers are hidden; the rich source activities are the
+  //   audit trail and make an unexplained "N mirrored changes" entry redundant and misleading.
+  // - agentRun:started is recorded for notifications and audit, but the live run block above the
+  //   fields already shows in-flight work, so the feed only carries the outcome (agentRun:ended).
+  readonly renderableFeedItems = computed(() =>
+    this.feedItems().filter((item) =>
+      item.type !== "activity" || (item.data.coalesceKey !== "card:mirrorSync" && item.data.action !== "agentRun:started"),
+    ),
+  );
   readonly filteredFeedItems = computed(() => {
     const q = this.commentSearchQuery().trim().toLowerCase();
-    // Hide aggregate rows left by older mirror workers; the rich source activities are the audit
-    // trail and make an unexplained "N mirrored changes" entry redundant and misleading.
-    const renderableItems = this.feedItems().filter((item) => item.type !== "activity" || item.data.coalesceKey !== "card:mirrorSync");
+    const renderableItems = this.renderableFeedItems();
     const visibleItems = this.feedFilter() === "comments"
       ? renderableItems.filter((item) => item.type === "comment")
       : renderableItems;
@@ -993,6 +1002,19 @@ export class CardActivityComponent {
         return " set a cover image";
       case "cover_removed":
         return " removed the cover image";
+      case "agentRun:ended": {
+        const title = this.activityPayloadText(p, "title");
+        const status = this.activityPayloadText(p, "status");
+        const verb = status === "succeeded" ? "finished" : status === "failed" ? "failed" : status === "cancelled" ? "cancelled" : status === "stalled" ? "stalled on" : "ended";
+        // Stalls are recorded by the system (nobody acted), so name the agent explicitly.
+        const agent = event.actorKind === "system" ? this.activityPayloadText(p, "agentName") : null;
+        const subject = agent ? ` marked ${this.v(agent)}'s run as ${verb === "stalled on" ? "stalled" : verb}` : ` ${verb}`;
+        // The run's closing summary is the outcome a reader actually wants; the run row itself is
+        // gone from card detail once it ends, so this is where that note lives.
+        const summary = this.activityPayloadText(p, "summary");
+        const headline = title ? `${subject}: ${this.v(title)}` : subject;
+        return summary ? `${headline} — ${this.v(summary)}` : headline;
+      }
       default:
         return ` ${event.action.replace(/_/g, " ")} ${event.entityType}`;
     }

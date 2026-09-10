@@ -18,7 +18,7 @@ import { BrowserPushService } from "../../core/notifications/browser-push.servic
 import { MentionSoundService } from "../../core/notifications/mention-sound.service";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
-import { ThemeService } from "../../core/theme/theme.service";
+import { ThemeService, type Accent, type Theme } from "../../core/theme/theme.service";
 import { AutosaveTracker } from "../../shared/autosave-tracker";
 import { ConfirmService } from "../../shared/confirm.service";
 import { PageHeaderComponent } from "../../shared/page-header.component";
@@ -220,6 +220,8 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private readonly sockets = inject(SocketService);
   readonly theme = inject(ThemeService);
+  // Theme-scoped, not the full vocabulary: the Blue/Green slot shows only the one this theme offers.
+  readonly accentOptions = this.theme.accentOptions;
   private detachSocket: (() => void) | null = null;
 
   private readonly routeTab = signal<string | undefined>(undefined);
@@ -775,7 +777,11 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
 
   // ─── Profile actions ──────────────────────────────────────────────────────
 
-  setTheme(theme: "light" | "dark") {
+  setAccent(accent: Accent) {
+    this.theme.setAccent(accent);
+  }
+
+  setTheme(theme: Theme) {
     this.theme.setTheme(theme);
   }
 

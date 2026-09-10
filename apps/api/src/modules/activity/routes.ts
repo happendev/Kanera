@@ -120,6 +120,7 @@ export async function activityRoutes(app: FastifyInstance) {
           authorKind: comments.authorKind,
           apiKeyId: comments.apiKeyId,
           apiKeyName: comments.apiKeyName,
+          agentName: comments.agentName,
           authorName: sql<string>`case when ${comments.authorKind} = 'system' then 'Kanera' when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
           authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} in ('system', 'apiKey') then null else ${users.avatarUrl} end`,
           authorClientId: users.clientId,

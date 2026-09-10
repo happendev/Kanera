@@ -259,6 +259,54 @@ describe("CardComposerDialogComponent", () => {
       expect(component.boardId()).toBe("board-1");
     });
 
+    it("keeps seeded assignees who are members of the newly selected board", async () => {
+      const component = await create({
+        boardGroups: BOARD_GROUPS,
+        seed: { assigneeIds: ["user-1"] },
+        members: [{
+          userId: "user-1",
+          displayName: "Current user",
+          avatarUrl: null,
+          role: "editor",
+          source: "board",
+        }],
+      });
+
+      fixture.componentRef.setInput("boardId", "board-2");
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(component.draft().assigneeIds).toEqual(["user-1"]);
+    });
+
+    it("does not restore a teammate draft into the viewer's first My Cards composer", async () => {
+      const members = [
+        { userId: "viewer", displayName: "Viewer", avatarUrl: null, role: "editor", source: "board" },
+        { userId: "teammate", displayName: "Teammate", avatarUrl: null, role: "editor", source: "board" },
+      ];
+      const teamComposer = await create({
+        boardGroups: BOARD_GROUPS,
+        draftKey: "global-work:team:teammate",
+        seed: { assigneeIds: ["teammate"] },
+        members,
+      });
+      teamComposer.setTitle("Team draft");
+      fixture.componentRef.setInput("boardId", "board-2");
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.destroy();
+
+      const myComposer = await create({
+        boardGroups: BOARD_GROUPS,
+        draftKey: "global-work:my:viewer",
+        seed: { assigneeIds: ["viewer"] },
+        members,
+      });
+
+      expect(myComposer.draft().boardId).toBe("board-1");
+      expect(myComposer.draft().assigneeIds).toEqual(["viewer"]);
+    });
+
     // Lists, labels and custom fields are workspace-scoped and members are board-scoped, so a move
     // to another workspace has to drop selections the target cannot honour.
     it("clears workspace-scoped selections when the board moves to another workspace", async () => {

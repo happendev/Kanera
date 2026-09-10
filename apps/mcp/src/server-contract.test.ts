@@ -156,6 +156,9 @@ const allToolCases: ToolCase[] = [
   { name: "separators.delete", args: { separatorId: O }, method: "DELETE", path: `/api/v1/separators/${O}` },
   { name: "cards.set_custom_field_value", args: { cardId: C, fieldId: F, value: { type: "text", value: "High" } }, method: "PUT", path: `/api/v1/cards/${C}/custom-fields/${F}`, body: { valueText: "High" } },
   { name: "comments.add", args: { cardId: C, body: "Hello" }, method: "POST", path: `/api/v1/cards/${C}/comments`, body: { body: "Hello" } },
+  { name: "runs.start", args: { cardId: C, title: "Drafting copy" }, method: "POST", path: `/api/v1/cards/${C}/agent-runs`, body: { title: "Drafting copy" } },
+  { name: "runs.update", args: { runId: O, status: "succeeded", summary: "Done" }, method: "PATCH", path: `/api/v1/agent-runs/${O}`, body: { status: "succeeded", summary: "Done" } },
+  { name: "runs.list", args: { cardId: C, includeEnded: false, limit: 50 }, method: "GET", path: `/api/v1/cards/${C}/agent-runs?includeEnded=false&limit=50` },
   { name: "kanera_bulk_add_comments", args: { boardId: B, comments: [{ cardId: C, body: "Hello" }] }, method: "POST", path: `/api/v1/boards/${B}/comments/bulk/create`, body: { comments: [{ cardId: C, body: "Hello" }] } },
   { name: "activity.list", args: { boardId: B, limit: 25 }, method: "GET", path: `/api/v1/boards/${B}/activity?limit=25` },
   { name: "notes.list", args: { boardId: B, scope: "team" }, method: "GET", path: `/api/v1/boards/${B}/notes?scope=team&limit=26&offset=0` },
@@ -309,7 +312,7 @@ const multipartToolCases: MultipartToolCase[] = [{
 void test("every MCP tool maps to the expected public API request", async () => {
   const server = internals();
   const expectedNames = [...new Set([...toolCases, ...noRequestToolCases, ...multiRequestToolCases, ...multipartToolCases].map((item) => item.name))].sort();
-  assert.equal(expectedNames.length, 85);
+  assert.equal(expectedNames.length, 88);
   assert.deepEqual(Object.keys(server._registeredTools).sort(), expectedNames);
 
   const originalFetch = globalThis.fetch;
@@ -587,8 +590,10 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     // descriptions add deliberate routing context inside nested inputs and union arms.
     // First-class separator create/update/move/delete tools and mixed-lane anchors add roughly 4k,
     // and every anchor description spells out which edge a null anchor selects.
+    // The three agent-run tools (start/update/list) add roughly 3k so agents can announce in-flight
+    // work; the ceiling moves up by exactly that headroom rather than an open-ended round number.
     const serializedToolCatalogLength = JSON.stringify(tools).length;
-    assert.ok(serializedToolCatalogLength <= 200_000, `the default tool catalog stays within its 200k-character budget (received ${serializedToolCatalogLength})`);
+    assert.ok(serializedToolCatalogLength <= 204_000, `the default tool catalog stays within its 200k-character budget (received ${serializedToolCatalogLength})`);
     for (const name of [
       "kanera_bulk_add_comments",
       "kanera_bulk_delete_comments",

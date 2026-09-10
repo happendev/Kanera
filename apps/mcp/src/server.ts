@@ -417,7 +417,7 @@ const noteUpdateChanges = z.union([
 ]);
 const automationActionInput = z.object({
   type: z.enum(AUTOMATION_ACTION_TYPES).describe("Automation action type."),
-  config: z.looseObject({}).describe("Config by type: add/remove_labels {labelIds}; add/remove_assignees {userIds}; apply_checklists {templateIds}; set_due_date {offsetDays, slot}; clear_due_date/move_to_top/move_to_bottom {}; set_completion {completed}; move_to_list {listId, placement}; populate_custom_field {fieldId, onlyIfEmpty, value}. IDs are UUID arrays where plural. The public API validates the selected type's exact config."),
+  config: z.looseObject({}).describe("Config by type: add/remove_labels {labelIds}; add/remove_assignees {userIds}; apply_checklists {templateIds}; set_due_date {offsetDays, slot}; clear_due_date/move_to_top/move_to_bottom {}; set_completion {completed}; move_to_list {listId, placement}; populate_custom_field {fieldId, onlyIfEmpty, value}; post_comment {template} (Markdown with {{card.title}}, {{card.key}}, {{card.url}}, {{card.dueDate}}, {{list.name}}, {{board.name}}, {{workspace.name}} placeholders); call_webhook {endpointId} (a generic webhook endpoint of the same workspace; delivered through the signed webhook pipeline with retries). IDs are UUID arrays where plural. The public API validates the selected type's exact config."),
 });
 const automationCreateFields = {
   enabled: z.boolean().default(false).describe("Whether the rule should start running immediately. Enabled rules require at least one action."),
@@ -601,6 +601,9 @@ const toolBehaviors: Record<string, ToolBehavior> = {
   "cards.set_cover": CHANGE,
   "comments.update": CHANGE,
   "comments.set_reaction": CHANGE,
+  "runs.start": ADD,
+  "runs.update": CHANGE,
+  "runs.list": READ,
 };
 
 function toolTitle(name: string) {
@@ -1069,7 +1072,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
   registerKaneraTool(server, "automations.list", "List the ordered automation rules and lifetime run statistics for a standard workspace. Requires workspace-admin authority; use workspaces.get when only general readable workspace configuration is needed.", {
     workspaceId: uuid,
   }, (a, api) => api.get(`/api/v1/workspaces/${a.workspaceId}/automations`), ctx);
-  registerKaneraTool(server, "automations.list_executions", "List a cursor-paginated history of one automation's retained execution outcomes (effectful, no-op, or failed), newest first. Requires workspace-admin authority.", {
+  registerKaneraTool(server, "automations.list_executions", "List a cursor-paginated history of one automation's retained execution outcomes (effectful, no-op, or failed) with the card acted on, the action type, and any error text, newest first. Requires workspace-admin authority.", {
     automationId: uuid,
     ...collectionPageSchema,
   }, (a, api) => remoteCollectionPage(api, `/api/v1/automations/${a.automationId}/executions`, {}, a.limit, a.cursor, `automation-executions:${a.automationId}`), ctx);
@@ -1309,6 +1312,24 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     body: z.string().min(1).max(20000),
     attachmentIds: z.array(uuid).max(100).optional(),
   }, async (a, api) => api.post(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/comments`, { body: a.body, attachmentIds: a.attachmentIds }), ctx);
+  registerKaneraTool(server, "runs.start", "Announce that you are starting work on a card: creates a live run that shows an \"agent working\" chip on the card and records which agent started it for whom. Call before multi-step work, then runs.update to report progress and finish. Requires board editor access and a write-capable credential.", {
+    cardId: cardReference,
+    title: z.string().trim().min(1).max(200).describe("Short description of the work, e.g. \"Implementing OAuth refresh\"."),
+    summary: z.string().trim().max(4000).optional().describe("Optional longer progress note shown in card detail."),
+    externalUrl: z.url().max(2000).optional().describe("Where a person can watch or resume this work: a pull request, session log, or chat thread."),
+  }, async (a, api) => api.post(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/agent-runs`, { title: a.title, summary: a.summary, externalUrl: a.externalUrl }), ctx);
+  registerKaneraTool(server, "runs.update", "Report progress on, or finish, a run from runs.start. Every call is a heartbeat; send one at least every 10 minutes or the run is marked stalled. A status of succeeded, failed, or cancelled ends the run (ended runs are immutable); use blocked while waiting on a person. Requires board editor access and a write-capable credential.", {
+    runId: uuid,
+    status: z.enum(["running", "blocked", "succeeded", "failed", "cancelled"]).optional(),
+    title: z.string().trim().min(1).max(200).optional(),
+    summary: z.string().trim().max(4000).nullable().optional().describe("Replace the progress/outcome note. Null clears it."),
+    externalUrl: z.url().max(2000).nullable().optional(),
+  }, (a, api) => api.patch(`/api/v1/agent-runs/${a.runId}`, { status: a.status, title: a.title, summary: a.summary, externalUrl: a.externalUrl }), ctx);
+  registerKaneraTool(server, "runs.list", "List a card's agent runs: live by default, full history with includeEnded. Check before starting work so two agents do not run the same card.", {
+    cardId: cardReference,
+    includeEnded: z.boolean().default(false),
+    limit: z.number().int().min(1).max(100).default(50),
+  }, async (a, api) => api.get(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/agent-runs`, { includeEnded: a.includeEnded, limit: a.limit }), ctx);
   registerKaneraTool(server, "comments.list", "List a card's comments, newest first. Cursor-paginated; pass the opaque nextCursor unchanged.", {
     cardId: cardReference,
     cursor: z.string().min(1).max(1000).optional(),

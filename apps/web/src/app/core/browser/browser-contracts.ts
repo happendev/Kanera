@@ -46,6 +46,12 @@ export const STORAGE_KEYS = {
   SIDEBAR_COLLAPSED: "kanera_sidebar_collapsed",
   WORKSPACES_COLLAPSED: "kanera_workspaces_collapsed",
   THEME: "kanera-theme",
+  // Accent (primary colour) choice, stored per device alongside THEME. Read by the index.html
+  // pre-paint script as well as ThemeService, so the literal is duplicated there intentionally.
+  ACCENT: "kanera-accent",
+  // Which account the two keys above were last painted for. Without it, signing in as someone who
+  // has never chosen an appearance leaves the previous user's theme on screen.
+  APPEARANCE_OWNER: "kanera-appearance-owner",
   VIEW_PREFIX: "kanera.view",
 } as const;
 

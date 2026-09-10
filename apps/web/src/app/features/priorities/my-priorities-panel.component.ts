@@ -54,6 +54,8 @@ export class MyPrioritiesPanelComponent {
   readonly loadError = this.priorities.loadError;
   readonly online = this.priorities.online;
   readonly addableCards = this.priorities.addableCards;
+  readonly addCandidatesLoading = this.priorities.addCandidatesLoading;
+  readonly addCandidatesLoadError = this.priorities.addCandidatesLoadError;
   readonly changedSinceSeen = this.priorities.changedSinceSeen;
 
   /** Errors from drawer gestures render inside the drawer, above the row that failed. */
@@ -186,6 +188,10 @@ export class MyPrioritiesPanelComponent {
 
   retry(): void {
     void this.priorities.refresh();
+    void this.priorities.loadAddCandidates();
+  }
+
+  retryCandidates(): void {
     void this.priorities.loadAddCandidates();
   }
 

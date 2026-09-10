@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ACCENTS, THEMES } from "../appearance.js";
 import { CLIENT_ROLES } from "../schema/client-roles.js";
 import { CLIENT_BILLING_STATUSES, CLIENT_PLANS } from "../schema/client.js";
 import { GENERAL_NAME_MAX_LENGTH } from "./name-limits.js";
@@ -121,6 +122,9 @@ export const authResponse = z.object({
     timezone: z.string(),
     showCardKeys: z.boolean(),
     showScratchpad: z.boolean(),
+    // Null until the account has actually chosen one; the client then keeps its device/OS default.
+    theme: z.enum(THEMES).nullable(),
+    accent: z.enum(ACCENTS).nullable(),
     orgName: z.string(),
     logoUrl: z.string().nullable(),
     deploymentMode: z.enum(["self_hosted", "hosted"]),
@@ -161,6 +165,8 @@ export const updateMeBody = z.object({
   timezone: z.string().min(1).max(100).optional(),
   showCardKeys: z.boolean().optional(),
   showScratchpad: z.boolean().optional(),
+  theme: z.enum(THEMES).optional(),
+  accent: z.enum(ACCENTS).optional(),
 });
 export type UpdateMeBody = z.infer<typeof updateMeBody>;
 

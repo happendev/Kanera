@@ -102,6 +102,7 @@ function boardStateStub() {
     inactiveCardsDays: signal(14),
     isCardChecklistExpanded: () => false,
     checklistsForCard: () => [],
+    liveAgentRunsForCard: () => [],
   };
 }
 

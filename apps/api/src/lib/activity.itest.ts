@@ -1,7 +1,7 @@
 import "../test/setup.integration.js";
 import { insertTestUsers } from "../test/user-fixtures.js";
 import { asyncLocalStorage, requestContext } from "@fastify/request-context";
-import { activityEvents, boards, clients, supportSessions, workspaceApiKeys, workspaces } from "@kanera/shared/schema";
+import { activityEvents, boards, clients, oauthClients, oauthGrants, supportSessions, workspaceApiKeys, workspaces } from "@kanera/shared/schema";
 import { eq, inArray } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -54,6 +54,29 @@ async function runWithApiKeyContext(apiKeyId: string, apiKeyName: string, callba
     requestContext.set("apiKeyName", apiKeyName);
     await callback();
   });
+}
+
+async function runWithAgentContext(grantId: string, agentName: string, callback: () => Promise<void>) {
+  await asyncLocalStorage.run({} as Parameters<typeof asyncLocalStorage.run>[0], async () => {
+    requestContext.set("authKind", "agent");
+    requestContext.set("agentGrantId", grantId);
+    requestContext.set("agentName", agentName);
+    await callback();
+  });
+}
+
+async function seedAgentGrant(f: Fixture) {
+  const clientId = `test_agent_${randomUUID()}`;
+  await db.insert(oauthClients).values({ clientId, kind: "public", name: "Claude", grantTypes: ["authorization_code"] });
+  const [grant] = await db.insert(oauthGrants).values({
+    clientId,
+    userId: f.actor.id,
+    orgClientId: f.actor.clientId,
+    scopes: ["kanera:read", "kanera:write"],
+    resource: "http://localhost:3002/mcp",
+  }).returning();
+  assert.ok(grant);
+  return grant;
 }
 
 async function runWithSupportContext(sessionId: string, operatorEmail: string, callback: () => Promise<void>) {
@@ -412,4 +435,79 @@ void test("coalesced activity separates user edits from API key edits by the sam
   assert.equal(rows.length, 2);
   assert.equal(rows.some((row) => row.actorKind === "user" && row.apiKeyId === null), true);
   assert.equal(rows.some((row) => row.actorKind === "apiKey" && row.apiKeyId === apiKey.id), true);
+});
+
+void test("recordActivity records an agent grant as actorKind agent for the person it acts for", async () => {
+  const f = await seedFixture();
+  const grant = await seedAgentGrant(f);
+
+  await runWithAgentContext(grant.id, "Claude", async () => {
+    const activity = await recordActivity(db, {
+      boardId: f.boardA.id,
+      workspaceId: f.workspace.id,
+      actorId: f.actor.id,
+      entityType: "card",
+      entityId: randomUUID(),
+      action: "created",
+    });
+
+    // actorId stays the person (permissions and "my work" keep working) while the kind + grant say
+    // an agent did it, so the feed labels it and Work Done never counts it as the person's effort.
+    assert.equal(activity.actorKind, "agent");
+    assert.equal(activity.actorId, f.actor.id);
+    assert.equal(activity.agentGrantId, grant.id);
+    assert.equal(activity.agentName, "Claude");
+    assert.equal(activity.apiKeyId, null);
+
+    const feed = toActivityFeedEvent(activity, { displayName: "Owner", avatarUrl: null }, f.actor.clientId);
+    assert.equal(feed.actorName, "Owner", "agent rows keep the person's name; the UI adds the via-agent marker");
+    assert.equal(feed.agentName, "Claude");
+  });
+});
+
+void test("coalesced activity never merges an agent's burst into its owner's own edits", async () => {
+  const f = await seedFixture();
+  const grant = await seedAgentGrant(f);
+  const entityId = randomUUID();
+
+  await recordCoalescedActivity(db, baseInput(f, {
+    entityId,
+    action: "updated",
+    coalesceKey: "card:title",
+    fromValue: "Draft",
+    toValue: "User edit",
+    payload: { title: "User edit" },
+  }));
+
+  await runWithAgentContext(grant.id, "Claude", async () => {
+    await recordCoalescedActivity(db, baseInput(f, {
+      entityId,
+      action: "updated",
+      coalesceKey: "card:title",
+      fromValue: "User edit",
+      toValue: "Agent edit",
+      payload: { title: "Agent edit" },
+    }));
+    // A second edit by the same agent inside the window does coalesce with its own row.
+    await recordCoalescedActivity(db, baseInput(f, {
+      entityId,
+      action: "updated",
+      coalesceKey: "card:title",
+      fromValue: "Agent edit",
+      toValue: "Agent edit 2",
+      payload: { title: "Agent edit 2" },
+    }));
+  });
+
+  const rows = await db
+    .select()
+    .from(activityEvents)
+    .where(inArray(activityEvents.entityId, [entityId]))
+    .orderBy(activityEvents.actorKind);
+
+  assert.equal(rows.length, 2);
+  assert.equal(rows.some((row) => row.actorKind === "user" && row.agentGrantId === null), true);
+  const agentRow = rows.find((row) => row.actorKind === "agent");
+  assert.equal(agentRow?.agentGrantId, grant.id);
+  assert.equal(agentRow?.coalescedCount, 2);
 });

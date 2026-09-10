@@ -184,6 +184,8 @@ export const publicWebhookEventTypes = [
   "note:deleted",
   "note:locked",
   "note:unlocked",
+  "agentRun:started",
+  "agentRun:updated",
 ] as const;
 
 function operation(input: Omit<Operation, "security"> & { public?: boolean }): Operation {
@@ -336,7 +338,7 @@ app.post("/kanera/webhook", express.raw({ type: "application/json" }), (req, res
 });
 \`\`\``;
 
-const webhookTagDescription = `Configure signed outgoing webhooks from **Workspace Settings -> API**.
+const webhookTagDescription = `Configure signed outgoing webhooks from **Workspace Settings -> API**, or manage them here: workspace admins manage every endpoint, and any write-capable credential can register endpoints scoped to its own connection so an agent can subscribe to events without admin authority.
 
 Kanera sends JSON payloads with \`X-Kanera-Event-Id\`, \`X-Kanera-Timestamp\`, and \`X-Kanera-Signature\`. Verify \`X-Kanera-Signature\` as \`sha256=\` plus HMAC-SHA256 over \`\${timestamp}.\${rawBody}\` using the endpoint secret. Leave an endpoint's \`eventTypes\` empty for all events, or call \`/webhook-event-types\` to build a filtered list.`;
 
@@ -367,6 +369,10 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     {
       name: "External Links",
       description: "Durable mappings between outside-system records and Kanera entities. Use these to make sync jobs idempotent without storing integration metadata in card text.",
+    },
+    {
+      name: "Agent Runs",
+      description: "Live \"an agent is working on this\" sessions on cards. Start a run before multi-step work, heartbeat it during, and finish it with a terminal status; boards show a live chip and card detail keeps the history. Live runs without a heartbeat for 15 minutes are marked stalled.",
     },
     { name: "Media", description: "Read signed media URLs returned by API responses. Treat signed URLs as opaque and short-lived." },
     {
@@ -508,6 +514,52 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           },
         ],
         description: "The created workspace. When kind is `board`, `initialBoard` is the standalone board and supplies the board id to open next.",
+      },
+      AgentRun: {
+        type: "object",
+        required: ["id", "workspaceId", "boardId", "cardId", "userId", "agentGrantId", "agentName", "status", "title", "summary", "externalUrl", "startedAt", "heartbeatAt", "endedAt", "createdAt", "updatedAt"],
+        properties: {
+          id: uuid,
+          workspaceId: uuid,
+          boardId: uuid,
+          cardId: uuid,
+          userId: { ...uuid, description: "The person the agent acts for." },
+          agentGrantId: nullable({ ...uuid, description: "OAuth grant of the connected agent; null for API-key callers." }),
+          agentName: { type: "string" },
+          status: { type: "string", enum: ["running", "blocked", "succeeded", "failed", "cancelled", "stalled"], description: "running/blocked are live; succeeded/failed/cancelled are terminal and immutable; stalled is set by Kanera when a live run stops heartbeating and may still be finished." },
+          title: { type: "string" },
+          summary: nullable({ type: "string" }),
+          externalUrl: nullable({ type: "string", format: "uri" }),
+          startedAt: dateTime,
+          heartbeatAt: dateTime,
+          endedAt: nullable(dateTime),
+          createdAt: dateTime,
+          updatedAt: dateTime,
+        },
+      },
+      AgentRunsResponse: {
+        type: "object",
+        required: ["runs"],
+        properties: { runs: arrayOf(ref("AgentRun")) },
+      },
+      StartAgentRunBody: {
+        type: "object",
+        required: ["title"],
+        properties: {
+          title: { type: "string", minLength: 1, maxLength: 200 },
+          summary: { type: "string", maxLength: 4000 },
+          externalUrl: nullable({ type: "string", format: "uri", maxLength: 2000, description: "Where a person can watch or resume the work (a PR, session log, chat thread)." }),
+        },
+      },
+      UpdateAgentRunBody: {
+        type: "object",
+        description: "Every field is optional; an empty body is a heartbeat.",
+        properties: {
+          status: { type: "string", enum: ["running", "blocked", "succeeded", "failed", "cancelled", "stalled"] },
+          title: { type: "string", minLength: 1, maxLength: 200 },
+          summary: nullable({ type: "string", maxLength: 4000 }),
+          externalUrl: nullable({ type: "string", format: "uri", maxLength: 2000 }),
+        },
       },
       ExternalLink: {
         type: "object",
@@ -866,14 +918,15 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       },
       Comment: {
         type: "object",
-        required: ["id", "cardId", "authorId", "authorKind", "apiKeyId", "apiKeyName", "authorName", "authorAvatarUrl", "body", "editedAt", "reactions", "createdAt"],
+        required: ["id", "cardId", "authorId", "authorKind", "apiKeyId", "apiKeyName", "agentName", "authorName", "authorAvatarUrl", "body", "editedAt", "reactions", "createdAt"],
         properties: {
           id: uuid,
           cardId: uuid,
           authorId: uuid,
-          authorKind: { type: "string", enum: ["user", "apiKey", "system"] },
+          authorKind: { type: "string", enum: ["user", "apiKey", "agent", "system"], description: "`agent` marks a comment an AI agent wrote for `authorId` through an interactive OAuth connection; the person owns it, `agentName` says which agent wrote it." },
           apiKeyId: nullable(uuid),
           apiKeyName: nullable({ type: "string" }),
+          agentName: nullable({ type: "string" }),
           authorName: { type: "string" },
           authorAvatarUrl: nullable({ type: "string" }),
           body: { type: "string" },
@@ -885,14 +938,15 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       },
       ContentQueryComment: {
         type: "object",
-        required: ["id", "cardId", "authorId", "authorKind", "apiKeyId", "apiKeyName", "authorName", "body", "editedAt", "createdAt"],
+        required: ["id", "cardId", "authorId", "authorKind", "apiKeyId", "apiKeyName", "agentName", "authorName", "body", "editedAt", "createdAt"],
         properties: {
           id: uuid,
           cardId: uuid,
           authorId: uuid,
-          authorKind: { type: "string", enum: ["user", "apiKey", "system"] },
+          authorKind: { type: "string", enum: ["user", "apiKey", "agent", "system"] },
           apiKeyId: nullable(uuid),
           apiKeyName: nullable({ type: "string" }),
+          agentName: nullable({ type: "string" }),
           authorName: { type: "string" },
           body: { type: "string" },
           editedAt: nullable(dateTime),
@@ -1242,6 +1296,64 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           eventTypes: arrayOf(ref("WebhookEventType")),
         },
       },
+      CreateWebhookEndpointBody: zodSchema(dto.createWebhookEndpointBody),
+      UpdateWebhookEndpointBody: zodSchema(dto.updateWebhookEndpointBody),
+      WebhookEndpoint: {
+        type: "object",
+        required: ["id", "workspaceId", "name", "url", "eventTypes", "enabled", "scope", "lastSuccessfulAt", "createdAt", "updatedAt"],
+        properties: {
+          id: uuid,
+          workspaceId: uuid,
+          name: { type: "string" },
+          url: { type: "string", format: "uri" },
+          eventTypes: { ...arrayOf(ref("WebhookEventType")), description: "Empty means every event." },
+          enabled: { type: "boolean" },
+          scope: {
+            type: "string",
+            enum: ["workspace", "connection"],
+            description: "`workspace` endpoints are managed by workspace admins. `connection` endpoints were registered by an API credential without workspace-admin authority and are visible only to that credential's connection and to admins.",
+          },
+          lastSuccessfulAt: { ...nullable(dateTime), description: "When a delivery to this endpoint last succeeded." },
+          createdAt: dateTime,
+          updatedAt: dateTime,
+        },
+        additionalProperties: false,
+      },
+      CreatedWebhookEndpoint: {
+        allOf: [
+          ref("WebhookEndpoint"),
+          {
+            type: "object",
+            required: ["secret"],
+            properties: {
+              secret: { type: "string", description: "The signing secret. Shown only in this response; rotate it with the secret endpoint if lost." },
+            },
+          },
+        ],
+      },
+      WebhookDelivery: {
+        type: "object",
+        required: ["id", "endpointId", "workspaceId", "eventType", "payload", "status", "attempts", "nextAttemptAt", "createdAt", "updatedAt"],
+        properties: {
+          id: uuid,
+          endpointId: uuid,
+          workspaceId: uuid,
+          outboxEventId: nullable(uuid),
+          eventType: { type: "string" },
+          payload: ref("WebhookDeliveryPayload"),
+          status: { type: "string", enum: ["queued", "delivering", "success", "failed"] },
+          attempts: { type: "integer" },
+          nextAttemptAt: dateTime,
+          lastAttemptAt: nullable(dateTime),
+          responseStatus: nullable({ type: "integer" }),
+          responseBody: nullable({ type: "string" }),
+          lastError: nullable({ type: "string" }),
+          deliveredAt: nullable(dateTime),
+          createdAt: dateTime,
+          updatedAt: dateTime,
+        },
+        additionalProperties: false,
+      },
       WebhookDeliveryPayload: {
         type: "object",
         required: ["id", "type", "workspaceId", "occurredAt", "data"],
@@ -1327,10 +1439,13 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       },
       AutomationExecution: {
         type: "object",
-        required: ["id", "outcome", "ranAt"],
+        required: ["id", "outcome", "cardId", "actionType", "error", "ranAt"],
         properties: {
           id: uuid,
           outcome: { type: "string", enum: ["effectful", "noop", "failed"] },
+          cardId: { ...nullable(uuid), description: "The card the run acted on. Null for runs recorded before this field existed or when the card was since deleted." },
+          actionType: { type: ["string", "null"], description: "For failed runs, the action that threw. Otherwise the rule's first action type." },
+          error: { type: ["string", "null"], description: "Truncated failure message; null unless outcome is failed." },
           ranAt: dateTime,
         },
         additionalProperties: false,
@@ -1454,6 +1569,68 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       patch: operation({ tags: ["Workspaces"], summary: "Update a workspace member role", operationId: "updateWorkspaceMember", parameters: [idParam(), idParam("userId")], requestBody: jsonBody(ref("UpdateWorkspaceMemberBody")), responses: authedResponses({ "200": ok(ref("WorkspaceMember")) }) }),
       delete: operation({ tags: ["Workspaces"], summary: "Remove a workspace member", operationId: "removeWorkspaceMember", parameters: [idParam(), idParam("userId")], responses: authedResponses({ "204": noContent }) }),
     },
+    "/workspaces/{wsId}/webhooks": {
+      get: operation({
+        tags: ["Webhooks"],
+        summary: "List webhook endpoints",
+        description: "Workspace admins see every generic webhook endpoint in the workspace. A write-capable non-admin credential (workspace key, personal key, or OAuth agent grant) that is a workspace member sees only the endpoints registered by its own connection.",
+        operationId: "listWebhookEndpoints",
+        parameters: [idParam("wsId", "Workspace id.")],
+        responses: authedResponses({ "200": ok(arrayOf(ref("WebhookEndpoint"))) }),
+      }),
+      post: operation({
+        tags: ["Webhooks"],
+        summary: "Create a webhook endpoint",
+        description: "Registers a signed HTTPS endpoint for workspace and board events. The signing secret is returned once. Workspace admins create workspace-scoped endpoints; any other write-capable credential creates an endpoint scoped to its own connection, which it can manage without admin authority. Webhooks require a paid plan on hosted Kanera.",
+        operationId: "createWebhookEndpoint",
+        parameters: [idParam("wsId", "Workspace id."), idempotencyKeyHeader()],
+        requestBody: jsonBody(ref("CreateWebhookEndpointBody")),
+        responses: authedResponses({ "201": created(ref("CreatedWebhookEndpoint")) }),
+      }),
+    },
+    "/workspaces/{workspaceId}/webhooks/{endpointId}": {
+      patch: operation({
+        tags: ["Webhooks"],
+        summary: "Update a webhook endpoint",
+        description: "Rename, repoint, refilter, or enable/disable an endpoint the caller may manage. Re-enabling requires a paid plan on hosted Kanera.",
+        operationId: "updateWebhookEndpoint",
+        parameters: [idParam("workspaceId"), idParam("endpointId")],
+        requestBody: jsonBody(ref("UpdateWebhookEndpointBody")),
+        responses: authedResponses({ "200": ok(ref("WebhookEndpoint")) }),
+      }),
+      delete: operation({
+        tags: ["Webhooks"],
+        summary: "Delete a webhook endpoint",
+        description: "Removes the endpoint and its delivery log. Returns 204 whether or not the endpoint existed within the caller's scope.",
+        operationId: "deleteWebhookEndpoint",
+        parameters: [idParam("workspaceId"), idParam("endpointId")],
+        responses: authedResponses({ "204": noContent }),
+      }),
+    },
+    "/workspaces/{workspaceId}/webhooks/{endpointId}/secret": pathItem("post", operation({
+      tags: ["Webhooks"],
+      summary: "Rotate a webhook signing secret",
+      description: "Generates a new signing secret and returns it once. Deliveries signed with the previous secret stop verifying immediately.",
+      operationId: "rotateWebhookEndpointSecret",
+      parameters: [idParam("workspaceId"), idParam("endpointId")],
+      responses: authedResponses({ "200": ok(ref("CreatedWebhookEndpoint")) }),
+    })),
+    "/workspaces/{workspaceId}/webhooks/{endpointId}/deliveries": pathItem("get", operation({
+      tags: ["Webhooks"],
+      summary: "List recent webhook deliveries",
+      description: "The most recent delivery attempts for an endpoint, newest first, including response status and error text.",
+      operationId: "listWebhookDeliveries",
+      parameters: [idParam("workspaceId"), idParam("endpointId"), queryParam("limit", { type: "integer", minimum: 1, maximum: 25, default: 25 })],
+      responses: authedResponses({ "200": ok(arrayOf(ref("WebhookDelivery"))) }),
+    })),
+    "/workspaces/{workspaceId}/webhooks/{endpointId}/deliveries/{deliveryId}/retry": pathItem("post", operation({
+      tags: ["Webhooks"],
+      summary: "Retry a failed webhook delivery",
+      description: "Re-sends one delivery that exhausted its automatic retries and returns the updated delivery row. Only failed deliveries can be retried.",
+      operationId: "retryWebhookDelivery",
+      parameters: [idParam("workspaceId"), idParam("endpointId"), idParam("deliveryId")],
+      responses: authedResponses({ "200": ok(ref("WebhookDelivery")) }),
+    })),
     "/workspaces/{wsId}/automations": {
       get: operation({
         tags: ["Automations"],
@@ -2126,6 +2303,34 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       responses: authedResponses({ "201": created({ type: "object", required: ["created", "comments"], properties: { created: { type: "integer" }, comments: arrayOf(ref("Comment")) } }) }),
     })),
     "/comments/{id}/reactions": pathItem("post", operation({ tags: ["Comments"], summary: "Add a comment reaction", operationId: "addCommentReaction", parameters: [idParam()], requestBody: jsonBody(ref("AddReactionBody")), responses: authedResponses({ "201": created(ref("Comment")) }) })),
+    "/cards/{cardId}/agent-runs": {
+      get: operation({
+        tags: ["Agent Runs"], summary: "List agent runs on a card", operationId: "listCardAgentRuns",
+        description: "Lists live runs by default. Pass includeEnded=true for the full history, newest first. Check this before starting work to avoid duplicating a run another agent already has in flight.",
+        parameters: [idParam("cardId"), queryParam("includeEnded", { type: "boolean", default: false }), queryParam("limit", { type: "integer", minimum: 1, maximum: 100, default: 50 })],
+        responses: authedResponses({ "200": ok(ref("AgentRunsResponse")) }),
+      }),
+      post: operation({
+        tags: ["Agent Runs"], summary: "Start an agent run on a card", operationId: "startAgentRun",
+        description: "Announces that the caller is working on the card. The board shows a live chip and a card-activity row is recorded, attributed to the connected agent acting for its user. Requires board editor access and a write-capable credential.",
+        parameters: [idParam("cardId"), idempotencyKeyHeader()],
+        requestBody: jsonBody(ref("StartAgentRunBody")),
+        responses: authedResponses({ "201": created(ref("AgentRun")) }),
+      }),
+    },
+    "/agent-runs/{id}": {
+      get: operation({
+        tags: ["Agent Runs"], summary: "Get an agent run", operationId: "getAgentRun", parameters: [idParam()],
+        responses: authedResponses({ "200": ok(ref("AgentRun")) }),
+      }),
+      patch: operation({
+        tags: ["Agent Runs"], summary: "Update, heartbeat, or finish an agent run", operationId: "updateAgentRun",
+        description: "Every PATCH is a heartbeat, so `{}` keeps a long run alive. A terminal status (succeeded, failed, cancelled) ends the run and records a card-activity row; ended runs reject further updates with 409. Use blocked while waiting on a person.",
+        parameters: [idParam(), idempotencyKeyHeader()],
+        requestBody: jsonBody(ref("UpdateAgentRunBody")),
+        responses: authedResponses({ "200": ok(ref("AgentRun")), "409": { $ref: "#/components/responses/Conflict" } }),
+      }),
+    },
     "/comments/{id}/reactions/{type}": pathItem("delete", operation({ tags: ["Comments"], summary: "Remove a comment reaction", operationId: "removeCommentReaction", parameters: [idParam(), { name: "type", in: "path", required: true, schema: { type: "string" } }], responses: authedResponses({ "204": noContent }) })),
     "/boards/{id}/activity": pathItem("get", operation({ tags: ["Activity"], summary: "List recent board activity", description: "Returns a cursor-paginated board-wide feed of activity and comments.", operationId: "listBoardActivity", parameters: [idParam(), ...cursorPaginationParams], responses: authedResponses({ "200": ok(ref("CardFeedPage")) }) })),
   },

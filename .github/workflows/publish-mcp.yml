@@ -40,13 +40,18 @@ jobs:
           pnpm --filter @kanera/mcp build
           pnpm --filter @kanera/mcp test
 
-      - name: Validate release version
-        if: ${{ github.event_name == 'release' }}
+      - name: Validate MCP release versions
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           manifest_version=$(node -p "require('./apps/mcp/server.json').version")
-          if [ "${RELEASE_TAG}" != "mcp-v${manifest_version}" ]; then
+          package_version=$(node -p "require('./apps/mcp/package.json').version")
+          plugin_version=$(node -p "require('./integrations/plugins/kanera/.codex-plugin/plugin.json').version")
+          if [ "${package_version}" != "${manifest_version}" ] || [ "${plugin_version}" != "${manifest_version}" ]; then
+            echo "MCP package (${package_version}), registry manifest (${manifest_version}), and plugin manifest (${plugin_version}) versions must match."
+            exit 1
+          fi
+          if [ -n "${RELEASE_TAG}" ] && [ "${RELEASE_TAG}" != "mcp-v${manifest_version}" ]; then
             echo "Release tag ${RELEASE_TAG} does not match MCP manifest version mcp-v${manifest_version}."
             exit 1
           fi

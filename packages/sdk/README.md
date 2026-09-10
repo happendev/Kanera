@@ -177,6 +177,19 @@ app.post("/kanera", async (req, res) => {
 using the payload. The signature covers `{timestamp}.{body}`, and the timestamp is checked against a
 5-minute window (configurable) to bound replay.
 
+Endpoints can be registered from the API as well as from Workspace Settings. A workspace admin
+manages every endpoint; any other write-capable credential that is a workspace member can register
+endpoints scoped to its own connection, which is how an agent subscribes without admin authority:
+
+```ts
+const endpoint = await kanera.webhookEndpoints.create(workspaceId, {
+  name: "My agent",
+  url: "https://agent.example.com/kanera",
+  eventTypes: ["card:created", "comment:created"], // [] for everything
+});
+// endpoint.secret is shown once; keep it for parseWebhook.
+```
+
 ## Options
 
 ```ts

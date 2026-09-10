@@ -6,7 +6,7 @@ import type { WireSearchResults } from "@kanera/shared/dto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CommandPaletteService } from "../../core/search/command-palette.service";
 import { GlobalSearchService } from "../../core/search/global-search.service";
-import { ThemeService } from "../../core/theme/theme.service";
+import { ThemeService, type Theme } from "../../core/theme/theme.service";
 import { GlobalSearchOverlayComponent } from "./global-search-overlay.component";
 
 function emptyResults(overrides: Partial<WireSearchResults> = {}): WireSearchResults {
@@ -46,7 +46,7 @@ describe("GlobalSearchOverlayComponent", () => {
       providers: [
         provideZonelessChangeDetection(),
         { provide: GlobalSearchService, useValue: search },
-        { provide: ThemeService, useValue: { theme: signal<"dark" | "light">("dark"), toggle: vi.fn() } },
+        { provide: ThemeService, useValue: { theme: signal<Theme>("dark"), isDark: signal(true), toggle: vi.fn() } },
         { provide: Router, useValue: router },
       ],
     }).compileComponents();

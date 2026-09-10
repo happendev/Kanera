@@ -34,7 +34,7 @@ describe("BoardInvitePage", () => {
           },
         },
         { provide: AuthService, useValue: { isAuthenticated: signal(false), hydrate } },
-        { provide: ThemeService, useValue: { theme: signal("dark") } },
+        { provide: ThemeService, useValue: { theme: signal("dark"), isDark: signal(true) } },
         { provide: Router, useValue: { navigate: vi.fn() } },
       ],
     }).compileComponents();

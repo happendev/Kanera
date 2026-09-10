@@ -3,6 +3,7 @@ import { EMAIL_QUEUE_STATUS, emailQueue, PUSH_QUEUE_STATUS, pushQueue } from "@k
 import { sql } from "drizzle-orm";
 import { db } from "./db.js";
 import { env } from "./env.js";
+import { startAgentRunStallScheduler } from "./lib/agent-runs.js";
 import { startArchivedCardCleanupScheduler } from "./lib/archived-card-cleanup.js";
 import { startBoardMirrorScheduler } from "./lib/board-mirror/scheduler.js";
 import { startDueDateAutomationScheduler } from "./lib/automations.js";
@@ -91,8 +92,10 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   let stopBoardMirrorScheduler: (() => Promise<void>) | null = null;
   let stopWeeklyAdminRecapScheduler: (() => Promise<void>) | null = null;
   let stopPresenceReaper: (() => void) | null = null;
+  let stopAgentRunStallScheduler: (() => Promise<void>) | null = null;
 
   app.addHook("onClose", async () => stopPresenceReaper?.());
+  app.addHook("onClose", async () => stopAgentRunStallScheduler?.());
   app.addHook("onClose", async () => stopRealtimeOutboxDispatcher?.());
   app.addHook("onClose", async () => stopDirectRealtimeOutboxDispatcher?.());
   app.addHook("onClose", async () => webhookDeliveryScheduler?.stop());
@@ -134,6 +137,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
     stopBoardMirrorScheduler = startBoardMirrorScheduler({ log: app.log });
     stopDirectRealtimeOutboxDispatcher = startDirectRealtimeOutboxDispatcher({ log: app.log });
     stopOverdueScheduler = startOverdueNotificationScheduler(app.log);
+    stopAgentRunStallScheduler = startAgentRunStallScheduler(app.log);
     stopDueDateAutomationScheduler = startDueDateAutomationScheduler(app.log);
     stopDailyDigestScheduler = startDailyDigestScheduler({ db, webOrigin: env.WEB_ORIGIN, resolveSmtpConfig, log: app.log });
     stopEmailQueueScheduler = startEmailQueueScheduler({ db, resolveSmtpConfig, log: app.log });

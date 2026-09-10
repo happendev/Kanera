@@ -1,6 +1,6 @@
 import { dto } from "@kanera/shared";
 import { AUTOMATION_LIMIT } from "@kanera/shared/automation-limits";
-import { automationActions, automationRuns, automations, cardLabels, checklistTemplates, customFieldOptions, customFields, lists, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { automationActions, automationRuns, automations, cardLabels, checklistTemplates, customFieldOptions, customFields, lists, webhookEndpoints, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db, type Db } from "../../db.js";
@@ -157,6 +157,19 @@ async function validateActionTargets(workspaceId: string, actions: dto.Automatio
     if (templateIds.some((id) => !validIds.has(id))) throw badRequest("one or more action checklist template ids are invalid");
   }
 
+  // call_webhook references an endpoint rather than a URL so the endpoint's secret, SSRF-checked
+  // URL, and delivery log are reused. Only generic (non-chat) endpoints of this workspace qualify;
+  // a disabled endpoint may still be selected, it simply no-ops until re-enabled.
+  const endpointIds = actions.flatMap((action) => action.type === "call_webhook" ? [action.config.endpointId] : []);
+  if (endpointIds.length > 0) {
+    const rows = await tx
+      .select({ id: webhookEndpoints.id })
+      .from(webhookEndpoints)
+      .where(and(eq(webhookEndpoints.workspaceId, workspaceId), eq(webhookEndpoints.provider, "generic"), inArray(webhookEndpoints.id, Array.from(new Set(endpointIds)))));
+    const validIds = new Set(rows.map((row) => row.id));
+    if (endpointIds.some((id) => !validIds.has(id))) throw badRequest("one or more action webhook endpoint ids are invalid");
+  }
+
   const populateActions = actions.filter((action) => action.type === "populate_custom_field");
   if (populateActions.length > 0) {
     // Load both the target field and, for copy-from-field actions, the source field so we can
@@ -291,7 +304,7 @@ export async function automationRoutes(app: FastifyInstance) {
     if (!current) throw notFound();
     await assertWorkspaceAccess(req.auth, current.workspaceId, "admin");
     return db
-      .select({ id: automationRuns.id, outcome: automationRuns.outcome, ranAt: automationRuns.ranAt })
+      .select({ id: automationRuns.id, outcome: automationRuns.outcome, cardId: automationRuns.cardId, actionType: automationRuns.actionType, error: automationRuns.error, ranAt: automationRuns.ranAt })
       .from(automationRuns)
       .where(eq(automationRuns.automationId, id))
       .orderBy(desc(automationRuns.ranAt), desc(automationRuns.id))

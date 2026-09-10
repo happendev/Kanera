@@ -26,7 +26,8 @@ export class LogoComponent {
   readonly height = input<number>(32);
 
   protected src() {
-    const dark = this.theme.theme() === "dark";
+    // Family, not exact value: carbon is dark and must not fall through to the light logo.
+    const dark = this.theme.isDark();
     return this.variant() === "icon"
       ? (dark ? DARK_ICON : LIGHT_ICON)
       : (dark ? DARK_LONG : LIGHT_LONG);

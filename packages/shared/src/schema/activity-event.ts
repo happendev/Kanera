@@ -3,6 +3,7 @@ import { boolean, check, index, integer, jsonb, pgTable, text, timestamp, uuid }
 import { valueIn } from "./_value-check.js";
 import { boards } from "./board.js";
 import { clients } from "./client.js";
+import { oauthGrants } from "./oauth.js";
 import { supportSessions } from "./support-session.js";
 import { users } from "./user.js";
 import { workspaceApiKeys } from "./workspace-api-key.js";
@@ -84,6 +85,8 @@ export const ACTIVITY_ACTIONS = [
   "mirror:deleted",
   "mirror:disabled",
   "mirror:enabled",
+  "agentRun:started",
+  "agentRun:ended",
 ] as const;
 export type ActivityAction = (typeof ACTIVITY_ACTIONS)[number];
 export const ACTIVITY_ACTION = {
@@ -129,6 +132,8 @@ export const ACTIVITY_ACTION = {
   MIRROR_DELETED: "mirror:deleted",
   MIRROR_DISABLED: "mirror:disabled",
   MIRROR_ENABLED: "mirror:enabled",
+  AGENT_RUN_STARTED: "agentRun:started",
+  AGENT_RUN_ENDED: "agentRun:ended",
 } as const satisfies Record<string, ActivityAction>;
 
 export const ACTIVITY_COALESCE_KEYS = [
@@ -164,7 +169,11 @@ export type DynamicActivityCoalesceKey =
   | `checklist:${string}:items:assignee`
   | `checklist:${string}:items:dueDate`;
 
-export const ACTIVITY_ACTOR_KINDS = ["user", "apiKey", "system", "support"] as const;
+// "agent" marks a mutation made by an AI agent connected through an interactive OAuth grant (the
+// "Connect an AI agent" flow). actorId still holds the person the agent acts for, so permissions,
+// entity references, and "my work" queries keep working; agentGrantId/agentName record which agent
+// did it so the feed, notifications, and Work Done can tell agent output from the human's own.
+export const ACTIVITY_ACTOR_KINDS = ["user", "apiKey", "agent", "system", "support"] as const;
 
 export const activityEvents = pgTable(
   "activity_event",
@@ -191,6 +200,11 @@ export const activityEvents = pgTable(
     supportSessionId: uuid("support_session_id")
       .references(() => supportSessions.id, { onDelete: "set null" }),
     supportActorEmail: text("support_actor_email"),
+    // Set only for actorKind "agent". SET NULL so revoking/pruning a grant never destroys history;
+    // the name snapshot keeps the row attributable after the grant row is gone.
+    agentGrantId: uuid("agent_grant_id")
+      .references(() => oauthGrants.id, { onDelete: "set null" }),
+    agentName: text("agent_name"),
     entityType: text("entity_type").notNull(),
     entityId: uuid("entity_id").notNull(),
     action: text("action").notNull(),

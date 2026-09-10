@@ -25,6 +25,8 @@ export interface WorkDoneActor {
   userId: string | null;
   name: string;
   avatarUrl: string | null;
+  /** Set when an AI agent did this work for the person; the row shows a sparkles mark beside them. */
+  agentName: string | null;
   /** How many of the day's events this person accounts for. */
   eventCount: number;
 }

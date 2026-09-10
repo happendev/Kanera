@@ -12,14 +12,14 @@ export class AuthSyncService {
   private readonly sockets = inject(SocketService);
   private reloadInFlight = false;
   private reloadPending = false;
-  private entitlementSyncAttached = false;
+  private sessionSyncAttached = false;
 
   constructor() {
     if (typeof window === "undefined") return;
 
     effect(() => {
-      if (!this.auth.user() || this.entitlementSyncAttached) return;
-      this.attachEntitlementSync();
+      if (!this.auth.user() || this.sessionSyncAttached) return;
+      this.attachSessionSync();
     });
     window.addEventListener("storage", (event) => {
       if (!this.auth.isLogoutSyncEvent(event)) return;
@@ -29,8 +29,8 @@ export class AuthSyncService {
     });
   }
 
-  private attachEntitlementSync(): void {
-    this.entitlementSyncAttached = true;
+  private attachSessionSync(): void {
+    this.sessionSyncAttached = true;
     const socket = this.sockets.connect();
     const handlers: Partial<ServerToClientEvents> = {
       [SERVER_EVENTS.CLIENT_ENTITLEMENTS_CHANGED]: ({ clientId }) => {
@@ -45,6 +45,16 @@ export class AuthSyncService {
       },
       [SERVER_EVENTS.CLIENT_USER_REMOVED]: ({ userId }) => {
         if (userId === this.auth.user()?.id) void this.reloadMe();
+      },
+      // Appearance changed on another of this user's devices. Writing it onto the cached session is
+      // the whole handler: AppComponent's effect watches auth.user() and repaints through
+      // ThemeService.hydrate(), the same path a fresh sign-in takes, and the cached copy keeps a
+      // reload agreeing with what is on screen. Deliberately not reloadMe() — the payload already
+      // carries the resulting pair, and appearance is the one session field a user can change
+      // often enough for a round trip per keystroke-speed click to be worth avoiding.
+      [SERVER_EVENTS.USER_APPEARANCE_UPDATED]: ({ theme, accent }) => {
+        if (!this.auth.user()) return;
+        this.auth.updateUser((user) => ({ ...user, theme, accent }));
       },
     };
     registerSocketHandlers(socket, handlers);

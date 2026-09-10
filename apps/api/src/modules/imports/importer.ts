@@ -997,6 +997,7 @@ export async function runTrelloImport(
       authorKind: comment.authorKind,
       apiKeyId: comment.apiKeyId,
       apiKeyName: comment.apiKeyName,
+      agentName: null,
       authorName: ctx.actorName,
       authorAvatarUrl: ctx.actorAvatarUrl,
       body: comment.body,

@@ -69,7 +69,7 @@ const ENTITIES: { name: string; table: unknown; synthetic?: string[]; omitted?: 
     // Credentials, per-user UI preferences, and soft-deletion bookkeeping are never public.
     omitted: [
       "activeClientId", "emailVerifiedAt", "passwordHash", "timezone", "showCardKeys",
-      "showScratchpad", "lastOnlineAt", "deletedAt", "needsOrganisationOnLoginAt",
+      "showScratchpad", "theme", "accent", "lastOnlineAt", "deletedAt", "needsOrganisationOnLoginAt",
     ],
   },
   {
@@ -90,7 +90,23 @@ const ENTITIES: { name: string; table: unknown; synthetic?: string[]; omitted?: 
     name: "Comment",
     table: schema.comments,
     synthetic: ["authorName", "authorAvatarUrl", "reactions"],
-    omitted: ["searchVector"],
+    // agentGrantId is an internal audit link to the OAuth grant; agentName is the public label.
+    omitted: ["searchVector", "agentGrantId"],
+  },
+  { name: "AgentRun", table: schema.agentRuns },
+  {
+    name: "WebhookEndpoint",
+    table: schema.webhookEndpoints,
+    // `scope` summarises the two owner columns; the owning key/grant ids themselves are internal.
+    synthetic: ["scope", "lastSuccessfulAt"],
+    omitted: ["createdById", "provider", "encryptedSecret", "encryptedConfig", "priorityFieldId", "ownerApiKeyId", "ownerAgentGrantId"],
+  },
+  { name: "WebhookDelivery", table: schema.webhookDeliveries },
+  {
+    name: "AutomationExecution",
+    table: schema.automationRuns,
+    // Executions are always fetched for one automation, so the parent id is not repeated per row.
+    omitted: ["automationId"],
   },
 ];
 

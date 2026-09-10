@@ -25,15 +25,18 @@ void test("the Codex plugin bundles the canonical Kanera skill", async () => {
 });
 
 void test("the Codex plugin advertises the registered Kanera app", async () => {
-  const [manifest, app, server] = await Promise.all([
+  const [manifest, app, mcpPackage, server] = await Promise.all([
     readJson(new URL(".codex-plugin/plugin.json", pluginRoot)),
     readJson(new URL(".app.json", pluginRoot)),
+    readJson(new URL("../apps/mcp/package.json", import.meta.url)),
     readJson(new URL("../apps/mcp/server.json", import.meta.url)),
   ]);
 
   assert.equal(manifest.name, "kanera");
   assert.match(manifest.version, /^\d+\.\d+\.\d+$/u);
   assert.match(server.version, /^\d+\.\d+\.\d+$/u);
+  assert.equal(mcpPackage.version, server.version);
+  assert.equal(manifest.version, server.version);
   assert.equal(manifest.skills, "./skills/");
   assert.equal(manifest.apps, "./.app.json");
   assert.deepEqual(manifest.interface.capabilities, ["Read", "Write"]);
@@ -50,5 +53,6 @@ void test("MCP registry releases trigger the publishing workflow", async () => {
 
   assert.match(workflow, /release:\s*\n\s+types: \[published\]/u);
   assert.match(workflow, /startsWith\(github\.event\.release\.tag_name, 'mcp-v'\)/u);
+  assert.match(workflow, /integrations\/plugins\/kanera\/\.codex-plugin\/plugin\.json/u);
   assert.doesNotMatch(workflow, /github\.event_name == 'push'/u);
 });

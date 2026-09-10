@@ -136,6 +136,7 @@ function createComment(overrides: Partial<WireComment> = {}): WireComment {
     authorKind: "user",
     apiKeyId: null,
     apiKeyName: null,
+    agentName: null,
     authorName: "Ada Lovelace",
     authorAvatarUrl: null,
     body: "Looks good to me.",
@@ -158,6 +159,8 @@ function createActivity(overrides: Partial<ActivityFeedEvent> = {}): ActivityFee
     apiKeyName: null,
     supportSessionId: null,
     supportActorEmail: null,
+    agentGrantId: null,
+    agentName: null,
     actorName: "Ada Lovelace",
     actorAvatarUrl: null,
     entityType: "card",
@@ -480,6 +483,8 @@ describe("CardDetailComponent realtime regressions", () => {
           provide: BoardState,
           useValue: {
             detailForCard: vi.fn((_cardId: string) => boardStateDetail()),
+            liveAgentRunsForCard: vi.fn(() => []),
+            mergeAgentRuns: vi.fn(),
             setCardDetail: vi.fn((detail: WireCardDetail) => boardStateDetail.set(detail)),
             cardDetailRealtimeRevision: vi.fn(() => cardDetailRevision),
             noteCardDetailRealtimeMutation: vi.fn(() => { cardDetailRevision += 1; }),
@@ -2350,6 +2355,40 @@ describe("CardDetailComponent realtime regressions", () => {
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector(".activity-item")).toBeNull();
     expect(host.textContent).not.toContain("mirrored changes");
+  });
+
+  it("hides agentRun:started but renders agentRun:ended with its summary", () => {
+    const fixture = TestBed.createComponent(CardActivityComponent);
+    const started = createActivity({
+      id: "act-started",
+      actorKind: "agent",
+      actorName: "Amelia Hart",
+      action: "agentRun:started",
+      payload: { title: "Audit links" },
+    });
+    const ended = createActivity({
+      id: "act-ended",
+      actorKind: "agent",
+      actorName: "Amelia Hart",
+      action: "agentRun:ended",
+      payload: { title: "Audit links", status: "succeeded", summary: "Fixed 3 links" },
+    });
+
+    fixture.componentRef.setInput("cardId", "card-1");
+    fixture.componentRef.setInput("canEdit", true);
+    fixture.componentRef.setInput("members", []);
+    fixture.detectChanges();
+    fixture.componentInstance.feedItems.set([
+      { type: "activity", data: started },
+      { type: "activity", data: ended },
+    ]);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelectorAll(".activity-item").length).toBe(1);
+    expect(host.querySelector(".count")?.textContent?.trim()).toBe("1");
+    expect(host.textContent).not.toContain("started working");
+    expect(host.textContent).toContain("finished: Audit links — Fixed 3 links");
   });
 
   it("renders self-assignment activity without repeating the actor name", () => {

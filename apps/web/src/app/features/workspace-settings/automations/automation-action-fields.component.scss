@@ -38,6 +38,49 @@
 // only matters if this component is ever mounted outside that editor. Every rule below must keep
 // matching .ac-field / .ac-scope-option there — a Do field and a When field are the same control at
 // different depths, and the user reads them as one form.
+// The comment template is the one multi-line control here; it shares the field chrome below and
+// grows with its content rather than forcing an inner scrollbar for a two-line note.
+.aaf-field textarea {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--field-bg, var(--surface-2));
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+
+  &:hover {
+    border-color: var(--border-strong);
+  }
+
+  &:focus-visible {
+    border-color: var(--accent, var(--border-strong));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, var(--border-strong)) 20%, transparent);
+    outline: none;
+  }
+}
+
+.aaf-variables {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.aaf-variable {
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--field-bg, var(--surface-2));
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  user-select: all;
+}
+
 .aaf-field {
   select,
   input {

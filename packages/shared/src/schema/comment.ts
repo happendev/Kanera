@@ -3,10 +3,13 @@ import { check, index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-cor
 import { tsvector } from "./_tsvector.js";
 import { valueIn } from "./_value-check.js";
 import { cards } from "./card.js";
+import { oauthGrants } from "./oauth.js";
 import { users } from "./user.js";
 import { workspaceApiKeys } from "./workspace-api-key.js";
 
-export const COMMENT_AUTHOR_KINDS = ["user", "apiKey", "system"] as const;
+// "agent" comments are authored by an AI agent acting for authorId through an OAuth grant. The
+// person keeps ownership (edit/delete) while the UI labels the comment as agent-written.
+export const COMMENT_AUTHOR_KINDS = ["user", "apiKey", "agent", "system"] as const;
 
 export const comments = pgTable(
   "comment",
@@ -22,6 +25,10 @@ export const comments = pgTable(
     apiKeyId: uuid("api_key_id")
       .references(() => workspaceApiKeys.id, { onDelete: "set null" }),
     apiKeyName: text("api_key_name"),
+    // Set only for authorKind "agent"; see activity_event.agent_grant_id for the FK rationale.
+    agentGrantId: uuid("agent_grant_id")
+      .references(() => oauthGrants.id, { onDelete: "set null" }),
+    agentName: text("agent_name"),
     body: text("body").notNull(),
     editedAt: timestamp("edited_at", { withTimezone: true }),
     // Full-text search vector over the comment body.

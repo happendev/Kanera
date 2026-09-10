@@ -26,7 +26,7 @@ import {
 import { Router } from "@angular/router";
 import { ALLOWED_ATTACHMENT_EXTENSIONS, ALLOWED_ATTACHMENT_MIME } from "@kanera/shared/attachments";
 import type { CardMirrorStatus, LinkedInternalSummary } from "@kanera/shared/dto";
-import { expandWireCard, SERVER_EVENTS, type CardAttachmentRow, type ServerToClientEvents, type WireBoardMemberUser, type WireCard, type WireCardChecklist, type WireCardChecklistItem, type WireCardDetail, type WireCardLabel, type WireCardSummary, type WireChecklistTemplate, type WireCustomFieldOption } from "@kanera/shared/events";
+import { expandWireCard, SERVER_EVENTS, type CardAttachmentRow, type WireAgentRun, type ServerToClientEvents, type WireBoardMemberUser, type WireCard, type WireCardChecklist, type WireCardChecklistItem, type WireCardDetail, type WireCardLabel, type WireCardSummary, type WireChecklistTemplate, type WireCustomFieldOption } from "@kanera/shared/events";
 import type { CardCustomFieldValue, CardLabel } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
@@ -282,6 +282,30 @@ export class CardDetailComponent {
   readonly checklists = input<WireCardChecklist[]>([]);
   readonly appliedChecklistTemplateIds = input<string[]>([]);
   readonly linkedNotes = input<LinkedInternalSummary[]>([]);
+  // Runs live on BoardState (the tile chip reads them too); detail projects only the card's live
+  // slice. Finished, failed, cancelled, and stalled runs are history, and history belongs in the
+  // activity feed (the agentRun:ended row), not in a second list above the fields.
+  readonly liveAgentRuns = computed(() => this.state.liveAgentRunsForCard(this.card().id));
+  agentRunStatusLabel(run: WireAgentRun): string {
+    switch (run.status) {
+      case "running": return "Working";
+      case "blocked": return "Waiting on you";
+      case "succeeded": return "Finished";
+      case "failed": return "Failed";
+      case "cancelled": return "Cancelled";
+      case "stalled": return "Stalled (no heartbeat)";
+    }
+  }
+  agentRunStatusIcon(run: WireAgentRun): string {
+    switch (run.status) {
+      case "running": return "loader-2";
+      case "blocked": return "hand-stop";
+      case "succeeded": return "circle-check";
+      case "failed": return "alert-circle";
+      case "cancelled": return "circle-x";
+      case "stalled": return "plug-connected-x";
+    }
+  }
   readonly close = output<void>();
   readonly checklistCreated = output<WireCardChecklist>();
   readonly closing = signal(false);
@@ -1029,7 +1053,21 @@ export class CardDetailComponent {
     });
   }
 
+  /**
+   * Live runs are loaded beside the detail rather than inside it. The board page already seeds
+   * them, but Global Work hosts this component without that seed, so the card fetches its own
+   * live slice. Merge (never replace) so a realtime update that raced this request keeps its
+   * newer status.
+   */
+  private refreshAgentRuns(cardId: string) {
+    if (!this.sockets.displayedOnline()) return;
+    void this.api.get<{ runs: WireAgentRun[] }>(`/cards/${cardId}/agent-runs`)
+      .then((payload) => { if (cardId === this.cardId()) this.state.mergeAgentRuns(payload.runs); })
+      .catch(() => undefined);
+  }
+
   private async refreshDetailFromNetwork(cardId: string, boardId: string) {
+    this.refreshAgentRuns(cardId);
     const seq = ++this.detailLoadSeq;
     // Only show the loading gate when we have no detail yet, so a background/reconnect refresh of an
     // already-hydrated card doesn't blank the body. Snapshot the realtime version to detect a
