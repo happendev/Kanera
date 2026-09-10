@@ -50,8 +50,8 @@ jobs:
 
       - run: pnpm test:sdk
 
-      # Bundle budgets were previously only checkable by hand, so growth went unnoticed between
-      # releases. Gating here fails the commit that regresses the payload instead of a later audit.
+      # This aliases the web package's standard production build, which enforces the same budgets
+      # locally and in Docker so CI is not the first place bundle growth becomes visible.
       - run: pnpm bundle:web:check
 
   secret-scan:
