@@ -22,6 +22,7 @@ import { SocketService } from "../realtime/socket.service";
 
 const OFFLINE_LOAD_ERROR = "You're offline. Reconnect to see what's next.";
 const GENERIC_LOAD_ERROR = "Couldn't load Up next. Try again in a moment.";
+const CANDIDATE_LOAD_ERROR = "Couldn’t load the cards you can add. Try again in a moment.";
 /**
  * One refetch per burst. The same 180 ms the Global Work and Home consumers use, so a drag that
  * fires several moves costs one round trip on every surface.
@@ -105,6 +106,8 @@ export class MyPrioritiesService {
   /** Candidate pool for the drawer's "Add card", loaded lazily and only while the drawer is open. */
   readonly addCandidates = signal<PriorityAddableCard[]>([]);
   readonly addCandidatesLoaded = signal(false);
+  readonly addCandidatesLoading = signal(false);
+  readonly addCandidatesLoadError = signal<string | null>(null);
   readonly addableCards = computed<PriorityAddableCard[]>(() => {
     if (!this.canReorder() || this.atCapacity()) return [];
     const ranked = this.rankedCardIds();
@@ -130,6 +133,8 @@ export class MyPrioritiesService {
   private joinedBoardIds = new Set<string>();
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
   private requestVersion = 0;
+  /** Independent from queue reads: a reconnecting queue refresh must not cancel a slower candidate load. */
+  private candidateRequestVersion = 0;
   /**
    * A socket-driven change that arrived mid-drag. Applying it would reorder the queue under the
    * pointer, so it is held and flushed as one refetch when the gesture ends.
@@ -190,12 +195,15 @@ export class MyPrioritiesService {
     this.leaveRooms();
     // Bump the version so an in-flight response cannot land into the next organisation's session.
     this.requestVersion += 1;
+    this.candidateRequestVersion += 1;
     this.initialised.set(false);
     this.queue.set(null);
     this.loading.set(false);
     this.loadError.set(null);
     this.addCandidates.set([]);
     this.addCandidatesLoaded.set(false);
+    this.addCandidatesLoading.set(false);
+    this.addCandidatesLoadError.set(null);
     this.appliedSnapshotAt = null;
     this.pendingResync = false;
   }
@@ -304,15 +312,16 @@ export class MyPrioritiesService {
    * names, which `/work/cards/query` does not carry.
    */
   async loadAddCandidates(): Promise<void> {
-    if (this.addCandidatesLoaded() || !this.online()) return;
-    this.addCandidatesLoaded.set(true);
-    const version = this.requestVersion;
+    if (this.addCandidatesLoaded() || this.addCandidatesLoading() || !this.online()) return;
+    const version = ++this.candidateRequestVersion;
+    this.addCandidatesLoading.set(true);
+    this.addCandidatesLoadError.set(null);
     try {
       const [catalog, cards] = await Promise.all([
         this.api.get<WorkCatalog>("/work/catalog"),
         this.loadAssignedCards(),
       ]);
-      if (version !== this.requestVersion) return;
+      if (version !== this.candidateRequestVersion) return;
       const boardsById = new Map(catalog.boards.map((board) => [board.id, board]));
       const listsById = new Map(catalog.lists.map((list) => [list.id, list]));
       const boardOrder = navBoardOrder(catalog);
@@ -355,10 +364,15 @@ export class MyPrioritiesService {
           || a.entry.id.localeCompare(b.entry.id)
         )
         .map((row) => row.entry));
+      this.addCandidatesLoaded.set(true);
     } catch {
-      // A failed candidate load leaves the picker empty and retryable on the next open; it must
-      // never take the queue itself down with it.
-      this.addCandidatesLoaded.set(false);
+      if (version !== this.candidateRequestVersion) return;
+      // The queue itself remains usable, but an empty candidate pool is not evidence that the user
+      // has no assigned work. Preserve that distinction so the drawer never presents a network
+      // failure as the "Open My Cards" empty state.
+      this.addCandidatesLoadError.set(CANDIDATE_LOAD_ERROR);
+    } finally {
+      if (version === this.candidateRequestVersion) this.addCandidatesLoading.set(false);
     }
   }
 

@@ -196,6 +196,7 @@ export class CardComposerDialogComponent implements OnInit {
     effect(() => {
       const boardId = this.boardId();
       const workspaceId = this.workspaceId();
+      const memberIds = new Set(this.members().map((member) => member.userId));
       untracked(() => {
         const previous = this.lastTarget;
         this.lastTarget = { boardId, workspaceId };
@@ -204,7 +205,9 @@ export class CardComposerDialogComponent implements OnInit {
         this.draft.update((draft) => ({
           ...draft,
           boardId,
-          assigneeIds: [],
+          // Keep My Cards' seeded self-assignment (and any other still-valid choices) when the
+          // target changes; only board members the new board cannot accept need to be removed.
+          assigneeIds: draft.assigneeIds.filter((userId) => memberIds.has(userId)),
           ...(workspaceChanged
             ? { listId: "", labelIds: [], checklistTemplateIds: [], customFields: {} }
             : {}),

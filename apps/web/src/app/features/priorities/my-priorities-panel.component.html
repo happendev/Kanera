@@ -96,6 +96,14 @@
         (completed)="onCompleted($event)"
         (cardOpened)="openCard($event)"
       />
+    } @else if (addCandidatesLoading()) {
+      <!-- The queue can finish before its larger, paged candidate pool. Do not briefly claim there
+           is no assigned work while production is still answering those requests. -->
+      <div class="k-loading drawer-empty"><i class="ti ti-loader-2 kanera-spin" aria-label="Loading cards for Up next"></i></div>
+    } @else if (addCandidatesLoadError(); as message) {
+      <k-empty-state class="drawer-empty" plain icon="alert-circle" title="Couldn’t load cards" [text]="message">
+        <button type="button" class="ghost empty-all-btn" (click)="retryCandidates()">Try again</button>
+      </k-empty-state>
     } @else if (showEmptyWithWork()) {
       <!-- Assigned work but nothing sequenced: the one empty state worth teaching, since the queue
            is only useful once something is in it. -->

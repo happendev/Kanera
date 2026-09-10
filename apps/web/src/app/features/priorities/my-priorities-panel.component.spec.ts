@@ -49,7 +49,14 @@ function queue(items = [entry("p1", 1), entry("p2", 2)]): WorkPrioritiesResponse
  * when it opens, what it shows in each state, and what it asks the service to do — not about the
  * queue mechanics, which `my-priorities.service.spec.ts` covers.
  */
-function setup(options: { queue?: WorkPrioritiesResponse | null; online?: boolean; loading?: boolean; loadError?: string | null } = {}) {
+function setup(options: {
+  queue?: WorkPrioritiesResponse | null;
+  online?: boolean;
+  loading?: boolean;
+  loadError?: string | null;
+  addCandidatesLoading?: boolean;
+  addCandidatesLoadError?: string | null;
+} = {}) {
   const queueSignal = signal<WorkPrioritiesResponse | null>(options.queue === undefined ? queue() : options.queue);
   const online = signal(options.online ?? true);
   const navigate = vi.fn(async () => true);
@@ -61,6 +68,8 @@ function setup(options: { queue?: WorkPrioritiesResponse | null; online?: boolea
     loadError: signal<string | null>(options.loadError ?? null),
     online,
     addableCards: signal<{ id: string }[]>([]),
+    addCandidatesLoading: signal(options.addCandidatesLoading ?? false),
+    addCandidatesLoadError: signal<string | null>(options.addCandidatesLoadError ?? null),
     changedSinceSeen: signal(false),
     initialise: vi.fn(),
     refresh: vi.fn(async () => undefined),
@@ -185,6 +194,27 @@ describe("MyPrioritiesPanelComponent", () => {
     f.service.addableCards.set([{ id: "card-9" }]);
     f.fixture.detectChanges();
     expect(host(f.fixture).querySelector(".state-actions")).not.toBeNull();
+  });
+
+  it("does not present candidate latency as an empty assignment list", () => {
+    const loading = setup({ queue: queue([]), addCandidatesLoading: true });
+    loading.fixture.componentInstance.toggle();
+    loading.fixture.detectChanges();
+    expect(host(loading.fixture).querySelector('[aria-label="Loading cards for Up next"]')).not.toBeNull();
+    expect(host(loading.fixture).textContent).not.toContain("Open My Cards");
+  });
+
+  it("does not present a candidate failure as an empty assignment list", () => {
+    const failed = setup({
+      queue: queue([]),
+      addCandidatesLoadError: "Couldn’t load the cards you can add. Try again in a moment.",
+    });
+    failed.fixture.componentInstance.toggle();
+    failed.fixture.detectChanges();
+    expect(host(failed.fixture).textContent).toContain("Couldn’t load cards");
+    expect(host(failed.fixture).textContent).not.toContain("Open My Cards");
+    host(failed.fixture).querySelector<HTMLButtonElement>(".empty-all-btn")!.click();
+    expect(failed.service.loadAddCandidates).toHaveBeenCalledTimes(2);
   });
 
   it("opens a card with its shareable URL and closes the drawer", () => {

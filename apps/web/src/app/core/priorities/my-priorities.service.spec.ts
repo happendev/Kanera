@@ -505,6 +505,34 @@ describe("MyPrioritiesService", () => {
       .toEqual(["c-delivery-doing", "c-delivery-next", "c-events", "c-standalone"]);
   });
 
+  it("keeps a candidate load alive across an overlapping queue refresh", async () => {
+    const f = setup({ priorityQueue: queue([]) });
+    f.service.initialise();
+    await vi.waitFor(() => expect(f.service.queue()).not.toBeNull());
+
+    const candidates = f.service.loadAddCandidates();
+    await f.service.refresh();
+    await candidates;
+
+    expect(f.service.addCandidates().map((card) => card.id)).toEqual(["card-9"]);
+    expect(f.service.addCandidatesLoaded()).toBe(true);
+    expect(f.service.addCandidatesLoading()).toBe(false);
+    expect(f.service.addCandidatesLoadError()).toBeNull();
+  });
+
+  it("reports candidate failures separately from a genuinely empty candidate pool", async () => {
+    const f = setup({ priorityQueue: queue([]) });
+    f.service.initialise();
+    await vi.waitFor(() => expect(f.service.queue()).not.toBeNull());
+    f.get.mockImplementationOnce(async () => { throw new Error("catalog unavailable"); });
+
+    await f.service.loadAddCandidates();
+
+    expect(f.service.addCandidatesLoaded()).toBe(false);
+    expect(f.service.addCandidatesLoading()).toBe(false);
+    expect(f.service.addCandidatesLoadError()).toContain("Couldn’t load");
+  });
+
   it("clears everything on teardown so no id survives an organisation switch", async () => {
     const f = setup();
     f.service.initialise();

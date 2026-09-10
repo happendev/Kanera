@@ -487,6 +487,14 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     assigneeIds: this.creationAssigneeIds(),
     ...this.composerSeedOverride(),
   }));
+  /**
+   * Drafts are isolated by the person the page is about. Sharing one key across My Cards and every
+   * Team Cards target let a teammate's board and assignees restore into the viewer's next card.
+   */
+  readonly composerDraftKey = computed(() => {
+    const targetUserId = this.creationTargetUserId();
+    return `global-work:${this.lens()}${targetUserId ? `:${targetUserId}` : ""}`;
+  });
 
   readonly editableBoardsByWorkspace = computed(() => {
     const result = new Map<string, WorkCatalogBoard[]>();
