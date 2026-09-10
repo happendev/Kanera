@@ -12,7 +12,7 @@ hosted application itself is documented in [DEPLOY.md](DEPLOY.md).
 | `@kanera/cli` | npm | workspace version (`vX.Y.Z` tags) | `publish-npm.yml` |
 | `@kanera/sdk` | npm | workspace version (`vX.Y.Z` tags) | `publish-npm.yml` |
 | MCP server metadata | MCP registry | independent (`mcp-vX.Y.Z` tags) | `publish-mcp.yml` |
-| OpenAI Kanera plugin | OpenAI universal Plugins Directory | independent plugin version | manual review and publish through the OpenAI plugin portal |
+| OpenAI Kanera plugin | OpenAI universal Plugins Directory | MCP version (`mcp-vX.Y.Z` tags) | manual review and publish through the OpenAI plugin portal |
 | Kanera Agent Skill | GitHub and `www.kanera.app` | source snapshot | merge this repo, then deploy Kanera-site |
 | Published Claude connector | Claude connector directory | live MCP server | deploy MCP; update the directory listing only when its public metadata or connection changes |
 | Kanera docs and agent discovery | `www.kanera.app` | site commit | build and deploy the sibling Kanera-site repository |
@@ -26,7 +26,10 @@ For a change that touches agent routing, the CLI, or public setup guidance, rele
    instructions.
 3. Deploy Kanera-site so its docs, setup prompt, Agent Skill, and discovery manifests are live.
 4. Publish new npm versions when `@kanera/cli` or `@kanera/sdk` changed.
-5. Publish a new MCP Registry version only when `apps/mcp/server.json` changed.
+5. Publish a new MCP Registry version only when `apps/mcp/server.json` changed. Bump
+   `apps/mcp/package.json`, `apps/mcp/server.json`, and
+   `integrations/plugins/kanera/.codex-plugin/plugin.json` to the same version as part of that
+   release.
 6. Scan, submit, and publish the OpenAI plugin when its MCP metadata or bundled skill changed.
 7. Verify the published Claude connector against the deployed server. Its listing does not need a
    new submission for an implementation-only MCP deployment.
@@ -34,9 +37,9 @@ For a change that touches agent routing, the CLI, or public setup guidance, rele
 The GitHub repository secrets currently required by the automated workflows are `NPM_TOKEN`,
 `MCP_PRIVATE_KEY`, and `GITLEAKS_LICENSE`.
 
-The workspace release script deliberately leaves `apps/mcp/package.json` and
-`apps/mcp/server.json` unchanged. MCP releases use their own version and `mcp-vX.Y.Z` tag; a CLI or
-SDK release must not bump them.
+The workspace release script deliberately leaves `apps/mcp/package.json`, `apps/mcp/server.json`,
+and `integrations/plugins/kanera/.codex-plugin/plugin.json` unchanged. MCP releases bump all three
+together and use their own `mcp-vX.Y.Z` tag; a CLI or SDK release must not bump them.
 
 The CLI bundles the `@kanera/mcp` tool layer with esbuild at build time, so the published tarball
 has **zero runtime dependencies**. The SDK is compiled with `tsc` to plain ESM plus type
@@ -115,17 +118,22 @@ uploads.
 
 ## Publishing MCP registry metadata
 
-MCP metadata versions independently (`apps/mcp/server.json`). Tag `mcp-vX.Y.Z` releases, or run
-`publish-mcp.yml` manually; it needs the `MCP_PRIVATE_KEY` repository secret. See that workflow for
-details.
+MCP metadata versions independently from workspace releases. Before tagging, bump
+`apps/mcp/package.json`, `apps/mcp/server.json`, and
+`integrations/plugins/kanera/.codex-plugin/plugin.json` to the same version. Tag `mcp-vX.Y.Z`
+releases, or run `publish-mcp.yml` manually; it needs the `MCP_PRIVATE_KEY` repository secret. See
+that workflow for details. `pnpm test:integrations` rejects version drift between the MCP Registry
+metadata and the Codex plugin manifest.
 
 ## Publishing the OpenAI Kanera plugin
 
 `integrations/plugins/kanera` is the source package for the installed Kanera plugin. It references
 the registered Kanera app and bundles the canonical Kanera skill, so app tools and routing guidance
 arrive together. `pnpm test:integrations` prevents the bundled skill from drifting from
-`integrations/skills/kanera`. The plugin and MCP Registry metadata are independently versioned;
-bump only the artefact whose reviewed package or metadata changed.
+`integrations/skills/kanera`. The plugin manifest tracks the MCP release version so installed
+clients can correlate its bundled guidance with the server catalog. A skill-only plugin submission
+does not require an MCP Registry release, but the next MCP release still bumps the plugin manifest
+in lockstep.
 
 After changing the app metadata, skill, or MCP catalog:
 
