@@ -1,7 +1,8 @@
 {
+  "_note": "Re-baselined 2026-09-10 after agent attribution, automation UI, and theme additions; measured 181107 initial and 1234524 total JS Brotli bytes.",
   "initialRaw": 768000,
-  "initialBrotli": 180000,
-  "totalJavaScriptBrotli": 1200000,
+  "initialBrotli": 182000,
+  "totalJavaScriptBrotli": 1240000,
   "largestScriptRaw": 925000,
   "tablerFontsRaw": 500000
 }
