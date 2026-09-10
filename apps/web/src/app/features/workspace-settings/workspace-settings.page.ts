@@ -41,6 +41,7 @@ import {
   automationActionTemplateIds,
   automationActionTypeValue,
   automationActionTypes,
+  automationCommentTemplateVariables,
   automationActionUserIds,
   automationCompletionValue,
   automationCustomFieldName,
@@ -783,9 +784,11 @@ export class WorkspaceSettingsPage implements OnDestroy {
     members: this.members(),
     templates: this.templates(),
     fields: this.fields(),
+    webhooks: this.webhooks(),
   }));
 
   readonly automationActionTypes = automationActionTypes;
+  readonly automationCommentTemplateVariables = automationCommentTemplateVariables;
   readonly automationActionLimit = AUTOMATION_ACTION_LIMIT;
   readonly automationLimit = AUTOMATION_LIMIT;
   readonly automationLimitHint = computed(() => `${this.entityLabelTitle()}s can have up to ${AUTOMATION_LIMIT} automations. Contact support if you need more.`);
@@ -2181,6 +2184,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
       const field = this.automationSetCustomFields()[0] ?? null;
       return { type, config: { fieldId: field?.id ?? "", onlyIfEmpty: true, value: this.defaultPopulateValueForField(field) } };
     }
+    if (type === "post_comment") return { type, config: { template: "" } };
+    if (type === "call_webhook") return { type, config: { endpointId: this.webhooks()[0]?.id ?? "" } };
     return { type: "set_completion", config: { completed: true } };
   }
 
@@ -2351,6 +2356,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
     if (type === "move_to_bottom") return "move to bottom";
     if (type === "apply_checklists") return "apply checklist";
     if (type === "populate_custom_field") return "set custom field";
+    if (type === "post_comment") return "post a comment";
+    if (type === "call_webhook") return "call a webhook";
     return type.replaceAll("_", " ");
   }
 
@@ -2526,6 +2533,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
     }
     if (action.type === "move_to_top") return { type: "move_to_top", config: {} };
     if (action.type === "move_to_bottom") return { type: "move_to_bottom", config: {} };
+    if (action.type === "post_comment") return { type: "post_comment", config: { template: this.stringValue(config["template"], "") } };
+    if (action.type === "call_webhook") return { type: "call_webhook", config: { endpointId: this.stringValue(config["endpointId"], "") } };
     const emptyConfig: Record<string, never> = {};
     return { type: "clear_due_date", config: emptyConfig };
   }
@@ -2838,8 +2847,22 @@ export class WorkspaceSettingsPage implements OnDestroy {
     } else if (action.type === "populate_custom_field") {
       const field = this.fields().find((candidate) => candidate.id === value) ?? null;
       this.setAutomationDraftAction(id, index, { type: action.type, config: { ...action.config, fieldId: value, value: this.defaultPopulateValueForField(field) } });
+    } else if (action.type === "call_webhook") {
+      this.setAutomationDraftAction(id, index, { type: action.type, config: { endpointId: value } });
     }
     void this.saveAutomationActions(id);
+  }
+
+  /** Free text: coalesced like the other typed values so one sentence is one save. */
+  updateAutomationCommentTemplate(id: string, index: number, template: string) {
+    const action = this.automationDraftActions(id)[index];
+    if (action?.type !== "post_comment") return;
+    this.setAutomationDraftAction(id, index, { type: "post_comment", config: { template } });
+    this.queueAutomationActionsSave(id);
+  }
+
+  automationCommentTemplateValue(action: AutomationActionBody): string {
+    return action.type === "post_comment" ? action.config.template : "";
   }
 
   /**
@@ -3108,6 +3131,11 @@ export class WorkspaceSettingsPage implements OnDestroy {
     if (action.type === "add_assignees" || action.type === "remove_assignees") return "Pick at least one member to save this action.";
     if (action.type === "apply_checklists") return "Pick at least one checklist template to save this action.";
     if (action.type === "move_to_list") return "Pick a destination list to save this action.";
+    if (action.type === "post_comment") return "Write the comment to save this action.";
+    if (action.type === "call_webhook") {
+      if (!action.config.endpointId) return "Pick a webhook endpoint to save this action.";
+      return "This webhook endpoint no longer exists. Pick another one.";
+    }
     if (action.type === "populate_custom_field") {
       if (!action.config.fieldId) return "Pick a custom field to save this action.";
       const field = this.automationSetCustomField(action);

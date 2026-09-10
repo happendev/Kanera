@@ -45,7 +45,7 @@ export const bulkDeleteCommentsBody = z.object({
 });
 export type BulkDeleteCommentsBody = z.infer<typeof bulkDeleteCommentsBody>;
 
-export type CommentRow = Pick<Comment, "id" | "cardId" | "authorId" | "authorKind" | "apiKeyId" | "apiKeyName" | "body" | "editedAt" | "createdAt"> & {
+export type CommentRow = Pick<Comment, "id" | "cardId" | "authorId" | "authorKind" | "apiKeyId" | "apiKeyName" | "agentName" | "body" | "editedAt" | "createdAt"> & {
   authorName: string;
   authorAvatarUrl: string | null;
   reactions: CommentReactionSummary[];

@@ -83,6 +83,8 @@ function activity(overrides: Partial<NonNullable<NotificationRow["activity"]>> =
     apiKeyName: null,
     supportSessionId: null,
     supportActorEmail: null,
+    agentGrantId: null,
+    agentName: null,
     boardId: "board-1",
     workspaceId: "workspace-1",
     entityType: "card",
@@ -113,6 +115,9 @@ describe("NotificationsPanelComponent", () => {
     items: ReturnType<typeof signal<NotificationRow[]>>;
     unreadCount: ReturnType<typeof signal<number>>;
     includeRead: ReturnType<typeof signal<boolean>>;
+    feedMode: ReturnType<typeof signal<"unread" | "agent" | "all">>;
+    agentCounts: ReturnType<typeof signal<{ total: number; unread: number }>>;
+    hasAgentNotifications: ReturnType<typeof signal<boolean>>;
     online: ReturnType<typeof signal<boolean>>;
     loading: ReturnType<typeof signal<boolean>>;
     loadError: ReturnType<typeof signal<string | null>>;
@@ -126,6 +131,7 @@ describe("NotificationsPanelComponent", () => {
     initialise: ReturnType<typeof vi.fn>;
     loadFirstPage: ReturnType<typeof vi.fn>;
     setIncludeRead: ReturnType<typeof vi.fn>;
+    setFeedMode: ReturnType<typeof vi.fn>;
     setBoardFilter: ReturnType<typeof vi.fn>;
     setUserFilter: ReturnType<typeof vi.fn>;
     setSearchQuery: ReturnType<typeof vi.fn>;
@@ -171,6 +177,9 @@ describe("NotificationsPanelComponent", () => {
       items: signal<NotificationRow[]>([]),
       unreadCount: signal(0),
       includeRead: signal(false),
+      feedMode: signal<"unread" | "agent" | "all">("unread"),
+      agentCounts: signal({ total: 0, unread: 0 }),
+      hasAgentNotifications: signal(false),
       online: signal(true),
       loading: signal(false),
       loadError: signal<string | null>(null),
@@ -185,6 +194,12 @@ describe("NotificationsPanelComponent", () => {
       loadFirstPage: vi.fn(() => Promise.resolve()),
       setIncludeRead: vi.fn((value: boolean) => {
         service.includeRead.set(value);
+        service.feedMode.set(value ? "all" : "unread");
+        return Promise.resolve();
+      }),
+      setFeedMode: vi.fn((mode: "unread" | "agent" | "all") => {
+        service.feedMode.set(mode);
+        service.includeRead.set(mode !== "unread");
         return Promise.resolve();
       }),
       setBoardFilter: vi.fn((value: string | null) => {

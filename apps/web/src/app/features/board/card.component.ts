@@ -143,6 +143,19 @@ export class CardComponent {
       : null;
   });
   readonly coverHeightPx = computed(() => this.coverAspectRatio() ? null : COVER_HEIGHT_FALLBACK_PX);
+  /** Live agent runs drive the "agent working" chip. Blocked runs show the same chip with a different tooltip. */
+  readonly liveAgentRuns = computed(() => this.state.liveAgentRunsForCard(this.card().id));
+  readonly agentRunLabel = computed(() => {
+    const runs = this.liveAgentRuns();
+    if (runs.length === 0) return null;
+    const [first] = runs;
+    const suffix = runs.length > 1 ? ` (+${runs.length - 1} more)` : "";
+    return first!.status === "blocked"
+      ? `${first!.agentName} is waiting on you: ${first!.title}${suffix}`
+      : `${first!.agentName} is working: ${first!.title}${suffix}`;
+  });
+  readonly agentRunBlocked = computed(() => this.liveAgentRuns().some((run) => run.status === "blocked"));
+
   readonly attention = computed<{ label: string; icon: string } | null>(() => {
     const card = this.card();
     if (card.completedAt || card.archivedAt) return null;

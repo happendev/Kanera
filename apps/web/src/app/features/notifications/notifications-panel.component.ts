@@ -11,7 +11,7 @@ import type { NotificationGroupBy, NotificationRow } from "@kanera/shared/dto";
 import { ApiClient, ORGANISATION_SWITCH_NAVIGATOR } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { visibleSignedMediaUrl } from "../../core/media/signed-media-url";
-import { NotificationsService } from "../../core/notifications/notifications.service";
+import { NotificationsService, type NotificationFeedMode } from "../../core/notifications/notifications.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../shared/avatar.component";
@@ -89,6 +89,8 @@ export class NotificationsPanelComponent {
   readonly items = this.notifications.items;
   readonly unreadCount = this.notifications.unreadCount;
   readonly includeRead = this.notifications.includeRead;
+  readonly feedMode = this.notifications.feedMode;
+  readonly agentCounts = this.notifications.agentCounts;
   readonly online = this.notifications.online;
   readonly loading = this.notifications.loading;
   readonly loadError = this.notifications.loadError;
@@ -255,10 +257,17 @@ export class NotificationsPanelComponent {
       return { ...base, label: first.orgName, icon: "ti ti-building", avatarUrl: first.orgLogoUrl };
     }
     const isUser = activity?.actorKind === "user";
+    const isAgent = activity?.actorKind === "agent";
     return {
       ...base,
-      label: isUser ? first.actorName ?? "Unknown user" : activity?.actorKind === "apiKey" ? first.actorName ?? "API key" : activity?.actorKind === "support" ? "Kanera support" : "Kanera",
-      icon: activity?.actorKind === "apiKey" ? "ti ti-api" : activity?.actorKind === "support" ? "ti ti-lifebuoy" : "ti ti-sparkles",
+      // Agent groups are labelled "<person> via <agent>" so the owner's own actions and their
+      // agent's actions never collapse into one group.
+      label: isUser
+        ? first.actorName ?? "Unknown user"
+        : isAgent
+          ? `${first.actorName ?? "Unknown user"} via ${activity.agentName ?? "AI agent"}`
+          : activity?.actorKind === "apiKey" ? first.actorName ?? "API key" : activity?.actorKind === "support" ? "Kanera support" : "Kanera",
+      icon: isAgent ? "ti ti-sparkles" : activity?.actorKind === "apiKey" ? "ti ti-api" : activity?.actorKind === "support" ? "ti ti-lifebuoy" : "ti ti-settings-automation",
       avatarUrl: isUser ? first.actorAvatarUrl : null,
       actorId: isUser ? activity.actorId : null,
     };
@@ -309,18 +318,25 @@ export class NotificationsPanelComponent {
   }
 
   /**
-   * Unread / All as a two-way segmented control. The pill treatment is the shared one, so this reads
+   * Unread / Agent / All as a segmented control. The pill treatment is the shared one, so this reads
    * the same as every other switch in the app; `size="sm"` keeps it inside the drawer's dense toolbar
-   * grid, which a 36px control would not fit.
+   * grid, which a 36px control would not fit. The Agent segment exists only once the viewer has ever
+   * received agent activity: people without an agent should never see a tab they cannot fill. Its
+   * label carries the unread agent count so what the agent did is visible from the Unread tab too.
    */
-  readonly readFilterOptions: SegmentedOption<"unread" | "all">[] = [
-    { id: "unread", label: "Unread" },
-    { id: "all", label: "All" },
-  ];
+  readonly readFilterOptions = computed<SegmentedOption<NotificationFeedMode>[]>(() => {
+    const agentUnread = this.agentCounts().unread;
+    return [
+      { id: "unread", label: "Unread" },
+      ...(this.notifications.hasAgentNotifications()
+        ? [{ id: "agent" as const, label: agentUnread > 0 ? `Agent (${agentUnread > 99 ? "99+" : agentUnread})` : "Agent", tooltip: "What your AI agents did" }]
+        : []),
+      { id: "all", label: "All" },
+    ];
+  });
 
-  async setReadFilter(value: "unread" | "all"): Promise<void> {
-    if ((value === "all") === this.includeRead()) return;
-    await this.toggleIncludeRead();
+  async setReadFilter(value: NotificationFeedMode): Promise<void> {
+    await this.notifications.setFeedMode(value);
   }
 
   async toggleIncludeRead(): Promise<void> {

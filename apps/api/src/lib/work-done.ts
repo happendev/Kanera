@@ -304,7 +304,10 @@ export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneR
     const payload = (activity.payload ?? {}) as { toListId?: string; fromListId?: string; toValue?: boolean };
     const actor = actorDisplay(activity, row.user);
     const at = activity.createdAt.toISOString();
+    // Agent actions keep actorUserId null: the person did not do the work themselves, so per-person
+    // effort views must not count it. agentName carries the attribution instead.
     const actorUserId = activity.actorKind === "user" ? activity.actorId : null;
+    const agentName = activity.actorKind === "agent" ? (activity.agentName ?? "AI agent") : null;
     const cardSummary = toWireCardSummary(card, opts.clientId);
     const base = {
       card: cardSummary,
@@ -313,6 +316,7 @@ export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneR
       actorUserId,
       actorName: actor.name,
       actorAvatarUrl: actor.avatarUrl,
+      agentName,
     };
 
     const moveKey = `${card.id}:${localDayKey(activity.createdAt)}`;
@@ -328,6 +332,7 @@ export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneR
         existing.listId = card.listId;
         existing.card = cardSummary;
         existing.actorUserId = actorUserId;
+        existing.agentName = agentName;
         existing.actorName = actor.name;
         existing.actorAvatarUrl = actor.avatarUrl;
         continue;

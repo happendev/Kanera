@@ -1189,3 +1189,23 @@
     }
   }
 }
+
+// "via <agent>" marker beside the actor name on agent-attributed rows: same treatment as the card
+// activity feed so agent work reads identically everywhere it appears.
+.via-agent {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  white-space: nowrap;
+  vertical-align: baseline;
+
+  i { font-size: 12px; }
+}

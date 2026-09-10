@@ -40,15 +40,20 @@
     <span class="wd-day-actors">
       @for (actor of visibleActors(); track actor.userId ?? actor.name) {
       <!-- showTooltip=false: k-avatar renders its own name tooltip, which would stack on top of the
-           richer one below. Exactly one tooltip per avatar. -->
-      <k-avatar
-        [url]="actor.avatarUrl"
-        [name]="actor.name"
-        [size]="20"
-        [showTooltip]="false"
-        [workspaceId]="workspaceId()"
-        [kTooltip]="actor.name + ' · ' + actor.eventCount + (actor.eventCount === 1 ? ' event' : ' events')"
-      />
+           richer one below. Exactly one tooltip per avatar. The wrapper carries the agent mark so
+           agent-done work is visible in the stack, not only in the tooltip. -->
+      <span class="wd-day-actor" [class.is-agent]="actor.agentName" [kTooltip]="actor.name + ' · ' + actor.eventCount + (actor.eventCount === 1 ? ' event' : ' events')">
+        <k-avatar
+          [url]="actor.avatarUrl"
+          [name]="actor.name"
+          [size]="20"
+          [showTooltip]="false"
+          [workspaceId]="workspaceId()"
+        />
+        @if (actor.agentName) {
+        <i class="ti ti-sparkles wd-actor-agent" aria-hidden="true"></i>
+        }
+      </span>
       }
       @if (overflowActorCount() > 0) {
       <span class="wd-actor-overflow" [kTooltip]="overflowActorNames()">+{{ overflowActorCount() }}</span>
@@ -147,7 +152,7 @@
       -->
       <span class="wd-trailing">
         @for (actor of digest.actors; track actor.userId ?? actor.name) {
-        <span class="wd-actors" [kTooltip]="'Worked on by ' + actor.name">
+        <span class="wd-actors" [class.is-agent]="actor.agentName" [kTooltip]="'Worked on by ' + actor.name">
           <k-avatar
             [url]="actor.avatarUrl"
             [name]="actor.name"
@@ -155,6 +160,10 @@
             [showTooltip]="false"
             [workspaceId]="workspaceId()"
           />
+          <!-- Agent-done work carries an explicit mark; the person is still the subject of the row. -->
+          @if (actor.agentName) {
+          <i class="ti ti-sparkles wd-actor-agent" aria-hidden="true"></i>
+          }
           <!-- First name only: the stack sits in a fixed trailing column, and full names ragged it. -->
           <span class="wd-actor-name">{{ firstNameOf(actor) }}</span>
         </span>

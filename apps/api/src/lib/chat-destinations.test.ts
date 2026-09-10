@@ -16,6 +16,8 @@ function endpoint(provider: "slack" | "discord" | "telegram" | "zulip", encrypte
     priorityFieldId: null,
     eventTypes: ["comment_created"],
     enabled: true,
+    ownerApiKeyId: null,
+    ownerAgentGrantId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

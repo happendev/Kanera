@@ -1,5 +1,6 @@
 export * from "./activity-event.js";
 export * from "./admin-audit-log.js";
+export * from "./agent-run.js";
 export * from "./admin-invite.js";
 export * from "./admin-refresh-token.js";
 export * from "./admin-roles.js";

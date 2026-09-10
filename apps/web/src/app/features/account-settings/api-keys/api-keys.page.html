@@ -5,7 +5,7 @@
         <div class="key-list">
           @for (connection of oauthConnections(); track connection.id) {
           <div class="key-row">
-            <i class="ti ti-robot key-row-icon"></i>
+            <i class="ti ti-sparkles key-row-icon"></i>
             <div class="key-row-primary">
               <span>{{ connection.clientName }}</span>
               <code>{{ connection.scopes.join(' · ') }}</code>
@@ -14,7 +14,7 @@
             <button type="button" class="ghost icon danger" (click)="revokeOauthConnection(connection.id)" aria-label="Disconnect agent" kTooltip="Disconnect agent"><i class="ti ti-plug-connected-x"></i></button>
           </div>
           } @empty {
-          <k-empty-state size="sm" icon="robot-off" title="No connected AI agents yet" />
+          <k-empty-state size="sm" icon="sparkles" title="No connected AI agents yet" />
           }
         </div>
       </div>

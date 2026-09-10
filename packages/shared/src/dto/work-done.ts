@@ -100,10 +100,15 @@ interface WorkDoneEventBase {
 
 /** Fields shared by the card-action events, where the actor has an actor-kind (user/api/system). */
 interface WorkDoneCardEventBase extends WorkDoneEventBase {
-  /** User actor for the historical action; null for system/API-key activity. */
+  /** User actor for the historical action; null for system/API-key/agent activity. */
   actorUserId: string | null;
   actorName: string;
   actorAvatarUrl: string | null;
+  /**
+   * Set when an AI agent performed the action for the named person. Rows with an agentName are
+   * agent output, not the person's own effort; reports must not present them as human work.
+   */
+  agentName: string | null;
 }
 
 export interface WorkDoneCreatedEvent extends WorkDoneCardEventBase {

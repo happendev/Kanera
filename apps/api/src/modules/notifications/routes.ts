@@ -123,7 +123,7 @@ async function validatePersonalDestination(url: string, baseUrl: boolean): Promi
 
 function notificationFeedConditions(
   req: FastifyRequest,
-  query: Pick<ListNotificationsQuery, "includeRead" | "boardId" | "actorId" | "q">,
+  query: Pick<ListNotificationsQuery, "includeRead" | "agentOnly" | "boardId" | "actorId" | "q">,
   options?: { includeRead?: boolean; cursor?: { createdAt: Date; id: string } | null },
 ): SQL[] {
   const includeRead = options?.includeRead ?? query.includeRead;
@@ -135,6 +135,7 @@ function notificationFeedConditions(
   if (!includeRead) conditions.push(isNull(notifications.readAt));
   if (query.boardId) conditions.push(eq(notifications.boardId, query.boardId));
   if (query.actorId) conditions.push(eq(activityEvents.actorId, query.actorId));
+  if (query.agentOnly) conditions.push(eq(activityEvents.actorKind, "agent"));
   if (query.q) {
     const pattern = notificationSearchPattern(query.q);
     const keyMatch = /^([A-Za-z][A-Za-z0-9]{1,9})-([1-9][0-9]*)$/.exec(query.q.trim());
@@ -241,6 +242,7 @@ export async function notificationsRoutes(app: FastifyInstance) {
         : sql<string>`case
             when ${activityEvents.actorKind} = 'user' and ${activityEvents.actorId} is not null then 'user:' || ${activityEvents.actorId}::text
             when ${activityEvents.actorKind} = 'apiKey' then 'apiKey:' || coalesce(${activityEvents.apiKeyId}::text, ${activityEvents.apiKeyName}, 'unknown')
+            when ${activityEvents.actorKind} = 'agent' then 'agent:' || coalesce(${activityEvents.agentGrantId}::text, ${activityEvents.agentName}, 'unknown') || ':' || coalesce(${activityEvents.actorId}::text, '')
             when ${activityEvents.actorKind} = 'support' then 'support:' || coalesce(${activityEvents.supportSessionId}::text, ${activityEvents.supportActorEmail}, 'unknown')
             else 'system'
           end`;
@@ -270,6 +272,26 @@ export async function notificationsRoutes(app: FastifyInstance) {
   app.get("/notifications/unread-count", async (req) => {
     const count = await countUnreadNotifications(req.auth.sub);
     return { count };
+  });
+
+  // Whether the drawer should offer an Agent tab at all, and its unread badge. `total` deliberately
+  // ignores the seven-day read window used by the feed: once a person has ever received agent
+  // activity the tab stays, so it never flickers in and out as old rows age past the window.
+  app.get("/notifications/agent-counts", async (req): Promise<dto.NotificationAgentCounts> => {
+    const [row] = await db
+      .select({
+        total: sql<number>`count(*)::int`,
+        unread: sql<number>`count(*) filter (where ${notifications.readAt} is null)::int`,
+      })
+      .from(notifications)
+      .innerJoin(activityEvents, eq(activityEvents.id, notifications.activityId))
+      .leftJoin(cards, eq(cards.id, notifications.cardId))
+      .where(and(
+        eq(notifications.userId, req.auth.sub),
+        eq(activityEvents.actorKind, "agent"),
+        inboxVisibleNotificationCondition(),
+      ));
+    return { total: row?.total ?? 0, unread: row?.unread ?? 0 };
   });
 
   app.get("/notifications/org-unread-counts", async (req) => {

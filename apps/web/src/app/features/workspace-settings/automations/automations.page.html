@@ -90,12 +90,12 @@
   <!-- First-run state. Deliberately one idea and one decision: the catalogue that used to live here
        now sits in the toolbar's Examples menu, which stays reachable once the first rule exists. -->
   <div class="automation-empty">
-    <span class="automation-empty-icon"><i class="ti ti-settings-automation"></i></span>
-    <h3>No automations yet</h3>
-    <p>Choose something that happens to a card — it enters a list, its due date arrives, its checklist is finished — and Kanera applies up to {{ settings.automationActionLimit }} actions for you every time.</p>
-    @if (settings.lists().length === 0) {
-    <p class="automation-empty-blocked"><i class="ti ti-alert-triangle"></i> Add at least one list to this {{ settings.entityLabel() }} first — every trigger needs something to watch.</p>
-    } @else {
+    <span class="automation-empty-icon"><i class="ti ti-bolt"></i></span>
+    <div class="automation-empty-copy">
+      <h3>Automate repetitive work</h3>
+      <p>Choose what starts the automation, then add up to {{ settings.automationActionLimit }} actions. Kanera handles the routine work every time.</p>
+    </div>
+    @if (settings.lists().length > 0) {
     <div class="automation-empty-actions">
       <div class="menu-anchor">
         <button

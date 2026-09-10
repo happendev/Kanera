@@ -656,6 +656,7 @@ export async function runKaneraBoardImport(tx: Tx, args: { source: BoardExportAr
       authorKind: comment.authorKind,
       apiKeyId: comment.apiKeyId,
       apiKeyName: comment.apiKeyName,
+      agentName: null,
       authorName: comment.authorId === ctx.actorId ? ctx.actorName : ctx.source.members.find((member) => member.userId === comment.authorId)?.displayName ?? ctx.actorName,
       authorAvatarUrl: comment.authorId === ctx.actorId ? ctx.actorAvatarUrl : null,
       body: comment.body,

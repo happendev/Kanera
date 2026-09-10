@@ -24,7 +24,10 @@ const LEAD_PRECEDENCE: WorkDoneEventType[] = ["created", "moved", "checklistItem
 
 /** Actor display branches on type: checklist completions carry their own completedBy fields. */
 export function actorNameFor(event: WorkDoneEvent): string {
-  return event.type === "checklistItemCompleted" ? event.completedByName : event.actorName;
+  if (event.type === "checklistItemCompleted") return event.completedByName;
+  // Agent output is never presented as the person's own effort: the row and the contributor
+  // stack both read "Ada via Claude", and (with actorUserId null) it groups apart from Ada.
+  return event.agentName ? `${event.actorName} via ${event.agentName}` : event.actorName;
 }
 
 export function actorAvatarFor(event: WorkDoneEvent): string | null {
@@ -33,6 +36,10 @@ export function actorAvatarFor(event: WorkDoneEvent): string | null {
 
 export function actorUserIdFor(event: WorkDoneEvent): string | null {
   return event.type === "checklistItemCompleted" ? event.completedByUserId : event.actorUserId;
+}
+
+export function actorAgentNameFor(event: WorkDoneEvent): string | null {
+  return event.type === "checklistItemCompleted" ? null : event.agentName;
 }
 
 /** Tabler icon name for each event type. */
@@ -80,7 +87,7 @@ function collectActors(events: readonly WorkDoneEvent[]): WorkDoneActor[] {
       existing.eventCount += 1;
       continue;
     }
-    byKey.set(key, { userId, name, avatarUrl: actorAvatarFor(event), eventCount: 1 });
+    byKey.set(key, { userId, name, avatarUrl: actorAvatarFor(event), agentName: actorAgentNameFor(event), eventCount: 1 });
   }
   return [...byKey.values()].sort((a, b) => b.eventCount - a.eventCount || a.name.localeCompare(b.name));
 }

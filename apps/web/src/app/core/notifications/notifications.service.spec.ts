@@ -188,6 +188,34 @@ describe("NotificationsService", () => {
     expect(service.loadError()).toBeNull();
   });
 
+  it("loads the Agent tab as a read-inclusive, agent-only feed and keeps its page separate", async () => {
+    const agentActivity = { actorKind: "agent" as const, agentName: "Claude", agentGrantId: "grant-1", actorId: "user-2" };
+    api.get.mockImplementation((path: string) => {
+      if (path === "/notifications/org-unread-counts") return Promise.resolve([]);
+      if (path === "/notifications/agent-counts") return Promise.resolve({ total: 2, unread: 1 });
+      if (path === "/notifications/unread?limit=25") return Promise.resolve(page([notification({ id: "unread" })], null, 1));
+      if (path === "/notifications?limit=25&includeRead=true&agentOnly=true") {
+        return Promise.resolve(page([
+          notification({ id: "agent-unread", activity: { ...notification().activity!, ...agentActivity } }),
+          notification({ id: "agent-read", readAt: new Date(), activity: { ...notification().activity!, ...agentActivity } }),
+        ], null, 1));
+      }
+      return Promise.resolve([]);
+    });
+
+    await service.loadFirstPage();
+    expect(service.items().map((n) => n.id)).toEqual(["unread"]);
+    expect(service.agentCounts()).toEqual({ total: 2, unread: 1 });
+    expect(service.hasAgentNotifications()).toBe(true);
+
+    await service.setFeedMode("agent");
+    expect(service.includeRead()).toBe(true);
+    expect(service.items().map((n) => n.id)).toEqual(["agent-unread", "agent-read"]);
+
+    await service.setFeedMode("unread");
+    expect(service.items().map((n) => n.id)).toEqual(["unread"]);
+  });
+
   it("does not load the first notifications page while offline", async () => {
     online.set(false);
     api.get.mockClear();
@@ -328,7 +356,7 @@ describe("NotificationsService", () => {
 
     service.groupBy.set("user");
     expect(service.groupKey(notification({ activity: {
-      id: "activity-1", clientId: null, actorId: "user-2", actorKind: "user", apiKeyId: null, apiKeyName: null, supportSessionId: null, supportActorEmail: null,
+      id: "activity-1", clientId: null, actorId: "user-2", actorKind: "user", apiKeyId: null, apiKeyName: null, supportSessionId: null, supportActorEmail: null, agentGrantId: null, agentName: null,
       boardId: "board-1", workspaceId: "workspace-1", entityType: "card", entityId: "card-1", action: "updated", payload: {}, feedVisible: true, coalesceKey: null, coalescedCount: 1, coalescedUntil: null, createdAt: new Date(), updatedAt: new Date(),
     } }))).toBe("user:user-2");
     expect(service.groupKey(notification())).toBe("system");

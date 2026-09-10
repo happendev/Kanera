@@ -2,7 +2,9 @@ import { sql } from "drizzle-orm";
 import { boolean, check, index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { valueIn } from "./_value-check.js";
 import { customFields } from "./custom-field.js";
+import { oauthGrants } from "./oauth.js";
 import { users } from "./user.js";
+import { workspaceApiKeys } from "./workspace-api-key.js";
 import { workspaces } from "./workspace.js";
 
 export const WEBHOOK_ENDPOINT_PROVIDERS = ["generic", "slack", "discord", "telegram", "zulip"] as const;
@@ -40,11 +42,21 @@ export const webhookEndpoints = pgTable(
       .references(() => customFields.id, { onDelete: "set null" }),
     eventTypes: jsonb("event_types").notNull().default(sql`'[]'::jsonb`).$type<string[]>(),
     enabled: boolean("enabled").notNull().default(true),
+    // Connection-scoped endpoints. A non-admin agent (a write-scoped API key, or an interactive
+    // OAuth grant) may subscribe to a workspace it is a member of, but it only ever sees and manages
+    // the endpoints owned by its own connection; workspace admins see everything. Exactly one owner
+    // column is set for a connection-scoped endpoint and both are null for an admin-created one.
+    // CASCADE: revoking the connection removes the subscriptions nobody else can reach.
+    ownerApiKeyId: uuid("owner_api_key_id").references(() => workspaceApiKeys.id, { onDelete: "cascade" }),
+    ownerAgentGrantId: uuid("owner_agent_grant_id").references(() => oauthGrants.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     check("webhook_endpoints_provider_ck", valueIn(t.provider, WEBHOOK_ENDPOINT_PROVIDERS)),
+    check("webhook_endpoints_owner_ck", sql`${t.ownerApiKeyId} is null or ${t.ownerAgentGrantId} is null`),
+    index("webhook_endpoints_owner_api_key_idx").on(t.ownerApiKeyId).where(sql`${t.ownerApiKeyId} is not null`),
+    index("webhook_endpoints_owner_agent_grant_idx").on(t.ownerAgentGrantId).where(sql`${t.ownerAgentGrantId} is not null`),
     check(
       "webhook_endpoints_config_ck",
       sql`(

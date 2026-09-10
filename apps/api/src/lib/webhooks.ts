@@ -223,6 +223,12 @@ function workspaceIdFromPayload(payload: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
+function endpointIdFromPayload(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const value = (payload as { endpointId?: unknown }).endpointId;
+  return typeof value === "string" ? value : null;
+}
+
 function cardIdFromPayload(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") return null;
   const value = (payload as { cardId?: unknown }).cardId;
@@ -259,8 +265,14 @@ export async function enqueueWebhookDeliveriesForOutboxEvent(
       .from(webhookEndpoints)
       .where(and(eq(webhookEndpoints.workspaceId, event.workspaceId), eq(webhookEndpoints.enabled, true)))
       .limit(ENDPOINT_FANOUT_LIMIT));
-  const genericMatching = endpoints.filter((endpoint) => endpoint.provider === "generic" && eventTypesMatch(endpoint.eventTypes, String(event.eventType)));
-  const chatDeliveries = await enrichChatPayloads(event, endpoints);
+  // A call_webhook automation action targets one endpoint by id. It bypasses the endpoint's own
+  // eventTypes filter (the admin chose the endpoint on the rule, so the subscription list is
+  // irrelevant) and never fans out to other endpoints or chat destinations.
+  const targetedEndpointId = event.eventType === "automation:webhook:called" ? endpointIdFromPayload(event.payload) : null;
+  const genericMatching = targetedEndpointId !== null
+    ? endpoints.filter((endpoint) => endpoint.provider === "generic" && endpoint.id === targetedEndpointId)
+    : endpoints.filter((endpoint) => endpoint.provider === "generic" && eventTypesMatch(endpoint.eventTypes, String(event.eventType)));
+  const chatDeliveries = targetedEndpointId !== null ? [] : await enrichChatPayloads(event, endpoints);
   if (genericMatching.length === 0 && chatDeliveries.length === 0) return;
 
   // Defense-in-depth: webhooks are a paid-only feature. Downgrade disables endpoints, but skip

@@ -484,6 +484,13 @@
       "when": 1788658513553,
       "tag": "0068_whole_texas_twister",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1789034673896,
+      "tag": "0069_fearless_longshot",
+      "breakpoints": true
     }
   ]
 }

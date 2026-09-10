@@ -30,9 +30,13 @@ declare module "@fastify/jwt" {
 
 declare module "@fastify/request-context" {
   interface RequestContextData {
-    authKind?: "user" | "apiKey" | "support";
+    authKind?: "user" | "apiKey" | "agent" | "support";
     apiKeyId?: string;
     apiKeyName?: string;
+    // Set for authKind "agent": the OAuth grant an AI agent is acting through and the agent's
+    // registered client name, so activity/comments can say "Ada via Claude" instead of just "Ada".
+    agentGrantId?: string;
+    agentName?: string;
     // Set for support-session tokens so activity/audit paths can tell an operator impersonation
     // apart from a genuine user action even though the token acts as a real user in the target org.
     supportSessionId?: string;
@@ -56,6 +60,11 @@ export interface AuthClaims {
   authKind?: "user" | "apiKey" | "support";
   apiKeyId?: string;
   apiKeyName?: string;
+  // Present when a personal OAuth credential belongs to an interactive agent connection (the
+  // "Connect an AI agent" flow). Authorization is unchanged (the agent acts as its owner); these
+  // only drive attribution, so the owner is notified about, and can audit, what the agent did.
+  agentGrantId?: string;
+  agentName?: string;
   // Personal keys are not pinned to a workspace and act as their owner; a `read` scope caps the
   // authority they may exercise below the owner's. OAuth personal credentials set apiKeyScope;
   // workspace credentials also set a pin.
@@ -173,10 +182,18 @@ export default fp(async (app) => {
       req.auth = claims;
       requestContext.set("clientId", claims.cid);
       requestContext.set("userId", claims.sub);
-      if (claims.apiKeyKind === "personal") {
-        // A personal key must read as its owner everywhere downstream: record authKind "user" so
-        // activity attribution (currentAttribution) shows the person, not a key name, and leave the
-        // apiKey*/workspace context unset. The per-key rate-limit bucket still uses claims.apiKeyId.
+      if (claims.apiKeyKind === "personal" && claims.agentGrantId) {
+        // An interactive agent grant acts as its owner for authorization but must NOT be recorded
+        // as the owner's own action: Work Done, the activity feed, and self-notification
+        // suppression all key off this. actorId stays the owner; the grant identifies the agent.
+        requestContext.set("authKind", "agent");
+        requestContext.set("agentGrantId", claims.agentGrantId);
+        requestContext.set("agentName", claims.agentName);
+      } else if (claims.apiKeyKind === "personal") {
+        // A personal API key (scripts, CI) reads as its owner everywhere downstream: record authKind
+        // "user" so activity attribution (currentAttribution) shows the person, not a key name, and
+        // leave the apiKey*/workspace context unset. The per-key rate-limit bucket still uses
+        // claims.apiKeyId.
         requestContext.set("authKind", "user");
       } else {
         requestContext.set("authKind", claims.authKind);

@@ -55,15 +55,15 @@ const lists: ListLookup = new Map([
 ]);
 
 function created(id: string, at: string, card: WireCardSummary, actor = "Ada", actorId = "user-1"): WorkDoneEvent {
-  return { id, type: "created", at, card, boardId: card.boardId, listId: card.listId, actorUserId: actorId, actorName: actor, actorAvatarUrl: null };
+  return { id, type: "created", at, card, boardId: card.boardId, listId: card.listId, actorUserId: actorId, actorName: actor, actorAvatarUrl: null, agentName: null };
 }
 
 function moved(id: string, at: string, card: WireCardSummary, listPath: string[], actor = "Ada", actorId = "user-1"): WorkDoneEvent {
-  return { id, type: "moved", at, card, boardId: card.boardId, listId: card.listId, actorUserId: actorId, actorName: actor, actorAvatarUrl: null, listPath };
+  return { id, type: "moved", at, card, boardId: card.boardId, listId: card.listId, actorUserId: actorId, actorName: actor, actorAvatarUrl: null, agentName: null, listPath };
 }
 
 function completed(id: string, at: string, card: WireCardSummary, actor = "Ada", actorId = "user-1"): WorkDoneEvent {
-  return { id, type: "completed", at, card, boardId: card.boardId, listId: card.listId, actorUserId: actorId, actorName: actor, actorAvatarUrl: null };
+  return { id, type: "completed", at, card, boardId: card.boardId, listId: card.listId, actorUserId: actorId, actorName: actor, actorAvatarUrl: null, agentName: null };
 }
 
 function checklistTick(id: string, at: string, card: WireCardSummary, text: string, actor = "Ada", actorId = "user-1"): WorkDoneEvent {

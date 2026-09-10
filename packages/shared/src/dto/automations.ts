@@ -43,6 +43,10 @@ const populateCustomFieldActionConfig = z.object({
   onlyIfEmpty: z.boolean().default(true),
   value: populateCustomFieldValue,
 });
+// Rendered Markdown; placeholders such as {{card.title}} are substituted per card when the rule runs.
+const postCommentActionConfig = z.object({ template: z.string().trim().min(1).max(20000) });
+// Must be a generic webhook endpoint of the same workspace; the route validates ownership.
+const callWebhookActionConfig = z.object({ endpointId: z.uuid() });
 const emptyConfig = z.object({}).strict();
 
 export const automationTriggerCustomFieldValue = z.discriminatedUnion("kind", [
@@ -69,6 +73,8 @@ export const automationActionBody = z.discriminatedUnion("type", [
   z.object({ type: z.literal("move_to_top"), config: emptyConfig.default({}) }),
   z.object({ type: z.literal("move_to_bottom"), config: emptyConfig.default({}) }),
   z.object({ type: z.literal("populate_custom_field"), config: populateCustomFieldActionConfig }),
+  z.object({ type: z.literal("post_comment"), config: postCommentActionConfig }),
+  z.object({ type: z.literal("call_webhook"), config: callWebhookActionConfig }),
 ]);
 export type AutomationActionBody = z.infer<typeof automationActionBody>;
 

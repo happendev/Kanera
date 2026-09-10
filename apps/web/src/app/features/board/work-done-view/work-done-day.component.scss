@@ -162,7 +162,12 @@
   min-width: 0;
   overflow: hidden;
 
-  k-avatar+k-avatar {
+  .wd-day-actor {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .wd-day-actor+.wd-day-actor {
     margin-left: -5px;
   }
 }
@@ -484,6 +489,14 @@
 
 // Capped rather than sized to content: one unusually long first name would otherwise widen the
 // trailing column and squeeze the chip run on every row of the day.
+// Robot mark for agent-done work. Same size as the row text so it reads as part of the name, in
+// the accent so it matches the "via <agent>" badge used on activity and comments.
+.wd-actor-agent {
+  font-size: 13px;
+  color: var(--accent);
+  flex: 0 0 auto;
+}
+
 .wd-actor-name {
   overflow: hidden;
   max-width: 7rem;

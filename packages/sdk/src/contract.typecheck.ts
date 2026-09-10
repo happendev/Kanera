@@ -6,18 +6,22 @@ import type {
 } from "@kanera/shared/dto";
 import type { createCardPriorityBody, moveCardPriorityBody } from "@kanera/shared/dto";
 import type { createCommentBody } from "@kanera/shared/dto";
+import type { startAgentRunBody, updateAgentRunBody } from "@kanera/shared/dto";
 import type { createNoteBody, updateNoteBody } from "@kanera/shared/dto";
 import type { createSeparatorBody, moveSeparatorBody, updateSeparatorBody } from "@kanera/shared/dto";
 import type { agentSearchQueryBody } from "@kanera/shared/dto";
 import type { workFiltersSchema, workScopeSchema } from "@kanera/shared/dto";
 import type { createBoardBody, createWorkspaceBody } from "@kanera/shared/dto";
+import type { createWebhookEndpointBody, updateWebhookEndpointBody } from "@kanera/shared/dto";
 import type { WorkspaceTemplateId as SharedWorkspaceTemplateId } from "@kanera/shared/workspace-templates";
 import type {
   CreateCardInput, CreateChecklistItemInput, CustomFieldValueInput, UpdateCardInput, UpdateChecklistItemInput,
 } from "./resources/cards.js";
 import type { CreateNoteInput, UpdateNoteInput } from "./resources/notes.js";
+import type { StartRunInput, UpdateRunInput } from "./resources/runs.js";
 import type { SearchInput } from "./resources/search.js";
 import type { UpdateSeparatorInput } from "./resources/separators.js";
+import type { CreateWebhookEndpointInput, UpdateWebhookEndpointInput } from "./resources/webhook-endpoints.js";
 import type { CreateBoardInput, CreateWorkspaceInput, WorkFilters, WorkScope, WorkspaceTemplateId } from "./types.js";
 
 /**
@@ -100,3 +104,11 @@ type _UpdateNote = AssertAssignable<UpdateNoteInput, z.input<typeof updateNoteBo
 type _Search = AssertAssignable<SearchInput, z.input<typeof agentSearchQueryBody>>;
 type _WorkScope = AssertAssignable<WorkScope, z.input<typeof workScopeSchema>>;
 type _WorkFilters = AssertAssignable<WorkFilters, z.input<typeof workFiltersSchema>>;
+
+// Agent runs.
+type _StartRun = AssertAssignable<StartRunInput, z.input<typeof startAgentRunBody>>;
+type _UpdateRun = AssertAssignable<UpdateRunInput, z.input<typeof updateAgentRunBody>>;
+
+// Webhook endpoints.
+type _CreateWebhookEndpoint = AssertAssignable<CreateWebhookEndpointInput, z.input<typeof createWebhookEndpointBody>>;
+type _UpdateWebhookEndpoint = AssertAssignable<UpdateWebhookEndpointInput, z.input<typeof updateWebhookEndpointBody>>;

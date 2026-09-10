@@ -16,7 +16,7 @@ interface ActivityActor {
   avatarUrl: string | null;
 }
 
-type ActivityActorKind = "user" | "apiKey" | "system" | "support";
+type ActivityActorKind = "user" | "apiKey" | "agent" | "system" | "support";
 
 interface ActivityAttribution {
   actorKind: ActivityActorKind;
@@ -24,7 +24,12 @@ interface ActivityAttribution {
   apiKeyName: string | null;
   supportSessionId: string | null;
   supportActorEmail: string | null;
+  agentGrantId: string | null;
+  agentName: string | null;
 }
+
+const NO_ATTRIBUTION_EXTRAS = { apiKeyId: null, apiKeyName: null, supportSessionId: null, supportActorEmail: null, agentGrantId: null, agentName: null } as const;
+const SYSTEM_ATTRIBUTION: ActivityAttribution = { actorKind: "system", ...NO_ATTRIBUTION_EXTRAS };
 
 export interface ActivityEmitOptions {
   notify?: boolean;
@@ -63,35 +68,42 @@ export type CoalescedActivityResult =
 
 const MERGED_OBJECT_PAYLOAD_KEYS = ["assigneeNamesById", "labelNamesById"] as const;
 
-function currentAttribution(): ActivityAttribution {
+export function currentAttribution(): ActivityAttribution {
   const authKind = requestContext.get("authKind");
   if (authKind === "apiKey") {
     return {
+      ...NO_ATTRIBUTION_EXTRAS,
       actorKind: "apiKey",
       apiKeyId: requestContext.get("apiKeyId") ?? null,
       apiKeyName: requestContext.get("apiKeyName") ?? "API key",
-      supportSessionId: null,
-      supportActorEmail: null,
+    };
+  }
+  // An AI agent acting through an OAuth grant. actorId (set by the route) is still the person the
+  // agent works for, so the row stays attached to a real user; the grant + name mark it as agent
+  // output so the feed labels it, Work Done can separate it, and the owner is not self-suppressed.
+  if (authKind === "agent") {
+    return {
+      ...NO_ATTRIBUTION_EXTRAS,
+      actorKind: "agent",
+      agentGrantId: requestContext.get("agentGrantId") ?? null,
+      agentName: requestContext.get("agentName") ?? "AI agent",
     };
   }
   // A support-session mutation acts as (actorId =) the impersonated org user, but must be recorded as
   // the operator's action so audit history is truthful. Carry the session id + operator email through.
   if (authKind === "support") {
     return {
+      ...NO_ATTRIBUTION_EXTRAS,
       actorKind: "support",
-      apiKeyId: null,
-      apiKeyName: null,
       supportSessionId: requestContext.get("supportSessionId") ?? null,
       supportActorEmail: requestContext.get("supportActorEmail") ?? null,
     };
   }
-  return { actorKind: "user", apiKeyId: null, apiKeyName: null, supportSessionId: null, supportActorEmail: null };
+  return { actorKind: "user", ...NO_ATTRIBUTION_EXTRAS };
 }
 
 export async function recordActivity(tx: Tx, input: ActivityInput): Promise<ActivityEvent> {
-  const attribution = input.actorKind === "system"
-    ? { actorKind: "system" as const, apiKeyId: null, apiKeyName: null, supportSessionId: null, supportActorEmail: null }
-    : currentAttribution();
+  const attribution = input.actorKind === "system" ? SYSTEM_ATTRIBUTION : currentAttribution();
   const [activity] = await tx.insert(activityEvents).values({
     boardId: input.boardId,
     clientId: input.clientId ?? null,
@@ -102,6 +114,8 @@ export async function recordActivity(tx: Tx, input: ActivityInput): Promise<Acti
     apiKeyName: attribution.apiKeyName,
     supportSessionId: attribution.supportSessionId,
     supportActorEmail: attribution.supportActorEmail,
+    agentGrantId: attribution.agentGrantId,
+    agentName: attribution.agentName,
     entityType: input.entityType,
     entityId: input.entityId,
     action: input.action,
@@ -128,6 +142,8 @@ export function toActivityFeedEvent(activity: ActivityEvent, actor: ActivityActo
       actorAvatarUrl: null,
     };
   }
+  // Agent rows keep the person's name and avatar (the agent acted for them); clients render the
+  // "via <agentName>" marker from the row's own agentName field.
   const isApiKey = activity.actorKind === "apiKey";
   return {
     ...activity,
@@ -140,9 +156,7 @@ export function toActivityFeedEvent(activity: ActivityEvent, actor: ActivityActo
 
 export async function recordCoalescedActivity(tx: Tx, input: CoalescedActivityInput): Promise<CoalescedActivityResult> {
   const now = new Date();
-  const attribution = input.actorKind === "system"
-    ? { actorKind: "system" as const, apiKeyId: null, apiKeyName: null, supportSessionId: null, supportActorEmail: null }
-    : currentAttribution();
+  const attribution = input.actorKind === "system" ? SYSTEM_ATTRIBUTION : currentAttribution();
   const coalescedUntil = new Date(now.getTime() + input.windowMs);
   const sameBoard = input.boardId === null ? isNull(activityEvents.boardId) : eq(activityEvents.boardId, input.boardId);
   const boardScope = input.coalesceAcrossBoards ? undefined : sameBoard;
@@ -161,6 +175,9 @@ export async function recordCoalescedActivity(tx: Tx, input: CoalescedActivityIn
         attribution.apiKeyId === null ? isNull(activityEvents.apiKeyId) : eq(activityEvents.apiKeyId, attribution.apiKeyId),
         // Never coalesce across support sessions, so a merged row can't blend two operators' edits.
         attribution.supportSessionId === null ? isNull(activityEvents.supportSessionId) : eq(activityEvents.supportSessionId, attribution.supportSessionId),
+        // Likewise never merge an agent's burst into its owner's (or another agent's) row: the
+        // whole point of the agent kind is that the two stay distinguishable in the feed.
+        attribution.agentGrantId === null ? isNull(activityEvents.agentGrantId) : eq(activityEvents.agentGrantId, attribution.agentGrantId),
         eq(activityEvents.entityType, input.entityType),
         eq(activityEvents.entityId, input.entityId),
         input.coalesceActions?.length
@@ -258,6 +275,8 @@ export async function recordCoalescedActivity(tx: Tx, input: CoalescedActivityIn
       apiKeyName: attribution.apiKeyName,
       supportSessionId: attribution.supportSessionId,
       supportActorEmail: attribution.supportActorEmail,
+      agentGrantId: attribution.agentGrantId,
+      agentName: attribution.agentName,
       entityType: input.entityType,
       entityId: input.entityId,
       action: input.action,

@@ -79,6 +79,15 @@ const automationActionPickerGroups = [
       { id: "populate_custom_field", label: "Set custom field", hint: "Write or copy a value into a field", icon: "forms" },
     ],
   },
+  {
+    id: "outbound",
+    label: "Notify & integrate",
+    icon: "send",
+    options: [
+      { id: "post_comment", label: "Post a comment", hint: "Add a templated comment to the card", icon: "message-plus" },
+      { id: "call_webhook", label: "Call a webhook", hint: "Send the card to a workspace webhook endpoint", icon: "webhook" },
+    ],
+  },
 ] satisfies PickerGroup[];
 
 @Component({

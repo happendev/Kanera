@@ -98,7 +98,9 @@ function notificationActorSuppressionId(activity: ActivityEvent): string | null 
   // API keys borrow the creator's user id for tenancy/audit ownership, but the
   // trigger can be an external system. Keep the creator eligible for notifications
   // when they otherwise match as a watcher, assignee, or mention recipient.
-  return activity.actorKind === "apiKey" ? null : activity.actorId;
+  // The same applies to agents: the owner did not perform the action themselves, and what their
+  // agent did on their behalf is exactly what they most need to review, so never self-suppress it.
+  return activity.actorKind === "apiKey" || activity.actorKind === "agent" ? null : activity.actorId;
 }
 
 export function queueNotificationFanout(
@@ -506,6 +508,8 @@ export async function enrichNotifications(
       activity_apiKeyName: activityEvents.apiKeyName,
       activity_supportSessionId: activityEvents.supportSessionId,
       activity_supportActorEmail: activityEvents.supportActorEmail,
+      activity_agentGrantId: activityEvents.agentGrantId,
+      activity_agentName: activityEvents.agentName,
       activity_boardId: activityEvents.boardId,
       activity_clientId: activityEvents.clientId,
       activity_workspaceId: activityEvents.workspaceId,
@@ -661,6 +665,8 @@ export async function enrichNotifications(
           apiKeyName: r.activity_apiKeyName,
           supportSessionId: r.activity_supportSessionId,
           supportActorEmail: r.activity_supportActorEmail,
+          agentGrantId: r.activity_agentGrantId,
+          agentName: r.activity_agentName,
           boardId: r.activity_boardId,
           clientId: r.activity_clientId,
           workspaceId: r.activity_workspaceId!,

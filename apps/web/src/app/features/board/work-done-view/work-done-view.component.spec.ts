@@ -110,6 +110,7 @@ describe("WorkDoneViewComponent", () => {
     actorUserId: "user-1",
     actorName: "Ada",
     actorAvatarUrl: null,
+    agentName: null,
   };
   const movedEvent: WorkDoneEvent = {
     id: "act-moved",
@@ -121,6 +122,7 @@ describe("WorkDoneViewComponent", () => {
     actorUserId: "user-2",
     actorName: "Bob",
     actorAvatarUrl: null,
+    agentName: null,
     listPath: ["list-1", "list-2"],
   };
   const completedEvent: WorkDoneEvent = {
@@ -133,6 +135,7 @@ describe("WorkDoneViewComponent", () => {
     actorUserId: "user-1",
     actorName: "Ada",
     actorAvatarUrl: null,
+    agentName: null,
   };
   const checklistEvent: WorkDoneEvent = {
     id: "checklistItem:item-1",
@@ -263,6 +266,7 @@ describe("WorkDoneViewComponent", () => {
       actorUserId: "user-1",
       actorName: "Ada",
       actorAvatarUrl: null,
+      agentName: null,
       listPath: ["list-a", "list-b", "list-c", "list-d", "list-e"],
     };
     const native = await render({ events: [longMove] }, {

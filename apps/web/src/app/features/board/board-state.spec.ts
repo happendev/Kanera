@@ -163,6 +163,7 @@ function createComment(overrides: Partial<WireComment> = {}): WireComment {
     authorKind: "user",
     apiKeyId: null,
     apiKeyName: null,
+    agentName: null,
     body: "Looks good.",
     editedAt: null,
     createdAt: new Date("2026-05-21T00:00:00.000Z"),

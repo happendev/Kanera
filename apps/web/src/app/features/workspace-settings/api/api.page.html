@@ -160,7 +160,7 @@
       </div>
 
       <div class="integration-section">
-        <div class="integration-section-head"><i class="ti ti-robot"></i><span>Unattended AI agents</span></div>
+        <div class="integration-section-head"><i class="ti ti-sparkles"></i><span>Unattended AI agents</span></div>
         <p class="settings-section-help">Create an OAuth client for CI, cron, or a server-side custom agent. The secret is shown once.</p>
         <k-docs-link path="ai-mcp-reference" label="Learn more about AI agent connections" />
         @if (settings.apiAllowed()) {
@@ -176,8 +176,8 @@
         }
         <div class="integration-list">
           @for (connection of settings.agentConnections(); track connection.clientId) {
-          <div class="integration-row key-row"><i class="ti ti-robot integration-icon"></i><div class="integration-primary"><span>{{ connection.name }}</span><code>{{ connection.clientId }}</code></div><span class="field-type-badge">{{ connection.maxScope }}</span><span class="key-last-used"><small>Last used</small><span>{{ settings.formatApiKeyLastUsed(connection.lastUsedAt) }}</span></span><div class="row-actions"><button class="ghost icon danger" (click)="settings.deleteAgentConnection(connection.clientId)" aria-label="Delete agent connection" kTooltip="Delete agent connection"><i class="ti ti-trash"></i></button></div></div>
-          } @empty { <k-empty-state size="sm" icon="robot-off" title="No unattended agents" /> }
+          <div class="integration-row key-row"><i class="ti ti-sparkles integration-icon"></i><div class="integration-primary"><span>{{ connection.name }}</span><code>{{ connection.clientId }}</code></div><span class="field-type-badge">{{ connection.maxScope }}</span><span class="key-last-used"><small>Last used</small><span>{{ settings.formatApiKeyLastUsed(connection.lastUsedAt) }}</span></span><div class="row-actions"><button class="ghost icon danger" (click)="settings.deleteAgentConnection(connection.clientId)" aria-label="Delete agent connection" kTooltip="Delete agent connection"><i class="ti ti-trash"></i></button></div></div>
+          } @empty { <k-empty-state size="sm" icon="sparkles" title="No unattended agents" /> }
         </div>
       </div>
 

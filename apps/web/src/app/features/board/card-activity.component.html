@@ -2,8 +2,8 @@
   <div class="section-label">
     <i class="ti ti-message-circle"></i>
     Activity
-    @if (feedItems().length) {
-    <span class="count">{{ feedItems().length }}</span>
+    @if (renderableFeedItems().length) {
+    <span class="count">{{ renderableFeedItems().length }}</span>
     }
     <div class="feed-filter" role="tablist" aria-label="Feed filter">
       <button type="button" [class.is-active]="feedFilter() === 'all'" (click)="feedFilter.set('all')">All</button>
@@ -107,6 +107,9 @@
           <span class="activity-date">{{ item.timeText }}@if (item.data.editedAt) { <span class="comment-edited"> (edited)</span>}</span>
           } @else {
           <span class="comment-author">{{ item.data.authorName }}</span>
+          @if (item.data.authorKind === 'agent') {
+          <span class="via-agent" [kTooltip]="'Written by ' + (item.data.agentName ?? 'an AI agent') + ' on behalf of ' + item.data.authorName"><i class="ti ti-sparkles"></i>via {{ item.data.agentName ?? 'AI agent' }}</span>
+          }
           @if (copiedSystemAuthorName(item.data); as copiedName) {
           <span class="comment-copied-author">&nbsp;({{ copiedName }})</span>
           }
@@ -180,6 +183,9 @@
         <span class="activity-text">
           @if (item.actorText) {
           <strong class="activity-actor">{{ item.actorText }}</strong>
+          }
+          @if (item.data.actorKind === 'agent') {
+          <span class="via-agent" [kTooltip]="'Done by ' + (item.data.agentName ?? 'an AI agent') + ' on behalf of ' + item.data.actorName"><i class="ti ti-sparkles"></i>via {{ item.data.agentName ?? 'AI agent' }}</span>
           }
           <span [innerHTML]="item.html"></span>
         </span>

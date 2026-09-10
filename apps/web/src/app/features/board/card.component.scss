@@ -366,6 +366,39 @@
   transform: translateY(-1px);
 }
 
+// "Agent working" chip. The flash is the only motion on a tile and is what says "live right now"
+// without a word, so it is deliberately unmissable rather than a gentle fade; blocked runs stop
+// flashing and go amber because the agent is now waiting on a person.
+.card-agent-run {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 17px;
+  width: 17px;
+  height: 17px;
+  border-radius: 5px;
+  transform: translateY(2px);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  animation: card-agent-run-flash 1.2s ease-in-out infinite;
+
+  i { font-size: 12px; }
+
+  &.is-blocked {
+    color: var(--color-amber, #b45309);
+    background: color-mix(in srgb, var(--color-amber, #b45309) 14%, transparent);
+    animation: none;
+  }
+}
+
+@keyframes card-agent-run-flash {
+  0%, 100% { opacity: 1; background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  50% { opacity: 0.25; background: color-mix(in srgb, var(--accent) 40%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-agent-run { animation: none; }
+}
+
 .card-attention {
   display: inline-grid;
   place-items: center;

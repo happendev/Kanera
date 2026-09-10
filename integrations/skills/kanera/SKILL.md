@@ -71,6 +71,14 @@ Kanera works.
 - Before a bulk action, confirm the board and selection. List-wide card actions always require an explicit board ID.
 - After a multi-step mutation, re-read the affected entity and report the resulting state.
 
+## Show your work
+
+- Kanera records what you do as *your* work, not the user's: activity, comments, and reports label it "via <your client name>", and the user is notified about it. Never present a change as if the person made it.
+- Before multi-step work on a card, call `runs.start` with a short title (and `externalUrl` for the pull request, session, or thread a person can open). The board then shows a live "agent working" chip on that card and the run appears in card detail. Check `runs.list` first so two agents do not work the same card.
+- While working, call `runs.update` at least every 10 minutes (an empty update is a heartbeat); a run with no heartbeat for 15 minutes is marked stalled. Put progress in `summary`, and set `status: "blocked"` when you need a decision from a person, saying what you need in the summary.
+- When you stop, end the run with `status: "succeeded"`, `"failed"`, or `"cancelled"` and a one-line outcome in `summary`. Ended runs cannot be edited; start a new run if work resumes. Do not leave a run open across turns you are not actively working.
+- A run is a status signal, not a record of the work: still comment on the card with the outcome, and link important entities with their canonical URLs.
+
 ## Handle failures
 
 - On `UNAUTHENTICATED`, ask the user to reconnect Kanera.

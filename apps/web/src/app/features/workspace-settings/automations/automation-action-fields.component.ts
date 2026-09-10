@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from "@an
 import type { AutomationActionBody } from "@kanera/shared/dto";
 import { ChecklistTemplateMultiSelectDropdownComponent } from "../checklist-template-multi-select-dropdown.component";
 import { TokenMultiSelectDropdownComponent } from "../token-multi-select-dropdown.component";
+import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { UserMultiSelectDropdownComponent } from "../user-multi-select-dropdown.component";
 import { WorkspaceSettingsPage } from "../workspace-settings.page";
 
@@ -20,7 +21,7 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
 @Component({
   selector: "k-automation-action-fields",
   standalone: true,
-  imports: [UserMultiSelectDropdownComponent, ChecklistTemplateMultiSelectDropdownComponent, TokenMultiSelectDropdownComponent],
+  imports: [UserMultiSelectDropdownComponent, ChecklistTemplateMultiSelectDropdownComponent, TokenMultiSelectDropdownComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @let a = action();
@@ -269,6 +270,36 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
           </div>
         </div>
       }
+    } @else if (a.type === 'post_comment') {
+      <label class="aaf-field aaf-wide">
+        <span class="aaf-label">Comment</span>
+        <textarea
+          rows="3"
+          placeholder="Markdown. Use the placeholders below for card details."
+          [value]="settings.automationCommentTemplateValue(a)"
+          (input)="settings.updateAutomationCommentTemplate(automationId(), index(), $any($event.target).value)"
+          (blur)="settings.flushAutomationActionsSave(automationId())"
+        ></textarea>
+      </label>
+      <div class="aaf-field aaf-wide aaf-variables" aria-label="Available placeholders">
+        @for (variable of settings.automationCommentTemplateVariables; track variable.token) {
+          <code class="aaf-variable" [kTooltip]="variable.label">{{ variable.token }}</code>
+        }
+      </div>
+    } @else if (a.type === 'call_webhook') {
+      <label class="aaf-field">
+        <span class="aaf-label">Webhook endpoint</span>
+        @if (settings.webhooks().length) {
+          <select [value]="settings.automationActionTargetValue(a)" (change)="settings.updateAutomationActionTarget(automationId(), index(), $any($event.target).value)">
+            <option value="" [selected]="!settings.automationActionTargetValue(a)">Choose endpoint</option>
+            @for (hook of settings.webhooks(); track hook.id) {
+              <option [value]="hook.id" [selected]="settings.automationActionTargetValue(a) === hook.id">{{ hook.name }}{{ hook.enabled ? '' : ' (disabled)' }}</option>
+            }
+          </select>
+        } @else {
+          <p class="aaf-missing">No webhook endpoints yet. Add one under the API tab first.</p>
+        }
+      </label>
     } @else {
       <!-- clear_due_date, move_to_top, move_to_bottom: no configuration. Say so rather than
            rendering the old literal "No target" placeholder in the middle of the row. -->

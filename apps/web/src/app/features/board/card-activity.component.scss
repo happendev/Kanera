@@ -476,6 +476,26 @@ button.xs {
   color: var(--text);
 }
 
+// "via <agent>" marker on agent-authored comments and activity. Sits inline after the name so the
+// person stays the subject of the sentence and the agent reads as the instrument.
+.via-agent {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin: 0 4px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  white-space: nowrap;
+  vertical-align: baseline;
+
+  i { font-size: 12px; }
+}
+
 :host ::ng-deep {
   .activity-value {
     display: inline-block;

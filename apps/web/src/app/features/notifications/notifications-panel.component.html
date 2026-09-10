@@ -28,8 +28,8 @@
     <div class="toolbar-left">
       <k-segmented
         class="toolbar-toggle"
-        [options]="readFilterOptions"
-        [value]="includeRead() ? 'all' : 'unread'"
+        [options]="readFilterOptions()"
+        [value]="feedMode()"
         [showLabels]="true"
         [equalWidths]="true"
         size="sm"
@@ -98,6 +98,8 @@
       [text]="unreadCount() > 0 ? unreadCount() + ' unread ' + (unreadCount() === 1 ? 'notification is' : 'notifications are') + ' hidden by an active filter.' : 'Try clearing the board or user filter to see more.'">
       <button type="button" class="ghost empty-all-btn" (click)="clearFilters()">Clear filters</button>
     </k-empty-state>
+    } @else if (feedMode() === 'agent') {
+    <k-empty-state class="drawer-empty" plain icon="sparkles" title="No agent activity yet" text="When an AI agent connected to your account changes a card, comments, or starts a run, it'll show up here." />
     } @else if (includeRead()) {
     <k-empty-state class="drawer-empty" plain icon="bell-z" title="No notifications yet" text="When someone assigns you to a card, mentions you, or updates a list you're watching — it'll show up here." />
     } @else if (hasUnresolvedUnreadMismatch()) {
@@ -185,6 +187,9 @@
           <div class="notif-action">
             <i [class]="changeSummary(n).icon"></i>
             <span class="actor-name">{{ n.actorName }}</span>
+            @if (n.activity?.actorKind === 'agent') {
+            <span class="via-agent" [kTooltip]="'Done by ' + (n.activity?.agentName ?? 'an AI agent') + ' on behalf of ' + n.actorName"><i class="ti ti-sparkles"></i>via {{ n.activity?.agentName ?? 'AI agent' }}</span>
+            }
             <span class="action-text">{{ changeSummary(n).text }}</span>
             @if (changeSummary(n).value) {
             <span class="action-value">{{ changeSummary(n).value }}</span>
@@ -300,6 +305,9 @@
               <div class="notif-action">
                 <i [class]="item.summary.icon"></i>
                 @if (item.notification.actorName) { <span class="actor-name">{{ item.notification.actorName }}</span> }
+                @if (item.notification.activity?.actorKind === 'agent') {
+                <span class="via-agent" [kTooltip]="'Done by ' + (item.notification.activity?.agentName ?? 'an AI agent') + ' on behalf of ' + (item.notification.actorName ?? '')"><i class="ti ti-sparkles"></i>via {{ item.notification.activity?.agentName ?? 'AI agent' }}</span>
+                }
                 <span class="action-text">{{ item.summary.text }}</span>
                 @if (item.summary.value) {
                 <span class="action-value">{{ item.summary.value }}</span>

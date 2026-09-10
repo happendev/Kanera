@@ -1,11 +1,12 @@
 import "../test/setup.integration.js";
-import { boards, cards, clientMembers, clients, comments, lists, oauthTokens, workspaceMembers, workspaces } from "@kanera/shared/schema";
+import { activityEvents, boards, cardAssignees, cards, clientMembers, clients, comments, lists, notifications, oauthTokens, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { buildPublicApiServer } from "../public-api-server.js";
 import { db } from "../db.js";
+import { waitForNotificationFanoutForTests } from "../lib/notifications.js";
 import { hashOpaqueToken } from "../lib/tokens.js";
 import { buildIntegrationServer } from "../test/integration.js";
 
@@ -235,6 +236,8 @@ void test("OAuth authorization-code, refresh rotation, and service client flows"
       createdById: fixture.userId,
     }).returning();
     assert.ok(card);
+    // The owner is assigned so they qualify as a notification recipient for their own agent's comment.
+    await db.insert(cardAssignees).values({ cardId: card.id, userId: fixture.userId });
     const createdComment = await publicApi.inject({
       method: "POST",
       url: `/api/v1/cards/${card.id}/comments`,
@@ -242,11 +245,36 @@ void test("OAuth authorization-code, refresh rotation, and service client flows"
       payload: { body: "Comment from a personal OAuth connection" },
     });
     assert.equal(createdComment.statusCode, 201);
-    const oauthComment = createdComment.json<{ id: string; authorKind: string; apiKeyId: string | null }>();
-    assert.equal(oauthComment.authorKind, "user");
+    // An interactive agent grant acts *for* the user but is recorded as the agent: the comment
+    // belongs to the person (authorId) yet is labelled agent-written with the OAuth client's name.
+    const oauthComment = createdComment.json<{ id: string; authorId: string; authorKind: string; apiKeyId: string | null; agentName: string | null; authorName: string }>();
+    assert.equal(oauthComment.authorKind, "agent");
+    assert.equal(oauthComment.authorId, fixture.userId);
+    assert.equal(oauthComment.agentName, "Claude-compatible test agent");
     assert.equal(oauthComment.apiKeyId, null);
     const [storedComment] = await db.select().from(comments).where(eq(comments.id, oauthComment.id)).limit(1);
     assert.equal(storedComment?.apiKeyId, null);
+    assert.ok(storedComment?.agentGrantId, "agent comments reference the grant they were made through");
+    const [commentActivity] = await db.select().from(activityEvents)
+      .where(eq(activityEvents.entityId, oauthComment.id)).limit(1);
+    assert.equal(commentActivity?.actorKind, "agent");
+    assert.equal(commentActivity?.actorId, fixture.userId);
+    assert.equal(commentActivity?.agentGrantId, storedComment?.agentGrantId);
+    assert.equal(commentActivity?.agentName, "Claude-compatible test agent");
+    // The person is NOT self-suppressed for their agent's actions: what the agent did on their
+    // behalf is exactly what they need to review.
+    await waitForNotificationFanoutForTests();
+    const ownerNotifications = await db.select().from(notifications)
+      .where(eq(notifications.activityId, commentActivity!.id));
+    assert.ok(ownerNotifications.some((row) => row.userId === fixture.userId), "the owner is notified about their own agent's comment");
+    // The owner can still edit their agent's comment.
+    const editedByOwner = await fixture.app.inject({
+      method: "PATCH",
+      url: `/comments/${oauthComment.id}`,
+      headers: { authorization: `Bearer ${fixture.accessToken}` },
+      payload: { body: "Edited by the person the agent acted for" },
+    });
+    assert.equal(editedByOwner.statusCode, 200, editedByOwner.body);
 
     const narrowedVerifier = randomBytes(48).toString("base64url");
     const narrowedAuthorization = {

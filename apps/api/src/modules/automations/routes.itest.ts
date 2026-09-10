@@ -25,12 +25,15 @@ import {
   cardWatchers,
   cards,
   cardCustomFieldValues,
+  comments,
   customFieldOptions,
   emailQueue,
   eventOutbox,
   lists,
   notifications,
   customFields,
+  webhookDeliveries,
+  webhookEndpoints,
   workspaceMembers,
   workspaces,
 } from "@kanera/shared/schema";
@@ -38,7 +41,8 @@ import { and, asc, eq, inArray, ne } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db, pool } from "../../db.js";
-import { runDueDateApproachingAutomationSweep, runDueDateAutomationSweep, runInactivityAutomationSweep, runListEntryAutomations } from "../../lib/automations.js";
+import { emitAutomationEffects, runDueDateApproachingAutomationSweep, runDueDateAutomationSweep, runInactivityAutomationSweep, runListEntryAutomations } from "../../lib/automations.js";
+import { enqueueWebhookDeliveriesForOutboxEvent } from "../../lib/webhooks.js";
 import { waitForNotificationFanoutForTests } from "../../lib/notifications.js";
 import { buildIntegrationServer } from "../../test/integration.js";
 import { signupOwner } from "../../test/api-fixtures.js";
@@ -3233,4 +3237,125 @@ void test("due-date-approaching automation fires once per due date and lead-time
   await db.update(cards).set({ dueDateLocalDate: "2026-06-12" }).where(eq(cards.id, card.id));
   assert.equal(await runDueDateApproachingAutomationSweep(undefined, new Date("2026-06-09T12:00:00.000Z")), 1);
   assert.equal((await loadAutomationRunStats(automation.id))?.runCount, 2);
+});
+
+void test("post_comment and call_webhook actions run, and executions record card, action, and error", async () => {
+  const f = await setupWorkspace("owner-automation-outbound@example.com");
+  const endpointCreated = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/webhooks`,
+    headers: f.auth,
+    payload: { name: "Agent callback", url: "https://example.com/kanera", eventTypes: ["card:created"], enabled: true },
+  });
+  assert.equal(endpointCreated.statusCode, 201);
+  const endpoint = endpointCreated.json<{ id: string }>();
+
+  // An endpoint from another workspace (or a random id) is rejected at save time.
+  const rejected = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: { triggerType: "card_enters_list", triggerListId: f.list.id, enabled: true, actions: [{ type: "call_webhook", config: { endpointId: "00000000-0000-4000-8000-000000000000" } }] },
+  });
+  assert.equal(rejected.statusCode, 400);
+
+  const created = await f.app.inject({
+    method: "POST",
+    url: `/workspaces/${f.workspace.id}/automations`,
+    headers: f.auth,
+    payload: {
+      triggerType: "card_enters_list",
+      triggerListId: f.list.id,
+      enabled: true,
+      actions: [
+        { type: "post_comment", config: { template: "Landed in **{{list.name}}**: {{card.title}} ({{card.key}}) {{card.url}} {{unknown.var}}" } },
+        { type: "call_webhook", config: { endpointId: endpoint.id } },
+      ],
+    },
+  });
+  assert.equal(created.statusCode, 201);
+  const automation = created.json<{ id: string }>();
+
+  const [card] = await db
+    .insert(cards)
+    .values({ boardId: f.board.id, listId: f.list.id, title: "Outbound card", position: "1000.0000000000", createdById: f.user.id })
+    .returning();
+  assert.ok(card);
+
+  const effects = await runListEntryAutomations(db, {
+    cardId: card.id,
+    listId: f.list.id,
+    boardId: f.board.id,
+    workspaceId: f.workspace.id,
+    clientId: f.user.clientId,
+    trigger: "create",
+    triggerActorId: f.user.id,
+  });
+  assert.deepEqual(effects.effects.map((effect) => effect.type), ["commentCreated", "webhookCalled"]);
+  await emitAutomationEffects(effects);
+
+  // The comment is system-authored, labelled "Automation", and has its placeholders resolved.
+  // Unknown placeholders stay verbatim so a typo is visible rather than silently blank.
+  const [comment] = await db.select().from(comments).where(eq(comments.cardId, card.id));
+  assert.ok(comment);
+  assert.equal(comment.authorKind, "system");
+  assert.equal(comment.apiKeyName, "Automation");
+  assert.equal(comment.authorId, f.user.id);
+  assert.match(comment.body, new RegExp(`^Landed in \\*\\*${f.list.name}\\*\\*: Outbound card \\(${card.key}\\) https?://\\S+ \\{\\{unknown\\.var\\}\\}$`));
+
+  // The webhook call is a durable board outbox event targeted at the chosen endpoint, and the
+  // enqueue step turns it into exactly one delivery row for that endpoint even though its
+  // eventTypes filter does not list the automation event.
+  const outboxRows = await db.select().from(eventOutbox).where(and(eq(eventOutbox.boardId, f.board.id), eq(eventOutbox.eventType, "automation:webhook:called")));
+  assert.equal(outboxRows.length, 1);
+  const outboxEvent = outboxRows[0]!;
+  const outboxPayload = outboxEvent.payload as { endpointId: string; cardId: string; automationId: string; card: { id: string }; list: { name: string } | null };
+  assert.equal(outboxPayload.endpointId, endpoint.id);
+  assert.equal(outboxPayload.cardId, card.id);
+  assert.equal(outboxPayload.automationId, automation.id);
+  assert.equal(outboxPayload.card.id, card.id);
+  assert.equal(outboxPayload.list?.name, f.list.name);
+  await enqueueWebhookDeliveriesForOutboxEvent(outboxEvent);
+  const deliveries = await db.select().from(webhookDeliveries).where(eq(webhookDeliveries.outboxEventId, outboxEvent.id));
+  assert.equal(deliveries.length, 1);
+  assert.equal(deliveries[0]!.endpointId, endpoint.id);
+  assert.equal(deliveries[0]!.eventType, "automation:webhook:called");
+
+  const executions = await f.app.inject({ method: "GET", url: `/automations/${automation.id}/executions`, headers: f.auth });
+  assert.equal(executions.statusCode, 200);
+  const [execution] = executions.json<Array<{ outcome: string; cardId: string | null; actionType: string | null; error: string | null }>>();
+  assert.ok(execution);
+  assert.equal(execution.outcome, "effectful");
+  assert.equal(execution.cardId, card.id);
+  assert.equal(execution.actionType, "post_comment");
+  assert.equal(execution.error, null);
+
+  // A disabled endpoint pauses the call (no-op) rather than failing the trigger.
+  await db.update(webhookEndpoints).set({ enabled: false }).where(eq(webhookEndpoints.id, endpoint.id));
+  const [second] = await db
+    .insert(cards)
+    .values({ boardId: f.board.id, listId: f.list.id, title: "Paused endpoint", position: "2000.0000000000", createdById: f.user.id })
+    .returning();
+  const pausedEffects = await runListEntryAutomations(db, { cardId: second!.id, listId: f.list.id, boardId: f.board.id, workspaceId: f.workspace.id, clientId: f.user.clientId, trigger: "create" });
+  assert.deepEqual(pausedEffects.effects.map((effect) => effect.type), ["commentCreated"]);
+
+  // A deleted endpoint is a configuration error: the run fails, and the run row names the action.
+  await db.delete(webhookEndpoints).where(eq(webhookEndpoints.id, endpoint.id));
+  const [third] = await db
+    .insert(cards)
+    .values({ boardId: f.board.id, listId: f.list.id, title: "Deleted endpoint", position: "3000.0000000000", createdById: f.user.id })
+    .returning();
+  await assert.rejects(
+    runListEntryAutomations(db, { cardId: third!.id, listId: f.list.id, boardId: f.board.id, workspaceId: f.workspace.id, clientId: f.user.clientId, trigger: "create" }),
+    /webhook endpoint no longer exists/,
+  );
+  const failed = await f.app.inject({ method: "GET", url: `/automations/${automation.id}/executions?limit=1`, headers: f.auth });
+  const [latest] = failed.json<Array<{ outcome: string; cardId: string | null; actionType: string | null; error: string | null }>>();
+  assert.ok(latest);
+  assert.equal(latest.outcome, "failed");
+  assert.equal(latest.cardId, third!.id);
+  assert.equal(latest.actionType, "call_webhook");
+  assert.match(latest.error ?? "", /webhook endpoint no longer exists/);
+  const stats = await loadAutomationRunStats(automation.id);
+  assert.equal(stats?.failedRunCount, 1);
 });

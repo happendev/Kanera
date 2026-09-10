@@ -10,7 +10,7 @@ export type PopulateTextDateFormat = Extract<PopulateCustomFieldValue, { kind: "
 /** One fragment of an automation's summary sentence. `strong` marks a configured value, not grammar. */
 export type AutomationSummarySegment = { text: string; strong: boolean };
 
-export const automationActionTypes = ["add_labels", "remove_labels", "add_assignees", "remove_assignees", "apply_checklists", "set_due_date", "clear_due_date", "set_completion", "move_to_list", "move_to_top", "move_to_bottom", "populate_custom_field"] as const;
+export const automationActionTypes = ["add_labels", "remove_labels", "add_assignees", "remove_assignees", "apply_checklists", "set_due_date", "clear_due_date", "set_completion", "move_to_list", "move_to_top", "move_to_bottom", "populate_custom_field", "post_comment", "call_webhook"] as const;
 export type AutomationActionTypeName = (typeof automationActionTypes)[number];
 
 export const automationSetCustomFieldTypes = ["text", "number", "date", "checkbox", "select", "user"] as const satisfies readonly CustomFieldTypeName[];
@@ -29,6 +29,30 @@ export interface AutomationLookups {
   members: readonly { userId: string; displayName: string }[];
   templates: readonly WireChecklistTemplate[];
   fields: readonly WireCustomField[];
+  // Generic webhook endpoints a call_webhook action can target. Only admins load these, which is
+  // fine: the automations tab is admin-only too.
+  webhooks: readonly { id: string; name: string }[];
+}
+
+/** Placeholders the post_comment template accepts; shown as hints in the editor. */
+export const automationCommentTemplateVariables = [
+  { token: "{{card.title}}", label: "Card title" },
+  { token: "{{card.key}}", label: "Card key" },
+  { token: "{{card.url}}", label: "Card link" },
+  { token: "{{card.dueDate}}", label: "Due date" },
+  { token: "{{list.name}}", label: "List" },
+  { token: "{{board.name}}", label: "Board" },
+  { token: "{{workspace.name}}", label: "Workspace" },
+] as const;
+
+export function automationWebhookName(id: string, lookups: AutomationLookups): string {
+  return lookups.webhooks.find((hook) => hook.id === id)?.name ?? "Deleted webhook";
+}
+
+/** First line of the comment template, shortened, for collapsed summaries. */
+export function automationCommentPreview(template: string, max = 60): string {
+  const firstLine = template.trim().split(/\r?\n/u)[0] ?? "";
+  return firstLine.length > max ? `${firstLine.slice(0, max - 1)}…` : firstLine;
 }
 
 // ─── Raw config accessors (no lookups needed) ─────────────────────────────────
@@ -50,6 +74,7 @@ export function automationActionTargetValue(action: AutomationActionBody): strin
   if (action.type === "add_assignees" || action.type === "remove_assignees") return action.config.userIds[0] ?? "";
   if (action.type === "move_to_list") return action.config.listId;
   if (action.type === "populate_custom_field") return action.config.fieldId;
+  if (action.type === "call_webhook") return action.config.endpointId;
   return "";
 }
 
@@ -117,6 +142,8 @@ export function automationActionIcon(action: AutomationActionBody): string {
   if (action.type === "move_to_bottom") return "ti-arrow-down";
   if (action.type === "set_due_date" || action.type === "clear_due_date") return "ti-calendar";
   if (action.type === "populate_custom_field") return "ti-forms";
+  if (action.type === "post_comment") return "ti-message-plus";
+  if (action.type === "call_webhook") return "ti-webhook";
   return action.config.completed ? "ti-circle-check" : "ti-circle-dashed";
 }
 
@@ -296,6 +323,14 @@ export function automationActionSummarySegments(action: AutomationActionBody, lo
       value(automationPopulateValueLabel(action, lookups)),
     ];
   }
+  if (action.type === "post_comment") {
+    const preview = automationCommentPreview(action.config.template);
+    return preview ? [plain("Post comment "), value(`“${preview}”`)] : [plain("Post comment "), value("(write the comment)")];
+  }
+  if (action.type === "call_webhook") {
+    if (!action.config.endpointId) return [plain("Call webhook "), value("(choose endpoint)")];
+    return [plain("Call webhook "), value(automationWebhookName(action.config.endpointId, lookups))];
+  }
   return [plain(action.config.completed ? "Mark complete" : "Mark incomplete")];
 }
 
@@ -320,6 +355,8 @@ export function automationActionTargetLabel(action: AutomationActionBody, lookup
     if (!action.config.fieldId) return "Choose custom field";
     return `${automationCustomFieldName(action.config.fieldId, lookups)} · ${automationPopulateValueLabel(action, lookups)}`;
   }
+  if (action.type === "post_comment") return automationCommentPreview(action.config.template) || "Write the comment";
+  if (action.type === "call_webhook") return action.config.endpointId ? automationWebhookName(action.config.endpointId, lookups) : "Choose endpoint";
   return null;
 }
 
@@ -350,6 +387,13 @@ export function automationActionSummary(action: AutomationActionBody, lookups: A
       ? `Set ${automationCustomFieldName(action.config.fieldId, lookups)} to ${automationPopulateValueLabel(action, lookups)}`
       : "Set custom field (choose field)";
   }
+  if (action.type === "post_comment") {
+    const preview = automationCommentPreview(action.config.template);
+    return preview ? `Post comment “${preview}”` : "Post comment (write the comment)";
+  }
+  if (action.type === "call_webhook") {
+    return action.config.endpointId ? `Call webhook ${automationWebhookName(action.config.endpointId, lookups)}` : "Call webhook (choose endpoint)";
+  }
   return action.config.completed ? "Mark complete" : "Mark incomplete";
 }
 
@@ -365,6 +409,9 @@ export function isAutomationActionComplete(action: AutomationActionBody, lookups
   if (action.type === "add_assignees" || action.type === "remove_assignees") return action.config.userIds.length > 0;
   if (action.type === "apply_checklists") return action.config.templateIds.length > 0;
   if (action.type === "move_to_list") return !!action.config.listId;
+  if (action.type === "post_comment") return Boolean(action.config.template.trim());
+  // The endpoint must still exist: the API rejects an id it cannot find in the workspace.
+  if (action.type === "call_webhook") return Boolean(action.config.endpointId) && lookups.webhooks.some((hook) => hook.id === action.config.endpointId);
   if (action.type === "populate_custom_field") {
     if (!action.config.fieldId) return false;
     const field = automationSetCustomField(action, lookups);

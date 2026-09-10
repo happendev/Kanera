@@ -358,6 +358,40 @@
         }
       </section>
 
+      <!--
+        Agent runs: the live "someone is working on this now" signal. Only in-flight runs render
+        here, directly under the description so a person sees them before they start editing; a
+        run that ends becomes an activity-feed row instead, so this section disappears when the
+        agent is done. Runs do not depend on /cards/:id/detail, so they render outside that gate.
+      -->
+      @if (liveAgentRuns().length) {
+      <section class="detail-section agent-runs">
+        <div class="section-label">
+          <i class="ti ti-sparkles"></i>
+          Agent runs
+          <span class="count">{{ liveAgentRuns().length }}</span>
+        </div>
+        <ul class="agent-run-list">
+          @for (run of liveAgentRuns(); track run.id) {
+          <li class="agent-run" [attr.data-status]="run.status">
+            <span class="agent-run-status" [kTooltip]="agentRunStatusLabel(run)">
+              <i [class]="'ti ti-' + agentRunStatusIcon(run)"></i>
+            </span>
+            <div class="agent-run-main">
+              <div class="agent-run-head">
+                <span class="agent-run-title">{{ run.title }}</span>
+                <span class="agent-run-meta">{{ run.agentName }} · {{ agentRunStatusLabel(run) }} · {{ formatFeedTime(run.heartbeatAt) }}</span>
+              </div>
+              @if (run.summary) {
+              <p class="agent-run-summary">{{ run.summary }}</p>
+              }
+            </div>
+          </li>
+          }
+        </ul>
+      </section>
+      }
+
       <!-- Detail-dependent body. Custom fields, checklists, linked items, and attachments all
            depend on /cards/:id/detail, so they render together behind one gate — never
            piece-by-piece, and never flashing their individual "No X" empties before detail loads.
