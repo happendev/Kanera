@@ -46,7 +46,7 @@
     (function () {
       try {
         var t = localStorage.getItem('kanera-theme');
-        if (t !== 'light' && t !== 'dark') {
+        if (['light', 'paper', 'dark', 'carbon'].indexOf(t) === -1) {
           t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
         }
         document.documentElement.dataset.theme = t;

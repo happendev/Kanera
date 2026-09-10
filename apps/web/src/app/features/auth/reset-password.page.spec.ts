@@ -20,7 +20,7 @@ describe("ResetPasswordPage", () => {
         provideZonelessChangeDetection(),
         { provide: ActivatedRoute, useValue: {} },
         { provide: Router, useValue: { navigateByUrl: vi.fn() } },
-        { provide: ThemeService, useValue: { theme: signal("dark") } },
+        { provide: ThemeService, useValue: { theme: signal("dark"), isDark: signal(true) } },
       ],
     }).compileComponents();
 

@@ -452,7 +452,7 @@ export class GlobalSearchOverlayComponent {
    */
   readonly commands = computed<PaletteCommand[]>(() => {
     const query = this.search.query().trim();
-    const dark = this.theme.theme() === "dark";
+    const dark = this.theme.isDark();
     const navigation: PaletteAction[] = [
       { id: "theme", label: `Switch to ${dark ? "light" : "dark"} mode`, detail: "Change the interface theme", icon: dark ? "sun" : "moon", keywords: ["theme", "toggle", "appearance", "dark", "light"], run: () => this.theme.toggle() },
       { id: "home", label: "Go to Home", detail: "Workspace overview", icon: "home", keys: "g h", run: () => void this.router.navigate(["/"]) },

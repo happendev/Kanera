@@ -917,7 +917,8 @@ button.xs {
   }
 }
 
-:host-context([data-theme="light"]) {
+:host-context([data-theme="light"]),
+:host-context([data-theme="paper"]) {
   .comment-body {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -942,7 +943,7 @@ button.xs {
 }
 
 @media (prefers-color-scheme: light) {
-  :host-context(:not([data-theme="dark"])) {
+  :host-context(:not([data-theme])) {
     .comment-body {
       background: var(--surface);
       border: 1px solid var(--border);

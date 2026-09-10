@@ -519,7 +519,7 @@
 
 .theme-options {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 180px));
+  grid-template-columns: repeat(4, minmax(0, 180px));
   gap: 8px;
 }
 
@@ -1718,7 +1718,8 @@
     grid-template-columns: 1fr;
   }
 
-  // ── Theme picker ── share the row instead of two fixed 180px tiles.
+  // ── Theme picker ── 2x2 rather than four cramped columns; at this width four tiles leave no
+  // room for the icon and label to sit on one line.
   .theme-options {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

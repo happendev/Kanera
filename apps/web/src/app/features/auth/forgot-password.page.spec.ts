@@ -35,7 +35,7 @@ describe("ForgotPasswordPage", () => {
       providers: [
         provideZonelessChangeDetection(),
         { provide: ActivatedRoute, useValue: {} },
-        { provide: ThemeService, useValue: { theme: signal("dark") } },
+        { provide: ThemeService, useValue: { theme: signal("dark"), isDark: signal(true) } },
       ],
     }).compileComponents();
   });

@@ -357,7 +357,7 @@ describe("AppShellComponent board search", () => {
           provide: NotificationsService,
           useValue: notifications,
         },
-        { provide: ThemeService, useValue: { theme: signal("light") } },
+        { provide: ThemeService, useValue: { theme: signal("light"), isDark: signal(false) } },
         {
           provide: WorkspaceService,
           useValue: workspaceService,

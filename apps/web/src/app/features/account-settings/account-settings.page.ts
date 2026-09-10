@@ -18,7 +18,7 @@ import { BrowserPushService } from "../../core/notifications/browser-push.servic
 import { MentionSoundService } from "../../core/notifications/mention-sound.service";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
-import { ThemeService } from "../../core/theme/theme.service";
+import { ThemeService, type Theme } from "../../core/theme/theme.service";
 import { AutosaveTracker } from "../../shared/autosave-tracker";
 import { ConfirmService } from "../../shared/confirm.service";
 import { PageHeaderComponent } from "../../shared/page-header.component";
@@ -775,7 +775,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
 
   // ─── Profile actions ──────────────────────────────────────────────────────
 
-  setTheme(theme: "light" | "dark") {
+  setTheme(theme: Theme) {
     this.theme.setTheme(theme);
   }
 

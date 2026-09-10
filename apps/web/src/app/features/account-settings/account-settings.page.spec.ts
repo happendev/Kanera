@@ -275,7 +275,7 @@ describe("AccountSettingsPage", () => {
           },
         },
         { provide: SocketService, useValue: { activeWorkspaceIds: signal(new Set<string>()), connect: vi.fn(() => socket.asSocket()), joinWorkspace: vi.fn(() => vi.fn()), disconnect: socketDisconnect } },
-        { provide: ThemeService, useValue: { theme: signal("dark"), setTheme: vi.fn() } },
+        { provide: ThemeService, useValue: { theme: signal("dark"), isDark: signal(true), setTheme: vi.fn() } },
       ],
     }).compileComponents();
   });

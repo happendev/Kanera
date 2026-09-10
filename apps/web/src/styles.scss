@@ -560,135 +560,12 @@ k-list.is-drop-target {
   --color-brown-accent: #7c4a1e;
 }
 
-@media (prefers-color-scheme: light) {
-  // Guard with :not([data-theme]) so this only applies before an explicit theme is set
-  // (the brief pre-boot window). Once ThemeService / the index.html bootstrap script sets
-  // [data-theme], this block must stop matching — otherwise it has the same specificity as
-  // [data-theme="dark"] but sits later in source order, so it would silently override an
-  // explicit user/JS choice. That cascade collision was the "toggle does nothing on a
-  // light-OS device" bug: picking Dark set [data-theme="dark"] but this :root rule won.
-  :root:not([data-theme]) {
-    color-scheme: light;
-    --bg: #e8ecf2;
-    // Gradient tile — light mode
-    --tile-scrim: rgba(255, 255, 255, 0.62);
-    --tile-scrim-hover: rgba(255, 255, 255, 0.52);
-    --board-scrim: linear-gradient(to bottom, rgba(255, 255, 255, 0.72) 0, rgba(255, 255, 255, 0.5) 80px, rgba(255, 255, 255, 0.4) 100%);
-    --board-scrim-preview: linear-gradient(to bottom, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.4));
-    --tile-gradient-fg: #0f172a;
-    --tile-gradient-fg-muted: rgba(15, 23, 42, 0.65);
-    --tile-gradient-btn: rgba(15, 23, 42, 0.55);
-    --tile-gradient-btn-hover-bg: rgba(0, 0, 0, 0.08);
-    // Deliberately off pure white: #ffffff is the one value with no headroom left, so a highlight,
-    // a white image edge or a nested panel has nothing to separate against. Keep every light
-    // surface a shade below it. The ramp recesses (each step darker) — the reverse of dark mode.
-    --surface: #fcfdff;
-    --surface-2: #f5f7fb;
-    --surface-3: #eef1f6;
-    --surface-hover: #eaeff6;
-    --surface-subtle: rgba(0, 0, 0, 0.03);
-    // Floating chrome — see the dark block. Light mode recesses instead of lifting (no surface may
-    // reach pure white, and #fcfdff has no usable headroom below it anyway), so the step is small
-    // and deliberately stays above --surface-2: menu row hover fills with --surface-2, and an
-    // overlay darker than its own hover would read inverted. Light separation therefore still
-    // leans on the border and shadow; this only stops a menu from matching what it covers exactly.
-    --surface-overlay: #f9fbfd;
-    --overlay-border: var(--border);
-    --overlay-separator: var(--border);
-
-    --border: #dde2ea;
-    --border-strong: #c8d0dc;
-
-    --text: #0f172a;
-    --text-muted: #52647a;
-    --muted: #52647a;
-
-    --nav-text-strong: #334155;
-    --nav-active-bg: #dfe6ef;
-    --inset-bg: var(--surface-2);
-    --inset-border: transparent;
-    --input-bg: var(--surface);
-    --select-bg: var(--surface);
-
-    // teal-700 rather than the dark theme's teal-600: white text on #0d9488 was 3.7:1, and on a
-    // light page the accent is also link/label text, where the deeper tone reads better anyway.
-    --accent: #0f766e;
-    --accent-hover: #115e59;
-    @include light-accent-palette;
-    --accent-fg: var(--accent-ink);
-    // See the dark block: must be redeclared alongside every --accent declaration.
-    --accent-soft: color-mix(in srgb, var(--accent) 8%, transparent);
-
-    --danger: #dc2626;
-    --danger-bg: rgba(220, 38, 38, 0.07);
-    --danger-border: rgba(220, 38, 38, 0.2);
-
-    --success: #16a34a;
-    --warning: #a16207;
-
-    --ring: rgba(15, 118, 110, 0.3);
-
-    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08), 0 1px 1px rgba(15, 23, 42, 0.04);
-    --shadow: 0 2px 8px rgba(15, 23, 42, 0.10), 0 1px 3px rgba(15, 23, 42, 0.06);
-    --shadow-lg: 0 10px 30px -8px rgba(15, 23, 42, 0.18);
-    --depth-edge: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 0 0 1px rgba(0, 0, 0, 0.04);
-
-    // Flip the kanban hierarchy: gray "tray" lists, near-white "elevated" cards.
-    // --list-bg is pinned rather than tracking --surface-2: that token is also the inset/chrome
-    // fill and sits close under --surface, which is not enough separation for a tray holding cards.
-    --list-bg: #eff3f9;
-    --list-bg-strong: #dde4ed;
-    --card-bg: var(--surface);
-    --card-bg-hover: #f4f7fc;
-
-    // Soft off-white tint for chrome (toolbars, notes doc, card-detail body)
-    // instead of the heavier page gray.
-    --app-tint: #f4f6f9;
-    // Muted surfaces recede toward the page gray for visible contrast vs white.
-    --page-bg: var(--bg);
-
-    --label-chip-ink-base: #0f172a;
-    --label-chip-ink-weight: 50%;
-    --label-chip-bg-weight: 18%;
-    --label-chip-hover-bg-weight: 23%;
-
-    // Label palette is shared with dark mode: no overrides here, so both themes
-    // inherit the single --color-* (and --color-*-cf) palette from the base :root
-    // block above. Label components derive their theme-aware foreground and wash
-    // from these same identity colours instead of replacing the user's selection.
-
-    --avatar-color-0-bg: #dff8f4;
-    --avatar-color-0-fg: #0f766e;
-    --avatar-color-1-bg: #e3efff;
-    --avatar-color-1-fg: #1d4ed8;
-    --avatar-color-2-bg: #eee8ff;
-    --avatar-color-2-fg: #6d28d9;
-    --avatar-color-3-bg: #fde7f2;
-    --avatar-color-3-fg: #be185d;
-    --avatar-color-4-bg: #ffeddc;
-    --avatar-color-4-fg: #c2410c;
-    --avatar-color-5-bg: #fdf4cf;
-    --avatar-color-5-fg: #a16207;
-    --avatar-color-6-bg: #e2f7e8;
-    --avatar-color-6-fg: #15803d;
-    --avatar-color-7-bg: #dff5fb;
-    --avatar-color-7-fg: #0e7490;
-    --avatar-color-8-bg: #e8ebff;
-    --avatar-color-8-fg: #4338ca;
-    --avatar-color-9-bg: #fee5e9;
-    --avatar-color-9-fg: #be123c;
-    --avatar-color-10-bg: #edf8d7;
-    --avatar-color-10-fg: #4d7c0f;
-    --avatar-color-11-bg: #e9eef5;
-    --avatar-color-11-fg: #475569;
-
-    --scrollbar-thumb: rgba(0, 0, 0, 0.15);
-    --scrollbar-thumb-hover: rgba(0, 0, 0, 0.3);
-    --scrollbar-track: transparent;
-  }
-}
-
-[data-theme="light"] {
+// ─── Design tokens — light base ──────────────────────────────────────────────
+// Every light-family theme starts here. Extracted as a mixin because these values have to be
+// declared under three selectors — the pre-boot window before index.html stamps [data-theme],
+// the explicit Light choice, and Paper, which layers a warm palette on top. Hand-syncing three
+// copies of a hundred declarations is exactly the drift this repo has been bitten by before.
+@mixin light-base-tokens {
   color-scheme: light;
   --bg: #e8ecf2;
   // Gradient tile — light mode
@@ -700,13 +577,19 @@ k-list.is-drop-target {
   --tile-gradient-fg-muted: rgba(15, 23, 42, 0.65);
   --tile-gradient-btn: rgba(15, 23, 42, 0.55);
   --tile-gradient-btn-hover-bg: rgba(0, 0, 0, 0.08);
-  // Keep in sync with the @media light block above; see the rationale comment there.
+  // Deliberately off pure white: #ffffff is the one value with no headroom left, so a highlight,
+  // a white image edge or a nested panel has nothing to separate against. Keep every light
+  // surface a shade below it. The ramp recesses (each step darker) — the reverse of dark mode.
   --surface: #fcfdff;
   --surface-2: #f5f7fb;
   --surface-3: #eef1f6;
   --surface-hover: #eaeff6;
   --surface-subtle: rgba(0, 0, 0, 0.03);
-  // Keep in sync with the @media light block above.
+  // Floating chrome — see the dark block. Light mode recesses instead of lifting (no surface may
+  // reach pure white, and #fcfdff has no usable headroom below it anyway), so the step is small
+  // and deliberately stays above --surface-2: menu row hover fills with --surface-2, and an
+  // overlay darker than its own hover would read inverted. Light separation therefore still
+  // leans on the border and shadow; this only stops a menu from matching what it covers exactly.
   --surface-overlay: #f9fbfd;
   --overlay-border: var(--border);
   --overlay-separator: var(--border);
@@ -725,7 +608,8 @@ k-list.is-drop-target {
   --input-bg: var(--surface);
   --select-bg: var(--surface);
 
-  // Keep in sync with the @media light block above.
+  // teal-700 rather than the dark theme's teal-600: white text on #0d9488 was 3.7:1, and on a
+  // light page the accent is also link/label text, where the deeper tone reads better anyway.
   --accent: #0f766e;
   --accent-hover: #115e59;
   @include light-accent-palette;
@@ -799,6 +683,148 @@ k-list.is-drop-target {
   --scrollbar-thumb: rgba(0, 0, 0, 0.15);
   --scrollbar-thumb-hover: rgba(0, 0, 0, 0.3);
   --scrollbar-track: transparent;
+}
+
+@media (prefers-color-scheme: light) {
+  // Guard with :not([data-theme]) so this only applies before an explicit theme is set
+  // (the brief pre-boot window). Once ThemeService / the index.html bootstrap script sets
+  // [data-theme], this block must stop matching — otherwise it has the same specificity as
+  // [data-theme="dark"] but sits later in source order, so it would silently override an
+  // explicit user/JS choice. That cascade collision was the "toggle does nothing on a
+  // light-OS device" bug: picking Dark set [data-theme="dark"] but this :root rule won.
+  :root:not([data-theme]) {
+    @include light-base-tokens;
+  }
+}
+
+[data-theme="light"] {
+  @include light-base-tokens;
+}
+
+// ─── Design tokens — paper (warm light) ──────────────────────────────────────
+// The light-family counterpart to carbon: where the default Light theme is a cool blue-grey, this
+// is a warm ivory — the same ramp and the same contrast contract, shifted off the blue axis. It
+// builds on light-base-tokens and restates only what the warm palette changes, so anything added
+// to the light base (a new surface, a new status colour) reaches this theme for free.
+//
+// The three pinned hexes in the light base (--list-bg, --card-bg-hover, --app-tint, --nav-*) are
+// deliberately not var()-derived there, so they must each be restated here or the kanban tray and
+// chrome stay blue on a warm page.
+[data-theme="paper"] {
+  @include light-base-tokens;
+
+  // Warm ramp. Light recesses to separate, so each step is darker than the last — the reverse of
+  // the dark themes. --surface stays off pure white for the reason given in the light base.
+  --bg: #edeae4;
+  --surface: #fdfcfa;
+  --surface-2: #f7f5f1;
+  --surface-3: #f0ede7;
+  --surface-hover: #ebe7e0;
+  --surface-overlay: #fbfaf7;
+
+  --border: #e2ddd4;
+  --border-strong: #cec7ba;
+
+  // Warm near-black rather than the light base's slate, so body text does not read blue-tinted
+  // against the ivory surfaces.
+  --text: #26221d;
+  --text-muted: #6b6459;
+  --muted: #6b6459;
+
+  --nav-text-strong: #3d382f;
+  --nav-active-bg: #e4dfd6;
+
+  // Sienna, chosen to match the weight of the light base's teal rather than outrank it: 5.6:1
+  // carrying white ink as a fill and 5.5:1 as text on --surface, against the teal's 5.5 / 5.3.
+  // A heavier brown was legible but read as a warning colour next to the amber --warning.
+  --accent: #a3502a;
+  --accent-hover: #8a4222;
+  // --accent-ink stays #ffffff from light-base-tokens' light-accent-palette include.
+  --accent-fg: var(--accent-ink);
+  // Must be redeclared wherever --accent is; a single :root definition would stay locked to teal.
+  --accent-soft: color-mix(in srgb, var(--accent) 9%, transparent);
+  --ring: rgba(163, 80, 42, 0.32); // matches --accent (#a3502a)
+
+  // Kanban: warm tray, near-white cards. Pinned rather than tracking --surface-2 for the reason
+  // given in the light base — that token sits too close under --surface to hold cards apart.
+  --list-bg: #f2efe9;
+  --list-bg-strong: #e5e0d7;
+  --card-bg-hover: #faf8f4;
+
+  --app-tint: #f6f4f0;
+
+  // Warm-tinted shadows. The light base casts slate (rgba(15, 23, 42, …)); over large areas that
+  // cool cast fights the ivory surfaces and reads as a colour mismatch rather than as depth.
+  --shadow-sm: 0 1px 2px rgba(60, 50, 38, 0.08), 0 1px 1px rgba(60, 50, 38, 0.04);
+  --shadow: 0 2px 8px rgba(60, 50, 38, 0.10), 0 1px 3px rgba(60, 50, 38, 0.06);
+  --shadow-lg: 0 10px 30px -8px rgba(60, 50, 38, 0.20);
+
+  // Label chip ink follows the page's warm near-black, as the light base's follows its slate.
+  --label-chip-ink-base: #26221d;
+
+  --scrollbar-thumb: rgba(60, 50, 38, 0.18);
+  --scrollbar-thumb-hover: rgba(60, 50, 38, 0.34);
+}
+
+
+// ─── Design tokens — carbon (neutral near-black dark) ────────────────────────
+// A second dark theme: neutral grey-blues instead of Kanera's navy, a deeper page canvas, and a
+// blue accent in place of teal. It is dark-*family*, so it only restates the tokens whose value is
+// genuinely different and inherits everything else (label palette, avatars, board scrims, shadows,
+// scrollbars) from the `:root` dark block above.
+// This block must stay after that one in source order — same specificity class, so order decides.
+//
+// Anything that branches on theme in a component stylesheet must treat this as dark: the
+// convention is `[data-theme="dark"], [data-theme="carbon"]` for dark-only chrome, and a
+// `:not([data-theme])` guard (never `:not([data-theme="dark"])`) inside a
+// prefers-color-scheme: light block, so a light OS does not leak light chrome into this theme.
+[data-theme="carbon"] {
+  color-scheme: dark;
+
+  // Canvas ramp. Dark elevates to separate, so each step is lighter than the last:
+  // page → list tray → card → inner fills → hover.
+  --bg: #0d1117;
+  --surface: #151b23;
+  --surface-2: #1e242c;
+  --surface-3: #262c36;
+  --surface-hover: #2a313c;
+
+  // Floating chrome sits above --surface-2 (cards) but below row hover, so a menu opened over a
+  // card reads as lifted rather than sunken. See the dark block for the full reasoning.
+  --surface-overlay: #252b35;
+  // Two border weights: the muted one for page hairlines, the stronger for the harder edges that
+  // floating chrome needs against a near-black canvas.
+  --overlay-border: #3d444d;
+  --overlay-separator: #313841;
+
+  --border: #2f3742;
+  --border-strong: #3d444d;
+
+  --text: #f0f6fc;
+  --text-muted: #9198a1;
+  --muted: #9198a1;
+
+  // A deliberately desaturated blue. In Kanera the accent is link text and active-state chrome as
+  // often as it is a fill, and a single token has to serve both: a fully saturated blue (~73%
+  // chroma) reads fine as small link text but turns a full-width primary button into a glowing
+  // slab. Pulling chroma to ~48% while holding lightness calms the large fills without touching
+  // legibility — 6.8:1 as text on this canvas, and 6.8:1 again for the page-coloured ink it carries
+  // when used as a fill. Resaturating this is a visible regression on the primary buttons; the
+  // loudness is the chroma, not the value.
+  --accent: #6e9ed4;
+  --accent-hover: #5a8ac2;
+  // Dark themes paint filled buttons with page-coloured ink — see the dark block.
+  --accent-ink: #0d1117;
+  --accent-fg: var(--accent-ink);
+  // Must be redeclared wherever --accent is; a single :root definition would stay locked to teal.
+  --accent-soft: color-mix(in srgb, var(--accent) 10%, transparent);
+  --ring: rgba(110, 158, 212, 0.45); // matches --accent (#6e9ed4)
+
+  --danger: #f85149;
+  --danger-bg: rgba(248, 81, 73, 0.1);
+  --danger-border: rgba(248, 81, 73, 0.22);
+  --success: #3fb950;
+  --warning: #d29922;
 }
 
 // ─── Reset ───────────────────────────────────────────────────────────────────

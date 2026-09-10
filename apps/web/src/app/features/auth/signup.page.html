@@ -88,9 +88,17 @@
             <i class="ti ti-moon"></i>
             Dark
           </button>
+          <button type="button" class="theme-option" [class.active]="theme.theme() === 'carbon'" [attr.aria-checked]="theme.theme() === 'carbon'" role="radio" (click)="setTheme('carbon')">
+            <i class="ti ti-moon-stars"></i>
+            Carbon
+          </button>
           <button type="button" class="theme-option" [class.active]="theme.theme() === 'light'" [attr.aria-checked]="theme.theme() === 'light'" role="radio" (click)="setTheme('light')">
             <i class="ti ti-sun"></i>
             Light
+          </button>
+          <button type="button" class="theme-option" [class.active]="theme.theme() === 'paper'" [attr.aria-checked]="theme.theme() === 'paper'" role="radio" (click)="setTheme('paper')">
+            <i class="ti ti-note"></i>
+            Paper
           </button>
         </div>
       </div>

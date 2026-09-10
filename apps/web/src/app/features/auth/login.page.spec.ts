@@ -67,7 +67,7 @@ describe("LoginPage", () => {
         { provide: ActivatedRoute, useValue: {} },
         { provide: Router, useValue: { navigateByUrl } },
         { provide: AuthService, useValue: { setSession } },
-        { provide: ThemeService, useValue: { theme: signal("dark") } },
+        { provide: ThemeService, useValue: { theme: signal("dark"), isDark: signal(true) } },
       ],
     }).compileComponents();
   });

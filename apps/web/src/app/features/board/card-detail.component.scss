@@ -131,7 +131,8 @@
   }
 }
 
-:host-context([data-theme="light"]) {
+:host-context([data-theme="light"]),
+:host-context([data-theme="paper"]) {
   .panel {
     box-shadow: -4px 0 16px rgba(15, 23, 42, 0.08), -1px 0 4px rgba(15, 23, 42, 0.04);
 
@@ -142,7 +143,7 @@
 }
 
 @media (prefers-color-scheme: light) {
-  :host-context(:not([data-theme="dark"])) {
+  :host-context(:not([data-theme])) {
     .panel {
       box-shadow: -4px 0 16px rgba(15, 23, 42, 0.08), -1px 0 4px rgba(15, 23, 42, 0.04);
 
@@ -481,13 +482,14 @@
   --card-comments-bg: color-mix(in srgb, var(--bg) 55%, var(--surface));
 }
 
-:host-context([data-theme="light"]) .panel-body {
+:host-context([data-theme="light"]) .panel-body,
+:host-context([data-theme="paper"]) .panel-body {
   background: var(--app-tint);
   --card-comments-bg: color-mix(in srgb, var(--bg) 45%, var(--app-tint));
 }
 
 @media (prefers-color-scheme: light) {
-  :host-context(:not([data-theme="dark"])) .panel-body {
+  :host-context(:not([data-theme])) .panel-body {
     background: var(--app-tint);
     --card-comments-bg: color-mix(in srgb, var(--bg) 45%, var(--app-tint));
   }
@@ -2450,7 +2452,8 @@ button.member-avatar {
 
 // In light mode, editable custom-field controls use the same white input surface as
 // the description editor so they remain visibly distinct from the tinted detail body.
-:host-context([data-theme="light"]) {
+:host-context([data-theme="light"]),
+:host-context([data-theme="paper"]) {
   .cf-input,
   .cf-trigger,
   .cf-checkbox-btn,
@@ -2460,7 +2463,7 @@ button.member-avatar {
 }
 
 @media (prefers-color-scheme: light) {
-  :host-context(:not([data-theme="dark"])) {
+  :host-context(:not([data-theme])) {
     .cf-input,
     .cf-trigger,
     .cf-checkbox-btn,
@@ -2791,7 +2794,8 @@ button.member-avatar {
 // on blending into a white surface need to be explicitly lifted to white so
 // they read as distinct, elevated content areas.
 
-:host-context([data-theme="light"]) {
+:host-context([data-theme="light"]),
+:host-context([data-theme="paper"]) {
 
   // Description: render as a white card against the gray panel body.
   // Non-hover default uses a visible border; hover adds a stronger border +
@@ -2814,7 +2818,7 @@ button.member-avatar {
 }
 
 @media (prefers-color-scheme: light) {
-  :host-context(:not([data-theme="dark"])) {
+  :host-context(:not([data-theme])) {
     .description-viewer-wrap:not(.is-empty) {
       background: var(--surface);
       border-color: var(--border);

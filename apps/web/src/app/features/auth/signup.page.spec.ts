@@ -113,7 +113,7 @@ describe("SignupPage", () => {
         },
         { provide: Router, useValue: { navigateByUrl } },
         { provide: AuthService, useValue: { setSession } },
-        { provide: ThemeService, useValue: { theme: vi.fn(() => "dark"), setTheme: vi.fn() } },
+        { provide: ThemeService, useValue: { theme: vi.fn(() => "dark"), isDark: vi.fn(() => true), setTheme: vi.fn() } },
       ],
     }).compileComponents();
   });
@@ -200,7 +200,8 @@ describe("SignupPage", () => {
     const element = fixture.nativeElement as HTMLElement;
     expect(element.textContent).toContain("Appearance");
     expect(element.textContent).toContain("Choose the theme used on this device.");
-    expect(element.querySelectorAll(".theme-option")).toHaveLength(2);
+    // Grouped by family, dark pair first — signup and account settings must offer the same set.
+    expect([...element.querySelectorAll(".theme-option")].map((b) => b.textContent?.trim())).toEqual(["Dark", "Carbon", "Light", "Paper"]);
   });
 
   it("shows the environment banner for non-production environments", async () => {
