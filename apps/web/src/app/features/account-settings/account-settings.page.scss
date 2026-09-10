@@ -560,6 +560,63 @@
   }
 }
 
+// ── Accent picker ── Shares the theme picker's tile chrome; the only structural difference is the
+// swatch replacing the icon. Five columns rather than four because the labels are single words.
+.accent-help {
+  margin-top: 14px;
+}
+
+.accent-options {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 144px));
+  gap: 8px;
+}
+
+.accent-option {
+  // Height is pinned for the same reason .theme-option pins it: the global `button` rule in
+  // styles.scss sets height: 36px, which would leave these a row shorter than the theme tiles.
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast), box-shadow var(--motion-fast);
+
+  // See .theme-option: `:not(:disabled)` is specificity against the global button:hover rule.
+  &:hover:not(:disabled) {
+    background: var(--surface-2);
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+
+  // The active tile is tinted with the *live* accent, so selecting an option immediately repaints
+  // this control in the colour it just applied.
+  &.active,
+  &.active:hover:not(:disabled) {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+}
+
+.accent-swatch {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: 999px;
+  // A hairline in the page's own ink keeps the graphite swatch from dissolving into the tile it
+  // sits on, without reading as a border on the saturated options.
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 22%, transparent);
+}
+
 .storage-usage-row {
   display: flex;
   align-items: center;
@@ -1721,6 +1778,12 @@
   // ── Theme picker ── 2x2 rather than four cramped columns; at this width four tiles leave no
   // room for the icon and label to sit on one line.
   .theme-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  // Five accent tiles do not fit a phone row; two keeps the swatch and label on one line, matching
+  // the theme picker above it.
+  .accent-options {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

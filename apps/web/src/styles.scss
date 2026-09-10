@@ -329,7 +329,10 @@ k-list.is-drop-target {
   // the per-board override (board.page.ts derives hover as the board color mixed
   // 15% toward black). The bright #14b8a6 was the previous resting value and read
   // too stark.
-  --accent: #0d9488;
+  // Held as its own token so the accent picker's "Default" swatch can still preview the theme's
+  // signature colour while a named accent has taken over --accent. Every theme block declares it.
+  --accent-default: #0d9488;
+  --accent: var(--accent-default);
   --accent-hover: #0f766e;
   // Text on an accent fill. No hue bright enough to read as *text* on this dark canvas can also
   // carry white text at AA (the default teal manages 3.7:1, the workspace blue 2.4:1), whereas dark
@@ -345,6 +348,44 @@ k-list.is-drop-target {
   // substituted where the property is *declared*, so a single :root definition would
   // stay locked to the default teal on a board with a custom colour.
   --accent-soft: color-mix(in srgb, var(--accent) 8%, transparent);
+
+  // Dark-family accent options, consumed by the [data-accent] blocks near the end of this file.
+  // Carbon inherits these unchanged — same element, and it restates only --accent-default.
+  // Blue, Violet, Pink and Graphite were picked in the same brightness band as carbon's signature
+  // blue (~7-8:1 against the page) rather than at full brightness: the accent is a large button
+  // fill as often as it is link text, and a brighter hue turns a primary button into a glowing
+  // slab. Those four clear 4.5:1 both as a fill carrying --accent-ink and as text on --bg,
+  // --surface and --surface-2 in both dark themes; Graphite sits well clear of --text-muted
+  // (#a3b5cc) so a neutral accent still reads as an accent, and none lands on --danger,
+  // --success or --warning.
+  //
+  // Blue and Green occupy one slot in the picker, never both at once — carbon's own accent is a
+  // blue, so it offers Green and every other theme offers Blue (THEME_COOL_ACCENT in
+  // theme.service.ts). Both tones are still declared for both families: the slot swaps per theme,
+  // so either value has to be ready under any of them.
+  //
+  // Green is Kanera's signature teal — deliberately the same value Dark shows as its Default, so
+  // the product has one green identity rather than two. Carbon is the only theme that offers it
+  // today, as the counterpart to its blue default; a dark-family theme whose own default is this
+  // teal would need its own value here, or Green and Default would be the same swatch.
+  //
+  // This is the one option below AA, accepted as a deliberate product call: on carbon it reads
+  // 5.05:1 as a fill and as text on the page, but 4.17:1 as text on a card and 3.46:1 on the hover
+  // fill. It is exactly the shortfall the shipped dark default already carries — the two are the
+  // same colour — so fixing one means fixing both.
+  --accent-blue: #6f9df0;
+  --accent-blue-hover: #5d89da;
+  --accent-green: #0d9488;
+  --accent-green-hover: #0f766e;
+  --accent-violet: #a58af2;
+  --accent-violet-hover: #9174e0;
+  --accent-pink: #e87fb4;
+  --accent-pink-hover: #d569a0;
+  --accent-graphite: #cbd5e1;
+  --accent-graphite-hover: #b4c1d2;
+  // Alpha the focus ring is mixed at. A token because the [data-accent] blocks are family-agnostic
+  // and each family tuned its own ring weight; keep it matching the --ring literal above.
+  --ring-strength: 45%;
 
   --danger: #f87171;
   --danger-bg: rgba(248, 113, 113, 0.1);
@@ -610,12 +651,37 @@ k-list.is-drop-target {
 
   // teal-700 rather than the dark theme's teal-600: white text on #0d9488 was 3.7:1, and on a
   // light page the accent is also link/label text, where the deeper tone reads better anyway.
-  --accent: #0f766e;
+  --accent-default: #0f766e;
+  --accent: var(--accent-default);
   --accent-hover: #115e59;
   @include light-accent-palette;
   --accent-fg: var(--accent-ink);
   // See the dark block: must be redeclared alongside every --accent declaration.
   --accent-soft: color-mix(in srgb, var(--accent) 8%, transparent);
+
+  // Light-family accent options — the counterparts to the dark block's, inherited by Paper. Deep
+  // tones for the same reason light-accent-palette exists: white ink is --accent-ink here, so a
+  // bright hue fails as a fill *and* as link text on a near-white page. Violet, pink and graphite
+  // reuse the matching --color-*-accent entries, already contrast-checked; hovers are one ramp step
+  // darker. All four clear 4.5:1 as a white-ink fill and as text on --bg, --surface and
+  // --surface-2 in both light themes.
+  //
+  // Green is the exception that does not reuse --color-green-accent (#15803d): that tone manages
+  // only 4.2:1 as text on --bg, which is fine for an identity swatch but not for an accent that is
+  // also link text. This is one step deeper. Unlike the dark family's Green — which is Kanera's
+  // teal — this stays a true green: no light-family theme offers the option today, and light's own
+  // default is already the teal, so reusing it would make Green and Default the same swatch.
+  --accent-blue: #1d4ed8;
+  --accent-blue-hover: #1e40af;
+  --accent-green: #15703a;
+  --accent-green-hover: #125c30;
+  --accent-violet: #6d28d9;
+  --accent-violet-hover: #5b21b6;
+  --accent-pink: #be185d;
+  --accent-pink-hover: #9d174d;
+  --accent-graphite: #475569;
+  --accent-graphite-hover: #334155;
+  --ring-strength: 30%;
 
   --danger: #dc2626;
   --danger-bg: rgba(220, 38, 38, 0.07);
@@ -737,13 +803,15 @@ k-list.is-drop-target {
   // Sienna, chosen to match the weight of the light base's teal rather than outrank it: 5.6:1
   // carrying white ink as a fill and 5.5:1 as text on --surface, against the teal's 5.5 / 5.3.
   // A heavier brown was legible but read as a warning colour next to the amber --warning.
-  --accent: #a3502a;
+  --accent-default: #a3502a;
+  --accent: var(--accent-default);
   --accent-hover: #8a4222;
   // --accent-ink stays #ffffff from light-base-tokens' light-accent-palette include.
   --accent-fg: var(--accent-ink);
   // Must be redeclared wherever --accent is; a single :root definition would stay locked to teal.
   --accent-soft: color-mix(in srgb, var(--accent) 9%, transparent);
   --ring: rgba(163, 80, 42, 0.32); // matches --accent (#a3502a)
+  --ring-strength: 32%; // keep in step with the literal above
 
   // Kanban: warm tray, near-white cards. Pinned rather than tracking --surface-2 for the reason
   // given in the light base — that token sits too close under --surface to hold cards apart.
@@ -811,7 +879,8 @@ k-list.is-drop-target {
   // legibility — 6.8:1 as text on this canvas, and 6.8:1 again for the page-coloured ink it carries
   // when used as a fill. Resaturating this is a visible regression on the primary buttons; the
   // loudness is the chroma, not the value.
-  --accent: #6e9ed4;
+  --accent-default: #6e9ed4;
+  --accent: var(--accent-default);
   --accent-hover: #5a8ac2;
   // Dark themes paint filled buttons with page-coloured ink — see the dark block.
   --accent-ink: #0d1117;
@@ -825,6 +894,50 @@ k-list.is-drop-target {
   --danger-border: rgba(248, 81, 73, 0.22);
   --success: #3fb950;
   --warning: #d29922;
+}
+
+// ─── Accent (primary colour) choice ──────────────────────────────────────────
+// Orthogonal to the theme: ThemeService and the index.html pre-paint script stamp [data-accent] on
+// <html> next to [data-theme], so a user who likes carbon's canvas is not stuck with its blue. Each
+// block retints the page from the per-family --accent-<name> tokens declared in the dark block and
+// in light-base-tokens above, which is why one rule serves all four themes and why the values live
+// next to the surface ramp they were contrast-checked against.
+//
+// These are specificity 0,1,0 — the same class as every [data-theme] block — so they must stay
+// *after* them in source order; that ordering is the entire mechanism by which they win.
+// [data-accent="default"] deliberately has no block: the theme's own --accent stands.
+//
+// --accent-fg, --accent-ink and --accent-soft are deliberately NOT restated. They are declared on
+// this same element by the theme block, and a var(--accent) inside a custom property resolves
+// against the element's *winning* --accent, so they follow this override for free — and --accent-soft
+// keeps each theme's own mix percentage instead of being flattened to one. (The per-board and
+// per-workspace overrides in board.page.ts / workspace-settings.page.ts must restate them only
+// because those set --accent on a *descendant*, where the :root declarations have already been
+// substituted.)
+@mixin accent-choice($name) {
+  --accent: var(--accent-#{$name});
+  --accent-hover: var(--accent-#{$name}-hover);
+  --ring: color-mix(in srgb, var(--accent-#{$name}) var(--ring-strength), transparent);
+}
+
+[data-accent="blue"] {
+  @include accent-choice(blue);
+}
+
+[data-accent="green"] {
+  @include accent-choice(green);
+}
+
+[data-accent="violet"] {
+  @include accent-choice(violet);
+}
+
+[data-accent="pink"] {
+  @include accent-choice(pink);
+}
+
+[data-accent="graphite"] {
+  @include accent-choice(graphite);
 }
 
 // ─── Reset ───────────────────────────────────────────────────────────────────

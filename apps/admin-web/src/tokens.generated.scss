@@ -62,7 +62,10 @@
   // the per-board override (board.page.ts derives hover as the board color mixed
   // 15% toward black). The bright #14b8a6 was the previous resting value and read
   // too stark.
-  --accent: #0d9488;
+  // Held as its own token so the accent picker's "Default" swatch can still preview the theme's
+  // signature colour while a named accent has taken over --accent. Every theme block declares it.
+  --accent-default: #0d9488;
+  --accent: var(--accent-default);
   --accent-hover: #0f766e;
   // Text on an accent fill. No hue bright enough to read as *text* on this dark canvas can also
   // carry white text at AA (the default teal manages 3.7:1, the workspace blue 2.4:1), whereas dark
@@ -78,6 +81,44 @@
   // substituted where the property is *declared*, so a single :root definition would
   // stay locked to the default teal on a board with a custom colour.
   --accent-soft: color-mix(in srgb, var(--accent) 8%, transparent);
+
+  // Dark-family accent options, consumed by the [data-accent] blocks near the end of this file.
+  // Carbon inherits these unchanged — same element, and it restates only --accent-default.
+  // Blue, Violet, Pink and Graphite were picked in the same brightness band as carbon's signature
+  // blue (~7-8:1 against the page) rather than at full brightness: the accent is a large button
+  // fill as often as it is link text, and a brighter hue turns a primary button into a glowing
+  // slab. Those four clear 4.5:1 both as a fill carrying --accent-ink and as text on --bg,
+  // --surface and --surface-2 in both dark themes; Graphite sits well clear of --text-muted
+  // (#a3b5cc) so a neutral accent still reads as an accent, and none lands on --danger,
+  // --success or --warning.
+  //
+  // Blue and Green occupy one slot in the picker, never both at once — carbon's own accent is a
+  // blue, so it offers Green and every other theme offers Blue (THEME_COOL_ACCENT in
+  // theme.service.ts). Both tones are still declared for both families: the slot swaps per theme,
+  // so either value has to be ready under any of them.
+  //
+  // Green is Kanera's signature teal — deliberately the same value Dark shows as its Default, so
+  // the product has one green identity rather than two. Carbon is the only theme that offers it
+  // today, as the counterpart to its blue default; a dark-family theme whose own default is this
+  // teal would need its own value here, or Green and Default would be the same swatch.
+  //
+  // This is the one option below AA, accepted as a deliberate product call: on carbon it reads
+  // 5.05:1 as a fill and as text on the page, but 4.17:1 as text on a card and 3.46:1 on the hover
+  // fill. It is exactly the shortfall the shipped dark default already carries — the two are the
+  // same colour — so fixing one means fixing both.
+  --accent-blue: #6f9df0;
+  --accent-blue-hover: #5d89da;
+  --accent-green: #0d9488;
+  --accent-green-hover: #0f766e;
+  --accent-violet: #a58af2;
+  --accent-violet-hover: #9174e0;
+  --accent-pink: #e87fb4;
+  --accent-pink-hover: #d569a0;
+  --accent-graphite: #cbd5e1;
+  --accent-graphite-hover: #b4c1d2;
+  // Alpha the focus ring is mixed at. A token because the [data-accent] blocks are family-agnostic
+  // and each family tuned its own ring weight; keep it matching the --ring literal above.
+  --ring-strength: 45%;
 
   --danger: #f87171;
   --danger-bg: rgba(248, 113, 113, 0.1);

@@ -38,10 +38,10 @@
   <meta name="theme-color" content="#0b111b" media="(prefers-color-scheme: dark)" />
   <meta name="theme-color" content="#eef2f7" media="(prefers-color-scheme: light)" />
 
-  <!-- Set the theme before first paint so the app never flashes the wrong theme and the OS
-       preference is honored on first load (Angular boots after parse, too late to avoid the
-       flash). Mirrors ThemeService.getInitial(); the 'kanera-theme' key is STORAGE_KEYS.THEME,
-       kept in sync intentionally. -->
+  <!-- Set the theme and accent before first paint so the app never flashes the wrong colours and
+       the OS preference is honored on first load (Angular boots after parse, too late to avoid the
+       flash). Mirrors ThemeService.getInitial()/getInitialAccent(); the 'kanera-theme' and
+       'kanera-accent' keys are STORAGE_KEYS.THEME/ACCENT, kept in sync intentionally. -->
   <script>
     (function () {
       try {
@@ -50,6 +50,14 @@
           t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
         }
         document.documentElement.dataset.theme = t;
+        var a = localStorage.getItem('kanera-accent');
+        if (['default', 'blue', 'green', 'violet', 'pink', 'graphite'].indexOf(a) === -1) a = 'default';
+        // Blue and Green are one slot whose occupant depends on the theme (THEME_COOL_ACCENT in
+        // theme.service.ts). ThemeService keeps storage consistent, but a cross-tab write can land
+        // out of order; resolving it here too means no flash of the wrong accent on boot.
+        if (a === 'blue' && t === 'carbon') a = 'green';
+        else if (a === 'green' && t !== 'carbon') a = 'blue';
+        document.documentElement.dataset.accent = a;
       } catch (e) {}
     })();
   </script>

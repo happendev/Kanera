@@ -63,7 +63,7 @@
 
       <div class="settings-section">
         <h3 class="settings-section-title"><i class="ti ti-palette"></i><span>Appearance</span></h3>
-        <p class="settings-section-help">Choose the theme used on this device.</p>
+        <p class="settings-section-help">Choose the theme and accent colour used on this device.</p>
         <div class="theme-options" role="radiogroup" aria-label="Theme color">
           <button type="button" class="theme-option" [class.active]="settings.theme.theme() === 'dark'" [attr.aria-checked]="settings.theme.theme() === 'dark'" role="radio" (click)="settings.setTheme('dark')">
             <i class="ti ti-moon"></i>
@@ -81,6 +81,25 @@
             <i class="ti ti-note"></i>
             Paper
           </button>
+        </div>
+
+        <p class="settings-section-help accent-help">Accent colour</p>
+        <div class="accent-options" role="radiogroup" aria-label="Accent colour">
+          @for (accent of settings.accentOptions(); track accent.value) {
+          <button
+            type="button"
+            class="accent-option"
+            [class.active]="settings.theme.accent() === accent.value"
+            [attr.aria-checked]="settings.theme.accent() === accent.value"
+            role="radio"
+            (click)="settings.setAccent(accent.value)"
+          >
+            <!-- The swatch reads the option's token rather than a hardcoded hex, so it previews the
+                 tone this accent actually resolves to in the theme currently applied. -->
+            <span class="accent-swatch" [style.background]="'var(' + accent.token + ')'" aria-hidden="true"></span>
+            {{ accent.label }}
+          </button>
+          }
         </div>
       </div>
 

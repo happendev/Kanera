@@ -113,7 +113,7 @@ describe("SignupPage", () => {
         },
         { provide: Router, useValue: { navigateByUrl } },
         { provide: AuthService, useValue: { setSession } },
-        { provide: ThemeService, useValue: { theme: vi.fn(() => "dark"), isDark: vi.fn(() => true), setTheme: vi.fn() } },
+        { provide: ThemeService, useValue: { theme: vi.fn(() => "dark"), accent: vi.fn(() => "default"), accentOptions: vi.fn(() => []), isDark: vi.fn(() => true), setTheme: vi.fn(), setAccent: vi.fn() } },
       ],
     }).compileComponents();
   });
