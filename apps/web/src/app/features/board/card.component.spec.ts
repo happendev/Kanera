@@ -382,6 +382,26 @@ describe("CardComponent", () => {
     expect(fixture.componentInstance.coverHeightPx()).toBeNull();
   });
 
+  it("paints the actions trigger above cover media", () => {
+    configure(0);
+
+    const fixture = TestBed.createComponent(CardComponent);
+    fixture.componentRef.setInput("card", card());
+    fixture.componentRef.setInput("coverUrl", "/cover.jpg");
+    fixture.componentRef.setInput("canEditOverride", true);
+    fixture.componentRef.setInput("canEditRoleOverride", true);
+    fixture.componentRef.setInput("sourceListsOverride", []);
+    fixture.detectChanges();
+
+    const trigger = fixture.nativeElement.querySelector(".card-actions-btn") as HTMLButtonElement;
+    const style = getComputedStyle(trigger);
+
+    // The positioned cover is later in the DOM; a positive stack level keeps it from swallowing
+    // the hover trigger without trapping the fixed menu in a card-local stacking context.
+    expect(style.position).toBe("relative");
+    expect(style.zIndex).toBe("1");
+  });
+
   it("uses the stable fallback for legacy or invalid cover dimensions", () => {
     configure(0);
 
