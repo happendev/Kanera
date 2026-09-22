@@ -111,6 +111,11 @@
 }
 
 .card-actions-btn {
+  // Cover media is a positioned sibling rendered later in the card link, so an auto-stacked
+  // button would paint underneath it. Lift only the trigger; the wrapper must remain outside a
+  // stacking context so its fixed action menu can still paint above the board header.
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -161,6 +166,9 @@
 // Same treatment as .card-actions-btn: quiet until hover or focus. Every declaration down to
 // border-radius undoes the global button reset (36px tall, accent background, bold).
 .card-priority-add {
+  // Match the actions trigger's paint order on cards with cover media.
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
