@@ -777,16 +777,16 @@ void test("removing a workspace member clears live board access, assignments, wa
   assert.equal(await db.$count(cardMentions, and(eq(cardMentions.cardId, card!.id), eq(cardMentions.userId, member.id))), 0);
   assert.equal(await db.$count(notifications, eq(notifications.id, removedWorkspaceNotification!.id)), 0);
   assert.equal(await db.$count(notifications, eq(notifications.id, retainedWorkspaceNotification!.id)), 1);
-  let notificationReadRows: { payload: unknown }[] = [];
+  let notificationDeletedRows: { payload: unknown }[] = [];
   for (let attempt = 0; attempt < 10; attempt += 1) {
-    notificationReadRows = await db
+    notificationDeletedRows = await db
       .select({ payload: directRealtimeOutbox.payload })
       .from(directRealtimeOutbox)
-      .where(and(eq(directRealtimeOutbox.scope, "user"), eq(directRealtimeOutbox.userId, member.id), eq(directRealtimeOutbox.eventType, "notification:read")));
-    if (notificationReadRows.length > 0) break;
+      .where(and(eq(directRealtimeOutbox.scope, "user"), eq(directRealtimeOutbox.userId, member.id), eq(directRealtimeOutbox.eventType, "notification:deleted")));
+    if (notificationDeletedRows.length > 0) break;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  assert.ok(notificationReadRows.some((row) => {
+  assert.ok(notificationDeletedRows.some((row) => {
     const payload = row.payload as { notificationIds?: string[] };
     return payload.notificationIds?.includes(removedWorkspaceNotification!.id) === true
       && payload.notificationIds.includes(retainedWorkspaceNotification!.id) === false;

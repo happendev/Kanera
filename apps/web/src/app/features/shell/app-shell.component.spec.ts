@@ -221,6 +221,7 @@ describe("AppShellComponent board search", () => {
       groupBy: signal<"day" | "board" | "user" | "organisation">("day"),
       groupCounts: signal<Record<string, number>>({}),
       notificationUserOptions: signal([]),
+      openInbox: vi.fn(() => Promise.resolve()),
       loadFirstPage: vi.fn(() => Promise.resolve()),
       setIncludeRead: vi.fn(() => Promise.resolve()),
       setFeedMode: vi.fn(() => Promise.resolve()),
