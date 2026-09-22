@@ -618,7 +618,7 @@ services:
       - loki
 
   loki:
-    image: grafana/loki:3.7.6
+    image: grafana/loki:3.7.8
     restart: unless-stopped
     profiles: ["monitoring"]
     command: ["-config.file=/etc/loki/local-config.yaml"]
@@ -717,7 +717,7 @@ services:
 
   cadvisor:
     # cAdvisor releases moved from gcr.io to GHCR starting with v0.53.0.
-    image: ghcr.io/google/cadvisor:v0.60.5
+    image: ghcr.io/google/cadvisor:v0.60.6
     restart: unless-stopped
     profiles: ["monitoring"]
     # cAdvisor needs broad read access to the host's cgroup/container state for per-container CPU/mem.
@@ -750,7 +750,7 @@ services:
       - "9100"
 
   redis-exporter:
-    image: oliver006/redis_exporter:v1.89.0
+    image: oliver006/redis_exporter:v1.91.1
     restart: unless-stopped
     profiles: ["monitoring"]
     environment:
