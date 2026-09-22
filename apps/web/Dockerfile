@@ -1,6 +1,6 @@
 # Node LTS only. Even-numbered majors (22, 24, 26) are the LTS line; odd majors are "Current"
 # and never become LTS. Keep this on an even major, in step with .nvmrc and engines.node.
-FROM node:24.19.0-alpine AS build
+FROM node:24.21.0-alpine AS build
 # Hydrate Corepack before dependency installation so the build does not rely on an
 # implicit package-manager download at the first `pnpm` invocation.
 ENV COREPACK_DEFAULT_TO_LATEST=0
@@ -21,7 +21,7 @@ RUN pnpm --filter @kanera/web build
 # by odd ones, both published as plain 1.x.y-alpine tags: 1.30.x here is what nginx:stable-alpine
 # resolves to, while 1.31.x is nginx:mainline-alpine. Keep this on an even minor — Dependabot is
 # restricted to patch updates for nginx so it cannot cross over on its own.
-FROM nginx:1.30.4-alpine AS runtime
+FROM nginx:1.30.5-alpine AS runtime
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /repo/apps/web/dist/web/browser /usr/share/nginx/html
 EXPOSE 80
