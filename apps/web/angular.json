@@ -35,7 +35,10 @@
               "src/tabler-icons.generated.css",
               "src/styles.scss"
             ],
-            "scripts": []
+            "scripts": [],
+            "allowedCommonJsDependencies": [
+              "markdown-it-task-lists"
+            ]
           },
           "configurations": {
             "production": {
@@ -43,7 +46,7 @@
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "675kb",
+                  "maximumWarning": "750kb",
                   "maximumError": "760kb"
                 },
                 {
