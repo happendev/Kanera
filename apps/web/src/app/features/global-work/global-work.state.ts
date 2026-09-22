@@ -150,7 +150,6 @@ export class GlobalWorkState {
   readonly cachedAt = signal<string | null>(null);
   readonly lastSyncedAt = signal<string | null>(null);
   readonly reconciling = signal(false);
-  readonly recoveringConnection = signal(false);
   /**
    * Background reconciliation refreshes an already-usable projection. It is not an offline state
    * and must not disable the page after ordinary realtime events such as the viewer's own drag.
@@ -353,7 +352,6 @@ export class GlobalWorkState {
     this.shareCandidates.set([]);
     this.cachedAt.set(null);
     this.lastSyncedAt.set(null);
-    this.recoveringConnection.set(false);
     this.selectedViewId.set(preference?.selectedViewId ?? null);
     this.drilldownLabel.set(lens === "portfolio" ? preference?.drilldownLabel ?? null : null);
     this.collapsedTableGroupKeys.set(preference?.definition.table.collapsedGroupKeys ?? []);
@@ -432,7 +430,6 @@ export class GlobalWorkState {
 
   async refresh(): Promise<void> {
     const version = ++this.requestVersion;
-    this.recoveringConnection.set(false);
     this.loading.set(true);
     this.reconciling.set(true);
     this.error.set(null);
@@ -460,7 +457,6 @@ export class GlobalWorkState {
     // This foreground query supersedes any in-flight background reconcile. Clear its status now;
     // the loading flag below owns readiness until the requested projection has settled.
     this.reconciling.set(false);
-    this.recoveringConnection.set(false);
     this.loading.set(true);
     this.error.set(null);
     try {
@@ -1737,10 +1733,8 @@ export class GlobalWorkState {
   private readonly onSocketConnect = () => {
     if (this.loading()) return;
     // Room refs are rejoined by SocketService first. Refetching after reconnect is the final
-    // convergence boundary for mutations or access changes missed while disconnected. Keep this
-    // status separate from routine realtime reconciliation: the latter runs after ordinary card
-    // events (including the viewer's own drag echo) and must not insert a loading banner.
-    this.recoveringConnection.set(true);
+    // convergence boundary for mutations or access changes missed while disconnected. Like
+    // foreground refreshes, this runs quietly against the still-usable loaded projection.
     this.reconciling.set(true);
     this.scheduleRealtimeRefresh(true);
   };
@@ -1864,7 +1858,6 @@ export class GlobalWorkState {
     } finally {
       if (version === this.requestVersion) {
         this.reconciling.set(false);
-        this.recoveringConnection.set(false);
       }
     }
   }

@@ -227,6 +227,12 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   private readonly routeTab = signal<string | undefined>(undefined);
 
   readonly user = this.auth.user;
+  // Renewed credentials replace the user object. Reload settings only for a different account
+  // or organisation so returning to an idle tab cannot overwrite unsaved notification drafts.
+  private readonly settingsScope = computed(() => {
+    const user = this.user();
+    return user ? `${user.id}:${user.activeClientId ?? user.clientId}` : null;
+  });
   readonly isClientAdmin = this.auth.isOrgAdmin;
   readonly isOrgOwner = this.auth.isOrgOwner;
   readonly personalNotificationChannelsAllowed = this.auth.webhooksAllowed;
@@ -615,14 +621,14 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     });
 
     effect(() => {
-      if (this.user() && this.selectedTab() === "users" && this.isClientAdmin()) {
+      if (this.settingsScope() && this.selectedTab() === "users" && this.isClientAdmin()) {
         void this.loadOrgUsers();
         this.attachOrgSocket();
       }
     });
 
     effect(() => {
-      if (this.user() && this.selectedTab() === "notifications") {
+      if (this.settingsScope() && this.selectedTab() === "notifications") {
         untracked(() => void this.loadNotificationSettings());
       }
     });

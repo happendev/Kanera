@@ -1543,6 +1543,32 @@ describe("BoardPage", () => {
   // handler and invoke it directly rather than dispatching a real document event, since the
   // handler is registered by an effect with no reset between tests and a global dispatch
   // would also fire every other test's leftover listener.
+  it("keeps the loaded board and search when session renewal replaces the same user", async () => {
+    const fixture = createInitializedBoardPage();
+    const page = fixture.componentInstance;
+    const state = boardState(page);
+    await vi.waitFor(() => expect(state.board()).not.toBeNull());
+    page.setSearchQuery("overdue");
+    flushEffects();
+    const loadedBoard = state.board();
+    const loadedCards = state.cards();
+    const clear = vi.spyOn(state, "clear");
+    api.post.mockClear();
+    recentBoards.record.mockClear();
+
+    // /auth/refresh publishes a new user object even when the identity is unchanged.
+    const auth = TestBed.inject(AuthService) as unknown as { user: ReturnType<typeof signal<{ id: string }>> };
+    auth.user.set({ ...auth.user() });
+    flushEffects();
+
+    expect(clear).not.toHaveBeenCalled();
+    expect(state.board()).toBe(loadedBoard);
+    expect(state.cards()).toBe(loadedCards);
+    expect(page.searchInputValue()).toBe("overdue");
+    expect(api.post).not.toHaveBeenCalled();
+    expect(recentBoards.record).not.toHaveBeenCalled();
+  });
+
   it("refetches and clears the cached-offline banner when the tab becomes visible again", async () => {
     const cachedAt = "2026-05-21T12:00:00.000Z";
     api.post.mockRejectedValueOnce(new Error("offline"));

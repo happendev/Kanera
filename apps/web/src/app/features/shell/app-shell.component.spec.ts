@@ -581,6 +581,36 @@ describe("AppShellComponent board search", () => {
     Object.defineProperty(window.navigator, "maxTouchPoints", { value: 0, configurable: true });
   });
 
+  it("retains navigation links and local state through session renewal and a delayed reconnect refresh", async () => {
+    const { api, authUser, socket } = await render();
+    const root = fixture.nativeElement as HTMLElement;
+    const link = root.querySelector<HTMLAnchorElement>('a.board-link[href="/b/board-1"]');
+    expect(link).not.toBeNull();
+    component.userMenuOpen.set(true);
+    component.collapsed.set({ "other-workspace": true });
+    authUser.update((user) => ({ ...user }));
+    fixture.detectChanges();
+
+    let resolveRefresh!: (response: HomeResponse) => void;
+    api.get.mockImplementationOnce(() => new Promise<HomeResponse>((resolve) => { resolveRefresh = resolve; }));
+    socket.emitServer("connect", undefined);
+    fixture.detectChanges();
+    expect(root.querySelector('a.board-link[href="/b/board-1"]')).toBe(link);
+    expect(component.userMenuOpen()).toBe(true);
+    expect(component.collapsed()).toEqual({ "other-workspace": true });
+
+    resolveRefresh({
+      groups: [group({ boards: [board({ name: "Renamed roadmap" })] })],
+      guestGroups: [], dueSoon: [], overdueChecklistItems: 0,
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(root.querySelector('a.board-link[href="/b/board-1"]')).toBe(link);
+    expect(link?.textContent).toContain("Renamed roadmap");
+    expect(component.userMenuOpen()).toBe(true);
+    expect(component.collapsed()).toEqual({ "other-workspace": true });
+  });
+
   it("labels non-production API environments and hides production", async () => {
     await render(undefined, { user: { kaneraEnvironment: "development" } });
     expect((fixture.nativeElement as HTMLElement).querySelector(".dev-banner")?.textContent).toContain("Development");
