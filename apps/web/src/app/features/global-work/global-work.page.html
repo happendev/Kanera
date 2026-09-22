@@ -527,12 +527,9 @@
         are paused.
       </span>
     </div>
-  } @else if (state.recoveringConnection() && state.lastSyncedAt()) {
-    <div class="offline-banner" role="status">
-      <span class="spinner"></span>
-      <span>Reconnected. Refreshing this view…</span>
-    </div>
   }
+  <!-- Reconnect and foreground refreshes keep the loaded view in place. A transient banner
+       shifts the entire work area on every return to the tab, even when nothing changed. -->
 
   @if (state.loading() && state.response().cards.length === 0 && !state.portfolio()) {
     <div class="k-loading" role="status" aria-live="polite">

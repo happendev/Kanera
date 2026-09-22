@@ -778,7 +778,8 @@ export interface ServerToClientEvents {
   "notification:deleted": (payload: { notificationIds: string[] }) => void;
   "notification:read": (payload: { notificationIds: string[]; readAt: string }) => void;
   "notification:unread": (payload: { notificationIds: string[] }) => void;
-  "notification:allRead": (payload: { readAt: string }) => void;
+  // Optional during rollout; exact ids preserve notifications created after the read-all update.
+  "notification:allRead": (payload: { readAt: string; notificationIds?: string[] }) => void;
 
   "presence:snapshot": (payload: { workspaceId: string; onlineUserIds: string[] }) => void;
   "presence:changed": (payload: { workspaceId: string; userId: string; online: boolean; lastOnlineAt?: string | Date | null }) => void;

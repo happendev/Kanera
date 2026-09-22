@@ -1112,8 +1112,8 @@ void test("account role updates and removal protect owners, clean memberships, r
     assert.equal(await db.$count(cardAssignees, and(eq(cardAssignees.userId, member.id), eq(cardAssignees.cardId, externalCard!.id))), 1);
     assert.equal((await db.select({ assigneeId: cardChecklistItems.assigneeId }).from(cardChecklistItems).where(eq(cardChecklistItems.id, externalChecklistItem!.id)))[0]?.assigneeId, member.id);
     assert.equal(await db.$count(notifications, and(eq(notifications.userId, member.id), eq(notifications.clientId, owner.user.clientId))), 0);
-    const notificationReadEvents = await waitForUserDirectOutboxEvent(member.id, "notification:read");
-    assert.ok(notificationReadEvents.some((row) => {
+    const notificationDeletedEvents = await waitForUserDirectOutboxEvent(member.id, "notification:deleted");
+    assert.ok(notificationDeletedEvents.some((row) => {
       const payload = row.payload as { notificationIds?: string[] };
       return payload.notificationIds?.includes(removedNotification!.id) === true;
     }));

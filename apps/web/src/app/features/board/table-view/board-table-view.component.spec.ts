@@ -373,7 +373,7 @@ describe("BoardTableViewComponent", () => {
     const requests: unknown[] = [];
     component.bulkSelectionRequested.subscribe((payload) => requests.push(payload));
 
-    component.beginEdit(cards[1]!, "cf:field-1", "Old", new MouseEvent("click", { shiftKey: true }));
+    void component.beginEdit(cards[1]!, "cf:field-1", "Old", new MouseEvent("click", { shiftKey: true }));
 
     expect(requests).toEqual([
       { cardId: "card-2", orderedCardIds: ["card-1", "card-2"], shiftKey: true, additive: true },
@@ -389,7 +389,7 @@ describe("BoardTableViewComponent", () => {
     let cleared = 0;
     component.bulkSelectionCleared.subscribe(() => (cleared += 1));
 
-    component.beginEdit(card("card-1"), "cf:field-1", "Old", new MouseEvent("click"));
+    void component.beginEdit(card("card-1"), "cf:field-1", "Old", new MouseEvent("click"));
 
     expect(cleared).toBe(1);
     expect(component.isEditing("card-1", "cf:field-1")).toBe(false);
@@ -401,7 +401,7 @@ describe("BoardTableViewComponent", () => {
     view.detectChanges();
     const component = view.componentInstance;
 
-    component.beginEdit(card("card-2", "2000.0000000000"), "cf:field-1", "Old", new MouseEvent("click"));
+    void component.beginEdit(card("card-2", "2000.0000000000"), "cf:field-1", "Old", new MouseEvent("click"));
 
     expect(component.isEditing("card-2", "cf:field-1")).toBe(true);
   });
@@ -1061,7 +1061,7 @@ describe("BoardTableViewComponent", () => {
 
   it("deletes a blank text value instead of writing an empty string", async () => {
     const component = fixture().componentInstance;
-    component.beginEdit(card("card-1"), "cf:field-1", "Old");
+    void component.beginEdit(card("card-1"), "cf:field-1", "Old");
     component.editDraft.set("");
     await component.commitEdit();
 
@@ -1072,7 +1072,7 @@ describe("BoardTableViewComponent", () => {
   it("rejects non-numeric number drafts without an API request", async () => {
     const numberField = field({ id: "number-1", type: "number" });
     const component = fixture([card("card-1")], [numberField]).componentInstance;
-    component.beginEdit(card("card-1"), "cf:number-1", "");
+    void component.beginEdit(card("card-1"), "cf:number-1", "");
     component.editDraft.set("not-a-number");
     await component.commitEdit();
 
@@ -1082,13 +1082,219 @@ describe("BoardTableViewComponent", () => {
 
   it("deduplicates the Enter-then-blur custom-field commit", async () => {
     const component = fixture().componentInstance;
-    component.beginEdit(card("card-1"), "cf:field-1", "");
+    void component.beginEdit(card("card-1"), "cf:field-1", "");
     component.editDraft.set("Acme");
 
     await Promise.all([component.commitEdit(), component.commitEdit()]);
 
     expect(api.put).toHaveBeenCalledTimes(1);
     expect(api.put).toHaveBeenCalledWith("/cards/card-1/custom-fields/field-1", { valueText: "Acme" });
+  });
+
+  it("keeps invalid titles and URLs available for correction", async () => {
+    const component = fixture([card("card-1")], [field({ type: "url" })]).componentInstance;
+    await component.beginEdit(card("card-1"), "title", "Original");
+    component.updateEditDraft("  ");
+    expect(await component.commitEdit()).toBe(false);
+    expect(component.editError()).toBe("Enter a title.");
+    expect(component.isEditing("card-1", "title")).toBe(true);
+    expect(api.patch).not.toHaveBeenCalled();
+
+    component.cancelEdit();
+    await component.beginEdit(card("card-1"), "cf:field-1", "");
+    component.updateEditDraft("example");
+    expect(await component.commitEdit()).toBe(false);
+    expect(component.editDraft()).toBe("example");
+    expect(component.editError()).toContain("complete URL");
+    expect(api.put).not.toHaveBeenCalled();
+    component.updateEditDraft("https://example.com");
+    expect(component.editError()).toBeNull();
+    expect(await component.commitEdit()).toBe(true);
+    expect(api.put).toHaveBeenCalledWith("/cards/card-1/custom-fields/field-1", { valueUrl: "https://example.com" });
+  });
+
+  it("retains a failed draft, blocks switching editors, and retries it once", async () => {
+    const component = fixture().componentInstance;
+    api.put.mockRejectedValueOnce(new Error("offline"));
+    await component.beginEdit(card("card-1"), "cf:field-1", "Old");
+    component.updateEditDraft("New");
+    await component.beginEdit(card("card-1"), "title", "Title");
+    expect(component.isEditing("card-1", "cf:field-1")).toBe(true);
+    expect(component.editDraft()).toBe("New");
+    expect(component.editError()).toContain("Couldn’t save");
+    expect(component.savingEdit()).toBe(false);
+    expect(await component.commitEdit()).toBe(true);
+    expect(api.put).toHaveBeenCalledTimes(2);
+    expect(component.editingCell()).toBeNull();
+  });
+
+  it("lets Discard receive focus without retrying a failed write on blur", async () => {
+    const component = fixture().componentInstance;
+    await component.beginEdit(card("card-1"), "title", "Original");
+    component.updateEditDraft("Draft");
+    api.patch.mockRejectedValueOnce(new Error("offline"));
+    await component.commitEdit();
+    const feedback = document.createElement("div");
+    feedback.className = "tv-edit-feedback";
+    const discard = feedback.appendChild(document.createElement("button"));
+    component.onEditBlur(new FocusEvent("blur", { relatedTarget: discard }));
+    component.cancelEdit();
+    expect(api.patch).toHaveBeenCalledTimes(1);
+    expect(component.editingCell()).toBeNull();
+  });
+
+  it("keeps a pending editor visible and does not pretend Escape cancels a sent write", async () => {
+    let resolve!: (value: object) => void;
+    api.put.mockReturnValueOnce(new Promise((done) => { resolve = done; }));
+    const component = fixture().componentInstance;
+    await component.beginEdit(card("card-1"), "cf:field-1", "Old");
+    component.updateEditDraft("New");
+    const save = component.commitEdit();
+    expect(component.savingEdit()).toBe(true);
+    expect(component.isEditing("card-1", "cf:field-1")).toBe(true);
+    component.cancelEdit();
+    expect(component.isEditing("card-1", "cf:field-1")).toBe(true);
+    expect(component.commitEdit()).toBe(save);
+    resolve({});
+    await save;
+    expect(component.savingEdit()).toBe(false);
+    expect(component.editingCell()).toBeNull();
+  });
+
+  it("allows the same value to be saved again after another user's realtime edit", async () => {
+    const view = fixture();
+    const component = view.componentInstance;
+    await component.beginEdit(card("card-1"), "cf:field-1", "Original");
+    component.updateEditDraft("Acme");
+    await component.commitEdit();
+    view.componentRef.setInput("customFieldValuesByCardAndField", new Map([["card-1", new Map([["field-1", value("card-1", "field-1", "Someone else's edit")]])]]));
+    await component.beginEdit(card("card-1"), "cf:field-1", "Someone else's edit");
+    component.updateEditDraft("Acme");
+    await component.commitEdit();
+    expect(api.put).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not write an untouched draft over a realtime update", async () => {
+    const view = fixture();
+    const component = view.componentInstance;
+    await component.beginEdit(card("card-1"), "title", "Card card-1");
+    view.componentRef.setInput("cards", [{ ...card("card-1"), title: "Changed remotely" }]);
+    expect(await component.commitEdit()).toBe(true);
+    expect(api.patch).not.toHaveBeenCalled();
+  });
+
+  it("rechecks edit rights when committing and preserves the draft when access changes", async () => {
+    const view = fixture();
+    const component = view.componentInstance;
+    await component.beginEdit(card("card-1"), "title", "Original");
+    component.updateEditDraft("New");
+    view.componentRef.setInput("editableCardIds", new Set());
+    expect(await component.commitEdit()).toBe(false);
+    expect(api.patch).not.toHaveBeenCalled();
+    expect(component.editDraft()).toBe("New");
+    expect(component.editError()).toContain("no longer editable");
+  });
+
+  it("does not offer a custom-field editor for another workspace", async () => {
+    const component = fixture([card("card-1")], [field({ workspaceId: "workspace-2" })]).componentInstance;
+    expect(component.canEditColumn(card("card-1"), "cf:field-1")).toBe(false);
+    await component.beginEdit(card("card-1"), "cf:field-1", "");
+    expect(component.editingCell()).toBeNull();
+  });
+
+  describe("keyboard cell navigation", () => {
+    function keyboardFixture() {
+      const view = fixture([card("card-1"), card("card-2")]);
+      // Match the mounted cell contract. The presentation deliberately omits collapsed/unmounted
+      // cards, contains read-only columns and repeats a card in a second grouping bucket.
+      const host = view.nativeElement as HTMLElement;
+      host.innerHTML = `
+        <div class="tv-row" data-group-key="first">
+          <div class="tv-cell" data-col="title"><input class="tv-cell-input" /></div>
+          <div class="tv-cell" data-col="created">Yesterday</div>
+          <div class="tv-cell" data-col="status"><button class="tv-cell-trigger">Todo</button></div>
+        </div>
+        <div class="tv-row is-bulk-selected"><div class="tv-cell" data-col="title"><button class="tv-title-trigger">Selected</button></div></div>
+        <div class="tv-row"><div class="tv-cell" data-col="title"><button class="tv-title-trigger" disabled>Observer</button></div></div>
+        <div class="tv-row" data-group-key="second"><div class="tv-cell" data-col="title"><button class="tv-title-trigger">Next visible title</button></div></div>`;
+      // Angular test hosts are connected to the document, as focus requires.
+      return { view, component: view.componentInstance, host, input: host.querySelector("input")! };
+    }
+    function key(target: Element, name: string, shiftKey = false) {
+      const event = new KeyboardEvent("keydown", { key: name, shiftKey, cancelable: true });
+      Object.defineProperty(event, "target", { value: target });
+      return event;
+    }
+
+    it("Tabs from an editor to a picker, skipping display-only columns", async () => {
+      const { component, host, input } = keyboardFixture();
+      await component.beginEdit(card("card-1"), "title", "Original");
+      const event = key(input, "Tab");
+      await component.onEditKeydown(event);
+      await vi.waitFor(() => expect(document.activeElement).toBe(host.querySelector('[data-col="status"] button')));
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it("Shift+Tab goes backward across the mounted presentation", async () => {
+      const { component, host } = keyboardFixture();
+      const last = host.querySelector('[data-group-key="second"] button')!;
+      const event = key(last, "Tab", true);
+      component.onCellKeydown(event);
+      await vi.waitFor(() => expect(document.activeElement).toBe(host.querySelector('[data-col="status"] button')));
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it("Enter advances vertically past selected and observer rows", async () => {
+      const { component, host, input } = keyboardFixture();
+      await component.beginEdit(card("card-1"), "title", "Original");
+      await component.onEditKeydown(key(input, "Enter"));
+      await vi.waitFor(() => expect(document.activeElement).toBe(host.querySelector('[data-group-key="second"] button')));
+    });
+
+    it("does not steal focus back from another control after a delayed save", async () => {
+      const { component, host, input } = keyboardFixture();
+      let resolve!: (value: AnyCard) => void;
+      api.patch.mockReturnValueOnce(new Promise((done) => { resolve = done; }));
+      await component.beginEdit(card("card-1"), "title", "Original");
+      component.updateEditDraft("New title");
+      input.focus();
+      const pending = component.onEditKeydown(key(input, "Tab"));
+      const outside = host.appendChild(document.createElement("button"));
+      outside.focus();
+      resolve(card("card-1"));
+      await pending;
+      await new Promise((done) => setTimeout(done, 5));
+      expect(document.activeElement).toBe(outside);
+    });
+
+    it("does not trap Tab at the last editable cell", () => {
+      const { component, host } = keyboardFixture();
+      const event = key(host.querySelector('[data-group-key="second"] button')!, "Tab");
+      component.onCellKeydown(event);
+      expect(event.defaultPrevented).toBe(false);
+    });
+
+    it("does not navigate on a rejected edit or commit while composing text", async () => {
+      const { component, input } = keyboardFixture();
+      await component.beginEdit(card("card-1"), "title", "Original");
+      component.updateEditDraft("");
+      input.focus();
+      await component.onEditKeydown(key(input, "Enter"));
+      expect(document.activeElement).toBe(input);
+      expect(component.editError()).toBe("Enter a title.");
+      component.updateEditDraft("Draft");
+      await component.onEditKeydown(new KeyboardEvent("keydown", { key: "Enter", isComposing: true }));
+      expect(api.patch).not.toHaveBeenCalled();
+    });
+
+    it("edits only the chosen copy of a card repeated by grouping", async () => {
+      const { component, host } = keyboardFixture();
+      const event = new MouseEvent("click");
+      Object.defineProperty(event, "target", { value: host.querySelector('[data-group-key="second"] button') });
+      await component.beginEdit(card("card-1"), "title", "Original", event);
+      expect(component.isEditing("card-1", "title", "first")).toBe(false);
+      expect(component.isEditing("card-1", "title", "second")).toBe(true);
+    });
   });
 
   it("moves a card optimistically before awaiting the API", async () => {

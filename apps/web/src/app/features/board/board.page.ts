@@ -1137,6 +1137,9 @@ export class BoardPage implements OnDestroy {
 
     effect((onCleanup) => {
       const boardId = this.boardId();
+      // Token renewal replaces the user object after an idle tab resumes. Only a change of
+      // viewer identity should restart this lifecycle and clear the board and local UI state.
+      const viewerUserId = this.currentUserId();
       let cancelled = false;
       let hydrated = false;
       let joinedOnce = false;
@@ -1174,9 +1177,8 @@ export class BoardPage implements OnDestroy {
       // bare ping (see `cardPriority:invalidated` in the shared events). Failure clears the pills
       // instead of leaving last session's order on screen.
       const refreshViewerQueue = () => {
-        const viewerId = this.auth.user()?.id;
-        if (!viewerId) return;
-        void this.api.get<WorkPrioritiesResponse>(`/work/priorities/${viewerId}`)
+        if (!viewerUserId) return;
+        void this.api.get<WorkPrioritiesResponse>(`/work/priorities/${viewerUserId}`)
           .then((queue) => {
             if (cancelled) return;
             this.viewerPriorityRanks.set(new Map(
@@ -1288,7 +1290,7 @@ export class BoardPage implements OnDestroy {
       }).finally(() => { initialLoadFinished = true; });
 
       const detach = this.socketBridge.attach(socket, boardId, {
-        viewerUserId: this.auth.user()?.id ?? null,
+        viewerUserId,
         onJoined: () => {
           if (!joinedOnce) {
             joinedOnce = true;

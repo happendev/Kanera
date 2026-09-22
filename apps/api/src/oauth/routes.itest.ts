@@ -117,7 +117,37 @@ void test("OAuth authorization-code, refresh rotation, and service client flows"
     };
     const context = await fixture.app.inject({ method: "GET", url: `/oauth/authorize/context?${new URLSearchParams(authorization).toString()}`, headers: { authorization: `Bearer ${fixture.accessToken}` } });
     assert.equal(context.statusCode, 200);
-    assert.equal(context.json<{ clientName: string }>().clientName, "Claude-compatible test agent");
+    assert.deepEqual(context.json<{ clientName: string; redirectOrigin: string; isLoopbackRedirect: boolean }>(), {
+      clientName: "Claude-compatible test agent",
+      scopes: ["kanera:read", "kanera:write", "offline_access"],
+      redirectUri: claudeRedirectUri,
+      redirectOrigin: "https://claude.ai",
+      isLoopbackRedirect: false,
+      resource: MCP_RESOURCE,
+    });
+
+    const denied = await fixture.app.inject({
+      method: "POST",
+      url: "/oauth/authorize/deny",
+      headers: { authorization: `Bearer ${fixture.accessToken}` },
+      payload: authorization,
+    });
+    assert.equal(denied.statusCode, 200);
+    const denial = denied.json<{ redirectUrl: string; redirectOrigin: string; isLoopbackRedirect: boolean }>();
+    const denialRedirect = new URL(denial.redirectUrl);
+    assert.equal(denialRedirect.origin, "https://claude.ai");
+    assert.equal(denialRedirect.searchParams.get("error"), "access_denied");
+    assert.equal(denialRedirect.searchParams.get("state"), "test-state");
+    assert.equal(denial.redirectOrigin, "https://claude.ai");
+    assert.equal(denial.isLoopbackRedirect, false);
+
+    const mismatchedDenial = await fixture.app.inject({
+      method: "POST",
+      url: "/oauth/authorize/deny",
+      headers: { authorization: `Bearer ${fixture.accessToken}` },
+      payload: { ...authorization, redirect_uri: "https://attacker.example/callback" },
+    });
+    assert.equal(mismatchedDenial.statusCode, 400);
 
     const consent = await fixture.app.inject({ method: "POST", url: "/oauth/authorize/consent", headers: { authorization: `Bearer ${fixture.accessToken}` }, payload: authorization });
     assert.equal(consent.statusCode, 200);

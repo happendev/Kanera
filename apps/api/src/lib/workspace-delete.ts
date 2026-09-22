@@ -1,3 +1,4 @@
+import { clearNotificationsForScope } from "./notifications.js";
 import { boardMembers, boardMirrors, boards, cards, clientMembers, workspaces } from "@kanera/shared/schema";
 import { and, eq, inArray, notExists, or } from "drizzle-orm";
 import { db } from "../db.js";
@@ -60,7 +61,10 @@ export async function deleteWorkspaceCascade(params: { workspaceId: string; clie
     );
   }
   await emitToWorkspace(params.workspaceId, "workspace:deleted", { workspaceId: params.workspaceId });
-  await db.delete(workspaces).where(eq(workspaces.id, params.workspaceId));
+  await db.transaction(async (tx) => {
+    await clearNotificationsForScope(tx, { workspaceId: params.workspaceId });
+    await tx.delete(workspaces).where(eq(workspaces.id, params.workspaceId));
+  });
 
   // Deleting a workspace can free the same guest and board capacity as deleting boards one by one.
   for (const userId of externalUserIds) {

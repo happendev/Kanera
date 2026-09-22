@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CARD_TITLE_MAX_LENGTH } from "../card-value-limits.js";
 import { CARD_DUE_DATE_SLOTS } from "../schema/card.js";
 import { customFieldValueColumns } from "./custom-fields.js";
 import { separatorAnchorItem } from "./separators.js";
@@ -7,7 +8,7 @@ export const dueDateSlot = z.enum(CARD_DUE_DATE_SLOTS);
 export type DueDateSlot = z.infer<typeof dueDateSlot>;
 
 export const createCardBody = z.object({
-  title: z.string().min(1).max(500),
+  title: z.string().min(1).max(CARD_TITLE_MAX_LENGTH),
   description: z.string().max(50000).optional(),
   atTop: z.boolean().optional(),
   // Typed lane anchors let a card be created directly between two existing lane items (the board's
@@ -32,7 +33,7 @@ export const createCardBody = z.object({
 export type CreateCardBody = z.infer<typeof createCardBody>;
 
 export const updateCardBody = z.object({
-  title: z.string().min(1).max(500).optional(),
+  title: z.string().min(1).max(CARD_TITLE_MAX_LENGTH).optional(),
   description: z.string().max(50000).nullable().optional(),
   dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   dueDateSlot: dueDateSlot.nullable().optional(),
@@ -175,7 +176,7 @@ export const moveCardToBoardBody = z.object({
 export type MoveCardToBoardBody = z.infer<typeof moveCardToBoardBody>;
 
 export const createChecklistBody = z.object({
-  title: z.string().trim().min(1).max(500),
+  title: z.string().trim().min(1).max(CARD_TITLE_MAX_LENGTH),
   parentItemId: z.uuid().nullable().optional(),
 });
 export type CreateChecklistBody = z.infer<typeof createChecklistBody>;
@@ -186,7 +187,7 @@ export const applyChecklistTemplatesBody = z.object({
 export type ApplyChecklistTemplatesBody = z.infer<typeof applyChecklistTemplatesBody>;
 
 export const updateChecklistBody = z.object({
-  title: z.string().trim().min(1).max(500),
+  title: z.string().trim().min(1).max(CARD_TITLE_MAX_LENGTH),
 });
 export type UpdateChecklistBody = z.infer<typeof updateChecklistBody>;
 

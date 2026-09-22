@@ -7,6 +7,14 @@ interface ConsentContext {
   clientName: string;
   scopes: string[];
   redirectUri: string;
+  redirectOrigin: string;
+  isLoopbackRedirect: boolean;
+}
+
+interface DenialContext {
+  redirectUrl: string;
+  redirectOrigin: string;
+  isLoopbackRedirect: boolean;
 }
 
 @Component({
@@ -15,27 +23,44 @@ interface ConsentContext {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <main class="consent-card">
-      <i class="ti ti-plug-connected consent-icon"></i>
-      <h1>Connect {{ context()?.clientName || "AI agent" }}</h1>
-      @if (loading()) {
-        <p>Checking this connection…</p>
-      } @else if (error(); as message) {
-        <p class="error">{{ message }}</p>
-      } @else {
-        <p>This agent will act as you in Kanera. It will be able to:</p>
-        <ul>
-          <li><i class="ti ti-eye"></i> Read boards, cards, notes, comments, and activity you can access</li>
-          @if (canWrite()) {
-            <li><i class="ti ti-edit"></i> Create and update board content wherever you are an editor</li>
-            <li><i class="ti ti-settings"></i> Create and administer workspaces wherever you are an administrator</li>
-          }
-          <li><i class="ti ti-lock"></i> Stay limited to your current Kanera permissions</li>
-        </ul>
-        <p class="muted">You can revoke this connection from Settings → AI agents.</p>
+      @if (denial(); as denied) {
+        <i class="ti ti-circle-x consent-icon"></i>
+        <h1>Access not granted</h1>
+        <p>This client was not given access to your Kanera account.</p>
+        <p class="destination-label">If you return to the client, your browser will open:</p>
+        <code class="destination">{{ denied.redirectOrigin }}</code>
         <div class="actions">
-          <button type="button" class="ghost" (click)="cancel()" [disabled]="busy()">Cancel</button>
-          <button type="button" (click)="approve()" [disabled]="busy()">{{ busy() ? "Connecting…" : "Allow access" }}</button>
+          <button type="button" class="ghost" (click)="returnToClient()">Return to client</button>
+          <button type="button" (click)="stayInKanera()">Stay in Kanera</button>
         </div>
+      } @else {
+        <i class="ti ti-plug-connected consent-icon"></i>
+        <h1>Connect {{ context()?.clientName || "AI agent" }}</h1>
+        @if (loading()) {
+          <p>Checking this connection…</p>
+        } @else if (error(); as message) {
+          <p class="error">{{ message }}</p>
+        } @else {
+          <p>This agent will act as you in Kanera. It will be able to:</p>
+          <ul>
+            <li><i class="ti ti-eye"></i> Read boards, cards, notes, comments, and activity you can access</li>
+            @if (canWrite()) {
+              <li><i class="ti ti-edit"></i> Create and update board content wherever you are an editor</li>
+              <li><i class="ti ti-settings"></i> Create and administer workspaces wherever you are an administrator</li>
+            }
+            <li><i class="ti ti-lock"></i> Stay limited to your current Kanera permissions</li>
+          </ul>
+          <p class="destination-label">After approval, the authorization result will be sent to:</p>
+          <code class="destination">{{ context()?.redirectOrigin }}</code>
+          @if (context()?.isLoopbackRedirect) {
+            <p class="muted">This callback returns to software running on this device.</p>
+          }
+          <p class="muted">Only continue if you started this connection. You can revoke it later from Settings → AI agents.</p>
+          <div class="actions">
+            <button type="button" class="ghost" (click)="cancel()" [disabled]="busy()">Cancel</button>
+            <button type="button" (click)="approve()" [disabled]="busy()">{{ busy() ? "Connecting…" : "Allow access" }}</button>
+          </div>
+        }
       }
     </main>
   `,
@@ -49,6 +74,8 @@ interface ConsentContext {
     ul { display: grid; gap: .65rem; padding: 0; list-style: none; }
     li { display: flex; gap: .55rem; align-items: flex-start; }
     .muted { font-size: .82rem; }
+    .destination-label { margin-bottom: .4rem; font-size: .88rem; }
+    .destination { display: block; overflow-wrap: anywhere; border: 1px solid var(--border); border-radius: 8px; padding: .65rem .75rem; background: var(--background); color: var(--foreground); }
     .error { color: var(--destructive, #dc2626); }
     .actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1.5rem; }
     button { border: 1px solid var(--border); border-radius: 8px; padding: .55rem .9rem; cursor: pointer; }
@@ -72,6 +99,7 @@ export class OauthAuthorizePage implements OnInit {
   readonly loading = signal(true);
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
+  readonly denial = signal<DenialContext | null>(null);
   readonly canWrite = () => this.context()?.scopes.includes("kanera:write") ?? false;
 
   async ngOnInit() {
@@ -97,16 +125,28 @@ export class OauthAuthorizePage implements OnInit {
     }
   }
 
-  cancel() {
-    // Redirect only to the URI the server confirmed is registered for this client (returned in the
-    // consent context), never the raw redirect_uri query input — otherwise a crafted link could turn
-    // the Cancel button into an open redirect to an arbitrary origin.
-    const registered = this.context()?.redirectUri;
-    if (!registered) return;
-    const redirect = new URL(registered);
-    redirect.searchParams.set("error", "access_denied");
-    if (this.state()) redirect.searchParams.set("state", this.state()!);
-    this.document.location.assign(redirect.toString());
+  async cancel() {
+    if (!this.context() || this.busy()) return;
+    this.busy.set(true);
+    this.error.set(null);
+    try {
+      // The API revalidates the client and registered callback before constructing the denial URL.
+      // Keep the user on Kanera until they explicitly choose to open that third-party destination.
+      this.denial.set(await this.api.post<DenialContext>("/oauth/authorize/deny", Object.fromEntries(this.params())));
+    } catch {
+      this.error.set("Kanera could not cancel this connection request. You can safely close this page.");
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  returnToClient() {
+    const denied = this.denial();
+    if (denied) this.document.location.assign(denied.redirectUrl);
+  }
+
+  stayInKanera() {
+    this.document.location.assign("/");
   }
 
   private params() {

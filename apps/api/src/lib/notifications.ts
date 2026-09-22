@@ -18,6 +18,7 @@ import {
   clientMembers,
   clients,
   comments,
+  directRealtimeOutbox,
   lists,
   notifications,
   users,
@@ -32,6 +33,8 @@ import type { Db } from "../db.js";
 import { db as dbSingleton } from "../db.js";
 import { signedAvatarUrl, signEmbeddedMediaUrls, withSignedMedia } from "./media-keys.js";
 import { emitToUser } from "../realtime/emit.js";
+import { inboxVisibleNotificationCondition } from "./notification-visibility.js";
+export { inboxVisibleNotificationCondition } from "./notification-visibility.js";
 import { enqueueWatchedActivityOutbound } from "./watched-activity-push.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -67,13 +70,6 @@ let fanoutTail: Promise<void> = Promise.resolve();
 const notificationUsers = alias(users, "notification_users");
 const notificationClientMembers = alias(clientMembers, "notification_client_members");
 
-export function inboxVisibleNotificationCondition() {
-  // Completed cards still keep normal watch/assignment/comment notifications
-  // actionable; only overdue attention is cleared once the card is complete.
-  // Archived cards are deletion-equivalent in the product, so no notification
-  // linked to one may remain visible even if legacy data escaped archive cleanup.
-  return sql`${cards.archivedAt} is null and (${notifications.reason} <> ${NOTIFICATION_REASON.OVERDUE} or ${cards.completedAt} is null)`;
-}
 
 function isRetryablePostgresConflict(error: unknown): boolean {
   if (!error || typeof error !== "object" || !("code" in error)) return false;
@@ -263,12 +259,7 @@ export async function fanoutNotificationsForActivity(
       .delete(notifications)
       .where(eq(notifications.activityId, activity.id))
       .returning({ id: notifications.id, userId: notifications.userId });
-    for (const row of deleted) {
-      emitToUser(row.userId, "notification:read", {
-        notificationIds: [row.id],
-        readAt: new Date().toISOString(),
-      });
-    }
+    emitDeletedNotifications(deleted);
     return;
   }
 
@@ -288,7 +279,7 @@ export async function fanoutNotificationsForActivity(
   if (!ctx) return;
 
   const recipients = await resolveRecipients(dbSingleton, ctx, activity, { suppressUserId: options?.suppressUserId });
-  if (recipients.size === 0) return;
+  if (recipients.size === 0 && kind !== "updated") return;
 
   if (kind === "updated") {
     // For coalesced bursts the row may already exist. Emit an "updated" so the
@@ -306,6 +297,7 @@ export async function fanoutNotificationsForActivity(
       await dbSingleton
         .delete(notifications)
         .where(inArray(notifications.id, suppressedExisting.map((row) => row.id)));
+      emitDeletedNotifications(suppressedExisting);
     }
     const visibleExisting = existing.filter((row) => !suppressedUserIds.has(row.userId));
     const existingUserIds = new Set(existing.map((row) => row.userId));
@@ -440,10 +432,7 @@ export async function syncDirectNotificationForActivity(params: {
       params.userId ? sql`${notifications.userId} <> ${params.userId}` : sql`true`,
     ))
     .returning({ id: notifications.id, userId: notifications.userId });
-  const readAt = new Date().toISOString();
-  for (const row of obsolete) {
-    emitToUser(row.userId, "notification:read", { notificationIds: [row.id], readAt });
-  }
+  emitDeletedNotifications(obsolete);
 
   if (!params.userId || params.userId === notificationActorSuppressionId(params.activity) || !params.activity.feedVisible) return;
 
@@ -728,7 +717,7 @@ export async function clearOverdueNotificationsForCards(
       inArray(notifications.reason, [NOTIFICATION_REASON.OVERDUE, NOTIFICATION_REASON.CHECKLIST_ITEM_OVERDUE]),
     ))
     .returning({ id: notifications.id, userId: notifications.userId });
-  emitClearedNotifications(deleted);
+  await enqueueDeletedNotifications(tx, deleted);
 }
 
 export async function clearOverdueChecklistItemNotifications(
@@ -743,7 +732,7 @@ export async function clearOverdueChecklistItemNotifications(
       eq(notifications.reason, NOTIFICATION_REASON.CHECKLIST_ITEM_OVERDUE),
     ))
     .returning({ id: notifications.id, userId: notifications.userId });
-  emitClearedNotifications(deleted);
+  await enqueueDeletedNotifications(tx, deleted);
 }
 
 export async function clearNotificationsForRevokedAccess(
@@ -772,7 +761,15 @@ export async function clearNotificationsForRevokedAccess(
       scopeFilter,
     ))
     .returning({ id: notifications.id, userId: notifications.userId });
-  emitClearedNotifications(deleted);
+  await enqueueDeletedNotifications(tx, deleted);
+}
+
+/** Capture recipients before a board/workspace cascade erases their notification rows. */
+export async function clearNotificationsForScope(tx: Tx, scope: { boardId: string } | { workspaceId: string } | { clientId: string }): Promise<void> {
+  const deleted = await tx.delete(notifications)
+    .where("boardId" in scope ? eq(notifications.boardId, scope.boardId) : "workspaceId" in scope ? eq(notifications.workspaceId, scope.workspaceId) : eq(notifications.clientId, scope.clientId))
+    .returning({ id: notifications.id, userId: notifications.userId });
+  await enqueueDeletedNotifications(tx, deleted);
 }
 
 export type DeletedNotificationRef = { id: string; userId: string };
@@ -913,19 +910,17 @@ export function emitDeletedNotifications(deleted: DeletedNotificationRef[]): voi
   }
 }
 
-function emitClearedNotifications(deleted: { id: string; userId: string }[]): void {
-  if (deleted.length === 0) return;
-  const deletedIdsByUser = new Map<string, string[]>();
-  for (const row of deleted) {
-    const ids = deletedIdsByUser.get(row.userId) ?? [];
-    ids.push(row.id);
-    deletedIdsByUser.set(row.userId, ids);
-  }
-
-  const readAt = new Date().toISOString();
-  for (const [userId, notificationIds] of deletedIdsByUser) {
-    emitToUser(userId, "notification:read", { notificationIds, readAt });
-  }
+export async function enqueueDeletedNotifications(tx: Tx, deleted: DeletedNotificationRef[]): Promise<void> {
+  const byUser = new Map<string, string[]>();
+  for (const row of deleted) byUser.set(row.userId, [...(byUser.get(row.userId) ?? []), row.id]);
+  if (byUser.size === 0) return;
+  // Persist with the deletion: the dispatcher cannot see this event until commit, and rollback
+  // removes it too. Broadcasting inside the transaction let badge refreshes read pre-delete rows.
+  // These are deletions, not reads; they must disappear from All and Agent as well as Unread.
+  await tx.insert(directRealtimeOutbox).values([...byUser].map(([userId, notificationIds]) => ({
+    scope: "user" as const, userId, eventType: "notification:deleted" as const,
+    payload: { notificationIds },
+  })));
 }
 
 export async function countUnreadNotifications(userId: string): Promise<number> {

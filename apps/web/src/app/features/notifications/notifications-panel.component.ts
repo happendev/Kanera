@@ -230,7 +230,7 @@ export class NotificationsPanelComponent {
     const base = {
       key,
       // Always a *notification* count, taken from the server total where it is known: the bell
-      // badge, the sidebar badges and this header must agree, and counting rendered blocks instead
+      // badge and this header count rows; sidebar board badges count distinct cards, and counting rendered blocks instead
       // would silently under-report a busy card.
       count: this.notifications.groupCount(key) || items.length,
       items,
@@ -287,7 +287,11 @@ export class NotificationsPanelComponent {
     this.returnFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     this.closing.set(false);
     this.open.set(true);
-    void this.loadDrawer();
+    if (this.searchDebounceTimer !== null) clearTimeout(this.searchDebounceTimer);
+    this.searchDebounceTimer = null;
+    this.searchInputValue.set("");
+    this.collapsedGroupKeys.set(new Set());
+    void this.notifications.openInbox();
   }
 
   private loadDrawer(): void {

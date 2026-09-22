@@ -90,7 +90,7 @@
     <div class="comment" [class.is-system]="item.data.authorKind === 'system'" [class.is-mirror]="item.isMirror">
       @if (item.isMirror) {
       <div class="activity-mirror-icon" aria-label="Board mirror comment" kTooltip="Synced by Board mirror">
-        <i class="ti ti-copy-check"></i>
+        <i class="ti ti-circles-relation"></i>
       </div>
       } @else if (item.data.authorKind !== 'system') {
       <div class="comment-avatar">
@@ -172,7 +172,7 @@
     <div class="activity-item" [class.is-system]="item.isSystem" [class.is-mirror]="item.isMirror">
       @if (item.isMirror) {
       <div class="activity-mirror-icon" aria-label="Board mirror activity" kTooltip="Synced by Board mirror">
-        <i class="ti ti-copy-check"></i>
+        <i class="ti ti-circles-relation"></i>
       </div>
       } @else if (!item.isSystem) {
       <div class="activity-avatar">

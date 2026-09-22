@@ -1,6 +1,7 @@
-import { clientMembers, clients, notifications, users, workspaceMembers, workspaces, type ClientRole } from "@kanera/shared/schema";
+import { cards, clientMembers, clients, notifications, users, workspaceMembers, workspaces, type ClientRole } from "@kanera/shared/schema";
 import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
 import { db, type Db } from "../db.js";
+import { inboxVisibleNotificationCondition } from "./notification-visibility.js";
 import { withSignedMedia } from "./media-keys.js";
 
 type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -60,9 +61,11 @@ export async function listActiveOrganisations(userId: string, tx: Tx = db, known
       end`,
       unreadCount: sql<number>`(
         select count(*)::int from ${notifications}
+        left join ${cards} on ${cards.id} = ${notifications.cardId}
         where ${notifications.userId} = ${userId}
           and ${notifications.clientId} = ${clients.id}
           and ${notifications.readAt} is null
+          and ${inboxVisibleNotificationCondition()}
       )`,
     })
     .from(clientMembers)
