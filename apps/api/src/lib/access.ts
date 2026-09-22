@@ -281,7 +281,7 @@ export async function assertBoardAccess(
 }
 
 /** SQL predicate shared by every card collection so restricted access cannot drift by endpoint. */
-export function assignedCardVisibility(userId: string, cardId: SQLWrapper = cards.id) {
+export function assignedCardVisibility(userId: string | SQLWrapper, cardId: SQLWrapper = cards.id) {
   return sql<boolean>`(
     exists (select 1 from ${cardAssignees}
       where ${cardAssignees.cardId} = ${cardId} and ${cardAssignees.userId} = ${userId})

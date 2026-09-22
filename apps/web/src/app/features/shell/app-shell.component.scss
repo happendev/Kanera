@@ -1613,7 +1613,6 @@ k-support-session-banner {
 }
 
 // Preview stays in the sidebar so its inherited theme and compact row styling survive dragging.
-.nav-board-drop-list .cdk-drag:not(.cdk-drag-disabled) { cursor: grab; }
 .nav-board-drop-list .cdk-drag-placeholder { opacity: .25; }
 .nav-board-drop-list.cdk-drop-list-dragging .cdk-drag:not(.cdk-drag-placeholder):not(.cdk-drag-preview),
 .cdk-drag-animating { transition: transform 140ms cubic-bezier(.2, 0, 0, 1); }

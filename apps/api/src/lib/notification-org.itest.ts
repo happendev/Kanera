@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mock, test } from "node:test";
 import { and, eq } from "drizzle-orm";
 import {
+  boardMembers,
   boards,
   cards,
   clientMembers,
@@ -60,6 +61,10 @@ void test("two-org notifications retain event org labels, aggregate globally, an
     { workspaceId: workspaceA!.id, name: "Notification board A", position: "1000.0000000000" },
     { workspaceId: workspaceB!.id, name: "Notification board B", position: "1000.0000000000" },
   ]).returning();
+  await db.insert(boardMembers).values([
+    { boardId: boardA!.id, userId: recipient!.id, role: "editor" },
+    { boardId: boardB!.id, userId: recipient!.id, role: "editor" },
+  ]);
   const [listA, listB] = await db.insert(lists).values([
     { workspaceId: workspaceA!.id, name: "Todo A", position: "1000.0000000000" },
     { workspaceId: workspaceB!.id, name: "Todo B", position: "1000.0000000000" },

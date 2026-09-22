@@ -145,10 +145,10 @@ export const listNotificationsQuery = z.object({
   // see encode/decodeCursor in the notifications routes.
   cursor: z.string().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(30),
-  includeRead: z.coerce.boolean().default(false),
+  includeRead: z.preprocess((value) => value === "true" ? true : value === "false" ? false : value, z.boolean()).default(false),
   // The drawer's Agent tab: only notifications whose activity was performed by an AI agent acting
   // for someone. Combines with includeRead so the tab can show the agent's read history too.
-  agentOnly: z.coerce.boolean().default(false),
+  agentOnly: z.preprocess((value) => value === "true" ? true : value === "false" ? false : value, z.boolean()).default(false),
   boardId: z.uuid().optional(),
   actorId: z.uuid().optional(),
   q: z.string().trim().min(1).max(200).optional(),

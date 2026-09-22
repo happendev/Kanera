@@ -1,3 +1,4 @@
+import { clearNotificationsForScope } from "../../lib/notifications.js";
 import { dto } from "@kanera/shared";
 import type { BoardTransferTarget, CompletedCardsResponse, DeletionImpactResponse, WorkDoneResponse, WorkDoneSummaryResponse } from "@kanera/shared/dto";
 import type { CompactCardSummary } from "@kanera/shared/events";
@@ -870,7 +871,10 @@ export async function boardRoutes(app: FastifyInstance) {
     }
 
     await emitToBoardAudience(id, "board:deleted", { workspaceId: ctx.workspaceId, boardId: id }, { workspaceId: ctx.workspaceId });
-    await db.delete(boards).where(eq(boards.id, id));
+    await db.transaction(async (tx) => {
+      await clearNotificationsForScope(tx, { boardId: id });
+      await tx.delete(boards).where(eq(boards.id, id));
+    });
     // Freeing the guest's pooled seat reduces the *used* count but not the purchased seat_limit (the
     // bill is unchanged): reducing capacity is a separate explicit admin action. The freed seat is now
     // available for the admin to assign to someone else.

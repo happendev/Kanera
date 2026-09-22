@@ -16,6 +16,7 @@
     "./appearance": "./src/appearance.ts",
     "./attachments": "./src/attachments.ts",
     "./client-ip": "./src/client-ip.ts",
+    "./card-value-limits": "./src/card-value-limits.ts",
     "./card-links": "./src/card-links.ts",
     "./card-health": "./src/card-health.ts",
     "./colors": "./src/lib/colors.ts",

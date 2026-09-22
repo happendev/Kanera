@@ -165,6 +165,7 @@ export class WorkDoneViewComponent {
     return hosted === null ? this.localCollapsedDayKeys() : new Set(hosted);
   });
   private loadSeq = 0;
+  private loadedRequestKey: string | null = null;
   private stripSeq = 0;
 
   readonly skeletonRows = Array.from({ length: SKELETON_ROW_COUNT }, (_unused, index) => index);
@@ -475,14 +476,19 @@ export class WorkDoneViewComponent {
 
   private async load() {
     const request = this.request();
+    const seq = ++this.loadSeq;
     if (!request) {
+      this.loadedRequestKey = null;
       this.events.set([]);
       this.error.set(null);
       this.loading.set(false);
       return;
     }
-    const seq = ++this.loadSeq;
-    this.loading.set(true);
+    const requestKey = JSON.stringify(request);
+    // Reconnects and realtime echoes refresh the same history query. Keep even an empty result
+    // mounted; only a new scope or filter needs a skeleton while its first response is pending.
+    const refreshing = this.loadedRequestKey === requestKey;
+    this.loading.set(!refreshing);
     this.error.set(null);
     try {
       const response = request.body
@@ -490,8 +496,10 @@ export class WorkDoneViewComponent {
         : await this.api.get<WorkDoneResponse>(request.url);
       if (seq !== this.loadSeq) return;
       this.events.set(response.events ?? []);
+      this.loadedRequestKey = requestKey;
     } catch {
-      if (seq === this.loadSeq) this.error.set("Work history could not be loaded.");
+      // A transient reconnect failure must not replace already-loaded history with an error page.
+      if (seq === this.loadSeq && !refreshing) this.error.set("Work history could not be loaded.");
     } finally {
       if (seq === this.loadSeq) this.loading.set(false);
     }

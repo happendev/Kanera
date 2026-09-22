@@ -79,6 +79,12 @@ function notification(overrides: Partial<NotificationRow> = {}): NotificationRow
   };
 }
 
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
 function page(items: NotificationRow[], nextCursor: string | null = null, unreadCount = items.filter((n) => !n.readAt).length): NotificationsPage {
   return { items, nextCursor, unreadCount };
 }
@@ -148,6 +154,150 @@ describe("NotificationsService", () => {
       ],
     });
     service = TestBed.inject(NotificationsService);
+  });
+
+  it("opens the global bell on the complete unread inbox instead of a remembered filter", async () => {
+    service.boardFilter.set("board-hidden");
+    service.userFilter.set("user-hidden");
+    service.searchQuery.set("old search");
+    service.feedMode.set("agent");
+    await service.openInbox();
+    expect(service.boardFilter()).toBeNull();
+    expect(service.userFilter()).toBeNull();
+    expect(service.searchQuery()).toBe("");
+    expect(service.feedMode()).toBe("unread");
+    expect(api.get).toHaveBeenCalledWith("/notifications/unread?limit=25");
+  });
+
+  it("ignores count responses overtaken by another refresh or a read-all event", async () => {
+    service.initialise();
+    await Promise.resolve();
+    const older = deferred<{ count: number }>();
+    const newer = deferred<{ count: number }>();
+    api.get.mockImplementationOnce(() => older.promise).mockImplementationOnce(() => newer.promise);
+    const first = service.refreshUnreadCount();
+    const second = service.refreshUnreadCount();
+    newer.resolve({ count: 1 });
+    await second;
+    older.resolve({ count: 12 });
+    await first;
+    expect(service.unreadCount()).toBe(1);
+
+    const pending = deferred<{ count: number }>();
+    api.get.mockImplementationOnce(() => pending.promise);
+    const refresh = service.refreshUnreadCount();
+    socket.trigger("notification:allRead", { readAt: new Date().toISOString() });
+    pending.resolve({ count: 12 });
+    await refresh;
+    expect(service.unreadCount()).toBe(0);
+  });
+
+  it("does not resurrect unread rows from a page started before marking all read", async () => {
+    const pending = deferred<NotificationsPage>();
+    const get = api.get.getMockImplementation() as (path: string) => Promise<unknown>;
+    api.get.mockImplementation((path: string) => path.startsWith("/notifications/unread?") ? pending.promise : get(path));
+    const load = service.loadFirstPage();
+    await service.markAllRead();
+    pending.resolve(page([notification()], null, 12));
+    await load;
+    expect(service.items()).toEqual([]);
+    expect(service.unreadCount()).toBe(0);
+    expect(service.loading()).toBe(false);
+  });
+
+  it("does not apply a previous session's pending feed or badge requests after teardown", async () => {
+    const pending = deferred<NotificationsPage>();
+    const count = deferred<{ count: number }>();
+    const get = api.get.getMockImplementation() as (path: string) => Promise<unknown>;
+    api.get.mockImplementation((path: string) => path.startsWith("/notifications/unread?") ? pending.promise
+      : path === "/notifications/unread-count" ? count.promise : get(path));
+    const load = service.loadFirstPage();
+    const refresh = service.refreshUnreadCount();
+    service.teardown();
+    pending.resolve(page([notification()]));
+    count.resolve({ count: 12 });
+    await Promise.all([load, refresh]);
+    expect(service.items()).toEqual([]);
+    expect(service.unreadCount()).toBe(0);
+  });
+
+  it("does not roll a failed previous-session mutation back into a new session", async () => {
+    const pending = deferred<void>();
+    api.post.mockImplementationOnce(() => pending.promise.then(() => { throw new Error("connection lost"); }));
+    service.items.set([notification()]);
+    service.unreadCount.set(1);
+    const read = service.markRead("notification-1");
+    service.teardown();
+    pending.resolve();
+    await read;
+    expect(service.items()).toEqual([]);
+    expect(service.unreadCount()).toBe(0);
+  });
+
+  it("clears cached agent rows and agent badges on all-read and deletion events", async () => {
+    const row = notification({ activity: { actorKind: "agent" } as NotificationRow["activity"] });
+    const get = api.get.getMockImplementation() as (path: string) => Promise<unknown>;
+    api.get.mockImplementation((path: string) => path.startsWith("/notifications?") ? Promise.resolve(page([row])) : get(path));
+    service.initialise();
+    await service.setFeedMode("agent");
+    service.agentCounts.set({ total: 1, unread: 1 });
+    socket.trigger("notification:allRead", { readAt: new Date().toISOString() });
+    expect(service.items()[0]?.readAt).toBeTruthy();
+    expect(service.agentCounts().unread).toBe(0);
+    socket.trigger("notification:deleted", { notificationIds: [row.id] });
+    expect(service.items()).toEqual([]);
+  });
+
+  it("a delayed all-read event preserves notifications created after its database update", async () => {
+    service.initialise();
+    await service.loadFirstPage();
+    service.unreadCount.set(1);
+    socket.trigger("notification:created", { notification: notification({ id: "new", cardId: "new-card" }) });
+    socket.trigger("notification:allRead", { readAt: new Date().toISOString(), notificationIds: ["notification-1"] });
+    expect(service.items().map((row) => row.id)).toEqual(["new"]);
+    expect(service.unreadCount()).toBe(1);
+  });
+
+  it("reloads an empty previously loaded inbox after a socket reconnect", async () => {
+    service.initialise();
+    await service.loadFirstPage();
+    service.items.set([]);
+    api.get.mockClear();
+    socket.trigger("connect");
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/notifications/unread?limit=25"));
+    expect(api.get).toHaveBeenCalledWith("/notifications/agent-counts");
+    expect(api.get).toHaveBeenCalledWith("/notifications/org-unread-counts");
+  });
+
+  it("deduplicates realtime notifications even when filters exclude them from cached pages", async () => {
+    service.initialise();
+    await Promise.resolve();
+    service.boardFilter.set("another-board");
+    service.unreadCount.set(0);
+    const row = notification();
+    socket.trigger("notification:created", { notification: row });
+    socket.trigger("notification:created", { notification: row });
+    expect(service.unreadCount()).toBe(1);
+  });
+
+  it("reconciles all badge families after an HTTP read succeeds without a socket echo", async () => {
+    vi.useFakeTimers();
+    try {
+      service.items.set([notification()]);
+      await service.markRead("notification-1");
+      const get = api.get.getMockImplementation() as (path: string) => Promise<unknown>;
+      api.get.mockImplementation((path: string) => path === "/notifications/unread-count" ? Promise.resolve({ count: 0 })
+        : path === "/notifications/agent-counts" ? Promise.resolve({ total: 1, unread: 0 })
+        : path.endsWith("unread-counts") ? Promise.resolve([]) : get(path));
+      await vi.advanceTimersByTimeAsync(200);
+      expect(service.unreadCount()).toBe(0);
+      expect(service.boardUnreadCounts()).toEqual({});
+      expect(service.cardUnreadCounts()).toEqual({});
+      expect(service.organisationUnreadCounts()).toEqual({});
+      expect(service.agentCounts().unread).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("loads the first page and subsequent pages with expected query params", async () => {
@@ -761,6 +911,23 @@ describe("NotificationsService", () => {
     expect(service.boardUnreadCounts()).toEqual({ "board-1": 1 });
     expect(service.cardUnreadCounts()).toEqual({ "card-1": 1 });
     expect(mentionSound.playMention).toHaveBeenCalledTimes(1);
+  });
+
+  it("expires a crashed sibling tab's card view before suppressing new attention", async () => {
+    service.initialise();
+    await Promise.resolve();
+    writeActiveCardView("card-1");
+    service.unreadCount.set(0);
+    api.post.mockClear();
+    const now = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(now + 20_000);
+    try {
+      socket.trigger("notification:created", { notification: notification() });
+      expect(service.unreadCount()).toBe(1);
+      expect(api.post).not.toHaveBeenCalled();
+    } finally {
+      vi.mocked(Date.now).mockRestore();
+    }
   });
 
   it("ignores stale active-card registry entries", async () => {

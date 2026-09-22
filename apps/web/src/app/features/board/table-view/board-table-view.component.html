@@ -240,6 +240,40 @@
     </span>
   </div>
 
+  @if (savingEdit() || editError()) {
+    <div class="tv-edit-feedback" [class.is-error]="!!editError()">
+      <span [id]="editFeedbackId" role="status">
+        <strong>{{ editLabel() }}</strong>
+        {{ savingEdit() ? 'Saving…' : editError() }}
+      </span>
+      @if (!savingEdit()) {
+        @if (editFailed()) {
+          <button type="button" class="sm" (click)="retryEdit($event)">Retry</button>
+        }
+        <button type="button" class="secondary sm" (click)="discardEdit($event)">Discard edit</button>
+      }
+    </div>
+  }
+
+  <ng-template #cellEditor let-label="label" let-kind="kind">
+    <input
+      class="tv-cell-input"
+      [class.is-invalid]="!!editError()"
+      [type]="kind === 'url' ? 'url' : 'text'"
+      [attr.inputmode]="kind === 'number' ? 'decimal' : kind === 'url' ? 'url' : null"
+      [attr.aria-label]="label"
+      [attr.aria-invalid]="!!editError()"
+      [attr.aria-describedby]="editError() || savingEdit() ? editFeedbackId : null"
+      [attr.aria-busy]="savingEdit()"
+      [readOnly]="savingEdit()"
+      autofocus
+      [value]="editDraft()"
+      (input)="updateEditDraft($any($event.target).value)"
+      (keydown)="onEditKeydown($event)"
+      (blur)="onEditBlur($event)"
+    />
+  </ng-template>
+
   <!-- No (scroll) binding: incremental row mounting is driven by a coalesced listener attached
        outside Angular in the constructor, so scrolling does not mark this component dirty per event. -->
   <div #scrollEl class="tv-scroll" (mousedown)="startBackgroundPan(scrollEl, $event)">
@@ -406,6 +440,9 @@
         @for (card of group.cards; track card.id) {
           <div
             class="tv-row tv-row-grid"
+            [attr.data-card-id]="card.id"
+            [attr.data-group-key]="group.key"
+            (keydown)="onCellKeydown($event)"
             [class.is-completed]="card.completedAt"
             [class.is-unread]="unreadCount(card.id) > 0"
             [class.is-selected]="selectedCardId() === card.id"
@@ -449,16 +486,8 @@
                 </span>
               }
               <span class="tv-cell-label">Title</span>
-              @if (isEditing(card.id, 'title')) {
-                <input
-                  class="tv-cell-input"
-                  type="text"
-                  autofocus
-                  [value]="editDraft()"
-                  (input)="editDraft.set($any($event.target).value)"
-                  (keydown)="onEditKeydown($event)"
-                  (blur)="commitEdit()"
-                />
+              @if (isEditing(card.id, 'title', group.key)) {
+                <ng-container [ngTemplateOutlet]="cellEditor" [ngTemplateOutletContext]="{ label: 'Title', kind: 'text' }" />
               } @else {
                 <button type="button" class="tv-title-trigger" [disabled]="!rowEditable" (click)="onTitleClick(card, $event)" (auxclick)="onTitleAuxClick(card, $event)">
                   <!-- Shown only when complete, unlike the former display's always-present circle toggle: a
@@ -613,34 +642,34 @@
                     @if (customFieldForColumn(col); as field) {
                       @switch (field.type) {
                         @case ('text') {
-                          @if (isEditing(card.id, col)) {
-                            <input class="tv-cell-input" type="text" autofocus [value]="editDraft()" (input)="editDraft.set($any($event.target).value)" (keydown)="onEditKeydown($event)" (blur)="commitEdit()" />
+                          @if (isEditing(card.id, col, group.key)) {
+                            <ng-container [ngTemplateOutlet]="cellEditor" [ngTemplateOutletContext]="{ label: field.name, kind: field.type }" />
                           } @else {
-                            <button type="button" class="tv-cell-trigger tv-text-value" [disabled]="!rowEditable" (click)="beginEdit(card, col, textValue(card, field), $event)"><span>{{ displayValue(card, field) }}</span></button>
+                            <button type="button" class="tv-cell-trigger tv-text-value" [disabled]="!canEditColumn(card, col)" (click)="beginEdit(card, col, textValue(card, field), $event)"><span>{{ displayValue(card, field) }}</span></button>
                           }
                         }
                         @case ('number') {
-                          @if (isEditing(card.id, col)) {
-                            <input class="tv-cell-input" type="number" step="any" autofocus [value]="editDraft()" (input)="editDraft.set($any($event.target).value)" (keydown)="onEditKeydown($event)" (blur)="commitEdit()" />
+                          @if (isEditing(card.id, col, group.key)) {
+                            <ng-container [ngTemplateOutlet]="cellEditor" [ngTemplateOutletContext]="{ label: field.name, kind: field.type }" />
                           } @else {
-                            <button type="button" class="tv-cell-trigger tv-number-value" [disabled]="!rowEditable" (click)="beginEdit(card, col, textValue(card, field), $event)"><span>{{ displayValue(card, field) }}</span></button>
+                            <button type="button" class="tv-cell-trigger tv-number-value" [disabled]="!canEditColumn(card, col)" (click)="beginEdit(card, col, textValue(card, field), $event)"><span>{{ displayValue(card, field) }}</span></button>
                           }
                         }
                         @case ('url') {
-                          @if (isEditing(card.id, col)) {
-                            <input class="tv-cell-input" type="url" inputmode="url" autofocus [value]="editDraft()" (input)="editDraft.set($any($event.target).value)" (keydown)="onEditKeydown($event)" (blur)="commitEdit()" />
+                          @if (isEditing(card.id, col, group.key)) {
+                            <ng-container [ngTemplateOutlet]="cellEditor" [ngTemplateOutletContext]="{ label: field.name, kind: field.type }" />
                           } @else {
-                            <button type="button" class="tv-cell-trigger tv-url-value" [disabled]="!rowEditable" (click)="beginEdit(card, col, textValue(card, field), $event)"><span>{{ displayValue(card, field) }}</span></button>
+                            <button type="button" class="tv-cell-trigger tv-url-value" [disabled]="!canEditColumn(card, col)" (click)="beginEdit(card, col, textValue(card, field), $event)"><span>{{ displayValue(card, field) }}</span></button>
                           }
                         }
                         @case ('checkbox') {
-                          <button type="button" class="tv-cell-trigger tv-checkbox-value" [class.checked]="valueFor(card.id, field.id)?.valueCheckbox === true" [disabled]="!rowEditable" (click)="setCheckboxField(card, field, $event)">
+                          <button type="button" class="tv-cell-trigger tv-checkbox-value" [class.checked]="valueFor(card.id, field.id)?.valueCheckbox === true" [disabled]="!canEditColumn(card, col)" (click)="setCheckboxField(card, field, $event)">
                             <i class="ti" [class.ti-checkbox]="valueFor(card.id, field.id)?.valueCheckbox === true" [class.ti-square]="valueFor(card.id, field.id)?.valueCheckbox !== true"></i>
                             <span>Yes</span>
                           </button>
                         }
                         @case ('select') {
-                          <button type="button" class="tv-cell-trigger" [disabled]="!rowEditable" (click)="openCellPicker(card, col, $event)"><span>{{ displayValue(card, field) }}</span></button>
+                          <button type="button" class="tv-cell-trigger" [disabled]="!canEditColumn(card, col)" (click)="openCellPicker(card, col, $event)"><span>{{ displayValue(card, field) }}</span></button>
                           @if (pickerIsOpen(card.id, col)) {
                             <k-select-picker
                               [options]="optionsForField(field)"
@@ -654,7 +683,7 @@
                           }
                         }
                         @case ('date') {
-                          <button type="button" class="tv-cell-trigger" [disabled]="!rowEditable" (click)="openCellPicker(card, col, $event)">
+                          <button type="button" class="tv-cell-trigger" [disabled]="!canEditColumn(card, col)" (click)="openCellPicker(card, col, $event)">
                             <i class="ti ti-calendar"></i><span>{{ displayValue(card, field) }}</span>
                           </button>
                           @if (pickerIsOpen(card.id, col)) {
@@ -668,7 +697,7 @@
                           }
                         }
                         @case ('user') {
-                          <button type="button" class="tv-cell-trigger" [disabled]="!rowEditable" (click)="openCellPicker(card, col, $event)"><span>{{ displayValue(card, field) }}</span></button>
+                          <button type="button" class="tv-cell-trigger" [disabled]="!canEditColumn(card, col)" (click)="openCellPicker(card, col, $event)"><span>{{ displayValue(card, field) }}</span></button>
                           @if (pickerIsOpen(card.id, col)) {
                             <k-member-picker
                               [members]="members()"

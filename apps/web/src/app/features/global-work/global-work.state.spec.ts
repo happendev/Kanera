@@ -482,10 +482,10 @@ describe("GlobalWorkState", () => {
         assigneeIds: [],
       });
       expect(state.response().cards[0]?.assigneeIds).toEqual([]);
-      expect(state.recoveringConnection()).toBe(false);
+      expect(state.loading()).toBe(false);
       await vi.advanceTimersByTimeAsync(180);
       expect(post.mock.calls.filter(([path]) => path === "/work/cards/query")).toHaveLength(2);
-      expect(state.recoveringConnection()).toBe(false);
+      expect(state.loading()).toBe(false);
     } finally {
       vi.useRealTimers();
     }
@@ -829,7 +829,7 @@ describe("GlobalWorkState", () => {
       });
       await vi.advanceTimersByTimeAsync(500);
       expect(cardQueries()).toBe(1);
-      expect(state.recoveringConnection()).toBe(false);
+      expect(state.loading()).toBe(false);
       // The optimistic patch still lands immediately; only the refetch waits.
       expect(state.response().cards[0]?.listId).toBe("50000000-0000-4000-8000-000000000002");
 
@@ -840,7 +840,7 @@ describe("GlobalWorkState", () => {
       expect(state.reconciling()).toBe(true);
       // The authoritative refresh is still in flight, but the live projection remains usable.
       expect(state.interactionReady()).toBe(true);
-      expect(state.recoveringConnection()).toBe(false);
+      expect(state.loading()).toBe(false);
 
       gate.release?.();
       await vi.waitFor(() => expect(state.reconciling()).toBe(false));
@@ -1060,12 +1060,13 @@ describe("GlobalWorkState", () => {
 
       f.setOffline(false);
       f.socket.trigger("connect", undefined);
-      expect(f.state.recoveringConnection()).toBe(true);
+      expect(f.state.reconciling()).toBe(true);
+      expect(f.state.loading()).toBe(false);
       await vi.advanceTimersByTimeAsync(400);
 
       expect(f.state.cachedAt()).toBeNull();
       expect(f.state.interactionReady()).toBe(true);
-      expect(f.state.recoveringConnection()).toBe(false);
+      expect(f.state.reconciling()).toBe(false);
       expect(f.saveGlobalWork).toHaveBeenLastCalledWith(
         "10000000-0000-4000-8000-000000000001:60000000-0000-4000-8000-000000000001:my",
         expect.any(Object),

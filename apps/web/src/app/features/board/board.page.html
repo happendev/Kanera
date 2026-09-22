@@ -143,8 +143,8 @@
         }
         @if (mirrorMenuAvailable()) {
         <div class="k-menu-heading board-menu-heading">Mirrors</div>
-        <button type="button" class="k-menu-item board-export-item mirror-menu-trigger" role="menuitem" [disabled]="mirrorCreateBlocked()" (click)="openMirrorCreate()"><i [class]="mirrorCreateBlocked() ? 'ti ti-ban' : 'ti ti-copy-plus'"></i><span>{{ mirrorCreateLabel() }}</span></button>
-        <button type="button" class="k-menu-item board-export-item" role="menuitem" [disabled]="mirrorCount() === 0" (click)="openMirrorsDialog()"><i class="ti ti-copy-check"></i><span>{{ manageMirrorsLabel() }}</span></button>
+        <button type="button" class="k-menu-item board-export-item mirror-menu-trigger" role="menuitem" [disabled]="mirrorCreateBlocked()" (click)="openMirrorCreate()"><i [class]="mirrorCreateBlocked() ? 'ti ti-ban' : 'ti ti-circles-relation'"></i><span>{{ mirrorCreateLabel() }}</span></button>
+        <button type="button" class="k-menu-item board-export-item" role="menuitem" [disabled]="mirrorCount() === 0" (click)="openMirrorsDialog()"><i class="ti ti-circles-relation"></i><span>{{ manageMirrorsLabel() }}</span></button>
         }
       </div>
       }

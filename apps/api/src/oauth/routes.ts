@@ -121,6 +121,14 @@ function validRedirectUri(value: string) {
   return url.protocol === "https:" || (url.protocol === "http:" && (url.hostname === "127.0.0.1" || url.hostname === "localhost"));
 }
 
+function redirectDetails(value: string) {
+  const url = new URL(value);
+  return {
+    redirectOrigin: url.origin,
+    isLoopbackRedirect: url.hostname === "127.0.0.1" || url.hostname === "localhost",
+  };
+}
+
 function safeEqual(left: string, right: string) {
   const a = Buffer.from(left);
   const b = Buffer.from(right);
@@ -731,7 +739,28 @@ export async function oauthUserRoutes(app: FastifyInstance) {
     if (client.kind !== "public" || !client.grantTypes.includes("authorization_code")) throw badRequest("client cannot use this authorization request");
     if (!client.redirectUris.includes(params.redirect_uri)) throw badRequest("redirect_uri is not registered");
     const resource = requestedMcpResource(params.resource);
-    return { clientName: client.name, scopes: scopes(params.scope), redirectUri: params.redirect_uri, resource };
+    return {
+      clientName: client.name,
+      scopes: scopes(params.scope),
+      redirectUri: params.redirect_uri,
+      ...redirectDetails(params.redirect_uri),
+      resource,
+    };
+  });
+
+  app.post("/oauth/authorize/deny", async (req) => {
+    const params = authorizationSchema.parse(req.body);
+    const client = await activeClient(params.client_id);
+    // A denial can be submitted directly, so independently repeat the same client and redirect
+    // checks as authorization. Never turn an invalid request into a redirect to attacker input.
+    if (client.kind !== "public" || !client.grantTypes.includes("authorization_code")) throw badRequest("client cannot use this authorization request");
+    if (!client.redirectUris.includes(params.redirect_uri)) throw badRequest("redirect_uri is not registered");
+    requestedMcpResource(params.resource);
+    const redirect = new URL(params.redirect_uri);
+    redirect.searchParams.set("error", "access_denied");
+    if (params.state) redirect.searchParams.set("state", params.state);
+    oauthOperationsTotal.inc({ operation: "consent_denied", client_kind: "public" });
+    return { redirectUrl: redirect.toString(), ...redirectDetails(params.redirect_uri) };
   });
 
   app.post("/oauth/authorize/consent", async (req) => {

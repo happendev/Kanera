@@ -188,7 +188,7 @@
             <i [class]="changeSummary(n).icon"></i>
             <span class="actor-name">{{ n.actorName }}</span>
             @if (n.activity?.actorKind === 'agent') {
-            <span class="via-agent" [kTooltip]="'Done by ' + (n.activity?.agentName ?? 'an AI agent') + ' on behalf of ' + n.actorName"><i class="ti ti-sparkles"></i>via {{ n.activity?.agentName ?? 'AI agent' }}</span>
+            <span class="via-agent" [kTooltip]="'Done by ' + (n.activity.agentName ?? 'an AI agent') + ' on behalf of ' + n.actorName"><i class="ti ti-sparkles"></i>via {{ n.activity.agentName ?? 'AI agent' }}</span>
             }
             <span class="action-text">{{ changeSummary(n).text }}</span>
             @if (changeSummary(n).value) {
@@ -306,7 +306,7 @@
                 <i [class]="item.summary.icon"></i>
                 @if (item.notification.actorName) { <span class="actor-name">{{ item.notification.actorName }}</span> }
                 @if (item.notification.activity?.actorKind === 'agent') {
-                <span class="via-agent" [kTooltip]="'Done by ' + (item.notification.activity?.agentName ?? 'an AI agent') + ' on behalf of ' + (item.notification.actorName ?? '')"><i class="ti ti-sparkles"></i>via {{ item.notification.activity?.agentName ?? 'AI agent' }}</span>
+                <span class="via-agent" [kTooltip]="'Done by ' + (item.notification.activity.agentName ?? 'an AI agent') + ' on behalf of ' + (item.notification.actorName ?? '')"><i class="ti ti-sparkles"></i>via {{ item.notification.activity.agentName ?? 'AI agent' }}</span>
                 }
                 <span class="action-text">{{ item.summary.text }}</span>
                 @if (item.summary.value) {

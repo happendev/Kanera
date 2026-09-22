@@ -153,6 +153,45 @@ describe("WorkDoneViewComponent", () => {
     completedByAvatarUrl: null,
   };
 
+  it.each([false, true])("keeps loaded history mounted during a background refresh (empty: %s)", async (empty) => {
+    const root = await render({ events: empty ? [] : [createdEvent] });
+    const content = root.querySelector(empty ? ".wd-empty" : ".wd-stream");
+    expect(content).not.toBeNull();
+    let resolveRefresh!: (response: WorkDoneResponse) => void;
+    api.get.mockImplementation((url: string) => url.includes("/summary")
+      ? Promise.resolve({ days: [] })
+      : new Promise<WorkDoneResponse>((resolve) => { resolveRefresh = resolve; }));
+
+    fixture.componentRef.setInput("refreshVersion", 1);
+    fixture.detectChanges();
+    expect(fixture.componentInstance.loading()).toBe(false);
+    expect(root.querySelector(".wd-skeleton-stream")).toBeNull();
+    expect(root.contains(content)).toBe(true);
+
+    resolveRefresh({ events: [completedEvent] });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(root.textContent).toContain("Wrap up");
+  });
+
+  it("preserves history on a failed background refresh but shows loading for a new query", async () => {
+    const root = await render({ events: [createdEvent] });
+    api.get.mockRejectedValue(new Error("offline"));
+    fixture.componentRef.setInput("refreshVersion", 1);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.error()).toBeNull();
+    expect(root.textContent).toContain("Ship it");
+
+    fixture.componentRef.setInput("searchQuery", "another card");
+    fixture.detectChanges();
+    expect(fixture.componentInstance.loading()).toBe(true);
+    expect(root.querySelector(".wd-skeleton-stream")).not.toBeNull();
+    await fixture.whenStable();
+    expect(fixture.componentInstance.error()).toBe("Work history could not be loaded.");
+  });
+
   it("renders one row per card, per person, per day, newest activity first", async () => {
     const native = await render({ events: [checklistEvent, completedEvent, movedEvent, createdEvent] });
 

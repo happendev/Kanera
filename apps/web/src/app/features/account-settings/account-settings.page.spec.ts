@@ -303,6 +303,40 @@ describe("AccountSettingsPage", () => {
     fixture.detectChanges();
   }
 
+  it("preserves notification drafts when the session renews but reloads for a different organisation", async () => {
+    activeSettingsRoute = "notifications";
+    await createPage();
+    const page = fixture.componentInstance;
+    await vi.waitFor(() => expect(page.notificationSettingsLoading()).toBe(false));
+    page.ntfyTopic.set("unsaved-topic");
+    api.get.mockClear();
+
+    user.update((current) => ({ ...current!, displayName: "Updated name" }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(api.get).not.toHaveBeenCalledWith("/notifications/settings");
+    expect(page.notificationSettingsLoading()).toBe(false);
+    expect(page.ntfyTopic()).toBe("unsaved-topic");
+
+    user.update((current) => ({ ...current!, activeClientId: "client-2" }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(api.get).toHaveBeenCalledWith("/notifications/settings");
+  });
+
+  it("does not reload the organisation roster when the same session renews", async () => {
+    activeSettingsRoute = "users";
+    await createPage();
+    api.get.mockClear();
+
+    user.update((current) => ({ ...current! }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(api.get).not.toHaveBeenCalledWith("/clients/me/users");
+  });
+
   it("keeps the primary type table focused and collapses additional notification destinations", async () => {
     activeSettingsRoute = "notifications";
     await createPage();

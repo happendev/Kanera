@@ -1,3 +1,4 @@
+import { clearNotificationsForScope } from "./notifications.js";
 import {
   activityEvents,
   boardInvitations,
@@ -150,6 +151,7 @@ export async function purgeOrganisation(clientId: string, log: FastifyBaseLogger
     await db.transaction(async (tx) => {
       await tx.delete(oauthGrants).where(eq(oauthGrants.orgClientId, clientId));
       await tx.delete(workspaceApiKeys).where(eq(workspaceApiKeys.clientId, clientId));
+      await clearNotificationsForScope(tx, { clientId });
       await tx.delete(workspaces).where(eq(workspaces.clientId, clientId));
       await tx.delete(boardInvitations).where(eq(boardInvitations.clientId, clientId));
       await tx.delete(activityEvents).where(eq(activityEvents.clientId, clientId));

@@ -129,6 +129,7 @@ describe("NotificationsPanelComponent", () => {
     groupCounts: ReturnType<typeof signal<Record<string, number>>>;
     notificationUserOptions: ReturnType<typeof signal<{ userId: string; displayName: string; avatarUrl: string | null }[]>>;
     initialise: ReturnType<typeof vi.fn>;
+    openInbox: ReturnType<typeof vi.fn>;
     loadFirstPage: ReturnType<typeof vi.fn>;
     setIncludeRead: ReturnType<typeof vi.fn>;
     setFeedMode: ReturnType<typeof vi.fn>;
@@ -191,6 +192,7 @@ describe("NotificationsPanelComponent", () => {
       groupCounts: signal<Record<string, number>>({}),
       notificationUserOptions: signal([]),
       initialise: vi.fn(),
+      openInbox: vi.fn(() => Promise.resolve()),
       loadFirstPage: vi.fn(() => Promise.resolve()),
       setIncludeRead: vi.fn((value: boolean) => {
         service.includeRead.set(value);
@@ -355,7 +357,7 @@ describe("NotificationsPanelComponent", () => {
 
     expect(service.initialise).toHaveBeenCalledTimes(1);
     expect(component.open()).toBe(true);
-    expect(service.loadFirstPage).toHaveBeenCalledTimes(1);
+    expect(service.openInbox).toHaveBeenCalledTimes(1);
     expect(document.body.classList.contains("k-no-scroll")).toBe(true);
 
     vi.useFakeTimers();
@@ -484,14 +486,14 @@ describe("NotificationsPanelComponent", () => {
   it("reloads the open drawer when connectivity returns", () => {
     component.toggle();
     fixture.detectChanges();
-    expect(service.loadFirstPage).toHaveBeenCalledTimes(1);
+    expect(service.openInbox).toHaveBeenCalledTimes(1);
 
     service.online.set(false);
     TestBed.flushEffects();
     service.online.set(true);
     TestBed.flushEffects();
 
-    expect(service.loadFirstPage).toHaveBeenCalledTimes(2);
+    expect(service.loadFirstPage).toHaveBeenCalledTimes(1);
   });
 
   it("renders the service feed verbatim and delegates include-read toggling", async () => {

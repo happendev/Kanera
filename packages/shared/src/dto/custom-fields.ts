@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CUSTOM_FIELD_TEXT_MAX_LENGTH, CUSTOM_FIELD_URL_MAX_LENGTH } from "../card-value-limits.js";
 import { CUSTOM_FIELD_TYPES } from "../schema/custom-field.js";
 import { colorTokenSchema } from "./_colors.js";
 import { CUSTOM_FIELD_OPTION_LABEL_MAX_LENGTH, WORKSPACE_ENTITY_NAME_MAX_LENGTH } from "./name-limits.js";
@@ -69,7 +70,7 @@ export type MoveCustomFieldOptionBody = z.infer<typeof moveCustomFieldOptionBody
 // One column per custom field type; all optional so a request only carries the
 // column matching the target field's type.
 export const customFieldValueColumns = {
-  valueText: z.string().max(20000).nullable().optional(),
+  valueText: z.string().max(CUSTOM_FIELD_TEXT_MAX_LENGTH).nullable().optional(),
   valueNumber: z.union([z.number(), z.string()]).nullable().optional(),
   valueCheckbox: z.boolean().nullable().optional(),
   // Local date string YYYY-MM-DD.
@@ -78,7 +79,7 @@ export const customFieldValueColumns = {
     .regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD")
     .nullable()
     .optional(),
-  valueUrl: z.url().max(2000).nullable().optional(),
+  valueUrl: z.url().max(CUSTOM_FIELD_URL_MAX_LENGTH).nullable().optional(),
   valueOptionIds: z.array(z.uuid()).nullable().optional(),
   valueUserIds: z.array(z.uuid()).nullable().optional(),
 } as const;

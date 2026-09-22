@@ -1259,6 +1259,38 @@
   font-variant-numeric: tabular-nums;
 }
 
+.tv-title-trigger:focus-visible,
+.tv-cell-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: var(--tv-cell-hover);
+}
+
+.tv-edit-feedback {
+  // Autosave feedback must not shift the rows between pointer-down and click on the next cell.
+  position: absolute;
+  inset-inline: 12px;
+  bottom: 42px;
+  z-index: 10;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px rgb(0 0 0 / .12);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+
+  > span { flex: 1; min-width: 160px; overflow-wrap: anywhere; }
+  strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+  &:not(.is-error) { pointer-events: none; }
+  &.is-error { color: var(--danger); }
+  button { flex: none; font-size: 12px; }
+}
+
 .tv-cell-input {
   width: 100%;
   height: 26px;
@@ -1272,6 +1304,9 @@
   font: inherit;
   // Match the rendered cell value so entering edit mode does not make its text visibly shrink.
   font-size: var(--tv-font);
+
+  &.is-invalid { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
+  &:read-only { opacity: .65; cursor: progress; }
 }
 
 // Status carries the list's own icon and colour, the same pair the kanban lane header, the List

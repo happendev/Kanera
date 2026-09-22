@@ -1887,7 +1887,7 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(commentEl.classList.contains("is-system")).toBe(true);
     expect(commentEl.classList.contains("is-mirror")).toBe(true);
     expect(commentEl.querySelector("k-avatar")).toBeNull();
-    expect(commentEl.querySelector(".activity-mirror-icon .ti-copy-check")).not.toBeNull();
+    expect(commentEl.querySelector(".activity-mirror-icon .ti-circles-relation")).not.toBeNull();
     expect(commentEl.querySelector(".activity-text")?.textContent?.replace(/\s+/g, " ").trim()).toBe("Kanera (Grace Hopper) added a comment");
     expect(commentEl.querySelector(".activity-actor")?.textContent?.replace(/\s+/g, " ").trim()).toBe("Kanera (Grace Hopper)");
     expect(commentEl.querySelector(".activity-date")).not.toBeNull();
@@ -2000,7 +2000,7 @@ describe("CardDetailComponent realtime regressions", () => {
 
     const host = fixture.nativeElement as HTMLElement;
     const marker = host.querySelector(".activity-mirror-icon");
-    expect(marker?.querySelector(".ti-copy-check")).not.toBeNull();
+    expect(marker?.querySelector(".ti-circles-relation")).not.toBeNull();
     expect(host.querySelector(".activity-text")?.textContent?.trim()).toBe("Kanera (Grace Hopper) updated the description");
     expect(host.querySelector(".activity-diff-toggle")).not.toBeNull();
   });

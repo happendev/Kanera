@@ -5,7 +5,7 @@ import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, or, sql
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
-import { assignedCardVisibility, assertBoardAccess, assertCardAccess } from "../../lib/access.js";
+import { assertBoardAccess, assertCardAccess } from "../../lib/access.js";
 import { loadAccessibleBoards } from "../../lib/accessible-boards.js";
 import { badRequest, notFound } from "../../lib/errors.js";
 import {
@@ -166,14 +166,6 @@ function notificationFeedConditions(
     );
   }
   conditions.push(inboxVisibleNotificationCondition());
-  conditions.push(sql`(
-    ${notifications.cardId} is null
-    or not exists (select 1 from board_member restricted_member
-      where restricted_member.board_id = ${notifications.boardId}
-        and restricted_member.user_id = ${req.auth.sub}
-        and restricted_member.assigned_items_only = true)
-    or ${assignedCardVisibility(req.auth.sub, notifications.cardId)}
-  )`);
   return conditions;
 }
 
@@ -324,7 +316,6 @@ export async function notificationsRoutes(app: FastifyInstance) {
         isNotNull(notifications.boardId),
         isNotNull(notifications.cardId),
         inboxVisibleNotificationCondition(),
-        sql`(${notifications.cardId} is null or not exists (select 1 from board_member bm where bm.board_id = ${notifications.boardId} and bm.user_id = ${req.auth.sub} and bm.assigned_items_only = true) or ${assignedCardVisibility(req.auth.sub, notifications.cardId)})`,
       ))
       .groupBy(notifications.boardId);
     return rows.filter((row): row is { boardId: string; count: number } => row.boardId !== null);
@@ -343,7 +334,6 @@ export async function notificationsRoutes(app: FastifyInstance) {
         isNull(notifications.readAt),
         isNotNull(notifications.cardId),
         inboxVisibleNotificationCondition(),
-        sql`(${notifications.cardId} is null or not exists (select 1 from board_member bm where bm.board_id = ${notifications.boardId} and bm.user_id = ${req.auth.sub} and bm.assigned_items_only = true) or ${assignedCardVisibility(req.auth.sub, notifications.cardId)})`,
       ))
       .groupBy(notifications.cardId);
     return rows.filter((row): row is { cardId: string; count: number } => row.cardId !== null);
@@ -749,7 +739,8 @@ export async function notificationsRoutes(app: FastifyInstance) {
       .set({ readAt })
       .where(and(eq(notifications.userId, req.auth.sub), isNull(notifications.readAt)))
       .returning({ id: notifications.id });
-    emitToUser(req.auth.sub, "notification:allRead", { readAt: readAt.toISOString() });
+    // Exact ids preserve notifications created after this UPDATE but before its event is delivered.
+    emitToUser(req.auth.sub, "notification:allRead", { readAt: readAt.toISOString(), notificationIds: updated.map((row) => row.id) });
     return { readIds: updated.map((r) => r.id) };
   });
 

@@ -2,7 +2,7 @@ import "../../test/setup.integration.js";
 import { insertTestNotifications } from "../../test/notification-fixtures.js";
 import { insertTestUsers } from "../../test/user-fixtures.js";
 import type { ServerEventName } from "@kanera/shared/events";
-import type { NotificationSettingsResponse, NotificationWorkspaceRule } from "@kanera/shared/dto";
+import type { NotificationsPage, NotificationSettingsResponse, NotificationWorkspaceRule } from "@kanera/shared/dto";
 import {
   activityEvents,
   boardMembers,
@@ -36,7 +36,7 @@ import { db } from "../../db.js";
 import { buildPublicApiServer } from "../../public-api-server.js";
 import { createOverdueNotificationsForCards, createOverdueNotificationsForChecklistItems, runOverdueNotificationSweep } from "../../lib/overdue-notifications.js";
 import { isEncryptedSecret } from "../../lib/secrets.js";
-import { waitForNotificationFanoutForTests } from "../../lib/notifications.js";
+import { clearNotificationsForRevokedAccess, waitForNotificationFanoutForTests } from "../../lib/notifications.js";
 import { hashOpaqueToken } from "../../lib/tokens.js";
 import { ensureSystemWebPushConfig, webPushClient } from "../../lib/web-push.js";
 import { setupIo } from "../../realtime/io.js";
@@ -229,6 +229,62 @@ async function seed() {
     otherUnread: otherUnread!,
   };
 }
+
+void test("restricted notifications disappear from the inbox and every aggregate until assigned", async () => {
+  const f = await seed();
+  await db.update(boardMembers).set({ assignedItemsOnly: true }).where(and(eq(boardMembers.boardId, f.publicBoard.id), eq(boardMembers.userId, f.member.id)));
+  const headers = { authorization: `Bearer ${f.memberToken}` };
+  const paths = ["/notifications/unread", "/notifications?includeRead=true", "/notifications/unread-count", "/notifications/org-unread-counts", "/notifications/board-unread-counts", "/notifications/card-unread-counts", "/notifications/group-counts", "/notifications/agent-counts", "/notifications/boards", "/notifications/users"];
+  for (const path of paths) {
+    const response = await f.app.inject({ method: "GET", url: path, headers });
+    assert.equal(response.statusCode, 200, path);
+    const body = response.json<Record<string, unknown> | unknown[]>();
+    if (Array.isArray(body)) assert.deepEqual(body, [], path);
+    else if (path.includes("group-counts")) assert.deepEqual(body.groups, [], path);
+    else if (path.includes("agent-counts")) assert.deepEqual(body, { total: 0, unread: 0 }, path);
+    else if (path.endsWith("unread-count")) assert.equal(body.count, 0, path);
+    else { assert.deepEqual(body.items, [], path); assert.equal(body.unreadCount, 0, path); }
+  }
+  await db.insert(cardAssignees).values({ cardId: f.publicCard.id, userId: f.member.id });
+  const visible = await f.app.inject({ method: "GET", url: "/notifications/unread", headers });
+  assert.equal(visible.json<NotificationsPage>().items.length, 1);
+  assert.equal(visible.json<NotificationsPage>().unreadCount, 1);
+});
+
+void test("explicit false query flags do not include read rows or enable agent-only filtering", async () => {
+  const f = await seed();
+  const response = await f.app.inject({ method: "GET", url: "/notifications?includeRead=false&agentOnly=false", headers: { authorization: `Bearer ${f.memberToken}` } });
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json<NotificationsPage>().items.map((row) => row.id), [f.unread.id]);
+});
+
+void test("legacy notifications with revoked board access cannot leave a phantom badge", async () => {
+  const f = await seed();
+  await db.delete(boardMembers).where(and(eq(boardMembers.boardId, f.publicBoard.id), eq(boardMembers.userId, f.member.id)));
+  const headers = { authorization: `Bearer ${f.memberToken}` };
+  const page = await f.app.inject({ method: "GET", url: "/notifications/unread", headers });
+  assert.deepEqual(page.json<NotificationsPage>().items, []);
+  assert.equal(page.json<NotificationsPage>().unreadCount, 0);
+  const count = await f.app.inject({ method: "GET", url: "/notifications/unread-count", headers });
+  assert.equal(count.json<{ count: number }>().count, 0);
+});
+
+void test("notification cleanup queues deletions atomically with the transaction", async () => {
+  const f = await seed();
+  await assert.rejects(db.transaction(async (tx) => {
+    await clearNotificationsForRevokedAccess(tx, { userId: f.member.id, boardIds: [f.publicBoard.id] });
+    const rows = await tx.select().from(directRealtimeOutbox).where(eq(directRealtimeOutbox.userId, f.member.id));
+    assert.ok(rows.some((row) => row.eventType === "notification:deleted"));
+    const outside = await db.select().from(directRealtimeOutbox).where(eq(directRealtimeOutbox.userId, f.member.id));
+    assert.equal(outside.length, 0, "cleanup must not broadcast or publish before commit");
+    throw new Error("rollback cleanup");
+  }), /rollback cleanup/);
+  assert.equal((await db.select().from(notifications).where(eq(notifications.id, f.unread.id))).length, 1);
+  assert.equal((await db.select().from(directRealtimeOutbox).where(eq(directRealtimeOutbox.userId, f.member.id))).length, 0);
+  await db.transaction((tx) => clearNotificationsForRevokedAccess(tx, { userId: f.member.id, boardIds: [f.publicBoard.id] }));
+  const [event] = await db.select().from(directRealtimeOutbox).where(eq(directRealtimeOutbox.userId, f.member.id));
+  assert.equal(event?.eventType, "notification:deleted");
+});
 
 void test("notifications list defaults to unread, supports includeRead, cursor pagination, and unread count", async () => {
   const f = await seed();
@@ -667,6 +723,10 @@ void test("notification filter options are sorted by board and user display name
     .insert(cards)
     .values({ listId: list!.id, boardId: alphaBoard!.id, title: "Alpha card", position: "1000.0000000000", createdById: f.other.id })
     .returning();
+  await db.insert(boardMembers).values([
+    { boardId: alphaBoard!.id, userId: f.member.id, role: "editor" },
+    { boardId: zuluBoard!.id, userId: f.member.id, role: "editor" },
+  ]);
   const [zuluActivity] = await db
     .insert(activityEvents)
     .values({

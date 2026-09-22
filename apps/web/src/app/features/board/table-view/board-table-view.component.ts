@@ -1,3 +1,4 @@
+import { NgTemplateOutlet } from "@angular/common";
 import { MenuDirective } from "../../../shared/menu.directive";
 import type { CdkDragDrop } from "@angular/cdk/drag-drop";
 import { CdkDrag, CdkDragHandle, CdkDropList, CdkDropListGroup, moveItemInArray } from "@angular/cdk/drag-drop";
@@ -16,6 +17,7 @@ import {
   viewChild,
 } from "@angular/core";
 import type { WorkTablePresentation } from "@kanera/shared/dto";
+import { CARD_TITLE_MAX_LENGTH, CUSTOM_FIELD_TEXT_MAX_LENGTH, CUSTOM_FIELD_URL_MAX_LENGTH } from "@kanera/shared/card-value-limits";
 import type { WireCustomFieldOption } from "@kanera/shared/events";
 import type { CardCustomFieldValue } from "@kanera/shared/schema";
 import { ApiClient } from "../../../core/api/api.client";
@@ -115,6 +117,8 @@ const GROW_NEAR_BOTTOM_PX = 600;
 interface EditingCell {
   cardId: string;
   col: string;
+  /** Multi-value grouping can mount the same card in several runs. Only the chosen copy edits. */
+  groupKey?: string;
 }
 
 interface OpenPicker {
@@ -181,7 +185,7 @@ interface GroupByOption {
 @Component({
   selector: "k-board-table-view",
   standalone: true,
-  imports: [MenuDirective, 
+  imports: [NgTemplateOutlet, MenuDirective,
     AnchoredPanelDirective,
     AnchoredPickerPopover,
     AutofocusDirective,
@@ -400,6 +404,17 @@ export class BoardTableViewComponent implements OnDestroy {
   });
   readonly editingCell = signal<EditingCell | null>(null);
   readonly editDraft = signal("");
+  readonly editError = signal<string | null>(null);
+  readonly editFailed = signal(false);
+  readonly savingEdit = signal(false);
+  readonly editLabel = signal("");
+  private static nextEditorId = 0;
+  readonly editFeedbackId = `table-edit-feedback-${BoardTableViewComponent.nextEditorId++}`;
+  private editOriginal = "";
+  private editSave: Promise<boolean> | null = null;
+  // A late save must not move focus back after the user has chosen another cell or cancelled.
+  private editIntent = 0;
+  private destroyed = false;
   readonly openPicker = signal<OpenPicker | null>(null);
   readonly columnsOpen = signal(false);
   // The show/hide panel has two triggers — the toolbar button and the `+` at the end of the header
@@ -418,7 +433,6 @@ export class BoardTableViewComponent implements OnDestroy {
   readonly activeActionsCardId = computed(() => this.menuCoordinator.activeCardMenuId());
   readonly hostAddOpenGroupKey = signal<string | null>(null);
 
-  private readonly customFieldSaveKeys = new Map<string, string>();
   private resizingColumn: {
     id: string;
     startX: number;
@@ -1260,78 +1274,212 @@ export class BoardTableViewComponent implements OnDestroy {
     }
   }
 
-  /** The row a bulk selection is anchored on is read-only, so `event` is optional only for the internal
-   *  Enter/Tab advance below — every template call passes it. */
-  beginEdit(card: AnyCard, col: string, value: string, event?: MouseEvent) {
+  canEditColumn(card: AnyCard, col: string): boolean {
+    if (!this.canEditCard(card)) return false;
+    if (!col.startsWith("cf:")) return true;
+    const field = this.customFieldForColumn(col);
+    if (!field) return false;
+    // Global Work can display fields from several workspaces; a card cannot acquire a value from
+    // another workspace merely because that field is visible as a column.
+    const workspaceId = this.boardFor(card)?.workspaceId ?? this.listById().get(card.listId)?.workspaceId;
+    return !workspaceId || field.workspaceId === workspaceId;
+  }
+
+  async beginEdit(card: AnyCard, col: string, value: string, event?: MouseEvent) {
     if (event && this.consumedBySelection(card, event)) return;
-    if (!this.canEditCard(card) || this.rowIsLocked(card.id)) return;
-    void this.commitEdit();
+    if (!this.canEditColumn(card, col) || this.rowIsLocked(card.id)) return;
+    const groupKey = event?.target instanceof Element
+      ? event.target.closest<HTMLElement>(".tv-row")?.dataset["groupKey"] : undefined;
+    const current = this.editingCell();
+    if (current?.cardId === card.id && current.col === col && current.groupKey === groupKey) return;
+    const intent = ++this.editIntent;
+    if (current && !await this.commitEdit()) return;
+    if (this.destroyed || intent !== this.editIntent || !this.canEditColumn(card, col) || this.rowIsLocked(card.id)) return;
     this.closePickers();
-    this.editingCell.set({ cardId: card.id, col });
+    this.editOriginal = value;
     this.editDraft.set(value);
+    this.editError.set(null);
+    this.editFailed.set(false);
+    this.editLabel.set(`${this.columnLabel(col)} · ${card.title}`);
+    this.editingCell.set({ cardId: card.id, col, groupKey });
   }
 
-  isEditing(cardId: string, col: string): boolean {
+  isEditing(cardId: string, col: string, groupKey?: string): boolean {
     const cell = this.editingCell();
-    return cell?.cardId === cardId && cell.col === col;
+    return cell?.cardId === cardId && cell.col === col && (cell.groupKey === undefined || cell.groupKey === groupKey);
   }
 
-  async commitEdit() {
+  updateEditDraft(value: string) {
+    this.editDraft.set(value);
+    this.editError.set(null);
+    this.editFailed.set(false);
+  }
+
+  commitEdit(): Promise<boolean> {
+    // Enter, blur and a following cell click can all commit the same draft. Share only the in-flight
+    // request: remembering successful values would suppress legitimate edits after a realtime change.
+    if (this.editSave) return this.editSave;
     const cell = this.editingCell();
-    if (!cell) return;
+    if (!cell) return Promise.resolve(true);
     const draft = this.editDraft();
-    this.editingCell.set(null);
-    const card = this.rows().find((item) => item.id === cell.cardId);
-    if (!card) return;
-    if (cell.col === TITLE_COLUMN_ID) {
-      const title = draft.trim();
-      if (!title || title === card.title) return;
-      const updated = await this.api.patch<AnyCard>(`/cards/${card.id}`, { title });
-      this.cardStore.updateCard(updated);
-      return;
+    this.editFailed.set(false);
+    const card = this.cards().find((item) => item.id === cell.cardId);
+    if (!card || !this.canEditColumn(card, cell.col) || this.rowIsLocked(card.id)) {
+      this.editError.set("This cell is no longer editable. Your draft is kept; discard it to continue.");
+      return Promise.resolve(false);
     }
     const field = this.customFieldForColumn(cell.col);
-    if (!field) return;
-    if (field.type === "url") await this.saveUrlField(card, field, draft);
-    else await this.saveTextField(card, field, draft);
+    const normalized = cell.col === TITLE_COLUMN_ID || field?.type === "url" || field?.type === "number" ? draft.trim() : draft;
+    let error: string | null = null;
+    if (cell.col === TITLE_COLUMN_ID && (!normalized || normalized.length > CARD_TITLE_MAX_LENGTH)) {
+      error = normalized ? "Use 500 characters or fewer for the title." : "Enter a title.";
+    } else if (field?.type === "number" && normalized && !Number.isFinite(Number(normalized))) {
+      error = "Enter a valid number.";
+    } else if (field?.type === "url" && normalized && (normalized.length > CUSTOM_FIELD_URL_MAX_LENGTH || !URL.canParse(normalized))) {
+      error = "Enter a complete URL (for example, https://example.com), up to 2,000 characters.";
+    } else if (field?.type === "text" && normalized.length > CUSTOM_FIELD_TEXT_MAX_LENGTH) {
+      error = "Use 20,000 characters or fewer.";
+    }
+    this.editError.set(error);
+    if (error) return Promise.resolve(false);
+    if (normalized === this.editOriginal) {
+      this.editingCell.set(null);
+      return Promise.resolve(true);
+    }
+    this.savingEdit.set(true);
+    this.editSave = (async () => {
+      try {
+        if (cell.col === TITLE_COLUMN_ID) {
+          const updated = await this.api.patch<AnyCard>(`/cards/${card.id}`, { title: normalized });
+          this.cardStore.updateCard(updated);
+        } else if (field?.type === "url") {
+          await this.saveUrlField(card, field, normalized);
+        } else if (field) {
+          await this.saveTextField(card, field, normalized);
+        }
+        this.editingCell.set(null);
+        return true;
+      } catch {
+        // Keep the editor and its draft intact. Realtime updates still flow into the card projection,
+        // while this local draft can be corrected, retried or explicitly discarded.
+        this.editFailed.set(true);
+        this.editError.set("Couldn’t save this edit. Your draft is kept. Try again.");
+        return false;
+      } finally {
+        this.savingEdit.set(false);
+        this.editSave = null;
+      }
+    })();
+    return this.editSave;
+  }
+
+  onEditBlur(event: FocusEvent) {
+    // Clicking Discard must not retry the failed write on blur before its click can run.
+    if (event.relatedTarget instanceof Element && event.relatedTarget.closest(".tv-edit-feedback")) return;
+    void this.commitEdit();
   }
 
   cancelEdit() {
+    // Once sent, Escape cannot undo a request; offer discard only for an unsent or failed draft.
+    if (this.savingEdit()) return;
+    ++this.editIntent;
     this.editingCell.set(null);
     this.editDraft.set("");
+    this.editError.set(null);
+    this.editFailed.set(false);
   }
 
-  onEditKeydown(event: KeyboardEvent) {
+  async retryEdit(event: MouseEvent) {
+    const source = this.hostEl.nativeElement.querySelector<HTMLElement>(".tv-cell-input")?.closest<HTMLElement>(".tv-cell") ?? null;
+    const intent = ++this.editIntent;
+    if (await this.commitEdit() && intent === this.editIntent) this.focusCell(source, false, event.target);
+  }
+
+  discardEdit(event: MouseEvent) {
+    const source = this.hostEl.nativeElement.querySelector<HTMLElement>(".tv-cell-input")?.closest<HTMLElement>(".tv-cell") ?? null;
+    this.cancelEdit();
+    this.focusCell(source, false, event.target);
+  }
+
+  async onEditKeydown(event: KeyboardEvent) {
+    if (event.isComposing) return;
+    const source = event.target instanceof Element ? event.target.closest<HTMLElement>(".tv-cell") : null;
     if (event.key === "Escape") {
       event.preventDefault();
-      this.cancelEdit();
+      event.stopPropagation();
+      if (!this.savingEdit()) {
+        this.cancelEdit();
+        this.focusCell(source, false, event.target);
+      }
       return;
     }
     if (event.key !== "Enter" && event.key !== "Tab") return;
+    event.stopPropagation();
+    const target = source ? this.adjacentCell(source, event.key === "Enter" ? "vertical" : "horizontal", event.shiftKey ? -1 : 1) : null;
+    // At the edge, native Tab leaves the table. Blur still saves, with failures retained in the
+    // feedback strip, so keyboard users never get trapped inside the sheet.
+    if (event.key === "Tab" && !target) return;
     event.preventDefault();
-    const current = this.editingCell();
-    void this.commitEdit().then(() => {
-      if (!current) return;
-      const columns = [TITLE_COLUMN_ID, ...this.visibleColumns()];
-      const rowIndex = this.rows().findIndex((card) => card.id === current.cardId);
-      const colIndex = columns.indexOf(current.col);
-      const nextRowIndex = event.key === "Enter" ? rowIndex + 1 : rowIndex + (colIndex === columns.length - 1 ? 1 : 0);
-      const nextColIndex = event.key === "Enter" ? colIndex : (colIndex + 1) % columns.length;
-      const card = this.rows()[nextRowIndex];
-      const col = columns[nextColIndex];
-      if (!card || !col || (col !== "title" && !["text", "number", "url"].includes(this.customFieldForColumn(col)?.type ?? ""))) return;
-      const value = col === "title" ? card.title : this.textValue(card, this.customFieldForColumn(col)!);
-      this.beginEdit(card, col, value);
+    const intent = ++this.editIntent;
+    if (await this.commitEdit() && intent === this.editIntent) this.focusCell(target ?? source, !!target, event.target);
+  }
+
+  onCellKeydown(event: KeyboardEvent) {
+    if (event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (!(event.target instanceof HTMLElement) || !event.target.matches(".tv-cell-trigger, .tv-title-trigger")) return;
+    const source = event.target.closest<HTMLElement>(".tv-cell");
+    if (!source || this.openPicker()) return;
+    const vertical = event.key === "ArrowDown" || event.key === "ArrowUp";
+    const horizontal = event.key === "ArrowRight" || event.key === "ArrowLeft" || event.key === "Tab";
+    if (!vertical && !horizontal) return;
+    const direction = event.key === "ArrowUp" || event.key === "ArrowLeft" || (event.key === "Tab" && event.shiftKey) ? -1 : 1;
+    const target = this.adjacentCell(source, vertical ? "vertical" : "horizontal", direction);
+    if (!target) return;
+    event.preventDefault();
+    event.stopPropagation();
+    ++this.editIntent;
+    this.focusCell(target, false, event.target);
+  }
+
+  private adjacentCell(source: HTMLElement, axis: "horizontal" | "vertical", direction: number): HTMLElement | null {
+    // Navigate the mounted presentation, not rows(): grouping may repeat/reorder cards, collapsed
+    // runs have no cells, and the incremental render cap intentionally withholds later rows.
+    const cells = Array.from(this.hostEl.nativeElement.querySelectorAll<HTMLElement>(".tv-row .tv-cell"));
+    for (let index = cells.indexOf(source) + direction; index >= 0 && index < cells.length; index += direction) {
+      const cell = cells[index]!;
+      if (axis === "vertical" && cell.dataset["col"] !== source.dataset["col"]) continue;
+      if (cell.closest(".is-bulk-selected")) continue;
+      if (cell.querySelector(".tv-cell-trigger:not(:disabled), .tv-title-trigger:not(:disabled), .tv-cell-input")) return cell;
+    }
+    return null;
+  }
+
+  private focusCell(cell: HTMLElement | null, editText = false, origin?: EventTarget | null) {
+    const intent = this.editIntent;
+    // Let Angular replace the committed input before looking up the trigger. Checking intent and
+    // connectivity prevents a delayed response from stealing focus or targeting a removed group.
+    setTimeout(() => {
+      if (this.destroyed || intent !== this.editIntent || !cell?.isConnected || cell.closest(".is-bulk-selected")) return;
+      const trigger = cell.querySelector<HTMLButtonElement>(".tv-cell-trigger:not(:disabled), .tv-title-trigger:not(:disabled)");
+      if (!trigger) return;
+      const active = this.hostEl.nativeElement.ownerDocument.activeElement;
+      // The user can leave the sheet while a save is pending (for example to search). Native focus
+      // on that other control wins over the keyboard destination queued before the request.
+      if (origin && active !== origin && active !== document.body) return;
+      trigger.focus();
+      const col = cell.dataset["col"];
+      if (editText && (col === TITLE_COLUMN_ID || ["text", "number", "url"].includes(this.customFieldForColumn(col ?? "")?.type ?? ""))) trigger.click();
     });
   }
 
-  openCellPicker(card: AnyCard, col: string, event: MouseEvent) {
+  async openCellPicker(card: AnyCard, col: string, event: MouseEvent) {
     if (this.consumedBySelection(card, event)) return;
     event.stopPropagation();
-    if (!this.canEditCard(card)) return;
-    // Editors are mounted beside their cell trigger so the anchored directive can follow tv-scroll;
-    // cursor-point anchors would remain stranded when the sheet scrolls.
-    void this.commitEdit();
+    if (!this.canEditColumn(card, col)) return;
+    const intent = ++this.editIntent;
+    if (this.editingCell() && !await this.commitEdit()) return;
+    if (this.destroyed || intent !== this.editIntent || !this.canEditColumn(card, col) || this.rowIsLocked(card.id)) return;
+    // Editors are mounted beside their cell trigger so the anchored directive can follow tv-scroll.
     const current = this.openPicker();
     this.openPicker.set(current?.cardId === card.id && current.col === col ? null : { cardId: card.id, col });
   }
@@ -1340,7 +1488,7 @@ export class BoardTableViewComponent implements OnDestroy {
     // The cell remains the edit trigger, so k-card-labels is deliberately presentational here (a
     // focusable chip inside this button would be invalid nested interaction). Table labels always
     // stay expanded, so a press anywhere in the cell has only one meaning: open the label picker.
-    this.openCellPicker(card, col, event);
+    void this.openCellPicker(card, col, event);
   }
 
   pickerIsOpen(cardId: string, col: string): boolean {
@@ -1549,7 +1697,7 @@ export class BoardTableViewComponent implements OnDestroy {
       openCardDetailInNewTab(card.organisationKey, card.key);
       return;
     }
-    this.beginEdit(card, TITLE_COLUMN_ID, card.title);
+    void this.beginEdit(card, TITLE_COLUMN_ID, card.title, event);
   }
 
   onTitleAuxClick(card: AnyCard, event: MouseEvent) {
@@ -2197,6 +2345,7 @@ export class BoardTableViewComponent implements OnDestroy {
   }
 
   ngOnDestroy() {
+    this.destroyed = true;
     this.endColumnResize();
     this.endBackgroundPan();
     this.closeActionsMenu();
@@ -2340,47 +2489,16 @@ export class BoardTableViewComponent implements OnDestroy {
   }
 
   private async saveTextField(card: AnyCard, field: AnyCustomField, value: string) {
-    const requestKey = `${card.id}:${field.id}`;
-    if (value === "") {
-      await this.saveCustomFieldOnce(requestKey, "delete", () => this.api.delete(`/cards/${card.id}/custom-fields/${field.id}`));
-      return;
-    }
-    if (field.type === "number") {
-      const number = Number(value);
-      if (!Number.isFinite(number)) return;
-      await this.saveCustomFieldOnce(requestKey, `number:${number}`, () =>
-        this.api.put(`/cards/${card.id}/custom-fields/${field.id}`, { valueNumber: String(number) }),
-      );
-      return;
-    }
-    await this.saveCustomFieldOnce(requestKey, `text:${value}`, () =>
-      this.api.put(`/cards/${card.id}/custom-fields/${field.id}`, { valueText: value }),
-    );
+    const path = `/cards/${card.id}/custom-fields/${field.id}`;
+    if (value === "") await this.api.delete(path);
+    else if (field.type === "number") await this.api.put(path, { valueNumber: String(Number(value)) });
+    else await this.api.put(path, { valueText: value });
   }
 
   private async saveUrlField(card: AnyCard, field: AnyCustomField, value: string) {
-    const requestKey = `${card.id}:${field.id}`;
-    const trimmed = value.trim();
-    if (!trimmed) {
-      await this.saveCustomFieldOnce(requestKey, "delete", () => this.api.delete(`/cards/${card.id}/custom-fields/${field.id}`));
-      return;
-    }
-    await this.saveCustomFieldOnce(requestKey, `url:${trimmed}`, () =>
-      this.api.put(`/cards/${card.id}/custom-fields/${field.id}`, { valueUrl: trimmed }),
-    );
-  }
-
-  private async saveCustomFieldOnce(requestKey: string, saveKey: string, save: () => Promise<unknown>) {
-    // Enter commits and the same DOM removal can fire blur. Retain the last successful value key so
-    // that double-fire produces one request while a rejected request remains retryable.
-    if (this.customFieldSaveKeys.get(requestKey) === saveKey) return;
-    this.customFieldSaveKeys.set(requestKey, saveKey);
-    try {
-      await save();
-    } catch (error) {
-      if (this.customFieldSaveKeys.get(requestKey) === saveKey) this.customFieldSaveKeys.delete(requestKey);
-      throw error;
-    }
+    const path = `/cards/${card.id}/custom-fields/${field.id}`;
+    if (!value) await this.api.delete(path);
+    else await this.api.put(path, { valueUrl: value });
   }
 
   private async writeIds(

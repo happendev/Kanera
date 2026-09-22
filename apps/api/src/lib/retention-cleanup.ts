@@ -15,11 +15,12 @@ import {
   passwordResetTokens,
   refreshTokens,
 } from "@kanera/shared/schema";
-import { and, eq, isNotNull, isNull, lt, or, type SQL } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lt, or, type SQL } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import type { FastifyBaseLogger } from "fastify";
 import type { Db } from "../db.js";
 import { env } from "../env.js";
+import { emitDeletedNotifications, enqueueDeletedNotifications } from "./notifications.js";
 import { startSweepScheduler } from "./sweep-scheduler.js";
 
 const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 1,440 minutes
@@ -35,12 +36,20 @@ const cutoffFrom = (now: Date, days: number) => new Date(now.getTime() - daysMs(
 /**
  * activity_event is the single largest long-term growth source — a row per board/card/list/comment
  * mutation, never otherwise pruned. Notifications reference activity via ON DELETE CASCADE, but this
- * sweep runs notification cleanup first with a shorter window, so any notification pointing at a
- * to-be-pruned activity row is already gone by the time we get here.
+ * sweep normally runs notification cleanup first with a shorter window. Configurable retention
+ * windows still require explicit notification cleanup before cascading the activity rows.
  */
 export async function runActivityRetentionCleanup({ db, log }: RetentionCleanupDeps, now = new Date()): Promise<number> {
   const cutoff = cutoffFrom(now, env.ACTIVITY_EVENT_RETENTION_DAYS);
-  const deleted = await db.delete(activityEvents).where(lt(activityEvents.createdAt, cutoff)).returning({ id: activityEvents.id });
+  const deleted = await db.transaction(async (tx) => {
+    // Retention windows are configurable. Capture remaining inbox recipients before the activity
+    // cascade, even when activity retention is shorter than notification retention.
+    const removed = await tx.delete(notifications)
+      .where(inArray(notifications.activityId, tx.select({ id: activityEvents.id }).from(activityEvents).where(lt(activityEvents.createdAt, cutoff))))
+      .returning({ id: notifications.id, userId: notifications.userId });
+    await enqueueDeletedNotifications(tx, removed);
+    return tx.delete(activityEvents).where(lt(activityEvents.createdAt, cutoff)).returning({ id: activityEvents.id });
+  });
   if (deleted.length > 0) {
     log.info({ deletedCount: deleted.length, retentionDays: env.ACTIVITY_EVENT_RETENTION_DAYS }, "purged activity events past retention");
   }
@@ -73,7 +82,8 @@ export async function runNotificationRetentionCleanup({ db, log }: RetentionClea
         lt(notifications.createdAt, maxCutoff),
       ),
     )
-    .returning({ id: notifications.id });
+    .returning({ id: notifications.id, userId: notifications.userId });
+  emitDeletedNotifications(deleted);
   if (deleted.length > 0) {
     log.info(
       { deletedCount: deleted.length, readRetentionDays: env.NOTIFICATION_READ_RETENTION_DAYS, maxRetentionDays: env.NOTIFICATION_MAX_RETENTION_DAYS },
