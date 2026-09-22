@@ -566,12 +566,22 @@ describe("AccountSettingsPage", () => {
     expect(text).toContain("100 automation executions per month");
   });
 
-  it("renders build information in the settings shell", async () => {
+  it("shows only the build date for hosted deployments", async () => {
     activeSettingsRoute = "profile";
     await createPage();
 
     const buildMeta = (fixture.nativeElement as HTMLElement).querySelector(".settings-build-meta");
     expect(buildMeta?.getAttribute("aria-label")).toBe("Build information");
+    expect(buildMeta?.textContent).not.toContain("Version");
+    expect(buildMeta?.textContent).toContain("Built");
+  });
+
+  it("shows the version and build date for self-hosted deployments", async () => {
+    currentClient = selfHostedClient;
+    activeSettingsRoute = "profile";
+    await createPage();
+
+    const buildMeta = (fixture.nativeElement as HTMLElement).querySelector(".settings-build-meta");
     expect(buildMeta?.textContent).toContain("Version");
     expect(buildMeta?.textContent).toContain("Built");
   });

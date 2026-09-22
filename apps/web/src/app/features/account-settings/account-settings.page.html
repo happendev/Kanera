@@ -29,7 +29,9 @@
     </section>
 
     <div class="settings-build-meta" aria-label="Build information">
-      <span>Version {{ buildVersion }}</span>
+      @if (!isHosted()) {
+        <span>Version {{ buildVersion }}</span>
+      }
       <span>Built {{ buildBuiltAt }}</span>
     </div>
   </main>
