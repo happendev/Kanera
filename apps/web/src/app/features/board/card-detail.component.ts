@@ -1941,6 +1941,11 @@ export class CardDetailComponent {
   onDocumentKeydown(event: KeyboardEvent) {
     if (event.key === "Escape") {
       if (this.closing()) return;
+      // Escape closes one layer. An inner layer that consumed the key (the attachment lightbox's CDK
+      // dialog, an editor suggestion menu) prevents its default before it bubbles here; closing the
+      // card too would dismiss two layers with one press. CDK marks the event even when focus never
+      // moved into the dialog, so this does not depend on where the keypress originated.
+      if (event.defaultPrevented) return;
       const anyPopoverOpen = this.moveToListOpen() || this.memberPickerOpen() || this.checklistTemplatePickerOpen() || this.checklistItemAssigneePickerId() || this.checklistItemDueDatePickerId() || this.bulkChecklistAssigneePickerId() || this.bulkChecklistDueDatePickerId() || this.labelPickerOpen() ||
         this.dueDatePickerOpen() || this.cfPickerFieldId() || this.actionsMenuOpen() || this.copyToBoardOpen() || this.moveToBoardOpen();
       if (anyPopoverOpen) {

@@ -63,8 +63,11 @@ export class DescriptionEditorUploader {
         path,
         { method: "POST", body: form },
       );
+      // A block image inserted on its own leaves the selection on the image node, so the next upload
+      // (a second file picked, or the rest of a multi-file drop) would replace it. The trailing
+      // paragraph gives the cursor a text position after the image instead.
       const inserted = IMAGE_MIMES.has(file.type)
-        ? editor?.chain().focus().setImage({ src: uploaded.url }).run()
+        ? editor?.chain().focus().insertContent([{ type: "image", attrs: { src: uploaded.url } }, { type: "paragraph" }]).run()
         : editor
           ?.chain()
           .focus()

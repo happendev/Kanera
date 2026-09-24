@@ -7,8 +7,9 @@ import {
   effect,
   inject,
   signal,
+  viewChild,
 } from "@angular/core";
-import type { OnDestroy } from "@angular/core";
+import type { ElementRef, OnDestroy } from "@angular/core";
 import type { SafeResourceUrl } from "@angular/platform-browser";
 import { DomSanitizer } from "@angular/platform-browser";
 import { MediaDownloadService } from "../../core/media/media-download.service";
@@ -18,6 +19,11 @@ import { DescriptionViewerComponent } from "./description-viewer.component";
 import { formatDate } from "../../shared/date-format";
 
 const MARKDOWN_PREVIEW_MAX_BYTES = 2 * 1024 * 1024;
+/** Finger travel below this still counts as a tap rather than a pan. */
+const TAP_SLOP_PX = 8;
+const DOUBLE_TAP_MS = 300;
+const DOUBLE_TAP_SLOP_PX = 30;
+const DOUBLE_TAP_SCALE = 2.5;
 
 export type ImageLightboxItem = {
   src: string;
@@ -61,7 +67,17 @@ export type ImageLightboxData = ImageLightboxItem & {
       <div class="lb-position" (click)="$event.stopPropagation()">{{ positionLabel() }}</div>
       }
 
-      <div class="lb-img-wrap">
+      <!-- Gestures listen on the whole stage, not just the <img>: a fitted image on a phone is often
+           too small for both pinch fingers to land on it. -->
+      <div
+        class="lb-img-wrap"
+        [class.lb-img-wrap-gestures]="isImage()"
+        (pointerdown)="startPan($event)"
+        (pointermove)="movePan($event)"
+        (pointerup)="endPan($event)"
+        (pointercancel)="endPan($event)"
+        (click)="onStageClick($event)"
+      >
         @if (isVideo()) {
         <video
           class="lb-video"
@@ -121,10 +137,6 @@ export type ImageLightboxData = ImageLightboxItem & {
           [class.lb-img-dragging]="isDragging()"
           [src]="activeImage().src"
           [style.transform]="imageTransform()"
-          (pointerdown)="startPan($event)"
-          (pointermove)="movePan($event)"
-          (pointerup)="endPan($event)"
-          (pointercancel)="endPan($event)"
           (wheel)="onWheel($event)"
           (click)="$event.stopPropagation()"
           draggable="false"
@@ -336,10 +348,15 @@ export type ImageLightboxData = ImageLightboxItem & {
       cursor: default;
     }
 
-    .lb-img {
+    .lb-img-wrap-gestures {
       overscroll-behavior: contain;
       touch-action: none;
+    }
+
+    .lb-img {
       user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
     }
 
     .lb-img-pannable {
@@ -510,6 +527,13 @@ export class ImageLightboxComponent implements OnDestroy {
   private readonly activePointers = new Map<number, { x: number; y: number }>();
   private pinchStartDistance = 0;
   private pinchStartScale = 1;
+  private pinchStartMid = { x: 0, y: 0 };
+  private pinchStartPan = { x: 0, y: 0 };
+  private pinchOrigin = { x: 0, y: 0 };
+  private gestureMoved = false;
+  private suppressStageClick = false;
+  private lastTap: { x: number; y: number; time: number } | null = null;
+  private readonly imageRef = viewChild<ElementRef<HTMLImageElement>>("lightboxImage");
 
   readonly hasMultiple = computed(() => this.images.length > 1);
   readonly activeImage = computed(() => this.images[this.currentIndex()]!);
@@ -571,74 +595,73 @@ export class ImageLightboxComponent implements OnDestroy {
   }
 
   startPan(event: PointerEvent) {
-    if (event.button !== 0 || (event.pointerType === "mouse" && this.scale() <= 1)) return;
+    if (!this.isImage() || event.button !== 0) return;
+    if (this.activePointers.size === 0) {
+      this.gestureMoved = false;
+      this.suppressStageClick = false;
+    }
+    if (event.pointerType === "mouse" && this.scale() <= 1) return;
     event.preventDefault();
-    event.stopPropagation();
-    const image = event.currentTarget as HTMLImageElement;
-    image.setPointerCapture(event.pointerId);
+    // Capture on the element under the finger, not the stage, so a tap on the image still clicks the
+    // image (which stops propagation) instead of the stage (which closes the lightbox).
+    (event.target as Element).setPointerCapture?.(event.pointerId);
     this.activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (this.activePointers.size === 2) {
-      this.pinchStartDistance = this.pointerDistance();
-      this.pinchStartScale = this.scale();
-      this.dragPointerId = null;
-      this.isDragging.set(false);
+      this.startPinch();
       return;
     }
     if (this.scale() <= 1) return;
-    this.dragPointerId = event.pointerId;
-    this.dragStartX = event.clientX;
-    this.dragStartY = event.clientY;
-    this.dragStartPanX = this.panX();
-    this.dragStartPanY = this.panY();
-    this.isDragging.set(true);
+    this.startDrag(event.pointerId, event.clientX, event.clientY);
   }
 
   movePan(event: PointerEvent) {
-    if (this.activePointers.has(event.pointerId)) {
-      this.activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    }
+    if (!this.activePointers.has(event.pointerId)) return;
+    this.activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (this.activePointers.size >= 2) {
       event.preventDefault();
-      const distance = this.pointerDistance();
-      if (this.pinchStartDistance > 0) {
-        const nextScale = this.clamp(
-          this.pinchStartScale * distance / this.pinchStartDistance,
-          this.minScale,
-          this.maxScale,
-        );
-        this.scale.set(parseFloat(nextScale.toFixed(2)));
-        if (nextScale <= 1) {
-          this.panX.set(0);
-          this.panY.set(0);
-        }
-      }
+      this.movePinch();
       return;
     }
     if (this.dragPointerId !== event.pointerId) return;
     event.preventDefault();
-    const image = event.currentTarget as HTMLImageElement;
-    const bounds = this.panBounds(image);
-    this.panX.set(this.clamp(this.dragStartPanX + event.clientX - this.dragStartX, -bounds.x, bounds.x));
-    this.panY.set(this.clamp(this.dragStartPanY + event.clientY - this.dragStartY, -bounds.y, bounds.y));
+    const dx = event.clientX - this.dragStartX;
+    const dy = event.clientY - this.dragStartY;
+    if (Math.hypot(dx, dy) > TAP_SLOP_PX) this.gestureMoved = true;
+    this.setClampedPan(this.dragStartPanX + dx, this.dragStartPanY + dy);
   }
 
   endPan(event: PointerEvent) {
-    const image = event.currentTarget as HTMLImageElement;
-    if (image.hasPointerCapture(event.pointerId)) image.releasePointerCapture(event.pointerId);
-    this.activePointers.delete(event.pointerId);
+    const target = event.target as Element | null;
+    if (target?.hasPointerCapture?.(event.pointerId)) target.releasePointerCapture(event.pointerId);
+    if (!this.activePointers.delete(event.pointerId)) return;
     this.pinchStartDistance = 0;
-    if (this.activePointers.size === 1 && this.scale() > 1) {
+    if (this.activePointers.size === 1) {
+      // Lifting one finger of a pinch continues as a one-finger pan from where the other finger is.
       const [pointerId, pointer] = this.activePointers.entries().next().value!;
-      this.dragPointerId = pointerId;
-      this.dragStartX = pointer.x;
-      this.dragStartY = pointer.y;
-      this.dragStartPanX = this.panX();
-      this.dragStartPanY = this.panY();
-      this.isDragging.set(true);
-    } else if (this.dragPointerId === event.pointerId || this.activePointers.size === 0) {
-      this.dragPointerId = null;
-      this.isDragging.set(false);
+      if (this.scale() > 1) this.startDrag(pointerId, pointer.x, pointer.y);
+      else {
+        this.dragPointerId = null;
+        this.isDragging.set(false);
+      }
+      return;
     }
+    if (this.activePointers.size > 0) return;
+    this.dragPointerId = null;
+    this.isDragging.set(false);
+    // Pinching below 100% is only a transient "rubber band"; settle back to the fitted image.
+    if (this.scale() < 1) this.resetZoom();
+    // A drag or pinch ends with a synthetic click on whatever is under the finger; when that is the
+    // stage backdrop it must not close the lightbox.
+    this.suppressStageClick = this.gestureMoved;
+    if (!this.gestureMoved && event.pointerType === "touch" && target === this.imageElement()) {
+      this.handleTap(event.clientX, event.clientY);
+    }
+  }
+
+  onStageClick(event: MouseEvent) {
+    if (!this.suppressStageClick) return;
+    this.suppressStageClick = false;
+    event.stopPropagation();
   }
 
   onWheel(event: WheelEvent) {
@@ -751,6 +774,10 @@ export class ImageLightboxComponent implements OnDestroy {
     this.resetZoom();
   }
 
+  private imageElement(): HTMLImageElement | null {
+    return this.imageRef()?.nativeElement ?? null;
+  }
+
   private resetPan(): void {
     this.dragPointerId = null;
     this.activePointers.clear();
@@ -771,14 +798,86 @@ export class ImageLightboxComponent implements OnDestroy {
     };
   }
 
-  private clamp(value: number, min: number, max: number): number {
-    return Math.min(Math.max(value, min), max);
+  private startDrag(pointerId: number, x: number, y: number): void {
+    this.dragPointerId = pointerId;
+    this.dragStartX = x;
+    this.dragStartY = y;
+    this.dragStartPanX = this.panX();
+    this.dragStartPanY = this.panY();
+    this.isDragging.set(true);
   }
 
-  private pointerDistance(): number {
+  private startPinch(): void {
     const [first, second] = [...this.activePointers.values()];
-    if (!first || !second) return 0;
-    return Math.hypot(second.x - first.x, second.y - first.y);
+    if (!first || !second) return;
+    this.gestureMoved = true;
+    this.dragPointerId = null;
+    // isDragging also disables the transform transition, which otherwise makes pinching lag behind.
+    this.isDragging.set(true);
+    this.pinchStartDistance = Math.hypot(second.x - first.x, second.y - first.y);
+    this.pinchStartScale = this.scale();
+    this.pinchStartMid = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
+    this.pinchStartPan = { x: this.panX(), y: this.panY() };
+    this.pinchOrigin = this.imageOrigin();
+  }
+
+  private movePinch(): void {
+    const [first, second] = [...this.activePointers.values()];
+    if (!first || !second || this.pinchStartDistance <= 0) return;
+    const distance = Math.hypot(second.x - first.x, second.y - first.y);
+    const nextScale = parseFloat(
+      this.clamp(this.pinchStartScale * distance / this.pinchStartDistance, this.minScale, this.maxScale).toFixed(3),
+    );
+    const mid = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
+    // Keep the image point that started under the fingers' midpoint under the current midpoint, so the
+    // image zooms around the pinch and follows the fingers as they move together.
+    const ratio = nextScale / this.pinchStartScale;
+    const origin = this.pinchOrigin;
+    this.scale.set(nextScale);
+    this.setClampedPan(
+      mid.x - origin.x - ratio * (this.pinchStartMid.x - origin.x - this.pinchStartPan.x),
+      mid.y - origin.y - ratio * (this.pinchStartMid.y - origin.y - this.pinchStartPan.y),
+    );
+  }
+
+  /** Double-tap toggles between the fitted image and a close-up centred on the tapped point. */
+  private handleTap(x: number, y: number): void {
+    const now = Date.now();
+    const last = this.lastTap;
+    this.lastTap = { x, y, time: now };
+    if (!last || now - last.time > DOUBLE_TAP_MS || Math.hypot(x - last.x, y - last.y) > DOUBLE_TAP_SLOP_PX) return;
+    this.lastTap = null;
+    if (this.scale() > 1) {
+      this.resetZoom();
+      return;
+    }
+    const origin = this.imageOrigin();
+    const ratio = DOUBLE_TAP_SCALE / this.scale();
+    this.scale.set(DOUBLE_TAP_SCALE);
+    this.setClampedPan(
+      x - origin.x - ratio * (x - origin.x - this.panX()),
+      y - origin.y - ratio * (y - origin.y - this.panY()),
+    );
+  }
+
+  /** Screen position of the image's untransformed centre, which is its scale origin. */
+  private imageOrigin(): { x: number; y: number } {
+    const image = this.imageElement();
+    if (!image) return { x: 0, y: 0 };
+    const rect = image.getBoundingClientRect();
+    // Scaling about the centre leaves the centre in place, so only the pan offset needs removing.
+    return { x: rect.left + rect.width / 2 - this.panX(), y: rect.top + rect.height / 2 - this.panY() };
+  }
+
+  private setClampedPan(x: number, y: number): void {
+    const image = this.imageElement();
+    const bounds = image ? this.panBounds(image) : { x: 0, y: 0 };
+    this.panX.set(this.clamp(x, -bounds.x, bounds.x) || 0);
+    this.panY.set(this.clamp(y, -bounds.y, bounds.y) || 0);
+  }
+
+  private clamp(value: number, min: number, max: number): number {
+    return Math.min(Math.max(value, min), max);
   }
 
   @HostListener("document:keydown.=")

@@ -196,6 +196,14 @@ export default tseslint.config(
     },
   },
   {
+    // Playwright fixtures must destructure their dependencies, so `async ({}, use) =>` is the
+    // required signature for a fixture that depends on none.
+    files: ['e2e/**/*.ts'],
+    rules: {
+      'no-empty-pattern': 'off',
+    },
+  },
+  {
     files: ['**/*.html'],
     extends: [...angular.configs.templateRecommended],
     rules: {

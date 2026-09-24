@@ -354,6 +354,14 @@
   cursor: pointer;
 }
 
+.cmp-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
 // .cmp-submit keeps the global primary button colours deliberately, so it matches every other
 // primary action; overriding only the background would leave the global button:hover rule to flip
 // it back to accent on hover.

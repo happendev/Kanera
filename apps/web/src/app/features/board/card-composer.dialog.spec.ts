@@ -214,6 +214,44 @@ describe("CardComposerDialogComponent", () => {
       expect(component.pendingAttachments()).toEqual([]);
     });
 
+    it("shows upload progress and keeps the modal open until the upload finishes", async () => {
+      let finishUpload!: (value: unknown) => void;
+      api.request.mockImplementation(() => new Promise((resolve) => { finishUpload = resolve; }));
+      const component = await create();
+      const dismissed = vi.fn();
+      component.dismissed.subscribe(dismissed);
+      component.setTitle("With a screenshot");
+      component.onPaste(pasteOf([png()]));
+
+      const submitting = component.submit();
+      await vi.waitFor(() => expect(api.request).toHaveBeenCalledOnce());
+      fixture.detectChanges();
+
+      const element = fixture.nativeElement as HTMLElement;
+      const submitButton = element.querySelector<HTMLButtonElement>(".cmp-submit")!;
+      expect(submitButton.disabled).toBe(true);
+      expect(submitButton.textContent).toContain("Uploading 1 of 1…");
+      expect(submitButton.querySelector(".kanera-spin")).not.toBeNull();
+      expect(element.querySelector(".cmp-dialog")?.getAttribute("aria-busy")).toBe("true");
+
+      element.querySelector<HTMLElement>(".cmp-backdrop")!.click();
+      element.querySelector<HTMLElement>(".cmp-backdrop")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      component.cancel();
+      component.requestDismiss();
+      const dropped = { dataTransfer: transfer([png()]), preventDefault: vi.fn() } as unknown as DragEvent;
+      component.onDrop(dropped);
+      expect(dropped.preventDefault).toHaveBeenCalledOnce();
+      expect(component.pendingAttachments()).toHaveLength(1);
+      await component.submit();
+      expect(api.createCard).toHaveBeenCalledOnce();
+      expect(dismissed).not.toHaveBeenCalled();
+
+      finishUpload({ id: "attachment-1" });
+      await submitting;
+      expect(dismissed).toHaveBeenCalledOnce();
+      expect(component.uploadProgress()).toBeNull();
+    });
+
     it("reports an upload failure and keeps the file staged", async () => {
       api.request.mockRejectedValue(new Error("quota"));
       const component = await create();

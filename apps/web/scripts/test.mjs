@@ -1,7 +1,7 @@
 import { execFileSync, spawn } from "node:child_process";
 
 execFileSync(process.execPath, ["scripts/write-build-info.mjs"], { stdio: "inherit" });
-execFileSync(process.execPath, ["--test", "scripts/push-worker.test.mjs"], { stdio: "inherit" });
+execFileSync(process.execPath, ["--test", "scripts/push-worker.test.mjs", "scripts/pwa-manifest.test.mjs"], { stdio: "inherit" });
 
 const rawArgs = process.argv.slice(2);
 const baseArgs = ["test", "--no-watch", "--no-progress"];

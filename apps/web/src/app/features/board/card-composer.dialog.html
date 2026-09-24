@@ -302,7 +302,14 @@
       </label>
       <span class="cmp-actions-spacer"></span>
       <button type="button" class="cmp-cancel" (click)="cancel()" [disabled]="busy()">Cancel</button>
-      <button type="submit" class="cmp-submit" [disabled]="!canSubmit()">{{ busy() ? "Creating…" : "Create card" }}</button>
+      <button type="submit" class="cmp-submit" [disabled]="!canSubmit()">
+        @if (busy()) { <i class="ti ti-loader-2 kanera-spin" aria-hidden="true"></i> }
+        @if (uploadProgress(); as progress) {
+        Uploading {{ progress.current }} of {{ progress.total }}…
+        } @else {
+        {{ busy() ? "Creating…" : "Create card" }}
+        }
+      </button>
     </footer>
   </form>
 </div>

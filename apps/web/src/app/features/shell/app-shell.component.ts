@@ -23,6 +23,8 @@ import { BrowserPushService } from "../../core/notifications/browser-push.servic
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
 import { KANERA_DOCS_URL } from "../../shared/docs-link.component";
+import { PwaInstallService } from "../../core/install/pwa-install.service";
+import { ToastService } from "../../shared/toast.service";
 import { ScratchpadPanelComponent } from "../scratchpad/scratchpad-panel.component";
 import { ScratchpadService } from "../scratchpad/scratchpad.service";
 import { ToastComponent } from "../../shared/toast.component";
@@ -126,6 +128,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private readonly navigateAfterOrganisationSwitch = inject(ORGANISATION_SWITCH_NAVIGATOR);
   private readonly auth = inject(AuthService);
   private readonly browserPush = inject(BrowserPushService);
+  readonly pwaInstall = inject(PwaInstallService);
+  private readonly toast = inject(ToastService);
   private readonly dialog = inject(Dialog);
   private readonly palette = inject(CommandPaletteService);
   private readonly recentBoards = inject(RecentBoardsService);
@@ -250,6 +254,13 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.shortcutsOpen.set(true);
   }
 
+  installKanera(): void {
+    this.closeUserMenu();
+    void this.pwaInstall.prompt().catch(() => {
+      this.toast.error("Could not open the install prompt. Open the account menu for installation steps.");
+    });
+  }
+
   readonly scratchpadTooltip = computed(() => `${this.scratchpad.open() ? "Close scratchpad" : "Scratchpad"} · .`);
   readonly userMenuTooltip = computed(() => {
     const user = this.user();
@@ -262,6 +273,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly activeOrganisation = computed(() => this.organisations().find((organisation) => organisation.clientId === this.activeClientId()) ?? null);
   readonly switchingOrganisationId = signal<string | null>(null);
   readonly docsUrl = KANERA_DOCS_URL;
+  readonly installGuideUrl = `${KANERA_DOCS_URL}/install-kanera`;
   // Tracks which workspaces are collapsed in the nav. Default empty (all expanded); persisted to localStorage.
   readonly collapsed = signal<Record<string, boolean>>(this.readCollapsed());
   // Tracks which workspaces have their boards section collapsed.

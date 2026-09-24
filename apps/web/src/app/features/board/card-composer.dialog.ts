@@ -147,6 +147,8 @@ export class CardComposerDialogComponent implements OnInit {
   readonly draft = signal<CardComposerDraft>(emptyComposerDraft());
   readonly openPicker = signal<OpenPicker | null>(null);
   readonly busy = signal(false);
+  /** Upload progress stays visible after the card itself has been created. */
+  readonly uploadProgress = signal<{ current: number; total: number } | null>(null);
   readonly error = signal<string | null>(null);
   /** Set once a stored draft was restored, so the banner explains why fields are pre-filled. */
   readonly recoveredDraft = signal(false);
@@ -510,11 +512,12 @@ export class CardComposerDialogComponent implements OnInit {
   }
 
   onDragOver(event: DragEvent): void {
-    if (!this.acceptsFileDrag(event.dataTransfer)) return;
+    if (!this.isFileDrag(event.dataTransfer)) return;
     // Without preventDefault the browser navigates to the dropped file, which would abandon the
-    // composer entirely.
+    // composer entirely. Keep preventing it while uploading, even though no new files can be staged.
     event.preventDefault();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    if (event.dataTransfer) event.dataTransfer.dropEffect = this.busy() || !this.canEdit() ? "none" : "copy";
+    if (this.busy() || !this.canEdit()) return;
     this.dragActive.set(true);
   }
 
@@ -527,9 +530,10 @@ export class CardComposerDialogComponent implements OnInit {
   }
 
   onDrop(event: DragEvent): void {
-    if (!this.acceptsFileDrag(event.dataTransfer)) return;
+    if (!this.isFileDrag(event.dataTransfer)) return;
     event.preventDefault();
     this.dragActive.set(false);
+    if (this.busy() || !this.canEdit()) return;
     this.stageFiles(event.dataTransfer?.files ?? null);
   }
 
@@ -548,13 +552,14 @@ export class CardComposerDialogComponent implements OnInit {
     this.stageFiles(files);
   }
 
-  private acceptsFileDrag(data: DataTransfer | null): boolean {
-    if (this.busy() || !this.canEdit() || !data) return false;
+  private isFileDrag(data: DataTransfer | null): boolean {
+    if (!data) return false;
     return Array.from(data.types ?? []).some((type) => type === "Files" || type === "application/x-moz-file")
       || Array.from(data.items ?? []).some((item) => item.kind === "file");
   }
 
   private stageFiles(files: FileList | File[] | null): void {
+    if (this.busy()) return;
     const incoming = Array.from(files ?? []);
     if (incoming.length === 0) return;
     // Type is the only limit the client can check. Per-file size is enforced server-side against the
@@ -580,7 +585,9 @@ export class CardComposerDialogComponent implements OnInit {
    */
   private async uploadPendingAttachments(cardId: string): Promise<string[]> {
     const failed: string[] = [];
-    for (const item of this.pendingAttachments()) {
+    const attachments = this.pendingAttachments();
+    for (const [index, item] of attachments.entries()) {
+      this.uploadProgress.set({ current: index + 1, total: attachments.length });
       try {
         const form = new FormData();
         form.append("file", item.file);
@@ -590,6 +597,7 @@ export class CardComposerDialogComponent implements OnInit {
         failed.push(item.file.name);
       }
     }
+    this.uploadProgress.set(null);
     return failed;
   }
 
@@ -686,6 +694,7 @@ export class CardComposerDialogComponent implements OnInit {
     }
 
     this.busy.set(true);
+    this.uploadProgress.set(null);
     this.error.set(null);
     try {
       const card = await this.api.createCard<AnyCard>(`/boards/${this.boardId()}/lists/${listId}/cards`, {
