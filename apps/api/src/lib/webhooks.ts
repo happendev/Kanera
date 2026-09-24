@@ -229,10 +229,13 @@ function endpointIdFromPayload(payload: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
+// Card-scoped events carry either a top-level `cardId` (feed items, comments) or the full entity
+// as `card` (card:created/updated/moved). The documented envelope promises `cardId` for both.
 function cardIdFromPayload(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") return null;
-  const value = (payload as { cardId?: unknown }).cardId;
-  return typeof value === "string" ? value : null;
+  const { cardId, card } = payload as { cardId?: unknown; card?: { id?: unknown } | null };
+  if (typeof cardId === "string") return cardId;
+  return typeof card?.id === "string" ? card.id : null;
 }
 
 // Load enabled endpoints for a set of workspaces in one query, grouped by workspace, so a drain

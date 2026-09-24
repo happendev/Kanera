@@ -54,6 +54,49 @@ jobs:
       # locally and in Docker so CI is not the first place bundle growth becomes visible.
       - run: pnpm bundle:web:check
 
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - run: corepack enable
+
+      - run: corepack prepare pnpm@11.23.0 --activate
+
+      - run: pnpm install --frozen-lockfile
+
+      # Browser binaries are keyed on the pinned Playwright version; system deps still install
+      # every run because apt packages are not part of the cached directory.
+      - id: playwright-version
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+
+      - if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
+
+      - run: pnpm test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-results
+          path: e2e/artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
+
   secret-scan:
     runs-on: ubuntu-latest
     timeout-minutes: 10

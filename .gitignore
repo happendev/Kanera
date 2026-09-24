@@ -33,6 +33,7 @@ pnpm-debug.log*
 
 # Local benchmark runs. The harnesses are committed; their per-run results are not.
 benchmarks/*/results/
+e2e/artifacts/
 
 # Python bytecode (scripts/scan-image-updates.py)
 __pycache__/
