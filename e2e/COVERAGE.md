@@ -16,6 +16,7 @@ This file exists to satisfy the testing policy in `CLAUDE.md`: an isolated test 
 | `onboarding.spec.ts` | Both signup paths; workspace-scoped lists and fields missing on a later board; a standalone board wrongly setting `hasWorkspace`. |
 | `reconnect.spec.ts` | A client that missed events while its socket was down not resyncing after rejoin. `SocketLink` proves the socket was actually cut. |
 | `attachments.spec.ts` | The four-surface attachment rule (description, comments, attachment list, activity): previewable types open the lightbox, other types download under their original name; inline uploads replacing earlier inserts; Escape in the lightbox closing the card. |
+| `lightbox-touch.spec.ts` | On a phone-sized touch device: a two-finger pinch that lands on the lightbox backdrop rather than the fitted image not zooming (the app's viewport meta disables browser zoom); lifting the fingers closing the lightbox; double-tap not toggling zoom. Uses real CDP multi-touch. |
 | `public-api.spec.ts` | Public API key and webhook creation in settings; public API writes (a separate process) not reaching open web clients through the outbox, worker and Redis adapter; webhook delivery, HMAC signature and envelope. |
 | `live-card-edits.spec.ts` | Another user's rename, description, list move, completion and unassignment not reaching, without a reload: the viewer's open card detail (board and Global Work hosts), the Kanban tile, the board table, board Work done, My Cards (board and table), Team Cards (board and Work done), and Portfolio table. |
 
