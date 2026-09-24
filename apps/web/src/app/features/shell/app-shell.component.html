@@ -599,6 +599,19 @@
       }
       <div class="k-menu-separator user-popover-divider"></div>
       <div class="popover-group" role="group" aria-label="Support and session">
+        @if (!pwaInstall.installed()) {
+        @if (pwaInstall.canPrompt()) {
+        <button type="button" class="k-menu-item popover-item" (click)="installKanera()" role="menuitem">
+          <i class="ti ti-device-mobile-plus"></i>
+          <span>Install Kanera</span>
+        </button>
+        } @else {
+        <a class="k-menu-item popover-item" [href]="installGuideUrl" target="_blank" rel="noopener noreferrer" (click)="closeUserMenu()" role="menuitem">
+          <i class="ti ti-device-mobile-plus"></i>
+          <span>How to install Kanera</span>
+        </a>
+        }
+        }
         <a class="k-menu-item popover-item" [href]="docsUrl" target="_blank" rel="noopener noreferrer" (click)="closeUserMenu()" role="menuitem">
           <i class="ti ti-help-circle"></i>
           <span>Help &amp; docs</span>

@@ -101,7 +101,11 @@ export class BoardSocketBridge {
       },
 
       [SERVER_EVENTS.CARD_CREATED]: ({ boardId: eventBoardId, card }) => {
-        if (eventBoardId === boardId && acceptsCard(card.id)) state.addCard(expandWireCard(card));
+        if (eventBoardId !== boardId || !acceptsCard(card.id)) return;
+        state.addCard(expandWireCard(card));
+        // Work done lists creations, list moves and completions. Completions arrive as card:updated;
+        // creations and moves only as these events, so each of the three must refresh the view.
+        options.onWorkDoneChanged?.();
       },
       [SERVER_EVENTS.CARD_UPDATED]: ({ boardId: eventBoardId, card }) => {
         if (eventBoardId !== boardId || !acceptsCard(card.id)) return;
@@ -120,6 +124,7 @@ export class BoardSocketBridge {
         // A concurrent detail fetch contains the card's list/position too. Mark the move so that
         // stale detail cannot put the card back after this realtime event has been applied.
         state.noteCardDetailRealtimeMutation(cardId);
+        options.onWorkDoneChanged?.();
       },
       [SERVER_EVENTS.CARD_REBALANCED]: ({ boardId: eventBoardId, positions }) => {
         if (eventBoardId !== boardId) return;

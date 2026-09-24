@@ -56,6 +56,7 @@ pnpm db:studio
 pnpm build
 pnpm lint
 pnpm test:api
+pnpm test:e2e
 pnpm test:cli
 pnpm test:sdk
 pnpm email:preview
@@ -72,8 +73,16 @@ Notes:
 - The API uses Node's built-in test runner via `pnpm test:api` for `*.test.ts` unit/route tests only.
 - Do not pass `*.itest.ts` files to `pnpm test:api`; that does not start Postgres. Use `pnpm test:api:integration -- apps/api/src/path/to/file.itest.ts` for focused integration tests.
 - API integration tests run against an isolated Docker Postgres on `localhost:55433` via `pnpm test:api:integration`, run migrations, then tear the database down.
+- `pnpm test:e2e` uses its own Docker database and browser, and saves reproducible traces, screenshots, logs, and a report under `e2e/artifacts/`. See `e2e/README.md`.
+- E2E specs are TypeScript under `e2e/`, linted by `pnpm lint`. Import `test`/`expect` from `e2e/support/fixtures.ts` (API sign-in, second users, unique names, and a guard that fails on page errors or 5xx), and record new coverage in `e2e/COVERAGE.md`.
+- E2E services run with `NODE_ENV=development`: `NODE_ENV=test` swaps Valkey for a per-process `ioredis-mock`, so unit and integration tests cannot catch cross-process realtime (worker outbox to API sockets); only E2E can.
 - The web test script accepts optional spec filenames after `--`; bare filenames are matched anywhere under `apps/web`.
-- The web tests are intentionally narrow and focus on realtime regression points.
+
+Testing policy:
+
+- Highly prefer E2E tests as the sole testing mechanism. Use them to verify complex features through complete user flows. At the end of each E2E test run, produce a verifiable and repeatable artifact, such as a trace, screenshot, or log with the reproduction command and stable test data.
+- Do not delete or trim an existing isolated test based on an impression that it is low-signal. Identify the failure it catches, cover that failure with an E2E test, run the E2E test, and retain its artifact. Delete the isolated test only after documenting that mapping and checking that it adds no distinct signal.
+- If you must add an isolated test because E2E cannot reliably catch a concrete failure, first write down all the ways the system could fail, then write the code.
 
 ## Backend Rules
 
@@ -193,7 +202,7 @@ Implementation notes:
 - Keep shared contracts in `packages/shared` aligned with both server and client changes.
 - When adding or changing an API environment variable, update every deployment path that must pass it through: `docker-compose.yml`, `.env.full.example`, the minimal `.env.example` when the variable is required, and relevant deployment docs such as `DEPLOY.md`/`DOKPLOY_DEPLOY.md`. Env vars parsed in `apps/api/src/env.ts` will not reach Docker services unless Compose forwards them.
 - If you add or change a realtime event, update the shared event types first, then the route emit call and frontend consumer. For board/workspace events, ensure the outbox/webhook path still has the right scope and payload.
-- When touching frontend realtime logic, prefer narrow regression tests around the affected state consumer.
+- When touching frontend realtime logic, verify the user-visible result with E2E coverage. Use an isolated regression test only when it catches a specific race or state failure that the E2E flow would likely miss.
 - Add comments where the intent, product rule, side effect, ordering requirement, or non-obvious tradeoff is not clear from the code itself. Comments are especially expected around realtime fanout, notification suppression, automation side effects, tenancy/access decisions, coalescing, rebalance ordering, and other places where a future maintainer needs the "why", not just the "what".
 - Do not leave tricky logic uncommented merely because it type-checks. If a change relies on an invariant from this file, a product decision, or a surprising interaction between backend and frontend state, add a short comment at the point of use.
 - Keep comments useful and durable: explain intent and constraints, not line-by-line mechanics or stale implementation history.
