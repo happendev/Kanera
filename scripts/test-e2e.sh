@@ -79,4 +79,8 @@ docker compose -p kanera-e2e -f docker-compose.e2e.yml down -v >"$KANERA_E2E_ART
 docker compose -p kanera-e2e -f docker-compose.e2e.yml up -d --wait >"$KANERA_E2E_ARTIFACT_DIR/docker-up.log" 2>&1
 pnpm --filter @kanera/api db:migrate >"$KANERA_E2E_ARTIFACT_DIR/migrate.log" 2>&1
 pnpm --filter @kanera/api db:seed >"$KANERA_E2E_ARTIFACT_DIR/seed.log" 2>&1
+# The web server runs `ng serve` directly, which skips apps/web's `prestart` hook. Run it here: it
+# writes the gitignored build-info.generated.ts and generated assets that a clean checkout (CI)
+# lacks. As a separate step, a failure here is reported instead of surfacing as a web-server timeout.
+pnpm --filter @kanera/web run prestart >"$KANERA_E2E_ARTIFACT_DIR/web-prepare.log" 2>&1
 pnpm exec playwright test --config e2e/playwright.config.ts "$@"
