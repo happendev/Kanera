@@ -12,6 +12,7 @@ import type { AnalyticsRuntimeConfig } from "./core/analytics/analytics.types";
 import { AuthService } from "./core/auth/auth.service";
 import { PublicAuthClient } from "./core/auth/public-auth.client";
 import { CookieConsentService } from "./core/consent/cookie-consent.service";
+import { PwaInstallService } from "./core/install/pwa-install.service";
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -22,6 +23,7 @@ export const appConfig: ApplicationConfig = {
       enabled: environment.production || !isDevMode(),
       registrationStrategy: "registerWhenStable:5000",
     }),
+    provideAppInitializer(() => { inject(PwaInstallService).init(); }),
     provideAppInitializer(() => { inject(UpdatesService); }),
     provideAppInitializer(() => {
       const analytics = inject(AnalyticsService);
