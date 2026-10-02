@@ -7,11 +7,20 @@ const artifactDir = process.env.KANERA_E2E_ARTIFACT_DIR ?? path.join(__dirname, 
 
 // Every service shares the isolated database/Valkey exported by scripts/test-e2e.sh; the ports are
 // E2E-only so a local dev stack (3000-3003, 4200) can keep running alongside a test run.
+const publicApiOrigin = `http://localhost:${ports.publicApi}`;
+const mcpUrl = `http://localhost:${ports.mcp}/mcp`;
 const serviceEnv = {
   API_PORT: String(ports.api),
   PUBLIC_API_PORT: String(ports.publicApi),
   WORKER_PORT: String(ports.worker),
   WEB_ORIGIN: webOrigin,
+  // OAuth tokens are bound to the MCP URL as their resource, so the issuer (public API) and the MCP
+  // server must agree on it, and the MCP server must name the issuer in its resource metadata.
+  PUBLIC_API_OAUTH_ISSUER: publicApiOrigin,
+  MCP_PUBLIC_URL: mcpUrl,
+  // CLI OAuth exercises repeated discovery, polling and MCP delegation from one loopback IP.
+  // Keep the limiter enabled without making these functional tests depend on minute boundaries.
+  PUBLIC_API_IP_RATE_LIMIT_PER_MINUTE: "1000",
 };
 
 function apiProcess(script: string, logName: string, port: number) {
@@ -52,6 +61,20 @@ export default defineConfig({
     apiProcess("start", "api", ports.api),
     apiProcess("start:public-api", "public-api", ports.publicApi),
     apiProcess("start:worker", "worker", ports.worker),
+    {
+      command: `pnpm --dir ../apps/mcp start > "$KANERA_E2E_ARTIFACT_DIR/mcp.log" 2>&1`,
+      url: `http://localhost:${ports.mcp}/health`,
+      env: {
+        MCP_PORT: String(ports.mcp),
+        MCP_SERVER_PUBLIC_URL: mcpUrl,
+        KANERA_PUBLIC_API_URL: publicApiOrigin,
+        OAUTH_ISSUER_URL: publicApiOrigin,
+      },
+      reuseExistingServer: false,
+      timeout: 120_000,
+      stdout: "pipe",
+      stderr: "pipe",
+    },
     {
       command: `pnpm --dir ../apps/web exec ng serve --configuration e2e --port ${ports.web} --proxy-config ../../e2e/web-proxy.config.mjs > "$KANERA_E2E_ARTIFACT_DIR/web.log" 2>&1`,
       url: `${webOrigin}/login`,

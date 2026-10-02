@@ -1,9 +1,14 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import { DEFAULT_PUBLIC_API_URL, DEFAULT_WEB_URL, readConfig, removeProfile, resolveCredential, saveProfile, validateApiUrl } from "../config.js";
+import { boolFlag, stringFlag } from "../args.js";
+import {
+  DEFAULT_MCP_URL, DEFAULT_PUBLIC_API_URL, DEFAULT_WEB_URL, readConfig, removeProfile, resolveCredential, saveProfile, validateApiUrl,
+  type OAuthProfile,
+} from "../config.js";
+import { discover, pollForTokens, registerClient, revoke, sessionOptionsFor, startDeviceAuthorization } from "../oauth.js";
 import { CliError, EXIT, usageError } from "../errors.js";
 import type { CommandContext, CommandResult } from "../context.js";
-import { openToolSession } from "../tools.js";
+import { openToolSession, type ToolSessionOptions } from "../tools.js";
 
 interface SessionSummary {
   userId?: string;
@@ -76,8 +81,8 @@ async function promptSecret(prompt: string): Promise<string> {
   });
 }
 
-async function describeSession(apiKey: string, url: string): Promise<SessionSummary> {
-  const session = await openToolSession({ apiKey, publicApiUrl: url });
+async function describeSession(options: ToolSessionOptions): Promise<SessionSummary> {
+  const session = await openToolSession(options);
   try {
     return await session.call("session.get", {}) as SessionSummary;
   } finally {
@@ -90,7 +95,7 @@ export async function authCommand(ctx: CommandContext): Promise<CommandResult> {
   switch (action) {
     case "login": return await login(ctx);
     case "status": return await status(ctx);
-    case "logout": return logout(ctx);
+    case "logout": return await logout(ctx);
     case "token": return token(ctx);
     case "list": return listProfiles();
     default: throw usageError(`unknown auth command "${action}"`, "Try: login, status, logout, token, list");
@@ -99,7 +104,56 @@ export async function authCommand(ctx: CommandContext): Promise<CommandResult> {
 
 async function login(ctx: CommandContext): Promise<CommandResult> {
   const profile = ctx.profileFlag ?? process.env.KANERA_PROFILE ?? "default";
-  const url = validateApiUrl(ctx.urlFlag ?? process.env.KANERA_PUBLIC_API_URL ?? "https://api.kanera.app");
+  // A key on the command line, or an explicit request for one, keeps the API-key flow: CI and
+  // unattended agents have nobody to approve a browser sign-in, and read-only keys are the
+  // server-enforced way to keep an agent from writing.
+  if (ctx.apiKeyFlag || boolFlag(ctx.flags, "with-api-key")) return await loginWithApiKey(ctx, profile);
+  return await loginWithOAuth(ctx, profile);
+}
+
+/** Which MCP endpoint to sign in to. Its metadata names the authorization server. */
+function mcpUrlForLogin(ctx: CommandContext): string {
+  const explicit = stringFlag(ctx.flags, "mcp-url") ?? process.env.KANERA_MCP_URL;
+  if (explicit) return explicit;
+  const apiUrl = ctx.urlFlag ?? process.env.KANERA_PUBLIC_API_URL;
+  if (apiUrl && validateApiUrl(apiUrl) !== DEFAULT_PUBLIC_API_URL) {
+    // A self-hosted MCP address is chosen by its operator and cannot be derived from the API origin.
+    throw usageError(
+      "browser sign-in to a self-hosted Kanera needs its MCP address",
+      "Pass --mcp-url https://your-kanera.example/mcp, or sign in with --with-api-key.",
+    );
+  }
+  return DEFAULT_MCP_URL;
+}
+
+async function loginWithOAuth(ctx: CommandContext, profile: string): Promise<CommandResult> {
+  const server = await discover(mcpUrlForLogin(ctx));
+  const clientId = await registerClient(server);
+  const device = await startDeviceAuthorization(server, clientId);
+  const openUrl = device.verificationUriComplete ?? device.verificationUri;
+  process.stderr.write(
+    `To sign in, open:\n  ${openUrl}\n\n`
+    + `and check that it shows this code:\n  ${device.userCode}\n\n`
+    + "Waiting for approval in the browser...\n",
+  );
+  openBrowserIfEnabled(ctx.flags, openUrl);
+  const oauth = await pollForTokens(server, clientId, device);
+
+  // Not saved yet, so the session uses the fresh token directly instead of reading the profile.
+  const session = await describeSession({ mcpUrl: oauth.mcpUrl, accessToken: async () => oauth.accessToken });
+  const previous = (await saveProfile(profile, { oauth, label: identityLabel(session), scope: session.scope ?? undefined }, true))?.oauth;
+  // Signing in again replaces the old sign-in; end it on the server so it does not linger in
+  // Settings -> AI agents with a refresh token nobody holds.
+  if (previous) await revoke(previous);
+
+  return {
+    summary: `Signed in as ${identityLabel(session)} (profile "${profile}", OAuth).`,
+    data: { profile, kind: "oauth", mcpUrl: oauth.mcpUrl, scope: session.scope ?? null, session },
+  };
+}
+
+async function loginWithApiKey(ctx: CommandContext, profile: string): Promise<CommandResult> {
+  const url = validateApiUrl(ctx.urlFlag ?? process.env.KANERA_PUBLIC_API_URL ?? DEFAULT_PUBLIC_API_URL);
   let apiKey = ctx.apiKeyFlag;
 
   if (!apiKey) {
@@ -122,42 +176,59 @@ async function login(ctx: CommandContext): Promise<CommandResult> {
   }
 
   // Validate before storing, so a mistyped key fails here rather than on the user's next command.
-  const session = await describeSession(apiKey, url);
-  saveProfile(profile, {
+  const session = await describeSession({ apiKey, publicApiUrl: url });
+  const previous = (await saveProfile(profile, {
     apiKey,
     url,
     label: identityLabel(session),
     scope: session.scope ?? undefined,
-  }, true);
+  }, true))?.oauth;
+  if (previous) await revoke(previous);
 
   return {
     summary: `Signed in as ${identityLabel(session)}`
       + ` (profile "${profile}", scope ${session.scope ?? "unknown"}).`,
-    data: { profile, url, scope: session.scope ?? null, session },
+    data: { profile, kind: "apiKey", url, scope: session.scope ?? null, session },
   };
 }
 
 async function status(ctx: CommandContext): Promise<CommandResult> {
   const credential = resolveCredential({ apiKeyFlag: ctx.apiKeyFlag, urlFlag: ctx.urlFlag, profileFlag: ctx.profileFlag });
-  const session = await describeSession(credential.apiKey, credential.url);
+  const session = await describeSession(sessionOptionsFor(credential));
+  const endpoint = credential.kind === "oauth" ? credential.oauth.mcpUrl : credential.url;
   return {
     summary: `${identityLabel(session)} · scope ${session.scope ?? "unknown"}`
-      + ` · profile "${credential.profile}" (${credential.source})`,
-    data: { profile: credential.profile, source: credential.source, url: credential.url, session },
+      + ` · profile "${credential.profile}" (${credential.kind === "oauth" ? "OAuth" : "API key"}, ${credential.source})`,
+    data: { profile: credential.profile, kind: credential.kind, source: credential.source, url: endpoint, session },
   };
 }
 
-function logout(ctx: CommandContext): CommandResult {
+async function logout(ctx: CommandContext): Promise<CommandResult> {
   const profile = ctx.profileFlag ?? process.env.KANERA_PROFILE ?? readConfig().defaultProfile;
-  const removed = removeProfile(profile);
+  let oauth: OAuthProfile | undefined;
+  let revoked = false;
+  const removed = await removeProfile(profile, async (stored) => {
+    oauth = stored.oauth;
+    if (oauth) revoked = await revoke(oauth);
+  });
+  const note = oauth && !revoked ? " Kanera could not be reached to end the sign-in; revoke it under Settings -> AI agents." : "";
   return {
-    summary: removed ? `Removed profile "${profile}".` : `No stored profile "${profile}".`,
-    data: { profile, removed },
+    summary: (removed ? `Removed profile "${profile}".` : `No stored profile "${profile}".`) + note,
+    data: { profile, removed, revoked },
   };
 }
 
 function token(ctx: CommandContext): CommandResult {
   const credential = resolveCredential({ apiKeyFlag: ctx.apiKeyFlag, urlFlag: ctx.urlFlag, profileFlag: ctx.profileFlag });
+  if (credential.kind === "oauth") {
+    // The OAuth access token is short-lived and only accepted by the MCP endpoint. Printing it where
+    // a caller expects an API key would produce a credential that fails on /api/v1 within minutes.
+    throw new CliError(
+      `profile "${credential.profile}" is signed in with OAuth, which has no API key to print`,
+      EXIT.usage,
+      "Create an API key for KANERA_API_KEY and run `kanera auth login --with-api-key`, or point MCP clients at `kanera mcp`.",
+    );
+  }
   // Printed bare so `KANERA_API_KEY=$(kanera auth token)` works; the summary would corrupt that.
   return { data: credential.apiKey, raw: credential.apiKey };
 }
@@ -167,7 +238,8 @@ function listProfiles(): CommandResult {
   const rows = Object.entries(config.profiles).map(([name, profile]) => ({
     profile: name,
     default: name === config.defaultProfile,
-    url: profile.url ?? "",
+    kind: profile.oauth ? "oauth" : "apiKey",
+    url: profile.oauth?.mcpUrl ?? profile.url ?? "",
     label: profile.label ?? "",
     scope: profile.scope ?? "",
   }));

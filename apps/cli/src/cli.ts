@@ -5,11 +5,12 @@ import { commandsCommand, helpCommand } from "./commands/catalog.js";
 import { doctorCommand } from "./commands/doctor.js";
 import { setupCommand } from "./commands/setup.js";
 import { resolveCredential } from "./config.js";
+import { sessionOptionsFor } from "./oauth.js";
 import type { CommandContext, CommandResult } from "./context.js";
 import { CliError, EXIT, type ExitCode } from "./errors.js";
 import { outputMode, render } from "./output.js";
 import { skillDocument } from "./skill.js";
-import { ApiFailure, coerceArguments, openToolSession, type ToolSession } from "./tools.js";
+import { ApiFailure, coerceArguments, openToolSession, proxyRemoteMcp, type ToolSession } from "./tools.js";
 
 declare const KANERA_CLI_VERSION: string;
 // Source-level tests and `tsx` development runs bypass the bundler. Published builds replace the
@@ -29,7 +30,8 @@ Usage:
   kanera <command> [arguments] [--flags]
 
 Getting started:
-  kanera auth login                    Store a personal API key (read-only keys are ideal for agents)
+  kanera auth login                    Sign in through your browser (OAuth device flow)
+  kanera auth login --with-api-key     Store an API key instead (read-only keys are ideal for agents)
   kanera whoami                        Show the credential and its scope
   kanera commands                      List every available command
   kanera skill                         Print the portable Agent Skill document
@@ -97,7 +99,7 @@ export async function run(argv: string[], io: Io): Promise<ExitCode> {
           urlFlag: ctx.urlFlag,
           profileFlag: ctx.profileFlag,
         });
-        opened = await openToolSession({ apiKey: credential.apiKey, publicApiUrl: credential.url });
+        opened = await openToolSession(sessionOptionsFor(credential));
       }
       return opened;
     },
@@ -221,6 +223,14 @@ async function serveMcp(ctx: CommandContext): Promise<ExitCode> {
     import("@kanera/mcp/server"),
     import("@modelcontextprotocol/sdk/server/stdio.js"),
   ]);
+  if (credential.kind === "oauth") {
+    // OAuth tokens are only valid at the MCP endpoint, so the in-process server (which calls
+    // /api/v1) cannot use them; relay the remote server instead.
+    const remote = sessionOptionsFor(credential);
+    if (!("mcpUrl" in remote)) throw new CliError("unexpected credential type", EXIT.failed);
+    await proxyRemoteMcp(remote, new StdioServerTransport());
+    return EXIT.ok;
+  }
   const server = createKaneraMcpServer({
     apiKey: credential.apiKey,
     publicApiUrl: credential.url,

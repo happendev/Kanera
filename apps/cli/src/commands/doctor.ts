@@ -2,6 +2,7 @@ import { existsSync, statSync } from "node:fs";
 import { configPath, resolveCredential } from "../config.js";
 import type { CommandContext, CommandResult } from "../context.js";
 import { CliError, EXIT } from "../errors.js";
+import { sessionOptionsFor } from "../oauth.js";
 import { ApiFailure, openToolSession } from "../tools.js";
 
 interface Check {
@@ -33,15 +34,20 @@ export async function doctorCommand(ctx: CommandContext): Promise<CommandResult>
     checks.push({
       name: "config",
       status: mode === 0o600 ? "ok" : "warn",
-      detail: `${path} (mode ${mode.toString(8).padStart(3, "0")}${mode === 0o600 ? "" : ", expected 600 — it holds API keys"})`,
+      detail: `${path} (mode ${mode.toString(8).padStart(3, "0")}${mode === 0o600 ? "" : ", expected 600 — it holds credentials"})`,
     });
   }
 
   let credential;
   try {
     credential = resolveCredential({ apiKeyFlag: ctx.apiKeyFlag, urlFlag: ctx.urlFlag, profileFlag: ctx.profileFlag });
-    checks.push({ name: "credential", status: "ok", detail: `profile "${credential.profile}" from ${credential.source}` });
-    checks.push({ name: "endpoint", status: "ok", detail: credential.url });
+    checks.push({
+      name: "credential",
+      status: "ok",
+      detail: `profile "${credential.profile}" from ${credential.source}`
+        + (credential.kind === "oauth" ? ` (OAuth sign-in, token valid until ${credential.oauth.accessTokenExpiresAt})` : " (API key)"),
+    });
+    checks.push({ name: "endpoint", status: "ok", detail: credential.kind === "oauth" ? credential.oauth.mcpUrl : credential.url });
   } catch (error) {
     checks.push({ name: "credential", status: "fail", detail: error instanceof Error ? error.message : String(error) });
     return finish(checks);
@@ -49,13 +55,13 @@ export async function doctorCommand(ctx: CommandContext): Promise<CommandResult>
 
   const startedAt = performance.now();
   try {
-    const session = await openToolSession({ apiKey: credential.apiKey, publicApiUrl: credential.url });
+    const session = await openToolSession(sessionOptionsFor(credential));
     try {
       const result = await session.call("session.get", {}) as {
         scope?: string | null; userId?: string; organisationName?: string; credentialKind?: string;
       };
       const elapsed = Math.round(performance.now() - startedAt);
-      checks.push({ name: "reachable", status: "ok", detail: `${credential.url} responded in ${elapsed}ms` });
+      checks.push({ name: "reachable", status: "ok", detail: `${credential.kind === "oauth" ? credential.oauth.mcpUrl : credential.url} responded in ${elapsed}ms` });
       checks.push({
         name: "identity",
         status: "ok",

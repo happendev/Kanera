@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { ErrorCode, McpError, ResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import { CliError, EXIT, exitCodeForApiError, usageError } from "./errors.js";
 
 export interface ToolCatalogEntry {
@@ -55,29 +56,51 @@ export interface ToolSession {
   close(): Promise<void>;
 }
 
+export type ToolSessionOptions =
+  | { apiKey: string; publicApiUrl: string }
+  | {
+      /** The remote MCP endpoint an OAuth sign-in is bound to. */
+      mcpUrl: string;
+      /** Called for every request so a long-lived session (`kanera mcp`) outlives one access token. */
+      accessToken: (options?: { force?: boolean }) => Promise<string>;
+    };
+
 /**
- * Open an in-process MCP session against the same tool layer the hosted MCP server exposes.
+ * Open an MCP session against the same tool layer the hosted MCP server exposes.
  *
  * The CLI is deliberately a second transport onto that layer rather than a third client of the
  * public REST API: card-reference resolution (`PROJ-12`), cursor encoding, response size caps, and
  * every tool description already live there, so a command surface built on it cannot drift from
- * what agents see over MCP. Nothing crosses a socket — the linked pair is two ends of an array.
+ * what agents see over MCP.
+ *
+ * An API key runs that layer in-process: nothing crosses a socket, the linked pair is two ends of
+ * an array. An OAuth sign-in cannot, because its tokens are bound to the MCP endpoint and are never
+ * accepted by `/api/v1`, so it talks to the remote MCP server exactly as Claude or Codex would.
  */
-export async function openToolSession(options: { apiKey: string; publicApiUrl: string }): Promise<ToolSession> {
-  // Imported lazily so main.ts can normalise MCP_* environment defaults before @kanera/mcp parses
-  // process.env at module load; a stray NODE_ENV=production in a user's shell would otherwise make
-  // the CLI demand server-only secrets it has no use for.
-  const { createKaneraMcpServer } = await import("@kanera/mcp/server");
-  const server = createKaneraMcpServer({
-    apiKey: options.apiKey,
-    publicApiUrl: options.publicApiUrl,
-    // The MCP server writes a JSON telemetry line per tool call. On a socket that is a server log;
-    // on a CLI it would corrupt stdout, which agents parse.
-    logToolCalls: false,
-  });
+export async function openToolSession(options: ToolSessionOptions): Promise<ToolSession> {
   const client = new Client({ name: "kanera-cli", version: "1.0.0" }, { capabilities: {} });
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  let closeServer: () => Promise<void> = async () => {};
+  if ("mcpUrl" in options) {
+    const { StreamableHTTPClientTransport } = await import("@modelcontextprotocol/sdk/client/streamableHttp.js");
+    await client.connect(new StreamableHTTPClientTransport(new URL(options.mcpUrl), {
+      fetch: (input, init) => authorizedFetch(input, init, options.accessToken),
+    }));
+  } else {
+    // Imported lazily so main.ts can normalise MCP_* environment defaults before @kanera/mcp parses
+    // process.env at module load; a stray NODE_ENV=production in a user's shell would otherwise make
+    // the CLI demand server-only secrets it has no use for.
+    const { createKaneraMcpServer } = await import("@kanera/mcp/server");
+    const server = createKaneraMcpServer({
+      apiKey: options.apiKey,
+      publicApiUrl: options.publicApiUrl,
+      // The MCP server writes a JSON telemetry line per tool call. On a socket that is a server log;
+      // on a CLI it would corrupt stdout, which agents parse.
+      logToolCalls: false,
+    });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    closeServer = () => server.close();
+  }
 
   const listed = await client.listTools();
   const tools: ToolCatalogEntry[] = listed.tools.map((entry) => ({
@@ -115,9 +138,71 @@ export async function openToolSession(options: { apiKey: string; publicApiUrl: s
     },
     async close() {
       await client.close();
-      await server.close();
+      await closeServer();
     },
   };
+}
+
+/**
+ * Serve a remote MCP endpoint over a local transport (stdio for `kanera mcp`). Requests are
+ * forwarded verbatim, so tools, resources and prompts are whatever the server exposes and the CLI
+ * never has to track that surface. Resolves when the host closes the local transport.
+ */
+export async function proxyRemoteMcp(
+  remote: Extract<ToolSessionOptions, { mcpUrl: string }>,
+  local: Transport,
+): Promise<void> {
+  // McpServer only dispatches to tools it registered itself; a verbatim relay needs the low-level
+  // Server's fallback handler, which is the "advanced use case" the deprecation notice carves out.
+  // eslint-disable-next-line @typescript-eslint/no-deprecated
+  const [{ StreamableHTTPClientTransport }, { Server }] = await Promise.all([
+    import("@modelcontextprotocol/sdk/client/streamableHttp.js"),
+    import("@modelcontextprotocol/sdk/server/index.js"),
+  ]);
+  const client = new Client({ name: "kanera-cli", version: "1.0.0" }, { capabilities: {} });
+  await client.connect(new StreamableHTTPClientTransport(new URL(remote.mcpUrl), {
+    fetch: (input, init) => authorizedFetch(input, init, remote.accessToken),
+  }));
+  const server = new Server(
+    { name: "kanera", version: client.getServerVersion()?.version ?? "1.0.0" },
+    { capabilities: client.getServerCapabilities() ?? {}, instructions: client.getInstructions() },
+  );
+  // initialize and ping are answered locally by Server; everything else goes upstream unchanged.
+  server.fallbackRequestHandler = async (request, extra) => await client.request(
+    { method: request.method, params: request.params },
+    ResultSchema,
+    { signal: extra.signal },
+  );
+  await server.connect(local);
+  await new Promise<void>((resolve) => {
+    server.onclose = resolve;
+  });
+  await client.close();
+}
+
+/**
+ * Attach a current access token to each MCP request. A 401 is retried once with a forced refresh:
+ * the stored expiry is only the CLI's estimate, and the server is the authority on whether a token
+ * still works. A second 401 means the sign-in itself is gone.
+ */
+async function authorizedFetch(
+  input: string | URL,
+  init: RequestInit | undefined,
+  accessToken: (options?: { force?: boolean }) => Promise<string>,
+): Promise<Response> {
+  const send = async (token: string) => {
+    const headers = new Headers(init?.headers);
+    headers.set("authorization", `Bearer ${token}`);
+    return await fetch(input, { ...init, headers });
+  };
+  let response = await send(await accessToken());
+  if (response.status === 401) {
+    response = await send(await accessToken({ force: true }));
+    if (response.status === 401) {
+      throw new CliError("Kanera rejected the stored sign-in", EXIT.unauthenticated, "Run `kanera auth login` to sign in again.");
+    }
+  }
+  return response;
 }
 
 function safeParse(text: string): unknown {

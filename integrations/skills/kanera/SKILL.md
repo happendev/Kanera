@@ -20,7 +20,7 @@ Kanera, choose the least disruptive suitable path:
 ```bash
 npx -y @kanera/cli commands          # inspect the surface without a global install
 npm install --global @kanera/cli     # persistent `kanera` command; requires Node 22+
-kanera auth login                    # user completes API-key setup once
+kanera auth login                    # user approves a browser sign-in once (or --with-api-key)
 kanera whoami --json                 # verify identity and read/write scope
 ```
 

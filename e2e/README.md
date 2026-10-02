@@ -5,7 +5,8 @@ Run `pnpm test:e2e` from the repository root, or pass spec names after `--` to r
 The runner:
 
 - starts isolated Postgres and Valkey containers (`docker-compose.e2e.yml`), then migrates and seeds them;
-- starts the API, public API, worker, and web app as separate processes on E2E-only ports (`e2e/ports.json`), so a local dev stack on 3000–3003 and 4200 can keep running;
+- starts the API, public API, worker, MCP server, and web app as separate processes on E2E-only ports (`e2e/ports.json`), so a local dev stack on 3000–3003 and 4200 can keep running;
+- builds the `kanera` CLI bundle that CLI specs execute;
 - runs Chromium with the timezone pinned to UTC and the locale to en-US.
 
 It never touches the development database. You need Docker and a Playwright Chromium install (`pnpm exec playwright install chromium`).
@@ -60,7 +61,7 @@ Each run writes `e2e/artifacts/<UTC timestamp>-<pid>/`, and the newest 10 runs a
 - `worktree.patch` and `untracked.tar.gz`, when the tree was dirty;
 - `results.json` and an HTML report (`report/`);
 - per-test traces and screenshots (`test-results/`);
-- logs for every service (`api`, `public-api`, `worker`, `web`) plus the migrate, seed and Docker logs.
+- logs for every service (`api`, `public-api`, `worker`, `mcp`, `web`) plus the migrate, seed, CLI build and Docker logs.
 
 Open a trace with `pnpm exec playwright show-trace <path>/trace.zip`.
 
