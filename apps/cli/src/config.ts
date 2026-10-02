@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { CliError, EXIT } from "./errors.js";
 
 export const DEFAULT_PUBLIC_API_URL = "https://api.kanera.app";
-export const DEFAULT_WEB_URL = "https://app.kanera.app";
+export const DEFAULT_WEB_URL = "https://board.kanera.app";
 
 export interface Profile {
   apiKey: string;

@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import { DEFAULT_WEB_URL, readConfig, removeProfile, resolveCredential, saveProfile, validateApiUrl } from "../config.js";
+import { DEFAULT_PUBLIC_API_URL, DEFAULT_WEB_URL, readConfig, removeProfile, resolveCredential, saveProfile, validateApiUrl } from "../config.js";
 import { CliError, EXIT, usageError } from "../errors.js";
 import type { CommandContext, CommandResult } from "../context.js";
 import { openToolSession } from "../tools.js";
@@ -25,19 +25,19 @@ function identityLabel(session: SessionSummary): string {
     : session.userId ?? "unknown user";
 }
 
-/** Best-effort guess at the web app that matches an API origin, for the "create a key" link. */
-export function webUrlForApi(apiUrl: string): string {
+/**
+ * The web app that serves the "create a key" page for an API origin, or null when it cannot be known.
+ * Only hosted Kanera has a fixed pairing (api.kanera.app -> board.kanera.app). A self-hosted public API
+ * lives on whatever domain the operator chose, and the session endpoint that reports `webUrl` needs the
+ * key we are about to ask for, so guessing would send the user to the wrong server to mint a key.
+ */
+export function webUrlForApi(apiUrl: string): string | null {
   try {
-    const url = new URL(apiUrl);
-    if (url.hostname.startsWith("api.")) {
-      url.hostname = `app.${url.hostname.slice(4)}`;
-      url.pathname = "/";
-      return url.origin;
-    }
+    if (new URL(apiUrl).origin === DEFAULT_PUBLIC_API_URL) return DEFAULT_WEB_URL;
   } catch {
-    // Fall through to the hosted default.
+    // An unparseable origin is rejected by validateApiUrl before this is reached.
   }
-  return DEFAULT_WEB_URL;
+  return null;
 }
 
 function openBrowser(url: string): void {
@@ -106,12 +106,15 @@ async function login(ctx: CommandContext): Promise<CommandResult> {
     if (!process.stdin.isTTY) {
       throw usageError("no API key supplied and stdin is not a terminal", "Pass --api-key, or set KANERA_API_KEY.");
     }
-    const keysUrl = `${webUrlForApi(url)}/settings/api-keys`;
+    const webUrl = webUrlForApi(url);
+    const keysUrl = webUrl ? `${webUrl}/settings/api-keys` : null;
     process.stderr.write(
-      `Create a personal API key at:\n  ${keysUrl}\n\n`
+      (keysUrl
+        ? `Create a personal API key at:\n  ${keysUrl}\n\n`
+        : "Create a personal API key in your Kanera web app under Settings -> API Keys.\n\n")
       + "Choose Read-only if this credential is for an AI agent that should not change anything.\n\n",
     );
-    openBrowserIfEnabled(ctx.flags, keysUrl);
+    if (keysUrl) openBrowserIfEnabled(ctx.flags, keysUrl);
     apiKey = await promptSecret("Paste your Kanera API key: ");
   }
   if (!apiKey.startsWith("kanera_")) {
