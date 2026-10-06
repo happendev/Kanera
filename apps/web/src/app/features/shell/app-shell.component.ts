@@ -171,12 +171,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly groups = signal<HomeGroup[]>([]);
   // Old offline shells have no kind; treating that as standard keeps their existing presentation.
   readonly standardGroups = computed(() => this.groups().filter((group) => (group.workspace as { kind?: string }).kind !== "board"));
-  /**
-   * The per-workspace "Boards" collapse toggle earns its row only when there is more than one
-   * workspace to collapse between. With a single workspace it was a repeated label pushing the
-   * boards themselves further down, so the group renders expanded with no subhead.
-   */
-  readonly showBoardsSubhead = computed(() => this.standardGroups().length > 1);
   readonly standaloneGroups = computed(() => this.groups().filter((group) => (group.workspace as { kind?: string }).kind === "board"));
   readonly guestGroups = signal<GuestHomeGroup[]>([]);
   readonly standaloneBoardGroups = signal<StandaloneBoardGroup[]>([]);
@@ -280,9 +274,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly installGuideUrl = `${KANERA_DOCS_URL}/install-kanera`;
   // Tracks which workspaces are collapsed in the nav. Default empty (all expanded); persisted to localStorage.
   readonly collapsed = signal<Record<string, boolean>>(this.readCollapsed());
-  // Tracks which workspaces have their boards section collapsed.
-  // Default is empty (all expanded); value is persisted to localStorage.
-  readonly boardsCollapsed = signal<Record<string, boolean>>(this.readBoardsCollapsed());
   readonly boardGroupsCollapsed = signal<Record<string, boolean>>(this.readBoardGroupsCollapsed());
   readonly workspaceCount = computed(() => this.standardGroups().length);
   readonly ownBoardCount = computed(() =>
@@ -400,15 +391,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
     const isMobileAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(userAgent) || isAppleTouch;
     if (isMobileAgent) return null;
     return /Macintosh|Mac OS X/i.test(userAgent) ? "⌘K" : "Ctrl K";
-  }
-
-  private readBoardsCollapsed(): Record<string, boolean> {
-    try {
-      const raw = localStorage.getItem(this.orgStorageKey(STORAGE_KEYS.BOARDS_COLLAPSED));
-      return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
-    } catch {
-      return {};
-    }
   }
 
   private readBoardGroupsCollapsed(): Record<string, boolean> {
@@ -1233,14 +1215,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.collapsed.update((c) => {
       const next = { ...c, [workspaceId]: !c[workspaceId] };
       localStorage.setItem(this.orgStorageKey(STORAGE_KEYS.WORKSPACES_COLLAPSED), JSON.stringify(next));
-      return next;
-    });
-  }
-
-  toggleBoards(workspaceId: string) {
-    this.boardsCollapsed.update((c) => {
-      const next = { ...c, [workspaceId]: !c[workspaceId] };
-      localStorage.setItem(this.orgStorageKey(STORAGE_KEYS.BOARDS_COLLAPSED), JSON.stringify(next));
       return next;
     });
   }

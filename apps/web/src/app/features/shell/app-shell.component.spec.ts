@@ -984,7 +984,7 @@ describe("AppShellComponent board search", () => {
     });
 
     const host = fixture.nativeElement as HTMLElement;
-    const controls = [".ws-toggle", ".ws-subhead-toggle", ".board-group-toggle"]
+    const controls = [".ws-toggle", ".board-group-toggle"]
       .map((selector) => host.querySelector<HTMLButtonElement>(selector)!);
     expect(controls.every((control) => getComputedStyle(control).height === "30px")).toBe(true);
   });
@@ -1288,7 +1288,6 @@ describe("AppShellComponent board search", () => {
   it("shows matching boards while workspace and board sections are collapsed", async () => {
     await render();
     component.collapsed.set({ "workspace-1": true });
-    component.boardsCollapsed.set({ "workspace-1": true });
     fixture.detectChanges();
 
     expect(text()).not.toContain("Roadmap");
@@ -1482,7 +1481,7 @@ describe("AppShellComponent board search", () => {
 
     const workspaceNotesLink =
       (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>('a[href="/w/workspace-1/notes"]');
-    expect(workspaceNotesLink?.querySelector(".nav-label")?.textContent?.trim()).toBe("Workspace Notes");
+    expect(workspaceNotesLink?.querySelector(".nav-label")?.textContent?.trim()).toBe("Notes");
 
     for (const href of ["/my-cards", "/team-cards", "/portfolio", "/w/workspace-1/notes"]) {
       const link = (fixture.nativeElement as HTMLElement).querySelector<HTMLAnchorElement>(`a[href="${href}"]`);

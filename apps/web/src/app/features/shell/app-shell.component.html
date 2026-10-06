@@ -157,18 +157,13 @@
         <a class="board-link" [routerLink]="['/w', group.workspace.id, 'notes']" routerLinkActive="active"
           (contextmenu)="openNavContextMenu($event, { label: 'Workspace Notes', url: '/w/' + group.workspace.id + '/notes', canMarkAllRead: false, clearBoardSearch: false })">
           <i class="ti ti-notebook"></i>
-          <span class="nav-label">Workspace Notes</span>
+          <span class="nav-label">Notes</span>
         </a>
       </div>
       }
       <div class="ws-boards">
-        @if (!sidebarCollapsed() && group.boards.length > 0 && showBoardsSubhead()) {
-        <button class="ws-subhead-toggle" (click)="toggleBoards(group.workspace.id)" [attr.aria-expanded]="!!boardSearchTerm() || !boardsCollapsed()[group.workspace.id]">
-          <i [class]="!boardSearchTerm() && boardsCollapsed()[group.workspace.id] ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
-          <span>Boards</span>
-        </button>
-        }
-        @if (sidebarCollapsed() || boardSearchTerm() || !showBoardsSubhead() || !boardsCollapsed()[group.workspace.id]) {
+        <!-- A workspace holds only Notes and boards, so boards sit directly under Notes with no
+             "Boards" subhead; the workspace row itself is the one collapse control. -->
         @if (sidebarCollapsed()) {
         <div class="nav-board-drop-list" cdkDropList [cdkDropListSortPredicate]="canSortNavBoard" [cdkDropListDisabled]="!canReorderBoards(group.workspace)" (cdkDropListDropped)="dropNavBoard($event, collapsedBoardLinks(group), group.workspace)">
           @for (board of collapsedBoardLinks(group); track board.id) {
@@ -232,7 +227,6 @@
           </a>
           }
         </div>
-        }
         }
         @if (group.boards.length === 0 && !sidebarCollapsed()) {
         <span class="board-empty">No boards yet</span>
