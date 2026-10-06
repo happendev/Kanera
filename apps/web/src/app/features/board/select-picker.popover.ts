@@ -138,7 +138,7 @@ import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
       text-align: left;
       width: 100%;
       transition: background-color 0.12s;
-      &:hover { background: var(--surface-2); }
+      &:hover { background: var(--surface-hover); }
       &.is-selected { background: var(--surface-2); }
     }
 
@@ -170,7 +170,7 @@ import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
       padding: 5px 8px;
       font-size: 12px;
       cursor: pointer;
-      &:hover { background: var(--surface-2); color: var(--text); }
+      &:hover { background: var(--surface-hover); color: var(--text); }
     }
   `,
     anchoredSheetStyles("lp-panel"),

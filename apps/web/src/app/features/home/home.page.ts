@@ -14,6 +14,7 @@ import { MyPrioritiesService } from "../../core/priorities/my-priorities.service
 import { RecentBoardsService } from "../../core/recent-boards/recent-boards.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { firstRunDismissedKey } from "../../core/browser/browser-contracts";
+import { TOUCH_ONLY_QUERY } from "../../core/browser/input-modality";
 import { ActivityStripComponent, type ActivityStripSeries } from "../../shared/activity-strip.component";
 import { AgentConnectCardComponent } from "../../shared/agent-connect-card/agent-connect-card.component";
 import { mediaQuerySignal } from "../../shared/media-query.signal";
@@ -343,6 +344,7 @@ export class HomePage implements OnInit {
 
   /** Narrow viewports halve the trend window; see TREND_DAYS_NARROW. */
   private readonly narrow = mediaQuerySignal(NARROW_QUERY);
+  readonly touchOnly = mediaQuerySignal(TOUCH_ONLY_QUERY);
   readonly visibleTrendDays = computed(() => (this.narrow() ? TREND_DAYS_NARROW : TREND_DAYS));
 
   /** Matches My Cards history: only completed cards count as completed work. */

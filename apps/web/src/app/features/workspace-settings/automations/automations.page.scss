@@ -11,8 +11,11 @@
 
 // ─── Toolbar ──────────────────────────────────────────────────────────────────
 
+// Wraps rather than squeezing: when the tally and the action pair do not fit one row (a phone
+// beside the rail), the actions drop below instead of crushing the count onto two lines.
 .automation-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   min-width: 0;
@@ -30,6 +33,8 @@
   strong {
     color: var(--text);
     font-weight: 600;
+    // "0 automations" is one label; it must never break between the number and the noun.
+    white-space: nowrap;
   }
 }
 
@@ -999,5 +1004,20 @@
   // push New automation off a 360px row.
   .automation-examples-label {
     display: none;
+  }
+}
+
+// On a phone the tally and the action pair never share a row, so the pair owns the second row and
+// New automation takes the slack: one deliberate control bar rather than two buttons stranded at
+// the right edge.
+@media (max-width: 480px) {
+  .automation-toolbar-actions {
+    flex: 1 1 100%;
+    margin-left: 0;
+  }
+
+  .automation-new-button {
+    flex: 1 1 auto;
+    justify-content: center;
   }
 }

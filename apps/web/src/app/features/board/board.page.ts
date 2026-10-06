@@ -182,11 +182,11 @@ export class BoardPage implements OnDestroy {
   readonly viewOptions = computed<SegmentedOption<ViewMode>[]>(() => {
     const disabled = this.state.board() === null;
     return [
-      { id: "board", icon: "layout-kanban", label: "Board view", disabled },
-      { id: "table", icon: "table", label: "Table view", disabled },
-      { id: "calendar", icon: "calendar-week", label: "Calendar view", disabled },
+      { id: "board", icon: "layout-kanban", label: "Board view", shortLabel: "Board", disabled },
+      { id: "table", icon: "table", label: "Table view", shortLabel: "Table", disabled },
+      { id: "calendar", icon: "calendar-week", label: "Calendar view", shortLabel: "Calendar", disabled },
       { id: "history", icon: "history", label: "Work done", disabled },
-      { id: "notes", icon: "notebook", label: "Board Notes", disabled },
+      { id: "notes", icon: "notebook", label: "Board Notes", shortLabel: "Notes", disabled },
     ];
   });
 

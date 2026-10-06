@@ -626,6 +626,12 @@ input {
   border-radius: var(--radius-lg);
 }
 
+// Set by kDragScroll once a press commits to a pan, so the drag does not select text across rows.
+.portfolio-table-wrap.is-drag-scrolling {
+  cursor: grabbing;
+  user-select: none;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

@@ -1,4 +1,10 @@
-<section class="calendar-view" [class.week-mode]="mode() === 'week'" [class.is-stacked]="navigation() === 'stacked'">
+<section
+  class="calendar-view"
+  [class.week-mode]="mode() === 'week'"
+  [class.is-stacked]="navigation() === 'stacked'"
+  [class.is-compact]="layout() === 'compact'"
+  [class.is-phone]="layout() === 'phone'"
+>
   @if (navigation() === "paged") {
   <div class="calendar-toolbar" (click)="$event.stopPropagation()">
     <div class="calendar-toolbar-left">
@@ -32,7 +38,7 @@
   <div class="calendar-scroll" cdkDropListGroup cdkScrollable>
     @if (loading()) {
     <section class="calendar-month">
-      <div class="calendar-month-scroll" kDragScroll>
+      <div class="calendar-month-body">
         <div class="calendar-weekdays" aria-hidden="true">
           @for (label of weekdayLabels; track label) {
           <span>{{ label }}</span>
@@ -42,14 +48,84 @@
           @for (_ of skeletonDays; track $index) {
           <div class="calendar-day skeleton-day">
             <div class="skeleton skeleton-day-number"></div>
+            @if (layout() !== "phone") {
             @for (__ of skeletonCards; track $index) {
             <div class="skeleton skeleton-cal-card"></div>
+            }
             }
           </div>
           }
         </div>
       </div>
     </section>
+    } @else if (layout() === "phone") {
+    <!-- Phone: seven columns of tiles would be ~50px each, so tiles leave the grid entirely and are
+         listed full width. Rescheduling here goes through card detail; a long-press drag would fight
+         the page's own vertical scroll for the same gesture. -->
+    @if (navigation() === "stacked") {
+    <!-- An agenda: each month that holds a card, listing only its days with something due. -->
+    @for (month of months(); track month.key) {
+    <section class="calendar-month">
+      <header class="calendar-month-header">
+        <h3>{{ month.label }}</h3>
+        <small>{{ month.cardCount }} {{ month.cardCount === 1 ? "card" : "cards" }}</small>
+      </header>
+      <div class="cal-agenda">
+        @for (day of agendaDays(month); track day.key) {
+        <ng-container [ngTemplateOutlet]="agendaDay" [ngTemplateOutletContext]="{ $implicit: day }" />
+        }
+      </div>
+    </section>
+    }
+    } @else if (mode() === "month") {
+    <!-- A month of day numbers with due dots, and the chosen day's cards listed underneath: the
+         standard phone calendar shape, so the whole month is visible without scrolling sideways. -->
+    <section class="cal-mini-month" aria-label="Choose a day">
+      <div class="cal-mini-weekdays" aria-hidden="true">
+        @for (label of weekdayLabels; track label) {
+        <span>{{ label }}</span>
+        }
+      </div>
+      <div class="cal-mini-grid">
+        @for (day of days(); track day.key) {
+        <button
+          type="button"
+          class="cal-mini-day"
+          [class.is-muted]="!day.inMonth"
+          [class.is-today]="day.isToday"
+          [class.is-selected]="phoneSelectedDay()?.key === day.key"
+          [attr.aria-pressed]="phoneSelectedDay()?.key === day.key"
+          [attr.aria-label]="dayAccessibleLabel(day)"
+          (click)="pickDay(day.key)"
+        >
+          <span class="cal-mini-number">{{ day.dayNumber }}</span>
+          <span class="cal-mini-dots" aria-hidden="true">
+            @if (day.cards.length > 3) {
+            <span class="cal-mini-count">{{ day.cards.length }}</span>
+            } @else {
+            @for (dot of dayDots(day); track $index) {
+            <span [class]="'cal-mini-dot is-' + dot"></span>
+            }
+            }
+          </span>
+        </button>
+        }
+      </div>
+    </section>
+    @if (phoneSelectedDay(); as day) {
+    <div class="cal-agenda" aria-live="polite">
+      <ng-container [ngTemplateOutlet]="agendaDay" [ngTemplateOutletContext]="{ $implicit: day }" />
+    </div>
+    }
+    } @else {
+    <!-- A week is seven days stacked top to bottom; an empty day shrinks to its heading so the
+         days that hold work carry the screen. -->
+    <div class="cal-agenda">
+      @for (day of days(); track day.key) {
+      <ng-container [ngTemplateOutlet]="agendaDay" [ngTemplateOutletContext]="{ $implicit: day }" />
+      }
+    </div>
+    }
     } @else {
     @for (month of months(); track month.key) {
     <section class="calendar-month">
@@ -61,11 +137,10 @@
       </header>
       }
 
-      <!-- The seven columns are fixed, never collapsed: dropping to fewer columns would put dates
-           under the wrong weekday, so the grid keeps a minimum width and scrolls sideways instead.
-           kDragScroll gives that sideways scroll the same click-and-drag gesture as the kanban lane,
-           and keeps every month panel on the same weekday columns. -->
-      <div class="calendar-month-scroll" kDragScroll cdkScrollable>
+      <!-- The seven columns are fixed, never collapsed — dropping to fewer would put dates under the
+           wrong weekday — and they always share the width: the tiles compact to fit instead of the
+           grid overflowing sideways (see the compact layout). -->
+      <div class="calendar-month-body">
       <div class="calendar-weekdays" aria-hidden="true">
         @for (label of weekdayLabels; track label) {
         <span>{{ label }}</span>
@@ -85,12 +160,7 @@
           [class.is-today]="day.isToday"
         >
           <header>
-            <span>{{ dayLabel(day.key) }}</span>
-            @if (day.isToday) {
-            <!-- A month is a wall of near-identical cells; the badge anchors the user to "now"
-                 without making them find the date. -->
-            <span class="calendar-today-badge">Today</span>
-            }
+            <ng-container [ngTemplateOutlet]="dayHeading" [ngTemplateOutletContext]="{ $implicit: day }" />
             <small>{{ day.cards.length }}</small>
           </header>
           <!-- The card column, not the cell, is the drop list: CDK parks its placeholder inside the
@@ -108,10 +178,9 @@
           >
             <!-- The tile lives inside the day's drop list rather than in a shared ng-template: a
                  templated cdkDrag resolves its drop list from where the template is declared, so it
-                 would drag free of any container and never be droppable on another day. -->
-            @for (card of day.cards; track card.id) {
-            <!-- cdkDrag lifts the tile onto another day to reschedule it. Disabled tiles still drag-scroll
-                 the month, since kDragScroll only steps aside for a tile that can actually be picked up. -->
+                 would drag free of any container and never be droppable on another day. Only its
+                 inner content is shared. -->
+            @for (card of cellCards(day); track card.id) {
             <button
               type="button"
               class="cal-card"
@@ -128,102 +197,17 @@
               (auxclick)="openCardInNewTab(card, $event)"
               (contextmenu)="onCardContextMenu(card, $event)"
             >
-              @if (labelsForCard(card.id).length) {
-              <!-- Named chips, not colour bars: a colour alone means nothing to anyone who has not learned
-                   the board's palette, and the tile has room for the words. -->
-              <k-card-labels class="cal-label-row" [labels]="labelsForCard(card.id)" [limit]="3" [showOverflow]="true" />
-              }
-
-              <!-- The approved global-work tile: title first, then its context line, with the assignees
-                   pinned to the right of the whole text column. -->
-              <span class="cal-card-body">
-                <span class="cal-card-text">
-                  <span class="cal-card-title">
-                    @if (card.completedAt) {
-                      <!-- Same green tick a completed k-card carries, so "done" reads the same everywhere. -->
-                      <i class="ti ti-circle-check cal-complete-icon" kTooltip="Completed"></i>
-                    }
-                    {{ card.title }}
-                  </span>
-                  <!-- The key shares the context row with time and board instead of taking a row of its own:
-                       day cells are the tightest surface in the app and the key is the least-read item in them. -->
-                  <span class="cal-context-row">
-                    @if (showCardKeys()) { <span class="cal-card-key">{{ card.key }}</span> }
-                    @if (slotTime(card); as time) {
-                    <span class="cal-time" [class.is-overdue]="isOverdue(card)">{{ time }}</span>
-                    }
-                    @if (boardSummaryFor(card); as board) {
-                    <span class="cal-board" [kTooltip]="board.name">
-                      <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
-                      <span class="cal-board-name">{{ board.name }}</span>
-                    </span>
-                    }
-                  </span>
-
-                  @if (hasMetaContent(card)) {
-                  <span class="cal-meta-row">
-                    @if (summary(card).hasDescription) {
-                    <span class="cal-indicator" kTooltip="Has description"><i class="ti ti-align-left"></i></span>
-                    }
-                    @if (summary(card).checklistTotalCount) {
-                    <span
-                      class="cal-indicator cal-checklist"
-                      [class.is-complete]="summary(card).checklistDoneCount === summary(card).checklistTotalCount"
-                      [kTooltip]="summary(card).checklistDoneCount + ' of ' + summary(card).checklistTotalCount + ' complete'"
-                    >
-                      <i class="ti ti-checkbox"></i>
-                      <span class="cal-indicator-count">{{ summary(card).checklistDoneCount }}/{{ summary(card).checklistTotalCount }}</span>
-                    </span>
-                    }
-                    @if (summary(card).attachmentCount) {
-                    <span class="cal-indicator" [kTooltip]="summary(card).attachmentCount + ' attachment' + (summary(card).attachmentCount === 1 ? '' : 's')">
-                      <i class="ti ti-paperclip"></i>
-                      <span class="cal-indicator-count">{{ summary(card).attachmentCount }}</span>
-                    </span>
-                    }
-                  </span>
-                  }
-                </span>
-
-                @if (assigneesForCard(card.id).length) {
-                <span class="cal-assignees">
-                  @for (member of visibleAssignees(card.id); track member.userId) {
-                  <span class="cal-avatar">
-                    <k-avatar [url]="member.avatarUrl" [name]="member.displayName" [size]="20" [userId]="member.userId" [workspaceId]="workspaceIdFor(card)" [showPresence]="true" [lastOnlineAt]="member.lastOnlineAt" />
-                  </span>
-                  }
-                  @if (assigneeOverflow(card.id); as more) {
-                  <span class="cal-avatar cal-avatar-more" [kTooltip]="'+' + more + ' more'">+{{ more }}</span>
-                  }
-                </span>
-                }
-              </span>
-
-              @if (summary(card).checklistTotalCount) {
-              <span class="cal-progress" [kTooltip]="summary(card).checklistDoneCount + ' of ' + summary(card).checklistTotalCount + ' checklist items complete'">
-                <span class="cal-progress-fill" [style.width.%]="(summary(card).checklistDoneCount ?? 0) / (summary(card).checklistTotalCount ?? 1) * 100"></span>
-              </span>
-              }
+              <ng-container [ngTemplateOutlet]="tileContent" [ngTemplateOutletContext]="{ $implicit: card }" />
             </button>
-            @if (activeActionsCardId() === card.id) {
-            <k-card-actions-menu
-              [cardId]="card.id"
-              [cardKey]="card.key"
-              [organisationKey]="card.organisationKey"
-              [boardId]="card.boardId"
-              [workspaceId]="workspaceIdFor(card)"
-              [sourceListId]="card.listId"
-              [sourceLists]="lists()"
-              [title]="card.title"
-              [dueDateLocalDate]="card.dueDateLocalDate"
-              [dueDateSlot]="card.dueDateSlot"
-              [dueDateTimezone]="card.dueDateTimezone"
-              [completedAt]="card.completedAt"
-              [archivedAt]="card.archivedAt"
-              [anchorPoint]="actionsMenuPoint()"
-              (close)="closeActionsMenu()"
-            />
+            <ng-container [ngTemplateOutlet]="actionsMenu" [ngTemplateOutletContext]="{ $implicit: card }" />
             }
+            @if (hiddenCardCount(day)) {
+            <!-- A compact month cell keeps its row short; the rest of the day opens in place. -->
+            <button type="button" class="cal-more" (click)="toggleDayExpanded(day.key)">
+              +{{ hiddenCardCount(day) }} more
+            </button>
+            } @else if (isDayExpanded(day.key) && layout() === "compact") {
+            <button type="button" class="cal-more" (click)="toggleDayExpanded(day.key)">Show less</button>
             }
           </div>
         </section>
@@ -235,10 +219,7 @@
           [class.is-today]="day.isToday"
         >
           <header>
-            <span>{{ dayLabel(day.key) }}</span>
-            @if (day.isToday) {
-            <span class="calendar-today-badge">Today</span>
-            }
+            <ng-container [ngTemplateOutlet]="dayHeading" [ngTemplateOutletContext]="{ $implicit: day }" />
           </header>
           <div
             class="day-cards"
@@ -260,3 +241,155 @@
     }
   </div>
 </section>
+
+<!-- Grid cell date. A compact column only has room for the number, so "today" becomes a filled
+     number rather than a separate badge. -->
+<ng-template #dayHeading let-day>
+  @if (layout() === "compact") {
+  <span class="calendar-day-number" [class.is-today]="day.isToday">{{ compactDayLabel(day) }}</span>
+  } @else {
+  <span>{{ dayLabel(day.key) }}</span>
+  @if (day.isToday) {
+  <!-- A month is a wall of near-identical cells; the badge anchors the user to "now" without
+       making them find the date. -->
+  <span class="calendar-today-badge">Today</span>
+  }
+  }
+</ng-template>
+
+<!-- A day in the phone lists: dated heading, then its tiles full width, or a muted "Nothing due". -->
+<ng-template #agendaDay let-day>
+  <section class="cal-agenda-day" [class.is-today]="day.isToday" [class.is-empty]="!day.cards.length" [class.is-muted]="!day.inMonth">
+    <header>
+      <span class="cal-agenda-date">{{ agendaDayLabel(day.key) }}</span>
+      @if (day.isToday) {
+      <span class="calendar-today-badge">Today</span>
+      }
+      @if (day.cards.length) {
+      <small>{{ day.cards.length }} {{ day.cards.length === 1 ? "card" : "cards" }}</small>
+      } @else {
+      <small>Nothing due</small>
+      }
+    </header>
+    @if (day.cards.length) {
+    <div class="cal-agenda-cards">
+      @for (card of day.cards; track card.id) {
+      <button
+        type="button"
+        class="cal-card"
+        [class.is-selected]="isSelected(card.id)"
+        [class.is-completed]="card.completedAt"
+        [class.is-overdue]="isOverdue(card)"
+        (click)="openCard(card.id)"
+        (auxclick)="openCardInNewTab(card, $event)"
+        (contextmenu)="onCardContextMenu(card, $event)"
+      >
+        <ng-container [ngTemplateOutlet]="tileContent" [ngTemplateOutletContext]="{ $implicit: card }" />
+      </button>
+      <ng-container [ngTemplateOutlet]="actionsMenu" [ngTemplateOutletContext]="{ $implicit: card }" />
+      }
+    </div>
+    }
+  </section>
+</ng-template>
+
+<ng-template #tileContent let-card>
+  @if (labelsForCard(card.id).length) {
+  <!-- Named chips, not colour bars: a colour alone means nothing to anyone who has not learned
+       the board's palette, and the tile has room for the words. A compact column keeps one and folds the rest into "+N". -->
+  <k-card-labels class="cal-label-row" [labels]="labelsForCard(card.id)" [limit]="layout() === 'compact' ? 1 : 3" [showOverflow]="true" />
+  }
+
+  <!-- The approved global-work tile: title first, then its context line, with the assignees
+       pinned to the right of the whole text column. -->
+  <span class="cal-card-body">
+    <span class="cal-card-text">
+      <span class="cal-card-title">
+        @if (card.completedAt) {
+          <!-- Same green tick a completed k-card carries, so "done" reads the same everywhere. -->
+          <i class="ti ti-circle-check cal-complete-icon" kTooltip="Completed"></i>
+        }
+        {{ card.title }}
+      </span>
+      <!-- The key shares the context row with time and board instead of taking a row of its own:
+           day cells are the tightest surface in the app and the key is the least-read item in them. -->
+      <span class="cal-context-row">
+        @if (showCardKeys()) { <span class="cal-card-key">{{ card.key }}</span> }
+        @if (slotTime(card); as time) {
+        <span class="cal-time" [class.is-overdue]="isOverdue(card)">{{ time }}</span>
+        }
+        @if (boardSummaryFor(card); as board) {
+        <span class="cal-board" [kTooltip]="board.name">
+          <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
+          <span class="cal-board-name">{{ board.name }}</span>
+        </span>
+        }
+      </span>
+
+      @if (hasMetaContent(card)) {
+      <span class="cal-meta-row">
+        @if (summary(card).hasDescription) {
+        <span class="cal-indicator" kTooltip="Has description"><i class="ti ti-align-left"></i></span>
+        }
+        @if (summary(card).checklistTotalCount) {
+        <span
+          class="cal-indicator cal-checklist"
+          [class.is-complete]="summary(card).checklistDoneCount === summary(card).checklistTotalCount"
+          [kTooltip]="summary(card).checklistDoneCount + ' of ' + summary(card).checklistTotalCount + ' complete'"
+        >
+          <i class="ti ti-checkbox"></i>
+          <span class="cal-indicator-count">{{ summary(card).checklistDoneCount }}/{{ summary(card).checklistTotalCount }}</span>
+        </span>
+        }
+        @if (summary(card).attachmentCount) {
+        <span class="cal-indicator" [kTooltip]="summary(card).attachmentCount + ' attachment' + (summary(card).attachmentCount === 1 ? '' : 's')">
+          <i class="ti ti-paperclip"></i>
+          <span class="cal-indicator-count">{{ summary(card).attachmentCount }}</span>
+        </span>
+        }
+      </span>
+      }
+    </span>
+
+    @if (assigneesForCard(card.id).length) {
+    <span class="cal-assignees">
+      @for (member of visibleAssignees(card.id); track member.userId) {
+      <span class="cal-avatar">
+        <k-avatar [url]="member.avatarUrl" [name]="member.displayName" [size]="20" [userId]="member.userId" [workspaceId]="workspaceIdFor(card)" [showPresence]="true" [lastOnlineAt]="member.lastOnlineAt" />
+      </span>
+      }
+      @if (assigneeOverflow(card.id); as more) {
+      <span class="cal-avatar cal-avatar-more" [kTooltip]="'+' + more + ' more'">+{{ more }}</span>
+      }
+    </span>
+    }
+  </span>
+
+  @if (summary(card).checklistTotalCount) {
+  <span class="cal-progress" [kTooltip]="summary(card).checklistDoneCount + ' of ' + summary(card).checklistTotalCount + ' checklist items complete'">
+    <span class="cal-progress-fill" [style.width.%]="(summary(card).checklistDoneCount ?? 0) / (summary(card).checklistTotalCount ?? 1) * 100"></span>
+  </span>
+  }
+</ng-template>
+
+<ng-template #actionsMenu let-card>
+  @if (activeActionsCardId() === card.id) {
+  <k-card-actions-menu
+    [cardId]="card.id"
+    [cardKey]="card.key"
+    [organisationKey]="card.organisationKey"
+    [boardId]="card.boardId"
+    [workspaceId]="workspaceIdFor(card)"
+    [sourceListId]="card.listId"
+    [sourceLists]="lists()"
+    [title]="card.title"
+    [dueDateLocalDate]="card.dueDateLocalDate"
+    [dueDateSlot]="card.dueDateSlot"
+    [dueDateTimezone]="card.dueDateTimezone"
+    [completedAt]="card.completedAt"
+    [archivedAt]="card.archivedAt"
+    [anchorPoint]="actionsMenuPoint()"
+    (close)="closeActionsMenu()"
+  />
+  }
+</ng-template>

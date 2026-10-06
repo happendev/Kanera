@@ -20,7 +20,7 @@ import { PageHeaderComponent, type PageHeaderVariant } from "./page-header.compo
       <span phMeta class="slot-meta">avatars</span>
       <button phActions type="button" class="slot-action">Create</button>
       <span phIcons class="slot-icons">icons</span>
-      <span phViews class="slot-views">views</span>
+      <span phViews class="slot-views"><span class="sg-auto-label">Board</span></span>
     </k-page-header>
   `,
 })
@@ -143,8 +143,16 @@ describe("PageHeaderComponent", () => {
 
       let barWidth = 0;
       Object.defineProperty(bar, "clientWidth", { get: () => barWidth });
+      // A title wider than the protected floor, so the floor (not the text) is what is reserved.
+      const title = host.querySelector(".ph-title") as HTMLElement;
+      Object.defineProperty(title, "scrollWidth", { get: () => 400 });
+      // The view switch's one auto label: 100px of text, and 114px once revealed with its chrome.
+      const autoLabel = host.querySelector(".sg-auto-label") as HTMLElement;
+      Object.defineProperty(autoLabel, "scrollWidth", { get: () => 100 });
       Object.defineProperty(tail, "offsetWidth", {
-        get: () => (header.classList.contains("is-tight") ? collapsed : labelled),
+        get: () => header.classList.contains("is-tight")
+          ? collapsed
+          : labelled + (header.classList.contains("is-roomy") ? 114 : 0),
       });
 
       return {
@@ -164,23 +172,46 @@ describe("PageHeaderComponent", () => {
     }
 
     it("drops the projected controls' labels once the row runs out of room", async () => {
-      // Needs 72px of title floor + the 8px bar gap + the tail: 580px in all.
+      // Needs the 160px title floor + the 8px bar gap + the tail: 668px in all.
       const { header, resize } = await mountMeasured(500, 300);
 
       resize(700);
       expect(header.classList.contains("is-tight")).toBe(false);
 
-      resize(560);
+      resize(640);
       expect(header.classList.contains("is-tight")).toBe(true);
 
-      resize(600);
+      resize(680);
       expect(header.classList.contains("is-tight")).toBe(false);
+    });
+
+    it("reveals the view switch's labels only once the whole row fits them with room to spare", async () => {
+      // The full 400px title + 8px gap + 500px tail + 8px bar gap, then 114px of labels and 24px of
+      // slack: 1054px. The subtitle measures zero here.
+      const { header, resize, settle } = await mountMeasured(500, 300);
+
+      resize(1100);
+      expect(header.classList.contains("is-roomy")).toBe(true);
+
+      // Revealing the labels widened the tail by exactly what they cost. Re-measuring must not read
+      // that as the row having run out of room.
+      settle();
+      settle();
+      expect(header.classList.contains("is-roomy")).toBe(true);
+
+      resize(1000);
+      expect(header.classList.contains("is-roomy")).toBe(false);
+      expect(header.classList.contains("is-tight")).toBe(false);
+
+      resize(640);
+      expect(header.classList.contains("is-roomy")).toBe(false);
+      expect(header.classList.contains("is-tight")).toBe(true);
     });
 
     it("holds the labelled width while collapsed, so the decision cannot oscillate", async () => {
       const { header, resize, settle } = await mountMeasured(500, 300);
 
-      resize(560);
+      resize(640);
       expect(header.classList.contains("is-tight")).toBe(true);
 
       // Collapsing shrank the tail to 300, which on its own says the row fits again. Re-measuring

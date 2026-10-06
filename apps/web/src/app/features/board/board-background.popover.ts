@@ -112,7 +112,7 @@ const GRADIENT_LABELS: Record<GradientToken, string> = {
       cursor: pointer;
       padding: 4px 6px;
       border-radius: var(--radius-sm);
-      &:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+      &:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
       &:disabled { opacity: 0.4; cursor: default; }
       i { font-size: 13px; }
     }

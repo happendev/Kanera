@@ -106,6 +106,7 @@
         [options]="displayOptions()"
         [value]="effectiveDisplay()"
         ariaLabel="Display mode"
+        [autoLabels]="true"
         (valueChange)="selectDisplay($event)"
       />
     </k-page-header>
@@ -562,7 +563,10 @@
             }
           </div>
           <k-activity-strip [series]="activitySeries()" [windowDays]="activityWindowDays()" />
-          <div class="portfolio-table-wrap">
+          <!-- The rollup is wider than a phone or a narrow window. Touch already pans it natively;
+               kDragScroll gives a mouse or trackpad the same click-and-drag pan as the kanban lane,
+               since a plain overflow container only scrolls by wheel or scrollbar. -->
+          <div class="portfolio-table-wrap" kDragScroll>
             <table class="portfolio-table">
               <thead>
                 <tr>
@@ -745,14 +749,14 @@
         }
       } @else {
         <section class="totals-strip">
-          <span><strong>{{ state.response().totals.cards }}</strong> cards</span>
+          <span><strong>{{ state.response().totals.cards }}</strong> {{ state.response().totals.cards === 1 ? "card" : "cards" }}</span>
           <span [class.attention]="state.response().totals.overdue"><strong>{{ state.response().totals.overdue }}</strong> overdue</span>
           <span><strong>{{ state.response().totals.dueSoon }}</strong> due next 7 days</span>
           @if (state.response().totals.completed) {
             <span><strong>{{ state.response().totals.completed }}</strong> completed</span>
           }
           @if (state.response().totals.checklistItems) {
-            <span><strong>{{ state.response().totals.checklistItems }}</strong> checklist items</span>
+            <span><strong>{{ state.response().totals.checklistItems }}</strong> {{ state.response().totals.checklistItems === 1 ? "checklist item" : "checklist items" }}</span>
           }
         </section>
 
@@ -797,7 +801,7 @@
                     <strong>{{ workspace.name }}</strong>
                     <small>{{ organisationsById().get(workspace.organisationId)?.name }}</small>
                   </span>
-                  <span class="section-toggle-meta">{{ listsForWorkspace(workspace.id).length }} lists</span>
+                  <span class="section-toggle-meta">{{ listsForWorkspace(workspace.id).length }} {{ listsForWorkspace(workspace.id).length === 1 ? "list" : "lists" }}</span>
                 </button>
                 }
                 @if (singleWorkspaceBoard() || !isWorkspaceCollapsed(workspace.id)) {
@@ -960,7 +964,7 @@
                 @if (overdueChecklistCount()) {
                   <span class="checklist-overdue-pill">{{ overdueChecklistCount() }} overdue</span>
                 }
-                <span>{{ state.response().checklistItems.length }} items</span>
+                <span>{{ state.response().checklistItems.length }} {{ state.response().checklistItems.length === 1 ? "item" : "items" }}</span>
               </span>
             </button>
             @if (!checklistSectionCollapsed()) {

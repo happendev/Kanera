@@ -131,6 +131,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  margin-bottom: 12px;
 
   > div { display: flex; flex-direction: column; gap: 2px; }
   strong { font-size: 13px; }
@@ -142,12 +143,20 @@
   grid-template-columns: repeat(4, 1fr);
   gap: 6px;
 
+  // The global button reset pins every <button> to 36px with nowrap, which crushed the count and
+  // label against the tile's top and bottom borders. These tiles are containers, so they size to
+  // their content instead.
   > button {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
     min-width: 0;
-    padding: 9px 7px;
+    height: auto;
+    padding: 10px 6px 9px;
+    line-height: 1.15;
+    white-space: normal;
     text-align: center;
     color: var(--text);
     background: var(--ov-tile-bg);
@@ -160,7 +169,8 @@
       border-color: var(--border-strong);
     }
 
-    &.is-active {
+    &.is-active,
+    &.is-active:hover:not(:disabled) {
       background: color-mix(in srgb, var(--accent) 14%, var(--surface-overlay));
       border-color: color-mix(in srgb, var(--accent) 45%, var(--ov-tile-border));
       strong { color: var(--accent); }
@@ -173,16 +183,16 @@
       strong, span { opacity: .45; }
     }
   }
-  strong { font-size: 16px; }
-  span { color: var(--text-muted); font-size: 10px; }
+  strong { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  span { overflow: hidden; max-width: 100%; color: var(--text-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
   .needs-attention strong { color: var(--danger); }
 }
 
 .board-overview-callout {
   display: flex;
   align-items: center;
-  gap: 7px;
-  margin-top: 10px;
+  gap: 8px;
+  margin-top: 8px;
   padding: 8px 10px;
   color: var(--text-muted);
   font-size: 11px;
@@ -538,10 +548,9 @@
 // change with it. Keyed on the same variable so the avatar stack cannot collapse a breakpoint away
 // from the row it lives in.
 
-@media (max-width: toolbar.$bp-compact) {
-
-  // Membership stays a first-class action, but the full avatar stack would compete with the icon
-  // cluster and the view switch once they share a row.
+// Membership stays a first-class action, but the full avatar stack would compete with the icon
+// cluster and the view switch once they share a row.
+@mixin compact-members {
   .board-member-stack {
     display: none;
   }
@@ -553,6 +562,18 @@
   .board-members-trigger {
     padding-inline: 7px;
   }
+}
+
+@media (max-width: toolbar.$bp-compact) {
+  @include compact-members;
+}
+
+// The header's own out-of-room state (see PageHeaderComponent.measureFit), which a tablet in
+// landscape with the sidebar open reaches well above the viewport breakpoint. The avatar stack
+// collapses together with the controls' labels: five faces were what had squeezed the board's
+// title to a single letter.
+k-page-header.is-tight {
+  @include compact-members;
 }
 
 // ─── Lists area ───────────────────────────────────────────────────────────────

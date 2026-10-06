@@ -285,10 +285,11 @@ k-list.is-drop-target {
   // panel painted in --surface had only its border and shadow to separate it from what it
   // covered. Sits between --surface and --surface-2 so row hover (--surface-2) still reads
   // clearly inside the panel. Dialogs and drawers keep --surface — they come with a scrim.
-  // Sits *above* --card-bg (--surface-2): a context menu opened over a card was darker than the card
-  // and receded into it. Dark separates by elevating, so floating chrome must be the lightest fill
-  // on screen bar row hover.
-  --surface-overlay: #253248;
+  // Midpoint of --surface and the old raised #253248: that lifted value read washed out, and the
+  // deeper fill is the look we want. It now sits a hair *below* --card-bg (--surface-2), so a menu
+  // opened over a card separates by --overlay-border and the shadow rather than by fill — keep
+  // both. Row hover inside floating chrome must use --surface-hover, not --surface-2, to register.
+  --surface-overlay: #1e283b;
   // Edge of floating chrome. The page hairline (--border) is tuned to divide same-hue surfaces
   // gently, which is exactly what a menu must not do; on dark it needs a clearly brighter edge.
   --overlay-border: #3d5170;
@@ -630,8 +631,8 @@ k-list.is-drop-target {
   --surface-subtle: rgba(0, 0, 0, 0.03);
   // Floating chrome — see the dark block. Light mode recesses instead of lifting (no surface may
   // reach pure white, and #fcfdff has no usable headroom below it anyway), so the step is small
-  // and deliberately stays above --surface-2: menu row hover fills with --surface-2, and an
-  // overlay darker than its own hover would read inverted. Light separation therefore still
+  // and deliberately stays above --surface-2 so inner fills (badges, selects) still read, and well
+  // above --surface-hover, which row hover uses in every theme. Light separation therefore still
   // leans on the border and shadow; this only stops a menu from matching what it covers exactly.
   --surface-overlay: #f9fbfd;
   --overlay-border: var(--border);
@@ -859,9 +860,9 @@ k-list.is-drop-target {
   --surface-3: #262c36;
   --surface-hover: #2a313c;
 
-  // Floating chrome sits above --surface-2 (cards) but below row hover, so a menu opened over a
-  // card reads as lifted rather than sunken. See the dark block for the full reasoning.
-  --surface-overlay: #252b35;
+  // Midpoint between --surface and --surface-2, matching the dark block's deeper floating chrome;
+  // separation over cards comes from --overlay-border and the shadow. See the dark block.
+  --surface-overlay: #1d232c;
   // Two border weights: the muted one for page hairlines, the stronger for the harder edges that
   // floating chrome needs against a near-black canvas.
   --overlay-border: #3d444d;
@@ -1056,7 +1057,10 @@ a.sm {
   font-family: inherit;
   font-size: 14px;
   font-weight: 500;
-  line-height: 1;
+  // Not 1: Inter's glyph box is ~1.21em tall, so at line-height 1 any truncating label inside a
+  // button (overflow: hidden + ellipsis) clips its descenders and accents. Fixed-height buttons
+  // centre the line box, so this only changes the height of auto-height buttons by a pixel or two.
+  line-height: 1.25;
   border: 1px solid transparent;
   border-radius: var(--radius);
   cursor: pointer;
@@ -1380,6 +1384,14 @@ k-app-shell {
   font-size: var(--text-xs);
   font-weight: 600;
   line-height: 1;
+}
+
+// Touch-only devices have no keys to press, so key hints are noise there. Same query as
+// TOUCH_ONLY_QUERY in core/browser/input-modality.ts.
+@media (any-hover: none) and (pointer: coarse) {
+  .k-kbd {
+    display: none !important;
+  }
 }
 
 // ─── Menu vocabulary ─────────────────────────────────────────────────────────

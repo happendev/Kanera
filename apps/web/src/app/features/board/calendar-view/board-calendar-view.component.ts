@@ -1,6 +1,7 @@
 import { CdkDrag, type CdkDragDrop, CdkDropList, CdkDropListGroup } from "@angular/cdk/drag-drop";
 import { CdkScrollable } from "@angular/cdk/scrolling";
-import { ChangeDetectionStrategy, Component, ElementRef, Injector, afterNextRender, computed, effect, inject, input, output, signal } from "@angular/core";
+import { NgTemplateOutlet } from "@angular/common";
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, afterNextRender, computed, inject, input, output, signal } from "@angular/core";
 import type { Card, List } from "@kanera/shared/schema";
 import type { WireCard, WireCardSummary, WireList } from "@kanera/shared/events";
 import { ApiClient } from "../../../core/api/api.client";
@@ -9,7 +10,6 @@ import { ToastService } from "../../../shared/toast.service";
 import { WorkspaceService } from "../../../core/workspace/workspace.service";
 import { AvatarComponent } from "../../../shared/avatar.component";
 import { CardKeyDisplayService } from "../../../shared/card-key-display.service";
-import { DragScrollDirective, ScrollSyncGroup } from "../../../shared/drag-scroll.directive";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { WEEKDAY_LABELS, startOfWeek, weekdayIndex } from "../../../shared/week-start";
 import { SegmentedComponent, type SegmentedOption } from "../../../shared/segmented.component";
@@ -38,6 +38,8 @@ interface CardSummaryFields {
 
 interface CalendarDay {
   key: string;
+  /** Day of the month, for the compact and phone cells that show the number alone. */
+  dayNumber: number;
   /** false dims the cell: the day belongs to a neighbouring month (paged month view only). */
   inMonth: boolean;
   /** Renders nothing. The cell only exists to shift its week into the right weekday columns. */
@@ -55,6 +57,35 @@ interface CalendarMonth {
 }
 
 /**
+ * How the calendar spends its width, measured on the component itself (not the viewport) because the
+ * same calendar sits beside an open sidebar, a card-detail panel, or nothing at all.
+ *
+ * - `full` — seven roomy columns, every tile shows its whole context row.
+ * - `compact` — still seven columns (dates must stay under their real weekday), but each column is
+ *   only ~80–140px, so cells show the bare day number and a month cell caps its tiles behind
+ *   "+N more" instead of growing into a column of slivers.
+ * - `phone` — seven columns of tiles is unreadable, so the month becomes a grid of day numbers with
+ *   due-card dots and the chosen day's cards listed underneath; a week becomes a vertical day list.
+ */
+export type CalendarLayout = "full" | "compact" | "phone";
+
+/** Below this the seven tile columns are too narrow to read. Same value as `$bp-sheet`. */
+const PHONE_MAX_WIDTH = 560;
+/** Below this a column is under ~140px, where the full day heading and an uncapped stack stop fitting. */
+const COMPACT_MAX_WIDTH = 1000;
+/** Tiles a compact month cell shows before the rest fold behind "+N more". */
+const COMPACT_MONTH_CARD_LIMIT = 3;
+
+export function calendarLayoutForWidth(width: number): CalendarLayout {
+  // 0 means "not laid out" (and every width in a DOM-less test): keep the full grid rather than
+  // guessing a phone layout for a component that has not been measured.
+  if (width <= 0) return "full";
+  if (width < PHONE_MAX_WIDTH) return "phone";
+  if (width < COMPACT_MAX_WIDTH) return "compact";
+  return "full";
+}
+
+/**
  * The calendar for board and Global Work views. One component keeps day cards, tiles, and label
  * chips aligned between them.
  *
@@ -68,10 +99,7 @@ interface CalendarMonth {
 @Component({
   selector: "k-board-calendar-view",
   standalone: true,
-  imports: [CdkDrag, CdkDropList, CdkDropListGroup, CdkScrollable, AvatarComponent, CardActionsMenuPopover, CardLabelsComponent, DragScrollDirective, SegmentedComponent, TooltipDirective],
-  // One group per calendar instance, so the month panels of this calendar stay on the same weekday
-  // columns without reaching into a calendar rendered elsewhere on the page.
-  providers: [ScrollSyncGroup],
+  imports: [CdkDrag, CdkDropList, CdkDropListGroup, CdkScrollable, NgTemplateOutlet, AvatarComponent, CardActionsMenuPopover, CardLabelsComponent, SegmentedComponent, TooltipDirective],
   // The stacked view is a block in a page that scrolls itself, so the host must stop claiming the
   // pane height and clipping its own overflow. Bound here because :host styles cannot be switched by
   // a class on a child element.
@@ -83,8 +111,6 @@ interface CalendarMonth {
 export class BoardCalendarViewComponent {
   private readonly workspaces = inject(WorkspaceService);
   private readonly element = inject<ElementRef<HTMLElement>>(ElementRef);
-  private readonly injector = inject(Injector);
-  private readonly scrollGroup = inject(ScrollSyncGroup);
   private readonly api = inject(ApiClient);
   private readonly toasts = inject(ToastService);
   /**
@@ -95,7 +121,6 @@ export class BoardCalendarViewComponent {
   private readonly cardStore: TableCardStore | null = inject(TABLE_CARD_STORE, { optional: true })
     ?? (() => { const state = inject(BoardState, { optional: true }); return state ? boardStateCardStore(state, this.api) : null; })();
   protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
-  private centredOnToday = false;
 
   readonly cards = input.required<AnyCard[]>();
   readonly lists = input<AnyList[]>([]);
@@ -134,31 +159,28 @@ export class BoardCalendarViewComponent {
   readonly skeletonDays = Array.from({ length: 35 }, (_, i) => i);
   readonly skeletonCards = [0, 1];
 
+  /**
+   * Seeded from the viewport so a phone does not paint a frame of the seven-column grid before the
+   * first measurement; the host is never wider than the window, so this only ever errs towards the
+   * roomier layout and the observer corrects it on the first frame.
+   */
+  readonly layout = signal<CalendarLayout>(
+    calendarLayoutForWidth(typeof window === "undefined" ? 0 : window.innerWidth),
+  );
+  /** Month cells the user has opened past the compact cap with "+N more". */
+  readonly expandedDayKeys = signal<ReadonlySet<string>>(new Set());
+  /** The day picked in the phone month grid; `null` falls back to `phoneSelectedDayKey`'s default. */
+  readonly pickedDayKey = signal<string | null>(null);
+
   constructor() {
-    // A day column never compresses below a width that keeps its cards readable, so seven of them
-    // are wider than almost any viewport and the month always scrolls sideways. Left alone it would
-    // open on Monday; centre today's column instead, once, as soon as a real grid has been laid out.
-    effect(() => {
-      if (this.centredOnToday || this.loading() || !this.months().length) return;
-      afterNextRender(() => this.centreTodayColumn(), { injector: this.injector });
+    const destroyRef = inject(DestroyRef);
+    afterNextRender(() => {
+      if (typeof ResizeObserver === "undefined") return;
+      const host = this.element.nativeElement;
+      const observer = new ResizeObserver(() => this.layout.set(calendarLayoutForWidth(host.clientWidth)));
+      observer.observe(host);
+      destroyRef.onDestroy(() => observer.disconnect());
     });
-  }
-
-  private centreTodayColumn(): void {
-    if (this.centredOnToday) return;
-    const host = this.element.nativeElement;
-    // An unscrollable panel has not been laid out yet (or has nothing to centre within), so leave
-    // the one attempt open for the next render rather than spending it on an empty grid.
-    const panel = host.querySelector<HTMLElement>(".calendar-month-scroll");
-    if (!panel || panel.scrollWidth <= panel.clientWidth) return;
-    this.centredOnToday = true;
-
-    const cell = host.querySelector<HTMLElement>(".calendar-month-scroll .is-today");
-    const scroller = cell?.closest<HTMLElement>(".calendar-month-scroll");
-    if (!cell || !scroller) return;
-    // Both are laid out against the host, so the difference is the cell's offset inside the scroller.
-    const withinScroller = cell.offsetLeft - scroller.offsetLeft;
-    this.scrollGroup.scrollTo(Math.max(0, withinScroller - (scroller.clientWidth - cell.offsetWidth) / 2));
   }
 
   readonly title = computed(() => {
@@ -215,6 +237,7 @@ export class BoardCalendarViewComponent {
       const key = toLocalDateKey(d);
       days.push({
         key,
+        dayNumber: d.getDate(),
         // A week strip is not bounded by a month, so nothing in it is out of month.
         inMonth: !monthMode || d.getMonth() === anchor.getMonth(),
         isPadding: false,
@@ -254,7 +277,7 @@ export class BoardCalendarViewComponent {
         const key = `${monthKey}-${`${dayNumber}`.padStart(2, "0")}`;
         const cards = cardsByDate.get(key) ?? [];
         cardCount += cards.length;
-        days.push({ key, inMonth: true, isPadding: false, isToday: key === todayKey, cards });
+        days.push({ key, dayNumber, inMonth: true, isPadding: false, isToday: key === todayKey, cards });
       }
       while (days.length % 7 !== 0) {
         days.push(paddingDay(`pad:${monthKey}:trail:${days.length}`));
@@ -262,6 +285,63 @@ export class BoardCalendarViewComponent {
       return { key: monthKey, label: monthLabel(new Date(year, month - 1, 1)), cardCount, days };
     });
   });
+
+  /**
+   * The phone month's chosen day. An explicit pick wins while it is still on screen; otherwise
+   * today when it is in this month, else the month's first day with something due, else the 1st —
+   * so paging to another month always lands on a day worth looking at.
+   */
+  readonly phoneSelectedDay = computed<CalendarDay | null>(() => {
+    const days = this.days();
+    const picked = this.pickedDayKey();
+    return days.find((day) => day.key === picked)
+      ?? days.find((day) => day.isToday && day.inMonth)
+      ?? days.find((day) => day.inMonth && day.cards.length)
+      ?? days.find((day) => day.inMonth)
+      ?? null;
+  });
+
+  pickDay(key: string) {
+    this.pickedDayKey.set(key);
+  }
+
+  /** Cards a cell renders: everything, except a compact month cell that has not been expanded. */
+  cellCards(day: CalendarDay): AnyCard[] {
+    if (!this.isCapped(day)) return day.cards;
+    return day.cards.slice(0, COMPACT_MONTH_CARD_LIMIT - 1);
+  }
+
+  /** How many tiles sit behind the cell's "+N more"; 0 when the cell shows them all. */
+  hiddenCardCount(day: CalendarDay): number {
+    return day.cards.length - this.cellCards(day).length;
+  }
+
+  /**
+   * Only a compact month caps: a week is a single row with the whole pane's height to grow into, and
+   * a full-width cell is wide enough that a tall day still reads as a column of cards. The cap hides
+   * one more than the limit so "+N more" takes the last slot instead of a lone "+1" replacing one tile.
+   */
+  private isCapped(day: CalendarDay): boolean {
+    // The stacked view is always a month grid, whatever the (hidden) paged mode says.
+    const monthGrid = this.navigation() === "stacked" || this.mode() === "month";
+    return this.layout() === "compact"
+      && monthGrid
+      && day.cards.length > COMPACT_MONTH_CARD_LIMIT
+      && !this.expandedDayKeys().has(day.key);
+  }
+
+  toggleDayExpanded(key: string) {
+    this.expandedDayKeys.update((keys) => {
+      const next = new Set(keys);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  isDayExpanded(key: string): boolean {
+    return this.expandedDayKeys().has(key);
+  }
 
   setMode(mode: "month" | "week") {
     this.mode.set(mode);
@@ -390,13 +470,45 @@ export class BoardCalendarViewComponent {
   }
 
   /**
-   * Day-cell heading: "1 July". No weekday — the cell sits under a labelled weekday column, so
-   * repeating it in all 35 cells is noise. The month is spelled out rather than abbreviated: a day
-   * column is 233px at its narrowest, so there is room, and it stays at all because the padding weeks
-   * of a month grid belong to the neighbouring month.
+   * Day-cell heading: "1 Jul". No weekday — the cell sits under a labelled weekday column, so
+   * repeating it in all 35 cells is noise. The month stays because the padding weeks of a month grid
+   * belong to the neighbouring month.
    */
   dayLabel(key: string): string {
     return formatDate(localDate(key), "short", { now: localDate(key) });
+  }
+
+  /**
+   * A compact column has room for the number alone. The 1st keeps its month so the rollover from
+   * the dimmed neighbouring month into this one (and back) still reads without the full labels.
+   */
+  compactDayLabel(day: CalendarDay): string {
+    return day.dayNumber === 1 ? this.dayLabel(day.key) : String(day.dayNumber);
+  }
+
+  /** Phone list heading: "Tue 6 Oct". The weekday is spelled because no column header names it. */
+  agendaDayLabel(key: string): string {
+    return formatDate(localDate(key), "weekday", { now: localDate(key) });
+  }
+
+  /** The full date for a phone month cell's accessible name, which otherwise reads as a bare number. */
+  dayAccessibleLabel(day: CalendarDay): string {
+    const date = formatDate(localDate(day.key), "long");
+    if (!day.cards.length) return date;
+    return `${date}, ${day.cards.length} ${day.cards.length === 1 ? "card" : "cards"} due`;
+  }
+
+  /**
+   * Up to three dots under a phone month day, one per card, coloured by the card's state so an
+   * overdue or finished day is visible before it is tapped. Past three, the count replaces the dots.
+   */
+  dayDots(day: CalendarDay): ("overdue" | "done" | "due")[] {
+    return day.cards.slice(0, 3).map((card) => card.completedAt ? "done" : this.isOverdue(card) ? "overdue" : "due");
+  }
+
+  /** Stacked phone agenda: only days holding cards, so a year of months does not become a year of empty rows. */
+  agendaDays(month: CalendarMonth): CalendarDay[] {
+    return month.days.filter((day) => !day.isPadding && day.cards.length);
   }
 
   summary(card: AnyCard): CardSummaryFields {
@@ -423,7 +535,7 @@ export class BoardCalendarViewComponent {
 }
 
 function paddingDay(key: string): CalendarDay {
-  return { key, inMonth: false, isPadding: true, isToday: false, cards: [] };
+  return { key, dayNumber: 0, inMonth: false, isPadding: true, isToday: false, cards: [] };
 }
 
 function monthLabel(date: Date): string {

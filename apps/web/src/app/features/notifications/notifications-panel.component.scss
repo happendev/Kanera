@@ -292,6 +292,9 @@
   // muddy. Chrome and content now share one surface and the borders do the
   // separating; the segmented's recessed track is the only intentional step.
   background: var(--surface);
+  // The filter row reflows on the toolbar's own width, not the viewport's: on a phone the drawer
+  // sits beside the rail, so its width is neither 100vw nor --drawer-width.
+  container: notif-toolbar / inline-size;
 }
 
 .toolbar-left {
@@ -345,6 +348,10 @@
   font: inherit;
   font-size: 12px;
   font-weight: 500;
+  // Board and user names are arbitrary length; end them cleanly instead of clipping mid-glyph.
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
@@ -378,6 +385,20 @@
 
 .filter-select-wrap:has(.filter-select.is-active)>i {
   color: var(--text);
+}
+
+// Three equal selects in a narrow drawer leave each about 100px, which clipped every label
+// ("Group b", "All boar"). Below that width grouping takes its own row and the two filters share
+// the next, so every label reads in full; long board/user names still ellipsize.
+@container notif-toolbar (max-width: 440px) {
+  .filter-selects {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .filter-select-wrap:first-child {
+    grid-column: 1 / -1;
+  }
 }
 
 // Unread / All is k-segmented at size="sm"; only its grid placement belongs here.
@@ -1140,12 +1161,12 @@
   color: var(--text-muted);
 }
 
-// Coarse pointers: match the 36px floor k-segmented's sm variant uses in this same
-// toolbar (the shared 44px floor would push the search and filter rows off a phone
-// screen), so the whole toolbar lands on one height instead of three.
+// Coarse pointers: the selects take the shared 44px touch floor (they are the toolbar's only
+// small targets a thumb aims at between scrolls); the segmented and mark-all keep the 36px sm
+// height they share on row one.
 @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
   .filter-select {
-    height: 36px;
+    height: 44px;
     font-size: 13px;
   }
 

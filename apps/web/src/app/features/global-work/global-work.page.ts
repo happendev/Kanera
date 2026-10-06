@@ -1,8 +1,9 @@
+import { DragScrollDirective } from "../../shared/drag-scroll.directive";
 import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { ToastService } from "../../shared/toast.service";
 import type { OnDestroy, OnInit } from "@angular/core";
 import { DatePipe } from "@angular/common";
-import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, input, signal } from "@angular/core";
 import { Router } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
 import type {
@@ -131,6 +132,9 @@ const PORTFOLIO_COLUMNS: { key: PortfolioMetric; label: string; tone: "danger" |
 /** Fallback window length until the first portfolio response lands; the server owns the real value. */
 const PORTFOLIO_ACTIVITY_DAYS = 60;
 
+/** Where the docked Up next sidebar becomes a bottom sheet; mirrors global-work.page.scss. */
+const UP_NEXT_SHEET_QUERY = "(max-width: 900px)";
+
 /** Smallest tint a non-zero count gets, and the curve that keeps mid-range counts distinguishable. */
 const HEAT_FLOOR = 0.16;
 const HEAT_GAMMA = 0.6;
@@ -191,6 +195,7 @@ function priorityGroupKey(userId: string): string {
     GlobalCardDetailHostComponent,
     SaveViewPopover,
     StatTileComponent,
+    DragScrollDirective,
   ],
   providers: [
     GlobalWorkState,
@@ -338,18 +343,18 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly displayOptions = computed<SegmentedOption<WorkDisplayMode>[]>(() => {
     const current = this.effectiveDisplay();
     const busy = !this.state.interactionReady();
-    const option = (id: WorkDisplayMode, icon: string, label: string): SegmentedOption<WorkDisplayMode> =>
-      ({ id, icon, label, disabled: busy && current !== id });
+    const option = (id: WorkDisplayMode, icon: string, label: string, shortLabel?: string): SegmentedOption<WorkDisplayMode> =>
+      ({ id, icon, label, shortLabel, disabled: busy && current !== id });
     if (this.lens() === "portfolio") {
-      return [option("summary", "chart-bar", "Summary view"), option("table", "table", "Table view")];
+      return [option("summary", "chart-bar", "Summary view", "Summary"), option("table", "table", "Table view", "Table")];
     }
     return [
-      option("board", "layout-kanban", "Board view"),
+      option("board", "layout-kanban", "Board view", "Board"),
       // Team only: everyone's Up next queues sit immediately beside the board view, since both are
       // lane-based ways of reading the same work. My Cards already has the docked single queue.
-      ...(this.lens() === "team" ? [option("priorities", "list-numbers", "Up next view")] : []),
-      option("table", "table", "Table view"),
-      option("calendar", "calendar", "Calendar view"),
+      ...(this.lens() === "team" ? [option("priorities", "list-numbers", "Up next view", "Up next")] : []),
+      option("table", "table", "Table view", "Table"),
+      option("calendar", "calendar", "Calendar view", "Calendar"),
       option("history", "history", "Work done"),
     ];
   });
@@ -1583,8 +1588,26 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     if (!this.state.interactionReady()) return "Loading Up next…";
     return "You don’t have permission to view this teammate’s Up next";
   });
+  /**
+   * Below the split point (global-work.page.scss, 900px) the panel is a bottom sheet over the page
+   * rather than a sidebar beside it. The saved open/closed preference describes the sidebar: honoured
+   * here it re-opened a 60vh sheet over the cards on every phone visit, burying the page the person
+   * navigated to. In sheet mode the panel is therefore session-only and starts closed, and toggling it
+   * leaves the desktop preference alone.
+   */
+  private readonly sheetMode = signal(typeof matchMedia === "function" && matchMedia(UP_NEXT_SHEET_QUERY).matches);
+  private readonly sheetOpen = signal(false);
+  private readonly watchSheetMode = (() => {
+    if (typeof matchMedia !== "function") return;
+    const query = matchMedia(UP_NEXT_SHEET_QUERY);
+    const sync = () => this.sheetMode.set(query.matches);
+    query.addEventListener("change", sync);
+    inject(DestroyRef).onDestroy(() => query.removeEventListener("change", sync));
+  })();
   readonly upNextOpen = computed(() =>
-    this.upNextAvailable() && this.showUpNextControl() && this.state.upNextPanelOpen()
+    this.upNextAvailable()
+    && this.showUpNextControl()
+    && (this.sheetMode() ? this.sheetOpen() : this.state.upNextPanelOpen())
   );
   /** Names the queue's owner in the panel header when curating somebody else. */
   readonly upNextTargetName = computed(() => {
@@ -1760,6 +1783,10 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   toggleUpNextPanel(): void {
     if (!this.showUpNextControl() || !this.upNextAvailable()) return;
     this.priorityError.set(null);
+    if (this.sheetMode()) {
+      this.sheetOpen.update((open) => !open);
+      return;
+    }
     this.state.setUpNextPanelOpen(!this.state.upNextPanelOpen());
   }
 

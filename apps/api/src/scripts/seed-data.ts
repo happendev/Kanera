@@ -5,9 +5,12 @@ import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-label
 import {
   ACTIVITY_ACTION,
   activityEvents,
+  agentRuns,
   automationActions,
   automations,
   boardMembers,
+  boardMirrorLists,
+  boardMirrors,
   boards,
   boardSeparators,
   cardAssignees,
@@ -41,7 +44,7 @@ import {
   type ClientRole,
   type NoteScope,
 } from "@kanera/shared/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -3959,6 +3962,252 @@ async function setSeedUserAvatar(input: {
     .where(eq(users.id, input.userId));
 }
 
+const SEED_AGENT_NAME = "Claude";
+const NIL_UUID = "00000000-0000-0000-0000-000000000000";
+
+async function findSeedBoard(tx: Tx, clientId: string, name: string) {
+  const [row] = await tx
+    .select({ board: boards })
+    .from(boards)
+    .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+    .where(and(eq(workspaces.clientId, clientId), eq(boards.name, name)))
+    .limit(1);
+  if (!row) throw new Error(`Missing seed board '${name}'.`);
+  return row.board;
+}
+
+/**
+ * Agent-run demo state on Autumn Campaign Launch, written as the API would record work done by
+ * Amelia's connected Claude agent (actorKind "agent", actorId Amelia). It backs the documentation
+ * screenshots for the card chip, card-detail run block, "via Claude" feed badges, the drawer's
+ * Agent tab, and the Work Done sparkles mark.
+ *
+ * Live runs are relative to seed time. The worker's stall sweep marks a live run `stalled` once its
+ * heartbeat is 15 minutes old, so capture live-run screenshots soon after seeding, or PATCH the run
+ * (an empty body is a heartbeat) to keep it live.
+ */
+async function seedAgentRunDemos(
+  tx: Tx,
+  input: { clientId: string; userIdByKey: Map<SeedUserKey, string>; now: Date },
+): Promise<number> {
+  const { clientId, now } = input;
+  const ameliaId = input.userIdByKey.get("amelia")!;
+  const leoId = input.userIdByKey.get("leo")!;
+  const board = await findSeedBoard(tx, clientId, "Autumn Campaign Launch");
+  const cardRows = await tx.select().from(cards).where(eq(cards.boardId, board.id));
+  const cardByTitle = new Map(cardRows.map((row) => [row.title, row]));
+  const card = (title: string) => {
+    const row = cardByTitle.get(title);
+    if (!row) throw new Error(`Missing agent demo card '${title}'.`);
+    return row;
+  };
+  const trackingCard = card("Finalise the campaign tracking and UTM plan");
+  const videoCard = card("Produce the launch-day explainer video");
+  const graphicsCard = card("Design the autumn campaign graphics");
+  const agentActor = {
+    boardId: board.id,
+    workspaceId: board.workspaceId,
+    actorId: ameliaId,
+    actorKind: "agent" as const,
+    agentName: SEED_AGENT_NAME,
+  };
+
+  // Production fanout never self-suppresses agent activity (the owner did not act), so Amelia is
+  // notified as a watcher of the cards her agent worked on.
+  await tx.insert(cardWatchers).values([trackingCard, graphicsCard].map((row) => ({
+    cardId: row.id,
+    userId: ameliaId,
+    createdAt: addHours(now, -6),
+  }))).onConflictDoNothing();
+
+  const runActivity = async (run: typeof agentRuns.$inferSelect, action: ActivityAction, at: Date) => {
+    const [activity] = await tx.insert(activityEvents).values({
+      ...agentActor,
+      entityType: "card",
+      entityId: run.cardId,
+      action,
+      payload: {
+        runId: run.id,
+        title: run.title,
+        status: run.status,
+        agentName: run.agentName,
+        externalUrl: run.externalUrl,
+        summary: run.summary,
+      },
+      createdAt: at,
+      updatedAt: at,
+    }).returning();
+    return activity!;
+  };
+  const insertRun = async (values: Omit<typeof agentRuns.$inferInsert, "workspaceId" | "boardId" | "userId" | "agentName">) => {
+    const [run] = await tx.insert(agentRuns).values({
+      workspaceId: board.workspaceId,
+      boardId: board.id,
+      userId: ameliaId,
+      agentName: SEED_AGENT_NAME,
+      ...values,
+    }).returning();
+    return run!;
+  };
+  let notificationCount = 0;
+  const notify = async (userId: string, row: typeof cards.$inferSelect, activityId: string, reason: "watching" | "assigned", at: Date, readAt: Date | null) => {
+    await tx.insert(notifications).values({
+      clientId,
+      userId,
+      activityId,
+      cardId: row.id,
+      listId: row.listId,
+      boardId: board.id,
+      workspaceId: board.workspaceId,
+      reason,
+      readAt,
+      createdAt: at,
+    });
+    notificationCount += 1;
+  };
+
+  // Tracking card: a finished audit run and the agent's comment sit above Leo's earlier moves in the
+  // activity feed, while a second run is still working.
+  const auditStartedAt = addMinutes(now, -190);
+  const auditEndedAt = addMinutes(now, -170);
+  const auditRun = await insertRun({
+    cardId: trackingCard.id,
+    status: "succeeded",
+    title: "Auditing the existing campaign UTM tags",
+    summary: "Found 14 legacy tags and mapped each to the new source/medium pairs.",
+    startedAt: auditStartedAt,
+    heartbeatAt: auditEndedAt,
+    endedAt: auditEndedAt,
+    createdAt: auditStartedAt,
+    updatedAt: auditEndedAt,
+  });
+  await runActivity({ ...auditRun, status: "running", summary: null }, ACTIVITY_ACTION.AGENT_RUN_STARTED, auditStartedAt);
+  const auditEnded = await runActivity(auditRun, ACTIVITY_ACTION.AGENT_RUN_ENDED, auditEndedAt);
+  await notify(ameliaId, trackingCard, auditEnded.id, "watching", auditEndedAt, null);
+
+  const commentAt = addMinutes(auditEndedAt, 2);
+  const [agentComment] = await tx.insert(comments).values({
+    cardId: trackingCard.id,
+    authorId: ameliaId,
+    authorKind: "agent",
+    agentName: SEED_AGENT_NAME,
+    body: "Audit done. Email and partner links already follow the new pattern; paid social still uses three legacy campaign names, which I have listed in the plan for Leo to retire.",
+    createdAt: commentAt,
+  }).returning();
+  const [commentActivity] = await tx.insert(activityEvents).values({
+    ...agentActor,
+    entityType: "comment",
+    entityId: agentComment!.id,
+    action: "created",
+    payload: { cardId: trackingCard.id },
+    createdAt: commentAt,
+    updatedAt: commentAt,
+  }).returning();
+  await notify(leoId, trackingCard, commentActivity!.id, "assigned", commentAt, null);
+
+  const draftStartedAt = addMinutes(now, -12);
+  const draftRun = await insertRun({
+    cardId: trackingCard.id,
+    status: "running",
+    title: "Drafting the UTM naming convention",
+    summary: "Source/medium pairs drafted for email, partner, and paid social; checking landing-page event names next.",
+    startedAt: draftStartedAt,
+    heartbeatAt: addMinutes(now, -1),
+    createdAt: draftStartedAt,
+    updatedAt: addMinutes(now, -1),
+  });
+  await runActivity({ ...draftRun, summary: null }, ACTIVITY_ACTION.AGENT_RUN_STARTED, draftStartedAt);
+
+  // Explainer video: the agent is blocked waiting on a person, which renders the amber chip.
+  const scriptStartedAt = addMinutes(now, -48);
+  const scriptRun = await insertRun({
+    cardId: videoCard.id,
+    status: "blocked",
+    title: "Cutting the explainer video script",
+    summary: "60- and 45-second cuts are ready. Which voiceover take should the final cut use?",
+    startedAt: scriptStartedAt,
+    heartbeatAt: addMinutes(now, -4),
+    createdAt: scriptStartedAt,
+    updatedAt: addMinutes(now, -4),
+  });
+  await runActivity({ ...scriptRun, status: "running", summary: null }, ACTIVITY_ACTION.AGENT_RUN_STARTED, scriptStartedAt);
+
+  // Graphics: completed today by the agent, so Work Done shows the sparkles mark beside Amelia.
+  const completedAt = addMinutes(now, -95);
+  await tx.update(cards).set({ completedAt, updatedAt: completedAt }).where(eq(cards.id, graphicsCard.id));
+  const [completion] = await tx.insert(activityEvents).values({
+    ...agentActor,
+    entityType: "card",
+    entityId: graphicsCard.id,
+    action: ACTIVITY_ACTION.COMPLETION_SET,
+    payload: { completedAt, fromValue: false, toValue: true },
+    createdAt: completedAt,
+    updatedAt: completedAt,
+  }).returning();
+  await notify(ameliaId, graphicsCard, completion!.id, "watching", completedAt, addMinutes(completedAt, 30));
+
+  return notificationCount;
+}
+
+/**
+ * An active mirror from the Launch Checklist standalone board into Platform Delivery, mapping
+ * To do onto Wishlist, as the board-mirror create route writes it. lastSyncAt predates the
+ * standalone cards and a reconcile is requested, so a running worker links the existing To do
+ * cards into Platform Delivery on its first pass instead of waiting for a new source change.
+ */
+async function seedBoardMirrorDemo(
+  tx: Tx,
+  input: { clientId: string; ameliaId: string; sourceBoardId: string; sourceWorkspaceId: string; sourceListId: string; createdAt: Date },
+): Promise<void> {
+  const target = await findSeedBoard(tx, input.clientId, "Platform Delivery");
+  const [targetList] = await tx
+    .select({ id: lists.id })
+    .from(lists)
+    .where(and(eq(lists.workspaceId, target.workspaceId), eq(lists.name, "Wishlist")))
+    .limit(1);
+  if (!targetList) throw new Error("Missing Wishlist list for the board mirror demo.");
+
+  const now = new Date();
+  const [mirror] = await tx.insert(boardMirrors).values({
+    sourceBoardId: input.sourceBoardId,
+    targetBoardId: target.id,
+    sourceWorkspaceId: input.sourceWorkspaceId,
+    targetWorkspaceId: target.workspaceId,
+    createdById: input.ameliaId,
+    // The cursor starts at seed time: seeded activity never went through the outbox, so the
+    // reconcile pass (not event replay) is what brings existing cards across.
+    cursorEventCreatedAt: now,
+    cursorEventId: NIL_UUID,
+    reconcileRequestedAt: now,
+    lastSyncAt: input.createdAt,
+    createdAt: input.createdAt,
+    updatedAt: input.createdAt,
+  }).returning();
+  await tx.insert(boardMirrorLists).values({ mirrorId: mirror!.id, sourceListId: input.sourceListId, targetListId: targetList.id });
+
+  const visibility = { sourceClientId: input.clientId, targetClientId: input.clientId };
+  await insertSeedActivity(tx, {
+    boardId: input.sourceBoardId,
+    workspaceId: input.sourceWorkspaceId,
+    actorId: input.ameliaId,
+    entityType: "board",
+    entityId: input.sourceBoardId,
+    action: ACTIVITY_ACTION.MIRROR_CREATED,
+    payload: { mirrorId: mirror!.id, targetBoardId: target.id, ...visibility },
+    createdAt: input.createdAt,
+  });
+  await insertSeedActivity(tx, {
+    boardId: target.id,
+    workspaceId: target.workspaceId,
+    actorId: input.ameliaId,
+    entityType: "board",
+    entityId: target.id,
+    action: ACTIVITY_ACTION.MIRROR_CREATED,
+    payload: { mirrorId: mirror!.id, sourceBoardId: input.sourceBoardId, ...visibility },
+    createdAt: input.createdAt,
+  });
+}
+
 async function seedInternalLinkDemos(tx: Tx, workspaceId: string): Promise<number> {
   const noteRows = await tx.select().from(notes).where(eq(notes.workspaceId, workspaceId));
   const boardRows = await tx.select().from(boards).where(eq(boards.workspaceId, workspaceId));
@@ -5496,6 +5745,20 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
 
         summary.internalLinks += await seedInternalLinkDemos(tx, workspace!.id);
       }
+
+      summary.notifications += await seedAgentRunDemos(tx, {
+        clientId: client!.id,
+        userIdByKey,
+        now: new Date(),
+      });
+      await seedBoardMirrorDemo(tx, {
+        clientId: client!.id,
+        ameliaId: userIdByKey.get("amelia")!,
+        sourceBoardId: standaloneBoard!.id,
+        sourceWorkspaceId: standaloneWorkspace!.id,
+        sourceListId: standaloneListByName.get("To do")!.id,
+        createdAt: addHours(standaloneCreatedAt, 4),
+      });
 
       for (const [targetUser, candidates] of priorityCandidatesByUser) {
         if (candidates.length === 0) continue;

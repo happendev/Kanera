@@ -610,11 +610,13 @@
           <i class="ti ti-help-circle"></i>
           <span>Help &amp; docs</span>
         </a>
+        @if (!touchOnly()) {
         <button type="button" class="k-menu-item popover-item" (click)="openShortcuts()" role="menuitem">
           <i class="ti ti-keyboard"></i>
           <span>Keyboard shortcuts</span>
           <kbd class="k-kbd popover-kbd">?</kbd>
         </button>
+        }
         <button type="button" class="k-menu-item popover-item danger" (click)="logout()" role="menuitem">
           <i class="ti ti-logout"></i>
           <span>Log out</span>

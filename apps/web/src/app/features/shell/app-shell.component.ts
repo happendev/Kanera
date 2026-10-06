@@ -2,6 +2,8 @@ import { UnreadGlowDirective } from "./unread-glow.directive";
 import { MenuDirective } from "../../shared/menu.directive";
 import { ShortcutsSheetComponent } from "../../shared/shortcuts-sheet.component";
 import { KeyboardShortcutsService } from "../../core/keyboard/keyboard-shortcuts.service";
+import { TOUCH_ONLY_QUERY } from "../../core/browser/input-modality";
+import { mediaQuerySignal } from "../../shared/media-query.signal";
 import { CdkDrag, CdkDropList, type CdkDragDrop } from "@angular/cdk/drag-drop";
 import { CdkScrollable } from "@angular/cdk/scrolling";
 import { Dialog } from "@angular/cdk/dialog";
@@ -685,6 +687,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   readonly shortcutsOpen = signal(false);
+  /** Phones and tablets with no keyboard: the shortcuts sheet and its entry points stand down. */
+  readonly touchOnly = mediaQuerySignal(TOUCH_ONLY_QUERY);
 
   private readonly shortcuts = inject(KeyboardShortcutsService);
   private readonly destroyRef = inject(DestroyRef);
@@ -797,6 +801,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
         icon: "keyboard",
         keywords: ["help", "keys"],
         keys: "?",
+        when: () => !this.touchOnly(),
         run: () => this.shortcutsOpen.set(true),
       },
     ], this.destroyRef);

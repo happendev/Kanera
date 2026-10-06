@@ -394,6 +394,10 @@ type FlatResult =
     /* ─── Responsive ─────────────────────────────────────────────────────────
        Phones: the palette becomes a near-full-height sheet pinned to the top so the on-screen
        keyboard, which eats the bottom half, never hides the results. dvh tracks that keyboard. */
+    /* Touch-only tablets are wider than the phone breakpoint but still have no Esc key to press. */
+    @media (any-hover: none) and (pointer: coarse) {
+      .esc { display: none; }
+    }
     @media (max-width: 640px) {
       .backdrop { padding: 8px; align-items: stretch; }
       .panel { max-width: none; max-height: calc(100dvh - 16px); }

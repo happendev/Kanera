@@ -277,7 +277,7 @@ import { GlobalWorkState } from "./global-work.state";
         font-weight: 600;
         cursor: pointer;
 
-        &:hover:not(:disabled) { background: var(--surface-2); }
+        &:hover:not(:disabled) { background: var(--surface-hover); }
         &:disabled { cursor: not-allowed; opacity: 0.5; }
       }
 
@@ -321,7 +321,7 @@ import { GlobalWorkState } from "./global-work.state";
         background: transparent;
         border: 1px solid var(--border);
 
-        &:hover { color: var(--text); background: var(--surface-2); }
+        &:hover { color: var(--text); background: var(--surface-hover); }
       }
     `,
   ],
