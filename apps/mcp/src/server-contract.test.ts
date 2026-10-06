@@ -180,9 +180,41 @@ const allToolCases: ToolCase[] = [
   { name: "checklists.update", args: { cardId: C, checklistId: CK, title: "Renamed" }, method: "PATCH", path: `/api/v1/cards/${C}/checklists/${CK}`, body: { title: "Renamed" } },
   { name: "checklists.delete", args: { cardId: C, checklistId: CK }, method: "DELETE", path: `/api/v1/cards/${C}/checklists/${CK}` },
   { name: "checklists.move", args: { cardId: C, checklistId: CK, anchor: { side: "before", id: CK } }, method: "POST", path: `/api/v1/cards/${C}/checklists/${CK}/move`, body: { beforeChecklistId: CK } },
-  { name: "checklists.add_item", args: { cardId: C, checklistId: CK, text: "Ship it" }, method: "POST", path: `/api/v1/cards/${C}/checklists/${CK}/items`, body: { text: "Ship it" } },
+  { name: "checklists.add_items", args: { cardId: C, checklistId: CK, items: [{ text: "Ship it" }] }, method: "POST", path: `/api/v1/cards/${C}/checklists/${CK}/items/batch`, body: { items: [{ text: "Ship it" }] } },
+  {
+    name: "checklists.add_items",
+    args: { cardId: C, checklistId: CK, items: [{ text: "Prepare release", description: "Coordinate", assigneeId: U, dueDateLocalDate: "2026-10-09", dueDateSlot: "morning", completed: false, subChecklists: [{ title: "Verification", items: [{ text: "Smoke tests" }] }] }], anchor: { side: "after", id: IT } },
+    method: "POST",
+    path: `/api/v1/cards/${C}/checklists/${CK}/items/batch`,
+    body: { items: [{ text: "Prepare release", description: "Coordinate", assigneeId: U, dueDateLocalDate: "2026-10-09", dueDateSlot: "morning", completed: false, subChecklists: [{ title: "Verification", items: [{ text: "Smoke tests" }] }] }], afterItemId: IT },
+  },
+  {
+    name: "checklists.add_items",
+    args: { cardId: C, checklistId: CK, items: [{ text: "One" }, { text: "Two", completed: true }], anchor: { side: "before", id: null } },
+    method: "POST",
+    path: `/api/v1/cards/${C}/checklists/${CK}/items/batch`,
+    body: { items: [{ text: "One" }, { text: "Two", completed: true }], beforeItemId: null },
+  },
+  { name: "checklists.get", args: { cardId: C }, method: "GET", path: `/api/v1/cards/${C}/checklists` },
+  { name: "checklists.get", args: { cardId: C, checklistId: CK }, method: "GET", path: `/api/v1/cards/${C}/checklists?checklistId=${CK}` },
+  {
+    name: "checklists.create",
+    args: { cardId: C, title: "Launch", items: [{ text: "Prepare release", description: "Coordinate the release.", subChecklists: [{ title: "Verification", items: [{ text: "Run smoke tests" }, { text: "Confirm rollback procedure" }] }] }] },
+    method: "POST",
+    path: `/api/v1/cards/${C}/checklists`,
+    body: { title: "Launch", items: [{ text: "Prepare release", description: "Coordinate the release.", subChecklists: [{ title: "Verification", items: [{ text: "Run smoke tests" }, { text: "Confirm rollback procedure" }] }] }] },
+  },
+  {
+    name: "checklists.update_items",
+    args: { cardId: C, updates: [{ itemId: IT, changes: { completed: true } }, { itemId: N, changes: { assigneeId: U } }] },
+    method: "PATCH",
+    path: `/api/v1/cards/${C}/checklist-items`,
+    body: { updates: [{ itemId: IT, changes: { completed: true } }, { itemId: N, changes: { assigneeId: U } }] },
+  },
+  { name: "checklists.delete_item", args: { cardId: C, itemId: IT }, method: "DELETE", path: `/api/v1/cards/${C}/checklist-items/${IT}` },
+  { name: "checklists.move_item", args: { cardId: C, itemId: IT, anchor: { side: "after", id: null } }, method: "POST", path: `/api/v1/cards/${C}/checklist-items/${IT}/move`, body: { afterItemId: null } },
   { name: "kanera_bulk_add_checklist_items", args: { boardId: B, items: [{ cardId: C, checklistId: CK, text: "Ship it", description: "Details" }] }, method: "POST", path: `/api/v1/boards/${B}/checklist-items/bulk/create`, body: { items: [{ cardId: C, checklistId: CK, text: "Ship it", description: "Details" }] } },
-  { name: "checklists.update_item", args: { cardId: C, checklistId: CK, itemId: IT, changes: { description: "More context", completed: true } }, method: "PATCH", path: `/api/v1/cards/${C}/checklists/${CK}/items/${IT}`, body: { description: "More context", completed: true } },
+  { name: "checklists.update_items", args: { cardId: C, updates: [{ itemId: IT, changes: { description: "More context", completed: true } }] }, method: "PATCH", path: `/api/v1/cards/${C}/checklist-items`, body: { updates: [{ itemId: IT, changes: { description: "More context", completed: true } }] } },
   { name: "checklists.bulk_update_items", args: { cardId: C, checklistId: CK, changes: { assigneeId: U } }, method: "PATCH", path: `/api/v1/cards/${C}/checklists/${CK}/items/bulk`, body: { assigneeId: U } },
   { name: "kanera_bulk_set_checklist_item_descriptions", args: { boardId: B, updates: [{ cardId: C, checklistId: CK, itemId: IT, description: "Migrated comment" }] }, method: "PATCH", path: `/api/v1/boards/${B}/checklist-items/bulk/descriptions`, body: { updates: [{ cardId: C, checklistId: CK, itemId: IT, description: "Migrated comment" }] } },
   { name: "checklists.delete_item", args: { cardId: C, checklistId: CK, itemId: IT }, method: "DELETE", path: `/api/v1/cards/${C}/checklists/${CK}/items/${IT}` },
@@ -237,7 +269,52 @@ type NoRequestToolCase = { name: string; args: unknown };
 const noRequestToolCases: NoRequestToolCase[] = [
   { name: "workspaces.list_templates", args: {} },
 ];
+const stubItem = (id: string, checklistId: string, text: string) => ({
+  id, checklistId, text, description: null, assigneeId: null, dueDateLocalDate: null, dueDateSlot: null, completedAt: null,
+});
+// Checklist tools reshape API responses into a nested tree, so their stubs return realistic shapes.
+// The card's checklists contain two items with the same text in different checklists, which is what
+// the itemText targeting cases resolve or reject.
+const stubChecklists = [
+  { id: CK, title: "Launch", parentItemId: null, items: [stubItem(IT, CK, "Prepare release"), stubItem(N, CK, "Announce")] },
+  { id: O, title: "Verification", parentItemId: IT, items: [stubItem(U, O, "Announce")] },
+];
+function checklistStubResponse(pathname: string, method: string): Response | null {
+  const json = (value: unknown) => new Response(JSON.stringify(value), { status: 200 });
+  if (pathname === `/api/v1/cards/${C}/checklists` && method === "GET") return json({ checklists: stubChecklists });
+  if (pathname === `/api/v1/cards/${C}/checklists` && method === "POST") return json({ ...stubChecklists[0], subChecklists: [stubChecklists[1]] });
+  if (pathname.endsWith("/items/batch")) return json({ items: [{ ...stubItem(IT, CK, "One"), subChecklists: [] }] });
+  if (pathname === `/api/v1/cards/${C}/checklist-items` && method === "PATCH") return json({ items: [stubItem(IT, CK, "One")] });
+  if (/\/(?:checklists\/[^/]+\/items|checklist-items)(?:\/[^/]+)?$/u.test(pathname) && method !== "DELETE") return json(stubItem(IT, CK, "One"));
+  return null;
+}
 const multiRequestToolCases: MultiRequestToolCase[] = [
+  {
+    // Text targeting costs one checklist read; matching ignores case and surrounding whitespace.
+    name: "checklists.update_items",
+    args: { cardId: C, updates: [{ itemText: "  prepare RELEASE ", changes: { completed: true } }] },
+    requests: [
+      { method: "GET", path: `/api/v1/cards/${C}/checklists` },
+      { method: "PATCH", path: `/api/v1/cards/${C}/checklist-items`, body: { updates: [{ itemId: IT, changes: { completed: true } }] } },
+    ],
+  },
+  {
+    // A duplicated text is unambiguous once scoped by checklistId; title targeting resolves the add.
+    name: "checklists.update_items",
+    args: { cardId: C, updates: [{ itemText: "Announce", checklistId: O, changes: { completed: true } }, { itemId: IT, changes: { text: "Ship" } }] },
+    requests: [
+      { method: "GET", path: `/api/v1/cards/${C}/checklists` },
+      { method: "PATCH", path: `/api/v1/cards/${C}/checklist-items`, body: { updates: [{ itemId: U, changes: { completed: true } }, { itemId: IT, changes: { text: "Ship" } }] } },
+    ],
+  },
+  {
+    name: "checklists.add_items",
+    args: { cardId: C, checklistTitle: "launch", items: [{ text: "One" }] },
+    requests: [
+      { method: "GET", path: `/api/v1/cards/${C}/checklists` },
+      { method: "POST", path: `/api/v1/cards/${C}/checklists/${CK}/items/batch`, body: { items: [{ text: "One" }] } },
+    ],
+  },
   { name: "boards.get_standalone_settings", args: { boardId: B }, requests: standaloneLookupRequests },
   {
     // Board creation confirms the target is a standard workspace before writing; W2 is the standard
@@ -317,7 +394,7 @@ const multipartToolCases: MultipartToolCase[] = [{
 void test("every MCP tool maps to the expected public API request", async () => {
   const server = internals();
   const expectedNames = [...new Set([...toolCases, ...noRequestToolCases, ...multiRequestToolCases, ...multipartToolCases].map((item) => item.name))].sort();
-  assert.equal(expectedNames.length, 88);
+  assert.equal(expectedNames.length, 89);
   assert.deepEqual(Object.keys(server._registeredTools).sort(), expectedNames);
 
   const originalFetch = globalThis.fetch;
@@ -374,6 +451,8 @@ void test("every MCP tool maps to the expected public API request", async () => 
         if (url.pathname === "/api/v1/search/query") {
           return new Response(JSON.stringify({ query: "road map", results: [] }), { status: 200 });
         }
+        const checklistStub = checklistStubResponse(url.pathname, init?.method ?? "GET");
+        if (checklistStub) return checklistStub;
         if (url.pathname === "/api/v1/work/cards/query") {
           return new Response(JSON.stringify({
             cards: [],
@@ -436,9 +515,12 @@ void test("every MCP tool maps to the expected public API request", async () => 
             updatedAt: "2026-06-30T00:00:00.000Z",
           }), { status: 200 });
         }
+        const checklistStub = checklistStubResponse(url.pathname, init?.method ?? "GET");
+        if (checklistStub) return checklistStub;
         return new Response(JSON.stringify({ ok: true }), { status: 200 });
       };
-      await server._registeredTools[item.name]!.handler(item.args);
+      const result = await server._registeredTools[item.name]!.handler(item.args);
+      assert.notEqual(result.isError, true, `${item.name}: ${JSON.stringify(result.content)}`);
       assert.deepEqual(requests, item.requests, item.name);
     }
 
@@ -542,7 +624,7 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     const { tools } = await client.listTools();
     const byName = new Map(tools.map((tool) => [tool.name, tool]));
     const createChecklist = byName.get("checklists.create");
-    const updateItem = tools.find((tool) => tool.name === "checklists.update_item");
+    const updateItems = byName.get("checklists.update_items");
     const updateCard = byName.get("cards.update");
     const moveCard = byName.get("cards.move");
     const createSeparator = byName.get("separators.create");
@@ -558,9 +640,12 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     }
 
     assert.ok(createChecklist, "checklists.create is advertised");
-    assert.ok(updateItem, "checklists.update_item is advertised");
+    assert.ok(updateItems, "checklists.update_items is advertised");
     assert.ok(createChecklist.inputSchema.properties?.parentItemId, "sub-checklist parentItemId is advertised");
-    assert.ok(updateItem.inputSchema.properties?.changes, "non-empty checklist changes are nested and required");
+    assert.ok(updateItems.inputSchema.properties?.updates, "checklist item changes are nested per entry");
+    // One tool per checklist verb: single-item add/update are the batch tools with one entry.
+    assert.equal(byName.has("checklists.add_item"), false, "checklists.add_item is folded into add_items");
+    assert.equal(byName.has("checklists.update_item"), false, "checklists.update_item is folded into update_items");
     assert.ok(updateCard?.inputSchema.properties?.changes, "non-empty card changes are nested and required");
     assert.ok(moveCard?.inputSchema.properties?.anchor, "card movement has one required anchor");
     assert.ok(createSeparator?.inputSchema.properties?.anchor, "separator creation advertises an exact mixed-lane anchor");
@@ -597,6 +682,9 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     // and every anchor description spells out which edge a null anchor selects.
     // The three agent-run tools (start/update/list) add roughly 3k so agents can announce in-flight
     // work; the ceiling moves up by exactly that headroom rather than an open-ended round number.
+    // Checklist trees (checklists.get and nested items on create/add_items) fit inside the existing
+    // budget because single-item add/update were folded into add_items/update_items: one tool per
+    // verb keeps tool choice unambiguous and the catalog small.
     const serializedToolCatalogLength = JSON.stringify(tools).length;
     assert.ok(serializedToolCatalogLength <= 204_000, `the default tool catalog stays within its 200k-character budget (received ${serializedToolCatalogLength})`);
     for (const name of [
@@ -800,4 +888,50 @@ void test("golden tool-selection prompts reference only the v2 catalog", () => {
     fixture.cases.some((item) => item.forbiddenCapabilities?.includes("browser")),
     "the eval matrix covers Kanera MCP versus browser routing",
   );
+});
+
+void test("checklist targeting rejects ambiguous text and API validation errors keep their field paths", async () => {
+  const server = internals();
+  const originalFetch = globalThis.fetch;
+  const requests: string[] = [];
+  try {
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : input.toString());
+      requests.push(`${init?.method ?? "GET"} ${url.pathname}`);
+      const stub = checklistStubResponse(url.pathname, init?.method ?? "GET");
+      if (stub && (init?.method ?? "GET") === "GET") return stub;
+      // Shape of a Zod rejection from the public API for a deeply nested field.
+      return new Response(JSON.stringify({
+        code: "VALIDATION",
+        message: "validation failed",
+        issues: [{ code: "too_small", path: ["items", 2, "subChecklists", 0, "items", 1, "text"], message: "Too small" }],
+      }), { status: 400 });
+    };
+
+    // "Announce" exists in two checklists: the tool must refuse to pick one and must not write.
+    const ambiguous = await server._registeredTools["checklists.update_items"]!.handler({ cardId: C, updates: [{ itemText: "announce", changes: { completed: true } }] });
+    assert.equal(ambiguous.isError, true);
+    const ambiguousError = JSON.parse((ambiguous.content[0] as { text: string }).text) as {
+      error: { code: string; issues: Array<{ path: string }>; candidates: Array<{ itemId: string }> };
+    };
+    assert.equal(ambiguousError.error.code, "AMBIGUOUS_TARGET");
+    assert.deepEqual(ambiguousError.error.issues.map((issue) => issue.path), ["updates[0].itemText"]);
+    assert.deepEqual(ambiguousError.error.candidates.map((candidate) => candidate.itemId).sort(), [N, U].sort());
+    assert.deepEqual(requests, [`GET /api/v1/cards/${C}/checklists`], "no write after an ambiguous match");
+
+    const batch = await server._registeredTools["checklists.update_items"]!.handler({
+      cardId: C,
+      updates: [{ itemId: IT, changes: { completed: true } }, { itemText: "missing step", changes: { completed: true } }],
+    });
+    const batchError = JSON.parse((batch.content[0] as { text: string }).text) as { error: { status: number; issues: Array<{ path: string }> } };
+    assert.equal(batchError.error.status, 404);
+    assert.deepEqual(batchError.error.issues.map((issue) => issue.path), ["updates[1].itemText"]);
+
+    const invalid = await server._registeredTools["checklists.create"]!.handler({ cardId: C, title: "Launch", items: [{ text: "a" }] });
+    assert.equal(invalid.isError, true);
+    const invalidError = JSON.parse((invalid.content[0] as { text: string }).text) as { error: { issues: Array<{ path: string; message: string }> } };
+    assert.deepEqual(invalidError.error.issues, [{ path: "items[2].subChecklists[0].items[1].text", message: "Too small" }]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

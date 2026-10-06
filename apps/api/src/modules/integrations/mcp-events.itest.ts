@@ -319,3 +319,81 @@ void test("retries stop after the bounded budget and record endpoint health with
   assert.equal(timedOut?.lastError, "timeout");
   assert.equal(timedOut?.failedSince?.getTime(), health?.failedSince?.getTime(), "failedSince marks the start of the failing streak");
 });
+
+
+// Local callbacks are deliberately blocked in production and E2E. Substitute only outbound
+// HTTPS I/O here to verify real route mutations, durable matching, signatures and delivery.
+void test("list subscriptions deliver arrivals and departures, exclude reorders and isolate list identity", async () => {
+  const f = await fixture();
+  const signingSecret = secret();
+  const delivered: Array<{ eventId: string; name: string; data: { cardId: string; listId?: string; fromListId?: string } }> = [];
+  const send: McpWebhookRequest = async (_url, body, headers) => {
+    checkSignature(headers, body, signingSecret);
+    const payload = JSON.parse(body) as { type: "verification"; challenge: string } | (typeof delivered)[number];
+    if ("type" in payload) return { status: 200, body: JSON.stringify({ challenge: payload.challenge }) };
+    delivered.push(payload);
+    return { status: 204, body: "" };
+  };
+  const publicApi = await buildPublicApiServer({ logger: false, enableWebhookDeliveryScheduler: false, rateLimit: { enabled: false }, mcpWebhookRequest: send });
+  const headers = { authorization: `Bearer ${f.key.secret}` };
+  const argumentsFor = (listId: string) => ({ workspaceId: f.workspace.id, listId });
+  const subscribe = (name: string, listId: string) => publicApi.inject({ method: "POST", url: "/api/v1/mcp-events/subscribe", headers, payload: { name, arguments: argumentsFor(listId), delivery: { mode: "webhook", url: "https://receiver.example/list", secret: signingSecret } } });
+  try {
+    const workspaceLists = await db.select().from(lists).where(eq(lists.workspaceId, f.workspace.id));
+    const watched = workspaceLists[0]!.id;
+    const outside = workspaceLists[1]!.id;
+    const other = workspaceLists[2]!.id;
+    const invalid = await subscribe("card.moved", randomUUID());
+    assert.equal(invalid.statusCode, 400, invalid.body);
+    const foreignWorkspace = await f.app.inject({ method: "POST", url: "/workspaces", headers: f.owner.auth, payload: { name: "Other list scope" } });
+    assert.equal(foreignWorkspace.statusCode, 201, foreignWorkspace.body);
+    const [foreignList] = await db.select().from(lists).where(eq(lists.workspaceId, foreignWorkspace.json<{ id: string }>().id));
+    assert.equal((await subscribe("card.moved", foreignList!.id)).statusCode, 400);
+    const stream = await subscribe("card.moved", watched);
+    assert.equal(stream.statusCode, 200, stream.body);
+    const id = stream.json<{ id: string }>().id;
+    const renewed = await subscribe("card.moved", watched);
+    assert.equal(renewed.json<{ id: string }>().id, id);
+    const second = await subscribe("card.moved", outside);
+    assert.notEqual(second.json<{ id: string }>().id, id);
+    const unsubscribe = await publicApi.inject({ method: "POST", url: "/api/v1/mcp-events/unsubscribe", headers, payload: { name: "card.moved", arguments: argumentsFor(outside), delivery: { mode: "webhook", url: "https://receiver.example/list" } } });
+    assert.equal(unsubscribe.statusCode, 200, unsubscribe.body);
+    assert.equal((await db.select().from(mcpEventSubscriptions).where(eq(mcpEventSubscriptions.id, id))).length, 1);
+    for (const name of ["card.created", "card.updated", "comment.created"]) assert.equal((await subscribe(name, watched)).statusCode, 200);
+    const create = async (listId: string) => {
+      const response = await f.app.inject({ method: "POST", url: `/boards/${f.workspace.boardId}/lists/${listId}/cards`, headers: f.owner.auth, payload: { title: "List event card" } });
+      assert.equal(response.statusCode, 201, response.body);
+      return response.json<{ id: string }>().id;
+    };
+    const cardId = await create(outside);
+    const watchedCard = await create(watched);
+    const move = async (listId: string, beforeCardId?: string) => {
+      const response = await f.app.inject({ method: "POST", url: `/cards/${cardId}/move`, headers: f.owner.auth, payload: { listId, beforeCardId: beforeCardId ?? null } });
+      assert.equal(response.statusCode, 200, response.body);
+    };
+    await move(watched);
+    const updated = await f.app.inject({ method: "PATCH", url: `/cards/${cardId}`, headers: f.owner.auth, payload: { title: "Changed while in watched list" } });
+    assert.equal(updated.statusCode, 200, updated.body);
+    await move(watched, watchedCard);
+    await move(outside);
+    await move(other);
+    // Drain after all moves: arrival/departure matching must use the event's lists even though
+    // the live card is now elsewhere. Updates likewise retain their event-time card snapshot.
+    const moveEvents = (await db.select().from(eventOutbox)).filter((event) => event.eventType === "card:moved" && (event.payload as { cardId?: string }).cardId === cardId);
+    assert.equal(moveEvents.length, 4, "the fixture actually emitted the reorder and unrelated move");
+    await processRealtimeOutbox({ limit: 100 });
+    while (await processMcpEventDeliveries(send)) { /* drain the bounded batches */ }
+    const moves = delivered.filter((event) => event.name === "card.moved");
+    assert.deepEqual(moves.map((event) => [event.data.fromListId, event.data.listId]), [[outside, watched], [watched, outside]]);
+    assert.equal(new Set(moves.map((event) => event.eventId)).size, 2, "only arrivals and departures deliver; same-list reorders are excluded");
+    assert.deepEqual(delivered.filter((event) => event.name === "card.created").map((event) => event.data.cardId), [watchedCard]);
+    assert.equal(delivered.filter((event) => event.name === "card.updated" && event.data.cardId === cardId).length, 1);
+    await f.app.inject({ method: "PATCH", url: `/cards/${cardId}`, headers: f.owner.auth, payload: { title: "Changed outside watched list" } });
+    await processRealtimeOutbox({ limit: 100 });
+    await processMcpEventDeliveries(send);
+    assert.equal(delivered.filter((event) => event.name === "card.updated" && event.data.cardId === cardId).length, 1);
+  } finally {
+    await publicApi.close();
+    await f.app.close();
+  }
+});

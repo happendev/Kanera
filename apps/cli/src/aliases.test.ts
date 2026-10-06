@@ -55,6 +55,13 @@ void test("shell strings are coerced by the schema, not by how they look", () =>
   assert.equal(coerceToSchema("true", { type: "boolean" }), true);
   assert.equal(coerceToSchema("false", { type: "boolean" }), false);
   assert.equal(coerceToSchema("42", { type: "string" }), "42");
+  // Arrays of objects: one JSON-array flag, or one JSON object per repeated flag.
+  const items = { type: "array", items: { type: "object", properties: { text: { type: "string" }, completed: { type: "boolean" } } } };
+  assert.deepEqual(coerceToSchema('[{"text":"a"},{"text":"b","completed":true}]', items), [{ text: "a" }, { text: "b", completed: true }]);
+  assert.deepEqual(coerceToSchema(['{"text":"a"}', '{"text":"b"}'], items), [{ text: "a" }, { text: "b" }]);
+  // A string list keeps a lone value that only looks like JSON as one entry.
+  assert.deepEqual(coerceToSchema("[draft] notes", { type: "array", items: { type: "string" } }), ["[draft] notes"]);
+  assert.deepEqual(coerceToSchema('["a","b"]', { type: "array", items: { type: "string" } }), ["a", "b"]);
   assert.deepEqual(coerceToSchema("a", { type: "array", items: { type: "string" } }), ["a"]);
   assert.deepEqual(coerceToSchema(["1", "2"], { type: "array", items: { type: "number" } }), [1, 2]);
   assert.deepEqual(coerceToSchema({ limit: "5" }, { type: "object", properties: { limit: { type: "number" } } }), { limit: 5 });

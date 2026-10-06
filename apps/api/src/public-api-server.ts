@@ -150,6 +150,10 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
   });
   app.addHook("onSend", async (req, reply, payload) => {
     reply.header(REQUEST_ID_HEADER, req.id);
+    // Handler time as seen by this process. The MCP layer subtracts it from its own round-trip
+    // measurement to separate API execution from network/proxy time when diagnosing agent latency.
+    const startedAt = requestStartedAt.get(req) ?? requestContext.get("requestStartedAt");
+    if (startedAt !== undefined) reply.header("Server-Timing", `app;dur=${(performance.now() - startedAt).toFixed(1)}`);
     return payload;
   });
   app.addHook("onRequest", async (req) => {

@@ -5,6 +5,7 @@ export const MCP_EVENT_NAMES = ["card.created", "card.updated", "card.moved", "c
 export const mcpEventArguments = z.strictObject({
   workspaceId: z.uuid().describe("Workspace UUID owning the boards to monitor."),
   boardId: z.uuid().optional().describe("Only events on this board. Required for board guests."),
+  listId: z.uuid().optional().describe("Workspace list UUID. Card moves match entry or exit from this list, excluding reorders within it; other events match the card list."),
   cardId: z.uuid().optional().describe("Only events for this card; requires boardId."),
 }).refine((a) => !a.cardId || !!a.boardId, "cardId requires boardId");
 const callbackUrl = z.url().max(2048).refine((url) => {
@@ -47,7 +48,7 @@ export const mcpEventActor = z.strictObject({
 export const mcpEventData = z.strictObject({
   workspaceId: z.uuid(), boardId: z.uuid(), cardId: z.uuid(), actor: mcpEventActor,
   title: z.string().optional(), text: z.string().optional(), commentId: z.uuid().optional(),
-  listId: z.uuid().optional(), prevPosition: z.string().optional(), url: z.url().optional(),
+  listId: z.uuid().optional(), fromListId: z.uuid().optional(), prevPosition: z.string().optional(), url: z.url().optional(),
 });
 export type McpEventData = z.infer<typeof mcpEventData>;
 export type McpEventArguments = z.infer<typeof mcpEventArguments>;
@@ -61,7 +62,7 @@ export interface McpEventOccurrence {
 const descriptions: Record<(typeof MCP_EVENT_NAMES)[number], string> = {
   "card.created": "A card was created in the monitored workspace, board, or card scope.",
   "card.updated": "A card changed, including its title, description, completion or archive state. Read cards.get for the current full record.",
-  "card.moved": "A card moved within or between lists or boards. Includes its destination list and previous position.",
+  "card.moved": "A card moved within or between lists or boards. Includes its source and destination lists and previous position.",
   "comment.created": "A new comment was posted on a card. Includes a bounded text excerpt; use comments.list for the full comment.",
 };
 export const mcpEventCatalog = MCP_EVENT_NAMES.map((name) => ({

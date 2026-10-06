@@ -306,7 +306,11 @@ export function coerceToSchema(value: unknown, schema: JsonSchema | undefined, r
   const types = schemaTypes(resolved);
 
   if (types.includes("array")) {
-    const list = Array.isArray(value) ? value : [value];
+    // `--items '[{"text":"a"}]'` is the natural way to pass a list of objects in one flag. Without
+    // this it was wrapped as a one-element list holding the whole array, and the server rejected it.
+    // A plain string that merely starts with "[" (and is not a JSON array) stays a single entry.
+    const parsed = typeof value === "string" && value.trimStart().startsWith("[") ? safeParse(value) : value;
+    const list = Array.isArray(parsed) ? parsed : [value];
     return list.map((entry) => coerceToSchema(entry, resolved.items, root));
   }
   if (types.includes("object") && typeof value === "object" && value !== null && !Array.isArray(value)) {

@@ -297,23 +297,25 @@ void test("MCP checklist tools drive the plan->track flow end to end", async () 
     const checklist = parseToolText<{ id: string; title: string }>(await createChecklist({ cardId: card.id, title: "Launch steps" }));
     assert.equal(checklist.title, "Launch steps");
 
-    const addItem = toolHandler(fixture.writeKey, publicApiUrl, "checklists.add_item");
-    const item = parseToolText<{ id: string; text: string; completedAt: string | null }>(
-      await addItem({ cardId: card.id, checklistId: checklist.id, text: "Write the plan" }),
-    );
+    const addItems = toolHandler(fixture.writeKey, publicApiUrl, "checklists.add_items");
+    const item = parseToolText<{ items: Array<{ id: string; text: string; completedAt: string | null }> }>(
+      await addItems({ cardId: card.id, checklistId: checklist.id, items: [{ text: "Write the plan" }] }),
+    ).items[0]!;
     assert.equal(item.completedAt, null);
 
     // Item detail remains part of the card resource, while sub-checklists are linked in the flat
     // checklist collection by parentItemId so MCP clients can assemble the same one-level view.
-    const updateItem = toolHandler(fixture.writeKey, publicApiUrl, "checklists.update_item");
-    await updateItem({
+    const updateItems = toolHandler(fixture.writeKey, publicApiUrl, "checklists.update_items");
+    await updateItems({
       cardId: card.id,
-      checklistId: checklist.id,
-      itemId: item.id,
-      changes: {
-        description: "Coordinate the launch notes and owners.",
-        completed: true,
-      },
+      updates: [{
+        itemId: item.id,
+        checklistId: checklist.id,
+        changes: {
+          description: "Coordinate the launch notes and owners.",
+          completed: true,
+        },
+      }],
     });
 
     const subChecklist = parseToolText<{ id: string; parentItemId: string | null; title: string }>(
@@ -321,10 +323,10 @@ void test("MCP checklist tools drive the plan->track flow end to end", async () 
     );
     assert.equal(subChecklist.parentItemId, item.id);
 
-    const subItem = parseToolText<{ id: string; text: string }>(
-      await addItem({ cardId: card.id, checklistId: subChecklist.id, text: "Confirm rollout window" }),
-    );
-    await updateItem({ cardId: card.id, checklistId: subChecklist.id, itemId: subItem.id, changes: { completed: true } });
+    const subItem = parseToolText<{ items: Array<{ id: string; text: string }> }>(
+      await addItems({ cardId: card.id, checklistId: subChecklist.id, items: [{ text: "Confirm rollout window" }] }),
+    ).items[0]!;
+    await updateItems({ cardId: card.id, updates: [{ itemId: subItem.id, changes: { completed: true } }] });
 
     const getCard = toolHandler(fixture.writeKey, publicApiUrl, "cards.get");
     const detail = parseToolText<{

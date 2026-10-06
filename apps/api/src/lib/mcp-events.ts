@@ -1,13 +1,13 @@
 import { mcpEventData, type McpEventArguments, type McpEventOccurrence } from "@kanera/shared/dto";
 import { cardPath } from "@kanera/shared/card-links";
-import { cards, clientMembers, mcpEventDeliveries, mcpEventSubscriptions, oauthClients, oauthGrants, users, workspaceApiKeys, type EventOutbox, type EventOutboxActor, type McpDeliveryError, type McpEventSubscription } from "@kanera/shared/schema";
+import { cards, clientMembers, lists, mcpEventDeliveries, mcpEventSubscriptions, oauthClients, oauthGrants, users, workspaceApiKeys, type EventOutbox, type EventOutboxActor, type McpDeliveryError, type McpEventSubscription } from "@kanera/shared/schema";
 import { and, eq, gt, inArray, lt, lte, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import type { AuthClaims } from "../auth/plugin.js";
 import { db } from "../db.js";
 import { env } from "../env.js";
 import { assertBoardAccess, assertCardAccess, assertWorkspaceAccess } from "./access.js";
-import { AppError, forbidden } from "./errors.js";
+import { AppError, badRequest, forbidden } from "./errors.js";
 import { decryptSecret } from "./secrets.js";
 import { McpCallbackError, mcpWebhookHeaders, postMcpWebhook, type McpWebhookRequest } from "./mcp-event-webhooks.js";
 
@@ -35,6 +35,12 @@ export async function assertMcpEventAccess(claims: AuthClaims, args: McpEventArg
       if (cardAccess.boardId !== args.boardId) throw forbidden();
     }
   } else await assertWorkspaceAccess(claims, args.workspaceId);
+  if (args.listId) {
+    // Lists belong to the workspace, so a board filter only narrows the shared list stream.
+    const [list] = await db.select({ id: lists.id }).from(lists)
+      .where(and(eq(lists.id, args.listId), eq(lists.workspaceId, args.workspaceId))).limit(1);
+    if (!list) throw badRequest("listId must identify a list in the monitored workspace");
+  }
 }
 
 // Reconstruct authority from live connection rows; stored issuance claims must never keep a
@@ -79,12 +85,13 @@ async function occurrenceFor(event: EventOutbox): Promise<BaseOccurrence | null>
   const comment = payload.comment as { id?: string; body?: string } | undefined;
   // A bounded summary avoids shipping descriptions, attachment URLs, or oversized comment bodies.
   // The matching read tools provide full current content when the task needs it.
-  const [current] = card?.key ? [card] : await db.select({ key: cards.key, organisationKey: cards.organisationKey }).from(cards).where(eq(cards.id, cardId)).limit(1);
+  const [current] = card?.key ? [card] : await db.select({ key: cards.key, organisationKey: cards.organisationKey, listId: cards.listId }).from(cards).where(eq(cards.id, cardId)).limit(1);
   const data = mcpEventData.omit({ actor: true }).parse({
     workspaceId: event.workspaceId, boardId: event.boardId, cardId,
     ...(card?.title !== undefined ? { title: card.title.slice(0, 2000) } : {}),
     // card:moved carries no card object; its destination travels as toListId.
-    ...(card?.listId ? { listId: card.listId } : typeof payload.toListId === "string" ? { listId: payload.toListId } : {}),
+    ...(card?.listId ? { listId: card.listId } : typeof payload.toListId === "string" ? { listId: payload.toListId } : current?.listId ? { listId: current.listId } : {}),
+    ...(name === "card.moved" && typeof payload.fromListId === "string" ? { fromListId: payload.fromListId } : {}),
     ...(typeof payload.prevPosition === "string" ? { prevPosition: payload.prevPosition } : {}),
     ...(comment ? { commentId: comment.id, text: (comment.body ?? "").slice(0, 8000) } : {}),
     ...(current?.key && current.organisationKey ? { url: new URL(cardPath(current.organisationKey, current.key), env.WEB_ORIGIN).toString() } : {}),
@@ -125,7 +132,13 @@ export async function enqueueMcpEventDeliveries(event: EventOutbox, preloadedSub
   if (!occurrence) return;
   const matching = subscriptions.filter((sub) => sub.name === occurrence.name && sub.expiresAt > new Date() && sub.startsAt <= event.occurredAt
     && (!sub.arguments.boardId || sub.arguments.boardId === event.boardId)
-    && (!sub.arguments.cardId || sub.arguments.cardId === occurrence.data.cardId));
+    && (!sub.arguments.cardId || sub.arguments.cardId === occurrence.data.cardId)
+    // Match the occurrence snapshot, not the live card: it may already have left this list again
+    // by the time the outbox drains. List watchers only want arrivals and departures, not reorders.
+    && (!sub.arguments.listId || occurrence.name !== "card.moved"
+      || occurrence.data.fromListId !== occurrence.data.listId)
+    && (!sub.arguments.listId || sub.arguments.listId === occurrence.data.listId
+      || (occurrence.name === "card.moved" && sub.arguments.listId === occurrence.data.fromListId)));
   if (!matching.length) return;
   // Rows published before actor capture existed carry no actor; they are reported as system.
   const actor = event.actor ?? null;

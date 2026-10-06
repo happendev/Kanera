@@ -66,6 +66,16 @@ kanera separator create <boardId> <listId> "This week" --color blue
 kanera separator move <separatorId> <listId> --anchor.side before --anchor.item.type card --anchor.item.id <cardId>
 \`\`\`
 
+Build a checklist plan in one call, then change several items in one call. List-of-object arguments
+take a JSON array; reuse the ids the first call returns:
+
+\`\`\`bash
+kanera call checklists.create --cardId MKT-42 --title Launch \\
+  --items '[{"text":"Prepare release","subChecklists":[{"title":"Verification","items":[{"text":"Run smoke tests"}]}]},{"text":"Announce launch"}]'
+kanera call checklists.update_items --cardId MKT-42 \\
+  --updates '[{"itemId":"<itemId>","changes":{"completed":true}},{"itemId":"<itemId>","changes":{"assigneeId":"<userId>"}}]'
+\`\`\`
+
 ## Setting up
 
 \`\`\`bash

@@ -1,3 +1,13 @@
+import { createHash } from "node:crypto";
+
+/**
+ * Stable, non-reversible identity for a credential, used to scope per-process caches and telemetry
+ * so nothing resolved for one credential is ever served to another.
+ */
+export function credentialDigest(apiKey: string): string {
+  return createHash("sha256").update(apiKey).digest("base64url").slice(0, 22);
+}
+
 export class KaneraApiError extends Error {
   constructor(
     readonly status: number,
@@ -10,6 +20,21 @@ export class KaneraApiError extends Error {
   }
 }
 
+/** Phase a request belongs to, so latency can be split into card resolution and the tool's own work. */
+export type UpstreamPhase = "card_resolution" | "api";
+
+export interface UpstreamTiming {
+  method: string;
+  /** Path with UUIDs, card keys, and organisation keys templated, so it is safe as a metric label. */
+  route: string;
+  status: number;
+  phase: UpstreamPhase;
+  /** Round trip measured by MCP: network, proxy, and public API time together. */
+  durationMs: number;
+  /** Handler time the public API reported in Server-Timing, when present. */
+  appMs: number | null;
+}
+
 export interface KaneraClientOptions {
   baseUrl: string;
   apiKey: string;
@@ -17,15 +42,54 @@ export interface KaneraClientOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
   idempotencyKey?: string;
+  onUpstreamRequest?: (timing: UpstreamTiming) => void;
+}
+
+const UUID_SEGMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+const CARD_KEY_SEGMENT = /^[A-Z][A-Z0-9]{1,9}-[1-9][0-9]*$/iu;
+const ORGANISATION_KEY_SEGMENT = /^[A-F0-9]{16}$/iu;
+
+export function upstreamRouteTemplate(pathname: string): string {
+  return pathname.split("/").map((segment) => {
+    if (UUID_SEGMENT.test(segment)) return ":id";
+    if (CARD_KEY_SEGMENT.test(segment)) return ":cardKey";
+    if (ORGANISATION_KEY_SEGMENT.test(segment)) return ":organisationKey";
+    return segment;
+  }).join("/");
+}
+
+function serverTimingAppMs(header: string | null): number | null {
+  const match = header?.match(/(?:^|,)\s*app;dur=([0-9.]+)/u);
+  return match ? Number(match[1]) : null;
 }
 
 export class KaneraClient {
   private readonly baseUrl: URL;
   private readonly fetchImpl: typeof fetch;
+  private phaseDepth = 0;
+  private digest: string | null = null;
 
   constructor(private readonly options: KaneraClientOptions) {
     this.baseUrl = new URL(options.baseUrl);
     this.fetchImpl = options.fetchImpl ?? fetch;
+  }
+
+  /**
+   * Labels requests started while `work` runs as card resolution, so per-call timing can separate
+   * key/URL lookup from the tool's own requests. Tool handlers await resolution before their main
+   * request, so a depth counter is sufficient without async-context tracking.
+   */
+  get credentialScope(): string {
+    return (this.digest ??= credentialDigest(this.options.apiKey));
+  }
+
+  async resolvingCards<T>(work: () => Promise<T>): Promise<T> {
+    this.phaseDepth += 1;
+    try {
+      return await work();
+    } finally {
+      this.phaseDepth -= 1;
+    }
   }
 
   async get<T>(path: string, query?: Record<string, string | number | boolean | null | undefined>): Promise<T> {
@@ -60,13 +124,12 @@ export class KaneraClient {
     const bytes = new Uint8Array(file.bytes.byteLength);
     bytes.set(file.bytes);
     form.append("file", new Blob([bytes.buffer], { type: file.mimeType }), file.fileName);
-    const response = await this.fetchResponse(url, {
+    return this.timed("POST", url, () => this.fetchResponse(url, {
       method: "POST",
       headers: this.headers(),
       body: form,
       signal: this.signal(),
-    });
-    return this.responsePayload<T>(response);
+    }));
   }
 
   private async request<T>(
@@ -76,13 +139,38 @@ export class KaneraClient {
     query?: Record<string, string | number | boolean | null | undefined>,
   ): Promise<T> {
     const url = this.url(path, query);
-    const response = await this.fetchResponse(url, {
+    return this.timed(method, url, () => this.fetchResponse(url, {
       method,
       headers: this.headers(body !== undefined, method !== "GET"),
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: this.signal(),
-    });
-    return this.responsePayload<T>(response);
+    }));
+  }
+
+  private async timed<T>(method: string, url: URL, send: () => Promise<Response>): Promise<T> {
+    const phase: UpstreamPhase = this.phaseDepth > 0 ? "card_resolution" : "api";
+    const startedAt = performance.now();
+    let status = 0;
+    let appMs: number | null = null;
+    try {
+      const response = await send();
+      status = response.status;
+      appMs = serverTimingAppMs(response.headers.get("server-timing"));
+      // Body read is part of the round trip: large responses stream after the headers arrive.
+      return await this.responsePayload<T>(response);
+    } catch (error) {
+      if (error instanceof KaneraApiError && status === 0) status = error.status;
+      throw error;
+    } finally {
+      this.options.onUpstreamRequest?.({
+        method,
+        route: upstreamRouteTemplate(url.pathname),
+        status,
+        phase,
+        durationMs: performance.now() - startedAt,
+        appMs,
+      });
+    }
   }
 
   private url(

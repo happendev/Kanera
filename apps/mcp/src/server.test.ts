@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { beforeEach } from "node:test";
 import type { CallToolResult } from "@modelcontextprotocol/server";
 import { env } from "./env.js";
-import { createKaneraMcpServer } from "./server.js";
+import { clearCardReferenceCache, createKaneraMcpServer } from "./server.js";
+
+// Card key resolutions are cached per credential across calls; each test stubs its own upstream.
+beforeEach(() => clearCardReferenceCache());
 
 const WORKSPACE_ID = "11111111-1111-4111-8111-111111111111";
 const BOARD_ID = "22222222-2222-4222-8222-222222222222";
@@ -19,9 +22,9 @@ function fetchInputUrl(input: Parameters<typeof fetch>[0]) {
   return input;
 }
 
-function toolHandler(name: string) {
+function toolHandler(name: string, apiKey = "kanera_live_test") {
   const server = createKaneraMcpServer({
-    apiKey: "kanera_live_test",
+    apiKey,
     publicApiUrl: "https://api.example.test",
   });
   const tools = (server as unknown as { _registeredTools: Record<string, RegisteredTool> })._registeredTools;
@@ -293,6 +296,32 @@ void test("card tools resolve a historical human key through its accessible orga
     `PATCH /api/v1/cards/${CARD_ID}/completion`,
   ]);
   assert.equal(result.isError, undefined);
+});
+
+void test("a resolved card key is reused across tool calls for the same credential only", async () => {
+  const requests: string[] = [];
+  await withFetchStub(async (input, init) => {
+    const url = new URL(fetchInputUrl(input));
+    requests.push(`${init?.method ?? "GET"} ${url.pathname}`);
+    if (url.pathname === "/api/v1/search") {
+      return new Response(JSON.stringify({ cards: [{ cardId: CARD_ID, cardKey: "DEV-9", organisationKey: ORGANISATION_KEY }] }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ id: CARD_ID, key: "DEV-9" }), { status: 200 });
+  }, async () => {
+    // Separate tool calls (separate server instances, as the stateless HTTP transport creates).
+    await toolHandler("cards.get")({ cardId: "DEV-9" });
+    await toolHandler("cards.get")({ cardId: "dev-9" });
+    // Another credential must resolve for itself: a cached id is never shared across credentials.
+    await toolHandler("cards.get", "kanera_live_other")({ cardId: "DEV-9" });
+  });
+
+  assert.deepEqual(requests, [
+    "GET /api/v1/search",
+    `GET /api/v1/cards/${CARD_ID}/detail`,
+    `GET /api/v1/cards/${CARD_ID}/detail`,
+    "GET /api/v1/search",
+    `GET /api/v1/cards/${CARD_ID}/detail`,
+  ]);
 });
 
 void test("canonical card URLs disambiguate keys without global search", async () => {

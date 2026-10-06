@@ -59,8 +59,9 @@ test("MCP 2 discovers events, executes tools, rejects private callbacks and resp
     const cancelled = await send("notifications/cancelled", { requestId: 1 }, { notification: true });
     expect(cancelled.response.status()).toBe(202);
     expect(cancelled.body).toBeNull();
-    const catalog = await rpc<{ events: Array<{ name: string; delivery: string[]; payloadSchema: { required: string[] } }> }>("events/list");
+    const catalog = await rpc<{ events: Array<{ name: string; delivery: string[]; payloadSchema: { required: string[] }; inputSchema: { properties: Record<string, unknown> } }> }>("events/list");
     expect(catalog.body.result.events.every((event) => event.payloadSchema.required.includes("actor"))).toBe(true);
+    expect(catalog.body.result.events.every((event) => !!event.inputSchema.properties.listId)).toBe(true);
     expect(catalog.body.result.events.map((event: { name: string }) => event.name)).toEqual(["card.created", "card.updated", "card.moved", "comment.created"]);
     expect(catalog.body.result.events.every((event: { delivery: string[] }) => event.delivery.join() === "webhook")).toBe(true);
     const tools = await rpc<{ tools: Array<{ name: string }>; ttlMs: number; cacheScope: string }>("tools/list");
@@ -71,6 +72,8 @@ test("MCP 2 discovers events, executes tools, rejects private callbacks and resp
     const detail = board.body.result.structuredContent;
     const workspaceId = detail.board.workspaceId;
     const listId = detail.lists[0]!.id;
+    const invalidList = await rpc("events/subscribe", { name: "card.moved", arguments: { workspaceId, boardId, listId: randomUUID() }, delivery: { mode: "webhook", url: "https://receiver.example/list", secret: `whsec_${randomBytes(32).toString("base64")}` } });
+    expect(invalidList.body.error!.code).toBe(-32602);
     const title = uniqueName("MCP 2 card");
     const write = { name: "cards.create", arguments: { boardId, listId, title, idempotencyKey: randomUUID() } };
     const created = await rpc<{ isError?: boolean }>("tools/call", write);

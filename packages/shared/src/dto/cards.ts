@@ -175,11 +175,100 @@ export const moveCardToBoardBody = z.object({
 });
 export type MoveCardToBoardBody = z.infer<typeof moveCardToBoardBody>;
 
-export const createChecklistBody = z.object({
-  title: z.string().trim().min(1).max(CARD_TITLE_MAX_LENGTH),
+// Checklist tree limits. Agents create whole plans in one request, so the bounds cover the tree,
+// not just one array: a top-level checklist may carry up to 200 items, each item up to 20
+// sub-checklists of up to 200 leaves, but one request may write at most 500 items in total.
+export const CHECKLIST_ITEM_TEXT_MAX_LENGTH = 2000;
+export const CHECKLIST_ITEMS_PER_REQUEST_MAX = 200;
+export const CHECKLIST_SUB_CHECKLISTS_PER_ITEM_MAX = 20;
+export const CHECKLIST_TREE_ITEMS_PER_REQUEST_MAX = 500;
+
+const checklistTitle = z.string().trim().min(1).max(CARD_TITLE_MAX_LENGTH);
+const checklistItemText = z.string().trim().min(1).max(CHECKLIST_ITEM_TEXT_MAX_LENGTH);
+const checklistLocalDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+// Sub-checklists are exactly one level deep and their items are leaves that carry only text and
+// completion. The schemas below are strict on purpose: a description, assignee, due date, or
+// further nesting on a leaf is rejected with its exact path instead of being silently dropped.
+export const newSubChecklistItem = z.strictObject({
+  text: checklistItemText,
+  completed: z.boolean().optional(),
+});
+export type NewSubChecklistItem = z.infer<typeof newSubChecklistItem>;
+
+export const newSubChecklist = z.strictObject({
+  title: checklistTitle,
+  items: z.array(newSubChecklistItem).max(CHECKLIST_ITEMS_PER_REQUEST_MAX).optional(),
+});
+export type NewSubChecklist = z.infer<typeof newSubChecklist>;
+
+const newChecklistItemFields = {
+  text: checklistItemText,
+  description: z.string().max(50000).nullable().optional(),
+  completed: z.boolean().optional(),
+  assigneeId: z.uuid().nullable().optional(),
+  dueDateLocalDate: checklistLocalDate.nullable().optional(),
+  dueDateSlot: dueDateSlot.nullable().optional(),
+  subChecklists: z.array(newSubChecklist).max(CHECKLIST_SUB_CHECKLISTS_PER_ITEM_MAX).optional(),
+};
+
+type NewItemShape = { dueDateLocalDate?: string | null; dueDateSlot?: string | null };
+function refineNewItemDueDate(item: NewItemShape, ctx: z.RefinementCtx, path: (string | number)[] = []) {
+  if (item.dueDateSlot != null && !item.dueDateLocalDate) {
+    ctx.addIssue({ code: "custom", path: [...path, "dueDateSlot"], message: "provide dueDateLocalDate when setting dueDateSlot" });
+  }
+}
+
+/** A fully specified top-level checklist item, optionally with its own one-level sub-checklists. */
+export const newChecklistItem = z.strictObject(newChecklistItemFields).superRefine((item, ctx) => refineNewItemDueDate(item, ctx));
+export type NewChecklistItem = z.infer<typeof newChecklistItem>;
+
+type NewItemTree = { subChecklists?: { items?: unknown[] }[] }[];
+function countTreeItems(items: NewItemTree | undefined): number {
+  return (items ?? []).reduce((total, item) =>
+    total + 1 + (item.subChecklists ?? []).reduce((sum, sub) => sum + (sub.items?.length ?? 0), 0), 0);
+}
+
+function refineTreeSize(items: NewItemTree | undefined, ctx: z.RefinementCtx, path: (string | number)[]) {
+  const total = countTreeItems(items);
+  if (total > CHECKLIST_TREE_ITEMS_PER_REQUEST_MAX) {
+    ctx.addIssue({
+      code: "custom",
+      path,
+      message: `one request may create at most ${CHECKLIST_TREE_ITEMS_PER_REQUEST_MAX} checklist items including sub-checklist items (received ${total})`,
+    });
+  }
+}
+
+// Creating a checklist may include its full contents. With parentItemId the new checklist is
+// itself a sub-checklist, so its items must be leaves; that rule depends on a sibling field and is
+// therefore checked in superRefine, reporting the first offending field by path.
+export const createChecklistBody = z.strictObject({
+  title: checklistTitle,
   parentItemId: z.uuid().nullable().optional(),
+  items: z.array(z.strictObject(newChecklistItemFields)).max(CHECKLIST_ITEMS_PER_REQUEST_MAX).optional(),
+}).superRefine((body, ctx) => {
+  body.items?.forEach((item, index) => {
+    refineNewItemDueDate(item, ctx, ["items", index]);
+    if (!body.parentItemId) return;
+    for (const field of ["description", "assigneeId", "dueDateLocalDate", "dueDateSlot", "subChecklists"] as const) {
+      if (item[field] !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["items", index, field],
+          message: `sub-checklist items support only text and completed; remove ${field}`,
+        });
+      }
+    }
+  });
+  refineTreeSize(body.items, ctx, ["items"]);
 });
 export type CreateChecklistBody = z.infer<typeof createChecklistBody>;
+
+export const listCardChecklistsQuery = z.strictObject({
+  checklistId: z.uuid().optional(),
+});
+export type ListCardChecklistsQuery = z.infer<typeof listCardChecklistsQuery>;
 
 export const applyChecklistTemplatesBody = z.object({
   templateIds: z.array(z.uuid()).min(1).max(100),
@@ -202,10 +291,40 @@ export const moveChecklistBody = z
   );
 export type MoveChecklistBody = z.infer<typeof moveChecklistBody>;
 
-export const createChecklistItemBody = z.object({
-  text: z.string().trim().min(1).max(2000),
+// Optional insertion anchor shared by single and batch item creation. Without one, new items are
+// appended. A null id selects an edge: after null is the top, before null is the bottom.
+const checklistItemAnchorFields = {
+  afterItemId: z.uuid().nullable().optional(),
+  beforeItemId: z.uuid().nullable().optional(),
+};
+type ItemAnchorShape = { afterItemId?: string | null; beforeItemId?: string | null };
+function refineSingleAnchor(body: ItemAnchorShape, ctx: z.RefinementCtx) {
+  if (body.afterItemId !== undefined && body.beforeItemId !== undefined) {
+    ctx.addIssue({ code: "custom", path: ["beforeItemId"], message: "provide at most one of afterItemId or beforeItemId" });
+  }
+}
+
+// `{ text }` remains the minimal valid body. Fields that only top-level items support are rejected
+// by the route when the target checklist is a sub-checklist, with the offending field named.
+export const createChecklistItemBody = z.strictObject({
+  ...newChecklistItemFields,
+  ...checklistItemAnchorFields,
+}).superRefine((body, ctx) => {
+  refineNewItemDueDate(body, ctx);
+  refineSingleAnchor(body, ctx);
+  refineTreeSize([body], ctx, ["subChecklists"]);
 });
 export type CreateChecklistItemBody = z.infer<typeof createChecklistItemBody>;
+
+export const createChecklistItemsBody = z.strictObject({
+  items: z.array(z.strictObject(newChecklistItemFields)).min(1).max(CHECKLIST_ITEMS_PER_REQUEST_MAX),
+  ...checklistItemAnchorFields,
+}).superRefine((body, ctx) => {
+  body.items.forEach((item, index) => refineNewItemDueDate(item, ctx, ["items", index]));
+  refineSingleAnchor(body, ctx);
+  refineTreeSize(body.items, ctx, ["items"]);
+});
+export type CreateChecklistItemsBody = z.infer<typeof createChecklistItemsBody>;
 
 export const bulkCreateChecklistItemsBody = z.object({
   items: z.array(z.object({
@@ -217,7 +336,9 @@ export const bulkCreateChecklistItemsBody = z.object({
 });
 export type BulkCreateChecklistItemsBody = z.infer<typeof bulkCreateChecklistItemsBody>;
 
-export const updateChecklistItemBody = z.object({
+// Strict so a misspelled or unsupported field fails validation instead of being dropped while the
+// rest of the change succeeds.
+export const updateChecklistItemBody = z.strictObject({
   text: z.string().trim().min(1).max(2000).optional(),
   description: z.string().max(50000).nullable().optional(),
   completed: z.boolean().optional(),
@@ -236,7 +357,27 @@ export const updateChecklistItemBody = z.object({
 );
 export type UpdateChecklistItemBody = z.infer<typeof updateChecklistItemBody>;
 
-export const bulkUpdateChecklistItemsBody = z.object({
+// Selected-item updates address items on one card by id; the server derives each item's checklist
+// and applies every change in one transaction, after validating the whole batch.
+export const updateChecklistItemsBody = z.strictObject({
+  updates: z.array(z.strictObject({
+    itemId: z.uuid(),
+    changes: updateChecklistItemBody,
+  })).min(1).max(CHECKLIST_ITEMS_PER_REQUEST_MAX),
+}).superRefine(({ updates }, ctx) => {
+  const seen = new Set<string>();
+  updates.forEach((update, index) => {
+    if (seen.has(update.itemId)) {
+      ctx.addIssue({ code: "custom", path: ["updates", index, "itemId"], message: "itemId must be unique within the batch; merge its changes into one entry" });
+    }
+    seen.add(update.itemId);
+  });
+});
+export type UpdateChecklistItemsBody = z.infer<typeof updateChecklistItemsBody>;
+
+// Strict: this applies to EVERY item in the checklist, so an unrecognised selector such as
+// `itemIds` must be rejected rather than stripped into an update of the whole checklist.
+export const bulkUpdateChecklistItemsBody = z.strictObject({
   assigneeId: z.uuid().nullable().optional(),
   dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   dueDateSlot: dueDateSlot.nullable().optional(),

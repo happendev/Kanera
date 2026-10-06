@@ -10,8 +10,11 @@ import { decryptSecret, encryptSecret } from "../../lib/secrets.js";
 import { McpCallbackError, verifyMcpCallback, type McpWebhookRequest } from "../../lib/mcp-event-webhooks.js";
 
 // Hash ordered scalar fields rather than raw JSON: argument key order never changes identity.
-function subscriptionId(principal: string, body: { name: string; arguments: { workspaceId: string; boardId?: string; cardId?: string }; delivery: { url: string } }) {
-  return `sub_${createHash("sha256").update(JSON.stringify([principal, body.delivery.url, body.name, body.arguments.workspaceId, body.arguments.boardId ?? null, body.arguments.cardId ?? null])).digest("hex")}`;
+function subscriptionId(principal: string, body: { name: string; arguments: { workspaceId: string; boardId?: string; cardId?: string; listId?: string }; delivery: { url: string } }) {
+  return `sub_${createHash("sha256").update(JSON.stringify([principal, body.delivery.url, body.name, body.arguments.workspaceId, body.arguments.boardId ?? null, body.arguments.cardId ?? null,
+    // Preserve existing IDs for unfiltered subscriptions while making each list a distinct stream.
+    ...(body.arguments.listId ? [body.arguments.listId] : []),
+  ])).digest("hex")}`;
 }
 const DEFAULT_TTL = 24 * 60 * 60_000;
 const VERIFICATION_CACHE_MS = 5 * 60_000;

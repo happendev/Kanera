@@ -143,7 +143,7 @@ export class CardActivityComponent {
   // rows the reader cannot find.
   // - Aggregate rows left by older mirror workers are hidden; the rich source activities are the
   //   audit trail and make an unexplained "N mirrored changes" entry redundant and misleading.
-  // - agentRun:started is recorded for notifications and audit, but the live run block above the
+  // - agentRun:started is recorded for audit (run start/end never notifies), but the live run block above the
   //   fields already shows in-flight work, so the feed only carries the outcome (agentRun:ended).
   readonly renderableFeedItems = computed(() =>
     this.feedItems().filter((item) =>

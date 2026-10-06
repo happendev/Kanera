@@ -3,7 +3,7 @@ import { cardPath } from "@kanera/shared/card-links";
 import { SERVER_EVENTS, type WireCard, type WireCardChecklist, type WireCardDetail } from "@kanera/shared/events";
 import { ACTIVITY_ACTION, activityEvents, boardMembers, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cards, cardWatchers, customFields, lists, users, type ActivityEvent } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { randomUUID } from "node:crypto";
 import type { AuthClaims } from "../../auth/plugin.js";
 import { db, type Db } from "../../db.js";
@@ -31,7 +31,20 @@ import { externalEmbeddedMediaReferences, signedAvatarUrl, signEmbeddedMediaUrls
 import { replaceCardMentions } from "../../lib/mentions.js";
 import { clearNotificationsForCards, clearOverdueChecklistItemNotifications, clearOverdueNotificationsForCards, emitDeletedNotifications, emitRelocatedNotifications, relocateNotificationsForCard, syncDirectNotificationForActivity } from "../../lib/notifications.js";
 import { createOverdueNotificationsForCards } from "../../lib/overdue-notifications.js";
-import { between } from "../../lib/position.js";
+import { between, positionAtIndex } from "../../lib/position.js";
+import {
+  assertLeafItems,
+  checklistValidationError,
+  collectAssignees,
+  hasDueDates,
+  insertChecklistItemTrees,
+  positionsBetween,
+  recordItemCreationActivities,
+  type CreatedItemTree,
+  type IssuePath,
+  type ItemCreationActivities,
+  type NewItem as NewChecklistTreeItem,
+} from "./checklist-tree.js";
 import { emitToBoard } from "../../realtime/emit.js";
 import { loadLinkedNotesForCard, repairInternalLinksAroundCard, replaceInternalLinksForSource } from "../../lib/internal-links.js";
 import { assertGlobalWorkSeparatorContext, positionForGlobalWorkLaneInsert } from "../global-work-separators/routes.js";
@@ -108,6 +121,93 @@ async function ensureBoardMembershipForUsers(
     .where(and(eq(boardMembers.boardId, boardId), inArray(boardMembers.userId, userIds)));
   const eligible = new Set(existingMembers.filter((m) => m.role !== "observer").map((m) => m.userId));
   return userIds.filter((uid) => eligible.has(uid));
+}
+
+async function actorTimezone(userId: string): Promise<string> {
+  return (await db.select({ timezone: users.timezone }).from(users).where(eq(users.id, userId)).limit(1))[0]?.timezone ?? "UTC";
+}
+
+/**
+ * Pre-write checks for items created through any checklist route: every assignee must be an
+ * assignable board member (reported at the first item that names them), and due dates capture the
+ * acting user's timezone exactly as an item PATCH would.
+ */
+async function prepareNewChecklistItems(
+  boardId: string,
+  workspaceId: string,
+  actorId: string,
+  items: readonly NewChecklistTreeItem[],
+  itemPath: (index: number) => IssuePath,
+): Promise<{ assigneeNames: Map<string, string | null>; timezone: string | null }> {
+  const assignees = collectAssignees(items, itemPath);
+  const assigneeIds = [...assignees.keys()];
+  const eligible = new Set(await ensureBoardMembershipForUsers(boardId, workspaceId, assigneeIds));
+  for (const [userId, path] of assignees) {
+    if (!eligible.has(userId)) throw checklistValidationError(path, "assignee is not an assignable (non-observer) member of this board");
+  }
+  const assigneeNames = new Map<string, string | null>();
+  if (assigneeIds.length > 0) {
+    const rows = await db.select({ id: users.id, displayName: users.displayName }).from(users).where(inArray(users.id, assigneeIds));
+    for (const row of rows) assigneeNames.set(row.id, row.displayName);
+  }
+  return { assigneeNames, timezone: hasDueDates(items) ? await actorTimezone(actorId) : null };
+}
+
+// Items may be created already complete. When that leaves every top-level item on the card done,
+// the "all checklist items complete" automation fires exactly as if the last item had been ticked.
+async function runCompletionAutomationsForNewItems(
+  tx: Tx,
+  card: Pick<typeof cards.$inferSelect, "id" | "boardId">,
+  ctx: { workspaceId: string; clientId: string },
+  actorId: string,
+  checklistParentItemId: string | null,
+  items: readonly NewChecklistTreeItem[],
+): Promise<AutomationEffects> {
+  if (checklistParentItemId !== null || !items.some((item) => item.completed)) return EMPTY_EFFECTS;
+  return runChecklistCompletionAutomations(tx, {
+    cardId: card.id,
+    boardId: card.boardId,
+    workspaceId: ctx.workspaceId,
+    clientId: ctx.clientId,
+    triggerActorId: actorId,
+  });
+}
+
+/**
+ * Post-commit fanout for created items. Item events precede the sub-checklist events that point at
+ * them, and audit rows are emitted without watcher notifications so a large plan does not page
+ * every watcher once per row; assignees still receive their direct "assigned" notification.
+ */
+async function emitCreatedItemTrees(
+  card: Pick<typeof cards.$inferSelect, "id" | "boardId" | "title" | "listId">,
+  checklist: { id: string; parentItemId: string | null },
+  trees: readonly CreatedItemTree[],
+  activities: ItemCreationActivities,
+  options: { emitItems: boolean },
+) {
+  for (const tree of trees) {
+    if (options.emitItems) {
+      await emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_CREATED, {
+        boardId: card.boardId,
+        cardId: card.id,
+        cardTitle: card.title,
+        listId: card.listId,
+        checklistId: checklist.id,
+        checklistParentItemId: checklist.parentItemId,
+        item: tree.item,
+      });
+    }
+    for (const subChecklist of tree.subChecklists) {
+      await emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_CREATED, { boardId: card.boardId, cardId: card.id, checklist: subChecklist });
+    }
+  }
+  for (const activity of [...activities.created, ...activities.subChecklistsCreated, ...activities.dueDates]) {
+    await emitCardActivityFeedItem(card.boardId, card.id, activity, { notify: false });
+  }
+  for (const { activity, assigneeId } of activities.assigned) {
+    await emitCardActivityFeedItem(card.boardId, card.id, activity, { notify: false });
+    void syncDirectNotificationForActivity({ userId: assigneeId, activity, reason: "assigned" }).catch(() => undefined);
+  }
 }
 
 async function bottomPositionForList(boardId: string, listId: string): Promise<string> {
@@ -2268,6 +2368,25 @@ export async function cardRoutes(
     };
   });
 
+  // Read-only checklist view for agents and integrations: the card's checklists without the rest of
+  // card detail. With checklistId it returns that checklist plus, for a top-level checklist, the
+  // sub-checklists owned by its items, so one call yields everything needed to edit that tree.
+  app.get("/cards/:id/checklists", async (req) => {
+    const { id } = req.params as { id: string };
+    const query = dto.listCardChecklistsQuery.parse(req.query);
+    const [card] = await db.select({ id: cards.id, boardId: cards.boardId }).from(cards).where(eq(cards.id, id)).limit(1);
+    if (!card) throw notFound();
+    await assertCardAccess(req.auth, card);
+    const checklists = await loadChecklistsForCard(id);
+    if (!query.checklistId) return { checklists };
+    const focused = checklists.find((checklist) => checklist.id === query.checklistId);
+    if (!focused) throw notFound("checklist not found");
+    const ownedItemIds = new Set(focused.items.map((item) => item.id));
+    return {
+      checklists: [focused, ...checklists.filter((checklist) => checklist.parentItemId !== null && ownedItemIds.has(checklist.parentItemId))],
+    };
+  });
+
   app.post("/cards/:id/checklists", async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = dto.createChecklistBody.parse(req.body);
@@ -2291,6 +2410,10 @@ export async function cardRoutes(
       // strictly card -> checklist -> item -> sub-checklist -> sub-item.
       if (!parentItem) throw badRequest("parentItemId must identify a top-level item on this card");
     }
+    const items = body.items ?? [];
+    // Validate every referenced assignee before writing so a bad entry deep in the tree fails the
+    // whole request with its path instead of leaving a half-created plan.
+    const newItems = await prepareNewChecklistItems(card.boardId, ctx.workspaceId, req.auth.sub, items, (index) => ["items", index]);
     const siblingScope = parentItemId === null
       ? and(eq(cardChecklists.cardId, id), isNull(cardChecklists.parentItemId))
       : and(eq(cardChecklists.cardId, id), eq(cardChecklists.parentItemId, parentItemId));
@@ -2302,12 +2425,21 @@ export async function cardRoutes(
       .limit(1);
     const position = between(last?.position ?? null, null).position;
 
-    const { checklist, activity } = await db.transaction(async (tx) => {
+    const { checklist, trees, activity, itemActivities, automationEffects } = await db.transaction(async (tx) => {
+      const now = new Date();
       const [checklist] = await tx
         .insert(cardChecklists)
         .values({ cardId: id, parentItemId, title: body.title, position })
         .returning();
-      await tx.update(cards).set({ updatedAt: new Date() }).where(eq(cards.id, id));
+      const trees = await insertChecklistItemTrees(tx, items, {
+        cardId: id,
+        checklistId: checklist!.id,
+        positions: items.map((_, index) => positionAtIndex(index)),
+        actorId: req.auth.sub,
+        timezone: newItems.timezone,
+        now,
+      });
+      await tx.update(cards).set({ updatedAt: now }).where(eq(cards.id, id));
       const activity = await recordActivity(tx, {
         boardId: card.boardId,
         workspaceId: ctx.workspaceId,
@@ -2315,14 +2447,33 @@ export async function cardRoutes(
         entityType: "card",
         entityId: id,
         action: ACTIVITY_ACTION.CHECKLIST_CREATED,
-        payload: { checklistId: checklist!.id, parentItemId, title: checklist!.title },
+        payload: { checklistId: checklist!.id, parentItemId, title: checklist!.title, ...(items.length > 0 && { itemCount: items.length }) },
       });
-      return { checklist: { ...checklist!, items: [] }, activity };
+      // The checklist:created row already announces the initial items, so per-item created rows
+      // are skipped; assignment and due-date rows are still written so the feed and the assignee
+      // notification match a step-by-step build of the same plan.
+      const itemActivities = await recordItemCreationActivities(tx, {
+        boardId: card.boardId,
+        workspaceId: ctx.workspaceId,
+        cardId: id,
+        actorId: req.auth.sub,
+        checklist: checklist!,
+        trees,
+        assigneeNames: newItems.assigneeNames,
+        recordCreated: false,
+      });
+      const automationEffects = await runCompletionAutomationsForNewItems(tx, card, ctx, req.auth.sub, parentItemId, items);
+      return { checklist: checklist!, trees, activity, itemActivities, automationEffects };
     });
 
+    const created: WireCardChecklist = { ...checklist, items: trees.map((tree) => tree.item) };
     emitCardActivityFeedItem(card.boardId, id, activity);
-    emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_CREATED, { boardId: card.boardId, cardId: id, checklist });
-    return reply.status(201).send(checklist);
+    // The parent checklist event carries its items, so clients have each owning item before the
+    // sub-checklist events that reference it by parentItemId arrive.
+    await emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_CREATED, { boardId: card.boardId, cardId: id, checklist: created });
+    await emitCreatedItemTrees(card, created, trees, itemActivities, { emitItems: false });
+    await emitAutomationEffects(automationEffects);
+    return reply.status(201).send({ ...created, subChecklists: trees.flatMap((tree) => tree.subChecklists) });
   });
 
   app.post("/cards/:id/checklist-templates/apply", async (req) => {
@@ -2606,16 +2757,30 @@ export async function cardRoutes(
     return reply.status(201).send({ created: items.length, items });
   });
 
-  app.post("/cards/:id/checklists/:checklistId/items", async (req, reply) => {
-    const { id, checklistId } = req.params as { id: string; checklistId: string };
-    const body = dto.createChecklistItemBody.parse(req.body);
+  /**
+   * Shared by single and batch item creation. Items (and any sub-checklists under them) are placed
+   * contiguously in request order at the anchor, or appended when no anchor is given.
+   */
+  async function createChecklistItems(
+    req: FastifyRequest,
+    params: { id: string; checklistId: string },
+    items: readonly dto.NewChecklistItem[],
+    anchor: { afterItemId?: string | null; beforeItemId?: string | null },
+    options: { itemPath: (index: number) => IssuePath; recordCreated: boolean },
+  ): Promise<CreatedItemTree[]> {
+    const { id, checklistId } = params;
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    await assertCardAccess(req.auth, card, "editor");
+    const ctx = await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
     const [checklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
     if (!checklist) throw notFound("checklist not found");
-    const item = await db.transaction(async (tx) => {
+    // Depth is a property of the target, so the leaf-only rule is enforced here rather than in the
+    // body schema: items added to a sub-checklist carry only text and completion.
+    if (checklist.parentItemId) assertLeafItems(items, options.itemPath);
+    const newItems = await prepareNewChecklistItems(card.boardId, ctx.workspaceId, req.auth.sub, items, options.itemPath);
+
+    const { trees, rebalanced, activities, automationEffects } = await db.transaction(async (tx) => {
       // Share the checklist lock used by bulk creation so concurrent single and batch appends cannot
       // calculate the same numeric position from a stale tail row.
       const [lockedChecklist] = await tx
@@ -2625,23 +2790,71 @@ export async function cardRoutes(
         .for("update")
         .limit(1);
       if (!lockedChecklist) throw notFound("checklist not found");
-      const [last] = await tx
-        .select({ position: cardChecklistItems.position })
-        .from(cardChecklistItems)
-        .where(eq(cardChecklistItems.checklistId, checklistId))
-        .orderBy(desc(cardChecklistItems.position))
-        .limit(1);
-      const position = between(last?.position ?? null, null).position;
-      const [item] = await tx
-        .insert(cardChecklistItems)
-        .values({ checklistId, text: body.text, position })
-        .returning();
-      await tx.update(cards).set({ updatedAt: new Date() }).where(eq(cards.id, id));
-      return item!;
+      const { prev, next } = anchor.afterItemId !== undefined || anchor.beforeItemId !== undefined
+        ? await neighbourChecklistItemPositions(checklistId, null, anchor.afterItemId, anchor.beforeItemId, tx)
+        : await neighbourChecklistItemPositions(checklistId, null, undefined, null, tx);
+      const placement = positionsBetween(prev, next, items.length);
+      const now = new Date();
+      const trees = await insertChecklistItemTrees(tx, items, {
+        cardId: id,
+        checklistId,
+        positions: placement.positions,
+        actorId: req.auth.sub,
+        timezone: newItems.timezone,
+        now,
+      });
+      await tx.update(cards).set({ updatedAt: now }).where(eq(cards.id, id));
+      const rebalanced = placement.needsRebalance ? await rebalanceChecklistItems(checklistId, tx) : null;
+      if (rebalanced) {
+        const positionById = new Map(rebalanced.map((row) => [row.id, row.position]));
+        for (const tree of trees) tree.item = { ...tree.item, position: positionById.get(tree.item.id) ?? tree.item.position };
+      }
+      const activities = await recordItemCreationActivities(tx, {
+        boardId: card.boardId,
+        workspaceId: ctx.workspaceId,
+        cardId: id,
+        actorId: req.auth.sub,
+        checklist,
+        trees,
+        assigneeNames: newItems.assigneeNames,
+        recordCreated: options.recordCreated,
+      });
+      const automationEffects = await runCompletionAutomationsForNewItems(tx, card, ctx, req.auth.sub, checklist.parentItemId, items);
+      return { trees, rebalanced, activities, automationEffects };
     });
 
-    emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_CREATED, { boardId: card.boardId, cardId: id, cardTitle: card.title, listId: card.listId, checklistId, checklistParentItemId: checklist.parentItemId, item });
-    return reply.status(201).send(item);
+    // Existing rows renumbered by a dense insert are announced before the created items, matching
+    // the rebalance-before-move ordering every other positioned entity follows.
+    if (rebalanced) {
+      await emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_REBALANCED, { boardId: card.boardId, cardId: id, checklistId, positions: rebalanced });
+    }
+    await emitCreatedItemTrees(card, checklist, trees, activities, { emitItems: true });
+    await emitAutomationEffects(automationEffects);
+    return trees;
+  }
+
+  app.post("/cards/:id/checklists/:checklistId/items", async (req, reply) => {
+    const params = req.params as { id: string; checklistId: string };
+    const { afterItemId, beforeItemId, ...item } = dto.createChecklistItemBody.parse(req.body);
+    // The first-party UI adds one plain item per keystroke-Enter, which has never written a feed row;
+    // only assignment and due-date rows are recorded here, as they would be by a follow-up edit.
+    const [tree] = await createChecklistItems(req, params, [item], { afterItemId, beforeItemId }, {
+      itemPath: () => [],
+      recordCreated: false,
+    });
+    return reply.status(201).send({ ...tree!.item, subChecklists: tree!.subChecklists });
+  });
+
+  app.post("/cards/:id/checklists/:checklistId/items/batch", async (req, reply) => {
+    const params = req.params as { id: string; checklistId: string };
+    const body = dto.createChecklistItemsBody.parse(req.body);
+    // A batch is an explicit plan edit, so each item gets an audit row (without watcher fanout), as
+    // in the board-level bulk create.
+    const trees = await createChecklistItems(req, params, body.items, body, {
+      itemPath: (index) => ["items", index],
+      recordCreated: true,
+    });
+    return reply.status(201).send({ items: trees.map((tree) => ({ ...tree.item, subChecklists: tree.subChecklists })) });
   });
 
   app.patch("/cards/:id/checklists/:checklistId/items/bulk", async (req) => {
@@ -2780,30 +2993,87 @@ export async function cardRoutes(
     return { items };
   });
 
-  app.patch("/cards/:id/checklists/:checklistId/items/:itemId", async (req) => {
-    const { id, checklistId, itemId } = req.params as { id: string; checklistId: string; itemId: string };
-    const body = dto.updateChecklistItemBody.parse(req.body);
-    const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
+  type ChecklistItemUpdateTarget = {
+    card: typeof cards.$inferSelect;
+    ctx: Awaited<ReturnType<typeof assertCardAccess>>;
+    checklist: typeof cardChecklists.$inferSelect;
+    current: typeof cardChecklistItems.$inferSelect;
+  };
+  type PreparedChecklistItemUpdate = ChecklistItemUpdateTarget & {
+    body: dto.UpdateChecklistItemBody;
+    actorId: string;
+    hasDueDateUpdate: boolean;
+    dueDateLocalDate: string | null | undefined;
+    dueDateSlot: dto.DueDateSlot | null | undefined;
+    dueDateTimezone: string | null | undefined;
+    nextCompletedAt: Date | null;
+    nextCompletedById: string | null;
+    nextText: string;
+    nextDescription: string | null;
+    assigneeChanged: boolean;
+    nextAssigneeId: string | null;
+    nextAssigneeName: string | null;
+    previousAssigneeName: string | null;
+  };
+  type WrittenChecklistItemUpdate = {
+    item: typeof cardChecklistItems.$inferSelect;
+    activities: CoalescedActivityResult[];
+    assigneeActivity: CoalescedActivityResult | null;
+    dueDateActivity: CoalescedActivityResult | null;
+    automationEffects: AutomationEffects;
+    hiddenChecklistCompletionId: string | null;
+  };
+
+  /**
+   * Resolves the card, its access context, and the item's containing checklist. When checklistId is
+   * omitted the server derives it from the item, but the item must still belong to the supplied
+   * card, so a stale or foreign id is a 404 rather than an edit on someone else's card.
+   */
+  async function loadChecklistItemTarget(req: FastifyRequest, params: { id: string; checklistId?: string; itemId: string }): Promise<ChecklistItemUpdateTarget> {
+    const [card] = await db.select().from(cards).where(eq(cards.id, params.id)).limit(1);
     if (!card) throw notFound();
     const ctx = await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
-    const [checklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
-    if (!checklist) throw notFound("checklist not found");
-    if (checklist.parentItemId && (
-      body.description !== undefined ||
-      body.assigneeId !== undefined ||
-      body.dueDateLocalDate !== undefined ||
-      body.dueDateSlot !== undefined
-    )) {
-      throw badRequest("nested checklist items support only text and completion");
-    }
-    const [current] = await db
-      .select()
+    const [row] = await db
+      .select({ item: cardChecklistItems, checklist: cardChecklists })
       .from(cardChecklistItems)
-      .where(and(eq(cardChecklistItems.id, itemId), eq(cardChecklistItems.checklistId, checklistId)))
+      .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
+      .where(and(
+        eq(cardChecklistItems.id, params.itemId),
+        eq(cardChecklists.cardId, params.id),
+        ...(params.checklistId ? [eq(cardChecklists.id, params.checklistId)] : []),
+      ))
       .limit(1);
-    if (!current) throw notFound("checklist item not found");
+    if (!row) {
+      if (params.checklistId) {
+        const [checklist] = await db.select({ id: cardChecklists.id }).from(cardChecklists)
+          .where(and(eq(cardChecklists.id, params.checklistId), eq(cardChecklists.cardId, params.id))).limit(1);
+        if (!checklist) throw notFound("checklist not found");
+      }
+      throw notFound("checklist item not found");
+    }
+    return { card, ctx, checklist: row.checklist, current: row.item };
+  }
 
+  /**
+   * Everything an item update needs that can be computed and validated before the transaction:
+   * leaf-only rules, assignee eligibility, and due-date derivation. `path` prefixes validation
+   * errors so a batch can name the offending entry.
+   */
+  async function prepareChecklistItemUpdate(
+    target: ChecklistItemUpdateTarget,
+    body: dto.UpdateChecklistItemBody,
+    actorId: string,
+    options: { path?: IssuePath; timezone?: () => Promise<string> } = {},
+  ): Promise<PreparedChecklistItemUpdate> {
+    const { card, ctx, checklist, current } = target;
+    if (checklist.parentItemId) {
+      const field = (["description", "assigneeId", "dueDateLocalDate", "dueDateSlot"] as const).find((key) => body[key] !== undefined);
+      if (field) {
+        if (options.path) throw checklistValidationError([...options.path, field], "sub-checklist items support only text and completed");
+        throw badRequest("nested checklist items support only text and completion");
+      }
+    }
     // Due date derivation mirrors the card PATCH route: clearing the date also
     // clears slot + timezone, setting a date defaults the slot to "anyTime" and
     // captures the acting user's timezone so overdue is evaluated correctly.
@@ -2817,7 +3087,7 @@ export async function cardRoutes(
     const dueDateTimezone = dueDateLocalDate === undefined
       ? undefined
       : dueDateLocalDate
-        ? ((await db.select({ timezone: users.timezone }).from(users).where(eq(users.id, req.auth.sub)).limit(1))[0]?.timezone ?? "UTC")
+        ? await (options.timezone ?? (() => actorTimezone(actorId)))()
         : null;
 
     const nextCompletedAt = body.completed === undefined
@@ -2828,7 +3098,7 @@ export async function cardRoutes(
     const nextCompletedById = body.completed === undefined
       ? current.completedById
       : body.completed
-        ? req.auth.sub
+        ? actorId
         : null;
     const nextText = body.text ?? current.text;
     const nextDescription = body.description === undefined ? current.description : body.description;
@@ -2839,7 +3109,10 @@ export async function cardRoutes(
 
     if (nextAssigneeId) {
       const eligibleIds = await ensureBoardMembershipForUsers(card.boardId, ctx.workspaceId, [nextAssigneeId]);
-      if (!eligibleIds.includes(nextAssigneeId)) throw badRequest("assignee is not an assignable member");
+      if (!eligibleIds.includes(nextAssigneeId)) {
+        if (options.path) throw checklistValidationError([...options.path, "assigneeId"], "assignee is not an assignable (non-observer) member of this board");
+        throw badRequest("assignee is not an assignable member");
+      }
     }
 
     if (assigneeChanged) {
@@ -2854,266 +3127,336 @@ export async function cardRoutes(
         previousAssigneeName = current.assigneeId ? userNameById.get(current.assigneeId) ?? null : null;
       }
     }
-    const { item, activities, assigneeActivity, dueDateActivity, automationEffects, hiddenChecklistCompletionId } = await db.transaction(async (tx) => {
-      const reopeningCompletedChecklist = body.completed === false
-        && Boolean(current.completedAt)
-        && (await tx
-          .select({ completedAt: cardChecklistItems.completedAt })
-          .from(cardChecklistItems)
-          .where(eq(cardChecklistItems.checklistId, checklistId)))
-          .every((row) => Boolean(row.completedAt));
-      const [item] = await tx
-        .update(cardChecklistItems)
-        .set({
-          text: nextText,
-          description: nextDescription,
-          assigneeId: nextAssigneeId,
-          ...(dueDateLocalDate !== undefined && { dueDateLocalDate }),
-          ...(dueDateSlot !== undefined && { dueDateSlot }),
-          ...(dueDateTimezone !== undefined && { dueDateTimezone }),
-          completedAt: nextCompletedAt,
-          completedById: nextCompletedById,
-          updatedAt: new Date(),
-        })
-        .where(eq(cardChecklistItems.id, itemId))
-        .returning();
-      await tx.update(cards).set({ updatedAt: new Date() }).where(eq(cards.id, id));
+    return {
+      ...target,
+      body,
+      actorId,
+      hasDueDateUpdate,
+      dueDateLocalDate,
+      dueDateSlot,
+      dueDateTimezone,
+      nextCompletedAt,
+      nextCompletedById,
+      nextText,
+      nextDescription,
+      assigneeChanged,
+      nextAssigneeId,
+      nextAssigneeName,
+      previousAssigneeName,
+    };
+  }
 
-      // Completing an item or clearing its due date drops any standing overdue
-      // notification so it no longer shows as overdue.
-      const completingItem = body.completed === true && !current.completedAt;
-      const dueDateRemoved = dueDateLocalDate === null;
-      if (completingItem || dueDateRemoved) {
-        await clearOverdueChecklistItemNotifications(tx, [itemId]);
-      }
+  async function writeChecklistItemUpdate(tx: Tx, prepared: PreparedChecklistItemUpdate): Promise<WrittenChecklistItemUpdate> {
+    const { card, ctx, checklist, current, body, actorId } = prepared;
+    const { dueDateLocalDate, dueDateSlot, dueDateTimezone, nextText, nextAssigneeId } = prepared;
+    const id = card.id;
+    const checklistId = checklist.id;
+    const itemId = current.id;
+    const reopeningCompletedChecklist = body.completed === false
+      && Boolean(current.completedAt)
+      && (await tx
+        .select({ completedAt: cardChecklistItems.completedAt })
+        .from(cardChecklistItems)
+        .where(eq(cardChecklistItems.checklistId, checklistId)))
+        .every((row) => Boolean(row.completedAt));
+    const [item] = await tx
+      .update(cardChecklistItems)
+      .set({
+        text: nextText,
+        description: prepared.nextDescription,
+        assigneeId: nextAssigneeId,
+        ...(dueDateLocalDate !== undefined && { dueDateLocalDate }),
+        ...(dueDateSlot !== undefined && { dueDateSlot }),
+        ...(dueDateTimezone !== undefined && { dueDateTimezone }),
+        completedAt: prepared.nextCompletedAt,
+        completedById: prepared.nextCompletedById,
+        updatedAt: new Date(),
+      })
+      .where(eq(cardChecklistItems.id, itemId))
+      .returning();
+    await tx.update(cards).set({ updatedAt: new Date() }).where(eq(cards.id, id));
 
-      const activities: CoalescedActivityResult[] = [];
-      let assigneeActivity: CoalescedActivityResult | null = null;
-      let dueDateActivity: CoalescedActivityResult | null = null;
-      if (body.text !== undefined) {
-        activities.push(await recordCoalescedActivity(tx, {
-          boardId: card.boardId,
-          workspaceId: ctx.workspaceId,
-          actorId: req.auth.sub,
-          entityType: "card",
-          entityId: id,
-          action: ACTIVITY_ACTION.CHECKLIST_ITEM_UPDATED,
-          coalesceKey: `checklistItem:${itemId}:text`,
-          windowMs: 60_000,
-          fromValue: current.text,
-          toValue: body.text,
-          payload: { checklistId, checklistTitle: checklist.title, itemId, fromValue: current.text, toValue: body.text },
-        }));
-      }
-      if (body.description !== undefined) {
-        activities.push(await recordCoalescedActivity(tx, {
-          boardId: card.boardId,
-          workspaceId: ctx.workspaceId,
-          actorId: req.auth.sub,
-          entityType: "card",
-          entityId: id,
-          action: ACTIVITY_ACTION.CHECKLIST_ITEM_DESCRIPTION_SET,
-          coalesceKey: `checklistItem:${itemId}:description`,
-          windowMs: 60_000,
+    // Completing an item or clearing its due date drops any standing overdue
+    // notification so it no longer shows as overdue.
+    const completingItem = body.completed === true && !current.completedAt;
+    const dueDateRemoved = dueDateLocalDate === null;
+    if (completingItem || dueDateRemoved) {
+      await clearOverdueChecklistItemNotifications(tx, [itemId]);
+    }
+
+    const activities: CoalescedActivityResult[] = [];
+    let assigneeActivity: CoalescedActivityResult | null = null;
+    let dueDateActivity: CoalescedActivityResult | null = null;
+    if (body.text !== undefined) {
+      activities.push(await recordCoalescedActivity(tx, {
+        boardId: card.boardId,
+        workspaceId: ctx.workspaceId,
+        actorId,
+        entityType: "card",
+        entityId: id,
+        action: ACTIVITY_ACTION.CHECKLIST_ITEM_UPDATED,
+        coalesceKey: `checklistItem:${itemId}:text`,
+        windowMs: 60_000,
+        fromValue: current.text,
+        toValue: body.text,
+        payload: { checklistId, checklistTitle: checklist.title, itemId, fromValue: current.text, toValue: body.text },
+      }));
+    }
+    if (body.description !== undefined) {
+      activities.push(await recordCoalescedActivity(tx, {
+        boardId: card.boardId,
+        workspaceId: ctx.workspaceId,
+        actorId,
+        entityType: "card",
+        entityId: id,
+        action: ACTIVITY_ACTION.CHECKLIST_ITEM_DESCRIPTION_SET,
+        coalesceKey: `checklistItem:${itemId}:description`,
+        windowMs: 60_000,
+        fromValue: current.description,
+        toValue: body.description,
+        payload: {
+          checklistId,
+          checklistTitle: checklist.title,
+          itemId,
+          itemText: nextText,
           fromValue: current.description,
           toValue: body.description,
+        },
+      }));
+    }
+    if (prepared.assigneeChanged) {
+      // Checklist-item assignment is independent of card assignment: assigning an item no
+      // longer adds the user to cardAssignees. The item is surfaced as a first-class work
+      // item via Global Work, Home, and digest surfaces instead, and the assignee still
+      // gets the direct "assigned" notification emitted below.
+      assigneeActivity = await recordCoalescedActivity(tx, {
+        boardId: card.boardId,
+        workspaceId: ctx.workspaceId,
+        actorId,
+        entityType: "card",
+        entityId: id,
+        action: ACTIVITY_ACTION.CHECKLIST_ITEM_ASSIGNEE_SET,
+        coalesceKey: `checklistItem:${itemId}:assignee`,
+        windowMs: 60_000,
+        fromValue: current.assigneeId,
+        toValue: nextAssigneeId,
+        preservePayloadKeys: ["checklistId", "checklistTitle", "itemId", "previousAssigneeId", "previousAssigneeName"],
+        payload: {
+          checklistId,
+          checklistTitle: checklist.title,
+          itemId,
+          itemText: nextText,
+          assigneeId: nextAssigneeId,
+          assigneeName: prepared.nextAssigneeName,
+          previousAssigneeId: current.assigneeId,
+          previousAssigneeName: prepared.previousAssigneeName,
+          fromValue: current.assigneeId,
+          toValue: nextAssigneeId,
+        },
+      });
+    }
+    if (prepared.hasDueDateUpdate) {
+      dueDateActivity = await recordCoalescedActivity(tx, {
+        boardId: card.boardId,
+        workspaceId: ctx.workspaceId,
+        actorId,
+        entityType: "card",
+        entityId: id,
+        action: ACTIVITY_ACTION.CHECKLIST_ITEM_DUE_DATE_SET,
+        coalesceKey: `checklistItem:${itemId}:dueDate`,
+        windowMs: 60_000,
+        fromValue: current.dueDateLocalDate,
+        toValue: dueDateLocalDate ?? null,
+        preservePayloadKeys: ["checklistId", "checklistTitle", "itemId", "itemText"],
+        payload: {
+          checklistId,
+          checklistTitle: checklist.title,
+          itemId,
+          itemText: nextText,
+          dueDateLocalDate: dueDateLocalDate ?? null,
+          dueDateSlot: dueDateSlot ?? null,
+          dueDateTimezone: dueDateTimezone ?? null,
+          fromValue: current.dueDateLocalDate,
+          toValue: dueDateLocalDate ?? null,
+        },
+      });
+    }
+    if (completingItem) {
+      const items = await tx
+        .select({ completedAt: cardChecklistItems.completedAt })
+        .from(cardChecklistItems)
+        .where(eq(cardChecklistItems.checklistId, checklistId));
+      if (items.length > 0 && items.every((row) => row.completedAt)) {
+        const [parentItem] = checklist.parentItemId
+          ? await tx
+            .select({ text: cardChecklistItems.text })
+            .from(cardChecklistItems)
+            .where(eq(cardChecklistItems.id, checklist.parentItemId))
+            .limit(1)
+          : [];
+        activities.push(await recordCoalescedActivity(tx, {
+          boardId: card.boardId,
+          workspaceId: ctx.workspaceId,
+          actorId,
+          entityType: "card",
+          entityId: id,
+          action: ACTIVITY_ACTION.CHECKLIST_COMPLETED,
+          coalesceKey: `checklist:${checklistId}:completed`,
+          windowMs: 5 * 60_000,
+          fromValue: false,
+          toValue: true,
           payload: {
             checklistId,
-            checklistTitle: checklist.title,
-            itemId,
-            itemText: nextText,
-            fromValue: current.description,
-            toValue: body.description,
+            title: checklist.title,
+            ...(checklist.parentItemId && {
+              parentItemId: checklist.parentItemId,
+              parentItemText: parentItem?.text ?? null,
+            }),
+            fromValue: false,
+            toValue: true,
           },
         }));
       }
-      if (assigneeChanged) {
-        // Checklist-item assignment is independent of card assignment: assigning an item no
-        // longer adds the user to cardAssignees. The item is surfaced as a first-class work
-        // item via Global Work, Home, and digest surfaces instead, and the assignee still
-        // gets the direct "assigned" notification emitted below.
-        assigneeActivity = await recordCoalescedActivity(tx, {
-          boardId: card.boardId,
-          workspaceId: ctx.workspaceId,
-          actorId: req.auth.sub,
-          entityType: "card",
-          entityId: id,
-          action: ACTIVITY_ACTION.CHECKLIST_ITEM_ASSIGNEE_SET,
-          coalesceKey: `checklistItem:${itemId}:assignee`,
-          windowMs: 60_000,
-          fromValue: current.assigneeId,
-          toValue: nextAssigneeId,
-          preservePayloadKeys: ["checklistId", "checklistTitle", "itemId", "previousAssigneeId", "previousAssigneeName"],
-          payload: {
-            checklistId,
-            checklistTitle: checklist.title,
-            itemId,
-            itemText: nextText,
-            assigneeId: nextAssigneeId,
-            assigneeName: nextAssigneeName,
-            previousAssigneeId: current.assigneeId,
-            previousAssigneeName,
-            fromValue: current.assigneeId,
-            toValue: nextAssigneeId,
-          },
-        });
+    }
+    let hiddenChecklistCompletionId: string | null = null;
+    if (reopeningCompletedChecklist) {
+      const now = new Date();
+      // Completion is checklist state, not actor state. A different user reopening the
+      // checklist must retract the latest still-coalescible completion instead of leaving
+      // a stale feed item (or creating a misleading "completed" activity for the reopen).
+      const [recentCompletion] = await tx
+        .select({ id: activityEvents.id })
+        .from(activityEvents)
+        .where(and(
+          eq(activityEvents.boardId, card.boardId),
+          eq(activityEvents.workspaceId, ctx.workspaceId),
+          eq(activityEvents.entityType, "card"),
+          eq(activityEvents.entityId, id),
+          eq(activityEvents.action, ACTIVITY_ACTION.CHECKLIST_COMPLETED),
+          eq(activityEvents.coalesceKey, `checklist:${checklistId}:completed`),
+          eq(activityEvents.feedVisible, true),
+          gte(activityEvents.coalescedUntil, now),
+        ))
+        .orderBy(desc(activityEvents.updatedAt))
+        .limit(1);
+      if (recentCompletion) {
+        await tx
+          .update(activityEvents)
+          .set({ feedVisible: false, updatedAt: now })
+          .where(eq(activityEvents.id, recentCompletion.id));
+        hiddenChecklistCompletionId = recentCompletion.id;
       }
-      if (hasDueDateUpdate) {
-        dueDateActivity = await recordCoalescedActivity(tx, {
-          boardId: card.boardId,
-          workspaceId: ctx.workspaceId,
-          actorId: req.auth.sub,
-          entityType: "card",
-          entityId: id,
-          action: ACTIVITY_ACTION.CHECKLIST_ITEM_DUE_DATE_SET,
-          coalesceKey: `checklistItem:${itemId}:dueDate`,
-          windowMs: 60_000,
-          fromValue: current.dueDateLocalDate,
-          toValue: dueDateLocalDate ?? null,
-          preservePayloadKeys: ["checklistId", "checklistTitle", "itemId", "itemText"],
-          payload: {
-            checklistId,
-            checklistTitle: checklist.title,
-            itemId,
-            itemText: nextText,
-            dueDateLocalDate: dueDateLocalDate ?? null,
-            dueDateSlot: dueDateSlot ?? null,
-            dueDateTimezone: dueDateTimezone ?? null,
-            fromValue: current.dueDateLocalDate,
-            toValue: dueDateLocalDate ?? null,
-          },
-        });
-      }
-      if (body.completed === true && !current.completedAt) {
-        const items = await tx
-          .select({ completedAt: cardChecklistItems.completedAt })
-          .from(cardChecklistItems)
-          .where(eq(cardChecklistItems.checklistId, checklistId));
-        if (items.length > 0 && items.every((row) => row.completedAt)) {
-          const [parentItem] = checklist.parentItemId
-            ? await tx
-              .select({ text: cardChecklistItems.text })
-              .from(cardChecklistItems)
-              .where(eq(cardChecklistItems.id, checklist.parentItemId))
-              .limit(1)
-            : [];
-          activities.push(await recordCoalescedActivity(tx, {
-            boardId: card.boardId,
-            workspaceId: ctx.workspaceId,
-            actorId: req.auth.sub,
-            entityType: "card",
-            entityId: id,
-            action: ACTIVITY_ACTION.CHECKLIST_COMPLETED,
-            coalesceKey: `checklist:${checklistId}:completed`,
-            windowMs: 5 * 60_000,
-            fromValue: false,
-            toValue: true,
-            payload: {
-              checklistId,
-              title: checklist.title,
-              ...(checklist.parentItemId && {
-                parentItemId: checklist.parentItemId,
-                parentItemText: parentItem?.text ?? null,
-              }),
-              fromValue: false,
-              toValue: true,
-            },
-          }));
-        }
-      }
-      let hiddenChecklistCompletionId: string | null = null;
-      if (reopeningCompletedChecklist) {
-        const now = new Date();
-        // Completion is checklist state, not actor state. A different user reopening the
-        // checklist must retract the latest still-coalescible completion instead of leaving
-        // a stale feed item (or creating a misleading "completed" activity for the reopen).
-        const [recentCompletion] = await tx
-          .select({ id: activityEvents.id })
-          .from(activityEvents)
-          .where(and(
-            eq(activityEvents.boardId, card.boardId),
-            eq(activityEvents.workspaceId, ctx.workspaceId),
-            eq(activityEvents.entityType, "card"),
-            eq(activityEvents.entityId, id),
-            eq(activityEvents.action, ACTIVITY_ACTION.CHECKLIST_COMPLETED),
-            eq(activityEvents.coalesceKey, `checklist:${checklistId}:completed`),
-            eq(activityEvents.feedVisible, true),
-            gte(activityEvents.coalescedUntil, now),
-          ))
-          .orderBy(desc(activityEvents.updatedAt))
-          .limit(1);
-        if (recentCompletion) {
-          await tx
-            .update(activityEvents)
-            .set({ feedVisible: false, updatedAt: now })
-            .where(eq(activityEvents.id, recentCompletion.id));
-          hiddenChecklistCompletionId = recentCompletion.id;
-        }
-      }
-      const automationEffects = body.completed === true && !current.completedAt
-        ? await runChecklistCompletionAutomations(tx, {
-          cardId: id,
-          boardId: card.boardId,
-          workspaceId: ctx.workspaceId,
-          clientId: ctx.clientId,
-          triggerActorId: req.auth.sub,
-        })
-        : { effects: [] };
-      return { item: item!, activities, assigneeActivity, dueDateActivity, automationEffects, hiddenChecklistCompletionId };
-    });
+    }
+    const automationEffects = completingItem
+      ? await runChecklistCompletionAutomations(tx, {
+        cardId: id,
+        boardId: card.boardId,
+        workspaceId: ctx.workspaceId,
+        clientId: ctx.clientId,
+        triggerActorId: actorId,
+      })
+      : { effects: [] };
+    return { item: item!, activities, assigneeActivity, dueDateActivity, automationEffects, hiddenChecklistCompletionId };
+  }
 
-    for (const activity of activities) emitCoalescedCardActivityFeedItem(card.boardId, id, activity);
-    if (hiddenChecklistCompletionId) await emitActivityFeedItemDeleted(card.boardId, id, hiddenChecklistCompletionId);
+  async function emitChecklistItemUpdate(prepared: PreparedChecklistItemUpdate, written: WrittenChecklistItemUpdate) {
+    const { card, checklist, current } = prepared;
+    const id = card.id;
+    for (const activity of written.activities) await emitCoalescedCardActivityFeedItem(card.boardId, id, activity);
+    if (written.hiddenChecklistCompletionId) await emitActivityFeedItemDeleted(card.boardId, id, written.hiddenChecklistCompletionId);
     // Feed-only: due date changes never raise a notification (overdue-only scope).
-    if (dueDateActivity) emitCoalescedCardActivityFeedItem(card.boardId, id, dueDateActivity, { notify: false });
-    if (assigneeActivity) {
-      emitCoalescedCardActivityFeedItem(card.boardId, id, assigneeActivity, { notify: false });
-      if (assigneeActivity.status !== "hidden") {
+    if (written.dueDateActivity) await emitCoalescedCardActivityFeedItem(card.boardId, id, written.dueDateActivity, { notify: false });
+    if (written.assigneeActivity) {
+      await emitCoalescedCardActivityFeedItem(card.boardId, id, written.assigneeActivity, { notify: false });
+      if (written.assigneeActivity.status !== "hidden") {
         void syncDirectNotificationForActivity({
-          userId: nextAssigneeId,
-          activity: assigneeActivity.activity,
+          userId: prepared.nextAssigneeId,
+          activity: written.assigneeActivity.activity,
           reason: "assigned",
         }).catch(() => undefined);
       }
     }
-    await emitAutomationEffects(automationEffects);
-    emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_UPDATED, { boardId: card.boardId, cardId: id, cardTitle: card.title, listId: card.listId, checklistId, checklistParentItemId: checklist.parentItemId, item, prevCompletedAt: current.completedAt });
-    return item;
-  });
+    await emitAutomationEffects(written.automationEffects);
+    await emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_UPDATED, { boardId: card.boardId, cardId: id, cardTitle: card.title, listId: card.listId, checklistId: checklist.id, checklistParentItemId: checklist.parentItemId, item: written.item, prevCompletedAt: current.completedAt });
+  }
 
-  app.delete("/cards/:id/checklists/:checklistId/items/:itemId", async (req, reply) => {
-    const { id, checklistId, itemId } = req.params as { id: string; checklistId: string; itemId: string };
+  async function updateChecklistItem(req: FastifyRequest, params: { id: string; checklistId?: string; itemId: string }) {
+    const body = dto.updateChecklistItemBody.parse(req.body);
+    const target = await loadChecklistItemTarget(req, params);
+    const prepared = await prepareChecklistItemUpdate(target, body, req.auth.sub);
+    const written = await db.transaction((tx) => writeChecklistItemUpdate(tx, prepared));
+    await emitChecklistItemUpdate(prepared, written);
+    return written.item;
+  }
+
+  app.patch("/cards/:id/checklists/:checklistId/items/:itemId", async (req) =>
+    updateChecklistItem(req, req.params as { id: string; checklistId: string; itemId: string }));
+  // Item-addressed alias: the server derives the containing checklist from the item, so callers
+  // that hold only an item id (agents, integrations) do not need to look up its checklist first.
+  app.patch("/cards/:id/checklist-items/:itemId", async (req) =>
+    updateChecklistItem(req, req.params as { id: string; itemId: string }));
+
+  // Selected-item updates: different changes for chosen items on one card, applied atomically. The
+  // whole batch is validated (existence on this card, leaf-only rules, assignee eligibility) before
+  // the transaction, and each entry then runs the exact single-item write so activity coalescing,
+  // checklist-completion feed rows, reopen retraction, and automations behave identically.
+  app.patch("/cards/:id/checklist-items", async (req) => {
+    const { id } = req.params as { id: string };
+    const body = dto.updateChecklistItemsBody.parse(req.body);
     const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
     if (!card) throw notFound();
-    await assertCardAccess(req.auth, card, "editor");
+    const ctx = await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
-    const [checklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
-    if (!checklist) throw notFound("checklist not found");
-    const [current] = await db
-      .select()
+    const rows = await db
+      .select({ item: cardChecklistItems, checklist: cardChecklists })
       .from(cardChecklistItems)
-      .where(and(eq(cardChecklistItems.id, itemId), eq(cardChecklistItems.checklistId, checklistId)))
-      .limit(1);
-    if (!current) throw notFound("checklist item not found");
+      .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
+      .where(and(eq(cardChecklists.cardId, id), inArray(cardChecklistItems.id, body.updates.map((update) => update.itemId))));
+    const rowsByItemId = new Map(rows.map((row) => [row.item.id, row]));
+    let timezone: Promise<string> | null = null;
+    const memoTimezone = () => (timezone ??= actorTimezone(req.auth.sub));
+    const prepared: PreparedChecklistItemUpdate[] = [];
+    for (const [index, update] of body.updates.entries()) {
+      const row = rowsByItemId.get(update.itemId);
+      if (!row) throw checklistValidationError(["updates", index, "itemId"], "checklist item was not found on this card");
+      prepared.push(await prepareChecklistItemUpdate(
+        { card, ctx, checklist: row.checklist, current: row.item },
+        update.changes,
+        req.auth.sub,
+        { path: ["updates", index, "changes"], timezone: memoTimezone },
+      ));
+    }
+    const written = await db.transaction(async (tx) => {
+      const results: WrittenChecklistItemUpdate[] = [];
+      for (const entry of prepared) results.push(await writeChecklistItemUpdate(tx, entry));
+      return results;
+    });
+    for (const [index, entry] of prepared.entries()) await emitChecklistItemUpdate(entry, written[index]!);
+    return { items: written.map((entry) => entry.item) };
+  });
 
+  async function deleteChecklistItem(req: FastifyRequest, reply: FastifyReply, params: { id: string; checklistId?: string; itemId: string }) {
+    const { card, checklist, current } = await loadChecklistItemTarget(req, params);
     await db.transaction(async (tx) => {
-      await tx.delete(cardChecklistItems).where(eq(cardChecklistItems.id, itemId));
-      await tx.update(cards).set({ updatedAt: new Date() }).where(eq(cards.id, id));
+      await tx.delete(cardChecklistItems).where(eq(cardChecklistItems.id, current.id));
+      await tx.update(cards).set({ updatedAt: new Date() }).where(eq(cards.id, card.id));
     });
 
-    emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_DELETED, { boardId: card.boardId, cardId: id, checklistId, checklistParentItemId: checklist.parentItemId, itemId, completedAt: current.completedAt });
+    await emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_DELETED, { boardId: card.boardId, cardId: card.id, checklistId: checklist.id, checklistParentItemId: checklist.parentItemId, itemId: current.id, completedAt: current.completedAt });
     return reply.status(204).send();
-  });
+  }
 
-  app.post("/cards/:id/checklists/:checklistId/items/:itemId/move", async (req) => {
-    const { id, checklistId, itemId } = req.params as { id: string; checklistId: string; itemId: string };
+  app.delete("/cards/:id/checklists/:checklistId/items/:itemId", async (req, reply) =>
+    deleteChecklistItem(req, reply, req.params as { id: string; checklistId: string; itemId: string }));
+  app.delete("/cards/:id/checklist-items/:itemId", async (req, reply) =>
+    deleteChecklistItem(req, reply, req.params as { id: string; itemId: string }));
+
+  async function moveChecklistItem(req: FastifyRequest, params: { id: string; checklistId?: string; itemId: string }) {
     const body = dto.moveChecklistItemBody.parse(req.body);
-    const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
-    if (!card) throw notFound();
-    await assertCardAccess(req.auth, card, "editor");
-    assertCardActive(card);
-    const [sourceChecklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
-    if (!sourceChecklist) throw notFound("checklist not found");
+    const { card, checklist: sourceChecklist, current } = await loadChecklistItemTarget(req, params);
+    const id = card.id;
+    const itemId = current.id;
+    const checklistId = sourceChecklist.id;
     const targetChecklistId = body.checklistId ?? checklistId;
     const [targetChecklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, targetChecklistId), eq(cardChecklists.cardId, id))).limit(1);
     if (!targetChecklist) throw badRequest("target checklist not on this card");
@@ -3122,12 +3465,6 @@ export async function cardRoutes(
     if (sourceChecklist.parentItemId !== targetChecklist.parentItemId) {
       throw badRequest("target checklist must have the same parent item");
     }
-    const [current] = await db
-      .select()
-      .from(cardChecklistItems)
-      .where(and(eq(cardChecklistItems.id, itemId), eq(cardChecklistItems.checklistId, checklistId)))
-      .limit(1);
-    if (!current) throw notFound("checklist item not found");
     const prevPosition = current.position;
 
     const { position, sourceRebalanced, targetRebalanced } = await db.transaction(async (tx) => {
@@ -3157,7 +3494,12 @@ export async function cardRoutes(
       prevPosition,
     });
     return { id: itemId, checklistId: targetChecklistId, position };
-  });
+  }
+
+  app.post("/cards/:id/checklists/:checklistId/items/:itemId/move", async (req) =>
+    moveChecklistItem(req, req.params as { id: string; checklistId: string; itemId: string }));
+  app.post("/cards/:id/checklist-items/:itemId/move", async (req) =>
+    moveChecklistItem(req, req.params as { id: string; itemId: string }));
 
   app.patch("/cards/:id/archive", async (req) => {
     const { id } = req.params as { id: string };

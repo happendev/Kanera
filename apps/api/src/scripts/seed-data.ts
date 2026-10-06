@@ -4082,8 +4082,8 @@ async function seedAgentRunDemos(
     updatedAt: auditEndedAt,
   });
   await runActivity({ ...auditRun, status: "running", summary: null }, ACTIVITY_ACTION.AGENT_RUN_STARTED, auditStartedAt);
-  const auditEnded = await runActivity(auditRun, ACTIVITY_ACTION.AGENT_RUN_ENDED, auditEndedAt);
-  await notify(ameliaId, trackingCard, auditEnded.id, "watching", auditEndedAt, null);
+  // Run start/end never notifies (see recordAgentRunActivity), so no inbox row for it here.
+  await runActivity(auditRun, ACTIVITY_ACTION.AGENT_RUN_ENDED, auditEndedAt);
 
   const commentAt = addMinutes(auditEndedAt, 2);
   const [agentComment] = await tx.insert(comments).values({
@@ -4104,6 +4104,9 @@ async function seedAgentRunDemos(
     updatedAt: commentAt,
   }).returning();
   await notify(leoId, trackingCard, commentActivity!.id, "assigned", commentAt, null);
+  // Comments reach card watchers, and agent work is never self-suppressed, so Amelia (watching)
+  // gets the agent's comment too: the unread entry on her drawer's Agent tab.
+  await notify(ameliaId, trackingCard, commentActivity!.id, "watching", commentAt, null);
 
   const draftStartedAt = addMinutes(now, -12);
   const draftRun = await insertRun({

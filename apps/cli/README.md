@@ -149,6 +149,14 @@ kanera work --scope.boardIds[] abc --scope.boardIds[] def   # repeat or [] for a
 kanera call cards.update --json-args '{"cardId":"MKT-42","changes":{"title":"Revised"}}'
 ```
 
+An array-typed argument also takes one JSON array, which is the simplest way to pass a list of
+objects, such as a whole checklist plan:
+
+```bash
+kanera call checklists.create --cardId MKT-42 --title Launch \
+  --items '[{"text":"Prepare release","subChecklists":[{"title":"Verification","items":[{"text":"Run smoke tests"}]}]},{"text":"Announce launch"}]'
+```
+
 ## Agent setup
 
 ```bash

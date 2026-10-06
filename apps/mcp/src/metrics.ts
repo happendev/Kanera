@@ -21,6 +21,30 @@ export const mcpToolDuration = new client.Histogram({
   registers: [registry],
 });
 
+const upstreamDuration = new client.Histogram({
+  name: "kanera_mcp_upstream_request_duration_seconds",
+  help: "Public API requests made by MCP tools, as seen from MCP (network + API time)",
+  labelNames: ["method", "route", "phase", "status_class"],
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+  registers: [registry],
+});
+
+const upstreamAppDuration = new client.Histogram({
+  name: "kanera_mcp_upstream_app_duration_seconds",
+  help: "Public API handler time reported via Server-Timing for MCP tool requests",
+  labelNames: ["method", "route", "phase"],
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+  registers: [registry],
+});
+
+export function observeUpstreamRequest(timing: { method: string; route: string; status: number; phase: string; durationMs: number; appMs: number | null }) {
+  const statusClass = timing.status === 0 ? "none" : `${Math.floor(timing.status / 100)}xx`;
+  upstreamDuration.observe({ method: timing.method, route: timing.route, phase: timing.phase, status_class: statusClass }, timing.durationMs / 1_000);
+  if (timing.appMs !== null) {
+    upstreamAppDuration.observe({ method: timing.method, route: timing.route, phase: timing.phase }, timing.appMs / 1_000);
+  }
+}
+
 export const mcpAuthFailures = new client.Counter({
   name: "kanera_mcp_auth_failures_total",
   help: "Rejected MCP authentication attempts by reason",

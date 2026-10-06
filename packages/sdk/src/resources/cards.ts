@@ -1,6 +1,7 @@
 import { paginateCursor, type PageIterator } from "../pagination.js";
 import type {
-  Attachment, BulkArchiveResult, BulkCardResult, Card, CardDetail, Checklist, ChecklistItem, DueDateSlot, LocalDate,
+  Attachment, BulkArchiveResult, BulkCardResult, Card, CardDetail, Checklist, ChecklistItem, CreatedChecklist, CreatedChecklistItem,
+  DueDateSlot, LocalDate,
   LaneItemReference, LanePositionAnchor, PositionAnchor, Uuid,
 } from "../types.js";
 import type { CallOptions, ResourceContext } from "./base.js";
@@ -24,9 +25,57 @@ export interface UpdateCardInput {
   dueDateSlot?: DueDateSlot | null;
 }
 
-export interface CreateChecklistItemInput {
+/** A leaf item inside a sub-checklist: text and completion only. */
+export interface NewSubChecklistItemInput {
+  text: string;
+  completed?: boolean;
+}
+
+/** A one-level sub-checklist created under a new top-level item. */
+export interface NewSubChecklistInput {
+  title: string;
+  items?: NewSubChecklistItemInput[];
+}
+
+/**
+ * A new checklist item. Only `text` is required. Description, assignee, due date, and
+ * `subChecklists` apply only to top-level items; items added to a sub-checklist are leaves.
+ */
+export interface NewChecklistItemInput {
   /** The item's label. Named `text`, not `title` — a checklist's own name is its `title`. */
   text: string;
+  description?: string | null;
+  completed?: boolean;
+  assigneeId?: Uuid | null;
+  dueDateLocalDate?: LocalDate | null;
+  dueDateSlot?: DueDateSlot | null;
+  subChecklists?: NewSubChecklistInput[];
+}
+
+export interface CreateChecklistInput {
+  title: string;
+  /** Create a sub-checklist under this top-level item; its items must then be leaves. */
+  parentItemId?: Uuid | null;
+  /** Initial items, created atomically in order with server-generated ids. */
+  items?: NewChecklistItemInput[];
+}
+
+export interface CreateChecklistItemInput extends NewChecklistItemInput {
+  /** Optional placement; omit both anchors to append. */
+  afterItemId?: Uuid | null;
+  beforeItemId?: Uuid | null;
+}
+
+export interface ChecklistItemUpdate {
+  itemId: Uuid;
+  changes: UpdateChecklistItemInput;
+}
+
+/** Applies to every item of one checklist. */
+export interface UpdateAllChecklistItemsInput {
+  assigneeId?: Uuid | null;
+  dueDateLocalDate?: LocalDate | null;
+  dueDateSlot?: DueDateSlot | null;
 }
 
 export interface UpdateChecklistItemInput {
@@ -204,8 +253,14 @@ export class CardAttachments {
 export class Checklists {
   constructor(private readonly ctx: ResourceContext) {}
 
-  async create(card: string, body: { title: string; parentItemId?: Uuid | null }, options: CallOptions = {}): Promise<Checklist> {
-    return this.ctx.http.post<Checklist>(`/api/v1/cards/${await this.ctx.resolveCard(card)}/checklists`, body, options);
+  /** The card's checklists, flat; a sub-checklist names its owning item in `parentItemId`. */
+  async list(card: string, query: { checklistId?: Uuid } = {}, options: CallOptions = {}): Promise<{ checklists: Checklist[] }> {
+    return this.ctx.http.get(`/api/v1/cards/${await this.ctx.resolveCard(card)}/checklists`, { ...options, query });
+  }
+
+  /** Create a checklist, optionally with its items and their sub-checklists, in one request. */
+  async create(card: string, body: CreateChecklistInput, options: CallOptions = {}): Promise<CreatedChecklist> {
+    return this.ctx.http.post<CreatedChecklist>(`/api/v1/cards/${await this.ctx.resolveCard(card)}/checklists`, body, options);
   }
 
   async update(card: string, checklistId: Uuid, body: { title: string }, options: CallOptions = {}): Promise<Checklist> {
@@ -224,8 +279,8 @@ export class Checklists {
     );
   }
 
-  async addItem(card: string, checklistId: Uuid, body: CreateChecklistItemInput, options: CallOptions = {}): Promise<ChecklistItem> {
-    return this.ctx.http.post<ChecklistItem>(
+  async addItem(card: string, checklistId: Uuid, body: CreateChecklistItemInput, options: CallOptions = {}): Promise<CreatedChecklistItem> {
+    return this.ctx.http.post<CreatedChecklistItem>(
       `/api/v1/cards/${await this.ctx.resolveCard(card)}/checklists/${checklistId}/items`,
       body,
       options,
@@ -267,13 +322,45 @@ export class Checklists {
     );
   }
 
-  /** Update many items of one checklist in a single request. */
-  async updateItems(
+  /** Add several items to one checklist atomically, in order; omit both anchors to append. */
+  async addItems(
     card: string,
     checklistId: Uuid,
-    body: { itemIds: Uuid[] } & UpdateChecklistItemInput,
+    items: NewChecklistItemInput[],
+    anchor: { afterItemId?: Uuid | null; beforeItemId?: Uuid | null } = {},
     options: CallOptions = {},
-  ): Promise<{ updated: number }> {
+  ): Promise<{ items: CreatedChecklistItem[] }> {
+    return this.ctx.http.post(
+      `/api/v1/cards/${await this.ctx.resolveCard(card)}/checklists/${checklistId}/items/batch`,
+      { items, ...anchor },
+      options,
+    );
+  }
+
+  /** Update one item by id; the server derives its checklist and requires it to be on the card. */
+  async updateItemById(card: string, itemId: Uuid, body: UpdateChecklistItemInput, options: CallOptions = {}): Promise<ChecklistItem> {
+    return this.ctx.http.patch<ChecklistItem>(`/api/v1/cards/${await this.ctx.resolveCard(card)}/checklist-items/${itemId}`, body, options);
+  }
+
+  async deleteItemById(card: string, itemId: Uuid, options: CallOptions = {}): Promise<void> {
+    return this.ctx.http.delete<void>(`/api/v1/cards/${await this.ctx.resolveCard(card)}/checklist-items/${itemId}`, options);
+  }
+
+  /**
+   * Apply different changes to selected items on one card in one atomic request. Items are
+   * addressed by id alone; results follow request order.
+   */
+  async updateItems(card: string, updates: ChecklistItemUpdate[], options: CallOptions = {}): Promise<{ items: ChecklistItem[] }> {
+    return this.ctx.http.patch(`/api/v1/cards/${await this.ctx.resolveCard(card)}/checklist-items`, { updates }, options);
+  }
+
+  /** Set or clear the same assignee and/or due date on every item of one checklist. */
+  async updateAllItems(
+    card: string,
+    checklistId: Uuid,
+    body: UpdateAllChecklistItemsInput,
+    options: CallOptions = {},
+  ): Promise<{ items: ChecklistItem[] }> {
     return this.ctx.http.patch(
       `/api/v1/cards/${await this.ctx.resolveCard(card)}/checklists/${checklistId}/items/bulk`,
       body,

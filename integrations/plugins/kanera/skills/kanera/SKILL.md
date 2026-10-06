@@ -27,7 +27,9 @@ kanera whoami --json                 # verify identity and read/write scope
 For a non-interactive environment, use a user-supplied `KANERA_API_KEY` instead of storing a
 profile. Never invent or expose a key. After authentication, use `kanera commands --json` and
 `kanera help <tool>` for discovery, `--quiet` for machine-readable results, and the same safety
-rules below. Do not install software or request a credential for a read-only question about how
+rules below. Nested arguments use dots (`--changes.title "New"`); pass a list of objects as one
+JSON array, for example `--items '[{"text":"Draft"},{"text":"Review"}]'`, or the whole input with
+`--json-args`. Do not install software or request a credential for a read-only question about how
 Kanera works.
 
 ## Resolve context
@@ -64,12 +66,20 @@ Kanera works.
 - Workspace and standalone-board creation require a write-capable personal key or interactive OAuth grant with the organisation-admin role; workspace-scoped keys cannot perform them. Adding a board to a standard workspace requires workspace-admin authority and a write-capable credential.
 - Inspect the target entity immediately before a mutation when stale state could change the outcome.
 - Use list, label, and custom-field IDs from the target board's current configuration.
-- Pass a stable UUID as `idempotencyKey` to `cards.create`, and reuse it if retrying after an ambiguous transport failure.
-- Do not retry other non-idempotent creation tools after an ambiguous success.
+- Every creation tool that accepts `idempotencyKey` (cards, checklists, items, comments, notes, runs, and others) replays the original result when the same key is reused. Pass a fresh UUID per intended write and reuse it only when retrying that write after an ambiguous transport failure.
+- Do not retry a creation tool without `idempotencyKey` (attachment uploads) after an ambiguous success; read the card first.
 - Treat archive and available delete tools as destructive. State the exact target when user intent is not already explicit.
 - Kanera MCP cannot delete boards or perform post-creation administration of boards, lists, labels, custom fields, notes, or note attachments unless a dedicated tool represents the operation. Tell the user to complete unsupported actions in the Kanera UI instead of implying success.
 - Before a bulk action, confirm the board and selection. List-wide card actions always require an explicit board ID.
 - After a multi-step mutation, re-read the affected entity and report the resulting state.
+
+## Plan and track with checklists
+
+- Build a plan in one call: `checklists.create` accepts `items`, and each top-level item may carry `description`, `assigneeId`, `dueDateLocalDate`, `completed`, and `subChecklists`. The result returns every new ID, so no follow-up read is needed.
+- Nesting is one level deep. Only top-level items own sub-checklists; sub-checklist items take only `text` and `completed`. Items move only within the same group (top-level checklists, or one parent item's sub-checklists).
+- Add one or more items with `checklists.add_items` (optional `anchor`; default appends). Change one or more items, each with its own changes, with `checklists.update_items`; use `checklists.bulk_update_items` only to set the same assignee or due date on every item of a checklist.
+- Use `checklists.get` for a nested read with IDs instead of `cards.get` when only checklists matter. Target items by `itemId`; exact `itemText` works but is rejected when it matches more than one item.
+- Batch calls are atomic: nothing is written when any entry is invalid.
 
 ## Show your work
 
@@ -84,4 +94,5 @@ Kanera works.
 - On `UNAUTHENTICATED`, ask the user to reconnect Kanera.
 - On `FORBIDDEN`, report the returned access, role, or credential restriction; do not retry unchanged.
 - On `RATE_LIMITED`, respect `retryAfter` before retrying.
-- On validation errors, correct IDs or inputs from current Kanera context rather than guessing.
+- On validation errors, read `error.issues`: each `path` (such as `items[2].subChecklists[0].items[1].text`) names the exact field to fix. Correct that input from current Kanera context rather than guessing or resending the rest.
+- On `AMBIGUOUS_TARGET`, choose from the returned `candidates` by ID, or ask the user; never pick one silently.
