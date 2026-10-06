@@ -9,6 +9,8 @@ The runner:
 - builds the `kanera` CLI bundle that CLI specs execute;
 - runs Chromium with the timezone pinned to UTC and the locale to en-US.
 
+The web server uses `--watch=false` to serve its startup build throughout the run. Concurrent development edits must not trigger browser reloads that interrupt fetches or user flows. Restart the suite to test a new build.
+
 It never touches the development database. You need Docker and a Playwright Chromium install (`pnpm exec playwright install chromium`).
 
 ## Topology the suite depends on

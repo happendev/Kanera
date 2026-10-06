@@ -45,9 +45,20 @@ export async function createCard(page: Page, title: string) {
   await page.getByRole("button", { name: "New card", exact: true }).click();
   const composer = page.getByRole("dialog", { name: "New card" });
   await composer.locator("textarea.cmp-title-input").fill(title);
+  const createdResponse = page.waitForResponse((response) =>
+    response.request().method() === "POST" && /\/boards\/[^/]+\/lists\/[^/]+\/cards$/.test(new URL(response.url()).pathname) && response.ok(),
+  );
   await composer.getByRole("button", { name: "Create card" }).click();
+  const response = await createdResponse;
+  const { listId } = await response.json() as { listId: string };
   await expect(composer).toBeHidden();
-  await expect(cardTile(page, title)).toHaveCount(1);
+  // Later full-suite flows can append beyond a lane's initial render window. Scroll the actual
+  // receiving lane to mount the new tile; keep asserting the browser result without a reload.
+  await expect.poll(async () => {
+    const count = await cardTile(page, title).count();
+    if (count === 0) await page.locator(`[id="dl-${listId}"]`).evaluate((lane) => lane.scrollTo({ top: lane.scrollHeight }));
+    return count;
+  }, { timeout: 15_000 }).toBe(1);
 }
 
 export async function openCard(page: Page, title: string): Promise<Locator> {

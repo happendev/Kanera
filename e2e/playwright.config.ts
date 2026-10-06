@@ -76,7 +76,8 @@ export default defineConfig({
       stderr: "pipe",
     },
     {
-      command: `pnpm --dir ../apps/web exec ng serve --configuration e2e --port ${ports.web} --proxy-config ../../e2e/web-proxy.config.mjs > "$KANERA_E2E_ARTIFACT_DIR/web.log" 2>&1`,
+      // Test the startup build: edits in a concurrent dev session must not reload browsers mid-flow.
+      command: `pnpm --dir ../apps/web exec ng serve --configuration e2e --watch=false --port ${ports.web} --proxy-config ../../e2e/web-proxy.config.mjs > "$KANERA_E2E_ARTIFACT_DIR/web.log" 2>&1`,
       url: `${webOrigin}/login`,
       reuseExistingServer: false,
       timeout: 180_000,
