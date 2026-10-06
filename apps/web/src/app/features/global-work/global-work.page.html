@@ -581,7 +581,6 @@
                       }
                     </span>
                   </th>
-                  <th>Work risk</th>
                   @for (column of portfolioColumns; track column.key) {
                     <th>{{ column.label }}</th>
                   }
@@ -611,16 +610,6 @@
                           <span>{{ bucket.context }}</span>
                         </div>
                       </div>
-                    </td>
-                    <td class="portfolio-health-cell" [title]="portfolioRiskTitle(bucket)">
-                      @if (bucket.healthEnabled) {
-                      <div class="portfolio-health" [attr.data-risk]="bucket.risk.level">
-                        <span class="portfolio-health-status"><i class="ti ti-activity-heartbeat"></i>{{ bucket.risk.label }}</span>
-                        <span class="portfolio-health-summary">{{ bucket.risk.summary }}</span>
-                      </div>
-                      } @else {
-                      <span class="portfolio-health-summary">Disabled</span>
-                      }
                     </td>
                     @for (column of portfolioColumns; track column.key) {
                       <td>

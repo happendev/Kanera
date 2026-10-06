@@ -15,7 +15,6 @@ export const DOCS_PATHS = [
   "ai-mcp-reference",
   "api",
   "automations",
-  "board-health",
   "board-syncing",
   "boards",
   "card-labels",

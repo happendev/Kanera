@@ -36,10 +36,10 @@ describe("DocsLinkComponent", () => {
 
   it("appends a heading anchor when a fragment is set", async () => {
     const { fixture, anchor } = await mount();
-    fixture.componentInstance.path.set("board-health");
-    fixture.componentInstance.fragment.set("organisation-default");
+    fixture.componentInstance.path.set("organisations");
+    fixture.componentInstance.fragment.set("what-to-read-next");
     fixture.detectChanges();
-    expect(anchor().getAttribute("href")).toBe(`${KANERA_DOCS_URL}/board-health#organisation-default`);
+    expect(anchor().getAttribute("href")).toBe(`${KANERA_DOCS_URL}/organisations#what-to-read-next`);
   });
 
   // Docs open away from the app, so the tab-napping guard has to be on every one of these links.

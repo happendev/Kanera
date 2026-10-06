@@ -93,7 +93,6 @@ describe("AccountSettingsPage", () => {
     requireMfa: false,
     defaultCompletedCardsActiveDays: 35,
     defaultInactiveCardsDays: 14,
-    defaultBoardHealthEnabled: true,
     storageConfig: { kind: "local" as const },
     storageConfigSource: "env" as const,
     smtpConfig: null,
@@ -1037,23 +1036,20 @@ describe("AccountSettingsPage", () => {
       ...hostedClient,
       defaultCompletedCardsActiveDays: 28,
       defaultInactiveCardsDays: 10,
-      defaultBoardHealthEnabled: false,
     });
 
     fixture.componentInstance.defaultCompletedCardsActiveDays.set(28);
     fixture.componentInstance.defaultInactiveCardsDays.set(10);
-    fixture.componentInstance.defaultBoardHealthEnabled.set(false);
     await fixture.componentInstance.saveCardTimingDefaults();
 
     expect(api.patch).toHaveBeenCalledWith("/clients/me", {
       defaultCompletedCardsActiveDays: 28,
       defaultInactiveCardsDays: 10,
-      defaultBoardHealthEnabled: false,
     });
     expect(fixture.componentInstance.client()?.defaultInactiveCardsDays).toBe(10);
   });
 
-  it("keeps timing defaults together with their icons before board health", async () => {
+  it("keeps timing defaults together with their icons", async () => {
     activeSettingsRoute = "org";
     await createPage();
 
@@ -1064,12 +1060,11 @@ describe("AccountSettingsPage", () => {
     expect(controls.map((control) => control.textContent?.trim())).toEqual([
       expect.stringContaining("Show completed cards for"),
       expect.stringContaining("Mark cards inactive after"),
-      expect.stringContaining("Show board health by default"),
     ]);
     expect(controls[0]!.querySelector(".ti-circle-check")).not.toBeNull();
     expect(controls[1]!.querySelector(".ti-zzz")).not.toBeNull();
     expect(section!.textContent).not.toContain("Save defaults");
-    expect(section!.querySelector<HTMLAnchorElement>('a[href="https://www.kanera.app/docs/board-health#organisation-default"]')?.target).toBe("_blank");
+    expect(section!.textContent).not.toContain("Show board health");
   });
 
   it("debounces organisation workspace defaults into one update", async () => {
@@ -1080,7 +1075,6 @@ describe("AccountSettingsPage", () => {
       ...hostedClient,
       defaultCompletedCardsActiveDays: 28,
       defaultInactiveCardsDays: 10,
-      defaultBoardHealthEnabled: false,
     });
 
     fixture.componentInstance.defaultCompletedCardsActiveDays.set(2);
@@ -1089,7 +1083,6 @@ describe("AccountSettingsPage", () => {
     fixture.componentInstance.queueCardTimingDefaultsSave();
     fixture.componentInstance.defaultInactiveCardsDays.set(10);
     fixture.componentInstance.queueCardTimingDefaultsSave();
-    fixture.componentInstance.defaultBoardHealthEnabled.set(false);
     fixture.componentInstance.queueCardTimingDefaultsSave();
 
     vi.advanceTimersByTime(299);
@@ -1100,7 +1093,6 @@ describe("AccountSettingsPage", () => {
     expect(api.patch).toHaveBeenCalledWith("/clients/me", {
       defaultCompletedCardsActiveDays: 28,
       defaultInactiveCardsDays: 10,
-      defaultBoardHealthEnabled: false,
     });
   });
 

@@ -243,44 +243,39 @@ describe("BoardPage", () => {
     fixture.destroy();
   });
 
-  it("shows actionable work risk and filters to the selected signal", async () => {
+  it("shows card counts and filters to the selected count", async () => {
     const fixture = createInitializedBoardPage();
     await vi.waitFor(() => expect(boardState(fixture.componentInstance).board()).not.toBeNull());
     const component = fixture.componentInstance;
 
-    expect(component.boardOverview().risk).toMatchObject({
-      level: "atRisk",
-      summary: "1 overdue · 1 unassigned · 1 inactive",
-    });
+    expect(component.boardOverview()).toMatchObject({ overdue: 1, unassigned: 1, inactive: 1 });
+    expect(component.boardOverview()).not.toHaveProperty("risk");
 
-    component.setBoardRiskFilter("unassigned");
+    component.setBoardCardFilter("unassigned");
     expect(component.filteredCardIds()).toEqual(new Set(["card-2"]));
-    component.setBoardRiskFilter("unassigned");
+    component.setBoardCardFilter("unassigned");
     expect(component.filteredCardIds()).toBeNull();
 
     fixture.destroy();
   });
 
-  it("does not call a board healthy when it has no active work", async () => {
+  it("shows zero active cards when all work is completed", async () => {
     const fixture = createInitializedBoardPage();
     await vi.waitFor(() => expect(boardState(fixture.componentInstance).board()).not.toBeNull());
     const state = boardState(fixture.componentInstance);
     state.cards.update((cards) => cards.map((entry) => ({ ...entry, completedAt: new Date() })));
 
-    expect(fixture.componentInstance.boardOverview().risk.level).toBe("noActiveWork");
+    expect(fixture.componentInstance.boardOverview()).toMatchObject({ active: 0, overdue: 0, unassigned: 0, inactive: 0 });
 
     fixture.destroy();
   });
 
-  it("does not use workspace-disabled signals to determine board health", async () => {
+  it("keeps raw counts available with a legacy workspace health payload", async () => {
     api.post.mockResolvedValue({ ...boardPayload(), workspaceBoardHealthOverdueEnabled: false });
     const fixture = createInitializedBoardPage();
     await vi.waitFor(() => expect(boardState(fixture.componentInstance).board()).not.toBeNull());
 
-    expect(fixture.componentInstance.boardOverview().risk).toMatchObject({
-      level: "needsAttention",
-      summary: "1 unassigned · 1 inactive",
-    });
+    expect(fixture.componentInstance.boardOverview()).toMatchObject({ overdue: 1, unassigned: 1, inactive: 1 });
 
     fixture.destroy();
   });
@@ -333,14 +328,14 @@ describe("BoardPage", () => {
     expect(api.get).not.toHaveBeenCalledWith("/boards/board-1/mirror-status");
   });
 
-  it("hides the board health overview when workspace health is disabled", async () => {
+  it("ignores a legacy health setting when calculating card counts", async () => {
     api.post.mockResolvedValue({ ...boardPayload(), workspaceBoardHealthEnabled: false });
     const fixture = createInitializedBoardPage();
 
-    await vi.waitFor(() => expect(boardState(fixture.componentInstance).boardHealthEnabled()).toBe(false));
+    await vi.waitFor(() => expect(boardState(fixture.componentInstance).board()).not.toBeNull());
     fixture.detectChanges();
 
-    expect((fixture.nativeElement as HTMLElement).querySelector('[aria-label^="Board overview"]')).toBeNull();
+    expect(fixture.componentInstance.boardOverview()).toMatchObject({ overdue: 1, unassigned: 1, inactive: 1 });
   });
 
   it("blocks board-sync creation when the board-owning organisation is Free", async () => {

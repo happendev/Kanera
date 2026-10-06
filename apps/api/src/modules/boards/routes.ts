@@ -101,10 +101,6 @@ async function boardPayload(
         kind: workspaces.kind,
         completedCardsActiveDays: workspaces.completedCardsActiveDays,
         inactiveCardsDays: workspaces.inactiveCardsDays,
-        boardHealthEnabled: workspaces.boardHealthEnabled,
-        boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
-        boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
-        boardHealthInactiveEnabled: workspaces.boardHealthInactiveEnabled,
         boardLinkingEnabled: workspaces.boardLinkingEnabled,
         plan: clients.plan,
         billingStatus: clients.billingStatus,
@@ -215,7 +211,7 @@ async function boardPayload(
     ? hydratedCardSummaries
     : hydratedCardSummaries.slice(0, cardQuery.limit);
 
-  return { board, workspaceClientId: workspace.clientId, workspaceKind: workspace.kind, workspaceInactiveCardsDays: workspace.inactiveCardsDays, workspaceBoardHealthEnabled: workspace.boardHealthEnabled, workspaceBoardHealthOverdueEnabled: workspace.boardHealthOverdueEnabled, workspaceBoardHealthUnassignedEnabled: workspace.boardHealthUnassignedEnabled, workspaceBoardHealthInactiveEnabled: workspace.boardHealthInactiveEnabled, workspaceCardKeyPrefixes: workspaceCardKeyPrefixRows.map((row) => row.prefix), boardLinkingEnabled: workspace.boardLinkingEnabled, boardSyncAllowed: hasBoardSyncEntitlement(workspace.plan, workspace.billingStatus), hasMirrors: participatingMirrors.length > 0, lists: boardLists, ...(cardQuery.includeCards === false ? {} : { cards: cardSummaries, ...(cardQuery.limit === undefined ? {} : { cardPage: { offset: cardQuery.offset ?? 0, limit: cardQuery.limit, hasMore: hasMoreCards } }) }), separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, checklistTemplates, members, viewerRole, viewerSource, viewerCanAccessWorkspace, viewerIsWorkspaceAdmin, viewerAssignedItemsOnly: Boolean(assignedUserId), customFieldValuesComplete };
+  return { board, workspaceClientId: workspace.clientId, workspaceKind: workspace.kind, workspaceInactiveCardsDays: workspace.inactiveCardsDays, workspaceCardKeyPrefixes: workspaceCardKeyPrefixRows.map((row) => row.prefix), boardLinkingEnabled: workspace.boardLinkingEnabled, boardSyncAllowed: hasBoardSyncEntitlement(workspace.plan, workspace.billingStatus), hasMirrors: participatingMirrors.length > 0, lists: boardLists, ...(cardQuery.includeCards === false ? {} : { cards: cardSummaries, ...(cardQuery.limit === undefined ? {} : { cardPage: { offset: cardQuery.offset ?? 0, limit: cardQuery.limit, hasMore: hasMoreCards } }) }), separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, checklistTemplates, members, viewerRole, viewerSource, viewerCanAccessWorkspace, viewerIsWorkspaceAdmin, viewerAssignedItemsOnly: Boolean(assignedUserId), customFieldValuesComplete };
 }
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this

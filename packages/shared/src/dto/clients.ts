@@ -45,7 +45,6 @@ export const updateClientBody = z.object({
   requireMfa: z.boolean().optional(),
   defaultCompletedCardsActiveDays: z.number().int().min(0).max(365).optional(),
   defaultInactiveCardsDays: z.number().int().min(0).max(365).optional(),
-  defaultBoardHealthEnabled: z.boolean().optional(),
   storageConfig: storageConfigSchema.optional(),
   smtpConfig: smtpConfigSchema.nullable().optional(),
 });
@@ -114,7 +113,6 @@ export const publicClientResponse = z.object({
   requireMfa: z.boolean(),
   defaultCompletedCardsActiveDays: z.number().int().min(0).max(365),
   defaultInactiveCardsDays: z.number().int().min(0).max(365),
-  defaultBoardHealthEnabled: z.boolean(),
   storageConfig: storageConfigSchema,
   storageConfigSource: z.enum(["env", "client"]),
   smtpConfig: smtpConfigSchema.nullable(),

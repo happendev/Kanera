@@ -505,6 +505,13 @@
       "when": 1791285426861,
       "tag": "0071_fair_bloodstorm",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1791297588946,
+      "tag": "0072_heavy_pandemic",
+      "breakpoints": true
     }
   ]
 }

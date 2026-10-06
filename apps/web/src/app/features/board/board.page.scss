@@ -92,39 +92,8 @@
   gap: 2px;
 }
 
-.board-overview-trigger {
-  // The radar identifies the overview; the beacon previews its current work-risk signal.
-  --overview-signal: var(--text-muted);
-
-  > .ti {
-    font-size: 18px;
-  }
-
-  &[data-risk="onTrack"] { --overview-signal: var(--success); }
-  &[data-risk="needsAttention"] { --overview-signal: var(--warning); }
-  &[data-risk="atRisk"] { --overview-signal: var(--danger); }
-
-  &:hover:not(:disabled),
-  &.is-open {
-    color: var(--text);
-
-    .board-overview-trigger-status {
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--overview-signal) 18%, transparent);
-    }
-  }
-}
-
-.board-overview-trigger-status {
-  position: absolute;
-  right: 6px;
-  bottom: 6px;
-  width: 7px;
-  height: 7px;
-  background: var(--overview-signal);
-  border: 1.5px solid var(--surface);
-  border-radius: 50%;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--overview-signal) 22%, transparent);
-  transition: box-shadow var(--motion-fast);
+.board-overview-trigger > .ti {
+  font-size: 18px;
 }
 
 .board-overview {
@@ -166,45 +135,6 @@
   > div { display: flex; flex-direction: column; gap: 2px; }
   strong { font-size: 13px; }
   span { color: var(--text-muted); font-size: 11px; }
-}
-
-.board-overview-risk {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  flex: 0 0 auto;
-  padding: 6px 9px;
-  color: var(--text-muted) !important;
-  font-size: 12px !important;
-  font-weight: 700;
-  background: var(--ov-tile-bg);
-  border: 1px solid var(--ov-tile-border);
-  border-radius: 999px;
-
-  &[data-risk="onTrack"] {
-    color: var(--success) !important;
-    background: color-mix(in srgb, var(--success) 10%, var(--surface-overlay));
-    border-color: color-mix(in srgb, var(--success) 32%, var(--ov-tile-border));
-  }
-
-  &[data-risk="needsAttention"] {
-    color: var(--warning) !important;
-    background: color-mix(in srgb, var(--warning) 10%, var(--surface-overlay));
-    border-color: color-mix(in srgb, var(--warning) 32%, var(--ov-tile-border));
-  }
-
-  &[data-risk="atRisk"] {
-    color: var(--danger) !important;
-    background: color-mix(in srgb, var(--danger) 10%, var(--surface-overlay));
-    border-color: color-mix(in srgb, var(--danger) 32%, var(--ov-tile-border));
-  }
-}
-
-.board-overview-risk-summary {
-  margin: 10px 0 4px;
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.4;
 }
 
 .board-overview-metrics {

@@ -538,7 +538,6 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly orgError = signal<string | null>(null);
   readonly defaultCompletedCardsActiveDays = signal(DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS);
   readonly defaultInactiveCardsDays = signal(DEFAULT_INACTIVE_CARDS_DAYS);
-  readonly defaultBoardHealthEnabled = signal(true);
   readonly cardTimingDefaultsSaving = signal(false);
   readonly cardTimingDefaultsError = signal<string | null>(null);
   /** The new-workspace defaults save on blur/toggle with no button, so they report through a chip. */
@@ -719,7 +718,6 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     this.requireMfaDraft.set(c.requireMfa);
     this.defaultCompletedCardsActiveDays.set(c.defaultCompletedCardsActiveDays);
     this.defaultInactiveCardsDays.set(c.defaultInactiveCardsDays);
-    this.defaultBoardHealthEnabled.set(c.defaultBoardHealthEnabled);
     const sc = c.storageConfig;
     if (sc.kind === "s3") {
       this.storageKind.set("s3");
@@ -1957,10 +1955,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     if (!current || this.cardTimingDefaultsSaving()) return;
     const defaultCompletedCardsActiveDays = Math.max(0, Math.min(365, Math.trunc(this.defaultCompletedCardsActiveDays())));
     const defaultInactiveCardsDays = Math.max(0, Math.min(365, Math.trunc(this.defaultInactiveCardsDays())));
-    const defaultBoardHealthEnabled = this.defaultBoardHealthEnabled();
     this.defaultCompletedCardsActiveDays.set(defaultCompletedCardsActiveDays);
     this.defaultInactiveCardsDays.set(defaultInactiveCardsDays);
-    if (current.defaultCompletedCardsActiveDays === defaultCompletedCardsActiveDays && current.defaultInactiveCardsDays === defaultInactiveCardsDays && current.defaultBoardHealthEnabled === defaultBoardHealthEnabled) return;
+    if (current.defaultCompletedCardsActiveDays === defaultCompletedCardsActiveDays && current.defaultInactiveCardsDays === defaultInactiveCardsDays) return;
 
     this.cardTimingDefaultsSaving.set(true);
     this.cardTimingDefaultsAutosave.markSaving();
@@ -1969,13 +1966,11 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       this.applyClient(await this.api.patch<PublicClientResponse>("/clients/me", {
         defaultCompletedCardsActiveDays,
         defaultInactiveCardsDays,
-        defaultBoardHealthEnabled,
       }));
       this.cardTimingDefaultsAutosave.markSaved();
     } catch (err) {
       this.defaultCompletedCardsActiveDays.set(current.defaultCompletedCardsActiveDays);
       this.defaultInactiveCardsDays.set(current.defaultInactiveCardsDays);
-      this.defaultBoardHealthEnabled.set(current.defaultBoardHealthEnabled);
       this.cardTimingDefaultsAutosave.markError();
       this.cardTimingDefaultsError.set(extractErrorMessage(err));
     } finally {

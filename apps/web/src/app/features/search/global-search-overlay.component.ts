@@ -458,7 +458,7 @@ export class GlobalSearchOverlayComponent {
       { id: "home", label: "Go to Home", detail: "Workspace overview", icon: "home", keys: "g h", run: () => void this.router.navigate(["/"]) },
       { id: "my-cards", label: "Go to My Cards", detail: "Your work across boards", icon: "user-check", keys: "g m", run: () => void this.router.navigate(["/my-cards"]) },
       { id: "team-cards", label: "Go to Team Cards", detail: "Team work across boards", icon: "users", keys: "g t", run: () => void this.router.navigate(["/team-cards"]) },
-      { id: "portfolio", label: "Go to Portfolio", detail: "Board health and progress", icon: "chart-dots-3", keys: "g p", run: () => void this.router.navigate(["/portfolio"]) },
+      { id: "portfolio", label: "Go to Portfolio", detail: "Card counts and progress", icon: "chart-dots-3", keys: "g p", run: () => void this.router.navigate(["/portfolio"]) },
       { id: "settings", label: "Open Settings", detail: "Workspace and account preferences", icon: "settings", keys: "g s", run: () => void this.router.navigate(["/settings"]) },
     ];
     return [...this.palette.actions(), ...navigation]

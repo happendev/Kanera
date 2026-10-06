@@ -18,7 +18,7 @@
     "./client-ip": "./src/client-ip.ts",
     "./card-value-limits": "./src/card-value-limits.ts",
     "./card-links": "./src/card-links.ts",
-    "./card-health": "./src/card-health.ts",
+    "./card-timing": "./src/card-timing.ts",
     "./colors": "./src/lib/colors.ts",
     "./due-date-slots": "./src/lib/due-date-slots.ts",
     "./activity-summary": "./src/lib/activity-summary.ts",

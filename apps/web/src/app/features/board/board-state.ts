@@ -61,10 +61,6 @@ export class BoardState {
   readonly workspaceClientId = signal<string | null>(null);
   readonly workspaceKind = signal<"standard" | "board" | null>(null);
   readonly inactiveCardsDays = signal(DEFAULT_INACTIVE_CARDS_DAYS);
-  readonly boardHealthEnabled = signal(true);
-  readonly boardHealthOverdueEnabled = signal(true);
-  readonly boardHealthUnassignedEnabled = signal(true);
-  readonly boardHealthInactiveEnabled = signal(true);
   readonly workspaceCardKeyPrefixes = signal<string[]>([]);
   readonly boardLinkingEnabled = signal(true);
   readonly boardSyncAllowed = signal(true);
@@ -511,10 +507,6 @@ export class BoardState {
     workspaceClientId?: string | null;
     workspaceKind?: "standard" | "board";
     workspaceInactiveCardsDays?: number;
-    workspaceBoardHealthEnabled?: boolean;
-    workspaceBoardHealthOverdueEnabled?: boolean;
-    workspaceBoardHealthUnassignedEnabled?: boolean;
-    workspaceBoardHealthInactiveEnabled?: boolean;
     workspaceCardKeyPrefixes?: string[];
     boardLinkingEnabled?: boolean;
     boardSyncAllowed?: boolean;
@@ -548,10 +540,6 @@ export class BoardState {
     this.workspaceClientId.set(payload.workspaceClientId ?? null);
     this.workspaceKind.set(payload.workspaceKind ?? null);
     this.inactiveCardsDays.set(payload.workspaceInactiveCardsDays ?? DEFAULT_INACTIVE_CARDS_DAYS);
-    this.boardHealthEnabled.set(payload.workspaceBoardHealthEnabled !== false);
-    this.boardHealthOverdueEnabled.set(payload.workspaceBoardHealthOverdueEnabled !== false);
-    this.boardHealthUnassignedEnabled.set(payload.workspaceBoardHealthUnassignedEnabled !== false);
-    this.boardHealthInactiveEnabled.set(payload.workspaceBoardHealthInactiveEnabled !== false);
     this.workspaceCardKeyPrefixes.set(payload.workspaceCardKeyPrefixes ?? []);
     this.boardLinkingEnabled.set(payload.boardLinkingEnabled !== false);
     this.boardSyncAllowed.set(payload.boardSyncAllowed !== false);
@@ -689,7 +677,6 @@ export class BoardState {
     this.workspaceClientId.set(null);
     this.workspaceKind.set(null);
     this.inactiveCardsDays.set(DEFAULT_INACTIVE_CARDS_DAYS);
-    this.boardHealthEnabled.set(true);
     this.workspaceCardKeyPrefixes.set([]);
     this.boardLinkingEnabled.set(true);
     this.boardSyncAllowed.set(true);
@@ -1227,10 +1214,6 @@ export class BoardState {
       workspaceClientId: this.workspaceClientId() ?? undefined,
       workspaceKind: this.workspaceKind() ?? undefined,
       workspaceInactiveCardsDays: this.inactiveCardsDays(),
-      workspaceBoardHealthEnabled: this.boardHealthEnabled(),
-      workspaceBoardHealthOverdueEnabled: this.boardHealthOverdueEnabled(),
-      workspaceBoardHealthUnassignedEnabled: this.boardHealthUnassignedEnabled(),
-      workspaceBoardHealthInactiveEnabled: this.boardHealthInactiveEnabled(),
       workspaceCardKeyPrefixes: this.workspaceCardKeyPrefixes(),
       boardLinkingEnabled: this.boardLinkingEnabled(),
       boardSyncAllowed: this.boardSyncAllowed(),
@@ -1267,10 +1250,6 @@ export class BoardState {
     this.workspaceClientId.set(snapshot.workspaceClientId ?? null);
     this.workspaceKind.set(snapshot.workspaceKind ?? null);
     this.inactiveCardsDays.set(snapshot.workspaceInactiveCardsDays ?? DEFAULT_INACTIVE_CARDS_DAYS);
-    this.boardHealthEnabled.set(snapshot.workspaceBoardHealthEnabled !== false);
-    this.boardHealthOverdueEnabled.set(snapshot.workspaceBoardHealthOverdueEnabled !== false);
-    this.boardHealthUnassignedEnabled.set(snapshot.workspaceBoardHealthUnassignedEnabled !== false);
-    this.boardHealthInactiveEnabled.set(snapshot.workspaceBoardHealthInactiveEnabled !== false);
     this.workspaceCardKeyPrefixes.set(snapshot.workspaceCardKeyPrefixes ?? []);
     this.boardLinkingEnabled.set(snapshot.boardLinkingEnabled !== false);
     this.boardSyncAllowed.set(snapshot.boardSyncAllowed !== false);

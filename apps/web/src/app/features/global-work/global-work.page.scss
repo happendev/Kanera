@@ -809,39 +809,6 @@ tbody tr:last-child td {
     }
   }
 
-  .portfolio-health-cell {
-    min-width: 150px;
-  }
-
-  .portfolio-health {
-    display: grid;
-    justify-items: end;
-    gap: 4px;
-
-    &[data-risk="onTrack"] .portfolio-health-status { color: var(--success); }
-    &[data-risk="needsAttention"] .portfolio-health-status { color: var(--warning); }
-    &[data-risk="atRisk"] .portfolio-health-status { color: var(--danger); }
-  }
-
-  .portfolio-health-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    color: var(--text-muted);
-    font-size: 13px;
-    font-weight: 700;
-    white-space: nowrap;
-  }
-
-  .portfolio-health-summary {
-    max-width: 190px;
-    overflow: hidden;
-    color: var(--text-muted);
-    font-size: 10px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
   .portfolio-organisation {
     background: var(--surface-2);
 

@@ -714,12 +714,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly boardLinkingEnabledDraft = signal(true);
   readonly boardLinkingSaving = signal(false);
   readonly boardLinkingError = signal<string | null>(null);
-  readonly boardHealthEnabledDraft = signal(true);
-  readonly boardHealthOverdueEnabledDraft = signal(true);
-  readonly boardHealthUnassignedEnabledDraft = signal(true);
-  readonly boardHealthInactiveEnabledDraft = signal(true);
-  readonly boardHealthSaving = signal(false);
-  readonly boardHealthError = signal<string | null>(null);
+  readonly generalSettingsSaving = signal(false);
+  readonly generalSettingsError = signal<string | null>(null);
   readonly completedCardsActiveDaysDraft = signal(DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS);
   readonly inactiveCardsDaysDraft = signal(DEFAULT_INACTIVE_CARDS_DAYS);
   readonly isStandalone = computed(() => this.workspace()?.kind === "board");
@@ -1505,10 +1501,6 @@ export class WorkspaceSettingsPage implements OnDestroy {
     // Keep locally queued values visible if an unrelated workspace mutation or realtime echo lands
     // during the debounce window. The defaults save response synchronizes them after the timer clears.
     if (!this.generalSettingsSaveTimer) {
-      this.boardHealthEnabledDraft.set(ws?.boardHealthEnabled !== false);
-      this.boardHealthOverdueEnabledDraft.set(ws?.boardHealthOverdueEnabled !== false);
-      this.boardHealthUnassignedEnabledDraft.set(ws?.boardHealthUnassignedEnabled !== false);
-      this.boardHealthInactiveEnabledDraft.set(ws?.boardHealthInactiveEnabled !== false);
       this.completedCardsActiveDaysDraft.set(ws?.completedCardsActiveDays ?? this.completedCardsActiveDaysDefault);
       this.inactiveCardsDaysDraft.set(ws?.inactiveCardsDays ?? this.inactiveCardsDaysDefault);
     }
@@ -1542,7 +1534,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.nameSaveTimer = null;
   }
 
-  private async patchWorkspace(patch: { name?: string; cardKeyPrefix?: string; icon?: string | null; accentColor?: ColorToken | null; completedCardsActiveDays?: number; inactiveCardsDays?: number; boardHealthEnabled?: boolean; boardHealthOverdueEnabled?: boolean; boardHealthUnassignedEnabled?: boolean; boardHealthInactiveEnabled?: boolean; boardLinkingEnabled?: boolean }) {
+  private async patchWorkspace(patch: { name?: string; cardKeyPrefix?: string; icon?: string | null; accentColor?: ColorToken | null; completedCardsActiveDays?: number; inactiveCardsDays?: number; boardLinkingEnabled?: boolean }) {
     const ws = await this.autosave.track(() => this.api.patch<Workspace>(`/workspaces/${this.workspaceId()}`, patch));
     this.applyWorkspace(ws);
   }
@@ -1604,20 +1596,6 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.queueGeneralSettingsSave();
   }
 
-  updateBoardHealthEnabled(enabled: boolean) {
-    if (!this.workspace() || this.boardHealthSaving()) return;
-    this.boardHealthEnabledDraft.set(enabled);
-    this.queueGeneralSettingsSave();
-  }
-
-  updateBoardHealthSignal(signal: "overdue" | "unassigned" | "inactive", enabled: boolean) {
-    if (!this.workspace() || !this.boardHealthEnabledDraft() || this.boardHealthSaving()) return;
-    if (signal === "overdue") this.boardHealthOverdueEnabledDraft.set(enabled);
-    else if (signal === "unassigned") this.boardHealthUnassignedEnabledDraft.set(enabled);
-    else this.boardHealthInactiveEnabledDraft.set(enabled);
-    this.queueGeneralSettingsSave();
-  }
-
   private queueGeneralSettingsSave() {
     if (this.generalSettingsSaveTimer) clearTimeout(this.generalSettingsSaveTimer);
     this.generalSettingsSaveTimer = setTimeout(() => {
@@ -1636,39 +1614,27 @@ export class WorkspaceSettingsPage implements OnDestroy {
   private async saveGeneralSettings() {
     const workspace = this.workspace();
     const workspaceId = this.workspaceId();
-    if (!workspace || !workspaceId || this.boardHealthSaving()) return;
+    if (!workspace || !workspaceId || this.generalSettingsSaving()) return;
     const patch = {
       completedCardsActiveDays: this.completedCardsActiveDaysDraft(),
       inactiveCardsDays: this.inactiveCardsDaysDraft(),
-      boardHealthEnabled: this.boardHealthEnabledDraft(),
-      boardHealthOverdueEnabled: this.boardHealthOverdueEnabledDraft(),
-      boardHealthUnassignedEnabled: this.boardHealthUnassignedEnabledDraft(),
-      boardHealthInactiveEnabled: this.boardHealthInactiveEnabledDraft(),
     };
     if (workspace.completedCardsActiveDays === patch.completedCardsActiveDays &&
-      workspace.inactiveCardsDays === patch.inactiveCardsDays &&
-      (workspace.boardHealthEnabled !== false) === patch.boardHealthEnabled &&
-      (workspace.boardHealthOverdueEnabled !== false) === patch.boardHealthOverdueEnabled &&
-      (workspace.boardHealthUnassignedEnabled !== false) === patch.boardHealthUnassignedEnabled &&
-      (workspace.boardHealthInactiveEnabled !== false) === patch.boardHealthInactiveEnabled) return;
+      workspace.inactiveCardsDays === patch.inactiveCardsDays) return;
 
-    this.boardHealthSaving.set(true);
-    this.boardHealthError.set(null);
+    this.generalSettingsSaving.set(true);
+    this.generalSettingsError.set(null);
     try {
       const updated = await this.autosave.track(() => this.api.patch<Workspace>(`/workspaces/${workspaceId}`, patch));
       if (this.workspaceId() === workspaceId) this.applyWorkspace(updated);
     } catch {
       if (this.workspaceId() === workspaceId) {
-        this.boardHealthEnabledDraft.set(workspace.boardHealthEnabled !== false);
-        this.boardHealthOverdueEnabledDraft.set(workspace.boardHealthOverdueEnabled !== false);
-        this.boardHealthUnassignedEnabledDraft.set(workspace.boardHealthUnassignedEnabled !== false);
-        this.boardHealthInactiveEnabledDraft.set(workspace.boardHealthInactiveEnabled !== false);
         this.completedCardsActiveDaysDraft.set(workspace.completedCardsActiveDays);
         this.inactiveCardsDaysDraft.set(workspace.inactiveCardsDays);
-        this.boardHealthError.set(`${this.entityLabelTitle()} defaults could not be updated.`);
+        this.generalSettingsError.set(`${this.entityLabelTitle()} defaults could not be updated.`);
       }
     } finally {
-      this.boardHealthSaving.set(false);
+      this.generalSettingsSaving.set(false);
     }
   }
 

@@ -47,10 +47,6 @@ export class BoardSocketBridge {
         // immediately, without waiting for a board refresh.
         state.boardLinkingEnabled.set(workspace.boardLinkingEnabled !== false);
         state.inactiveCardsDays.set(workspace.inactiveCardsDays);
-        state.boardHealthEnabled.set(workspace.boardHealthEnabled);
-        state.boardHealthOverdueEnabled.set(workspace.boardHealthOverdueEnabled);
-        state.boardHealthUnassignedEnabled.set(workspace.boardHealthUnassignedEnabled);
-        state.boardHealthInactiveEnabled.set(workspace.boardHealthInactiveEnabled);
         if (workspace.boardLinkingEnabled === false) state.hasMirrorsAtHydration.set(false);
         state.updateCardKeyPrefix(workspace.cardKeyPrefix);
       },
