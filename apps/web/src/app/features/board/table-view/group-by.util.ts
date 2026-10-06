@@ -612,9 +612,19 @@ export function sortGroupCards(cards: AnyCard[], mode: SortBy): AnyCard[] {
       return arr.sort(byDate((c) => c.updatedAt as unknown as string | Date, "desc"));
     case "updated-asc":
       return arr.sort(byDate((c) => c.updatedAt as unknown as string | Date, "asc"));
+    // ISO instants compare lexicographically; cards not in progress (no start) sink to the bottom.
+    case "in-progress-longest":
+      return arr.sort(byNullableString(inProgressStartIso, "asc"));
+    case "in-progress-newest":
+      return arr.sort(byNullableString(inProgressStartIso, "desc"));
     default:
       return arr;
   }
+}
+
+function inProgressStartIso(card: AnyCard): string | null {
+  const since = (card as { inProgressSince?: Date | string | null }).inProgressSince;
+  return since ? new Date(since).toISOString() : null;
 }
 
 function byNullableString<T>(get: (item: T) => string | null | undefined, dir: "asc" | "desc") {

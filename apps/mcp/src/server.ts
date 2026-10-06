@@ -40,6 +40,7 @@ const workFilters = z.object({
   completion: z.enum(["activeAndRecentlyCompleted", "active", "completed", "all"]).optional().describe("Completion-state subset to return."),
   unassignedOnly: z.boolean().optional().describe("Return only cards with no assignees."),
   inactiveOnly: z.boolean().optional().describe("Return active cards whose canonical activity timestamp is at least 14 days old."),
+  inProgressOnly: z.boolean().optional().describe("Only open cards in In progress lists."),
   dueFrom: z.iso.date().nullable().optional().describe("Inclusive due-date lower bound in YYYY-MM-DD format."),
   dueTo: z.iso.date().nullable().optional().describe("Inclusive due-date upper bound in YYYY-MM-DD format."),
   overdueOnly: z.boolean().optional().describe("Return only overdue active cards."),
@@ -60,7 +61,7 @@ const sourceDirectorySchema = z.object({
     organisationId: uuid,
     organisationName: z.string(),
   })),
-  lists: z.array(z.looseObject({ id: uuid, workspaceId: uuid, name: z.string() })),
+  lists: z.array(z.looseObject({ id: uuid, workspaceId: uuid, name: z.string(), inProgress: z.boolean().optional() })),
   labels: z.array(z.looseObject({ id: uuid, workspaceId: uuid, name: z.string() })),
   people: z.array(z.looseObject({ id: uuid, displayName: z.string() })),
 });
@@ -303,7 +304,11 @@ type WorkspaceTemplateId = WorkspaceTemplate["id"];
 const workspaceTemplateId = z.enum(WORKSPACE_TEMPLATES.map((template) => template.id) as [WorkspaceTemplateId, ...WorkspaceTemplateId[]]);
 const iconSlug = z.string().trim().min(1).max(100).describe("Tabler icon slug such as \"rocket\"; omit for the default.");
 const seedName = z.string().trim().min(1).max(100).describe("Non-empty name, up to 100 characters.");
-const seedList = z.object({ name: seedName, icon: iconSlug.optional() });
+const seedList = z.object({
+  name: seedName,
+  icon: iconSlug.optional(),
+  inProgress: z.boolean().optional().describe("Mark lists where work is actively happening; cards entering one start a time-in-progress stint (inProgressSince); finished stints accumulate in inProgressSeconds."),
+});
 const seedCustomField = z.object({
   name: seedName,
   icon: iconSlug.optional(),
@@ -377,6 +382,7 @@ function describeWorkspaceTemplate(template: WorkspaceTemplate) {
     workspaceName: template.workspaceName,
     initialBoardName: template.initialBoardName,
     lists: template.lists.map((list) => list.name),
+    inProgressLists: template.lists.filter((list) => list.inProgress).map((list) => list.name),
     customFields: template.customFields.map((field) => ({ name: field.name, type: field.type })),
     labels: template.labels.map((label) => label.name),
     checklistTemplateCount: template.checklistTemplates?.length ?? 0,
@@ -1477,11 +1483,11 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     if (a.preset && (a.from || a.to)) validationError("preset cannot be combined with from and to");
     return api.post("/api/v1/work/history/query", a);
   }, ctx, workHistoryOutputSchema);
-  registerKaneraTool(server, "work.query_cards", "Use this when listing current, completed, overdue, unassigned, or stale work across one or many Kanera projects. For another person, use lens=team and one assigneeIds value; do not enumerate boards manually. Results include source-name maps and canonical card links.", {
+  registerKaneraTool(server, "work.query_cards", "Use this when listing current, in-progress, completed, overdue, unassigned, or stale work across one or many Kanera projects. For active work use filters.inProgressOnly with sort=inProgressAsc (longest first). For another person, use lens=team and one assigneeIds value; do not enumerate boards manually. Results include source-name maps and canonical card links.", {
     lens: z.enum(["my", "team"]).describe("Use my for the connected user's assignments; use team with filters.assigneeIds for another person."),
     scope: workScope,
     filters: workFilters,
-    sort: z.enum(["dueAsc", "dueDesc", "titleAsc", "titleDesc", "createdAsc", "createdDesc", "updatedAsc", "updatedDesc"]).default("dueAsc"),
+    sort: z.enum(["dueAsc", "dueDesc", "titleAsc", "titleDesc", "createdAsc", "createdDesc", "updatedAsc", "updatedDesc", "inProgressAsc", "inProgressDesc"]).default("dueAsc"),
     cursor: z.string().min(1).max(500_000).optional(),
     limit: z.number().int().min(1).max(100).default(50),
   }, (a, api) => api.post("/api/v1/work/cards/query", a), ctx, workCardsOutputSchema);

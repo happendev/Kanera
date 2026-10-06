@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { COLOR_TOKENS } from "../lib/colors.js";
-import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS, DEFAULT_INACTIVE_CARDS_DAYS } from "../lib/workspace-defaults.js";
+import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS, DEFAULT_IN_PROGRESS_ALERT_DAYS, DEFAULT_INACTIVE_CARDS_DAYS } from "../lib/workspace-defaults.js";
 import { valueIn } from "./_value-check.js";
 import { clients } from "./client.js";
 
@@ -32,6 +32,13 @@ export const workspaces = pgTable(
     accentColor: text("accent_color", { enum: COLOR_TOKENS }),
     completedCardsActiveDays: integer("completed_cards_active_days").notNull().default(DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS),
     inactiveCardsDays: integer("inactive_cards_days").notNull().default(DEFAULT_INACTIVE_CARDS_DAYS),
+    // Time in progress past this many days is flagged on cards, the overview and table, and fires
+    // the card_in_progress_too_long automation trigger. Workspace-wide rather than per list because a
+    // card's time in progress is one continuous stint across every in-progress list. 0 turns it off.
+    inProgressAlertDays: integer("in_progress_alert_days").notNull().default(DEFAULT_IN_PROGRESS_ALERT_DAYS),
+    // IANA time zone whose working hours (09:00-17:00, Monday to Friday) time in progress counts.
+    // Defaults to the creator's zone; the database falls back to UTC for a zone it does not know.
+    timeZone: text("time_zone").notNull().default("UTC"),
     boardHealthEnabled: boolean("board_health_enabled").notNull().default(true),
     boardHealthOverdueEnabled: boolean("board_health_overdue_enabled").notNull().default(true),
     boardHealthUnassignedEnabled: boolean("board_health_unassigned_enabled").notNull().default(true),

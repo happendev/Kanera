@@ -379,6 +379,15 @@
               @case ('card_becomes_inactive') {
                 <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> Runs when a card reaches the inactivity period, on every board in this {{ settings.entityLabel() }}. New card activity resets the period.</p>
               }
+              @case ('card_in_progress_too_long') {
+                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i>
+                  @if (settings.inProgressAlertDaysDraft() > 0) {
+                    Runs once each time an open card has been in progress for more than {{ settings.inProgressAlertDaysDraft() }} {{ settings.inProgressAlertDaysDraft() === 1 ? "day" : "days" }}, on every board in this {{ settings.entityLabel() }}. Leaving and re-entering In progress starts a new clock.
+                  } @else {
+                    Won't run: the time in progress alert is off in General settings.
+                  }
+                </p>
+              }
               @case ('all_checklist_items_complete') {
                 <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> Runs when the last unticked checklist item on a card is completed.</p>
               }

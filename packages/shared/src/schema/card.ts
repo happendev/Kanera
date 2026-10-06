@@ -39,6 +39,26 @@ export const cards = pgTable(
     dueDateSlot: text("due_date_slot", { enum: CARD_DUE_DATE_SLOTS }),
     dueDateTimezone: text("due_date_timezone"),
     completedAt: timestamp("completed_at", { withTimezone: true }),
+    // Time in progress is tracked as finished stints plus the running one, both owned by the
+    // `card_track_in_progress` / `list_backfill_in_progress` triggers so every write path (app,
+    // public API, automations, imports, board transfers) agrees.
+    //
+    // `inProgressSince` is the start of the running stint: set while the card is *actively* in
+    // progress (in an in-progress list, open and not archived), null otherwise. Moving between two
+    // in-progress lists keeps the original start; leaving, completing or archiving ends the stint.
+    inProgressSince: timestamp("in_progress_since", { withTimezone: true }),
+    // Tracked seconds from every finished stint. A stint's time is banked here when it ends, so a
+    // card's total survives it leaving progress, being completed, reopened or re-entering progress.
+    // Tracked, not wall-clock: only working hours count (09:00-17:00, Monday to Friday, in the
+    // workspace's time zone; see `@kanera/shared/time-in-progress`), so the running stint adds its
+    // working time, not `now - inProgressSince`.
+    inProgressSeconds: integer("in_progress_seconds").notNull().default(0),
+    // When the card entered its current list, maintained by the same trigger on every list change.
+    // Flagging a list in progress starts each card's clock from here, so the start is exact even for
+    // paths that record no per-card move activity (bulk list moves) or after activity retention.
+    // The trigger fills it (an insert may supply an earlier value, as imports do); the null default
+    // only lets inserts omit it. Internal: not part of the wire card.
+    listEnteredAt: timestamp("list_entered_at", { withTimezone: true }).notNull().default(sql`null`),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdById: uuid("created_by_id")
       .notNull()
@@ -54,6 +74,7 @@ export const cards = pgTable(
   (t) => [
     check("cards_due_date_slot_ck", valueIn(t.dueDateSlot, CARD_DUE_DATE_SLOTS)),
     check("cards_number_ck", sql`${t.number} > 0`),
+    check("cards_in_progress_seconds_ck", sql`${t.inProgressSeconds} >= 0`),
     check("cards_key_ck", sql`${t.key} ~ '^[A-Z][A-Z0-9]{1,9}-[1-9][0-9]*$'`),
     uniqueIndex("cards_workspace_id_number_key").on(t.workspaceId, t.number),
     uniqueIndex("cards_organisation_key_key_key").on(t.organisationKey, t.key),
@@ -72,6 +93,9 @@ export const cards = pgTable(
     index("cards_board_list_position_idx").on(t.boardId, t.listId, t.position),
     index("cards_board_id_idx").on(t.boardId),
     index("cards_list_id_idx").on(t.listId),
+    // Cards currently in progress: the "longest in progress" sort, the in-progress filter and the
+    // card_in_progress_too_long sweep all read only this small subset.
+    index("cards_in_progress_since_idx").on(t.inProgressSince).where(sql`${t.inProgressSince} is not null`),
     index("cards_active_board_list_position_idx")
       .on(t.boardId, t.listId, t.position)
       .where(sql`${t.archivedAt} is null`),

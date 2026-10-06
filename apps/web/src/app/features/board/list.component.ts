@@ -1,4 +1,5 @@
 import { ToastService } from "../../shared/toast.service";
+import { InProgressHintService } from "./in-progress-hint.service";
 import type { CdkDragDrop, CdkDragMove} from "@angular/cdk/drag-drop";
 import { CdkDrag, CdkDragPreview, CdkDropList } from "@angular/cdk/drag-drop";
 import type { OnDestroy} from "@angular/core";
@@ -34,6 +35,9 @@ export interface BoardListPresentation {
   icon: string | null;
   color: string | null;
   position: string;
+  /** Marks a list that runs the time-in-progress clock (see `list.in_progress`). */
+  inProgress?: boolean;
+  wipLimit?: number | null;
 }
 type AnyList = List | WireList | BoardListPresentation;
 type AnyCard = Card | WireCard | WireCardSummary;
@@ -130,6 +134,7 @@ class CloseCardChecklistsBeforeDragDirective {
   styleUrl: "./list.component.scss",
 })
 export class ListComponent implements OnDestroy {
+  protected readonly inProgressHint = inject(InProgressHintService);
   private readonly toasts = inject(ToastService);
   private readonly api = inject(ApiClient);
   private readonly notifications = inject(NotificationsService);
@@ -232,6 +237,25 @@ export class ListComponent implements OnDestroy {
   readonly displayedItems = computed(() => this.committedDropItems() ?? this.baseDisplayedItems());
 
   readonly cardCount = computed(() => this.displayedCards().length);
+
+  /**
+   * The list's advisory WIP limit for this board's column. Only on a real board: a cross-board lane
+   * (Global Work passes no board) mixes several teams' flows, which is not what the limit is about.
+   */
+  readonly wipLimit = computed(() => (this.boardId() ? this.list().wipLimit ?? null : null));
+  /** Open cards in the column, whatever the board filter shows: a filter must not hide overload. */
+  readonly wipCount = computed(() => this.cards().filter((card) => !card.completedAt && !card.archivedAt).length);
+  readonly overWipLimit = computed(() => {
+    const limit = this.wipLimit();
+    return limit !== null && this.wipCount() > limit;
+  });
+  readonly wipLabel = computed(() => {
+    const limit = this.wipLimit();
+    if (limit === null) return "";
+    const count = this.wipCount();
+    const base = `WIP limit ${limit}: ${count} open ${count === 1 ? "card" : "cards"} on this board`;
+    return count > limit ? `${base}, ${count - limit} over` : base;
+  });
 
   // How many leading cards to actually render. Grows on scroll and drag edge-scroll.
   private readonly renderCap = signal(INITIAL_RENDER_CAP);

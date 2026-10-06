@@ -1393,6 +1393,22 @@
 
 .tv-muted-soft { color: var(--text-muted); }
 
+// Accent like the tile's chip: this column is the "actively moving" signal, not another timestamp.
+.tv-time-in-progress {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  color: var(--accent);
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+
+  i { font-size: 14px; }
+
+  &.is-done { color: var(--text-muted); font-weight: 500; }
+  // Past the workspace's in-progress alert (see the card tile's matching chip).
+  &.is-alert { color: var(--color-amber); }
+}
+
 .tv-checklist {
   display: flex;
   align-items: center;

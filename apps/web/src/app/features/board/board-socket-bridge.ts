@@ -47,6 +47,8 @@ export class BoardSocketBridge {
         // immediately, without waiting for a board refresh.
         state.boardLinkingEnabled.set(workspace.boardLinkingEnabled !== false);
         state.inactiveCardsDays.set(workspace.inactiveCardsDays);
+        state.inProgressAlertDays.set(workspace.inProgressAlertDays);
+        state.workspaceTimeZone.set(workspace.timeZone ?? "UTC");
         state.boardHealthEnabled.set(workspace.boardHealthEnabled);
         state.boardHealthOverdueEnabled.set(workspace.boardHealthOverdueEnabled);
         state.boardHealthUnassignedEnabled.set(workspace.boardHealthUnassignedEnabled);
@@ -69,7 +71,11 @@ export class BoardSocketBridge {
       },
       [SERVER_EVENTS.LIST_UPDATED]: ({ workspaceId, list }) => {
         if (!isCurrentWorkspace(workspaceId)) return;
+        const previous = state.lists().find((l) => l.id === list.id);
         state.lists.update((ls) => ls.map((l) => (l.id === list.id ? list : l)));
+        // Flagging a list back-fills its cards' time-in-progress start from move history on the
+        // server (list_backfill_in_progress), which the client cannot reproduce. Resync once.
+        if (previous && previous.inProgress !== list.inProgress) requestResync();
       },
       [SERVER_EVENTS.LIST_MOVED]: ({ workspaceId, listId, position }) => {
         if (!isCurrentWorkspace(workspaceId)) return;
@@ -113,13 +119,13 @@ export class BoardSocketBridge {
         state.noteCardDetailRealtimeMutation(card.id);
         options.onWorkDoneChanged?.();
       },
-      [SERVER_EVENTS.CARD_MOVED]: ({ boardId: eventBoardId, cardId, toListId, position }) => {
+      [SERVER_EVENTS.CARD_MOVED]: ({ boardId: eventBoardId, cardId, toListId, position, ...clock }) => {
         if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
         if (!state.hasCard(cardId) || !state.lists().some((list) => list.id === toListId)) {
           requestResync();
           return;
         }
-        state.moveCard(cardId, toListId, position);
+        state.moveCard(cardId, toListId, position, clock);
         state.touchCardActivity(cardId, false);
         // A concurrent detail fetch contains the card's list/position too. Mark the move so that
         // stale detail cannot put the card back after this realtime event has been applied.

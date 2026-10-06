@@ -313,6 +313,17 @@
     <!-- cdkScrollable registers this inner scroller with CDK drag-drop so the manual checklist
          auto-scroll (below) re-sorts the drag as rows scroll into view under a stationary pointer. -->
     <div #detailScroller cdkScrollable class="col-main" [class.tab-hidden]="activeTab() !== 'detail'">
+      <!-- Tracked time in progress, above the description for every viewer (the list control that
+           starts and stops it is not shown to read-only viewers). It stays after the card leaves
+           progress or is completed: muted and stopped, but still the card's total. -->
+      @if (timeInProgress(); as timer) {
+      <div class="detail-time-in-progress" [class.is-done]="!timer.running" [class.is-alert]="timer.alert" [kTooltip]="timer.label" [attr.aria-label]="timer.label" role="status">
+        <i class="ti" [class.ti-progress]="timer.running" [class.ti-clock]="!timer.running"></i>
+        <span class="detail-time-caption">{{ timer.running ? "In progress" : "Time in progress" }}</span>
+        <strong>{{ timer.detail }}</strong>
+      </div>
+      }
+
       <!-- Description -->
       <section class="detail-section">
         @if (mirrorStatus(); as status) {

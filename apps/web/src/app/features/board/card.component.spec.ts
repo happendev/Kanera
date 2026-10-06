@@ -28,6 +28,8 @@ function card(overrides: Partial<WireCardSummary> = {}): WireCardSummary {
     dueDateTimezone: "UTC",
     completedAt: null,
     archivedAt: null,
+    inProgressSince: null,
+    inProgressSeconds: 0,
     coverAttachmentId: null,
     createdAt: new Date("2026-05-21T00:00:00.000Z"),
     updatedAt: new Date("2026-05-21T00:00:00.000Z"),

@@ -1,4 +1,4 @@
-import { SERVER_EVENTS, type CardAttachmentRow, type WireCard } from "@kanera/shared/events";
+import { inProgressClockOf, SERVER_EVENTS, type CardAttachmentRow, type WireCard } from "@kanera/shared/events";
 import { cardPath } from "@kanera/shared/card-links";
 import {
   ACTIVITY_ACTION,
@@ -74,7 +74,7 @@ function groupBy<T>(values: T[], keyFor: (value: T) => string): Map<string, T[]>
 }
 
 function toWireCard(card: typeof cards.$inferSelect, clientId: string): WireCard {
-  const { clientToken: _clientToken, ...publicCard } = card;
+  const { clientToken: _clientToken, listEnteredAt: _listEnteredAt, ...publicCard } = card;
   return {
     ...publicCard,
     description: signEmbeddedMediaUrls(card.description, clientId),
@@ -456,7 +456,7 @@ async function convergeCore(mirror: BoardMirror, sourceCardId: string, source: t
   });
   // Rebalance must be visible before the corresponding move or clients can apply stale positions.
   if (result.rebalance && mapping) await emitLaneRebalanced(mirror.targetBoardId, mapping.targetListId, result.rebalance);
-  if (shouldMove && mapping) await emitToBoard(mirror.targetBoardId, SERVER_EVENTS.CARD_MOVED, { boardId: mirror.targetBoardId, cardId: target.id, fromListId: target.listId, toListId: mapping.targetListId, position: result.updated.position, prevPosition: target.position });
+  if (shouldMove && mapping) await emitToBoard(mirror.targetBoardId, SERVER_EVENTS.CARD_MOVED, { boardId: mirror.targetBoardId, cardId: target.id, fromListId: target.listId, toListId: mapping.targetListId, position: result.updated.position, prevPosition: target.position, ...inProgressClockOf(result.updated) });
   // The CARD_UPDATED payload now carries archivedAt, so target boards add/remove the card exactly as
   // the native archive route does when the mirror flips its lifecycle state.
   emitDeletedNotifications(result.deletedNotifications);

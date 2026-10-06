@@ -274,7 +274,7 @@
     @else if (step() === 4) {
     <div class="ob-heading">
       <h1>Define your workflow stages</h1>
-      <p>These lists are shared by every board in this workspace, keeping each client, department, project, or team on the same process.</p>
+      <p>These lists are shared by every board in this workspace, keeping each client, department, project, or team on the same process. Mark the stages where work is actively happening as <strong>In progress</strong>, and each card in them shows its time in progress.</p>
     </div>
 
     <div cdkDropList [cdkDropListData]="lists()" (cdkDropListDropped)="dropList($event)" class="ob-items">
@@ -283,6 +283,18 @@
         <i class="ti ti-grip-vertical ob-grip" cdkDragHandle></i>
         <i [class]="'ob-icon ti ti-' + (list.icon || 'list')"></i>
         <span>{{ list.name }}</span>
+        <button
+          type="button"
+          class="ob-pill-toggle ob-progress-toggle"
+          [class.is-active]="list.inProgress"
+          [attr.aria-pressed]="!!list.inProgress"
+          [attr.aria-label]="(list.inProgress ? 'Unmark ' : 'Mark ') + list.name + ' as in progress'"
+          [kTooltip]="list.inProgress ? 'In progress list: each card shows its time in progress' : 'Mark as In progress'"
+          (click)="toggleListInProgress(index)"
+        >
+          <i class="ti ti-progress"></i>
+          In progress
+        </button>
         <button type="button" class="ghost icon ob-item-action" (click)="removeList(index)" [attr.aria-label]="'Delete ' + list.name" [kTooltip]="'Delete ' + list.name">
           <i class="ti ti-trash"></i>
         </button>

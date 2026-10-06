@@ -180,6 +180,14 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                     </span>
                     @if (value().showInactiveOnly) { <i class="ti ti-check fb-row-check"></i> }
                   </button>
+                  <button type="button" class="fb-row" [class.active]="value().showInProgressOnly" (click)="toggleInProgress()">
+                    <i class="ti ti-progress fb-row-icon"></i>
+                    <span class="fb-row-text">
+                      <span class="fb-row-name">In progress</span>
+                      <small>Open cards in In progress lists</small>
+                    </span>
+                    @if (value().showInProgressOnly) { <i class="ti ti-check fb-row-check"></i> }
+                  </button>
                 }
                 @if (showPrioritySet()) {
                   <button type="button" class="fb-row" [class.active]="value().showPrioritySetOnly" (click)="togglePrioritySet()">
@@ -897,6 +905,7 @@ export class FilterBarComponent implements OnDestroy {
     if (v.showUnreadOnly) n++;
     if (v.showOverdueOnly) n++;
     if (v.showInactiveOnly) n++;
+    if (v.showInProgressOnly) n++;
     if (v.showPrioritySetOnly) n++;
     if (this.completedActive()) n++;
     if (this.archived()) n++;
@@ -985,6 +994,9 @@ export class FilterBarComponent implements OnDestroy {
   }
   toggleInactive() {
     this.emit({ showInactiveOnly: !this.value().showInactiveOnly });
+  }
+  toggleInProgress() {
+    this.emit({ showInProgressOnly: !this.value().showInProgressOnly });
   }
   togglePrioritySet() {
     this.emit({ showPrioritySetOnly: !this.value().showPrioritySetOnly });

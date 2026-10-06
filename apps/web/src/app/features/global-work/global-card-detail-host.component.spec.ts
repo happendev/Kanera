@@ -35,6 +35,7 @@ const catalog: WorkCatalog = {
     accentColor: null,
     kind: "standard",
     viewerCanAccessWorkspace: true,
+    inProgressAlertDays: 7, timeZone: "UTC",
   }],
   boards: [{
     id: card.boardId,
@@ -51,6 +52,8 @@ const catalog: WorkCatalog = {
     name: "Next",
     icon: "list",
     color: null,
+    inProgress: false,
+    wipLimit: null,
     position: "1000.0000000000",
   }],
   labels: [],

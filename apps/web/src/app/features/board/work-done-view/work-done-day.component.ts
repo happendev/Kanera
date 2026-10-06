@@ -7,6 +7,8 @@ import { CardLabelsComponent, type CardLabelPresentation } from "../card-labels.
 import { iconForType, verbForType } from "./work-done-grouping";
 import type { CardDayDigest, WorkDoneActor, WorkDoneDay } from "./work-done.types";
 import { formatTime } from "../../../shared/date-format";
+import { MinuteClockService } from "../../../shared/minute-clock.service";
+import { timeInProgressChip, type TimeInProgressChip } from "../time-in-progress.util";
 
 export type WorkDoneBoardSummary = { id: string; name: string; icon: string | null; iconColor: string | null };
 
@@ -43,11 +45,13 @@ const COUNT_ORDER: { type: WorkDoneEventType; icon: string; one: string; many: s
 })
 export class WorkDoneDayComponent {
   protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
+  private readonly clock = inject(MinuteClockService);
   readonly day = input.required<WorkDoneDay>();
   readonly collapsed = input(false);
   readonly workspaceId = input<string | null>(null);
   readonly selectedCardId = input<string | null>(null);
   readonly boardSummariesById = input<Map<string, WorkDoneBoardSummary> | null>(null);
+  readonly timeZonesByWorkspace = input<ReadonlyMap<string, string> | null>(null);
   readonly labelsById = input<ReadonlyMap<string, CardLabelPresentation> | null>(null);
 
   readonly toggled = output<string>();
@@ -127,6 +131,15 @@ export class WorkDoneDayComponent {
       named.push(`+${ticks.length - MAX_CHECKLIST_TOOLTIP_ITEMS} more`);
     }
     return named.join(" · ");
+  }
+
+  /**
+   * The card's tracked time in progress, as it stands now (the digest carries the live card, not a
+   * snapshot of that day). Beside what happened, it answers how much effort the card has taken.
+   * No workspace alert here: this view reports work, it does not flag stuck cards.
+   */
+  timeInProgressFor(digest: CardDayDigest): TimeInProgressChip | null {
+    return timeInProgressChip(digest.card, this.clock.now(), 0, this.timeZonesByWorkspace()?.get(digest.card.workspaceId));
   }
 
   /** Time of the card's last event that day, in the viewer's locale. */

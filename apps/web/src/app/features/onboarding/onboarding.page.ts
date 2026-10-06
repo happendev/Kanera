@@ -23,6 +23,8 @@ interface DraftItem {
   id: string;
   name: string;
   icon?: string;
+  /** Lists only: work in this list is actively happening (drives time in progress). */
+  inProgress?: boolean;
   type?: CustomFieldTypeName;
   allowMultiple?: boolean;
   options?: DraftFieldOption[];
@@ -208,6 +210,12 @@ export class OnboardingPage implements OnInit {
     if (!name) return;
     this.lists.update((items) => [...items, { id: this.nextDraftId("list"), name }]);
     this.newList.set("");
+  }
+
+  toggleListInProgress(index: number) {
+    this.lists.update((items) => items.map((item, itemIndex) =>
+      itemIndex === index ? { ...item, inProgress: !item.inProgress } : item
+    ));
   }
 
   removeList(index: number) {
@@ -489,7 +497,7 @@ export class OnboardingPage implements OnInit {
             icon: template.icon,
           },
         } : {}),
-        lists: this.lists().map((list) => ({ name: list.name.trim(), icon: list.icon ?? null })),
+        lists: this.lists().map((list) => ({ name: list.name.trim(), icon: list.icon ?? null, inProgress: list.inProgress ?? false })),
         customFields: this.fields().map((field) => ({
           name: field.name.trim(),
           icon: field.icon ?? "forms",

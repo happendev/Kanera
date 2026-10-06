@@ -1011,6 +1011,10 @@ k-work-done-view {
   }
 }
 
+.overview-partial > .ti {
+  color: var(--warning);
+}
+
 .board-move-error {
   color: var(--danger);
   background: color-mix(in srgb, var(--danger) 6%, var(--surface));

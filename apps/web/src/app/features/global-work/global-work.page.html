@@ -514,6 +514,7 @@
         Showing a saved copy from {{ cachedAt | date: "medium" }}. Reconnect to make changes.
         @if (historyOfflineFallback()) { History will return after reconnecting. }
         @if (prioritiesOfflineFallback()) { The Up next view will return after reconnecting. }
+        @if (overviewOfflineFallback()) { The team overview will return after reconnecting. }
       </span>
     </div>
   } @else if (!state.sockets.displayedOnline()) {
@@ -660,6 +661,7 @@
           [catalogLabels]="historyLabels()"
           [catalogCustomFields]="state.catalog().customFields"
           [boardSummariesById]="boardsById()"
+          [timeZonesByWorkspace]="workspaceTimeZones()"
           [selectedCardId]="selectedCard()?.id ?? null"
           [searchQuery]="state.definition().filters.q"
           [filterLabelIds]="state.definition().filters.labelIds"
@@ -671,6 +673,40 @@
           [hostCollapsedDayKeys]="state.collapsedHistoryDayKeys()"
           (hostCollapsedDayKeysChange)="state.setCollapsedHistoryDayKeys($event)"
           (cardSummaryOpened)="openHistoryCard($event)"
+        />
+      } @else if (effectiveDisplay() === "overview") {
+        <!-- Whole-team summary, one panel per teammate. The card-derived sections follow scope,
+             search and filters; the queue heads keep their true ranks (see TeamOverviewComponent). -->
+        <!-- Per-person counts and the longest-running work are computed from the loaded cards, so
+             say when that is not every match: while paging in, and when the load cap stops it. -->
+        @if (state.loadingMore()) {
+          <div class="board-priority-note">
+            <span class="spinner"></span>
+            <span><strong>Loading all matching cards…</strong> Counts settle when the full set is ready.</span>
+          </div>
+        } @else if (state.canLoadMore()) {
+          <div class="board-priority-note overview-partial" role="status">
+            <i class="ti ti-alert-triangle"></i>
+            <span>
+              <strong>Showing {{ state.cards().length }} of {{ state.response().totals.cards }} matching cards.</strong>
+              Counts and the longest-running work cover only these. Narrow the scope or filters for a complete overview.
+            </span>
+          </div>
+        }
+        <k-team-overview
+          [people]="teamPeople()"
+          [cards]="state.cards()"
+          [queues]="priorityLanes()"
+          [lists]="state.catalog().lists"
+          [boards]="state.catalog().boards"
+          [workspaces]="state.catalog().workspaces"
+          [scope]="state.definition().scope"
+          [filters]="state.definition().filters"
+          [enabled]="state.cachedAt() === null"
+          [refreshVersion]="workDoneRefreshVersion() + state.reconciliationVersion()"
+          [selectedCardId]="selectedCard()?.id ?? null"
+          (cardOpened)="openHistoryCard($event)"
+          (personFocused)="focusTeammate($event)"
         />
       } @else if (effectiveDisplay() === "priorities") {
         <!-- The priority queues replace the card query wholesale: no totals strip (it describes a

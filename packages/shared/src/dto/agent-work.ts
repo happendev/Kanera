@@ -53,7 +53,9 @@ export interface AgentWorkSources {
     organisationId: string;
     organisationName: string;
   }>;
-  lists: Array<{ id: string; workspaceId: string; name: string }>;
+  // `inProgress` lets an agent report "what is actively being worked on" from the source map alone;
+  // cards in such a list also carry `inProgressSince`.
+  lists: Array<{ id: string; workspaceId: string; name: string; inProgress: boolean }>;
   labels: Array<{ id: string; workspaceId: string; name: string; color: string | null }>;
   people: Array<{ id: string; displayName: string }>;
 }

@@ -227,6 +227,7 @@ export function automationTriggerTargetLabel(automation: WireAutomation, lookups
     return `${days} ${days === 1 ? "day" : "days"} before`;
   }
   if (automation.triggerType === "card_becomes_inactive") return null;
+  if (automation.triggerType === "card_in_progress_too_long") return null;
   if (automation.triggerType === "all_checklist_items_complete") return null;
   if (automation.triggerType === "card_marked_complete") return null;
   if (automation.triggerType === "card_label_set") {

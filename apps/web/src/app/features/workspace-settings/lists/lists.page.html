@@ -8,6 +8,15 @@
           }
         </span>
       </div>
+      <div class="settings-info-note">
+        <i class="ti ti-progress"></i>
+        <span>
+          Mark the lists where work is actively happening as <strong>In progress</strong>. Each card in them
+          shows its time in progress, and counts as in progress for its assignees on Team Cards. A
+          <strong>WIP</strong> limit caps how many open cards one board should hold in a list; boards show
+          the count and flag a column that goes over.
+        </span>
+      </div>
       <k-docs-link class="spaced" path="lists" label="Learn more about lists" />
       <form class="board-form single-line-capture" (submit)="settings.addList($event)">
         <k-icon-picker [value]="settings.newListIcon() ?? 'list'" (valueChange)="settings.newListIcon.set($event)" />
@@ -30,6 +39,33 @@
             </button>
             }
             <div class="row-actions">
+              <button
+                type="button"
+                class="list-progress-toggle"
+                [class.is-on]="list.inProgress"
+                [attr.aria-pressed]="list.inProgress"
+                [attr.aria-label]="(list.inProgress ? 'Unmark ' : 'Mark ') + list.name + ' as in progress'"
+                [kTooltip]="list.inProgress ? 'In progress list: each card shows its time in progress' : 'Mark as In progress'"
+                (click)="settings.updateListStyle(list.id, { inProgress: !list.inProgress })"
+              >
+                <i class="ti ti-progress"></i>
+                <span class="mobile-hide">In progress</span>
+              </button>
+              <!-- Commits on change (blur or Enter) so typing "12" does not save "1" on the way. -->
+              <label class="list-wip-field" [kTooltip]="'Most open cards one board should hold in ' + list.name + '. Leave empty for no limit.'">
+                <span>WIP</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="999"
+                  step="1"
+                  inputmode="numeric"
+                  placeholder="–"
+                  [value]="list.wipLimit ?? ''"
+                  [attr.aria-label]="'WIP limit for ' + list.name"
+                  (change)="settings.updateListWipLimit(list.id, $any($event.target))"
+                />
+              </label>
               <k-icon-picker [value]="list.icon ?? 'list'" (valueChange)="settings.updateListStyle(list.id, { icon: $event })" />
               <k-color-picker [value]="$any(list.color)" (valueChange)="settings.updateListStyle(list.id, { color: $event })" />
               <button class="ghost icon danger" (click)="settings.archiveList(list.id)" [disabled]="!!settings.deletionPreviewKey()" aria-label="Delete list" kTooltip="Delete list">

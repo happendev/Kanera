@@ -1,4 +1,5 @@
 import type { ColorToken } from "@kanera/shared/colors";
+import { workingMs } from "@kanera/shared/time-in-progress";
 import { cardPath } from "@kanera/shared/card-links";
 import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
 import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
@@ -41,7 +42,7 @@ import {
   type ClientRole,
   type NoteScope,
 } from "@kanera/shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -105,6 +106,8 @@ type SeedList = {
   name: string;
   icon?: string;
   color?: ColorToken;
+  /** Applied after all cards and moves exist; see `inProgressListIds` in seedDatabase. */
+  inProgress?: boolean;
 };
 
 type SeedCustomField = {
@@ -443,6 +446,9 @@ const USER_SEEDS: SeedUser[] = [
   { key: "henry", email: "henry@kanera.test", displayName: "Henry Walsh", gender: "male", avatarFileName: "henry-walsh.webp", timezone: "Europe/Dublin", clientRole: "member" },
 ];
 
+// Demo workspaces work in their organisation owner's zone, as migrated workspaces do.
+const seedWorkspaceTimeZone = USER_SEEDS.find((user) => user.clientRole === "owner")?.timezone ?? "UTC";
+
 const AMELIA_SCRATCHPAD_NOTES = [
   {
     title: "Today",
@@ -598,10 +604,12 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
       { name: "Backlog", icon: "list" },
       { name: "Bugs / Issues / Feedback", icon: "bug" },
       { name: "Awaiting Feedback", icon: "message-dots" },
-      { name: "In Progress", icon: "progress" },
+      { name: "In Progress", icon: "progress", inProgress: true },
       { name: "Ready for QA", icon: "checklist" },
       { name: "Complete", icon: "circle-check" },
     ],
+    listFlow: ["Wishlist", "Planning / Review", "Backlog", "In Progress", "Ready for QA", "Complete"],
+    listSideEntries: { "Bugs / Issues / Feedback": "Backlog", "Awaiting Feedback": "In Progress" },
     customFields: [
       ...DEFAULT_WORKSPACE_CUSTOM_FIELDS.map((field) => ({ ...field })),
       {
@@ -2834,7 +2842,7 @@ function buildMarketingWorkspace(): SeedWorkspace {
     lists: [
       { name: "Ideas & Requests", icon: "bulb" },
       { name: "Ready to Start", icon: "player-play" },
-      { name: "In Progress", icon: "progress" },
+      { name: "In Progress", icon: "progress", inProgress: true },
       { name: "Review & Approval", icon: "checks" },
       { name: "Waiting on Others", icon: "clock-pause" },
       { name: "Done", icon: "circle-check" },
@@ -3082,12 +3090,14 @@ function buildDevopsWorkspace(): SeedWorkspace {
     lists: [
       { name: "Intake", icon: "inbox" },
       { name: "Planned", icon: "calendar" },
-      { name: "Implementing", icon: "code" },
+      { name: "Implementing", icon: "code", inProgress: true },
       { name: "Awaiting Window", icon: "clock" },
       { name: "Monitoring", icon: "activity" },
       { name: "Completed", icon: "circle-check" },
       { name: "Follow-up", icon: "refresh" },
     ],
+    listFlow: ["Intake", "Planned", "Implementing", "Monitoring", "Completed"],
+    listSideEntries: { "Awaiting Window": "Implementing", "Follow-up": "Monitoring" },
     customFields: [
       { name: "Service", icon: "server-cog", type: "text" },
       { name: "Maintenance Window", icon: "calendar-clock", type: "text" },
@@ -3835,6 +3845,81 @@ function seedMovementPath(
   return [listName];
 }
 
+// Seed inserts cards directly in their final list. Replay the historical path for both the audit
+// feed and banked working time, then let the final list-flag backfill start only open clocks.
+async function insertSeedMovementHistory(input: {
+  tx: Tx;
+  card: { id: string; position: string };
+  boardId: string;
+  workspaceId: string;
+  actorId: string;
+  listByName: ReadonlyMap<string, { id: string; name: string; inProgress: boolean }>;
+  movementPath: string[];
+  cardCreatedAt: Date;
+  completedAt: Date | null;
+  timeZone: string;
+}): Promise<number> {
+  const { tx, listByName, movementPath, cardCreatedAt, completedAt } = input;
+  if (movementPath.length < 2) return 0;
+  const listRow = listByName.get(movementPath.at(-1)!)!;
+  // Moves sit between creation and the card "arriving" in its current list: shortly
+  // before completion for done cards, or a short window after creation for active ones.
+  // Spreading them evenly reads as steady progress rather than one instantaneous jump.
+  const arrivalAt = completedAt
+    ? addHours(completedAt, -3)
+    : addHours(cardCreatedAt, 3 * (movementPath.length - 1) + 3);
+  const spanMs = arrivalAt.getTime() - cardCreatedAt.getTime();
+  const steps = movementPath.length - 1;
+  let enteredAt = cardCreatedAt;
+  // Time already spent in in-progress lists this card has since left, banked as the
+  // card trigger would have banked it had those lists been flagged while it moved: in
+  // working hours, in the workspace's time zone.
+  let bankedMs = 0;
+  const bank = (sinceMs: number, stopMs: number) => {
+    bankedMs += workingMs(sinceMs, stopMs, input.timeZone);
+  };
+  for (let step = 0; step < steps; step++) {
+    const fromList = listByName.get(movementPath[step]!)!;
+    const toList = listByName.get(movementPath[step + 1]!)!;
+    const movedAt = addMinutes(
+      new Date(cardCreatedAt.getTime() + Math.round((spanMs * (step + 1)) / (steps + 1))),
+      0,
+    );
+    await insertSeedActivity(tx, {
+      boardId: input.boardId,
+      workspaceId: input.workspaceId,
+      actorId: input.actorId,
+      entityType: "card",
+      entityId: input.card.id,
+      action: ACTIVITY_ACTION.MOVED,
+      // Names are stored alongside ids so the feed still renders if a demo later renames
+      // or deletes a list; the client prefers the live list name and falls back to these.
+      payload: {
+        fromListId: fromList.id,
+        toListId: toList.id,
+        fromListName: fromList.name,
+        toListName: toList.name,
+        prevPosition: input.card.position,
+        position: input.card.position,
+      },
+      createdAt: movedAt,
+    });
+    if (fromList.inProgress) bank(enteredAt.getTime(), movedAt.getTime());
+    enteredAt = movedAt;
+  }
+  // A card completed while still in an in-progress list stopped its clock at completion;
+  // the list backfill below only starts clocks for open cards.
+  if (completedAt && listRow.inProgress) bank(enteredAt.getTime(), Math.max(enteredAt.getTime(), completedAt.getTime()));
+  // The card was inserted straight into its final list, so the trigger dated its entry
+  // at creation. Its seeded arrival is the last move; time in progress starts there.
+  // Writing only these columns does not fire the card trigger.
+  await tx.update(cards).set({
+    listEnteredAt: enteredAt,
+    inProgressSeconds: Math.floor(bankedMs / 1000),
+  }).where(eq(cards.id, input.card.id));
+  return steps;
+}
+
 async function insertSeedNotes(input: {
   tx: Tx;
   storage: StorageProvider | null;
@@ -4173,6 +4258,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
     notifications: 0,
   };
   const uploadedKeys: string[] = [];
+  const inProgressListIds: string[] = [];
   const guestUploadedKeys: string[] = [];
   const assetCache = new Map<AssetKey, Buffer>();
   let storage: StorageProvider | null = null;
@@ -4324,6 +4410,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
           name: "Maya's Workspace",
           icon: "briefcase",
           accentColor: "violet",
+          timeZone: GUEST_USER_SEED.timezone,
           createdAt: guestWorkspaceCreatedAt,
           updatedAt: guestWorkspaceCreatedAt,
         })
@@ -4356,6 +4443,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
         )
         .returning();
       const guestListByName = new Map(guestListRows.map((row) => [row.name, row]));
+      inProgressListIds.push(guestListByName.get("Doing")!.id);
 
       const guestBoardCreatedAt = addHours(guestWorkspaceCreatedAt, 3);
       const [guestBoard] = await tx
@@ -4483,6 +4571,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
           kind: "board",
           icon: "clipboard-check",
           accentColor: "teal",
+          timeZone: seedWorkspaceTimeZone,
           createdAt: standaloneCreatedAt,
           updatedAt: standaloneCreatedAt,
         })
@@ -4507,7 +4596,8 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
           updatedAt: addHours(standaloneCreatedAt, 2),
         })),
       ).returning();
-      const standaloneListByName = new Map(standaloneListRows.map((row) => [row.name, row]));
+      const standaloneListByName = new Map(standaloneListRows.map((row) => [row.name, { ...row, inProgress: row.name === "In progress" }]));
+      inProgressListIds.push(standaloneListByName.get("In progress")!.id);
       const standaloneCustomFields = [
         { name: "Release version", icon: "tag", type: "text" as const },
         { name: "Rollout percentage", icon: "percentage", type: "number" as const },
@@ -4673,7 +4763,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
         const listPosition = standaloneCardCountsByList.get(cardSeed.list) ?? 0;
         standaloneCardCountsByList.set(cardSeed.list, listPosition + 1);
         const completedAt = cardSeed.completedDaysAgo === undefined ? null : addHours(addDays(baseDate, -cardSeed.completedDaysAgo), 16);
-        const cardCreatedAt = completedAt ? addDays(completedAt, -1) : addHours(standaloneCreatedAt, 5 + cardIndex);
+        const cardCreatedAt = completedAt ? addDays(completedAt, -7) : addHours(standaloneCreatedAt, 5 + cardIndex);
         const [card] = await tx.insert(cards).values({
           ...standaloneCardIdentities[cardIndex]!,
           listId: listRow.id,
@@ -4707,7 +4797,13 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             return { cardId: card!.id, fieldId: fieldRow.id, ...fieldValueUpdate(fieldName, fieldRow.type, value, new Map()), updatedAt: addHours(cardCreatedAt, 1) };
           }));
         }
-        await insertSeedActivity(tx, { boardId: standaloneBoard!.id, workspaceId: standaloneWorkspace!.id, actorId: userIdByKey.get("amelia")!, entityType: "card", entityId: card!.id, action: "created", payload: { title: cardSeed.title, listId: listRow.id }, createdAt: cardCreatedAt });
+        const movementPath = seedMovementPath(cardSeed.list, ["To do", "In progress", "Done"], {});
+        await insertSeedActivity(tx, { boardId: standaloneBoard!.id, workspaceId: standaloneWorkspace!.id, actorId: userIdByKey.get("amelia")!, entityType: "card", entityId: card!.id, action: "created", payload: { title: cardSeed.title, listId: standaloneListByName.get(movementPath[0]!)!.id }, createdAt: cardCreatedAt });
+        summary.cardMoves += await insertSeedMovementHistory({
+          tx, card: card!, boardId: standaloneBoard!.id, workspaceId: standaloneWorkspace!.id,
+          actorId: userIdByKey.get("amelia")!, listByName: standaloneListByName,
+          movementPath, cardCreatedAt, completedAt, timeZone: standaloneWorkspace!.timeZone,
+        });
         if (completedAt) {
           await insertSeedActivity(tx, { boardId: standaloneBoard!.id, workspaceId: standaloneWorkspace!.id, actorId: userIdByKey.get("amelia")!, entityType: "card", entityId: card!.id, action: "completed", payload: { completedAt }, createdAt: completedAt });
         }
@@ -4751,6 +4847,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             name: workspaceSeed.name,
             icon: workspaceSeed.icon,
             accentColor: workspaceSeed.accentColor,
+            timeZone: seedWorkspaceTimeZone,
             createdAt: workspaceCreatedAt,
             updatedAt: workspaceCreatedAt,
           })
@@ -4782,7 +4879,13 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             })),
           )
           .returning();
-        const listByName = new Map(listRows.map((row) => [row.name, row]));
+        // The database flags stay off until historical clocks are restored below.
+        const listByName = new Map(listRows.map((row, index) => [row.name, {
+          ...row, inProgress: workspaceSeed.lists[index]!.inProgress ?? false,
+        }]));
+        for (const listSeed of workspaceSeed.lists) {
+          if (listSeed.inProgress) inProgressListIds.push(listByName.get(listSeed.name)!.id);
+        }
 
         for (const [automationIndex, automationSeed] of (workspaceSeed.automations ?? []).entries()) {
           const triggerList = listByName.get(automationSeed.trigger.list);
@@ -4996,8 +5099,10 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             const completedAt = completedDaysAgo === undefined
               ? null
               : addHours(addDays(baseDate, -completedDaysAgo), 16);
+            // Three weeks keeps the replayed progress stage across a weekday, even
+            // when the evenly spaced moves would otherwise land entirely on a weekend.
             const cardCreatedAt = completedAt
-              ? addDays(completedAt, -7)
+              ? addDays(completedAt, -21)
               : cardSeed.createdDaysAgo === undefined
                 ? addHours(addDays(boardCreatedAt, cardIndex), cardIndex % 5)
                 : addHours(addDays(baseDate, -cardSeed.createdDaysAgo), boardIndex + 1);
@@ -5045,47 +5150,11 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
               createdAt: cardCreatedAt,
             });
 
-            if (workspaceSeed.listFlow && movementPath.length > 1) {
-              // Whoever owns the card is the natural mover; fall back to its creator for cards with
-              // no assignee (idea cards never reach here because they have an empty movement path).
-              const moverId = userIdByKey.get(cardSeed.assignees[0] ?? cardSeed.createdBy)!;
-              // Moves sit between creation and the card "arriving" in its current list: shortly
-              // before completion for done cards, or a short window after creation for active ones.
-              // Spreading them evenly reads as steady progress rather than one instantaneous jump.
-              const arrivalAt = completedAt
-                ? addHours(completedAt, -3)
-                : addHours(cardCreatedAt, 3 * (movementPath.length - 1) + 3);
-              const spanMs = arrivalAt.getTime() - cardCreatedAt.getTime();
-              const steps = movementPath.length - 1;
-              for (let step = 0; step < steps; step++) {
-                const fromList = listByName.get(movementPath[step]!)!;
-                const toList = listByName.get(movementPath[step + 1]!)!;
-                const movedAt = addMinutes(
-                  new Date(cardCreatedAt.getTime() + Math.round((spanMs * (step + 1)) / (steps + 1))),
-                  0,
-                );
-                await insertSeedActivity(tx, {
-                  boardId: board!.id,
-                  workspaceId: workspace!.id,
-                  actorId: moverId,
-                  entityType: "card",
-                  entityId: card!.id,
-                  action: ACTIVITY_ACTION.MOVED,
-                  // Names are stored alongside ids so the feed still renders if a demo later renames
-                  // or deletes a list; the client prefers the live list name and falls back to these.
-                  payload: {
-                    fromListId: fromList.id,
-                    toListId: toList.id,
-                    fromListName: fromList.name,
-                    toListName: toList.name,
-                    prevPosition: card!.position,
-                    position: card!.position,
-                  },
-                  createdAt: movedAt,
-                });
-                summary.cardMoves += 1;
-              }
-            }
+            summary.cardMoves += await insertSeedMovementHistory({
+              tx, card: card!, boardId: board!.id, workspaceId: workspace!.id,
+              actorId: userIdByKey.get(cardSeed.assignees[0] ?? cardSeed.createdBy)!,
+              listByName, movementPath, cardCreatedAt, completedAt, timeZone: workspace!.timeZone,
+            });
 
             if (completedAt) {
               if (!completedBy) throw new Error(`Completed card '${cardSeed.title}' needs completedBy.`);
@@ -5524,6 +5593,13 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
 
       if (summary.cardCovers === 0) {
         throw new Error("Seed data created no card cover images.");
+      }
+
+      // Classified last on purpose: flagging a list runs the list_backfill_in_progress trigger,
+      // which starts each card's clock from its `listEnteredAt`, set above from the seeded move
+      // history. Flagged up front, a card's clock would start at insert, before that correction.
+      if (inProgressListIds.length > 0) {
+        await tx.update(lists).set({ inProgress: true }).where(inArray(lists.id, inProgressListIds));
       }
     });
 

@@ -1,6 +1,7 @@
 import { dto } from "@kanera/shared";
 import { cardPath } from "@kanera/shared/card-links";
-import { SERVER_EVENTS, type WireCard, type WireCardChecklist, type WireCardDetail } from "@kanera/shared/events";
+import { inProgressClockOf, SERVER_EVENTS, type WireCard, type WireCardChecklist, type WireCardDetail } from "@kanera/shared/events";
+import { IN_PROGRESS_CLOCK_COLUMNS } from "../../lib/in-progress-clock.js";
 import { ACTIVITY_ACTION, activityEvents, boardMembers, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cards, cardWatchers, customFields, lists, users, type ActivityEvent } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
@@ -85,7 +86,7 @@ function cardUrl(organisationKey: string, cardKey: string): string {
 }
 
 function toWireCard(card: typeof cards.$inferSelect, clientId: string): WireCard {
-  const { clientToken: _clientToken, ...publicCard } = card;
+  const { clientToken: _clientToken, listEnteredAt: _listEnteredAt, ...publicCard } = card;
   return {
     ...publicCard,
     description: signEmbeddedMediaUrls(card.description, clientId),
@@ -1255,6 +1256,7 @@ export async function cardRoutes(
         toListId: body.listId,
         position: move.card.position,
         prevPosition: move.previous.position,
+        ...inProgressClockOf(move.card),
       });
       await emitCardActivityFeedItem(boardId, move.card.id, move.activity);
       await emitAutomationEffects(move.automationEffects);
@@ -1548,7 +1550,7 @@ export async function cardRoutes(
     const fromListId = current.listId;
     const prevPosition = current.position;
     const enteringNewList = fromListId !== body.listId;
-    const { position, finalPosition, finalListId, rebalancedPositions, activity, completedCard, completionActivity, automationEffects, noOp } = await db.transaction(async (tx) => {
+    const { position, finalPosition, finalListId, clock, finalClock, rebalancedPositions, activity, completedCard, completionActivity, automationEffects, noOp } = await db.transaction(async (tx) => {
       await tx.select({ id: lists.id }).from(lists).where(eq(lists.id, body.listId)).for("update").limit(1);
 
       // The mover needs access to the card's own board. Anchor cards are only
@@ -1595,6 +1597,8 @@ export async function cardRoutes(
           position,
           finalPosition: prevPosition,
           finalListId: fromListId,
+          clock: inProgressClockOf(current),
+          finalClock: inProgressClockOf(current),
           rebalancedPositions: null,
           activity: null,
           completedCard: null,
@@ -1604,14 +1608,16 @@ export async function cardRoutes(
         };
       }
 
-      await tx
+      // The trigger owns the time-in-progress clock; read back what it wrote for this move's event.
+      const [written] = await tx
         .update(cards)
         .set({
           listId: body.listId,
           position,
           updatedAt: new Date(),
         })
-        .where(eq(cards.id, id));
+        .where(eq(cards.id, id))
+        .returning(IN_PROGRESS_CLOCK_COLUMNS);
 
       const rebalancedPositions = result.needsRebalance ? await rebalanceBoardLane(body.listId, current.boardId, tx) : null;
       if (rebalancedPositions) {
@@ -1642,11 +1648,15 @@ export async function cardRoutes(
           triggerActorId: req.auth.sub,
         })
         : { effects: [] };
-      const [finalCard] = await tx.select({ listId: cards.listId, position: cards.position }).from(cards).where(eq(cards.id, id)).limit(1);
+      const [finalCard] = await tx.select({ listId: cards.listId, position: cards.position, ...IN_PROGRESS_CLOCK_COLUMNS }).from(cards).where(eq(cards.id, id)).limit(1);
+      const clock = inProgressClockOf(written ?? current);
       return {
         position,
         finalPosition: finalCard?.position ?? position,
         finalListId: finalCard?.listId ?? body.listId,
+        clock,
+        // After automations, which may have moved the card again; that move emits its own event.
+        finalClock: finalCard ? inProgressClockOf(finalCard) : clock,
         rebalancedPositions,
         activity,
         completedCard: null,
@@ -1656,7 +1666,7 @@ export async function cardRoutes(
       };
     });
 
-    if (noOp) return { id, listId: finalListId, position: finalPosition };
+    if (noOp) return { id, listId: finalListId, position: finalPosition, ...finalClock };
 
     if (rebalancedPositions) {
       // Rebalance must be persisted before card:moved so clients replay the normalized positions
@@ -1670,6 +1680,7 @@ export async function cardRoutes(
       toListId: body.listId,
       position,
       prevPosition,
+      ...clock,
     });
     if (activity) await emitCardActivityFeedItem(current.boardId, id, activity);
     if (completedCard && completionActivity) {
@@ -1683,7 +1694,7 @@ export async function cardRoutes(
       actorId: req.auth.sub,
       supportSession: req.auth.authKind === "support" || req.auth.authKind === "apiKey",
     });
-    return { id, listId: finalListId, position: finalPosition };
+    return { id, listId: finalListId, position: finalPosition, ...finalClock };
   });
 
   app.post("/cards/:id/duplicate", async (req, reply) => {

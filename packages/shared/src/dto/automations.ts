@@ -5,7 +5,7 @@ import { AUTOMATION_TRIGGER_TYPES } from "../schema/automation.js";
 import { dueDateSlot } from "./cards.js";
 
 export const automationTriggerType = z.enum(AUTOMATION_TRIGGER_TYPES).describe(
-  "Automation trigger event. card_leaves_list matches the source list of a move. custom_field_value_changed fires only on a transition into the selected typed value. due_date_approaching is scheduled and fires once per due date and lead-time setting before the due day. card_becomes_inactive is scheduled and fires once per inactivity boundary.",
+  "Automation trigger event. card_leaves_list matches the source list of a move. custom_field_value_changed fires only on a transition into the selected typed value. due_date_approaching is scheduled and fires once per due date and lead-time setting before the due day. card_becomes_inactive is scheduled and fires once per inactivity boundary. card_in_progress_too_long is scheduled and fires once per in-progress stint when its time in progress passes the workspace's inProgressAlertDays (never while that setting is 0).",
 );
 export type AutomationTriggerTypeDto = z.infer<typeof automationTriggerType>;
 

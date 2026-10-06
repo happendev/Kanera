@@ -10,7 +10,7 @@ import type { startAgentRunBody, updateAgentRunBody } from "@kanera/shared/dto";
 import type { createNoteBody, updateNoteBody } from "@kanera/shared/dto";
 import type { createSeparatorBody, moveSeparatorBody, updateSeparatorBody } from "@kanera/shared/dto";
 import type { agentSearchQueryBody } from "@kanera/shared/dto";
-import type { workFiltersSchema, workScopeSchema } from "@kanera/shared/dto";
+import type { workFiltersSchema, workScopeSchema, WorkSort as SharedWorkSort } from "@kanera/shared/dto";
 import type { createBoardBody, createWorkspaceBody } from "@kanera/shared/dto";
 import type { createWebhookEndpointBody, updateWebhookEndpointBody } from "@kanera/shared/dto";
 import type { WorkspaceTemplateId as SharedWorkspaceTemplateId } from "@kanera/shared/workspace-templates";
@@ -22,7 +22,7 @@ import type { StartRunInput, UpdateRunInput } from "./resources/runs.js";
 import type { SearchInput } from "./resources/search.js";
 import type { UpdateSeparatorInput } from "./resources/separators.js";
 import type { CreateWebhookEndpointInput, UpdateWebhookEndpointInput } from "./resources/webhook-endpoints.js";
-import type { CreateBoardInput, CreateWorkspaceInput, WorkFilters, WorkScope, WorkspaceTemplateId } from "./types.js";
+import type { CreateBoardInput, CreateWorkspaceInput, WorkFilters, WorkScope, WorkSort, WorkspaceTemplateId } from "./types.js";
 
 /**
  * Compile-time drift guard.
@@ -104,6 +104,8 @@ type _UpdateNote = AssertAssignable<UpdateNoteInput, z.input<typeof updateNoteBo
 type _Search = AssertAssignable<SearchInput, z.input<typeof agentSearchQueryBody>>;
 type _WorkScope = AssertAssignable<WorkScope, z.input<typeof workScopeSchema>>;
 type _WorkFilters = AssertAssignable<WorkFilters, z.input<typeof workFiltersSchema>>;
+type _WorkSortForward = AssertAssignable<WorkSort, SharedWorkSort>;
+type _WorkSortBackward = AssertAssignable<SharedWorkSort, WorkSort>;
 
 // Agent runs.
 type _StartRun = AssertAssignable<StartRunInput, z.input<typeof startAgentRunBody>>;

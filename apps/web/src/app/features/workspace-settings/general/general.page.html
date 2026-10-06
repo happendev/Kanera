@@ -96,6 +96,32 @@
 </div>
 <div class="board-settings-section">
   <div class="guest-section-head">
+    <i class="ti ti-progress"></i>
+    <span>Time in progress</span>
+  </div>
+  <div class="board-form single-line-capture">
+    <label class="compact-number-field">
+      <span>Flag cards in progress for more than</span>
+      <input type="number" min="0" max="365" step="1" aria-label="Time in progress alert in days" [value]="settings.inProgressAlertDaysDraft()" (input)="settings.updateInProgressAlertDays($any($event.target).value)" (blur)="settings.saveGeneralSettingsNow()"
+        [disabled]="settings.boardHealthSaving()" />
+      <span>days</span>
+    </label>
+  </div>
+  <p class="board-linking-help field-help">Their time in progress turns amber on boards and Team Cards, and "Card in progress too long" automations run. 0 turns this off.</p>
+  <div class="board-form single-line-capture">
+    <label class="compact-number-field time-zone-field">
+      <span>Working hours time zone</span>
+      <select aria-label="Working hours time zone" [value]="settings.timeZoneDraft()" (input)="settings.updateTimeZone($any($event.target).value)" [disabled]="settings.boardHealthSaving()">
+        @for (zone of settings.timeZoneOptions(); track zone) {
+        <option [value]="zone" [selected]="zone === settings.timeZoneDraft()">{{ zone }}</option>
+        }
+      </select>
+    </label>
+  </div>
+  <p class="board-linking-help field-help">Tracked time counts working hours only: 09:00–17:00, Monday to Friday, in this time zone. Nights and weekends in progress add nothing.</p>
+</div>
+<div class="board-settings-section">
+  <div class="guest-section-head">
     <i class="ti ti-circle-check"></i>
     <span>Completed cards</span>
   </div>

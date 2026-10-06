@@ -147,7 +147,8 @@ function cardUrl(organisationKey: string, cardKey: string): string {
 }
 
 function toWireCard(card: Card): WireCard {
-  return { ...card, url: cardUrl(card.organisationKey, card.key) };
+  const { listEnteredAt: _listEnteredAt, ...publicCard } = card;
+  return { ...publicCard, url: cardUrl(card.organisationKey, card.key) };
 }
 
 function normalize(value: string): string {
@@ -217,7 +218,7 @@ async function mapLists(ctx: ImportContext): Promise<{ map: Map<string, string>;
     const position = between(prev, null).position;
     prev = position;
     sourceIds.push(sourceList.id);
-    rows.push({ workspaceId: ctx.workspaceId, name: mapping.name ?? sourceList.name, icon: mapping.icon ?? sourceList.icon, color: mapping.color ?? sourceList.color, position });
+    rows.push({ workspaceId: ctx.workspaceId, name: mapping.name ?? sourceList.name, icon: mapping.icon ?? sourceList.icon, color: mapping.color ?? sourceList.color, inProgress: sourceList.inProgress === true, position });
   }
   const created = await insertMany<typeof rows[number], List>(ctx.tx, lists, rows);
   created.forEach((list, index) => map.set(sourceIds[index]!, list.id));
@@ -489,6 +490,13 @@ export async function runKaneraBoardImport(tx: Tx, args: { source: BoardExportAr
       dueDateTimezone: card.dueDateTimezone,
       completedAt: toDate(card.completedAt),
       archivedAt: toDate(card.archivedAt),
+      // Time in progress is restored, not restarted. card_track_in_progress keeps the running start
+      // only when the target list is in progress and the card is open (a mapped list's own flag
+      // wins) and never later than now; an older export without them falls back to the card's
+      // creation time. The banked total from finished stints always carries over: it is history.
+      listEnteredAt: toDate(card.listEnteredAt) ?? undefined,
+      inProgressSince: toDate(card.inProgressSince),
+      inProgressSeconds: card.inProgressSeconds ?? 0,
       createdById: memberMap.get(card.createdById) ?? ctx.actorId,
       createdAt: toDate(card.createdAt) ?? new Date(),
       updatedAt: toDate(card.updatedAt) ?? new Date(),

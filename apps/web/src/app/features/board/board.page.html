@@ -324,7 +324,7 @@
 <k-board-calendar-view [cards]="activeCards()" [lists]="state.visibleLists()" [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [filteredCardIds]="filteredCardIds()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [loading]="state.board() === null"
   (cardOpened)="openCardDetail($event)" />
 } @else if (effectiveView() === 'history') {
-<k-work-done-view scope="board" [boardId]="boardId()" [workspaceId]="state.board()?.workspaceId ?? null" [lists]="state.visibleLists()" [selectedCardId]="openCardId()" [searchQuery]="searchQuery()" [filterLabelIds]="filterLabelIds()" [filterMemberIds]="filterMemberIds()" [filterListIds]="filterListIds()" [filterCfConditions]="filterCfConditions()" [eventTypeFilter]="workDoneEventType()" [layout]="workDoneLayout()" [refreshVersion]="workDoneRefreshVersion()" (cardOpened)="openCardDetail($event)" />
+<k-work-done-view scope="board" [boardId]="boardId()" [workspaceId]="state.board()?.workspaceId ?? null" [timeZonesByWorkspace]="workDoneTimeZones()" [lists]="state.visibleLists()" [selectedCardId]="openCardId()" [searchQuery]="searchQuery()" [filterLabelIds]="filterLabelIds()" [filterMemberIds]="filterMemberIds()" [filterListIds]="filterListIds()" [filterCfConditions]="filterCfConditions()" [eventTypeFilter]="workDoneEventType()" [layout]="workDoneLayout()" [refreshVersion]="workDoneRefreshVersion()" (cardOpened)="openCardDetail($event)" />
 } @else {
 <k-board #listsEl [tooltip]="offlineTooltip()" (scrolled)="onListsScroll($event)" (backgroundClicked)="onListsBackgroundClick($event)" (cardDragStateChanged)="onCardDragStateChanged($event)" (edgeScrolledRight)="onEdgeScrolledRight()">
   @if (state.board() === null) {

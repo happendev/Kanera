@@ -119,6 +119,8 @@ function createCard(overrides: Partial<WireCard> = {}): WireCard {
     dueDateTimezone: null,
     completedAt: null,
     archivedAt: null,
+    inProgressSince: null,
+    inProgressSeconds: 0,
     createdById: "user-1",
     coverAttachmentId: null,
     createdAt: new Date("2026-05-21T00:00:00.000Z"),

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { WORKSPACE_ROLES } from "../schema/member-roles.js";
 import { WORKSPACE_KINDS } from "../schema/workspace.js";
+import { isKnownTimeZone } from "../lib/time-in-progress.js";
 import {
   createIconSchema,
   DEFAULT_BOARD_ICON,
@@ -40,6 +41,7 @@ const initialAutomationTrigger = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("due_date_arrives") }),
   z.object({ type: z.literal("card_becomes_inactive") }),
+  z.object({ type: z.literal("card_in_progress_too_long") }),
   z.object({ type: z.literal("all_checklist_items_complete") }),
   z.object({ type: z.literal("card_marked_complete") }),
   z.object({
@@ -108,12 +110,17 @@ const initialAutomation = z.object({
   actions: z.array(initialAutomationAction).min(1).max(AUTOMATION_ACTION_LIMIT),
 });
 
+/** The IANA zone whose working hours time in progress counts (see `@kanera/shared/time-in-progress`). */
+export const workspaceTimeZoneSchema = z.string().trim().min(1).max(64).refine(isKnownTimeZone, "Unknown time zone");
+
 export const createWorkspaceBody = z
   .object({
     name: z.string().min(1).max(GENERAL_NAME_MAX_LENGTH),
     cardKeyPrefix: z.string().regex(/^[A-Za-z][A-Za-z0-9]{1,9}$/).transform((value) => value.toUpperCase()).optional(),
     kind: z.enum(WORKSPACE_KINDS).default("standard"),
     icon: createIconSchema(DEFAULT_WORKSPACE_ICON),
+    /** Defaults to the creating user's time zone. */
+    timeZone: workspaceTimeZoneSchema.optional(),
     initialBoard: z.object({
       name: z.string().trim().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH),
       icon: createIconSchema(DEFAULT_BOARD_ICON),
@@ -123,6 +130,7 @@ export const createWorkspaceBody = z
     lists: z.array(z.object({
       name: z.string().trim().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH),
       icon: createIconSchema(DEFAULT_LIST_ICON),
+      inProgress: z.boolean().optional(),
     }))
       .max(32)
       .refine((value) => value.length === 0 || value.length >= 2, "lists must be empty or contain at least 2 items")
@@ -378,6 +386,9 @@ export const updateWorkspaceBody = z.object({
   accentColor: colorTokenSchema.nullable().optional(),
   completedCardsActiveDays: z.number().int().min(0).max(365).optional(),
   inactiveCardsDays: z.number().int().min(0).max(365).optional(),
+  /** Flag cards in progress for longer than this many days; 0 turns the flag off. */
+  inProgressAlertDays: z.number().int().min(0).max(365).optional(),
+  timeZone: workspaceTimeZoneSchema.optional(),
   boardHealthEnabled: z.boolean().optional(),
   boardHealthOverdueEnabled: z.boolean().optional(),
   boardHealthUnassignedEnabled: z.boolean().optional(),

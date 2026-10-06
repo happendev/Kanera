@@ -110,7 +110,7 @@ function cardUrl(organisationKey: string, cardKey: string): string {
 }
 
 function toWireCard(card: typeof cards.$inferSelect, clientId: string): WireCard {
-  const { clientToken: _clientToken, ...publicCard } = card;
+  const { clientToken: _clientToken, listEnteredAt: _listEnteredAt, ...publicCard } = card;
   return {
     ...publicCard,
     description: signEmbeddedMediaUrls(card.description, clientId),

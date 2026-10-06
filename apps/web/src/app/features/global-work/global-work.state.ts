@@ -1,7 +1,9 @@
 import { DestroyRef, Injectable, computed, effect, inject, signal } from "@angular/core";
+import { compactInProgressClock, nextInProgressClock, resolveInProgressClock, type ReportedInProgressClock } from "../board/time-in-progress.util";
 import type {
   PortfolioSummary,
   SavedWorkView,
+  WorkCard,
   WorkCatalog,
   WorkDisplayMode,
   WorkFilters,
@@ -82,6 +84,7 @@ function defaultDefinition(lens: WorkViewLens): WorkViewDefinition {
       completion: DEFAULT_COMPLETION,
       unassignedOnly: false,
       inactiveOnly: false,
+      inProgressOnly: false,
       dueFrom: null,
       dueTo: null,
       overdueOnly: false,
@@ -108,6 +111,14 @@ function defaultDefinition(lens: WorkViewLens): WorkViewDefinition {
 
 function toggleId(ids: string[], id: string): string[] {
   return ids.includes(id) ? ids.filter((candidate) => candidate !== id) : [...ids, id];
+}
+
+/**
+ * Displays that are wrong on a partial card set: the board's lane order and "Next" card, and the
+ * overview's per-teammate counts and stage totals, which would silently under-report from page one.
+ */
+function displayNeedsEveryCard(display: WorkDisplayMode): boolean {
+  return display === "board" || display === "priorities" || display === "overview";
 }
 
 /** The card fields the query projection keeps in sync, whether from a realtime echo or a local edit. */
@@ -477,7 +488,7 @@ export class GlobalWorkState {
       this.otherPriorities.set(priorities);
       this.teamPriorities.set(teamPriorities);
       this.teamPriorityCandidates.set(priorityCandidateCards);
-      if (["board", "priorities"].includes(this.definition().display)) {
+      if (displayNeedsEveryCard(this.definition().display)) {
         await this.loadRemainingCards(version);
       }
       if (this.lens() === "portfolio") {
@@ -643,9 +654,10 @@ export class GlobalWorkState {
     // every count and heatmap with no visible control explaining why.
     const clearSearch = this.lens() === "portfolio" && display === "summary";
     // Priority is the whole-team queue overview. Carrying a hidden teammate filter into it would
-    // leave other lanes without add-card candidates even though their queues are visible.
+    // leave other lanes without add-card candidates even though their queues are visible. The
+    // overview is whole-team by definition too: a focus would silently empty every other panel.
     const clearTeamFocus = this.lens() === "team"
-      && display === "priorities"
+      && (display === "priorities" || display === "overview")
       && this.definition().filters.assigneeIds.length > 0;
     this.definition.update((definition) => ({
       ...definition,
@@ -668,8 +680,15 @@ export class GlobalWorkState {
       void this.queryFirstPage();
       return;
     }
-    if (display === "priorities") {
+    if (display === "priorities" || (display === "overview" && clearTeamFocus)) {
       void this.queryFirstPage();
+    } else if (display === "overview") {
+      // The overview needs every teammate's queue head and the full card set. Both load without
+      // resetting the page, so switching in from the board does not flash a loading state.
+      this.teamPriorityCandidates.set([]);
+      void Promise.all([this.refreshTeamPriorities(this.requestVersion), this.loadRemainingCards(this.requestVersion)])
+        .then(() => this.persistCache())
+        .catch(() => this.error.set("We couldn’t load every card. Try refreshing the page."));
     } else if (display === "board") {
       this.teamPriorityCandidates.set([]);
       void this.loadRemainingCards(this.requestVersion)
@@ -678,6 +697,22 @@ export class GlobalWorkState {
     } else {
       this.teamPriorityCandidates.set([]);
     }
+  }
+
+  /**
+   * Switch display and teammate focus as one change with one query. Doing it as `setDisplay` then
+   * `setAssignees` would start the new display's paging against the old (whole-team) cursor and
+   * then supersede it, briefly painting everyone's cards under one person's name.
+   */
+  focusTeammate(userId: string, display: WorkDisplayMode): void {
+    this.definition.update((definition) => ({
+      ...definition,
+      display,
+      filters: { ...definition.filters, assigneeIds: [userId] },
+    }));
+    this.persistPreference();
+    this.teamPriorityCandidates.set([]);
+    void this.queryFirstPage();
   }
 
   setPortfolioDays(portfolioDays: number): void {
@@ -865,7 +900,7 @@ export class GlobalWorkState {
           ...response,
           cards: response.cards.map((card) => {
             const original = card.id === id ? originals.get(id) : undefined;
-            return original ? { ...card, listId: original.listId, position: original.position } : card;
+            return original ? { ...card, listId: original.listId, position: original.position, ...(compactInProgressClock(resolveInProgressClock(original, original)) as Partial<WorkCard>) } : card;
           }),
         }));
         throw error;
@@ -919,7 +954,7 @@ export class GlobalWorkState {
     }));
     const globalWorkUserId = this.focusedTargetUserId();
     return async () => {
-      const moved = await this.api.post<{ id: string; listId: string; position: string }>(
+      const moved = await this.api.post<{ id: string; listId: string; position: string } & ReportedInProgressClock>(
         `/cards/${cardId}/move`,
         {
           listId,
@@ -930,7 +965,14 @@ export class GlobalWorkState {
       this.response.update((response) => ({
         ...response,
         cards: response.cards.map((card) =>
-          card.id === moved.id ? { ...card, listId: moved.listId, position: moved.position } : card
+          card.id === moved.id
+            ? {
+                ...card,
+                listId: moved.listId,
+                position: moved.position,
+                ...(compactInProgressClock(resolveInProgressClock(card, moved)) as Partial<WorkCard>),
+              }
+            : card
         ),
       }));
     };
@@ -1381,7 +1423,7 @@ export class GlobalWorkState {
     ) {
       this.selectedViewId.set(null);
     }
-    if (!atomicCards && ["board", "priorities"].includes(this.definition().display)) {
+    if (!atomicCards && displayNeedsEveryCard(this.definition().display)) {
       await this.loadRemainingCards(version);
     }
     this.cachedAt.set(null);
@@ -1427,8 +1469,16 @@ export class GlobalWorkState {
    * so unlike `loadPriorities` there is no cross-user 403 to absorb here.
    */
   private loadTeamPriorities(): Promise<WorkPriorityQueuesResponse | null> {
-    if (this.lens() !== "team" || this.definition().display !== "priorities") return Promise.resolve(null);
+    // The overview reads each teammate's queue head from the same batch the lanes render.
+    const display = this.definition().display;
+    if (this.lens() !== "team" || (display !== "priorities" && display !== "overview")) return Promise.resolve(null);
     return this.api.get<WorkPriorityQueuesResponse>("/work/priorities");
+  }
+
+  /** Loads the queue batch alone, for entering the overview without re-querying the cards. */
+  private async refreshTeamPriorities(version: number): Promise<void> {
+    const queues = await this.loadTeamPriorities();
+    if (version === this.requestVersion) this.teamPriorities.set(queues);
   }
 
   /**
@@ -1541,8 +1591,9 @@ export class GlobalWorkState {
    */
   private async loadAllCards(version: number): Promise<WorkQueryResponse> {
     const merged = await this.loadCards();
-    // Only the board display needs every match at once; the table paginates behind "Load more".
-    if (this.definition().display !== "board") return merged;
+    // Only the board and overview displays need every match at once (lane order; per-person
+    // counts); the table paginates behind "Load more".
+    if (this.definition().display !== "board" && this.definition().display !== "overview") return merged;
     const seen = new Set(merged.cards.map((card) => card.id));
     let combined = merged;
     while (version === this.requestVersion && combined.nextCursor && combined.cards.length < 10_000) {
@@ -1602,10 +1653,32 @@ export class GlobalWorkState {
         this.patchVisibleCard(card);
         refreshCards();
       },
-      [SERVER_EVENTS.CARD_MOVED]: ({ cardId, toListId, position }) => {
+      [SERVER_EVENTS.CARD_MOVED]: ({ cardId, toListId, position, ...reported }) => {
+        const at = new Date();
+        // The event carries the persisted clock; the local mirror of the trigger only covers events
+        // from a server that predates it, until the debounced reconcile below.
+        const inProgressLists = new Set(this.catalog().lists.filter((list) => list.inProgress).map((list) => list.id));
         this.response.update((response) => ({
           ...response,
-          cards: response.cards.map((card) => card.id === cardId ? { ...card, listId: toListId, position, updatedAt: new Date() } : card),
+          cards: response.cards.map((card) => {
+            if (card.id !== cardId) return card;
+            const clock = reported.inProgressSince !== undefined
+              ? resolveInProgressClock(card, reported)
+              : nextInProgressClock(
+                card,
+                inProgressLists.has(card.listId),
+                inProgressLists.has(toListId),
+                at,
+                this.catalog().workspaces.find((workspace) => workspace.id === card.workspaceId)?.timeZone,
+              );
+            return {
+              ...card,
+              listId: toListId,
+              position,
+              updatedAt: at,
+              ...(compactInProgressClock(clock) as Partial<WorkCard>),
+            };
+          }),
         }));
         refreshCards();
       },

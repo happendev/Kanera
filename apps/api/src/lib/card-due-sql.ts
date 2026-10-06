@@ -24,6 +24,7 @@ export type CardDueColumns = {
   archivedAt: AnyPgColumn;
   createdAt: AnyPgColumn;
   updatedAt: AnyPgColumn;
+  inProgressSince: AnyPgColumn;
 };
 
 export const cardSummaryDueColumns: CardDueColumns = {
@@ -38,6 +39,7 @@ export const cardSummaryDueColumns: CardDueColumns = {
   archivedAt: cardSummaryView.archivedAt,
   createdAt: cardSummaryView.createdAt,
   updatedAt: cardSummaryView.updatedAt,
+  inProgressSince: cardSummaryView.inProgressSince,
 };
 
 /** Narrow-table counterpart used to page/filter ids before hydrating the rich summary view. */
@@ -53,6 +55,7 @@ export const cardDueColumns: CardDueColumns = {
   archivedAt: cards.archivedAt,
   createdAt: cards.createdAt,
   updatedAt: cards.updatedAt,
+  inProgressSince: cards.inProgressSince,
 };
 
 /**

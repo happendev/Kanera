@@ -30,6 +30,11 @@ test("signup creates a workspace whose lists and fields belong to a second board
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByPlaceholder("New list name").fill(listName);
   await page.getByRole("button", { name: "Add list" }).click();
+  // The Development Team template marks "In Progress" as active work; a custom list can opt in too.
+  await expect(page.getByRole("button", { name: "Unmark In Progress as in progress", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "Mark Backlog as in progress", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await page.getByRole("button", { name: `Mark ${listName} as in progress`, exact: true }).click();
+  await expect(page.getByRole("button", { name: `Unmark ${listName} as in progress`, exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByPlaceholder("Field name").fill(fieldName);
   await page.getByRole("button", { name: "Add field" }).click();
@@ -44,6 +49,10 @@ test("signup creates a workspace whose lists and fields belong to a second board
   await expectBoardLoaded(page, "Engineering");
   await scrollBoardToEnd(page);
   await expect(page.locator("k-list").filter({ hasText: listName })).toHaveCount(1);
+  // Both flags reached the created workspace: the list headers wear the in-progress marker.
+  await expect(page.locator("k-list").filter({ hasText: listName }).locator(".list-in-progress")).toHaveCount(1);
+  await expect(page.locator("k-list").filter({ has: page.locator(".list-header h3", { hasText: /^\s*\d*\s*In Progress/ }) }).locator(".list-in-progress")).toHaveCount(1);
+  await expect(page.locator("k-list").filter({ has: page.locator(".list-header h3", { hasText: "Backlog" }) }).locator(".list-in-progress")).toHaveCount(0);
   const settingsHref = await page.locator("a.ws-settings").filter({ visible: true }).first().getAttribute("href");
   expect(settingsHref).toMatch(/^\/w\/[^/]+\/settings$/);
   await page.goto(`${settingsHref}/boards`);

@@ -657,6 +657,22 @@
   margin-left: 0;
 }
 
+// Off, the in-progress pill is a quiet suggestion; on, it takes the accent the board uses for
+// time in progress rather than the success green of the field toggles.
+.ob-progress-toggle {
+  &:not(.is-active) {
+    border-style: dashed;
+    font-weight: 600;
+  }
+
+  &.is-active,
+  &.is-active:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+  }
+}
+
 .ob-grip {
   color: var(--text-muted);
   font-size: 15px;

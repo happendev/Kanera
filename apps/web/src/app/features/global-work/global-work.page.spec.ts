@@ -27,6 +27,8 @@ const card = {
   dueDateTimezone: null,
   completedAt: null,
   archivedAt: null,
+  inProgressSince: null,
+  inProgressSeconds: 0,
   coverAttachmentId: null,
   createdAt: new Date("2026-07-01T00:00:00.000Z"),
   updatedAt: new Date("2026-07-01T00:00:00.000Z"),
@@ -597,6 +599,7 @@ describe("GlobalWorkPage card routing", () => {
             accentColor: null,
             kind: "standard",
             viewerCanAccessWorkspace: true,
+            inProgressAlertDays: 7,
           },
           {
             id: secondWorkspaceId,
@@ -606,6 +609,7 @@ describe("GlobalWorkPage card routing", () => {
             accentColor: null,
             kind: "standard",
             viewerCanAccessWorkspace: true,
+            inProgressAlertDays: 7,
           },
         ],
         boards: [],
@@ -1232,6 +1236,7 @@ describe("GlobalWorkPage toolbar state", () => {
         completion: DEFAULT_COMPLETION,
         unassignedOnly: false,
         inactiveOnly: false,
+        inProgressOnly: false,
         dueFrom: null,
         dueTo: null,
         overdueOnly: false,
@@ -1431,13 +1436,13 @@ describe("GlobalWorkPage toolbar state", () => {
     });
   });
 
-  it("places the team Priority view immediately after Board", () => {
+  it("places the team overview and Priority views immediately after Board", () => {
     return mount().then(({ fixture }) => {
       fixture.componentRef.setInput("lens", "team");
       TestBed.tick();
 
       expect(fixture.componentInstance.displayOptions().map((option) => option.id))
-        .toEqual(["board", "priorities", "table", "calendar", "history"]);
+        .toEqual(["board", "overview", "priorities", "table", "calendar", "history"]);
       expect(fixture.componentInstance.showTeammateFilter()).toBe(true);
       expect(fixture.componentInstance.showUpNextControl()).toBe(true);
 

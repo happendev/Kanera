@@ -106,13 +106,19 @@
     <span class="card-title-text">{{ card().title }}</span>
   </div>
 
-  @if (showCardWatchIndicator() || hasDescription() || checklistTotalCount() || commentCount() || attachmentCount() || assignees().length || hasDueDate() || hasVisibleCustomFieldBadges()) {
+  @if (showCardWatchIndicator() || hasDescription() || checklistTotalCount() || commentCount() || attachmentCount() || assignees().length || hasDueDate() || timeInProgress() || hasVisibleCustomFieldBadges()) {
   <div class="card-footer">
     <div class="card-footer-left">
       @if (hasDueDate()) {
       <span class="card-due" [class.overdue]="dueDateOverdue()" [class.due-soon]="dueDateDueSoon()">
         <i class="ti ti-calendar-event"></i>
         {{ dueDateText() }}
+      </span>
+      }
+      @if (timeInProgress(); as timer) {
+      <span class="card-time-in-progress" [class.is-done]="!timer.running" [class.is-alert]="timer.alert" [kTooltip]="timer.label" [attr.aria-label]="timer.label">
+        <i class="ti" [class.ti-progress]="timer.running" [class.ti-clock]="!timer.running"></i>
+        {{ timer.text }}
       </span>
       }
       <div class="card-indicators">

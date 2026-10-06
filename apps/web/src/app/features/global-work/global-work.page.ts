@@ -79,6 +79,7 @@ import { globalWorkBulkCardStore } from "./global-work-bulk-card-store";
 import { priorityAnchorAt, type PriorityAnchor } from "./priority-anchor";
 import { SaveViewPopover } from "./save-view.popover";
 import { TeamPrioritiesViewComponent, type TeamPriorityReorder } from "./team-priorities-view.component";
+import { TeamOverviewComponent } from "./team-overview.component";
 import { UpNextPanelComponent, type UpNextAddableCard } from "./up-next-panel.component";
 import { boardPickerGroups, peoplePickerGroups, savedViewPickerGroups, scopePickerGroups } from "./work-pickers";
 import { createSortedLaneProjection, createLaneItemsProjection } from "../board/lane-projection";
@@ -197,6 +198,7 @@ function priorityGroupKey(userId: string): string {
     TooltipDirective,
     WorkDoneViewComponent,
     TeamPrioritiesViewComponent,
+    TeamOverviewComponent,
     UpNextPanelComponent,
     CardComposerDialogComponent,
     GlobalCardDetailHostComponent,
@@ -356,9 +358,12 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     }
     return [
       option("board", "layout-kanban", "Board view"),
-      // Team only: everyone's Up next queues sit immediately beside the board view, since both are
-      // lane-based ways of reading the same work. My Cards already has the docked single queue.
-      ...(this.lens() === "team" ? [option("priorities", "list-numbers", "Up next view")] : []),
+      // Team only: the per-teammate overview, then everyone's Up next queues, sit immediately beside
+      // the board view, since all three read the same work person by person. My Cards already has
+      // the docked single queue, and an overview of one person is just My Cards.
+      ...(this.lens() === "team"
+        ? [option("overview", "users-group", "Team overview"), option("priorities", "list-numbers", "Up next view")]
+        : []),
       option("table", "table", "Table view"),
       option("calendar", "calendar", "Calendar view"),
       option("history", "history", "Work done"),
@@ -372,9 +377,10 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     if (display === "summary") this.drilldownLabel.set(null);
   }
   // History has no offline query, and the lanes' queues are deliberately not cached (a stale
-  // sequence reads as an instruction) — both fall back to the table over a cached snapshot.
+  // sequence reads as an instruction) — both fall back to the table over a cached snapshot. The
+  // overview is built from both, so it falls back with them.
   readonly effectiveDisplay = computed<WorkDisplayMode>(() =>
-    this.state.cachedAt() && ["history", "priorities"].includes(this.state.definition().display)
+    this.state.cachedAt() && ["history", "priorities", "overview"].includes(this.state.definition().display)
       ? "table"
       : this.state.definition().display
   );
@@ -384,9 +390,12 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly prioritiesOfflineFallback = computed(() =>
     this.state.cachedAt() !== null && this.state.definition().display === "priorities"
   );
-  /** Priority is the whole-team overview; teammate focus is only meaningful on card views. */
+  readonly overviewOfflineFallback = computed(() =>
+    this.state.cachedAt() !== null && this.state.definition().display === "overview"
+  );
+  /** Priority and overview are whole-team displays; teammate focus is only meaningful on card views. */
   readonly showTeammateFilter = computed(() =>
-    this.lens() === "team" && this.effectiveDisplay() !== "priorities"
+    this.lens() === "team" && this.effectiveDisplay() !== "priorities" && this.effectiveDisplay() !== "overview"
   );
 
   readonly organisationsById = computed(() =>
@@ -395,6 +404,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly workspacesById = computed(() =>
     new Map(this.state.catalog().workspaces.map((item) => [item.id, item]))
   );
+  /** Each workspace's time zone, for the Work done display's tracked-time chips. */
+  readonly workspaceTimeZones = computed(() => new Map(this.state.catalog().workspaces.map((workspace) => [workspace.id, workspace.timeZone])));
   readonly boardsById = computed(() =>
     new Map(this.state.catalog().boards.map((item) => [item.id, item]))
   );
@@ -597,6 +608,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       showUnreadOnly: filters.unreadOnly,
       showOverdueOnly: filters.overdueOnly,
       showInactiveOnly: filters.inactiveOnly,
+      showInProgressOnly: filters.inProgressOnly,
       // Like the board filter, this always means the signed-in viewer's own queue. A Team Cards
       // focus still scopes assignees, so selecting this there deliberately shows the intersection.
       showPrioritySetOnly: filters.prioritySetOnly,
@@ -834,6 +846,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       name: workspace.name,
       icon: workspace.icon,
       accentColor: workspace.accentColor,
+      inProgressAlertDays: workspace.inProgressAlertDays,
+      timeZone: workspace.timeZone,
     }))
   );
   readonly tableSourceOrganisations = computed<SourceOrganisationRef[]>(() =>
@@ -861,6 +875,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     createdDesc: "created-desc",
     updatedAsc: "updated-asc",
     updatedDesc: "updated-desc",
+    inProgressAsc: "in-progress-longest",
+    inProgressDesc: "in-progress-newest",
   } as const)[this.state.definition().sort]);
 
   readonly historyLists = computed(() =>
@@ -911,6 +927,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     { id: "titleDesc", label: "Title Z–A", icon: "sort-z-a" },
     { id: "updatedDesc", label: "Recently updated", icon: "history" },
     { id: "createdDesc", label: "Recently created", icon: "plus" },
+    { id: "inProgressAsc", label: "Longest in progress", icon: "progress" },
   ];
   readonly groupByGroups = computed(() => [{
     id: "groupBy",
@@ -1222,6 +1239,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       || filters.customFieldConditions.length > 0
       || filters.unassignedOnly
       || filters.inactiveOnly
+      || filters.inProgressOnly
       || filters.overdueOnly
       || filters.overdueChecklistOnly
       || filters.unreadOnly
@@ -1425,6 +1443,15 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     return "";
   }
 
+  /**
+   * From the overview into one teammate's own board: the focused board display is where the whole
+   * of their work, their separators and their docked Up next can actually be curated.
+   */
+  focusTeammate(userId: string): void {
+    if (!this.state.interactionReady()) return;
+    this.state.focusTeammate(userId, "board");
+  }
+
   selectTeamPerson(userId: string): void {
     this.closeMenu("team");
     this.state.setAssignees(userId ? [userId] : []);
@@ -1461,6 +1488,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       unreadOnly: value.showUnreadOnly,
       overdueOnly: value.showOverdueOnly,
       inactiveOnly: value.showInactiveOnly,
+      inProgressOnly: value.showInProgressOnly,
       prioritySetOnly: value.showPrioritySetOnly,
       customFieldConditions,
       ...(this.lens() === "portfolio" ? { assigneeIds: value.memberIds } : {}),
@@ -1524,6 +1552,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       completion: DEFAULT_COMPLETION,
       overdueOnly: false,
       inactiveOnly: false,
+      inProgressOnly: false,
       unreadOnly: false,
       prioritySetOnly: false,
       archived: false,
@@ -1579,8 +1608,10 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     && this.state.cachedAt() === null
     && this.effectiveDisplay() !== "history"
     && this.effectiveDisplay() !== "summary"
-    // The lanes display *is* every queue; a docked copy of one of them beside it is noise.
+    // The lanes display *is* every queue; a docked copy of one of them beside it is noise. The
+    // overview already shows every teammate's queue head.
     && this.effectiveDisplay() !== "priorities"
+    && this.effectiveDisplay() !== "overview"
   );
   /** The dock is a board curation tool; every other display keeps its own full-width reading mode. */
   readonly showUpNextControl = computed(() =>
@@ -2443,6 +2474,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       overdueOnly: false,
       unassignedOnly: false,
       inactiveOnly: false,
+      inProgressOnly: false,
       overdueChecklistOnly: false,
       dueFrom: null,
       dueTo: null,

@@ -1,4 +1,6 @@
 import { CdkTrapFocus } from "@angular/cdk/a11y";
+import { formatTrackedDuration, hasTimeInProgress, timeInProgressChip, type ReportedInProgressClock, type TimeInProgressChip } from "./time-in-progress.util";
+import { MinuteClockService } from "../../shared/minute-clock.service";
 import { KeyboardShortcutsService } from "../../core/keyboard/keyboard-shortcuts.service";
 import { ToastService } from "../../shared/toast.service";
 import type { CdkDragDrop, CdkDragMove } from "@angular/cdk/drag-drop";
@@ -138,6 +140,7 @@ export class CardDetailComponent {
   private readonly offlineCache = inject(OfflineCacheService);
   private readonly sockets = inject(SocketService);
   private readonly state = inject(BoardState);
+  private readonly clock = inject(MinuteClockService);
   private readonly router = inject(Router);
   private readonly layout = inject(CardDetailLayoutService);
   private readonly confirm = inject(ConfirmService);
@@ -493,6 +496,18 @@ export class CardDetailComponent {
   readonly boardSummary = computed(() => this.workspaces.boardSummaryFor(this.boardId()));
 
   readonly currentList = computed(() => this.state.lists().find((l) => l.id === this.card().listId));
+  /**
+   * The card's tracked time in progress, shown above the description. Same reading as the tile, but
+   * in the two-unit form: the detail has room to say "3d 4h" where the tile can only say "3d".
+   */
+  readonly timeInProgress = computed<(TimeInProgressChip & { detail: string }) | null>(() => {
+    const card = this.card();
+    const now = this.clock.now();
+    // The alert setting is only read for a card that has time to show.
+    if (!hasTimeInProgress(card)) return null;
+    const chip = timeInProgressChip(card, now, this.state.inProgressAlertDays(), this.state.workspaceTimeZone())!;
+    return { ...chip, detail: formatTrackedDuration(chip.ms) };
+  });
   readonly otherLists = computed(() => this.state.visibleLists().filter((l) => l.id !== this.card().listId));
 
   /** The list popover anchors to its trigger; from the keyboard, find that trigger in the panel. */
@@ -519,7 +534,8 @@ export class CardDetailComponent {
     const card = this.card();
     const position = this.state.positionForCardDrop(card.id, listId, null, undefined);
     this.state.moveCard(card.id, listId, position);
-    await this.api.post(`/cards/${card.id}/move`, { listId, beforeCardId: null });
+    const moved = await this.api.post<{ id: string; listId: string; position: string } & ReportedInProgressClock>(`/cards/${card.id}/move`, { listId, beforeCardId: null });
+    this.state.moveCard(moved.id, moved.listId, moved.position, moved);
   }
 
   toggleActionsMenu(e: MouseEvent) {

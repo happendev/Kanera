@@ -78,7 +78,8 @@ export const kaneraBoardImportArchive = z.looseObject({
     name: z.string(),
     description: z.string().nullable().optional(),
   }),
-  lists: z.array(z.looseObject({ id: z.uuid(), name: z.string(), position: z.string() })),
+  // `inProgress` is absent from exports made before in-progress lists existed.
+  lists: z.array(z.looseObject({ id: z.uuid(), name: z.string(), position: z.string(), inProgress: z.boolean().optional() })),
   labels: z.array(z.looseObject({ id: z.uuid(), name: z.string(), color: colorTokenSchema.nullable().optional() })),
   customFields: z.array(z.looseObject({
     id: z.uuid(),
@@ -104,6 +105,9 @@ export const kaneraBoardImportArchive = z.looseObject({
     position: z.string(),
     completedAt: nullableDateLike.optional(),
     archivedAt: nullableDateLike.optional(),
+    inProgressSince: nullableDateLike.optional(),
+    inProgressSeconds: z.number().int().nonnegative().optional(),
+    listEnteredAt: nullableDateLike.optional(),
   })),
   cardAssignees: z.array(z.looseObject({ cardId: z.uuid(), userId: z.uuid() })),
   cardLabelAssignments: z.array(z.looseObject({ cardId: z.uuid(), labelId: z.uuid() })),

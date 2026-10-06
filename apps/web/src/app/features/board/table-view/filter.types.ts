@@ -49,6 +49,8 @@ export interface FilterValue {
   showUnreadOnly: boolean;
   showOverdueOnly: boolean;
   showInactiveOnly: boolean;
+  /** Open cards in In progress lists: the work actively happening now. */
+  showInProgressOnly: boolean;
   /**
    * Only cards in the viewer's own "Up next" priority queue — the same set whose rank pills the
    * board renders. Board-only for now: Global Work always passes false, since its rank pills can

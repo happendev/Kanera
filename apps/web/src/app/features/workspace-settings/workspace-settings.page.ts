@@ -10,7 +10,7 @@ import type { AutomationActionBody, AutomationTriggerCustomFieldValueDto, Automa
 import { API_KEY_NAME_MAX_LENGTH, CARD_LABEL_NAME_MAX_LENGTH, WORKSPACE_ENTITY_NAME_MAX_LENGTH } from "@kanera/shared/dto/name-limits";
 import type { ServerToClientEvents, WireAutomation, WireAutomationAction, WireCardLabel, WireChecklistTemplate, WireCustomField, WireCustomFieldOption } from "@kanera/shared/events";
 import type { Board, BoardGroup, List, Workspace, WorkspaceMember } from "@kanera/shared/schema";
-import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS, DEFAULT_INACTIVE_CARDS_DAYS } from "@kanera/shared/workspace-defaults";
+import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS, DEFAULT_IN_PROGRESS_ALERT_DAYS, DEFAULT_INACTIVE_CARDS_DAYS, LIST_WIP_LIMIT_MAX } from "@kanera/shared/workspace-defaults";
 import { filter } from "rxjs";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AutosaveTracker } from "../../shared/autosave-tracker";
@@ -508,12 +508,13 @@ const automationRecipeCatalogue: readonly AutomationRecipe[] = [
     group: "Wrap-up",
     icon: "ti-rotate-2",
     title: "Reopen work that moves back",
-    detail: "When a completed card returns to your in-progress list, mark it incomplete again.",
-    // No positional fallback: a middle list has no structural meaning, and marking cards incomplete
-    // in the wrong one is a destructive guess.
-    requirement: "Needs a list named for work in progress.",
+    detail: "When a completed card returns to your In progress list, mark it incomplete again.",
+    // The list the workspace marked In progress is the answer; the name hints only cover workspaces
+    // that have not marked one yet. No positional fallback: a middle list has no structural meaning,
+    // and marking cards incomplete in the wrong one is a destructive guess.
+    requirement: "Needs a list marked In progress.",
     resolve: ({ lists, labels }) => {
-      const progress = matchRecipeList(lists, PROGRESS_LIST_HINTS);
+      const progress = lists.find((list) => list.inProgress && !list.archivedAt) ?? matchRecipeList(lists, PROGRESS_LIST_HINTS);
       if (!progress) return null;
       const label = matchRecipeLabel(labels, ACTIVE_LABEL_HINTS);
       const actions: AutomationActionBody[] = [{ type: "set_completion", config: { completed: false } }];
@@ -679,6 +680,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export class WorkspaceSettingsPage implements OnDestroy {
   readonly completedCardsActiveDaysDefault = DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS;
   readonly inactiveCardsDaysDefault = DEFAULT_INACTIVE_CARDS_DAYS;
+  readonly inProgressAlertDaysDefault = DEFAULT_IN_PROGRESS_ALERT_DAYS;
 
   private readonly api = inject(ApiClient);
   private readonly toasts = inject(ToastService);
@@ -722,6 +724,15 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly boardHealthError = signal<string | null>(null);
   readonly completedCardsActiveDaysDraft = signal(DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS);
   readonly inactiveCardsDaysDraft = signal(DEFAULT_INACTIVE_CARDS_DAYS);
+  readonly inProgressAlertDaysDraft = signal(DEFAULT_IN_PROGRESS_ALERT_DAYS);
+  /** The zone whose working hours time in progress counts (09:00-17:00, Monday to Friday). */
+  readonly timeZoneDraft = signal("UTC");
+  /** Every zone the browser knows, always including the saved one so it never renders blank. */
+  readonly timeZoneOptions = computed(() => {
+    const zones = supportedTimeZones();
+    const current = this.timeZoneDraft();
+    return zones.includes(current) ? zones : [current, ...zones];
+  });
   readonly isStandalone = computed(() => this.workspace()?.kind === "board");
   readonly entityLabel = computed(() => this.isStandalone() ? "board" : "workspace");
   readonly entityLabelTitle = computed(() => this.isStandalone() ? "Board" : "Workspace");
@@ -1511,6 +1522,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
       this.boardHealthInactiveEnabledDraft.set(ws?.boardHealthInactiveEnabled !== false);
       this.completedCardsActiveDaysDraft.set(ws?.completedCardsActiveDays ?? this.completedCardsActiveDaysDefault);
       this.inactiveCardsDaysDraft.set(ws?.inactiveCardsDays ?? this.inactiveCardsDaysDefault);
+      this.inProgressAlertDaysDraft.set(ws?.inProgressAlertDays ?? this.inProgressAlertDaysDefault);
+      this.timeZoneDraft.set(ws?.timeZone ?? "UTC");
     }
     const accentColor = (ws as { accentColor?: string | null } | null)?.accentColor as ColorToken | null ?? null;
     if (syncControls) {
@@ -1542,7 +1555,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.nameSaveTimer = null;
   }
 
-  private async patchWorkspace(patch: { name?: string; cardKeyPrefix?: string; icon?: string | null; accentColor?: ColorToken | null; completedCardsActiveDays?: number; inactiveCardsDays?: number; boardHealthEnabled?: boolean; boardHealthOverdueEnabled?: boolean; boardHealthUnassignedEnabled?: boolean; boardHealthInactiveEnabled?: boolean; boardLinkingEnabled?: boolean }) {
+  private async patchWorkspace(patch: { name?: string; cardKeyPrefix?: string; icon?: string | null; accentColor?: ColorToken | null; completedCardsActiveDays?: number; inactiveCardsDays?: number; inProgressAlertDays?: number; timeZone?: string; boardHealthEnabled?: boolean; boardHealthOverdueEnabled?: boolean; boardHealthUnassignedEnabled?: boolean; boardHealthInactiveEnabled?: boolean; boardLinkingEnabled?: boolean }) {
     const ws = await this.autosave.track(() => this.api.patch<Workspace>(`/workspaces/${this.workspaceId()}`, patch));
     this.applyWorkspace(ws);
   }
@@ -1604,6 +1617,20 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.queueGeneralSettingsSave();
   }
 
+  updateInProgressAlertDays(value: string) {
+    const days = Math.max(0, Math.min(365, Math.trunc(Number(value) || 0)));
+    this.inProgressAlertDaysDraft.set(days);
+    this.queueGeneralSettingsSave();
+  }
+
+  updateTimeZone(value: string) {
+    if (!value) return;
+    this.timeZoneDraft.set(value);
+    // A select is one deliberate choice, not typing: save it without the debounce.
+    this.queueGeneralSettingsSave();
+    this.saveGeneralSettingsNow();
+  }
+
   updateBoardHealthEnabled(enabled: boolean) {
     if (!this.workspace() || this.boardHealthSaving()) return;
     this.boardHealthEnabledDraft.set(enabled);
@@ -1640,6 +1667,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
     const patch = {
       completedCardsActiveDays: this.completedCardsActiveDaysDraft(),
       inactiveCardsDays: this.inactiveCardsDaysDraft(),
+      inProgressAlertDays: this.inProgressAlertDaysDraft(),
+      timeZone: this.timeZoneDraft(),
       boardHealthEnabled: this.boardHealthEnabledDraft(),
       boardHealthOverdueEnabled: this.boardHealthOverdueEnabledDraft(),
       boardHealthUnassignedEnabled: this.boardHealthUnassignedEnabledDraft(),
@@ -1647,6 +1676,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
     };
     if (workspace.completedCardsActiveDays === patch.completedCardsActiveDays &&
       workspace.inactiveCardsDays === patch.inactiveCardsDays &&
+      workspace.inProgressAlertDays === patch.inProgressAlertDays &&
+      workspace.timeZone === patch.timeZone &&
       (workspace.boardHealthEnabled !== false) === patch.boardHealthEnabled &&
       (workspace.boardHealthOverdueEnabled !== false) === patch.boardHealthOverdueEnabled &&
       (workspace.boardHealthUnassignedEnabled !== false) === patch.boardHealthUnassignedEnabled &&
@@ -1665,6 +1696,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
         this.boardHealthInactiveEnabledDraft.set(workspace.boardHealthInactiveEnabled !== false);
         this.completedCardsActiveDaysDraft.set(workspace.completedCardsActiveDays);
         this.inactiveCardsDaysDraft.set(workspace.inactiveCardsDays);
+        this.inProgressAlertDaysDraft.set(workspace.inProgressAlertDays);
+        this.timeZoneDraft.set(workspace.timeZone);
         this.boardHealthError.set(`${this.entityLabelTitle()} defaults could not be updated.`);
       }
     } finally {
@@ -1731,9 +1764,22 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.newListColor.set(null);
   }
 
-  async updateListStyle(id: string, patch: { icon?: string | null; color?: string | null }) {
+  async updateListStyle(id: string, patch: { icon?: string | null; color?: string | null; inProgress?: boolean; wipLimit?: number | null }) {
     const list = await this.api.patch<List>(`/lists/${id}`, patch);
     this.lists.update((items) => items.map((l) => (l.id === id ? list : l)));
+  }
+
+  /** Empty clears the limit; anything outside 1–999 (or fractional) snaps back to the saved value. */
+  async updateListWipLimit(id: string, input: HTMLInputElement) {
+    const current = this.lists().find((list) => list.id === id)?.wipLimit ?? null;
+    const raw = input.value.trim();
+    const next = raw === "" ? null : Number(raw);
+    if (next !== null && (!Number.isInteger(next) || next < 1 || next > LIST_WIP_LIMIT_MAX)) {
+      input.value = current === null ? "" : String(current);
+      return;
+    }
+    if (next === current) return;
+    await this.updateListStyle(id, { wipLimit: next });
   }
 
   async archiveList(id: string) {
@@ -2223,7 +2269,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   automationTriggerTypeValue(automation: WireAutomation): AutomationTriggerTypeName {
-    return automation.triggerType === "card_leaves_list" || automation.triggerType === "due_date_arrives" || automation.triggerType === "due_date_approaching" || automation.triggerType === "card_becomes_inactive" || automation.triggerType === "all_checklist_items_complete" || automation.triggerType === "card_assigned_to_user" || automation.triggerType === "card_marked_complete" || automation.triggerType === "card_label_set" || automation.triggerType === "custom_field_value_changed" ? automation.triggerType : "card_enters_list";
+    return automation.triggerType === "card_leaves_list" || automation.triggerType === "due_date_arrives" || automation.triggerType === "due_date_approaching" || automation.triggerType === "card_becomes_inactive" || automation.triggerType === "card_in_progress_too_long" || automation.triggerType === "all_checklist_items_complete" || automation.triggerType === "card_assigned_to_user" || automation.triggerType === "card_marked_complete" || automation.triggerType === "card_label_set" || automation.triggerType === "custom_field_value_changed" ? automation.triggerType : "card_enters_list";
   }
 
   automationTriggerListValue(automation: WireAutomation): string {
@@ -2378,6 +2424,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     if (automation.triggerType === "due_date_arrives") return "Due date arrives";
     if (automation.triggerType === "due_date_approaching") return "Due date approaches";
     if (automation.triggerType === "card_becomes_inactive") return "Card becomes inactive";
+    if (automation.triggerType === "card_in_progress_too_long") return "Card in progress too long";
     if (automation.triggerType === "all_checklist_items_complete") return "All checklist items complete";
     if (automation.triggerType === "card_assigned_to_user") return "Card assigned to";
     if (automation.triggerType === "card_marked_complete") return "Card marked complete";
@@ -2467,7 +2514,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   private normalizeAutomation(automation: WireAutomation): WireAutomation {
     return {
       ...automation,
-      triggerType: automation.triggerType === "card_leaves_list" || automation.triggerType === "due_date_arrives" || automation.triggerType === "due_date_approaching" || automation.triggerType === "card_becomes_inactive" || automation.triggerType === "all_checklist_items_complete" || automation.triggerType === "card_assigned_to_user" || automation.triggerType === "card_marked_complete" || automation.triggerType === "card_label_set" || automation.triggerType === "custom_field_value_changed" ? automation.triggerType : "card_enters_list",
+      triggerType: automation.triggerType === "card_leaves_list" || automation.triggerType === "due_date_arrives" || automation.triggerType === "due_date_approaching" || automation.triggerType === "card_becomes_inactive" || automation.triggerType === "card_in_progress_too_long" || automation.triggerType === "all_checklist_items_complete" || automation.triggerType === "card_assigned_to_user" || automation.triggerType === "card_marked_complete" || automation.triggerType === "card_label_set" || automation.triggerType === "custom_field_value_changed" ? automation.triggerType : "card_enters_list",
       triggerListId: automation.triggerType === "card_enters_list" || automation.triggerType === "card_leaves_list" ? automation.triggerListId : null,
       triggerUserIds: automation.triggerType === "card_assigned_to_user" ? this.stringList(automation.triggerUserIds) : null,
       triggerLabelId: automation.triggerType === "card_label_set" ? automation.triggerLabelId : null,
@@ -3965,4 +4012,16 @@ export class WorkspaceSettingsPage implements OnDestroy {
     }
   }
 
+}
+
+let timeZoneList: string[] | null = null;
+
+/** IANA zones for the workspace time zone picker, computed once per session. */
+function supportedTimeZones(): string[] {
+  if (!timeZoneList) {
+    const intl = Intl as typeof Intl & { supportedValuesOf?: (key: "timeZone") => string[] };
+    const zones = intl.supportedValuesOf?.("timeZone") ?? [];
+    timeZoneList = zones.includes("UTC") ? zones : ["UTC", ...zones];
+  }
+  return timeZoneList;
 }

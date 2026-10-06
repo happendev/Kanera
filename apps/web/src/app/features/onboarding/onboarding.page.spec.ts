@@ -40,6 +40,7 @@ function workspace(): Workspace {
     accentColor: null,
     completedCardsActiveDays: 35,
     inactiveCardsDays: 14,
+    inProgressAlertDays: 7, timeZone: "UTC",
     boardHealthEnabled: true,
     boardHealthOverdueEnabled: true,
     boardHealthUnassignedEnabled: true,

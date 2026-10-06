@@ -1,6 +1,7 @@
 import { InjectionToken } from "@angular/core";
 import type { ApiClient } from "../../../core/api/api.client";
 import type { BoardState } from "../board-state";
+import { resolveInProgressClock, type ReportedInProgressClock } from "../time-in-progress.util";
 import type { AnyCard } from "./table-view.types";
 
 /**
@@ -41,15 +42,16 @@ export function boardStateCardStore(state: BoardState, api: ApiClient): TableCar
       const position = state.positionForCardDrop(cardId, listId, null, undefined);
       state.moveCard(cardId, listId, position);
       try {
-        const moved = await api.post<{ id: string; listId: string; position: string }>(
+        const moved = await api.post<{ id: string; listId: string; position: string } & ReportedInProgressClock>(
           `/cards/${cardId}/move`,
           { listId, beforeCardId: null },
         );
         // The server may rebalance the mixed card/separator lane before appending. Settle from its
         // authoritative result instead of depending on the viewer receiving their own socket echo.
-        state.moveCard(moved.id, moved.listId, moved.position);
+        state.moveCard(moved.id, moved.listId, moved.position, moved);
       } catch (error) {
-        state.moveCard(previous.id, previous.listId, previous.position);
+        // Normalised, so a compact row missing null/zero fields still restores them.
+        state.moveCard(previous.id, previous.listId, previous.position, resolveInProgressClock(previous, previous));
         throw error;
       }
     },

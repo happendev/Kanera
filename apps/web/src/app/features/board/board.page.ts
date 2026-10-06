@@ -5,7 +5,8 @@ import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, e
 import { Router } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
 import type { CompactCardCustomFieldValue, CompactCardSummary, ServerToClientEvents, WireAgentRun, WireBoardMemberUser, WireCard, WireCardSummary, WireChecklistTemplate, WireSeparator } from "@kanera/shared/events";
-import { expandCardCustomFieldValue, expandCardSummary, SERVER_EVENTS } from "@kanera/shared/events";
+import { expandCardCustomFieldValue, expandCardSummary, inProgressClockOf, SERVER_EVENTS } from "@kanera/shared/events";
+import type { ReportedInProgressClock } from "./time-in-progress.util";
 import type { BoardExportArchive, WorkDoneEventType, WorkPrioritiesResponse } from "@kanera/shared/dto";
 import type { Board, BoardRole, BoardSeparator, Card, CardCustomFieldValue, CardLabel, CustomField, List } from "@kanera/shared/schema";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
@@ -250,6 +251,11 @@ export class BoardPage implements OnDestroy {
   readonly filterCfConditions = signal<CfFilterCondition[]>([]);
   /** History-only event dimension, surfaced through the page's shared Filter panel. */
   readonly workDoneEventType = signal<WorkDoneEventType | null>(null);
+  /** Work done shows each card's tracked time, counted in its workspace's working hours. */
+  readonly workDoneTimeZones = computed(() => {
+    const workspaceId = this.state.board()?.workspaceId;
+    return workspaceId ? new Map([[workspaceId, this.state.workspaceTimeZone()]]) : null;
+  });
   private readonly preferredWorkDoneLayout = signal<WorkDoneLayout>(readWorkDoneLayout("board"));
   private readonly narrowWorkDoneLayout = mediaQuerySignal(NARROW_WORK_DONE_LAYOUT_QUERY);
   /** Grid is a wide-screen preference; a one-column "grid" is just a less readable list. */
@@ -269,6 +275,7 @@ export class BoardPage implements OnDestroy {
   readonly showUnreadOnly = signal(false);
   readonly showOverdueOnly = signal(false);
   readonly showInactiveOnly = signal(false);
+  readonly showInProgressOnly = signal(false);
   /** Session-local drill-down selected from Board overview; composed with the normal filter bar. */
   readonly boardRiskFilter = signal<BoardRiskFilter | null>(null);
   /** Only cards in the viewer's own "Up next" queue (`viewerPriorityRanks`). */
@@ -367,6 +374,7 @@ export class BoardPage implements OnDestroy {
     showUnreadOnly: this.showUnreadOnly(),
     showOverdueOnly: this.showOverdueOnly(),
     showInactiveOnly: this.showInactiveOnly(),
+    showInProgressOnly: this.showInProgressOnly(),
     showPrioritySetOnly: this.showPrioritySetOnly(),
   }));
 
@@ -420,12 +428,13 @@ export class BoardPage implements OnDestroy {
     const unreadOnly = this.effectiveView() !== "history" && this.showUnreadOnly();
     const overdueOnly = this.showOverdueOnly();
     const inactiveOnly = this.showInactiveOnly();
+    const inProgressOnly = this.showInProgressOnly();
     const riskFilter = this.boardRiskFilter();
     // Like overdue, ignored while viewing archived: archived cards are never in the live queue,
     // so applying it there would blank the archive rather than filter it.
     const prioritySetOnly = this.showPrioritySetOnly();
     const showArchived = this.showArchived();
-    if (!q && !labelIds.length && !memberIds.length && !listIds.length && !conditions.length && !unreadOnly && (!overdueOnly || showArchived) && (!inactiveOnly || showArchived) && (!prioritySetOnly || showArchived) && (!riskFilter || showArchived)) return null;
+    if (!q && !labelIds.length && !memberIds.length && !listIds.length && !conditions.length && !unreadOnly && (!overdueOnly || showArchived) && (!inactiveOnly || showArchived) && (!inProgressOnly || showArchived) && (!prioritySetOnly || showArchived) && (!riskFilter || showArchived)) return null;
     const fieldsById = conditions.length ? this.state.customFieldsById() : null;
     const cfValuesByCard = conditions.length ? this.state.customFieldValuesByCardAndField() : null;
     const listSet = new Set(listIds);
@@ -447,6 +456,8 @@ export class BoardPage implements OnDestroy {
         // Inactivity is a live-work signal, matching the health indicator: completed cards do not
         // become actionable again merely because their final update is more than 14 days old.
         if (!showArchived && inactiveOnly && (card.completedAt || !isCardInactive(card.updatedAt, Date.now(), this.state.inactiveCardsDays()))) return false;
+        // Same rule as the work query's inProgressOnly: open work in an In progress list.
+        if (!showArchived && inProgressOnly && (card.completedAt || !card.inProgressSince)) return false;
         if (!showArchived && riskFilter) {
           if (card.completedAt) return false;
           if (riskFilter === "overdue" && !isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone)) return false;
@@ -658,6 +669,7 @@ export class BoardPage implements OnDestroy {
     (this.effectiveView() !== "history" && this.showUnreadOnly()) ||
     this.showOverdueOnly() ||
     this.showInactiveOnly() ||
+    this.showInProgressOnly() ||
     this.boardRiskFilter() !== null ||
     this.showPrioritySetOnly() ||
     this.showArchived() ||
@@ -1159,6 +1171,7 @@ export class BoardPage implements OnDestroy {
       this.showUnreadOnly.set(saved?.showUnreadOnly ?? false);
       this.showOverdueOnly.set(saved?.showOverdueOnly ?? false);
       this.showInactiveOnly.set(saved?.showInactiveOnly ?? false);
+      this.showInProgressOnly.set(saved?.showInProgressOnly ?? false);
       this.boardRiskFilter.set(null);
       this.showPrioritySetOnly.set(saved?.showPrioritySetOnly ?? false);
       this.showArchived.set(false);
@@ -1394,6 +1407,7 @@ export class BoardPage implements OnDestroy {
         showUnreadOnly: this.showUnreadOnly(),
         showOverdueOnly: this.showOverdueOnly(),
         showInactiveOnly: this.showInactiveOnly(),
+        showInProgressOnly: this.showInProgressOnly(),
         showPrioritySetOnly: this.showPrioritySetOnly(),
       };
       writeFilters(scope, filters);
@@ -1931,6 +1945,7 @@ export class BoardPage implements OnDestroy {
     if (next) {
       this.showOverdueOnly.set(false);
       this.showInactiveOnly.set(false);
+      this.showInProgressOnly.set(false);
       this.showPrioritySetOnly.set(false);
     }
     const data = await this.loadBoard(this.boardId(), false, next);
@@ -1979,6 +1994,7 @@ export class BoardPage implements OnDestroy {
     this.showUnreadOnly.set(v.showUnreadOnly);
     this.showOverdueOnly.set(v.showOverdueOnly);
     this.showInactiveOnly.set(v.showInactiveOnly);
+    this.showInProgressOnly.set(v.showInProgressOnly);
     this.showPrioritySetOnly.set(v.showPrioritySetOnly);
   }
 
@@ -2009,6 +2025,7 @@ export class BoardPage implements OnDestroy {
     this.showUnreadOnly.set(false);
     this.showOverdueOnly.set(false);
     this.showInactiveOnly.set(false);
+    this.showInProgressOnly.set(false);
     this.boardRiskFilter.set(null);
     this.showPrioritySetOnly.set(false);
     this.showArchived.set(false);
@@ -2197,7 +2214,7 @@ export class BoardPage implements OnDestroy {
       } catch (error) {
         // Earlier writes are durable and later cards have not moved. Restore only
         // this card's position, preserving unrelated realtime updates.
-        this.state.moveCard(card.id, card.listId, card.position);
+        this.state.moveCard(card.id, card.listId, card.position, inProgressClockOf(card));
         throw error;
       }
     }
@@ -2216,12 +2233,12 @@ export class BoardPage implements OnDestroy {
     this.state.moveCard(p.cardId, p.toListId, optimisticPosition);
 
     return async () => {
-      const moved = await this.api.post<{ id: string; listId: string; position: string }>(`/cards/${p.cardId}/move`, {
+      const moved = await this.api.post<{ id: string; listId: string; position: string } & ReportedInProgressClock>(`/cards/${p.cardId}/move`, {
         listId: p.toListId,
         ...(p.beforeItem !== undefined ? { beforeItem: p.beforeItem } : p.beforeCardId !== undefined ? { beforeCardId: p.beforeCardId } : {}),
         ...(p.afterItem !== undefined ? { afterItem: p.afterItem } : p.afterCardId !== undefined ? { afterCardId: p.afterCardId } : {}),
       });
-      this.state.moveCard(moved.id, moved.listId, moved.position);
+      this.state.moveCard(moved.id, moved.listId, moved.position, moved);
     };
   }
 

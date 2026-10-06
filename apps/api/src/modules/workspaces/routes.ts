@@ -1,9 +1,10 @@
 import { dto } from "@kanera/shared";
+import { isKnownTimeZone } from "@kanera/shared/time-in-progress";
 import type { PendingBoardInvitationSummary } from "@kanera/shared/dto";
 import { SERVER_EVENTS } from "@kanera/shared/events";
 import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
 import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
-import { DEFAULT_WORKSPACE_LIST_NAMES } from "@kanera/shared/default-workspace-lists";
+import { DEFAULT_WORKSPACE_LISTS } from "@kanera/shared/default-workspace-lists";
 import { DUE_DATE_SLOT_RANK, type CardDueDateSlot } from "@kanera/shared/due-date-slots";
 import { automationActions, automations, boardGroups, boardInvitationGrants, boardInvitations, boardMembers, boardMirrors, boards, cardAssignees, cardLabelAssignments, cardLabels, cards, checklistTemplateItems, checklistTemplates, clientGuestSeats, clientMembers, clients, customFieldOptions, customFields, lists, planActions, standaloneBoardGroups, users, workspaceMembers, workspaces, type AutomationActionConfig, type Workspace } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
@@ -94,6 +95,8 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           accentColor: workspaces.accentColor,
           completedCardsActiveDays: workspaces.completedCardsActiveDays,
           inactiveCardsDays: workspaces.inactiveCardsDays,
+          inProgressAlertDays: workspaces.inProgressAlertDays,
+          timeZone: workspaces.timeZone,
           boardHealthEnabled: workspaces.boardHealthEnabled,
           boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
           boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
@@ -146,6 +149,8 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           accentColor: workspaces.accentColor,
           completedCardsActiveDays: workspaces.completedCardsActiveDays,
           inactiveCardsDays: workspaces.inactiveCardsDays,
+          inProgressAlertDays: workspaces.inProgressAlertDays,
+          timeZone: workspaces.timeZone,
           boardHealthEnabled: workspaces.boardHealthEnabled,
           boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
           boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
@@ -171,6 +176,8 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           accentColor: workspaces.accentColor,
           completedCardsActiveDays: workspaces.completedCardsActiveDays,
           inactiveCardsDays: workspaces.inactiveCardsDays,
+          inProgressAlertDays: workspaces.inProgressAlertDays,
+          timeZone: workspaces.timeZone,
           boardHealthEnabled: workspaces.boardHealthEnabled,
           boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
           boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
@@ -196,6 +203,8 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         accentColor: workspaces.accentColor,
         completedCardsActiveDays: workspaces.completedCardsActiveDays,
         inactiveCardsDays: workspaces.inactiveCardsDays,
+        inProgressAlertDays: workspaces.inProgressAlertDays,
+        timeZone: workspaces.timeZone,
         boardHealthEnabled: workspaces.boardHealthEnabled,
         boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
         boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
@@ -232,6 +241,8 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         workspaceName,
         requestedPrefix: body.cardKeyPrefix,
       });
+      // Time in progress counts working hours in this zone; the creator's is the best default there is.
+      const [creator] = await tx.select({ timezone: users.timezone }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
       const [organisationDefaults] = await tx
         .select({
           completedCardsActiveDays: clients.defaultCompletedCardsActiveDays,
@@ -259,6 +270,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           completedCardsActiveDays: organisationDefaults.completedCardsActiveDays,
           inactiveCardsDays: organisationDefaults.inactiveCardsDays,
           boardHealthEnabled: organisationDefaults.boardHealthEnabled,
+          timeZone: body.timeZone ?? (creator?.timezone && isKnownTimeZone(creator.timezone) ? creator.timezone : "UTC"),
         })
         .returning();
       const [member] = await tx.insert(workspaceMembers).values({
@@ -268,8 +280,10 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       }).returning();
       if (!member) throw badRequest("could not add workspace member");
 
-      const initialLists: { name: string; icon?: string | null }[] =
-        body.lists ?? (body.listNames ?? [...DEFAULT_WORKSPACE_LIST_NAMES]).map((name) => ({ name }));
+      // Bare `listNames` carry no classification, so only the default workflow (and explicit
+      // `lists`) arrive with in-progress flags; admins can flag lists later in settings.
+      const initialLists: { name: string; icon?: string | null; inProgress?: boolean }[] =
+        body.lists ?? (body.listNames ? body.listNames.map((name) => ({ name })) : [...DEFAULT_WORKSPACE_LISTS]);
       // Blank onboarding intentionally sends an explicit empty list array so users can configure
       // workspace lists later. Omitted lists still seed the default workflow above.
       const initialListRows = initialLists.length > 0
@@ -278,6 +292,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
             workspaceId: workspace!.id,
             name: list.name,
             icon: "icon" in list ? list.icon ?? null : null,
+            inProgress: list.inProgress ?? false,
             position: String((index + 1) * 1000),
           })),
         ).returning()
@@ -659,6 +674,8 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           ...(body.accentColor !== undefined && { accentColor: body.accentColor }),
           ...(body.completedCardsActiveDays !== undefined && { completedCardsActiveDays: body.completedCardsActiveDays }),
           ...(body.inactiveCardsDays !== undefined && { inactiveCardsDays: body.inactiveCardsDays }),
+          ...(body.inProgressAlertDays !== undefined && { inProgressAlertDays: body.inProgressAlertDays }),
+          ...(body.timeZone !== undefined && { timeZone: body.timeZone }),
           ...(body.boardHealthEnabled !== undefined && { boardHealthEnabled: body.boardHealthEnabled }),
           ...(body.boardHealthOverdueEnabled !== undefined && { boardHealthOverdueEnabled: body.boardHealthOverdueEnabled }),
           ...(body.boardHealthUnassignedEnabled !== undefined && { boardHealthUnassignedEnabled: body.boardHealthUnassignedEnabled }),

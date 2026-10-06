@@ -445,6 +445,20 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
+  // Tracked time in progress: neutral once stopped, the tile's accent while the clock runs.
+  &.wd-chip--time {
+    background: var(--surface-2);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    box-shadow: inset 0 0 0 1px var(--border);
+
+    &.is-running {
+      background: color-mix(in srgb, var(--accent) 9%, transparent);
+      color: var(--accent);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
+    }
+  }
 }
 
 .wd-list-name {

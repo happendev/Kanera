@@ -152,7 +152,8 @@ function cardUrl(organisationKey: string, cardKey: string): string {
 }
 
 function toWireCard(card: Card): WireCard {
-  return { ...card, url: cardUrl(card.organisationKey, card.key) };
+  const { listEnteredAt: _listEnteredAt, ...publicCard } = card;
+  return { ...publicCard, url: cardUrl(card.organisationKey, card.key) };
 }
 
 function attachmentLinksSection(attachments: TrelloAttachmentSource[]): string | null {

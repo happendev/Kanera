@@ -142,6 +142,11 @@
               <i class="ti ti-checkbox"></i>{{ checklistChipText(digest) }}
             </span>
             }
+            @if (timeInProgressFor(digest); as timer) {
+            <span class="wd-chip wd-chip--time" [class.is-running]="timer.running" [kTooltip]="timer.label" [attr.aria-label]="timer.label">
+              <i class="ti" [class.ti-progress]="timer.running" [class.ti-clock]="!timer.running"></i>{{ timer.text }}
+            </span>
+            }
           </span>
         </span>
       </span>

@@ -183,6 +183,7 @@ describe("matchesCfConditions", () => {
       showUnreadOnly: false,
       showOverdueOnly: false,
       showInactiveOnly: false,
+      showInProgressOnly: false,
       showPrioritySetOnly: false,
     };
     it("is false when nothing is set", () => {

@@ -48,6 +48,8 @@ import type { FilterValue } from "./filter.types";
 import {
   buildBoardExportPayload,
   buildWorkbookExport,
+  IN_PROGRESS_COLUMN_ID,
+  IN_PROGRESS_EXPORT_LABEL,
   sanitizeExportFileName,
   styledSheetData,
   timestampForFileName,
@@ -69,6 +71,8 @@ import type { SourceBoardRef, SourceOrganisationRef, SourceWorkspaceRef } from "
 import { priorityRankHeat } from "../../../shared/priority-rank";
 import { CROSS_BOARD_GROUP_BY_OPTIONS, GROUP_BY_OPTIONS, SORT_BY_OPTIONS } from "./table-view.types";
 import { boardStateCardStore, TABLE_CARD_STORE, type TableCardStore } from "./table-card-store";
+import { formatTrackedDuration, hasTimeInProgress, timeInProgressChip, timeInProgressMs, type TimeInProgressChip } from "../time-in-progress.util";
+import { MinuteClockService } from "../../../shared/minute-clock.service";
 import {
   ROW_INTERACTION_STOP_SELECTOR,
   applySavedColumnOrder,
@@ -210,6 +214,7 @@ interface GroupByOption {
 export class BoardTableViewComponent implements OnDestroy {
   private readonly api = inject(ApiClient);
   private readonly state = inject(BoardState);
+  private readonly clock = inject(MinuteClockService);
   private readonly notifications = inject(NotificationsService);
   private readonly menuCoordinator = inject(BoardMenuCoordinator);
   private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -466,6 +471,7 @@ export class BoardTableViewComponent implements OnDestroy {
     ...(this.crossBoard() ? ["board"] : []),
     "assignees",
     "due",
+    "inProgress",
     "labels",
     "checklist",
     "created",
@@ -555,6 +561,7 @@ export class BoardTableViewComponent implements OnDestroy {
     showUnreadOnly: false,
     showOverdueOnly: false,
     showInactiveOnly: false,
+    showInProgressOnly: false,
     showPrioritySetOnly: false,
   }));
 
@@ -969,7 +976,8 @@ export class BoardTableViewComponent implements OnDestroy {
     if (id.startsWith("cf:")) return !this.crossWorkspace();
     if (id === "labels") return this.labelsVisibleByDefault();
     if (id === "priority") return this.priorityVisibleByDefault();
-    return id === "status" || id === "assignees" || id === "due" || id === "board";
+    // Time in progress is on by default: it is the product's "what is actively moving" signal.
+    return id === "status" || id === "assignees" || id === "due" || id === "board" || id === "inProgress";
   }
 
   /**
@@ -1910,6 +1918,42 @@ export class BoardTableViewComponent implements OnDestroy {
   }
 
   /**
+   * The card's tracked total, running or stopped. Reads the shared minute clock, so the cell ages in
+   * place without a per-row timer.
+   */
+  timeInProgress(card: AnyCard): TimeInProgressChip | null {
+    const now = this.clock.now();
+    // The alert setting is only resolved for a card that has time to show.
+    if (!hasTimeInProgress(card)) return null;
+    return timeInProgressChip(card, now, this.inProgressAlertDaysFor(card), this.timeZoneFor(card));
+  }
+
+  /**
+   * Each workspace sets its own alert. A cross-board host supplies it per source workspace; on a
+   * board every row shares the board's workspace.
+   */
+  private readonly alertDaysByWorkspace = computed(() => new Map(
+    this.sourceWorkspaces()
+      .filter((workspace) => workspace.inProgressAlertDays !== undefined)
+      .map((workspace) => [workspace.id, workspace.inProgressAlertDays!]),
+  ));
+
+  private inProgressAlertDaysFor(card: AnyCard): number {
+    return this.alertDaysByWorkspace().get(card.workspaceId) ?? this.state.inProgressAlertDays();
+  }
+
+  /** Working hours are counted in each card's own workspace's zone, resolved like the alert. */
+  private readonly timeZoneByWorkspace = computed(() => new Map(
+    this.sourceWorkspaces()
+      .filter((workspace) => workspace.timeZone !== undefined)
+      .map((workspace) => [workspace.id, workspace.timeZone!]),
+  ));
+
+  private timeZoneFor(card: AnyCard): string {
+    return this.timeZoneByWorkspace().get(card.workspaceId) ?? this.state.workspaceTimeZone();
+  }
+
+  /**
    * "Ben, Priya, Nina" for a shared card. A stack of anonymous circles is the least readable cell in
    * the grid; first names fit where full names would not and are unambiguous within one board. A
    * card with one assignee has the room for their full name, so it keeps it.
@@ -1922,7 +1966,8 @@ export class BoardTableViewComponent implements OnDestroy {
 
   /** Columns the table renders but cannot edit in place — they have no cell trigger and no hover. */
   isReadOnlyColumn(id: string): boolean {
-    return id === "checklist" || id === "created" || id === "updated";
+    // Time in progress is driven by the card's list; it is changed by moving the card, not in place.
+    return id === "checklist" || id === "created" || id === "updated" || id === "inProgress";
   }
 
   /**
@@ -2191,7 +2236,7 @@ export class BoardTableViewComponent implements OnDestroy {
     this.moreOpen.set(false);
     const columns = [TITLE_COLUMN_ID, ...this.visibleColumns()];
     const rows = [
-      columns.map((column) => this.csvCell(this.columnLabel(column))),
+      columns.map((column) => this.csvCell(this.exportColumnLabel(column))),
       ...this.exportRows().map((card) => columns.map((column) => this.csvCell(this.exportCell(card, column)))),
     ];
     downloadTextFile(rows.map((row) => row.join(",")).join("\n"), "text/csv;charset=utf-8", this.exportFileName("csv"));
@@ -2245,34 +2290,44 @@ export class BoardTableViewComponent implements OnDestroy {
     return this.aggregateConfig()[fieldId]?.[0] ?? null;
   }
 
-  /** The sticky footer's grand total for one numeric column, over the distinct cards in the view. */
+  /**
+   * The aggregate key a column summarises under: a number field's id, or time in progress's column
+   * id. Null for columns that cannot be summarised.
+   */
+  aggregateKeyForColumn(column: string): string | null {
+    if (column === IN_PROGRESS_COLUMN_ID) return IN_PROGRESS_COLUMN_ID;
+    const field = this.customFieldForColumn(column);
+    return field?.type === "number" ? field.id : null;
+  }
+
+  /** The sticky footer's grand total for one summarised column, over the distinct cards in the view. */
   private readonly aggregateValues = computed(() => {
     const values = new Map<string, string>();
-    for (const [fieldId, metrics] of Object.entries(this.aggregateConfig())) {
+    for (const [key, metrics] of Object.entries(this.aggregateConfig())) {
       const metric = metrics?.[0];
       if (!metric) continue;
-      const value = this.metricOver(this.rows(), fieldId, metric);
-      values.set(fieldId, value === null ? "—" : formatAggregate(value));
+      const value = this.metricOver(this.rows(), key, metric);
+      values.set(key, value === null ? "—" : this.formatAggregateFor(key, value));
     }
     return values;
   });
 
-  aggregateValue(fieldId: string): string {
-    return this.aggregateValues().get(fieldId) ?? "";
+  aggregateValue(key: string): string {
+    return this.aggregateValues().get(key) ?? "";
   }
 
   // ── Summaries ─────────────────────────────────────────────────────────────
-  /** Visible numeric columns that are actually summarising something. */
+  /** Visible summarisable columns (number fields, time in progress) that are actually summarising something. */
   readonly summarisedColumns = computed(() =>
     this.visibleColumns().filter((id) => {
-      const field = this.customFieldForColumn(id);
-      return field?.type === "number" && !!this.aggregateFor(field.id);
+      const key = this.aggregateKeyForColumn(id);
+      return !!key && !!this.aggregateFor(key);
     }),
   );
 
   readonly hasSummaries = computed(() => this.summarisedColumns().length > 0);
 
-  /** Breakdown is meaningless until at least one visible number column is being summarised. */
+  /** Breakdown is meaningless until at least one visible column is being summarised. */
   readonly availableSplitByOptions = computed(() => this.hasSummaries() ? this.splitByOptions() : []);
 
   readonly splitActive = computed(() => this.aggregateSplitBy() !== "none");
@@ -2320,28 +2375,42 @@ export class BoardTableViewComponent implements OnDestroy {
   private summaryValues(cards: AnyCard[], columns: string[]): Record<string, string> {
     const values: Record<string, string> = {};
     for (const column of columns) {
-      const field = this.customFieldForColumn(column);
-      const metric = field && this.aggregateFor(field.id);
-      if (!field || !metric) continue;
-      const value = this.metricOver(cards, field.id, metric);
-      if (value !== null) values[column] = formatAggregate(value);
+      const key = this.aggregateKeyForColumn(column);
+      const metric = key && this.aggregateFor(key);
+      if (!key || !metric) continue;
+      const value = this.metricOver(cards, key, metric);
+      if (value !== null) values[column] = this.formatAggregateFor(key, value);
     }
     return values;
   }
 
-  /** Sum or average of a numeric field over the given cards, or null when none hold a value. */
-  private metricOver(cards: AnyCard[], fieldId: string, metric: AggregateMetric): number | null {
+  /**
+   * Sum or average over the given cards, or null when none hold a value. For time in progress the
+   * value is each card's tracked total in ms (live, from the minute clock); cards with no tracked
+   * time hold no value, so an average is per card that was actually worked on.
+   */
+  private metricOver(cards: AnyCard[], key: string, metric: AggregateMetric): number | null {
+    const now = key === IN_PROGRESS_COLUMN_ID ? this.clock.now() : 0;
     let sum = 0;
     let count = 0;
     for (const card of cards) {
-      const raw = this.valueFor(card.id, fieldId)?.valueNumber;
-      const value = raw === null || raw === undefined || raw === "" ? Number.NaN : Number(raw);
+      let value: number;
+      if (key === IN_PROGRESS_COLUMN_ID) {
+        value = hasTimeInProgress(card) ? timeInProgressMs(card, now, this.timeZoneFor(card)) : Number.NaN;
+      } else {
+        const raw = this.valueFor(card.id, key)?.valueNumber;
+        value = raw === null || raw === undefined || raw === "" ? Number.NaN : Number(raw);
+      }
       if (!Number.isFinite(value)) continue;
       sum += value;
       count += 1;
     }
     if (!count) return null;
     return metric === "avg" ? sum / count : sum;
+  }
+
+  private formatAggregateFor(key: string, value: number): string {
+    return key === IN_PROGRESS_COLUMN_ID ? formatTrackedDuration(value) : formatAggregate(value);
   }
 
   ngOnDestroy() {
@@ -2378,6 +2447,7 @@ export class BoardTableViewComponent implements OnDestroy {
       // Fits an avatar plus a full name, which is what a single-assignee cell now renders.
       assignees: 170,
       due: 150,
+      inProgress: 140,
       priority: 112,
       labels: 200,
       checklist: 110,
@@ -2404,6 +2474,12 @@ export class BoardTableViewComponent implements OnDestroy {
       // the file is saved.
       case "created": return isoTimestamp(card.createdAt);
       case "updated": return isoTimestamp(card.updatedAt);
+      // Hours as of the export rather than the cell's "3d": a number the file can sum, labelled with
+      // its unit (see `exportColumnLabel`).
+      case IN_PROGRESS_COLUMN_ID: {
+        const now = this.clock.now();
+        return hasTimeInProgress(card) ? String(Math.round((timeInProgressMs(card, now, this.timeZoneFor(card)) / 3_600_000) * 100) / 100) : "";
+      }
       default: {
         const field = this.customFieldForColumn(column);
         if (!field) return "";
@@ -2426,7 +2502,7 @@ export class BoardTableViewComponent implements OnDestroy {
       exportedAt: new Date().toISOString(),
       groupBy: this.groupByLabel(),
       sortBy: this.sortByLabel(),
-      columns: this.visibleColumns().map((id) => ({ id, label: this.columnLabel(id) })),
+      columns: this.visibleColumns().map((id) => ({ id, label: this.exportColumnLabel(id) })),
       aggregateConfig: this.aggregateConfig(),
       aggregateSplitBy: this.aggregateSplitBy(),
       aggregateSplitLabel: this.splitByLabel(),
@@ -2451,7 +2527,13 @@ export class BoardTableViewComponent implements OnDestroy {
       priorityRanksByGroup: this.priorityRanksByGroup(),
       currentUserId: this.currentUserId(),
       cardLinkBaseUrl: window.location.origin,
+      timeZoneForCard: (card) => this.timeZoneFor(card),
     });
+  }
+
+  /** Exports carry time in progress in hours, so its header names the unit. */
+  private exportColumnLabel(id: string): string {
+    return id === IN_PROGRESS_COLUMN_ID ? IN_PROGRESS_EXPORT_LABEL : this.columnLabel(id);
   }
 
   private exportFileName(extension: "csv" | "xlsx" | "json"): string {

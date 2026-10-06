@@ -9,7 +9,7 @@ import { MirrorCreateDialogComponent } from "./mirror-create.dialog";
 
 const now = new Date("2026-07-10T00:00:00.000Z");
 function sourceList(id: string, name: string): List {
-  return { id, workspaceId: "source-ws", name, icon: null, color: null, position: "1000.0000000000", archivedAt: null, createdAt: now, updatedAt: now };
+  return { id, workspaceId: "source-ws", name, icon: null, color: null, inProgress: false, wipLimit: null, position: "1000.0000000000", archivedAt: null, createdAt: now, updatedAt: now };
 }
 function target(id: string, workspaceId: string, lists: Array<{ id: string; name: string }>, workspaceKind: "standard" | "board" = "standard"): MirrorTargetBoard {
   return { id, name: id, workspaceId, workspaceName: workspaceId, workspaceKind, organisationId: "org-id", organisationName: "Org", standaloneGroupId: null, standaloneGroupTitle: null, lists };

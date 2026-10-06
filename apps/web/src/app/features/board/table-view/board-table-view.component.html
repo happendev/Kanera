@@ -628,6 +628,13 @@
                   @case ('updated') {
                     <span class="tv-static-value tv-muted-soft">{{ relativeTime(card.updatedAt) }}</span>
                   }
+                  @case ('inProgress') {
+                    @if (timeInProgress(card); as timer) {
+                      <span class="tv-static-value tv-time-in-progress" [class.is-done]="!timer.running" [class.is-alert]="timer.alert" [kTooltip]="timer.label">
+                        <i class="ti" [class.ti-progress]="timer.running" [class.ti-clock]="!timer.running"></i>{{ timer.text }}
+                      </span>
+                    } @else { <span class="tv-muted">—</span> }
+                  }
                   @case ('labels') {
                     <button type="button" class="tv-cell-trigger" [disabled]="!rowEditable" (click)="openLabelsCellPicker(card, col, $event)">
                       @if (labelsForCard(card.id).length) {
@@ -844,32 +851,31 @@
         <div class="tv-footer-count">COUNT {{ footerCount() }}</div>
         @for (col of visibleColumns(); track col) {
           <div class="tv-footer-cell">
-            @if (customFieldForColumn(col); as field) {
-              @if (field.type === 'number') {
-                <button
-                  type="button"
-                  class="tv-aggregate-btn"
-                  [class.is-active]="!!aggregateFor(field.id)"
-                  [kTooltip]="'Summarise ' + field.name"
-                  (click)="aggregateOpenFieldId.set(aggregateOpenFieldId() === field.id ? null : field.id)"
-                >
-                  <!-- Chevron first: the row is right-aligned, so the value keeps the column's edge
-                       whether or not the chevron is showing. -->
-                  <i class="ti ti-chevron-down"></i>
-                  @if (aggregateFor(field.id); as metric) {
-                    <span class="tv-aggregate-label">{{ metric.toUpperCase() }}</span><strong>{{ aggregateValue(field.id) }}</strong>
-                  } @else { <span>Calculate</span> }
-                </button>
-                @if (aggregateOpenFieldId() === field.id) {
-                  <!-- maxHeight matches the three rows this menu actually renders. Left at the 420px
-                       default the placement helper reserves height the panel never uses, so the
-                       bottom-pinned flip above the footer lands ~300px away from its trigger. -->
-                  <div kMenu class="ap-panel tv-aggregate-menu" kAnchoredPanel [apPlacement]="{ side: 'top', align: 'end', width: 150, minHeight: 100, maxHeight: 118 }" (apDismissed)="aggregateOpenFieldId.set(null)">
-                    <button type="button" class="k-menu-item tv-menu-row" (click)="setAggregate(field.id, null)">None</button>
-                    <button type="button" class="k-menu-item tv-menu-row" (click)="setAggregate(field.id, 'sum')">Sum</button>
-                    <button type="button" class="k-menu-item tv-menu-row" (click)="setAggregate(field.id, 'avg')">Average</button>
-                  </div>
-                }
+            <!-- Number fields and time in progress summarise; every other column is blank here. -->
+            @if (aggregateKeyForColumn(col); as key) {
+              <button
+                type="button"
+                class="tv-aggregate-btn"
+                [class.is-active]="!!aggregateFor(key)"
+                [kTooltip]="'Summarise ' + columnLabel(col)"
+                (click)="aggregateOpenFieldId.set(aggregateOpenFieldId() === key ? null : key)"
+              >
+                <!-- Chevron first: the row is right-aligned, so the value keeps the column's edge
+                     whether or not the chevron is showing. -->
+                <i class="ti ti-chevron-down"></i>
+                @if (aggregateFor(key); as metric) {
+                  <span class="tv-aggregate-label">{{ metric.toUpperCase() }}</span><strong>{{ aggregateValue(key) }}</strong>
+                } @else { <span>Calculate</span> }
+              </button>
+              @if (aggregateOpenFieldId() === key) {
+                <!-- maxHeight matches the three rows this menu actually renders. Left at the 420px
+                     default the placement helper reserves height the panel never uses, so the
+                     bottom-pinned flip above the footer lands ~300px away from its trigger. -->
+                <div kMenu class="ap-panel tv-aggregate-menu" kAnchoredPanel [apPlacement]="{ side: 'top', align: 'end', width: 150, minHeight: 100, maxHeight: 118 }" (apDismissed)="aggregateOpenFieldId.set(null)">
+                  <button type="button" class="k-menu-item tv-menu-row" (click)="setAggregate(key, null)">None</button>
+                  <button type="button" class="k-menu-item tv-menu-row" (click)="setAggregate(key, 'sum')">Sum</button>
+                  <button type="button" class="k-menu-item tv-menu-row" (click)="setAggregate(key, 'avg')">Average</button>
+                </div>
               }
             }
           </div>

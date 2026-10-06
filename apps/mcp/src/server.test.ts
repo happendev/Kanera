@@ -380,6 +380,7 @@ void test("workspaces.list_templates answers from bundled templates without call
     workspaceName: "Workspace",
     initialBoardName: "Board",
     lists: [],
+    inProgressLists: [],
     customFields: [],
     labels: [],
     checklistTemplateCount: 0,
@@ -387,7 +388,9 @@ void test("workspaces.list_templates answers from bundled templates without call
     automationCount: 0,
     automations: [],
   });
-  const operations = payload.items.find((item) => item.id === "operations-support");
+  const operations = payload.items.find((item) => item.id === "operations-support") as (typeof payload.items[number] & { inProgressLists: string[] }) | undefined;
+  // Agents choosing a template can see which stages count as active work (time in progress).
+  assert.deepEqual(operations?.inProgressLists, ["Assigned", "Escalated"]);
   assert.deepEqual(operations?.automations, [
     "When a card's due date arrives: move to Escalated; set Escalated to checked if empty",
     "When a card enters Resolved: mark complete",

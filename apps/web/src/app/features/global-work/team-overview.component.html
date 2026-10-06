@@ -1,0 +1,236 @@
+@if (activityError(); as message) {
+  <p class="overview-error"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+}
+
+<div class="overview-grid">
+  @if (unownedRows(); as unowned) {
+    <!-- Every other panel is a person; in-progress work with no assignee would otherwise vanish. -->
+    <section class="person unowned" aria-label="In progress with no assignee">
+      <header class="person-head">
+        <span class="unowned-icon" aria-hidden="true"><i class="ti ti-user-question"></i></span>
+        <div class="person-id">
+          <strong class="person-name">No assignee</strong>
+          <span class="person-active">In progress, but nobody owns it</span>
+        </div>
+      </header>
+      <div class="section tone-progress">
+        <h4 class="section-title" kTooltip="Open cards in In progress lists with no assignee, longest time in progress first">
+          <span class="section-icon"><i class="ti ti-progress"></i></span>In progress<span class="section-count">{{ unowned.rows.length + unowned.more }}</span>
+        </h4>
+        @for (row of unowned.rows; track row.card.id) {
+          <ng-container *ngTemplateOutlet="rowTpl; context: { $implicit: row }" />
+        }
+        @if (unowned.more) {
+          <p class="section-more">+{{ unowned.more }} more with no assignee</p>
+        }
+      </div>
+    </section>
+  }
+  @for (item of activePeople(); track item.person.userId) {
+    <section class="person" [attr.aria-label]="item.person.displayName">
+      <header class="person-head">
+        <k-avatar [url]="item.person.avatarUrl" [name]="item.person.displayName" [size]="32" [userId]="item.person.userId" />
+        <div class="person-id">
+          <strong class="person-name">{{ item.person.displayName }}</strong>
+          <span class="person-active" [class.is-idle]="!item.lastActiveAt">{{ lastActiveLabel(item) }}</span>
+        </div>
+        <button
+          type="button"
+          class="person-open"
+          [attr.aria-label]="'Open ' + item.person.displayName + '’s cards'"
+          [kTooltip]="'Open ' + item.person.displayName + '’s cards'"
+          (click)="personFocused.emit(item.person.userId)"
+        >
+          <i class="ti ti-arrow-up-right"></i>
+        </button>
+      </header>
+
+      <!-- The stats are toggles: each swaps the summary below for that whole set of cards. -->
+      <div class="person-stats" role="group" [attr.aria-label]="item.person.displayName + '’s cards'">
+        @for (stat of item.stats; track stat.key) {
+          <button
+            type="button"
+            class="stat"
+            [class.is-selected]="item.drillDown?.stat === stat.key"
+            [class.is-active]="stat.tone === 'active'"
+            [class.is-aging]="stat.tone === 'aging'"
+            [class.is-alert]="stat.tone === 'alert'"
+            [attr.aria-pressed]="item.drillDown?.stat === stat.key"
+            [kTooltip]="stat.tooltip"
+            (click)="toggleStat(item.person.userId, stat.key)"
+          >
+            <span class="stat-label">{{ stat.label }}</span>
+            <span class="stat-value">{{ stat.value }}</span>
+          </button>
+        }
+      </div>
+
+      @if (item.drillDown; as drill) {
+        <div class="section drill-down" [class]="'tone-' + drill.tone">
+          <h4 class="section-title">
+            <span class="section-icon"><i [class]="'ti ti-' + drill.icon"></i></span>{{ drill.label }}<span class="section-count">{{ drill.rows.length + drill.more }}</span>
+            <button type="button" class="section-close" aria-label="Back to summary" kTooltip="Back to summary" (click)="toggleStat(item.person.userId, drill.stat)">
+              <i class="ti ti-x"></i>
+            </button>
+          </h4>
+          @for (row of drill.rows; track row.card.id) {
+            <ng-container *ngTemplateOutlet="rowTpl; context: { $implicit: row }" />
+          } @empty {
+            <p class="section-empty">{{ drill.empty }}</p>
+          }
+          @if (drill.more) {
+            <button type="button" class="section-more is-link" (click)="personFocused.emit(item.person.userId)">
+              +{{ drill.more }} more — open their cards
+            </button>
+          }
+        </div>
+      } @else {
+        <div class="section tone-progress">
+          <h4 class="section-title" kTooltip="Their open cards in In progress lists, longest time in progress first">
+            <span class="section-icon"><i class="ti ti-progress"></i></span>In progress
+          </h4>
+          @for (row of item.inProgressRows; track row.card.id) {
+            <ng-container *ngTemplateOutlet="rowTpl; context: { $implicit: row }" />
+          } @empty {
+            <p class="section-empty">
+              {{ hasInProgressLists() ? "Nothing in progress" : "No lists are marked In progress yet — mark them in workspace settings" }}
+            </p>
+          }
+          @if (item.inProgressMore) {
+            <p class="section-more">+{{ item.inProgressMore }} more in progress</p>
+          }
+        </div>
+
+        @if (item.recent.length) {
+          <div class="section tone-recent">
+            <h4 class="section-title" [kTooltip]="'Other open cards they moved, created or ticked items on in the last ' + activityDays + ' days'">
+              <span class="section-icon"><i class="ti ti-activity"></i></span>Recently active
+            </h4>
+            @for (row of item.recent; track row.card.id) {
+              <ng-container *ngTemplateOutlet="rowTpl; context: { $implicit: row }" />
+            }
+          </div>
+        }
+
+        @if (item.upNext; as upNext) {
+          <div class="section tone-next">
+            <h4 class="section-title"><span class="section-icon"><i class="ti ti-list-numbers"></i></span>Up next<span class="section-count">{{ upNext.total }}</span></h4>
+            @for (row of upNext.rows; track row.card.id) {
+              <ng-container *ngTemplateOutlet="rowTpl; context: { $implicit: row }" />
+            } @empty {
+              <p class="section-empty">
+                {{ upNext.total === 0 ? "Nothing queued" : upNext.hidden === upNext.total ? "Queued cards aren’t visible to you" : "No queued cards match this search" }}
+              </p>
+            }
+            @if (upNext.total > upNext.rows.length && upNext.rows.length) {
+              <p class="section-more">+{{ upNext.total - upNext.rows.length }} more in their queue</p>
+            }
+          </div>
+        }
+
+        <div class="section tone-assigned">
+          <h4 class="section-title" kTooltip="Their other open cards, soonest due first">
+            <span class="section-icon"><i class="ti ti-user-check"></i></span>Assigned
+          </h4>
+          @for (row of item.assigned; track row.card.id) {
+            <ng-container *ngTemplateOutlet="rowTpl; context: { $implicit: row }" />
+          } @empty {
+            <p class="section-empty">Nothing else assigned</p>
+          }
+          @if (item.assignedMore) {
+            <p class="section-more">+{{ item.assignedMore }} more</p>
+          }
+        </div>
+
+        @if (item.doneRows.length) {
+          <div class="section tone-done">
+            <h4 class="section-title"><span class="section-icon"><i class="ti ti-circle-check"></i></span>Recently done</h4>
+            @for (row of item.doneRows; track row.card.id) {
+              <ng-container *ngTemplateOutlet="rowTpl; context: { $implicit: row }" />
+            }
+          </div>
+        }
+      }
+    </section>
+  } @empty {
+    @if (quietPeople().length === 0) {
+      <div class="overview-empty">
+        <i class="ti ti-users"></i>
+        <strong>No teammates to show</strong>
+        <span>Teammates on the boards in this scope appear here with their open and recent work.</span>
+      </div>
+    }
+  }
+</div>
+
+@if (quietPeople().length) {
+  <section class="quiet">
+    <button type="button" class="quiet-toggle" [attr.aria-expanded]="showQuiet()" (click)="showQuiet.set(!showQuiet())">
+      <i class="ti" [class.ti-chevron-right]="!showQuiet()" [class.ti-chevron-down]="showQuiet()"></i>
+      <span>{{ quietPeople().length }} {{ quietPeople().length === 1 ? "teammate has" : "teammates have" }} no open cards or recent activity</span>
+      <span class="quiet-avatars" aria-hidden="true">
+        @for (item of quietPeople().slice(0, 8); track item.person.userId) {
+          <k-avatar [url]="item.person.avatarUrl" [name]="item.person.displayName" [size]="20" [userId]="item.person.userId" />
+        }
+      </span>
+    </button>
+    @if (showQuiet()) {
+      <ul class="quiet-list">
+        @for (item of quietPeople(); track item.person.userId) {
+          <li>
+            <button type="button" class="quiet-person" (click)="personFocused.emit(item.person.userId)">
+              <k-avatar [url]="item.person.avatarUrl" [name]="item.person.displayName" [size]="20" [userId]="item.person.userId" />
+              <span>{{ item.person.displayName }}</span>
+            </button>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+}
+
+<ng-template #rowTpl let-row>
+  <button
+    type="button"
+    class="row"
+    [class.is-selected]="row.card.id === selectedCardId()"
+    (click)="cardOpened.emit(row.card)"
+  >
+    @if (row.rank) {
+      <span class="row-rank" [style.--rank-heat]="rankHeat(row.rank)">{{ row.rank }}</span>
+    }
+    <span class="row-main">
+      <span class="row-title">{{ row.card.title }}</span>
+      <span class="row-context">
+        @if (showCardKeys()) { <span class="row-card-key">{{ row.card.key }}</span> }
+        @if (row.boardName) {
+          <i [class]="row.boardIconClass" [style.color]="row.boardIconColor"></i>
+          <span class="row-context-part">{{ row.boardName }}</span>
+        }
+        @if (row.listName) {
+          <span class="row-sep">·</span>
+          <span class="row-context-part">{{ row.listName }}</span>
+        }
+      </span>
+      <!-- Chips get their own line: beside the title or context they either squeezed the text into
+           an ellipsis or were squeezed out themselves. -->
+      @if (row.time || row.due || row.note) {
+        <span class="row-chips">
+          @if (row.time; as time) {
+            <span class="row-chip row-time" [class.is-running]="time.running" [class.is-aging]="time.alert" [kTooltip]="time.label" [attr.aria-label]="time.label">
+              <i class="ti" [class.ti-progress]="time.running" [class.ti-clock]="!time.running"></i>{{ time.text }}
+            </span>
+          }
+          @if (row.due; as due) {
+            <span class="row-chip row-due" [class.overdue]="due.tone === 'overdue'" [class.due-soon]="due.tone === 'soon'">
+              <i class="ti ti-calendar-due"></i>{{ due.text }}
+            </span>
+          }
+          @if (row.note) {
+            <span class="row-note">{{ row.note }}</span>
+          }
+        </span>
+      }
+    </span>
+  </button>
+</ng-template>

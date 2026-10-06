@@ -592,6 +592,45 @@
   }
 }
 
+// Time in progress shares the due chip's shape so the two read as one row of "when" facts, but wears
+// the accent: it describes work that is moving, not a deadline.
+.card-time-in-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px 1px 4px;
+  line-height: 1.5;
+  flex-shrink: 0;
+
+  i {
+    font-size: 13px;
+    line-height: 1;
+    position: relative;
+    top: -0.5px;
+  }
+
+  // Open work past its workspace's in-progress alert: the amber of a due-soon date, not the red of
+  // overdue. It is a prompt to ask about the card, not a missed commitment.
+  &.is-alert {
+    color: var(--color-amber);
+    background: color-mix(in srgb, var(--color-amber) 12%, transparent);
+    border-color: color-mix(in srgb, var(--color-amber) 32%, transparent);
+  }
+
+  &.is-done {
+    color: var(--text-muted);
+    background: var(--list-bg);
+    border-color: var(--border);
+  }
+}
+
 .card-footer {
   display: flex;
   align-items: flex-end;
@@ -938,7 +977,7 @@
     display: none;
   }
 
-  .card-footer:not(:has(.card-due, .assignee-stack)) {
+  .card-footer:not(:has(.card-due, .card-time-in-progress, .assignee-stack)) {
     display: none;
   }
 }

@@ -53,6 +53,7 @@ const catalog: WorkCatalog = {
       accentColor: null,
       kind: "standard",
       viewerCanAccessWorkspace: true,
+      inProgressAlertDays: 7, timeZone: "UTC",
     },
     {
       id: "20000000-0000-4000-8000-000000000002",
@@ -62,6 +63,7 @@ const catalog: WorkCatalog = {
       accentColor: null,
       kind: "standard",
       viewerCanAccessWorkspace: false,
+      inProgressAlertDays: 7, timeZone: "UTC",
     },
   ],
   boards: [
@@ -215,6 +217,7 @@ const cachedDefinition: WorkViewDefinition = {
     completion: "active",
     unassignedOnly: false,
     inactiveOnly: false,
+    inProgressOnly: false,
     dueFrom: null,
     dueTo: null,
     overdueOnly: false,
@@ -1143,6 +1146,7 @@ describe("GlobalWorkState", () => {
         completion: "active",
         unassignedOnly: false,
         inactiveOnly: false,
+        inProgressOnly: false,
         dueFrom: null,
         dueTo: null,
         overdueOnly: false,

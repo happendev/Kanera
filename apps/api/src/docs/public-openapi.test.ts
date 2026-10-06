@@ -35,9 +35,10 @@ const ENTITIES: { name: string; table: unknown; synthetic?: string[]; omitted?: 
     table: schema.cards,
     // `url` is built from the organisation key and card key rather than stored.
     synthetic: ["url"],
-    // `clientToken` is idempotency bookkeeping and `searchVector` is a tsvector index column;
-    // neither is meaningful to an API consumer.
-    omitted: ["clientToken", "dueDateTimezone", "createdById", "coverAttachmentId", "searchVector"],
+    // `clientToken` is idempotency bookkeeping, `searchVector` is a tsvector index column and
+    // `listEnteredAt` is trigger bookkeeping behind `inProgressSince`; none is meaningful to an API
+    // consumer.
+    omitted: ["clientToken", "dueDateTimezone", "createdById", "coverAttachmentId", "searchVector", "listEnteredAt"],
   },
   {
     name: "CardAttachment",

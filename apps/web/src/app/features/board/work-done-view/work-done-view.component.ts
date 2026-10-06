@@ -137,6 +137,8 @@ export class WorkDoneViewComponent {
   readonly selectedCardId = input<string | null>(null);
   /** Cross-board scope passes board summaries so rows show their board badge. */
   readonly boardSummariesById = input<Map<string, WorkDoneBoardSummary> | null>(null);
+  /** Each workspace's time zone, whose working hours a card's tracked time counts. */
+  readonly timeZonesByWorkspace = input<ReadonlyMap<string, string> | null>(null);
   readonly searchQuery = input("");
   readonly filterLabelIds = input<string[]>([]);
   readonly filterMemberIds = input<string[]>([]);

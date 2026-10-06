@@ -21,8 +21,9 @@ const GROUPS: WorkGroupBy[] = [
 ];
 const SORTS: WorkSort[] = [
   "dueAsc", "dueDesc", "titleAsc", "titleDesc", "createdAsc", "createdDesc", "updatedAsc", "updatedDesc",
+  "inProgressAsc", "inProgressDesc",
 ];
-const DISPLAYS: WorkDisplayMode[] = ["board", "table", "calendar", "priorities", "history", "summary"];
+const DISPLAYS: WorkDisplayMode[] = ["board", "table", "calendar", "priorities", "overview", "history", "summary"];
 const COMPLETIONS: WorkFilters["completion"][] = ["activeAndRecentlyCompleted", "active", "completed", "all"];
 /**
  * Mirrors DEFAULT_WORK_COMPLETION in `@kanera/shared/dto`. The vocabulary is duplicated here — as
@@ -104,7 +105,8 @@ function storedAggregates(value: unknown): WorkTablePresentation["aggregates"] {
   const result: WorkTablePresentation["aggregates"] = {};
   for (const [fieldId, rawMetrics] of Object.entries(objectValue(value) ?? {})) {
     if (Object.keys(result).length >= 100) break;
-    if (!/^[0-9a-f-]{36}$/i.test(fieldId) || !Array.isArray(rawMetrics)) continue;
+    // A number field's id, or time in progress's column id (see IN_PROGRESS_COLUMN_ID).
+    if ((fieldId !== "inProgress" && !/^[0-9a-f-]{36}$/i.test(fieldId)) || !Array.isArray(rawMetrics)) continue;
     const metric: unknown = rawMetrics[0];
     if (metric === "sum" || metric === "avg") result[fieldId] = [metric];
   }
@@ -176,6 +178,7 @@ function storedDefinition(value: unknown): WorkViewDefinition | null {
       : DEFAULT_COMPLETION,
     unassignedOnly: filters["unassignedOnly"] === true,
     inactiveOnly: filters["inactiveOnly"] === true,
+    inProgressOnly: filters["inProgressOnly"] === true,
     dueFrom: nullableDate(filters["dueFrom"]),
     dueTo: nullableDate(filters["dueTo"]),
     overdueOnly: filters["overdueOnly"] === true,
@@ -320,17 +323,18 @@ export function sanitizeGlobalWorkDefinition(
   // Portfolio is a rollup lens: a summary, plus the table its metric drill-downs land in. It has no
   // board, history, or calendar display, so a stored definition naming one falls back to the summary.
   // The priorities lanes display belongs to the team lens alone: on My Cards the docked panel already
-  // is your one queue, and the portfolio has no queues at all.
+  // is your one queue, and the portfolio has no queues at all. The overview is per-teammate, so it
+  // only exists where there are teammates.
   const allowedDisplays = lens === "portfolio"
     ? new Set(["summary", "table"])
     : lens === "team"
-      ? new Set(["board", "table", "calendar", "priorities", "history"])
+      ? new Set(["board", "table", "calendar", "priorities", "overview", "history"])
       : new Set(["board", "table", "calendar", "history"]);
   const display = allowedDisplays.has(definition.display)
     ? definition.display
     : lens === "portfolio" ? "summary" : lens === "team" ? "board" : "table";
   const builtinTableColumns = new Set([
-    "status", "board", "assignees", "due", "labels", "checklist", "description", "created", "updated",
+    "status", "board", "assignees", "due", "inProgress", "labels", "checklist", "description", "created", "updated",
   ]);
   const validTableColumn = (id: string) => {
     if (builtinTableColumns.has(id)) return true;
@@ -339,6 +343,7 @@ export function sanitizeGlobalWorkDefinition(
     return Boolean(field && !field.archivedAt);
   };
   const validAggregateField = (id: string) => {
+    if (id === "inProgress") return true;
     const field = fieldsById.get(id);
     return field?.type === "number" && !field.archivedAt;
   };
@@ -367,7 +372,8 @@ export function sanitizeGlobalWorkDefinition(
     },
     filters: {
       ...definition.filters,
-      assigneeIds: lens === "my" || display === "priorities"
+      // Both whole-team displays render every teammate at once, so a remembered focus is dropped.
+      assigneeIds: lens === "my" || display === "priorities" || display === "overview"
         ? []
         : definition.filters.assigneeIds.filter((id) =>
             peopleIds.has(id) && (lens !== "team" || id !== currentUserId)

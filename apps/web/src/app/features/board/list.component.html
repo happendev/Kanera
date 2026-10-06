@@ -3,6 +3,14 @@
     <span class="card-count">{{ cardCount() }}</span>
     <i [class]="'ti ti-' + (list().icon || 'list')"></i>
     {{ list().name }}
+    @if (list().inProgress) {
+    <span class="list-in-progress" kTooltip="In progress list: each card shows its time in progress" aria-label="In progress list">
+      <i class="ti ti-progress"></i>
+    </span>
+    }
+    @if (wipLimit(); as limit) {
+    <span class="list-wip" [class.is-over]="overWipLimit()" [kTooltip]="wipLabel()" [attr.aria-label]="wipLabel()">{{ wipCount() }}/{{ limit }}</span>
+    }
   </h3>
   @if (canEditRole() && anyBulkAction()) {
   <div class="list-menu-wrap">
@@ -71,6 +79,17 @@
   </div>
   }
 </div>
+
+@if (list().inProgress && !inProgressHint.dismissed()) {
+<!-- Explains the column marker once; dismissing it here dismisses it on every in-progress list. -->
+<div class="list-in-progress-hint" role="note">
+  <i class="ti ti-progress"></i>
+  <span><strong>In progress list.</strong> Work here is actively happening, and each card shows its time in progress.</span>
+  <button type="button" class="ghost icon list-in-progress-hint-dismiss" aria-label="Dismiss in-progress explanation" kTooltip="Got it" (click)="inProgressHint.dismiss()">
+    <i class="ti ti-x"></i>
+  </button>
+</div>
+}
 
 <div class="cards" #cardsEl [class.cards-receiving]="receiving()" cdkDropList kViewportDropTarget [cdkDropListData]="renderedItems()" [cdkDropListConnectedTo]="connectedDropLists()" [cdkDropListDisabled]="!canEdit()" [id]="'dl-' + list().id"
   (cdkDropListDropped)="onDrop($event)" (cdkDropListEntered)="onDropListEntered()" (cdkDropListExited)="receiving.set(false); draggingOut.set(true)">

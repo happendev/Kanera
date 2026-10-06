@@ -15,6 +15,7 @@ import type {
   GroupBy,
 } from "./table-view.types";
 import { formatDateTime } from "../../../shared/date-format";
+import { hasTimeInProgress, timeInProgressMs } from "../time-in-progress.util";
 
 const CARD_DETAIL_LINK_HEADER = "Card detail link";
 
@@ -55,6 +56,8 @@ export interface BoardExportContext {
   priorityRanksByGroup?: ReadonlyMap<string, ReadonlyMap<string, number>>;
   currentUserId: string | null;
   cardLinkBaseUrl?: string;
+  /** Each card's workspace time zone, whose working hours time in progress counts. Default UTC. */
+  timeZoneForCard?: (card: AnyCard) => string;
 }
 
 export interface BoardExportPayload {
@@ -637,6 +640,10 @@ function valueForColumn(
       return formatDateValue(card.updatedAt);
     case "created":
       return formatDateValue(card.createdAt);
+    // Tracked time as of the export, in hours: a number a spreadsheet can sum, where the cell's
+    // "3d" is text. The header says so (see `IN_PROGRESS_EXPORT_LABEL`).
+    case IN_PROGRESS_COLUMN_ID:
+      return inProgressHours(card, ctx);
     // Not a Table column — the sheet dropped it, since the row payloads the cross-board views carry
     // only ever had `hasDescription` and the cell was permanently empty. The completed-cards panel
     // still asks for it by id in its own export, where a "Yes" column is worth having.
@@ -671,23 +678,23 @@ function buildSummaryRows(ctx: BoardExportContext, index: ExportIndex): Aggregat
       : null;
 
     for (const [fieldId, metrics] of Object.entries(ctx.aggregateConfig)) {
-      const field = index.customFieldById.get(fieldId);
-      if (!field || field.type !== "number") continue;
+      const target = aggregateTarget(fieldId, ctx, index);
+      if (!target) continue;
       for (const metric of metrics) {
         if (buckets) {
           // Keep one row per bucket while carrying the true group total as a column. This preserves
           // tidy summary data without making totals depend on summing bucket values (especially avg).
-          const total = metricOver(group.cards, fieldId, metric, ctx);
+          const total = metricOver(group.cards, target, metric);
           if (total === null) continue;
           for (const bucket of buckets) {
-            const value = metricOver(bucket.cards, fieldId, metric, ctx);
+            const value = metricOver(bucket.cards, target, metric);
             if (value === null) continue;
-            rows.push({ group: group.label, split: bucket.label, field: field.name, metric, total, value });
+            rows.push({ group: group.label, split: bucket.label, field: target.name, metric, total, value });
           }
         } else {
-          const value = metricOver(group.cards, fieldId, metric, ctx);
+          const value = metricOver(group.cards, target, metric);
           if (value === null) continue;
-          rows.push({ group: group.label, split: null, field: field.name, metric, total: null, value });
+          rows.push({ group: group.label, split: null, field: target.name, metric, total: null, value });
         }
       }
     }
@@ -713,21 +720,21 @@ function buildOverallSummaryRows(ctx: BoardExportContext, index: ExportIndex): A
     : null;
 
   for (const [fieldId, metrics] of Object.entries(ctx.aggregateConfig)) {
-    const field = index.customFieldById.get(fieldId);
-    if (!field || field.type !== "number") continue;
+    const target = aggregateTarget(fieldId, ctx, index);
+    if (!target) continue;
     for (const metric of metrics) {
       if (buckets) {
-        const total = metricOver(cards, fieldId, metric, ctx);
+        const total = metricOver(cards, target, metric);
         if (total === null) continue;
         for (const bucket of buckets) {
-          const value = metricOver(bucket.cards, fieldId, metric, ctx);
+          const value = metricOver(bucket.cards, target, metric);
           if (value === null) continue;
-          rows.push({ group: "Overall", split: bucket.label, field: field.name, metric, total, value });
+          rows.push({ group: "Overall", split: bucket.label, field: target.name, metric, total, value });
         }
       } else {
-        const value = metricOver(cards, fieldId, metric, ctx);
+        const value = metricOver(cards, target, metric);
         if (value === null) continue;
-        rows.push({ group: "Overall", split: null, field: field.name, metric, total: null, value });
+        rows.push({ group: "Overall", split: null, field: target.name, metric, total: null, value });
       }
     }
   }
@@ -758,9 +765,41 @@ function dedupedExportCardCount(groups: BoardExportGroup[]): number {
 }
 
 /** Sum or average of a numeric field across the given cards, or null when no card holds a value. */
-function metricOver(cards: CardGroup["cards"], fieldId: string, metric: AggregateMetric, ctx: BoardExportContext): number | null {
+/** The table column id of time in progress, which aggregates alongside number custom fields. */
+export const IN_PROGRESS_COLUMN_ID = "inProgress";
+/** Its exported header: the unit has to travel with the numbers. */
+export const IN_PROGRESS_EXPORT_LABEL = "Time in progress (hours)";
+
+type AggregateTarget = { name: string; valueOf: (card: AnyCard) => number | null };
+
+/**
+ * What an aggregate key sums: a number custom field (keyed by its id) or time in progress (keyed by
+ * its column id, which cannot collide with a field's uuid). Anything else, such as a field since
+ * deleted or retyped, is skipped.
+ */
+function aggregateTarget(key: string, ctx: BoardExportContext, index: ExportIndex): AggregateTarget | null {
+  if (key === IN_PROGRESS_COLUMN_ID) {
+    return { name: IN_PROGRESS_EXPORT_LABEL, valueOf: (card) => inProgressHours(card, ctx) };
+  }
+  const field = index.customFieldById.get(key);
+  if (!field || field.type !== "number") return null;
+  return {
+    name: field.name,
+    valueOf: (card) => numberValue(ctx.customFieldValuesByCardAndField.get(card.id)?.get(key)?.valueNumber),
+  };
+}
+
+/** Tracked hours at `at`, to two decimals; null for a card with no tracked time (so averages skip it). */
+function inProgressHours(card: AnyCard, ctx: BoardExportContext): number | null {
+  if (!hasTimeInProgress(card)) return null;
+  const now = new Date(ctx.exportedAt).getTime();
+  const timeZone = ctx.timeZoneForCard?.(card) ?? "UTC";
+  return Math.round((timeInProgressMs(card, now, timeZone) / 3_600_000) * 100) / 100;
+}
+
+function metricOver(cards: CardGroup["cards"], target: AggregateTarget, metric: AggregateMetric): number | null {
   const numbers = cards
-    .map((card) => numberValue(ctx.customFieldValuesByCardAndField.get(card.id)?.get(fieldId)?.valueNumber))
+    .map((card) => target.valueOf(card))
     .filter((value): value is number => value !== null);
   if (!numbers.length) return null;
   const sum = numbers.reduce((accumulator, value) => accumulator + value, 0);

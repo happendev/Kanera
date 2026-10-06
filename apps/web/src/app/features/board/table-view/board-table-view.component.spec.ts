@@ -135,7 +135,7 @@ describe("BoardTableViewComponent", () => {
     return fixture;
   }
 
-  it("shows title, status, assignees, due date, labels, and every custom field by default, including showOnCard=false", () => {
+  it("shows title, status, assignees, due date, time in progress, labels, and every custom field by default, including showOnCard=false", () => {
     const component = fixture().componentInstance;
 
     expect(["title", ...component.visibleColumns()]).toEqual([
@@ -143,6 +143,7 @@ describe("BoardTableViewComponent", () => {
       "status",
       "assignees",
       "due",
+      "inProgress",
       "labels",
       "cf:field-1",
     ]);
@@ -183,14 +184,14 @@ describe("BoardTableViewComponent", () => {
   it("restores column visibility and order, grouping, and sorting when the board table is reopened", () => {
     const firstVisit = fixture();
     const first = firstVisit.componentInstance;
-    first.onColumnDrop({ previousIndex: 3, currentIndex: 0 } as never);
+    first.onColumnDrop({ previousIndex: 4, currentIndex: 0 } as never);
     first.setGroupBy("completion");
     first.setSort("title-desc");
     firstVisit.destroy();
 
     const reopened = fixture().componentInstance;
 
-    expect(reopened.visibleColumns()).toEqual(["labels", "status", "assignees", "due", "cf:field-1"]);
+    expect(reopened.visibleColumns()).toEqual(["labels", "status", "assignees", "due", "inProgress", "cf:field-1"]);
     expect(reopened.groupBy()).toBe("completion");
     expect(reopened.sortBy()).toBe("title-desc");
   });
@@ -1298,7 +1299,7 @@ describe("BoardTableViewComponent", () => {
   });
 
   it("moves a card optimistically before awaiting the API", async () => {
-    let resolveRequest!: (value: { id: string; listId: string; position: string }) => void;
+    let resolveRequest!: (value: { id: string; listId: string; position: string; inProgressSince: string | null; inProgressSeconds: number }) => void;
     api.post.mockReturnValue(new Promise((resolve) => { resolveRequest = resolve; }));
     const component = fixture().componentInstance;
     const source = card("card-1");
@@ -1306,9 +1307,10 @@ describe("BoardTableViewComponent", () => {
     const pending = component.setListForCard(source, "list-2");
     expect(state.moveCard).toHaveBeenCalledWith("card-1", "list-2", "2000.0000000000");
     expect(api.post).toHaveBeenCalled();
-    resolveRequest({ id: "card-1", listId: "list-2", position: "3000.0000000000" });
+    resolveRequest({ id: "card-1", listId: "list-2", position: "3000.0000000000", inProgressSince: null, inProgressSeconds: 90 });
     await pending;
-    expect(state.moveCard).toHaveBeenLastCalledWith("card-1", "list-2", "3000.0000000000");
+    // Settles from the response, including the persisted time-in-progress clock.
+    expect(state.moveCard).toHaveBeenLastCalledWith("card-1", "list-2", "3000.0000000000", expect.objectContaining({ inProgressSince: null, inProgressSeconds: 90 }));
   });
 
   it("restores the original status and position when the optimistic status request fails", async () => {
@@ -1317,7 +1319,8 @@ describe("BoardTableViewComponent", () => {
 
     await expect(component.setListForCard(card("card-1"), "list-2")).rejects.toThrow("no access");
     expect(state.moveCard).toHaveBeenNthCalledWith(1, "card-1", "list-2", "2000.0000000000");
-    expect(state.moveCard).toHaveBeenNthCalledWith(2, "card-1", "list-1", "1000.0000000000");
+    // The rollback restores the card's own clock rather than re-deriving one.
+    expect(state.moveCard).toHaveBeenNthCalledWith(2, "card-1", "list-1", "1000.0000000000", expect.objectContaining({ inProgressSince: null }));
   });
 
   it("rolls an optimistic assignee change back when the request fails", async () => {

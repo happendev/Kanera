@@ -53,6 +53,7 @@ function workspace(overrides: Partial<Workspace & { role: string }> = {}): Works
     accentColor: null,
     completedCardsActiveDays: 35,
     inactiveCardsDays: 14,
+    inProgressAlertDays: 7, timeZone: "UTC",
     boardHealthEnabled: true,
     boardHealthOverdueEnabled: true,
     boardHealthUnassignedEnabled: true,

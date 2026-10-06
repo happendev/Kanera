@@ -50,7 +50,20 @@ export type WireBoardSeparator = Omit<BoardSeparator, "position"> & { position: 
 export type WireGlobalWorkSeparator = Omit<GlobalWorkSeparator, "position"> & { position: string };
 export type WireSeparator = WireBoardSeparator | WireGlobalWorkSeparator;
 // clientToken is an internal request-deduplication key, not card data for API or realtime clients.
-export type WireCard = Omit<Card, "position" | "searchVector" | "clientToken"> & { position: string; url?: string };
+// `listEnteredAt` is trigger bookkeeping for time in progress (see the card schema), not a client field.
+export type WireCard = Omit<Card, "position" | "searchVector" | "clientToken" | "listEnteredAt"> & { position: string; url?: string };
+/**
+ * A card's time-in-progress clock, owned by the `card_track_in_progress` trigger: the running
+ * stint's start (null outside progress) and the tracked working seconds banked from finished stints
+ * (leaving progress banks the stint that just ended; see `@kanera/shared/time-in-progress`). Moves
+ * report it whole.
+ */
+export type InProgressClock = Pick<WireCard, "inProgressSince" | "inProgressSeconds">;
+
+export function inProgressClockOf(card: InProgressClock): InProgressClock {
+  return { inProgressSince: card.inProgressSince, inProgressSeconds: card.inProgressSeconds };
+}
+
 export type WireCardChecklistItem = Omit<CardChecklistItem, "position"> & { position: string };
 export type WireCardChecklist = Omit<CardChecklist, "position" | "parentItemId"> & {
   position: string;
@@ -88,6 +101,8 @@ export function compactWireCard(card: WireCard | CompactWireCard): CompactWireCa
   if (card.completedAt != null) out.completedAt = card.completedAt;
   if (card.archivedAt != null) out.archivedAt = card.archivedAt;
   if (card.coverAttachmentId != null) out.coverAttachmentId = card.coverAttachmentId;
+  if (card.inProgressSince != null) out.inProgressSince = card.inProgressSince;
+  if (card.inProgressSeconds) out.inProgressSeconds = card.inProgressSeconds;
   return out;
 }
 
@@ -110,6 +125,8 @@ export function expandWireCard(card: CompactWireCard): WireCard {
     archivedAt: card.archivedAt ?? null,
     createdById: card.createdById,
     coverAttachmentId: card.coverAttachmentId ?? null,
+    inProgressSince: card.inProgressSince ?? null,
+    inProgressSeconds: card.inProgressSeconds ?? 0,
     createdAt: card.createdAt,
     updatedAt: card.updatedAt,
   };
@@ -131,6 +148,8 @@ export type WireCardSummary = Pick<
   | "completedAt"
   | "archivedAt"
   | "coverAttachmentId"
+  | "inProgressSince"
+  | "inProgressSeconds"
   | "createdAt"
   | "updatedAt"
 > & {
@@ -215,6 +234,8 @@ export function compactCardSummary(card: WireCardSummary): CompactCardSummary {
   if (card.completedAt !== null) out.completedAt = card.completedAt;
   if (card.archivedAt !== null) out.archivedAt = card.archivedAt;
   if (card.coverAttachmentId !== null) out.coverAttachmentId = card.coverAttachmentId;
+  if (card.inProgressSince !== null) out.inProgressSince = card.inProgressSince;
+  if (card.inProgressSeconds) out.inProgressSeconds = card.inProgressSeconds;
   if (card.coverUrl !== null) out.coverUrl = card.coverUrl;
   if (card.coverImageWidth !== null) out.coverImageWidth = card.coverImageWidth;
   if (card.coverImageHeight !== null) out.coverImageHeight = card.coverImageHeight;
@@ -249,6 +270,8 @@ export function expandCardSummary(card: CompactCardSummary): WireCardSummary {
     completedAt: card.completedAt ?? null,
     archivedAt: card.archivedAt ?? null,
     coverAttachmentId: card.coverAttachmentId ?? null,
+    inProgressSince: card.inProgressSince ?? null,
+    inProgressSeconds: card.inProgressSeconds ?? 0,
     coverUrl: card.coverUrl ?? null,
     coverImageWidth: card.coverImageWidth ?? null,
     coverImageHeight: card.coverImageHeight ?? null,
@@ -485,7 +508,10 @@ export interface ServerToClientEvents {
     toListId: string;
     position: string;
     prevPosition: string;
-  }) => void;
+    // The card's persisted time-in-progress clock after this move (set by the database trigger;
+    // see `InProgressClock`). Clients take it as-is rather than deriving it, so every client and the
+    // REST API agree regardless of client clocks or delivery delay.
+  } & InProgressClock) => void;
   "card:rebalanced": (payload: {
     boardId: string;
     listId: string;

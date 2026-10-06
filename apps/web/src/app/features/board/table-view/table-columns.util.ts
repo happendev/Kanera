@@ -11,6 +11,7 @@ export function builtinColumnLabel(id: string): string {
     case "board": return "Board";
     case "assignees": return "Assignees";
     case "due": return "Due date";
+    case "inProgress": return "Time in progress";
     case "labels": return "Labels";
     case "checklist": return "Checklist";
     case "updated": return "Updated";
@@ -27,6 +28,7 @@ export function builtinColumnIcon(id: string): string {
     case "board": return "layout-kanban";
     case "assignees": return "users";
     case "due": return "calendar-event";
+    case "inProgress": return "progress";
     case "labels": return "tag";
     case "checklist": return "checkbox";
     case "updated": return "history";
