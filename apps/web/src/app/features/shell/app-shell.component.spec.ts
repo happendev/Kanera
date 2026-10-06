@@ -832,7 +832,8 @@ describe("AppShellComponent board search", () => {
 
     const content = text();
     expect(content).toContain("Guest boards");
-    expect(content).toContain("Client Delivery");
+    // A lone guest board sits directly under its organisation, without the workspace heading.
+    expect(content).not.toContain("Client Delivery");
     expect(content).toContain("Client Co");
     expect(content).toContain("Shared Launch");
     expect(content).not.toContain("No workspaces yet");

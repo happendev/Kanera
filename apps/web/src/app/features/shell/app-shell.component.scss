@@ -499,6 +499,14 @@ k-support-session-banner {
   gap: 1px;
 }
 
+// The organisation row is a grouping header, not a destination: keep it in the same muted,
+// small type as the other sidebar group headers so it doesn't outweigh the boards beneath it.
+.guest-org-toggle {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
 .guest-org-contents {
   display: flex;
   flex-direction: column;

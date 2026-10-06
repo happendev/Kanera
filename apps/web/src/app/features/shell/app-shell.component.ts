@@ -210,7 +210,11 @@ export class AppShellComponent implements OnInit, OnDestroy {
         ...entry.standard.map((workspace): GuestContainer => ({ kind: "workspace", id: workspace.workspace.id, name: workspace.workspace.name, workspace })),
         ...[...byGroup].map(([id, boards]): GuestContainer => ({ kind: "standaloneGroup", id, name: metadata.get(id)!.title, boards: boards.sort((a, b) => Number(a.board.position) - Number(b.board.position) || a.board.name.localeCompare(b.board.name)) })),
       ].sort((a, b) => a.name.localeCompare(b.name));
-      return { clientId, clientName: entry.clientName, containers, ungroupedStandaloneBoards: ungroupedStandaloneBoards.sort((a, b) => Number(a.board.position) - Number(b.board.position) || a.board.name.localeCompare(b.board.name)) };
+      const org: GuestOrganisation = { clientId, clientName: entry.clientName, containers, ungroupedStandaloneBoards: ungroupedStandaloneBoards.sort((a, b) => Number(a.board.position) - Number(b.board.position) || a.board.name.localeCompare(b.board.name)) };
+      // A guest with a single board in an organisation gains nothing from the workspace/group
+      // headings in between; show that board directly under the organisation instead.
+      const boards = this.guestCollapsedBoards(org);
+      return boards.length === 1 ? { ...org, containers: [], ungroupedStandaloneBoards: boards } : org;
     }).filter((org) => org.containers.length > 0 || org.ungroupedStandaloneBoards.length > 0)
       .sort((a, b) => a.clientName.localeCompare(b.clientName));
   });
