@@ -299,6 +299,7 @@ async function authenticateMcpToken(raw: string, resource: string): Promise<Auth
       apiKeyName: row.apiKeyName ?? row.client.name,
       apiKeyWorkspaceId: row.apiKeyWorkspaceId ?? undefined,
       apiKeyScope: effectiveScope,
+      oauthServiceClientId: row.client.clientId,
     };
   }
   return {

@@ -1,7 +1,5 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { ErrorCode, McpError, ResultSchema } from "@modelcontextprotocol/sdk/types.js";
+import { Client, InMemoryTransport, ProtocolError, ProtocolErrorCode, type ServerCapabilities, type Transport } from "@modelcontextprotocol/client";
+import { z } from "zod";
 import { CliError, EXIT, exitCodeForApiError, usageError } from "./errors.js";
 
 export interface ToolCatalogEntry {
@@ -65,6 +63,30 @@ export type ToolSessionOptions =
       accessToken: (options?: { force?: boolean }) => Promise<string>;
     };
 
+// `auto` probes with the 2026-07-28 `server/discover` and falls back to the 2025 `initialize`
+// handshake only when the server gives no modern answer, so the CLI speaks the current protocol to
+// Kanera's endpoint and still works against older self-hosted MCP deployments.
+function cliClient() {
+  return new Client({ name: "kanera-cli", version: "1.0.0" }, { capabilities: {}, versionNegotiation: { mode: "auto" } });
+}
+
+/**
+ * The SDK's version-negotiation probe wraps whatever the transport threw ("Version negotiation
+ * probe failed: ...") in its own error. Left alone, a revoked sign-in (exit 3) or an API problem
+ * with its own exit code would reach the shell as a generic failure (exit 1), and agents branch on
+ * that number. Surface the CLI's own error from the cause chain instead.
+ */
+async function connectRemote(client: Client, transport: Transport): Promise<void> {
+  try {
+    await client.connect(transport);
+  } catch (error) {
+    for (let cause: unknown = error; cause instanceof Error; cause = cause.cause) {
+      if (cause instanceof CliError || cause instanceof ApiFailure) throw cause;
+    }
+    throw error;
+  }
+}
+
 /**
  * Open an MCP session against the same tool layer the hosted MCP server exposes.
  *
@@ -78,11 +100,14 @@ export type ToolSessionOptions =
  * accepted by `/api/v1`, so it talks to the remote MCP server exactly as Claude or Codex would.
  */
 export async function openToolSession(options: ToolSessionOptions): Promise<ToolSession> {
-  const client = new Client({ name: "kanera-cli", version: "1.0.0" }, { capabilities: {} });
+  // The in-process pair carries no wire protocol worth negotiating: the same handlers answer either
+  // era, and a directly connected server only speaks 2026-07-28 behind the SDK's serving entries,
+  // so probing would always fall back. Only the remote endpoint negotiates.
+  const client = "mcpUrl" in options ? cliClient() : new Client({ name: "kanera-cli", version: "1.0.0" }, { capabilities: {} });
   let closeServer: () => Promise<void> = async () => {};
   if ("mcpUrl" in options) {
-    const { StreamableHTTPClientTransport } = await import("@modelcontextprotocol/sdk/client/streamableHttp.js");
-    await client.connect(new StreamableHTTPClientTransport(new URL(options.mcpUrl), {
+    const { StreamableHTTPClientTransport } = await import("@modelcontextprotocol/client");
+    await connectRemote(client, new StreamableHTTPClientTransport(new URL(options.mcpUrl), {
       fetch: (input, init) => authorizedFetch(input, init, options.accessToken),
     }));
   } else {
@@ -124,7 +149,7 @@ export async function openToolSession(options: ToolSessionOptions): Promise<Tool
       try {
         result = await client.callTool({ name, arguments: args });
       } catch (error) {
-        if (error instanceof McpError && error.code === Number(ErrorCode.InvalidParams)) {
+        if (error instanceof ProtocolError && error.code === Number(ProtocolErrorCode.InvalidParams)) {
           throw usageError(error.message, `Run \`kanera help ${name} --json\` to inspect the complete input schema.`);
         }
         throw error;
@@ -132,6 +157,12 @@ export async function openToolSession(options: ToolSessionOptions): Promise<Tool
       const text = Array.isArray(result.content)
         ? (result.content.find((block) => (block as { type?: string }).type === "text") as { text?: string } | undefined)?.text
         : undefined;
+      // The v2 SDK reports arguments that fail the tool's input schema as an isError result (the
+      // 2025-06-18+ rule) rather than the InvalidParams protocol error the v1 SDK threw. Keep that
+      // a usage error: an agent must see "fix the call" (exit 2), not "Kanera failed" (exit 1).
+      if (result.isError && text?.startsWith("Input validation error:")) {
+        throw usageError(text, `Run \`kanera help ${name} --json\` to inspect the complete input schema.`);
+      }
       if (result.isError) throw toApiFailure(text);
       if (result.structuredContent !== undefined) return result.structuredContent;
       return text === undefined ? null : safeParse(text);
@@ -144,40 +175,56 @@ export async function openToolSession(options: ToolSessionOptions): Promise<Tool
 }
 
 /**
- * Serve a remote MCP endpoint over a local transport (stdio for `kanera mcp`). Requests are
- * forwarded verbatim, so tools, resources and prompts are whatever the server exposes and the CLI
- * never has to track that surface. Resolves when the host closes the local transport.
+ * Serve a remote MCP endpoint over local stdio for `kanera mcp`. Requests are forwarded verbatim,
+ * so tools, resources and prompts are whatever the server exposes and the CLI never has to track
+ * that surface. Resolves when the host closes stdin.
  */
-export async function proxyRemoteMcp(
-  remote: Extract<ToolSessionOptions, { mcpUrl: string }>,
-  local: Transport,
-): Promise<void> {
-  // McpServer only dispatches to tools it registered itself; a verbatim relay needs the low-level
-  // Server's fallback handler, which is the "advanced use case" the deprecation notice carves out.
-  // eslint-disable-next-line @typescript-eslint/no-deprecated
-  const [{ StreamableHTTPClientTransport }, { Server }] = await Promise.all([
-    import("@modelcontextprotocol/sdk/client/streamableHttp.js"),
-    import("@modelcontextprotocol/sdk/server/index.js"),
+export async function proxyRemoteMcp(remote: Extract<ToolSessionOptions, { mcpUrl: string }>): Promise<void> {
+  const [{ StreamableHTTPClientTransport }, { Server }, { serveStdio }] = await Promise.all([
+    import("@modelcontextprotocol/client"),
+    import("@modelcontextprotocol/server"),
+    import("@modelcontextprotocol/server/stdio"),
   ]);
-  const client = new Client({ name: "kanera-cli", version: "1.0.0" }, { capabilities: {} });
-  await client.connect(new StreamableHTTPClientTransport(new URL(remote.mcpUrl), {
+  const client = cliClient();
+  await connectRemote(client, new StreamableHTTPClientTransport(new URL(remote.mcpUrl), {
     fetch: (input, init) => authorizedFetch(input, init, remote.accessToken),
   }));
-  const server = new Server(
-    { name: "kanera", version: client.getServerVersion()?.version ?? "1.0.0" },
-    { capabilities: client.getServerCapabilities() ?? {}, instructions: client.getInstructions() },
-  );
-  // initialize and ping are answered locally by Server; everything else goes upstream unchanged.
-  server.fallbackRequestHandler = async (request, extra) => await client.request(
-    { method: request.method, params: request.params },
-    ResultSchema,
-    { signal: extra.signal },
-  );
-  await server.connect(local);
-  await new Promise<void>((resolve) => {
-    server.onclose = resolve;
+  // McpServer only dispatches to tools it registered itself; a verbatim relay needs the low-level
+  // Server's fallback handler. serveStdio picks the host's protocol era (2026-07-28 discovery or
+  // the 2025 initialize handshake) and answers the handshake locally from the upstream identity.
+  const stdio = serveStdio(() => {
+    const server = new Server(
+      { name: "kanera", version: client.getServerVersion()?.version ?? "1.0.0" },
+      { capabilities: localCapabilities(client.getServerCapabilities()), instructions: client.getInstructions() },
+    );
+    server.fallbackRequestHandler = async (request, handlerCtx) => await client.request(
+      { method: request.method, params: request.params },
+      z.looseObject({}),
+      { signal: handlerCtx.mcpReq.signal },
+    );
+    return server;
   });
+  await stdinClosed();
+  await stdio.close();
   await client.close();
+}
+
+// MCP events deliver to a hosted HTTPS webhook the subscribing client registers; a local stdio
+// host has no use for them, so the relay does not advertise the upstream events extension.
+function localCapabilities(capabilities: ServerCapabilities | undefined): ServerCapabilities {
+  // Upstream advertises the extension under both the top-level `events` key (what ChatGPT reads)
+  // and the SEP-3415 extensions entry; both must go or a host still finds events/subscribe.
+  const { extensions, events: _events, ...rest } = (capabilities ?? {}) as ServerCapabilities & { events?: unknown };
+  const { "io.modelcontextprotocol/events": _eventsExtension, ...otherExtensions } = extensions ?? {};
+  return Object.keys(otherExtensions).length ? { ...rest, extensions: otherExtensions } : rest;
+}
+
+/** The stdio transport closes itself at stdin EOF; that is the host ending the session. */
+export function stdinClosed(): Promise<void> {
+  return new Promise((resolve) => {
+    process.stdin.once("end", () => resolve());
+    process.stdin.once("close", () => resolve());
+  });
 }
 
 /**

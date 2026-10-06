@@ -4,6 +4,7 @@ export class KaneraApiError extends Error {
     readonly code: string,
     message: string,
     readonly retryAfter?: string | null,
+    readonly details?: Record<string, unknown>,
   ) {
     super(message);
   }
@@ -130,12 +131,13 @@ export class KaneraClient {
     const text = await response.text();
     const payload = this.parsePayload(text, response);
     if (!response.ok) {
-      const problem = typeof payload === "object" && payload ? payload as { code?: string; message?: string } : {};
+      const problem = typeof payload === "object" && payload ? payload as { code?: string; message?: string; reason?: unknown } : {};
       throw new KaneraApiError(
         response.status,
         problem.code ?? this.defaultCode(response.status),
         problem.message ?? (response.statusText || "public API request failed"),
         response.headers.get("retry-after"),
+        problem,
       );
     }
     return payload as T;

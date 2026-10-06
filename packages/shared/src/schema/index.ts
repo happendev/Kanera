@@ -77,3 +77,4 @@ export * from "./workspace-member.js";
 export * from "./workspace.js";
 export * from "./workspace-analytics-milestone.js";
 export * from "./work-view.js";
+export * from "./mcp-event-subscription.js";

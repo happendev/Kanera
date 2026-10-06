@@ -41,6 +41,11 @@ declare module "@fastify/request-context" {
     // apart from a genuine user action even though the token acts as a real user in the target org.
     supportSessionId?: string;
     supportActorEmail?: string;
+    // The authenticating API key for every key-backed credential, including personal keys whose
+    // activity deliberately reads as the user. Only change attribution (outbox actor) uses it, so
+    // an MCP event subscriber can recognise writes made through its own connection.
+    credentialApiKeyId?: string;
+    credentialServiceClientId?: string;
   }
 }
 
@@ -65,6 +70,8 @@ export interface AuthClaims {
   // only drive attribution, so the owner is notified about, and can audit, what the agent did.
   agentGrantId?: string;
   agentName?: string;
+  // Service OAuth connections own event subscriptions separately from their backing API key.
+  oauthServiceClientId?: string;
   // Personal keys are not pinned to a workspace and act as their owner; a `read` scope caps the
   // authority they may exercise below the owner's. OAuth personal credentials set apiKeyScope;
   // workspace credentials also set a pin.
@@ -182,6 +189,8 @@ export default fp(async (app) => {
       req.auth = claims;
       requestContext.set("clientId", claims.cid);
       requestContext.set("userId", claims.sub);
+      if (claims.apiKeyId) requestContext.set("credentialApiKeyId", claims.apiKeyId);
+      if (claims.oauthServiceClientId) requestContext.set("credentialServiceClientId", claims.oauthServiceClientId);
       if (claims.apiKeyKind === "personal" && claims.agentGrantId) {
         // An interactive agent grant acts as its owner for authorization but must NOT be recorded
         // as the owner's own action: Work Done, the activity feed, and self-notification

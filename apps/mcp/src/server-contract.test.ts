@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
+import type { CallToolResult } from "@modelcontextprotocol/server";
 import { createKaneraMcpServer } from "./server.js";
 
 const W = "11111111-1111-4111-8111-111111111111";
@@ -30,16 +29,22 @@ type Tool = {
   };
   outputSchema?: unknown;
 };
-type Resource = { readCallback: (uri: URL, vars: Record<string, string>) => Promise<{ contents: Array<{ text?: string }> }> };
-type Prompt = { callback: (args: Record<string, string>) => { messages: Array<{ content: { text: string } }> } };
 type Internals = {
   _registeredTools: Record<string, Tool>;
-  _registeredResourceTemplates: Record<string, Resource>;
-  _registeredPrompts: Record<string, Prompt>;
 };
 
 function internals() {
   return createKaneraMcpServer({ apiKey: "kanera_live_test", publicApiUrl: "https://api.example.test" }) as unknown as Internals;
+}
+
+// Resources and prompts are exercised through a real client so the test pins the wire contract
+// rather than SDK-private registration fields.
+async function connectedClient() {
+  const server = createKaneraMcpServer({ apiKey: "kanera_live_test", publicApiUrl: "https://api.example.test", logToolCalls: false });
+  const client = new Client({ name: "kanera-contract-test", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  return { client, close: async () => { await client.close(); await server.close(); } };
 }
 
 function missingParameterDescriptions(schema: Record<string, unknown>, path = ""): string[] {
@@ -718,14 +723,15 @@ void test("tools/list keeps post-creation administration UI-only and retains no 
 });
 
 void test("all resource templates fetch and serialize their public API entities", async () => {
-  const server = internals();
+  const { client, close } = await connectedClient();
   const cases = [
     ["workspace", W, `/api/v1/workspaces/${W}`],
     ["board", B, `/api/v1/boards/${B}/open?includeCards=false`],
     ["card", C, `/api/v1/cards/${C}/detail`],
     ["note", N, `/api/v1/notes/${N}`],
   ] as const;
-  assert.deepEqual(Object.keys(server._registeredResourceTemplates).sort(), cases.map(([name]) => name).sort());
+  const { resourceTemplates } = await client.listResourceTemplates();
+  assert.deepEqual(resourceTemplates.map((template) => template.name).sort(), cases.map(([name]) => name).sort());
   const originalFetch = globalThis.fetch;
   try {
     for (const [name, id, expectedPath] of cases) {
@@ -735,27 +741,33 @@ void test("all resource templates fetch and serialize their public API entities"
         path = `${url.pathname}${url.search}`;
         return new Response(JSON.stringify(name === "workspace" ? { workspace: { id, kind: "standard" }, role: "admin" } : { id }), { status: 200 });
       };
-      const result = await server._registeredResourceTemplates[name]!.readCallback(new URL(`kanera://${name}/${id}`), { [`${name}Id`]: id });
+      const result = await client.readResource({ uri: `kanera://${name}/${id}` });
       assert.equal(path, expectedPath);
-      assert.deepEqual(JSON.parse(result.contents[0]!.text!), name === "workspace" ? { workspace: { id, kind: "standard" }, role: "admin" } : { id });
+      assert.deepEqual(JSON.parse((result.contents[0] as { text: string }).text), name === "workspace" ? { workspace: { id, kind: "standard" }, role: "admin" } : { id });
     }
   } finally {
     globalThis.fetch = originalFetch;
+    await close();
   }
 });
 
-void test("all prompts produce actionable text containing their target identifier", () => {
-  const prompts = internals()._registeredPrompts;
+void test("all prompts produce actionable text containing their target identifier", async () => {
+  const { client, close } = await connectedClient();
   const cases = [
     ["summarize_board_status", { boardId: B }, B],
     ["prepare_standup_update", { period: "last_week" }, "last_week"],
     ["prepare_one_on_one", { workspaceId: W, userId: U, period: "last_month" }, U],
     ["draft_card_from_notes", { noteId: N }, N],
   ] as const;
-  assert.deepEqual(Object.keys(prompts).sort(), cases.map(([name]) => name).sort());
-  for (const [name, args, target] of cases) {
-    const result = prompts[name]!.callback(args);
-    assert.match(result.messages[0]!.content.text, new RegExp(target));
+  try {
+    const { prompts } = await client.listPrompts();
+    assert.deepEqual(prompts.map((prompt) => prompt.name).sort(), cases.map(([name]) => name).sort());
+    for (const [name, args, target] of cases) {
+      const result = await client.getPrompt({ name, arguments: args });
+      assert.match((result.messages[0]!.content as { text: string }).text, new RegExp(target));
+    }
+  } finally {
+    await close();
   }
 });
 

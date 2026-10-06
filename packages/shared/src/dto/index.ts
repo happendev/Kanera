@@ -41,3 +41,4 @@ export * from "./work-done.js";
 export * from "./agent-work.js";
 export * from "./work.js";
 export * from "./workspaces.js";
+export * from "./mcp-events.js";

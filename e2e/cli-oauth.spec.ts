@@ -11,6 +11,7 @@ import { boardHref, cardTile, expectBoardLoaded } from "./support/ui";
 // The bundled executable npm ships (built by scripts/test-e2e.sh), not the TypeScript sources.
 const cli = path.join(__dirname, "..", "apps", "cli", "dist", "kanera.mjs");
 const mcpUrl = `http://localhost:${ports.mcp}/mcp`;
+const publicApiOrigin = `http://localhost:${ports.publicApi}`;
 
 type Run = { code: number | null; stdout: string; stderr: string };
 type StoredProfile = {
@@ -93,7 +94,7 @@ function json<T>(run: Run): T {
 
 /** Exercise the published stdio bridge as an MCP host, keeping the same process across refresh/login. */
 async function mcpRequest(child: ChildProcess, id: number, method: string, params: Record<string, unknown>) {
-  return await new Promise<{ result?: { isError?: boolean }; error?: { message: string } }>((resolve, reject) => {
+  return await new Promise<{ result?: { isError?: boolean; content?: Array<{ text?: string }> }; error?: { message: string } }>((resolve, reject) => {
     let buffered = "";
     const cleanup = () => {
       clearTimeout(timer);
@@ -107,7 +108,7 @@ async function mcpRequest(child: ChildProcess, id: number, method: string, param
       while ((newline = buffered.indexOf("\n")) !== -1) {
         const line = buffered.slice(0, newline);
         buffered = buffered.slice(newline + 1);
-        const response = JSON.parse(line) as { id?: number; result?: { isError?: boolean }; error?: { message: string } };
+        const response = JSON.parse(line) as { id?: number; result?: { isError?: boolean; content?: Array<{ text?: string }> }; error?: { message: string } };
         if (response.id === id) { cleanup(); resolve(response); return; }
       }
     };
@@ -144,7 +145,7 @@ test("the CLI signs in with the browser device flow, works on the board, refresh
 
     // The connection is visible to the user under their AI agent connections, named for the machine.
     const app = await apiAs("amelia");
-    const connections = async () => (await (await app.get("/api/me/oauth-connections")).json() as { clientName: string }[])
+    const connections = async () => (await (await app.get("/api/me/oauth-connections")).json() as { id: string; clientName: string }[])
       .filter((connection) => connection.clientName.startsWith("Kanera CLI ("));
     expect(await connections()).toHaveLength(1);
 
@@ -172,6 +173,12 @@ test("the CLI signs in with the browser device flow, works on the board, refresh
     const title = uniqueName("E2E CLI OAuth card");
     json(await cliEnv.run(["card", "create", title, "--boardId", boardId, "--listId", listId, "--json"]));
     await expect(cardTile(page, title)).toBeVisible();
+    // The same for a write an MCP host makes through the stdio bridge, relayed to the remote server.
+    const bridgeTitle = uniqueName("E2E MCP bridge card");
+    const bridgeWrite = await mcpRequest(bridge, 10, "tools/call", { name: "cards.create", arguments: { boardId, listId, title: bridgeTitle } });
+    expect(bridgeWrite.error).toBeUndefined();
+    expect(bridgeWrite.result?.isError).not.toBe(true);
+    await expect(cardTile(page, bridgeTitle)).toBeVisible();
 
     // An expired access token is refreshed transparently, and the rotated refresh token is saved:
     // presenting the spent one later would make Kanera revoke the whole sign-in.
@@ -205,6 +212,27 @@ test("the CLI signs in with the browser device flow, works on the board, refresh
     expect(staleBridge.error?.message).toContain("changed");
     json(await cliEnv.run(["whoami", "--json"]));
 
+    // Revoking the connection under Settings -> AI agents ends it server-side: the stored access
+    // token is rejected, and the refresh token cannot bring the sign-in back.
+    const [connection] = await connections();
+    expect((await app.delete(`/api/me/oauth-connections/${connection!.id}`)).status()).toBe(204);
+    expect(await connections()).toHaveLength(0);
+    const revoked = await cliEnv.run(["whoami", "--json"]);
+    expect(revoked.code, `stdout:\n${revoked.stdout}\nstderr:\n${revoked.stderr}`).toBe(3);
+    cliEnv.expireAccessToken();
+    const revokedRefresh = await cliEnv.run(["whoami", "--json"]);
+    expect(revokedRefresh.code, `stdout:\n${revokedRefresh.stdout}\nstderr:\n${revokedRefresh.stderr}`).toBe(3);
+    expect(revokedRefresh.stderr).toMatch(/revoked|rejected the stored sign-in/u);
+
+    // A fresh sign-in recovers, so logout below exercises a live connection.
+    const recovery = cliEnv.start(["auth", "login", "--mcp-url", mcpUrl, "--no-browser", "--json"]);
+    const recoveryDone = finished(recovery);
+    const recoveryInstructions = await deviceInstructions(recovery);
+    await decide(page, recoveryInstructions.url, recoveryInstructions.code, "Allow access");
+    json(await recoveryDone);
+    expect(await connections()).toHaveLength(1);
+    json(await cliEnv.run(["whoami", "--json"]));
+
     // Signing out ends the sign-in on the server and removes the connection from the user's list.
     const logout = json<{ revoked: boolean; removed: boolean }>(await cliEnv.run(["auth", "logout", "--json"]));
     expect(logout).toMatchObject({ revoked: true, removed: true });
@@ -235,6 +263,57 @@ test("denying the CLI sign-in in the browser stores nothing and exits unauthenti
     expect(result.stderr).toContain("denied");
     expect(() => statSync(cliEnv.configFile)).toThrow();
   } finally {
+    cliEnv.cleanup();
+  }
+});
+
+test("a read-only API key profile reads through the CLI and MCP bridge but is refused every write", async ({ page, signIn, apiAs, uniqueName }) => {
+  const cliEnv = cliHome();
+  let bridge: ChildProcess | undefined;
+  try {
+    await signIn(page, "amelia");
+    const boardPath = await boardHref(page, "Platform Delivery");
+    const boardId = boardPath.split("/")[2]!;
+    const app = await apiAs("amelia");
+    const minted = await app.post("/api/me/api-keys", { data: { label: uniqueName("E2E read-only key"), scope: "read" } });
+    expect(minted.status(), await minted.text()).toBe(201);
+    const { secret } = await minted.json() as { secret: string };
+    json(await cliEnv.run(["auth", "login", "--with-api-key", "--api-key", secret, "--url", publicApiOrigin, "--json"]));
+    const stored = cliEnv.profile();
+    expect(stored.oauth).toBeUndefined();
+    expect(stored.apiKey).toBe(secret);
+
+    // Reads succeed; the write is refused with the forbidden exit code an agent can branch on.
+    const board = json<{ lists: { id: string }[] }>(await cliEnv.run(["board", boardId, "--json"]));
+    const listId = board.lists[0]!.id;
+    const title = uniqueName("E2E read-only card");
+    const write = await cliEnv.run(["card", "create", title, "--boardId", boardId, "--listId", listId, "--json"]);
+    expect(write.code, `stdout:\n${write.stdout}\nstderr:\n${write.stderr}`).toBe(4);
+
+    // The in-process stdio server reports the same refusal as a tool error, not a transport failure.
+    bridge = cliEnv.startMcp();
+    const initialized = await mcpRequest(bridge, 1, "initialize", {
+      protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "kanera-e2e", version: "1" },
+    });
+    expect(initialized.error).toBeUndefined();
+    bridge.stdin!.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
+    const read = await mcpRequest(bridge, 2, "tools/call", { name: "boards.get", arguments: { boardId } });
+    expect(read.error).toBeUndefined();
+    expect(read.result?.isError).not.toBe(true);
+    const refused = await mcpRequest(bridge, 3, "tools/call", { name: "cards.create", arguments: { boardId, listId, title } });
+    expect(refused.error).toBeUndefined();
+    expect(refused.result?.isError).toBe(true);
+    expect(refused.result?.content?.[0]?.text).toContain('"status": 403');
+
+    await page.goto(boardPath);
+    await expectBoardLoaded(page, "Platform Delivery");
+    await expect(cardTile(page, title)).toHaveCount(0);
+  } finally {
+    if (bridge && bridge.exitCode === null) {
+      const closed = once(bridge, "close");
+      bridge.kill();
+      await closed;
+    }
     cliEnv.cleanup();
   }
 });

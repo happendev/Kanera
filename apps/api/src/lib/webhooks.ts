@@ -10,6 +10,7 @@ import {
   type ChatDeliveryPayload,
   type ChatDestinationEventType,
   type EventOutbox,
+  type McpEventSubscription,
   type WebhookDelivery,
   type WebhookEndpoint,
   type WebhookPayload,
@@ -25,6 +26,8 @@ import { startSweepScheduler, type SweepScheduler } from "./sweep-scheduler.js";
 import { assertResolvedHostAllowed } from "./ssrf.js";
 import { signWebhookPayload } from "./webhook-signing.js";
 import { buildChatRequest, chatContentExcerpt } from "./chat-destinations.js";
+import { cleanupMcpEvents, enqueueMcpEventDeliveries, processMcpEventDeliveries } from "./mcp-events.js";
+import { postMcpWebhook } from "./mcp-event-webhooks.js";
 
 const MAX_ATTEMPTS = 8;
 const DELIVERY_LIMIT = 25;
@@ -261,7 +264,9 @@ export async function enqueueWebhookDeliveriesForOutboxEvent(
   // When a caller has already loaded the workspace's enabled endpoints for this drain, reuse them
   // instead of issuing a per-event SELECT. Callers without the cache keep the single-event query path.
   preloadedEndpoints?: WebhookEndpoint[],
+  preloadedMcpSubscriptions?: McpEventSubscription[],
 ): Promise<void> {
+  await enqueueMcpEventDeliveries(event, preloadedMcpSubscriptions);
   const endpoints = preloadedEndpoints
     ?? (await db
       .select()
@@ -462,7 +467,15 @@ export interface WebhookDeliveryResult {
 }
 
 export async function processWebhookDeliveries(log?: FastifyBaseLogger): Promise<WebhookDeliveryResult> {
-  const due = await claimWebhookDeliveries();
+  // The MCP queue drains alongside the regular one, never ahead of it: a hung callback host for
+  // one subscriber must not delay unrelated customer webhooks, and vice versa.
+  const [mcpDrainedFull, due] = await Promise.all([
+    processMcpEventDeliveries(postMcpWebhook, log).catch((err: unknown) => {
+      log?.error({ err }, "mcp event delivery drain failed");
+      return false;
+    }),
+    claimWebhookDeliveries(),
+  ]);
 
   // Deliver in fixed-size concurrent chunks: a single slow/timing-out endpoint no longer
   // blocks every other due delivery behind it. allSettled keeps one failure from rejecting
@@ -477,10 +490,11 @@ export async function processWebhookDeliveries(log?: FastifyBaseLogger): Promise
     });
   }
 
-  return { drainedFull: due.length >= DELIVERY_LIMIT };
+  return { drainedFull: mcpDrainedFull || due.length >= DELIVERY_LIMIT };
 }
 
 export async function cleanupWebhookDeliveries(log?: FastifyBaseLogger, now = new Date()): Promise<number> {
+  await cleanupMcpEvents();
   const successCutoff = new Date(now.getTime() - SUCCESS_RETENTION_MS);
   const failedCutoff = new Date(now.getTime() - FAILED_RETENTION_MS);
   // Only terminal rows are eligible: queued and leased deliveries must survive cleanup so

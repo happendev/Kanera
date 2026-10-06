@@ -41,6 +41,8 @@ import { commentRoutes } from "./modules/comments/routes.js";
 import { customFieldRoutes } from "./modules/custom-fields/routes.js";
 import { agentRunRoutes } from "./modules/agent-runs/routes.js";
 import { externalLinkRoutes } from "./modules/external-links/routes.js";
+import { mcpEventRoutes } from "./modules/integrations/mcp-events.routes.js";
+import type { McpWebhookRequest } from "./lib/mcp-event-webhooks.js";
 import { webhookEndpointRoutes } from "./modules/integrations/webhook-endpoint.routes.js";
 import { listRoutes } from "./modules/lists/routes.js";
 import { mediaRoutes } from "./modules/media/routes.js";
@@ -80,6 +82,7 @@ export interface BuildPublicApiServerOptions {
   logger?: FastifyServerOptions["logger"];
   uploadsDir?: string;
   enableWebhookDeliveryScheduler?: boolean;
+  mcpWebhookRequest?: McpWebhookRequest;
   slowRequestLogMs?: number;
   rateLimit?: PublicApiRateLimitOptions;
 }
@@ -344,6 +347,7 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
     // credential (workspace key, personal key, or OAuth agent grant) manages endpoints scoped to its
     // own connection. Delivery itself stays on the worker's webhook pipeline.
     await api.register(webhookEndpointRoutes);
+    await api.register(mcpEventRoutes, { webhookRequest: options.mcpWebhookRequest });
     await api.register(agentWorkRoutes);
     await api.register(agentWorkQueryRoutes);
   }, { prefix });

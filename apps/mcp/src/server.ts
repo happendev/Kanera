@@ -1,5 +1,5 @@
-import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { CallToolResult, ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
+import { McpServer, ResourceTemplate, type CallToolResult, type ToolAnnotations } from "@modelcontextprotocol/server";
+import { registerKaneraEvents } from "./events.js";
 import { z } from "zod";
 import mcpPackage from "../package.json" with { type: "json" };
 import { docsSearchClient } from "./docs-search.js";
@@ -454,6 +454,12 @@ export interface KaneraMcpContext {
    * because their stdout is the command's result and callers parse it.
    */
   logToolCalls?: boolean;
+  /**
+   * Register the MCP events methods (events/list, events/subscribe, events/unsubscribe). Only the
+   * remote HTTP endpoint enables them: webhook delivery targets the hosted callback a client such
+   * as ChatGPT registers, which a local stdio or CLI session has no use for.
+   */
+  events?: boolean;
 }
 
 function client(ctx: KaneraMcpContext, options: { signal?: AbortSignal; idempotencyKey?: string } = {}) {
@@ -894,6 +900,25 @@ async function standardWorkspaceContext(api: KaneraClient, workspaceId: string) 
   return { detail, workspaceId };
 }
 
+/**
+ * SDK v1 published tool schemas as JSON Schema draft-07 (nullable fields as `anyOf`); v2 converts
+ * to 2020-12 (nullable fields as `type` arrays). Clients and the model providers behind them differ
+ * in which dialect they accept (Gemini-backed agents are the strictest), so the SDK upgrade keeps
+ * the published schemas exactly as they were. Zod still validates and parses the arguments; only
+ * the advertised JSON Schema is pinned.
+ */
+function draft7Schema<T extends z.ZodType>(schema: T): T {
+  return {
+    "~standard": {
+      ...schema["~standard"],
+      jsonSchema: {
+        input: () => z.toJSONSchema(schema, { target: "draft-7", io: "input" }),
+        output: () => z.toJSONSchema(schema, { target: "draft-7", io: "output" }),
+      },
+    },
+  } as unknown as T;
+}
+
 function registerKaneraTool<T extends z.ZodRawShape>(
   server: McpServer,
   name: string,
@@ -912,24 +937,28 @@ function registerKaneraTool<T extends z.ZodRawShape>(
         idempotencyKey: z.uuid().optional().describe("Stable UUID reused only when retrying the same mutation after an ambiguous failure. Retained for 24 hours."),
       }
     : inputSchema;
+  // The SDK infers handler argument types per tool; this registry erases them on purpose so one
+  // wrapper can strip idempotencyKey and map errors for every tool. The schema passed below is a
+  // z.object (the current overload); the deprecated raw-shape overload is never used.
+  // eslint-disable-next-line @typescript-eslint/no-deprecated
   const registerTool = server.registerTool.bind(server) as unknown as (
     toolName: string,
     config: {
       title: string;
       description: string;
-      inputSchema: z.ZodRawShape;
+      inputSchema: z.ZodType;
       outputSchema: z.ZodType<Record<string, unknown>>;
       annotations: ToolAnnotations;
     },
-    callback: (args: unknown, extra?: { signal: AbortSignal; requestId: string | number }) => Promise<CallToolResult>,
+    callback: (args: unknown, handlerCtx?: { mcpReq: { signal: AbortSignal } }) => Promise<CallToolResult>,
   ) => void;
   registerTool(name, {
     title: toolTitle(name),
     description,
-    inputSchema: describeInputParameters(registeredInputSchema),
-    outputSchema,
+    inputSchema: draft7Schema(z.object(describeInputParameters(registeredInputSchema))),
+    outputSchema: draft7Schema(outputSchema),
     annotations: toolAnnotations(name),
-  }, async (args, extra): Promise<CallToolResult> => {
+  }, async (args, handlerCtx): Promise<CallToolResult> => {
     const startedAt = performance.now();
     const logToolCalls = ctx.logToolCalls !== false && env.NODE_ENV !== "test" && process.env.NODE_TEST_CONTEXT === undefined;
     try {
@@ -938,7 +967,7 @@ function registerKaneraTool<T extends z.ZodRawShape>(
       const handlerArgs = idempotencyKey
         ? Object.fromEntries(Object.entries(record).filter(([key]) => key !== "idempotencyKey"))
         : record;
-      const result = content(await handler(handlerArgs as ToolArgs<T>, client(ctx, { signal: extra?.signal, idempotencyKey })));
+      const result = content(await handler(handlerArgs as ToolArgs<T>, client(ctx, { signal: handlerCtx?.mcpReq.signal, idempotencyKey })));
       if (logToolCalls) {
         console.info(JSON.stringify({
           event: "mcp_tool_call",
@@ -968,6 +997,9 @@ function registerKaneraTool<T extends z.ZodRawShape>(
   });
 }
 
+const serverInstructions = "Use Kanera MCP tools instead of browser automation for every supported read or write; reserve the web interface for explicitly visual tasks and UI-only administration. For an exact human card key or canonical card URL, call cards.get directly before a mutation and reserve search.content for names, phrases, and other ambiguous text. For cross-board reporting, first resolve people with workspaces.list_members, then use work.query_cards for active or completed assignments and work.query_history for one person's actions in a date range. Use cards.get_content for selected evidence and cards.get or cards.list_history only when deeper detail is needed. search.content returns one bounded, typed result stream with canonical links. Kanera MCP is work-focused: it reads configuration needed to resolve boards, lists, labels, fields, options, members, and permissions. Organisation admins can bootstrap a standard workspace (workspaces.create), a standalone board (boards.create_standalone), or an extra board inside a standard workspace (boards.create), choosing a templateId from workspaces.list_templates or supplying explicit lists, custom fields, and labels; workspace and standalone-board creation needs a write-capable personal key or interactive OAuth grant with organisation admin role, and workspace-scoped keys cannot do it. Workspace admins can manage automations with the dedicated automation tools, while editing or deleting lists, fields, labels, members, and boards after creation remains in the Kanera UI. Standard-workspace lists, fields, labels, membership, and automations are shared across its boards; standalone boards have dedicated configuration. Card reference fields accept a UUID, human key such as PROJ-123, or canonical card URL. Use boards.list_accessible for complete discovery including standalone and guest boards, boards.get for metadata/configuration, and cards.list for bounded list pages. Use work.portfolio_summary for portfolio rollups. Use the priority tools (priorities.list, priorities.add, priorities.move, priorities.remove) to read and curate a user's ranked cross-board \"Up next\" queue; priorities.list_targets shows whose queues a manager can reach. Use search.docs for product guidance and search.content for live user data. Personal notes are private to their owner. Read-only credentials cannot mutate. Board, workspace, list, field, label, note, and note-attachment deletion or administration not represented by a tool must be completed manually in the Kanera UI.";
+const eventInstructions = "Event payloads are bounded summaries; read the matching card or comment before acting. Each event names its actor and sets actor.self when this connection caused it, so skip or confirm before reacting to your own writes. Subscriptions deliver via verified HTTPS webhooks and require periodic refresh; cursor is null (no replay).";
+
 export function createKaneraMcpServer(ctx: KaneraMcpContext) {
   const server = new McpServer(
     {
@@ -980,12 +1012,24 @@ export function createKaneraMcpServer(ctx: KaneraMcpContext) {
       // custom MCP clients connect directly to /mcp and never discover server.json.
       icons: serverIcons,
     },
-    { instructions: "Use Kanera MCP tools instead of browser automation for every supported read or write; reserve the web interface for explicitly visual tasks and UI-only administration. For an exact human card key or canonical card URL, call cards.get directly before a mutation and reserve search.content for names, phrases, and other ambiguous text. For cross-board reporting, first resolve people with workspaces.list_members, then use work.query_cards for active or completed assignments and work.query_history for one person's actions in a date range. Use cards.get_content for selected evidence and cards.get or cards.list_history only when deeper detail is needed. search.content returns one bounded, typed result stream with canonical links. Kanera MCP is work-focused: it reads configuration needed to resolve boards, lists, labels, fields, options, members, and permissions. Organisation admins can bootstrap a standard workspace (workspaces.create), a standalone board (boards.create_standalone), or an extra board inside a standard workspace (boards.create), choosing a templateId from workspaces.list_templates or supplying explicit lists, custom fields, and labels; workspace and standalone-board creation needs a write-capable personal key or interactive OAuth grant with organisation admin role, and workspace-scoped keys cannot do it. Workspace admins can manage automations with the dedicated automation tools, while editing or deleting lists, fields, labels, members, and boards after creation remains in the Kanera UI. Standard-workspace lists, fields, labels, membership, and automations are shared across its boards; standalone boards have dedicated configuration. Card reference fields accept a UUID, human key such as PROJ-123, or canonical card URL. Use boards.list_accessible for complete discovery including standalone and guest boards, boards.get for metadata/configuration, and cards.list for bounded list pages. Use work.portfolio_summary for portfolio rollups. Use the priority tools (priorities.list, priorities.add, priorities.move, priorities.remove) to read and curate a user's ranked cross-board \"Up next\" queue; priorities.list_targets shows whose queues a manager can reach. Use search.docs for product guidance and search.content for live user data. Personal notes are private to their owner. Read-only credentials cannot mutate. Board, workspace, list, field, label, note, and note-attachment deletion or administration not represented by a tool must be completed manually in the Kanera UI." },
+    {
+      instructions: ctx.events ? `${serverInstructions} ${eventInstructions}` : serverInstructions,
+      // ttlMs/cacheScope are REQUIRED on these 2026-07-28 results. Tool, prompt and template
+      // catalogs are identical for every credential; resource reads opt out per resource.
+      cacheHints: {
+        "server/discover": { ttlMs: 3_600_000, cacheScope: "public" },
+        "tools/list": { ttlMs: 300_000, cacheScope: "public" },
+        "prompts/list": { ttlMs: 300_000, cacheScope: "public" },
+        "resources/list": { ttlMs: 300_000, cacheScope: "public" },
+        "resources/templates/list": { ttlMs: 300_000, cacheScope: "public" },
+      },
+    },
   );
 
   registerTools(server, ctx);
   registerResources(server, ctx);
   registerPrompts(server);
+  if (ctx.events) registerKaneraEvents(server, () => client(ctx));
   return server;
 }
 
@@ -1610,30 +1654,31 @@ function registerResource(
   read: (vars: Record<string, string>, api: KaneraClient) => Promise<unknown>,
   ctx: KaneraMcpContext,
 ) {
-  server.registerResource(name, new ResourceTemplate(template, { list: undefined }), { description, mimeType: "application/json" }, async (uri, vars, extra) => {
-    const data = await read(vars as Record<string, string>, client(ctx, { signal: extra?.signal }));
+  // Resource reads return live, credential-scoped data: never cacheable or shareable.
+  server.registerResource(name, new ResourceTemplate(template, { list: undefined }), { description, mimeType: "application/json", cacheHint: { ttlMs: 0, cacheScope: "private" } }, async (uri, vars, handlerCtx) => {
+    const data = await read(vars as Record<string, string>, client(ctx, { signal: handlerCtx.mcpReq.signal }));
     return { contents: [{ uri: uri.toString(), mimeType: "application/json", text: JSON.stringify(data, null, 2) }] };
   });
 }
 
 function registerPrompts(server: McpServer) {
-  server.registerPrompt("summarize_board_status", { description: "Summarize board progress, blockers, stale cards, and next actions.", argsSchema: { boardId: uuid } }, (a) => ({
+  server.registerPrompt("summarize_board_status", { description: "Summarize board progress, blockers, stale cards, and next actions.", argsSchema: z.object({ boardId: uuid }) }, (a) => ({
     messages: [{ role: "user", content: { type: "text", text: `Call boards.get for ${a.boardId}, then page the relevant lists with cards.list. Use work.query_cards scoped to this board for overdue, unassigned, and stale-card evidence, and inspect cards.list_history only for cards that need chronology. Summarize progress, blockers, risks, and next actions; distinguish observed facts from inferences.` } }],
   }));
-  server.registerPrompt("prepare_standup_update", { description: "Prepare the connected user's cross-board standup update.", argsSchema: { period: z.enum(["today", "yesterday", "this_week", "last_week", "this_month", "last_month"]).default("yesterday") } }, (a) => ({
+  server.registerPrompt("prepare_standup_update", { description: "Prepare the connected user's cross-board standup update.", argsSchema: z.object({ period: z.enum(["today", "yesterday", "this_week", "last_week", "this_month", "last_month"]).default("yesterday") }) }, (a) => ({
     messages: [{ role: "user", content: { type: "text", text: `Use work.query_history with preset ${a.period} and no userId for work I performed, then use work.query_cards with lens=my and completion=active for work in flight. Draft a concise accomplishments/current work/blockers update. Identify blockers only when supported by card data, and label any inference.` } }],
   }));
   server.registerPrompt("prepare_one_on_one", {
     description: "Prepare a read-only cross-project one-on-one review for a workspace member.",
-    argsSchema: {
+    argsSchema: z.object({
       workspaceId: uuid,
       userId: uuid,
       period: z.enum(["this_week", "last_week", "this_month", "last_month"]).default("last_month"),
-    },
+    }),
   }, (a) => ({
     messages: [{ role: "user", content: { type: "text", text: `Do not make changes in Kanera. For workspace ${a.workspaceId} and user ${a.userId}, use work.query_cards twice with lens=team and that assignee: completion=active for current work, then completion=completed with the ${a.period} date range. Use work.query_history for the same user, workspace, and ${a.period}. Search and inspect only the most relevant supporting cards, comments, and notes. Summarize completed work, important progress, blockers or follow-ups, and 4–5 discussion points with canonical Kanera links. Distinguish observed facts from inferences.` } }],
   }));
-  server.registerPrompt("draft_card_from_notes", { description: "Draft a card title and description from one note.", argsSchema: { noteId: uuid } }, (a) => ({
+  server.registerPrompt("draft_card_from_notes", { description: "Draft a card title and description from one note.", argsSchema: z.object({ noteId: uuid }) }, (a) => ({
     messages: [{ role: "user", content: { type: "text", text: `Call notes.get for ${a.noteId} and draft a Kanera card title plus Markdown description. Do not create the card until asked.` } }],
   }));
 }

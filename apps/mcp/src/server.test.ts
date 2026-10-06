@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult } from "@modelcontextprotocol/server";
 import { env } from "./env.js";
 import { createKaneraMcpServer } from "./server.js";
 
@@ -31,11 +31,12 @@ function toolHandler(name: string) {
 }
 
 function parseToolText(result: CallToolResult) {
-  if (result.structuredContent && "result" in result.structuredContent) return result.structuredContent.result;
-  if (result.structuredContent) {
-    const keys = Object.keys(result.structuredContent);
-    if (keys.length === 1 && "items" in result.structuredContent) return result.structuredContent.items;
-    return result.structuredContent;
+  const structured = result.structuredContent as Record<string, unknown> | undefined;
+  if (structured && "result" in structured) return structured.result;
+  if (structured) {
+    const keys = Object.keys(structured);
+    if (keys.length === 1 && "items" in structured) return structured.items;
+    return structured;
   }
   const item = result.content[0];
   assert.equal(item?.type, "text");

@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+import { requestContext } from "@fastify/request-context";
 import type { ServerToClientEvents } from "@kanera/shared/events";
 import {
   boards,
@@ -6,7 +8,9 @@ import {
   type DirectRealtimeOutbox,
   type DirectRealtimeOutboxScope,
   type EventOutbox,
+  type EventOutboxActor,
   type EventOutboxScope,
+  type McpEventSubscription,
   type WebhookEndpoint,
 } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, lt, sql } from "drizzle-orm";
@@ -14,6 +18,7 @@ import type { FastifyBaseLogger } from "fastify";
 import type { PoolClient } from "pg";
 import { db, pool } from "../db.js";
 import { env } from "../env.js";
+import { loadActiveMcpSubscriptionsByWorkspace } from "../lib/mcp-events.js";
 import { startSweepScheduler } from "../lib/sweep-scheduler.js";
 import { enqueueWebhookDeliveriesForOutboxEvent, loadEnabledEndpointsByWorkspace } from "../lib/webhooks.js";
 import { broadcastToBoard, broadcastToClient, broadcastToUser, broadcastToWorkspace } from "./broadcast.js";
@@ -69,6 +74,29 @@ async function workspaceForBoard(boardId: string): Promise<string | null> {
   return board?.workspaceId ?? null;
 }
 
+// Automation effects are emitted inline, inside the request that triggered them. Without this scope
+// they would be attributed to the triggering credential and an MCP subscriber would read an
+// automation's comment as its own write.
+const automationActorScope = new AsyncLocalStorage<true>();
+export function publishAsAutomation<T>(fn: () => Promise<T>): Promise<T> {
+  return automationActorScope.run(true, fn);
+}
+
+function currentOutboxActor(): EventOutboxActor {
+  const none = { userId: null, apiKeyId: null, agentGrantId: null };
+  if (automationActorScope.getStore()) return { kind: "automation", ...none };
+  const kind = requestContext.get("authKind");
+  // No request context means a worker, sweep or other background job.
+  if (!kind) return { kind: "system", ...none };
+  return {
+    kind,
+    userId: requestContext.get("userId") ?? null,
+    apiKeyId: requestContext.get("credentialApiKeyId") ?? null,
+    agentGrantId: requestContext.get("agentGrantId") ?? null,
+    serviceClientId: requestContext.get("credentialServiceClientId") ?? null,
+  };
+}
+
 export async function publishRealtimeEvent<E extends keyof ServerToClientEvents>(
   scope: EventOutboxScope,
   scopeId: string,
@@ -88,6 +116,7 @@ export async function publishRealtimeEvent<E extends keyof ServerToClientEvents>
       boardId: scope === "board" ? scopeId : null,
       eventType,
       payload,
+      actor: currentOutboxActor(),
       realtimeDispatched: options.realtimeDispatched ?? false,
     })
     .returning();
@@ -124,7 +153,7 @@ export async function publishDirectRealtimeEvent<E extends keyof ServerToClientE
   return event ?? null;
 }
 
-async function processEvent(event: EventOutbox, endpoints: WebhookEndpoint[] | undefined): Promise<void> {
+async function processEvent(event: EventOutbox, endpoints: WebhookEndpoint[] | undefined, mcpSubscriptions: McpEventSubscription[]): Promise<void> {
   if (!event.realtimeDispatched) {
     if (event.scope === "board") {
       dependencies.broadcastToBoard(event.scopeId, event.eventType, event.payload);
@@ -146,7 +175,7 @@ async function processEvent(event: EventOutbox, endpoints: WebhookEndpoint[] | u
   }
 
   if (!event.webhooksEnqueued) {
-    await dependencies.enqueueWebhookDeliveriesForOutboxEvent(event, endpoints);
+    await dependencies.enqueueWebhookDeliveriesForOutboxEvent(event, endpoints, mcpSubscriptions);
   }
 }
 
@@ -213,11 +242,14 @@ export async function processRealtimeOutbox(options: { log?: FastifyBaseLogger; 
     ...new Set(events.filter((event) => !event.webhooksEnqueued).map((event) => event.workspaceId)),
   ];
   const endpointsByWorkspace = await loadEnabledEndpointsByWorkspace(workspacesNeedingWebhooks);
+  // MCP subscriptions share this batch lookup discipline: adding events must not reintroduce
+  // a subscription SELECT for every outbox row, especially on busy boards with no subscribers.
+  const mcpSubscriptionsByWorkspace = await loadActiveMcpSubscriptionsByWorkspace(workspacesNeedingWebhooks);
 
   const completedIds: string[] = [];
   for (const event of events) {
     try {
-      await processEvent(event, endpointsByWorkspace.get(event.workspaceId));
+      await processEvent(event, endpointsByWorkspace.get(event.workspaceId), mcpSubscriptionsByWorkspace.get(event.workspaceId) ?? []);
       completedIds.push(event.id);
     } catch (err) {
       options.log?.error({ err, eventId: event.id, eventType: event.eventType }, "event outbox processing failed");

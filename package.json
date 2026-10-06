@@ -58,6 +58,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@modelcontextprotocol/client": "^2.3.0",
     "@playwright/test": "1.61.1",
     "@types/node": "^24.13.3",
     "angular-eslint": "^22.1.0",

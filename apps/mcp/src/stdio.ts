@@ -1,4 +1,4 @@
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { env } from "./env.js";
 import { createKaneraMcpServer } from "./server.js";
 
@@ -8,5 +8,6 @@ if (!apiKey?.startsWith("kanera_")) {
   process.exit(1);
 }
 
-const server = createKaneraMcpServer({ apiKey, publicApiUrl: env.KANERA_PUBLIC_API_URL });
-await server.connect(new StdioServerTransport());
+// serveStdio answers a 2026-07-28 server/discover probe and pins a client that opens with the
+// 2025-era initialize handshake to a legacy instance from the same factory.
+serveStdio(() => createKaneraMcpServer({ apiKey, publicApiUrl: env.KANERA_PUBLIC_API_URL }));

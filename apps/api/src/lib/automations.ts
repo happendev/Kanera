@@ -41,6 +41,7 @@ import type { FastifyBaseLogger } from "fastify";
 import { db, type Db } from "../db.js";
 import { env } from "../env.js";
 import { emitToBoard } from "../realtime/emit.js";
+import { publishAsAutomation } from "../realtime/outbox.js";
 import { invalidateQueuesForCards } from "./card-priority-invalidation.js";
 import { emitActivityFeedItem, recordActivity } from "./activity.js";
 import { enqueueCardAssignedEmails } from "./assignee-email-notifications.js";
@@ -1342,7 +1343,12 @@ export async function runCardLabelSetAutomations(
   return applyTriggeredAutomations(tx, rows, opts);
 }
 
-export async function emitAutomationEffects(effects: AutomationEffects): Promise<void> {
+export function emitAutomationEffects(effects: AutomationEffects): Promise<void> {
+  // Outbox rows from these emits are attributed to the automation, not the triggering credential.
+  return publishAsAutomation(() => emitAutomationEffectsInScope(effects));
+}
+
+async function emitAutomationEffectsInScope(effects: AutomationEffects): Promise<void> {
   for (const effect of effects.effects) {
     // Awaits here preserve authored automation effect order in the durable outbox/webhook replay.
     // emitToBoard/emitActivityFeedItem still log publish failures and resolve, so realtime remains fail-open.

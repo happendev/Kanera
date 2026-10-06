@@ -10,7 +10,7 @@ import type { CommandContext, CommandResult } from "./context.js";
 import { CliError, EXIT, type ExitCode } from "./errors.js";
 import { outputMode, render } from "./output.js";
 import { skillDocument } from "./skill.js";
-import { ApiFailure, coerceArguments, openToolSession, proxyRemoteMcp, type ToolSession } from "./tools.js";
+import { ApiFailure, coerceArguments, openToolSession, proxyRemoteMcp, stdinClosed, type ToolSession } from "./tools.js";
 
 declare const KANERA_CLI_VERSION: string;
 // Source-level tests and `tsx` development runs bypass the bundler. Published builds replace the
@@ -219,29 +219,26 @@ async function serveMcp(ctx: CommandContext): Promise<ExitCode> {
     urlFlag: ctx.urlFlag,
     profileFlag: ctx.profileFlag,
   });
-  const [{ createKaneraMcpServer }, { StdioServerTransport }] = await Promise.all([
-    import("@kanera/mcp/server"),
-    import("@modelcontextprotocol/sdk/server/stdio.js"),
-  ]);
+  const { createKaneraMcpServer } = await import("@kanera/mcp/server");
   if (credential.kind === "oauth") {
     // OAuth tokens are only valid at the MCP endpoint, so the in-process server (which calls
     // /api/v1) cannot use them; relay the remote server instead.
     const remote = sessionOptionsFor(credential);
     if (!("mcpUrl" in remote)) throw new CliError("unexpected credential type", EXIT.failed);
-    await proxyRemoteMcp(remote, new StdioServerTransport());
+    await proxyRemoteMcp(remote);
     return EXIT.ok;
   }
-  const server = createKaneraMcpServer({
+  const { serveStdio } = await import("@modelcontextprotocol/server/stdio");
+  // serveStdio serves both the 2026-07-28 discovery opening and the 2025 initialize handshake.
+  const stdio = serveStdio(() => createKaneraMcpServer({
     apiKey: credential.apiKey,
     publicApiUrl: credential.url,
     // stdout is the MCP transport here, so tool telemetry must stay off it.
     logToolCalls: false,
-  });
-  await server.connect(new StdioServerTransport());
+  }));
   // Stay alive until the host closes the transport; there is nothing to render and no exit point.
-  await new Promise<void>((resolve) => {
-    server.server.onclose = resolve;
-  });
+  await stdinClosed();
+  await stdio.close();
   return EXIT.ok;
 }
 

@@ -75,6 +75,18 @@ void test("surplus positionals and invalid JSON arguments are usage errors", asy
   assert.match(invalidJson.err.join(""), /valid JSON object/u);
 });
 
+void test("arguments the tool schema rejects are usage errors, not Kanera failures", async () => {
+  // The in-process server validates against the tool schema before any network call, so an offline
+  // key is enough. The v2 SDK returns the rejection as an isError tool result; the CLI must still
+  // report exit 2 with the schema hint, as it did when the v1 SDK threw InvalidParams.
+  const rejected = capture();
+  assert.equal(await run(["card", "create", "--api-key", "kanera_u_offline_catalog_probe", "--json-args", "{\"boardId\":\"11111111-1111-4111-8111-111111111111\"}", "--json"], rejected.io), EXIT.usage);
+  const failure = JSON.parse(rejected.err.join("")) as { error: { exitCode: number; message: string; hint?: string } };
+  assert.equal(failure.error.exitCode, EXIT.usage);
+  assert.match(failure.error.message, /listId/u);
+  assert.match(failure.error.hint ?? "", /kanera help cards\.create/u);
+});
+
 void test("missing tool arguments and command help do not become generic failures", async () => {
   const missing = capture();
   assert.equal(await run(["card", "--api-key", "kanera_u_offline_catalog_probe", "--json"], missing.io), EXIT.usage);
