@@ -8,7 +8,7 @@ import { provideRouter } from "@angular/router";
 import type { CardAttachmentRow, WireCardSummary } from "@kanera/shared/events";
 import type { List } from "@kanera/shared/schema";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiClient, ApiError } from "../../core/api/api.client";
+import { ApiClient } from "../../core/api/api.client";
 import { APP_DOM_EVENTS } from "../../core/browser/browser-contracts";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";

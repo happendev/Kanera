@@ -10,35 +10,32 @@ export const KANERA_DOCS_URL = "https://www.kanera.app/docs";
  * the user discovers. When a doc page is renamed on the site, this list is the single place the
  * app has to follow it.
  */
-const DOCS_PATHS = [
-  "ai-mcp-oauth",
-  "ai-mcp-reference",
-  "api",
-  "automations",
-  "board-syncing",
-  "boards",
-  "card-labels",
-  "chat-destinations",
-  "checklist-templates",
-  "completed-cards",
-  "csv-import",
-  "custom-fields",
-  "guests",
-  "lists",
-  "managing-users",
-  "notification-channels",
-  "notification-configuration",
-  "notification-workspace-rules",
-  "organisations",
-  "profile-security",
-  "scratchpad",
-  "trello-import",
-  "user-roles",
-  "webhooks",
-  "workspace-users",
-] as const;
-
-export type DocsPath = (typeof DOCS_PATHS)[number];
+export type DocsPath =
+  | "ai-mcp-oauth"
+  | "ai-mcp-reference"
+  | "api"
+  | "automations"
+  | "board-syncing"
+  | "boards"
+  | "card-labels"
+  | "chat-destinations"
+  | "checklist-templates"
+  | "completed-cards"
+  | "csv-import"
+  | "custom-fields"
+  | "guests"
+  | "lists"
+  | "managing-users"
+  | "notification-channels"
+  | "notification-configuration"
+  | "notification-workspace-rules"
+  | "organisations"
+  | "profile-security"
+  | "scratchpad"
+  | "trello-import"
+  | "user-roles"
+  | "webhooks"
+  | "workspace-users";
 
 /**
  * The inline "learn more" affordance that sits under a settings section's descriptive copy.

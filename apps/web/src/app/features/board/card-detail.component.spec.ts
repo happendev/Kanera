@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection, signal } from "@angular/core";
-import { ComponentFixture, TestBed } from "@angular/core/testing";
+import type { ComponentFixture } from "@angular/core/testing";
+import { TestBed } from "@angular/core/testing";
 import type { CardAttachmentRow } from "@kanera/shared/dto";
 import type { ActivityFeedEvent, CardFeedItem, WireBoardMemberUser, WireCard, WireCardChecklist, WireCardChecklistItem, WireCardDetail, WireChecklistTemplate, WireComment } from "@kanera/shared/events";
 import type { CardCustomFieldValue, CustomField } from "@kanera/shared/schema";

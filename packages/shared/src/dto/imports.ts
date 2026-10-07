@@ -66,7 +66,6 @@ export type AnalyzeImportResponse = z.infer<typeof analyzeImportResponse>;
 
 const dateLike = z.union([z.iso.datetime(), z.date()]);
 const nullableDateLike = z.union([dateLike, z.null()]);
-const kaneraBoardArchiveEntity = z.looseObject({ id: z.uuid() });
 // Shared by the archive and the manifest member rows. Older Kanera exports carry the retired
 // owner/admin board roles; normalize them to editor so legacy archives still import under the
 // editor/observer board-role model.

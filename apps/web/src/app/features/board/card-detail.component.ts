@@ -520,7 +520,7 @@ export class CardDetailComponent {
     await this.api.post(`/cards/${card.id}/move`, { listId, beforeCardId: null });
   }
 
-  toggleActionsMenu(e: MouseEvent) {
+  toggleActionsMenu() {
     this.actionsMenuOpen.update((value) => !value);
   }
 

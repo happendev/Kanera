@@ -96,7 +96,8 @@ function notificationQueueStats(): Promise<NotificationQueueStats> | null {
   return notificationQueueStatsCache.value;
 }
 
-const notificationQueueRows = new client.Gauge({
+// These gauges register themselves and collect through callbacks; no instance references are needed.
+new client.Gauge({
   name: "kanera_notification_queue_rows",
   help: "Current durable notification queue rows by state",
   labelNames: ["queue", "state"],
@@ -112,7 +113,7 @@ const notificationQueueRows = new client.Gauge({
   },
 });
 
-const notificationQueueOldestAge = new client.Gauge({
+new client.Gauge({
   name: "kanera_notification_queue_oldest_age_seconds",
   help: "Age of the oldest unresolved notification queue row",
   labelNames: ["queue"],

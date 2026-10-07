@@ -1,11 +1,11 @@
 import type {
   AfterViewInit,
+  ElementRef,
   OnInit,
 } from "@angular/core";
 import {
   ChangeDetectionStrategy,
   Component,
-  ElementRef,
   ViewChild,
   computed,
   inject,

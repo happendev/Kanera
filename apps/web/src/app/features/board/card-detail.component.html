@@ -60,7 +60,7 @@
     </button>
     } @else {
     <div class="card-actions-wrap">
-      <button #actionsTrigger class="ghost icon" [class.is-active]="actionsMenuOpen()" [disabled]="!canEdit()" (click)="toggleActionsMenu($event)" aria-label="Card actions" kTooltip="Card actions">
+      <button #actionsTrigger class="ghost icon" [class.is-active]="actionsMenuOpen()" [disabled]="!canEdit()" (click)="toggleActionsMenu()" aria-label="Card actions" kTooltip="Card actions">
         <i class="ti ti-dots"></i>
       </button>
       @if (actionsMenuOpen()) {

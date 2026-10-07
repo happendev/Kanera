@@ -1707,7 +1707,7 @@ describe("BoardPage", () => {
     });
 
     it("remembers the axis per board, separately from the table's grouping", async () => {
-      const { component } = await groupedByAssignee();
+      await groupedByAssignee();
 
       expect(localStorage.getItem(viewPreferenceKey("groupBy", "board:board-1:kanban"))).toBe("assignee");
       expect(localStorage.getItem(viewPreferenceKey("groupBy", "board:board-1"))).toBeNull();
