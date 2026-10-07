@@ -58,7 +58,7 @@ async function linkAttachmentsToComment(params: {
     .where(inArray(cardAttachments.id, updated.map((u) => u.id)));
   for (const { uploadedByClientId, uploadedByAvatarUrl, ...row } of rows) {
     // Re-emit as created so clients upsert the row with the new commentId/source.
-    emitToBoard(boardId, "card:attachment:created", {
+    await emitToBoard(boardId, "card:attachment:created", {
       boardId,
       cardId,
       attachment: withSignedMedia(clientId, {
@@ -471,12 +471,12 @@ export async function commentRoutes(app: FastifyInstance) {
       commentBody,
     });
     queueNotificationFanout(commentCreatedActivity, { kind: "created" });
-    emitToBoard(card.boardId, "comment:created", {
+    await emitToBoard(card.boardId, "comment:created", {
       boardId: card.boardId,
       cardId,
       comment: selectedCommentRow,
     });
-    emitToBoard(card.boardId, "card:feedItem:created", {
+    await emitToBoard(card.boardId, "card:feedItem:created", {
       boardId: card.boardId,
       cardId,
       item: { type: "comment", data: selectedCommentRow },
@@ -626,12 +626,12 @@ export async function commentRoutes(app: FastifyInstance) {
     const commentRow = await selectCommentRow(comment!.id, req.auth.cid);
     await touchCardActivity(card.id, req.auth.cid);
 
-    emitToBoard(card.boardId, "comment:updated", {
+    await emitToBoard(card.boardId, "comment:updated", {
       boardId: card.boardId,
       cardId: card.id,
       comment: commentRow,
     });
-    emitToBoard(card.boardId, "card:feedItem:updated", {
+    await emitToBoard(card.boardId, "card:feedItem:updated", {
       boardId: card.boardId,
       cardId: card.id,
       item: { type: "comment", data: commentRow },
@@ -671,12 +671,12 @@ export async function commentRoutes(app: FastifyInstance) {
       action: "deleted",
       payload: { cardId: card.id },
     });
-    emitToBoard(card.boardId, "comment:deleted", {
+    await emitToBoard(card.boardId, "comment:deleted", {
       boardId: card.boardId,
       cardId: card.id,
       commentId: id,
     });
-    emitToBoard(card.boardId, "card:feedItem:deleted", {
+    await emitToBoard(card.boardId, "card:feedItem:deleted", {
       boardId: card.boardId,
       cardId: card.id,
       type: "comment",
@@ -790,7 +790,7 @@ export async function commentRoutes(app: FastifyInstance) {
         .where(eq(users.id, req.auth.sub))
         .limit(1);
       if (user) {
-        emitToBoard(card.boardId, "comment:reaction:added", {
+        await emitToBoard(card.boardId, "comment:reaction:added", {
           boardId: card.boardId,
           cardId: card.id,
           commentId,
@@ -830,7 +830,7 @@ export async function commentRoutes(app: FastifyInstance) {
       .returning({ id: commentReactions.id });
 
     if (removed.length > 0) {
-      emitToBoard(card.boardId, "comment:reaction:removed", {
+      await emitToBoard(card.boardId, "comment:reaction:removed", {
         boardId: card.boardId,
         cardId: card.id,
         commentId,

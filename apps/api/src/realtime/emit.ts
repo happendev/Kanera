@@ -28,6 +28,8 @@ function compactBoardRealtimePayload<E extends keyof ServerToClientEvents>(
   return { ...cardPayload, card: compactWireCard(cardPayload.card) } as Parameters<ServerToClientEvents[E]>[0];
 }
 
+// Mutation callers await board/workspace publication so the outbox write finishes before the
+// response or a dependent event. Awaiting preserves fail-open behavior: publish failures are logged.
 export function emitToBoard<E extends keyof ServerToClientEvents>(
   boardId: string,
   event: E,

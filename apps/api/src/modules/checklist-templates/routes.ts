@@ -108,7 +108,7 @@ export async function checklistTemplateRoutes(app: FastifyInstance) {
     });
 
     const template = await loadChecklistTemplate(templateId);
-    emitToWorkspace(workspaceId, "checklistTemplate:created", { workspaceId, template: template! });
+    await emitToWorkspace(workspaceId, "checklistTemplate:created", { workspaceId, template: template! });
     return reply.status(201).send(template);
   });
 
@@ -140,7 +140,7 @@ export async function checklistTemplateRoutes(app: FastifyInstance) {
     });
 
     const template = await loadChecklistTemplate(id);
-    emitToWorkspace(current.workspaceId, "checklistTemplate:updated", { workspaceId: current.workspaceId, template: template! });
+    await emitToWorkspace(current.workspaceId, "checklistTemplate:updated", { workspaceId: current.workspaceId, template: template! });
     return template!;
   });
 
@@ -164,7 +164,7 @@ export async function checklistTemplateRoutes(app: FastifyInstance) {
       });
       return affectedAutomationIds;
     });
-    emitToWorkspace(current.workspaceId, "checklistTemplate:deleted", { workspaceId: current.workspaceId, templateId: id });
+    await emitToWorkspace(current.workspaceId, "checklistTemplate:deleted", { workspaceId: current.workspaceId, templateId: id });
     for (const automationId of affectedAutomationIds) {
       const automation = await loadAutomation(automationId);
       if (automation) await emitToWorkspaceAdmins(current.workspaceId, "automation:updated", { workspaceId: current.workspaceId, automation });
@@ -204,7 +204,7 @@ export async function checklistTemplateRoutes(app: FastifyInstance) {
     if (rebalancedPositions) {
       await emitToWorkspace(current.workspaceId, "checklistTemplate:rebalanced", { workspaceId: current.workspaceId, positions: rebalancedPositions });
     }
-    emitToWorkspace(current.workspaceId, "checklistTemplate:moved", {
+    await emitToWorkspace(current.workspaceId, "checklistTemplate:moved", {
       workspaceId: current.workspaceId,
       templateId: id,
       position,

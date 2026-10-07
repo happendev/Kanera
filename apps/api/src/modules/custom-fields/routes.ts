@@ -86,7 +86,7 @@ export async function customFieldRoutes(app: FastifyInstance) {
       action: "created",
       payload: { name: customField!.name, icon: customField!.icon, type: customField!.type },
     });
-    emitToWorkspace(workspaceId, "customField:created", { workspaceId, customField: wireField });
+    await emitToWorkspace(workspaceId, "customField:created", { workspaceId, customField: wireField });
     return reply.status(201).send(wireField);
   });
 
@@ -123,7 +123,7 @@ export async function customFieldRoutes(app: FastifyInstance) {
       action: "updated",
       payload: body,
     });
-    emitToWorkspace(current.workspaceId, "customField:updated", { workspaceId: current.workspaceId, customField: wireField });
+    await emitToWorkspace(current.workspaceId, "customField:updated", { workspaceId: current.workspaceId, customField: wireField });
     return wireField;
   });
 
@@ -148,7 +148,7 @@ export async function customFieldRoutes(app: FastifyInstance) {
       });
       return affected;
     });
-    emitToWorkspace(current.workspaceId, "customField:deleted", { workspaceId: current.workspaceId, fieldId: id });
+    await emitToWorkspace(current.workspaceId, "customField:deleted", { workspaceId: current.workspaceId, fieldId: id });
     // Re-emit each disabled automation so the workspace-settings list reflects the pruned
     // actions and disabled state without a reload (there is no bulk automation event).
     for (const automationId of disabledAutomationIds) {
@@ -185,7 +185,7 @@ export async function customFieldRoutes(app: FastifyInstance) {
     if (rebalancedPositions) {
       await emitToWorkspace(current.workspaceId, "customField:rebalanced", { workspaceId: current.workspaceId, positions: rebalancedPositions });
     }
-    emitToWorkspace(current.workspaceId, "customField:moved", {
+    await emitToWorkspace(current.workspaceId, "customField:moved", {
       workspaceId: current.workspaceId,
       fieldId: id,
       position,
@@ -223,7 +223,7 @@ export async function customFieldRoutes(app: FastifyInstance) {
       action: "updated",
       payload: { optionAdded: option!.label },
     });
-    emitToWorkspace(field.workspaceId, "customFieldOption:created", {
+    await emitToWorkspace(field.workspaceId, "customFieldOption:created", {
       workspaceId: field.workspaceId,
       fieldId: id,
       option: option!,
@@ -254,7 +254,7 @@ export async function customFieldRoutes(app: FastifyInstance) {
       action: "updated",
       payload: { optionUpdated: option!.label, ...body },
     });
-    emitToWorkspace(workspaceId, "customFieldOption:updated", {
+    await emitToWorkspace(workspaceId, "customFieldOption:updated", {
       workspaceId,
       fieldId: field.id,
       option: option!,
@@ -285,7 +285,7 @@ export async function customFieldRoutes(app: FastifyInstance) {
       });
       return affected;
     });
-    emitToWorkspace(workspaceId, "customFieldOption:deleted", { workspaceId, fieldId: field.id, optionId });
+    await emitToWorkspace(workspaceId, "customFieldOption:deleted", { workspaceId, fieldId: field.id, optionId });
     for (const automationId of disabledAutomationIds) {
       const automation = await loadAutomation(automationId);
       if (automation) await emitToWorkspaceAdmins(workspaceId, "automation:updated", { workspaceId, automation });
@@ -322,7 +322,7 @@ export async function customFieldRoutes(app: FastifyInstance) {
     if (rebalancedPositions) {
       await emitToWorkspace(workspaceId, "customFieldOption:rebalanced", { workspaceId, fieldId: field.id, positions: rebalancedPositions });
     }
-    emitToWorkspace(workspaceId, "customFieldOption:moved", {
+    await emitToWorkspace(workspaceId, "customFieldOption:moved", {
       workspaceId,
       fieldId: field.id,
       optionId,

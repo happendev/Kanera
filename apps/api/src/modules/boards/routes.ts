@@ -654,7 +654,7 @@ export async function boardRoutes(app: FastifyInstance) {
       action: "created",
       payload: { title: group!.title },
     });
-    emitToWorkspace(workspaceId, "boardGroup:created", { workspaceId, group: group! });
+    await emitToWorkspace(workspaceId, "boardGroup:created", { workspaceId, group: group! });
     return reply.status(201).send(group);
   });
 
@@ -678,7 +678,7 @@ export async function boardRoutes(app: FastifyInstance) {
       action: "updated",
       payload: { title: body.title },
     });
-    emitToWorkspace(current.workspaceId, "boardGroup:updated", { workspaceId: current.workspaceId, group: group! });
+    await emitToWorkspace(current.workspaceId, "boardGroup:updated", { workspaceId: current.workspaceId, group: group! });
     return group!;
   });
 
@@ -708,7 +708,7 @@ export async function boardRoutes(app: FastifyInstance) {
     if (rebalancedPositions) {
       await emitToWorkspace(current.workspaceId, "boardGroup:rebalanced", { workspaceId: current.workspaceId, positions: rebalancedPositions });
     }
-    emitToWorkspace(current.workspaceId, "boardGroup:moved", {
+    await emitToWorkspace(current.workspaceId, "boardGroup:moved", {
       workspaceId: current.workspaceId,
       groupId: id,
       position,
@@ -732,7 +732,7 @@ export async function boardRoutes(app: FastifyInstance) {
       action: "deleted",
       payload: { title: group.title },
     });
-    emitToWorkspace(group.workspaceId, "boardGroup:deleted", { workspaceId: group.workspaceId, groupId: id });
+    await emitToWorkspace(group.workspaceId, "boardGroup:deleted", { workspaceId: group.workspaceId, groupId: id });
     return reply.status(204).send();
   });
 
@@ -1065,7 +1065,7 @@ export async function boardRoutes(app: FastifyInstance) {
         isOrganisationMember: user!.orgRole !== null,
       },
     };
-    emitToBoard(id, "board:member:added", payload);
+    await emitToBoard(id, "board:member:added", payload);
     emitToUser(user.id, "board:member:added", payload);
     if (!user.membershipClientId) void capturePremiumFeatureUsed({
       organizationId: ctx.clientId,
@@ -1181,11 +1181,13 @@ export async function boardRoutes(app: FastifyInstance) {
     // A live role change is enough: every board mutation re-runs assertBoardAccess, so the new
     // role takes effect on the member's next action. Unlike a workspace-role change (which gates
     // room membership), there is no need to force-disconnect the user's sockets.
-    emitToBoard(id, "board:member:updated", payload);
+    const published = emitToBoard(id, "board:member:updated", payload);
     emitToUser(userId, "board:member:updated", payload);
     // Room membership is part of the confidentiality boundary: switching this flag must eject
     // any socket that may still be sitting in the unfiltered board room (or needs to rejoin it).
     if (member!.assignedItemsOnly !== existing.assignedItemsOnly) disconnectUserRealtimeSockets(userId);
+    // Eject restricted sockets immediately; only then wait for the durable role-change event.
+    await published;
     return member!;
   });
 

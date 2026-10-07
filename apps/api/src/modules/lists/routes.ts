@@ -57,7 +57,7 @@ export async function listRoutes(app: FastifyInstance) {
       action: "created",
       payload: { name: list!.name },
     });
-    emitToWorkspace(workspaceId, "list:created", { workspaceId, list: list! });
+    await emitToWorkspace(workspaceId, "list:created", { workspaceId, list: list! });
     return reply.status(201).send(list);
   });
 
@@ -99,7 +99,7 @@ export async function listRoutes(app: FastifyInstance) {
       toValue,
       payload: body,
     });
-    emitToWorkspace(current.workspaceId, "list:updated", { workspaceId: current.workspaceId, list: list! });
+    await emitToWorkspace(current.workspaceId, "list:updated", { workspaceId: current.workspaceId, list: list! });
     return list!;
   });
 
@@ -135,7 +135,7 @@ export async function listRoutes(app: FastifyInstance) {
       action: "deleted",
       payload: { name: current.name },
     });
-    emitToWorkspace(current.workspaceId, "list:deleted", { workspaceId: current.workspaceId, listId: id });
+    await emitToWorkspace(current.workspaceId, "list:deleted", { workspaceId: current.workspaceId, listId: id });
     return reply.status(204).send();
   });
 
@@ -246,7 +246,7 @@ export async function listRoutes(app: FastifyInstance) {
     }
     for (const [boardId, boardMoves] of byBoard) {
       for (const m of boardMoves) {
-        emitToBoard(boardId, "card:moved", {
+        await emitToBoard(boardId, "card:moved", {
           boardId,
           cardId: m.id,
           fromListId: id,
@@ -325,7 +325,7 @@ export async function listRoutes(app: FastifyInstance) {
     }
     for (const [boardId, boardCards] of byBoard) {
       for (const card of boardCards) {
-        emitToBoard(boardId, "card:updated", { boardId, card });
+        await emitToBoard(boardId, "card:updated", { boardId, card });
       }
     }
     // Archiving removes cards from "Up next" queues without touching their rows, so the queue
@@ -370,7 +370,7 @@ export async function listRoutes(app: FastifyInstance) {
       toValue: position,
       payload: { prevPosition, position },
     });
-    emitToWorkspace(current.workspaceId, "list:moved", {
+    await emitToWorkspace(current.workspaceId, "list:moved", {
       workspaceId: current.workspaceId,
       listId: id,
       position,

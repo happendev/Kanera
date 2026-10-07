@@ -45,7 +45,7 @@ export async function cardLabelRoutes(app: FastifyInstance) {
       action: "created",
       payload: { name: label!.name },
     });
-    emitToWorkspace(workspaceId, "cardLabel:created", { workspaceId, cardLabel: label! });
+    await emitToWorkspace(workspaceId, "cardLabel:created", { workspaceId, cardLabel: label! });
     return reply.status(201).send(label);
   });
 
@@ -75,7 +75,7 @@ export async function cardLabelRoutes(app: FastifyInstance) {
       action: "updated",
       payload: body,
     });
-    emitToWorkspace(current.workspaceId, "cardLabel:updated", { workspaceId: current.workspaceId, cardLabel: label! });
+    await emitToWorkspace(current.workspaceId, "cardLabel:updated", { workspaceId: current.workspaceId, cardLabel: label! });
     return label!;
   });
 
@@ -94,7 +94,7 @@ export async function cardLabelRoutes(app: FastifyInstance) {
       action: "deleted",
       payload: { name: current.name },
     });
-    emitToWorkspace(current.workspaceId, "cardLabel:deleted", { workspaceId: current.workspaceId, labelId: id });
+    await emitToWorkspace(current.workspaceId, "cardLabel:deleted", { workspaceId: current.workspaceId, labelId: id });
     return reply.status(204).send();
   });
 
@@ -126,7 +126,7 @@ export async function cardLabelRoutes(app: FastifyInstance) {
     if (rebalancedPositions) {
       await emitToWorkspace(current.workspaceId, "cardLabel:rebalanced", { workspaceId: current.workspaceId, positions: rebalancedPositions });
     }
-    emitToWorkspace(current.workspaceId, "cardLabel:moved", {
+    await emitToWorkspace(current.workspaceId, "cardLabel:moved", {
       workspaceId: current.workspaceId,
       labelId: id,
       position,

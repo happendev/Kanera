@@ -218,7 +218,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
     // Uploads that do not become the cover are still activity on the card.
     if (!coverChanged) await touchCardActivity(cardId, req.auth.cid);
 
-    emitToBoard(card.boardId, "card:attachment:created", {
+    await emitToBoard(card.boardId, "card:attachment:created", {
       boardId: card.boardId,
       cardId,
       attachment,
@@ -227,7 +227,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
     if (coverChanged) {
       const [updatedCard] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
       if (updatedCard) {
-        emitToBoard(card.boardId, "card:updated", { boardId: card.boardId, card: updatedCard });
+        await emitToBoard(card.boardId, "card:updated", { boardId: card.boardId, card: updatedCard });
       }
     }
 
@@ -345,7 +345,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
       .where(eq(cards.id, cardId))
       .returning();
 
-    emitToBoard(card.boardId, "card:updated", { boardId: card.boardId, card: updated! });
+    await emitToBoard(card.boardId, "card:updated", { boardId: card.boardId, card: updated! });
 
     await recordActivity(db, {
       boardId: card.boardId,
@@ -431,7 +431,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
       }
     }
 
-    emitToBoard(card.boardId, "card:attachment:deleted", {
+    await emitToBoard(card.boardId, "card:attachment:deleted", {
       boardId: card.boardId,
       cardId,
       attachmentId,
@@ -497,12 +497,12 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
           body: signEmbeddedMediaUrls(comment.body, req.auth.cid) ?? comment.body,
           reactions: reactionsMap.get(updatedComment.id) ?? [],
         };
-        emitToBoard(card.boardId, "comment:updated", {
+        await emitToBoard(card.boardId, "comment:updated", {
           boardId: card.boardId,
           cardId,
           comment: enriched,
         });
-        emitToBoard(card.boardId, "card:feedItem:updated", {
+        await emitToBoard(card.boardId, "card:feedItem:updated", {
           boardId: card.boardId,
           cardId,
           item: { type: "comment", data: enriched },
@@ -513,7 +513,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
     if (coverChanged || descriptionChanged) {
       const [updatedCard] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
       if (updatedCard) {
-        emitToBoard(card.boardId, "card:updated", { boardId: card.boardId, card: { ...updatedCard, description: signEmbeddedMediaUrls(updatedCard.description, req.auth.cid) } });
+        await emitToBoard(card.boardId, "card:updated", { boardId: card.boardId, card: { ...updatedCard, description: signEmbeddedMediaUrls(updatedCard.description, req.auth.cid) } });
       }
     } else {
       // A plain attachment deletion does not otherwise mutate the card row.

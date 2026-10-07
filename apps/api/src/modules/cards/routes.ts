@@ -1067,8 +1067,8 @@ export async function cardRoutes(
           dueDateTimezone: card.dueDateTimezone,
         },
       });
-      emitCardActivityFeedItem(boardId, card.id, activity);
-      emitToBoard(boardId, SERVER_EVENTS.CARD_UPDATED, { boardId, card: toWireCard(card, req.auth.cid) });
+      await emitCardActivityFeedItem(boardId, card.id, activity);
+      await emitToBoard(boardId, SERVER_EVENTS.CARD_UPDATED, { boardId, card: toWireCard(card, req.auth.cid) });
     }
     return { updated: updates.length, cards: updates.map(({ card }) => toWireCard(card, req.auth.cid)), skippedCardIds };
   });
@@ -1357,8 +1357,8 @@ export async function cardRoutes(
     emitDeletedNotifications(deletedNotifications);
 
     for (const { card, activity } of updates) {
-      emitCardActivityFeedItem(boardId, card.id, activity);
-      emitToBoard(boardId, SERVER_EVENTS.CARD_UPDATED, { boardId, card: toWireCard(card, req.auth.cid) });
+      await emitCardActivityFeedItem(boardId, card.id, activity);
+      await emitToBoard(boardId, SERVER_EVENTS.CARD_UPDATED, { boardId, card: toWireCard(card, req.auth.cid) });
     }
     // Archival removes cards from "Up next" queues without touching their rows, so the queue
     // audiences must be pinged separately from the board room above.
@@ -1945,7 +1945,7 @@ export async function cardRoutes(
     ]);
 
     if (labelAssignments.length > 0) {
-      emitToBoard(body.boardId, SERVER_EVENTS.CARD_LABELS_SET, {
+      await emitToBoard(body.boardId, SERVER_EVENTS.CARD_LABELS_SET, {
         boardId: body.boardId,
         cardId: id,
         labelIds: labelAssignments.map((l) => l.labelId),
@@ -1954,14 +1954,14 @@ export async function cardRoutes(
     // Always broadcast when assignees were dropped, even if the final set is empty, so the
     // destination board's clients do not keep a stale assignee list from the CARD_CREATED payload.
     if (assignees.length > 0 || droppedAssigneeIds.length > 0) {
-      emitToBoard(body.boardId, SERVER_EVENTS.CARD_ASSIGNEES_SET, {
+      await emitToBoard(body.boardId, SERVER_EVENTS.CARD_ASSIGNEES_SET, {
         boardId: body.boardId,
         cardId: id,
         assigneeIds: assignees.map((a) => a.userId),
       });
     }
     for (const { uploadedByClientId, uploadedByAvatarUrl, ...att } of attachmentRows) {
-      emitToBoard(body.boardId, SERVER_EVENTS.CARD_ATTACHMENT_CREATED, {
+      await emitToBoard(body.boardId, SERVER_EVENTS.CARD_ATTACHMENT_CREATED, {
         boardId: body.boardId,
         cardId: id,
         attachment: {
@@ -2110,7 +2110,7 @@ export async function cardRoutes(
     });
 
     for (const { value, activity, automationEffects } of changes.set) {
-      emitToBoard(boardId, SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_SET, {
+      await emitToBoard(boardId, SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_SET, {
         boardId,
         cardId: value.cardId,
         fieldId: field.id,
@@ -2126,7 +2126,7 @@ export async function cardRoutes(
       await emitAutomationEffects(automationEffects);
     }
     for (const { cardId, activity, automationEffects } of changes.cleared) {
-      emitToBoard(boardId, SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_CLEARED, { boardId, cardId, fieldId: field.id });
+      await emitToBoard(boardId, SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_CLEARED, { boardId, cardId, fieldId: field.id });
       await emitCoalescedCardActivityFeedItem(boardId, cardId, activity);
       await emitAutomationEffects(automationEffects);
     }
@@ -2194,7 +2194,7 @@ export async function cardRoutes(
       });
       return { value: updatedValue!, activity: baseActivity, automationEffects: effects };
     });
-    emitToBoard(card.boardId, SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_SET, {
+    await emitToBoard(card.boardId, SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_SET, {
       boardId: card.boardId,
       cardId: id,
       fieldId,
@@ -2414,7 +2414,7 @@ export async function cardRoutes(
     });
 
     const created: WireCardChecklist = { ...checklist, items: trees.map((tree) => tree.item) };
-    emitCardActivityFeedItem(card.boardId, id, activity);
+    await emitCardActivityFeedItem(card.boardId, id, activity);
     // The parent checklist event carries its items, so clients have each owning item before the
     // sub-checklist events that reference it by parentItemId arrive.
     await emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_CREATED, { boardId: card.boardId, cardId: id, checklist: created });
@@ -2445,8 +2445,8 @@ export async function cardRoutes(
     });
 
     for (const result of applied) {
-      emitCardActivityFeedItem(card.boardId, id, result.activity);
-      emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_CREATED, {
+      await emitCardActivityFeedItem(card.boardId, id, result.activity);
+      await emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_CREATED, {
         boardId: card.boardId,
         cardId: id,
         checklist: result.checklist,
@@ -2492,7 +2492,7 @@ export async function cardRoutes(
     });
 
     await emitCoalescedCardActivityFeedItem(card.boardId, id, activity);
-    emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_UPDATED, { boardId: card.boardId, cardId: id, checklist });
+    await emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_UPDATED, { boardId: card.boardId, cardId: id, checklist });
     return checklist;
   });
 
@@ -2557,11 +2557,11 @@ export async function cardRoutes(
     });
 
     if (result.hiddenCreate) {
-      emitActivityFeedItemDeleted(card.boardId, id, result.hiddenCreate.id);
+      await emitActivityFeedItemDeleted(card.boardId, id, result.hiddenCreate.id);
     } else if (result.deletedActivity) {
-      emitCardActivityFeedItem(card.boardId, id, result.deletedActivity);
+      await emitCardActivityFeedItem(card.boardId, id, result.deletedActivity);
     }
-    emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_DELETED, { boardId: card.boardId, cardId: id, checklistId });
+    await emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_DELETED, { boardId: card.boardId, cardId: id, checklistId });
     return reply.status(204).send();
   });
 
@@ -2588,7 +2588,7 @@ export async function cardRoutes(
     });
 
     if (rebalancedPositions) await emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_REBALANCED, { boardId: card.boardId, cardId: id, positions: rebalancedPositions });
-    emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_MOVED, { boardId: card.boardId, cardId: id, checklistId, position, prevPosition });
+    await emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_MOVED, { boardId: card.boardId, cardId: id, checklistId, position, prevPosition });
     return { id: checklistId, position };
   });
 
@@ -2907,13 +2907,13 @@ export async function cardRoutes(
       return { items, assigneeActivity, dueDateActivity };
     });
 
-    if (assigneeActivity) emitCoalescedCardActivityFeedItem(card.boardId, id, assigneeActivity, { notify: false });
-    if (dueDateActivity) emitCoalescedCardActivityFeedItem(card.boardId, id, dueDateActivity, { notify: false });
+    if (assigneeActivity) await emitCoalescedCardActivityFeedItem(card.boardId, id, assigneeActivity, { notify: false });
+    if (dueDateActivity) await emitCoalescedCardActivityFeedItem(card.boardId, id, dueDateActivity, { notify: false });
     const itemsById = new Map(items.map((item) => [item.id, item]));
     for (const current of targetItems) {
       const item = itemsById.get(current.id);
       if (!item) continue;
-      emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_UPDATED, { boardId: card.boardId, cardId: id, cardTitle: card.title, listId: card.listId, checklistId, checklistParentItemId: checklist.parentItemId, item, prevCompletedAt: current.completedAt });
+      await emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_UPDATED, { boardId: card.boardId, cardId: id, cardTitle: card.title, listId: card.listId, checklistId, checklistParentItemId: checklist.parentItemId, item, prevCompletedAt: current.completedAt });
     }
     return { items };
   });
@@ -3405,7 +3405,7 @@ export async function cardRoutes(
 
     if (sourceRebalanced) await emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_REBALANCED, { boardId: card.boardId, cardId: id, checklistId, positions: sourceRebalanced });
     if (targetRebalanced) await emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_REBALANCED, { boardId: card.boardId, cardId: id, checklistId: targetChecklistId, positions: targetRebalanced });
-    emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_MOVED, {
+    await emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_MOVED, {
       boardId: card.boardId,
       cardId: id,
       itemId,
@@ -3452,9 +3452,9 @@ export async function cardRoutes(
       return { updated: updated!, activity, deletedNotifications };
     });
     emitDeletedNotifications(deletedNotifications);
-    emitCardActivityFeedItem(card.boardId, id, activity, { notify: false });
+    await emitCardActivityFeedItem(card.boardId, id, activity, { notify: false });
     const wireCard = toWireCard(updated, req.auth.cid);
-    emitToBoard(card.boardId, SERVER_EVENTS.CARD_UPDATED, { boardId: card.boardId, card: wireCard });
+    await emitToBoard(card.boardId, SERVER_EVENTS.CARD_UPDATED, { boardId: card.boardId, card: wireCard });
     // Archiving hides the card from any "Up next" queue holding it (and restoring brings it back)
     // without touching the queue rows, so those audiences are pinged separately.
     await invalidateQueuesForCards([id]);
@@ -3507,8 +3507,8 @@ export async function cardRoutes(
       });
       return { activity: baseActivity, automationEffects: effects };
     });
-    emitToBoard(card.boardId, SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_CLEARED, { boardId: card.boardId, cardId: id, fieldId });
-    emitCoalescedCardActivityFeedItem(card.boardId, id, activity);
+    await emitToBoard(card.boardId, SERVER_EVENTS.CARD_CUSTOM_FIELD_VALUE_CLEARED, { boardId: card.boardId, cardId: id, fieldId });
+    await emitCoalescedCardActivityFeedItem(card.boardId, id, activity);
     await emitAutomationEffects(automationEffects);
     return reply.status(204).send();
   });

@@ -5,6 +5,7 @@ import { db, type Db, type Tx } from "../db.js";
 import { env } from "../env.js";
 import { enqueueOverdueWatcherOutbound } from "./watched-activity-push.js";
 import { emitToUser } from "../realtime/emit.js";
+import { logRealtimePublishFailure } from "../realtime/metrics.js";
 import { emitActivityFeedItem, recordActivity } from "./activity.js";
 import { loadAssignedChecklistItems } from "./assigned-checklist-items.js";
 import { enqueueOverdueAssigneeEmails, enqueueOverdueChecklistItemAssigneeEmails } from "./assignee-email-notifications.js";
@@ -204,7 +205,20 @@ export async function createOverdueNotificationsForCards(
   const overdueCards = cardCandidates.filter((candidate) => isCandidateOverdue(candidate, now));
   const overdueActivities = await createOverdueActivities(tx, overdueCards);
   for (const activity of overdueActivities) {
-    emitActivityFeedItem(activity.boardId!, activity.entityId, activity, { notify: false });
+    const published = emitActivityFeedItem(activity.boardId!, activity.entityId, activity, { notify: false });
+    if (tx === db) {
+      // The sweep owns no transaction connection, so finish its durable publication before returning.
+      await published;
+    } else {
+      // Completion/due-date automations call this with an open transaction. Publication uses the
+      // global pool, so awaiting it here could exhaust the pool while every caller holds a
+      // transaction connection. Keep this existing background path explicit and log rejections.
+      void published.catch((err) => logRealtimePublishFailure(err, {
+        scope: "board",
+        scopeId: activity.boardId!,
+        event: "card:feedItem:created",
+      }));
+    }
   }
   const overdue = overdueCards.flatMap((card) =>
     Array.from(recipientsByCard.get(card.cardId) ?? []).map((userId) => ({ ...card, userId })),
