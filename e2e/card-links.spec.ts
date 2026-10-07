@@ -28,7 +28,12 @@ async function writeDescription(detail: Locator, text: string) {
   // The corner, not the centre: a resolved link chip in the body navigates instead of editing.
   await detail.locator(".description-viewer-wrap").click({ position: { x: 4, y: 4 } });
   const editor = detail.locator("k-description-editor");
-  await editor.locator(".tiptap").fill(text);
+  const body = editor.locator(".tiptap");
+  // Tiptap focuses the end asynchronously on create. Wait for that before fill selects the
+  // document, otherwise autofocus can collapse the selection and append instead of replacing.
+  await expect(body).toBeFocused();
+  await body.fill(text);
+  await expect(body).toHaveText(text);
   await editor.getByRole("button", { name: "Save", exact: true }).click();
   await expect(editor).toHaveCount(0);
 }

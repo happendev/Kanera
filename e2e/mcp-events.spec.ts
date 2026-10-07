@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import ports from "./ports.json";
 import { expect, test } from "./support/fixtures";
-import { boardIdOf, createWorkspaceApiKey, openBoard, workspaceSettingsHref } from "./support/ui";
+import { boardIdOf, createWorkspaceApiKey, expectCardTileMounted, openBoard, workspaceSettingsHref } from "./support/ui";
 
 const mcpUrl = `http://localhost:${ports.mcp}/mcp`;
 
@@ -53,10 +53,17 @@ test("MCP 2 discovers events, executes tools, rejects private callbacks and resp
     const cancelled = await send("notifications/cancelled", { requestId: 1 }, { notification: true });
     expect(cancelled.response.status()).toBe(202);
     expect(cancelled.body).toBeNull();
-    const catalog = await rpc<{ events: Array<{ name: string; delivery: string[]; payloadSchema: { required: string[] }; inputSchema: { properties: Record<string, unknown> } }> }>("events/list");
+    const catalog = await rpc<{ events: Array<{ name: string; delivery: string[]; payloadSchema: { required: string[]; properties: Record<string, unknown> }; inputSchema: { properties: Record<string, unknown> } }> }>("events/list");
     expect(catalog.body.result.events.every((event) => event.payloadSchema.required.includes("actor"))).toBe(true);
-    expect(catalog.body.result.events.every((event) => !!event.inputSchema.properties.listId)).toBe(true);
-    expect(catalog.body.result.events.map((event: { name: string }) => event.name)).toEqual(["card.created", "card.updated", "card.moved", "comment.created"]);
+    // Card events accept list filters; the personal queue invalidation has no scope arguments
+    // or queue content, because the caller must re-read priorities under its own credentials.
+    const cardEvents = catalog.body.result.events.filter((event) => event.name !== "priorities.changed");
+    expect(cardEvents.every((event) => !!event.inputSchema.properties.listId)).toBe(true);
+    const priorityEvent = catalog.body.result.events.find((event) => event.name === "priorities.changed");
+    expect(priorityEvent?.inputSchema.properties).toEqual({});
+    expect(priorityEvent?.payloadSchema.required).toEqual(["targetUserId", "actor"]);
+    expect(Object.keys(priorityEvent!.payloadSchema.properties)).toEqual(["targetUserId", "actor"]);
+    expect(catalog.body.result.events.map((event: { name: string }) => event.name)).toEqual(["card.created", "card.updated", "card.moved", "comment.created", "priorities.changed"]);
     expect(catalog.body.result.events.every((event: { delivery: string[] }) => event.delivery.join() === "webhook")).toBe(true);
     const tools = await rpc<{ tools: Array<{ name: string }>; ttlMs: number; cacheScope: string }>("tools/list");
     expect(tools.body.result).toMatchObject({ resultType: "complete", ttlMs: expect.any(Number), cacheScope: "public" });
@@ -75,6 +82,8 @@ test("MCP 2 discovers events, executes tools, rejects private callbacks and resp
     expect(duplicate.body.result.isError).not.toBe(true);
     expect(created.body.result.isError).not.toBe(true);
     await openBoard(page, "Platform Delivery");
+    // Full-suite runs fill the seeded lane beyond its initial render window.
+    await expectCardTileMounted(page, title, listId);
     await expect(page.locator("k-card").filter({ hasText: title })).toHaveCount(1);
     const callback = await rpc("events/subscribe", { name: "comment.created", arguments: { workspaceId, boardId }, delivery: { mode: "webhook", url: "https://127.0.0.1/callback", secret: `whsec_${randomBytes(32).toString("base64")}` } });
     expect(callback.body.error).toMatchObject({ code: -32015, data: { reason: "challenge_failed" } });

@@ -23,6 +23,12 @@ async function renderedOrder(page: Page, listId: string, titles: string[]): Prom
  * cross the lower half of the target first would legitimately land after it.
  */
 async function dragCard(page: Page, card: Locator, target: Locator, side: "above" | "below") {
+  // Earlier specs append cards to this seeded lane. A mounted tile can still sit below its
+  // scroll viewport, and mouse coordinates do not scroll it into view like locator actions do.
+  await target.scrollIntoViewIfNeeded();
+  await card.scrollIntoViewIfNeeded();
+  await expect(card).toBeInViewport();
+  await expect(target).toBeInViewport();
   const from = (await card.boundingBox())!;
   const to = (await target.boundingBox())!;
   const startX = from.x + from.width / 2;

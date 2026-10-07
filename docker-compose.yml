@@ -527,7 +527,7 @@ services:
   # ---------------------------------------------------------------------------
 
   prometheus:
-    image: prom/prometheus:v3.14.0
+    image: prom/prometheus:v3.15.0
     restart: unless-stopped
     profiles: ["monitoring"]
     # Runs as root so it can both write the scrape token file and own the TSDB volume without a
@@ -571,7 +571,7 @@ services:
       - api
 
   grafana:
-    image: grafana/grafana:13.2.0
+    image: grafana/grafana:13.2.3
     restart: unless-stopped
     profiles: ["monitoring"]
     entrypoint:
@@ -630,7 +630,7 @@ services:
       - "3100"
 
   alloy:
-    image: grafana/alloy:v1.19.0
+    image: grafana/alloy:v1.20.1
     restart: unless-stopped
     profiles: ["monitoring"]
     command:
