@@ -100,10 +100,10 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
-    background: transparent;
-    border: 1px dashed var(--border-strong);
+    background: var(--accent);
+    border: 1px solid var(--accent);
     border-radius: var(--radius);
-    color: var(--text-muted);
+    color: var(--accent-fg);
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
@@ -112,9 +112,9 @@
     i { font-size: 14px; }
 
     &:hover:not(:disabled) {
-      background: var(--surface-2);
-      color: var(--text);
-      border-color: var(--accent);
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+      color: var(--accent-fg);
     }
 
     &:disabled { opacity: 0.5; cursor: not-allowed; }

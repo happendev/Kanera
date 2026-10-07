@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from "@angular/core";
 import type { ColorToken } from "@kanera/shared/colors";
 import { AutofocusDirective } from "../../shared/autofocus.directive";
 import { ColorPickerComponent } from "../../shared/color-picker.component";
@@ -44,24 +44,12 @@ export class SeparatorComponent {
   // Role-only permission for structural visibility of the edit/delete actions so they stay
   // mounted across offline blips; `canEdit` (online-aware) still gates the disabled state + saves.
   readonly canEditRole = input<boolean>(true);
-  readonly autoEdit = input<boolean>(false);
   readonly updated = output<{ id: string; title: string; color: ColorToken | null }>();
   readonly deleteRequested = output<string>();
   readonly editing = signal(false);
   readonly draftTitle = signal("");
   readonly draftColor = signal<ColorToken | null>(null);
   readonly displayColor = computed(() => this.editing() ? this.draftColor() : this.separator().color);
-  private autoEditedSeparatorId: string | null = null;
-
-  constructor() {
-    effect(() => {
-      const separator = this.separator();
-      if (!this.autoEdit() || !this.canEdit() || this.autoEditedSeparatorId === separator.id) return;
-      this.autoEditedSeparatorId = separator.id;
-      this.startEditing();
-    });
-  }
-
   // Seed the draft once when editing opens (not via an effect on separator()): a concurrent
   // separator:updated realtime event must not clobber the title the user is mid-edit on.
   startEditing() {

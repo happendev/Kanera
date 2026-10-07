@@ -848,6 +848,7 @@
                       [connectedDropLists]="upNextDropTargets()"
                       (cardAddedToPriority)="onUpNextAdd($event)"
                       [separatorCreateBaseUrl]="separatorCreateBaseUrl(workspace.id)"
+                      [defaultSeparatorColor]="workspace.accentColor ?? null"
                       [separatorItemBaseUrl]="'/global-work-separators'"
                       (separatorCreated)="onSeparatorCreated($event)"
                       (separatorUpdated)="onSeparatorUpdated($event)"

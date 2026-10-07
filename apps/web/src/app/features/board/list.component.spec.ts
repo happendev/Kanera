@@ -174,7 +174,7 @@ describe("ListComponent", () => {
     const emitted: unknown[] = [];
     fixture.componentInstance.startAdd.subscribe((payload) => emitted.push(payload));
     // One strip per gap; the lane footer already covers "after the last card".
-    const strips = fixture.debugElement.queryAll(By.css(".lane-insert"));
+    const strips = fixture.debugElement.queryAll(By.css(".lane-insert-card"));
     expect(strips).toHaveLength(2);
     (strips[0].nativeElement as HTMLButtonElement).click();
     expect(emitted).toEqual([{ listId: "list-1", atTop: false, afterItem: { type: "card", id: "first" } }]);
@@ -182,7 +182,7 @@ describe("ListComponent", () => {
     // Readers and view-only members never see the affordance.
     fixture.componentRef.setInput("canCreateCards", false);
     fixture.detectChanges();
-    expect(fixture.debugElement.queryAll(By.css(".lane-insert"))).toHaveLength(0);
+    expect(fixture.debugElement.queryAll(By.css(".lane-insert-card"))).toHaveLength(0);
   });
 
   it("does not expose completion setup from reused board list UI", () => {

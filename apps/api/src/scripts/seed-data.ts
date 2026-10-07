@@ -41,6 +41,7 @@ import {
   type ActivityEntityType,
   type CardDueDateSlot,
   type ClientRole,
+  type NoteAttachmentSource,
   type NoteScope,
 } from "@kanera/shared/schema";
 import { and, eq } from "drizzle-orm";
@@ -511,6 +512,8 @@ export type SeedDatabaseResult = {
 
 const seedUserByKey = new Map([...USER_SEEDS, GUEST_USER_SEED].map((user) => [user.key, user]));
 
+const INLINE_NOTE_IMAGE = /\{\{image:([A-Za-z0-9]+)(?:\|([^}]*))?\}\}/g;
+
 function note(...sections: string[]): string {
   return sections.join("\n\n");
 }
@@ -621,31 +624,65 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
         title: "Engineering Handbook",
         icon: "notebook",
         owner: "amelia",
-        content: note(
-          "📘 Shared engineering reference for how Development work moves through Kanera.",
-          "Use this as the first stop for release expectations, branch naming, QA handoff, and where to record decisions that affect multiple boards.",
-          "Reference: https://docs.kanera.app/engineering-handbook",
-        ),
+        content: `## Start here
+
+📘 Shared engineering reference for how Development work moves through Kanera: release expectations, branch naming, QA handoff, and where to record decisions that affect more than one board.
+
+| Topic | Page | Owner |
+| --- | --- | --- |
+| Shipping a release | Release Process | Priya Nair |
+| Branch names | Branching Guide | Priya Nair |
+| Events and payloads | API & Realtime Contracts | Marcus Cole |
+
+## Decisions
+
+Record a decision on the card it affects. If it changes how **several boards** work, add a short entry here and link the card.
+
+> Reference: https://docs.kanera.app/engineering-handbook`,
         children: [
           {
             title: "Release Process",
             icon: "rocket",
             owner: "priya",
             attachments: [{ asset: "releaseTemplate", uploadedBy: "priya" }],
-            content: note(
-              "Every release should have a board card with owner, due date, branch, acceptance notes, and rollback notes before it enters Ready for QA.",
-              "- ✅ Confirm custom field values are filled in\n- 📎 Attach release evidence when it helps future audits\n- 🧪 Leave a short comment when QA signs off",
-              "Release checklist: https://docs.kanera.app/releases/checklist",
-            ),
+            content: `Every release has a board card with owner, due date, branch, acceptance notes, and rollback notes **before** it enters Ready for QA.
+
+## Release checklist
+
+- [x] Custom field values are filled in
+- [x] Branch is linked on the card
+- [ ] Release evidence is attached when it helps a future audit
+- [ ] QA leaves a short sign-off comment
+- [ ] Rollback steps are written, not just "revert"
+
+## Stages
+
+| Stage | Who moves it | Exit check |
+| --- | --- | --- |
+| Ready for QA | Developer | Acceptance notes complete |
+| In QA | QA | Sign-off comment posted |
+| Ready to Release | Release owner | Rollback rehearsed |
+
+Release checklist: https://docs.kanera.app/releases/checklist`,
           },
           {
             title: "Branching Guide",
             icon: "git-branch",
             owner: "priya",
-            content: note(
-              "Use `feature/`, `fix/`, `docs/`, and `chore/` prefixes so reporting can group delivery work cleanly.",
-              "Hotfix branches should include the customer impact in the linked card before deployment.",
-            ),
+            content: `Prefix branches so reporting can group delivery work cleanly.
+
+| Prefix | Use for | Example |
+| --- | --- | --- |
+| \`feature/\` | New behaviour | \`feature/workspace-templates\` |
+| \`fix/\` | Defects | \`fix/billing-export-retry\` |
+| \`docs/\` | Documentation only | \`docs/api-pagination\` |
+| \`chore/\` | Tooling and upkeep | \`chore/bump-node-24\` |
+
+> **Hotfixes** must include the customer impact in the linked card before deployment.
+
+\`\`\`bash
+git switch -c fix/billing-export-retry
+\`\`\``,
           },
         ],
       },
@@ -653,22 +690,41 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
         title: "API & Realtime Contracts",
         icon: "plug-connected",
         owner: "marcus",
-        content: note(
-          "Shared contract notes for API mutations, Socket.IO events, and public integration behavior.",
-          "Mutation routes should validate the DTO, enforce workspace or board access, write data, record activity when the route's model expects it, and emit the matching realtime event.",
-          "Board events stay in board rooms. Workspace events stay in workspace rooms. Event payloads should carry full entities so connected clients can update without guessing.",
-          "API reference: https://docs.kanera.app/api",
-        ),
+        content: `Shared contract notes for API mutations, Socket.IO events, and public integration behaviour.
+
+## Every mutation route
+
+1. Validate the DTO.
+2. Enforce workspace or board access.
+3. Write the data.
+4. Record activity and emit the matching realtime event.
+
+## Rooms
+
+| Event scope | Room | Example |
+| --- | --- | --- |
+| Board | \`board:\${boardId}\` | \`card:moved\` |
+| Workspace | \`workspace:\${workspaceId}\` | \`list:created\` |
+
+> Payloads carry **full entities**, not diffs, so connected clients update without guessing. \`*:moved\` events also include \`prevPosition\`.
+
+API reference: https://docs.kanera.app/api`,
       },
       {
         title: "Weekly Focus",
         icon: "target-arrow",
         scope: "personal",
         owner: "amelia",
-        content: note(
-          "Personal focus list for the week.",
-          "- 🎯 Keep template rollout small and demoable\n- 💸 Review billing export retry fix before finance review\n- 🚪 Check that onboarding still runs when `me.hasWorkspace === false`",
-        ),
+        content: `## This week
+
+- [ ] 🎯 Keep the template rollout small and demoable
+- [ ] 💸 Review the billing export retry fix before finance review
+- [x] 🚪 Check onboarding still runs when \`me.hasWorkspace === false\`
+
+## Parking lot
+
+- Pair with Ben on the offline skeleton states
+- Ask Marcus about the public API rate-limit headers`,
       },
     ],
     boards: [
@@ -992,10 +1048,24 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             title: "Mobile QA Checklist",
             icon: "device-mobile-check",
             owner: "nina",
-            content: note(
-              "Board-level QA checklist for mobile web and native-style flows.",
-              "- Test image, PDF, and DOCX attachment previews\n- Check offline skeleton states before reconnect\n- Confirm due-date reminders keep the card title after a cold start\n- Verify tablet layout does not hide filters or custom fields",
-            ),
+            content: `Board-level QA checklist for mobile web and native-style flows.
+
+{{image:tabletBoardOverview|Tablet board layout under review}}
+
+## Every release
+
+- [ ] Image, PDF, and DOCX attachment previews open
+- [ ] Offline skeleton states show before reconnect
+- [ ] Due-date reminders keep the card title after a cold start
+- [ ] Tablet layout keeps filters and custom fields visible
+
+## Devices
+
+| Device | Browser | Owner |
+| --- | --- | --- |
+| iPhone 15 | Safari | Nina Park |
+| Pixel 8 | Chrome | Zoe Mitchell |
+| iPad Air | Safari | Ben Ortega |`,
           },
         ],
         cards: [
@@ -2877,43 +2947,108 @@ function buildMarketingWorkspace(): SeedWorkspace {
         title: "Autumn Campaign Launch Plan",
         icon: "speakerphone",
         owner: "ben",
-        content: note(
-          "Shared plan for the autumn campaign launch across creative, content, web, email, social, and partner activity.",
-          "Ben owns launch readiness and the final schedule. Amelia gives final approval; Nina owns campaign artwork, Zoe owns customer-facing copy, Leo owns web and measurement, and Omar coordinates partner and event dependencies.",
-          "The launch remains blocked until product confirms the headline promise. Channel owners can continue production, but nothing should be scheduled or sent with placeholder wording.",
-          "Launch-day rule: update the main launch card first when a dependency changes so the readiness view remains trustworthy.",
-        ),
+        content: `## Launch at a glance
+
+Shared plan for the autumn launch across creative, content, web, email, social, and partner activity.
+
+{{image:campaignLaunchReadiness|Autumn launch readiness dashboard}}
+
+## Owners
+
+| Area | Owner | Done means |
+| --- | --- | --- |
+| Launch readiness & schedule | Ben Ortega | Every channel card is in Review & Approval or Done |
+| Final approval | Amelia Hart | Headline, offer, and dates signed off |
+| Campaign artwork | Nina Park | Desktop and mobile crops approved |
+| Customer-facing copy | Zoe Mitchell | Email, social, and landing copy approved |
+| Web & measurement | Leo Santos | Tracking verified on the live page |
+| Partners & events | Omar Ibrahim | Partner copy agreed in writing |
+
+> **Blocked:** the launch waits on product confirming the headline promise. Channels can keep producing, but nothing is scheduled or sent with placeholder wording.
+
+## Launch-day rules
+
+1. Update the main launch card **first** when a dependency changes.
+2. Post channel go-live confirmations as comments on that card.
+3. Hold the T+12h performance check before changing any spend.`,
       },
       {
         title: "Marketing Team Operating Guide",
         icon: "route",
         owner: "amelia",
-        content: note(
-          "How Marketing & Creative work moves through this workspace.",
-          "Ideas & Requests is for uncommitted work. A card moves to Ready to Start only when the audience, owner, intended outcome, and essential inputs are clear.",
-          "Use Review & Approval for a specific decision, not general feedback. Name the approver in a comment and describe what changed since the previous review.",
-          "Waiting on Others should identify the dependency and next follow-up date. Completed work belongs in Done with final files or destination links attached where useful.",
-        ),
+        content: `## How work moves
+
+How Marketing & Creative work moves through this workspace. Every board shares these lists, so a card means the same thing wherever it lives.
+
+| List | Use it when | Leave it when |
+| --- | --- | --- |
+| **Ideas & Requests** | The work is uncommitted or still being shaped | Audience, owner, and outcome are agreed |
+| **Ready to Start** | Inputs are clear and an owner is named | Someone starts producing |
+| **In Progress** | Work is actively being made | A specific decision is needed |
+| **Review & Approval** | One named approver is deciding one thing | The approver signs off or asks for changes |
+| **Waiting on Others** | A dependency outside the team blocks progress | The dependency lands |
+| **Done** | Final files or destination links are attached | — |
+
+> Use Review & Approval for a **specific decision**, not general feedback. Name the approver in a comment and say what changed since the last review.
+
+## Before a card leaves Ideas & Requests
+
+- [x] Audience and single promise are written in the description
+- [x] An owner is assigned and the due date is realistic
+- [ ] Source material is attached or linked
+- [ ] The destination (page, email, post, event) is named
+
+## Waiting on Others
+
+Name the dependency, the person who owns it, and the **next follow-up date** in a comment. If the follow-up passes with no answer, raise it in Monday's stand-up rather than letting the card go quiet.`,
         children: [
           {
             title: "Creative Review Standards",
             icon: "palette",
             owner: "nina",
-            content: note(
-              "Creative reviews should answer whether the work meets the brief, works in its intended placements, and is ready for production.",
-              "Review desktop and mobile crops together. Check contrast, safe areas, logo clearance, and whether partner variants still feel like the same campaign.",
-              "Keep subjective exploration in working files. Card comments should record decisions, concrete changes, and final approval.",
-            ),
+            content: `Creative reviews answer three questions: does the work meet the brief, does it work in its placements, and is it ready for production?
+
+{{image:campaignReviewCover|Campaign review wall with crops, swatches, and partner variants}}
+
+## Checklist
+
+- [ ] Desktop and mobile crops reviewed side by side
+- [ ] Contrast passes on every background
+- [ ] Safe areas and logo clearance respected
+- [ ] Partner variants still read as the same campaign
+
+## Where feedback goes
+
+| Kind of feedback | Where it belongs |
+| --- | --- |
+| Exploration and options | Working files |
+| Decisions and concrete changes | Card comments |
+| Final approval | A comment from the named approver |`,
           },
           {
             title: "Copy Approval Checklist",
             icon: "writing",
             owner: "zoe",
-            content: note(
-              "Before requesting approval, confirm the audience, single promise, supporting proof, call to action, and destination are consistent.",
-              "Avoid unsourced performance claims. Customer quotations must have a traceable interview or approval source, and partner copy must use the wording agreed with the partner.",
-              "For email and social, include the final subject line or post copy in the review context so approvers are not judging an isolated headline.",
-            ),
+            content: `Run through this before requesting approval so the approver judges the whole message, not an isolated headline.
+
+## Message
+
+- [ ] Audience is named
+- [ ] There is **one** promise
+- [ ] Supporting proof is sourced
+- [ ] Call to action matches the destination
+
+## Claims and quotes
+
+> Avoid unsourced performance claims. Customer quotations need a traceable interview or approval source, and partner copy must use the wording agreed with the partner.
+
+## By channel
+
+| Channel | Include in the review |
+| --- | --- |
+| Email | Subject line, preview text, body, CTA |
+| Social | Final post copy and the image it sits on |
+| Landing page | Headline, sub-head, and form copy |`,
           },
         ],
       },
@@ -2921,11 +3056,27 @@ function buildMarketingWorkspace(): SeedWorkspace {
         title: "Campaign Measurement Conventions",
         icon: "chart-dots-3",
         owner: "leo",
-        content: note(
-          "Use one campaign name across landing pages, email, social, partner links, and reporting. Preserve the original source when a visitor moves between campaign pages.",
-          "Primary measures are qualified demo requests and campaign-assisted opportunities. Landing-page conversion, email engagement, partner referrals, and event registrations are diagnostic measures.",
-          "Compare against the previous quarter where possible and label directional numbers clearly when attribution is incomplete.",
-        ),
+        content: `Use **one campaign name** across landing pages, email, social, partner links, and reporting, and preserve the original source when a visitor moves between campaign pages.
+
+## Naming
+
+\`\`\`text
+utm_campaign = autumn-launch-2026
+utm_source   = newsletter | linkedin | partner-<name>
+utm_medium   = email | social | referral | paid
+\`\`\`
+
+## What we report
+
+| Measure | Type | Reported |
+| --- | --- | --- |
+| Qualified demo requests | Primary | Weekly |
+| Campaign-assisted opportunities | Primary | Monthly |
+| Landing-page conversion | Diagnostic | Weekly |
+| Email engagement | Diagnostic | Per send |
+| Partner referrals & event registrations | Diagnostic | Weekly |
+
+> Compare against the previous quarter where possible, and label directional numbers clearly when attribution is incomplete.`,
       },
     ],
     boards: [
@@ -3105,22 +3256,51 @@ function buildDevopsWorkspace(): SeedWorkspace {
         title: "Incident Response Runbook",
         icon: "alert-triangle",
         owner: "grace",
-        content: note(
-          "🛟 Workspace runbook for production incidents and follow-up work.",
-          "First response: identify customer impact, link the active incident card, assign an owner, and keep the Monitoring list updated until the incident is stable.",
-          "Follow-up should capture root cause, alert changes, and any runbook updates before the card moves to Completed.",
-          "Status page: https://status.kanera.test",
-        ),
+        content: `🛟 Workspace runbook for production incidents and follow-up work.
+
+{{image:workerIncidentCover|Worker incident dashboard during a queue spike}}
+
+## First fifteen minutes
+
+1. Identify customer impact and post it on the incident card.
+2. Assign a single incident owner.
+3. Keep the card in **Monitoring** until the incident is stable.
+
+## Severity
+
+| Level | Impact | Update cadence |
+| --- | --- | --- |
+| **SEV1** | Customers cannot work | Every 15 minutes |
+| **SEV2** | A feature is degraded | Every 30 minutes |
+| **SEV3** | Internal or cosmetic | At resolution |
+
+## Before moving to Completed
+
+- [ ] Root cause written up
+- [ ] Alert changes made or ticketed
+- [ ] This runbook updated if a step was missing
+
+> Status page: https://status.kanera.test`,
         children: [
           {
             title: "Upload Storage Outage Drill",
             icon: "cloud-upload",
             owner: "omar",
-            content: note(
-              "Practice both local disk pressure and object-store credential failure.",
-              "Expected evidence: alert timeline, recovery steps, customer impact decision, and the owner for any automation card created afterward.",
-              "Drill notes: https://ops.kanera.test/runbooks/upload-storage-outage",
-            ),
+            content: `Practise both failure modes:
+
+- Local disk pressure on the API host
+- Object-store credential failure
+
+## Evidence to capture
+
+| Evidence | Where |
+| --- | --- |
+| Alert timeline | Incident card comments |
+| Recovery steps | This note |
+| Customer impact decision | Incident card description |
+| Automation follow-up owner | Linked card |
+
+Drill notes: https://ops.kanera.test/runbooks/upload-storage-outage`,
           },
         ],
       },
@@ -3128,10 +3308,19 @@ function buildDevopsWorkspace(): SeedWorkspace {
         title: "Access Review Checklist",
         icon: "lock-check",
         owner: "amelia",
-        content: note(
-          "Quarterly checklist for access and compliance reviews.",
-          "- 🔐 Review dormant admin accounts\n- 📷 Capture evidence for board guest controls\n- 🧾 Confirm audit export retention copy\n- ⚠️ Record exceptions before closing the review",
-        ),
+        content: `Quarterly checklist for access and compliance reviews.
+
+- [ ] 🔐 Review dormant admin accounts
+- [ ] 📷 Capture evidence for board guest controls
+- [ ] 🧾 Confirm audit export retention copy
+- [ ] ⚠️ Record exceptions before closing the review
+
+## Last review
+
+| Quarter | Reviewer | Exceptions |
+| --- | --- | --- |
+| 2026 Q2 | Henry Walsh | 1 (contractor extension) |
+| 2026 Q1 | Grace Liu | 0 |`,
       },
     ],
     boards: [
@@ -3871,6 +4060,34 @@ async function insertSeedNotes(input: {
       .returning();
     result.notes += 1;
 
+    // Inline images are written as `{{image:assetKey|alt}}` in seed content. Each one becomes a
+    // `description`-source attachment (what pasting an image into the editor creates), so it renders
+    // in the body and opens in the lightbox without also appearing in the note's attachment list.
+    const inlineImages = [...noteSeed.content.matchAll(INLINE_NOTE_IMAGE)];
+    if (inlineImages.length > 0) {
+      if (!input.storage) throw new Error("Storage provider was not initialized.");
+      let content = noteSeed.content;
+      for (const [imageIndex, match] of inlineImages.entries()) {
+        const asset = match[1] as AssetKey;
+        if (!(asset in ATTACHMENT_ASSETS)) throw new Error(`Unknown inline note image asset '${asset}'.`);
+        const url = await createNoteAttachmentRow({
+          tx: input.tx,
+          storage: input.storage,
+          clientId: input.clientId,
+          uploadedKeys: input.uploadedKeys,
+          assetCache: input.assetCache,
+          noteId: noteRow!.id,
+          uploadedById: input.userIdByKey.get(noteSeed.owner)!,
+          asset,
+          createdAt: addMinutes(createdAt, imageIndex + 1),
+          source: "description",
+        });
+        content = content.replace(match[0], `![${match[2] ?? ""}](${url})`);
+      }
+      await input.tx.update(notes).set({ content }).where(eq(notes.id, noteRow!.id));
+      result.attachments += inlineImages.length;
+    }
+
     for (const [attachmentIndex, attachmentSeed] of (noteSeed.attachments ?? []).entries()) {
       if (!input.storage) throw new Error("Storage provider was not initialized.");
       await createNoteAttachmentRow({
@@ -4300,12 +4517,14 @@ async function createNoteAttachmentRow(input: {
   uploadedById: string;
   asset: AssetKey;
   createdAt: Date;
-}) {
+  source?: NoteAttachmentSource;
+}): Promise<string> {
   const assetMeta = ATTACHMENT_ASSETS[input.asset];
   const fileName = path.basename(attachmentAssetPath(input.asset));
   const extension = path.extname(fileName).slice(1);
   const buffer = await loadAssetBuffer(input.asset, input.assetCache);
   const fileKey = noteAttachmentStorageKey(input.noteId, extension);
+  const url = unsignedMediaUrl(input.clientId, fileKey)!;
   await input.storage.put(fileKey, buffer, assetMeta.mimeType);
   input.uploadedKeys.push(fileKey);
 
@@ -4317,10 +4536,11 @@ async function createNoteAttachmentRow(input: {
     mimeType: assetMeta.mimeType,
     byteSize: buffer.byteLength,
     fileKey,
-    url: unsignedMediaUrl(input.clientId, fileKey)!,
-    source: "attachment",
+    url,
+    source: input.source ?? "attachment",
     createdAt: input.createdAt,
   });
+  return url;
 }
 
 async function createAttachmentRow(input: {

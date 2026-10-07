@@ -507,23 +507,15 @@ h3 {
 // The top edge stays put, so the cursor that triggered the hover stays inside the growing box.
 .lane-insert {
   --lane-insert-rest: 12px;
-  --lane-insert-open: 32px;
+  --lane-insert-open: 34px;
   --lane-insert-accent: color-mix(in srgb, var(--accent) 40%, transparent);
 
   position: relative;
   z-index: 2;
-  display: block;
   flex-shrink: 0;
   width: 100%;
   height: var(--lane-insert-rest);
-  min-height: 0;
   margin: -9px 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: none;
-  color: var(--text-muted);
-  cursor: pointer;
   // A short delay on the way in stops the lane rippling while the pointer travels down a list.
   transition: height var(--motion-base) cubic-bezier(0.2, 0.8, 0.2, 1) 60ms;
 
@@ -538,89 +530,106 @@ h3 {
     transform: translateY(-50%) scaleX(0.6);
     background: var(--lane-insert-accent);
     opacity: 0;
+    pointer-events: none;
     transition: opacity var(--motion-fast) ease 60ms, transform var(--motion-base) cubic-bezier(0.2, 0.8, 0.2, 1) 60ms;
   }
 
-  &:hover:not(:disabled),
-  &:focus-visible {
+  &:not(.is-disabled):hover,
+  &:has(:focus-visible) {
     height: var(--lane-insert-open);
 
     &::after {
       opacity: 1;
       transform: translateY(-50%) scaleX(1);
     }
+
+    .lane-insert-actions {
+      opacity: 1;
+      pointer-events: auto;
+    }
   }
 
-  // The global button rules paint every bare <button> in the accent colour, including on hover and
-  // focus; this strip is invisible chrome whose only visuals are the line and the plus badge.
-  &,
-  &:hover:not(:disabled),
-  &:focus-visible {
-    background: none;
-    box-shadow: none;
-    outline: none;
-  }
-
-  &:disabled {
-    cursor: default;
+  &.is-disabled {
     &::after,
-    .lane-insert-plus { opacity: 0; }
+    .lane-insert-actions { opacity: 0; }
   }
 }
 
-.lane-insert-plus {
+// A single neutral segmented control centred on the line, one segment per action. Hidden, it takes
+// no clicks, so the resting strip never steals one meant for the cards it overlaps. Centred with
+// flexbox and faded with opacity only: a scale or -50% translate renders the text as a
+// fractional-pixel layer during the transition, and the re-raster onto whole pixels when it ends
+// reads as the control "locking" into place.
+.lane-insert-actions {
   position: absolute;
-  left: 50%;
-  top: 50%;
-  display: inline-flex;
+  z-index: 1;
+  inset: 0;
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 999px;
-  // Filled accent dot with a surface halo so it reads as a marker on the line, not as a button.
-  background: var(--accent);
-  color: var(--accent-fg);
-  box-shadow: 0 0 0 3px var(--list-bg, var(--bg));
-  transform: translate(-50%, -50%) scale(0.7);
   opacity: 0;
-  transition: opacity var(--motion-fast) ease 60ms, transform var(--motion-base) cubic-bezier(0.2, 0.8, 0.2, 1) 60ms;
   pointer-events: none;
-
-  i { font-size: 11px; line-height: 1; }
-
-  .lane-insert:hover:not(:disabled) &,
-  .lane-insert:focus-visible & {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
-  }
+  transition: opacity var(--motion-base) ease 60ms;
 }
 
-// Coarse pointers have no hover; the footer and list-menu "Add card" remain the touch path.
+.lane-insert-group {
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  // The list-colour halo parts the accent line either side, so the control sits in a gap in it.
+  box-shadow: 0 0 0 3px var(--list-bg, var(--bg)), var(--shadow-sm);
+}
+
+.lane-insert-pill {
+  height: 20px;
+  min-height: 0;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 0;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  background: transparent;
+  color: var(--text-muted);
+
+  & + & {
+    border-left: 1px solid var(--border);
+  }
+
+  &:hover:not(:disabled) {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+
+  // Inset, because the group clips anything drawn outside a segment.
+  &:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--accent);
+    color: var(--text);
+  }
+
+  &:disabled { cursor: default; }
+}
+
+// Coarse pointers have no hover; the footer and list-menu actions remain the touch path.
 @media (hover: none) {
   .lane-insert { display: none; }
 }
 
-// Reduced motion: no transitions, and no opening gap either, since the cards sliding apart is the
-// movement. The line and marker simply appear in the resting 6px gap, overlapping the card edges.
+// Reduced motion: no transitions. The gap still opens (instantly), because the control is taller
+// than the resting 6px gap and would otherwise sit over the neighbouring cards' edges.
 @media (prefers-reduced-motion: reduce) {
   .lane-insert,
   .lane-insert::after,
-  .lane-insert-plus {
+  .lane-insert-actions {
     transition: none;
   }
 
-  .lane-insert:hover:not(:disabled),
-  .lane-insert:focus-visible {
-    height: var(--lane-insert-rest);
-
-    &::after {
-      transform: translateY(-50%);
-    }
-  }
-
-  .lane-insert-plus {
-    transform: translate(-50%, -50%);
+  .lane-insert:not(.is-disabled):hover::after,
+  .lane-insert:has(:focus-visible)::after {
+    transform: translateY(-50%);
   }
 }
 

@@ -166,6 +166,8 @@ export class ListComponent implements OnDestroy {
   readonly commentCounts = input<Map<string, number>>(new Map());
   readonly filteredCardIds = input<Set<string> | null>(null);
   readonly hideDetachedSeparators = input(false);
+  /** Colour for newly added separators: the board's accent (board colour, else workspace accent). */
+  readonly defaultSeparatorColor = input<string | null>(null);
   readonly selectedCardId = input<string | null>(null);
   readonly bulkSelectedCardIds = input<Set<string>>(new Set());
   readonly canEdit = input<boolean>(true);
@@ -403,7 +405,6 @@ export class ListComponent implements OnDestroy {
   readonly receiving = signal(false);
   readonly draggingOut = signal(false);
   readonly cardDragging = signal(false);
-  readonly autoEditSeparatorId = signal<string | null>(null);
 
   @HostBinding("class.is-drop-target")
   get isDropTarget() {
@@ -622,8 +623,10 @@ export class ListComponent implements OnDestroy {
     }
   }
 
-  /** The in-between "+" needs create rights on this lane; view-only boards and readers never see it. */
-  readonly showInsertBetween = computed(() => this.canEditRole() && this.canCreateCards() && this.canEdit());
+  /** In-between inserts need edit rights on this lane; view-only boards and readers never see them. */
+  readonly showInsertCard = computed(() => this.canEditRole() && this.canEdit() && this.canCreateCards());
+  readonly showInsertSeparator = computed(() => this.canEditRole() && this.canEdit() && this.canManageSeparators());
+  readonly showInsertBetween = computed(() => this.showInsertCard() || this.showInsertSeparator());
 
   startAddAfter(item: BoardLaneItem, event?: MouseEvent) {
     if (this.cardDragging()) return;
@@ -640,17 +643,25 @@ export class ListComponent implements OnDestroy {
     this.startAdd.emit({ listId: this.list().id, atTop: true });
   }
 
-  async addSeparator(atTop = false) {
+  addSeparatorAfter(item: BoardLaneItem, event?: MouseEvent) {
+    if (this.cardDragging()) return;
+    // Same pointer-only blur as startAddAfter, so the strip does not stay lit via :focus-visible.
+    if (event && event.detail > 0) (event.currentTarget as HTMLElement | null)?.blur();
+    void this.addSeparator(false, laneItemAnchor(item));
+  }
+
+  async addSeparator(atTop = false, afterItem?: LaneAnchor) {
     if (!this.canEdit()) return;
     const baseUrl = this.separatorCreateBaseUrl() ?? (this.boardId() ? `/boards/${this.boardId()}` : null);
     if (!baseUrl) return;
     const separator = await this.api.post<AnySeparator>(`${baseUrl}/lists/${this.list().id}/separators`, {
       title: "",
-      color: null,
-      ...(atTop ? { atTop: true } : {}),
+      // New separators are added ready-made in the host's accent (no title editor opens); the
+      // person renames or recolours them later from the separator's own actions.
+      color: this.defaultSeparatorColor(),
+      ...(afterItem ? { afterItem } : atTop ? { atTop: true } : {}),
     });
     this.separatorCreated.emit(separator);
-    this.autoEditSeparatorId.set(separator.id);
     this.closeMenu();
   }
 
@@ -661,14 +672,12 @@ export class ListComponent implements OnDestroy {
       color: payload.color,
     });
     this.separatorUpdated.emit(separator);
-    if (this.autoEditSeparatorId() === separator.id) this.autoEditSeparatorId.set(null);
   }
 
   async deleteSeparator(separatorId: string) {
     if (!this.canEdit()) return;
     await this.api.delete(`${this.separatorItemBaseUrl()}/${separatorId}`);
     this.separatorDeleted.emit(separatorId);
-    if (this.autoEditSeparatorId() === separatorId) this.autoEditSeparatorId.set(null);
   }
 
   ngOnDestroy() {

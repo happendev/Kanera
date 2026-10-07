@@ -20,7 +20,7 @@ import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milest
 import { EMPTY_EFFECTS, emitAutomationEffects, runCardAssignedAutomations, runCardLabelSetAutomations, runCardMarkedCompleteAutomations, runCardMoveAutomations, runChecklistCompletionAutomations, runCustomFieldValueChangedAutomations, runListEntryAutomations, type AutomationEffects } from "../../lib/automations.js";
 import { invalidateQueuesForCards } from "../../lib/card-priority-invalidation.js";
 import { applyChecklistTemplates } from "../../lib/checklist-templates.js";
-import { emitLaneRebalanced, positionForLaneInsert, rebalanceBoardLane } from "../../lib/board-lane.js";
+import { emitLaneRebalanced, emitWorkspaceLaneRebalanced, positionForLaneInsert, rebalanceBoardLane } from "../../lib/board-lane.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { assertValidOptionIds, assertWorkspaceMemberIds, buildCustomFieldValueColumns, customFieldValueEquals, describeCustomFieldValue, emptyValueColumns, hasCustomFieldValue, type CustomFieldValueColumns } from "../../lib/custom-fields.js";
 import { AppError, badRequest, notFound } from "../../lib/errors.js";
@@ -784,19 +784,22 @@ export async function cardRoutes(
           : body.atTop
             ? { afterItem: null }
             : { beforeItem: null };
-      const positionResult = body.globalWorkUserId
-        ? {
-            position: await positionForGlobalWorkLaneInsert({
-              auth: req.auth,
-              workspaceId: ctx.workspaceId,
-              targetUserId: body.globalWorkUserId,
-              listId,
-              ...anchor,
-              tx,
-            }),
-            needsRebalance: false,
-          }
+      // A Global Work insert settles any rebalance before the card exists, so it never needs the
+      // board-lane rebalance below; its workspace-wide rebalance is emitted separately.
+      const globalWorkPlacement = body.globalWorkUserId
+        ? await positionForGlobalWorkLaneInsert({
+            auth: req.auth,
+            workspaceId: ctx.workspaceId,
+            targetUserId: body.globalWorkUserId,
+            listId,
+            ...anchor,
+            tx,
+          })
+        : null;
+      const positionResult = globalWorkPlacement
+        ? { position: globalWorkPlacement.position, needsRebalance: false }
         : await positionForLaneInsert({ listId, boardId, ...anchor, tx });
+      const laneRebalanced = globalWorkPlacement?.rebalanced ?? null;
       const position = positionResult.position;
       const [identity] = await allocateCardKeys(tx, ctx.workspaceId, 1);
       const [card] = await tx
@@ -893,13 +896,14 @@ export async function cardRoutes(
       // card:created keeps the pre-automation snapshot (automation effects emit their own events)
       // but must carry the rebalanced position, or clients would place it by a stale number.
       const createdCard = rebalanced && finalCard ? { ...card, position: finalCard.position } : card;
-      return { kind: "created", card: createdCard, finalCard: finalCard ?? card, activity, automationEffects, assignmentAutomationEffects, rebalanced } as const;
+      return { kind: "created", card: createdCard, finalCard: finalCard ?? card, activity, automationEffects, assignmentAutomationEffects, rebalanced, laneRebalanced } as const;
     });
     if (result.kind === "replayed") {
       return reply.status(201).send(toWireCard(result.card, req.auth.cid));
     }
-    const { card, finalCard, activity, automationEffects, assignmentAutomationEffects, rebalanced } = result;
+    const { card, finalCard, activity, automationEffects, assignmentAutomationEffects, rebalanced, laneRebalanced } = result;
     if (rebalanced) await emitLaneRebalanced(boardId, listId, rebalanced);
+    if (laneRebalanced) await emitWorkspaceLaneRebalanced(listId, laneRebalanced);
     if (assigneeIds.length > 0) {
       await enqueueCardAssignedEmails({
         tx: db,
@@ -1597,7 +1601,7 @@ export async function cardRoutes(
     const fromListId = current.listId;
     const prevPosition = current.position;
     const enteringNewList = fromListId !== body.listId;
-    const { position, finalPosition, finalListId, rebalancedPositions, activity, completedCard, completionActivity, automationEffects, noOp } = await db.transaction(async (tx) => {
+    const { position, finalPosition, finalListId, rebalancedPositions, laneRebalanced, activity, completedCard, completionActivity, automationEffects, noOp } = await db.transaction(async (tx) => {
       await tx.select({ id: lists.id }).from(lists).where(eq(lists.id, body.listId)).for("update").limit(1);
 
       // The mover needs access to the card's own board. Anchor cards are only
@@ -1613,20 +1617,21 @@ export async function cardRoutes(
         : body.beforeCardId !== undefined
           ? body.beforeCardId === null ? null : { type: "card" as const, id: body.beforeCardId }
           : undefined;
-      const result = body.globalWorkUserId
-        ? {
-            position: await positionForGlobalWorkLaneInsert({
-              auth: req.auth,
-              workspaceId: ctx.workspaceId,
-              targetUserId: body.globalWorkUserId,
-              listId: body.listId,
-              moving: { type: "card", id },
-              afterItem,
-              beforeItem,
-              tx,
-            }),
-            needsRebalance: false,
-          }
+      const globalWorkPlacement = body.globalWorkUserId
+        ? await positionForGlobalWorkLaneInsert({
+            auth: req.auth,
+            workspaceId: ctx.workspaceId,
+            targetUserId: body.globalWorkUserId,
+            listId: body.listId,
+            moving: { type: "card", id },
+            afterItem,
+            beforeItem,
+            tx,
+          })
+        : null;
+      const laneRebalanced = globalWorkPlacement?.rebalanced ?? null;
+      const result = globalWorkPlacement
+        ? { position: globalWorkPlacement.position, needsRebalance: false }
         : await positionForLaneInsert({
             listId: body.listId,
             boardId: current.boardId,
@@ -1639,12 +1644,14 @@ export async function cardRoutes(
 
       // Treat an unchanged location as idempotent so retries and stale clients do not create
       // writes or durable realtime noise for a move that never happened.
-      if (!enteringNewList && position === prevPosition) {
+      // A rebalance has already rewritten the stored position, so an equal number is not a no-op.
+      if (!laneRebalanced && !enteringNewList && position === prevPosition) {
         return {
           position,
           finalPosition: prevPosition,
           finalListId: fromListId,
           rebalancedPositions: null,
+          laneRebalanced: null,
           activity: null,
           completedCard: null,
           completionActivity: null,
@@ -1697,6 +1704,7 @@ export async function cardRoutes(
         finalPosition: finalCard?.position ?? position,
         finalListId: finalCard?.listId ?? body.listId,
         rebalancedPositions,
+        laneRebalanced,
         activity,
         completedCard: null,
         completionActivity: null,
@@ -1706,6 +1714,7 @@ export async function cardRoutes(
     });
 
     if (noOp) return { id, listId: finalListId, position: finalPosition };
+    if (laneRebalanced) await emitWorkspaceLaneRebalanced(body.listId, laneRebalanced);
 
     if (rebalancedPositions) {
       // Rebalance must be persisted before card:moved so clients replay the normalized positions

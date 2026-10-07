@@ -199,10 +199,12 @@ export class BoardPage implements OnDestroy {
       : `/w/${board.workspaceId}/settings/lists`;
   });
 
-  /** Board colour, falling back to the workspace accent, for the header's lead icon. */
+  /** Board colour, falling back to the workspace accent: the board's accent token. */
+  readonly boardAccentColor = computed(() => this.state.board()?.iconColor ?? this.workspaceAccentColor() ?? null);
+
+  /** The board accent as a CSS colour, for the header's lead icon. */
   readonly boardIconColor = computed(() => {
-    const board = this.state.board();
-    const color = board?.iconColor ?? this.workspaceAccentColor();
+    const color = this.boardAccentColor();
     return color ? `var(--color-${color})` : null;
   });
   // Derived, not stored: the route's card id is its only source. As a signal fed by an effect it
