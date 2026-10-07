@@ -1,10 +1,7 @@
 import { button, emailLayout, fallbackLink, heading, paragraphHtml, strong, text } from "./layout.js";
 
 export interface BoardInviteEmailParams {
-  boards?: Array<{ boardName: string; role: string }>;
-  /** Legacy queued-email fields retained until pre-deployment queue rows have drained. */
-  boardName?: string;
-  role?: string;
+  boards: Array<{ boardName: string; role: string }>;
   orgName: string;
   invitedByName: string;
   acceptUrl: string;
@@ -12,13 +9,11 @@ export interface BoardInviteEmailParams {
 
 export function boardInviteEmail({
   boards,
-  boardName,
-  role,
   orgName,
   invitedByName,
   acceptUrl,
 }: BoardInviteEmailParams): string {
-  const grants = boards?.length ? boards : [{ boardName: boardName ?? "your board", role: role ?? "editor" }];
+  const grants = boards;
   const firstBoard = grants[0]!;
   const boardSummary = grants.length === 1 ? firstBoard.boardName : `${grants.length} boards`;
   const grantList = grants

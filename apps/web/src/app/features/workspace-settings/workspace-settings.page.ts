@@ -79,6 +79,11 @@ import { WorkspaceSettingsLabelsPage } from "./labels/labels.page";
 import { WorkspaceSettingsListsPage } from "./lists/lists.page";
 import { WorkspaceSettingsMembersPage } from "./members/members.page";
 import { WorkspaceSettingsTemplatesPage } from "./templates/templates.page";
+import { applyAccentScope } from "../../shared/accent-scope";
+import { copyToClipboard } from "../../shared/clipboard";
+import { byPosition } from "../../shared/position-sort";
+import { moveAnchorBody, reorderByIndex } from "../../shared/reorder";
+import { applyPositions, withPosition } from "../../shared/positions";
 
 type MemberRow = WorkspaceMember & { email: string; displayName: string; avatarUrl: string | null; lastOnlineAt?: string | Date | null; orgRole?: "owner" | "admin" | "member" };
 type WorkspaceRole = "admin" | "member";
@@ -646,7 +651,7 @@ function isSeatLimitReached(error: unknown): boolean {
 }
 
 function sortBoards<T extends { position: string }>(boards: T[]): T[] {
-  return [...boards].sort((a, b) => Number(a.position) - Number(b.position));
+  return [...boards].sort(byPosition);
 }
 
 function toGuestBoard(board: Board): WorkspaceGuestBoard {
@@ -660,7 +665,7 @@ function toGuestBoard(board: Board): WorkspaceGuestBoard {
 }
 
 function sortBoardGroups<T extends { position: string }>(groups: T[]): T[] {
-  return [...groups].sort((a, b) => Number(a.position) - Number(b.position));
+  return [...groups].sort(byPosition);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -714,12 +719,11 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly boardLinkingEnabledDraft = signal(true);
   readonly boardLinkingSaving = signal(false);
   readonly boardLinkingError = signal<string | null>(null);
-  readonly boardHealthEnabledDraft = signal(true);
-  readonly boardHealthOverdueEnabledDraft = signal(true);
-  readonly boardHealthUnassignedEnabledDraft = signal(true);
-  readonly boardHealthInactiveEnabledDraft = signal(true);
-  readonly boardHealthSaving = signal(false);
-  readonly boardHealthError = signal<string | null>(null);
+  readonly notesEnabledDraft = signal(true);
+  readonly notesSaving = signal(false);
+  readonly notesError = signal<string | null>(null);
+  readonly generalSettingsSaving = signal(false);
+  readonly generalSettingsError = signal<string | null>(null);
   readonly completedCardsActiveDaysDraft = signal(DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS);
   readonly inactiveCardsDaysDraft = signal(DEFAULT_INACTIVE_CARDS_DAYS);
   readonly isStandalone = computed(() => this.workspace()?.kind === "board");
@@ -1008,25 +1012,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
 
     effect(() => {
       const color = this.accentColor();
-      const style = this.el.nativeElement.style;
-      if (color) {
-        // The identity colour is decorative; the *-accent token is its contrast-checked action tone
-        // (light mode only — dark falls back to the identity colour and relies on --accent-ink).
-        const accent = `var(--color-${color}-accent, var(--color-${color}))`;
-        style.setProperty("--accent", accent);
-        style.setProperty("--accent-hover", `color-mix(in srgb, ${accent}, black 15%)`);
-        style.setProperty("--accent-fg", "var(--accent-ink)");
-        style.setProperty("--ring", `color-mix(in srgb, ${accent} 40%, transparent)`);
-        // --accent-soft resolves its var(--accent) where it is *declared*, so the :root
-        // definition would stay the default teal here. Rebind it with the accent itself.
-        style.setProperty("--accent-soft", `color-mix(in srgb, var(--color-${color}) 8%, transparent)`);
-      } else {
-        style.removeProperty("--accent");
-        style.removeProperty("--accent-hover");
-        style.removeProperty("--accent-fg");
-        style.removeProperty("--ring");
-        style.removeProperty("--accent-soft");
-      }
+      applyAccentScope(this.el.nativeElement.style, color);
       this.workspaceService.setActiveAccentColor(color);
     });
 
@@ -1199,11 +1185,11 @@ export class WorkspaceSettingsPage implements OnDestroy {
       : [[] as WorkspaceApiKeyRow[], [] as AgentConnectionRow[], [] as WebhookEndpointRow[], null];
     if (workspaceId !== this.workspaceId()) return;
     this.applyWorkspace(ws, true);
-    this.lists.set([...detail.lists].sort((a, b) => Number(a.position) - Number(b.position)));
-    this.fields.set([...detail.customFields].sort((a, b) => Number(a.position) - Number(b.position)));
+    this.lists.set([...detail.lists].sort(byPosition));
+    this.fields.set([...detail.customFields].sort(byPosition));
     this.templates.set(this.sortTemplates(detail.checklistTemplates ?? []));
     this.automations.set(this.sortAutomations((detail.automations ?? []).map((automation) => this.normalizeAutomation(automation))));
-    this.labels.set([...detail.cardLabels].sort((a, b) => Number(a.position) - Number(b.position)));
+    this.labels.set([...detail.cardLabels].sort(byPosition));
     this.members.set(members);
     this.orgUsers.set(orgUsers);
     this.boardList.set(sortBoards(boards));
@@ -1233,22 +1219,11 @@ export class WorkspaceSettingsPage implements OnDestroy {
       },
       "list:moved": ({ workspaceId, listId, position }) => {
         if (!matchWs(workspaceId)) return;
-        this.lists.update((ls) =>
-          ls
-            .map((l) => (l.id === listId ? { ...l, position } : l))
-            .sort((a, b) => Number(a.position) - Number(b.position)),
-        );
+        this.lists.update((items) => withPosition(items, listId, position).sort(byPosition));
       },
       "list:rebalanced": ({ workspaceId, positions }) => {
         if (!matchWs(workspaceId)) return;
-        this.lists.update((ls) =>
-          ls
-            .map((l) => {
-              const next = positions.find((p) => p.id === l.id);
-              return next ? { ...l, position: next.position } : l;
-            })
-            .sort((a, b) => Number(a.position) - Number(b.position)),
-        );
+        this.lists.update((items) => applyPositions(items, positions).sort(byPosition));
       },
       "list:deleted": ({ workspaceId, listId }) => {
         if (!matchWs(workspaceId)) return;
@@ -1264,22 +1239,11 @@ export class WorkspaceSettingsPage implements OnDestroy {
       },
       "customField:moved": ({ workspaceId, fieldId, position }) => {
         if (!matchWs(workspaceId)) return;
-        this.fields.update((fs) =>
-          fs
-            .map((f) => (f.id === fieldId ? { ...f, position } : f))
-            .sort((a, b) => Number(a.position) - Number(b.position)),
-        );
+        this.fields.update((items) => withPosition(items, fieldId, position).sort(byPosition));
       },
       "customField:rebalanced": ({ workspaceId, positions }) => {
         if (!matchWs(workspaceId)) return;
-        this.fields.update((fs) =>
-          fs
-            .map((f) => {
-              const next = positions.find((p) => p.id === f.id);
-              return next ? { ...f, position: next.position } : f;
-            })
-            .sort((a, b) => Number(a.position) - Number(b.position)),
-        );
+        this.fields.update((items) => applyPositions(items, positions).sort(byPosition));
       },
       "customField:deleted": ({ workspaceId, fieldId }) => {
         if (!matchWs(workspaceId)) return;
@@ -1295,17 +1259,11 @@ export class WorkspaceSettingsPage implements OnDestroy {
       },
       "customFieldOption:moved": ({ workspaceId, fieldId, optionId, position }) => {
         if (!matchWs(workspaceId)) return;
-        this.applyOptionChange(fieldId, (options) => options.map((o) => (o.id === optionId ? { ...o, position } : o)));
+        this.applyOptionChange(fieldId, (options) => withPosition(options, optionId, position));
       },
       "customFieldOption:rebalanced": ({ workspaceId, fieldId, positions }) => {
         if (!matchWs(workspaceId)) return;
-        const positionsById = new Map(positions.map((p) => [p.id, p.position]));
-        this.applyOptionChange(fieldId, (options) =>
-          options.map((o) => {
-            const next = positionsById.get(o.id);
-            return next ? { ...o, position: next } : o;
-          }),
-        );
+        this.applyOptionChange(fieldId, (options) => applyPositions(options, positions));
       },
       "customFieldOption:deleted": ({ workspaceId, fieldId, optionId }) => {
         if (!matchWs(workspaceId)) return;
@@ -1321,18 +1279,11 @@ export class WorkspaceSettingsPage implements OnDestroy {
       },
       "checklistTemplate:moved": ({ workspaceId, templateId, position }) => {
         if (!matchWs(workspaceId)) return;
-        this.templates.update((ts) =>
-          this.sortTemplates(ts.map((t) => (t.id === templateId ? { ...t, position } : t))),
-        );
+        this.templates.update((ts) => this.sortTemplates(withPosition(ts, templateId, position)));
       },
       "checklistTemplate:rebalanced": ({ workspaceId, positions }) => {
         if (!matchWs(workspaceId)) return;
-        this.templates.update((ts) =>
-          this.sortTemplates(ts.map((t) => {
-            const next = positions.find((p) => p.id === t.id);
-            return next ? { ...t, position: next.position } : t;
-          })),
-        );
+        this.templates.update((ts) => this.sortTemplates(applyPositions(ts, positions)));
       },
       "checklistTemplate:deleted": ({ workspaceId, templateId }) => {
         if (!matchWs(workspaceId)) return;
@@ -1349,14 +1300,11 @@ export class WorkspaceSettingsPage implements OnDestroy {
       },
       "automation:moved": ({ workspaceId, automationId, position }) => {
         if (!matchWs(workspaceId)) return;
-        this.automations.update((items) => this.sortAutomations(items.map((item) => (item.id === automationId ? { ...item, position } : item))));
+        this.automations.update((items) => this.sortAutomations(withPosition(items, automationId, position)));
       },
       "automation:rebalanced": ({ workspaceId, positions }) => {
         if (!matchWs(workspaceId)) return;
-        this.automations.update((items) => this.sortAutomations(items.map((item) => {
-          const next = positions.find((position) => position.id === item.id);
-          return next ? { ...item, position: next.position } : item;
-        })));
+        this.automations.update((items) => this.sortAutomations(applyPositions(items, positions)));
       },
       "automation:deleted": ({ workspaceId, automationId }) => {
         if (!matchWs(workspaceId)) return;
@@ -1372,22 +1320,11 @@ export class WorkspaceSettingsPage implements OnDestroy {
       },
       "cardLabel:moved": ({ workspaceId, labelId, position }) => {
         if (!matchWs(workspaceId)) return;
-        this.labels.update((ls) =>
-          ls
-            .map((l) => (l.id === labelId ? { ...l, position } : l))
-            .sort((a, b) => Number(a.position) - Number(b.position)),
-        );
+        this.labels.update((items) => withPosition(items, labelId, position).sort(byPosition));
       },
       "cardLabel:rebalanced": ({ workspaceId, positions }) => {
         if (!matchWs(workspaceId)) return;
-        this.labels.update((ls) =>
-          ls
-            .map((l) => {
-              const next = positions.find((p) => p.id === l.id);
-              return next ? { ...l, position: next.position } : l;
-            })
-            .sort((a, b) => Number(a.position) - Number(b.position)),
-        );
+        this.labels.update((items) => applyPositions(items, positions).sort(byPosition));
       },
       "cardLabel:deleted": ({ workspaceId, labelId }) => {
         if (!matchWs(workspaceId)) return;
@@ -1441,20 +1378,13 @@ export class WorkspaceSettingsPage implements OnDestroy {
       },
       "board:moved": ({ workspaceId, boardId, position }) => {
         if (!matchWs(workspaceId)) return;
-        this.boardList.update((bs) => sortBoards(bs.map((b) => (b.id === boardId ? { ...b, position } : b))));
-        this.guestBoards.update((boards) => sortBoards(boards.map((board) => board.id === boardId ? { ...board, position } : board)));
+        this.boardList.update((bs) => sortBoards(withPosition(bs, boardId, position)));
+        this.guestBoards.update((boards) => sortBoards(withPosition(boards, boardId, position)));
       },
       "board:rebalanced": ({ workspaceId, positions }) => {
         if (!matchWs(workspaceId)) return;
-        const positionsById = new Map(positions.map((p) => [p.id, p.position]));
-        this.boardList.update((bs) => sortBoards(bs.map((b) => {
-          const pos = positionsById.get(b.id);
-          return pos ? { ...b, position: pos } : b;
-        })));
-        this.guestBoards.update((boards) => sortBoards(boards.map((board) => {
-          const position = positionsById.get(board.id);
-          return position ? { ...board, position } : board;
-        })));
+        this.boardList.update((bs) => sortBoards(applyPositions(bs, positions)));
+        this.guestBoards.update((boards) => sortBoards(applyPositions(boards, positions)));
       },
       "board:deleted": ({ boardId }) => {
         this.boardList.update((bs) => bs.filter((b) => b.id !== boardId));
@@ -1471,15 +1401,11 @@ export class WorkspaceSettingsPage implements OnDestroy {
       },
       "boardGroup:moved": ({ workspaceId, groupId, position }) => {
         if (!matchWs(workspaceId)) return;
-        this.boardGroups.update((groups) => sortBoardGroups(groups.map((g) => g.id === groupId ? { ...g, position } : g)));
+        this.boardGroups.update((groups) => sortBoardGroups(withPosition(groups, groupId, position)));
       },
       "boardGroup:rebalanced": ({ workspaceId, positions }) => {
         if (!matchWs(workspaceId)) return;
-        const positionsById = new Map(positions.map((p) => [p.id, p.position]));
-        this.boardGroups.update((groups) => sortBoardGroups(groups.map((g) => {
-          const position = positionsById.get(g.id);
-          return position ? { ...g, position } : g;
-        })));
+        this.boardGroups.update((groups) => sortBoardGroups(applyPositions(groups, positions)));
       },
       "boardGroup:deleted": ({ workspaceId, groupId }) => {
         if (!matchWs(workspaceId)) return;
@@ -1502,13 +1428,10 @@ export class WorkspaceSettingsPage implements OnDestroy {
   private applyWorkspace(ws: Workspace | null, syncControls = false) {
     this.workspace.set(ws);
     this.boardLinkingEnabledDraft.set(ws?.boardLinkingEnabled !== false);
+    this.notesEnabledDraft.set(ws?.notesEnabled !== false);
     // Keep locally queued values visible if an unrelated workspace mutation or realtime echo lands
     // during the debounce window. The defaults save response synchronizes them after the timer clears.
     if (!this.generalSettingsSaveTimer) {
-      this.boardHealthEnabledDraft.set(ws?.boardHealthEnabled !== false);
-      this.boardHealthOverdueEnabledDraft.set(ws?.boardHealthOverdueEnabled !== false);
-      this.boardHealthUnassignedEnabledDraft.set(ws?.boardHealthUnassignedEnabled !== false);
-      this.boardHealthInactiveEnabledDraft.set(ws?.boardHealthInactiveEnabled !== false);
       this.completedCardsActiveDaysDraft.set(ws?.completedCardsActiveDays ?? this.completedCardsActiveDaysDefault);
       this.inactiveCardsDaysDraft.set(ws?.inactiveCardsDays ?? this.inactiveCardsDaysDefault);
     }
@@ -1542,7 +1465,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.nameSaveTimer = null;
   }
 
-  private async patchWorkspace(patch: { name?: string; cardKeyPrefix?: string; icon?: string | null; accentColor?: ColorToken | null; completedCardsActiveDays?: number; inactiveCardsDays?: number; boardHealthEnabled?: boolean; boardHealthOverdueEnabled?: boolean; boardHealthUnassignedEnabled?: boolean; boardHealthInactiveEnabled?: boolean; boardLinkingEnabled?: boolean }) {
+  private async patchWorkspace(patch: { name?: string; cardKeyPrefix?: string; icon?: string | null; accentColor?: ColorToken | null; completedCardsActiveDays?: number; inactiveCardsDays?: number; boardLinkingEnabled?: boolean; notesEnabled?: boolean }) {
     const ws = await this.autosave.track(() => this.api.patch<Workspace>(`/workspaces/${this.workspaceId()}`, patch));
     this.applyWorkspace(ws);
   }
@@ -1604,20 +1527,6 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.queueGeneralSettingsSave();
   }
 
-  updateBoardHealthEnabled(enabled: boolean) {
-    if (!this.workspace() || this.boardHealthSaving()) return;
-    this.boardHealthEnabledDraft.set(enabled);
-    this.queueGeneralSettingsSave();
-  }
-
-  updateBoardHealthSignal(signal: "overdue" | "unassigned" | "inactive", enabled: boolean) {
-    if (!this.workspace() || !this.boardHealthEnabledDraft() || this.boardHealthSaving()) return;
-    if (signal === "overdue") this.boardHealthOverdueEnabledDraft.set(enabled);
-    else if (signal === "unassigned") this.boardHealthUnassignedEnabledDraft.set(enabled);
-    else this.boardHealthInactiveEnabledDraft.set(enabled);
-    this.queueGeneralSettingsSave();
-  }
-
   private queueGeneralSettingsSave() {
     if (this.generalSettingsSaveTimer) clearTimeout(this.generalSettingsSaveTimer);
     this.generalSettingsSaveTimer = setTimeout(() => {
@@ -1636,39 +1545,27 @@ export class WorkspaceSettingsPage implements OnDestroy {
   private async saveGeneralSettings() {
     const workspace = this.workspace();
     const workspaceId = this.workspaceId();
-    if (!workspace || !workspaceId || this.boardHealthSaving()) return;
+    if (!workspace || !workspaceId || this.generalSettingsSaving()) return;
     const patch = {
       completedCardsActiveDays: this.completedCardsActiveDaysDraft(),
       inactiveCardsDays: this.inactiveCardsDaysDraft(),
-      boardHealthEnabled: this.boardHealthEnabledDraft(),
-      boardHealthOverdueEnabled: this.boardHealthOverdueEnabledDraft(),
-      boardHealthUnassignedEnabled: this.boardHealthUnassignedEnabledDraft(),
-      boardHealthInactiveEnabled: this.boardHealthInactiveEnabledDraft(),
     };
     if (workspace.completedCardsActiveDays === patch.completedCardsActiveDays &&
-      workspace.inactiveCardsDays === patch.inactiveCardsDays &&
-      (workspace.boardHealthEnabled !== false) === patch.boardHealthEnabled &&
-      (workspace.boardHealthOverdueEnabled !== false) === patch.boardHealthOverdueEnabled &&
-      (workspace.boardHealthUnassignedEnabled !== false) === patch.boardHealthUnassignedEnabled &&
-      (workspace.boardHealthInactiveEnabled !== false) === patch.boardHealthInactiveEnabled) return;
+      workspace.inactiveCardsDays === patch.inactiveCardsDays) return;
 
-    this.boardHealthSaving.set(true);
-    this.boardHealthError.set(null);
+    this.generalSettingsSaving.set(true);
+    this.generalSettingsError.set(null);
     try {
       const updated = await this.autosave.track(() => this.api.patch<Workspace>(`/workspaces/${workspaceId}`, patch));
       if (this.workspaceId() === workspaceId) this.applyWorkspace(updated);
     } catch {
       if (this.workspaceId() === workspaceId) {
-        this.boardHealthEnabledDraft.set(workspace.boardHealthEnabled !== false);
-        this.boardHealthOverdueEnabledDraft.set(workspace.boardHealthOverdueEnabled !== false);
-        this.boardHealthUnassignedEnabledDraft.set(workspace.boardHealthUnassignedEnabled !== false);
-        this.boardHealthInactiveEnabledDraft.set(workspace.boardHealthInactiveEnabled !== false);
         this.completedCardsActiveDaysDraft.set(workspace.completedCardsActiveDays);
         this.inactiveCardsDaysDraft.set(workspace.inactiveCardsDays);
-        this.boardHealthError.set(`${this.entityLabelTitle()} defaults could not be updated.`);
+        this.generalSettingsError.set(`${this.entityLabelTitle()} defaults could not be updated.`);
       }
     } finally {
-      this.boardHealthSaving.set(false);
+      this.generalSettingsSaving.set(false);
     }
   }
 
@@ -1714,6 +1611,35 @@ export class WorkspaceSettingsPage implements OnDestroy {
       this.boardLinkingError.set("Board linking could not be updated.");
     } finally {
       this.boardLinkingSaving.set(false);
+    }
+  }
+
+  /**
+   * Disabling notes hides them and closes the notes API but keeps every note, so unlike board
+   * linking there is nothing destructive to confirm.
+   */
+  async updateNotesEnabled(enabled: boolean, control?: HTMLInputElement) {
+    const workspace = this.workspace();
+    if (!workspace || this.notesSaving()) return;
+    const previous = workspace.notesEnabled !== false;
+    const restorePrevious = () => {
+      this.notesEnabledDraft.set(previous);
+      if (control) control.checked = previous;
+    };
+    if (previous === enabled) {
+      restorePrevious();
+      return;
+    }
+    this.notesEnabledDraft.set(enabled);
+    this.notesSaving.set(true);
+    this.notesError.set(null);
+    try {
+      await this.patchWorkspace({ notesEnabled: enabled });
+    } catch {
+      restorePrevious();
+      this.notesError.set("Notes could not be updated.");
+    } finally {
+      this.notesSaving.set(false);
     }
   }
 
@@ -1806,19 +1732,11 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   async dropList(event: CdkDragDrop<List[]>) {
-    if (event.previousIndex === event.currentIndex) return;
-    const items = this.lists();
-    const moved = items[event.previousIndex];
-    if (!moved) return;
-    const reordered = [...items];
-    reordered.splice(event.previousIndex, 1);
-    reordered.splice(event.currentIndex, 0, moved);
+    const move = reorderByIndex(this.lists(), event.previousIndex, event.currentIndex);
+    if (!move) return;
+    const { moved, reordered } = move;
     this.lists.set(reordered);
-
-    const body =
-      event.currentIndex === 0
-        ? { beforeListId: reordered[1]?.id ?? null }
-        : { afterListId: reordered[event.currentIndex - 1]?.id };
+    const body = moveAnchorBody(reordered, event.currentIndex, "beforeListId", "afterListId");
     await this.api.post(`/lists/${moved.id}/move`, body);
   }
 
@@ -1899,7 +1817,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.fields.update((items) =>
       items.map((field) =>
         field.id === fieldId
-          ? { ...field, options: [...update(field.options)].sort((a, b) => Number(a.position) - Number(b.position)) }
+          ? { ...field, options: [...update(field.options)].sort(byPosition) }
           : field,
       ),
     );
@@ -1951,20 +1869,13 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   async dropOption(fieldId: string, event: CdkDragDrop<WireCustomFieldOption[]>) {
-    if (event.previousIndex === event.currentIndex) return;
     const field = this.fields().find((f) => f.id === fieldId);
     if (!field) return;
-    const moved = field.options[event.previousIndex];
-    if (!moved) return;
-    const reordered = [...field.options];
-    reordered.splice(event.previousIndex, 1);
-    reordered.splice(event.currentIndex, 0, moved);
+    const move = reorderByIndex(field.options, event.previousIndex, event.currentIndex);
+    if (!move) return;
+    const { moved, reordered } = move;
     this.applyOptionChange(fieldId, () => reordered);
-
-    const body =
-      event.currentIndex === 0
-        ? { beforeOptionId: reordered[1]?.id ?? null }
-        : { afterOptionId: reordered[event.currentIndex - 1]?.id };
+    const body = moveAnchorBody(reordered, event.currentIndex, "beforeOptionId", "afterOptionId");
     await this.api.post(`/options/${moved.id}/move`, body);
   }
 
@@ -1991,26 +1902,18 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   async dropField(event: CdkDragDrop<WireCustomField[]>) {
-    if (event.previousIndex === event.currentIndex) return;
-    const items = this.fields();
-    const moved = items[event.previousIndex];
-    if (!moved) return;
-    const reordered = [...items];
-    reordered.splice(event.previousIndex, 1);
-    reordered.splice(event.currentIndex, 0, moved);
+    const move = reorderByIndex(this.fields(), event.previousIndex, event.currentIndex);
+    if (!move) return;
+    const { moved, reordered } = move;
     this.fields.set(reordered);
-
-    const body =
-      event.currentIndex === 0
-        ? { beforeFieldId: reordered[1]?.id ?? null }
-        : { afterFieldId: reordered[event.currentIndex - 1]?.id };
+    const body = moveAnchorBody(reordered, event.currentIndex, "beforeFieldId", "afterFieldId");
     await this.api.post(`/custom-fields/${moved.id}/move`, body);
   }
 
   // ─── Checklist templates ───────────────────────────────────────────────────
 
   private sortTemplates(templates: WireChecklistTemplate[]): WireChecklistTemplate[] {
-    return [...templates].sort((a, b) => Number(a.position) - Number(b.position));
+    return [...templates].sort(byPosition);
   }
 
   private replaceTemplate(template: WireChecklistTemplate) {
@@ -2124,32 +2027,22 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   async dropTemplateItem(event: CdkDragDrop<unknown>, id: string) {
-    if (event.previousIndex === event.currentIndex) return;
     const template = this.templates().find((t) => t.id === id);
     if (!template) return;
-    const reordered = [...template.items];
-    const [moved] = reordered.splice(event.previousIndex, 1);
-    if (!moved) return;
-    reordered.splice(event.currentIndex, 0, moved);
+    const move = reorderByIndex(template.items, event.previousIndex, event.currentIndex);
+    if (!move) return;
+    const { reordered } = move;
     // Optimistic reorder, then persist the new order via the coarse-grained items array.
     this.replaceTemplate({ ...template, items: reordered });
     await this.saveTemplateItemTexts(id, reordered.map((i) => i.text));
   }
 
   async dropTemplate(event: CdkDragDrop<WireChecklistTemplate[]>) {
-    if (event.previousIndex === event.currentIndex) return;
-    const items = this.templates();
-    const moved = items[event.previousIndex];
-    if (!moved) return;
-    const reordered = [...items];
-    reordered.splice(event.previousIndex, 1);
-    reordered.splice(event.currentIndex, 0, moved);
+    const move = reorderByIndex(this.templates(), event.previousIndex, event.currentIndex);
+    if (!move) return;
+    const { moved, reordered } = move;
     this.templates.set(reordered);
-
-    const body =
-      event.currentIndex === 0
-        ? { beforeTemplateId: reordered[1]?.id ?? null }
-        : { afterTemplateId: reordered[event.currentIndex - 1]?.id };
+    const body = moveAnchorBody(reordered, event.currentIndex, "beforeTemplateId", "afterTemplateId");
     const result = await this.api.post<{ id: string; position: string }>(`/checklist-templates/${moved.id}/move`, body);
     this.templates.update((ts) => this.sortTemplates(ts.map((t) => (t.id === result.id ? { ...t, position: result.position } : t))));
   }
@@ -2157,7 +2050,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   // ─── Automations ──────────────────────────────────────────────────────────
 
   private sortAutomations(automations: WireAutomation[]): WireAutomation[] {
-    return [...automations].sort((a, b) => Number(a.position) - Number(b.position));
+    return [...automations].sort(byPosition);
   }
 
   private replaceAutomation(automation: WireAutomation, preserveDraft = false) {
@@ -2318,16 +2211,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
     return action.type === "populate_custom_field" && action.config.value.kind === "select" ? action.config.value.optionIds : [];
   }
 
-  automationPopulateFirstOptionId(action: AutomationActionBody): string {
-    return this.automationPopulateOptionIds(action).at(0) ?? "";
-  }
-
   automationPopulateUserIds(action: AutomationActionBody): string[] {
     return action.type === "populate_custom_field" && action.config.value.kind === "user" ? action.config.value.userIds : [];
-  }
-
-  automationPopulateFirstUserId(action: AutomationActionBody): string {
-    return this.automationPopulateUserIds(action).at(0) ?? "";
   }
 
   automationPopulatePolicyValue(action: AutomationActionBody): string {
@@ -2349,16 +2234,6 @@ export class WorkspaceSettingsPage implements OnDestroy {
     const target = this.automationSetCustomField(action);
     if (!target) return [];
     return this.automationSetCustomFields().filter((field) => field.type === target.type && field.id !== target.id);
-  }
-
-  automationActionLabel(type: string): string {
-    if (type === "move_to_top") return "move to top";
-    if (type === "move_to_bottom") return "move to bottom";
-    if (type === "apply_checklists") return "apply checklist";
-    if (type === "populate_custom_field") return "set custom field";
-    if (type === "post_comment") return "post a comment";
-    if (type === "call_webhook") return "call a webhook";
-    return type.replaceAll("_", " ");
   }
 
   /**
@@ -2418,16 +2293,6 @@ export class WorkspaceSettingsPage implements OnDestroy {
 
   automationSummaryActions(automation: WireAutomation): AutomationActionBody[] {
     return this.automationActionDrafts()[automation.id] ?? this.automationActionBodies(automation);
-  }
-
-  private automationDueDateSummary(offsetDays: number, slot: DueDateSlot): string {
-    const dayLabel =
-      offsetDays === 0 ? "today"
-        : offsetDays === 1 ? "tomorrow"
-          : offsetDays === 7 ? "in 1 week"
-            : offsetDays > 0 ? `in ${offsetDays} days`
-              : `${Math.abs(offsetDays)} ${Math.abs(offsetDays) === 1 ? "day" : "days"} ago`;
-    return slot === "anyTime" ? dayLabel : `${dayLabel}, ${this.automationDueSlotLabel(slot)}`;
   }
 
   automationLabelName(id: string): string { return automationLabelName(id, this.automationLookups()); }
@@ -2763,17 +2628,6 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.replaceAutomation(updated);
   }
 
-  async toggleAutomationTriggerUser(id: string, userId: string) {
-    const current = this.automations().find((automation) => automation.id === id);
-    if (!current) return;
-    const ids = new Set(current.triggerUserIds ?? []);
-    if (ids.has(userId)) ids.delete(userId);
-    else ids.add(userId);
-    if (ids.size === 0) return;
-    const updated = await this.api.patch<WireAutomation>(`/automations/${id}`, { triggerUserIds: Array.from(ids) });
-    this.replaceAutomation(updated);
-  }
-
   async updateAutomationTriggerUsers(id: string, triggerUserIds: string[]) {
     if (triggerUserIds.length === 0) return;
     const updated = await this.api.patch<WireAutomation>(`/automations/${id}`, { triggerUserIds });
@@ -2946,12 +2800,6 @@ export class WorkspaceSettingsPage implements OnDestroy {
     void this.saveAutomationActions(id);
   }
 
-  toggleAutomationPopulatePolicy(id: string, index: number) {
-    const action = this.automationDraftActions(id)[index];
-    if (action?.type !== "populate_custom_field") return;
-    this.updateAutomationPopulatePolicy(id, index, action.config.onlyIfEmpty ? "overwrite" : "empty");
-  }
-
   updateAutomationPopulateTextSource(id: string, index: number, source: PopulateTextSource) {
     const action = this.automationDraftActions(id)[index];
     if (action?.type !== "populate_custom_field") return;
@@ -3074,10 +2922,6 @@ export class WorkspaceSettingsPage implements OnDestroy {
     void this.saveAutomationActions(id);
   }
 
-  selectedOptionValues(options: HTMLCollectionOf<HTMLOptionElement>): string[] {
-    return Array.from(options).filter((option) => option.selected).map((option) => option.value).filter(Boolean);
-  }
-
   async saveAutomationActions(id: string) {
     this.clearQueuedAutomationActionsSave(id);
     // Incomplete actions cannot be persisted (the DTO rejects an empty labelIds/userIds), so they stay
@@ -3198,11 +3042,6 @@ export class WorkspaceSettingsPage implements OnDestroy {
     return automation.runStats?.runCount ?? 0;
   }
 
-  /** True for an enabled rule that has never fired — usually a sign the trigger does not match. */
-  automationNeverRan(automation: WireAutomation): boolean {
-    return automation.enabled && !automation.runStats?.lastRunAt;
-  }
-
   /**
    * Null when the most recent run was the effectful one. Both columns are stamped with the same
    * `now` in that case, so showing it would just repeat "Ran 20m ago" in different words. The
@@ -3217,28 +3056,19 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   async dropAutomationAction(event: CdkDragDrop<unknown>, id: string) {
-    if (event.previousIndex === event.currentIndex) return;
-    const actions = [...this.automationDraftActions(id)];
-    const [moved] = actions.splice(event.previousIndex, 1);
-    if (!moved) return;
-    actions.splice(event.currentIndex, 0, moved);
+    const move = reorderByIndex(this.automationDraftActions(id), event.previousIndex, event.currentIndex);
+    if (!move) return;
+    const actions = move.reordered;
     this.automationActionDrafts.update((drafts) => ({ ...drafts, [id]: actions }));
     await this.saveAutomationActions(id);
   }
 
   async dropAutomation(event: CdkDragDrop<WireAutomation[]>) {
-    if (event.previousIndex === event.currentIndex) return;
-    const items = this.automations();
-    const moved = items[event.previousIndex];
-    if (!moved) return;
-    const reordered = [...items];
-    reordered.splice(event.previousIndex, 1);
-    reordered.splice(event.currentIndex, 0, moved);
+    const move = reorderByIndex(this.automations(), event.previousIndex, event.currentIndex);
+    if (!move) return;
+    const { moved, reordered } = move;
     this.automations.set(reordered);
-    const body =
-      event.currentIndex === 0
-        ? { beforeAutomationId: reordered[1]?.id ?? null }
-        : { afterAutomationId: reordered[event.currentIndex - 1]?.id };
+    const body = moveAnchorBody(reordered, event.currentIndex, "beforeAutomationId", "afterAutomationId");
     const result = await this.api.post<{ id: string; position: string }>(`/automations/${moved.id}/move`, body);
     this.automations.update((items) => this.sortAutomations(items.map((item) => (item.id === result.id ? { ...item, position: result.position } : item))));
   }
@@ -3305,19 +3135,11 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   async dropLabel(event: CdkDragDrop<WireCardLabel[]>) {
-    if (event.previousIndex === event.currentIndex) return;
-    const items = this.labels();
-    const moved = items[event.previousIndex];
-    if (!moved) return;
-    const reordered = [...items];
-    reordered.splice(event.previousIndex, 1);
-    reordered.splice(event.currentIndex, 0, moved);
+    const move = reorderByIndex(this.labels(), event.previousIndex, event.currentIndex);
+    if (!move) return;
+    const { moved, reordered } = move;
     this.labels.set(reordered);
-
-    const body =
-      event.currentIndex === 0
-        ? { beforeLabelId: reordered[1]?.id ?? null }
-        : { afterLabelId: reordered[event.currentIndex - 1]?.id };
+    const body = moveAnchorBody(reordered, event.currentIndex, "beforeLabelId", "afterLabelId");
     await this.api.post(`/card-labels/${moved.id}/move`, body);
   }
 
@@ -3473,8 +3295,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   async copyGuestInviteUrl(value: string | null) {
-    if (!value || typeof navigator === "undefined") return;
-    await navigator.clipboard?.writeText(value);
+    if (!value) return;
+    await copyToClipboard(value);
     this.guestInviteCopied.set(true);
   }
 
@@ -3626,19 +3448,11 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   async dropBoardGroup(event: CdkDragDrop<BoardGroup[]>) {
-    if (event.previousIndex === event.currentIndex) return;
-    const items = this.boardGroups();
-    const moved = items[event.previousIndex];
-    if (!moved) return;
-    const reordered = [...items];
-    reordered.splice(event.previousIndex, 1);
-    reordered.splice(event.currentIndex, 0, moved);
+    const move = reorderByIndex(this.boardGroups(), event.previousIndex, event.currentIndex);
+    if (!move) return;
+    const { moved, reordered } = move;
     this.boardGroups.set(reordered);
-
-    const body =
-      event.currentIndex === 0
-        ? { beforeGroupId: reordered[1]?.id ?? null }
-        : { afterGroupId: reordered[event.currentIndex - 1]?.id };
+    const body = moveAnchorBody(reordered, event.currentIndex, "beforeGroupId", "afterGroupId");
     const result = await this.api.post<{ id: string; position: string }>(`/board-groups/${moved.id}/move`, body);
     this.boardGroups.update((groups) => sortBoardGroups(groups.map((g) => g.id === result.id ? { ...g, position: result.position } : g)));
   }
@@ -3719,19 +3533,11 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   async dropBoard(event: CdkDragDrop<Board[]>) {
-    if (event.previousIndex === event.currentIndex) return;
-    const items = this.boardList();
-    const moved = items[event.previousIndex];
-    if (!moved) return;
-    const reordered = [...items];
-    reordered.splice(event.previousIndex, 1);
-    reordered.splice(event.currentIndex, 0, moved);
+    const move = reorderByIndex(this.boardList(), event.previousIndex, event.currentIndex);
+    if (!move) return;
+    const { moved, reordered } = move;
     this.boardList.set(reordered);
-
-    const body =
-      event.currentIndex === 0
-        ? { beforeBoardId: reordered[1]?.id ?? null }
-        : { afterBoardId: reordered[event.currentIndex - 1]?.id };
+    const body = moveAnchorBody(reordered, event.currentIndex, "beforeBoardId", "afterBoardId");
     const result = await this.api.post<{ id: string; position: string }>(`/boards/${moved.id}/move`, body);
     this.boardList.update((bs) => sortBoards(bs.map((b) => (b.id === result.id ? { ...b, position: result.position } : b))));
     this.guestBoards.update((boards) => sortBoards(boards.map((board) => board.id === result.id ? { ...board, position: result.position } : board)));
@@ -3850,8 +3656,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   async copyText(value: string | null) {
-    if (!value || typeof navigator === "undefined") return;
-    await navigator.clipboard?.writeText(value);
+    if (!value) return;
+    await copyToClipboard(value);
   }
 
   updateWebhookUrl(value: string) {

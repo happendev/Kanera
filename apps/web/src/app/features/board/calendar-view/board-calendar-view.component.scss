@@ -10,10 +10,6 @@
   // which reads as a misaligned grid. Opted in at the component root so every cell inherits it.
   font-variant-numeric: tabular-nums;
 
-  // A day column never compresses. Below this width a card's title, board and metadata stop being
-  // readable, so the month keeps seven columns of at least this size and scrolls sideways instead —
-  // on a phone as much as on a desktop. Do not trade it away in a media query.
-  --cal-col-min: 233px;
   // The division between two days is a single shared 1px line, painted by the grid's own background
   // showing through its gap. Widening this widens every line in the grid at once.
   --cal-line: 1px;
@@ -201,37 +197,21 @@
   }
 }
 
-// Seven equal columns is the whole point of the view, so the grid never reflows to fewer: below its
-// minimum width the month scrolls sideways instead, which keeps every date under its real weekday.
-// The gesture is kDragScroll's click-and-drag, so this has to stay usable with no visible scrollbar.
-.calendar-month-scroll {
-  padding-bottom: 4px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-}
-
-// While a drag is in flight the pointer owns the panel: no caret, no selection, no text handles.
-.calendar-month-scroll.is-drag-scrolling {
-  cursor: grabbing;
-  user-select: none;
-  scroll-behavior: auto;
-}
-
+// Seven equal columns is the whole point of the view, so the grid never reflows to fewer, and it
+// never overflows sideways either: a sideways-scrolling month hid half the week on every tablet. The
+// columns share whatever width there is and the tiles compact to fit (see `.is-compact`); below
+// $bp-sheet the component swaps the grid of tiles for the phone layout instead.
 .calendar-weekdays,
 .calendar-grid {
   display: grid;
-  // minmax(--cal-col-min, 1fr), so wide panels share the slack while narrow ones overflow rather
-  // than squeezing a day card. min-width keeps the overflow inside this element's own box, so the
-  // scroller's padding still applies at the right-hand end of the grid.
-  grid-template-columns: repeat(7, minmax(var(--cal-col-min), 1fr));
+  // minmax(0, 1fr), not 1fr: a bare 1fr track's minimum is its content's min-content width, so one
+  // long unbreakable title would widen its column and push the week past the panel edge.
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: var(--cal-line);
   // Both grids carry the same 1px frame — visible on the grid, transparent on the weekday strip —
   // with border-box sizing, so the seven weekday labels stay exactly over the seven day columns.
   box-sizing: border-box;
   border: 1px solid transparent;
-  min-width: calc(7 * var(--cal-col-min) + 6 * var(--cal-line) + 2px);
 }
 
 .calendar-weekdays {
@@ -689,10 +669,20 @@ k-card-labels.cal-label-row {
   background: var(--success);
 }
 
-// A tile squeezed to the narrowest useful column drops the metadata row before it drops the title.
-@container (max-width: 132px) {
+// A tile squeezed to a narrow column drops the metadata row before it drops the title: beside the
+// assignee stack the row has ~90px, which clipped the checklist count mid-number.
+@container (max-width: 150px) {
   .cal-context-row {
     gap: 4px;
+  }
+
+  // The key gives way to the due time here: the time is what the calendar is for, and a fixed-width
+  // key pushed it past the clipped edge of the row.
+  .cal-card-key {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .cal-meta-row {
@@ -717,10 +707,10 @@ k-card-labels.cal-label-row {
 }
 
 @media (max-width: 900px) {
-  // Only the chrome around the grid gets tighter. --cal-col-min and the grid lines are deliberately
-  // untouched: a day card is exactly as readable on a phone as on a desktop, and the panel scrolls
-  // sideways to pay for it. Panel padding moves through the variables so the stacked view's title
-  // strip stays pulled out to exactly the panel's inner edge here too.
+  // Only the chrome around the grid gets tighter here; the cells themselves respond to the
+  // component's own measured width (`.is-compact` / `.is-phone`), not the viewport. Panel padding
+  // moves through the variables so the stacked view's title strip stays pulled out to exactly the
+  // panel's inner edge here too.
   :host {
     --cal-panel-pad-y: 10px;
     --cal-panel-pad-x: 10px;
@@ -751,7 +741,7 @@ k-card-labels.cal-label-row {
 
   .calendar-toolbar-left {
     display: grid;
-    grid-template-columns: 36px auto 36px minmax(0, 1fr);
+    grid-template-columns: auto auto auto minmax(0, 1fr);
     width: 100%;
   }
 
@@ -770,10 +760,9 @@ k-card-labels.cal-label-row {
     font-size: 12px;
   }
 
-  // The toolbar grid reserves 36px tracks for the arrows, so the buttons have to fill them to stay
-  // a comfortable touch target.
+  // Auto tracks, so the arrows keep their own square size here and the coarse-pointer 44px below.
   .cal-icon-btn {
-    width: 100%;
+    width: 36px;
   }
 
   .cal-toolbar-title {
@@ -828,4 +817,401 @@ k-card-labels.cal-label-row {
 .calendar-slot-empty.is-drop-target {
   background: color-mix(in srgb, var(--accent) 8%, var(--list-bg));
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+// ---- Compact: seven narrow columns ---------------------------------------------------------------
+//
+// A tablet, or a desktop pane squeezed by the sidebar and card detail, gives each column ~80–140px.
+// The grid still shows the whole week; the cell chrome and the tile shrink around it instead.
+
+.is-compact {
+  --cal-row-min: 84px;
+
+  .calendar-weekdays span {
+    padding-left: 7px;
+  }
+
+  .calendar-day > header,
+  .calendar-slot-empty > header {
+    gap: 4px;
+    padding: 6px 6px 2px 7px;
+  }
+
+  .calendar-slot-empty > header {
+    padding-bottom: 6px;
+  }
+
+  .day-cards {
+    gap: 4px;
+    padding: 2px 4px 6px;
+  }
+
+  .cal-card {
+    gap: 4px;
+    padding: 6px;
+  }
+
+  .cal-card-title {
+    font-size: 11px;
+    line-height: 1.3;
+  }
+
+  k-card-labels.cal-label-row {
+    --label-chip-height: 14px;
+    --label-chip-padding-x: 4px;
+    --label-chip-font-size: 8.5px;
+    --label-chip-text-max-width: 100%;
+  }
+}
+
+// The bare day number; today fills it with the accent the badge used to carry, and the 1st (which
+// keeps its month, "1 Oct") stretches the same fill into a pill.
+.calendar-day-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 20px;
+  height: 20px;
+  margin-left: -4px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+
+  &.is-today {
+    background: var(--accent);
+    color: var(--accent-fg);
+  }
+}
+
+// The number keeps its own width (the full layout's date span takes the slack, which would centre
+// the pill in the header); the count is pushed to the far end instead.
+.is-compact .calendar-day > header > .calendar-day-number {
+  flex: none;
+}
+
+.is-compact .calendar-day > header > small {
+  margin-left: auto;
+  font-size: 10.5px;
+}
+
+// "+N more" / "Show less" under a capped month cell. A quiet text button on the cell surface, so it
+// reads as part of the day rather than another card; it opts out of the global button reset.
+.cal-more {
+  height: 22px;
+  justify-content: flex-start;
+  width: 100%;
+  padding: 0 6px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+
+  &:hover:not(:disabled) {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+}
+
+// A tile narrower than ~110px (a compact column) keeps the title, the time and who owns it; the
+// card key and board name are the least-read items and go first, then the second assignee.
+@container (max-width: 110px) {
+  .cal-card-key,
+  .cal-board-name {
+    display: none;
+  }
+
+  .cal-card-body {
+    gap: 4px;
+  }
+
+  .cal-avatar ~ .cal-avatar {
+    display: none;
+  }
+}
+
+// Below ~84px the assignee avatar would take a quarter of the title's width, so the title wins.
+@container (max-width: 84px) {
+  .cal-assignees {
+    display: none;
+  }
+}
+
+// A paged week is a single row; let it take the pane's height so each day reads as a full column
+// rather than a strip with the rest of the screen empty below it.
+.week-mode:not(.is-stacked):not(.is-phone) {
+  .calendar-month {
+    display: flex;
+    flex: 1 0 auto;
+    flex-direction: column;
+  }
+
+  .calendar-month-body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+  }
+
+  .calendar-grid {
+    flex: 1;
+  }
+}
+
+// ---- Phone ---------------------------------------------------------------------------------------
+
+.is-phone {
+  --cal-row-min: 44px;
+}
+
+// The month picker: a panel of day numbers with due dots. Same panel treatment as a stacked month so
+// the two phone surfaces belong together.
+.cal-mini-month {
+  flex: none;
+  padding: 8px 6px 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.cal-mini-weekdays,
+.cal-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.cal-mini-weekdays {
+  margin-bottom: 2px;
+
+  span {
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 650;
+    text-align: center;
+  }
+}
+
+.cal-mini-grid {
+  row-gap: 2px;
+}
+
+// 44px tall on every pointer: these are the only way to reach a day's cards on a phone. Opts out of
+// the global button reset (fixed 36px height, primary fill, horizontal centring of a single row).
+.cal-mini-day {
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  width: 100%;
+  min-width: 0;
+  height: 46px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+
+  &:hover:not(:disabled) {
+    background: var(--surface-hover);
+  }
+
+  &.is-muted {
+    color: var(--text-muted);
+
+    .cal-mini-number {
+      opacity: 0.6;
+    }
+  }
+}
+
+.cal-mini-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  transition: background-color var(--motion-fast), color var(--motion-fast);
+}
+
+// Today is an accent ring; the chosen day is the filled accent, which wins when they coincide.
+.cal-mini-day.is-today .cal-mini-number {
+  color: var(--accent);
+  font-weight: 750;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+.cal-mini-day.is-selected .cal-mini-number {
+  background: var(--accent);
+  color: var(--accent-fg);
+  opacity: 1;
+  box-shadow: none;
+}
+
+// Fixed height whether or not the day has dots, so every number sits on the same line.
+.cal-mini-dots {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 6px;
+}
+
+.cal-mini-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--accent);
+
+  &.is-overdue {
+    background: var(--danger);
+  }
+
+  &.is-done {
+    background: var(--success);
+  }
+}
+
+.cal-mini-count {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+// ---- Phone lists: the chosen day, a week, the stacked agenda -------------------------------------
+
+.cal-agenda {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+// A day is a lane, like a grid cell: --list-bg under --card-bg tiles in both themes.
+.cal-agenda-day {
+  flex: none;
+  background: var(--list-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+
+  > header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 650;
+
+    small {
+      margin-left: auto;
+      color: var(--text-muted);
+      font-size: 11.5px;
+      font-weight: 500;
+    }
+  }
+
+  &.is-today {
+    background: color-mix(in srgb, var(--accent) 6%, var(--list-bg));
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  }
+
+  // An empty day is just its heading, receded, so the week's working days carry the screen.
+  &.is-empty > header {
+    min-height: 36px;
+    color: var(--text-muted);
+    font-weight: 550;
+  }
+
+  &.is-muted:not(.is-today) > header {
+    color: var(--text-muted);
+  }
+}
+
+.cal-agenda-date {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cal-agenda-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 8px 8px;
+}
+
+// Full-width tiles have room again: a readable title size, three lines before it clips, and a
+// tap target well past 44px.
+.cal-agenda-cards .cal-card {
+  gap: 6px;
+  padding: 10px 11px;
+  font-size: 13px;
+
+  .cal-card-title {
+    font-size: 13px;
+    line-clamp: 3;
+    -webkit-line-clamp: 3;
+  }
+
+  .cal-time,
+  .cal-board,
+  .cal-card-key {
+    font-size: 11px;
+  }
+
+  .cal-time {
+    line-height: 17px;
+  }
+}
+
+// Inside a stacked month panel the days are rows of one list, divided by hairlines, rather than a
+// box per day inside the month's box.
+.calendar-month .cal-agenda {
+  gap: 0;
+  margin: 0 calc(-1 * var(--cal-panel-pad-x)) calc(-1 * var(--cal-panel-pad-y));
+
+  .cal-agenda-day {
+    background: none;
+    border: 0;
+    border-radius: 0;
+
+    & + .cal-agenda-day {
+      border-top: 1px solid var(--border);
+    }
+  }
+}
+
+// ---- Touch ---------------------------------------------------------------------------------------
+
+// Coarse pointers get 44px controls. The tiles are already taller than that; these are the chrome.
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  .cal-toolbar-btn {
+    height: 44px;
+  }
+
+  .cal-icon-btn {
+    width: 44px;
+  }
+
+  .cal-more {
+    height: 44px;
+  }
+
+  // A one-line tile in a compact cell is ~30px of content; pad it out to a full target.
+  .cal-card {
+    min-height: 44px;
+  }
+
+  .cal-agenda-day > header {
+    min-height: 44px;
+  }
 }

@@ -129,16 +129,26 @@
     </ng-template>
   </k-card>
   } @else {
-  <k-separator cdkDrag #separatorDrag="cdkDrag" #separatorEditor [cdkDragStartDelay]="dragStartDelay" [cdkDragDisabled]="!canEdit() || separatorEditor.editing()" [cdkDragData]="item" (cdkDragStarted)="onDragStarted(separatorDrag)" (cdkDragMoved)="onDragMoved($event)" (cdkDragEnded)="onDragEnded()" [separator]="item.separator" [canEdit]="canEdit() && canManageSeparators()" [canEditRole]="canEditRole() && canManageSeparators()" [autoEdit]="autoEditSeparatorId() === item.separator.id"
+  <k-separator cdkDrag #separatorDrag="cdkDrag" #separatorEditor [cdkDragStartDelay]="dragStartDelay" [cdkDragDisabled]="!canEdit() || separatorEditor.editing()" [cdkDragData]="item" (cdkDragStarted)="onDragStarted(separatorDrag)" (cdkDragMoved)="onDragMoved($event)" (cdkDragEnded)="onDragEnded()" [separator]="item.separator" [canEdit]="canEdit() && canManageSeparators()" [canEditRole]="canEditRole() && canManageSeparators()"
     (updated)="updateSeparator($event)" (deleteRequested)="deleteSeparator($event)" />
   }
-  <!-- Hover "+" between two lane items. Not a cdkDrag, so CDK ignores it for drop indices; it is
-       hidden while a drag is active because CDK only transforms drag items during sorting. The
-       footer button still covers "below the last item", so nothing renders after $last. -->
+  <!-- Hover insert strip between two lane items. Not a cdkDrag, so CDK ignores it for drop indices;
+       it is hidden while a drag is active because CDK only transforms drag items during sorting. The
+       footer buttons still cover "below the last item", so nothing renders after $last. Hovering the
+       line reveals a segmented control centred on it; its segments are the click targets. -->
   @if (showInsertBetween() && !$last) {
-  <button type="button" class="lane-insert" [disabled]="cardDragging()" (click)="startAddAfter(item, $event)" aria-label="Add card here">
-    <span class="lane-insert-plus" aria-hidden="true"><i class="ti ti-plus"></i></span>
-  </button>
+  <div class="lane-insert" [class.is-disabled]="cardDragging()">
+    <div class="lane-insert-actions">
+      <div class="lane-insert-group" role="group" aria-label="Insert here">
+        @if (showInsertCard()) {
+        <button type="button" class="lane-insert-pill lane-insert-card" [disabled]="cardDragging()" (click)="startAddAfter(item, $event)" aria-label="Add card here">Add card</button>
+        }
+        @if (showInsertSeparator()) {
+        <button type="button" class="lane-insert-pill lane-insert-separator" [disabled]="cardDragging()" (click)="addSeparatorAfter(item, $event)" aria-label="Add separator here">Add separator</button>
+        }
+      </div>
+    </div>
+  </div>
   }
   } @empty {
   <div class="list-empty-hint" aria-hidden="true"></div>

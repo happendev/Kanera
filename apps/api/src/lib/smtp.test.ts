@@ -25,6 +25,27 @@ test("SMTP delivery uses sender domain for EHLO and Message-ID", async () => {
   assert.doesNotMatch(received.message, /kanera\.local/);
 });
 
+test("HTML delivery writes extra headers and cannot be used to inject more", async () => {
+  const received = await withSmtpServer(async (port) => {
+    await sendEmail({
+      config: { host: "127.0.0.1", port, security: "none", fromEmail: "noreply@example.com" },
+      to: "ada@example.net",
+      subject: "Header test",
+      html: "<p>Hello</p>",
+      headers: {
+        "List-Unsubscribe": "<https://kanera.test/api/email/unsubscribe/one-click?token=t>",
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click\r\nBcc: attacker@example.com",
+        "Bad Name": "ignored",
+      },
+    });
+  });
+
+  assert.match(received.message, /^List-Unsubscribe: <https:\/\/kanera\.test\/api\/email\/unsubscribe\/one-click\?token=t>\r$/m);
+  assert.match(received.message, /^List-Unsubscribe-Post: List-Unsubscribe=One-Click Bcc: attacker@example\.com\r$/m);
+  assert.doesNotMatch(received.message, /^Bcc:/m);
+  assert.doesNotMatch(received.message, /Bad Name/);
+});
+
 async function withSmtpServer(run: (port: number) => Promise<void>): Promise<{ commands: string[]; message: string }> {
   const commands: string[] = [];
   let message = "";

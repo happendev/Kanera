@@ -3,7 +3,7 @@ import { and, eq, gte, isNull, lt } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { db } from "../db.js";
 import { env } from "../env.js";
-import { impactFromPlanActions, sendHostedBillingEmail } from "./billing-emails.js";
+import { impactFromPlanActions, sendHostedBillingEmail, trialUsageSummary } from "./billing-emails.js";
 import type { Mailer } from "./mailer.js";
 import { convertClientPlan } from "./plan-conversion.js";
 import { ANALYTICS_EVENT_VERSION, productAnalytics } from "./product-analytics.js";
@@ -79,6 +79,8 @@ export async function runTrialWarningSweep(log?: FastifyBaseLogger, mailer?: Mai
         kind: "pro_trial_warning",
         daysRemaining: days,
         trialEndsAt: trial.currentPeriodEnd,
+        // Marketing's "trial nearing end" moment: summarise achieved value next to the plan options.
+        usage: await trialUsageSummary(trial.id),
         dedupeKey: `pro_trial_warning:${days}:${dateKey(start)}`,
       }, { log });
     }

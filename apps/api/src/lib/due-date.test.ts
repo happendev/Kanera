@@ -12,6 +12,10 @@ test("due-date cutoffs stay current across calls and zones", () => {
     assert.equal(isDueDateOverdue({ ...candidate, dueDateTimezone: "America/New_York" }, new Date(`2026-09-05T${String(hour).padStart(2, "0")}:00:00Z`)), false);
   }
   assert.equal(isDueDateOverdue({ dueDateLocalDate: null, dueDateSlot: null, dueDateTimezone: null }), false);
+  // Whole-day comparison comes before the slot boundary: yesterday is overdue at any hour, tomorrow never is.
+  const dated = { dueDateLocalDate: "2026-05-24", dueDateSlot: "morning" as const, dueDateTimezone: "UTC" };
+  assert.equal(isDueDateOverdue(dated, new Date("2026-05-25T00:00:00Z")), true);
+  assert.equal(isDueDateOverdue(dated, new Date("2026-05-23T23:59:00Z")), false);
 });
 
 test("local dates preserve midnight, DST, fractional offsets and invalid-zone fallback", () => {

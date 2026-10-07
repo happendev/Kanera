@@ -3,11 +3,9 @@ import type { WritableSignal } from "@angular/core";
 import { inject, Injectable, signal, untracked } from "@angular/core";
 import { APP_DOM_EVENTS } from "../../core/browser/browser-contracts";
 import { PanelStackService } from "../../shared/panel-stack.service";
-import { CardLabelDisplayService } from "../../shared/card-label-display.service";
 
 /**
- * Coordinates the mutually-exclusive card/list menus, and re-exports the shared label display
- * preference that `CardLabelDisplayService` now owns.
+ * Coordinates the mutually-exclusive card/list menus.
  *
  * Board and Global Work provide a route-local instance (see their component `providers`). Keeping
  * the native listeners here means a 1,000-card board installs one listener per event instead of one
@@ -15,25 +13,20 @@ import { CardLabelDisplayService } from "../../shared/card-label-display.service
  * torn down in ngOnDestroy, and only a component-scoped provider guarantees that teardown runs on
  * route leave. A root singleton would leak that listener.
  *
- * The label preference is the opposite case — localStorage-backed, app-lifetime, and needed by shell
- * chrome outside any route that provides this service — so it lives in the root service and is
- * delegated here for the call sites that already read it through the coordinator.
+ * The label display preference is deliberately not here: it is localStorage-backed, app-lifetime,
+ * and needed by shell chrome outside any route, so it lives in the root `CardLabelDisplayService`.
  */
 @Injectable()
 export class BoardMenuCoordinator implements OnDestroy {
-  private readonly labelDisplay = inject(CardLabelDisplayService);
   private readonly panelStack = inject(PanelStackService);
 
   readonly activeCardMenuId = signal<string | null>(null);
   readonly activeListMenuId = signal<string | null>(null);
-  readonly labelsCompressed = this.labelDisplay.labelsCompressed;
   private readonly cardMenuStates = new Map<string, WritableSignal<boolean>>();
 
   // The calendar view still dispatches CARD_ACTIONS_MENU_OPEN as a DOM event rather than calling the
   // coordinator directly, so this bridge keeps its card menu mutually exclusive with the others.
-  // (Kanban and table cards now call openCardMenu directly.) LIST_MENU_OPEN and
-  // CARD_LABELS_DISPLAY_CHANGED no longer have any dispatcher — list menus call openListMenu directly
-  // and the label preference is this shared signal — so they are not bridged.
+  // (Kanban and table cards now call openCardMenu directly, and list menus call openListMenu.)
   private readonly onCardMenuEvent = (event: Event) => {
     const cardId = event instanceof CustomEvent && typeof event.detail === "string" ? event.detail : null;
     if (cardId) this.openCardMenu(cardId);
@@ -91,10 +84,6 @@ export class BoardMenuCoordinator implements OnDestroy {
       this.cardMenuStates.delete(cardId);
       if (this.activeCardMenuId() === cardId) this.activeCardMenuId.set(null);
     };
-  }
-
-  setLabelsCompressed(compressed: boolean) {
-    this.labelDisplay.setLabelsCompressed(compressed);
   }
 
   ngOnDestroy() {

@@ -11,6 +11,7 @@ import { DocsLinkComponent } from "../../../shared/docs-link.component";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { AccountSettingsPage } from "../account-settings.page";
 import { formatDateTime } from "../../../shared/date-format";
+import { copyToClipboard } from "../../../shared/clipboard";
 
 // Personal API keys are the caller's own, board-content-only credentials; the list carries no
 // workspace/creator fields (see the /me/api-keys response shape on the API). `scope` caps what the
@@ -139,8 +140,8 @@ export class AccountSettingsApiKeysPage implements OnInit {
   }
 
   protected async copyText(value: string | null) {
-    if (!value || typeof navigator === "undefined") return;
-    await navigator.clipboard?.writeText(value);
+    if (!value) return;
+    await copyToClipboard(value);
   }
 
   protected formatKeyLastUsed(value: string | Date | null | undefined): string {

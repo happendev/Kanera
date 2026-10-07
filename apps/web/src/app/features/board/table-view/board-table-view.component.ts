@@ -100,6 +100,7 @@ import {
   writeSortBy,
   type ColumnWidths,
 } from "./view-preference";
+import { byPosition } from "../../../shared/position-sort";
 
 const TITLE_COLUMN_ID = "title";
 const ACTIONS_COLUMN_WIDTH = 38;
@@ -450,9 +451,9 @@ export class BoardTableViewComponent implements OnDestroy {
   };
   private readonly onPanEnd = () => this.endBackgroundPan();
 
-  readonly sortedLists = computed(() => [...this.lists()].sort((a, b) => Number(a.position) - Number(b.position)));
+  readonly sortedLists = computed(() => [...this.lists()].sort(byPosition));
   readonly sortedCustomFields = computed(() =>
-    [...this.customFields()].filter((field) => !field.archivedAt).sort((a, b) => Number(a.position) - Number(b.position)),
+    [...this.customFields()].filter((field) => !field.archivedAt).sort(byPosition),
   );
   readonly customFieldById = computed(() => new Map(this.sortedCustomFields().map((field) => [field.id, field])));
   readonly listById = computed(() => new Map(this.lists().map((list) => [list.id, list])));
@@ -1918,11 +1919,6 @@ export class BoardTableViewComponent implements OnDestroy {
     const assignees = this.assigneesForCard(cardId);
     if (assignees.length === 1) return assignees[0]!.displayName;
     return assignees.map((member) => member.displayName.split(" ")[0]).join(", ");
-  }
-
-  /** Columns the table renders but cannot edit in place — they have no cell trigger and no hover. */
-  isReadOnlyColumn(id: string): boolean {
-    return id === "checklist" || id === "created" || id === "updated";
   }
 
   /**

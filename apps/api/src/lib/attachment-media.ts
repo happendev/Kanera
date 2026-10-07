@@ -27,7 +27,8 @@ export function shapeAttachmentMedia<T extends AttachmentMediaRow>(row: T): T {
   return shaped;
 }
 
-function withDownloadFileName(url: string, fileName: string): string {
+/** Appends the `fn` hint so the media route serves the download under its original file name. */
+export function withDownloadFileName(url: string, fileName: string): string {
   try {
     const parsed = new URL(url);
     parsed.searchParams.set("fn", fileName);

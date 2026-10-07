@@ -1113,47 +1113,6 @@ describe("GlobalWorkPage portfolio summary", () => {
     fixture.destroy();
   });
 
-  it("rolls up the worst board risk instead of diluting it across card totals", async () => {
-    const fixture = await mount();
-    const page = fixture.componentInstance;
-    const busiest = page.portfolioRows()
-      .find((row) => row.id === "board:30000000-0000-4000-8000-000000000001")!;
-    const organisation = page.portfolioRows().find((row) => row.level === "organisation")!;
-
-    expect(busiest.risk).toMatchObject({ level: "needsAttention", summary: "3 overdue" });
-    expect(organisation.risk).toMatchObject({ level: "needsAttention", summary: "1 board needs attention" });
-    expect(page.portfolioRiskTitle(busiest)).toBe("Needs attention: 3 overdue");
-
-    fixture.destroy();
-  });
-
-  it("hides disabled board health and excludes it from portfolio rollups", async () => {
-    const disabledBoardId = "30000000-0000-4000-8000-000000000001";
-    const fixture = await mount([], disabledBoardId);
-    const page = fixture.componentInstance;
-    const disabledBoard = page.portfolioRows().find((row) => row.id === `board:${disabledBoardId}`)!;
-    const organisation = page.portfolioRows().find((row) => row.level === "organisation")!;
-
-    expect(disabledBoard.healthEnabled).toBe(false);
-    expect(page.portfolioRiskTitle(disabledBoard)).toBe("Board health is disabled");
-    expect(organisation.risk.level).toBe("onTrack");
-
-    fixture.destroy();
-  });
-
-  it("uses each workspace's enabled signals in board and portfolio health", async () => {
-    const boardId = "30000000-0000-4000-8000-000000000001";
-    const fixture = await mount([], undefined, boardId);
-    const page = fixture.componentInstance;
-    const board = page.portfolioRows().find((row) => row.id === `board:${boardId}`)!;
-    const organisation = page.portfolioRows().find((row) => row.level === "organisation")!;
-
-    expect(board.risk.level).toBe("onTrack");
-    expect(organisation.risk.level).toBe("onTrack");
-
-    fixture.destroy();
-  });
-
   it("feeds the activity strip separate movement and completion counts per day", async () => {
     const today = new Date();
     const localDate = (date: Date) =>

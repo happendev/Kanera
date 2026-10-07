@@ -89,7 +89,7 @@
     <label class="compact-number-field">
       <span>Mark cards inactive after</span>
       <input type="number" min="0" max="365" step="1" [value]="settings.inactiveCardsDaysDraft()" (input)="settings.updateInactiveCardsDays($any($event.target).value)" (blur)="settings.saveGeneralSettingsNow()"
-        [disabled]="settings.boardHealthSaving()" />
+        [disabled]="settings.generalSettingsSaving()" />
       <span>days</span>
     </label>
   </div>
@@ -104,43 +104,35 @@
     <label class="compact-number-field">
       <span>Show completed cards on boards for</span>
       <input type="number" min="0" max="365" step="1" [value]="settings.completedCardsActiveDaysDraft()" (input)="settings.updateCompletedCardsActiveDays($any($event.target).value)" (blur)="settings.saveGeneralSettingsNow()"
-        [disabled]="settings.boardHealthSaving()" />
+        [disabled]="settings.generalSettingsSaving()" />
       <span>days</span>
     </label>
   </div>
 </div>
+@if (settings.generalSettingsError(); as message) {
+<p class="board-linking-error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+}
 <div class="board-settings-section">
   <div class="guest-section-head">
-    <i class="ti ti-activity-heartbeat"></i>
-    <span>Board health</span>
+    <i class="ti ti-notebook"></i>
+    <span>Notes</span>
   </div>
+  <k-docs-link path="notes" fragment="turn-notes-on-or-off" label="Learn more about notes" />
   <label class="board-linking-toggle">
-    <input type="checkbox" aria-label="Show board health" [checked]="settings.boardHealthEnabledDraft()" (change)="settings.updateBoardHealthEnabled($any($event.target).checked)" (blur)="settings.saveGeneralSettingsNow()"
-      [disabled]="settings.boardHealthSaving()" />
+    <input type="checkbox" aria-label="Enable notes" [checked]="settings.notesEnabledDraft()" (change)="settings.updateNotesEnabled($any($event.target).checked, $any($event.target))"
+      [disabled]="settings.notesSaving()" />
     <span class="board-linking-copy">
-      <span class="board-linking-title">Show board health</span>
-      <span class="board-linking-help">Show automatic work-risk signals on this {{ settings.isStandalone() ? 'board' : 'workspace and its boards' }} and in Portfolio.</span>
+      <span class="board-linking-title">Enable notes</span>
+      <span class="board-linking-help">
+        @if (settings.isStandalone()) {
+        Show Notes on this board. Turning it off hides existing notes without deleting them.
+        } @else {
+        Show Notes in this workspace and on its boards. Turning it off hides existing notes without deleting them.
+        }
+      </span>
     </span>
   </label>
-  @if (settings.boardHealthEnabledDraft()) {
-  <div class="health-signal-options" role="group" aria-label="Board health signals">
-    <span class="health-signal-heading">Use these signals to determine health</span>
-    <label class="health-signal-toggle">
-      <input type="checkbox" [checked]="settings.boardHealthOverdueEnabledDraft()" (change)="settings.updateBoardHealthSignal('overdue', $any($event.target).checked)" [disabled]="settings.boardHealthSaving()" />
-      <span><strong>Overdue cards</strong><small>Flag boards when active cards are past their due date.</small></span>
-    </label>
-    <label class="health-signal-toggle">
-      <input type="checkbox" [checked]="settings.boardHealthUnassignedEnabledDraft()" (change)="settings.updateBoardHealthSignal('unassigned', $any($event.target).checked)" [disabled]="settings.boardHealthSaving()" />
-      <span><strong>Unassigned cards</strong><small>Flag boards when active work has no owner.</small></span>
-    </label>
-    <label class="health-signal-toggle">
-      <input type="checkbox" [checked]="settings.boardHealthInactiveEnabledDraft()" (change)="settings.updateBoardHealthSignal('inactive', $any($event.target).checked)" [disabled]="settings.boardHealthSaving()" />
-      <span><strong>Inactive cards</strong><small>Flag boards when active work has not changed within the inactivity window.</small></span>
-    </label>
-  </div>
-  }
-  <k-docs-link path="board-health" label="Learn how board health and signal thresholds work" />
-  @if (settings.boardHealthError(); as message) {
+  @if (settings.notesError(); as message) {
   <p class="board-linking-error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p>
   }
 </div>

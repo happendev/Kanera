@@ -3,20 +3,18 @@ import { AUTOMATION_LIMIT } from "@kanera/shared/automation-limits";
 import { automationActions, automationRuns, automations, cardLabels, checklistTemplates, customFieldOptions, customFields, lists, webhookEndpoints, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import { db, type Db } from "../../db.js";
+import { db, type Tx } from "../../db.js";
 import { env } from "../../env.js";
 import { assertWorkspaceAccess } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
 import { loadAutomation, loadAutomations } from "../../lib/automations.js";
 import { badRequest, notFound } from "../../lib/errors.js";
 import { moveOrderedEntity } from "../../lib/move-ordered-entity.js";
-import { between, neighbourPositions as resolveNeighbourPositions, positionAtIndex } from "../../lib/position.js";
+import { between, positionAtIndex, workspaceNeighbourPositions } from "../../lib/position.js";
 import { capturePremiumFeatureUsed } from "../../lib/product-analytics.js";
 import { rebalanceAutomations } from "../../lib/rebalance.js";
 import { assertEnabledAutomationLimit } from "../../lib/tier-limits.js";
 import { emitToWorkspaceAdmins } from "../../realtime/emit.js";
-
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 async function capturePremiumAutomationRuleUse(input: {
   clientId: string;
@@ -42,18 +40,7 @@ async function capturePremiumAutomationRuleUse(input: {
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
 // as targeted indexed probes so large workspaces do not pay for a full automation scan.
-function neighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
-  return resolveNeighbourPositions({
-    table: automations,
-    id: automations.id,
-    position: automations.position,
-    scope: and(eq(automations.workspaceId, workspaceId), isNull(automations.archivedAt)),
-    afterId,
-    beforeId,
-    afterLabel: "afterAutomationId",
-    beforeLabel: "beforeAutomationId",
-  });
-}
+const neighbourPositions = workspaceNeighbourPositions(automations, "Automation");
 
 async function assertListInWorkspace(workspaceId: string, listId: string | null | undefined, tx: Tx = db) {
   if (!listId) return;

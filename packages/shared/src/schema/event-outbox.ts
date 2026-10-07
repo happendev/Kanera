@@ -10,6 +10,21 @@ export type EventOutboxScope = (typeof EVENT_OUTBOX_SCOPES)[number];
 
 export type EventOutboxPayload<E extends ServerEventName = ServerEventName> = Parameters<ServerToClientEvents[E]>[0];
 
+// Who caused an outbox event, captured from the request context at publish time. Event consumers
+// (notably MCP event subscribers) need it to tell their own writes apart from everyone else's;
+// rows written outside a request, or by automations, have no credential and read as system.
+export const EVENT_OUTBOX_ACTOR_KINDS = ["user", "apiKey", "agent", "support", "automation", "system"] as const;
+export type EventOutboxActorKind = (typeof EVENT_OUTBOX_ACTOR_KINDS)[number];
+export interface EventOutboxActor {
+  kind: EventOutboxActorKind;
+  userId: string | null;
+  apiKeyId: string | null;
+  agentGrantId: string | null;
+  // Set when the key was exercised through a service OAuth connection; optional because rows
+  // written before it was captured lack it.
+  serviceClientId?: string | null;
+}
+
 export const eventOutbox = pgTable(
   "event_outbox",
   {
@@ -22,6 +37,7 @@ export const eventOutbox = pgTable(
     boardId: uuid("board_id").references(() => boards.id, { onDelete: "cascade" }),
     eventType: text("event_type").notNull().$type<ServerEventName>(),
     payload: jsonb("payload").notNull().$type<EventOutboxPayload>(),
+    actor: jsonb("actor").$type<EventOutboxActor>(),
     realtimeDispatched: boolean("realtime_dispatched").notNull().default(false),
     webhooksEnqueued: boolean("webhooks_enqueued").notNull().default(false),
     attempts: integer("attempts").notNull().default(0),

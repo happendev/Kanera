@@ -13,7 +13,7 @@ import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { BoardState } from "./board-state";
 import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
-import { isCardInactive } from "@kanera/shared/card-health";
+import { isCardInactive } from "@kanera/shared/card-timing";
 import { CardDragCoordinator } from "./card-drag-coordinator.service";
 import { CardActionsMenuPopover } from "./card-actions-menu.popover";
 import { priorityRankHeat } from "../../shared/priority-rank";
@@ -368,22 +368,6 @@ export class CardComponent {
 
   urlFor(fieldId: string): string | null {
     return this.customFieldValuesByField().get(fieldId)?.valueUrl?.trim() || null;
-  }
-
-  hasValues(): boolean {
-    for (const value of this.customFieldValuesByField().values()) {
-      if (
-        value.valueText ||
-        value.valueNumber ||
-        value.valueCheckbox != null ||
-        value.valueDate ||
-        value.valueUrl ||
-        value.valueOptionIds?.length ||
-        value.valueUserIds?.length
-      )
-        return true;
-    }
-    return false;
   }
 
   hasVisibleCustomFieldBadges(): boolean {

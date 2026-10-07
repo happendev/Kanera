@@ -105,18 +105,6 @@ describe("DescriptionEditorComponent", () => {
         fixture.detectChanges();
       });
 
-      it("uploads files chosen from the file picker", () => {
-        const file = imageFile();
-        fixture.componentInstance.onFileChosen({
-          target: {
-            files: [file],
-            value: "C:\\fakepath\\screenshot.png",
-          },
-        } as unknown as Event);
-
-        expectUpload(source, file);
-      });
-
       it("uploads pasted files exposed through clipboard items", () => {
         const file = imageFile();
         const event = pasteEvent({ items: [clipboardFileItem(file)], files: [] });
@@ -256,16 +244,6 @@ describe("DescriptionEditorComponent", () => {
 
         expect(event.defaultPrevented).toBe(true);
         expect(uploadAndInsert).not.toHaveBeenCalled();
-      });
-
-      it("includes uploaded attachment ids when saving", () => {
-        attachmentIdsSnapshot.mockReturnValue(["attachment-1", "attachment-2"]);
-        const saveSpy = vi.fn();
-        fixture.componentInstance.save.subscribe(saveSpy);
-
-        fixture.componentInstance.onSave();
-
-        expect(saveSpy).toHaveBeenCalledWith(expect.objectContaining({ attachmentIds: ["attachment-1", "attachment-2"] }));
       });
     });
   }

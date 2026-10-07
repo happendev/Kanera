@@ -10,7 +10,7 @@
 
 See what is assigned, what changed, what is blocked, and what has been completed across every project, client, and team.
 
-[Start free](https://board.kanera.app/signup) · [Explore features](https://www.kanera.app/features) · [Read the docs](https://www.kanera.app/docs) · [Self-host Kanera](https://www.kanera.app/docs/self-host)
+[Start free](https://board.kanera.app/signup) · [Explore features](https://www.kanera.app/features) · [Read the docs](https://www.kanera.app/docs) · [CLI and MCP for AI agents](#cli-mcp-and-ai-agents) · [Self-host Kanera](https://www.kanera.app/docs/self-host)
 
 </div>
 
@@ -139,6 +139,26 @@ For Jira, ClickUp, Asana, monday.com, Notion, Linear, spreadsheets, or an intern
 - [Import from Trello](https://www.kanera.app/trello-migration)
 - [Explore migration options](https://www.kanera.app/migration)
 
+## CLI, MCP, and AI agents
+
+Kanera does not ship its own chatbot. It is built so the AI tools you already use can work on your boards, with every change attributed to the agent that made it.
+
+| Interface | Use it for | Get started |
+| --- | --- | --- |
+| **`kanera` CLI** | Terminals, scripts, CI, and coding agents that can run shell commands | `npm install --global @kanera/cli` · [CLI docs](https://www.kanera.app/docs/cli) |
+| **MCP server** | Claude, ChatGPT, Codex, GitHub Copilot, Cursor, Gemini CLI, OpenCode, and other MCP clients, connected with OAuth | `https://mcp.kanera.app/mcp` · [MCP setup guides](https://www.kanera.app/docs/ai-mcp) |
+| **Agent Skill** | Teaching Claude Code, Codex, and other agents to use Kanera reliably | `kanera setup claude` or `npx -y skills add https://github.com/happendev/Kanera/tree/main/integrations/skills/kanera` · [skill source](integrations/skills/kanera) |
+| **TypeScript SDK** | Your own applications and integrations | `npm install @kanera/sdk` · [SDK docs](packages/sdk/README.md) |
+| **REST API and webhooks** | Any language, sync jobs, and event-driven integrations | [API docs](https://www.kanera.app/docs/api) |
+
+The CLI and the MCP server expose the same tool layer, so anything an agent can do over MCP it can also do with `kanera` from a shell. Try the CLI without installing it:
+
+```bash
+npx -y @kanera/cli commands
+```
+
+Agents can be given read-only credentials that the server enforces, and self-hosted Kanera exposes its own MCP address and API for the same CLI and SDK. See [Work with coding agents from the terminal](https://www.kanera.app/docs/ai-coding-agents) for picking up cards and reporting progress from Claude Code or Codex.
+
 ## Hosted or self-hosted
 
 **Hosted Kanera** is the simplest way to get started. New accounts include a 30-day Pro trial with no card required; teams can then stay on Free or upgrade to Pro. Pro adds unlimited boards and automations, board guests for clients and contractors, the REST API, webhooks, chat destinations, personal notification channels, and email support, typically within one business day. See [current pricing](https://www.kanera.app/pricing).
@@ -223,6 +243,8 @@ pnpm test:api:integration # Run API integration tests with isolated PostgreSQL
 
 - **Typed API client:** `@kanera/sdk` wraps the public API with card-key resolution, cursor iteration, idempotent retries, and webhook signature verification. See [packages/sdk/README.md](packages/sdk/README.md).
 - **Agent-native CLI:** `kanera` exposes the same tool layer as the MCP server to any agent that can run shell commands, with a machine-readable command catalog and exit codes that distinguish "not permitted" from "failed". Try it without a global install using `npx -y @kanera/cli commands`, or install it with `npm install --global @kanera/cli`.
+
+Kanera also supports MCP event subscriptions for card creation, updates, moves, and new comments, delivered through verified HTTPS callbacks. See [MCP events](apps/mcp/MCP_EVENTS.md) for filtering, subscription lifetimes, and deployment checks.
 
 Hosted MCP clients connect to `https://mcp.kanera.app/mcp`. See the [AI and MCP guide](https://www.kanera.app/docs/ai-mcp) for supported clients and setup instructions. For the command line, see [apps/cli/README.md](apps/cli/README.md).
 

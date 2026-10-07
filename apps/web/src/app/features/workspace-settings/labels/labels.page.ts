@@ -13,7 +13,6 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
   imports: [EmptyStateComponent, AutofocusDirective, CdkDrag, CdkDragHandle, CdkDropList, ColorPickerComponent, DocsLinkComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./labels.page.html",
-  styleUrl: "./labels.page.scss",
 })
 export class WorkspaceSettingsLabelsPage {
   protected readonly settings = inject(WorkspaceSettingsPage);

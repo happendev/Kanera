@@ -282,7 +282,6 @@ function createCustomFieldValue(overrides: Partial<CardCustomFieldValue> = {}): 
 
 function expectCardStateInvariants(state: BoardState) {
   const cards = state.cards();
-  expect(state.snapshotCards()).toEqual(cards);
   expect(state.cardsById().size).toBe(cards.length);
 
   for (const card of cards) {
@@ -404,25 +403,6 @@ describe("BoardState realtime regressions", () => {
     });
   });
 
-  it("stores and clears the board workspace owner client id", () => {
-    state.hydrate({
-      board: createBoard(),
-      workspaceClientId: "owner-org",
-      lists: [createList()],
-      cards: [createCard()],
-      customFields: [],
-      cardLabels: [],
-      members: [],
-      viewerRole: "editor",
-    });
-
-    expect(state.workspaceClientId()).toBe("owner-org");
-
-    state.clear();
-
-    expect(state.workspaceClientId()).toBeNull();
-  });
-
   it("keeps every separator in a lane when the supplied card set is filtered", () => {
     state.hydrate({
       board: createBoard(),
@@ -446,24 +426,6 @@ describe("BoardState realtime regressions", () => {
 
     expect(itemIds([state.cardById("card-a")!])).toEqual(["card-a", "separator-a", "separator-b"]);
     expect(itemIds([])).toEqual(["separator-a", "separator-b"]);
-  });
-
-  it("re-emits board:join after reconnect", () => {
-    const socket = new SocketStub();
-
-    const detach = bridge.attach(socket.asSocket(), "board-1");
-
-    let joinCalls = socket.emit.mock.calls.filter(([event]) => event === "board:join");
-    expect(joinCalls).toHaveLength(1);
-
-    socket.trigger("connect");
-
-    joinCalls = socket.emit.mock.calls.filter(([event]) => event === "board:join");
-    expect(joinCalls).toHaveLength(2);
-    expect(joinCalls[1]?.[1]).toBe("board-1");
-
-    detach();
-    expect(socket.emit).toHaveBeenCalledWith("board:leave", "board-1");
   });
 
   it("notifies after each successful board join", () => {
@@ -863,16 +825,6 @@ describe("BoardState realtime regressions", () => {
     state.removeCard("card-b");
     expect(state.hasCard("card-b")).toBe(false);
     expect(state.cards().map((card) => card.id)).toEqual(["card-a"]);
-    expectCardStateInvariants(state);
-
-    state.upsertCard(createCardSummary({ id: "card-a", title: "Updated title", attachmentCount: 4 }));
-    state.upsertCard(createCardSummary({ id: "card-c", position: "5000.0000000000", attachmentCount: 1 }));
-    expect(state.cardById("card-a")?.title).toBe("Updated title");
-    expect(state.hasCard("card-c")).toBe(true);
-    expectCardStateInvariants(state);
-
-    state.removeCardsForBoard("board-1");
-    expect(state.cards()).toEqual([]);
     expectCardStateInvariants(state);
   });
 

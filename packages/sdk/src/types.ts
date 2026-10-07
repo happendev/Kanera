@@ -288,6 +288,7 @@ export interface ChecklistItem {
   completedAt: Timestamp | null;
   assigneeId: Uuid | null;
   dueDateLocalDate: LocalDate | null;
+  dueDateSlot: DueDateSlot | null;
   position: string;
   /** Set when this item owns a nested sub-checklist. */
   parentItemId?: Uuid | null;
@@ -301,6 +302,16 @@ export interface Checklist {
   /** A sub-checklist names the item that owns it; top-level checklists leave this null. */
   parentItemId: Uuid | null;
   items: ChecklistItem[];
+}
+
+/** A created checklist plus every sub-checklist created under its initial items. */
+export interface CreatedChecklist extends Checklist {
+  subChecklists: Checklist[];
+}
+
+/** A created item plus the sub-checklists created under it in the same request. */
+export interface CreatedChecklistItem extends ChecklistItem {
+  subChecklists: Checklist[];
 }
 
 export interface CardDetail {

@@ -2,7 +2,7 @@ import { Injectable, computed, signal } from "@angular/core";
 
 export const KANERA_CONSENT_COOKIE = "kanera_cookie_consent";
 export const KANERA_CONSENT_VERSION = 1;
-export const CONSENT_MAX_AGE_SECONDS = 60 * 60 * 24 * 180;
+const CONSENT_MAX_AGE_SECONDS = 60 * 60 * 24 * 180;
 const CONSENT_MAX_AGE_MS = CONSENT_MAX_AGE_SECONDS * 1_000;
 
 export interface CookieConsentChoice {
@@ -40,7 +40,7 @@ function cookieValue(name: string): string | null {
   return match?.slice(prefix.length) ?? null;
 }
 
-export function readCookieConsent(): CookieConsentChoice | null {
+function readCookieConsent(): CookieConsentChoice | null {
   return parseConsentChoice(cookieValue(KANERA_CONSENT_COOKIE));
 }
 

@@ -17,7 +17,7 @@ import { ColorPickerComponent } from "../../shared/color-picker.component";
 import { IconPickerComponent } from "../../shared/icon-picker.component";
 import { LogoComponent } from "../../shared/logo.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
-import { standaloneBoardCreatePayload, workspaceTemplateSeedPayload } from "../standalone-board/standalone-board-create.payload";
+import { standaloneBoardCreatePayload, workspaceTemplateSeedPayload } from "@kanera/shared/workspace-template-payload";
 
 interface DraftItem {
   id: string;
@@ -90,7 +90,6 @@ export class OnboardingPage implements OnInit {
   readonly step = signal<1 | 2 | 3 | 4 | 5 | 6>(1);
   readonly selectedTemplateId = signal<WorkspaceTemplateId>(DEFAULT_WORKSPACE_TEMPLATE.id);
   readonly boardTemplateId = signal<WorkspaceTemplateId>(DEFAULT_WORKSPACE_TEMPLATE.id);
-  readonly selectedBoardTemplate = computed(() => this.templateById(this.boardTemplateId()));
   readonly boardIcon = signal(DEFAULT_WORKSPACE_TEMPLATE.icon);
   readonly boardIconColor = signal<ColorToken | null>(null);
   readonly hasEditedBoardIcon = signal(false);

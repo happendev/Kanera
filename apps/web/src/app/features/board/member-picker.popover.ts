@@ -130,7 +130,7 @@ import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
       text-align: left;
       width: 100%;
       transition: background-color 0.12s;
-      &:hover { background: var(--surface-2); }
+      &:hover { background: var(--surface-hover); }
       &.is-selected { background: var(--surface-2); }
     }
 

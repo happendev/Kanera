@@ -626,6 +626,12 @@ input {
   border-radius: var(--radius-lg);
 }
 
+// Set by kDragScroll once a press commits to a pan, so the drag does not select text across rows.
+.portfolio-table-wrap.is-drag-scrolling {
+  cursor: grabbing;
+  user-select: none;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -807,39 +813,6 @@ tbody tr:last-child td {
         background: color-mix(in srgb, var(--heat-color) calc(14% + var(--heat) * 40%), var(--surface-2));
       }
     }
-  }
-
-  .portfolio-health-cell {
-    min-width: 150px;
-  }
-
-  .portfolio-health {
-    display: grid;
-    justify-items: end;
-    gap: 4px;
-
-    &[data-risk="onTrack"] .portfolio-health-status { color: var(--success); }
-    &[data-risk="needsAttention"] .portfolio-health-status { color: var(--warning); }
-    &[data-risk="atRisk"] .portfolio-health-status { color: var(--danger); }
-  }
-
-  .portfolio-health-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    color: var(--text-muted);
-    font-size: 13px;
-    font-weight: 700;
-    white-space: nowrap;
-  }
-
-  .portfolio-health-summary {
-    max-width: 190px;
-    overflow: hidden;
-    color: var(--text-muted);
-    font-size: 10px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .portfolio-organisation {

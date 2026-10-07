@@ -34,7 +34,7 @@ import { emitBoardInvitationAccepted, loadBoardInvitationGrants, loadRedeemableB
 import { pinOrgAdminToClientBoards } from "../lib/board-membership.js";
 import { hashOpaqueToken, newOpaqueToken, newVerificationCode } from "../lib/tokens.js";
 import { emitToBoard, emitToClient, emitToClientDurable, emitToWorkspace } from "../realtime/emit.js";
-import { hashRefresh, newRefreshToken, rotateRefresh } from "./jwt.js";
+import { newRefreshToken, rotateRefresh } from "./jwt.js";
 import { hashPassword, needsPasswordRehash, verifyPassword, verifyPasswordTimingSafe } from "./password.js";
 import { beginMfaEnrollment, createMfaChallenge, enableMfa, getMfaCredential, readMfaChallenge, regenerateRecoveryCodes, resetMfa, verifyMfaCode, verifyMfaLoginCode } from "./mfa.js";
 import { ANALYTICS_EVENT_VERSION, productAnalytics } from "../lib/product-analytics.js";
@@ -959,7 +959,7 @@ export async function authRoutes(app: FastifyInstance) {
       await db
         .update(refreshTokens)
         .set({ revokedAt: new Date() })
-        .where(eq(refreshTokens.tokenHash, hashRefresh(raw)));
+        .where(eq(refreshTokens.tokenHash, hashOpaqueToken(raw)));
     }
     reply.clearCookie(REFRESH_COOKIE, refreshCookieOptions());
     return { ok: true };

@@ -1,8 +1,6 @@
 # E2E coverage map
 
-This file exists to satisfy the testing policy in `CLAUDE.md`: an isolated test is removed only after the failure it catches is shown to be covered by a passing E2E run, and after checking it adds no distinct signal. Update it when adding a spec or retiring an isolated test.
-
-## What each spec catches
+This file describes the user flows and failures covered by each E2E spec. Update it when adding or changing coverage.
 
 | Spec | Failures it catches |
 |---|---|
@@ -11,68 +9,57 @@ This file exists to satisfy the testing policy in `CLAUDE.md`: an isolated test 
 | `guest-access.spec.ts` | A cross-organisation guest seeing an uninvited board (checked by the loaded board heading, not the canvas); revocation not ejecting a live guest; a cached route or sidebar entry reopening a revoked board. |
 | `card-move.spec.ts` | List and board moves diverging between Kanban, table and Portfolio; duplicated or misplaced activity after a board transfer. |
 | `drag-and-drop.spec.ts` | Real pointer drags reordering within a list and across lists at a specific index: the CDK index, the anchors sent to `/cards/:id/move`, `card:moved` reaching another viewer, and positions persisting after reload. |
+| `lane-insert.spec.ts` | The hover strip between two lane items not offering "Add separator here"; the separator being appended to the lane instead of created with an `afterItem` anchor; the new separator not taking the board accent colour, or opening a title editor instead of being added ready-made; the inserted position not reaching another viewer or not surviving a reload; in My Cards, a card inserted between two cross-board cards that share a per-board position sorting after every tied card instead of between them, or the rebalance that makes room reordering the rest of the merged lane. Retains screenshots of the open strip and the My Cards lane. |
 | `shared-fields.spec.ts` | Workspace custom-field renames not propagating; values lost on board transfer; custom-field filters not matching. |
+| `comment-reply.spec.ts` | Replying to a comment leaving the caret inside the quoted blockquote, so the typed reply lands in the quote instead of below it; the sent reply not keeping the quote separate from the reply text. Retains a screenshot of the composer. |
+| `card-links.spec.ts` | Card↔card and card↔note links. A link not appearing under "Linked items" on the linking card without reopening it (its `/detail` refresh discarded by the save's own `card:updated` echo); the linked card or note not listing the linker live for a viewer who already has it open (`card:links:changed` / `note:links:changed` through the outbox); a rename of a card or note not reaching linked items, note backlinks and description link chips live; a `card:updated` rename echo rewriting a just-opened description editor and corrupting the text being typed; linked items pointing at a non-route (`/c/<key>`); linked items, note backlinks and link chips doing a full page reload instead of in-app navigation; unlinking not clearing either end live. Retains screenshots of the viewer's backlink, the linking card and renamed note backlinks. |
 | `mentions.spec.ts` | Mention picker, notification creation, unread and read state persisting, and notification deep links. |
 | `onboarding.spec.ts` | Both signup paths; workspace-scoped lists and fields missing on a later board; a standalone board wrongly setting `hasWorkspace`. |
 | `reconnect.spec.ts` | A client that missed events while its socket was down not resyncing after rejoin. `SocketLink` proves the socket was actually cut. |
 | `attachments.spec.ts` | The four-surface attachment rule (description, comments, attachment list, activity): previewable types open the lightbox, other types download under their original name; inline uploads replacing earlier inserts; Escape in the lightbox closing the card. |
 | `lightbox-touch.spec.ts` | On a phone-sized touch device: a two-finger pinch that lands on the lightbox backdrop rather than the fitted image not zooming (the app's viewport meta disables browser zoom); lifting the fingers closing the lightbox; double-tap not toggling zoom. Uses real CDP multi-touch. |
 | `public-api.spec.ts` | Public API key and webhook creation in settings; public API writes (a separate process) not reaching open web clients through the outbox, worker and Redis adapter; webhook delivery, HMAC signature and envelope. |
+| `cli-oauth.spec.ts` | CLI OAuth device sign-in, consent approval and denial, owner-only refresh-token storage, live CLI and stdio-bridge writes, token rotation and concurrent refresh, connection replacement and revocation, read-only credential enforcement, and logout removing the grant from Settings. |
+| `mcp-protocol.spec.ts` | The same matrix over HTTP and the bundled `kanera mcp` stdio server, in both the 2026-07-28 era (pinned `server/discover` negotiation) and the 2025 `initialize` era, using the official client SDK: discovery and capabilities, `tools/list` with draft-07 schemas, a read (`boards.get`), a write (`cards.create`) arriving live on an open board for every cell, resource templates and `resources/read`, `prompts/list` and `prompts/get`, cancellation rejecting locally and leaving the session usable, and the three error shapes (bad arguments as an `isError` result, unknown tool as `-32602`, domain failure as an `isError` problem document). `mcp-protocol-matrix.json` retains per-cell protocol evidence. |
 | `live-card-edits.spec.ts` | Another user's rename, description, list move, completion and unassignment not reaching, without a reload: the viewer's open card detail (board and Global Work hosts), the Kanban tile, the board table, board Work done, My Cards (board and table), Team Cards (board and Work done), and Portfolio table. |
+
+| `mcp-events.spec.ts` | API key creation in settings; MCP event catalog and capability discovery, including list filters and invalid-list rejection; actor payload schemas; protocol-version validation and removed-method errors; notification acceptance; tool-created cards appearing live; insecure callback rejection; and discovery denied after credential revocation. `apps/api/src/modules/integrations/mcp-events.itest.ts` substitutes only outbound callback I/O because production rejects local receivers; it verifies signed list-scoped arrivals, departures, reorder exclusion, event-time update matching, unrelated-list exclusion, subscription identity/refresh/unsubscribe, and foreign-list rejection. |
+| `mcp-checklists.spec.ts` | Agent checklist plans through MCP with the card open in the browser: one `checklists.create` call building items, a sub-checklist and its leaves with ids returned at every level; the tree arriving in order through realtime without a reload (including the item drawer); a retry with the same idempotency key replaying instead of duplicating; invalid batches (leaf-only fields on sub-checklist items, a non-member assignee) naming the exact field path and writing nothing; `checklists.add_items` keeping request order at an anchor; `checklists.update_items` applying different changes to chosen items (by id and by scoped text); ambiguous text targets rejected with candidates and no write; the audit rows (checklist created, assignee/due date set, item created, item updated, sub-checklist completed); and the bundled `kanera` CLI passing a nested plan and per-item updates as single JSON-array flags, arriving live in the open card. `mcp-checklists-evidence.json` and screenshots retain each step. |
+| `email-unsubscribe.spec.ts` | The lifecycle-email unsubscribe link failing without a session; the RFC 8058 one-click `List-Unsubscribe` target not accepting a provider's form post through the `/api` proxy path; opening the link (as an inbox link scanner would) unsubscribing before the click; a forged link being accepted; unsubscribing also turning off card-notification email; and the onboarding-tips toggle appearing on self-hosted deployments, which never send these emails. The time-driven hosted sweep itself (which moment fires, for whom, once) cannot be reached without weeks of history, so `apps/api/src/lib/lifecycle-emails.itest.ts` covers it with backdated rows; its header lists the failure modes. A screenshot of the unsubscribed state is retained. |
+| `notes-toggle.spec.ts` | The per-workspace Notes switch (General settings, shared by standalone boards). Turning it off not reaching an open workspace Notes page or the sidebar Notes link without a reload (`workspace:updated`); the notes API (read, list, create) staying open or failing without `NOTES_DISABLED`; search still returning the workspace's notes; a `?view=notes` link or the view switch still offering Board Notes; a card's linked note still listed. Turning it back on not restoring the same notes, search hits and linked items (rows are hidden, never deleted). The standalone-board case runs from `/b/:id/settings/general`. Retains screenshots of the settings toggle, the disabled Notes page, and the board without Notes. |
+| `board-overview.spec.ts` | Neutral active, overdue, unassigned and inactive counts without health verdicts; Portfolio metrics without Work risk; absence of health settings; inactivity-window persistence; overdue, unassigned and inactive drill-downs excluding completed cards; clearing filters; and the overview at a 390px mobile width. |
 
 `runtimeGuard` also fails any spec on an uncaught page error, a `console.error`, or an HTTP 5xx.
 
-## Defects found by the suite (2026-09-24)
+## Retired isolated tests
 
-Each was reproduced by the spec before the fix, and the spec was confirmed to pass after it.
+Isolated (Vitest / node:test) cases removed because an E2E spec already fails on the same defect. Each
+row names the failure the case caught and the spec that now catches it; the run that was executed
+before deletion is recorded at the end of this section.
 
-1. **Escape in the attachment lightbox also closed the card detail.** `CardDetailComponent.onDocumentKeydown` ignored that the CDK dialog had already consumed the key. It now returns when `event.defaultPrevented`. Caught by `attachments.spec.ts`.
-2. **Uploading a file right after an image replaced the image** in descriptions and comments, including multi-file drops. `setImage` left a NodeSelection on the image. The uploader now inserts a trailing paragraph. Caught by `attachments.spec.ts` (`insertIntoEditor` re-checks earlier inserts).
-3. **Card webhooks omitted the documented top-level `cardId`.** `cardIdFromPayload` only read `payload.cardId`, but `card:*` events carry `payload.card`. Caught by `public-api.spec.ts`.
-4. **Harness: E2E ran against `ioredis-mock`.** `NODE_ENV=test` gave every service a private in-memory Valkey, so cross-process realtime could not work. This was invisible because every other test also runs with `NODE_ENV=test`. The runner now uses `NODE_ENV=development`.
-5. **Harness: false passes.** A "guest can open board" check passed on a board the guest had been removed from, because `k-board` renders before the access check. Tests also depended on each other's seed mutations. Fixed with `expectBoardLoaded` and per-test boards.
-6. **The board's Work done view missed other users' moves and new cards until reload.** `BoardSocketBridge` refreshed it only on `card:updated` (completions), not on `card:moved` or `card:created`. Global Work's Work done was unaffected. Caught by `live-card-edits.spec.ts`.
-
-## Isolated tests verified redundant (safe to delete)
-
-Each case below was checked by mutation on 2026-09-24. The behaviour the unit test guards was broken in the app, and the named E2E test failed on that exact behaviour. The unit test asserts nothing beyond it.
-
-| Isolated test case | Mutation | E2E failure that caught it |
+| Retired case | Failure | Covering E2E spec |
 |---|---|---|
-| `apps/web/.../auth/login.page.spec.ts`: "shows invalid credentials for rejected logins" | Rejected-login message changed | `auth.spec.ts`, wrong password: `.error-banner` lacks "Invalid credentials" (the same test also asserts no session and staying on `/login`) |
-| `apps/web/.../board/board-state.spec.ts`: "notifies after each successful board join" | `onJoined` fired only for the first join, not after reconnect | `reconnect.spec.ts`: the viewer never converged on the missed rename |
-| `apps/web/.../global-work/global-card-detail-host.component.spec.ts`: "feeds card detail from the live route-scoped card state" | Detail fed from the static input instead of the route-scoped `BoardState` | `live-card-edits.spec.ts`, Global Work: the open My Cards detail kept the old title |
+| `card-detail.component.spec` "downloads attachments with the stored file name" | download uses the storage key instead of the original filename | `attachments.spec.ts` (`expectDownload` → `suggestedFilename`) |
+| `card-detail.component.spec` "downloads non-previewable attachments in comments…" / "keeps non-previewable activity attachments as download links" | a docx in a comment or activity row opens the lightbox instead of downloading | `attachments.spec.ts` |
+| `card-detail.component.spec` "opens attachment-added activity files in the media lightbox" / "opens PDFs from the attachment list…" / "opens PDFs linked in the card description…" | activity image, list PDF or description PDF fails to open the lightbox | `attachments.spec.ts` (all four surfaces) |
+| `board-state.spec` "re-emits board:join after reconnect" | no `board:join` after a socket reconnect, so the board misses events | `reconnect.spec.ts` |
+| `board.page.spec` "shows card counts…", "shows zero active cards…", "keeps raw counts available with a legacy…", "shows only incomplete cards with no activity for 14 days" | overview tiles / drill-downs wrong; inactive includes completed | `board-overview.spec.ts` |
+| `global-work.page.spec` "rolls up raw card counts…", "includes every board in raw metric rollups…", "keeps overdue metrics despite a legacy…" | Portfolio shows a risk verdict or drops legacy-health boards | `board-overview.spec.ts` |
+| `global-work.state.spec` "applies known realtime mutations immediately…" | `assignees:set` not reflected in My Cards without a reload | `live-card-edits.spec.ts` |
+| `global-card-detail-host.component.spec` "feeds card detail from the live route-scoped card state" | Global Work card detail not fed from live state | `live-card-edits.spec.ts` |
+| `image-lightbox.component.spec` "pinches on the backdrop…" / "double-taps the image…" | backdrop pinch closes or ignores; double-tap does not toggle zoom | `lightbox-touch.spec.ts` |
+| `login.page.spec` "signs in and stores the returned session" / "shows invalid credentials…"; `public-auth.client.spec` (whole) | session not stored; no wrong-password error; auth requests missing `credentials: include` | `auth.spec.ts` |
+| `onboarding.page.spec` "creates a standalone board from the first-run path without changing hasWorkspace" | standalone first run flips `hasWorkspace` | `onboarding.spec.ts` |
+| `workspace-settings.page.spec` "shows timing settings without board health configuration" | board-health settings reappear | `board-overview.spec.ts` |
+| `description-editor.component.spec` "uploads files chosen from the file picker" / "includes uploaded attachment ids when saving" | file-picker upload not inserted; attachment ids not saved | `attachments.spec.ts` |
+| `apps/mcp http.test.ts` "completes protocol initialization…" / "negotiates current Claude and generic MCP protocol revisions" | HTTP MCP initialise / version negotiation broken | `mcp-protocol.spec.ts` |
 
-Checked and kept, because each has a distinct signal E2E cannot give:
+Also removed without an E2E prerequisite: `board.page.spec` member added/removed cases (duplicated
+`board-state.spec`), plumbing-only cases (signal set/clear, fallback titles, mock-called-with-path,
+static copy, UA shortcut hint, control-height classes), `realtime/metrics.test.ts` (asserted a stub
+logger received its own arguments) and `lib/overdue-notifications.test.ts` (tested a one-line
+pass-through; its one uncovered assertion moved into `lib/due-date.test.ts`).
 
-- `login.page.spec.ts`, "signs in and stores the returned session": asserts `credentials: "include"`, which only matters cross-origin (the dev build). E2E runs same-origin like production.
-- `board-state.spec.ts`, "re-emits board:join after reconnect": also asserts `board:leave` on detach.
-- `onboarding.page.spec.ts`, "creates a standalone board from the first-run path…": asserts the exact template payload.
+E2E run executed before these deletions: `pnpm test:e2e`, 27/27 passed, artifacts under
+`e2e/artifacts/20261006T231129Z-1794008/` (trace, screenshots, service logs and `REPRODUCE.txt`).
 
-## Isolated tests that overlap E2E coverage
-
-None of these has been retired. "Distinct signal" records what the isolated test catches that E2E does not; a test with distinct signal stays even when its happy path is covered.
-
-| Isolated test | Overlapping spec | Distinct signal (keep) or status |
-|---|---|---|
-| `apps/web/.../auth/login.page.spec.ts` | `auth.spec.ts` | Client-side validation messages without a request (empty password). **Keep** until E2E asserts those. |
-| `apps/web/.../core/auth/auth.guard.spec.ts`, `auth.service.spec.ts` | `auth.spec.ts` | Hydration retry while the API restarts, logout-versus-refresh races, safe return URLs, and invitation tokens through the guard. **Keep.** |
-| `apps/web/.../core/realtime/socket.service.spec.ts` | `reconnect.spec.ts` | Room reference counting, offline signalling, visibility-resume and stalled-reconnect recovery, and server eviction. E2E covers only a clean cut and restore. **Keep.** |
-| `apps/web/.../board/board-state.spec.ts` | `board.spec.ts`, `drag-and-drop.spec.ts`, `reconnect.spec.ts` | Rebalance event handling, cover metadata across full-card updates, and live role changes. "Re-emits board:join after reconnect" overlaps `reconnect.spec.ts`; that one case is a retirement candidate. **Keep the file.** |
-| `apps/web/.../board/description-editor-uploader.service.spec.ts` | `attachments.spec.ts` | Quota and plan-size error messages, the note upload endpoint, and scratchpad rollback. **Keep.** |
-| `apps/web/.../shared/attachment-preview.spec.ts` | `attachments.spec.ts` | Full MIME and extension table (video, audio, markdown). E2E samples image, PDF and DOCX only. **Keep.** |
-| `apps/web/.../board/image-lightbox.component.spec.ts` | `attachments.spec.ts` | Gallery cycling, wheel and pinch zoom, panning, and video, audio and PDF rendering. **Keep.** |
-| `apps/web/.../board/card-drag-scroll.spec.ts`, `card-drag-coordinator.service.spec.ts` | `drag-and-drop.spec.ts` | Edge auto-scroll speed by pointer type and hit-element style restoration. E2E drags with a mouse inside the viewport. **Keep.** |
-| `apps/web/.../notifications/notifications-panel.component.spec.ts` | `mentions.spec.ts` | Focus trapping, offline and error states, organisation context, and refresh with a positive unread count. "Opens and loads the first page" is a retirement candidate. |
-| `apps/web/.../onboarding/onboarding.page.spec.ts` | `onboarding.spec.ts` | Candidate: evaluate per case. |
-| `apps/api/src/realtime/outbox.itest.ts` | `public-api.spec.ts` | Batched drains, retry without rebroadcast after a webhook-enqueue failure, and the direct user/client outbox. Note that it runs with `ioredis-mock`, so it cannot catch cross-process delivery; only `public-api.spec.ts` does. **Keep.** |
-| `apps/api/src/lib/webhooks.itest.ts`, `modules/integrations/webhook-endpoint.routes.itest.ts` | `public-api.spec.ts` | Hosted plan gating, no double delivery from concurrent sweeps, chat snapshots, never following redirects, and endpoint scoping by credential. **Keep.** |
-| `apps/api/src/auth/routes.itest.ts` | `auth.spec.ts` | Signup and forgot-password rate limiting, MFA enrollment and login, refresh-token rotation and reuse detection. E2E raises the login limit. **Keep.** |
-
-## Known gaps
-
-- Email flows (invites, password reset, email verification): these need a mail catcher such as Mailpit in `docker-compose.e2e.yml`.
-- Roles: observers and read-only guests blocked in the UI and the API.
-- Automations and their side effects.
-- Calendar views (board and Global Work), and field, label, assignee and due-date edits reaching other viewers live.
-- Video, audio and Markdown attachments; the lightbox's previous and next navigation.

@@ -835,3 +835,30 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
 ];
 
 export const DEFAULT_WORKSPACE_TEMPLATE = WORKSPACE_TEMPLATES[0]!;
+
+// Derived views of the default template, used by the API when it creates a workspace without an
+// explicit template and by the seed scripts.
+export const DEFAULT_WORKSPACE_LIST_NAMES = DEFAULT_WORKSPACE_TEMPLATE.lists.map((list) => list.name);
+
+export type DefaultWorkspaceLabel = {
+  name: string;
+  color: ColorToken;
+};
+
+export const DEFAULT_WORKSPACE_LABELS: DefaultWorkspaceLabel[] =
+  DEFAULT_WORKSPACE_TEMPLATE.labels.map((label) => ({ ...label }));
+
+export type DefaultWorkspaceCustomField = {
+  name: string;
+  icon: string;
+  type: "text" | "number" | "checkbox";
+};
+
+// The default template's fields are narrowed to the three types the seed and workspace-creation
+// paths know how to insert without options.
+export const DEFAULT_WORKSPACE_CUSTOM_FIELDS: DefaultWorkspaceCustomField[] =
+  DEFAULT_WORKSPACE_TEMPLATE.customFields.map((field) => ({
+    name: field.name,
+    icon: field.icon,
+    type: field.type as DefaultWorkspaceCustomField["type"],
+  }));

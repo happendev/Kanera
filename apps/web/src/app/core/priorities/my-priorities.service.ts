@@ -28,7 +28,7 @@ const CANDIDATE_LOAD_ERROR = "Couldn’t load the cards you can add. Try again i
  * fires several moves costs one round trip on every surface.
  */
 const INVALIDATION_DEBOUNCE_MS = 180;
-export const MAX_UP_NEXT_ENTRIES = 50;
+const MAX_UP_NEXT_ENTRIES = 50;
 
 /**
  * Redacted rows belong to manager views, where preserving another person's absolute ranks is

@@ -264,7 +264,7 @@ export class IconPickerComponent {
   private loadIcons() {
     if (this.icons().length > 0) return Promise.resolve();
 
-    this.iconLoadPromise ??= import("./tabler-icons").then(({ TABLER_ICONS }) => {
+    this.iconLoadPromise ??= import("@kanera/shared/icons").then(({ TABLER_ICONS }) => {
       this.icons.set(TABLER_ICONS);
     });
 

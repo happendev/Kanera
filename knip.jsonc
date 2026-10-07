@@ -1,0 +1,118 @@
+// Dead-code scan (pnpm knip). Tests are entries so "used only by a test" counts as used; the
+// deliberate test seams and in-file-only DTO exports are therefore not reported.
+// - exclude types/duplicates: `$inferSelect` row types and `FooBody = z.infer<…>` aliases are a
+//   one-per-table/one-per-schema convention, and the duplicate exports are intentional aliases.
+// - packages/shared ignoreExportsUsedInFile: every DTO schema is exported as the public contract
+//   even when the package itself only consumes it in-file.
+// - ignoreDependencies: concurrently and pino-pretty are used from scripts/log transports by name;
+//   @fontsource-variable/inter is loaded via angular.json; @tiptap/extension-link is pulled in by the
+//   editor bundle; the CLI bundles the MCP server, which imports @kanera/shared at runtime; the MCP
+//   itest imports fastify types from the API's dependency graph.
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreExportsUsedInFile": false,
+  "exclude": [
+    "types",
+    "duplicates"
+  ],
+  "workspaces": {
+    ".": {
+      "entry": [
+        "scripts/*.mjs",
+        "benchmarks/api/*.mjs",
+        "benchmarks/web/*.cjs",
+        "e2e/**/*.spec.ts",
+        "e2e/playwright.config.ts",
+        "e2e/web-proxy.config.mjs"
+      ],
+      "project": [
+        "scripts/**/*.mjs",
+        "benchmarks/api/*.mjs",
+        "benchmarks/web/*.cjs",
+        "e2e/**/*.{ts,mjs}"
+      ],
+      "ignoreDependencies": [
+        "concurrently"
+      ]
+    },
+    "apps/api": {
+      "entry": [
+        "src/scripts/*.ts",
+        "src/**/*.{test,itest}.ts",
+        "scripts/*.mjs"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "scripts/*.mjs"
+      ],
+      "ignoreDependencies": [
+        "pino-pretty"
+      ],
+      "ignoreUnresolved": [
+        "./src/test/setup.ts",
+        "./src/test/setup.integration.ts"
+      ]
+    },
+    "apps/web": {
+      "entry": [
+        "src/**/*.spec.ts",
+        "scripts/*.mjs"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "scripts/*.mjs"
+      ],
+      "ignoreDependencies": [
+        "@fontsource-variable/inter",
+        "@tiptap/extension-link"
+      ]
+    },
+    "apps/admin-web": {
+      "entry": [
+        "scripts/*.mjs"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "scripts/*.mjs"
+      ]
+    },
+    "apps/mcp": {
+      "entry": [
+        "src/**/*.{test,itest}.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ],
+      "ignoreDependencies": [
+        "fastify"
+      ]
+    },
+    "apps/cli": {
+      "entry": [
+        "src/**/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ],
+      "ignoreDependencies": [
+        "@kanera/shared"
+      ]
+    },
+    "packages/sdk": {
+      "entry": [
+        "src/**/*.test.ts",
+        "src/contract.typecheck.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "packages/shared": {
+      "includeEntryExports": true,
+      "ignoreExportsUsedInFile": true,
+      "project": [
+        "src/**/*.ts"
+      ]
+    }
+  }
+}

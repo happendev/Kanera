@@ -3,20 +3,9 @@ import { env } from "./env.js";
 import { pool } from "./db.js";
 import { installGracefulShutdown } from "./lib/graceful-shutdown.js";
 
-const app = await buildServer({
-  enableArchivedCardCleanupScheduler: false,
-  enableDailyDigestScheduler: false,
-  enableDueDateAutomationScheduler: false,
-  enableEmailQueueScheduler: false,
-  enableImportCleanupScheduler: false,
-  enableOrganisationDeletionScheduler: false,
-  enableOverdueScheduler: false,
-  enablePushQueueScheduler: false,
-  enableRetentionCleanupScheduler: false,
-  enableRealtimeOutboxDispatcher: false,
-  enableTrialExpiryScheduler: false,
-  enableWebhookDeliveryScheduler: false,
-});
+// Background schedulers live in the worker process (worker-index.ts); this process serves requests
+// and realtime only.
+const app = await buildServer();
 installGracefulShutdown({ app, closeResources: () => pool.end(), service: "api" });
 
 try {

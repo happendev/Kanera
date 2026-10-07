@@ -1175,6 +1175,7 @@ void test("notification settings default enabled and patch merges type settings"
     emailEnabled: true,
     pushEnabled: false,
     watchedActivityOutbound: false,
+    lifecycleEmail: true,
     types: {
       cardAssigned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
       cardCommentAdded: { email: true, push: true, ntfy: true, gotify: true, webhook: true },

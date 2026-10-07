@@ -1,13 +1,15 @@
 import type { ColorToken } from "@kanera/shared/colors";
 import { cardPath } from "@kanera/shared/card-links";
-import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
-import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
+import { DEFAULT_WORKSPACE_CUSTOM_FIELDS, DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/workspace-templates";
 import {
   ACTIVITY_ACTION,
   activityEvents,
+  agentRuns,
   automationActions,
   automations,
   boardMembers,
+  boardMirrorLists,
+  boardMirrors,
   boards,
   boardSeparators,
   cardAssignees,
@@ -39,14 +41,15 @@ import {
   type ActivityEntityType,
   type CardDueDateSlot,
   type ClientRole,
+  type NoteAttachmentSource,
   type NoteScope,
 } from "@kanera/shared/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { hashPassword } from "../auth/password.js";
-import { db, type Db } from "../db.js";
+import { db, type TxOnly as Tx } from "../db.js";
 import { env } from "../env.js";
 import { seedBoardMembersFromWorkspace } from "../lib/board-membership.js";
 import { allocateCardKeys } from "../lib/card-keys.js";
@@ -60,8 +63,6 @@ import {
   cardAttachmentStorageKey,
   noteAttachmentStorageKey,
 } from "../lib/storage/keys.js";
-
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 type SeedUserKey =
   | "amelia"
@@ -511,6 +512,8 @@ export type SeedDatabaseResult = {
 
 const seedUserByKey = new Map([...USER_SEEDS, GUEST_USER_SEED].map((user) => [user.key, user]));
 
+const INLINE_NOTE_IMAGE = /\{\{image:([A-Za-z0-9]+)(?:\|([^}]*))?\}\}/g;
+
 function note(...sections: string[]): string {
   return sections.join("\n\n");
 }
@@ -621,31 +624,65 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
         title: "Engineering Handbook",
         icon: "notebook",
         owner: "amelia",
-        content: note(
-          "📘 Shared engineering reference for how Development work moves through Kanera.",
-          "Use this as the first stop for release expectations, branch naming, QA handoff, and where to record decisions that affect multiple boards.",
-          "Reference: https://docs.kanera.app/engineering-handbook",
-        ),
+        content: `## Start here
+
+📘 Shared engineering reference for how Development work moves through Kanera: release expectations, branch naming, QA handoff, and where to record decisions that affect more than one board.
+
+| Topic | Page | Owner |
+| --- | --- | --- |
+| Shipping a release | Release Process | Priya Nair |
+| Branch names | Branching Guide | Priya Nair |
+| Events and payloads | API & Realtime Contracts | Marcus Cole |
+
+## Decisions
+
+Record a decision on the card it affects. If it changes how **several boards** work, add a short entry here and link the card.
+
+> Reference: https://docs.kanera.app/engineering-handbook`,
         children: [
           {
             title: "Release Process",
             icon: "rocket",
             owner: "priya",
             attachments: [{ asset: "releaseTemplate", uploadedBy: "priya" }],
-            content: note(
-              "Every release should have a board card with owner, due date, branch, acceptance notes, and rollback notes before it enters Ready for QA.",
-              "- ✅ Confirm custom field values are filled in\n- 📎 Attach release evidence when it helps future audits\n- 🧪 Leave a short comment when QA signs off",
-              "Release checklist: https://docs.kanera.app/releases/checklist",
-            ),
+            content: `Every release has a board card with owner, due date, branch, acceptance notes, and rollback notes **before** it enters Ready for QA.
+
+## Release checklist
+
+- [x] Custom field values are filled in
+- [x] Branch is linked on the card
+- [ ] Release evidence is attached when it helps a future audit
+- [ ] QA leaves a short sign-off comment
+- [ ] Rollback steps are written, not just "revert"
+
+## Stages
+
+| Stage | Who moves it | Exit check |
+| --- | --- | --- |
+| Ready for QA | Developer | Acceptance notes complete |
+| In QA | QA | Sign-off comment posted |
+| Ready to Release | Release owner | Rollback rehearsed |
+
+Release checklist: https://docs.kanera.app/releases/checklist`,
           },
           {
             title: "Branching Guide",
             icon: "git-branch",
             owner: "priya",
-            content: note(
-              "Use `feature/`, `fix/`, `docs/`, and `chore/` prefixes so reporting can group delivery work cleanly.",
-              "Hotfix branches should include the customer impact in the linked card before deployment.",
-            ),
+            content: `Prefix branches so reporting can group delivery work cleanly.
+
+| Prefix | Use for | Example |
+| --- | --- | --- |
+| \`feature/\` | New behaviour | \`feature/workspace-templates\` |
+| \`fix/\` | Defects | \`fix/billing-export-retry\` |
+| \`docs/\` | Documentation only | \`docs/api-pagination\` |
+| \`chore/\` | Tooling and upkeep | \`chore/bump-node-24\` |
+
+> **Hotfixes** must include the customer impact in the linked card before deployment.
+
+\`\`\`bash
+git switch -c fix/billing-export-retry
+\`\`\``,
           },
         ],
       },
@@ -653,22 +690,41 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
         title: "API & Realtime Contracts",
         icon: "plug-connected",
         owner: "marcus",
-        content: note(
-          "Shared contract notes for API mutations, Socket.IO events, and public integration behavior.",
-          "Mutation routes should validate the DTO, enforce workspace or board access, write data, record activity when the route's model expects it, and emit the matching realtime event.",
-          "Board events stay in board rooms. Workspace events stay in workspace rooms. Event payloads should carry full entities so connected clients can update without guessing.",
-          "API reference: https://docs.kanera.app/api",
-        ),
+        content: `Shared contract notes for API mutations, Socket.IO events, and public integration behaviour.
+
+## Every mutation route
+
+1. Validate the DTO.
+2. Enforce workspace or board access.
+3. Write the data.
+4. Record activity and emit the matching realtime event.
+
+## Rooms
+
+| Event scope | Room | Example |
+| --- | --- | --- |
+| Board | \`board:\${boardId}\` | \`card:moved\` |
+| Workspace | \`workspace:\${workspaceId}\` | \`list:created\` |
+
+> Payloads carry **full entities**, not diffs, so connected clients update without guessing. \`*:moved\` events also include \`prevPosition\`.
+
+API reference: https://docs.kanera.app/api`,
       },
       {
         title: "Weekly Focus",
         icon: "target-arrow",
         scope: "personal",
         owner: "amelia",
-        content: note(
-          "Personal focus list for the week.",
-          "- 🎯 Keep template rollout small and demoable\n- 💸 Review billing export retry fix before finance review\n- 🚪 Check that onboarding still runs when `me.hasWorkspace === false`",
-        ),
+        content: `## This week
+
+- [ ] 🎯 Keep the template rollout small and demoable
+- [ ] 💸 Review the billing export retry fix before finance review
+- [x] 🚪 Check onboarding still runs when \`me.hasWorkspace === false\`
+
+## Parking lot
+
+- Pair with Ben on the offline skeleton states
+- Ask Marcus about the public API rate-limit headers`,
       },
     ],
     boards: [
@@ -992,10 +1048,24 @@ function buildDevelopmentWorkspace(): SeedWorkspace {
             title: "Mobile QA Checklist",
             icon: "device-mobile-check",
             owner: "nina",
-            content: note(
-              "Board-level QA checklist for mobile web and native-style flows.",
-              "- Test image, PDF, and DOCX attachment previews\n- Check offline skeleton states before reconnect\n- Confirm due-date reminders keep the card title after a cold start\n- Verify tablet layout does not hide filters or custom fields",
-            ),
+            content: `Board-level QA checklist for mobile web and native-style flows.
+
+{{image:tabletBoardOverview|Tablet board layout under review}}
+
+## Every release
+
+- [ ] Image, PDF, and DOCX attachment previews open
+- [ ] Offline skeleton states show before reconnect
+- [ ] Due-date reminders keep the card title after a cold start
+- [ ] Tablet layout keeps filters and custom fields visible
+
+## Devices
+
+| Device | Browser | Owner |
+| --- | --- | --- |
+| iPhone 15 | Safari | Nina Park |
+| Pixel 8 | Chrome | Zoe Mitchell |
+| iPad Air | Safari | Ben Ortega |`,
           },
         ],
         cards: [
@@ -2877,43 +2947,108 @@ function buildMarketingWorkspace(): SeedWorkspace {
         title: "Autumn Campaign Launch Plan",
         icon: "speakerphone",
         owner: "ben",
-        content: note(
-          "Shared plan for the autumn campaign launch across creative, content, web, email, social, and partner activity.",
-          "Ben owns launch readiness and the final schedule. Amelia gives final approval; Nina owns campaign artwork, Zoe owns customer-facing copy, Leo owns web and measurement, and Omar coordinates partner and event dependencies.",
-          "The launch remains blocked until product confirms the headline promise. Channel owners can continue production, but nothing should be scheduled or sent with placeholder wording.",
-          "Launch-day rule: update the main launch card first when a dependency changes so the readiness view remains trustworthy.",
-        ),
+        content: `## Launch at a glance
+
+Shared plan for the autumn launch across creative, content, web, email, social, and partner activity.
+
+{{image:campaignLaunchReadiness|Autumn launch readiness dashboard}}
+
+## Owners
+
+| Area | Owner | Done means |
+| --- | --- | --- |
+| Launch readiness & schedule | Ben Ortega | Every channel card is in Review & Approval or Done |
+| Final approval | Amelia Hart | Headline, offer, and dates signed off |
+| Campaign artwork | Nina Park | Desktop and mobile crops approved |
+| Customer-facing copy | Zoe Mitchell | Email, social, and landing copy approved |
+| Web & measurement | Leo Santos | Tracking verified on the live page |
+| Partners & events | Omar Ibrahim | Partner copy agreed in writing |
+
+> **Blocked:** the launch waits on product confirming the headline promise. Channels can keep producing, but nothing is scheduled or sent with placeholder wording.
+
+## Launch-day rules
+
+1. Update the main launch card **first** when a dependency changes.
+2. Post channel go-live confirmations as comments on that card.
+3. Hold the T+12h performance check before changing any spend.`,
       },
       {
         title: "Marketing Team Operating Guide",
         icon: "route",
         owner: "amelia",
-        content: note(
-          "How Marketing & Creative work moves through this workspace.",
-          "Ideas & Requests is for uncommitted work. A card moves to Ready to Start only when the audience, owner, intended outcome, and essential inputs are clear.",
-          "Use Review & Approval for a specific decision, not general feedback. Name the approver in a comment and describe what changed since the previous review.",
-          "Waiting on Others should identify the dependency and next follow-up date. Completed work belongs in Done with final files or destination links attached where useful.",
-        ),
+        content: `## How work moves
+
+How Marketing & Creative work moves through this workspace. Every board shares these lists, so a card means the same thing wherever it lives.
+
+| List | Use it when | Leave it when |
+| --- | --- | --- |
+| **Ideas & Requests** | The work is uncommitted or still being shaped | Audience, owner, and outcome are agreed |
+| **Ready to Start** | Inputs are clear and an owner is named | Someone starts producing |
+| **In Progress** | Work is actively being made | A specific decision is needed |
+| **Review & Approval** | One named approver is deciding one thing | The approver signs off or asks for changes |
+| **Waiting on Others** | A dependency outside the team blocks progress | The dependency lands |
+| **Done** | Final files or destination links are attached | — |
+
+> Use Review & Approval for a **specific decision**, not general feedback. Name the approver in a comment and say what changed since the last review.
+
+## Before a card leaves Ideas & Requests
+
+- [x] Audience and single promise are written in the description
+- [x] An owner is assigned and the due date is realistic
+- [ ] Source material is attached or linked
+- [ ] The destination (page, email, post, event) is named
+
+## Waiting on Others
+
+Name the dependency, the person who owns it, and the **next follow-up date** in a comment. If the follow-up passes with no answer, raise it in Monday's stand-up rather than letting the card go quiet.`,
         children: [
           {
             title: "Creative Review Standards",
             icon: "palette",
             owner: "nina",
-            content: note(
-              "Creative reviews should answer whether the work meets the brief, works in its intended placements, and is ready for production.",
-              "Review desktop and mobile crops together. Check contrast, safe areas, logo clearance, and whether partner variants still feel like the same campaign.",
-              "Keep subjective exploration in working files. Card comments should record decisions, concrete changes, and final approval.",
-            ),
+            content: `Creative reviews answer three questions: does the work meet the brief, does it work in its placements, and is it ready for production?
+
+{{image:campaignReviewCover|Campaign review wall with crops, swatches, and partner variants}}
+
+## Checklist
+
+- [ ] Desktop and mobile crops reviewed side by side
+- [ ] Contrast passes on every background
+- [ ] Safe areas and logo clearance respected
+- [ ] Partner variants still read as the same campaign
+
+## Where feedback goes
+
+| Kind of feedback | Where it belongs |
+| --- | --- |
+| Exploration and options | Working files |
+| Decisions and concrete changes | Card comments |
+| Final approval | A comment from the named approver |`,
           },
           {
             title: "Copy Approval Checklist",
             icon: "writing",
             owner: "zoe",
-            content: note(
-              "Before requesting approval, confirm the audience, single promise, supporting proof, call to action, and destination are consistent.",
-              "Avoid unsourced performance claims. Customer quotations must have a traceable interview or approval source, and partner copy must use the wording agreed with the partner.",
-              "For email and social, include the final subject line or post copy in the review context so approvers are not judging an isolated headline.",
-            ),
+            content: `Run through this before requesting approval so the approver judges the whole message, not an isolated headline.
+
+## Message
+
+- [ ] Audience is named
+- [ ] There is **one** promise
+- [ ] Supporting proof is sourced
+- [ ] Call to action matches the destination
+
+## Claims and quotes
+
+> Avoid unsourced performance claims. Customer quotations need a traceable interview or approval source, and partner copy must use the wording agreed with the partner.
+
+## By channel
+
+| Channel | Include in the review |
+| --- | --- |
+| Email | Subject line, preview text, body, CTA |
+| Social | Final post copy and the image it sits on |
+| Landing page | Headline, sub-head, and form copy |`,
           },
         ],
       },
@@ -2921,11 +3056,27 @@ function buildMarketingWorkspace(): SeedWorkspace {
         title: "Campaign Measurement Conventions",
         icon: "chart-dots-3",
         owner: "leo",
-        content: note(
-          "Use one campaign name across landing pages, email, social, partner links, and reporting. Preserve the original source when a visitor moves between campaign pages.",
-          "Primary measures are qualified demo requests and campaign-assisted opportunities. Landing-page conversion, email engagement, partner referrals, and event registrations are diagnostic measures.",
-          "Compare against the previous quarter where possible and label directional numbers clearly when attribution is incomplete.",
-        ),
+        content: `Use **one campaign name** across landing pages, email, social, partner links, and reporting, and preserve the original source when a visitor moves between campaign pages.
+
+## Naming
+
+\`\`\`text
+utm_campaign = autumn-launch-2026
+utm_source   = newsletter | linkedin | partner-<name>
+utm_medium   = email | social | referral | paid
+\`\`\`
+
+## What we report
+
+| Measure | Type | Reported |
+| --- | --- | --- |
+| Qualified demo requests | Primary | Weekly |
+| Campaign-assisted opportunities | Primary | Monthly |
+| Landing-page conversion | Diagnostic | Weekly |
+| Email engagement | Diagnostic | Per send |
+| Partner referrals & event registrations | Diagnostic | Weekly |
+
+> Compare against the previous quarter where possible, and label directional numbers clearly when attribution is incomplete.`,
       },
     ],
     boards: [
@@ -3105,22 +3256,51 @@ function buildDevopsWorkspace(): SeedWorkspace {
         title: "Incident Response Runbook",
         icon: "alert-triangle",
         owner: "grace",
-        content: note(
-          "🛟 Workspace runbook for production incidents and follow-up work.",
-          "First response: identify customer impact, link the active incident card, assign an owner, and keep the Monitoring list updated until the incident is stable.",
-          "Follow-up should capture root cause, alert changes, and any runbook updates before the card moves to Completed.",
-          "Status page: https://status.kanera.test",
-        ),
+        content: `🛟 Workspace runbook for production incidents and follow-up work.
+
+{{image:workerIncidentCover|Worker incident dashboard during a queue spike}}
+
+## First fifteen minutes
+
+1. Identify customer impact and post it on the incident card.
+2. Assign a single incident owner.
+3. Keep the card in **Monitoring** until the incident is stable.
+
+## Severity
+
+| Level | Impact | Update cadence |
+| --- | --- | --- |
+| **SEV1** | Customers cannot work | Every 15 minutes |
+| **SEV2** | A feature is degraded | Every 30 minutes |
+| **SEV3** | Internal or cosmetic | At resolution |
+
+## Before moving to Completed
+
+- [ ] Root cause written up
+- [ ] Alert changes made or ticketed
+- [ ] This runbook updated if a step was missing
+
+> Status page: https://status.kanera.test`,
         children: [
           {
             title: "Upload Storage Outage Drill",
             icon: "cloud-upload",
             owner: "omar",
-            content: note(
-              "Practice both local disk pressure and object-store credential failure.",
-              "Expected evidence: alert timeline, recovery steps, customer impact decision, and the owner for any automation card created afterward.",
-              "Drill notes: https://ops.kanera.test/runbooks/upload-storage-outage",
-            ),
+            content: `Practise both failure modes:
+
+- Local disk pressure on the API host
+- Object-store credential failure
+
+## Evidence to capture
+
+| Evidence | Where |
+| --- | --- |
+| Alert timeline | Incident card comments |
+| Recovery steps | This note |
+| Customer impact decision | Incident card description |
+| Automation follow-up owner | Linked card |
+
+Drill notes: https://ops.kanera.test/runbooks/upload-storage-outage`,
           },
         ],
       },
@@ -3128,10 +3308,19 @@ function buildDevopsWorkspace(): SeedWorkspace {
         title: "Access Review Checklist",
         icon: "lock-check",
         owner: "amelia",
-        content: note(
-          "Quarterly checklist for access and compliance reviews.",
-          "- 🔐 Review dormant admin accounts\n- 📷 Capture evidence for board guest controls\n- 🧾 Confirm audit export retention copy\n- ⚠️ Record exceptions before closing the review",
-        ),
+        content: `Quarterly checklist for access and compliance reviews.
+
+- [ ] 🔐 Review dormant admin accounts
+- [ ] 📷 Capture evidence for board guest controls
+- [ ] 🧾 Confirm audit export retention copy
+- [ ] ⚠️ Record exceptions before closing the review
+
+## Last review
+
+| Quarter | Reviewer | Exceptions |
+| --- | --- | --- |
+| 2026 Q2 | Henry Walsh | 1 (contractor extension) |
+| 2026 Q1 | Grace Liu | 0 |`,
       },
     ],
     boards: [
@@ -3871,6 +4060,34 @@ async function insertSeedNotes(input: {
       .returning();
     result.notes += 1;
 
+    // Inline images are written as `{{image:assetKey|alt}}` in seed content. Each one becomes a
+    // `description`-source attachment (what pasting an image into the editor creates), so it renders
+    // in the body and opens in the lightbox without also appearing in the note's attachment list.
+    const inlineImages = [...noteSeed.content.matchAll(INLINE_NOTE_IMAGE)];
+    if (inlineImages.length > 0) {
+      if (!input.storage) throw new Error("Storage provider was not initialized.");
+      let content = noteSeed.content;
+      for (const [imageIndex, match] of inlineImages.entries()) {
+        const asset = match[1] as AssetKey;
+        if (!(asset in ATTACHMENT_ASSETS)) throw new Error(`Unknown inline note image asset '${asset}'.`);
+        const url = await createNoteAttachmentRow({
+          tx: input.tx,
+          storage: input.storage,
+          clientId: input.clientId,
+          uploadedKeys: input.uploadedKeys,
+          assetCache: input.assetCache,
+          noteId: noteRow!.id,
+          uploadedById: input.userIdByKey.get(noteSeed.owner)!,
+          asset,
+          createdAt: addMinutes(createdAt, imageIndex + 1),
+          source: "description",
+        });
+        content = content.replace(match[0], `![${match[2] ?? ""}](${url})`);
+      }
+      await input.tx.update(notes).set({ content }).where(eq(notes.id, noteRow!.id));
+      result.attachments += inlineImages.length;
+    }
+
     for (const [attachmentIndex, attachmentSeed] of (noteSeed.attachments ?? []).entries()) {
       if (!input.storage) throw new Error("Storage provider was not initialized.");
       await createNoteAttachmentRow({
@@ -3957,6 +4174,255 @@ async function setSeedUserAvatar(input: {
     .update(users)
     .set({ avatarUrl: unsignedMediaUrl(input.clientId, fileKey) })
     .where(eq(users.id, input.userId));
+}
+
+const SEED_AGENT_NAME = "Claude";
+const NIL_UUID = "00000000-0000-0000-0000-000000000000";
+
+async function findSeedBoard(tx: Tx, clientId: string, name: string) {
+  const [row] = await tx
+    .select({ board: boards })
+    .from(boards)
+    .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+    .where(and(eq(workspaces.clientId, clientId), eq(boards.name, name)))
+    .limit(1);
+  if (!row) throw new Error(`Missing seed board '${name}'.`);
+  return row.board;
+}
+
+/**
+ * Agent-run demo state on Autumn Campaign Launch, written as the API would record work done by
+ * Amelia's connected Claude agent (actorKind "agent", actorId Amelia). It backs the documentation
+ * screenshots for the card chip, card-detail run block, "via Claude" feed badges, the drawer's
+ * Agent tab, and the Work Done sparkles mark.
+ *
+ * Live runs are relative to seed time. The worker's stall sweep marks a live run `stalled` once its
+ * heartbeat is 15 minutes old, so capture live-run screenshots soon after seeding, or PATCH the run
+ * (an empty body is a heartbeat) to keep it live.
+ */
+async function seedAgentRunDemos(
+  tx: Tx,
+  input: { clientId: string; userIdByKey: Map<SeedUserKey, string>; now: Date },
+): Promise<number> {
+  const { clientId, now } = input;
+  const ameliaId = input.userIdByKey.get("amelia")!;
+  const leoId = input.userIdByKey.get("leo")!;
+  const board = await findSeedBoard(tx, clientId, "Autumn Campaign Launch");
+  const cardRows = await tx.select().from(cards).where(eq(cards.boardId, board.id));
+  const cardByTitle = new Map(cardRows.map((row) => [row.title, row]));
+  const card = (title: string) => {
+    const row = cardByTitle.get(title);
+    if (!row) throw new Error(`Missing agent demo card '${title}'.`);
+    return row;
+  };
+  const trackingCard = card("Finalise the campaign tracking and UTM plan");
+  const videoCard = card("Produce the launch-day explainer video");
+  const graphicsCard = card("Design the autumn campaign graphics");
+  const agentActor = {
+    boardId: board.id,
+    workspaceId: board.workspaceId,
+    actorId: ameliaId,
+    actorKind: "agent" as const,
+    agentName: SEED_AGENT_NAME,
+  };
+
+  // Production fanout never self-suppresses agent activity (the owner did not act), so Amelia is
+  // notified as a watcher of the cards her agent worked on.
+  await tx.insert(cardWatchers).values([trackingCard, graphicsCard].map((row) => ({
+    cardId: row.id,
+    userId: ameliaId,
+    createdAt: addHours(now, -6),
+  }))).onConflictDoNothing();
+
+  const runActivity = async (run: typeof agentRuns.$inferSelect, action: ActivityAction, at: Date) => {
+    const [activity] = await tx.insert(activityEvents).values({
+      ...agentActor,
+      entityType: "card",
+      entityId: run.cardId,
+      action,
+      payload: {
+        runId: run.id,
+        title: run.title,
+        status: run.status,
+        agentName: run.agentName,
+        externalUrl: run.externalUrl,
+        summary: run.summary,
+      },
+      createdAt: at,
+      updatedAt: at,
+    }).returning();
+    return activity!;
+  };
+  const insertRun = async (values: Omit<typeof agentRuns.$inferInsert, "workspaceId" | "boardId" | "userId" | "agentName">) => {
+    const [run] = await tx.insert(agentRuns).values({
+      workspaceId: board.workspaceId,
+      boardId: board.id,
+      userId: ameliaId,
+      agentName: SEED_AGENT_NAME,
+      ...values,
+    }).returning();
+    return run!;
+  };
+  let notificationCount = 0;
+  const notify = async (userId: string, row: typeof cards.$inferSelect, activityId: string, reason: "watching" | "assigned", at: Date, readAt: Date | null) => {
+    await tx.insert(notifications).values({
+      clientId,
+      userId,
+      activityId,
+      cardId: row.id,
+      listId: row.listId,
+      boardId: board.id,
+      workspaceId: board.workspaceId,
+      reason,
+      readAt,
+      createdAt: at,
+    });
+    notificationCount += 1;
+  };
+
+  // Tracking card: a finished audit run and the agent's comment sit above Leo's earlier moves in the
+  // activity feed, while a second run is still working.
+  const auditStartedAt = addMinutes(now, -190);
+  const auditEndedAt = addMinutes(now, -170);
+  const auditRun = await insertRun({
+    cardId: trackingCard.id,
+    status: "succeeded",
+    title: "Auditing the existing campaign UTM tags",
+    summary: "Found 14 legacy tags and mapped each to the new source/medium pairs.",
+    startedAt: auditStartedAt,
+    heartbeatAt: auditEndedAt,
+    endedAt: auditEndedAt,
+    createdAt: auditStartedAt,
+    updatedAt: auditEndedAt,
+  });
+  await runActivity({ ...auditRun, status: "running", summary: null }, ACTIVITY_ACTION.AGENT_RUN_STARTED, auditStartedAt);
+  // Run start/end never notifies (see recordAgentRunActivity), so no inbox row for it here.
+  await runActivity(auditRun, ACTIVITY_ACTION.AGENT_RUN_ENDED, auditEndedAt);
+
+  const commentAt = addMinutes(auditEndedAt, 2);
+  const [agentComment] = await tx.insert(comments).values({
+    cardId: trackingCard.id,
+    authorId: ameliaId,
+    authorKind: "agent",
+    agentName: SEED_AGENT_NAME,
+    body: "Audit done. Email and partner links already follow the new pattern; paid social still uses three legacy campaign names, which I have listed in the plan for Leo to retire.",
+    createdAt: commentAt,
+  }).returning();
+  const [commentActivity] = await tx.insert(activityEvents).values({
+    ...agentActor,
+    entityType: "comment",
+    entityId: agentComment!.id,
+    action: "created",
+    payload: { cardId: trackingCard.id },
+    createdAt: commentAt,
+    updatedAt: commentAt,
+  }).returning();
+  await notify(leoId, trackingCard, commentActivity!.id, "assigned", commentAt, null);
+  // Comments reach card watchers, and agent work is never self-suppressed, so Amelia (watching)
+  // gets the agent's comment too: the unread entry on her drawer's Agent tab.
+  await notify(ameliaId, trackingCard, commentActivity!.id, "watching", commentAt, null);
+
+  const draftStartedAt = addMinutes(now, -12);
+  const draftRun = await insertRun({
+    cardId: trackingCard.id,
+    status: "running",
+    title: "Drafting the UTM naming convention",
+    summary: "Source/medium pairs drafted for email, partner, and paid social; checking landing-page event names next.",
+    startedAt: draftStartedAt,
+    heartbeatAt: addMinutes(now, -1),
+    createdAt: draftStartedAt,
+    updatedAt: addMinutes(now, -1),
+  });
+  await runActivity({ ...draftRun, summary: null }, ACTIVITY_ACTION.AGENT_RUN_STARTED, draftStartedAt);
+
+  // Explainer video: the agent is blocked waiting on a person, which renders the amber chip.
+  const scriptStartedAt = addMinutes(now, -48);
+  const scriptRun = await insertRun({
+    cardId: videoCard.id,
+    status: "blocked",
+    title: "Cutting the explainer video script",
+    summary: "60- and 45-second cuts are ready. Which voiceover take should the final cut use?",
+    startedAt: scriptStartedAt,
+    heartbeatAt: addMinutes(now, -4),
+    createdAt: scriptStartedAt,
+    updatedAt: addMinutes(now, -4),
+  });
+  await runActivity({ ...scriptRun, status: "running", summary: null }, ACTIVITY_ACTION.AGENT_RUN_STARTED, scriptStartedAt);
+
+  // Graphics: completed today by the agent, so Work Done shows the sparkles mark beside Amelia.
+  const completedAt = addMinutes(now, -95);
+  await tx.update(cards).set({ completedAt, updatedAt: completedAt }).where(eq(cards.id, graphicsCard.id));
+  const [completion] = await tx.insert(activityEvents).values({
+    ...agentActor,
+    entityType: "card",
+    entityId: graphicsCard.id,
+    action: ACTIVITY_ACTION.COMPLETION_SET,
+    payload: { completedAt, fromValue: false, toValue: true },
+    createdAt: completedAt,
+    updatedAt: completedAt,
+  }).returning();
+  await notify(ameliaId, graphicsCard, completion!.id, "watching", completedAt, addMinutes(completedAt, 30));
+
+  return notificationCount;
+}
+
+/**
+ * An active mirror from the Launch Checklist standalone board into Platform Delivery, mapping
+ * To do onto Wishlist, as the board-mirror create route writes it. lastSyncAt predates the
+ * standalone cards and a reconcile is requested, so a running worker links the existing To do
+ * cards into Platform Delivery on its first pass instead of waiting for a new source change.
+ */
+async function seedBoardMirrorDemo(
+  tx: Tx,
+  input: { clientId: string; ameliaId: string; sourceBoardId: string; sourceWorkspaceId: string; sourceListId: string; createdAt: Date },
+): Promise<void> {
+  const target = await findSeedBoard(tx, input.clientId, "Platform Delivery");
+  const [targetList] = await tx
+    .select({ id: lists.id })
+    .from(lists)
+    .where(and(eq(lists.workspaceId, target.workspaceId), eq(lists.name, "Wishlist")))
+    .limit(1);
+  if (!targetList) throw new Error("Missing Wishlist list for the board mirror demo.");
+
+  const now = new Date();
+  const [mirror] = await tx.insert(boardMirrors).values({
+    sourceBoardId: input.sourceBoardId,
+    targetBoardId: target.id,
+    sourceWorkspaceId: input.sourceWorkspaceId,
+    targetWorkspaceId: target.workspaceId,
+    createdById: input.ameliaId,
+    // The cursor starts at seed time: seeded activity never went through the outbox, so the
+    // reconcile pass (not event replay) is what brings existing cards across.
+    cursorEventCreatedAt: now,
+    cursorEventId: NIL_UUID,
+    reconcileRequestedAt: now,
+    lastSyncAt: input.createdAt,
+    createdAt: input.createdAt,
+    updatedAt: input.createdAt,
+  }).returning();
+  await tx.insert(boardMirrorLists).values({ mirrorId: mirror!.id, sourceListId: input.sourceListId, targetListId: targetList.id });
+
+  const visibility = { sourceClientId: input.clientId, targetClientId: input.clientId };
+  await insertSeedActivity(tx, {
+    boardId: input.sourceBoardId,
+    workspaceId: input.sourceWorkspaceId,
+    actorId: input.ameliaId,
+    entityType: "board",
+    entityId: input.sourceBoardId,
+    action: ACTIVITY_ACTION.MIRROR_CREATED,
+    payload: { mirrorId: mirror!.id, targetBoardId: target.id, ...visibility },
+    createdAt: input.createdAt,
+  });
+  await insertSeedActivity(tx, {
+    boardId: target.id,
+    workspaceId: target.workspaceId,
+    actorId: input.ameliaId,
+    entityType: "board",
+    entityId: target.id,
+    action: ACTIVITY_ACTION.MIRROR_CREATED,
+    payload: { mirrorId: mirror!.id, sourceBoardId: input.sourceBoardId, ...visibility },
+    createdAt: input.createdAt,
+  });
 }
 
 async function seedInternalLinkDemos(tx: Tx, workspaceId: string): Promise<number> {
@@ -4051,12 +4517,14 @@ async function createNoteAttachmentRow(input: {
   uploadedById: string;
   asset: AssetKey;
   createdAt: Date;
-}) {
+  source?: NoteAttachmentSource;
+}): Promise<string> {
   const assetMeta = ATTACHMENT_ASSETS[input.asset];
   const fileName = path.basename(attachmentAssetPath(input.asset));
   const extension = path.extname(fileName).slice(1);
   const buffer = await loadAssetBuffer(input.asset, input.assetCache);
   const fileKey = noteAttachmentStorageKey(input.noteId, extension);
+  const url = unsignedMediaUrl(input.clientId, fileKey)!;
   await input.storage.put(fileKey, buffer, assetMeta.mimeType);
   input.uploadedKeys.push(fileKey);
 
@@ -4068,10 +4536,11 @@ async function createNoteAttachmentRow(input: {
     mimeType: assetMeta.mimeType,
     byteSize: buffer.byteLength,
     fileKey,
-    url: unsignedMediaUrl(input.clientId, fileKey)!,
-    source: "attachment",
+    url,
+    source: input.source ?? "attachment",
     createdAt: input.createdAt,
   });
+  return url;
 }
 
 async function createAttachmentRow(input: {
@@ -5496,6 +5965,20 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
 
         summary.internalLinks += await seedInternalLinkDemos(tx, workspace!.id);
       }
+
+      summary.notifications += await seedAgentRunDemos(tx, {
+        clientId: client!.id,
+        userIdByKey,
+        now: new Date(),
+      });
+      await seedBoardMirrorDemo(tx, {
+        clientId: client!.id,
+        ameliaId: userIdByKey.get("amelia")!,
+        sourceBoardId: standaloneBoard!.id,
+        sourceWorkspaceId: standaloneWorkspace!.id,
+        sourceListId: standaloneListByName.get("To do")!.id,
+        createdAt: addHours(standaloneCreatedAt, 4),
+      });
 
       for (const [targetUser, candidates] of priorityCandidatesByUser) {
         if (candidates.length === 0) continue;

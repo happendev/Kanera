@@ -12,9 +12,10 @@ import { toWireCardSummary } from "./card-summary.js";
 import { badRequest } from "./errors.js";
 import { assignedCardVisibility } from "./access.js";
 import { signedAvatarUrl } from "./media-keys.js";
+import { escapedSearchPattern } from "./search-pattern.js";
 
 /** Furthest back the historical view may look — keeps the queryable window bounded. */
-export const WORK_DONE_MAX_DAYS = 60;
+const WORK_DONE_MAX_DAYS = 60;
 
 /**
  * Rejects requests whose day falls outside the allowed window: no further back
@@ -93,10 +94,6 @@ export interface LoadWorkDoneOptions {
    * matters because the window may span several days. Defaults to UTC.
    */
   timeZone?: string;
-}
-
-function escapedSearchPattern(query: string): string {
-  return `%${query.toLowerCase().replace(/[\\%_]/g, "\\$&")}%`;
 }
 
 /** Matches titles, current keys, and exact historical key aliases for every board history query. */

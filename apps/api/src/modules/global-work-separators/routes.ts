@@ -15,15 +15,16 @@ import {
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import type { AuthClaims } from "../../auth/plugin.js";
-import { db, type Db } from "../../db.js";
+import { db, type Tx } from "../../db.js";
 import { assertWorkspaceAccess, isOrgAdmin } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
 import { activeCompletedCardPredicate } from "../../lib/completed-card-visibility.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { between } from "../../lib/position.js";
+import { emitWorkspaceLaneRebalanced, rebalanceWorkspaceLane, type WorkspaceLaneRebalanceResult } from "../../lib/board-lane.js";
 import { emitToGlobalWorkSeparatorAudience } from "../../realtime/emit.js";
+import { resolveNeighbourPositions } from "../../lib/lane-neighbours.js";
 
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 type GlobalWorkLaneItemType = "card" | "separator";
 type GlobalWorkLaneAnchor = { type: GlobalWorkLaneItemType; id: string };
 type GlobalWorkLaneItem = { type: GlobalWorkLaneItemType; id: string; position: string };
@@ -132,36 +133,19 @@ export async function positionForGlobalWorkLaneInsert(options: {
   afterItem?: GlobalWorkLaneAnchor | null;
   beforeItem?: GlobalWorkLaneAnchor | null;
   tx: Tx;
-}) {
-  const items = await loadGlobalWorkLaneItems(options);
-  const findAnchor = (anchor: GlobalWorkLaneAnchor) => {
-    const item = items.find((candidate) => candidate.type === anchor.type && candidate.id === anchor.id);
-    if (!item) throw badRequest(`${anchor.type} anchor not found`);
-    return item;
-  };
+}): Promise<{ position: string; rebalanced: WorkspaceLaneRebalanceResult | null }> {
+  const { prev, next } = resolveNeighbourPositions(await loadGlobalWorkLaneItems(options), options);
+  const result = between(prev, next);
+  if (!result.needsRebalance) return { position: result.position, rebalanced: null };
 
-  let prev: string | null = null;
-  let next: string | null = null;
-  if (options.afterItem === null && options.beforeItem === undefined) {
-    next = items[0]?.position ?? null;
-  } else if (options.beforeItem === null && options.afterItem === undefined) {
-    prev = items.at(-1)?.position ?? null;
-  } else if (options.afterItem) {
-    const after = findAnchor(options.afterItem);
-    const index = items.findIndex((item) => item.type === after.type && item.id === after.id);
-    prev = after.position;
-    next = items[index + 1]?.position ?? null;
-  } else if (options.beforeItem) {
-    const before = findAnchor(options.beforeItem);
-    const index = items.findIndex((item) => item.type === before.type && item.id === before.id);
-    next = before.position;
-    prev = items[index - 1]?.position ?? null;
-  }
-
-  // Global Work combines board-owned card positions with personal separators. Rebalancing from this
-  // virtual lane would unexpectedly rewrite source boards, so interpolation intentionally remains
-  // sparse and leaves the rare precision-exhaustion case visible to the caller.
-  return between(prev, next).position;
+  // The neighbours tie (typically cards from different boards that share a per-board position), so
+  // the midpoint would equal both and the new item would sort after every tied card instead of
+  // landing here. Renumber the whole workspace list in its existing order, which leaves every board
+  // lane and every Global Work lane visually unchanged, then resolve the anchor again. Callers must
+  // emit the returned rebalance before their own created/moved event.
+  const rebalanced = await rebalanceWorkspaceLane(options.listId, options.tx);
+  const resolved = resolveNeighbourPositions(await loadGlobalWorkLaneItems(options), options);
+  return { position: between(resolved.prev, resolved.next).position, rebalanced };
 }
 
 export async function globalWorkSeparatorRoutes(app: FastifyInstance) {
@@ -172,8 +156,8 @@ export async function globalWorkSeparatorRoutes(app: FastifyInstance) {
     const body = dto.createSeparatorBody.parse(req.body);
     await assertGlobalWorkSeparatorContext({ auth: req.auth, workspaceId, targetUserId, listId });
 
-    const separator = await db.transaction(async (tx) => {
-      const position = await positionForGlobalWorkLaneInsert({
+    const { separator, rebalanced } = await db.transaction(async (tx) => {
+      const { position, rebalanced } = await positionForGlobalWorkLaneInsert({
         auth: req.auth,
         workspaceId,
         targetUserId,
@@ -209,8 +193,10 @@ export async function globalWorkSeparatorRoutes(app: FastifyInstance) {
         action: ACTIVITY_ACTION.CREATED,
         payload: { title: created.title, color: created.color, listId, targetUserId, scope: "globalWork" },
       });
-      return created;
+      return { separator: created, rebalanced };
     });
+
+    if (rebalanced) await emitWorkspaceLaneRebalanced(listId, rebalanced);
 
     await emitToGlobalWorkSeparatorAudience(workspaceId, targetUserId, SERVER_EVENTS.GLOBAL_WORK_SEPARATOR_CREATED, {
       workspaceId,
@@ -272,8 +258,8 @@ export async function globalWorkSeparatorRoutes(app: FastifyInstance) {
 
     const fromListId = current.listId;
     const prevPosition = current.position;
-    const { position, noOp } = await db.transaction(async (tx) => {
-      const nextPosition = await positionForGlobalWorkLaneInsert({
+    const { position, noOp, rebalanced } = await db.transaction(async (tx) => {
+      const { position: nextPosition, rebalanced } = await positionForGlobalWorkLaneInsert({
         auth: req.auth,
         workspaceId: current.workspaceId,
         targetUserId: current.targetUserId,
@@ -283,8 +269,9 @@ export async function globalWorkSeparatorRoutes(app: FastifyInstance) {
         beforeItem: body.beforeItem,
         tx,
       });
-      if (body.listId === fromListId && nextPosition === prevPosition) {
-        return { position: prevPosition, noOp: true };
+      // After a rebalance the stored position has moved, so an equal number is no longer a no-op.
+      if (!rebalanced && body.listId === fromListId && nextPosition === prevPosition) {
+        return { position: prevPosition, noOp: true, rebalanced };
       }
       await tx
         .update(globalWorkSeparators)
@@ -299,10 +286,11 @@ export async function globalWorkSeparatorRoutes(app: FastifyInstance) {
         action: ACTIVITY_ACTION.MOVED,
         payload: { fromListId, toListId: body.listId, prevPosition, position: nextPosition, targetUserId: current.targetUserId, scope: "globalWork" },
       });
-      return { position: nextPosition, noOp: false };
+      return { position: nextPosition, noOp: false, rebalanced };
     });
 
     if (noOp) return { id, listId: fromListId, position };
+    if (rebalanced) await emitWorkspaceLaneRebalanced(body.listId, rebalanced);
     await emitToGlobalWorkSeparatorAudience(current.workspaceId, current.targetUserId, SERVER_EVENTS.GLOBAL_WORK_SEPARATOR_MOVED, {
       workspaceId: current.workspaceId,
       targetUserId: current.targetUserId,

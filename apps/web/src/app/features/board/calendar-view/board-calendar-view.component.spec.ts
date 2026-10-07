@@ -1,14 +1,13 @@
+import { createComponentFixture } from "../../../../test/component-fixture";
 import { provideZonelessChangeDetection } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
-import { By } from "@angular/platform-browser";
 import type { WireBoardMemberUser, WireCardSummary } from "@kanera/shared/events";
 import { describe, expect, it, vi } from "vitest";
 import type { CdkDragDrop } from "@angular/cdk/drag-drop";
 import { ApiClient } from "../../../core/api/api.client";
-import { DragScrollDirective } from "../../../shared/drag-scroll.directive";
 import { TABLE_CARD_STORE, type TableCardStore } from "../table-view/table-card-store";
 import { BoardMenuCoordinator } from "../board-menu-coordinator.service";
-import { BoardCalendarViewComponent } from "./board-calendar-view.component";
+import { BoardCalendarViewComponent, calendarLayoutForWidth } from "./board-calendar-view.component";
 
 function card(overrides: Partial<WireCardSummary> = {}): WireCardSummary {
   return {
@@ -62,7 +61,7 @@ describe("BoardCalendarViewComponent", () => {
       imports: [BoardCalendarViewComponent],
       providers: [provideZonelessChangeDetection(), BoardMenuCoordinator],
     }).compileComponents();
-    const fixture = TestBed.createComponent(BoardCalendarViewComponent);
+    const fixture = createComponentFixture(BoardCalendarViewComponent);
     fixture.componentRef.setInput("cards", cards);
     fixture.componentInstance.anchorDate.set(new Date(2026, 4, 15));
     fixture.detectChanges();
@@ -92,19 +91,105 @@ describe("BoardCalendarViewComponent", () => {
     expect(viewport).toBeTruthy();
     const panel = viewport?.querySelector(":scope > .calendar-month");
     expect(panel).toBeTruthy();
-    expect(panel?.querySelector(".calendar-month-scroll > .calendar-weekdays")).toBeTruthy();
-    expect(panel?.querySelector(".calendar-month-scroll > .calendar-grid")).toBeTruthy();
-    // The seven columns never compress, so the panel always scrolls sideways: it has to carry the
-    // click-and-drag gesture, in the loading state as much as the loaded one.
-    const scrollers = fixture.debugElement.queryAll(By.directive(DragScrollDirective));
-    expect(scrollers.map((node) => (node.nativeElement as HTMLElement).className)).toEqual(["calendar-month-scroll"]);
+    expect(panel?.querySelector(".calendar-month-body > .calendar-weekdays")).toBeTruthy();
+    expect(panel?.querySelector(".calendar-month-body > .calendar-grid")).toBeTruthy();
     // The paged view is named by its toolbar, so the panel does not repeat the month.
     expect(panel?.querySelector(".calendar-month-header")).toBeNull();
 
     fixture.componentRef.setInput("loading", true);
     fixture.detectChanges();
     expect(viewport?.querySelector(".calendar-grid .skeleton-day")).toBeTruthy();
-    expect(fixture.debugElement.queryAll(By.directive(DragScrollDirective))).toHaveLength(1);
+  });
+
+  it("picks the layout from the calendar's own width", () => {
+    // Unmeasured (0) keeps the full grid rather than guessing a phone layout.
+    expect(calendarLayoutForWidth(0)).toBe("full");
+    expect(calendarLayoutForWidth(390)).toBe("phone");
+    expect(calendarLayoutForWidth(559)).toBe("phone");
+    expect(calendarLayoutForWidth(560)).toBe("compact");
+    expect(calendarLayoutForWidth(768)).toBe("compact");
+    expect(calendarLayoutForWidth(1200)).toBe("full");
+  });
+
+  it("caps a compact month cell behind +N more and opens it in place", async () => {
+    const fixture = await create(Array.from({ length: 5 }, (_, i) => card({ id: `c${i}`, title: `Card ${i}`, position: `${i + 1}` })));
+    fixture.componentInstance.layout.set("compact");
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    // Two tiles plus the "+3 more" row fill the three-slot cap.
+    expect(host.querySelectorAll(".calendar-day .cal-card").length).toBe(2);
+    const more = host.querySelector<HTMLButtonElement>(".calendar-day .cal-more");
+    expect(more?.textContent?.trim()).toBe("+3 more");
+    // A compact column shows the bare number, not "20 May".
+    expect(host.querySelector(".calendar-day .calendar-day-number")?.textContent?.trim()).toBe("20");
+
+    more?.click();
+    fixture.detectChanges();
+    expect(host.querySelectorAll(".calendar-day .cal-card").length).toBe(5);
+    expect(host.querySelector(".calendar-day .cal-more")?.textContent?.trim()).toBe("Show less");
+
+    // A week row has the pane's height to grow into, so it never caps.
+    fixture.componentInstance.toggleDayExpanded("2026-05-20");
+    fixture.componentInstance.setMode("week");
+    fixture.componentInstance.anchorDate.set(new Date(2026, 4, 20));
+    fixture.detectChanges();
+    expect(host.querySelectorAll(".calendar-day .cal-card").length).toBe(5);
+    expect(host.querySelector(".cal-more")).toBeNull();
+  });
+
+  it("lists the chosen day's cards under a month of day numbers on a phone", async () => {
+    const fixture = await create([
+      card({ id: "a", title: "First", dueDateLocalDate: "2026-05-20" }),
+      card({ id: "b", title: "Second", dueDateLocalDate: "2026-05-22" }),
+    ]);
+    fixture.componentInstance.layout.set("phone");
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector(".calendar-grid")).toBeNull();
+    expect(host.querySelectorAll(".cal-mini-day").length).toBe(35);
+    // Today is outside May 2026, so the month opens on its first day with something due.
+    expect(host.querySelector(".cal-mini-day.is-selected .cal-mini-number")?.textContent?.trim()).toBe("20");
+    expect([...host.querySelectorAll(".cal-agenda .cal-card-title")].map((el) => el.textContent?.trim())).toEqual(["First"]);
+
+    // Accessible dates follow the viewer's locale; choose the day by its visible number instead
+    // of requiring day-before-month wording from the machine running the tests.
+    const may22 = [...host.querySelectorAll<HTMLButtonElement>(".cal-mini-day")]
+      .find((el) => el.querySelector(".cal-mini-number")?.textContent?.trim() === "22" && !el.classList.contains("is-muted"));
+    expect(may22?.querySelectorAll(".cal-mini-dot").length).toBe(1);
+    may22?.click();
+    fixture.detectChanges();
+    expect([...host.querySelectorAll(".cal-agenda .cal-card-title")].map((el) => el.textContent?.trim())).toEqual(["Second"]);
+  });
+
+  it("stacks a phone week as seven days with empty days reduced to their heading", async () => {
+    const fixture = await create([card({ id: "a", dueDateLocalDate: "2026-05-20" })]);
+    fixture.componentInstance.layout.set("phone");
+    fixture.componentInstance.setMode("week");
+    fixture.componentInstance.anchorDate.set(new Date(2026, 4, 20));
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const days = [...host.querySelectorAll(".cal-agenda-day")];
+    expect(days.length).toBe(7);
+    expect(days.filter((day) => day.classList.contains("is-empty")).length).toBe(6);
+    expect(days[2]?.querySelectorAll(".cal-card").length).toBe(1);
+  });
+
+  it("lists only days with cards in the stacked phone agenda", async () => {
+    const fixture = await create([
+      card({ id: "july", dueDateLocalDate: "2026-07-15" }),
+      card({ id: "september", dueDateLocalDate: "2026-09-02" }),
+    ]);
+    fixture.componentRef.setInput("navigation", "stacked");
+    fixture.componentInstance.layout.set("phone");
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelectorAll(".calendar-month-header h3").length).toBe(2);
+    expect(host.querySelectorAll(".cal-agenda-day").length).toBe(2);
+    expect(host.querySelector(".cal-agenda-day.is-empty")).toBeNull();
   });
 
   it("renders empty days as slots and keeps neighbouring-month cards in the paged view", async () => {
@@ -331,7 +416,7 @@ describe("BoardCalendarViewComponent", () => {
           { provide: TABLE_CARD_STORE, useValue: store },
         ],
       }).compileComponents();
-      const fixture = TestBed.createComponent(BoardCalendarViewComponent);
+      const fixture = createComponentFixture(BoardCalendarViewComponent);
       fixture.componentRef.setInput("cards", cards);
       fixture.componentInstance.anchorDate.set(new Date(2026, 4, 15));
       fixture.detectChanges();

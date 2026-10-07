@@ -3,6 +3,7 @@ import { and, eq, gt, isNull } from "drizzle-orm";
 import { refreshTokens } from "@kanera/shared/schema";
 import { db } from "../db.js";
 import { env } from "../env.js";
+import { hashOpaqueToken } from "../lib/tokens.js";
 
 const REFRESH_BYTES = 48;
 export const REFRESH_REUSE_GRACE_MS = 30_000;
@@ -20,12 +21,8 @@ export function newRefreshToken(): { raw: string; hash: string; expiresAt: Date 
   return { raw, hash, expiresAt };
 }
 
-export function hashRefresh(raw: string): string {
-  return crypto.createHash("sha256").update(raw).digest("hex");
-}
-
 export async function rotateRefresh(oldRaw: string): Promise<RefreshRotationResult> {
-  const oldHash = hashRefresh(oldRaw);
+  const oldHash = hashOpaqueToken(oldRaw);
   return db.transaction(async (tx) => {
     const [existing] = await tx
       .select()

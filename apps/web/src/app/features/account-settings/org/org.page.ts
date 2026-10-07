@@ -13,7 +13,6 @@ import { AccountSettingsPage } from "../account-settings.page";
   imports: [AnchoredPanelDirective, AutosaveStatusComponent, DocsLinkComponent, NgOptimizedImage, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./org.page.html",
-  styleUrl: "./org.page.scss",
 })
 export class AccountSettingsOrgPage {
   protected readonly settings = inject(AccountSettingsPage);

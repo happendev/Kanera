@@ -1,4 +1,4 @@
-import type { WorkDoneEvent, WorkDoneEventType } from "@kanera/shared/dto";
+import type { WorkDoneEventType } from "@kanera/shared/dto";
 import type { WireCardSummary } from "@kanera/shared/events";
 
 /** Range presets offered by the toolbar. `custom` is whatever the range picker last applied. */

@@ -103,12 +103,9 @@ export type OfflineBoardSnapshot = {
   workspaceClientId?: string | null;
   workspaceKind?: "standard" | "board";
   workspaceInactiveCardsDays?: number;
-  workspaceBoardHealthEnabled?: boolean;
-  workspaceBoardHealthOverdueEnabled?: boolean;
-  workspaceBoardHealthUnassignedEnabled?: boolean;
-  workspaceBoardHealthInactiveEnabled?: boolean;
   workspaceCardKeyPrefixes?: string[];
   boardLinkingEnabled?: boolean;
+  notesEnabled?: boolean;
   boardSyncAllowed?: boolean;
   hasMirrors?: boolean;
   lists: (List | WireList)[];

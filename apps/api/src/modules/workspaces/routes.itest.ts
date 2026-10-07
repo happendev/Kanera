@@ -6,9 +6,7 @@ import { test } from "node:test";
 import type Stripe from "stripe";
 import { activityEvents, automationActions, automations, boardInvitationGrants, boardInvitations, boardMembers, boardWatchers, boards, cardAssignees, cardChecklistItems, cardChecklists, cardLabelAssignments, cardLabels, cardMentions, cardWatchers, cards, clientGuestSeats, clientMembers, clients, customFields, directRealtimeOutbox, emailQueue, eventOutbox, lists, notifications, workspaceAnalyticsMilestones, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
-import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
-import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
-import { DEFAULT_WORKSPACE_LIST_NAMES } from "@kanera/shared/default-workspace-lists";
+import { DEFAULT_WORKSPACE_CUSTOM_FIELDS, DEFAULT_WORKSPACE_LABELS, DEFAULT_WORKSPACE_LIST_NAMES } from "@kanera/shared/workspace-templates";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { setStripeClientForTests } from "../../lib/billing.js";
@@ -22,10 +20,6 @@ type WorkspaceResponse = {
   clientId: string;
   completedCardsActiveDays: number;
   inactiveCardsDays: number;
-  boardHealthEnabled: boolean;
-  boardHealthOverdueEnabled: boolean;
-  boardHealthUnassignedEnabled: boolean;
-  boardHealthInactiveEnabled: boolean;
 };
 type WorkspaceGuestsResponse = {
   acceptedGuests: { userId: string }[];
@@ -56,13 +50,12 @@ void test("POST /workspaces creates workspace-scoped defaults and admin membersh
     method: "PATCH",
     url: "/clients/me",
     headers: { authorization: `Bearer ${accessToken}` },
-    payload: { defaultCompletedCardsActiveDays: 21, defaultInactiveCardsDays: 9, defaultBoardHealthEnabled: false },
+    payload: { defaultCompletedCardsActiveDays: 21, defaultInactiveCardsDays: 9 },
   });
   assert.equal(defaults.statusCode, 200);
-  const savedDefaults = defaults.json<{ defaultCompletedCardsActiveDays: number; defaultInactiveCardsDays: number; defaultBoardHealthEnabled: boolean }>();
+  const savedDefaults = defaults.json<{ defaultCompletedCardsActiveDays: number; defaultInactiveCardsDays: number; }>();
   assert.equal(savedDefaults.defaultCompletedCardsActiveDays, 21);
   assert.equal(savedDefaults.defaultInactiveCardsDays, 9);
-  assert.equal(savedDefaults.defaultBoardHealthEnabled, false);
 
   const created = await app.inject({
     method: "POST",
@@ -74,22 +67,16 @@ void test("POST /workspaces creates workspace-scoped defaults and admin membersh
   const workspace = created.json<WorkspaceResponse>();
   assert.equal(workspace.completedCardsActiveDays, 21);
   assert.equal(workspace.inactiveCardsDays, 9);
-  assert.equal(workspace.boardHealthEnabled, false);
-  assert.equal(workspace.boardHealthOverdueEnabled, true);
-  assert.equal(workspace.boardHealthUnassignedEnabled, true);
-  assert.equal(workspace.boardHealthInactiveEnabled, true);
 
   const updatedTiming = await app.inject({
     method: "PATCH",
     url: `/workspaces/${workspace.id}`,
     headers: { authorization: `Bearer ${accessToken}` },
-    payload: { inactiveCardsDays: 30, boardHealthEnabled: true, boardHealthUnassignedEnabled: false },
+    payload: { inactiveCardsDays: 30 },
   });
   assert.equal(updatedTiming.statusCode, 200);
-  const updatedTimingBody = updatedTiming.json<{ inactiveCardsDays: number; boardHealthEnabled: boolean; boardHealthUnassignedEnabled: boolean }>();
+  const updatedTimingBody = updatedTiming.json<{ inactiveCardsDays: number; }>();
   assert.equal(updatedTimingBody.inactiveCardsDays, 30);
-  assert.equal(updatedTimingBody.boardHealthEnabled, true);
-  assert.equal(updatedTimingBody.boardHealthUnassignedEnabled, false);
 
   const [ownerMembership] = await db
     .select()
@@ -298,7 +285,7 @@ void test("standalone workspaces create one mirrored board and stay hidden from 
   const app = await buildIntegrationServer();
   const { user, auth: auth } = await signupOwner(app, { orgName: "Standalone Org", email: "standalone-owner@example.com", displayName: "Owner" });
   await db.update(clients)
-    .set({ defaultCompletedCardsActiveDays: 18, defaultInactiveCardsDays: 6, defaultBoardHealthEnabled: false })
+    .set({ defaultCompletedCardsActiveDays: 18, defaultInactiveCardsDays: 6 })
     .where(eq(clients.id, user.clientId));
 
   const missingBoard = await app.inject({
@@ -332,7 +319,6 @@ void test("standalone workspaces create one mirrored board and stay hidden from 
     accentColor: string | null;
     completedCardsActiveDays: number;
     inactiveCardsDays: number;
-    boardHealthEnabled: boolean;
     initialBoard: { id: string; workspaceId: string; name: string; icon: string | null; iconColor: string | null };
   }>();
   assert.equal(standalone.kind, "board");
@@ -341,7 +327,6 @@ void test("standalone workspaces create one mirrored board and stay hidden from 
   assert.equal(standalone.accentColor, "violet");
   assert.equal(standalone.completedCardsActiveDays, 18);
   assert.equal(standalone.inactiveCardsDays, 6);
-  assert.equal(standalone.boardHealthEnabled, false);
   assert.equal(standalone.initialBoard.name, "Launch plan");
   assert.equal(standalone.initialBoard.icon, "rocket");
   assert.equal(standalone.initialBoard.iconColor, "violet");

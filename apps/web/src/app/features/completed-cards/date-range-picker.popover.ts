@@ -1,10 +1,12 @@
 import type { OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from "@angular/core";
 import { TooltipDirective } from "../../shared/tooltip.directive";
-import { WEEKDAY_LABELS, startOfWeek } from "../../shared/week-start";
+import { WEEKDAY_LABELS } from "../../shared/week-start";
 import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { formatDate } from "../../shared/date-format";
+import { localDateKey, parseDateInputValue, startOfLocalDay } from "../../shared/day-key.util";
+import { buildMonthGrid, monthStart, shiftMonth } from "../../shared/month-grid";
 
 type CalendarDay = {
   date: Date;
@@ -21,26 +23,6 @@ type RangeShortcut = {
   label: string;
   days: number;
 };
-
-function pad(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
-function toDateInputValue(date: Date): string {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
-function fromDateInputValue(value: string): Date | null {
-  const [year, month, day] = value.split("-").map(Number);
-  if (!year || !month || !day) return null;
-  const date = new Date(year, month - 1, day);
-  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
-  return date;
-}
-
-function startOfDay(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
 
 function compareDateValue(a: string, b: string): number {
   return a.localeCompare(b);
@@ -363,30 +345,15 @@ export class DateRangePickerPopover implements OnInit {
   readonly draftLabel = computed(() => this.rangeLabel(this.draftFrom(), this.draftTo()));
 
   readonly days = computed<CalendarDay[]>(() => {
-    const month = this.visibleMonth();
     const from = this.draftFrom();
     const to = this.draftTo();
     const start = from && to && compareDateValue(from, to) > 0 ? to : from;
     const end = from && to && compareDateValue(from, to) > 0 ? from : to;
-    const todayValue = toDateInputValue(new Date());
-    const firstOfMonth = new Date(month.getFullYear(), month.getMonth(), 1);
-    const first = startOfWeek(firstOfMonth);
-
-    return Array.from({ length: 42 }, (_, i) => {
-      const date = new Date(first);
-      date.setDate(first.getDate() + i);
-      const value = toDateInputValue(date);
-      return {
-        date,
-        value,
-        day: date.getDate(),
-        inMonth: date.getMonth() === month.getMonth(),
-        isToday: value === todayValue,
-        isRangeStart: value === start,
-        isRangeEnd: value === end,
-        isInRange: !!start && !!end && compareDateValue(value, start) > 0 && compareDateValue(value, end) < 0,
-      };
-    });
+    return buildMonthGrid(this.visibleMonth(), ({ value }) => ({
+      isRangeStart: value === start,
+      isRangeEnd: value === end,
+      isInRange: !!start && !!end && compareDateValue(value, start) > 0 && compareDateValue(value, end) < 0,
+    }));
   });
 
   ngOnInit() {
@@ -396,11 +363,11 @@ export class DateRangePickerPopover implements OnInit {
   }
 
   previousMonth() {
-    this.visibleMonth.update((date) => new Date(date.getFullYear(), date.getMonth() - 1, 1));
+    this.visibleMonth.update((date) => shiftMonth(date, -1));
   }
 
   nextMonth() {
-    this.visibleMonth.update((date) => new Date(date.getFullYear(), date.getMonth() + 1, 1));
+    this.visibleMonth.update((date) => shiftMonth(date, 1));
   }
 
   select(value: string) {
@@ -423,11 +390,11 @@ export class DateRangePickerPopover implements OnInit {
   }
 
   selectLastDays(days: number) {
-    const end = startOfDay(new Date());
+    const end = startOfLocalDay(new Date());
     const start = new Date(end);
     start.setDate(start.getDate() - days + 1);
-    this.draftFrom.set(toDateInputValue(start));
-    this.draftTo.set(toDateInputValue(end));
+    this.draftFrom.set(localDateKey(start));
+    this.draftTo.set(localDateKey(end));
     this.visibleMonth.set(new Date(end.getFullYear(), end.getMonth(), 1));
     this.emitIfInstant();
   }
@@ -449,9 +416,9 @@ export class DateRangePickerPopover implements OnInit {
   }
 
   private initialVisibleMonth(): Date {
-    const selected = fromDateInputValue(this.to()) ?? fromDateInputValue(this.from());
+    const selected = parseDateInputValue(this.to()) ?? parseDateInputValue(this.from());
     const base = selected ?? new Date();
-    return new Date(base.getFullYear(), base.getMonth(), 1);
+    return monthStart(base);
   }
 
   private rangeLabel(from: string, to: string): string {
@@ -462,7 +429,7 @@ export class DateRangePickerPopover implements OnInit {
   }
 
   private dateLabel(value: string): string {
-    const date = fromDateInputValue(value);
+    const date = parseDateInputValue(value);
     return date ? formatDate(date, "medium") : value;
   }
 

@@ -209,6 +209,50 @@
         "cards.update",
         "cards.archive"
       ]
+    },
+    {
+      "id": "create-nested-checklist-plan",
+      "category": "direct",
+      "prompt": "On PROJ-123 add a Launch checklist: 'Prepare release' (coordinate the release) with a Verification sub-checklist of 'Run smoke tests' and 'Confirm rollback procedure', then 'Announce launch'.",
+      "expectedTools": [
+        "checklists.create"
+      ],
+      "expectedArguments": {
+        "checklists.create": {
+          "cardId": "PROJ-123",
+          "title": "Launch",
+          "items": "Prepare release with description and a Verification subChecklists entry holding both leaf items, followed by Announce launch, in order"
+        }
+      },
+      "forbiddenTools": [
+        "checklists.add_items"
+      ],
+      "forbiddenCapabilities": [
+        "browser",
+        "computer-use"
+      ]
+    },
+    {
+      "id": "update-selected-checklist-items",
+      "category": "direct",
+      "prompt": "On PROJ-123, mark 'Run smoke tests' and 'Confirm rollback procedure' done and assign 'Announce launch' to Ben Ortega.",
+      "expectedTools": [
+        "workspaces.list_members",
+        "checklists.update_items"
+      ],
+      "expectedArguments": {
+        "checklists.update_items": {
+          "cardId": "PROJ-123 or its resolved UUID",
+          "updates": "three entries in ONE call: two with changes.completed true and one with changes.assigneeId set to Ben's resolved userId, targeted by itemId from checklists.get or by exact itemText"
+        }
+      },
+      "forbiddenTools": [
+        "checklists.bulk_update_items"
+      ],
+      "forbiddenCapabilities": [
+        "browser",
+        "computer-use"
+      ]
     }
   ]
 }

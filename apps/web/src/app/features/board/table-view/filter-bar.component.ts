@@ -1192,11 +1192,6 @@ export class FilterBarComponent implements OnDestroy {
     });
   }
 
-  patchCf(patch: Partial<CfFilterCondition>) {
-    this.clearPendingCfPatch();
-    this.updateEditing(patch);
-  }
-
   patchCfDebounced(patch: Partial<CfFilterCondition>) {
     this.pendingCfPatch = { ...(this.pendingCfPatch ?? {}), ...patch };
     if (this.cfValueDebounceTimer) clearTimeout(this.cfValueDebounceTimer);

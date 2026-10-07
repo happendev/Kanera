@@ -26,6 +26,7 @@ import {
   refreshPushSubscription,
   upsertPushSubscriptionForUser
 } from "../../lib/web-push.js";
+import { verifyLifecycleUnsubscribeToken } from "../../lib/lifecycle-emails.js";
 import { emitToUser } from "../../realtime/emit.js";
 
 function toWorkspaceRuleResponse(rule: EffectiveNotificationWorkspaceRule): NotificationWorkspaceRule {
@@ -389,6 +390,7 @@ export async function notificationsRoutes(app: FastifyInstance) {
       ...(body.emailEnabled !== undefined ? { emailEnabled: body.emailEnabled } : {}),
       ...(body.pushEnabled !== undefined ? { pushEnabled: body.pushEnabled } : {}),
       ...(body.watchedActivityOutbound !== undefined ? { watchedActivityOutbound: body.watchedActivityOutbound } : {}),
+      ...(body.lifecycleEmail !== undefined ? { lifecycleEmail: body.lifecycleEmail } : {}),
       ...(personal ? {
         ntfyEnabled: requestedNtfyEnabled && Boolean(ntfyServerUrl && ntfyTopic),
         ntfyServerUrl,
@@ -875,4 +877,43 @@ export async function pushPublicRoutes(app: FastifyInstance) {
     if (!updated) throw notFound("subscription not found");
     return reply.status(204).send();
   });
+}
+
+/**
+ * Unauthenticated unsubscribe for lifecycle (onboarding/check-in) emails. The signed token is the only
+ * authority: it names one user and can only clear that user's lifecycle flag, so a leaked link cannot
+ * read anything or touch card notification preferences. Bare GETs never unsubscribe, so inbox link
+ * scanners that prefetch URLs cannot opt someone out.
+ */
+export async function emailPreferencePublicRoutes(app: FastifyInstance) {
+  // RFC 8058 one-click requests arrive as a form post. Scoped to this plugin, like the OAuth parser.
+  app.addContentTypeParser("application/x-www-form-urlencoded", { parseAs: "string" }, (_req, body, done) => {
+    done(null, Object.fromEntries(new URLSearchParams(body.toString())));
+  });
+
+  // The web app's /email/unsubscribe page posts here after an explicit click.
+  app.post("/email/unsubscribe", async (req, reply) => {
+    const body = dto.emailUnsubscribeBody.parse(req.body);
+    await unsubscribeFromLifecycleEmail(body.token);
+    return reply.status(204).send();
+  });
+
+  // Target of the List-Unsubscribe header. Mail providers POST `List-Unsubscribe=One-Click` here
+  // with the token in the URL, from their own "Unsubscribe" control and without a session.
+  app.post("/email/unsubscribe/one-click", async (req, reply) => {
+    const query = dto.emailUnsubscribeBody.parse(req.query);
+    await unsubscribeFromLifecycleEmail(query.token);
+    return reply.status(200).send({ ok: true });
+  });
+}
+
+async function unsubscribeFromLifecycleEmail(token: string): Promise<void> {
+  const userId = verifyLifecycleUnsubscribeToken(token);
+  if (!userId) throw badRequest("unsubscribe link is invalid");
+  const [user] = await db.select({ id: users.id }).from(users).where(and(eq(users.id, userId), isNull(users.deletedAt))).limit(1);
+  // Answer the same way for a deleted account: there is nothing left to email.
+  if (!user) return;
+  await db.insert(notificationSettings)
+    .values({ userId, lifecycleEmail: false })
+    .onConflictDoUpdate({ target: notificationSettings.userId, set: { lifecycleEmail: false, updatedAt: new Date() } });
 }

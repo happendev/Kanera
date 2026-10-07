@@ -8,8 +8,11 @@ import {
   input,
   output,
   signal,
+  untracked,
 } from "@angular/core";
 import { DomSanitizer } from "@angular/platform-browser";
+import { Router } from "@angular/router";
+import { isPlainPrimaryClick } from "./card-navigation.util";
 import type { ResolveGitHubLinksResponse, ResolvedGitHubLink, ResolveInternalLinksResponse, ResolvedInternalLink } from "@kanera/shared/dto";
 import type { WireBoardMemberUser } from "@kanera/shared/events";
 import { blobatarUri } from "blobatar/uri";
@@ -630,6 +633,7 @@ function normalizePlainText(value: string): string {
 export class DescriptionViewerComponent {
   private readonly sanitizer = inject(DomSanitizer);
   private readonly api = inject(ApiClient, { optional: true });
+  private readonly router = inject(Router, { optional: true });
   private readonly mediaDownloads = inject(MediaDownloadService);
 
   readonly value = input.required<string>();
@@ -641,6 +645,12 @@ export class DescriptionViewerComponent {
   readonly handleImageClicks = input<boolean>(true);
   readonly handleAttachmentLinks = input<boolean>(false);
   readonly showCopy = input<boolean>(false);
+  /**
+   * Bumped by the host when its card/note receives a links-changed invalidation (a linked item was
+   * renamed, recoloured or deleted). Chip titles are resolved once per URL, so without this a chip
+   * keeps the old title until the viewer is recreated.
+   */
+  readonly linkRevision = input(0);
   readonly imageClick = output<string>();
   readonly attachmentClick = output<{
     src: string;
@@ -653,6 +663,7 @@ export class DescriptionViewerComponent {
   readonly copied = signal(false);
   readonly visibleValue = computed(() => stripEmptyTaskItems(this.value()));
   private readonly resolvedLinks = signal<Record<string, ResolvedInternalLink>>({});
+  private seenLinkRevision: number | null = null;
   private readonly resolvedGitHubLinks = signal<Record<string, ResolvedGitHubLink>>({});
   private copyResetTimer: number | null = null;
 
@@ -692,6 +703,31 @@ export class DescriptionViewerComponent {
     });
 
     effect(() => {
+      const revision = this.linkRevision();
+      const first = this.seenLinkRevision === null;
+      this.seenLinkRevision = revision;
+      if (first || !this.api) return;
+      const urls = [...new Set(this.extractResolvableUrls(untracked(() => this.cleanHtml())))].slice(0, 50);
+      if (!urls.length) return;
+      void this.api.post<ResolveInternalLinksResponse>("/internal-links/resolve", { urls })
+        .then((response) => {
+          if (revision !== this.linkRevision()) return;
+          // Replace, not merge: a URL that no longer resolves (target deleted, access lost) must drop
+          // back to a plain link instead of keeping its stale chip.
+          this.resolvedLinks.update((links) => {
+            const next = { ...links };
+            for (const url of urls) {
+              const link = response.links?.[url];
+              if (link) next[url] = link;
+              else delete next[url];
+            }
+            return next;
+          });
+        })
+        .catch(() => undefined);
+    });
+
+    effect(() => {
       const resolved = this.resolvedGitHubLinks();
       const urls = this.extractGitHubUrls(this.cleanHtml()).filter((url) => !resolved[url]);
       if (!urls.length || !this.api) return;
@@ -709,6 +745,26 @@ export class DescriptionViewerComponent {
     });
   }
 
+  /**
+   * Resolved internal chips (cards, boards, notes) navigate inside the app instead of reloading the
+   * page, so unsaved-work guards run and the board/workspace state survives. Modified clicks keep
+   * the browser's own behaviour (new tab/window) since the href is a real, canonical URL.
+   */
+  private openInternalChipInApp(anchor: HTMLAnchorElement, event: MouseEvent): boolean {
+    if (!this.router || !anchor.classList.contains("internal-link-chip") || !isPlainPrimaryClick(event)) return false;
+    let url: URL;
+    try {
+      url = new URL(anchor.href, window.location.origin);
+    } catch {
+      return false;
+    }
+    if (url.origin !== window.location.origin) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    void this.router.navigateByUrl(`${url.pathname}${url.search}${url.hash}`);
+    return true;
+  }
+
   onClick(event: MouseEvent) {
     const target = event.target as HTMLElement | null;
     if (target?.tagName === "IMG") {
@@ -722,6 +778,7 @@ export class DescriptionViewerComponent {
     }
 
     const anchor = target?.closest("a[href]") as HTMLAnchorElement | null;
+    if (anchor && this.openInternalChipInApp(anchor, event)) return;
     if (!anchor || !this.isKaneraMediaHref(anchor.href)) return;
     const fileName = this.attachmentFileNameForLink(anchor);
     if (!fileName) return;

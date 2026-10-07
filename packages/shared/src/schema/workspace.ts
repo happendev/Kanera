@@ -32,13 +32,13 @@ export const workspaces = pgTable(
     accentColor: text("accent_color", { enum: COLOR_TOKENS }),
     completedCardsActiveDays: integer("completed_cards_active_days").notNull().default(DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS),
     inactiveCardsDays: integer("inactive_cards_days").notNull().default(DEFAULT_INACTIVE_CARDS_DAYS),
-    boardHealthEnabled: boolean("board_health_enabled").notNull().default(true),
-    boardHealthOverdueEnabled: boolean("board_health_overdue_enabled").notNull().default(true),
-    boardHealthUnassignedEnabled: boolean("board_health_unassigned_enabled").notNull().default(true),
-    boardHealthInactiveEnabled: boolean("board_health_inactive_enabled").notNull().default(true),
     // Board linking is configured on the workspace so standard workspaces and the hidden workspace
     // behind a standalone board follow the same governance and cleanup path.
     boardLinkingEnabled: boolean("board_linking_enabled").notNull().default(true),
+    // Notes follow the same pattern: one switch on the workspace covers its boards' notes and, for a
+    // standalone board, the hidden workspace's. Disabling hides notes everywhere and blocks the notes
+    // API, but keeps every row so re-enabling restores them untouched.
+    notesEnabled: boolean("notes_enabled").notNull().default(true),
     // Set when a downgrade-to-free archives a workspace beyond the free cap (mirrors boards.archivedAt).
     // Archived workspaces are hidden from listings and excluded from plan-limit counts.
     archivedAt: timestamp("archived_at", { withTimezone: true }),

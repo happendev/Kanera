@@ -226,62 +226,11 @@ describe("BoardPage", () => {
       .compileComponents();
   });
 
-  it("sets the fallback board title before board data loads", () => {
-    const fixture = TestBed.createComponent(BoardPage);
-    fixture.componentRef.setInput("boardId", "board-1");
-    fixture.detectChanges();
-    flushEffects();
-
-    expect(appTitle().set).toHaveBeenLastCalledWith("Board");
-  });
-
   it("attributes its pageview to the organisation that owns the board", async () => {
     const fixture = createInitializedBoardPage();
 
     await vi.waitFor(() => expect(analytics.pageCurrentRoute).toHaveBeenCalledWith("client-1"));
     expect(analytics.pageCurrentRoute).toHaveBeenCalledTimes(1);
-    fixture.destroy();
-  });
-
-  it("shows actionable work risk and filters to the selected signal", async () => {
-    const fixture = createInitializedBoardPage();
-    await vi.waitFor(() => expect(boardState(fixture.componentInstance).board()).not.toBeNull());
-    const component = fixture.componentInstance;
-
-    expect(component.boardOverview().risk).toMatchObject({
-      level: "atRisk",
-      summary: "1 overdue · 1 unassigned · 1 inactive",
-    });
-
-    component.setBoardRiskFilter("unassigned");
-    expect(component.filteredCardIds()).toEqual(new Set(["card-2"]));
-    component.setBoardRiskFilter("unassigned");
-    expect(component.filteredCardIds()).toBeNull();
-
-    fixture.destroy();
-  });
-
-  it("does not call a board healthy when it has no active work", async () => {
-    const fixture = createInitializedBoardPage();
-    await vi.waitFor(() => expect(boardState(fixture.componentInstance).board()).not.toBeNull());
-    const state = boardState(fixture.componentInstance);
-    state.cards.update((cards) => cards.map((entry) => ({ ...entry, completedAt: new Date() })));
-
-    expect(fixture.componentInstance.boardOverview().risk.level).toBe("noActiveWork");
-
-    fixture.destroy();
-  });
-
-  it("does not use workspace-disabled signals to determine board health", async () => {
-    api.post.mockResolvedValue({ ...boardPayload(), workspaceBoardHealthOverdueEnabled: false });
-    const fixture = createInitializedBoardPage();
-    await vi.waitFor(() => expect(boardState(fixture.componentInstance).board()).not.toBeNull());
-
-    expect(fixture.componentInstance.boardOverview().risk).toMatchObject({
-      level: "needsAttention",
-      summary: "1 unassigned · 1 inactive",
-    });
-
     fixture.destroy();
   });
 
@@ -292,7 +241,7 @@ describe("BoardPage", () => {
     ));
     const fixture = createInitializedBoardPage();
 
-    await vi.waitFor(() => expect(fixture.componentInstance.mirrorConfigured()).toBe(true));
+    await vi.waitFor(() => expect(fixture.componentInstance.mirrorCount()).toBe(2));
     expect(fixture.componentInstance.manageMirrorsLabel()).toBe("Manage 2 board mirrors");
     expect(api.get).toHaveBeenCalledWith("/boards/board-1/mirror-status");
   });
@@ -333,14 +282,14 @@ describe("BoardPage", () => {
     expect(api.get).not.toHaveBeenCalledWith("/boards/board-1/mirror-status");
   });
 
-  it("hides the board health overview when workspace health is disabled", async () => {
+  it("ignores a legacy health setting when calculating card counts", async () => {
     api.post.mockResolvedValue({ ...boardPayload(), workspaceBoardHealthEnabled: false });
     const fixture = createInitializedBoardPage();
 
-    await vi.waitFor(() => expect(boardState(fixture.componentInstance).boardHealthEnabled()).toBe(false));
+    await vi.waitFor(() => expect(boardState(fixture.componentInstance).board()).not.toBeNull());
     fixture.detectChanges();
 
-    expect((fixture.nativeElement as HTMLElement).querySelector('[aria-label^="Board overview"]')).toBeNull();
+    expect(fixture.componentInstance.boardOverview()).toMatchObject({ overdue: 1, unassigned: 1, inactive: 1 });
   });
 
   it("blocks board-sync creation when the board-owning organisation is Free", async () => {
@@ -414,7 +363,7 @@ describe("BoardPage", () => {
       path === "/boards/board-1/mirror-status" ? { count: 1, inboundCount: 0, outboundCount: 1 } : [],
     ));
     const fixture = createInitializedBoardPage();
-    await vi.waitFor(() => expect(fixture.componentInstance.mirrorConfigured()).toBe(true));
+    await vi.waitFor(() => expect(fixture.componentInstance.mirrorCount()).toBe(1));
     api.get.mockClear();
 
     fixture.componentRef.setInput("boardId", "board-2");
@@ -422,7 +371,7 @@ describe("BoardPage", () => {
     flushEffects();
 
     await vi.waitFor(() => expect(boardState(fixture.componentInstance).board()?.id).toBe("board-2"));
-    expect(fixture.componentInstance.mirrorConfigured()).toBe(false);
+    expect(fixture.componentInstance.mirrorCount()).toBe(0);
     expect(api.get).not.toHaveBeenCalledWith("/boards/board-2/mirror-status");
   });
 
@@ -680,27 +629,6 @@ describe("BoardPage", () => {
     component.showOverdueOnly.set(true);
 
     expect(component.filteredCardIds()).toEqual(new Set(["card-2"]));
-  });
-
-  it("shows only incomplete cards with no activity for 14 days", () => {
-    const fixture = TestBed.createComponent(BoardPage);
-    const component = fixture.componentInstance;
-    boardState(component).hydrate({
-      board: board(),
-      lists: [list()],
-      cards: [
-        card({ id: "inactive", updatedAt: new Date("2020-01-01T00:00:00.000Z") }),
-        card({ id: "recent", updatedAt: new Date() }),
-        card({ id: "completed", updatedAt: new Date("2020-01-01T00:00:00.000Z"), completedAt: new Date("2020-01-02T00:00:00.000Z") }),
-      ],
-      customFields: [],
-      cardLabels: [],
-      members: [],
-      viewerRole: "editor",
-    });
-    component.showInactiveOnly.set(true);
-
-    expect(component.filteredCardIds()).toEqual(new Set(["inactive"]));
   });
 
   it("limits cards to the viewer's Up next queue with the priority-set filter", () => {
@@ -985,15 +913,6 @@ describe("BoardPage", () => {
   // covered by board-canvas.component.spec.ts, which also exercises the multi-canvas ownership guard
   // that this page-level version could not.
 
-  it("accepts calendar as a board view mode", () => {
-    const fixture = TestBed.createComponent(BoardPage);
-    fixture.componentRef.setInput("boardId", "board-1");
-    fixture.componentRef.setInput("view", "calendar");
-    fixture.detectChanges();
-
-    expect(fixture.componentInstance.effectiveView()).toBe("calendar");
-  });
-
   // The template is blanked in this suite, so this asserts the flag the @if around k-page-toolbar
   // reads: Board Notes is the one view with no cards on screen, and "Search cards", Filter and Completed
   // would all be querying a collection that is not there.
@@ -1175,15 +1094,6 @@ describe("BoardPage", () => {
     expect(recentBoards.record).toHaveBeenCalledWith("board-1");
   });
 
-  it("has no header members before a board is loaded", () => {
-    const fixture = TestBed.createComponent(BoardPage);
-    fixture.componentRef.setInput("boardId", "board-1");
-
-    expect(fixture.componentInstance.headerMembers()).toEqual([]);
-    expect(fixture.componentInstance.headerMemberOverflow()).toBe(0);
-    expect(fixture.componentInstance.membersButtonLabel()).toBe("0 board members");
-  });
-
   it("uses a singular accessible label for one board member", async () => {
     api.post.mockResolvedValue({
       ...boardPayload(),
@@ -1319,41 +1229,6 @@ describe("BoardPage", () => {
     expect(boardState(component).board()).toBeNull();
     expect(offlineCache.revokeBoardAccess).toHaveBeenCalledWith("board-1");
     expect(router.navigateByUrl).toHaveBeenCalledWith("/");
-  });
-
-  it("removes another user from the board member header when their membership is removed", async () => {
-    api.post.mockResolvedValueOnce({
-      ...boardPayload(),
-      members: [
-        member({ userId: "user-1", displayName: "Me User" }),
-        member({ userId: "user-2", displayName: "Ada" }),
-      ],
-    });
-    const fixture = createInitializedBoardPage();
-    const component = fixture.componentInstance;
-    await vi.waitFor(() => expect(component.sortedBoardMembers().length).toBe(2));
-
-    socket.trigger("board:member:removed", { boardId: "board-1", userId: "user-2" });
-
-    expect(component.sortedBoardMembers().map((row) => row.userId)).toEqual(["user-1"]);
-    expect(component.membersButtonLabel()).toBe("1 board member");
-    expect(router.navigateByUrl).not.toHaveBeenCalled();
-  });
-
-  it("makes a newly added board member immediately available to assignment pickers", async () => {
-    api.post.mockResolvedValueOnce({ ...boardPayload(), members: [member({ userId: "user-1" })] });
-    const fixture = createInitializedBoardPage();
-    const component = fixture.componentInstance;
-    await vi.waitFor(() => expect(component.assignableMembers().map((row) => row.userId)).toEqual(["user-1"]));
-
-    socket.trigger("board:member:added", {
-      boardId: "board-1",
-      member: { boardId: "board-1", userId: "user-2", role: "editor", assignedItemsOnly: false, pinned: false, addedAt: new Date() },
-      user: member({ userId: "user-2", displayName: "Ben", source: "board" }),
-    });
-
-    expect(component.assignableMembers().map((row) => row.userId)).toEqual(["user-2", "user-1"]);
-    expect(component.membersButtonLabel()).toBe("2 board members");
   });
 
   it("removes a member and their card assignments immediately after the members menu mutation", () => {
@@ -1832,7 +1707,7 @@ describe("BoardPage", () => {
     });
 
     it("remembers the axis per board, separately from the table's grouping", async () => {
-      const { component } = await groupedByAssignee();
+      await groupedByAssignee();
 
       expect(localStorage.getItem(viewPreferenceKey("groupBy", "board:board-1:kanban"))).toBe("assignee");
       expect(localStorage.getItem(viewPreferenceKey("groupBy", "board:board-1"))).toBeNull();

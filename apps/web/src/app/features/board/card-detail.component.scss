@@ -2679,7 +2679,10 @@ button.member-avatar {
 
   &:hover {
     background: var(--surface-hover);
+  }
 
+  &:hover,
+  &:focus-within {
     .attach-actions {
       opacity: 1;
     }
@@ -2693,6 +2696,12 @@ button.member-avatar {
   flex: 0 0 auto;
   opacity: 0;
   transition: opacity 0.12s;
+
+  // Phones and touch devices have no reliable hover, so the cover/download/delete actions would be
+  // invisible and effectively unreachable. Same query as the checklist item menu above.
+  @media (max-width: 767.98px), (hover: none) {
+    opacity: 1;
+  }
 }
 
 .attach-thumb {

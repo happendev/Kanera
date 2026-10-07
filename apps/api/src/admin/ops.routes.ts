@@ -20,8 +20,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../db.js";
 import { badRequest, notFound } from "../lib/errors.js";
 import { writeAdminAudit } from "./audit.js";
-
-const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
+import { iso } from "./helpers.js";
 
 // Keep one mapping for queue filtering and health aggregation even though the persisted states are
 // now readable text; it makes the route exhaustive against the shared status contract.

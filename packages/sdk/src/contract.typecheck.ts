@@ -1,8 +1,9 @@
 import type { z } from "zod";
 import type {
   bulkArchiveCardsBody, bulkPatchCardAssigneesBody, bulkPatchCardLabelsBody,
-  bulkSetCardCustomFieldBody, createCardBody, createChecklistBody, createChecklistItemBody,
-  moveCardBody, setCustomFieldValueBody, updateCardBody, updateChecklistItemBody,
+  bulkSetCardCustomFieldBody, bulkUpdateChecklistItemsBody, createCardBody, createChecklistBody, createChecklistItemBody,
+  createChecklistItemsBody, moveCardBody, setCustomFieldValueBody, updateCardBody, updateChecklistItemBody,
+  updateChecklistItemsBody,
 } from "@kanera/shared/dto";
 import type { createCardPriorityBody, moveCardPriorityBody } from "@kanera/shared/dto";
 import type { createCommentBody } from "@kanera/shared/dto";
@@ -15,7 +16,8 @@ import type { createBoardBody, createWorkspaceBody } from "@kanera/shared/dto";
 import type { createWebhookEndpointBody, updateWebhookEndpointBody } from "@kanera/shared/dto";
 import type { WorkspaceTemplateId as SharedWorkspaceTemplateId } from "@kanera/shared/workspace-templates";
 import type {
-  CreateCardInput, CreateChecklistItemInput, CustomFieldValueInput, UpdateCardInput, UpdateChecklistItemInput,
+  ChecklistItemUpdate, CreateCardInput, CreateChecklistInput, CreateChecklistItemInput, CustomFieldValueInput,
+  NewChecklistItemInput, UpdateAllChecklistItemsInput, UpdateCardInput, UpdateChecklistItemInput,
 } from "./resources/cards.js";
 import type { CreateNoteInput, UpdateNoteInput } from "./resources/notes.js";
 import type { StartRunInput, UpdateRunInput } from "./resources/runs.js";
@@ -68,9 +70,13 @@ type _MoveSeparator = AssertAssignable<
 >;
 
 // Checklists. The item label is `text`; a live run against the API is what caught `title` here.
-type _CreateChecklist = AssertAssignable<{ title: string; parentItemId?: string | null }, z.input<typeof createChecklistBody>>;
+type _CreateChecklist = AssertAssignable<CreateChecklistInput, z.input<typeof createChecklistBody>>;
 type _CreateItem = AssertAssignable<CreateChecklistItemInput, z.input<typeof createChecklistItemBody>>;
+type _CreateItems = AssertAssignable<{ items: NewChecklistItemInput[]; afterItemId?: string | null }, z.input<typeof createChecklistItemsBody>>;
 type _UpdateItem = AssertAssignable<UpdateChecklistItemInput, z.input<typeof updateChecklistItemBody>>;
+type _UpdateItems = AssertAssignable<{ updates: ChecklistItemUpdate[] }, z.input<typeof updateChecklistItemsBody>>;
+// The bulk route applies to every item and is strict, so the SDK input must not carry a selector.
+type _UpdateAllItems = AssertAssignable<UpdateAllChecklistItemsInput, z.input<typeof bulkUpdateChecklistItemsBody>>;
 
 // Bulk mutations and priority anchors. Both were wrong on the first live run — the bulk endpoints
 // take a `mode` plus one id list, and priority anchors are bare `afterId`/`beforeId`.

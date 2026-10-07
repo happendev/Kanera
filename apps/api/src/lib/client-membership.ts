@@ -1,12 +1,10 @@
 import { cards, clientMembers, clients, notifications, users, workspaceMembers, workspaces, type ClientRole } from "@kanera/shared/schema";
 import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
-import { db, type Db } from "../db.js";
+import { db, type Tx } from "../db.js";
 import { inboxVisibleNotificationCondition } from "./notification-visibility.js";
 import { withSignedMedia } from "./media-keys.js";
 
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
-
-export function activeClientMembership(clientId: string, userId: string) {
+function activeClientMembership(clientId: string, userId: string) {
   return and(
     eq(clientMembers.clientId, clientId),
     eq(clientMembers.userId, userId),

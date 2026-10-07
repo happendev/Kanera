@@ -21,7 +21,7 @@ import {
 import { and, asc, countDistinct, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import type { AuthClaims } from "../../auth/plugin.js";
-import { db, type Db } from "../../db.js";
+import { db, type Tx } from "../../db.js";
 import { assertCardAccess, isOrgAdmin } from "../../lib/access.js";
 import { loadAccessibleBoards, type AccessibleBoard } from "../../lib/accessible-boards.js";
 import { recordActivity } from "../../lib/activity.js";
@@ -38,7 +38,6 @@ import { rebalanceCardPriorities } from "../../lib/rebalance.js";
 import { emitCardPriorityInvalidated } from "../../realtime/emit.js";
 import { assertGlobalWorkSeparatorContext } from "../global-work-separators/routes.js";
 
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 type QueueEntry = { id: string; cardId: string; position: string };
 
 function isWorkspaceCredential(auth: AuthClaims): boolean {

@@ -1,23 +1,18 @@
 import { dto } from "@kanera/shared";
 import { boardMembers, boards, cards, clientGuestSeats, clientMembers, clients, users, workspaces } from "@kanera/shared/schema";
 import { and, asc, desc, eq, ilike, isNull, sql } from "drizzle-orm";
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { db } from "../db.js";
 import { env } from "../env.js";
-import { badRequest, forbidden, notFound } from "../lib/errors.js";
+import { badRequest, notFound } from "../lib/errors.js";
 import { getOrgStorageUsage, isPaidTier } from "../lib/entitlements.js";
 import { withSignedMedia } from "../lib/media-keys.js";
 import { convertClientPlan } from "../lib/plan-conversion.js";
 import { getEntitlements } from "../lib/tier-limits.js";
 import { writeAdminAudit } from "./audit.js";
+import { requireSuperadmin, iso } from "./helpers.js";
 
 // Destructive actions (delete) are superadmin-only; staff get read + non-destructive mutations.
-function requireSuperadmin(req: FastifyRequest) {
-  if (req.adminAuth.role !== "superadmin") throw forbidden("superadmin required");
-}
-
-const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
-
 async function loadOrgOr404(clientId: string) {
   const [row] = await db.select().from(clients).where(eq(clients.id, clientId)).limit(1);
   if (!row) throw notFound("organisation not found");

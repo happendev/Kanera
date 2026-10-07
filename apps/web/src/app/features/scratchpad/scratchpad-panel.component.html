@@ -267,8 +267,8 @@
     </div>
     } @else if (loadError()) {
     <div class="panel-state">
-      <k-empty-state plain icon="cloud-off" title="Scratchpad unavailable" [text]="loadError()">
-        <button type="button" class="sm" (click)="scratchpad.refresh()">Try again</button>
+      <k-empty-state plain icon="alert-circle" title="Couldn’t load Scratchpad" [text]="loadError()">
+        <button type="button" class="ghost state-retry-btn" (click)="scratchpad.refresh()">Try again</button>
       </k-empty-state>
     </div>
     } @else if (showEmptyState()) {

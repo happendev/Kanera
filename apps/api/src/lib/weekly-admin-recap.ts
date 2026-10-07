@@ -61,7 +61,7 @@ export async function runWeeklyAdminRecapSweep(deps: WeeklyAdminRecapDeps, now =
   return 1;
 }
 
-export async function buildWeeklyAdminRecap(
+async function buildWeeklyAdminRecap(
   database: Db,
   lastMonday: Date,
   thisMonday: Date,

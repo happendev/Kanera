@@ -1,4 +1,4 @@
-import { computed, inject, Injectable, signal } from "@angular/core";
+import { inject, Injectable, signal } from "@angular/core";
 import type { CanActivateFn, CanDeactivateFn } from "@angular/router";
 import { ConfirmService } from "../../shared/confirm.service";
 
@@ -6,8 +6,6 @@ import { ConfirmService } from "../../shared/confirm.service";
 export class ImportNavigationGuardService {
   private readonly confirm = inject(ConfirmService);
   private readonly runningImport = signal(false);
-
-  readonly isImportRunning = computed(() => this.runningImport());
 
   setImportRunning(running: boolean): void {
     this.runningImport.set(running);

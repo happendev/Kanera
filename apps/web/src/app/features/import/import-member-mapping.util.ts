@@ -10,7 +10,7 @@ export interface ImportTargetMemberIdentity {
   email: string;
 }
 
-export function normalizedIdentity(value: string | null | undefined): string {
+function normalizedIdentity(value: string | null | undefined): string {
   return (value ?? "").trim().toLocaleLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/gu, "");
 }
 

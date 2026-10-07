@@ -1,7 +1,7 @@
 import type { AttachmentSource, CardAttachmentRow } from "@kanera/shared/dto";
 import { ATTACHMENT_SOURCES } from "@kanera/shared/dto";
 import { ACTIVITY_ACTION, cardAttachments, cards, comments, users } from "@kanera/shared/schema";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertCardAccess } from "../../lib/access.js";
@@ -18,7 +18,7 @@ import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { readAttachmentUpload } from "../../lib/read-attachment-upload.js";
 import { touchCardActivity } from "../../lib/card-activity.js";
 import { fetchReactionsByComment } from "../../lib/comment-reactions.js";
-import { AppError, badRequest, forbidden, notFound } from "../../lib/errors.js";
+import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { assertCanUploadAttachment, getUploadEntitlements, isStorageFull, storageQuotaExceededError } from "../../lib/entitlements.js";
 import { stripAttachmentReferences } from "../../lib/strip-attachment-refs.js";
 import { dominantColorFromThumbnail, generateCoverImage, generateThumbnail, isProcessableImage } from "../../lib/image.js";
@@ -26,31 +26,10 @@ import { signedAvatarUrl, signEmbeddedMediaUrls, unsignedMediaUrl } from "../../
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { attachmentCoverStorageKey, attachmentThumbnailStorageKey, cardAttachmentStorageKey } from "../../lib/storage/keys.js";
 import { emitToBoard } from "../../realtime/emit.js";
-import type { StorageProvider } from "../../lib/storage/types.js";
-
-const attachmentRowColumns = {
-  id: cardAttachments.id,
-  cardId: cardAttachments.cardId,
-  fileName: cardAttachments.fileName,
-  mimeType: cardAttachments.mimeType,
-  byteSize: cardAttachments.byteSize,
-  url: cardAttachments.url,
-  fileKey: cardAttachments.fileKey,
-  thumbnailUrl: cardAttachments.thumbnailUrl,
-  thumbnailFileKey: cardAttachments.thumbnailFileKey,
-  coverImageUrl: cardAttachments.coverImageUrl,
-  coverImageFileKey: cardAttachments.coverImageFileKey,
-  coverImageWidth: cardAttachments.coverImageWidth,
-  coverImageHeight: cardAttachments.coverImageHeight,
-  coverImageColor: cardAttachments.coverImageColor,
-  createdAt: cardAttachments.createdAt,
-  uploadedById: cardAttachments.uploadedById,
-  uploadedByName: users.displayName,
-  uploadedByAvatarUrl: users.avatarUrl,
-  uploadedByClientId: users.clientId,
-  source: cardAttachments.source,
-  commentId: cardAttachments.commentId,
-} as const;
+import { putAttachmentFile } from "../../lib/attachment-upload.js";
+import { assertCardActive } from "../../lib/card-guards.js";
+import { commentAuthorColumns } from "../../lib/comment-rows.js";
+import { attachmentRowColumns } from "../../lib/attachment-rows.js";
 
 type AttachmentRowWithKeys = CardAttachmentRow & {
   fileKey: string;
@@ -85,10 +64,6 @@ function isAttachmentSource(value: unknown): value is AttachmentSource {
   return typeof value === "string" && (ATTACHMENT_SOURCES as readonly string[]).includes(value);
 }
 
-function assertCardActive(card: Pick<typeof cards.$inferSelect, "archivedAt">) {
-  if (card.archivedAt) throw badRequest("archived cards are read-only");
-}
-
 function attachmentResponse<T extends object>(attachment: T, exposeCoverMetadata: boolean): T {
   if (exposeCoverMetadata) return attachment;
   // The app API needs derivative metadata for stable card rendering and cheap drag previews, but
@@ -102,14 +77,6 @@ function attachmentResponse<T extends object>(attachment: T, exposeCoverMetadata
   delete response.coverImageHeight;
   delete response.coverImageColor;
   return response;
-}
-
-async function putAttachmentFile(storage: StorageProvider, key: string, body: Buffer, contentType: string) {
-  try {
-    await storage.put(key, body, contentType);
-  } catch {
-    throw new AppError(503, "STORAGE_UNAVAILABLE", "attachment storage unavailable");
-  }
 }
 
 export async function cardAttachmentRoutes(app: FastifyInstance, options: { exposeCoverMetadata?: boolean } = {}) {
@@ -251,7 +218,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
     // Uploads that do not become the cover are still activity on the card.
     if (!coverChanged) await touchCardActivity(cardId, req.auth.cid);
 
-    emitToBoard(card.boardId, "card:attachment:created", {
+    await emitToBoard(card.boardId, "card:attachment:created", {
       boardId: card.boardId,
       cardId,
       attachment,
@@ -260,7 +227,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
     if (coverChanged) {
       const [updatedCard] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
       if (updatedCard) {
-        emitToBoard(card.boardId, "card:updated", { boardId: card.boardId, card: updatedCard });
+        await emitToBoard(card.boardId, "card:updated", { boardId: card.boardId, card: updatedCard });
       }
     }
 
@@ -378,7 +345,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
       .where(eq(cards.id, cardId))
       .returning();
 
-    emitToBoard(card.boardId, "card:updated", { boardId: card.boardId, card: updated! });
+    await emitToBoard(card.boardId, "card:updated", { boardId: card.boardId, card: updated! });
 
     await recordActivity(db, {
       boardId: card.boardId,
@@ -464,7 +431,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
       }
     }
 
-    emitToBoard(card.boardId, "card:attachment:deleted", {
+    await emitToBoard(card.boardId, "card:attachment:deleted", {
       boardId: card.boardId,
       cardId,
       attachmentId,
@@ -511,8 +478,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
           apiKeyId: comments.apiKeyId,
           apiKeyName: comments.apiKeyName,
           agentName: comments.agentName,
-          authorName: sql<string>`case when ${comments.authorKind} = 'system' then 'Kanera' when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
-          authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} in ('system', 'apiKey') then null else ${users.avatarUrl} end`,
+          ...commentAuthorColumns,
           authorClientId: users.clientId,
           body: comments.body,
           editedAt: comments.editedAt,
@@ -531,12 +497,12 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
           body: signEmbeddedMediaUrls(comment.body, req.auth.cid) ?? comment.body,
           reactions: reactionsMap.get(updatedComment.id) ?? [],
         };
-        emitToBoard(card.boardId, "comment:updated", {
+        await emitToBoard(card.boardId, "comment:updated", {
           boardId: card.boardId,
           cardId,
           comment: enriched,
         });
-        emitToBoard(card.boardId, "card:feedItem:updated", {
+        await emitToBoard(card.boardId, "card:feedItem:updated", {
           boardId: card.boardId,
           cardId,
           item: { type: "comment", data: enriched },
@@ -547,7 +513,7 @@ export async function cardAttachmentRoutes(app: FastifyInstance, options: { expo
     if (coverChanged || descriptionChanged) {
       const [updatedCard] = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
       if (updatedCard) {
-        emitToBoard(card.boardId, "card:updated", { boardId: card.boardId, card: { ...updatedCard, description: signEmbeddedMediaUrls(updatedCard.description, req.auth.cid) } });
+        await emitToBoard(card.boardId, "card:updated", { boardId: card.boardId, card: { ...updatedCard, description: signEmbeddedMediaUrls(updatedCard.description, req.auth.cid) } });
       }
     } else {
       // A plain attachment deletion does not otherwise mutate the card row.

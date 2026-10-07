@@ -1,4 +1,5 @@
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { toNodeHandler } from "@modelcontextprotocol/node";
+import { createMcpHandler } from "@modelcontextprotocol/server";
 import { resolveClientIp } from "@kanera/shared/client-ip";
 import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -7,6 +8,7 @@ import { pathToFileURL } from "node:url";
 import { env } from "./env.js";
 import { McpDistributedRateLimiter, type DistributedRateLimitResult } from "./distributed-rate-limit.js";
 import { mcpAuthFailures, mcpMetricsResponse, observeMcpHttpRequest, trackActiveMcpRequest } from "./metrics.js";
+import { KaneraApiError, KaneraClient } from "./kanera-client.js";
 import { createKaneraMcpServer } from "./server.js";
 
 const require = createRequire(import.meta.url);
@@ -115,8 +117,21 @@ export function mcpClientIp(req: IncomingMessage, trustProxy: boolean) {
   });
 }
 
+// Deliberately uncached: the contract (and the lifecycle itest) is that a revoked credential gets
+// the 401 challenge on its very next discovery, so a remembered "valid" verdict would be a window
+// in which a revoked key still receives a capability list.
+async function credentialRevoked(token: string, publicApiUrl: string | undefined) {
+  try {
+    await new KaneraClient({ baseUrl: publicApiUrl ?? env.KANERA_PUBLIC_API_URL, apiKey: token, timeoutMs: env.MCP_UPSTREAM_TIMEOUT_MS }).get("session");
+    return false;
+  } catch (error) {
+    return error instanceof KaneraApiError && error.status === 401;
+  }
+}
+
 export function createMcpHttpHandler(options: {
   bodyMaxBytes?: number;
+  publicApiUrl?: string;
   ipRateLimitPerMinute?: number;
   keyRateLimitPerMinute?: number;
   rateLimitWindowMs?: number;
@@ -132,6 +147,19 @@ export function createMcpHttpHandler(options: {
   const tokenExchange = options.tokenExchange ?? exchangeMcpToken;
   const requestBuckets = new Map<string, RateLimitEntry>();
   let nextBucketSweepAt = 0;
+  // One SDK entry serves both protocol eras from the same per-request server factory: 2026-07-28
+  // requests (per-request _meta envelope) statelessly with the spec's header validation, and
+  // 2025-era initialize-based clients through the SDK's stateless legacy fallback. Bearer
+  // verification and token exchange happen above it; the factory receives the downstream token
+  // as pass-through authInfo and never derives credentials from request headers itself.
+  const mcpHandler = createMcpHandler(({ authInfo, era }) => createKaneraMcpServer({
+    apiKey: authInfo!.token,
+    publicApiUrl: options.publicApiUrl,
+    // The events draft is defined against 2026-07-28 only. Keeping it off the legacy era leaves
+    // what existing 2025-era clients (Claude, Codex, Cursor, opencode, ...) see unchanged.
+    events: era === "modern",
+  }), { legacy: "stateless", maxRequestBodySize: bodyMaxBytes });
+  const serveMcp = toNodeHandler(mcpHandler, { maxRequestBodySize: bodyMaxBytes });
 
   const localRateLimit = (bucketKey: string, limit: number, now: number) => {
     if (now >= nextBucketSweepAt) {
@@ -256,20 +284,28 @@ export function createMcpHttpHandler(options: {
         return;
       }
     }
-    const mcp = createKaneraMcpServer({ apiKey: downstreamToken });
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-    await mcp.connect(transport);
     try {
       const body = req.method === "POST" ? await readBody(req, bodyMaxBytes) : undefined;
-      await transport.handleRequest(req, res, body);
+      // Token shape alone is not authentication, and the SDK answers server/discover itself. Check
+      // discovery against the public API (live revocation for static keys and delegated OAuth) so
+      // a revoked credential gets the 401 challenge instead of a capability list. Only a definite
+      // 401 short-circuits: discovery carries nothing credential-specific, and failing it on an
+      // upstream outage would make negotiating clients abort the connection (a 5xx probe is a
+      // connect error, not an era verdict) when the outage may be brief.
+      if ((body as { method?: unknown } | undefined)?.method === "server/discover" && await credentialRevoked(downstreamToken, options.publicApiUrl)) {
+        mcpAuthFailures.inc({ reason: "revoked" });
+        if (env.MCP_SERVER_PUBLIC_URL) res.setHeader("www-authenticate", mcpAuthorizationChallenge(env.MCP_SERVER_PUBLIC_URL, "invalid_token"));
+        res.writeHead(401, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "invalid or revoked Kanera credential" }));
+        return;
+      }
+      await serveMcp(Object.assign(req, { auth: { token: downstreamToken, clientId: "kanera-mcp", scopes: [] } }), res, body);
     } catch (error) {
       if (!res.headersSent) {
         const statusCode = error instanceof RequestBodyError ? error.statusCode : 500;
         res.writeHead(statusCode, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: statusCode === 500 ? "internal server error" : error instanceof Error ? error.message : "invalid request" }));
       }
-    } finally {
-      await mcp.close();
     }
   };
 }

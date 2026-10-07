@@ -62,7 +62,6 @@ export const clients = pgTable(
     // Existing workspaces remain independent when an organisation changes its defaults.
     defaultCompletedCardsActiveDays: integer("default_completed_cards_active_days").notNull().default(DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS),
     defaultInactiveCardsDays: integer("default_inactive_cards_days").notNull().default(DEFAULT_INACTIVE_CARDS_DAYS),
-    defaultBoardHealthEnabled: boolean("default_board_health_enabled").notNull().default(true),
     // Explicitly excludes staff, demo, seed, test, and load-test organisations from product analytics.
     // This is deliberately not inferred from an email domain because analytics never receives email.
     analyticsExcluded: boolean("analytics_excluded").notNull().default(false),

@@ -1,5 +1,9 @@
 @use "../../../shared/page-styles";
 
+.board-settings-section + .board-settings-section {
+  margin-top: 24px;
+}
+
 // Per-board access panel. Reuses the global guest-list/guest-row grid, but with three columns
 // (member / role / action) instead of the guests page's four.
 .board-access-panel {

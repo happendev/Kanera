@@ -1,3 +1,4 @@
+import { createComponentFixture } from "../../test/component-fixture";
 import { ChangeDetectionStrategy, provideZonelessChangeDetection, signal } from "@angular/core";
 import { Component } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
@@ -56,7 +57,7 @@ describe("AvatarComponent", () => {
       providers: [provideZonelessChangeDetection(), { provide: PresenceService, useValue: presence }],
     }).compileComponents();
 
-    const fixture = TestBed.createComponent(AvatarHostComponent);
+    const fixture = createComponentFixture(AvatarHostComponent);
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
 
@@ -78,7 +79,7 @@ describe("AvatarComponent", () => {
       providers: [provideZonelessChangeDetection(), { provide: PresenceService, useValue: presence }],
     }).compileComponents();
 
-    const fixture = TestBed.createComponent(AvatarHostComponent);
+    const fixture = createComponentFixture(AvatarHostComponent);
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
 
@@ -100,7 +101,7 @@ describe("AvatarComponent", () => {
       providers: [provideZonelessChangeDetection(), { provide: PresenceService, useValue: presence }],
     }).compileComponents();
 
-    const fixture = TestBed.createComponent(FallbackColorAvatarHostComponent);
+    const fixture = createComponentFixture(FallbackColorAvatarHostComponent);
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
 
@@ -120,7 +121,7 @@ describe("AvatarComponent", () => {
       providers: [provideZonelessChangeDetection(), { provide: PresenceService, useValue: presence }],
     }).compileComponents();
 
-    const fixture = TestBed.createComponent(FallbackColorAvatarHostComponent);
+    const fixture = createComponentFixture(FallbackColorAvatarHostComponent);
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
 
@@ -138,7 +139,7 @@ describe("AvatarComponent", () => {
       providers: [provideZonelessChangeDetection(), { provide: PresenceService, useValue: presence }],
     }).compileComponents();
 
-    const fixture = TestBed.createComponent(AvatarHostComponent);
+    const fixture = createComponentFixture(AvatarHostComponent);
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
 
@@ -156,7 +157,7 @@ describe("AvatarComponent", () => {
       providers: [provideZonelessChangeDetection(), { provide: PresenceService, useValue: presence }],
     }).compileComponents();
 
-    const fixture = TestBed.createComponent(PresenceAvatarHostComponent);
+    const fixture = createComponentFixture(PresenceAvatarHostComponent);
     fixture.componentInstance.userId.set("online-user");
     fixture.componentInstance.workspaceId.set("workspace-1");
     fixture.detectChanges();
@@ -171,7 +172,7 @@ describe("AvatarComponent", () => {
       providers: [provideZonelessChangeDetection(), { provide: PresenceService, useValue: presence }],
     }).compileComponents();
 
-    const fixture = TestBed.createComponent(PresenceAvatarHostComponent);
+    const fixture = createComponentFixture(PresenceAvatarHostComponent);
     fixture.componentInstance.showPresence.set(true);
     fixture.componentInstance.userId.set("online-user");
     fixture.componentInstance.workspaceId.set("workspace-1");
@@ -197,7 +198,7 @@ describe("AvatarComponent", () => {
         providers: [provideZonelessChangeDetection(), { provide: PresenceService, useValue: presence }],
       }).compileComponents();
 
-      const fixture = TestBed.createComponent(PresenceAvatarHostComponent);
+      const fixture = createComponentFixture(PresenceAvatarHostComponent);
       fixture.componentInstance.showPresence.set(true);
       fixture.componentInstance.workspaceId.set("workspace-1");
       fixture.componentInstance.userId.set("online-user");
@@ -251,7 +252,7 @@ describe("AvatarComponent", () => {
         providers: [provideZonelessChangeDetection(), { provide: PresenceService, useValue: presence }],
       }).compileComponents();
 
-      const fixture = TestBed.createComponent(PresenceAvatarHostComponent);
+      const fixture = createComponentFixture(PresenceAvatarHostComponent);
       fixture.componentInstance.showTooltip.set(false);
       fixture.detectChanges();
 

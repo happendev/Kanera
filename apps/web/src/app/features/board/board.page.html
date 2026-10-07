@@ -54,28 +54,21 @@
   <!-- Board-level chrome actions. These moved up from row 2 so that row is purely query controls. -->
   @if (state.board(); as board) {
   <span phIcons class="board-icon-cluster">
-    @if (state.boardHealthEnabled()) {
     <span class="menu-anchor">
-      <button #overviewTrigger type="button" class="k-toolbar-icon-btn is-ghost board-overview-trigger" [class.is-open]="overviewOpen()" [attr.data-risk]="boardOverview().risk.level" (click)="toggleOverview()" [attr.aria-label]="'Board overview · ' + boardOverview().risk.label" [attr.aria-expanded]="overviewOpen()" [kTooltip]="'Board overview · ' + boardOverview().risk.label">
+      <button #overviewTrigger type="button" class="k-toolbar-icon-btn is-ghost board-overview-trigger" [class.is-open]="overviewOpen()" (click)="toggleOverview()" aria-label="Board overview" [attr.aria-expanded]="overviewOpen()" kTooltip="Board overview">
         <i class="ti ti-radar-2"></i>
-        <span class="board-overview-trigger-status" aria-hidden="true"></span>
       </button>
       @if (overviewOpen()) {
       <section class="board-overview" kAnchoredPanel [apAnchor]="overviewTrigger" [apPlacement]="overviewPlacement" (apDismissed)="overviewOpen.set(false)" aria-label="Board overview">
         @let overview = boardOverview();
         <div class="board-overview-head">
-          <div><strong>Board overview</strong><span>Automatic work-risk signals</span></div>
-          <span class="board-overview-risk" [attr.data-risk]="overview.risk.level">
-            <i class="ti ti-activity-heartbeat"></i>{{ overview.risk.label }}
-          </span>
+          <div><strong>Board overview</strong><span>Card counts and upcoming work</span></div>
         </div>
-        <p class="board-overview-risk-summary">{{ overview.risk.summary }}</p>
-        <k-docs-link class="spaced" path="board-health" label="How board health is calculated" />
         <div class="board-overview-metrics">
-          <button type="button" [class.is-active]="boardRiskFilter() === null" (click)="setBoardRiskFilter(null)" kTooltip="Show all active cards"><strong>{{ overview.active }}</strong><span>Active</span></button>
-          <button type="button" [class.needs-attention]="overview.overdue > 0" [class.is-active]="boardRiskFilter() === 'overdue'" [disabled]="overview.overdue === 0" (click)="setBoardRiskFilter('overdue')" kTooltip="Show overdue cards"><strong>{{ overview.overdue }}</strong><span>Overdue</span></button>
-          <button type="button" [class.is-active]="boardRiskFilter() === 'unassigned'" [disabled]="overview.unassigned === 0" (click)="setBoardRiskFilter('unassigned')" kTooltip="Show unassigned cards"><strong>{{ overview.unassigned }}</strong><span>Unassigned</span></button>
-          <button type="button" [class.is-active]="boardRiskFilter() === 'inactive'" [disabled]="overview.inactive === 0" (click)="setBoardRiskFilter('inactive')" [kTooltip]="inactiveCardsTooltip()"><strong>{{ overview.inactive }}</strong><span>Inactive</span></button>
+          <button type="button" [class.is-active]="boardCardFilter() === null" (click)="setBoardCardFilter(null)" kTooltip="Show all active cards"><strong>{{ overview.active }}</strong><span>Active</span></button>
+          <button type="button" [class.needs-attention]="overview.overdue > 0" [class.is-active]="boardCardFilter() === 'overdue'" [disabled]="overview.overdue === 0" (click)="setBoardCardFilter('overdue')" kTooltip="Show overdue cards"><strong>{{ overview.overdue }}</strong><span>Overdue</span></button>
+          <button type="button" [class.is-active]="boardCardFilter() === 'unassigned'" [disabled]="overview.unassigned === 0" (click)="setBoardCardFilter('unassigned')" kTooltip="Show unassigned cards"><strong>{{ overview.unassigned }}</strong><span>Unassigned</span></button>
+          <button type="button" [class.is-active]="boardCardFilter() === 'inactive'" [disabled]="overview.inactive === 0" (click)="setBoardCardFilter('inactive')" [kTooltip]="inactiveCardsTooltip()"><strong>{{ overview.inactive }}</strong><span>Inactive</span></button>
         </div>
         @if (overview.dueSoon > 0) {
         <div class="board-overview-callout"><i class="ti ti-calendar-due"></i>{{ overview.dueSoon }} due in the next 7 days</div>
@@ -95,7 +88,6 @@
       </section>
       }
     </span>
-    }
     <span class="menu-anchor watcher-popover-wrap">
       <button type="button" class="k-toolbar-icon-btn is-ghost watch-btn" [class.is-watching]="isWatchingBoard()" [class.is-open]="watcherPopoverOpen()" (click)="toggleBoardWatcherPopover()" [attr.aria-label]="isWatchingBoard() ? 'Board watchers' : 'Watch board'"
         [attr.aria-expanded]="watcherPopoverOpen()" kTooltip="Board watchers">
@@ -161,6 +153,7 @@
     [options]="viewOptions()"
     [value]="effectiveView()"
     ariaLabel="View mode"
+    [autoLabels]="true"
     (valueChange)="setView($event)"
   />
 </k-page-header>
@@ -357,7 +350,7 @@
   </k-empty-state>
   } @else {
   @for (l of renderedLists(); track l.id) {
-  <k-list [list]="l" [boardId]="boardId()" [allLists]="state.visibleLists()" [cards]="cardsByList().get(l.id) ?? []" [items]="itemsByList().get(l.id) ?? []" [filteredCardIds]="filteredCardIds()" [hideDetachedSeparators]="isFiltered()" [customFields]="state.customFields()"
+  <k-list [list]="l" [boardId]="boardId()" [allLists]="state.visibleLists()" [cards]="cardsByList().get(l.id) ?? []" [items]="itemsByList().get(l.id) ?? []" [filteredCardIds]="filteredCardIds()" [hideDetachedSeparators]="isFiltered()" [defaultSeparatorColor]="boardAccentColor()" [customFields]="state.customFields()"
     [customFieldValuesByCardAndField]="state.customFieldValuesByCardAndField()" [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [attachmentCountByCard]="state.attachmentCountByCard()"
     [coverAttachmentById]="state.coverAttachmentById()" [commentCounts]="state.commentCounts()" [selectedCardId]="openCardId()" [canEdit]="state.canEdit() && !showArchived()" [canEditRole]="state.canEditRole() && !showArchived()"
     [bulkSelectedCardIds]="bulkSelectedCardIds()" [priorityRanksByCard]="viewerPriorityRanks()"

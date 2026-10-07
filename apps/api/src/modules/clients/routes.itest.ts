@@ -9,10 +9,10 @@ import { test } from "node:test";
 import type Stripe from "stripe";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
-import { hashRefresh } from "../../auth/jwt.js";
 import { hashPassword } from "../../auth/password.js";
 import { setStripeClientForTests } from "../../lib/billing.js";
 import { buildIntegrationServer } from "../../test/integration.js";
+import { hashOpaqueToken } from "../../lib/tokens.js";
 
 async function signupOwner(app: Awaited<ReturnType<typeof buildIntegrationServer>>, email: string, orgName: string) {
   const signup = await app.inject({
@@ -963,7 +963,7 @@ void test("account role updates and removal protect owners, clean memberships, r
     await db.update(clients).set({ billingStatus: "active", stripeSubscriptionItemId: "si_account" }).where(eq(clients.id, owner.user.clientId));
     await db.insert(refreshTokens).values({
       userId: member.id,
-      tokenHash: hashRefresh("member-refresh-token"),
+      tokenHash: hashOpaqueToken("member-refresh-token"),
       expiresAt: new Date(Date.now() + 86_400_000),
     });
     const [personalApiKey] = await db.insert(workspaceApiKeys).values({
@@ -1129,7 +1129,7 @@ void test("account role updates and removal protect owners, clean memberships, r
     assert.equal(removedUser?.email, "account-member@example.com");
     assert.equal(removedMembership?.suspendedAt, null);
     assert.equal(await db.$count(cards, eq(cards.createdById, member.id)), 1);
-    const [tokenRow] = await db.select().from(refreshTokens).where(eq(refreshTokens.tokenHash, hashRefresh("member-refresh-token"))).limit(1);
+    const [tokenRow] = await db.select().from(refreshTokens).where(eq(refreshTokens.tokenHash, hashOpaqueToken("member-refresh-token"))).limit(1);
     assert.ok(tokenRow && !tokenRow.revokedAt);
     assert.equal(await db.$count(workspaceApiKeys, and(eq(workspaceApiKeys.id, personalApiKey!.id), isNull(workspaceApiKeys.revokedAt))), 0);
     const [removedCreatorWorkspaceKey] = await db.select({ revokedAt: workspaceApiKeys.revokedAt }).from(workspaceApiKeys).where(eq(workspaceApiKeys.id, workspaceApiKey!.id)).limit(1);

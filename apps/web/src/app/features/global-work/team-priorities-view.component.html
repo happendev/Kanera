@@ -84,19 +84,31 @@
                 <span class="row-title">{{ card.title }}</span>
                 <span class="row-context">
                   @if (showCardKeys()) { <span class="row-card-key">{{ card.key }}</span> }
+                  <!-- Board and list wrap as whole units, the "·" travelling with the list, so a
+                       narrow lane drops the list to its own line instead of ellipsising both names
+                       or stranding a separator at a line end. -->
                   @if (row.boardName) {
-                    <i [class]="row.boardIconClass" [style.color]="row.boardIconColor"></i>
-                    <span class="row-context-part">{{ row.boardName }}</span>
+                    <span class="row-trail-part">
+                      <i [class]="row.boardIconClass" [style.color]="row.boardIconColor"></i>
+                      <span class="row-context-part">{{ row.boardName }}</span>
+                    </span>
                   }
                   @if (row.listName) {
-                    <span class="row-sep">·</span>
-                    <span class="row-context-part">{{ row.listName }}</span>
+                    <span class="row-trail-part">
+                      @if (row.boardName) {
+                        <span class="row-sep">·</span>
+                      }
+                      <span class="row-context-part">{{ row.listName }}</span>
+                    </span>
+                  }
+                  <!-- Inside the meta line, not a column of its own: a due column beside the title
+                       cost the title a third of a ~300px lane. A plain span, so it is not nested
+                       interactive content inside the row button. -->
+                  @if (dueText(card); as due) {
+                    <span class="row-due" [class.overdue]="dueOverdue(card)" [class.due-soon]="dueSoon(card)">{{ due }}</span>
                   }
                 </span>
               </button>
-              @if (dueText(card); as due) {
-                <span class="row-due" [class.overdue]="dueOverdue(card)" [class.due-soon]="dueSoon(card)">{{ due }}</span>
-              }
               @if (isDraggable(lane, row.entry)) {
                 <span class="row-tools">
                   <button type="button" [disabled]="$first" aria-label="Move up" kTooltip="Move up" (click)="moveBy(lane, row.entry, -1)">

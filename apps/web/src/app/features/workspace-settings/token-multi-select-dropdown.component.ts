@@ -1,6 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from "@angular/core";
-import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
-import { PickerListComponent, type PickerGroup } from "../../shared/picker-list.component";
+import { ChangeDetectionStrategy, Component, computed, input, output, viewChild } from "@angular/core";
+import { MultiSelectDropdownComponent } from "../../shared/multi-select-dropdown.component";
+import type { PickerGroup } from "../../shared/picker-list.component";
 
 export type TokenMultiSelectOption = {
   id: string;
@@ -21,86 +21,35 @@ export type TokenMultiSelectOption = {
 @Component({
   selector: "k-token-multi-select-dropdown",
   standalone: true,
-  imports: [AnchoredPanelDirective, PickerListComponent],
+  imports: [MultiSelectDropdownComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="tms">
-      <button #trigger type="button" class="tms-trigger" [class.is-open]="open()" [class.is-empty]="selectedOptions().length === 0" (click)="toggleOpen()" [attr.aria-expanded]="open()" aria-haspopup="listbox" [attr.aria-label]="ariaLabel() || placeholder()">
-        @if (selectedOptions().length) {
-          <span class="tms-swatches" aria-hidden="true">
-            @for (option of selectedOptions().slice(0, 3); track option.id) {
-              @if (option.color) { <span class="tms-dot" [style.background]="swatch(option.color)"></span> }
-            }
-          </span>
-        } @else {
-          <i [class]="'ti ' + icon()"></i>
-        }
-        <span class="tms-label">{{ selectedLabel() }}</span>
-        <i class="ti ti-chevron-down tms-chevron"></i>
-      </button>
-
-      @if (open()) {
-        <div
-          class="tms-panel"
-          kAnchoredPanel
-          [apAnchor]="trigger"
-          [apPlacement]="placement"
-          (apDismissed)="open.set(false)"
-        >
-          <k-picker-list
-            [groups]="pickerGroups()"
-            [selectedIds]="selectedIds()"
-            [searchPlaceholder]="searchPlaceholder()"
-            [emptyLabel]="emptyMessage()"
-            (pick)="toggle($event)"
-          />
-        </div>
+    <k-multi-select-dropdown
+      [groups]="pickerGroups()"
+      [selectedIds]="selectedIds()"
+      [label]="selectedLabel()"
+      [empty]="selectedOptions().length === 0"
+      [placement]="placement"
+      [searchPlaceholder]="searchPlaceholder()"
+      [emptyLabel]="emptyMessage()"
+      [ariaLabel]="ariaLabel() || placeholder()"
+      (pick)="toggle($event)"
+    >
+      @if (selectedOptions().length) {
+        <span class="tms-swatches" aria-hidden="true">
+          @for (option of selectedOptions().slice(0, 3); track option.id) {
+            @if (option.color) { <span class="tms-dot" [style.background]="swatch(option.color)"></span> }
+          }
+        </span>
+      } @else {
+        <i [class]="'ti ' + icon()"></i>
       }
-    </div>
+    </k-multi-select-dropdown>
   `,
   styles: `
     :host {
       display: block;
       min-width: 0;
-    }
-
-    /* --field-bg lets the host seat this trigger at the same depth as its native selects; hosts that
-       do not set it keep the previous --surface-2 fill. */
-    .tms-trigger {
-      width: 100%;
-      height: 34px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      min-width: 0;
-      padding: 0 9px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      background: var(--field-bg, var(--surface-2));
-      color: var(--text);
-      cursor: pointer;
-      text-align: left;
-      font-size: 13px;
-
-      &.is-open {
-        border-color: var(--border-strong);
-        background: var(--surface-hover);
-      }
-
-      &:focus-visible {
-        border-color: var(--accent, var(--border-strong));
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, var(--border-strong)) 20%, transparent);
-        outline: none;
-      }
-
-      &.is-empty .tms-label {
-        color: var(--text-muted);
-      }
-    }
-
-    .tms-trigger > i:not(.tms-chevron) {
-      color: var(--text-muted);
-      font-size: 15px;
     }
 
     .tms-swatches {
@@ -116,34 +65,6 @@ export type TokenMultiSelectOption = {
       border-radius: 50%;
       flex: 0 0 auto;
     }
-
-    .tms-label {
-      flex: 1;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .tms-chevron {
-      color: var(--text-muted);
-      font-size: 14px;
-      flex: 0 0 auto;
-    }
-
-    .tms-panel {
-      width: var(--ap-width, 280px);
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      padding: 8px;
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius);
-      background: var(--surface-overlay);
-      box-shadow: var(--shadow-lg);
-      overflow: hidden;
-    }
-
   `,
 })
 export class TokenMultiSelectDropdownComponent {
@@ -158,7 +79,8 @@ export class TokenMultiSelectDropdownComponent {
   readonly max = input<number | null>(null);
   readonly selectedIdsChange = output<string[]>();
 
-  readonly open = signal(false);
+  private readonly dropdown = viewChild.required(MultiSelectDropdownComponent);
+  /** Narrower than the member pickers: token lists are short names, not name + email rows. */
   readonly placement = { width: 280, maxHeight: 320, minHeight: 160, gap: 4, margin: 8 } as const;
 
   readonly selectedOptions = computed(() => {
@@ -196,10 +118,6 @@ export class TokenMultiSelectDropdownComponent {
     return color ? `var(--color-${color})` : "var(--border-strong)";
   }
 
-  toggleOpen() {
-    this.open.update((value) => !value);
-  }
-
   toggle(id: string) {
     const selected = this.selectedIds();
     if (selected.includes(id)) {
@@ -210,7 +128,7 @@ export class TokenMultiSelectDropdownComponent {
     if (max === 1) {
       // Single-select: replace rather than append, and close so the choice reads as committed.
       this.selectedIdsChange.emit([id]);
-      this.open.set(false);
+      this.dropdown().close();
       return;
     }
     if (max !== null && selected.length >= max) return;

@@ -18,10 +18,11 @@
   // panel painted in --surface had only its border and shadow to separate it from what it
   // covered. Sits between --surface and --surface-2 so row hover (--surface-2) still reads
   // clearly inside the panel. Dialogs and drawers keep --surface — they come with a scrim.
-  // Sits *above* --card-bg (--surface-2): a context menu opened over a card was darker than the card
-  // and receded into it. Dark separates by elevating, so floating chrome must be the lightest fill
-  // on screen bar row hover.
-  --surface-overlay: #253248;
+  // Midpoint of --surface and the old raised #253248: that lifted value read washed out, and the
+  // deeper fill is the look we want. It now sits a hair *below* --card-bg (--surface-2), so a menu
+  // opened over a card separates by --overlay-border and the shadow rather than by fill — keep
+  // both. Row hover inside floating chrome must use --surface-hover, not --surface-2, to register.
+  --surface-overlay: #1e283b;
   // Edge of floating chrome. The page hairline (--border) is tuned to divide same-hue surfaces
   // gently, which is exactly what a menu must not do; on dark it needs a clearly brighter edge.
   --overlay-border: #3d5170;
@@ -173,7 +174,6 @@
   // The 1px ring is the part that does the work on dark: a soft shadow alone vanishes against
   // same-hue navy, and the ring gives the menu a hard edge the eye can find.
   --shadow-lg: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 16px 40px -10px rgba(0, 0, 0, 0.7);
-  --depth-edge: inset 0 1px 2px rgba(255, 255, 255, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.18);
 
   // ─── Kanban surfaces (semantic) ──────────────────────────────────────────────
   // Dark mode keeps the existing visual: lists lighter than bg, cards lighter still.

@@ -8,11 +8,9 @@ import {
   checklistTemplates,
 } from "@kanera/shared/schema";
 import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
-import { db, type Db } from "../db.js";
+import { db, type Tx } from "../db.js";
 import { recordActivity } from "./activity.js";
 import { between } from "./position.js";
-
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 /** Load a single template with its items + bound list ids, shaped for the wire. */
 export async function loadChecklistTemplate(

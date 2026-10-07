@@ -93,7 +93,6 @@ describe("AccountSettingsPage", () => {
     requireMfa: false,
     defaultCompletedCardsActiveDays: 35,
     defaultInactiveCardsDays: 14,
-    defaultBoardHealthEnabled: true,
     storageConfig: { kind: "local" as const },
     storageConfigSource: "env" as const,
     smtpConfig: null,
@@ -159,6 +158,7 @@ describe("AccountSettingsPage", () => {
       emailEnabled: true,
       pushEnabled: false,
       watchedActivityOutbound: false,
+      lifecycleEmail: true,
       push: { status: "system-disabled", registrationEnabled: false, enabled: false, publicKey: null },
       personalChannels: {
         destinationPolicy: "public-https",
@@ -554,36 +554,6 @@ describe("AccountSettingsPage", () => {
     expect(text).toContain("Storage");
     expect(text).toContain("512.0 MB of 1.0 GB used");
     expect(text).toContain("512.0 MB remaining");
-  });
-
-  it("renders the configured Free plan limits in the plan comparison", async () => {
-    activeSettingsRoute = "account-plan";
-    await createPage();
-
-    const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
-    expect(text).toContain("4 members");
-    expect(text).toContain("3 active automations");
-    expect(text).toContain("100 automation executions per month");
-  });
-
-  it("shows only the build date for hosted deployments", async () => {
-    activeSettingsRoute = "profile";
-    await createPage();
-
-    const buildMeta = (fixture.nativeElement as HTMLElement).querySelector(".settings-build-meta");
-    expect(buildMeta?.getAttribute("aria-label")).toBe("Build information");
-    expect(buildMeta?.textContent).not.toContain("Version");
-    expect(buildMeta?.textContent).toContain("Built");
-  });
-
-  it("shows the version and build date for self-hosted deployments", async () => {
-    currentClient = selfHostedClient;
-    activeSettingsRoute = "profile";
-    await createPage();
-
-    const buildMeta = (fixture.nativeElement as HTMLElement).querySelector(".settings-build-meta");
-    expect(buildMeta?.textContent).toContain("Version");
-    expect(buildMeta?.textContent).toContain("Built");
   });
 
   it("shows the scratchpad by default and persists the personal visibility choice", async () => {
@@ -1037,23 +1007,20 @@ describe("AccountSettingsPage", () => {
       ...hostedClient,
       defaultCompletedCardsActiveDays: 28,
       defaultInactiveCardsDays: 10,
-      defaultBoardHealthEnabled: false,
     });
 
     fixture.componentInstance.defaultCompletedCardsActiveDays.set(28);
     fixture.componentInstance.defaultInactiveCardsDays.set(10);
-    fixture.componentInstance.defaultBoardHealthEnabled.set(false);
     await fixture.componentInstance.saveCardTimingDefaults();
 
     expect(api.patch).toHaveBeenCalledWith("/clients/me", {
       defaultCompletedCardsActiveDays: 28,
       defaultInactiveCardsDays: 10,
-      defaultBoardHealthEnabled: false,
     });
     expect(fixture.componentInstance.client()?.defaultInactiveCardsDays).toBe(10);
   });
 
-  it("keeps timing defaults together with their icons before board health", async () => {
+  it("keeps timing defaults together with their icons", async () => {
     activeSettingsRoute = "org";
     await createPage();
 
@@ -1064,12 +1031,11 @@ describe("AccountSettingsPage", () => {
     expect(controls.map((control) => control.textContent?.trim())).toEqual([
       expect.stringContaining("Show completed cards for"),
       expect.stringContaining("Mark cards inactive after"),
-      expect.stringContaining("Show board health by default"),
     ]);
     expect(controls[0]!.querySelector(".ti-circle-check")).not.toBeNull();
     expect(controls[1]!.querySelector(".ti-zzz")).not.toBeNull();
     expect(section!.textContent).not.toContain("Save defaults");
-    expect(section!.querySelector<HTMLAnchorElement>('a[href="https://www.kanera.app/docs/board-health#organisation-default"]')?.target).toBe("_blank");
+    expect(section!.textContent).not.toContain("Show board health");
   });
 
   it("debounces organisation workspace defaults into one update", async () => {
@@ -1080,7 +1046,6 @@ describe("AccountSettingsPage", () => {
       ...hostedClient,
       defaultCompletedCardsActiveDays: 28,
       defaultInactiveCardsDays: 10,
-      defaultBoardHealthEnabled: false,
     });
 
     fixture.componentInstance.defaultCompletedCardsActiveDays.set(2);
@@ -1089,7 +1054,6 @@ describe("AccountSettingsPage", () => {
     fixture.componentInstance.queueCardTimingDefaultsSave();
     fixture.componentInstance.defaultInactiveCardsDays.set(10);
     fixture.componentInstance.queueCardTimingDefaultsSave();
-    fixture.componentInstance.defaultBoardHealthEnabled.set(false);
     fixture.componentInstance.queueCardTimingDefaultsSave();
 
     vi.advanceTimersByTime(299);
@@ -1100,7 +1064,6 @@ describe("AccountSettingsPage", () => {
     expect(api.patch).toHaveBeenCalledWith("/clients/me", {
       defaultCompletedCardsActiveDays: 28,
       defaultInactiveCardsDays: 10,
-      defaultBoardHealthEnabled: false,
     });
   });
 

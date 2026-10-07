@@ -2,6 +2,8 @@ import { UnreadGlowDirective } from "./unread-glow.directive";
 import { MenuDirective } from "../../shared/menu.directive";
 import { ShortcutsSheetComponent } from "../../shared/shortcuts-sheet.component";
 import { KeyboardShortcutsService } from "../../core/keyboard/keyboard-shortcuts.service";
+import { TOUCH_ONLY_QUERY } from "../../core/browser/input-modality";
+import { mediaQuerySignal } from "../../shared/media-query.signal";
 import { CdkDrag, CdkDropList, type CdkDragDrop } from "@angular/cdk/drag-drop";
 import { CdkScrollable } from "@angular/cdk/scrolling";
 import { Dialog } from "@angular/cdk/dialog";
@@ -48,13 +50,15 @@ import { MyPrioritiesPanelComponent } from "../priorities/my-priorities-panel.co
 import { GlobalSearchOverlayComponent } from "../search/global-search-overlay.component";
 import { StandaloneBoardCreateDialogComponent } from "../standalone-board/standalone-board-create.dialog";
 import { CreateOrganisationDialogComponent, JoinOrganisationDialogComponent, type CreateOrganisationResult } from "./organisation-action.dialog";
+import { byPosition } from "../../shared/position-sort";
+import { applyPositions, withPosition } from "../../shared/positions";
 
 function sortBoards<T extends { position: string }>(boards: T[]): T[] {
-  return [...boards].sort((a, b) => Number(a.position) - Number(b.position));
+  return [...boards].sort(byPosition);
 }
 
 function sortBoardGroups<T extends { position: string }>(groups: T[]): T[] {
-  return [...groups].sort((a, b) => Number(a.position) - Number(b.position));
+  return [...groups].sort(byPosition);
 }
 
 type SidebarBoardGroup = {
@@ -171,12 +175,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly groups = signal<HomeGroup[]>([]);
   // Old offline shells have no kind; treating that as standard keeps their existing presentation.
   readonly standardGroups = computed(() => this.groups().filter((group) => (group.workspace as { kind?: string }).kind !== "board"));
-  /**
-   * The per-workspace "Boards" collapse toggle earns its row only when there is more than one
-   * workspace to collapse between. With a single workspace it was a repeated label pushing the
-   * boards themselves further down, so the group renders expanded with no subhead.
-   */
-  readonly showBoardsSubhead = computed(() => this.standardGroups().length > 1);
   readonly standaloneGroups = computed(() => this.groups().filter((group) => (group.workspace as { kind?: string }).kind === "board"));
   readonly guestGroups = signal<GuestHomeGroup[]>([]);
   readonly standaloneBoardGroups = signal<StandaloneBoardGroup[]>([]);
@@ -210,14 +208,17 @@ export class AppShellComponent implements OnInit, OnDestroy {
         ...entry.standard.map((workspace): GuestContainer => ({ kind: "workspace", id: workspace.workspace.id, name: workspace.workspace.name, workspace })),
         ...[...byGroup].map(([id, boards]): GuestContainer => ({ kind: "standaloneGroup", id, name: metadata.get(id)!.title, boards: boards.sort((a, b) => Number(a.board.position) - Number(b.board.position) || a.board.name.localeCompare(b.board.name)) })),
       ].sort((a, b) => a.name.localeCompare(b.name));
-      return { clientId, clientName: entry.clientName, containers, ungroupedStandaloneBoards: ungroupedStandaloneBoards.sort((a, b) => Number(a.board.position) - Number(b.board.position) || a.board.name.localeCompare(b.board.name)) };
+      const org: GuestOrganisation = { clientId, clientName: entry.clientName, containers, ungroupedStandaloneBoards: ungroupedStandaloneBoards.sort((a, b) => Number(a.board.position) - Number(b.board.position) || a.board.name.localeCompare(b.board.name)) };
+      // A guest with a single board in an organisation gains nothing from the workspace/group
+      // headings in between; show that board directly under the organisation instead.
+      const boards = this.guestCollapsedBoards(org);
+      return boards.length === 1 ? { ...org, containers: [], ungroupedStandaloneBoards: boards } : org;
     }).filter((org) => org.containers.length > 0 || org.ungroupedStandaloneBoards.length > 0)
       .sort((a, b) => a.clientName.localeCompare(b.clientName));
   });
   readonly usingOfflineShell = signal(false);
   readonly user = this.auth.user;
   readonly showScratchpad = computed(() => this.user()?.showScratchpad ?? true);
-  private readonly isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
   // String queries keep the component classes out of the eager shell import graph. The types
   // still describe their public API without preventing Angular from deferring the components.
   readonly notificationsPanel = viewChild<NotificationsPanelComponent>("notificationsPanel");
@@ -276,9 +277,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly installGuideUrl = `${KANERA_DOCS_URL}/install-kanera`;
   // Tracks which workspaces are collapsed in the nav. Default empty (all expanded); persisted to localStorage.
   readonly collapsed = signal<Record<string, boolean>>(this.readCollapsed());
-  // Tracks which workspaces have their boards section collapsed.
-  // Default is empty (all expanded); value is persisted to localStorage.
-  readonly boardsCollapsed = signal<Record<string, boolean>>(this.readBoardsCollapsed());
   readonly boardGroupsCollapsed = signal<Record<string, boolean>>(this.readBoardGroupsCollapsed());
   readonly workspaceCount = computed(() => this.standardGroups().length);
   readonly ownBoardCount = computed(() =>
@@ -288,7 +286,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
     const max = this.auth.maxBoards();
     return max !== null && this.ownBoardCount() >= max;
   });
-  readonly canCreateWorkspace = computed(() => true);
   readonly workspaceCreateAttempted = signal(false);
   readonly standaloneBoardCreateAttempted = signal(false);
   readonly workspaceCreateLimitMessage = computed(() => {
@@ -396,15 +393,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
     const isMobileAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(userAgent) || isAppleTouch;
     if (isMobileAgent) return null;
     return /Macintosh|Mac OS X/i.test(userAgent) ? "⌘K" : "Ctrl K";
-  }
-
-  private readBoardsCollapsed(): Record<string, boolean> {
-    try {
-      const raw = localStorage.getItem(this.orgStorageKey(STORAGE_KEYS.BOARDS_COLLAPSED));
-      return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
-    } catch {
-      return {};
-    }
   }
 
   private readBoardGroupsCollapsed(): Record<string, boolean> {
@@ -699,6 +687,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   readonly shortcutsOpen = signal(false);
+  /** Phones and tablets with no keyboard: the shortcuts sheet and its entry points stand down. */
+  readonly touchOnly = mediaQuerySignal(TOUCH_ONLY_QUERY);
 
   private readonly shortcuts = inject(KeyboardShortcutsService);
   private readonly destroyRef = inject(DestroyRef);
@@ -811,6 +801,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
         icon: "keyboard",
         keywords: ["help", "keys"],
         keys: "?",
+        when: () => !this.touchOnly(),
         run: () => this.shortcutsOpen.set(true),
       },
     ], this.destroyRef);
@@ -1039,31 +1030,24 @@ export class AppShellComponent implements OnInit, OnDestroy {
         this.groups.update((groups) =>
           groups.map((g) =>
             g.workspace.id === workspaceId
-              ? { ...g, boards: sortBoards(g.boards.map((b) => (b.id === boardId ? { ...b, position } : b))) }
+              ? { ...g, boards: sortBoards(withPosition(g.boards, boardId, position)) }
               : g,
           ),
         );
         this.guestGroups.update((groups) =>
           groups.map((g) =>
             g.workspace.id === workspaceId
-              ? { ...g, boards: sortBoards(g.boards.map((b) => (b.id === boardId ? { ...b, position } : b))) }
+              ? { ...g, boards: sortBoards(withPosition(g.boards, boardId, position)) }
               : g,
           ),
         );
       },
       "board:rebalanced": ({ workspaceId, positions }) => {
-        const applyRebalance = <T extends { id: string; position: string }>(boards: T[]) => {
-          const positionsById = new Map(positions.map((p) => [p.id, p.position]));
-          return sortBoards(boards.map((b) => {
-            const position = positionsById.get(b.id);
-            return position ? { ...b, position } : b;
-          }));
-        };
         this.groups.update((groups) =>
-          groups.map((g) => g.workspace.id === workspaceId ? { ...g, boards: applyRebalance(g.boards) } : g),
+          groups.map((g) => g.workspace.id === workspaceId ? { ...g, boards: sortBoards(applyPositions(g.boards, positions)) } : g),
         );
         this.guestGroups.update((groups) =>
-          groups.map((g) => g.workspace.id === workspaceId ? { ...g, boards: applyRebalance(g.boards) } : g),
+          groups.map((g) => g.workspace.id === workspaceId ? { ...g, boards: sortBoards(applyPositions(g.boards, positions)) } : g),
         );
       },
       "board:deleted": ({ boardId }) => {
@@ -1112,22 +1096,14 @@ export class AppShellComponent implements OnInit, OnDestroy {
       "boardGroup:moved": ({ workspaceId, groupId, position }) =>
         this.groups.update((groups) =>
           groups.map((g) => g.workspace.id === workspaceId
-            ? { ...g, boardGroups: sortBoardGroups((g.boardGroups ?? []).map((bg) => bg.id === groupId ? { ...bg, position } : bg)) }
+            ? { ...g, boardGroups: sortBoardGroups(withPosition(g.boardGroups ?? [], groupId, position)) }
             : g),
         ),
       "boardGroup:rebalanced": ({ workspaceId, positions }) =>
         this.groups.update((groups) =>
-          groups.map((g) => {
-            if (g.workspace.id !== workspaceId) return g;
-            const positionsById = new Map(positions.map((p) => [p.id, p.position]));
-            return {
-              ...g,
-              boardGroups: sortBoardGroups((g.boardGroups ?? []).map((bg) => {
-                const position = positionsById.get(bg.id);
-                return position ? { ...bg, position } : bg;
-              })),
-            };
-          }),
+          groups.map((g) => g.workspace.id === workspaceId
+            ? { ...g, boardGroups: sortBoardGroups(applyPositions(g.boardGroups ?? [], positions)) }
+            : g),
         ),
       "boardGroup:deleted": ({ workspaceId, groupId }) =>
         this.groups.update((groups) =>
@@ -1229,14 +1205,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.collapsed.update((c) => {
       const next = { ...c, [workspaceId]: !c[workspaceId] };
       localStorage.setItem(this.orgStorageKey(STORAGE_KEYS.WORKSPACES_COLLAPSED), JSON.stringify(next));
-      return next;
-    });
-  }
-
-  toggleBoards(workspaceId: string) {
-    this.boardsCollapsed.update((c) => {
-      const next = { ...c, [workspaceId]: !c[workspaceId] };
-      localStorage.setItem(this.orgStorageKey(STORAGE_KEYS.BOARDS_COLLAPSED), JSON.stringify(next));
       return next;
     });
   }

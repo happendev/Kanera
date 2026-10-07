@@ -11,30 +11,65 @@ Prefer Kanera MCP tools over browser automation, computer use, or the Kanera CLI
 connected tools can perform the request. Use the Kanera web interface only for an explicitly visual
 task or an operation documented below as UI-only. Use the CLI only when MCP tools are unavailable.
 
+## Look up details
+
+For product behaviour, setup, or permissions, call `search.docs` (CLI: `kanera docs "<question>"`).
+It returns canonical source URLs to cite. When that tool is unavailable, or you need a whole page,
+fetch the page's Markdown version directly. Fetch only the page the task needs. Every page is
+indexed at https://www.kanera.app/llms.txt.
+
+| Topic | Page |
+| ----- | ---- |
+| Product model: organisations, workspaces, boards, lists, cards | https://www.kanera.app/docs/tldr.md |
+| Every MCP tool and its arguments | https://www.kanera.app/docs/ai-mcp-tools.md |
+| Connections, card references, errors, troubleshooting | https://www.kanera.app/docs/ai-mcp-reference.md |
+| OAuth sign-in and device authorization | https://www.kanera.app/docs/ai-mcp-oauth.md |
+| Kanera CLI | https://www.kanera.app/docs/cli.md |
+| Coding-agent loop: pick up, report on, and finish a card | https://www.kanera.app/docs/ai-coding-agents.md |
+| Agent runs and how agent work is labelled | https://www.kanera.app/docs/ai-agent-runs.md |
+| What an agent can reach, credential types, revoking access | https://www.kanera.app/docs/ai-agent-security.md |
+| Roles and guest access | https://www.kanera.app/docs/user-roles.md, https://www.kanera.app/docs/guests.md |
+| Cards; lists and separators | https://www.kanera.app/docs/cards.md, https://www.kanera.app/docs/lists.md |
+| Linking cards and notes, Linked items, Backlinks | https://www.kanera.app/docs/cards.md#link-cards-and-notes |
+| Checklists | https://www.kanera.app/docs/checklists.md |
+| Comments and mentions | https://www.kanera.app/docs/comments.md |
+| Notes | https://www.kanera.app/docs/notes.md |
+| My Cards, Team Cards, Up next, Portfolio | https://www.kanera.app/docs/assigned-work.md, https://www.kanera.app/docs/up-next.md |
+| Automations | https://www.kanera.app/docs/automations.md |
+
 ## If MCP is unavailable
 
 When the agent can run shell commands, Kanera's CLI exposes the same tool layer without requiring
-an MCP client. Check for `kanera` first. If it is missing and the user asked to configure or use
-Kanera, choose the least disruptive suitable path:
+an MCP client. Check for `kanera --version` first. If it is missing and the user asked to configure
+or use Kanera, check `node --version` (the CLI needs Node 22 or newer; do not install Node yourself),
+then choose the least disruptive suitable path:
 
 ```bash
 npx -y @kanera/cli commands          # inspect the surface without a global install
 npm install --global @kanera/cli     # persistent `kanera` command; requires Node 22+
-kanera auth login                    # user completes API-key setup once
+kanera auth login --agent "Claude Code"  # user approves a browser sign-in once; name yourself
 kanera whoami --json                 # verify identity and read/write scope
 ```
+
+Pass your own product name to `--agent` so Kanera labels your work "via <agent> (Kanera CLI on
+<computer>)". Without it the work reads "via Kanera CLI", and with a personal API key
+(`--with-api-key`) it is recorded as the user with no agent label at all.
 
 For a non-interactive environment, use a user-supplied `KANERA_API_KEY` instead of storing a
 profile. Never invent or expose a key. After authentication, use `kanera commands --json` and
 `kanera help <tool>` for discovery, `--quiet` for machine-readable results, and the same safety
-rules below. Do not install software or request a credential for a read-only question about how
-Kanera works.
+rules below. Nested arguments use dots (`--changes.title "New"`); pass a list of objects as one
+JSON array, for example `--items '[{"text":"Draft"},{"text":"Review"}]'`, or the whole input with
+`--json-args`. Every tool below is callable as `kanera call <tool>`, and common ones have shortcuts
+such as `kanera card MKT-42`, `kanera comment MKT-42 "text"`, and
+`kanera run start MKT-42 "title"`. Do not install software or request a credential for a read-only
+question about how Kanera works.
 
 ## Resolve context
 
 1. Call `session.get` to understand the credential scope and canonical Kanera URL.
 2. Use `boards.list_accessible` for complete board discovery, including standalone and guest boards. Use `workspaces.list` and `workspaces.list_boards` for standard-workspace navigation.
-3. Use `search.docs` for product behavior, setup, permissions, or workflow guidance. Cite the canonical source URLs it returns.
+3. Use `search.docs` for product behavior, setup, permissions, or workflow guidance, or fetch the matching page under "Look up details". Cite the canonical source URLs.
 4. For an exact human card key or canonical card URL, call `cards.get` directly. Use
    `search.content` to resolve names, phrases, notes, comments, or attachment filenames. Never guess
    an ID.
@@ -64,12 +99,29 @@ Kanera works.
 - Workspace and standalone-board creation require a write-capable personal key or interactive OAuth grant with the organisation-admin role; workspace-scoped keys cannot perform them. Adding a board to a standard workspace requires workspace-admin authority and a write-capable credential.
 - Inspect the target entity immediately before a mutation when stale state could change the outcome.
 - Use list, label, and custom-field IDs from the target board's current configuration.
-- Pass a stable UUID as `idempotencyKey` to `cards.create`, and reuse it if retrying after an ambiguous transport failure.
-- Do not retry other non-idempotent creation tools after an ambiguous success.
+- Every creation tool that accepts `idempotencyKey` (cards, checklists, items, comments, notes, runs, and others) replays the original result when the same key is reused. Pass a fresh UUID per intended write and reuse it only when retrying that write after an ambiguous transport failure.
+- Do not retry a creation tool without `idempotencyKey` (attachment uploads) after an ambiguous success; read the card first.
 - Treat archive and available delete tools as destructive. State the exact target when user intent is not already explicit.
 - Kanera MCP cannot delete boards or perform post-creation administration of boards, lists, labels, custom fields, notes, or note attachments unless a dedicated tool represents the operation. Tell the user to complete unsupported actions in the Kanera UI instead of implying success.
 - Before a bulk action, confirm the board and selection. List-wide card actions always require an explicit board ID.
 - After a multi-step mutation, re-read the affected entity and report the resulting state.
+
+## Discuss, note, link, and prioritise
+
+- Comment on a card with `comments.add`; read the thread with `comments.list`, or `cards.list_history` for comments and activity together.
+- Read and write notes with `notes.list`, `notes.get`, `notes.create`, and `notes.update`. Personal notes are private to their owner; team-note edits respect note locks.
+- To link cards or notes to each other, put the target's canonical Kanera URL in a card description or a note. Kanera turns it into a live link with a backlink (`notes.get_backlinks`). Only items in the same workspace are tracked, and URLs in comments do not create links.
+- Each person has a ranked cross-board "Up next" queue: read it with `priorities.list` and curate it with `priorities.add`, `priorities.move`, and `priorities.remove`. `priorities.list_targets` shows whose queues a manager can reach.
+- Separators are titled dividers inside a list (`separators.create`, `separators.move`, `separators.update`, `separators.delete`); they never change cards.
+- Workspace admins can manage automations with the `automations.*` tools.
+
+## Plan and track with checklists
+
+- Build a plan in one call: `checklists.create` accepts `items`, and each top-level item may carry `description`, `assigneeId`, `dueDateLocalDate`, `completed`, and `subChecklists`. The result returns every new ID, so no follow-up read is needed.
+- Nesting is one level deep. Only top-level items own sub-checklists; sub-checklist items take only `text` and `completed`. Items move only within the same group (top-level checklists, or one parent item's sub-checklists).
+- Add one or more items with `checklists.add_items` (optional `anchor`; default appends). Change one or more items, each with its own changes, with `checklists.update_items`; use `checklists.bulk_update_items` only to set the same assignee or due date on every item of a checklist.
+- Use `checklists.get` for a nested read with IDs instead of `cards.get` when only checklists matter. Target items by `itemId`; exact `itemText` works but is rejected when it matches more than one item.
+- Batch calls are atomic: nothing is written when any entry is invalid.
 
 ## Show your work
 
@@ -83,5 +135,7 @@ Kanera works.
 
 - On `UNAUTHENTICATED`, ask the user to reconnect Kanera.
 - On `FORBIDDEN`, report the returned access, role, or credential restriction; do not retry unchanged.
+- On `NOTES_DISABLED`, tell the user a workspace admin has switched notes off for that workspace; do not retry.
 - On `RATE_LIMITED`, respect `retryAfter` before retrying.
-- On validation errors, correct IDs or inputs from current Kanera context rather than guessing.
+- On validation errors, read `error.issues`: each `path` (such as `items[2].subChecklists[0].items[1].text`) names the exact field to fix. Correct that input from current Kanera context rather than guessing or resending the rest.
+- On `AMBIGUOUS_TARGET`, choose from the returned `candidates` by ID, or ask the user; never pick one silently.

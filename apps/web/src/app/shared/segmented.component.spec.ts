@@ -29,6 +29,19 @@ class HostComponent {
   readonly showLabels = signal(false);
 }
 
+@Component({
+  standalone: true,
+  imports: [SegmentedComponent],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `<k-segmented [options]="options" value="board" [autoLabels]="true" ariaLabel="View mode" />`,
+})
+class AutoLabelHostComponent {
+  readonly options: SegmentedOption[] = [
+    { id: "board", icon: "layout-kanban", label: "Board view", shortLabel: "Board" },
+    { id: "table", icon: "table", label: "Table view" },
+  ];
+}
+
 async function mount() {
   await TestBed.configureTestingModule({
     imports: [HostComponent],
@@ -79,6 +92,23 @@ describe("SegmentedComponent", () => {
     // The visible label is the accessible name once it renders; a duplicate aria-label would win
     // over it and is dropped.
     expect(host.querySelector(".sg-btn")?.getAttribute("aria-label")).toBeNull();
+  });
+
+  it("renders auto labels collapsed with the short text, keeping the full accessible name", async () => {
+    await TestBed.configureTestingModule({
+      imports: [AutoLabelHostComponent],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(AutoLabelHostComponent);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const button = host.querySelector(".sg-btn");
+
+    // The header reveals these by width alone, so they must be in the DOM from the start.
+    expect(button?.querySelector(".sg-auto-label")?.textContent?.trim()).toBe("Board");
+    expect(button?.getAttribute("aria-label")).toBe("Board view");
+    // Falls back to the full label when no short one is given.
+    expect(host.querySelectorAll(".sg-auto-label")[1]?.textContent?.trim()).toBe("Table view");
   });
 
   it("names the group so screen readers announce what the switch controls", async () => {

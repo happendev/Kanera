@@ -1,4 +1,5 @@
 import type { WorkPrioritiesResponse, WorkPriorityItem } from "@kanera/shared/dto";
+import { byPosition } from "../position-sort";
 
 /** Where a move lands, in the same anchor vocabulary the priorities endpoint takes. */
 export type PriorityAnchor = { afterId?: string | null; beforeId?: string | null };
@@ -69,6 +70,6 @@ export function reorderedQueueItems(
   }
   const position = optimisticPriorityPosition(previous, next);
   return [...rest, { ...moving, position }]
-    .sort((a, b) => Number(a.position) - Number(b.position) || a.id.localeCompare(b.id))
+    .sort((a, b) => byPosition(a, b) || a.id.localeCompare(b.id))
     .map((item, index) => ({ ...item, rank: index + 1 }));
 }

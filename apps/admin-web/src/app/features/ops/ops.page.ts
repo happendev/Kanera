@@ -79,7 +79,7 @@ const TABS: QueueTab[] = [
         <button class="tab" [class.active]="active().key === t.key" type="button" (click)="select(t)">{{ t.label }}</button>
       }
     </div>
-    <a-table-controls [query]="query()" placeholder="Search this queue…" [page]="page()" [pageSize]="pageSize()" [total]="total()" [loading]="loading()" (queryChange)="search($event)" (pageChange)="go($event)" (pageSizeChange)="resize($event)" />
+    <a-table-controls [query]="query()" placeholder="Search this queue…" (queryChange)="search($event)" />
 
     @if (loading()) {
       <p class="muted">Loading…</p>

@@ -440,6 +440,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly requireMfaError = signal<string | null>(null);
   readonly billingInfo = signal<BillingInfoResponse | null>(null);
   readonly isHosted = computed(() => (this.client()?.deploymentMode ?? this.user()?.deploymentMode) === "hosted");
+  // Lifecycle emails are a hosted-only sweep addressed to organisation owners, so the opt-out is
+  // shown only to the people who can receive them.
+  readonly lifecycleEmailAvailable = computed(() => this.isHosted() && this.auth.isOrgOwner());
   readonly isSelfHosted = computed(() => (this.client()?.deploymentMode ?? this.user()?.deploymentMode) === "self_hosted");
   // Plan/trial state for the hosted-mode Account section. Derived from the org-wide entitlements on
   // /me; the actual purchase + upgrade flow will live in this section later.
@@ -538,7 +541,6 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly orgError = signal<string | null>(null);
   readonly defaultCompletedCardsActiveDays = signal(DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS);
   readonly defaultInactiveCardsDays = signal(DEFAULT_INACTIVE_CARDS_DAYS);
-  readonly defaultBoardHealthEnabled = signal(true);
   readonly cardTimingDefaultsSaving = signal(false);
   readonly cardTimingDefaultsError = signal<string | null>(null);
   /** The new-workspace defaults save on blur/toggle with no button, so they report through a chip. */
@@ -719,7 +721,6 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     this.requireMfaDraft.set(c.requireMfa);
     this.defaultCompletedCardsActiveDays.set(c.defaultCompletedCardsActiveDays);
     this.defaultInactiveCardsDays.set(c.defaultInactiveCardsDays);
-    this.defaultBoardHealthEnabled.set(c.defaultBoardHealthEnabled);
     const sc = c.storageConfig;
     if (sc.kind === "s3") {
       this.storageKind.set("s3");
@@ -1292,15 +1293,26 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
    * event types the matrix models, so it has no row there.
    */
   async setWatchedActivityOutbound(checked: boolean) {
+    await this.patchNotificationFlag({ watchedActivityOutbound: checked });
+  }
+
+  /**
+   * Onboarding and account-tip emails (the hosted lifecycle sweep). Separate from the type matrix:
+   * these are product messages, not notifications about work. The emails' unsubscribe link clears
+   * the same flag, so this checkbox is also how someone opts back in.
+   */
+  async setLifecycleEmail(checked: boolean) {
+    await this.patchNotificationFlag({ lifecycleEmail: checked });
+  }
+
+  private async patchNotificationFlag(body: { watchedActivityOutbound?: boolean; lifecycleEmail?: boolean }) {
     const current = this.notificationSettings();
     if (!current || this.notificationSettingsSaving()) return;
     this.notificationSettingsSaving.set(true);
     this.notificationAutosave.markSaving();
     this.notificationSettingsError.set(null);
-        try {
-      const updated = await this.api.patch<NotificationSettingsResponse>("/notifications/settings", {
-        watchedActivityOutbound: checked,
-      });
+    try {
+      const updated = await this.api.patch<NotificationSettingsResponse>("/notifications/settings", body);
       this.notificationSettings.set(updated);
       this.notificationAutosave.markSaved();
     } catch (err) {
@@ -1957,10 +1969,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     if (!current || this.cardTimingDefaultsSaving()) return;
     const defaultCompletedCardsActiveDays = Math.max(0, Math.min(365, Math.trunc(this.defaultCompletedCardsActiveDays())));
     const defaultInactiveCardsDays = Math.max(0, Math.min(365, Math.trunc(this.defaultInactiveCardsDays())));
-    const defaultBoardHealthEnabled = this.defaultBoardHealthEnabled();
     this.defaultCompletedCardsActiveDays.set(defaultCompletedCardsActiveDays);
     this.defaultInactiveCardsDays.set(defaultInactiveCardsDays);
-    if (current.defaultCompletedCardsActiveDays === defaultCompletedCardsActiveDays && current.defaultInactiveCardsDays === defaultInactiveCardsDays && current.defaultBoardHealthEnabled === defaultBoardHealthEnabled) return;
+    if (current.defaultCompletedCardsActiveDays === defaultCompletedCardsActiveDays && current.defaultInactiveCardsDays === defaultInactiveCardsDays) return;
 
     this.cardTimingDefaultsSaving.set(true);
     this.cardTimingDefaultsAutosave.markSaving();
@@ -1969,13 +1980,11 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       this.applyClient(await this.api.patch<PublicClientResponse>("/clients/me", {
         defaultCompletedCardsActiveDays,
         defaultInactiveCardsDays,
-        defaultBoardHealthEnabled,
       }));
       this.cardTimingDefaultsAutosave.markSaved();
     } catch (err) {
       this.defaultCompletedCardsActiveDays.set(current.defaultCompletedCardsActiveDays);
       this.defaultInactiveCardsDays.set(current.defaultInactiveCardsDays);
-      this.defaultBoardHealthEnabled.set(current.defaultBoardHealthEnabled);
       this.cardTimingDefaultsAutosave.markError();
       this.cardTimingDefaultsError.set(extractErrorMessage(err));
     } finally {

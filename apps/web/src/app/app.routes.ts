@@ -1,8 +1,10 @@
+import { inject } from "@angular/core";
 import type { Routes, UrlMatcher, UrlSegment } from "@angular/router";
 import { authGuard, publicAuthGuard, resetPasswordGuard } from "./core/auth/auth.guard";
 import { onboardingGuard, standaloneBoardSettingsGuard, workspaceGuard, workspaceSettingsGuard } from "./core/auth/workspace.guard";
 import { unsavedWorkCanDeactivateGuard } from "./core/browser/unsaved-work.service";
 import { importNavigationCanActivateGuard, importNavigationCanDeactivateGuard } from "./features/import/import-navigation-guard.service";
+import { ToastService } from "./shared/toast.service";
 
 /**
  * Keep the same route/component instance while a card drawer opens and closes. A pair of separate
@@ -33,6 +35,17 @@ const boardWithOptionalCard: UrlMatcher = (segments) => {
   return null;
 };
 
+/** Settings tabs in display order; both the workspace and standalone-board settings pages mount them. */
+const WORKSPACE_SETTINGS_TABS = ["general", "boards", "lists", "fields", "templates", "automations", "labels", "members", "guests", "integrations", "api"] as const;
+
+/**
+ * Every tab is a leaf child so the settings page can read the active tab from the URL; the import
+ * guard keeps a running import from being abandoned by a tab change.
+ */
+function settingsTabRoutes(tabs: readonly string[]): Routes {
+  return tabs.map((path) => ({ path, canActivate: [importNavigationCanActivateGuard], children: [] }));
+}
+
 export const routes: Routes = [
   {
     path: "login",
@@ -56,6 +69,12 @@ export const routes: Routes = [
     title: "Reset Password",
     canActivate: [resetPasswordGuard],
     loadComponent: () => import("./features/auth/reset-password.page").then((m) => m.ResetPasswordPage),
+  },
+  {
+    // Reached from lifecycle emails; deliberately unguarded so it works signed in or out.
+    path: "email/unsubscribe",
+    title: "Unsubscribe",
+    loadComponent: () => import("./features/email-unsubscribe/email-unsubscribe.page").then((m) => m.EmailUnsubscribePage),
   },
   {
     path: "board-invite",
@@ -146,17 +165,7 @@ export const routes: Routes = [
           import("./features/workspace-settings/workspace-settings.page").then((m) => m.WorkspaceSettingsPage),
         children: [
           { path: "", pathMatch: "full", redirectTo: "general" },
-          { path: "general", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "boards", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "lists", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "fields", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "templates", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "automations", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "labels", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "members", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "guests", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "integrations", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "api", canActivate: [importNavigationCanActivateGuard], children: [] },
+          ...settingsTabRoutes(WORKSPACE_SETTINGS_TABS),
           { path: "import", children: [] },
         ],
       },
@@ -170,17 +179,10 @@ export const routes: Routes = [
           import("./features/workspace-settings/workspace-settings.page").then((m) => m.WorkspaceSettingsPage),
         children: [
           { path: "", pathMatch: "full", redirectTo: "general" },
+          // Standalone boards have no board list or member roster of their own.
           { path: "boards", pathMatch: "full", redirectTo: "general" },
           { path: "members", pathMatch: "full", redirectTo: "general" },
-          { path: "general", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "lists", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "fields", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "templates", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "automations", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "labels", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "guests", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "integrations", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "api", canActivate: [importNavigationCanActivateGuard], children: [] },
+          ...settingsTabRoutes(WORKSPACE_SETTINGS_TABS.filter((tab) => tab !== "boards" && tab !== "members")),
           { path: "import", children: [] },
         ],
       },
@@ -229,5 +231,13 @@ export const routes: Routes = [
       },
     ],
   },
-  { path: "**", redirectTo: "" },
+  {
+    // Hand-shortened or stale links (e.g. `/c/DEV-12` without its `/o/<orgKey>` prefix) land here.
+    // Say so instead of silently dropping the user on the home page as if the link had worked.
+    path: "**",
+    redirectTo: () => {
+      inject(ToastService).error("That link doesn't point to anything in Kanera.", "link-off");
+      return "";
+    },
+  },
 ];

@@ -14,7 +14,8 @@ export interface DueDateCandidate {
   dueDateTimezone: string | null;
 }
 
-function localParts(now: Date, timezone: string): { date: string; hour: number; minute: number } {
+/** Local calendar date and wall-clock time in `timezone`, falling back to UTC for unknown zones. */
+export function localParts(now: Date, timezone: string): { date: string; hour: number; minute: number } {
   let parts: Intl.DateTimeFormatPart[];
   try {
     parts = minuteFormatter(timezone || "UTC").formatToParts(now);

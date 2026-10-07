@@ -8,7 +8,7 @@ import { UpdatesService } from "../updates/updates.service";
 import { environment } from "../../../environments/environment";
 
 export type AppSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
-export const OFFLINE_DEBOUNCE_MS = 1500; // 1.5 seconds
+const OFFLINE_DEBOUNCE_MS = 1500; // 1.5 seconds
 export const RECONNECT_WATCHDOG_MS = 15_000;
 export const SOCKET_IO = new InjectionToken<typeof io>("SOCKET_IO", {
   providedIn: "root",

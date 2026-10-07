@@ -40,6 +40,7 @@ import { hasMarkdownContent, stripEmptyTaskItems } from "../../shared/markdown-c
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { DescriptionEditorToolbarComponent } from "./description-editor-toolbar.component";
 import { DESCRIPTION_EDITOR_ACCEPT, DescriptionEditorUploader, type AttachmentTarget } from "./description-editor-uploader.service";
+import { clipboardAttachmentFiles, hasDraggedFiles } from "../../shared/attachments/file-transfer";
 
 export type EditorSaveEvent = { markdown: string; attachmentIds: string[] };
 
@@ -1099,7 +1100,12 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
       // real parser errors without enabling that incompatible false-positive.
       emitContentError: true,
       editable: this.editable(),
-      autofocus: this.autofocus() ? "end" : false,
+      // Focus through `focusEnd` on create instead of Tiptap's `"end"`, so a draft ending in a quote
+      // (a comment reply) puts the caret below the quote rather than inside it.
+      autofocus: false,
+      onCreate: () => {
+        if (this.autofocus()) this.focusEnd();
+      },
       onContentError: ({ editor, error }) => {
         if (isMarkdownTableWrapperFalsePositive(error)) return;
         // Invalid inserted content is rejected before dispatch. Re-assert the
@@ -1628,7 +1634,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
       this.insertPlainText(plainText);
       return;
     }
-    const clipboardFiles = this.clipboardFiles(e.clipboardData);
+    const clipboardFiles = clipboardAttachmentFiles(e.clipboardData);
     if (!this.allowAttachments() && clipboardFiles.length > 0) {
       e.preventDefault();
       e.stopPropagation();
@@ -1722,15 +1728,6 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
       && lines[separatorIndex + 1]?.includes("|");
   }
 
-  private clipboardFiles(data: DataTransfer | null): File[] {
-    if (!data) return [];
-    const fromItems = Array.from(data.items ?? [])
-      .filter((item) => item.kind === "file")
-      .map((item) => item.getAsFile())
-      .filter((file): file is File => file !== null);
-    return fromItems.length > 0 ? fromItems : Array.from(data.files ?? []);
-  }
-
   private readonly handleDragOver = (e: DragEvent) => {
     if (!this.editable() || !this.isFileDrag(e.dataTransfer)) return;
     e.preventDefault();
@@ -1752,10 +1749,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   };
 
   private isFileDrag(data: DataTransfer | null): boolean {
-    if (!this.allowAttachments()) return false;
-    if (!data) return false;
-    if (Array.from(data.types ?? []).some((type) => type === "Files" || type === "application/x-moz-file")) return true;
-    return Array.from(data.items ?? []).some((item) => item.kind === "file");
+    return this.allowAttachments() && hasDraggedFiles(data);
   }
 
   onSave() {
@@ -1832,7 +1826,25 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
    */
   prependMarkdown(markdown: string) {
     // insertContentAt clamps the position; 0 resolves to the document start.
-    this.editor?.chain().insertContentAt(0, this.markdownShortcodesToUnicode(markdown)).focus("end").run();
+    this.editor?.chain().insertContentAt(0, this.markdownShortcodesToUnicode(markdown)).run();
+    this.focusEnd();
+  }
+
+  /**
+   * Focus the end of the document. Markdown parsing drops trailing blank lines, so a reply quote
+   * (`> … wrote:\n\n`) loads as a document whose last block is the blockquote, and `"end"` alone
+   * would leave the caret inside the quote. Give a trailing blockquote an empty paragraph to land in.
+   * The paragraph is not serialised (see MarkdownParagraph), so the saved markdown is unchanged.
+   */
+  private focusEnd() {
+    const editor = this.editor;
+    if (!editor) return;
+    const { doc } = editor.state;
+    const chain = editor.chain();
+    if (doc.lastChild?.type.name === "blockquote") {
+      chain.insertContentAt(doc.content.size, { type: "paragraph" });
+    }
+    chain.focus("end").run();
   }
 
   setSaving(v: boolean) {

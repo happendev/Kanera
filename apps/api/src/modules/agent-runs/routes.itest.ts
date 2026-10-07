@@ -1,10 +1,11 @@
 import "../../test/setup.integration.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ACTIVITY_ACTION, activityEvents, agentRuns, boards, cards, lists } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, activityEvents, agentRuns, boards, cardWatchers, cards, lists, notifications } from "@kanera/shared/schema";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db.js";
 import { AGENT_RUN_STALL_AFTER_MS, sweepStalledAgentRuns } from "../../lib/agent-runs.js";
+import { waitForNotificationFanoutForTests } from "../../lib/notifications.js";
 import { buildPublicApiServer } from "../../public-api-server.js";
 import { signupOwner } from "../../test/api-fixtures.js";
 import { buildIntegrationServer, testUploadsDir } from "../../test/integration.js";
@@ -121,6 +122,9 @@ void test("agent runs through the public API are labelled by the credential and 
   });
   assert.equal(key.statusCode, 201, key.body);
   const secret = key.json<{ secret: string }>().secret;
+  // API-key activity is never self-suppressed, so a watching owner would be notified of anything
+  // that fans out. Run start/end must not: it stays in the card feed only.
+  await db.insert(cardWatchers).values({ cardId: card.id, userId: owner.user.id });
 
   const publicApi = await buildPublicApiServer({ logger: false, uploadsDir: testUploadsDir("test-agent-run-uploads"), rateLimit: { enabled: false } });
   try {
@@ -160,6 +164,10 @@ void test("agent runs through the public API are labelled by the credential and 
     assert.equal(closed.statusCode, 200, closed.body);
     assert.equal(closed.json<RunRow>().status, "failed");
     assert.ok(closed.json<RunRow>().endedAt);
+
+    await waitForNotificationFanoutForTests();
+    const inbox = await db.select().from(notifications).where(eq(notifications.cardId, card.id));
+    assert.equal(inbox.length, 0, "agent run start/end must not notify watchers");
   } finally {
     await publicApi.close();
   }

@@ -16,12 +16,12 @@ function cacheKey(workspaceId: string, userId: string): string {
   return `${workspaceId}:${userId}`;
 }
 
-export function getCachedUserDisplay(workspaceId: string, userId: string): UserDisplayMetadata | null {
+function getCachedUserDisplay(workspaceId: string, userId: string): UserDisplayMetadata | null {
   if (env.USER_DISPLAY_CACHE_TTL_MS === 0) return null;
   return userDisplayCache.get(cacheKey(workspaceId, userId)) ?? null;
 }
 
-export function setCachedUserDisplay(workspaceId: string, userId: string, metadata: UserDisplayMetadata): void {
+function setCachedUserDisplay(workspaceId: string, userId: string, metadata: UserDisplayMetadata): void {
   if (env.USER_DISPLAY_CACHE_TTL_MS === 0) return;
   userDisplayCache.set(cacheKey(workspaceId, userId), metadata, Date.now() + env.USER_DISPLAY_CACHE_TTL_MS);
 }

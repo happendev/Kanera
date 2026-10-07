@@ -1,6 +1,6 @@
 import { dto } from "@kanera/shared";
 import { CARD_DUE_DATE_SLOTS } from "@kanera/shared/due-date-slots";
-import { MAX_CARD_PRIORITIES_PER_USER } from "@kanera/shared/schema";
+import { CLIENT_ROUTE_KEY_PATTERN, MAX_CARD_PRIORITIES_PER_USER } from "@kanera/shared/schema";
 import { z } from "zod";
 
 type HttpMethod = "get" | "post" | "patch" | "put" | "delete";
@@ -39,6 +39,12 @@ const queryParam = (name: string, schema: Schema, description?: string, required
   description,
   schema,
 });
+// Offset paging shared by every directory-style list: `limit` is one above the page size so callers
+// can detect "has more" without a count, matching dto `offsetPagedQuery`.
+const pagedQueryParams = (): Schema[] => [
+  queryParam("limit", { type: "integer", minimum: 1, maximum: 101 }),
+  queryParam("offset", { type: "integer", minimum: 0, maximum: 1_000_000, default: 0 }),
+];
 
 const personalOrganisationHeader = (): Schema => ({
   name: "X-Kanera-Organisation-Id",
@@ -476,10 +482,6 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           accentColor: nullable({ type: "string" }),
           completedCardsActiveDays: { type: "integer", minimum: 0, maximum: 365 },
           inactiveCardsDays: { type: "integer", minimum: 0, maximum: 365 },
-          boardHealthEnabled: { type: "boolean" },
-          boardHealthOverdueEnabled: { type: "boolean" },
-          boardHealthUnassignedEnabled: { type: "boolean" },
-          boardHealthInactiveEnabled: { type: "boolean" },
           role: { type: "string", enum: ["admin", "member"] },
           createdAt: dateTime,
           updatedAt: dateTime,
@@ -727,7 +729,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         properties: {
           id: uuid,
           workspaceId: uuid,
-          organisationKey: { type: "string", pattern: "^[A-F0-9]{16}$", examples: ["0123456789ABCDEF"] },
+          organisationKey: { type: "string", pattern: CLIENT_ROUTE_KEY_PATTERN.source, examples: ["0123456789ABCDEF"] },
           number: { type: "integer", minimum: 1 },
           key: { type: "string", pattern: "^[A-Z][A-Z0-9]{1,9}-[1-9][0-9]*$", examples: ["PROJ-123"] },
           boardId: uuid,
@@ -835,6 +837,20 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           items: arrayOf(ref("ChecklistItem")),
         },
         additionalProperties: true,
+      },
+      CreatedChecklist: {
+        description: "The created checklist with its initial items, plus every sub-checklist created under those items (each names its owning item in parentItemId).",
+        allOf: [
+          ref("Checklist"),
+          { type: "object", required: ["subChecklists"], properties: { subChecklists: arrayOf(ref("Checklist")) } },
+        ],
+      },
+      CreatedChecklistItem: {
+        description: "A created checklist item plus the sub-checklists created under it in the same request.",
+        allOf: [
+          ref("ChecklistItem"),
+          { type: "object", required: ["subChecklists"], properties: { subChecklists: arrayOf(ref("Checklist")) } },
+        ],
       },
       ChecklistItem: {
         type: "object",
@@ -1476,6 +1492,8 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       UpdateChecklistBody: zodSchema(dto.updateChecklistBody),
       MoveChecklistBody: zodSchema(dto.moveChecklistBody),
       CreateChecklistItemBody: zodSchema(dto.createChecklistItemBody),
+      CreateChecklistItemsBody: zodSchema(dto.createChecklistItemsBody),
+      UpdateChecklistItemsBody: zodSchema(dto.updateChecklistItemsBody),
       BulkCreateChecklistItemsBody: zodSchema(dto.bulkCreateChecklistItemsBody),
       UpdateChecklistItemBody: zodSchema(dto.updateChecklistItemBody),
       BulkUpdateChecklistItemsBody: zodSchema(dto.bulkUpdateChecklistItemsBody),
@@ -1561,7 +1579,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       delete: operation({ tags: ["Workspaces"], summary: "Delete a workspace", description: "Permanently deletes the workspace after `confirmationName` exactly matches its current name.", operationId: "deleteWorkspace", parameters: [idParam()], requestBody: jsonBody(ref("DeleteWorkspaceBody")), responses: authedResponses({ "204": noContent }) }),
     },
     "/workspaces/{id}/members": {
-      get: operation({ tags: ["Workspaces"], summary: "List workspace members", operationId: "listWorkspaceMembers", parameters: [idParam(), queryParam("limit", { type: "integer", minimum: 1, maximum: 101 }), queryParam("offset", { type: "integer", minimum: 0, maximum: 1_000_000, default: 0 })], responses: authedResponses({ "200": ok(arrayOf(ref("WorkspaceMember"))) }) }),
+      get: operation({ tags: ["Workspaces"], summary: "List workspace members", operationId: "listWorkspaceMembers", parameters: [idParam(), ...pagedQueryParams()], responses: authedResponses({ "200": ok(arrayOf(ref("WorkspaceMember"))) }) }),
       post: operation({ tags: ["Workspaces"], summary: "Add a workspace member", operationId: "addWorkspaceMember", parameters: [idParam()], requestBody: jsonBody(ref("AddWorkspaceMemberBody")), responses: authedResponses({ "200": ok(ref("WorkspaceMember")) }) }),
     },
     "/workspaces/{id}/member-candidates": pathItem("get", operation({ tags: ["Workspaces"], summary: "List users that can be added to a workspace", operationId: "listWorkspaceMemberCandidates", parameters: [idParam()], responses: authedResponses({ "200": ok(arrayOf(ref("User"))) }) })),
@@ -1692,8 +1710,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       operationId: "listAutomationExecutions",
       parameters: [
         idParam(),
-        queryParam("limit", { type: "integer", minimum: 1, maximum: 101 }),
-        queryParam("offset", { type: "integer", minimum: 0, maximum: 1_000_000, default: 0 }),
+        ...pagedQueryParams(),
       ],
       responses: authedResponses({ "200": ok(arrayOf(ref("AutomationExecution"))) }),
     })),
@@ -1719,7 +1736,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         summary: "Create or update an external link",
         description: "Upserts a durable mapping from an external record to a Kanera entity. Use this after creating or matching a Kanera record so future sync runs are idempotent. The target entity must belong to the workspace.",
         operationId: "upsertExternalLink",
-        parameters: [idParam(), queryParam("limit", { type: "integer", minimum: 1, maximum: 101 }), queryParam("offset", { type: "integer", minimum: 0, maximum: 1_000_000, default: 0 })],
+        parameters: [idParam(), ...pagedQueryParams()],
         requestBody: jsonBody(ref("UpsertExternalLinkBody")),
         responses: authedResponses({ "200": ok(ref("ExternalLink")) }),
       }),
@@ -1744,7 +1761,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       summary: "List accessible boards",
       description: "Lists every board the credential can access, including standalone and explicitly shared cross-organisation boards.",
       operationId: "listAccessibleBoards",
-      parameters: [queryParam("limit", { type: "integer", minimum: 1, maximum: 101 }), queryParam("offset", { type: "integer", minimum: 0, maximum: 1_000_000, default: 0 })],
+      parameters: [...pagedQueryParams()],
       responses: authedResponses({ "200": ok(arrayOf(ref("AccessibleBoard"))) }),
     })),
     "/boards/{id}": {
@@ -1912,7 +1929,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         summary: "List workspace notes",
         description: "Returns a flat note-tree slice at every supported nesting level. Use parentNoteId to rebuild the hierarchy. Personal scope returns only the credential owner's notes.",
         operationId: "listWorkspaceNotes",
-        parameters: [idParam("wsId"), queryParam("scope", { type: "string", enum: ["personal", "team"] }, "Note visibility scope.", true), queryParam("limit", { type: "integer", minimum: 1, maximum: 101 }), queryParam("offset", { type: "integer", minimum: 0, maximum: 1_000_000, default: 0 })],
+        parameters: [idParam("wsId"), queryParam("scope", { type: "string", enum: ["personal", "team"] }, "Note visibility scope.", true), ...pagedQueryParams()],
         responses: authedResponses({ "200": ok(arrayOf(ref("Note"))) }),
       }),
       post: operation({ tags: ["Notes"], summary: "Create a workspace note", operationId: "createWorkspaceNote", parameters: [idParam("wsId")], requestBody: jsonBody(ref("CreateNoteBody")), responses: authedResponses({ "201": created(ref("Note")) }) }),
@@ -1923,7 +1940,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         summary: "List board notes",
         description: "Returns a flat note-tree slice at every supported nesting level. Use parentNoteId to rebuild the hierarchy. Personal scope returns only the credential owner's notes.",
         operationId: "listBoardNotes",
-        parameters: [idParam("boardId"), queryParam("scope", { type: "string", enum: ["personal", "team"] }, "Note visibility scope.", true), queryParam("limit", { type: "integer", minimum: 1, maximum: 101 }), queryParam("offset", { type: "integer", minimum: 0, maximum: 1_000_000, default: 0 })],
+        parameters: [idParam("boardId"), queryParam("scope", { type: "string", enum: ["personal", "team"] }, "Note visibility scope.", true), ...pagedQueryParams()],
         responses: authedResponses({ "200": ok(arrayOf(ref("Note"))) }),
       }),
       post: operation({ tags: ["Notes"], summary: "Create a board note", operationId: "createBoardNote", parameters: [idParam("boardId")], requestBody: jsonBody(ref("CreateNoteBody")), responses: authedResponses({ "201": created(ref("Note")) }) }),
@@ -1985,7 +2002,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       responses: authedResponses({ "200": ok({
         type: "object",
         required: ["id", "workspaceId", "organisationKey", "boardId", "listId", "number", "key", "url"],
-        properties: { id: uuid, workspaceId: uuid, organisationKey: { type: "string", pattern: "^[A-F0-9]{16}$" }, boardId: uuid, listId: uuid, number: { type: "integer", minimum: 1 }, key: { type: "string" }, url: { type: "string", format: "uri" } },
+        properties: { id: uuid, workspaceId: uuid, organisationKey: { type: "string", pattern: CLIENT_ROUTE_KEY_PATTERN.source }, boardId: uuid, listId: uuid, number: { type: "integer", minimum: 1 }, key: { type: "string" }, url: { type: "string", format: "uri" } },
         additionalProperties: false,
       }) }),
     })),
@@ -2074,13 +2091,62 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       put: operation({ tags: ["Cards"], summary: "Set a card custom field value", operationId: "setCardCustomFieldValue", parameters: [idParam(), idParam("fieldId")], requestBody: jsonBody(ref("SetCustomFieldValueBody")), responses: authedResponses({ "200": ok(ref("CustomFieldValue")) }) }),
       delete: operation({ tags: ["Cards"], summary: "Clear a card custom field value", operationId: "clearCardCustomFieldValue", parameters: [idParam(), idParam("fieldId")], responses: authedResponses({ "204": noContent }) }),
     },
-    "/cards/{id}/checklists": pathItem("post", operation({ tags: ["Cards"], summary: "Create a card-level or one-level sub-checklist", operationId: "createChecklist", parameters: [idParam()], requestBody: jsonBody(ref("CreateChecklistBody")), responses: authedResponses({ "201": created(ref("Checklist")) }) })),
+    "/cards/{id}/checklists": {
+      get: operation({
+        tags: ["Cards"],
+        summary: "List a card's checklists",
+        description: "Returns the card's checklists in display order without the rest of card detail. Sub-checklists are returned in the same flat array and name their owning item in parentItemId. With checklistId, returns that checklist followed by the sub-checklists owned by its items.",
+        operationId: "listCardChecklists",
+        parameters: [idParam(), queryParam("checklistId", uuid, "Return only this checklist and the sub-checklists owned by its items.")],
+        responses: authedResponses({ "200": ok({ type: "object", required: ["checklists"], properties: { checklists: arrayOf(ref("Checklist")) } }) }),
+      }),
+      post: operation({
+        tags: ["Cards"],
+        summary: "Create a checklist, optionally with its items and sub-checklists",
+        description: "Creates a card-level checklist, or a sub-checklist when parentItemId names a top-level item. Optional `items` are created atomically in order with server-generated ids; each top-level item may carry description, assignee, due date, completion, and `subChecklists`. Sub-checklists are one level deep: only top-level items own sub-checklists, and sub-checklist items support only `text` and `completed`. Unknown or unsupported fields are rejected with their JSON path (for example `items[2].subChecklists[0].items[1].assigneeId`), and the whole request is validated before anything is written. Supply an Idempotency-Key when retrying.",
+        operationId: "createChecklist",
+        parameters: [idParam()],
+        requestBody: jsonBody(ref("CreateChecklistBody")),
+        responses: authedResponses({ "201": created(ref("CreatedChecklist")) }),
+      }),
+    },
     "/cards/{id}/checklists/{checklistId}": {
       patch: operation({ tags: ["Cards"], summary: "Update a checklist", operationId: "updateChecklist", parameters: [idParam(), idParam("checklistId")], requestBody: jsonBody(ref("UpdateChecklistBody")), responses: authedResponses({ "200": ok(ref("Checklist")) }) }),
       delete: operation({ tags: ["Cards"], summary: "Delete a checklist", operationId: "deleteChecklist", parameters: [idParam(), idParam("checklistId")], responses: authedResponses({ "204": noContent }) }),
     },
     "/cards/{id}/checklists/{checklistId}/move": pathItem("post", operation({ tags: ["Cards"], summary: "Move a checklist", operationId: "moveChecklist", parameters: [idParam(), idParam("checklistId")], requestBody: jsonBody(ref("MoveChecklistBody")), responses: authedResponses({ "200": ok(ref("Checklist")) }) })),
-    "/cards/{id}/checklists/{checklistId}/items": pathItem("post", operation({ tags: ["Cards"], summary: "Create a checklist item", operationId: "createChecklistItem", parameters: [idParam(), idParam("checklistId")], requestBody: jsonBody(ref("CreateChecklistItemBody")), responses: authedResponses({ "201": created(ref("ChecklistItem")) }) })),
+    "/cards/{id}/checklists/{checklistId}/items": pathItem("post", operation({
+      tags: ["Cards"],
+      summary: "Create a checklist item",
+      description: "`{ \"text\": \"...\" }` is the minimal body. A top-level item may also set description, assignee, due date, completion, and initial `subChecklists`; place it with one of afterItemId/beforeItemId (null after = top, null before = bottom) or omit both to append. Sub-checklists are one level deep: only top-level items own sub-checklists, and sub-checklist items support only `text` and `completed`. Unknown or unsupported fields are rejected with their JSON path (for example `items[2].subChecklists[0].items[1].assigneeId`), and the whole request is validated before anything is written. Supply an Idempotency-Key when retrying.",
+      operationId: "createChecklistItem",
+      parameters: [idParam(), idParam("checklistId")],
+      requestBody: jsonBody(ref("CreateChecklistItemBody")),
+      responses: authedResponses({ "201": created(ref("CreatedChecklistItem")) }),
+    })),
+    "/cards/{id}/checklists/{checklistId}/items/batch": pathItem("post", operation({
+      tags: ["Cards"],
+      summary: "Create several items in one checklist",
+      description: "Atomically creates up to 200 items (500 including sub-checklist items) contiguously in request order, at the optional anchor or appended. Results preserve request order and include generated ids for items and sub-checklists. Sub-checklists are one level deep: only top-level items own sub-checklists, and sub-checklist items support only `text` and `completed`. Unknown or unsupported fields are rejected with their JSON path (for example `items[2].subChecklists[0].items[1].assigneeId`), and the whole request is validated before anything is written. Supply an Idempotency-Key when retrying.",
+      operationId: "createChecklistItems",
+      parameters: [idParam(), idParam("checklistId")],
+      requestBody: jsonBody(ref("CreateChecklistItemsBody")),
+      responses: authedResponses({ "201": created({ type: "object", required: ["items"], properties: { items: arrayOf(ref("CreatedChecklistItem")) } }) }),
+    })),
+    "/cards/{id}/checklist-items": pathItem("patch", operation({
+      tags: ["Cards"],
+      summary: "Update selected checklist items",
+      description: "Applies different changes to up to 200 chosen items on one card in one transaction, for example completing five steps or assigning different owners. Each entry names an itemId; the server derives its checklist and rejects items that are not on this card. The whole batch is validated before writing, and errors name the entry (for example `updates[3].changes.assigneeId`). Activity, notifications, and automations match the equivalent single-item updates. To set one assignee or due date on every item in a checklist, use the checklist bulk route instead.",
+      operationId: "updateChecklistItems",
+      parameters: [idParam()],
+      requestBody: jsonBody(ref("UpdateChecklistItemsBody")),
+      responses: authedResponses({ "200": ok({ type: "object", required: ["items"], properties: { items: arrayOf(ref("ChecklistItem")) } }) }),
+    })),
+    "/cards/{id}/checklist-items/{itemId}": {
+      patch: operation({ tags: ["Cards"], summary: "Update a checklist item by id", description: "Same as the checklist-scoped item update; the server derives the containing checklist and requires the item to be on this card.", operationId: "updateChecklistItemById", parameters: [idParam(), idParam("itemId")], requestBody: jsonBody(ref("UpdateChecklistItemBody")), responses: authedResponses({ "200": ok(ref("ChecklistItem")) }) }),
+      delete: operation({ tags: ["Cards"], summary: "Delete a checklist item by id", description: "Same as the checklist-scoped item delete; the server derives the containing checklist and requires the item to be on this card.", operationId: "deleteChecklistItemById", parameters: [idParam(), idParam("itemId")], responses: authedResponses({ "204": noContent }) }),
+    },
+    "/cards/{id}/checklist-items/{itemId}/move": pathItem("post", operation({ tags: ["Cards"], summary: "Move a checklist item by id", description: "Same as the checklist-scoped item move. Items move only within one ownership group: between top-level checklists, or between sub-checklists of the same parent item; an item can never change nesting depth or parent.", operationId: "moveChecklistItemById", parameters: [idParam(), idParam("itemId")], requestBody: jsonBody(ref("MoveChecklistItemBody")), responses: authedResponses({ "200": ok(ref("ChecklistItem")) }) })),
     "/boards/{boardId}/checklist-items/bulk/create": pathItem("post", operation({
       tags: ["Cards"],
       summary: "Create selected checklist items in bulk",
@@ -2093,6 +2159,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     "/cards/{id}/checklists/{checklistId}/items/bulk": pathItem("patch", operation({
       tags: ["Cards"],
       summary: "Set the assignee or due date on every item in a checklist",
+      description: "Applies one assignee and/or due date to every item in the checklist. To change chosen items individually, use PATCH /cards/{id}/checklist-items.",
       operationId: "bulkUpdateChecklistItems",
       parameters: [idParam(), idParam("checklistId")],
       requestBody: jsonBody(ref("BulkUpdateChecklistItemsBody")),
@@ -2123,7 +2190,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       patch: operation({ tags: ["Cards"], summary: "Update a checklist item, including its description", operationId: "updateChecklistItem", parameters: [idParam(), idParam("checklistId"), idParam("itemId")], requestBody: jsonBody(ref("UpdateChecklistItemBody")), responses: authedResponses({ "200": ok(ref("ChecklistItem")) }) }),
       delete: operation({ tags: ["Cards"], summary: "Delete a checklist item", operationId: "deleteChecklistItem", parameters: [idParam(), idParam("checklistId"), idParam("itemId")], responses: authedResponses({ "204": noContent }) }),
     },
-    "/cards/{id}/checklists/{checklistId}/items/{itemId}/move": pathItem("post", operation({ tags: ["Cards"], summary: "Move a checklist item", operationId: "moveChecklistItem", parameters: [idParam(), idParam("checklistId"), idParam("itemId")], requestBody: jsonBody(ref("MoveChecklistItemBody")), responses: authedResponses({ "200": ok(ref("ChecklistItem")) }) })),
+    "/cards/{id}/checklists/{checklistId}/items/{itemId}/move": pathItem("post", operation({ tags: ["Cards"], summary: "Move a checklist item", description: "Items move only within one ownership group: between top-level checklists, or between sub-checklists of the same parent item; an item can never change nesting depth or parent.", operationId: "moveChecklistItem", parameters: [idParam(), idParam("checklistId"), idParam("itemId")], requestBody: jsonBody(ref("MoveChecklistItemBody")), responses: authedResponses({ "200": ok(ref("ChecklistItem")) }) })),
     "/cards/{id}/archive": pathItem("patch", operation({ tags: ["Cards"], summary: "Archive or restore a card", operationId: "setCardArchived", parameters: [idParam()], requestBody: jsonBody(ref("SetCardArchivedBody")), responses: authedResponses({ "200": ok(ref("Card")) }) })),
     "/cards/{id}/labels": pathItem("put", operation({ tags: ["Cards"], summary: "Replace card labels", operationId: "setCardLabels", parameters: [idParam()], requestBody: jsonBody(ref("SetCardLabelsBody")), responses: authedResponses({ "200": ok(ref("CardDetail")) }) })),
     "/cards/{id}/assignees": pathItem("put", operation({ tags: ["Cards"], summary: "Replace card assignees", operationId: "setCardAssignees", parameters: [idParam()], requestBody: jsonBody(ref("SetCardAssigneesBody")), responses: authedResponses({ "200": ok(ref("CardDetail")) }) })),

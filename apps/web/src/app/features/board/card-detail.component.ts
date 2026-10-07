@@ -25,7 +25,8 @@ import {
 } from "@angular/core";
 import { Router } from "@angular/router";
 import { ALLOWED_ATTACHMENT_EXTENSIONS, ALLOWED_ATTACHMENT_MIME } from "@kanera/shared/attachments";
-import type { CardMirrorStatus, LinkedInternalSummary } from "@kanera/shared/dto";
+import { cardPath } from "@kanera/shared/card-links";
+import type { CardLinkedItemsResponse, CardMirrorStatus, LinkedInternalSummary } from "@kanera/shared/dto";
 import { expandWireCard, SERVER_EVENTS, type CardAttachmentRow, type WireAgentRun, type ServerToClientEvents, type WireBoardMemberUser, type WireCard, type WireCardChecklist, type WireCardChecklistItem, type WireCardDetail, type WireCardLabel, type WireCardSummary, type WireChecklistTemplate, type WireCustomFieldOption } from "@kanera/shared/events";
 import type { CardCustomFieldValue, CardLabel } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
@@ -57,6 +58,7 @@ import { CardDetailLayoutService } from "./card-detail-layout.service";
 import { DatePickerPopover } from "./date-picker.popover";
 import { DescriptionEditorComponent } from "./description-editor.component";
 import { DescriptionViewerComponent } from "./description-viewer.component";
+import { isPlainPrimaryClick } from "./card-navigation.util";
 import {
   dueDateInputValue,
   dueDateSlotFor,
@@ -73,6 +75,8 @@ import { SelectPickerPopover } from "./select-picker.popover";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
 import { BoardMirrorsService } from "../board-mirrors/board-mirrors.service";
 import { formatFeedTime } from "../../shared/date-format";
+import { clipboardAttachmentFiles, dragTargetElement, hasDraggedFiles, isEditablePasteTarget, isEditorDropTarget } from "../../shared/attachments/file-transfer";
+import { openAttachmentPreview, toLightboxAttachments } from "../../shared/attachments/attachment-lightbox";
 
 const CHECKLIST_DRAG_SCROLL_EDGE_PX = 80;
 const CHECKLIST_DRAG_SCROLL_MAX_STEP_PX = 20;
@@ -331,19 +335,7 @@ export class CardDetailComponent {
   readonly attachmentDragActive = signal(false);
   // Keep every format the shared lightbox can render in attachment order so navigation can cross
   // images, playback media, and documents without exposing download-only files in the sequence.
-  readonly lightboxAttachments = computed(() => this.visibleAttachments()
-    .flatMap((attachment) => {
-      const mediaType = attachmentPreviewType(attachment.mimeType, attachment.fileName);
-      const src = visibleSignedMediaUrl(attachment.url);
-      return src && mediaType ? [{
-        id: attachment.id,
-        src,
-        fileName: attachment.fileName,
-        createdAt: attachment.createdAt,
-        mediaType,
-        mimeType: attachment.mimeType,
-      }] : [];
-    }));
+  readonly lightboxAttachments = computed(() => toLightboxAttachments(this.visibleAttachments()));
   readonly lightboxItems = computed<ImageLightboxItem[]>(() => this.lightboxAttachments()
     .map(({ id: _id, ...item }) => item));
   // Attachment presentation is stable until the attachment collection changes. Precomputing it
@@ -363,14 +355,31 @@ export class CardDetailComponent {
   ])));
 
   linkedItemHref(item: LinkedInternalSummary): string {
-    if (item.kind === "card") {
-      const tree = this.router.createUrlTree(["/c", item.key]);
-      return this.router.serializeUrl(tree);
-    }
+    // The canonical key URL, so copy-link and open-in-new-tab land on the same card.
+    if (item.kind === "card") return cardPath(item.organisationKey, item.key);
     const tree = item.boardId
       ? this.router.createUrlTree(["/b", item.boardId], { queryParams: { view: "notes", noteId: item.id } })
       : this.router.createUrlTree(["/w", item.workspaceId, "notes"], { queryParams: { noteId: item.id } });
     return this.router.serializeUrl(tree);
+  }
+
+  /**
+   * Plain clicks route inside the app (the drawer swaps to the linked card, and unsaved-work guards
+   * run); modified and middle clicks fall through to the href so new-tab behaviour is native.
+   */
+  openLinkedItem(event: MouseEvent, item: LinkedInternalSummary) {
+    if (!isPlainPrimaryClick(event)) return;
+    event.preventDefault();
+    if (item.kind === "card") {
+      // Same board keeps the current view (?view=table etc.); another board starts at its default.
+      const sameBoard = item.boardId === this.boardId();
+      void this.router.navigate(["/b", item.boardId, "c", item.id], {
+        ...(sameBoard && { queryParams: { cardId: null, lightboxAttachmentId: null }, queryParamsHandling: "merge" as const }),
+        browserUrl: cardPath(item.organisationKey, item.key),
+      });
+      return;
+    }
+    void this.router.navigateByUrl(this.linkedItemHref(item));
   }
 
   linkedItemIcon(item: LinkedInternalSummary): string {
@@ -433,18 +442,7 @@ export class CardDetailComponent {
   }
 
   private openAttachmentPreview(attachmentId: string, mediaType: AttachmentPreviewType, event?: Event): boolean {
-    const attachments = this.lightboxAttachments();
-    const initialIndex = attachments.findIndex((attachment) => attachment.id === attachmentId);
-    const selected = attachments[initialIndex];
-    if (!selected || selected.mediaType !== mediaType) return false;
-
-    const { id: _id, ...item } = selected;
-    this.imageLightbox.open({
-      ...item,
-      images: this.lightboxItems(),
-      initialIndex,
-    }, event);
-    return true;
+    return openAttachmentPreview(this.imageLightbox, this.lightboxAttachments(), attachmentId, mediaType, event);
   }
 
   openInlineAttachment(attachment: {
@@ -522,7 +520,7 @@ export class CardDetailComponent {
     await this.api.post(`/cards/${card.id}/move`, { listId, beforeCardId: null });
   }
 
-  toggleActionsMenu(e: MouseEvent) {
+  toggleActionsMenu() {
     this.actionsMenuOpen.update((value) => !value);
   }
 
@@ -743,6 +741,9 @@ export class CardDetailComponent {
   private openedInitialLightboxFor: string | null = null;
   private detailLoadSeq = 0;
   private mirrorLoadSeq = 0;
+  private linkedItemsLoadSeq = 0;
+  // Passed to the description viewer so its link chips re-resolve on card:links:changed.
+  readonly linkRevision = signal(0);
   readonly mirrorStatus = signal<CardMirrorStatus | null>(null);
   // Bumped when a CARD_UPDATED for the open card lands via socket. refreshDetailFromNetwork
   // snapshots it before the /detail request so a slower response can't revert a newer realtime body.
@@ -866,6 +867,13 @@ export class CardDetailComponent {
           // carry an older description) does not overwrite it with stale text.
           this.detailRealtimeVersion++;
           this.applyPublishedDescription(expanded.description ?? "");
+        },
+        // Fired for both ends of a link (and for notes linking this card), so a card shows that it was
+        // linked from elsewhere without being reopened.
+        [SERVER_EVENTS.CARD_LINKS_CHANGED]: ({ cardId: changedCardId }) => {
+          if (changedCardId !== cardId) return;
+          this.refreshLinkedItems(cardId);
+          this.linkRevision.update((revision) => revision + 1);
         },
         [SERVER_EVENTS.BOARD_MIRROR_CREATED]: () => this.refreshMirrorStatus(cardId),
         [SERVER_EVENTS.BOARD_MIRROR_UPDATED]: () => this.refreshMirrorStatus(cardId),
@@ -1066,6 +1074,20 @@ export class CardDetailComponent {
       .catch(() => undefined);
   }
 
+  /**
+   * Re-reads only the linked items. A full /detail refresh is the wrong tool here: the description
+   * save (or another user's edit) that changed the links also emits card:updated, which bumps the
+   * realtime revision mid-fetch and makes refreshDetailFromNetwork discard its response.
+   */
+  private refreshLinkedItems(cardId: string) {
+    const seq = ++this.linkedItemsLoadSeq;
+    void this.api.get<CardLinkedItemsResponse>(`/cards/${cardId}/linked-items`)
+      .then(({ linkedItems }) => {
+        if (seq === this.linkedItemsLoadSeq && cardId === this.cardId()) this.state.setCardLinkedItems(cardId, linkedItems);
+      })
+      .catch(() => undefined);
+  }
+
   private async refreshDetailFromNetwork(cardId: string, boardId: string) {
     this.refreshAgentRuns(cardId);
     const seq = ++this.detailLoadSeq;
@@ -1234,6 +1256,8 @@ export class CardDetailComponent {
       this.recoveredDescriptionDraft.set(false);
       this.exitDescriptionEdit();
       void this.refreshDetailFromNetwork(card.id, card.boardId);
+      // Don't wait for the card:links:changed echo: the author should see a new link immediately.
+      this.refreshLinkedItems(card.id);
     } finally {
       this.savingDescription.set(false);
     }
@@ -1260,7 +1284,10 @@ export class CardDetailComponent {
       }
       return;
     }
+    // card:updated also carries renames, completions and moves. With the body unchanged there is
+    // nothing to promote, and rewriting a just-opened editor would reset input that is in flight.
     const cleanEditorStillShowsPreviousBaseline = editor
+      && markdown !== previousBaseline
       && !editor.isDirty()
       && editor.markdown().trim() === previousBaseline.trim()
       && this.editorInitialValue().trim() === previousBaseline.trim();
@@ -2128,8 +2155,8 @@ export class CardDetailComponent {
   }
 
   private readonly handleAttachmentDragCapture = (event: DragEvent) => {
-    if (!this.hasDraggedFiles(event)) return;
-    if (!this.canEdit() || !this.isDragInsidePanel(event) || this.isEditorDropTarget(event.target) || this.isEditablePasteTarget(event.target)) {
+    if (!hasDraggedFiles(event.dataTransfer)) return;
+    if (!this.canEdit() || !this.isDragInsidePanel(event) || isEditorDropTarget(event.target) || isEditablePasteTarget(event.target)) {
       this.attachmentDragActive.set(false);
     }
   };
@@ -2154,7 +2181,7 @@ export class CardDetailComponent {
   }
 
   onAttachmentDragLeave(event: DragEvent) {
-    if (!this.hasDraggedFiles(event)) return;
+    if (!hasDraggedFiles(event.dataTransfer)) return;
     const current = this.panel()?.nativeElement ?? event.currentTarget as Node | null;
     const related = event.relatedTarget as Node | null;
     if (!current || !related || !current.contains(related)) {
@@ -2170,65 +2197,33 @@ export class CardDetailComponent {
   }
 
   async onCardDetailPaste(event: ClipboardEvent) {
-    if (event.defaultPrevented || !this.canEdit() || this.isEditablePasteTarget(event.target)) return;
+    if (event.defaultPrevented || !this.canEdit() || isEditablePasteTarget(event.target)) return;
 
-    const files = this.clipboardAttachmentFiles(event.clipboardData);
+    const files = clipboardAttachmentFiles(event.clipboardData);
     if (files.length === 0) return;
 
     event.preventDefault();
     await this.uploadAttachmentFiles(files);
   }
 
-  private clipboardAttachmentFiles(data: DataTransfer | null): File[] {
-    if (!data) return [];
-
-    const files: File[] = [];
-    for (const item of Array.from(data.items ?? [])) {
-      if (item.kind !== "file") continue;
-      const file = item.getAsFile();
-      if (file) files.push(file);
-    }
-
-    if (files.length > 0) return files;
-    return Array.from(data.files ?? []);
-  }
-
-  private isEditablePasteTarget(target: EventTarget | null): boolean {
-    if (!(target instanceof Element)) return false;
-    return Boolean(target.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']"));
-  }
-
   private shouldHandleAttachmentDrag(event: DragEvent): boolean {
-    if (event.defaultPrevented || !this.hasDraggedFiles(event)) return false;
+    if (event.defaultPrevented || !hasDraggedFiles(event.dataTransfer)) return false;
     if (!this.isDragInsidePanel(event)) {
       this.attachmentDragActive.set(false);
       return false;
     }
-    if (this.isEditorDropTarget(event.target) || this.isEditablePasteTarget(event.target)) {
+    if (isEditorDropTarget(event.target) || isEditablePasteTarget(event.target)) {
       this.attachmentDragActive.set(false);
       return false;
     }
     return true;
   }
 
-  private isEditorDropTarget(target: EventTarget | null): boolean {
-    if (!(target instanceof Element)) return false;
-    // Description/comment editors upload and insert files into their markdown,
-    // so panel-level attachment drops must not preempt their own drop handlers.
-    return Boolean(target.closest("k-description-editor"));
-  }
-
   private isDragInsidePanel(event: DragEvent): boolean {
     const panel = this.panel()?.nativeElement;
     if (!panel) return false;
-    const target = this.dragTargetElement(event);
+    const target = dragTargetElement(event);
     return Boolean(target && panel.contains(target));
-  }
-
-  private dragTargetElement(event: DragEvent): Element | null {
-    if (event.target instanceof Element) return event.target;
-    if (event.clientX || event.clientY) return document.elementFromPoint(event.clientX, event.clientY);
-    return null;
   }
 
   private async uploadAttachmentFiles(files: File[]) {
@@ -2236,13 +2231,6 @@ export class CardDetailComponent {
     // Validation, per-file progress, retry, and error formatting all live in the queue; the new
     // attachment lands in attachments() via the card:attachment:created realtime event.
     this.uploads.add(files);
-  }
-
-  private hasDraggedFiles(event: DragEvent): boolean {
-    const data = event.dataTransfer;
-    if (!data) return false;
-    if (Array.from(data.types ?? []).some((type) => type === "Files" || type === "application/x-moz-file")) return true;
-    return Array.from(data.items ?? []).some((item) => item.kind === "file");
   }
 
   async setCover(attachmentId: string) {

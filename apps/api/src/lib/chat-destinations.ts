@@ -7,6 +7,7 @@ import { env } from "../env.js";
 import { badRequest } from "./errors.js";
 import { decryptSecret, encryptSecret } from "./secrets.js";
 import { assertWebhookUrlAllowed } from "./ssrf.js";
+import { escapeHtml } from "./html-escape.js";
 
 export type ChatDestinationConfig =
   | { webhookUrl: string }
@@ -48,7 +49,7 @@ export function encryptChatDestinationConfig(
   return encryptSecret(JSON.stringify(config));
 }
 
-export function decryptChatDestinationConfig(endpoint: WebhookEndpoint): ChatDestinationConfig {
+function decryptChatDestinationConfig(endpoint: WebhookEndpoint): ChatDestinationConfig {
   if (!endpoint.encryptedConfig || endpoint.provider === "generic") {
     throw new Error("chat destination configuration is missing");
   }
@@ -80,10 +81,6 @@ export function chatContentExcerpt(value: string | null | undefined, limit = 500
   if (!plain) return undefined;
   const chars = Array.from(plain);
   return chars.length <= limit ? plain : `${chars.slice(0, limit - 1).join("")}…`;
-}
-
-function escapeHtml(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
 
 function escapeSlack(value: string): string {

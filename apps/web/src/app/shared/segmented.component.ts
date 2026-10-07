@@ -15,6 +15,11 @@ export type SegmentedOption<T extends string = string> = {
   label: string;
   /** Defaults to `label`; only shown when the segment renders icon-only. */
   tooltip?: string;
+  /**
+   * The visible text for `autoLabels` mode ("Table" rather than "Table view"): beside its icon the
+   * word "view" is redundant, while `label` stays the full accessible name. Defaults to `label`.
+   */
+  shortLabel?: string;
   disabled?: boolean;
 };
 
@@ -50,6 +55,7 @@ export type SegmentedOption<T extends string = string> = {
           [attr.aria-label]="showLabels() ? null : option.label"
           [kTooltip]="option.tooltip ?? option.label"
           [kTooltipDisabled]="showLabels()"
+          [kTooltipTruncationTarget]="autoLabels() ? '.sg-auto-label' : null"
           (click)="valueChange.emit(option.id)"
         >
           @if (option.icon) {
@@ -57,6 +63,8 @@ export type SegmentedOption<T extends string = string> = {
           }
           @if (showLabels()) {
             <span>{{ option.label }}</span>
+          } @else if (autoLabels()) {
+            <span class="sg-auto-label" aria-hidden="true">{{ option.shortLabel ?? option.label }}</span>
           }
         </button>
       }
@@ -64,8 +72,12 @@ export type SegmentedOption<T extends string = string> = {
   `,
   styles: [
     `
+      /* --sg-fill-width / --sg-fill-flex let a container stretch the track and share its width
+         equally between segments (k-page-header's compact view row) without reaching into this
+         component's styles. Unset, the control keeps its intrinsic size. */
       :host {
         display: inline-flex;
+        width: var(--sg-fill-width, auto);
         min-width: 0;
       }
 
@@ -81,9 +93,11 @@ export type SegmentedOption<T extends string = string> = {
         background: var(--surface-2);
         border: 1px solid var(--border);
         border-radius: var(--radius);
+        width: var(--sg-fill-width, auto);
       }
 
       .sg-btn {
+        flex: var(--sg-fill-flex, 0 1 auto);
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -114,6 +128,36 @@ export type SegmentedOption<T extends string = string> = {
       .sg-btn i {
         font-size: 15px;
         line-height: 1;
+      }
+
+      /* autoLabels: the label is always rendered but collapsed to zero width, so the host can measure
+         its natural width (scrollWidth) to decide whether there is room, and reveal it with one rule
+         (k-page-header.is-roomy, below) without re-rendering. Collapsed, it is also what
+         tells the tooltip to show: kTooltipTruncationTarget sees it as cut short, so the tooltip
+         appears exactly while the text is hidden and stands down once it is visible. The gap moves
+         onto the label's margin so a collapsed label costs no width at all. */
+      .sg-btn:has(.sg-auto-label) {
+        gap: 0;
+      }
+
+      .sg-auto-label {
+        display: inline-block;
+        max-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+      }
+
+      /* The reveal. The header sets .is-roomy only once the whole title, every control and these
+         labels fit with margin (PageHeaderComponent.measureFit). :host-context rather than a rule in
+         toolbar-styles.scss: that file is compiled into each page's scoped styles, which cannot
+         reach this component's own spans. */
+      :host-context(k-page-header.is-roomy) .sg-auto-label {
+        max-width: none;
+        margin-left: 6px;
+      }
+
+      :host-context(k-page-header.is-roomy) .sg-btn:has(.sg-auto-label) {
+        padding-inline: 10px;
       }
 
       /* Hover lifts the label and nothing else. The background has to be restated here, because the
@@ -199,6 +243,11 @@ export class SegmentedComponent<T extends string = string> {
   readonly value = input<T | null>(null);
   /** False renders icon + tooltip only, which is what a 4–5 way switch needs to fit a phone. */
   readonly showLabels = input(false);
+  /**
+   * Icon-only, with a short label a containing header reveals when its row has room for it (see
+   * PageHeaderComponent's `is-roomy`). Ignored when `showLabels` is set.
+   */
+  readonly autoLabels = input(false);
   /**
    * Sizes every segment to the widest one. Opt-in because most label-mode callers are a range or
    * period switch where uneven widths read fine; a two-way state toggle does not — "Unread"/"All"

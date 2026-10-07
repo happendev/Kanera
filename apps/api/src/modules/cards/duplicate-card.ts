@@ -1,5 +1,4 @@
-import { SERVER_EVENTS, type WireCard, type WireCardChecklist } from "@kanera/shared/events";
-import { cardPath } from "@kanera/shared/card-links";
+import { SERVER_EVENTS, type WireCardChecklist } from "@kanera/shared/events";
 import {
   ACTIVITY_ACTION,
   activityEvents,
@@ -28,22 +27,22 @@ import {
 import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { AuthClaims } from "../../auth/plugin.js";
-import { db, type Db } from "../../db.js";
-import { env } from "../../env.js";
+import { db, type Tx } from "../../db.js";
 import type { assertBoardAccess, assertCardAccess } from "../../lib/access.js";
 import { emitActivityFeedItem, recordActivity } from "../../lib/activity.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { allocateCardKeys } from "../../lib/card-keys.js";
 import { emptyValueColumns, hasCustomFieldValue, type CustomFieldValueColumns } from "../../lib/custom-fields.js";
 import { badRequest } from "../../lib/errors.js";
-import { signEmbeddedMediaUrls, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
+import { unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
+import { EMPTY_LINK_FANOUT, emitInternalLinksChanged, replaceInternalLinksForSource, type LinkFanout } from "../../lib/internal-links.js";
 import { replaceCardMentions } from "../../lib/mentions.js";
 import type { StorageProvider } from "../../lib/storage/index.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { attachmentCoverStorageKey, attachmentThumbnailStorageKey, cardAttachmentStorageKey } from "../../lib/storage/keys.js";
 import { emitToBoard } from "../../realtime/emit.js";
-
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
+import { toWireCard } from "../../lib/wire-card.js";
+import { ensureBoardMembershipForUsers, shouldAutoWatchAuthoredCards } from "../../lib/card-assignment.js";
 
 export interface DuplicateIdMap {
   comments: Map<string, string>;
@@ -51,26 +50,6 @@ export interface DuplicateIdMap {
   checklists: Map<string, string>;
   checklistItems: Map<string, string>;
   activities: Map<string, string>;
-}
-
-function shouldAutoWatchAuthoredCards(authKind: AuthClaims["authKind"]) {
-  return authKind !== "apiKey";
-}
-
-async function ensureBoardMembershipForUsers(
-  boardId: string,
-  _workspaceId: string,
-  userIds: string[],
-): Promise<string[]> {
-  if (userIds.length === 0) return [];
-  // Assignment eligibility remains board-scoped for ordinary copies and mirror snapshots alike.
-  // A workspace member who is not an explicit non-observer board member cannot own card work.
-  const rows = await db.select({ userId: boardMembers.userId, role: boardMembers.role }).from(boardMembers).where(and(
-    eq(boardMembers.boardId, boardId),
-    inArray(boardMembers.userId, userIds),
-  ));
-  const eligible = new Set(rows.filter((member) => member.role !== "observer").map((member) => member.userId));
-  return userIds.filter((userId) => eligible.has(userId));
 }
 
 async function ensureWorkspaceMembershipForUsers(workspaceId: string, userIds: string[]): Promise<string[]> {
@@ -103,19 +82,6 @@ async function ensureMirrorAssignmentEligibility(boardId: string, workspaceId: s
     else eligible.add(row.userId);
   }
   return userIds.filter((userId) => eligible.has(userId));
-}
-
-function cardUrl(organisationKey: string, cardKey: string): string {
-  return new URL(cardPath(organisationKey, cardKey), env.WEB_ORIGIN).toString();
-}
-
-function toWireCard(card: typeof cards.$inferSelect, clientId: string): WireCard {
-  const { clientToken: _clientToken, ...publicCard } = card;
-  return {
-    ...publicCard,
-    description: signEmbeddedMediaUrls(card.description, clientId),
-    url: cardUrl(card.organisationKey, card.key),
-  };
 }
 
 async function emitCardActivityFeedItem(boardId: string, cardId: string, activity: ActivityEvent) {
@@ -648,7 +614,7 @@ export async function duplicateCardInto({
     includeAssignees
       ? resolveMirrorAssigneesFromBoardAccess
         ? ensureMirrorAssignmentEligibility(targetBoardId, dstCtx.workspaceId, assignmentCandidates)
-        : ensureBoardMembershipForUsers(targetBoardId, dstCtx.workspaceId, assignmentCandidates)
+        : ensureBoardMembershipForUsers(targetBoardId, assignmentCandidates)
       : Promise.resolve([]),
     resolveCustomFieldUsersFromWorkspace
       ? ensureWorkspaceMembershipForUsers(dstCtx.workspaceId, fieldUserCandidates)
@@ -670,6 +636,7 @@ export async function duplicateCardInto({
   const { copiedAttachments, dstStorage } = await copyAttachmentsForDuplicate(sourceAttachments, srcCtx, dstCtx, newCardId);
 
   let result: { newCard: typeof cards.$inferSelect; attachmentRows: (typeof cardAttachments.$inferSelect)[]; activity: ActivityEvent };
+  let linkFanout: LinkFanout = EMPTY_LINK_FANOUT;
   try {
     result = await db.transaction(async (tx) => {
       const [identity] = await allocateCardKeys(tx, dstCtx.workspaceId, 1);
@@ -697,6 +664,16 @@ export async function duplicateCardInto({
         boardId: targetBoardId,
         cardId: inserted!.id,
         source: "description",
+        markdown: inserted!.description,
+      });
+      // The copied description links the same cards as the original, so the copy belongs in their
+      // linked items too. Recorded against the destination workspace with the actor's access.
+      linkFanout = await replaceInternalLinksForSource({
+        tx,
+        claims: actor,
+        workspaceId: dstCtx.workspaceId,
+        sourceType: "card",
+        sourceId: inserted!.id,
         markdown: inserted!.description,
       });
 
@@ -1000,6 +977,7 @@ export async function duplicateCardInto({
     throw err;
   }
 
+  await emitInternalLinksChanged(linkFanout);
   return { ...result, labelIds, assigneeIds: eligibleAssigneeIds, customFieldValues: fieldValueRows };
 }
 

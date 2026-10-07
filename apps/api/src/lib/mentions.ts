@@ -7,7 +7,7 @@ type MentionDb = Pick<Db, "select" | "insert" | "delete">;
 
 const MENTION_RE = /@\[([^\]]+)\]\(kanera-user:([0-9a-fA-F-]{36})\)/g;
 
-export function extractMentionUserIds(markdown: string | null | undefined): string[] {
+function extractMentionUserIds(markdown: string | null | undefined): string[] {
   if (!markdown) return [];
   const ids = new Set<string>();
   for (const match of markdown.matchAll(MENTION_RE)) {

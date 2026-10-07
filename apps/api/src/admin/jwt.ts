@@ -3,6 +3,7 @@ import { and, eq, gt, isNull } from "drizzle-orm";
 import { adminRefreshTokens } from "@kanera/shared/schema";
 import { db } from "../db.js";
 import { env } from "../env.js";
+import { hashOpaqueToken } from "../lib/tokens.js";
 
 // Deliberate verbatim clone of auth/jwt.ts against admin_refresh_tokens. The rotation + reuse-theft
 // logic must stay identical, but the storage table is separate so admin and tenant sessions cannot be
@@ -23,12 +24,8 @@ export function newAdminRefreshToken(): { raw: string; hash: string; expiresAt: 
   return { raw, hash, expiresAt };
 }
 
-export function hashAdminRefresh(raw: string): string {
-  return crypto.createHash("sha256").update(raw).digest("hex");
-}
-
 export async function rotateAdminRefresh(oldRaw: string): Promise<AdminRefreshRotationResult> {
-  const oldHash = hashAdminRefresh(oldRaw);
+  const oldHash = hashOpaqueToken(oldRaw);
   return db.transaction(async (tx) => {
     const [existing] = await tx
       .select()

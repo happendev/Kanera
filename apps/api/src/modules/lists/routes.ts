@@ -11,25 +11,14 @@ import { emitAutomationEffects, runCardMoveAutomations, type AutomationEffects }
 import { invalidateQueuesForCards } from "../../lib/card-priority-invalidation.js";
 import { badRequest, notFound } from "../../lib/errors.js";
 import { clearNotificationsForCards, emitDeletedNotifications } from "../../lib/notifications.js";
-import { between, neighbourPositions as resolveNeighbourPositions } from "../../lib/position.js";
+import { between, workspaceNeighbourPositions } from "../../lib/position.js";
 import { rebalanceLists } from "../../lib/rebalance.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { emitToBoard, emitToWorkspace } from "../../realtime/emit.js";
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
 // as targeted indexed probes so large workspaces do not pay for a full list scan.
-function neighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
-  return resolveNeighbourPositions({
-    table: lists,
-    id: lists.id,
-    position: lists.position,
-    scope: and(eq(lists.workspaceId, workspaceId), isNull(lists.archivedAt)),
-    afterId,
-    beforeId,
-    afterLabel: "afterListId",
-    beforeLabel: "beforeListId",
-  });
-}
+const neighbourPositions = workspaceNeighbourPositions(lists, "List");
 
 function listUpdateActivityValue(name: string, icon: string | null, color: string | null) {
   return { name, icon, color };
@@ -68,7 +57,7 @@ export async function listRoutes(app: FastifyInstance) {
       action: "created",
       payload: { name: list!.name },
     });
-    emitToWorkspace(workspaceId, "list:created", { workspaceId, list: list! });
+    await emitToWorkspace(workspaceId, "list:created", { workspaceId, list: list! });
     return reply.status(201).send(list);
   });
 
@@ -110,7 +99,7 @@ export async function listRoutes(app: FastifyInstance) {
       toValue,
       payload: body,
     });
-    emitToWorkspace(current.workspaceId, "list:updated", { workspaceId: current.workspaceId, list: list! });
+    await emitToWorkspace(current.workspaceId, "list:updated", { workspaceId: current.workspaceId, list: list! });
     return list!;
   });
 
@@ -146,7 +135,7 @@ export async function listRoutes(app: FastifyInstance) {
       action: "deleted",
       payload: { name: current.name },
     });
-    emitToWorkspace(current.workspaceId, "list:deleted", { workspaceId: current.workspaceId, listId: id });
+    await emitToWorkspace(current.workspaceId, "list:deleted", { workspaceId: current.workspaceId, listId: id });
     return reply.status(204).send();
   });
 
@@ -257,7 +246,7 @@ export async function listRoutes(app: FastifyInstance) {
     }
     for (const [boardId, boardMoves] of byBoard) {
       for (const m of boardMoves) {
-        emitToBoard(boardId, "card:moved", {
+        await emitToBoard(boardId, "card:moved", {
           boardId,
           cardId: m.id,
           fromListId: id,
@@ -336,7 +325,7 @@ export async function listRoutes(app: FastifyInstance) {
     }
     for (const [boardId, boardCards] of byBoard) {
       for (const card of boardCards) {
-        emitToBoard(boardId, "card:updated", { boardId, card });
+        await emitToBoard(boardId, "card:updated", { boardId, card });
       }
     }
     // Archiving removes cards from "Up next" queues without touching their rows, so the queue
@@ -381,7 +370,7 @@ export async function listRoutes(app: FastifyInstance) {
       toValue: position,
       payload: { prevPosition, position },
     });
-    emitToWorkspace(current.workspaceId, "list:moved", {
+    await emitToWorkspace(current.workspaceId, "list:moved", {
       workspaceId: current.workspaceId,
       listId: id,
       position,

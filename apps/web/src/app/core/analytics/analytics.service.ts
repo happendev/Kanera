@@ -185,14 +185,6 @@ export class AnalyticsService {
     try { this.instance?.reset(); } catch { /* Identity cleanup remains best-effort. */ }
   }
 
-  optIn(): void {
-    this.setConsent(true);
-  }
-
-  optOut(): void {
-    this.setConsent(false);
-  }
-
   setSuppressed(suppressed: boolean): void {
     if (suppressed === this.policySuppressed) return;
     this.policySuppressed = suppressed;

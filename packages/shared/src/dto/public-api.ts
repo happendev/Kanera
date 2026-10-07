@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { PERSONAL_API_KEY_SCOPES, WORKSPACE_API_KEY_SCOPES } from "../schema/workspace-api-key.js";
-import { CHAT_DESTINATION_EVENT_TYPES, CHAT_DESTINATION_PROVIDERS } from "../schema/webhook-endpoint.js";
+import { CHAT_DESTINATION_EVENT_TYPES } from "../schema/webhook-endpoint.js";
 import { API_KEY_NAME_MAX_LENGTH, GENERAL_NAME_MAX_LENGTH } from "./name-limits.js";
+import { offsetPagedQuery } from "./_pagination.js";
 
 export const workspaceApiKeyScope = z.enum(WORKSPACE_API_KEY_SCOPES);
 export type WorkspaceApiKeyScopeDto = z.infer<typeof workspaceApiKeyScope>;
@@ -64,13 +65,9 @@ export type ListWebhookDeliveriesQuery = z.infer<typeof listWebhookDeliveriesQue
 
 // Public agent directories use an offset only behind an opaque MCP cursor. Both values remain
 // optional so the first-party app routes retain their existing complete-directory responses.
-export const agentDirectoryQuery = z.object({
-  limit: z.coerce.number().int().min(1).max(101).optional(),
-  offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
-});
+export const agentDirectoryQuery = offsetPagedQuery;
 export type AgentDirectoryQuery = z.infer<typeof agentDirectoryQuery>;
 
-export const chatDestinationProvider = z.enum(CHAT_DESTINATION_PROVIDERS);
 export const chatDestinationEventType = z.enum(CHAT_DESTINATION_EVENT_TYPES);
 const chatDestinationCommon = {
   name: z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH),

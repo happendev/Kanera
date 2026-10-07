@@ -107,7 +107,7 @@ async function serveMedia(req: FastifyRequest, reply: FastifyReply) {
     return reply.send(object.body);
 }
 
-export function hasDotSegment(key: string): boolean {
+function hasDotSegment(key: string): boolean {
   return key.split("/").some((part) => part === "" || part === "." || part === "..");
 }
 

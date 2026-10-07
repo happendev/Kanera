@@ -1,5 +1,4 @@
 import { getAllowedAttachmentExtension } from "@kanera/shared/attachments";
-import { cardPath } from "@kanera/shared/card-links";
 import type { BoardExportArchive, CardAttachmentRow, CardFeedItem, CommentRow, CommitImportBody, ImportResultSummary, ReactionUserSummary } from "@kanera/shared/dto";
 import type { WireCard, WireCardChecklist, WireCardChecklistItem, WireCustomField, WireCustomFieldOption } from "@kanera/shared/events";
 import {
@@ -26,7 +25,7 @@ import {
 import type { ActivityEvent, Board, Card, CardLabel, CustomField, List } from "@kanera/shared/schema";
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
-import type { Db } from "../../db.js";
+import type { TxOnly as Tx } from "../../db.js";
 import { recordActivity } from "../../lib/activity.js";
 import { allocateCardKeys } from "../../lib/card-keys.js";
 import { env } from "../../env.js";
@@ -38,29 +37,13 @@ import { seedBoardMembersFromWorkspace } from "../../lib/board-membership.js";
 import type { StorageProvider } from "../../lib/storage/index.js";
 import { cardAttachmentStorageKey } from "../../lib/storage/keys.js";
 import { assertBoardLimit } from "../../lib/tier-limits.js";
+import { insertMany, mapWithConcurrency, toWireImportedCard } from "./shared.js";
 
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
-
-const CHUNK_SIZE = 500;
 
 // Attachment copy is network-bound (download from the source export, upload to storage). The
 // whole import runs in one transaction, so we parallelize only the I/O and keep DB writes serial:
 // a Drizzle transaction is a single connection and cannot run concurrent queries safely.
 const ATTACHMENT_COPY_CONCURRENCY = 8;
-
-async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let cursor = 0;
-  const worker = async () => {
-    while (true) {
-      const index = cursor++;
-      if (index >= items.length) return;
-      results[index] = await fn(items[index]!, index);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return results;
-}
 
 export interface KaneraBoardImportEvents {
   cardsCreated: WireCard[];
@@ -110,12 +93,6 @@ interface ImportContext {
   sourceLabel: "kanera" | "csv";
 }
 
-function chunks<T>(items: T[], size = CHUNK_SIZE): T[][] {
-  const result: T[][] = [];
-  for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size));
-  return result;
-}
-
 function uniqueCardUserRows(rows: { cardId: string; userId: string }[]): { cardId: string; userId: string }[] {
   const seen = new Set<string>();
   return rows.filter((row) => {
@@ -126,28 +103,11 @@ function uniqueCardUserRows(rows: { cardId: string; userId: string }[]): { cardI
   });
 }
 
-async function insertMany<T extends Record<string, unknown>, R>(tx: Tx, table: Parameters<Tx["insert"]>[0], rows: T[]): Promise<R[]> {
-  const inserted: R[] = [];
-  for (const chunk of chunks(rows)) {
-    if (chunk.length === 0) continue;
-    inserted.push(...await tx.insert(table).values(chunk).returning() as R[]);
-  }
-  return inserted;
-}
-
 function toDate(value: unknown): Date | null {
   if (!value) return null;
   const date = value instanceof Date || typeof value === "string" || typeof value === "number" ? new Date(value) : null;
   if (!date) return null;
   return Number.isNaN(date.getTime()) ? null : date;
-}
-
-function cardUrl(organisationKey: string, cardKey: string): string {
-  return cardPath(organisationKey, cardKey);
-}
-
-function toWireCard(card: Card): WireCard {
-  return { ...card, url: cardUrl(card.organisationKey, card.key) };
 }
 
 function normalize(value: string): string {
@@ -687,8 +647,8 @@ export async function runKaneraBoardImport(tx: Tx, args: { source: BoardExportAr
     createdLabels: labelMapping.created,
     createdCustomFields: fieldMapping.created,
     events: {
-      cardsCreated: insertedCards.map((card) => toWireCard({ ...card, coverAttachmentId: attachments.coverUpdates.get(card.id) ?? card.coverAttachmentId })),
-      cardsUpdated: updatedCards.map(toWireCard),
+      cardsCreated: insertedCards.map((card) => toWireImportedCard({ ...card, coverAttachmentId: attachments.coverUpdates.get(card.id) ?? card.coverAttachmentId })),
+      cardsUpdated: updatedCards.map(toWireImportedCard),
       labelsSet: insertedCards.map((card) => ({ cardId: card.id, labelIds: labelAssignments.filter((row) => row.cardId === card.id).map((row) => row.labelId) })).filter((row) => row.labelIds.length > 0),
       assigneesSet: insertedCards.map((card) => ({ cardId: card.id, assigneeIds: assignees.filter((row) => row.cardId === card.id).map((row) => row.userId) })).filter((row) => row.assigneeIds.length > 0),
       customFieldValuesSet: fieldValues,

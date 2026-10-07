@@ -238,6 +238,21 @@ export async function loadAccessibleBoards(auth: AuthClaims): Promise<Accessible
   return pending;
 }
 
+// The board/workspace/organisation columns every access branch below selects before its own extras.
+const accessibleBoardColumns = {
+  boardId: boards.id,
+  workspaceId: boards.workspaceId,
+  workspaceName: workspaces.name,
+  workspaceIcon: workspaces.icon,
+  workspaceAccentColor: workspaces.accentColor,
+  workspaceKind: workspaces.kind,
+  clientId: clients.id,
+  clientName: clients.name,
+  boardName: boards.name,
+  boardIcon: boards.icon,
+  boardIconColor: boards.iconColor,
+} as const;
+
 async function loadAccessibleBoardsUncached(auth: AuthClaims): Promise<AccessibleBoard[]> {
   const readOnlyCredential = auth.apiKeyKind === "personal" && auth.apiKeyScope === "read";
   const byId = new Map<string, UnorderedAccessibleBoard>();
@@ -245,17 +260,7 @@ async function loadAccessibleBoardsUncached(auth: AuthClaims): Promise<Accessibl
   if (auth.authKind === "apiKey" && auth.apiKeyKind !== "personal") {
     const rows = await db
       .select({
-        boardId: boards.id,
-        workspaceId: boards.workspaceId,
-        workspaceName: workspaces.name,
-        workspaceIcon: workspaces.icon,
-        workspaceAccentColor: workspaces.accentColor,
-        workspaceKind: workspaces.kind,
-        clientId: clients.id,
-        clientName: clients.name,
-        boardName: boards.name,
-        boardIcon: boards.icon,
-        boardIconColor: boards.iconColor,
+        ...accessibleBoardColumns,
       })
       .from(boards)
       .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
@@ -369,17 +374,7 @@ async function loadAccessibleBoardsUncached(auth: AuthClaims): Promise<Accessibl
   if (isOrgAdmin(auth)) {
     const rows = await db
       .select({
-        boardId: boards.id,
-        workspaceId: boards.workspaceId,
-        workspaceName: workspaces.name,
-        workspaceIcon: workspaces.icon,
-        workspaceAccentColor: workspaces.accentColor,
-        workspaceKind: workspaces.kind,
-        clientId: clients.id,
-        clientName: clients.name,
-        boardName: boards.name,
-        boardIcon: boards.icon,
-        boardIconColor: boards.iconColor,
+        ...accessibleBoardColumns,
       })
       .from(boards)
       .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
@@ -415,17 +410,7 @@ async function loadAccessibleBoardsUncached(auth: AuthClaims): Promise<Accessibl
 
   const explicitRows = await db
     .select({
-      boardId: boards.id,
-      workspaceId: boards.workspaceId,
-      workspaceName: workspaces.name,
-      workspaceIcon: workspaces.icon,
-      workspaceAccentColor: workspaces.accentColor,
-      workspaceKind: workspaces.kind,
-      clientId: clients.id,
-      clientName: clients.name,
-      boardName: boards.name,
-      boardIcon: boards.icon,
-      boardIconColor: boards.iconColor,
+      ...accessibleBoardColumns,
       role: boardMembers.role,
       assignedItemsOnly: boardMembers.assignedItemsOnly,
       workspaceMemberId: workspaceMembers.userId,

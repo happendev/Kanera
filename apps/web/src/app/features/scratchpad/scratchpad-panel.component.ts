@@ -29,12 +29,13 @@ import {
   ScratchpadService,
 } from "./scratchpad.service";
 import { formatDateTime } from "../../shared/date-format";
+import { mediaQuerySignal } from "../../shared/media-query.signal";
 
 /** Below this the dock has no room to be a dock and becomes a bottom sheet. Matches the shell's
  * auto-collapse breakpoint, so the sidebar and the scratchpad change shape at the same width. */
 const SHEET_QUERY = "(max-width: 900px)";
 /** The popped-out route. Exported so the shell and the route table cannot drift from each other. */
-export const SCRATCHPAD_ROUTE = "/scratchpad";
+const SCRATCHPAD_ROUTE = "/scratchpad";
 /** Named target so repeated pop-outs reuse one top-level window instead of opening duplicates. */
 const SCRATCHPAD_POPOUT_TARGET = "kanera-scratchpad";
 
@@ -117,7 +118,7 @@ export class ScratchpadPanelComponent implements OnDestroy {
   protected readonly atCapacity = this.scratchpad.atCapacity;
   protected readonly maxNotes = MAX_SCRATCHPAD_NOTES;
 
-  protected readonly isSheet = signal(this.matchesSheet());
+  protected readonly isSheet = mediaQuerySignal(SHEET_QUERY);
   /** The bottom-sheet shape: narrow viewport *and* docked. A popped-out tab is a page at any width. */
   protected readonly isSheetForm = computed(() => this.isSheet() && !this.isPage());
   /** Whether the active page's name in the header is being edited inline. */
@@ -217,14 +218,8 @@ export class ScratchpadPanelComponent implements OnDestroy {
   private sheetPointerId: number | null = null;
   private sheetStartY = 0;
   private sheetStartHeight = 0;
-  private readonly onSheetChange = (event: MediaQueryListEvent) => this.isSheet.set(event.matches);
-  private sheetQueryList: MediaQueryList | null = null;
 
   constructor() {
-    if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
-      this.sheetQueryList = window.matchMedia(SHEET_QUERY);
-      this.sheetQueryList.addEventListener("change", this.onSheetChange);
-    }
     // The panel can be opened before it has ever loaded (restored from localStorage at startup, or
     // the shell shortcut), so kick the lazy first fetch from here rather than from a click handler.
     effect(() => {
@@ -273,7 +268,6 @@ export class ScratchpadPanelComponent implements OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.sheetQueryList?.removeEventListener("change", this.onSheetChange);
     // Never leave text in a debounce that is about to be discarded with the component.
     this.scratchpad.flushAll();
     this.scratchpad.registerEditor(null);
@@ -576,9 +570,4 @@ export class ScratchpadPanelComponent implements OnDestroy {
     return formatDateTime(value, "compact") || "—";
   }
 
-  private matchesSheet(): boolean {
-    return typeof window !== "undefined"
-      && typeof window.matchMedia === "function"
-      && window.matchMedia(SHEET_QUERY).matches;
-  }
 }

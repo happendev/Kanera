@@ -2,17 +2,14 @@ import "../../api/src/test/setup.integration.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { FastifyInstance, LightMyRequestResponse } from "fastify";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
+import type { CallToolResult } from "@modelcontextprotocol/server";
 import { buildPublicApiServer } from "../../api/src/public-api-server.js";
 import { buildIntegrationServer } from "../../api/src/test/integration.js";
 import { createKaneraMcpServer } from "./server.js";
 
 type RegisteredTool = {
   handler: (args: unknown) => Promise<CallToolResult>;
-};
-
-type RegisteredResource = {
-  readCallback: (uri: URL, vars: Record<string, string>) => Promise<{ contents: Array<{ text?: string }> }>;
 };
 
 type SignupResponse = {
@@ -44,12 +41,18 @@ function toolHandler(apiKey: string, publicApiUrl: string, name: string) {
   return tool.handler;
 }
 
-function resourceHandler(apiKey: string, publicApiUrl: string, name: string) {
-  const server = createKaneraMcpServer({ apiKey, publicApiUrl });
-  const resources = (server as unknown as { _registeredResourceTemplates: Record<string, RegisteredResource> })._registeredResourceTemplates;
-  const resource = resources[name];
-  assert.ok(resource, `expected ${name} resource to be registered`);
-  return resource.readCallback;
+// Reads through a connected client so the test covers the resources/read wire path.
+async function readResource(apiKey: string, publicApiUrl: string, uri: string) {
+  const server = createKaneraMcpServer({ apiKey, publicApiUrl, logToolCalls: false });
+  const client = new Client({ name: "kanera-mcp-itest", version: "1.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  try {
+    return await client.readResource({ uri });
+  } finally {
+    await client.close();
+    await server.close();
+  }
 }
 
 function parseToolText<T>(result: CallToolResult): T {
@@ -208,9 +211,8 @@ void test("MCP tools initialize against the real public API and create cards wit
     assert.equal(boardPayload.board.id, fixture.board.id);
     assert.equal(boardPayload.lists.some((list) => list.id === fixture.listId), true);
 
-    const readBoardResource = resourceHandler(fixture.writeKey, publicApiUrl, "board");
-    const resource = await readBoardResource(new URL(`kanera://board/${fixture.board.id}`), { boardId: fixture.board.id });
-    const resourcePayload = JSON.parse(resource.contents[0]!.text!) as { board: { id: string }; cards?: unknown };
+    const resource = await readResource(fixture.writeKey, publicApiUrl, `kanera://board/${fixture.board.id}`);
+    const resourcePayload = JSON.parse((resource.contents[0] as { text: string }).text) as { board: { id: string }; cards?: unknown };
     assert.equal(resourcePayload.board.id, fixture.board.id);
     assert.equal(resourcePayload.cards, undefined, "the board resource must remain metadata-only");
 
@@ -295,23 +297,25 @@ void test("MCP checklist tools drive the plan->track flow end to end", async () 
     const checklist = parseToolText<{ id: string; title: string }>(await createChecklist({ cardId: card.id, title: "Launch steps" }));
     assert.equal(checklist.title, "Launch steps");
 
-    const addItem = toolHandler(fixture.writeKey, publicApiUrl, "checklists.add_item");
-    const item = parseToolText<{ id: string; text: string; completedAt: string | null }>(
-      await addItem({ cardId: card.id, checklistId: checklist.id, text: "Write the plan" }),
-    );
+    const addItems = toolHandler(fixture.writeKey, publicApiUrl, "checklists.add_items");
+    const item = parseToolText<{ items: Array<{ id: string; text: string; completedAt: string | null }> }>(
+      await addItems({ cardId: card.id, checklistId: checklist.id, items: [{ text: "Write the plan" }] }),
+    ).items[0]!;
     assert.equal(item.completedAt, null);
 
     // Item detail remains part of the card resource, while sub-checklists are linked in the flat
     // checklist collection by parentItemId so MCP clients can assemble the same one-level view.
-    const updateItem = toolHandler(fixture.writeKey, publicApiUrl, "checklists.update_item");
-    await updateItem({
+    const updateItems = toolHandler(fixture.writeKey, publicApiUrl, "checklists.update_items");
+    await updateItems({
       cardId: card.id,
-      checklistId: checklist.id,
-      itemId: item.id,
-      changes: {
-        description: "Coordinate the launch notes and owners.",
-        completed: true,
-      },
+      updates: [{
+        itemId: item.id,
+        checklistId: checklist.id,
+        changes: {
+          description: "Coordinate the launch notes and owners.",
+          completed: true,
+        },
+      }],
     });
 
     const subChecklist = parseToolText<{ id: string; parentItemId: string | null; title: string }>(
@@ -319,10 +323,10 @@ void test("MCP checklist tools drive the plan->track flow end to end", async () 
     );
     assert.equal(subChecklist.parentItemId, item.id);
 
-    const subItem = parseToolText<{ id: string; text: string }>(
-      await addItem({ cardId: card.id, checklistId: subChecklist.id, text: "Confirm rollout window" }),
-    );
-    await updateItem({ cardId: card.id, checklistId: subChecklist.id, itemId: subItem.id, changes: { completed: true } });
+    const subItem = parseToolText<{ items: Array<{ id: string; text: string }> }>(
+      await addItems({ cardId: card.id, checklistId: subChecklist.id, items: [{ text: "Confirm rollout window" }] }),
+    ).items[0]!;
+    await updateItems({ cardId: card.id, updates: [{ itemId: subItem.id, changes: { completed: true } }] });
 
     const getCard = toolHandler(fixture.writeKey, publicApiUrl, "cards.get");
     const detail = parseToolText<{

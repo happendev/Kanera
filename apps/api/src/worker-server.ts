@@ -10,6 +10,7 @@ import { startDueDateAutomationScheduler } from "./lib/automations.js";
 import { startDailyDigestScheduler } from "./lib/daily-digest.js";
 import { startEmailQueueScheduler } from "./lib/email-queue.js";
 import { startImportCleanupScheduler } from "./lib/import-cleanup.js";
+import { startLifecycleEmailScheduler } from "./lib/lifecycle-emails.js";
 import { registerMetrics, registerNotificationQueueStatsProvider, timestampAgeSeconds } from "./lib/metrics.js";
 import mailerPlugin from "./lib/mailer-plugin.js";
 import { startOverdueNotificationScheduler } from "./lib/overdue-notifications.js";
@@ -89,6 +90,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   let stopPushQueueScheduler: (() => Promise<void>) | null = null;
   let stopRetentionCleanupScheduler: (() => Promise<void>) | null = null;
   let stopTrialExpiryScheduler: (() => Promise<void>) | null = null;
+  let stopLifecycleEmailScheduler: (() => Promise<void>) | null = null;
   let stopBoardMirrorScheduler: (() => Promise<void>) | null = null;
   let stopWeeklyAdminRecapScheduler: (() => Promise<void>) | null = null;
   let stopPresenceReaper: (() => void) | null = null;
@@ -109,6 +111,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   app.addHook("onClose", async () => stopPushQueueScheduler?.());
   app.addHook("onClose", async () => stopRetentionCleanupScheduler?.());
   app.addHook("onClose", async () => stopTrialExpiryScheduler?.());
+  app.addHook("onClose", async () => stopLifecycleEmailScheduler?.());
   app.addHook("onClose", async () => stopBoardMirrorScheduler?.());
   app.addHook("onClose", async () => stopWeeklyAdminRecapScheduler?.());
   app.addHook("onClose", async () => closeRealtimeIo());
@@ -147,6 +150,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
     stopPushQueueScheduler = startPushQueueScheduler({ db, log: app.log });
     stopRetentionCleanupScheduler = startRetentionCleanupScheduler({ db, log: app.log });
     stopTrialExpiryScheduler = startTrialExpiryScheduler(app.log, app.mailer);
+    stopLifecycleEmailScheduler = startLifecycleEmailScheduler(app.log, app.mailer);
     stopWeeklyAdminRecapScheduler = startWeeklyAdminRecapScheduler({
       db,
       adminEmail: env.ADMIN_EMAIL,

@@ -83,4 +83,6 @@ pnpm --filter @kanera/api db:seed >"$KANERA_E2E_ARTIFACT_DIR/seed.log" 2>&1
 # writes the gitignored build-info.generated.ts and generated assets that a clean checkout (CI)
 # lacks. As a separate step, a failure here is reported instead of surfacing as a web-server timeout.
 pnpm --filter @kanera/web run prestart >"$KANERA_E2E_ARTIFACT_DIR/web-prepare.log" 2>&1
+# CLI specs run the bundled executable that npm ships, not the TypeScript sources.
+pnpm --filter @kanera/cli run build >"$KANERA_E2E_ARTIFACT_DIR/cli-build.log" 2>&1
 pnpm exec playwright test --config e2e/playwright.config.ts "$@"

@@ -20,7 +20,7 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, notExists, or, sql } fr
 import { alias } from "drizzle-orm/pg-core";
 import type { FastifyInstance } from "fastify";
 import type { AuthClaims } from "../../auth/plugin.js";
-import { db, type Db } from "../../db.js";
+import { db, type Tx } from "../../db.js";
 import { env } from "../../env.js";
 import { assertBoardAccess, assertBoardManageAccess, assertCardAccess, assertWorkspaceAccess, isOrgAdmin } from "../../lib/access.js";
 import { loadAccessibleBoards } from "../../lib/accessible-boards.js";
@@ -32,7 +32,6 @@ import { PAID_BILLING_STATUSES } from "../../lib/entitlements.js";
 import { deleteExternalLinks } from "../../lib/external-links.js";
 import { assertBoardSyncAllowed, hasBoardSyncEntitlement } from "../../lib/tier-limits.js";
 
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 const NIL_UUID = "00000000-0000-0000-0000-000000000000";
 
 const sourceBoards = alias(boards, "mirror_source_board");

@@ -89,7 +89,7 @@ function zonedDateTimeToUtc(localDate: string, slot: DueDateSlot, timezone: stri
   return guess;
 }
 
-export function dueDateTimestamp(
+function dueDateTimestamp(
   localDate: string | null | undefined,
   slot: DueDateSlot | null | undefined,
   timezone: string | null | undefined,
@@ -122,7 +122,7 @@ export function isDueSoon(
 }
 
 /** "4 Mar" for a YYYY-MM-DD due date; the shared "short" style adds the year outside the current one. */
-export function formatShortDate(localDate: string): string {
+function formatShortDate(localDate: string): string {
   return formatDate(localDate, "short");
 }
 

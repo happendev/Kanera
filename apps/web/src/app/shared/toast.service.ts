@@ -45,7 +45,7 @@ export interface UndoableToastOptions {
 }
 
 /** Lifetime of a plain confirmation or error toast. */
-export const TOAST_LIFETIME_MS = 6000;
+const TOAST_LIFETIME_MS = 6000;
 
 /**
  * How long an undo stays available. Longer than a plain toast: the user has to notice the toast,

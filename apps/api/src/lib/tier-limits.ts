@@ -1,12 +1,10 @@
 import type { Entitlements } from "@kanera/shared/dto";
 import { automationMonthlyUsage, automations, boards, clientGuestSeats, clientMembers, clients, users, workspaces, type ClientBillingStatus, type ClientPlan } from "@kanera/shared/schema";
 import { and, eq, inArray, isNull, lt, ne, sql } from "drizzle-orm";
-import { db, type Db } from "../db.js";
+import { db, type Tx } from "../db.js";
 import { env, type Env } from "../env.js";
 import { AppError } from "./errors.js";
 import { hasPaidPlanEntitlement } from "./entitlements.js";
-
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 type TierLimitEnv = Pick<
   Env,
@@ -86,7 +84,7 @@ export async function assertOrgMemberLimit(clientId: string, tx: Tx = db, config
   if (await isUnlimited(clientId, tx, config)) return;
   await lockTenant(clientId, tx);
   // Accepted, active members only; pending invites, suspended members (disabled by a prior downgrade),
-  // and removed member tombstones do not occupy a slot (mirrors board-guest-limits).
+  // and removed member tombstones do not occupy a slot (mirrors paid-guest-seats).
   const [row] = await tx
     .select({ count: sql<number>`count(*)::int` })
     .from(clientMembers)

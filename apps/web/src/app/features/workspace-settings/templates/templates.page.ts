@@ -12,7 +12,6 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
   imports: [EmptyStateComponent, AutofocusDirective, CdkDrag, CdkDragHandle, CdkDropList, DocsLinkComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./templates.page.html",
-  styleUrl: "./templates.page.scss",
 })
 export class WorkspaceSettingsTemplatesPage {
   protected readonly settings = inject(WorkspaceSettingsPage);

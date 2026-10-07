@@ -26,7 +26,7 @@ const ENTITIES: { name: string; table: unknown; synthetic?: string[]; omitted?: 
     table: schema.workspaces,
     synthetic: ["role"],
     // `lastCardNumber` is the card-key allocation counter, an internal implementation detail.
-    omitted: ["lastCardNumber", "boardLinkingEnabled", "archivedAt"],
+    omitted: ["lastCardNumber", "boardLinkingEnabled", "notesEnabled", "archivedAt"],
   },
   { name: "Board", table: schema.boards, omitted: ["groupId", "archivedAt"] },
   { name: "List", table: schema.lists, omitted: ["icon", "color"] },
