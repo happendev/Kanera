@@ -1,7 +1,7 @@
+import { createComponentFixture, type HtmlComponentFixture } from "../../../test/component-fixture";
 import { provideZonelessChangeDetection, signal } from "@angular/core";
 import type { CdkDragDrop } from "@angular/cdk/drag-drop";
 import { Dialog } from "@angular/cdk/dialog";
-import type { ComponentFixture} from "@angular/core/testing";
 import { DeferBlockBehavior, DeferBlockState, TestBed } from "@angular/core/testing";
 import { provideRouter, Router } from "@angular/router";
 import type { Entitlements } from "@kanera/shared/dto";
@@ -138,7 +138,7 @@ function guestGroup(overrides: Partial<GuestHomeGroup> = {}): GuestHomeGroup {
 }
 
 describe("AppShellComponent board search", () => {
-  let fixture: ComponentFixture<AppShellComponent>;
+  let fixture: HtmlComponentFixture<AppShellComponent>;
   let component: AppShellComponent;
 
   async function render(
@@ -366,7 +366,7 @@ describe("AppShellComponent board search", () => {
       ],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(AppShellComponent);
+    fixture = createComponentFixture(AppShellComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
     await fixture.whenStable();

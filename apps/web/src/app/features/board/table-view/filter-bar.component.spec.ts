@@ -1,6 +1,6 @@
+import { createComponentFixture, type HtmlComponentFixture } from "../../../../test/component-fixture";
 import { provideZonelessChangeDetection } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
-import type { ComponentFixture } from "@angular/core/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FilterBarComponent } from "./filter-bar.component";
 import type { FilterValue } from "./filter.types";
@@ -63,12 +63,12 @@ function textField(): AnyCustomField {
   } as unknown as AnyCustomField;
 }
 
-function makeFixture(value: FilterValue, inputs: Record<string, unknown> = {}): ComponentFixture<FilterBarComponent> {
+function makeFixture(value: FilterValue, inputs: Record<string, unknown> = {}): HtmlComponentFixture<FilterBarComponent> {
   TestBed.configureTestingModule({
     imports: [FilterBarComponent],
     providers: [provideZonelessChangeDetection()],
   });
-  const fixture = TestBed.createComponent(FilterBarComponent);
+  const fixture = createComponentFixture(FilterBarComponent);
   fixture.componentRef.setInput("value", value);
   fixture.componentRef.setInput("labels", LABELS);
   fixture.componentRef.setInput("lists", LISTS);
@@ -78,7 +78,7 @@ function makeFixture(value: FilterValue, inputs: Record<string, unknown> = {}): 
 }
 
 /** Click the first button whose text contains `text`. */
-function clickButton(fixture: ComponentFixture<FilterBarComponent>, text: string) {
+function clickButton(fixture: HtmlComponentFixture<FilterBarComponent>, text: string) {
   const buttons = Array.from(fixture.nativeElement.querySelectorAll("button")) as HTMLButtonElement[];
   const btn = buttons.find((b) => (b.textContent ?? "").includes(text));
   if (!btn) throw new Error(`No button containing "${text}". Buttons: ${buttons.map((b) => b.textContent?.trim()).join(" | ")}`);

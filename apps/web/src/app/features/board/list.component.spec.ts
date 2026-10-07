@@ -1,7 +1,7 @@
+import { createComponentFixture, type HtmlComponentFixture } from "../../../test/component-fixture";
 import { CdkDrag } from "@angular/cdk/drag-drop";
 import type { CdkDragPreview } from "@angular/cdk/drag-drop";
 import { provideZonelessChangeDetection, signal } from "@angular/core";
-import type { ComponentFixture} from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
 import { By } from "@angular/platform-browser";
 import { provideRouter } from "@angular/router";
@@ -109,7 +109,7 @@ describe("ListComponent", () => {
   let notifications: { watchCreatedCardLocally: ReturnType<typeof vi.fn> };
   const checklistExpanded = signal(false);
   let closeCardChecklists: ReturnType<typeof vi.fn>;
-  let fixture: ComponentFixture<ListComponent>;
+  let fixture: HtmlComponentFixture<ListComponent>;
 
   beforeEach(async () => {
     const post = vi.fn((_path: string, _body: unknown) => Promise.resolve({}));
@@ -137,7 +137,7 @@ describe("ListComponent", () => {
       ],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(ListComponent);
+    fixture = createComponentFixture(ListComponent);
     fixture.componentRef.setInput("list", list());
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("allLists", [list(), list({ id: "list-2", name: "Todo" })]);

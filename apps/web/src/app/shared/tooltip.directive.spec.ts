@@ -1,3 +1,4 @@
+import { createComponentFixture } from "../../test/component-fixture";
 import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -48,10 +49,11 @@ describe("TooltipDirective", () => {
 
   it("shows after the hover delay and removes the native title", () => {
     vi.useFakeTimers();
-    const fixture = TestBed.configureTestingModule({
+    TestBed.configureTestingModule({
       imports: [TooltipHostComponent],
       providers: [provideZonelessChangeDetection()],
-    }).createComponent(TooltipHostComponent);
+    });
+    const fixture = createComponentFixture(TooltipHostComponent);
     fixture.detectChanges();
 
     const button = fixture.nativeElement.querySelector("button") as HTMLButtonElement;
@@ -70,10 +72,11 @@ describe("TooltipDirective", () => {
 
   it("hides on mouse leave", () => {
     vi.useFakeTimers();
-    const fixture = TestBed.configureTestingModule({
+    TestBed.configureTestingModule({
       imports: [TooltipHostComponent],
       providers: [provideZonelessChangeDetection()],
-    }).createComponent(TooltipHostComponent);
+    });
+    const fixture = createComponentFixture(TooltipHostComponent);
     fixture.detectChanges();
 
     const button = fixture.nativeElement.querySelector("button") as HTMLButtonElement;
@@ -89,10 +92,11 @@ describe("TooltipDirective", () => {
   });
 
   it("hides when a nested container scrolls", () => {
-    const fixture = TestBed.configureTestingModule({
+    TestBed.configureTestingModule({
       imports: [TooltipHostComponent],
       providers: [provideZonelessChangeDetection()],
-    }).createComponent(TooltipHostComponent);
+    });
+    const fixture = createComponentFixture(TooltipHostComponent);
     fixture.detectChanges();
 
     const button = fixture.nativeElement.querySelector("button") as HTMLButtonElement;
@@ -109,10 +113,11 @@ describe("TooltipDirective", () => {
 
   it("auto-hides after 10 seconds while still hovered", () => {
     vi.useFakeTimers();
-    const fixture = TestBed.configureTestingModule({
+    TestBed.configureTestingModule({
       imports: [TooltipHostComponent],
       providers: [provideZonelessChangeDetection()],
-    }).createComponent(TooltipHostComponent);
+    });
+    const fixture = createComponentFixture(TooltipHostComponent);
     fixture.detectChanges();
 
     const button = fixture.nativeElement.querySelector("button") as HTMLButtonElement;
@@ -133,10 +138,11 @@ describe("TooltipDirective", () => {
   });
 
   it("shows on focus and wires aria-describedby while visible", () => {
-    const fixture = TestBed.configureTestingModule({
+    TestBed.configureTestingModule({
       imports: [TooltipHostComponent],
       providers: [provideZonelessChangeDetection()],
-    }).createComponent(TooltipHostComponent);
+    });
+    const fixture = createComponentFixture(TooltipHostComponent);
     fixture.detectChanges();
 
     const button = fixture.nativeElement.querySelector("button") as HTMLButtonElement;
@@ -156,10 +162,11 @@ describe("TooltipDirective", () => {
 
   it("suppresses empty and disabled tooltips", () => {
     vi.useFakeTimers();
-    const fixture = TestBed.configureTestingModule({
+    TestBed.configureTestingModule({
       imports: [TooltipHostComponent],
       providers: [provideZonelessChangeDetection()],
-    }).createComponent(TooltipHostComponent);
+    });
+    const fixture = createComponentFixture(TooltipHostComponent);
     fixture.componentInstance.text.set("");
     fixture.detectChanges();
 
@@ -177,10 +184,11 @@ describe("TooltipDirective", () => {
   });
 
   it("hides on Escape even when another document handler consumes the bubbling event", () => {
-    const fixture = TestBed.configureTestingModule({
+    TestBed.configureTestingModule({
       imports: [TooltipHostComponent],
       providers: [provideZonelessChangeDetection()],
-    }).createComponent(TooltipHostComponent);
+    });
+    const fixture = createComponentFixture(TooltipHostComponent);
     fixture.detectChanges();
 
     const consumeEscape = (event: KeyboardEvent) => event.stopImmediatePropagation();
@@ -203,10 +211,11 @@ describe("TooltipDirective", () => {
 
   it("closes an open tooltip and suppresses new ones during a checklist drag", () => {
     vi.useFakeTimers();
-    const fixture = TestBed.configureTestingModule({
+    TestBed.configureTestingModule({
       imports: [TooltipHostComponent],
       providers: [provideZonelessChangeDetection()],
-    }).createComponent(TooltipHostComponent);
+    });
+    const fixture = createComponentFixture(TooltipHostComponent);
     fixture.detectChanges();
 
     const button = fixture.nativeElement.querySelector("button") as HTMLButtonElement;
@@ -225,10 +234,11 @@ describe("TooltipDirective", () => {
   });
   it("with a truncation target, shows only while that element overflows", () => {
     vi.useFakeTimers();
-    const fixture = TestBed.configureTestingModule({
+    TestBed.configureTestingModule({
       imports: [TruncationHostComponent],
       providers: [provideZonelessChangeDetection()],
-    }).createComponent(TruncationHostComponent);
+    });
+    const fixture = createComponentFixture(TruncationHostComponent);
     fixture.detectChanges();
 
     const link = fixture.nativeElement.querySelector("a") as HTMLAnchorElement;

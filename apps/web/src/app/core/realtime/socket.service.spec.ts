@@ -2,6 +2,7 @@ import { provideZonelessChangeDetection } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { Router } from "@angular/router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { MockInstance } from "vitest";
 import { AuthService } from "../auth/auth.service";
 import { UpdatesService } from "../updates/updates.service";
 import { RECONNECT_WATCHDOG_MS, SOCKET_IO, SocketService } from "./socket.service";
@@ -126,10 +127,16 @@ describe("SocketService", () => {
   // root singleton with no teardown hook). Dispatching a genuine document event would also
   // fire every earlier test's leftover listener. Capturing this test's own handler and
   // invoking it directly keeps each test isolated from that accumulation.
-  function captureVisibilityHandler(addEventListenerSpy: ReturnType<typeof vi.spyOn>): () => void {
-    const call = addEventListenerSpy.mock.calls.find((call: unknown[]) => call[0] === "visibilitychange");
+  function captureVisibilityHandler(addEventListenerSpy: MockInstance<Document["addEventListener"]>): () => void {
+    const call = addEventListenerSpy.mock.calls.find((call) => call[0] === "visibilitychange");
     if (!call) throw new Error("SocketService did not register a visibilitychange listener");
-    return call[1] as () => void;
+    const listener = call[1];
+    return () => {
+      // Invoke only this test's listener, with the same event and receiver as a DOM dispatch.
+      const event = new Event("visibilitychange");
+      if (typeof listener === "function") listener.call(document, event);
+      else listener.handleEvent(event);
+    };
   }
 
   it("resyncs a stuck offline signal and reconnects a stalled socket when the tab becomes visible again", () => {

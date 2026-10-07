@@ -1,3 +1,4 @@
+import { createComponentFixture } from "../../test/component-fixture";
 import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { describe, expect, it } from "vitest";
@@ -21,7 +22,7 @@ async function mount() {
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
 
-  const fixture = TestBed.createComponent(HostComponent);
+  const fixture = createComponentFixture(HostComponent);
   fixture.detectChanges();
   const anchor = () => fixture.nativeElement.querySelector("a") as HTMLAnchorElement;
   return { fixture, anchor };

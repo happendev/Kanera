@@ -1,3 +1,4 @@
+import { createComponentFixture } from "../../../test/component-fixture";
 import { provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { provideRouter } from "@angular/router";
@@ -137,7 +138,7 @@ describe("CardComponent", () => {
     })
       .overrideComponent(CardComponent, { set: { template: "" } });
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card());
     fixture.componentRef.setInput("selected", true);
     fixture.detectChanges();
@@ -160,7 +161,7 @@ describe("CardComponent", () => {
       ],
     }).overrideComponent(CardComponent, { set: { template: "" } });
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card());
     fixture.detectChanges();
 
@@ -173,7 +174,7 @@ describe("CardComponent", () => {
 
   it("uses source-card permission and workspace overrides on consolidated boards", () => {
     configure();
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card());
     fixture.componentRef.setInput("canEditOverride", true);
     fixture.componentRef.setInput("canEditRoleOverride", true);
@@ -199,7 +200,7 @@ describe("CardComponent", () => {
     })
       .overrideComponent(CardComponent, { set: { template: "" } });
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card({ completedAt: new Date("2026-05-21T10:00:00.000Z") }));
 
     expect(fixture.componentInstance.dueDateOverdue()).toBe(false);
@@ -208,7 +209,7 @@ describe("CardComponent", () => {
   it("does not render an unread dot when the card has no unread notifications", () => {
     configure(0);
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card());
     fixture.componentRef.setInput("showActions", false);
     fixture.detectChanges();
@@ -221,7 +222,7 @@ describe("CardComponent", () => {
     configure();
     TestBed.overrideProvider(CardKeyDisplayService, { useValue: { showCardKeys } });
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card());
     fixture.componentRef.setInput("showActions", false);
     await fixture.whenStable();
@@ -252,7 +253,7 @@ describe("CardComponent", () => {
   it("renders a bare unread dot before the card title, and marks the tile unread", () => {
     configure(2);
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card());
     fixture.componentRef.setInput("showActions", false);
     fixture.detectChanges();
@@ -272,7 +273,7 @@ describe("CardComponent", () => {
   it("leaves a single unread notification as the same bare dot", () => {
     configure(1);
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card());
     fixture.componentRef.setInput("showActions", false);
     fixture.detectChanges();
@@ -285,7 +286,7 @@ describe("CardComponent", () => {
   it("keeps the mark a bare dot at a large count, reporting the number only to assistive tech", () => {
     configure(42);
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card());
     fixture.componentRef.setInput("showActions", false);
     fixture.detectChanges();
@@ -299,7 +300,7 @@ describe("CardComponent", () => {
   it("keeps the completed icon before the unread dot and title", () => {
     configure(1);
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card({ completedAt: new Date("2026-05-21T10:00:00.000Z") }));
     fixture.componentRef.setInput("showActions", false);
     fixture.detectChanges();
@@ -315,7 +316,7 @@ describe("CardComponent", () => {
   it("shows a checklist indicator when the card has checklist items", () => {
     configure(0);
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card({ dueDateLocalDate: null, checklistDoneCount: 1, checklistTotalCount: 3 }));
     fixture.componentRef.setInput("showActions", false);
     fixture.detectChanges();
@@ -330,7 +331,7 @@ describe("CardComponent", () => {
   it("hides show-on-card checkbox custom fields with no value row", () => {
     configure(0);
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card({ dueDateLocalDate: null }));
     fixture.componentRef.setInput("showActions", false);
     fixture.componentRef.setInput("customFields", [customField()]);
@@ -344,7 +345,7 @@ describe("CardComponent", () => {
   it("hides show-on-card checkbox custom fields when the value is false", () => {
     configure(0);
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card({ dueDateLocalDate: null }));
     fixture.componentRef.setInput("showActions", false);
     fixture.componentRef.setInput("customFields", [customField()]);
@@ -359,7 +360,7 @@ describe("CardComponent", () => {
   it("renders show-on-card checkbox custom fields when the value is true", () => {
     configure(0);
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card({ dueDateLocalDate: null }));
     fixture.componentRef.setInput("showActions", false);
     fixture.componentRef.setInput("customFields", [customField()]);
@@ -375,7 +376,7 @@ describe("CardComponent", () => {
   it("reserves a proportional cover before the image loads", () => {
     configure(0);
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card({ coverUrl: "/cover-wide.jpg", coverImageWidth: 800, coverImageHeight: 400 }));
 
     expect(fixture.componentInstance.coverAspectRatio()).toBe("800 / 400");
@@ -385,7 +386,7 @@ describe("CardComponent", () => {
   it("paints the actions trigger above cover media", () => {
     configure(0);
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card());
     fixture.componentRef.setInput("coverUrl", "/cover.jpg");
     fixture.componentRef.setInput("canEditOverride", true);
@@ -405,7 +406,7 @@ describe("CardComponent", () => {
   it("uses the stable fallback for legacy or invalid cover dimensions", () => {
     configure(0);
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card({ coverUrl: "/cover-legacy.jpg" }));
     expect(fixture.componentInstance.coverAspectRatio()).toBeNull();
     expect(fixture.componentInstance.coverHeightPx()).toBe("160px");
@@ -418,7 +419,7 @@ describe("CardComponent", () => {
   it("updates reserved geometry when the summary cover dimensions change or are removed", () => {
     configure(0);
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card({ coverUrl: "/cover-first.jpg", coverImageWidth: 800, coverImageHeight: 400 }));
     expect(fixture.componentInstance.coverAspectRatio()).toBe("800 / 400");
 
@@ -433,7 +434,7 @@ describe("CardComponent", () => {
   it("recreates the optimized cover when a move changes its list priority", () => {
     configure(0);
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card());
     fixture.componentRef.setInput("coverUrl", "/cover-priority.jpg");
     fixture.componentRef.setInput("coverPriority", true);
@@ -451,7 +452,7 @@ describe("CardComponent", () => {
   it("renders labels expanded by default", () => {
     configure(0);
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card());
     fixture.componentRef.setInput("showActions", false);
     fixture.componentRef.setInput("labels", [label()]);
@@ -470,7 +471,7 @@ describe("CardComponent", () => {
   it("compresses and expands all card labels from a label click", () => {
     configure(0);
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card());
     fixture.componentRef.setInput("showActions", false);
     fixture.componentRef.setInput("labels", [label()]);
@@ -496,7 +497,7 @@ describe("CardComponent", () => {
   it("does not open the card when a label is clicked", () => {
     configure(0);
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card());
     fixture.componentRef.setInput("showActions", false);
     fixture.componentRef.setInput("labels", [label()]);
@@ -513,7 +514,7 @@ describe("CardComponent", () => {
   it("opens the board from the board badge without opening the card", () => {
     configure(0);
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card());
     fixture.componentRef.setInput("showActions", false);
     fixture.componentRef.setInput("boardSummary", { id: "board-1", name: "Roadmap", icon: null, iconColor: null });
@@ -534,7 +535,7 @@ describe("CardComponent", () => {
   it("opens the card from the card body when board navigation is enabled", () => {
     configure(0);
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card());
     fixture.componentRef.setInput("showActions", false);
     fixture.componentRef.setInput("boardSummary", { id: "board-1", name: "Roadmap", icon: null, iconColor: null });
@@ -552,7 +553,7 @@ describe("CardComponent", () => {
   it("renders the board badge as static text unless board navigation is enabled", () => {
     configure(0);
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card());
     fixture.componentRef.setInput("showActions", false);
     fixture.componentRef.setInput("boardSummary", { id: "board-1", name: "Roadmap", icon: null, iconColor: null });
@@ -567,7 +568,7 @@ describe("CardComponent", () => {
   it("updates label compression when another tab changes the preference", () => {
     configure(0);
 
-    const fixture = TestBed.createComponent(CardComponent);
+    const fixture = createComponentFixture(CardComponent);
     fixture.componentRef.setInput("card", card());
     fixture.componentRef.setInput("showActions", false);
     fixture.componentRef.setInput("labels", [label()]);
@@ -591,13 +592,13 @@ describe("CardComponent", () => {
   it("updates other cards on the same page when a label is clicked", () => {
     configure(0);
 
-    const first = TestBed.createComponent(CardComponent);
+    const first = createComponentFixture(CardComponent);
     first.componentRef.setInput("card", card({ id: "card-1" }));
     first.componentRef.setInput("showActions", false);
     first.componentRef.setInput("labels", [label()]);
     first.detectChanges();
 
-    const second = TestBed.createComponent(CardComponent);
+    const second = createComponentFixture(CardComponent);
     second.componentRef.setInput("card", card({ id: "card-2" }));
     second.componentRef.setInput("showActions", false);
     second.componentRef.setInput("labels", [label({ id: "label-2", name: "Blocked" })]);

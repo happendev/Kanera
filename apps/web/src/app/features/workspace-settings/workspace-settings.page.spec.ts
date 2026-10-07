@@ -1,5 +1,5 @@
+import { createComponentFixture, type HtmlComponentFixture } from "../../../test/component-fixture";
 import { provideZonelessChangeDetection, signal } from "@angular/core";
-import type { ComponentFixture } from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
 import { ActivatedRoute, Router } from "@angular/router";
 import { AUTOMATION_ACTION_LIMIT, AUTOMATION_LIMIT } from "@kanera/shared/automation-limits";
@@ -211,7 +211,7 @@ function customField(overrides: Partial<WireCustomField> = {}): WireCustomField 
 }
 
 describe("WorkspaceSettingsPage", () => {
-  let fixture: ComponentFixture<WorkspaceSettingsPage>;
+  let fixture: HtmlComponentFixture<WorkspaceSettingsPage>;
   let activeSettingsRoute: string;
 
   async function flushAsyncEffects() {
@@ -372,7 +372,7 @@ describe("WorkspaceSettingsPage", () => {
     }).compileComponents();
 
     activeSettingsRoute = "boards";
-    fixture = TestBed.createComponent(WorkspaceSettingsPage);
+    fixture = createComponentFixture(WorkspaceSettingsPage);
     if (auth.standalone) fixture.componentRef.setInput("boardId", "board-1");
     else fixture.componentRef.setInput("workspaceId", "workspace-1");
     fixture.detectChanges();

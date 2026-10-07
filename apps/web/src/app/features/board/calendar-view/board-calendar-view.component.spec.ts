@@ -1,3 +1,4 @@
+import { createComponentFixture } from "../../../../test/component-fixture";
 import { provideZonelessChangeDetection } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import type { WireBoardMemberUser, WireCardSummary } from "@kanera/shared/events";
@@ -60,7 +61,7 @@ describe("BoardCalendarViewComponent", () => {
       imports: [BoardCalendarViewComponent],
       providers: [provideZonelessChangeDetection(), BoardMenuCoordinator],
     }).compileComponents();
-    const fixture = TestBed.createComponent(BoardCalendarViewComponent);
+    const fixture = createComponentFixture(BoardCalendarViewComponent);
     fixture.componentRef.setInput("cards", cards);
     fixture.componentInstance.anchorDate.set(new Date(2026, 4, 15));
     fixture.detectChanges();
@@ -152,7 +153,10 @@ describe("BoardCalendarViewComponent", () => {
     expect(host.querySelector(".cal-mini-day.is-selected .cal-mini-number")?.textContent?.trim()).toBe("20");
     expect([...host.querySelectorAll(".cal-agenda .cal-card-title")].map((el) => el.textContent?.trim())).toEqual(["First"]);
 
-    const may22 = [...host.querySelectorAll<HTMLButtonElement>(".cal-mini-day")].find((el) => el.getAttribute("aria-label")?.includes("22 May"));
+    // Accessible dates follow the viewer's locale; choose the day by its visible number instead
+    // of requiring day-before-month wording from the machine running the tests.
+    const may22 = [...host.querySelectorAll<HTMLButtonElement>(".cal-mini-day")]
+      .find((el) => el.querySelector(".cal-mini-number")?.textContent?.trim() === "22" && !el.classList.contains("is-muted"));
     expect(may22?.querySelectorAll(".cal-mini-dot").length).toBe(1);
     may22?.click();
     fixture.detectChanges();
@@ -412,7 +416,7 @@ describe("BoardCalendarViewComponent", () => {
           { provide: TABLE_CARD_STORE, useValue: store },
         ],
       }).compileComponents();
-      const fixture = TestBed.createComponent(BoardCalendarViewComponent);
+      const fixture = createComponentFixture(BoardCalendarViewComponent);
       fixture.componentRef.setInput("cards", cards);
       fixture.componentInstance.anchorDate.set(new Date(2026, 4, 15));
       fixture.detectChanges();

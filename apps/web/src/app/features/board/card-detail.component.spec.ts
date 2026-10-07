@@ -1,5 +1,5 @@
+import { createComponentFixture, type HtmlComponentFixture } from "../../../test/component-fixture";
 import { provideZonelessChangeDetection, signal } from "@angular/core";
-import type { ComponentFixture } from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
 import type { CardAttachmentRow } from "@kanera/shared/dto";
 import type { ActivityFeedEvent, CardFeedItem, WireBoardMemberUser, WireCard, WireCardChecklist, WireCardChecklistItem, WireCardDetail, WireChecklistTemplate, WireComment } from "@kanera/shared/events";
@@ -302,7 +302,7 @@ function deferred<T>() {
 // Let the /cards/:id/detail fetch settle so the gated detail body renders, mirroring production where
 // that body only appears after the async load. Flushing microtasks (rather than vi.waitFor) keeps this
 // usable under fake timers, since the fetch resolves on the microtask queue, not a timer.
-async function settleDetail(fixture: ComponentFixture<CardDetailComponent>) {
+async function settleDetail(fixture: HtmlComponentFixture<CardDetailComponent>) {
   for (let i = 0; i < 5; i++) await Promise.resolve();
   fixture.detectChanges();
 }
@@ -526,7 +526,7 @@ describe("CardDetailComponent realtime regressions", () => {
             asSource: [{ mirrorId: "m2", cardId: "target-card", boardId: "target-board", boardName: "Internal board", workspaceName: "Internal", organisationName: "Kanera" }],
           })
         : Promise.resolve({ items: [], nextCursor: null }));
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -552,7 +552,7 @@ describe("CardDetailComponent realtime regressions", () => {
       : path.endsWith("/mirrors")
         ? Promise.resolve(status)
         : Promise.resolve({ items: [], nextCursor: null }));
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -578,7 +578,7 @@ describe("CardDetailComponent realtime regressions", () => {
       : path.endsWith("/mirrors")
         ? Promise.resolve({ asTarget: [], asSource: [{ mirrorId: "m1", cardId: "copy", boardId: "board-2", boardName: "Target", workspaceName: "Delivery", organisationName: "Kanera" }] })
         : Promise.resolve({ items: [], nextCursor: null }));
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -600,7 +600,7 @@ describe("CardDetailComponent realtime regressions", () => {
 
   it("keeps copy but hides move-to-board in standalone card actions", async () => {
     workspaceKind.set("board");
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -628,7 +628,7 @@ describe("CardDetailComponent realtime regressions", () => {
     boardState.detailForCard.mockReturnValue(restoredDetail);
     socketService.displayedOnline.set(false);
 
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard({ description: null }));
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -645,7 +645,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("registers the active card view without retriggering on notification state changes", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard({ id: "card-opened" }));
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -668,7 +668,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("cleans up the active card view on destroy", async () => {
     const cleanup = vi.fn();
     notifications.beginViewingCard.mockReturnValue(cleanup);
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard({ id: "card-opened" }));
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -690,7 +690,7 @@ describe("CardDetailComponent realtime regressions", () => {
     notifications.beginViewingCard
       .mockReturnValueOnce(firstCleanup)
       .mockReturnValueOnce(secondCleanup);
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard({ id: "card-opened" }));
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -716,7 +716,7 @@ describe("CardDetailComponent realtime regressions", () => {
       "card-2": ["checklist-2"],
     }));
 
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -744,7 +744,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("focuses the dialog container instead of the complete button when opened", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -767,7 +767,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("uploads pasted screenshots as card attachments without opening description edit mode", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard({ description: "Existing description" }));
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -794,7 +794,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("uploads files dropped onto the card detail panel outside an editor", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard({ description: "Existing description" }));
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -827,7 +827,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("does not intercept drops inside the description editor", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard({ description: "Existing description" }));
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -852,7 +852,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("clears the panel drop overlay when dragging onto the description editor", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard({ description: "Existing description" }));
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -884,7 +884,7 @@ describe("CardDetailComponent realtime regressions", () => {
     api.upload.mockRejectedValueOnce(
       new ApiError(400, { code: "FILE_TOO_LARGE", maxFileBytes: 250 * 1024 * 1024 }),
     );
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -911,7 +911,7 @@ describe("CardDetailComponent realtime regressions", () => {
     api.upload.mockRejectedValueOnce(
       new ApiError(400, { code: "FILE_TOO_LARGE", maxFileBytes: 5 * 1024 * 1024 }),
     );
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -930,7 +930,7 @@ describe("CardDetailComponent realtime regressions", () => {
 
   it("shows a friendly message when attachment upload returns 413", async () => {
     api.upload.mockRejectedValueOnce(new ApiError(413, { message: "request entity too large" }));
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -950,7 +950,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("shows a role-aware message when attachment upload is blocked by org storage quota", async () => {
     // Member view (isOrgAdmin stubbed false): directed to ask an admin rather than to upgrade.
     api.upload.mockRejectedValueOnce(new ApiError(403, { code: "STORAGE_QUOTA_EXCEEDED" }));
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -968,7 +968,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("allows normal text paste inside editable fields in card detail", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -992,7 +992,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("renders authorName from realtime comment events", async () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
 
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
@@ -1025,7 +1025,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("opens video attachments in comments with the card media lightbox", async () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     const videoUrl = "/api/media/client-1/cards/card-1/walkthrough.mp4?t=token&e=9999999999999";
 
     fixture.componentRef.setInput("cardId", "card-1");
@@ -1071,7 +1071,7 @@ describe("CardDetailComponent realtime regressions", () => {
       return Promise.resolve({ items: [], nextCursor: null });
     });
 
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
@@ -1100,7 +1100,7 @@ describe("CardDetailComponent realtime regressions", () => {
       return Promise.resolve({ items: [], nextCursor: null });
     });
 
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
@@ -1132,7 +1132,7 @@ describe("CardDetailComponent realtime regressions", () => {
       return Promise.resolve({ items: [], nextCursor: null });
     });
 
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
@@ -1170,7 +1170,7 @@ describe("CardDetailComponent realtime regressions", () => {
       return Promise.resolve({ items: [], nextCursor: null });
     });
 
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
@@ -1214,7 +1214,7 @@ describe("CardDetailComponent realtime regressions", () => {
       return Promise.resolve({ items: [], nextCursor: null });
     });
 
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
@@ -1246,7 +1246,7 @@ describe("CardDetailComponent realtime regressions", () => {
       return Promise.resolve({ items: [], nextCursor: null });
     });
 
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
@@ -1285,7 +1285,7 @@ describe("CardDetailComponent realtime regressions", () => {
       return Promise.resolve({ items: [], nextCursor: null });
     });
 
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
@@ -1317,7 +1317,7 @@ describe("CardDetailComponent realtime regressions", () => {
       return Promise.resolve({ items: [], nextCursor: null });
     });
 
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
@@ -1349,7 +1349,7 @@ describe("CardDetailComponent realtime regressions", () => {
       return Promise.resolve({ items: [], nextCursor: null });
     });
 
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
@@ -1367,7 +1367,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("does not show comment author presence for historical authors no longer in members", async () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
 
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
@@ -1397,7 +1397,7 @@ describe("CardDetailComponent realtime regressions", () => {
     state.detailForCard.mockReturnValue(detail);
     api.post.mockResolvedValueOnce(createComment({ id: "comment-created", body: "Saved before disconnect" }));
 
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
@@ -1417,7 +1417,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("saves a new comment as a local draft when send is pressed offline", async () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
@@ -1449,7 +1449,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("preserves and closes an open new comment composer when the card goes offline", async () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
@@ -1473,7 +1473,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("shows the new comment draft banner when an open composer goes offline", async () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
@@ -1499,7 +1499,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("keeps a live new-comment draft as the remount seed", async () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
@@ -1517,7 +1517,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("saves an edited comment as a local draft when save is pressed offline", async () => {
     const comment = createComment({ id: "comment-1", body: "Saved comment" });
 
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
@@ -1550,7 +1550,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("preserves and closes an open comment editor when the card goes offline", async () => {
     const comment = createComment({ id: "comment-1", body: "Saved comment" });
 
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
@@ -1578,7 +1578,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("keeps a live edited-comment draft as the remount seed", async () => {
     const comment = createComment({ id: "comment-1", body: "Saved comment" });
 
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
@@ -1602,7 +1602,7 @@ describe("CardDetailComponent realtime regressions", () => {
       return Promise.resolve({ items: [], nextCursor: null });
     });
 
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
@@ -1635,7 +1635,7 @@ describe("CardDetailComponent realtime regressions", () => {
       feed: cachedFeed,
     });
 
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", false);
     fixture.componentRef.setInput("members", []);
@@ -1664,7 +1664,7 @@ describe("CardDetailComponent realtime regressions", () => {
       },
     }));
 
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
@@ -1691,7 +1691,7 @@ describe("CardDetailComponent realtime regressions", () => {
       },
     }));
 
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
@@ -1705,7 +1705,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("renders overdue activity wording without the system actor", () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     const activity = createActivity({
       actorId: null,
       actorKind: "system",
@@ -1736,7 +1736,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("renders copied-card activity as a copy rather than a new card creation", () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     const activity = createActivity({
       action: "created",
       payload: {
@@ -1763,7 +1763,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("renders imported-card activity as an import rather than a new card creation", () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     const activity = createActivity({
       action: "created",
       payload: {
@@ -1786,7 +1786,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("renders mirrored comments with the original author and link marker", () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     const comment = createComment({
       id: "comment-copied",
       authorId: "user-1",
@@ -1831,7 +1831,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("lets board administrators delete another author's comment without allowing edits", async () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
@@ -1885,7 +1885,7 @@ describe("CardDetailComponent realtime regressions", () => {
           links: {},
         },
       ));
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     const comment = createComment({
       id: "comment-provenance",
       authorKind: "system",
@@ -1908,7 +1908,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("renders mirrored activity with a branded marker and the original rich description diff", () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     const activity = createActivity({
       actorId: null,
       actorKind: "system",
@@ -1938,7 +1938,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("names the original user on a mirror-created card activity", () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     const activity = createActivity({
       actorId: null,
       actorKind: "system",
@@ -1963,7 +1963,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("names the original uploader on a mirrored attachment activity", () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     const activity = createActivity({
       actorId: null,
       actorKind: "system",
@@ -1988,7 +1988,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("renders the label names changed by Kanera activity", () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     const activity = createActivity({
       actorId: null,
       actorKind: "system",
@@ -2016,7 +2016,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("renders checkbox custom field activity values as Yes and No", () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     const activity = createActivity({
       action: "customFieldValue:set",
       payload: {
@@ -2042,7 +2042,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("opens a modal description diff for audited description activity", () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     const activity = createActivity({
       payload: {
         description: "Hello brave world",
@@ -2080,7 +2080,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("does not render a description diff button for legacy description activity", () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
 
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
@@ -2093,7 +2093,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("does not render a description diff button when the description is captured for the first time", () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
 
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
@@ -2115,7 +2115,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("does not render a description diff button when the previous description was blank", () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
 
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
@@ -2137,7 +2137,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("labels formatting-only description edits instead of hiding them", () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
 
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
@@ -2166,7 +2166,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("renders coalesced description activity wording with the net diff", () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     const activity = createActivity({
       coalescedCount: 3,
       payload: {
@@ -2191,7 +2191,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("hides legacy aggregate mirror-sync activity", () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     const legacyMirrorSummary = createActivity({
       actorId: null,
       actorKind: "system",
@@ -2214,7 +2214,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("hides agentRun:started but renders agentRun:ended with its summary", () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     const started = createActivity({
       id: "act-started",
       actorKind: "agent",
@@ -2248,7 +2248,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("renders self-assignment activity without repeating the actor name", () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     const activity = createActivity({
       actorId: "user-2",
       actorKind: "user",
@@ -2274,7 +2274,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("passes board-access members into the description editor for mentions", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     const members = [{
       userId: "user-2",
       displayName: "Ada Lovelace",
@@ -2301,7 +2301,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("updates edit affordances when the viewer role changes while detail is open", () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -2327,7 +2327,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("does not submit stale removed assignee ids when assigning from card detail", async () => {
     const state = TestBed.inject(BoardState);
     state.viewerRole.set("editor");
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     const members: WireBoardMemberUser[] = [
       { userId: "user-1", displayName: "Owner", avatarUrl: null, role: "editor", source: "workspace" },
       { userId: "user-2", displayName: "Ada Lovelace", avatarUrl: null, role: "editor", source: "workspace" },
@@ -2364,7 +2364,7 @@ describe("CardDetailComponent realtime regressions", () => {
     }));
     api.patch.mockResolvedValueOnce(createCard({ description: "Recovered description" }));
 
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard({ description: "Saved description" }));
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -2385,7 +2385,7 @@ describe("CardDetailComponent realtime regressions", () => {
 
   it("saves a card description as a local draft when save is pressed offline", async () => {
     // Detail is unloaded on open (default), so the card summary's description is the draft baseline.
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard({ description: "Saved description" }));
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -2422,7 +2422,7 @@ describe("CardDetailComponent realtime regressions", () => {
 
   it("preserves and closes an open card description editor when the card goes offline", async () => {
     // Detail is unloaded on open (default), so the card summary's description is the draft baseline.
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard({ description: "Saved description" }));
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -2454,7 +2454,7 @@ describe("CardDetailComponent realtime regressions", () => {
   // board component is reused. One click must not produce two identical prompts.
   it("prompts once when closing with a dirty description, leaving nothing for the route guard to ask", () => {
     const unsavedWork = TestBed.inject(UnsavedWorkService);
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     fixture.componentRef.setInput("card", createCard({ description: "Saved description" }));
     fixture.componentRef.setInput("boardId", "board-1");
@@ -2483,7 +2483,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("keeps a live card description draft if the editor remounts", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard({ description: "Saved description" }));
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -2521,7 +2521,7 @@ describe("CardDetailComponent realtime regressions", () => {
           : Promise.resolve({ items: [], nextCursor: null }),
     );
 
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard({ description: null }));
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -2558,7 +2558,7 @@ describe("CardDetailComponent realtime regressions", () => {
           : Promise.resolve({ items: [], nextCursor: null }),
     );
 
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", [createCustomField({ id: "field-1", type: "text" })]);
@@ -2591,7 +2591,7 @@ describe("CardDetailComponent realtime regressions", () => {
           : Promise.resolve({ items: [], nextCursor: null }),
     );
 
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", [createCustomField({ id: "field-1", type: "text" })]);
@@ -2637,7 +2637,7 @@ describe("CardDetailComponent realtime regressions", () => {
       return Promise.resolve({ items: [], nextCursor: null });
     });
 
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -2681,7 +2681,7 @@ describe("CardDetailComponent realtime regressions", () => {
       return Promise.resolve({ items: [], nextCursor: null });
     });
 
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("customFields", []);
@@ -2702,7 +2702,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("saves text custom fields when the input blurs", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
 
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
@@ -2724,7 +2724,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("saves text custom fields on Enter without duplicating the following blur", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
 
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
@@ -2748,7 +2748,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("saves rounded decimal number custom fields when the input blurs", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
 
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
@@ -2771,7 +2771,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("saves URL custom fields on Enter without duplicating the following blur", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
 
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
@@ -2795,7 +2795,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("clears custom fields when an empty input blurs", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
 
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
@@ -2817,7 +2817,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("renders unchecked checkbox custom fields as an unselected Yes control", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
 
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
@@ -2844,7 +2844,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("renders checked checkbox custom fields as a selected Yes control", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
 
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
@@ -2871,7 +2871,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("does not mark completed due dates as overdue", () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
 
     fixture.componentRef.setInput("card", createCard({
       dueDateLocalDate: "2026-05-20",
@@ -2890,7 +2890,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("focuses the new checklist item input after creating a checklist", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     const createdChecklist = createChecklistFixture();
     api.post.mockResolvedValue(createdChecklist);
 
@@ -2927,7 +2927,7 @@ describe("CardDetailComponent realtime regressions", () => {
 
   it("keeps empty checklist rows content-first and moves secondary edits into one actions menu", async () => {
     const checklist = createChecklistFixture({ items: [createChecklistItemFixture()] });
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
 
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
@@ -2969,7 +2969,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("deletes empty top-level and sub-checklists without confirmation", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     const confirm = vi.spyOn(TestBed.inject(ConfirmService), "open").mockResolvedValue(false);
     fixture.componentRef.setInput("card", createCard());
 
@@ -2982,7 +2982,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("still confirms before deleting a checklist containing items", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     const checklist = createChecklistFixture({ items: [createChecklistItemFixture()] });
     const confirm = vi.spyOn(TestBed.inject(ConfirmService), "open").mockResolvedValue(false);
     fixture.componentRef.setInput("card", createCard());
@@ -3005,7 +3005,7 @@ describe("CardDetailComponent realtime regressions", () => {
     });
     const topLevel = createChecklistFixture({ items: [item] });
     const nested = createChecklistFixture({ id: "nested-1", parentItemId: item.id, title: "Nested" });
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     api.post.mockResolvedValue(nested);
 
     fixture.componentRef.setInput("card", createCard());
@@ -3043,7 +3043,7 @@ describe("CardDetailComponent realtime regressions", () => {
     const nestedItem = createChecklistItemFixture({ id: "nested-item", text: "Nested item" });
     const topLevel = createChecklistFixture({ id: "top-level", items: [parentItem] });
     const nested = createChecklistFixture({ id: "nested", parentItemId: parentItem.id, items: [nestedItem] });
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
 
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
@@ -3080,7 +3080,7 @@ describe("CardDetailComponent realtime regressions", () => {
 
   it("dims the card and closes item detail when the drawer scrim is clicked", async () => {
     const item = createChecklistItemFixture();
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
 
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
@@ -3121,7 +3121,7 @@ describe("CardDetailComponent realtime regressions", () => {
       dueDateSlot: "morning",
     });
     const checklist = createChecklistFixture({ items: [item] });
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
 
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
@@ -3161,7 +3161,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("edits the checklist item title from its detail drawer", async () => {
     const item = createChecklistItemFixture();
     const checklist = createChecklistFixture({ items: [item] });
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     api.patch.mockResolvedValueOnce({ ...item, text: "Updated from detail" });
 
     fixture.componentRef.setInput("card", createCard());
@@ -3206,7 +3206,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("deletes the checklist item from its detail drawer and closes it", async () => {
     const item = createChecklistItemFixture();
     const checklist = createChecklistFixture({ items: [item] });
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
 
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
@@ -3236,7 +3236,7 @@ describe("CardDetailComponent realtime regressions", () => {
     const item = createChecklistItemFixture({ description: "Do not lose this context" });
     const checklist = createChecklistFixture({ items: [item] });
     const nested = createChecklistFixture({ id: "nested-1", parentItemId: item.id });
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     const confirm = vi.spyOn(TestBed.inject(ConfirmService), "open")
       .mockResolvedValueOnce(false)
       .mockResolvedValueOnce(true);
@@ -3272,7 +3272,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("persists checklist item description drafts and guards every drawer close path", async () => {
     const item = createChecklistItemFixture({ description: "Published description" });
     const checklist = createChecklistFixture({ items: [item] });
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
 
     fixture.componentRef.setInput("card", createCard());
@@ -3316,7 +3316,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("closing a clean checklist item drawer ignores unrelated unsaved editors", async () => {
     const item = createChecklistItemFixture({ description: "Published description" });
     const checklist = createChecklistFixture({ items: [item] });
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
 
     fixture.componentRef.setInput("card", createCard());
@@ -3364,7 +3364,7 @@ describe("CardDetailComponent realtime regressions", () => {
     }));
     const updated = { ...item, description: "Recovered item draft" };
     api.patch.mockResolvedValueOnce(updated);
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
 
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
@@ -3408,7 +3408,7 @@ describe("CardDetailComponent realtime regressions", () => {
       items: [createChecklistItemFixture({ id: "nested-item-1", checklistId: "nested-1", text: "Read-only sub-item" })],
     });
     const topLevel = createChecklistFixture({ items: [item] });
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
 
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
@@ -3449,7 +3449,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("shows the checklist template action when editable workspace templates exist", async () => {
     const template = createChecklistTemplateFixture();
     boardChecklistTemplates.set([template]);
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
 
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
@@ -3472,7 +3472,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("applies a checklist template and emits created checklists", async () => {
     const template = createChecklistTemplateFixture();
     const checklist = createChecklistFixture({ id: "checklist-template-1", title: template.title });
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     api.post.mockResolvedValue({ checklists: [checklist], skippedTemplateIds: [] });
 
     fixture.componentRef.setInput("card", createCard());
@@ -3497,7 +3497,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("does not offer or apply already-applied checklist templates", async () => {
     const template = createChecklistTemplateFixture();
     boardChecklistTemplates.set([template]);
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
 
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
@@ -3525,7 +3525,7 @@ describe("CardDetailComponent realtime regressions", () => {
     const itemA = createChecklistItemFixture({ id: "item-1", assigneeId: null });
     const itemB = createChecklistItemFixture({ id: "item-2", assigneeId: "user-2", completedAt: new Date("2026-05-21T01:00:00.000Z") });
     const checklist = createChecklistFixture({ items: [itemA, itemB] });
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     const boardState = TestBed.inject(BoardState) as unknown as { updateChecklistItem: ReturnType<typeof vi.fn> };
     api.patch.mockResolvedValue({});
 
@@ -3565,7 +3565,7 @@ describe("CardDetailComponent realtime regressions", () => {
     const checklist = createChecklistFixture({
       items: [createChecklistItemFixture({ assigneeId: assignee.userId })],
     });
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
 
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
@@ -3595,7 +3595,7 @@ describe("CardDetailComponent realtime regressions", () => {
       role: "editor" as const,
       source: "workspace" as const,
     };
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
 
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
@@ -3627,7 +3627,7 @@ describe("CardDetailComponent realtime regressions", () => {
     const itemA = createChecklistItemFixture({ id: "item-1", dueDateLocalDate: null });
     const itemB = createChecklistItemFixture({ id: "item-2", dueDateLocalDate: "2026-05-20", dueDateSlot: "morning" });
     const checklist = createChecklistFixture({ items: [itemA, itemB] });
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     api.patch.mockResolvedValue({});
 
     fixture.componentRef.setInput("card", createCard());
@@ -3652,7 +3652,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("renders deferred activity after switching to the comments tab", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
 
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
@@ -3677,7 +3677,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("renders deferred activity in wide two-column layouts without switching tabs", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
 
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
@@ -3702,7 +3702,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("names the owning item when a nested sub-checklist is completed", () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     const text = fixture.componentInstance.activityText(createActivity({
       action: "checklist:completed",
       payload: {
@@ -3722,7 +3722,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("replaces and removes realtime activity feed items by id", async () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
 
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
@@ -3759,7 +3759,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("keeps card-created activity before same-timestamp automation activity", async () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
 
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
@@ -3784,7 +3784,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("filters the feed to comments only", async () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
 
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
@@ -3815,7 +3815,7 @@ describe("CardDetailComponent realtime regressions", () => {
   it("hides comment reaction controls for observer viewers", async () => {
     viewerRole.set("observer");
 
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", false);
     fixture.componentRef.setInput("members", []);
@@ -3864,7 +3864,7 @@ describe("CardDetailComponent realtime regressions", () => {
       return Promise.resolve({ items: [], nextCursor: null });
     });
 
-    const fixture = TestBed.createComponent(CardActivityComponent);
+    const fixture = createComponentFixture(CardActivityComponent);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("canEdit", true);
     fixture.componentRef.setInput("members", []);
@@ -3896,7 +3896,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("opens the attachment lightbox with all previewable card attachments at the selected item", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     const attachments = [
       createAttachment({
         id: "attachment-1",
@@ -3970,7 +3970,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("opens video attachments in the media lightbox instead of downloading them", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     const video = createAttachment({
       id: "attachment-video",
       fileName: "walkthrough.mp4",
@@ -4011,7 +4011,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("opens Markdown attachments as rendered lightbox previews", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     const markdown = createAttachment({
       id: "attachment-markdown",
       fileName: "agent-plan.md",
@@ -4053,7 +4053,7 @@ describe("CardDetailComponent realtime regressions", () => {
   });
 
   it("opens the requested attachment lightbox from an initial deep link", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
+    const fixture = createComponentFixture(CardDetailComponent);
     const attachments = [
       createAttachment({
         id: "attachment-1",
