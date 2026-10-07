@@ -7,7 +7,6 @@ import { createInterface } from "node:readline/promises";
 const manifestPaths = [
   "package.json",
   "apps/api/package.json",
-  "apps/cli/package.json",
   "apps/web/package.json",
   "packages/sdk/package.json",
   "packages/shared/package.json",
