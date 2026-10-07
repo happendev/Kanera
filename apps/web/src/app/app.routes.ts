@@ -1,8 +1,10 @@
+import { inject } from "@angular/core";
 import type { Routes, UrlMatcher, UrlSegment } from "@angular/router";
 import { authGuard, publicAuthGuard, resetPasswordGuard } from "./core/auth/auth.guard";
 import { onboardingGuard, standaloneBoardSettingsGuard, workspaceGuard, workspaceSettingsGuard } from "./core/auth/workspace.guard";
 import { unsavedWorkCanDeactivateGuard } from "./core/browser/unsaved-work.service";
 import { importNavigationCanActivateGuard, importNavigationCanDeactivateGuard } from "./features/import/import-navigation-guard.service";
+import { ToastService } from "./shared/toast.service";
 
 /**
  * Keep the same route/component instance while a card drawer opens and closes. A pair of separate
@@ -229,5 +231,13 @@ export const routes: Routes = [
       },
     ],
   },
-  { path: "**", redirectTo: "" },
+  {
+    // Hand-shortened or stale links (e.g. `/c/DEV-12` without its `/o/<orgKey>` prefix) land here.
+    // Say so instead of silently dropping the user on the home page as if the link had worked.
+    path: "**",
+    redirectTo: () => {
+      inject(ToastService).error("That link doesn't point to anything in Kanera.", "link-off");
+      return "";
+    },
+  },
 ];
