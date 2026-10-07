@@ -1100,7 +1100,12 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
       // real parser errors without enabling that incompatible false-positive.
       emitContentError: true,
       editable: this.editable(),
-      autofocus: this.autofocus() ? "end" : false,
+      // Focus through `focusEnd` on create instead of Tiptap's `"end"`, so a draft ending in a quote
+      // (a comment reply) puts the caret below the quote rather than inside it.
+      autofocus: false,
+      onCreate: () => {
+        if (this.autofocus()) this.focusEnd();
+      },
       onContentError: ({ editor, error }) => {
         if (isMarkdownTableWrapperFalsePositive(error)) return;
         // Invalid inserted content is rejected before dispatch. Re-assert the
@@ -1821,7 +1826,25 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
    */
   prependMarkdown(markdown: string) {
     // insertContentAt clamps the position; 0 resolves to the document start.
-    this.editor?.chain().insertContentAt(0, this.markdownShortcodesToUnicode(markdown)).focus("end").run();
+    this.editor?.chain().insertContentAt(0, this.markdownShortcodesToUnicode(markdown)).run();
+    this.focusEnd();
+  }
+
+  /**
+   * Focus the end of the document. Markdown parsing drops trailing blank lines, so a reply quote
+   * (`> … wrote:\n\n`) loads as a document whose last block is the blockquote, and `"end"` alone
+   * would leave the caret inside the quote. Give a trailing blockquote an empty paragraph to land in.
+   * The paragraph is not serialised (see MarkdownParagraph), so the saved markdown is unchanged.
+   */
+  private focusEnd() {
+    const editor = this.editor;
+    if (!editor) return;
+    const { doc } = editor.state;
+    const chain = editor.chain();
+    if (doc.lastChild?.type.name === "blockquote") {
+      chain.insertContentAt(doc.content.size, { type: "paragraph" });
+    }
+    chain.focus("end").run();
   }
 
   setSaving(v: boolean) {
