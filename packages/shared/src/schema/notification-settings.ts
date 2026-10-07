@@ -13,6 +13,10 @@ export const notificationSettings = pgTable("notification_settings", {
   // email) to those watcher rows too. Default off: a watcher on a busy board would otherwise
   // start receiving one notification per card move the moment this ships.
   watchedActivityOutbound: boolean("watched_activity_outbound").notNull().default(false),
+  // Onboarding and account check-in emails (lifecycle sweep). Kept apart from the per-type card
+  // notification matrix because these are product messages, not notifications about work, and each
+  // one carries a one-click unsubscribe link that flips only this flag.
+  lifecycleEmail: boolean("lifecycle_email").notNull().default(true),
   ntfyEnabled: boolean("ntfy_enabled").notNull().default(false),
   ntfyServerUrl: text("ntfy_server_url"),
   ntfyTopic: text("ntfy_topic"),

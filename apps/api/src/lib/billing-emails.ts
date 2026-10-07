@@ -3,6 +3,7 @@ import {
   boardInvitations,
   boardMembers,
   boards,
+  cards,
   clientMembers,
   clients,
   emailQueue,
@@ -13,6 +14,7 @@ import {
   workspaces,
   type BillingEmailQueueData,
   type BillingImpactSummary,
+  type BillingUsageSummary,
   type EmailQueueType,
 } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, isNull, notExists, sql } from "drizzle-orm";
@@ -65,6 +67,7 @@ export type BillingEmailContext = {
   billedUserEmail?: string | null;
   billedUserName?: string | null;
   activeSeatCount?: number | null;
+  usage?: BillingUsageSummary | null;
   dedupeKey?: string | null;
 };
 
@@ -155,6 +158,7 @@ export async function sendHostedBillingEmail(
     billedUserEmail: context.billedUserEmail ?? null,
     billedUserName: context.billedUserName ?? null,
     activeSeatCount: context.activeSeatCount ?? null,
+    usage: context.usage ?? null,
   };
 
   let sent = 0;
@@ -332,4 +336,30 @@ function emptyImpact(): BillingImpactSummary {
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(date);
+}
+
+/**
+ * Structural "what you built" counts for the trial-warning email: live boards, cards on them, and
+ * active members. Counts only, so the summary never quotes or interprets board content.
+ */
+export async function trialUsageSummary(clientId: string, database: Tx = db): Promise<BillingUsageSummary> {
+  const result = await database.execute<BillingUsageSummary>(sql`
+    select
+      (
+        select count(*)::int from ${boards} inner join ${workspaces} on ${workspaces.id} = ${boards.workspaceId}
+        where ${workspaces.clientId} = ${clientId} and ${boards.archivedAt} is null and ${workspaces.archivedAt} is null
+      ) as boards,
+      (
+        select count(*)::int from ${cards}
+        inner join ${boards} on ${boards.id} = ${cards.boardId}
+        inner join ${workspaces} on ${workspaces.id} = ${boards.workspaceId}
+        where ${workspaces.clientId} = ${clientId} and ${boards.archivedAt} is null and ${workspaces.archivedAt} is null
+      ) as cards,
+      (
+        select count(*)::int from ${clientMembers}
+        where ${clientMembers.clientId} = ${clientId} and ${clientMembers.removedAt} is null and ${clientMembers.suspendedAt} is null
+      ) as members
+  `);
+  const row = result.rows[0];
+  return { boards: row?.boards ?? 0, cards: row?.cards ?? 0, members: row?.members ?? 0 };
 }

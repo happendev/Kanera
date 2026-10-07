@@ -440,6 +440,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly requireMfaError = signal<string | null>(null);
   readonly billingInfo = signal<BillingInfoResponse | null>(null);
   readonly isHosted = computed(() => (this.client()?.deploymentMode ?? this.user()?.deploymentMode) === "hosted");
+  // Lifecycle emails are a hosted-only sweep addressed to organisation owners, so the opt-out is
+  // shown only to the people who can receive them.
+  readonly lifecycleEmailAvailable = computed(() => this.isHosted() && this.auth.isOrgOwner());
   readonly isSelfHosted = computed(() => (this.client()?.deploymentMode ?? this.user()?.deploymentMode) === "self_hosted");
   // Plan/trial state for the hosted-mode Account section. Derived from the org-wide entitlements on
   // /me; the actual purchase + upgrade flow will live in this section later.
@@ -1290,15 +1293,26 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
    * event types the matrix models, so it has no row there.
    */
   async setWatchedActivityOutbound(checked: boolean) {
+    await this.patchNotificationFlag({ watchedActivityOutbound: checked });
+  }
+
+  /**
+   * Onboarding and account-tip emails (the hosted lifecycle sweep). Separate from the type matrix:
+   * these are product messages, not notifications about work. The emails' unsubscribe link clears
+   * the same flag, so this checkbox is also how someone opts back in.
+   */
+  async setLifecycleEmail(checked: boolean) {
+    await this.patchNotificationFlag({ lifecycleEmail: checked });
+  }
+
+  private async patchNotificationFlag(body: { watchedActivityOutbound?: boolean; lifecycleEmail?: boolean }) {
     const current = this.notificationSettings();
     if (!current || this.notificationSettingsSaving()) return;
     this.notificationSettingsSaving.set(true);
     this.notificationAutosave.markSaving();
     this.notificationSettingsError.set(null);
-        try {
-      const updated = await this.api.patch<NotificationSettingsResponse>("/notifications/settings", {
-        watchedActivityOutbound: checked,
-      });
+    try {
+      const updated = await this.api.patch<NotificationSettingsResponse>("/notifications/settings", body);
       this.notificationSettings.set(updated);
       this.notificationAutosave.markSaved();
     } catch (err) {

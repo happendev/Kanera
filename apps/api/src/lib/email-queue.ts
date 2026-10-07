@@ -2,7 +2,7 @@ import { EMAIL_QUEUE_STATUS, emailQueue, type EmailQueue, type SmtpConfig } from
 import { and, eq, inArray, isNull, lt, lte, or } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import type { Db } from "../db.js";
-import { errorMessage, renderEmail } from "./mailer.js";
+import { emailHeaders, errorMessage, renderEmail } from "./mailer.js";
 import { notificationDeliveryDuration, notificationDeliveryTotal, notificationQueueWaitDuration } from "./metrics.js";
 import { sendEmail, type SendEmailOptions } from "./smtp.js";
 import { startSweepScheduler } from "./sweep-scheduler.js";
@@ -55,7 +55,7 @@ export async function runEmailQueueSweep({
         Math.max(0, (startedAt - row.createdAt.getTime()) / 1000),
       );
       try {
-        await deliverEmail({ config, to: row.toEmail, subject: row.subject, html: renderEmail(row) });
+        await deliverEmail({ config, to: row.toEmail, subject: row.subject, html: renderEmail(row), headers: emailHeaders(row) });
         await db
           .update(emailQueue)
           .set({ status: EMAIL_QUEUE_STATUS.success, sentAt: new Date(), processingLeaseExpiresAt: null, updatedAt: new Date(), lastError: null })

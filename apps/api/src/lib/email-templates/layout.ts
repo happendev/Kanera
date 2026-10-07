@@ -4,6 +4,11 @@ export interface LayoutOptions {
   subject: string;
   preheader: string;
   body: string;
+  /**
+   * Lifecycle (onboarding/check-in) emails are optional product messages, so their footer names why
+   * the reader got them and links to a one-click opt-out. Transactional mail omits it.
+   */
+  unsubscribeUrl?: string;
 }
 
 const BRAND = "#0d9488";
@@ -24,7 +29,11 @@ const EMAIL_LINK = BRAND;
 const EMAIL_BUTTON_TEXT = "#ffffff";
 const LOGO_URL = "https://www.kanera.app/assets/logo/jpg/logo%20light%20long.jpg";
 
-export function emailLayout({ subject, preheader, body }: LayoutOptions): string {
+export function emailLayout({ subject, preheader, body, unsubscribeUrl }: LayoutOptions): string {
+  const footerReason = unsubscribeUrl
+    ? `You're receiving this onboarding and account tip because you own a Kanera organisation.<br>
+                  <a href="${escapeAttr(unsubscribeUrl)}" target="_blank" class="email-link" style="color:${EMAIL_FOOTER_TEXT};text-decoration:underline;">Unsubscribe from these emails</a><br>`
+    : "You're receiving this because you have a Kanera account.<br>";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -74,7 +83,7 @@ export function emailLayout({ subject, preheader, body }: LayoutOptions): string
             <tr>
               <td class="email-card-inner" style="padding:28px 32px 32px 32px;">
                 <div class="email-footer" style="padding-top:20px;border-top:1px solid ${EMAIL_DIVIDER};font-family:${FONT_STACK};font-size:13px;line-height:20px;color:${EMAIL_FOOTER_TEXT};text-align:center;mso-line-height-rule:exactly;">
-                  You're receiving this because you have a Kanera account.<br>
+                  ${footerReason}
                   &copy; 2026 Kanera
                 </div>
               </td>

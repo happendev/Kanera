@@ -69,6 +69,12 @@ export const routes: Routes = [
     loadComponent: () => import("./features/auth/reset-password.page").then((m) => m.ResetPasswordPage),
   },
   {
+    // Reached from lifecycle emails; deliberately unguarded so it works signed in or out.
+    path: "email/unsubscribe",
+    title: "Unsubscribe",
+    loadComponent: () => import("./features/email-unsubscribe/email-unsubscribe.page").then((m) => m.EmailUnsubscribePage),
+  },
+  {
     path: "board-invite",
     title: "Board Invitation",
     loadComponent: () => import("./features/board-invite/board-invite.page").then((m) => m.BoardInvitePage),

@@ -43,6 +43,7 @@ export const updateNotificationSettingsBody = z.object({
   emailEnabled: z.boolean().optional(),
   pushEnabled: z.boolean().optional(),
   watchedActivityOutbound: z.boolean().optional(),
+  lifecycleEmail: z.boolean().optional(),
   personalChannels: z.object({
     ntfy: z.object({
       enabled: z.boolean().optional(),
@@ -75,6 +76,7 @@ export const notificationSettingsResponse = z.object({
   emailEnabled: z.boolean(),
   pushEnabled: z.boolean(),
   watchedActivityOutbound: z.boolean(),
+  lifecycleEmail: z.boolean(),
   types: notificationSettingsMatrix,
   push: z.object({
     status: z.enum(["enabled", "org-disabled", "system-disabled"]),
@@ -112,6 +114,7 @@ export interface NotificationSettingsResponse {
   emailEnabled: boolean;
   pushEnabled: boolean;
   watchedActivityOutbound: boolean;
+  lifecycleEmail: boolean;
   types: z.infer<typeof notificationSettingsMatrix>;
   push: {
     status: "enabled" | "org-disabled" | "system-disabled";
@@ -240,3 +243,8 @@ export interface NotificationAgentCounts {
   total: number;
   unread: number;
 }
+
+export const emailUnsubscribeBody = z.object({
+  token: z.string().min(1).max(512),
+});
+export type EmailUnsubscribeBody = z.infer<typeof emailUnsubscribeBody>;

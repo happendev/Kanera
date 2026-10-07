@@ -47,3 +47,14 @@ export { verificationCodeEmail } from "./verification-code.js";
 export type { VerificationCodeEmailParams } from "./verification-code.js";
 export { welcomeEmail } from "./welcome.js";
 export type { WelcomeEmailParams } from "./welcome.js";
+export { importCompletedEmail } from "./import-completed.js";
+export type { ImportCompletedEmailParams } from "./import-completed.js";
+export {
+  lifecycleActiveCheckinEmail,
+  lifecycleEarlySuccessEmail,
+  lifecycleEmailSubject,
+  lifecycleInactiveEmail,
+  lifecycleInviteTeamEmail,
+  lifecycleNoBoardEmail,
+} from "./lifecycle.js";
+export type { LifecycleEmailParams } from "./lifecycle.js";

@@ -158,6 +158,7 @@ describe("AccountSettingsPage", () => {
       emailEnabled: true,
       pushEnabled: false,
       watchedActivityOutbound: false,
+      lifecycleEmail: true,
       push: { status: "system-disabled", registrationEnabled: false, enabled: false, publicKey: null },
       personalChannels: {
         destinationPolicy: "public-https",

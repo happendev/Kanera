@@ -30,6 +30,7 @@ export function proTrialWarningEmail(params: BillingEmailParams): string {
     intro: `Hi ${firstName(params.displayName)}, ${params.orgName}'s Pro trial ends${params.trialEndsAtLabel ? ` on ${params.trialEndsAtLabel}` : days === 1 ? " tomorrow" : ` in ${days} days`}.`,
     params,
     lines: [
+      usageLine(params),
       "You won't be charged automatically. Unless you upgrade, the organisation will move to Kanera Free when the trial ends.",
       "All workspaces remain available. The summary below shows what will change based on your current setup.",
     ],
@@ -377,3 +378,13 @@ function firstName(displayName: string): string {
   return displayName.split(" ")[0] ?? displayName;
 }
 
+
+function usageLine(params: BillingEmailParams): string | null {
+  const usage = params.usage;
+  if (!usage || (usage.boards === 0 && usage.cards === 0)) return null;
+  const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const built = `${count(usage.boards, "board", "boards")} with ${count(usage.cards, "card", "cards")}`;
+  return usage.members > 1
+    ? `So far, your team of ${usage.members} has built ${built}.`
+    : `So far, you've built ${built}.`;
+}

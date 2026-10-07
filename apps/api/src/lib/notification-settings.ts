@@ -30,6 +30,7 @@ export interface EffectiveNotificationSettings {
   emailEnabled: boolean;
   pushEnabled: boolean;
   watchedActivityOutbound: boolean;
+  lifecycleEmail: boolean;
   ntfyEnabled: boolean;
   gotifyEnabled: boolean;
   webhookEnabled: boolean;
@@ -66,6 +67,7 @@ export function defaultNotificationSettings(userId: string): EffectiveNotificati
     emailEnabled: true,
     pushEnabled: false,
     watchedActivityOutbound: false,
+    lifecycleEmail: true,
     ntfyEnabled: false,
     gotifyEnabled: false,
     webhookEnabled: false,
@@ -92,6 +94,7 @@ export function toEffectiveNotificationSettings(row: NotificationSettings | null
     emailEnabled: row.emailEnabled,
     pushEnabled: row.pushEnabled,
     watchedActivityOutbound: row.watchedActivityOutbound,
+    lifecycleEmail: row.lifecycleEmail,
     ntfyEnabled: row.ntfyEnabled,
     gotifyEnabled: row.gotifyEnabled,
     webhookEnabled: row.webhookEnabled,

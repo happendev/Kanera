@@ -1,4 +1,4 @@
-import { EMAIL_QUEUE_STATUS, emailQueue, type BoardRole, type EmailQueue, type SmtpConfig } from "@kanera/shared/schema";
+import { EMAIL_QUEUE_STATUS, emailQueue, type BoardRole, type EmailQueue, type LifecycleEmailQueueType, type SmtpConfig } from "@kanera/shared/schema";
 import { and, eq, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import type { Db } from "../db.js";
@@ -33,6 +33,15 @@ import {
   welcomeToProEmail,
   welcomeEmail,
   weeklyAdminRecapEmail,
+  importCompletedEmail,
+  lifecycleActiveCheckinEmail,
+  lifecycleEarlySuccessEmail,
+  lifecycleEmailSubject,
+  lifecycleInactiveEmail,
+  lifecycleInviteTeamEmail,
+  lifecycleNoBoardEmail,
+  type ImportCompletedEmailParams,
+  type LifecycleEmailParams,
   type BillingEmailParams,
   type BoardAccessGrantedEmailParams,
   type BoardInviteEmailParams,
@@ -77,6 +86,8 @@ export interface Mailer {
   sendProCancellationScheduled(to: string, params: BillingEmailParams): Promise<EmailQueue>;
   sendProCancellationReversed(to: string, params: BillingEmailParams): Promise<EmailQueue>;
   sendProCancelled(to: string, params: BillingEmailParams): Promise<EmailQueue>;
+  sendImportCompleted(to: string, params: ImportCompletedEmailParams): Promise<EmailQueue>;
+  sendLifecycle(to: string, type: LifecycleEmailQueueType, params: LifecycleEmailParams): Promise<EmailQueue>;
 }
 
 export interface MailerDeps {
@@ -97,7 +108,7 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
     if (!config) {
       throw new Error("no SMTP configuration available");
     }
-    await deliverEmail({ config, to: row.toEmail, subject: row.subject, html: renderEmail(row) });
+    await deliverEmail({ config, to: row.toEmail, subject: row.subject, html: renderEmail(row), headers: emailHeaders(row) });
     log.info({ emailQueueId: row.id, to: row.toEmail, subject: row.subject }, "email sent");
   }
 
@@ -253,6 +264,14 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
     async sendProCancelled(to, params) {
       return queueEmail(to, `${params.orgName} is now on Kanera Free`, "pro_cancelled", params);
     },
+
+    async sendImportCompleted(to, params) {
+      return queueEmail(to, "Your Kanera import is complete", "import_completed", params);
+    },
+
+    async sendLifecycle(to, type, params) {
+      return queueEmail(to, lifecycleEmailSubject(type, params), type, params);
+    },
   };
 
   /**
@@ -297,6 +316,24 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
       return await markFailed(row!, err);
     }
   }
+}
+
+/**
+ * Lifecycle emails are optional product mail, so they carry RFC 2369/8058 one-click unsubscribe
+ * headers. Mail providers show their own "Unsubscribe" control for these and POST to the API URL
+ * directly (no page, no session); the mailto-free HTTPS form is what Gmail and Yahoo require. The
+ * web page link stays second for clients that only open URLs. Transactional mail gets no headers.
+ */
+export function emailHeaders(row: EmailQueue): Record<string, string> | undefined {
+  if (!row.type.startsWith("lifecycle_")) return undefined;
+  const pageUrl = (row.data as LifecycleEmailParams).unsubscribeUrl;
+  const token = pageUrl ? new URL(pageUrl).searchParams.get("token") : null;
+  if (!token) return undefined;
+  const oneClickUrl = `${env.API_PUBLIC_URL}/api/email/unsubscribe/one-click?token=${encodeURIComponent(token)}`;
+  return {
+    "List-Unsubscribe": `<${oneClickUrl}>, <${pageUrl}>`,
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+  };
 }
 
 export function renderEmail(row: EmailQueue): string {
@@ -359,6 +396,18 @@ export function renderEmail(row: EmailQueue): string {
       return proCancellationReversedEmail(row.data as BillingEmailParams);
     case "pro_cancelled":
       return proCancelledEmail(row.data as BillingEmailParams);
+    case "import_completed":
+      return importCompletedEmail(row.data as ImportCompletedEmailParams);
+    case "lifecycle_no_board":
+      return lifecycleNoBoardEmail(row.data as LifecycleEmailParams);
+    case "lifecycle_invite_team":
+      return lifecycleInviteTeamEmail(row.data as LifecycleEmailParams);
+    case "lifecycle_early_success":
+      return lifecycleEarlySuccessEmail(row.data as LifecycleEmailParams);
+    case "lifecycle_inactive":
+      return lifecycleInactiveEmail(row.data as LifecycleEmailParams);
+    case "lifecycle_active_checkin":
+      return lifecycleActiveCheckinEmail(row.data as LifecycleEmailParams);
   }
 }
 

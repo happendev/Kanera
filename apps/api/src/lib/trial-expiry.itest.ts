@@ -1,6 +1,6 @@
 import "../test/setup.integration.js";
 import { insertTestUsers } from "../test/user-fixtures.js";
-import { clients, emailQueue, workspaces } from "@kanera/shared/schema";
+import { clients, emailQueue, workspaces, type BillingEmailQueueData } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -105,6 +105,11 @@ void test("trial warning sweep sends 10-day and 1-day warnings with dedupe and i
     assert.deepEqual(warnings.map((row) => row.toEmail).sort(), ["trial-10@example.com", "trial-1@example.com"]);
     assert.deepEqual(warnings.map((row) => (row.data as { daysRemaining: number; dedupeKey: string }).daysRemaining).sort((a, b) => a - b), [1, 10]);
     assert.ok(warnings.every((row) => (row.data as { dedupeKey: string }).dedupeKey.startsWith("pro_trial_warning:")));
+    // "Trial nearing end" summarises achieved value; a lone owner with nothing built yet still counts.
+    assert.ok(warnings.every((row) => {
+      const usage = (row.data as BillingEmailQueueData).usage;
+      return usage?.boards === 0 && usage.cards === 0 && usage.members === 1;
+    }));
   });
 });
 

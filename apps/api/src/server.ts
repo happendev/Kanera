@@ -50,7 +50,7 @@ import { internalLinkRoutes } from "./modules/internal-links/routes.js";
 import { listRoutes } from "./modules/lists/routes.js";
 import { mediaRoutes } from "./modules/media/routes.js";
 import { noteRoutes } from "./modules/notes/routes.js";
-import { notificationsRoutes, pushPublicRoutes } from "./modules/notifications/routes.js";
+import { emailPreferencePublicRoutes, notificationsRoutes, pushPublicRoutes } from "./modules/notifications/routes.js";
 import { searchRoutes } from "./modules/search/routes.js";
 import { separatorRoutes } from "./modules/separators/routes.js";
 import { workspaceRoutes } from "./modules/workspaces/routes.js";
@@ -275,6 +275,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
   await app.register(activityRoutes);
   await app.register(notificationsRoutes);
   await app.register(pushPublicRoutes);
+  await app.register(emailPreferencePublicRoutes);
   await app.register(clientRoutes);
   await app.register(clientUserRoutes);
   await app.register(integrationRoutes);

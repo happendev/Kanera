@@ -1,0 +1,21 @@
+<div class="auth-root">
+  <div class="auth-card">
+    <div class="auth-header">
+      <k-logo [height]="34" />
+      <p>Onboarding and account tips</p>
+    </div>
+    @if (done()) {
+      <div class="success-banner"><i class="ti ti-circle-check"></i> You're unsubscribed from onboarding and account tips.</div>
+      <p class="unsubscribe-help">You'll still get emails about your work, such as assignments, mentions and billing. To turn tips back on, go to Settings, then Notifications.</p>
+    } @else {
+      <form (submit)="unsubscribe($event)">
+        <p class="unsubscribe-help">Stop receiving emails with setup suggestions and account check-ins. Emails about your work, such as assignments, mentions and billing, are not affected.</p>
+        @if (error()) {
+          <div class="error-banner"><i class="ti ti-alert-circle"></i> {{ error() }}</div>
+        }
+        <button type="submit" [disabled]="busy()" class="submit-btn">Unsubscribe</button>
+      </form>
+    }
+    <div class="auth-footer"><a routerLink="/settings/notifications">Notification settings</a></div>
+  </div>
+</div>

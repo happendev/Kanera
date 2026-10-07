@@ -45,6 +45,7 @@ export * from "./event-outbox.js";
 export * from "./external-link.js";
 export * from "./github-app-installation.js";
 export * from "./invite-token.js";
+export * from "./lifecycle-email-send.js";
 export * from "./invite-workspace-grant.js";
 export * from "./internal-link.js";
 export * from "./kanera-board-import.js";

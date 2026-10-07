@@ -41,6 +41,14 @@ import { smtpTestEmail } from "../lib/email-templates/smtp-test.js";
 import { verificationCodeEmail } from "../lib/email-templates/verification-code.js";
 import { welcomeEmail } from "../lib/email-templates/welcome.js";
 import { weeklyAdminRecapEmail } from "../lib/email-templates/weekly-admin-recap.js";
+import { importCompletedEmail } from "../lib/email-templates/import-completed.js";
+import {
+  lifecycleActiveCheckinEmail,
+  lifecycleEarlySuccessEmail,
+  lifecycleInactiveEmail,
+  lifecycleInviteTeamEmail,
+  lifecycleNoBoardEmail,
+} from "../lib/email-templates/lifecycle.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const outDir = resolve(scriptDir, "../lib/email-templates/preview");
@@ -297,6 +305,7 @@ const templates = [
       settingsUrl: "http://localhost:4200/settings/account-plan",
       daysRemaining: 10,
       trialEndsAtLabel: "Jun 25, 2026",
+      usage: { boards: 6, cards: 184, members: 5 },
       impact: { boardsArchived: 5, usersSuspended: 1, automationsDisabled: 3, webhooksDisabled: 2, apiKeysRevoked: 1, guestMembersRemoved: 4, guestInvitesRevoked: 1 },
       limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 3, maxAutomationExecutionsPerMonth: 100 },
     }),
@@ -417,6 +426,37 @@ const templates = [
       impact: { boardsArchived: 3, usersSuspended: 2, automationsDisabled: 2, webhooksDisabled: 1, apiKeysRevoked: 1, guestMembersRemoved: 1, guestInvitesRevoked: 1 },
       limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 3, maxAutomationExecutionsPerMonth: 100 },
     }),
+  },
+  {
+    name: "import-completed",
+    html: importCompletedEmail({
+      displayName: "Amelia Hart", source: "trello", boardName: "Client Launch", boardUrl: "http://localhost:4200/b/board-client-launch",
+      lists: 5, cards: 142, checklistItems: 318, comments: 96, attachmentsImported: 41, attachmentsSkipped: 2, warningCount: 1,
+    }),
+  },
+  {
+    name: "lifecycle-no-board",
+    html: lifecycleNoBoardEmail({ displayName: "Amelia Hart", orgName: "Northstar Studio", unsubscribeUrl: "http://localhost:4200/email/unsubscribe?token=example", ctaUrl: "http://localhost:4200/" }),
+  },
+  {
+    name: "lifecycle-invite-team",
+    html: lifecycleInviteTeamEmail({ displayName: "Amelia Hart", orgName: "Northstar Studio", unsubscribeUrl: "http://localhost:4200/email/unsubscribe?token=example", ctaUrl: "http://localhost:4200/settings/users" }),
+  },
+  {
+    name: "lifecycle-early-success-automations",
+    html: lifecycleEarlySuccessEmail({ displayName: "Amelia Hart", orgName: "Northstar Studio", unsubscribeUrl: "http://localhost:4200/email/unsubscribe?token=example", ctaUrl: "http://localhost:4200/w/workspace-example/settings/automations", nextStep: "automations" }),
+  },
+  {
+    name: "lifecycle-early-success-my-cards",
+    html: lifecycleEarlySuccessEmail({ displayName: "Amelia Hart", orgName: "Northstar Studio", unsubscribeUrl: "http://localhost:4200/email/unsubscribe?token=example", ctaUrl: "http://localhost:4200/my-cards", nextStep: "my_cards" }),
+  },
+  {
+    name: "lifecycle-inactive",
+    html: lifecycleInactiveEmail({ displayName: "Amelia Hart", orgName: "Northstar Studio", unsubscribeUrl: "http://localhost:4200/email/unsubscribe?token=example", ctaUrl: "http://localhost:4200/", feedbackEmail: "support@kanera.app" }),
+  },
+  {
+    name: "lifecycle-active-checkin",
+    html: lifecycleActiveCheckinEmail({ displayName: "Amelia Hart", orgName: "Northstar Studio", unsubscribeUrl: "http://localhost:4200/email/unsubscribe?token=example", ctaUrl: "http://localhost:4200/team-cards", onFreePlan: true, feedbackEmail: "support@kanera.app" }),
   },
 ];
 

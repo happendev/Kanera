@@ -98,19 +98,29 @@ function buildTextMessage({ from, to, subject, text }: { from: string; to: strin
   ].join("\r\n");
 }
 
-function buildMimeMessage({ from, to, subject, html }: { from: string; to: string; subject: string; html: string }): string {
+function buildMimeMessage({ from, to, subject, html, headers }: { from: string; to: string; subject: string; html: string; headers?: Record<string, string> }): string {
   return [
     `From: ${from}`,
     `To: ${to}`,
     `Subject: =?utf-8?B?${Buffer.from(subject, "utf-8").toString("base64")}?=`,
     `Date: ${new Date().toUTCString()}`,
     `Message-ID: <${crypto.randomUUID()}@${messageIdDomain(from)}>`,
+    ...extraHeaderLines(headers),
     "MIME-Version: 1.0",
     "Content-Type: text/html; charset=utf-8",
     "Content-Transfer-Encoding: base64",
     "",
     encodeBase64Body(html),
   ].join("\r\n");
+}
+
+// Extra headers are application-built (List-Unsubscribe), but strip CR/LF anyway so a value can
+// never inject further headers, and refuse names that are not plain RFC 5322 field names.
+function extraHeaderLines(headers: Record<string, string> | undefined): string[] {
+  if (!headers) return [];
+  return Object.entries(headers)
+    .filter(([name]) => /^[A-Za-z0-9-]+$/.test(name))
+    .map(([name, value]) => `${name}: ${value.replace(/[\r\n]+/g, " ")}`);
 }
 
 function formatAddress(email: string, name?: string): string {
@@ -125,18 +135,20 @@ export interface SendEmailOptions {
   subject: string;
   html?: string;
   text?: string;
+  /** Additional headers for the HTML message, such as List-Unsubscribe. */
+  headers?: Record<string, string>;
 }
 
 /**
  * Send an email via SMTP. Builds a MIME message with proper headers and
  * delivers it using the same low-level SmtpProbe used for SMTP config testing.
  */
-export async function sendEmail({ config, to, subject, html, text }: SendEmailOptions): Promise<void> {
+export async function sendEmail({ config, to, subject, html, text, headers }: SendEmailOptions): Promise<void> {
   const from = formatAddress(config.fromEmail, config.fromName);
   if (html === undefined && text === undefined) throw new Error("email html or text body is required");
   const message = text !== undefined && html === undefined
     ? buildTextMessage({ from, to, subject, text })
-    : buildMimeMessage({ from, to, subject, html: html! });
+    : buildMimeMessage({ from, to, subject, html: html!, headers });
 
   const client = new SmtpProbe(config);
   await client.connect();

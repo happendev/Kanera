@@ -1,4 +1,9 @@
+import { users } from "@kanera/shared/schema";
+import { eq } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
+import { db } from "../../db.js";
+import { env } from "../../env.js";
+import { userAcceptsEmail } from "../../lib/lifecycle-emails.js";
 import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
 import { ANALYTICS_EVENT_VERSION, productAnalytics } from "../../lib/product-analytics.js";
 import { emitToBoard, emitToBoardAudience, emitToWorkspace } from "../../realtime/emit.js";
@@ -47,4 +52,36 @@ export async function finishImportAnalytics(req: FastifyRequest, workspaceId: st
     },
   });
   await evaluateWorkspaceAnalyticsMilestones({ workspaceId, actorId: req.auth.sub, supportSession });
+}
+
+/**
+ * Migration support: confirms by email what transferred, so the importer can check it against the
+ * source before retiring the old tool. Sent to the person who ran the import, never during a support
+ * session (the customer did not start it). Best-effort: it runs inside the commit handler's try, and
+ * a mail failure must not flip a completed import to failed.
+ */
+export async function sendImportCompletedEmail(req: FastifyRequest, result: ImportResult, source: "trello" | "kanera" | "csv"): Promise<void> {
+  if (req.auth.authKind === "support") return;
+  try {
+    if (!await userAcceptsEmail(req.auth.sub)) return;
+    const [user] = await db.select({ email: users.email, displayName: users.displayName }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
+    if (!user) return;
+    const { summary } = result;
+    await req.server.mailer.sendImportCompleted(user.email, {
+      displayName: user.displayName,
+      source,
+      boardName: result.board.name,
+      boardUrl: `${env.WEB_ORIGIN}/b/${result.board.id}`,
+      // Lists are workspace-scoped, so an import may map onto lists that already existed.
+      lists: summary.lists.created + summary.lists.reused,
+      cards: summary.cards.created,
+      checklistItems: summary.checklistItems,
+      comments: summary.comments,
+      attachmentsImported: summary.attachments.imported,
+      attachmentsSkipped: summary.attachments.skipped,
+      warningCount: summary.warnings.length,
+    });
+  } catch (err) {
+    req.log.warn({ err }, "failed to queue import completed email");
+  }
 }
