@@ -13,6 +13,32 @@ The web server uses `--watch=false` to serve its startup build throughout the ru
 
 It never touches the development database. You need Docker and a Playwright Chromium install (`pnpm exec playwright install chromium`).
 
+## Concurrent CI runs
+
+CI splits the suite into three Playwright shards on separate GitHub-hosted runners. Each shard
+starts its own freshly migrated and seeded Postgres, Valkey, API, worker, MCP server and web app.
+Tests remain sequential within that stack (`workers: 1`, `fullyParallel: false`): seeded users,
+boards, settings and realtime rooms must not be shared by concurrently executing tests.
+Playwright assigns whole spec files to shards, keeping the tests in each file together.
+
+Reproduce an individual shard locally:
+
+```bash
+pnpm test:e2e -- --shard=1/3
+pnpm test:e2e -- --shard=2/3
+pnpm test:e2e -- --shard=3/3
+```
+
+Run those commands one at a time on a local checkout: its fixed E2E ports, Docker Compose project
+and database are protected by the runner's lock. CI concurrency comes from separate machines.
+Do not increase `--workers` against a shared stack without first isolating its test fixtures.
+
+All shards finish even if one fails, and upload separate `e2e-results-<index>-of-3` artifacts with
+traces, screenshots, service logs, reports and the exact shard command in `REPRODUCE.txt`.
+The existing `e2e` CI check passes only when every shard passes, so branch protection can continue
+requiring that check. Sharding repeats stack setup on each runner, trading more runner minutes
+for a shorter wait; it does not skip tests or retry failures.
+
 ## Topology the suite depends on
 
 - **Real Valkey.** Services run with `NODE_ENV=development`. `NODE_ENV=test` would swap Valkey for a per-process `ioredis-mock`, and cross-process realtime could never deliver.

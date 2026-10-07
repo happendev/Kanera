@@ -38,6 +38,8 @@ function apiProcess(script: string, logName: string, port: number) {
 export default defineConfig({
   testDir: __dirname,
   testMatch: "*.spec.ts",
+  // CI parallelizes isolated stacks with --shard. Within one stack tests share seeded users and
+  // boards, so keep file/test execution sequential rather than racing on those fixtures.
   fullyParallel: false,
   workers: 1,
   retries: 0,

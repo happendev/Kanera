@@ -54,9 +54,17 @@ jobs:
       # locally and in Docker so CI is not the first place bundle growth becomes visible.
       - run: pnpm bundle:web:check
 
-  e2e:
+  e2e-shard:
+    name: E2E shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Seeded users, boards and realtime channels are shared inside a stack. Separate runners give
+    # each shard its own database, Valkey, ports and services without weakening realtime coverage.
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1, 2, 3]
+        shardTotal: [3]
     steps:
       - uses: actions/checkout@v4
 
@@ -87,15 +95,32 @@ jobs:
       - if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps chromium
 
-      - run: pnpm test:e2e
+      - run: pnpm test:e2e -- --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: e2e-results
+          name: e2e-results-${{ matrix.shardIndex }}-of-${{ matrix.shardTotal }}
           path: e2e/artifacts/
           if-no-files-found: ignore
           retention-days: 7
+
+  # Keep the existing required check name stable. A failed or cancelled shard must fail this gate;
+  # without always(), GitHub would skip it when a dependency fails instead of reporting a failure.
+  e2e:
+    needs: e2e-shard
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Require every E2E shard to pass
+        env:
+          SHARD_RESULT: ${{ needs.e2e-shard.result }}
+        run: |
+          if [[ "$SHARD_RESULT" != "success" ]]; then
+            echo "E2E shards did not all pass: $SHARD_RESULT"
+            exit 1
+          fi
 
   secret-scan:
     runs-on: ubuntu-latest
