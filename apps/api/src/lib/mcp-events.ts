@@ -1,4 +1,4 @@
-import { mcpEventData, type McpEventArguments, type McpEventOccurrence } from "@kanera/shared/dto";
+import { MCP_PRIORITY_EVENT_NAME, mcpEventData, type McpCardEventOccurrence, type McpEventArguments, type McpEventName, type McpPriorityEventOccurrence, type McpStoredEventArguments } from "@kanera/shared/dto";
 import { cards, clientMembers, lists, mcpEventDeliveries, mcpEventSubscriptions, oauthClients, oauthGrants, users, workspaceApiKeys, type EventOutbox, type EventOutboxActor, type McpDeliveryError, type McpEventSubscription } from "@kanera/shared/schema";
 import { and, eq, gt, inArray, lt, lte, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
@@ -23,7 +23,13 @@ export function mcpSubscriptionOwner(claims: AuthClaims) {
   if (!claims.apiKeyId || !/^[0-9a-f-]{36}$/iu.test(claims.apiKeyId)) throw forbidden();
   return { principal: `${claims.oauthServiceClientId ? `service:${claims.oauthServiceClientId}:` : ""}key:${claims.apiKeyId}:${claims.sub}`, ownerApiKeyId: claims.apiKeyId, ownerAgentGrantId: null, ownerServiceClientId: claims.oauthServiceClientId ?? null };
 }
-export async function assertMcpEventAccess(claims: AuthClaims, args: McpEventArguments) {
+export async function assertMcpEventAccess(claims: AuthClaims, name: McpEventName, args: McpStoredEventArguments) {
+  // Your own queue is always readable (as in priorities.list), so there is nothing to check beyond
+  // the live connection, which liveSubscriptionClaims re-verifies before every delivery.
+  if (name === MCP_PRIORITY_EVENT_NAME) return;
+  await assertCardEventAccess(claims, args as McpEventArguments);
+}
+async function assertCardEventAccess(claims: AuthClaims, args: McpEventArguments) {
   if (args.boardId) {
     const access = await assertBoardAccess(claims, args.boardId);
     if (access.workspaceId !== args.workspaceId) throw forbidden();
@@ -72,7 +78,7 @@ async function liveSubscriptionClaims(sub: McpEventSubscription): Promise<AuthCl
 }
 
 // Shared occurrence for every matching subscription; actor.self is filled in per subscriber.
-type BaseOccurrence = Omit<McpEventOccurrence, "data"> & { data: Omit<McpEventOccurrence["data"], "actor"> };
+type BaseOccurrence = Omit<McpCardEventOccurrence, "data"> & { data: Omit<McpCardEventOccurrence["data"], "actor"> };
 async function occurrenceFor(event: EventOutbox): Promise<BaseOccurrence | null> {
   const names = { "card:created": "card.created", "card:updated": "card.updated", "card:moved": "card.moved", "comment:created": "comment.created" } as const;
   const name = names[event.eventType as keyof typeof names];
@@ -112,6 +118,8 @@ export async function loadActiveMcpSubscriptionsByWorkspace(workspaceIds: string
     inArray(mcpEventSubscriptions.workspaceId, workspaceIds), gt(mcpEventSubscriptions.expiresAt, new Date()),
   ));
   for (const row of rows) {
+    // The IN filter already excludes user-addressed (priorities.changed) rows; this narrows the type.
+    if (!row.workspaceId) continue;
     const subscriptions = grouped.get(row.workspaceId) ?? [];
     subscriptions.push(row);
     grouped.set(row.workspaceId, subscriptions);
@@ -129,23 +137,61 @@ export async function enqueueMcpEventDeliveries(event: EventOutbox, preloadedSub
   if (!subscriptions.length) return;
   const occurrence = await occurrenceFor(event);
   if (!occurrence) return;
-  const matching = subscriptions.filter((sub) => sub.name === occurrence.name && sub.expiresAt > new Date() && sub.startsAt <= event.occurredAt
-    && (!sub.arguments.boardId || sub.arguments.boardId === event.boardId)
-    && (!sub.arguments.cardId || sub.arguments.cardId === occurrence.data.cardId)
-    // Match the occurrence snapshot, not the live card: it may already have left this list again
-    // by the time the outbox drains. List watchers only want arrivals and departures, not reorders.
-    && (!sub.arguments.listId || occurrence.name !== "card.moved"
-      || occurrence.data.fromListId !== occurrence.data.listId)
-    && (!sub.arguments.listId || sub.arguments.listId === occurrence.data.listId
-      || (occurrence.name === "card.moved" && sub.arguments.listId === occurrence.data.fromListId)));
+  const matching = subscriptions.filter((sub) => {
+    if (sub.name !== occurrence.name || sub.expiresAt <= new Date() || sub.startsAt > event.occurredAt) return false;
+    // The name matched a card event, so these are the workspace/board/list/card filter arguments.
+    const args = sub.arguments as McpEventArguments;
+    return (!args.boardId || args.boardId === event.boardId)
+      && (!args.cardId || args.cardId === occurrence.data.cardId)
+      // Match the occurrence snapshot, not the live card: it may already have left this list again
+      // by the time the outbox drains. List watchers only want arrivals and departures, not reorders.
+      && (!args.listId || occurrence.name !== "card.moved"
+        || occurrence.data.fromListId !== occurrence.data.listId)
+      && (!args.listId || args.listId === occurrence.data.listId
+        || (occurrence.name === "card.moved" && args.listId === occurrence.data.fromListId));
+  });
   if (!matching.length) return;
   // Rows published before actor capture existed carry no actor; they are reported as system.
   const actor = event.actor ?? null;
   // The uniqueness key makes outbox retry/crash recovery idempotent, retaining the same eventId.
   await db.insert(mcpEventDeliveries).values(matching.map((sub) => ({
     subscriptionId: sub.id, outboxEventId: event.id,
-    payload: { ...occurrence, data: { ...occurrence.data, actor: { kind: actor?.kind ?? "system", userId: actor?.userId ?? null, self: isSelf(actor, sub) } } },
+    payload: { ...occurrence, data: { ...occurrence.data, actor: actorFor(actor, sub) } },
   }))).onConflictDoNothing();
+}
+function actorFor(actor: EventOutboxActor | null, sub: McpEventSubscription) {
+  return { kind: actor?.kind ?? "system", userId: actor?.userId ?? null, self: isSelf(actor, sub) };
+}
+
+/**
+ * Queue a `priorities.changed` occurrence for this person's own subscriptions to their "Up next" queue.
+ *
+ * Called from `emitCardPriorityInvalidated`, so it fires on exactly the changes the web app refetches
+ * on — direct add/move/remove and indirect completion, archive and reassignment of a queued card.
+ * The queue spans workspaces and therefore never enters the workspace `event_outbox` (see that
+ * emitter), so unlike card events these rows are written straight after the caller's commit rather
+ * than from the outbox drain. A crash in between loses the occurrence, the same exposure as the
+ * inline realtime ping; subscribers converge on their next priorities.list read, and no replay is
+ * promised anyway. Delivery still re-verifies the subscribing connection is live.
+ */
+export async function enqueuePriorityQueueMcpEvents(targetUserId: string, actor: EventOutboxActor | null): Promise<void> {
+  const now = new Date();
+  const subscriptions = await db.select().from(mcpEventSubscriptions).where(and(
+    // userId too, though the scope check already pins target to subscriber: a queue owner's change
+    // must never reach a subscription that some other user holds.
+    eq(mcpEventSubscriptions.targetUserId, targetUserId), eq(mcpEventSubscriptions.userId, targetUserId),
+    eq(mcpEventSubscriptions.name, MCP_PRIORITY_EVENT_NAME),
+    gt(mcpEventSubscriptions.expiresAt, now), lte(mcpEventSubscriptions.startsAt, now),
+  ));
+  if (!subscriptions.length) return;
+  const eventId = `evt_${crypto.randomUUID()}`;
+  await db.insert(mcpEventDeliveries).values(subscriptions.map((sub) => ({
+    subscriptionId: sub.id, outboxEventId: null,
+    payload: {
+      eventId, name: MCP_PRIORITY_EVENT_NAME, timestamp: now.toISOString(), cursor: null,
+      data: { targetUserId, actor: actorFor(actor, sub) },
+    } satisfies McpPriorityEventOccurrence,
+  })));
 }
 
 // Map a failed attempt to the draft's fixed deliveryStatus.lastError categories. Redirects are
@@ -171,7 +217,7 @@ async function gateFor(sub: McpEventSubscription): Promise<SubscriptionGate> {
   if (sub.expiresAt <= new Date()) return { sub, claims: null };
   try {
     const claims = await liveSubscriptionClaims(sub);
-    await assertMcpEventAccess(claims, sub.arguments);
+    await assertMcpEventAccess(claims, sub.name as McpEventName, sub.arguments);
     return { sub, claims };
   } catch (error) {
     if (!(error instanceof AppError && error.statusCode < 500)) throw error;
@@ -184,13 +230,16 @@ async function gateFor(sub: McpEventSubscription): Promise<SubscriptionGate> {
 async function attemptDelivery(delivery: typeof mcpEventDeliveries.$inferSelect, gate: SubscriptionGate, send: McpWebhookRequest): Promise<DeliveryOutcome> {
   const { sub, claims } = gate;
   if (!claims || new Date(delivery.payload.timestamp) < sub.startsAt) return { kind: "skipped" };
-  try {
-    // Authorize the card's current board: it may have moved after this event was queued.
-    // Losing one card must not expire an otherwise valid workspace/board-wide subscription.
-    await assertCardAccess(claims, delivery.payload.data.cardId);
-  } catch (error) {
-    if (!(error instanceof AppError && error.statusCode < 500)) throw error;
-    return { kind: "skipped" };
+  // Queue events name no card, and only ever describe the subscriber's own queue (a database check).
+  if (delivery.payload.name !== MCP_PRIORITY_EVENT_NAME) {
+    try {
+      // Authorize the card's current board: it may have moved after this event was queued.
+      // Losing one card must not expire an otherwise valid workspace/board-wide subscription.
+      await assertCardAccess(claims, delivery.payload.data.cardId);
+    } catch (error) {
+      if (!(error instanceof AppError && error.statusCode < 500)) throw error;
+      return { kind: "skipped" };
+    }
   }
   const body = JSON.stringify(delivery.payload);
   if (Buffer.byteLength(body) > 262_144) return { kind: "skipped" };

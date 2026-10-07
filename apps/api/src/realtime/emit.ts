@@ -3,9 +3,10 @@ import { boardMembers, boards, clientMembers, users, workspaceMembers, workspace
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "../db.js";
 import { loadOwnPriorityQueueSnapshot } from "../lib/card-priority-queue.js";
+import { enqueuePriorityQueueMcpEvents } from "../lib/mcp-events.js";
 import { broadcastToBoard, broadcastToClient, broadcastToUser, broadcastToWorkspace } from "./broadcast.js";
 import { logRealtimePublishFailure } from "./metrics.js";
-import { publishDirectRealtimeEvent, publishRealtimeEvent } from "./outbox.js";
+import { currentOutboxActor, publishDirectRealtimeEvent, publishRealtimeEvent } from "./outbox.js";
 
 type EventPayload<E extends keyof ServerToClientEvents> = Parameters<ServerToClientEvents[E]>[0];
 type BoardLifecycleEvent =
@@ -292,7 +293,9 @@ export async function emitToGlobalWorkSeparatorAudience<E extends keyof ServerTo
  * The target additionally receives their queue in full as `cardPriority:queueChanged`, which the
  * confidentiality argument above permits for exactly one recipient: they already see every entry.
  * That snapshot is an *acceleration*, never a replacement — the ping still goes to the target, so a
- * client that ignores the snapshot converges by refetching exactly as before.
+ * client that ignores the snapshot converges by refetching exactly as before. *
+ * MCP `priorities.changed` subscribers hear about the same change from here, so agents and the web
+ * app agree on when a queue changed. Their occurrence is content-free for the same reason as the ping.
  */
 export async function emitCardPriorityInvalidated(targetUserId: string): Promise<void> {
   const membershipRows = await db
@@ -317,6 +320,10 @@ export async function emitCardPriorityInvalidated(targetUserId: string): Promise
   await Promise.all([
     ...[...audienceUserIds].map((userId) =>
       emitToUserDurable(userId, SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId })),
+    // A failed enqueue must not fail the caller's already-committed write, like any emit here.
+    enqueuePriorityQueueMcpEvents(targetUserId, currentOutboxActor()).catch((err) => {
+      logRealtimePublishFailure(err, { scope: "user", scopeId: targetUserId, event: SERVER_EVENTS.CARD_PRIORITY_INVALIDATED });
+    }),
     ...(snapshot
       ? [emitToUserDurable(targetUserId, SERVER_EVENTS.CARD_PRIORITY_QUEUE_CHANGED, snapshot)]
       : []),

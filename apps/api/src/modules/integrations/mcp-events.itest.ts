@@ -9,6 +9,7 @@ import { db } from "../../db.js";
 import { buildPublicApiServer } from "../../public-api-server.js";
 import { buildIntegrationServer } from "../../test/integration.js";
 import { signupOwner } from "../../test/api-fixtures.js";
+import { insertTestUsers } from "../../test/user-fixtures.js";
 import { encryptSecret } from "../../lib/secrets.js";
 import { enqueueMcpEventDeliveries, processMcpEventDeliveries } from "../../lib/mcp-events.js";
 import { McpCallbackError, postMcpWebhook, verifyMcpCallback, type McpWebhookRequest } from "../../lib/mcp-event-webhooks.js";
@@ -129,8 +130,9 @@ void test("MCP HTTP lifecycle persists, filters, rotates keys, retries and stops
     assert.ok(moved.result);
     await enqueueMcpEventDeliveries({ ...events[0]!, occurredAt: new Date(), eventType: "card:moved", payload: { boardId: f.workspace.boardId, cardId: card.id, fromListId: f.workspace.listId, toListId: f.workspace.listId, position: "2", prevPosition: "1" } as never });
     const movedDelivery = (await db.select().from(mcpEventDeliveries)).find((row) => row.payload.name === "card.moved");
-    assert.deepEqual({ listId: movedDelivery?.payload.data.listId, prevPosition: movedDelivery?.payload.data.prevPosition }, { listId: f.workspace.listId, prevPosition: "1" });
-    assert.ok(movedDelivery?.payload.data.url, "moved occurrences resolve the canonical card URL from the database");
+    const movedData = movedDelivery?.payload.name === "card.moved" ? movedDelivery.payload.data : undefined;
+    assert.deepEqual({ listId: movedData?.listId, prevPosition: movedData?.prevPosition }, { listId: f.workspace.listId, prevPosition: "1" });
+    assert.ok(movedData?.url, "moved occurrences resolve the canonical card URL from the database");
     await db.delete(mcpEventDeliveries).where(eq(mcpEventDeliveries.id, movedDelivery!.id));
     await rpc("events/unsubscribe", { name: "card.moved", arguments: params.arguments, delivery: { mode: "webhook", url: params.delivery.url } });
     // Expiration prevents queued data being sent; restarting/refreshing cannot replay missed history.
@@ -396,4 +398,82 @@ void test("list subscriptions deliver arrivals and departures, exclude reorders 
     await publicApi.close();
     await f.app.close();
   }
+});
+
+// Failure modes covered: a subscription can name someone else's queue (via arguments or a stored
+// row); one user's queue change reaches another user's subscription, even a workspace admin's; a
+// queue change from a direct add or an indirect completion does not enqueue; the occurrence leaks
+// queue content; actor.self misreports the subscriber's own write.
+void test("priorities.changed only ever reports the subscriber's own Up next queue", async () => {
+  const f = await fixture();
+  const signingSecret = secret();
+  const delivered: Array<{ subscriptionId: string; name: string; data: Record<string, unknown> }> = [];
+  const send: McpWebhookRequest = async (_url, body, headers) => {
+    const payload = JSON.parse(body) as { type?: string; challenge?: string; name: string; data: Record<string, unknown> };
+    if (payload.type === "verification") return { status: 200, body: JSON.stringify({ challenge: payload.challenge }) };
+    checkSignature(headers, body, signingSecret);
+    delivered.push({ subscriptionId: headers["X-MCP-Subscription-Id"]!, name: payload.name, data: payload.data });
+    return { status: 204, body: "" };
+  };
+  const publicApi = await buildPublicApiServer({ logger: false, enableWebhookDeliveryScheduler: false, rateLimit: { enabled: false }, mcpWebhookRequest: send });
+  try {
+    const keyHeaders = { authorization: `Bearer ${f.key.secret}` };
+    const subscribe = (args: Record<string, unknown>, headers = keyHeaders) => publicApi.inject({ method: "POST", url: "/api/v1/mcp-events/subscribe", headers,
+      payload: { name: "priorities.changed", arguments: args, delivery: { mode: "webhook", url: "https://receiver.example/queue", secret: signingSecret } } });
+    const catalog = await publicApi.inject({ method: "GET", url: "/api/v1/mcp-events", headers: keyHeaders });
+    assert.ok(catalog.json<{ events: Array<{ name: string }> }>().events.some((event) => event.name === "priorities.changed"));
+
+    // A workspace admin in the same organisation: the most privileged watcher there could be.
+    const [teammateUser] = await insertTestUsers(db, { clientId: f.owner.user.clientId, email: `teammate-${randomUUID()}@example.test`, passwordHash: "x", displayName: "Teammate" }).returning();
+    assert.ok(teammateUser);
+    await db.insert(workspaceMembers).values({ workspaceId: f.workspace.id, userId: teammateUser.id, role: "admin" });
+    await db.insert(boardMembers).values({ boardId: f.workspace.boardId, userId: teammateUser.id, role: "editor" });
+    const teammateAuth = { authorization: `Bearer ${f.app.jwt.sign({ sub: teammateUser.id, cid: teammateUser.clientId, role: "member" })}` };
+    const teammateKey = await f.app.inject({ method: "POST", url: "/me/api-keys", headers: teammateAuth, payload: { label: "Teammate", scope: "write" } });
+    assert.equal(teammateKey.statusCode, 201, teammateKey.body);
+    const teammateHeaders = { authorization: `Bearer ${teammateKey.json<{ secret: string }>().secret}` };
+
+    assert.equal((await subscribe({ targetUserId: f.owner.user.id }, teammateHeaders)).statusCode, 400, "there is no way to name another user's queue");
+    const mine = await subscribe({});
+    assert.equal(mine.statusCode, 200, mine.body);
+    const theirs = await subscribe({}, teammateHeaders);
+    assert.equal(theirs.statusCode, 200, theirs.body);
+    const ownerSubscriptionId = mine.json<{ id: string }>().id;
+    const teammateSubscriptionId = theirs.json<{ id: string }>().id;
+    const stored = await db.select().from(mcpEventSubscriptions);
+    assert.deepEqual(stored.map((row) => row.targetUserId === row.userId && row.workspaceId === null), [true, true]);
+    await assert.rejects(db.insert(mcpEventSubscriptions).values({
+      id: "sub_foreign_queue", userId: teammateUser.id, targetUserId: f.owner.user.id, ownerApiKeyId: f.key.id, name: "priorities.changed", arguments: {},
+      url: "https://receiver.example/queue", encryptedSecret: encryptSecret(signingSecret), verifiedAt: new Date(), expiresAt: new Date(Date.now() + 60_000),
+    }), "the database refuses a subscription to someone else's queue");
+
+    // The owner queues a card; only the owner's subscription hears about it.
+    const created = await f.app.inject({ method: "POST", url: `/boards/${f.workspace.boardId}/lists/${f.workspace.listId}/cards`, headers: f.owner.auth, payload: { title: "Queued work" } });
+    assert.equal(created.statusCode, 201, created.body);
+    const cardId = created.json<{ id: string }>().id;
+    await db.insert(cardAssignees).values([{ cardId, userId: f.owner.user.id }, { cardId, userId: teammateUser.id }]);
+    const added = await publicApi.inject({ method: "POST", url: `/api/v1/work/priorities/${f.owner.user.id}/cards`, headers: keyHeaders, payload: { cardId, beforeId: null } });
+    assert.equal(added.statusCode, 201, added.body);
+    await processMcpEventDeliveries(send);
+    assert.deepEqual(delivered, [{ subscriptionId: ownerSubscriptionId, name: "priorities.changed", data: { targetUserId: f.owner.user.id, actor: { kind: "apiKey", userId: f.owner.user.id, self: true } } }], "content-free, own subscription only, and the key's own write is self");
+
+    // The teammate queues the same card; only the teammate's subscription hears about it.
+    const teammateAdded = await publicApi.inject({ method: "POST", url: `/api/v1/work/priorities/${teammateUser.id}/cards`, headers: teammateHeaders, payload: { cardId, beforeId: null } });
+    assert.equal(teammateAdded.statusCode, 201, teammateAdded.body);
+    await processMcpEventDeliveries(send);
+    assert.deepEqual(delivered.slice(1).map((event) => [event.subscriptionId, event.data.targetUserId]), [[teammateSubscriptionId, teammateUser.id]]);
+
+    // Completing a queued card drops it from both live queues without touching card_priorities;
+    // each watcher hears about their own queue once.
+    const completed = await f.app.inject({ method: "PATCH", url: `/cards/${cardId}/completion`, headers: f.owner.auth, payload: { completed: true } });
+    assert.equal(completed.statusCode, 200, completed.body);
+    await processMcpEventDeliveries(send);
+    const afterCompletion = delivered.slice(2);
+    assert.deepEqual(afterCompletion.map((event) => [event.subscriptionId, event.data.targetUserId]).sort(), [[ownerSubscriptionId, f.owner.user.id], [teammateSubscriptionId, teammateUser.id]].sort());
+    assert.deepEqual(afterCompletion.find((event) => event.subscriptionId === ownerSubscriptionId)!.data.actor, { kind: "user", userId: f.owner.user.id, self: false });
+
+    const unsubscribed = await publicApi.inject({ method: "POST", url: "/api/v1/mcp-events/unsubscribe", headers: keyHeaders, payload: { name: "priorities.changed", arguments: {}, delivery: { mode: "webhook", url: "https://receiver.example/queue" } } });
+    assert.equal(unsubscribed.statusCode, 200, unsubscribed.body);
+    assert.deepEqual((await db.select().from(mcpEventSubscriptions)).map((row) => row.id), [teammateSubscriptionId], "unsubscribe removes only the caller's stream");
+  } finally { await publicApi.close(); }
 });

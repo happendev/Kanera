@@ -83,7 +83,7 @@ export function publishAsAutomation<T>(fn: () => Promise<T>): Promise<T> {
   return automationActorScope.run(true, fn);
 }
 
-function currentOutboxActor(): EventOutboxActor {
+export function currentOutboxActor(): EventOutboxActor {
   const none = { userId: null, apiKeyId: null, agentGrantId: null };
   if (automationActorScope.getStore()) return { kind: "automation", ...none };
   const kind = requestContext.get("authKind");

@@ -8,7 +8,7 @@ import { workspaceApiKeys } from "./workspace-api-key.js";
 import { oauthClients, oauthGrants } from "./oauth.js";
 import { eventOutbox } from "./event-outbox.js";
 import { WEBHOOK_DELIVERY_STATUSES } from "./webhook-delivery.js";
-import type { McpEventArguments, McpEventOccurrence } from "../dto/mcp-events.js";
+import type { McpEventOccurrence, McpStoredEventArguments } from "../dto/mcp-events.js";
 
 // deliveryStatus.lastError categories from the events draft. They are deliberately coarse: raw
 // endpoint status lines or bodies would turn subscribe refreshes into a response oracle for
@@ -18,14 +18,18 @@ export type McpDeliveryError = (typeof MCP_DELIVERY_ERRORS)[number];
 
 export const mcpEventSubscriptions = pgTable("mcp_event_subscription", {
   id: text("id").primaryKey(),
-  workspaceId: uuid("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  // Card/comment streams are workspace-scoped. The "Up next" queue spans workspaces, so a
+  // priorities.changed subscription is addressed by the queue owner instead, who must be the
+  // subscriber (see the check below).
+  workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
   boardId: uuid("board_id").references(() => boards.id, { onDelete: "cascade" }),
+  targetUserId: uuid("target_user_id").references(() => users.id, { onDelete: "cascade" }),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   ownerApiKeyId: uuid("owner_api_key_id").references(() => workspaceApiKeys.id, { onDelete: "cascade" }),
   ownerAgentGrantId: uuid("owner_agent_grant_id").references(() => oauthGrants.id, { onDelete: "cascade" }),
   ownerServiceClientId: text("owner_service_client_id").references(() => oauthClients.clientId, { onDelete: "cascade" }),
   name: text("name").notNull(),
-  arguments: jsonb("arguments").notNull().$type<McpEventArguments>(),
+  arguments: jsonb("arguments").notNull().$type<McpStoredEventArguments>(),
   url: text("url").notNull(),
   encryptedSecret: text("encrypted_secret").notNull(),
   previousEncryptedSecret: text("previous_encrypted_secret"),
@@ -40,7 +44,12 @@ export const mcpEventSubscriptions = pgTable("mcp_event_subscription", {
 }, (t) => [
   check("mcp_subscription_owner_ck", sql`(${t.ownerApiKeyId} is null) <> (${t.ownerAgentGrantId} is null)`),
   check("mcp_subscription_last_error_ck", valueIn(t.lastError, MCP_DELIVERY_ERRORS)),
+  check("mcp_subscription_scope_ck", sql`case when ${t.name} = 'priorities.changed'
+    then ${t.targetUserId} = ${t.userId} and ${t.workspaceId} is null and ${t.boardId} is null
+    else ${t.workspaceId} is not null and ${t.targetUserId} is null end`),
   index("mcp_subscription_workspace_event_idx").on(t.workspaceId, t.name, t.expiresAt),
+  // Every queue change looks up subscriptions by owner; most users have none, so keep it partial.
+  index("mcp_subscription_target_user_idx").on(t.targetUserId, t.expiresAt).where(sql`${t.targetUserId} is not null`),
   // Subscribe limit checks, the verification cache and credential-revocation cascades all filter
   // by owner; without these every refresh scans the table under the principal's advisory lock.
   index("mcp_subscription_owner_key_idx").on(t.ownerApiKeyId, t.expiresAt),

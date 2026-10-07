@@ -13,7 +13,7 @@ The event methods are custom request handlers on the same server (`apps/mcp/src/
 
 Events are HTTP-only.
 
-The catalog exposes `card.created`, `card.updated`, `card.moved`, and `comment.created`. Arguments require `workspaceId`; optional `boardId`, `listId`, and `cardId` narrow the subscription. `listId` must belong to the workspace; omit `boardId` to monitor that shared list across accessible boards. For `card.moved`, either the source or destination list matches, and moves within the same list are excluded. Other event types match the card’s list. `cardId` requires `boardId`. Workspace lists remain shared across boards. Board guests must supply `boardId`; assigned-items-only guests must also supply a currently visible `cardId`.
+The catalog exposes `card.created`, `card.updated`, `card.moved`, `comment.created`, and `priorities.changed`. For the card and comment events, arguments require `workspaceId`; optional `boardId`, `listId`, and `cardId` narrow the subscription. `listId` must belong to the workspace; omit `boardId` to monitor that shared list across accessible boards. For `card.moved`, either the source or destination list matches, and moves within the same list are excluded. Other event types match the card’s list. `cardId` requires `boardId`. Workspace lists remain shared across boards. Board guests must supply `boardId`; assigned-items-only guests must also supply a currently visible `cardId`.
 
 For example, subscribe to arrivals and departures for one shared list:
 
@@ -26,6 +26,12 @@ For example, subscribe to arrivals and departures for one shared list:
 ```
 
 Send these parameters to `events/subscribe`. Add `boardId` to restrict the shared list to one board. A departure has `data.fromListId` equal to the watched list; an arrival has `data.listId` equal to it. Reorders within the watched list do not deliver notifications. Refresh and unsubscribe using the same `listId` along with the other identity fields.
+
+`priorities.changed` watches the connected user's own "Up next" queue and takes no arguments (`{}`). Nobody can watch someone else's queue, workspace admins included. Even a content-free ping would tell a watcher when, and by whom, a card they cannot see was completed or reassigned. A database check pins every such subscription's target to its subscriber. The event fires on every change the web app refetches on: an entry added, moved or removed, or a queued card completed, archived, restored or reassigned. Its `data` is only `targetUserId` (the subscriber) and `actor`, with no queue content; call `priorities.list` for the current ranking. These occurrences are enqueued right after the queue write commits rather than from the workspace outbox, which never carries the cross-workspace queue. A crash in that window loses one occurrence, and the next read converges.
+
+```json
+{ "name": "priorities.changed", "arguments": {}, "delivery": { "mode": "webhook", "url": "https://your-agent.example/events", "secret": "<whsec_ signing key>" } }
+```
 
 Subscriptions are owned by the credential connection, not by the bearer token string. Refreshes and signing-secret changes keep the same deterministic ID. Secrets are encrypted with Kanera's existing secret storage. A connection may hold up to 100 active subscriptions. Lifetime defaults to 24 hours and is capped at 24 hours, including requests for no expiration (`ttlMs: null`). Shorter positive lifetimes are honored. Refresh before the returned `refreshBefore`. Refreshing an active subscription also returns `deliveryStatus` (`active`, `lastDeliveryAt`, `lastError`, and `failedSince` while the endpoint keeps failing). `lastError` is one of the draft's fixed categories and never includes endpoint response content. Delivery is never suspended, so `active` is always true. No replay is offered: `maxAgeMs` is accepted for protocol compatibility, cursors are always null, and renewing an expired subscription starts at the refresh time. Pending deliveries for an active subscription survive process restarts.
 
@@ -54,6 +60,7 @@ The isolated lifecycle tests are necessary because the production callback polic
 - Retries duplicate enqueue, exceed the five-attempt budget, retry 410/413, or ignore receiver disappearance.
 - Delivery health is not recorded, leaks raw endpoint responses, or resets `failedSince` during a failing streak.
 - An event the subscriber's own key caused is not marked `actor.self`.
+- `priorities.changed` reaches anyone but the queue's owner (including a workspace admin), accepts a target user, misses a direct or indirect (completion) queue change, or leaks queue content.
 - Local/private/metadata/mapped IPv6 destinations, DNS rebinding or redirects bypass destination checks.
 
 Run `pnpm test:e2e -- mcp-events` and `pnpm test:api:integration -- apps/api/src/modules/integrations/mcp-events.itest.ts`. Run MCP's existing tests with `pnpm test:mcp`.

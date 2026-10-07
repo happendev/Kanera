@@ -1,4 +1,4 @@
-import { MCP_EVENT_NAMES, mcpEventCatalog, mcpEventSubscribe, mcpEventUnsubscribe } from "@kanera/shared/dto";
+import { MCP_EVENT_NAMES, MCP_PRIORITY_EVENT_NAME, mcpEventCatalog, mcpEventSubscribe, mcpEventUnsubscribe, type McpEventArguments } from "@kanera/shared/dto";
 import { mcpEventSubscriptions } from "@kanera/shared/schema";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
@@ -10,10 +10,12 @@ import { decryptSecret, encryptSecret } from "../../lib/secrets.js";
 import { McpCallbackError, verifyMcpCallback, type McpWebhookRequest } from "../../lib/mcp-event-webhooks.js";
 
 // Hash ordered scalar fields rather than raw JSON: argument key order never changes identity.
-function subscriptionId(principal: string, body: { name: string; arguments: { workspaceId: string; boardId?: string; cardId?: string; listId?: string }; delivery: { url: string } }) {
-  return `sub_${createHash("sha256").update(JSON.stringify([principal, body.delivery.url, body.name, body.arguments.workspaceId, body.arguments.boardId ?? null, body.arguments.cardId ?? null,
+// A priorities.changed subscription takes no arguments; the principal already names its user.
+function subscriptionId(principal: string, url: string, name: string, args: McpEventArguments | Record<string, never>) {
+  if (name === MCP_PRIORITY_EVENT_NAME || !("workspaceId" in args)) return `sub_${createHash("sha256").update(JSON.stringify([principal, url, name])).digest("hex")}`;
+  return `sub_${createHash("sha256").update(JSON.stringify([principal, url, name, args.workspaceId, args.boardId ?? null, args.cardId ?? null,
     // Preserve existing IDs for unfiltered subscriptions while making each list a distinct stream.
-    ...(body.arguments.listId ? [body.arguments.listId] : []),
+    ...(args.listId ? [args.listId] : []),
   ])).digest("hex")}`;
 }
 const DEFAULT_TTL = 24 * 60 * 60_000;
@@ -30,8 +32,8 @@ export async function mcpEventRoutes(app: FastifyInstance, options: { webhookReq
     if (typeof proposed?.delivery?.mode === "string" && proposed.delivery.mode !== "webhook") throw new AppError(400, "MCP_EVENT_UNSUPPORTED", "unsupported delivery mode", { feature: "deliveryMode", value: proposed.delivery.mode });
     const body = mcpEventSubscribe.parse(req.body);
     const owner = mcpSubscriptionOwner(req.auth);
-    await assertMcpEventAccess(req.auth, body.arguments);
-    const id = subscriptionId(owner.principal, body);
+    await assertMcpEventAccess(req.auth, body.name, body.arguments);
+    const id = subscriptionId(owner.principal, body.delivery.url, body.name, body.arguments);
     const ownerCondition = and(
       owner.ownerAgentGrantId ? eq(mcpEventSubscriptions.ownerAgentGrantId, owner.ownerAgentGrantId) : eq(mcpEventSubscriptions.ownerApiKeyId, owner.ownerApiKeyId!),
       owner.ownerServiceClientId ? eq(mcpEventSubscriptions.ownerServiceClientId, owner.ownerServiceClientId) : isNull(mcpEventSubscriptions.ownerServiceClientId),
@@ -82,7 +84,9 @@ export async function mcpEventRoutes(app: FastifyInstance, options: { webhookReq
       // Renewing an expired subscription is a fresh stream: no replay and no stale health report.
       const health = active ? {} : { lastDeliveryAt: null, lastError: null, failedSince: null };
       await tx.insert(mcpEventSubscriptions).values({
-        id, workspaceId: body.arguments.workspaceId, boardId: body.arguments.boardId, userId: req.auth.sub,
+        id, userId: req.auth.sub,
+        // Your own queue only: the target is always the subscribing user (also a database check).
+        ...(body.name === MCP_PRIORITY_EVENT_NAME ? { targetUserId: req.auth.sub } : { workspaceId: body.arguments.workspaceId, boardId: body.arguments.boardId }),
         ownerApiKeyId: owner.ownerApiKeyId, ownerAgentGrantId: owner.ownerAgentGrantId, ownerServiceClientId: owner.ownerServiceClientId,
         name: body.name, arguments: body.arguments, url: body.delivery.url,
         encryptedSecret: encryptSecret(body.delivery.secret), verifiedAt, expiresAt, ...rotation,
@@ -108,7 +112,7 @@ export async function mcpEventRoutes(app: FastifyInstance, options: { webhookReq
   app.post("/mcp-events/unsubscribe", async (req) => {
     const body = mcpEventUnsubscribe.parse(req.body);
     const owner = mcpSubscriptionOwner(req.auth);
-    const id = subscriptionId(owner.principal, body);
+    const id = subscriptionId(owner.principal, body.delivery.url, body.name, body.arguments);
     // Ownership is the authorization boundary for cleanup, even after resource access is lost.
     await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${id}, 0))`);
