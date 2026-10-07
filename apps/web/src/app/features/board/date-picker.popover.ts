@@ -11,10 +11,12 @@ import {
 import { ANCHORED_HOST_STYLES, anchoredSheetStyles, type AnchoredPanelPlacement } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { TooltipDirective } from "../../shared/tooltip.directive";
-import { WEEKDAY_LABELS, startOfWeek } from "../../shared/week-start";
+import { WEEKDAY_LABELS } from "../../shared/week-start";
 import { dueDateSlotTimeLabel } from "@kanera/shared/due-date-slots";
 import { DUE_DATE_SLOT_OPTIONS, type DueDateSlot, type DueDateSlotSelection } from "./due-date.util";
 import { formatDate } from "../../shared/date-format";
+import { localDateKey, parseDateInputValue, startOfLocalDay } from "../../shared/day-key.util";
+import { buildMonthGrid, monthStart, shiftMonth } from "../../shared/month-grid";
 
 type CalendarDay = {
   date: Date;
@@ -25,26 +27,6 @@ type CalendarDay = {
   isSelected: boolean;
   isDisabled: boolean;
 };
-
-function pad(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
-function toDateInputValue(date: Date): string {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
-function fromDateInputValue(value: string): Date | null {
-  const [year, month, day] = value.split("-").map(Number);
-  if (!year || !month || !day) return null;
-  const date = new Date(year, month - 1, day);
-  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
-  return date;
-}
-
-function startOfDay(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
 
 @Component({
   selector: "k-date-picker",
@@ -434,7 +416,7 @@ export class DatePickerPopover implements OnInit {
   readonly weekdays = WEEKDAY_LABELS;
   readonly slotOptions = DUE_DATE_SLOT_OPTIONS;
   readonly shortcuts = (() => {
-    const today = startOfDay(new Date());
+    const today = startOfLocalDay(new Date());
     const fmt = (d: Date) => formatDate(d, "short");
     const add = (days: number) => { const d = new Date(today); d.setDate(d.getDate() + days); return d; };
     return [
@@ -475,28 +457,13 @@ export class DatePickerPopover implements OnInit {
   );
 
   readonly days = computed<CalendarDay[]>(() => {
-    const month = this.visibleMonth();
     const selected = this.draftValue();
-    const todayValue = toDateInputValue(new Date());
     const min = this.min();
     const max = this.max();
-    const firstOfMonth = new Date(month.getFullYear(), month.getMonth(), 1);
-    const first = startOfWeek(firstOfMonth);
-
-    return Array.from({ length: 42 }, (_, i) => {
-      const date = new Date(first);
-      date.setDate(first.getDate() + i);
-      const value = toDateInputValue(date);
-      return {
-        date,
-        value,
-        day: date.getDate(),
-        inMonth: date.getMonth() === month.getMonth(),
-        isToday: value === todayValue,
-        isSelected: value === selected,
-        isDisabled: (min != null && value < min) || (max != null && value > max),
-      };
-    });
+    return buildMonthGrid(this.visibleMonth(), ({ value }) => ({
+      isSelected: value === selected,
+      isDisabled: (min != null && value < min) || (max != null && value > max),
+    }));
   });
 
   ngOnInit() {
@@ -506,11 +473,11 @@ export class DatePickerPopover implements OnInit {
   }
 
   previousMonth() {
-    this.visibleMonth.update((date) => new Date(date.getFullYear(), date.getMonth() - 1, 1));
+    this.visibleMonth.update((date) => shiftMonth(date, -1));
   }
 
   nextMonth() {
-    this.visibleMonth.update((date) => new Date(date.getFullYear(), date.getMonth() + 1, 1));
+    this.visibleMonth.update((date) => shiftMonth(date, 1));
   }
 
   select(value: string, updateMonth = true) {
@@ -518,14 +485,14 @@ export class DatePickerPopover implements OnInit {
     this.draftValue.set(value);
     if (!updateMonth) return;
 
-    const date = fromDateInputValue(value);
-    if (date) this.visibleMonth.set(new Date(date.getFullYear(), date.getMonth(), 1));
+    const date = parseDateInputValue(value);
+    if (date) this.visibleMonth.set(monthStart(date));
   }
 
   selectRelative(days: number) {
-    const date = startOfDay(new Date());
+    const date = startOfLocalDay(new Date());
     date.setDate(date.getDate() + days);
-    this.select(toDateInputValue(date));
+    this.select(localDateKey(date));
   }
 
   apply() {
@@ -537,16 +504,6 @@ export class DatePickerPopover implements OnInit {
 
   ariaLabel(date: Date): string {
     return formatDate(date, "long");
-  }
-
-  slotIcon(slot: DueDateSlot): string {
-    const icons: Record<DueDateSlot, string> = {
-      anyTime: "ti-calendar",
-      morning: "ti-sunrise",
-      afternoon: "ti-sun",
-      endOfWorkDay: "ti-sunset",
-    };
-    return icons[slot];
   }
 
   slotDisplayLabel(slot: DueDateSlot): string {
@@ -566,9 +523,9 @@ export class DatePickerPopover implements OnInit {
   }
 
   private initialVisibleMonth(): Date {
-    const selected = fromDateInputValue(this.value());
+    const selected = parseDateInputValue(this.value());
     const base = selected ?? new Date();
-    return new Date(base.getFullYear(), base.getMonth(), 1);
+    return monthStart(base);
   }
 
   isSelectable(value: string): boolean {

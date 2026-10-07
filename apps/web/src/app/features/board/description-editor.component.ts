@@ -40,6 +40,7 @@ import { hasMarkdownContent, stripEmptyTaskItems } from "../../shared/markdown-c
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { DescriptionEditorToolbarComponent } from "./description-editor-toolbar.component";
 import { DESCRIPTION_EDITOR_ACCEPT, DescriptionEditorUploader, type AttachmentTarget } from "./description-editor-uploader.service";
+import { clipboardAttachmentFiles, hasDraggedFiles } from "../../shared/attachments/file-transfer";
 
 export type EditorSaveEvent = { markdown: string; attachmentIds: string[] };
 
@@ -1628,7 +1629,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
       this.insertPlainText(plainText);
       return;
     }
-    const clipboardFiles = this.clipboardFiles(e.clipboardData);
+    const clipboardFiles = clipboardAttachmentFiles(e.clipboardData);
     if (!this.allowAttachments() && clipboardFiles.length > 0) {
       e.preventDefault();
       e.stopPropagation();
@@ -1722,15 +1723,6 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
       && lines[separatorIndex + 1]?.includes("|");
   }
 
-  private clipboardFiles(data: DataTransfer | null): File[] {
-    if (!data) return [];
-    const fromItems = Array.from(data.items ?? [])
-      .filter((item) => item.kind === "file")
-      .map((item) => item.getAsFile())
-      .filter((file): file is File => file !== null);
-    return fromItems.length > 0 ? fromItems : Array.from(data.files ?? []);
-  }
-
   private readonly handleDragOver = (e: DragEvent) => {
     if (!this.editable() || !this.isFileDrag(e.dataTransfer)) return;
     e.preventDefault();
@@ -1752,10 +1744,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   };
 
   private isFileDrag(data: DataTransfer | null): boolean {
-    if (!this.allowAttachments()) return false;
-    if (!data) return false;
-    if (Array.from(data.types ?? []).some((type) => type === "Files" || type === "application/x-moz-file")) return true;
-    return Array.from(data.items ?? []).some((item) => item.kind === "file");
+    return this.allowAttachments() && hasDraggedFiles(data);
   }
 
   onSave() {

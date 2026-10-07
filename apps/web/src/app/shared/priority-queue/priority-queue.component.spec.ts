@@ -267,7 +267,7 @@ describe("PriorityQueueComponent", () => {
     fixture.componentInstance.onAddPicked("c2");
     // A pick appends; only a drop carries a positional anchor.
     expect(added).toEqual([{ cardId: "c2", beforeId: null }]);
-    expect(fixture.componentInstance.addOpen()).toBe(false);
+    expect(fixture.componentInstance.addOpenAt()).toBeNull();
   });
 
   it("keeps the Add card footer in flow while the drop list is dragging", () => {

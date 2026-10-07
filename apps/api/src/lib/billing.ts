@@ -2,7 +2,7 @@ import { clientGuestSeats, clientMembers, clients, stripeEvents, users, type Cli
 import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import Stripe from "stripe";
-import { db, type Db } from "../db.js";
+import { db, type Tx } from "../db.js";
 import { env, type Env } from "../env.js";
 import { impactFromPlanActions, previewDowngradeImpact, sendHostedBillingEmail, sendHostedSeatCapacityEmail } from "./billing-emails.js";
 import { AppError, badRequest } from "./errors.js";
@@ -18,7 +18,6 @@ import {
   type SubscriptionPaymentReason,
 } from "./product-analytics.js";
 
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 export type BillingPortalIntent = "home" | "invoices" | "cancel_subscription" | "payment_method";
 
 type StripeEnv = Pick<
@@ -114,13 +113,13 @@ function requireHostedStripe(config: StripeEnv = env): void {
   }
 }
 
-export function priceIdForInterval(interval: ClientBillingInterval, config: StripeEnv = env): string {
+function priceIdForInterval(interval: ClientBillingInterval, config: StripeEnv = env): string {
   const priceId = interval === "annual" ? config.STRIPE_PRICE_ID_PRO_ANNUAL : config.STRIPE_PRICE_ID_PRO_MONTHLY;
   if (!priceId) throw badRequest("Stripe price is not configured");
   return priceId;
 }
 
-export function intervalForPrice(priceId: string | null | undefined, config: StripeEnv = env): ClientBillingInterval | null {
+function intervalForPrice(priceId: string | null | undefined, config: StripeEnv = env): ClientBillingInterval | null {
   if (priceId === config.STRIPE_PRICE_ID_PRO_ANNUAL) return "annual";
   if (priceId === config.STRIPE_PRICE_ID_PRO_MONTHLY) return "monthly";
   return null;

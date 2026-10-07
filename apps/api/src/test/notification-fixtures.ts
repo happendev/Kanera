@@ -1,8 +1,7 @@
 import { notifications, workspaces } from "@kanera/shared/schema";
 import { inArray } from "drizzle-orm";
-import type { Db } from "../db.js";
+import type { Tx } from "../db.js";
 
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 type LegacyNotificationFixture = Omit<typeof notifications.$inferInsert, "clientId"> & { clientId?: string };
 
 /** Resolve the durable organisation from workspace ownership, just as production fanout does. */

@@ -343,10 +343,6 @@ export class NotificationsPanelComponent {
     await this.notifications.setFeedMode(value);
   }
 
-  async toggleIncludeRead(): Promise<void> {
-    await this.notifications.setIncludeRead(!this.includeRead());
-  }
-
   async setBoardFilter(boardId: string | null): Promise<void> {
     await this.notifications.setBoardFilter(boardId);
   }
@@ -585,10 +581,6 @@ export class NotificationsPanelComponent {
       viewerSource?: "board" | "workspace";
     }>(`/boards/${boardId}/open${suffix}`, {});
     this.boardState.hydrate(payload);
-  }
-
-  actorInitial(n: NotificationRow): string {
-    return (n.actorName || "K").charAt(0).toUpperCase();
   }
 
   relativeTime(value: string | Date): string {

@@ -73,6 +73,8 @@ import { SelectPickerPopover } from "./select-picker.popover";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
 import { BoardMirrorsService } from "../board-mirrors/board-mirrors.service";
 import { formatFeedTime } from "../../shared/date-format";
+import { clipboardAttachmentFiles, dragTargetElement, hasDraggedFiles, isEditablePasteTarget, isEditorDropTarget } from "../../shared/attachments/file-transfer";
+import { openAttachmentPreview, toLightboxAttachments } from "../../shared/attachments/attachment-lightbox";
 
 const CHECKLIST_DRAG_SCROLL_EDGE_PX = 80;
 const CHECKLIST_DRAG_SCROLL_MAX_STEP_PX = 20;
@@ -331,19 +333,7 @@ export class CardDetailComponent {
   readonly attachmentDragActive = signal(false);
   // Keep every format the shared lightbox can render in attachment order so navigation can cross
   // images, playback media, and documents without exposing download-only files in the sequence.
-  readonly lightboxAttachments = computed(() => this.visibleAttachments()
-    .flatMap((attachment) => {
-      const mediaType = attachmentPreviewType(attachment.mimeType, attachment.fileName);
-      const src = visibleSignedMediaUrl(attachment.url);
-      return src && mediaType ? [{
-        id: attachment.id,
-        src,
-        fileName: attachment.fileName,
-        createdAt: attachment.createdAt,
-        mediaType,
-        mimeType: attachment.mimeType,
-      }] : [];
-    }));
+  readonly lightboxAttachments = computed(() => toLightboxAttachments(this.visibleAttachments()));
   readonly lightboxItems = computed<ImageLightboxItem[]>(() => this.lightboxAttachments()
     .map(({ id: _id, ...item }) => item));
   // Attachment presentation is stable until the attachment collection changes. Precomputing it
@@ -433,18 +423,7 @@ export class CardDetailComponent {
   }
 
   private openAttachmentPreview(attachmentId: string, mediaType: AttachmentPreviewType, event?: Event): boolean {
-    const attachments = this.lightboxAttachments();
-    const initialIndex = attachments.findIndex((attachment) => attachment.id === attachmentId);
-    const selected = attachments[initialIndex];
-    if (!selected || selected.mediaType !== mediaType) return false;
-
-    const { id: _id, ...item } = selected;
-    this.imageLightbox.open({
-      ...item,
-      images: this.lightboxItems(),
-      initialIndex,
-    }, event);
-    return true;
+    return openAttachmentPreview(this.imageLightbox, this.lightboxAttachments(), attachmentId, mediaType, event);
   }
 
   openInlineAttachment(attachment: {
@@ -2128,8 +2107,8 @@ export class CardDetailComponent {
   }
 
   private readonly handleAttachmentDragCapture = (event: DragEvent) => {
-    if (!this.hasDraggedFiles(event)) return;
-    if (!this.canEdit() || !this.isDragInsidePanel(event) || this.isEditorDropTarget(event.target) || this.isEditablePasteTarget(event.target)) {
+    if (!hasDraggedFiles(event.dataTransfer)) return;
+    if (!this.canEdit() || !this.isDragInsidePanel(event) || isEditorDropTarget(event.target) || isEditablePasteTarget(event.target)) {
       this.attachmentDragActive.set(false);
     }
   };
@@ -2154,7 +2133,7 @@ export class CardDetailComponent {
   }
 
   onAttachmentDragLeave(event: DragEvent) {
-    if (!this.hasDraggedFiles(event)) return;
+    if (!hasDraggedFiles(event.dataTransfer)) return;
     const current = this.panel()?.nativeElement ?? event.currentTarget as Node | null;
     const related = event.relatedTarget as Node | null;
     if (!current || !related || !current.contains(related)) {
@@ -2170,65 +2149,33 @@ export class CardDetailComponent {
   }
 
   async onCardDetailPaste(event: ClipboardEvent) {
-    if (event.defaultPrevented || !this.canEdit() || this.isEditablePasteTarget(event.target)) return;
+    if (event.defaultPrevented || !this.canEdit() || isEditablePasteTarget(event.target)) return;
 
-    const files = this.clipboardAttachmentFiles(event.clipboardData);
+    const files = clipboardAttachmentFiles(event.clipboardData);
     if (files.length === 0) return;
 
     event.preventDefault();
     await this.uploadAttachmentFiles(files);
   }
 
-  private clipboardAttachmentFiles(data: DataTransfer | null): File[] {
-    if (!data) return [];
-
-    const files: File[] = [];
-    for (const item of Array.from(data.items ?? [])) {
-      if (item.kind !== "file") continue;
-      const file = item.getAsFile();
-      if (file) files.push(file);
-    }
-
-    if (files.length > 0) return files;
-    return Array.from(data.files ?? []);
-  }
-
-  private isEditablePasteTarget(target: EventTarget | null): boolean {
-    if (!(target instanceof Element)) return false;
-    return Boolean(target.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']"));
-  }
-
   private shouldHandleAttachmentDrag(event: DragEvent): boolean {
-    if (event.defaultPrevented || !this.hasDraggedFiles(event)) return false;
+    if (event.defaultPrevented || !hasDraggedFiles(event.dataTransfer)) return false;
     if (!this.isDragInsidePanel(event)) {
       this.attachmentDragActive.set(false);
       return false;
     }
-    if (this.isEditorDropTarget(event.target) || this.isEditablePasteTarget(event.target)) {
+    if (isEditorDropTarget(event.target) || isEditablePasteTarget(event.target)) {
       this.attachmentDragActive.set(false);
       return false;
     }
     return true;
   }
 
-  private isEditorDropTarget(target: EventTarget | null): boolean {
-    if (!(target instanceof Element)) return false;
-    // Description/comment editors upload and insert files into their markdown,
-    // so panel-level attachment drops must not preempt their own drop handlers.
-    return Boolean(target.closest("k-description-editor"));
-  }
-
   private isDragInsidePanel(event: DragEvent): boolean {
     const panel = this.panel()?.nativeElement;
     if (!panel) return false;
-    const target = this.dragTargetElement(event);
+    const target = dragTargetElement(event);
     return Boolean(target && panel.contains(target));
-  }
-
-  private dragTargetElement(event: DragEvent): Element | null {
-    if (event.target instanceof Element) return event.target;
-    if (event.clientX || event.clientY) return document.elementFromPoint(event.clientX, event.clientY);
-    return null;
   }
 
   private async uploadAttachmentFiles(files: File[]) {
@@ -2236,13 +2183,6 @@ export class CardDetailComponent {
     // Validation, per-file progress, retry, and error formatting all live in the queue; the new
     // attachment lands in attachments() via the card:attachment:created realtime event.
     this.uploads.add(files);
-  }
-
-  private hasDraggedFiles(event: DragEvent): boolean {
-    const data = event.dataTransfer;
-    if (!data) return false;
-    if (Array.from(data.types ?? []).some((type) => type === "Files" || type === "application/x-moz-file")) return true;
-    return Array.from(data.items ?? []).some((item) => item.kind === "file");
   }
 
   async setCover(attachmentId: string) {

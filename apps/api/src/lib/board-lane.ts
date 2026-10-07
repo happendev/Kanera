@@ -1,14 +1,12 @@
 import { SERVER_EVENTS } from "@kanera/shared/events";
 import { boardSeparators, cards } from "@kanera/shared/schema";
 import { and, asc, eq, isNull } from "drizzle-orm";
-import { db, type Db } from "../db.js";
+import { db, type Tx } from "../db.js";
 import { emitToBoard } from "../realtime/emit.js";
 import { between } from "./position.js";
 import { positionAtIndex } from "./position.js";
 import { emitCardRebalancedByBoard, type CardRebalancedPosition, type RebalancedPosition } from "./rebalance.js";
-import { badRequest } from "./errors.js";
-
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
+import { resolveNeighbourPositions } from "./lane-neighbours.js";
 
 export type LaneItemType = "card" | "separator";
 export type LaneAnchor = { type: LaneItemType; id: string };
@@ -45,7 +43,7 @@ async function loadLaneItems(listId: string, boardId: string, tx: Tx): Promise<L
   ].sort((a, b) => Number(a.position) - Number(b.position) || a.type.localeCompare(b.type) || a.id.localeCompare(b.id));
 }
 
-export async function neighbourLanePositions(options: {
+async function neighbourLanePositions(options: {
   listId: string;
   boardId: string;
   moving?: LaneAnchor;
@@ -57,30 +55,7 @@ export async function neighbourLanePositions(options: {
   const items = (await loadLaneItems(options.listId, options.boardId, tx))
     .filter((item) => item.type !== options.moving?.type || item.id !== options.moving.id);
 
-  const findAnchor = (anchor: LaneAnchor) => {
-    const item = items.find((candidate) => candidate.type === anchor.type && candidate.id === anchor.id);
-    if (!item) throw badRequest(`${anchor.type === "card" ? "card" : "separator"} anchor not found`);
-    return item;
-  };
-
-  let prev: string | null = null;
-  let next: string | null = null;
-  if (options.afterItem === null && options.beforeItem === undefined) {
-    next = items[0]?.position ?? null;
-  } else if (options.beforeItem === null && options.afterItem === undefined) {
-    prev = items.at(-1)?.position ?? null;
-  } else if (options.afterItem) {
-    const after = findAnchor(options.afterItem);
-    const index = items.findIndex((item) => item.type === after.type && item.id === after.id);
-    prev = after.position;
-    next = items[index + 1]?.position ?? null;
-  } else if (options.beforeItem) {
-    const before = findAnchor(options.beforeItem);
-    const index = items.findIndex((item) => item.type === before.type && item.id === before.id);
-    next = before.position;
-    prev = items[index - 1]?.position ?? null;
-  }
-  return { prev, next };
+  return resolveNeighbourPositions(items, options);
 }
 
 export async function positionForLaneInsert(options: {

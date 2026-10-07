@@ -6,7 +6,7 @@ import path from "node:path";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import ports from "./ports.json";
 import { expect, test } from "./support/fixtures";
-import { boardHref, openBoard, openCard, workspaceSettingsHref } from "./support/ui";
+import { boardIdOf, openBoard, openCard, workspaceSettingsHref } from "./support/ui";
 
 const mcpUrl = `http://localhost:${ports.mcp}/mcp`;
 // The bundled executable npm ships (built by scripts/test-e2e.sh), not the TypeScript sources.
@@ -47,7 +47,7 @@ test("an agent builds and edits a nested checklist plan through MCP while the ca
   const record = (step: string, detail: unknown) => evidence.push({ step, detail });
 
   await signIn(page, "amelia");
-  const boardId = (await boardHref(page, "Platform Delivery")).split("/")[2]!;
+  const boardId = await boardIdOf(page, "Platform Delivery");
   await page.goto(`${await workspaceSettingsHref(page, "Platform Delivery")}/api`);
   await page.locator('input[name="apiKeyName"]').fill(uniqueName("MCP checklist key"));
   await page.locator('select[name="apiKeyScope"]').selectOption("write");

@@ -42,7 +42,7 @@ import { Subject } from "rxjs";
       align-items: center;
       justify-content: center;
       padding: 16px;
-      animation: fade-in 120ms ease;
+      animation: kanera-fade-in 120ms ease;
     }
 
     .dialog {
@@ -100,7 +100,6 @@ import { Subject } from "rxjs";
       &:hover { opacity: 0.9; }
     }
 
-    @keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
     @keyframes slide-in { from { opacity: 0; transform: scale(0.96) translateY(-4px) } to { opacity: 1; transform: none } }
   `,
 })

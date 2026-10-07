@@ -15,15 +15,15 @@ import {
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import type { AuthClaims } from "../../auth/plugin.js";
-import { db, type Db } from "../../db.js";
+import { db, type Tx } from "../../db.js";
 import { assertWorkspaceAccess, isOrgAdmin } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
 import { activeCompletedCardPredicate } from "../../lib/completed-card-visibility.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { between } from "../../lib/position.js";
 import { emitToGlobalWorkSeparatorAudience } from "../../realtime/emit.js";
+import { resolveNeighbourPositions } from "../../lib/lane-neighbours.js";
 
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 type GlobalWorkLaneItemType = "card" | "separator";
 type GlobalWorkLaneAnchor = { type: GlobalWorkLaneItemType; id: string };
 type GlobalWorkLaneItem = { type: GlobalWorkLaneItemType; id: string; position: string };
@@ -134,29 +134,7 @@ export async function positionForGlobalWorkLaneInsert(options: {
   tx: Tx;
 }) {
   const items = await loadGlobalWorkLaneItems(options);
-  const findAnchor = (anchor: GlobalWorkLaneAnchor) => {
-    const item = items.find((candidate) => candidate.type === anchor.type && candidate.id === anchor.id);
-    if (!item) throw badRequest(`${anchor.type} anchor not found`);
-    return item;
-  };
-
-  let prev: string | null = null;
-  let next: string | null = null;
-  if (options.afterItem === null && options.beforeItem === undefined) {
-    next = items[0]?.position ?? null;
-  } else if (options.beforeItem === null && options.afterItem === undefined) {
-    prev = items.at(-1)?.position ?? null;
-  } else if (options.afterItem) {
-    const after = findAnchor(options.afterItem);
-    const index = items.findIndex((item) => item.type === after.type && item.id === after.id);
-    prev = after.position;
-    next = items[index + 1]?.position ?? null;
-  } else if (options.beforeItem) {
-    const before = findAnchor(options.beforeItem);
-    const index = items.findIndex((item) => item.type === before.type && item.id === before.id);
-    next = before.position;
-    prev = items[index - 1]?.position ?? null;
-  }
+  const { prev, next } = resolveNeighbourPositions(items, options);
 
   // Global Work combines board-owned card positions with personal separators. Rebalancing from this
   // virtual lane would unexpectedly rewrite source boards, so interpolation intentionally remains

@@ -8,6 +8,25 @@ export async function boardHref(page: Page, boardName: string): Promise<string> 
   return href!;
 }
 
+/** The id segment of `boardHref`, for API and MCP calls that address the board directly. */
+export async function boardIdOf(page: Page, boardName: string): Promise<string> {
+  return (await boardHref(page, boardName)).split("/")[2]!;
+}
+
+/**
+ * Creates a write-scoped workspace API key the way an integrator would, from the settings API tab,
+ * and returns the one-time revealed secret.
+ */
+export async function createWorkspaceApiKey(page: Page, settingsHref: string, name: string): Promise<string> {
+  await page.goto(`${settingsHref}/api`);
+  await page.locator('input[name="apiKeyName"]').fill(name);
+  await page.locator('select[name="apiKeyScope"]').selectOption("write");
+  await page.getByRole("button", { name: "Create API key" }).click();
+  const reveal = page.locator(".secret-reveal").filter({ has: page.getByRole("button", { name: "Copy API key" }) });
+  await expect(reveal).toBeVisible();
+  return (await reveal.locator("code").innerText()).trim();
+}
+
 /** The workspace settings href (`/w/:id/settings`) of the workspace that contains `boardName`. */
 export async function workspaceSettingsHref(page: Page, boardName: string): Promise<string> {
   const group = page.locator(".ws-group").filter({ has: page.locator("a.board-link").filter({ hasText: boardName }) }).first();
@@ -52,11 +71,24 @@ export async function createCard(page: Page, title: string) {
   const response = await createdResponse;
   const { listId } = await response.json() as { listId: string };
   await expect(composer).toBeHidden();
-  // Later full-suite flows can append beyond a lane's initial render window. Scroll the actual
-  // receiving lane to mount the new tile; keep asserting the browser result without a reload.
+  await expectCardTileMounted(page, title, listId);
+}
+
+/**
+ * Waits for a card tile to be rendered, scrolling the receiving lane so the tile mounts.
+ *
+ * Lanes render only their first fifteen cards until scrolled (`INITIAL_RENDER_CAP`), and a full-suite
+ * run appends many cards to the seed boards' first lists. A tile that exists in state but is beyond
+ * the window would otherwise fail a plain visibility check on any page observing the board, not just
+ * the one that created the card. Without `listId` every lane is nudged.
+ */
+export async function expectCardTileMounted(page: Page, title: string, listId?: string) {
+  const lanes = listId ? page.locator(`[id="dl-${listId}"]`) : page.locator('[id^="dl-"]');
   await expect.poll(async () => {
     const count = await cardTile(page, title).count();
-    if (count === 0) await page.locator(`[id="dl-${listId}"]`).evaluate((lane) => lane.scrollTo({ top: lane.scrollHeight }));
+    if (count === 0) {
+      for (const lane of await lanes.all()) await lane.evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
+    }
     return count;
   }, { timeout: 15_000 }).toBe(1);
 }

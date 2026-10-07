@@ -19,10 +19,14 @@ import { enqueueCommentAddedEmails, enqueueCommentMentionedNotifications } from 
 import { touchCardActivity } from "../../lib/card-activity.js";
 import { fetchReactionsByComment } from "../../lib/comment-reactions.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
-import { externalEmbeddedMediaReferences, signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
+import { signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
 import { replaceCardMentions } from "../../lib/mentions.js";
 import { queueNotificationFanout } from "../../lib/notifications.js";
 import { emitToBoard } from "../../realtime/emit.js";
+import { assertCardActive, assertIntegrationEmbeddedMediaStoredLocally } from "../../lib/card-guards.js";
+import { cardFeedSortPriority, compareCardFeedItems, feedAfterCursor } from "../../lib/card-feed.js";
+import { commentAuthorColumns } from "../../lib/comment-rows.js";
+import { attachmentRowBaseColumns } from "../../lib/attachment-rows.js";
 
 async function linkAttachmentsToComment(params: {
   clientId: string;
@@ -48,24 +52,7 @@ async function linkAttachmentsToComment(params: {
     .returning({ id: cardAttachments.id });
   if (updated.length === 0) return;
   const rows = await db
-    .select({
-      id: cardAttachments.id,
-      cardId: cardAttachments.cardId,
-      fileName: cardAttachments.fileName,
-      mimeType: cardAttachments.mimeType,
-      byteSize: cardAttachments.byteSize,
-      url: cardAttachments.url,
-      fileKey: cardAttachments.fileKey,
-      thumbnailUrl: cardAttachments.thumbnailUrl,
-      thumbnailFileKey: cardAttachments.thumbnailFileKey,
-      createdAt: cardAttachments.createdAt,
-      uploadedById: cardAttachments.uploadedById,
-      uploadedByName: users.displayName,
-      uploadedByAvatarUrl: users.avatarUrl,
-      uploadedByClientId: users.clientId,
-      source: cardAttachments.source,
-      commentId: cardAttachments.commentId,
-    })
+    .select(attachmentRowBaseColumns)
     .from(cardAttachments)
     .innerJoin(users, eq(users.id, cardAttachments.uploadedById))
     .where(inArray(cardAttachments.id, updated.map((u) => u.id)));
@@ -82,23 +69,6 @@ async function linkAttachmentsToComment(params: {
       }),
     });
   }
-}
-
-function assertCardActive(card: Pick<typeof cards.$inferSelect, "archivedAt">) {
-  if (card.archivedAt) throw badRequest("archived cards are read-only");
-}
-
-function cardFeedSortPriority(item: dto.CardFeedItem): number {
-  return item.type === "activity" && item.data.entityType === "card" && item.data.action === "created" ? 0 : 1;
-}
-
-function compareCardFeedItems(a: dto.CardFeedItem, b: dto.CardFeedItem): number {
-  const ta = new Date(a.data.createdAt as unknown as string).getTime();
-  const tb = new Date(b.data.createdAt as unknown as string).getTime();
-  if (ta !== tb) return tb - ta;
-  const priority = cardFeedSortPriority(a) - cardFeedSortPriority(b);
-  if (priority !== 0) return priority;
-  return String(a.data.id).localeCompare(String(b.data.id));
 }
 
 type CommentCursor = { kind: "cardComments"; createdAt: string; id: string };
@@ -151,30 +121,6 @@ function cardFeedCursor(raw: string | undefined): CardFeedCursor | null {
 function commentAfterCursor(cursor: CommentCursor, createdAt = comments.createdAt, id = comments.id): SQL {
   const at = new Date(cursor.createdAt);
   return or(lt(createdAt, at), and(eq(createdAt, at), gt(id, cursor.id)))!;
-}
-
-function feedAfterCursor(
-  cursor: CardFeedCursor,
-  createdAt: typeof comments.createdAt | typeof activityEvents.createdAt,
-  id: typeof comments.id | typeof activityEvents.id,
-  priority: SQL<number>,
-): SQL {
-  const at = new Date(cursor.createdAt);
-  return or(
-    lt(createdAt, at),
-    and(eq(createdAt, at), or(
-      gt(priority, cursor.priority),
-      and(eq(priority, cursor.priority), gt(id, cursor.id)),
-    )),
-  )!;
-}
-
-function assertIntegrationEmbeddedMediaStoredLocally(markdown: string, clientId: string, authKind?: string) {
-  if (authKind !== "apiKey") return;
-  const externalRefs = externalEmbeddedMediaReferences(markdown, clientId);
-  if (externalRefs.length > 0) {
-    throw badRequest("inline media from integrations must be uploaded to Kanera before embedding");
-  }
 }
 
 function commentAttribution(auth: { authKind?: string; apiKeyKind?: string; apiKeyId?: string; apiKeyName?: string; agentGrantId?: string; agentName?: string }) {
@@ -264,8 +210,7 @@ async function selectCommentRows(commentIds: string[], clientId: string): Promis
       apiKeyId: comments.apiKeyId,
       apiKeyName: comments.apiKeyName,
       agentName: comments.agentName,
-      authorName: sql<string>`case when ${comments.authorKind} = 'system' then 'Kanera' when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
-      authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} in ('system', 'apiKey') then null else ${users.avatarUrl} end`,
+      ...commentAuthorColumns,
       authorClientId: users.clientId,
       body: comments.body,
       editedAt: comments.editedAt,
@@ -342,8 +287,7 @@ export async function commentRoutes(app: FastifyInstance) {
           apiKeyId: comments.apiKeyId,
           apiKeyName: comments.apiKeyName,
           agentName: comments.agentName,
-          authorName: sql<string>`case when ${comments.authorKind} = 'system' then 'Kanera' when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
-          authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} in ('system', 'apiKey') then null else ${users.avatarUrl} end`,
+          ...commentAuthorColumns,
           authorClientId: users.clientId,
           body: comments.body,
           editedAt: comments.editedAt,
@@ -422,8 +366,7 @@ export async function commentRoutes(app: FastifyInstance) {
         apiKeyId: comments.apiKeyId,
         apiKeyName: comments.apiKeyName,
         agentName: comments.agentName,
-        authorName: sql<string>`case when ${comments.authorKind} = 'system' then 'Kanera' when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
-        authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} in ('system', 'apiKey') then null else ${users.avatarUrl} end`,
+        ...commentAuthorColumns,
         authorClientId: users.clientId,
         body: comments.body,
         editedAt: comments.editedAt,

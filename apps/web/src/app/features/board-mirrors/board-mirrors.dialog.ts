@@ -1,5 +1,6 @@
 import { CdkTrapFocus } from "@angular/cdk/a11y";
 import type { OnInit } from "@angular/core";
+import { NgTemplateOutlet } from "@angular/common";
 import { ChangeDetectionStrategy, Component, effect, inject, input, output, signal } from "@angular/core";
 import type { BoardMirrorRow } from "@kanera/shared/dto";
 import { ApiError } from "../../core/api/api.client";
@@ -10,8 +11,59 @@ import { formatDateTime } from "../../shared/date-format";
   selector: "k-board-mirrors-dialog",
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CdkTrapFocus],
+  imports: [CdkTrapFocus, NgTemplateOutlet],
   template: `
+    <!-- Inbound and outbound mirrors share the list-mapping editor and the action row; only the
+         delete button's wording differs, so both sections stamp this template. -->
+    <ng-template #mirrorEditor let-mirror let-deleteLabel="deleteLabel">
+      @if (editingId() === mirror.id) {
+        <div class="mapping-editor">
+          <div class="mapping-copy">
+            <strong>Choose source lists</strong>
+            <span>Cards become linked when created in or moved into a selected list.</span>
+          </div>
+          <div class="mapping-grid" [class.has-targets]="mirror.sourceWorkspaceId !== mirror.targetWorkspaceId">
+            @if (mirror.sourceWorkspaceId !== mirror.targetWorkspaceId) {
+              <div class="mapping-grid-heading" aria-hidden="true"><span>Source list</span><span>Target list</span></div>
+            }
+            @for (sourceList of mirror.availableSourceLists; track sourceList.id) {
+              <div class="mapping-row">
+                <label class="mapping-choice"><input type="checkbox" [checked]="editSelected().has(sourceList.id)" (change)="toggleEditSource(sourceList.id, $any($event.target).checked, mirror)" /><span>{{ sourceList.name }}</span></label>
+              @if (mirror.sourceWorkspaceId !== mirror.targetWorkspaceId) {
+                <select [value]="editTargets()[sourceList.id]" [disabled]="!editSelected().has(sourceList.id)" [attr.aria-label]="'Target list for ' + sourceList.name" (input)="setEditTarget(sourceList.id, $any($event.target).value)">
+                  <option value="" [selected]="!editTargets()[sourceList.id]">Choose target…</option>
+                  @for (targetList of mirror.availableTargetLists; track targetList.id) { <option [value]="targetList.id" [selected]="targetList.id === editTargets()[sourceList.id]">{{ targetList.name }}</option> }
+                </select>
+              }
+              </div>
+            }
+          </div>
+          <div class="edit-actions"><button type="button" class="ghost" (click)="editingId.set(null)">Cancel</button><button type="button" (click)="saveLists(mirror)" [disabled]="busyId() || !canSaveLists(mirror)">Save lists</button></div>
+        </div>
+      }
+      <div class="actions">
+        @if (mirror.manageTarget) {
+        <button type="button" class="secondary sm state-action" [class.is-restorative]="!!mirror.pausedAt" (click)="togglePause(mirror)" [disabled]="busyId() === mirror.id || (!!mirror.pausedAt && mirror.planBlocked)">
+          <i [class]="mirror.pausedAt ? 'ti ti-player-play' : 'ti ti-player-pause'"></i>
+          {{ mirror.pausedAt ? 'Resume syncing' : 'Pause syncing' }}
+        </button>
+        }
+        @if (mirror.manageSource) {
+        <button type="button" class="secondary sm state-action" [class.is-restorative]="!!mirror.sourceDisabledAt" (click)="toggleSource(mirror)" [disabled]="busyId() === mirror.id || (!!mirror.sourceDisabledAt && mirror.planBlocked)">
+          <i [class]="mirror.sourceDisabledAt ? 'ti ti-link' : 'ti ti-link-off'"></i>
+          {{ mirror.sourceDisabledAt ? 'Enable mirror' : 'Disable mirror' }}
+        </button>
+        }
+        @if (mirror.manageSource || mirror.manageTarget) {
+        <button type="button" class="ghost" (click)="editLists(mirror)"><i class="ti ti-list-check"></i>Edit lists</button>
+        @if (confirmDeleteId() === mirror.id) { <button type="button" class="danger" (click)="remove(mirror)">Confirm delete</button><button type="button" class="ghost" (click)="confirmDeleteId.set(null)">Cancel</button> }
+        @else { <button type="button" class="ghost danger-text" (click)="confirmDeleteId.set(mirror.id)"><i class="ti ti-trash"></i>{{ deleteLabel }}</button> }
+        } @else {
+          <span class="read-only"><i class="ti ti-lock"></i> Read-only mirror status</span>
+        }
+      </div>
+    </ng-template>
+
     <div class="backdrop" (click)="dismissed.emit()">
       <section class="dialog" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-modal="true" aria-label="Board mirrors" (click)="$event.stopPropagation()">
         <header><div><h2>Board mirrors</h2><p>Manage incoming copies and outbound governance.</p></div><button type="button" class="icon" (click)="dismissed.emit()" aria-label="Close"><i class="ti ti-x"></i></button></header>
@@ -32,52 +84,7 @@ import { formatDateTime } from "../../shared/date-format";
                 @if (mirror.planBlocked) { <p class="warning"><i class="ti ti-lock"></i> Syncing is paused until both organisations have Pro.</p> }
                 @if (hasArchivedTarget(mirror)) { <p class="warning"><i class="ti ti-alert-triangle"></i> A mapped target list is archived. Card moves into it are being skipped.</p> }
                 <div class="chips">@for (list of mirror.lists; track list.sourceListId) { <span>{{ list.sourceListName }} <i class="ti ti-arrow-right"></i> {{ list.targetListName }}</span> }</div>
-                @if (editingId() === mirror.id) {
-                  <div class="mapping-editor">
-                    <div class="mapping-copy">
-                      <strong>Choose source lists</strong>
-                      <span>Cards become linked when created in or moved into a selected list.</span>
-                    </div>
-                    <div class="mapping-grid" [class.has-targets]="mirror.sourceWorkspaceId !== mirror.targetWorkspaceId">
-                      @if (mirror.sourceWorkspaceId !== mirror.targetWorkspaceId) {
-                        <div class="mapping-grid-heading" aria-hidden="true"><span>Source list</span><span>Target list</span></div>
-                      }
-                      @for (sourceList of mirror.availableSourceLists; track sourceList.id) {
-                        <div class="mapping-row">
-                          <label class="mapping-choice"><input type="checkbox" [checked]="editSelected().has(sourceList.id)" (change)="toggleEditSource(sourceList.id, $any($event.target).checked, mirror)" /><span>{{ sourceList.name }}</span></label>
-                        @if (mirror.sourceWorkspaceId !== mirror.targetWorkspaceId) {
-                          <select [value]="editTargets()[sourceList.id]" [disabled]="!editSelected().has(sourceList.id)" [attr.aria-label]="'Target list for ' + sourceList.name" (input)="setEditTarget(sourceList.id, $any($event.target).value)">
-                            <option value="" [selected]="!editTargets()[sourceList.id]">Choose target…</option>
-                            @for (targetList of mirror.availableTargetLists; track targetList.id) { <option [value]="targetList.id" [selected]="targetList.id === editTargets()[sourceList.id]">{{ targetList.name }}</option> }
-                          </select>
-                        }
-                        </div>
-                      }
-                    </div>
-                    <div class="edit-actions"><button type="button" class="ghost" (click)="editingId.set(null)">Cancel</button><button type="button" (click)="saveLists(mirror)" [disabled]="busyId() || !canSaveLists(mirror)">Save lists</button></div>
-                  </div>
-                }
-                <div class="actions">
-                  @if (mirror.manageTarget) {
-                  <button type="button" class="secondary sm state-action" [class.is-restorative]="!!mirror.pausedAt" (click)="togglePause(mirror)" [disabled]="busyId() === mirror.id || (!!mirror.pausedAt && mirror.planBlocked)">
-                    <i [class]="mirror.pausedAt ? 'ti ti-player-play' : 'ti ti-player-pause'"></i>
-                    {{ mirror.pausedAt ? 'Resume syncing' : 'Pause syncing' }}
-                  </button>
-                  }
-                  @if (mirror.manageSource) {
-                  <button type="button" class="secondary sm state-action" [class.is-restorative]="!!mirror.sourceDisabledAt" (click)="toggleSource(mirror)" [disabled]="busyId() === mirror.id || (!!mirror.sourceDisabledAt && mirror.planBlocked)">
-                    <i [class]="mirror.sourceDisabledAt ? 'ti ti-link' : 'ti ti-link-off'"></i>
-                    {{ mirror.sourceDisabledAt ? 'Enable mirror' : 'Disable mirror' }}
-                  </button>
-                  }
-                  @if (mirror.manageSource || mirror.manageTarget) {
-                  <button type="button" class="ghost" (click)="editLists(mirror)"><i class="ti ti-list-check"></i>Edit lists</button>
-                  @if (confirmDeleteId() === mirror.id) { <button type="button" class="danger" (click)="remove(mirror)">Confirm delete</button><button type="button" class="ghost" (click)="confirmDeleteId.set(null)">Cancel</button> }
-                  @else { <button type="button" class="ghost danger-text" (click)="confirmDeleteId.set(mirror.id)"><i class="ti ti-trash"></i>Delete</button> }
-                  } @else {
-                    <span class="read-only"><i class="ti ti-lock"></i> Read-only mirror status</span>
-                  }
-                </div>
+                <ng-container *ngTemplateOutlet="mirrorEditor; context: { $implicit: mirror, deleteLabel: 'Delete' }" />
               </article>
             } @empty { <p class="empty">No boards mirror into this board.</p> }
           </div>
@@ -87,52 +94,7 @@ import { formatDateTime } from "../../shared/date-format";
                 @if (mirror.planBlocked) { <p class="warning"><i class="ti ti-lock"></i> Syncing is paused until both organisations have Pro.</p> }
                 @if (hasArchivedTarget(mirror)) { <p class="warning"><i class="ti ti-alert-triangle"></i> A mapped target list is archived. Card moves into it are being skipped.</p> }
                 <div class="chips">@for (list of mirror.lists; track list.sourceListId) { <span>{{ list.sourceListName }} <i class="ti ti-arrow-right"></i> {{ list.targetListName }}</span> }</div>
-                @if (editingId() === mirror.id) {
-                  <div class="mapping-editor">
-                    <div class="mapping-copy">
-                      <strong>Choose source lists</strong>
-                      <span>Cards become linked when created in or moved into a selected list.</span>
-                    </div>
-                    <div class="mapping-grid" [class.has-targets]="mirror.sourceWorkspaceId !== mirror.targetWorkspaceId">
-                      @if (mirror.sourceWorkspaceId !== mirror.targetWorkspaceId) {
-                        <div class="mapping-grid-heading" aria-hidden="true"><span>Source list</span><span>Target list</span></div>
-                      }
-                      @for (sourceList of mirror.availableSourceLists; track sourceList.id) {
-                        <div class="mapping-row">
-                          <label class="mapping-choice"><input type="checkbox" [checked]="editSelected().has(sourceList.id)" (change)="toggleEditSource(sourceList.id, $any($event.target).checked, mirror)" /><span>{{ sourceList.name }}</span></label>
-                        @if (mirror.sourceWorkspaceId !== mirror.targetWorkspaceId) {
-                          <select [value]="editTargets()[sourceList.id]" [disabled]="!editSelected().has(sourceList.id)" [attr.aria-label]="'Target list for ' + sourceList.name" (input)="setEditTarget(sourceList.id, $any($event.target).value)">
-                            <option value="" [selected]="!editTargets()[sourceList.id]">Choose target…</option>
-                            @for (targetList of mirror.availableTargetLists; track targetList.id) { <option [value]="targetList.id" [selected]="targetList.id === editTargets()[sourceList.id]">{{ targetList.name }}</option> }
-                          </select>
-                        }
-                        </div>
-                      }
-                    </div>
-                    <div class="edit-actions"><button type="button" class="ghost" (click)="editingId.set(null)">Cancel</button><button type="button" (click)="saveLists(mirror)" [disabled]="busyId() || !canSaveLists(mirror)">Save lists</button></div>
-                  </div>
-                }
-                <div class="actions">
-                  @if (mirror.manageTarget) {
-                  <button type="button" class="secondary sm state-action" [class.is-restorative]="!!mirror.pausedAt" (click)="togglePause(mirror)" [disabled]="busyId() === mirror.id || (!!mirror.pausedAt && mirror.planBlocked)">
-                    <i [class]="mirror.pausedAt ? 'ti ti-player-play' : 'ti ti-player-pause'"></i>
-                    {{ mirror.pausedAt ? 'Resume syncing' : 'Pause syncing' }}
-                  </button>
-                  }
-                  @if (mirror.manageSource) {
-                  <button type="button" class="secondary sm state-action" [class.is-restorative]="!!mirror.sourceDisabledAt" (click)="toggleSource(mirror)" [disabled]="busyId() === mirror.id || (!!mirror.sourceDisabledAt && mirror.planBlocked)">
-                    <i [class]="mirror.sourceDisabledAt ? 'ti ti-link' : 'ti ti-link-off'"></i>
-                    {{ mirror.sourceDisabledAt ? 'Enable mirror' : 'Disable mirror' }}
-                  </button>
-                  }
-                  @if (mirror.manageSource || mirror.manageTarget) {
-                  <button type="button" class="ghost" (click)="editLists(mirror)"><i class="ti ti-list-check"></i>Edit lists</button>
-                  @if (confirmDeleteId() === mirror.id) { <button type="button" class="danger" (click)="remove(mirror)">Confirm delete</button><button type="button" class="ghost" (click)="confirmDeleteId.set(null)">Cancel</button> }
-                  @else { <button type="button" class="ghost danger-text" (click)="confirmDeleteId.set(mirror.id)"><i class="ti ti-trash"></i>Delete mirror</button> }
-                  } @else {
-                    <span class="read-only"><i class="ti ti-lock"></i> Read-only mirror status</span>
-                  }
-                </div>
+                <ng-container *ngTemplateOutlet="mirrorEditor; context: { $implicit: mirror, deleteLabel: 'Delete mirror' }" />
               </article>
             } @empty { <p class="empty">This board does not feed another board.</p> }
           </div>

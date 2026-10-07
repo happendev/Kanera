@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./support/fixtures";
-import { boardHref, expectBoardLoaded, openBoard } from "./support/ui";
+import { boardIdOf, expectBoardLoaded, openBoard } from "./support/ui";
 
 /** A list's card drop container; `dl-<listId>` is the CDK drop-list id the board renders. */
 function listCards(page: Page, listId: string): Locator {
@@ -46,7 +46,7 @@ test("dragged cards reorder within and across lists for every viewer and after r
   const second = uniqueName("E2E drag second");
   const titles = [first, second];
   await signIn(page, "amelia");
-  const boardId = (await boardHref(page, "Platform Delivery")).split("/")[2]!;
+  const boardId = await boardIdOf(page, "Platform Delivery");
 
   // Setup through the API: the subject is the drag, not card creation. Default placement is the
   // bottom of the list, so the two cards start adjacent and in creation order.

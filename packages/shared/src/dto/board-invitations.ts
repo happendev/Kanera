@@ -45,9 +45,3 @@ export const pendingBoardInvitationSummary = z.object({
   })),
 });
 export type PendingBoardInvitationSummary = z.infer<typeof pendingBoardInvitationSummary>;
-
-export const acceptBoardInvitationResponse = z.object({
-  boardId: z.string(),
-  boardIds: z.array(z.string()).optional(),
-});
-export type AcceptBoardInvitationResponse = z.infer<typeof acceptBoardInvitationResponse>;

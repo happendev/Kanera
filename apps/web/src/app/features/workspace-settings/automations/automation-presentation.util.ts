@@ -45,12 +45,12 @@ export const automationCommentTemplateVariables = [
   { token: "{{workspace.name}}", label: "Workspace" },
 ] as const;
 
-export function automationWebhookName(id: string, lookups: AutomationLookups): string {
+function automationWebhookName(id: string, lookups: AutomationLookups): string {
   return lookups.webhooks.find((hook) => hook.id === id)?.name ?? "Deleted webhook";
 }
 
 /** First line of the comment template, shortened, for collapsed summaries. */
-export function automationCommentPreview(template: string, max = 60): string {
+function automationCommentPreview(template: string, max = 60): string {
   const firstLine = template.trim().split(/\r?\n/u)[0] ?? "";
   return firstLine.length > max ? `${firstLine.slice(0, max - 1)}…` : firstLine;
 }

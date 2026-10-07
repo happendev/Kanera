@@ -3,7 +3,7 @@ import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { ToastService } from "../../shared/toast.service";
 import type { OnDestroy, OnInit } from "@angular/core";
 import { DatePipe } from "@angular/common";
-import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, input, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal } from "@angular/core";
 import { Router } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
 import type {
@@ -51,9 +51,9 @@ import { formatDueDate, isOverdue } from "../board/due-date.util";
 import { FilterBarComponent } from "../board/table-view/filter-bar.component";
 import { ListComponent, type BulkCardMenuPayload, type BulkCardSelectionPayload, type BulkListSelectionPayload, type CardDropPayload, type SeparatorDropPayload, type StartAddPayload } from "../board/list.component";
 import { WorkDoneViewComponent } from "../board/work-done-view/work-done-view.component";
-import { readWorkDoneLayout, writeWorkDoneLayout } from "../board/work-done-view/work-done-preferences";
+import { workDoneLayoutState } from "../board/work-done-view/work-done-preferences";
 import { readBackground, readCompactCards, writeBackground, writeCompactCards } from "../board/table-view/view-preference";
-import { NARROW_WORK_DONE_LAYOUT_QUERY, type WorkDoneLayout } from "../board/work-done-view/work-done.types";
+import type { WorkDoneLayout } from "../board/work-done-view/work-done.types";
 import { BoardTableViewComponent, type HostedTableCardReorder } from "../board/table-view/board-table-view.component";
 import { TABLE_CARD_STORE, type TableCardStore } from "../board/table-view/table-card-store";
 import type {
@@ -76,13 +76,15 @@ import { BulkCardActionsMenuPopover } from "../board/bulk-card-actions-menu.popo
 import { BulkCustomFieldsDialogComponent } from "../board/bulk-custom-fields.dialog";
 import { BULK_CARD_STORE } from "../board/bulk-card-store";
 import { globalWorkBulkCardStore } from "./global-work-bulk-card-store";
-import { priorityAnchorAt, type PriorityAnchor } from "./priority-anchor";
+import { priorityAnchorAt, type PriorityAnchor } from "../../shared/priority-queue/priority-queue-math";
 import { SaveViewPopover } from "./save-view.popover";
 import { TeamPrioritiesViewComponent, type TeamPriorityReorder } from "./team-priorities-view.component";
 import { UpNextPanelComponent, type UpNextAddableCard } from "./up-next-panel.component";
 import { boardPickerGroups, peoplePickerGroups, savedViewPickerGroups, scopePickerGroups } from "./work-pickers";
 import { createSortedLaneProjection, createLaneItemsProjection } from "../board/lane-projection";
 import { formatDate } from "../../shared/date-format";
+import { localDateKey } from "../../shared/day-key.util";
+import { byPosition } from "../../shared/position-sort";
 
 type GlobalCard = WireCardSummary & { workspaceId: string };
 type ChecklistGroup = {
@@ -262,21 +264,12 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly workDoneRefreshVersion = signal(0);
   /** History-only event dimension, surfaced through the page's shared Filter panel. */
   readonly workDoneEventType = signal<WorkDoneEventType | null>(null);
-  private readonly preferredWorkDoneLayout = signal<WorkDoneLayout>(readWorkDoneLayout("global"));
-  private readonly narrowWorkDoneLayout = mediaQuerySignal(NARROW_WORK_DONE_LAYOUT_QUERY);
-  /** Keep the wide-screen choice, but render List while the grid cannot form multiple columns. */
-  readonly workDoneLayout = computed<WorkDoneLayout>(() =>
-    this.narrowWorkDoneLayout() ? "list" : this.preferredWorkDoneLayout()
-  );
-  readonly workDoneLayoutOptions = computed<readonly SegmentedOption<WorkDoneLayout>[]>(() => [
-    { id: "list", icon: "list-details", label: "List layout" },
-    { id: "grid", icon: "layout-grid", label: "Grid layout", disabled: this.narrowWorkDoneLayout() },
-  ]);
+  private readonly workDoneLayoutState = workDoneLayoutState("global");
+  readonly workDoneLayout = this.workDoneLayoutState.layout;
+  readonly workDoneLayoutOptions = this.workDoneLayoutState.options;
 
   setWorkDoneLayout(layout: WorkDoneLayout): void {
-    if (layout === "grid" && this.narrowWorkDoneLayout()) return;
-    this.preferredWorkDoneLayout.set(layout);
-    writeWorkDoneLayout("global", layout);
+    this.workDoneLayoutState.setLayout(layout);
   }
   readonly priorityLayout = signal<PriorityLayout>(storedPriorityLayout());
   readonly priorityLayoutOptions: readonly SegmentedOption<PriorityLayout>[] = [
@@ -619,7 +612,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   );
   // Preserve the existing workspace-list ordering across boards, including the id tie-break.
   private readonly projectCardLanes = createSortedLaneProjection<GlobalCard>(
-    (a, b) => Number(a.position) - Number(b.position) || a.id.localeCompare(b.id),
+    (a, b) => byPosition(a, b) || a.id.localeCompare(b.id),
   );
   private readonly projectItemLanes = createLaneItemsProjection((a, b) => {
     const left = a.kind === "card" ? a.card : a.separator;
@@ -640,7 +633,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       result.set(list.workspaceId, lists);
     }
     for (const lists of result.values()) {
-      lists.sort((a, b) => Number(a.position) - Number(b.position) || a.id.localeCompare(b.id));
+      lists.sort((a, b) => byPosition(a, b) || a.id.localeCompare(b.id));
     }
     return result;
   });
@@ -1595,15 +1588,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
    * navigated to. In sheet mode the panel is therefore session-only and starts closed, and toggling it
    * leaves the desktop preference alone.
    */
-  private readonly sheetMode = signal(typeof matchMedia === "function" && matchMedia(UP_NEXT_SHEET_QUERY).matches);
+  private readonly sheetMode = mediaQuerySignal(UP_NEXT_SHEET_QUERY);
   private readonly sheetOpen = signal(false);
-  private readonly watchSheetMode = (() => {
-    if (typeof matchMedia !== "function") return;
-    const query = matchMedia(UP_NEXT_SHEET_QUERY);
-    const sync = () => this.sheetMode.set(query.matches);
-    query.addEventListener("change", sync);
-    inject(DestroyRef).onDestroy(() => query.removeEventListener("change", sync));
-  })();
   readonly upNextOpen = computed(() =>
     this.upNextAvailable()
     && this.showUpNextControl()
@@ -2418,7 +2404,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   drillDown(source: PortfolioRow | null, metric: PortfolioMetric): void {
     if (!this.state.interactionReady()) return;
     const now = new Date();
-    const today = this.localDate(now);
+    const today = localDateKey(now);
     const nextSeven = new Date(now);
     nextSeven.setDate(nextSeven.getDate() + 7);
     const completedFrom = new Date(now.getTime() - this.state.definition().portfolioDays * 86_400_000).toISOString();
@@ -2433,7 +2419,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       inactiveOnly: metric === "inactive",
       overdueChecklistOnly: metric === "overdueChecklistItems",
       dueFrom: metric === "dueSoon" ? today : null,
-      dueTo: metric === "dueSoon" ? this.localDate(nextSeven) : null,
+      dueTo: metric === "dueSoon" ? localDateKey(nextSeven) : null,
       completedFrom: metric === "completed" ? completedFrom : null,
       completedTo: metric === "completed" ? now.toISOString() : null,
     });
@@ -2542,10 +2528,10 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly checklistGroups = computed<ChecklistGroup[]>(() => {
     const items = this.state.response().checklistItems;
     if (items.length === 0) return [];
-    const today = this.localDate(new Date());
+    const today = localDateKey(new Date());
     const nextSeven = new Date();
     nextSeven.setDate(nextSeven.getDate() + 7);
-    const weekEnd = this.localDate(nextSeven);
+    const weekEnd = localDateKey(nextSeven);
     const groups: ChecklistGroup[] = [
       { id: "checklist:overdue", label: "Overdue", icon: "alert-circle", overdue: true, items: [] },
       { id: "checklist:today", label: "Due today", icon: "calendar-event", overdue: false, items: [] },
@@ -2579,13 +2565,6 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
 
   workspaceName(workspaceId: string): string {
     return this.workspacesById().get(workspaceId)?.name ?? "Workspace";
-  }
-
-  private localDate(date: Date): string {
-    const year = date.getFullYear();
-    const month = `${date.getMonth() + 1}`.padStart(2, "0");
-    const day = `${date.getDate()}`.padStart(2, "0");
-    return `${year}-${month}-${day}`;
   }
 
   private rollupPortfolioRow(

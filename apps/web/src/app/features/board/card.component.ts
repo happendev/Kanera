@@ -370,22 +370,6 @@ export class CardComponent {
     return this.customFieldValuesByField().get(fieldId)?.valueUrl?.trim() || null;
   }
 
-  hasValues(): boolean {
-    for (const value of this.customFieldValuesByField().values()) {
-      if (
-        value.valueText ||
-        value.valueNumber ||
-        value.valueCheckbox != null ||
-        value.valueDate ||
-        value.valueUrl ||
-        value.valueOptionIds?.length ||
-        value.valueUserIds?.length
-      )
-        return true;
-    }
-    return false;
-  }
-
   hasVisibleCustomFieldBadges(): boolean {
     return this.customFields().some((field) => field.showOnCard && this.hasBadge(field));
   }

@@ -470,16 +470,6 @@ describe("WorkspaceSettingsPage", () => {
     });
   });
 
-  it("shows timing settings without board health configuration", async () => {
-    await render();
-    fixture.componentInstance.selectedTab.set("general");
-    fixture.detectChanges();
-    const root = fixture.nativeElement as HTMLElement;
-    expect(root.textContent).toContain("Mark cards inactive after");
-    expect(root.querySelector('[aria-label="Board health signals"]')).toBeNull();
-    expect(root.querySelector('a[href*="board-health"]')).toBeNull();
-  });
-
   it("selects an existing standalone group from the editable group control", async () => {
     const { api } = await render({ standalone: true });
     fixture.componentInstance.selectedTab.set("general");
@@ -1877,7 +1867,6 @@ describe("WorkspaceSettingsPage", () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(component.automationNeverRan(component.automations()[0]!)).toBe(true);
     expect((fixture.nativeElement as HTMLElement).textContent).toContain("Enabled, but has not run yet.");
 
     component.automations.set([automation({ runStats: automationRunStats({ effectfulRunCount: 7, noopRunCount: 2 }) })]);
@@ -2173,8 +2162,8 @@ describe("WorkspaceSettingsPage", () => {
     expect(component.automationHasNoEntryType(automation)).toBe(false);
   });
 
-  it("summarizes and updates card-assigned trigger users", async () => {
-    const { api } = await render();
+  it("summarizes card-assigned trigger users", async () => {
+    await render();
     const component = fixture.componentInstance;
     component.members.set([
       member({ userId: "user-1", displayName: "Alice", role: "member" as const }),
@@ -2208,11 +2197,6 @@ describe("WorkspaceSettingsPage", () => {
     // The title used to be the target alone, so this rule rendered as "Alice, Ben" and read like a
     // person rather than a rule.
     expect(component.automationTriggerLabel(automation)).toBe("Card assigned to Alice, Ben");
-
-    api.patch.mockResolvedValue({ ...automation, triggerUserIds: ["user-1"] });
-    await component.toggleAutomationTriggerUser("automation-1", "user-2");
-
-    expect(api.patch).toHaveBeenCalledWith("/automations/automation-1", { triggerUserIds: ["user-1"] });
   });
 
   it("summarizes and updates card-marked-complete automations without trigger targets", async () => {

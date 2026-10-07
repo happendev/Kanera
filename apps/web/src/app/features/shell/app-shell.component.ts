@@ -50,13 +50,15 @@ import { MyPrioritiesPanelComponent } from "../priorities/my-priorities-panel.co
 import { GlobalSearchOverlayComponent } from "../search/global-search-overlay.component";
 import { StandaloneBoardCreateDialogComponent } from "../standalone-board/standalone-board-create.dialog";
 import { CreateOrganisationDialogComponent, JoinOrganisationDialogComponent, type CreateOrganisationResult } from "./organisation-action.dialog";
+import { byPosition } from "../../shared/position-sort";
+import { applyPositions, withPosition } from "../../shared/positions";
 
 function sortBoards<T extends { position: string }>(boards: T[]): T[] {
-  return [...boards].sort((a, b) => Number(a.position) - Number(b.position));
+  return [...boards].sort(byPosition);
 }
 
 function sortBoardGroups<T extends { position: string }>(groups: T[]): T[] {
-  return [...groups].sort((a, b) => Number(a.position) - Number(b.position));
+  return [...groups].sort(byPosition);
 }
 
 type SidebarBoardGroup = {
@@ -217,7 +219,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly usingOfflineShell = signal(false);
   readonly user = this.auth.user;
   readonly showScratchpad = computed(() => this.user()?.showScratchpad ?? true);
-  private readonly isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
   // String queries keep the component classes out of the eager shell import graph. The types
   // still describe their public API without preventing Angular from deferring the components.
   readonly notificationsPanel = viewChild<NotificationsPanelComponent>("notificationsPanel");
@@ -285,7 +286,6 @@ export class AppShellComponent implements OnInit, OnDestroy {
     const max = this.auth.maxBoards();
     return max !== null && this.ownBoardCount() >= max;
   });
-  readonly canCreateWorkspace = computed(() => true);
   readonly workspaceCreateAttempted = signal(false);
   readonly standaloneBoardCreateAttempted = signal(false);
   readonly workspaceCreateLimitMessage = computed(() => {
@@ -1030,31 +1030,24 @@ export class AppShellComponent implements OnInit, OnDestroy {
         this.groups.update((groups) =>
           groups.map((g) =>
             g.workspace.id === workspaceId
-              ? { ...g, boards: sortBoards(g.boards.map((b) => (b.id === boardId ? { ...b, position } : b))) }
+              ? { ...g, boards: sortBoards(withPosition(g.boards, boardId, position)) }
               : g,
           ),
         );
         this.guestGroups.update((groups) =>
           groups.map((g) =>
             g.workspace.id === workspaceId
-              ? { ...g, boards: sortBoards(g.boards.map((b) => (b.id === boardId ? { ...b, position } : b))) }
+              ? { ...g, boards: sortBoards(withPosition(g.boards, boardId, position)) }
               : g,
           ),
         );
       },
       "board:rebalanced": ({ workspaceId, positions }) => {
-        const applyRebalance = <T extends { id: string; position: string }>(boards: T[]) => {
-          const positionsById = new Map(positions.map((p) => [p.id, p.position]));
-          return sortBoards(boards.map((b) => {
-            const position = positionsById.get(b.id);
-            return position ? { ...b, position } : b;
-          }));
-        };
         this.groups.update((groups) =>
-          groups.map((g) => g.workspace.id === workspaceId ? { ...g, boards: applyRebalance(g.boards) } : g),
+          groups.map((g) => g.workspace.id === workspaceId ? { ...g, boards: sortBoards(applyPositions(g.boards, positions)) } : g),
         );
         this.guestGroups.update((groups) =>
-          groups.map((g) => g.workspace.id === workspaceId ? { ...g, boards: applyRebalance(g.boards) } : g),
+          groups.map((g) => g.workspace.id === workspaceId ? { ...g, boards: sortBoards(applyPositions(g.boards, positions)) } : g),
         );
       },
       "board:deleted": ({ boardId }) => {
@@ -1103,22 +1096,14 @@ export class AppShellComponent implements OnInit, OnDestroy {
       "boardGroup:moved": ({ workspaceId, groupId, position }) =>
         this.groups.update((groups) =>
           groups.map((g) => g.workspace.id === workspaceId
-            ? { ...g, boardGroups: sortBoardGroups((g.boardGroups ?? []).map((bg) => bg.id === groupId ? { ...bg, position } : bg)) }
+            ? { ...g, boardGroups: sortBoardGroups(withPosition(g.boardGroups ?? [], groupId, position)) }
             : g),
         ),
       "boardGroup:rebalanced": ({ workspaceId, positions }) =>
         this.groups.update((groups) =>
-          groups.map((g) => {
-            if (g.workspace.id !== workspaceId) return g;
-            const positionsById = new Map(positions.map((p) => [p.id, p.position]));
-            return {
-              ...g,
-              boardGroups: sortBoardGroups((g.boardGroups ?? []).map((bg) => {
-                const position = positionsById.get(bg.id);
-                return position ? { ...bg, position } : bg;
-              })),
-            };
-          }),
+          groups.map((g) => g.workspace.id === workspaceId
+            ? { ...g, boardGroups: sortBoardGroups(applyPositions(g.boardGroups ?? [], positions)) }
+            : g),
         ),
       "boardGroup:deleted": ({ workspaceId, groupId }) =>
         this.groups.update((groups) =>

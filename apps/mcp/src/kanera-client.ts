@@ -49,7 +49,7 @@ const UUID_SEGMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 const CARD_KEY_SEGMENT = /^[A-Z][A-Z0-9]{1,9}-[1-9][0-9]*$/iu;
 const ORGANISATION_KEY_SEGMENT = /^[A-F0-9]{16}$/iu;
 
-export function upstreamRouteTemplate(pathname: string): string {
+function upstreamRouteTemplate(pathname: string): string {
   return pathname.split("/").map((segment) => {
     if (UUID_SEGMENT.test(segment)) return ":id";
     if (CARD_KEY_SEGMENT.test(segment)) return ":cardKey";

@@ -10,7 +10,6 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
   imports: [EmptyStateComponent, DocsLinkComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./api.page.html",
-  styleUrl: "./api.page.scss",
 })
 export class WorkspaceSettingsApiPage {
   protected readonly settings = inject(WorkspaceSettingsPage);

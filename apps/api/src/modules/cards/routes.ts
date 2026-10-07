@@ -1,12 +1,10 @@
 import { dto } from "@kanera/shared";
-import { cardPath } from "@kanera/shared/card-links";
 import { SERVER_EVENTS, type WireCard, type WireCardChecklist, type WireCardDetail } from "@kanera/shared/events";
-import { ACTIVITY_ACTION, activityEvents, boardMembers, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cards, cardWatchers, customFields, lists, users, type ActivityEvent } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, activityEvents, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cards, cardWatchers, customFields, lists, users, type ActivityEvent } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { randomUUID } from "node:crypto";
-import type { AuthClaims } from "../../auth/plugin.js";
-import { db, type Db } from "../../db.js";
+import { db, type Db, type Tx } from "../../db.js";
 import { env } from "../../env.js";
 import { assignedCardVisibility, assertBatchCardVisibility, assertBoardAccess, assertCardAccess } from "../../lib/access.js";
 import {
@@ -27,7 +25,7 @@ import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { assertValidOptionIds, assertWorkspaceMemberIds, buildCustomFieldValueColumns, customFieldValueEquals, describeCustomFieldValue, emptyValueColumns, hasCustomFieldValue, type CustomFieldValueColumns } from "../../lib/custom-fields.js";
 import { AppError, badRequest, notFound } from "../../lib/errors.js";
 import { allocateCardKeys, resolveCardKey } from "../../lib/card-keys.js";
-import { externalEmbeddedMediaReferences, signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls } from "../../lib/media-keys.js";
+import { signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls } from "../../lib/media-keys.js";
 import { replaceCardMentions } from "../../lib/mentions.js";
 import { clearNotificationsForCards, clearOverdueChecklistItemNotifications, clearOverdueNotificationsForCards, emitDeletedNotifications, emitRelocatedNotifications, relocateNotificationsForCard, syncDirectNotificationForActivity } from "../../lib/notifications.js";
 import { createOverdueNotificationsForCards } from "../../lib/overdue-notifications.js";
@@ -48,27 +46,16 @@ import {
 import { emitToBoard } from "../../realtime/emit.js";
 import { loadLinkedNotesForCard, repairInternalLinksAroundCard, replaceInternalLinksForSource } from "../../lib/internal-links.js";
 import { assertGlobalWorkSeparatorContext, positionForGlobalWorkLaneInsert } from "../global-work-separators/routes.js";
+import { duplicateCardInto, emitDuplicatedCardIntoBoard, resolveDuplicateTargetList } from "./duplicate-card.js";
+import { absoluteCardUrl, toWireCard } from "../../lib/wire-card.js";
+import { assertCardActive, assertIntegrationEmbeddedMediaStoredLocally } from "../../lib/card-guards.js";
+import { attachmentRowBaseColumns } from "../../lib/attachment-rows.js";
+import { ensureBoardMembershipForUsers, shouldAutoWatchAuthoredCards } from "../../lib/card-assignment.js";
+import type { AuthClaims } from "../../auth/plugin.js";
 
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 const CHECKLIST_MISTAKE_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
 const CARD_ASSIGNEE_MISTAKE_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
 const CARD_LABEL_MISTAKE_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
-function assertCardActive(card: Pick<typeof cards.$inferSelect, "archivedAt">) {
-  if (card.archivedAt) throw badRequest("archived cards are read-only");
-}
-
-function assertIntegrationEmbeddedMediaStoredLocally(markdown: string | null | undefined, clientId: string, authKind?: string) {
-  if (authKind !== "apiKey") return;
-  const externalRefs = externalEmbeddedMediaReferences(markdown, clientId);
-  if (externalRefs.length > 0) {
-    throw badRequest("inline media from integrations must be uploaded to Kanera before embedding");
-  }
-}
-
-function shouldAutoWatchAuthoredCards(authKind: AuthClaims["authKind"]) {
-  return authKind !== "apiKey";
-}
-
 function sortedIds(ids: readonly string[]): string[] {
   return [...ids].sort((a, b) => a.localeCompare(b));
 }
@@ -93,34 +80,26 @@ async function emitCoalescedCardActivityFeedItem(boardId: string, cardId: string
   } else await emitActivityFeedItemDeleted(previousBoardId, cardId, result.activity.id);
 }
 
-function cardUrl(organisationKey: string, cardKey: string): string {
-  return new URL(cardPath(organisationKey, cardKey), env.WEB_ORIGIN).toString();
+/**
+ * Loads a card for a mutation: 404 when it does not exist, then the editor-role access check. Callers
+ * still call `assertCardActive` themselves where archived cards must be rejected, so the two routes
+ * that deliberately operate on archived cards (archive/unarchive) read the same way.
+ */
+async function loadEditableCard(auth: AuthClaims, id: string) {
+  const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
+  if (!card) throw notFound();
+  const ctx = await assertCardAccess(auth, card, "editor");
+  return { card, ctx };
 }
 
-function toWireCard(card: typeof cards.$inferSelect, clientId: string): WireCard {
-  const { clientToken: _clientToken, ...publicCard } = card;
-  return {
-    ...publicCard,
-    description: signEmbeddedMediaUrls(card.description, clientId),
-    url: cardUrl(card.organisationKey, card.key),
-  };
-}
-
-async function ensureBoardMembershipForUsers(
-  boardId: string,
-  workspaceId: string,
-  userIds: string[],
-): Promise<string[]> {
-  if (userIds.length === 0) return [];
-  // Only explicit, non-observer board members can own work. Board membership is the access model,
-  // so assignment never auto-adds anyone: a workspace member who is not on the board is ineligible
-  // until an admin adds them. Observers can watch and be notified but cannot be card owners.
-  const existingMembers = await db
-    .select({ userId: boardMembers.userId, role: boardMembers.role })
-    .from(boardMembers)
-    .where(and(eq(boardMembers.boardId, boardId), inArray(boardMembers.userId, userIds)));
-  const eligible = new Set(existingMembers.filter((m) => m.role !== "observer").map((m) => m.userId));
-  return userIds.filter((uid) => eligible.has(uid));
+/** A checklist that belongs to the given card, or null. Both ids must match so a checklist id cannot be used across cards. */
+async function loadChecklistForCard(id: string, checklistId: string) {
+  const [checklist] = await db
+    .select()
+    .from(cardChecklists)
+    .where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id)))
+    .limit(1);
+  return checklist ?? null;
 }
 
 async function actorTimezone(userId: string): Promise<string> {
@@ -141,7 +120,7 @@ async function prepareNewChecklistItems(
 ): Promise<{ assigneeNames: Map<string, string | null>; timezone: string | null }> {
   const assignees = collectAssignees(items, itemPath);
   const assigneeIds = [...assignees.keys()];
-  const eligible = new Set(await ensureBoardMembershipForUsers(boardId, workspaceId, assigneeIds));
+  const eligible = new Set(await ensureBoardMembershipForUsers(boardId, assigneeIds));
   for (const [userId, path] of assignees) {
     if (!eligible.has(userId)) throw checklistValidationError(path, "assignee is not an assignable (non-observer) member of this board");
   }
@@ -415,7 +394,7 @@ async function rebalanceChecklists(cardId: string, parentItemId: string | null, 
     .from(cardChecklists)
     .where(siblingScope)
     .orderBy(asc(cardChecklists.position));
-  const positions = rows.map((row, index) => ({ id: row.id, position: ((index + 1) * 1000).toFixed(10) }));
+  const positions = rows.map((row, index) => ({ id: row.id, position: positionAtIndex(index) }));
   await Promise.all(positions.map((row) =>
     tx.update(cardChecklists).set({ position: row.position, updatedAt: new Date() }).where(eq(cardChecklists.id, row.id)),
   ));
@@ -428,7 +407,7 @@ async function rebalanceChecklistItems(checklistId: string, tx: Tx = db) {
     .from(cardChecklistItems)
     .where(eq(cardChecklistItems.checklistId, checklistId))
     .orderBy(asc(cardChecklistItems.position));
-  const positions = rows.map((row, index) => ({ id: row.id, position: ((index + 1) * 1000).toFixed(10) }));
+  const positions = rows.map((row, index) => ({ id: row.id, position: positionAtIndex(index) }));
   await Promise.all(positions.map((row) =>
     tx.update(cardChecklistItems).set({ position: row.position, updatedAt: new Date() }).where(eq(cardChecklistItems.id, row.id)),
   ));
@@ -467,14 +446,7 @@ async function loadChecklistsForCard(cardId: string, tx: Tx = db): Promise<WireC
   return (await loadChecklistsForCards([cardId], tx)).get(cardId) ?? [];
 }
 
-import {
-  duplicateCardInto,
-  emitDuplicatedCardIntoBoard,
-  resolveDuplicateTargetList,
-} from "./duplicate-card.js";
-
 type BoardAccessContext = Awaited<ReturnType<typeof assertBoardAccess>>;
-
 
 type CardCompletionWrite = {
   card: typeof cards.$inferSelect;
@@ -581,7 +553,7 @@ export async function cardRoutes(
       if (error instanceof AppError && (error.statusCode === 403 || error.statusCode === 404)) throw notFound();
       throw error;
     }
-    return { ...card, url: cardUrl(card.organisationKey, card.key) };
+    return { ...card, url: absoluteCardUrl(card.organisationKey, card.key) };
   });
 
   app.get("/cards/:id/detail", async (req): Promise<WireCardDetail> => {
@@ -607,24 +579,7 @@ export async function cardRoutes(
         .from(cardAssignees)
         .where(eq(cardAssignees.cardId, id)),
       db
-        .select({
-          id: cardAttachments.id,
-          cardId: cardAttachments.cardId,
-          fileName: cardAttachments.fileName,
-          mimeType: cardAttachments.mimeType,
-          byteSize: cardAttachments.byteSize,
-          url: cardAttachments.url,
-          fileKey: cardAttachments.fileKey,
-          thumbnailUrl: cardAttachments.thumbnailUrl,
-          thumbnailFileKey: cardAttachments.thumbnailFileKey,
-          createdAt: cardAttachments.createdAt,
-          uploadedById: cardAttachments.uploadedById,
-          uploadedByName: users.displayName,
-          uploadedByAvatarUrl: users.avatarUrl,
-          uploadedByClientId: users.clientId,
-          source: cardAttachments.source,
-          commentId: cardAttachments.commentId,
-        })
+        .select(attachmentRowBaseColumns)
         .from(cardAttachments)
         .innerJoin(users, eq(users.id, cardAttachments.uploadedById))
         .where(eq(cardAttachments.cardId, id))
@@ -800,7 +755,7 @@ export async function cardRoutes(
     }
 
     if (assigneeIds.length > 0) {
-      const eligibleUserIds = await ensureBoardMembershipForUsers(boardId, ctx.workspaceId, assigneeIds);
+      const eligibleUserIds = await ensureBoardMembershipForUsers(boardId, assigneeIds);
       if (eligibleUserIds.length !== assigneeIds.length) {
         throw badRequest("one or more user ids are not assignable members");
       }
@@ -1211,7 +1166,7 @@ export async function cardRoutes(
     const ctx = await assertBoardAccess(req.auth, boardId, "editor");
     const loaded = await loadBulkBoardCards(boardId, body.cardIds, ctx.assignedItemsOnly ? req.auth.sub : undefined);
     const { cards: targetCards, skippedCardIds } = activeBulkCards(loaded);
-    const eligibleUserIds = await ensureBoardMembershipForUsers(boardId, ctx.workspaceId, userIds);
+    const eligibleUserIds = await ensureBoardMembershipForUsers(boardId, userIds);
     if (eligibleUserIds.length !== userIds.length) throw badRequest("one or more user ids are not assignable members");
     const changedUsers = await db
       .select({ id: users.id, displayName: users.displayName })
@@ -1448,9 +1403,7 @@ export async function cardRoutes(
     const { id } = req.params as { id: string };
     const body = dto.updateCardBody.parse(req.body);
 
-    const [current] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
-    if (!current) throw notFound();
-    const ctx = await assertCardAccess(req.auth, current, "editor");
+    const { card: current, ctx } = await loadEditableCard(req.auth, id);
     assertCardActive(current);
     assertIntegrationEmbeddedMediaStoredLocally(body.description, req.auth.cid, req.auth.authKind);
     const description = body.description === undefined
@@ -1581,9 +1534,7 @@ export async function cardRoutes(
   app.patch("/cards/:id/completion", async (req) => {
     const { id } = req.params as { id: string };
     const body = dto.setCardCompletionBody.parse(req.body);
-    const [current] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
-    if (!current) throw notFound();
-    const ctx = await assertCardAccess(req.auth, current, "editor");
+    const { card: current, ctx } = await loadEditableCard(req.auth, id);
     assertCardActive(current);
     if (body.completed === Boolean(current.completedAt)) {
       return toWireCard(current, req.auth.cid);
@@ -1618,9 +1569,7 @@ export async function cardRoutes(
       throw badRequest("Global Work layout anchors are not available through this API");
     }
 
-    const [current] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
-    if (!current) throw notFound();
-    const ctx = await assertCardAccess(req.auth, current, "editor");
+    const { card: current, ctx } = await loadEditableCard(req.auth, id);
     assertCardActive(current);
 
     const [targetList] = await db.select().from(lists).where(eq(lists.id, body.listId)).limit(1);
@@ -1885,7 +1834,7 @@ export async function cardRoutes(
       .from(cardAssignees)
       .where(eq(cardAssignees.cardId, source.id));
     const currentAssigneeIds = currentAssignees.map((a) => a.userId);
-    const eligibleAssigneeIds = await ensureBoardMembershipForUsers(body.boardId, dstCtx.workspaceId, currentAssigneeIds);
+    const eligibleAssigneeIds = await ensureBoardMembershipForUsers(body.boardId, currentAssigneeIds);
     // Assignment is board-scoped: anyone who is not a non-observer member of the destination board
     // must be unassigned as part of the move. Leaving them on the card would keep sending them
     // comment/due-date notifications for a card (and board) they can no longer open.
@@ -1970,24 +1919,7 @@ export async function cardRoutes(
       db.select({ labelId: cardLabelAssignments.labelId }).from(cardLabelAssignments).where(eq(cardLabelAssignments.cardId, id)),
       db.select({ userId: cardAssignees.userId }).from(cardAssignees).where(eq(cardAssignees.cardId, id)),
       db
-        .select({
-          id: cardAttachments.id,
-          cardId: cardAttachments.cardId,
-          fileName: cardAttachments.fileName,
-          mimeType: cardAttachments.mimeType,
-          byteSize: cardAttachments.byteSize,
-          url: cardAttachments.url,
-          fileKey: cardAttachments.fileKey,
-          thumbnailUrl: cardAttachments.thumbnailUrl,
-          thumbnailFileKey: cardAttachments.thumbnailFileKey,
-          createdAt: cardAttachments.createdAt,
-          uploadedById: cardAttachments.uploadedById,
-          uploadedByName: users.displayName,
-          uploadedByAvatarUrl: users.avatarUrl,
-          uploadedByClientId: users.clientId,
-          source: cardAttachments.source,
-          commentId: cardAttachments.commentId,
-        })
+        .select(attachmentRowBaseColumns)
         .from(cardAttachments)
         .innerJoin(users, eq(users.id, cardAttachments.uploadedById))
         .where(eq(cardAttachments.cardId, id)),
@@ -2191,9 +2123,7 @@ export async function cardRoutes(
   app.put("/cards/:id/custom-fields/:fieldId", async (req) => {
     const { id, fieldId } = req.params as { id: string; fieldId: string };
     const body = dto.setCustomFieldValueBody.parse(req.body);
-    const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
-    if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card, "editor");
+    const { card, ctx } = await loadEditableCard(req.auth, id);
     assertCardActive(card);
     const [field] = await db.select().from(customFields).where(eq(customFields.id, fieldId)).limit(1);
     if (!field || field.workspaceId !== ctx.workspaceId) throw notFound("custom field not found");
@@ -2390,9 +2320,7 @@ export async function cardRoutes(
   app.post("/cards/:id/checklists", async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = dto.createChecklistBody.parse(req.body);
-    const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
-    if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card, "editor");
+    const { card, ctx } = await loadEditableCard(req.auth, id);
     assertCardActive(card);
     const parentItemId = body.parentItemId ?? null;
     if (parentItemId) {
@@ -2479,9 +2407,7 @@ export async function cardRoutes(
   app.post("/cards/:id/checklist-templates/apply", async (req) => {
     const { id } = req.params as { id: string };
     const body = dto.applyChecklistTemplatesBody.parse(req.body);
-    const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
-    if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card, "editor");
+    const { card, ctx } = await loadEditableCard(req.auth, id);
     assertCardActive(card);
 
     const requestedTemplateIds = Array.from(new Set(body.templateIds));
@@ -2518,15 +2444,9 @@ export async function cardRoutes(
   app.patch("/cards/:id/checklists/:checklistId", async (req) => {
     const { id, checklistId } = req.params as { id: string; checklistId: string };
     const body = dto.updateChecklistBody.parse(req.body);
-    const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
-    if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card, "editor");
+    const { card, ctx } = await loadEditableCard(req.auth, id);
     assertCardActive(card);
-    const [current] = await db
-      .select()
-      .from(cardChecklists)
-      .where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id)))
-      .limit(1);
+    const current = await loadChecklistForCard(id, checklistId);
     if (!current) throw notFound("checklist not found");
 
     const { checklist, activity } = await db.transaction(async (tx) => {
@@ -2559,15 +2479,9 @@ export async function cardRoutes(
 
   app.delete("/cards/:id/checklists/:checklistId", async (req, reply) => {
     const { id, checklistId } = req.params as { id: string; checklistId: string };
-    const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
-    if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card, "editor");
+    const { card, ctx } = await loadEditableCard(req.auth, id);
     assertCardActive(card);
-    const [current] = await db
-      .select()
-      .from(cardChecklists)
-      .where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id)))
-      .limit(1);
+    const current = await loadChecklistForCard(id, checklistId);
     if (!current) throw notFound("checklist not found");
 
     const result = await db.transaction(async (tx) => {
@@ -2639,11 +2553,7 @@ export async function cardRoutes(
     if (!card) throw notFound();
     await assertCardAccess(req.auth, card, "editor");
     assertCardActive(card);
-    const [current] = await db
-      .select()
-      .from(cardChecklists)
-      .where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id)))
-      .limit(1);
+    const current = await loadChecklistForCard(id, checklistId);
     if (!current) throw notFound("checklist not found");
     const prevPosition = current.position;
 
@@ -2769,11 +2679,9 @@ export async function cardRoutes(
     options: { itemPath: (index: number) => IssuePath; recordCreated: boolean },
   ): Promise<CreatedItemTree[]> {
     const { id, checklistId } = params;
-    const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
-    if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card, "editor");
+    const { card, ctx } = await loadEditableCard(req.auth, id);
     assertCardActive(card);
-    const [checklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
+    const checklist = await loadChecklistForCard(id, checklistId);
     if (!checklist) throw notFound("checklist not found");
     // Depth is a property of the target, so the leaf-only rule is enforced here rather than in the
     // body schema: items added to a sub-checklist carry only text and completion.
@@ -2860,11 +2768,9 @@ export async function cardRoutes(
   app.patch("/cards/:id/checklists/:checklistId/items/bulk", async (req) => {
     const { id, checklistId } = req.params as { id: string; checklistId: string };
     const body = dto.bulkUpdateChecklistItemsBody.parse(req.body);
-    const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
-    if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card, "editor");
+    const { card, ctx } = await loadEditableCard(req.auth, id);
     assertCardActive(card);
-    const [checklist] = await db.select().from(cardChecklists).where(and(eq(cardChecklists.id, checklistId), eq(cardChecklists.cardId, id))).limit(1);
+    const checklist = await loadChecklistForCard(id, checklistId);
     if (!checklist) throw notFound("checklist not found");
     if (checklist.parentItemId) throw badRequest("nested checklist items do not support assignees or due dates");
 
@@ -2879,7 +2785,7 @@ export async function cardRoutes(
     const nextAssigneeId = hasAssigneeUpdate ? body.assigneeId : undefined;
     let nextAssigneeName: string | null = null;
     if (nextAssigneeId) {
-      const eligibleIds = await ensureBoardMembershipForUsers(card.boardId, ctx.workspaceId, [nextAssigneeId]);
+      const eligibleIds = await ensureBoardMembershipForUsers(card.boardId, [nextAssigneeId]);
       if (!eligibleIds.includes(nextAssigneeId)) throw badRequest("assignee is not an assignable member");
       const [assignee] = await db
         .select({ displayName: users.displayName })
@@ -3030,9 +2936,7 @@ export async function cardRoutes(
    * card, so a stale or foreign id is a 404 rather than an edit on someone else's card.
    */
   async function loadChecklistItemTarget(req: FastifyRequest, params: { id: string; checklistId?: string; itemId: string }): Promise<ChecklistItemUpdateTarget> {
-    const [card] = await db.select().from(cards).where(eq(cards.id, params.id)).limit(1);
-    if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card, "editor");
+    const { card, ctx } = await loadEditableCard(req.auth, params.id);
     assertCardActive(card);
     const [row] = await db
       .select({ item: cardChecklistItems, checklist: cardChecklists })
@@ -3066,7 +2970,7 @@ export async function cardRoutes(
     actorId: string,
     options: { path?: IssuePath; timezone?: () => Promise<string> } = {},
   ): Promise<PreparedChecklistItemUpdate> {
-    const { card, ctx, checklist, current } = target;
+    const { card, checklist, current } = target;
     if (checklist.parentItemId) {
       const field = (["description", "assigneeId", "dueDateLocalDate", "dueDateSlot"] as const).find((key) => body[key] !== undefined);
       if (field) {
@@ -3108,7 +3012,7 @@ export async function cardRoutes(
     let previousAssigneeName: string | null = null;
 
     if (nextAssigneeId) {
-      const eligibleIds = await ensureBoardMembershipForUsers(card.boardId, ctx.workspaceId, [nextAssigneeId]);
+      const eligibleIds = await ensureBoardMembershipForUsers(card.boardId, [nextAssigneeId]);
       if (!eligibleIds.includes(nextAssigneeId)) {
         if (options.path) throw checklistValidationError([...options.path, "assigneeId"], "assignee is not an assignable (non-observer) member of this board");
         throw badRequest("assignee is not an assignable member");
@@ -3403,9 +3307,7 @@ export async function cardRoutes(
   app.patch("/cards/:id/checklist-items", async (req) => {
     const { id } = req.params as { id: string };
     const body = dto.updateChecklistItemsBody.parse(req.body);
-    const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
-    if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card, "editor");
+    const { card, ctx } = await loadEditableCard(req.auth, id);
     assertCardActive(card);
     const rows = await db
       .select({ item: cardChecklistItems, checklist: cardChecklists })
@@ -3504,9 +3406,7 @@ export async function cardRoutes(
   app.patch("/cards/:id/archive", async (req) => {
     const { id } = req.params as { id: string };
     const body = dto.setCardArchivedBody.parse(req.body);
-    const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
-    if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card, "editor");
+    const { card, ctx } = await loadEditableCard(req.auth, id);
 
     const archivedAt = body.archived ? (card.archivedAt ?? new Date()) : null;
     if (body.archived === Boolean(card.archivedAt)) {
@@ -3544,9 +3444,7 @@ export async function cardRoutes(
 
   app.delete("/cards/:id/custom-fields/:fieldId", async (req, reply) => {
     const { id, fieldId } = req.params as { id: string; fieldId: string };
-    const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
-    if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card, "editor");
+    const { card, ctx } = await loadEditableCard(req.auth, id);
     assertCardActive(card);
     const [field] = await db.select().from(customFields).where(eq(customFields.id, fieldId)).limit(1);
     if (!field || field.workspaceId !== ctx.workspaceId) throw notFound("custom field not found");
@@ -3599,9 +3497,7 @@ export async function cardRoutes(
   app.put("/cards/:id/labels", async (req) => {
     const { id } = req.params as { id: string };
     const body = dto.setCardLabelsBody.parse(req.body);
-    const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
-    if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card, "editor");
+    const { card, ctx } = await loadEditableCard(req.auth, id);
     assertCardActive(card);
     const currentAssignments = await db
       .select({ labelId: cardLabelAssignments.labelId })
@@ -3708,13 +3604,11 @@ export async function cardRoutes(
     const { id } = req.params as { id: string };
     const body = dto.setCardAssigneesBody.parse(req.body);
     const nextUserIds = Array.from(new Set(body.userIds));
-    const [card] = await db.select().from(cards).where(eq(cards.id, id)).limit(1);
-    if (!card) throw notFound();
-    const ctx = await assertCardAccess(req.auth, card, "editor");
+    const { card, ctx } = await loadEditableCard(req.auth, id);
     assertCardActive(card);
 
     if (nextUserIds.length > 0) {
-      const eligibleUserIds = await ensureBoardMembershipForUsers(card.boardId, ctx.workspaceId, nextUserIds);
+      const eligibleUserIds = await ensureBoardMembershipForUsers(card.boardId, nextUserIds);
       if (eligibleUserIds.length !== nextUserIds.length) {
         throw badRequest("one or more user ids are not assignable members");
       }

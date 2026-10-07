@@ -2,7 +2,7 @@ import type { BacklinkSummary, LinkedInternalSummary } from "@kanera/shared/dto"
 import { boards, cards, internalLinks, lists, notes, type InternalLinkSourceType, type InternalLinkTargetType, type Note } from "@kanera/shared/schema";
 import { and, eq, inArray, like, or } from "drizzle-orm";
 import type { AuthClaims } from "../auth/plugin.js";
-import { db } from "../db.js";
+import { db, type TxOnly as Tx } from "../db.js";
 import { env } from "../env.js";
 import { assertBoardAccess, assertCardAccess, assertWorkspaceAccess } from "./access.js";
 import { resolveCardKey } from "./card-keys.js";
@@ -17,7 +17,6 @@ const CARD_KEY_PATH_RE = /^\/o\/([A-Fa-f0-9]{16})\/c\/([A-Za-z][A-Za-z0-9]{1,9}-
 const WORKSPACE_NOTES_PATH_RE = /^\/w\/([0-9a-fA-F-]{36})\/notes(?:\/)?$/;
 const UUID_RE = /^[0-9a-fA-F-]{36}$/;
 
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type DbLike = typeof db | Tx;
 
 export type ParsedInternalLink =
@@ -95,7 +94,7 @@ export function parseInternalUrl(raw: string): ParsedInternalLink | null {
   return null;
 }
 
-export function extractInternalUrls(markdown: string | null | undefined): string[] {
+function extractInternalUrls(markdown: string | null | undefined): string[] {
   if (!markdown) return [];
   // Markdown autolinks (`<https://...>`) and ordinary prose punctuation can
   // sit directly beside a URL. Keep those delimiters out of persistence so

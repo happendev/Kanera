@@ -24,6 +24,18 @@ export function parseDateKey(key: string): Date {
   return new Date(`${key}T12:00:00`);
 }
 
+/**
+ * Parses a YYYY-MM-DD input value to a local-midnight Date, or null when the text is not a real
+ * calendar date (Feb 30 rolls over in `new Date`, so the parts are checked after construction).
+ */
+export function parseDateInputValue(value: string): Date | null {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+  return date;
+}
+
 /** The viewer's IANA zone, as sent to any server query that buckets by calendar day. */
 export function viewerTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";

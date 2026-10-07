@@ -44,6 +44,8 @@ import type { ImageLightboxItem } from "../board/image-lightbox.component";
 import { NotesState } from "./notes.service";
 import { formatDateTime } from "../../shared/date-format";
 import { viewerTimeZone } from "../../shared/day-key.util";
+import { clipboardAttachmentFiles, dragTargetElement, hasDraggedFiles, isEditablePasteTarget, isEditorDropTarget } from "../../shared/attachments/file-transfer";
+import { openAttachmentPreview, toLightboxAttachments } from "../../shared/attachments/attachment-lightbox";
 
 const LOCK_HEARTBEAT_MS = 30_000; // 30 seconds
 const OFFLINE_DRAFT_MESSAGES = new Set([
@@ -349,19 +351,7 @@ export class NoteEditorComponent implements OnDestroy {
   ].join(",");
   readonly canChangeAttachments = computed(() => this.canEdit() && !this.lockedByOther());
   // Match card detail: the gallery contains every renderable attachment, preserving list order.
-  readonly lightboxAttachments = computed(() => this.attachments()
-    .flatMap((attachment) => {
-      const mediaType = attachmentPreviewType(attachment.mimeType, attachment.fileName);
-      const src = visibleSignedMediaUrl(attachment.url);
-      return src && mediaType ? [{
-        id: attachment.id,
-        src,
-        fileName: attachment.fileName,
-        createdAt: attachment.createdAt,
-        mediaType,
-        mimeType: attachment.mimeType,
-      }] : [];
-    }));
+  readonly lightboxAttachments = computed(() => toLightboxAttachments(this.attachments()));
   readonly lightboxItems = computed<ImageLightboxItem[]>(() => this.lightboxAttachments()
     .map(({ id: _id, ...item }) => item));
 
@@ -915,12 +905,12 @@ export class NoteEditorComponent implements OnDestroy {
   }
 
   private readonly handleAttachmentDragCapture = (event: DragEvent) => {
-    if (!this.hasDraggedFiles(event)) return;
+    if (!hasDraggedFiles(event.dataTransfer)) return;
     if (
       !this.canChangeAttachments()
       || !this.isDragInsideShell(event)
-      || this.isEditorDropTarget(event.target)
-      || this.isEditablePasteTarget(event.target)
+      || isEditorDropTarget(event.target)
+      || isEditablePasteTarget(event.target)
     ) {
       this.attachmentDragActive.set(false);
     }
@@ -940,7 +930,7 @@ export class NoteEditorComponent implements OnDestroy {
   }
 
   onAttachmentDragLeave(event: DragEvent) {
-    if (!this.hasDraggedFiles(event)) return;
+    if (!hasDraggedFiles(event.dataTransfer)) return;
     const current = this.shell()?.nativeElement ?? event.currentTarget as Node | null;
     const related = event.relatedTarget as Node | null;
     if (!current || !related || !current.contains(related)) {
@@ -956,58 +946,29 @@ export class NoteEditorComponent implements OnDestroy {
   }
 
   async onNotePaste(event: ClipboardEvent) {
-    if (event.defaultPrevented || !this.canChangeAttachments() || this.isEditablePasteTarget(event.target)) return;
+    if (event.defaultPrevented || !this.canChangeAttachments() || isEditablePasteTarget(event.target)) return;
 
-    const files = this.clipboardAttachmentFiles(event.clipboardData);
+    const files = clipboardAttachmentFiles(event.clipboardData);
     if (files.length === 0) return;
 
     event.preventDefault();
     await this.uploadAttachmentFiles(files);
   }
 
-  private clipboardAttachmentFiles(data: DataTransfer | null): File[] {
-    if (!data) return [];
-    const files: File[] = [];
-    for (const item of Array.from(data.items ?? [])) {
-      if (item.kind !== "file") continue;
-      const file = item.getAsFile();
-      if (file) files.push(file);
-    }
-    return files.length > 0 ? files : Array.from(data.files ?? []);
-  }
-
-  private isEditablePasteTarget(target: EventTarget | null): boolean {
-    if (!(target instanceof Element)) return false;
-    return Boolean(target.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']"));
-  }
-
   private shouldHandleAttachmentDrag(event: DragEvent): boolean {
-    if (event.defaultPrevented || !this.hasDraggedFiles(event) || !this.isDragInsideShell(event)) return false;
-    if (this.isEditorDropTarget(event.target) || this.isEditablePasteTarget(event.target)) {
+    if (event.defaultPrevented || !hasDraggedFiles(event.dataTransfer) || !this.isDragInsideShell(event)) return false;
+    if (isEditorDropTarget(event.target) || isEditablePasteTarget(event.target)) {
       this.attachmentDragActive.set(false);
       return false;
     }
     return true;
   }
 
-  private isEditorDropTarget(target: EventTarget | null): boolean {
-    if (!(target instanceof Element)) return false;
-    // The note body editor inserts dropped files into markdown, so the shell-level
-    // note attachment target must yield while the pointer is over that editor.
-    return Boolean(target.closest("k-description-editor"));
-  }
-
   private isDragInsideShell(event: DragEvent): boolean {
     const shell = this.shell()?.nativeElement;
     if (!shell) return false;
-    const target = this.dragTargetElement(event);
+    const target = dragTargetElement(event);
     return Boolean(target && shell.contains(target));
-  }
-
-  private dragTargetElement(event: DragEvent): Element | null {
-    if (event.target instanceof Element) return event.target;
-    if (event.clientX || event.clientY) return document.elementFromPoint(event.clientX, event.clientY);
-    return null;
   }
 
   private async uploadAttachmentFiles(files: File[]) {
@@ -1015,13 +976,6 @@ export class NoteEditorComponent implements OnDestroy {
     // Validation, per-file progress, retry, and error formatting all live in the queue; on success
     // it prepends the new attachment via the onUploaded hook configured in the constructor.
     this.uploads.add(files);
-  }
-
-  private hasDraggedFiles(event: DragEvent): boolean {
-    const data = event.dataTransfer;
-    if (!data) return false;
-    if (Array.from(data.types ?? []).some((type) => type === "Files" || type === "application/x-moz-file")) return true;
-    return Array.from(data.items ?? []).some((item) => item.kind === "file");
   }
 
   async confirmDeleteAttachment(attachmentId: string, fileName: string) {
@@ -1071,18 +1025,7 @@ export class NoteEditorComponent implements OnDestroy {
   }
 
   private openAttachmentPreview(attachmentId: string, mediaType: AttachmentPreviewType, event?: Event): boolean {
-    const attachments = this.lightboxAttachments();
-    const initialIndex = attachments.findIndex((attachment) => attachment.id === attachmentId);
-    const selected = attachments[initialIndex];
-    if (!selected || selected.mediaType !== mediaType) return false;
-
-    const { id: _id, ...item } = selected;
-    this.imageLightbox.open({
-      ...item,
-      images: this.lightboxItems(),
-      initialIndex,
-    }, event);
-    return true;
+    return openAttachmentPreview(this.imageLightbox, this.lightboxAttachments(), attachmentId, mediaType, event);
   }
 
   openInlineAttachment(attachment: {

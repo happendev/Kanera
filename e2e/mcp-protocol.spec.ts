@@ -6,7 +6,7 @@ import { Client, ProtocolError, StreamableHTTPClientTransport, type Transport, t
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import ports from "./ports.json";
 import { expect, test } from "./support/fixtures";
-import { boardHref, cardTile, openBoard, workspaceSettingsHref } from "./support/ui";
+import { boardIdOf, cardTile, createWorkspaceApiKey, expectCardTileMounted, openBoard, workspaceSettingsHref } from "./support/ui";
 
 const mcpUrl = `http://localhost:${ports.mcp}/mcp`;
 const publicApiOrigin = `http://localhost:${ports.publicApi}`;
@@ -113,15 +113,9 @@ async function exercise(client: Client, cell: string, target: { boardId: string;
 
 test("both protocol eras work over HTTP and stdio: discovery, reads, writes, resources, prompts, cancellation and errors", async ({ page, signIn, uniqueName }, testInfo) => {
   await signIn(page, "amelia");
-  const boardId = (await boardHref(page, "Platform Delivery")).split("/")[2]!;
+  const boardId = await boardIdOf(page, "Platform Delivery");
   const settings = await workspaceSettingsHref(page, "Platform Delivery");
-  await page.goto(`${settings}/api`);
-  await page.locator('input[name="apiKeyName"]').fill(uniqueName("MCP protocol key"));
-  await page.locator('select[name="apiKeyScope"]').selectOption("write");
-  await page.getByRole("button", { name: "Create API key" }).click();
-  const reveal = page.locator(".secret-reveal").filter({ has: page.getByRole("button", { name: "Copy API key" }) });
-  await expect(reveal).toBeVisible();
-  const apiKey = (await reveal.locator("code").innerText()).trim();
+  const apiKey = await createWorkspaceApiKey(page, settings, uniqueName("MCP protocol key"));
 
   // The board stays open for the whole matrix, so each cell's write must arrive live.
   await openBoard(page, "Platform Delivery");
@@ -151,7 +145,11 @@ test("both protocol eras work over HTTP and stdio: discovery, reads, writes, res
         }
       }
     }
-    for (const [cell, title] of titles) await expect(cardTile(page, title), `${cell} write reached the open board`).toBeVisible();
+    for (const [cell, title] of titles) {
+      // Mounts the tile first: late cells append past the lane's render window in a full-suite run.
+      await expectCardTileMounted(page, title);
+      await expect(cardTile(page, title), `${cell} write reached the open board`).toBeVisible();
+    }
   } finally {
     // Protocol evidence per cell; the API key never enters the artifact.
     await testInfo.attach("mcp-protocol-matrix.json", { body: JSON.stringify(evidence, null, 2), contentType: "application/json" });

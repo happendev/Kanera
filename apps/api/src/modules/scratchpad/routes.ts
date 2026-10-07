@@ -9,7 +9,7 @@ import {
 } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { db } from "../../db.js";
+import { db, type TxOnly as Tx } from "../../db.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { readAttachmentUpload } from "../../lib/read-attachment-upload.js";
 import {
@@ -18,14 +18,13 @@ import {
   isStorageFull,
   storageQuotaExceededError,
 } from "../../lib/entitlements.js";
-import { AppError, badRequest, forbidden, notFound } from "../../lib/errors.js";
+import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { assertWriteCapableCredential } from "../../lib/access.js";
 import { signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, unsignedMediaUrl } from "../../lib/media-keys.js";
 import { between } from "../../lib/position.js";
 import { rebalanceScratchpadNotes } from "../../lib/rebalance.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { scratchpadNoteAttachmentStorageKey } from "../../lib/storage/keys.js";
-import type { StorageProvider } from "../../lib/storage/types.js";
 import { stripAttachmentReferences } from "../../lib/strip-attachment-refs.js";
 // `emitToUserDurable`, not the fire-and-forget `emitToUser`: awaiting the durable write means the
 // response is only sent once the event is recorded, so a process that dies immediately after
@@ -33,8 +32,8 @@ import { stripAttachmentReferences } from "../../lib/strip-attachment-refs.js";
 // rebalance-before-move ordering below a real ordering rather than two racing background writes.
 // Failures are caught and logged inside the helper, so awaiting cannot fail the request.
 import { emitToUserDurable } from "../../realtime/emit.js";
+import { putAttachmentFile } from "../../lib/attachment-upload.js";
 
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type DbLike = typeof db | Tx;
 
 /**
@@ -83,14 +82,6 @@ async function lockScratchpadForWrite(userId: string, clientId: string, tx: Tx):
  */
 function wire(note: ScratchpadNote): WireScratchpadNote {
   return { ...note, content: signEmbeddedMediaUrls(note.content, note.clientId) ?? "" };
-}
-
-async function putAttachmentFile(storage: StorageProvider, key: string, body: Buffer, contentType: string) {
-  try {
-    await storage.put(key, body, contentType);
-  } catch {
-    throw new AppError(503, "STORAGE_UNAVAILABLE", "attachment storage unavailable");
-  }
 }
 
 /** Neighbour positions for a move, over the owner's flat page list. */

@@ -8,7 +8,6 @@ import { fileTooLargeMessage, storageFullMessage } from "../../shared/storage-me
 const IMAGE_MIMES = new Set([
   "image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml",
 ]);
-export const DESCRIPTION_EDITOR_ALLOWED_MIMES: ReadonlySet<string> = new Set(Object.keys(ALLOWED_ATTACHMENT_MIME));
 export const DESCRIPTION_EDITOR_ACCEPT = [
   ...Object.keys(ALLOWED_ATTACHMENT_MIME),
   ...ALLOWED_ATTACHMENT_EXTENSIONS.map((ext) => `.${ext}`),

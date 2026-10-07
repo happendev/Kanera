@@ -13,17 +13,18 @@ import {
   type McpEventSubscription,
   type WebhookEndpoint,
 } from "@kanera/shared/schema";
-import { and, asc, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, lt, sql, type SQL } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
-import type { PoolClient } from "pg";
 import { db, pool } from "../db.js";
 import { env } from "../env.js";
 import { loadActiveMcpSubscriptionsByWorkspace } from "../lib/mcp-events.js";
 import { startSweepScheduler } from "../lib/sweep-scheduler.js";
 import { enqueueWebhookDeliveriesForOutboxEvent, loadEnabledEndpointsByWorkspace } from "../lib/webhooks.js";
 import { broadcastToBoard, broadcastToClient, broadcastToUser, broadcastToWorkspace } from "./broadcast.js";
+import { startNotifyListener } from "./notify-listener.js";
 
-const OUTBOX_NOTIFY_CHANNEL = "kanera_event_outbox";
+/** Postgres NOTIFY channel pinged for every board/workspace outbox row; the board-mirror scheduler listens too. */
+export const OUTBOX_NOTIFY_CHANNEL = "kanera_event_outbox";
 const DIRECT_OUTBOX_NOTIFY_CHANNEL = "kanera_direct_realtime_outbox";
 const DEFAULT_PROCESS_LIMIT = 50;
 const PROCESSING_LEASE_SECONDS = 30;
@@ -343,39 +344,35 @@ export async function processDirectRealtimeOutbox(options: { log?: FastifyBaseLo
   return { processed: events.length, drainedFull: events.length >= limit };
 }
 
-export async function cleanupRealtimeOutbox(options: { log?: FastifyBaseLogger; now?: Date } = {}): Promise<number> {
+/**
+ * Purges rows every consumer has finished with, then the stuck backstop. The event outbox waits for
+ * both realtime and webhook fan-out; the direct outbox has only the realtime consumer.
+ */
+async function cleanupOutboxTable(
+  table: typeof eventOutbox | typeof directRealtimeOutbox,
+  processed: SQL,
+  label: "event outbox" | "direct realtime outbox",
+  options: { log?: FastifyBaseLogger; now?: Date } = {},
+): Promise<number> {
   const now = options.now ?? new Date();
   const cutoff = new Date(now.getTime() - env.REALTIME_OUTBOX_RETENTION_DAYS * 24 * 60 * 60 * 1000);
   const deleted = await db
-    .delete(eventOutbox)
-    .where(and(
-      eq(eventOutbox.realtimeDispatched, true),
-      eq(eventOutbox.webhooksEnqueued, true),
-      lt(eventOutbox.createdAt, cutoff),
-    ))
-    .returning({ id: eventOutbox.id });
+    .delete(table)
+    .where(and(processed, lt(table.createdAt, cutoff)))
+    .returning({ id: table.id });
   if (deleted.length > 0) {
-    options.log?.info({ deletedCount: deleted.length, retentionDays: env.REALTIME_OUTBOX_RETENTION_DAYS }, "purged processed event outbox rows");
+    options.log?.info({ deletedCount: deleted.length, retentionDays: env.REALTIME_OUTBOX_RETENTION_DAYS }, `purged processed ${label} rows`);
   }
-  const stuck = await purgeStuckOutboxRows(eventOutbox, now, options.log, "event outbox");
+  const stuck = await purgeStuckOutboxRows(table, now, options.log, label);
   return deleted.length + stuck;
 }
 
-export async function cleanupDirectRealtimeOutbox(options: { log?: FastifyBaseLogger; now?: Date } = {}): Promise<number> {
-  const now = options.now ?? new Date();
-  const cutoff = new Date(now.getTime() - env.REALTIME_OUTBOX_RETENTION_DAYS * 24 * 60 * 60 * 1000);
-  const deleted = await db
-    .delete(directRealtimeOutbox)
-    .where(and(
-      eq(directRealtimeOutbox.realtimeDispatched, true),
-      lt(directRealtimeOutbox.createdAt, cutoff),
-    ))
-    .returning({ id: directRealtimeOutbox.id });
-  if (deleted.length > 0) {
-    options.log?.info({ deletedCount: deleted.length, retentionDays: env.REALTIME_OUTBOX_RETENTION_DAYS }, "purged processed direct realtime outbox rows");
-  }
-  const stuck = await purgeStuckOutboxRows(directRealtimeOutbox, now, options.log, "direct realtime outbox");
-  return deleted.length + stuck;
+function cleanupRealtimeOutbox(options: { log?: FastifyBaseLogger; now?: Date } = {}): Promise<number> {
+  return cleanupOutboxTable(eventOutbox, and(eq(eventOutbox.realtimeDispatched, true), eq(eventOutbox.webhooksEnqueued, true))!, "event outbox", options);
+}
+
+function cleanupDirectRealtimeOutbox(options: { log?: FastifyBaseLogger; now?: Date } = {}): Promise<number> {
+  return cleanupOutboxTable(directRealtimeOutbox, eq(directRealtimeOutbox.realtimeDispatched, true), "direct realtime outbox", options);
 }
 
 /**
@@ -406,10 +403,6 @@ export function startRealtimeOutboxDispatcher(
   options: { log?: FastifyBaseLogger; pollMs?: number; onDeliveriesEnqueued?: () => void } = {},
 ): () => Promise<void> {
   const pollMs = options.pollMs ?? env.REALTIME_OUTBOX_POLL_MS;
-  let stopped = false;
-  let listener: PoolClient | null = null;
-  let listenerReady: Promise<PoolClient | null> | null = null;
-  let listenerReleased = false;
 
   // Drain dispatcher: single-flight, and when a run drains a full batch it continues
   // immediately so a backlog of outbox rows isn't paced one batch per poll window. After
@@ -432,33 +425,7 @@ export function startRealtimeOutboxDispatcher(
   // Wake on every realtime mutation: NOTIFY collapses the public-API → fanout latency to
   // the insert, with the poll loop as a durability fallback. trigger() respects the
   // dispatcher's single-flight guard, so a NOTIFY mid-run coalesces to one rerun.
-  listenerReady = pool.connect().then(async (client) => {
-    if (stopped) {
-      client.release();
-      return null;
-    }
-    client.on("notification", (message) => {
-      if (message.channel === OUTBOX_NOTIFY_CHANNEL) dispatcher.trigger();
-    });
-    client.on("error", (err) => {
-      options.log?.error({ err }, "event outbox listener failed");
-    });
-    try {
-      await client.query(`listen ${OUTBOX_NOTIFY_CHANNEL}`);
-    } catch (err) {
-      options.log?.error({ err }, "event outbox listen failed");
-    }
-    if (stopped) {
-      await client.query(`unlisten ${OUTBOX_NOTIFY_CHANNEL}`).catch(() => undefined);
-      client.release();
-      return null;
-    }
-    listener = client;
-    return client;
-  }).catch((err) => {
-    options.log?.error({ err }, "event outbox listener could not start");
-    return null;
-  });
+  const listener = startNotifyListener({ channel: OUTBOX_NOTIFY_CHANNEL, onNotify: () => dispatcher.trigger(), log: options.log, label: "event outbox" });
 
   const cleanup = startSweepScheduler({
     name: "realtime-outbox-cleanup",
@@ -468,17 +435,7 @@ export function startRealtimeOutboxDispatcher(
   });
 
   return async () => {
-    stopped = true;
-    const releaseListener = async () => {
-      if (listenerReleased) return;
-      listenerReleased = true;
-      const client = listener ?? await listenerReady;
-      if (!client) return;
-      listener = null;
-      await client.query(`unlisten ${OUTBOX_NOTIFY_CHANNEL}`).catch(() => undefined);
-      client.release();
-    };
-    await Promise.all([dispatcher.stop(), cleanup.stop(), releaseListener()]);
+    await Promise.all([dispatcher.stop(), cleanup.stop(), listener.release()]);
   };
 }
 
@@ -486,10 +443,6 @@ export function startDirectRealtimeOutboxDispatcher(
   options: { log?: FastifyBaseLogger; pollMs?: number } = {},
 ): () => Promise<void> {
   const pollMs = options.pollMs ?? env.REALTIME_OUTBOX_POLL_MS;
-  let stopped = false;
-  let listener: PoolClient | null = null;
-  let listenerReady: Promise<PoolClient | null> | null = null;
-  let listenerReleased = false;
 
   const dispatcher = startSweepScheduler({
     name: "direct-realtime-outbox",
@@ -498,33 +451,7 @@ export function startDirectRealtimeOutboxDispatcher(
     log: options.log,
   });
 
-  listenerReady = pool.connect().then(async (client) => {
-    if (stopped) {
-      client.release();
-      return null;
-    }
-    client.on("notification", (message) => {
-      if (message.channel === DIRECT_OUTBOX_NOTIFY_CHANNEL) dispatcher.trigger();
-    });
-    client.on("error", (err) => {
-      options.log?.error({ err }, "direct realtime outbox listener failed");
-    });
-    try {
-      await client.query(`listen ${DIRECT_OUTBOX_NOTIFY_CHANNEL}`);
-    } catch (err) {
-      options.log?.error({ err }, "direct realtime outbox listen failed");
-    }
-    if (stopped) {
-      await client.query(`unlisten ${DIRECT_OUTBOX_NOTIFY_CHANNEL}`).catch(() => undefined);
-      client.release();
-      return null;
-    }
-    listener = client;
-    return client;
-  }).catch((err) => {
-    options.log?.error({ err }, "direct realtime outbox listener could not start");
-    return null;
-  });
+  const listener = startNotifyListener({ channel: DIRECT_OUTBOX_NOTIFY_CHANNEL, onNotify: () => dispatcher.trigger(), log: options.log, label: "direct realtime outbox" });
 
   const cleanup = startSweepScheduler({
     name: "direct-realtime-outbox-cleanup",
@@ -534,16 +461,6 @@ export function startDirectRealtimeOutboxDispatcher(
   });
 
   return async () => {
-    stopped = true;
-    const releaseListener = async () => {
-      if (listenerReleased) return;
-      listenerReleased = true;
-      const client = listener ?? await listenerReady;
-      if (!client) return;
-      listener = null;
-      await client.query(`unlisten ${DIRECT_OUTBOX_NOTIFY_CHANNEL}`).catch(() => undefined);
-      client.release();
-    };
-    await Promise.all([dispatcher.stop(), cleanup.stop(), releaseListener()]);
+    await Promise.all([dispatcher.stop(), cleanup.stop(), listener.release()]);
   };
 }

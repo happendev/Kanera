@@ -12,6 +12,7 @@ import { DatePickerPopover } from "./date-picker.popover";
 import type { DueDateSlotSelection } from "./due-date.util";
 import { ANCHORED_HOST_STYLES, type AnchoredPanelPlacement } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
+import { byPosition } from "../../shared/position-sort";
 
 type AnyCard = Card | WireCard | WireCardSummary;
 type AnyList = List | WireList;
@@ -485,7 +486,7 @@ export class BulkCardActionsMenuPopover {
     const listIds = new Set(selectedCards.map((card) => card.listId));
     return selectedCards.length === selected.size && listIds.size === 1 ? Array.from(listIds)[0]! : null;
   });
-  readonly sortedLabels = computed(() => [...this.labels()].sort((a, b) => Number(a.position) - Number(b.position)));
+  readonly sortedLabels = computed(() => [...this.labels()].sort(byPosition));
   readonly assignableMembers = computed(() => {
     const meId = this.currentUserId();
     return this.members().filter((member) => member.role !== "observer").sort((a, b) => {

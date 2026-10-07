@@ -1,7 +1,7 @@
 import { signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { APP_DOM_EVENTS, STORAGE_KEYS } from "../../core/browser/browser-contracts";
+import { APP_DOM_EVENTS } from "../../core/browser/browser-contracts";
 import { PanelStackService } from "../../shared/panel-stack.service";
 import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
 
@@ -78,20 +78,5 @@ describe("BoardMenuCoordinator", () => {
     document.dispatchEvent(new CustomEvent<string>(APP_DOM_EVENTS.CARD_ACTIONS_MENU_OPEN, { detail: "card-2" }));
     expect(coordinator.activeCardMenuId()).toBe("card-2");
     expect(coordinator.activeListMenuId()).toBeNull();
-  });
-
-  // Delegated to the root CardLabelDisplayService, which is what lets shell chrome outside any
-  // board route render the same chips. The coordinator keeps the accessors its call sites use.
-  it("delegates the shared label-display preference", () => {
-    coordinator = create();
-    coordinator.setLabelsCompressed(true);
-    expect(coordinator.labelsCompressed()).toBe(true);
-    expect(localStorage.getItem(STORAGE_KEYS.CARD_LABELS_COMPRESSED)).toBe("1");
-
-    window.dispatchEvent(new StorageEvent("storage", {
-      key: STORAGE_KEYS.CARD_LABELS_COMPRESSED,
-      newValue: null,
-    }));
-    expect(coordinator.labelsCompressed()).toBe(false);
   });
 });

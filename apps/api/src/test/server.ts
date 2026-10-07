@@ -9,13 +9,6 @@ export async function buildTestServer(options: { slowRequestLogMs?: number } = {
   const { buildServer } = await import("../server.js");
   const app = await buildServer({
     enableRealtime: false,
-    enableOverdueScheduler: false,
-    enableDueDateAutomationScheduler: false,
-    enableDailyDigestScheduler: false,
-    enableEmailQueueScheduler: false,
-    enableArchivedCardCleanupScheduler: false,
-    enableWebhookDeliveryScheduler: false,
-    enableRealtimeOutboxDispatcher: false,
     logger: false,
     slowRequestLogMs: options.slowRequestLogMs,
     uploadsDir: ".tmp/test-uploads",

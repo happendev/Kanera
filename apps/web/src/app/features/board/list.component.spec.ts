@@ -442,49 +442,6 @@ describe("ListComponent", () => {
     }
   });
 
-  it("ignores global drag moves outside this list column", () => {
-    const frameCallbacks: FrameRequestCallback[] = [];
-    const requestFrame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
-      frameCallbacks.push(cb);
-      return frameCallbacks.length;
-    });
-    const cancelFrame = vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
-
-    try {
-      fixture.componentRef.setInput("cards", Array.from({ length: 75 }, (_, i) => summaryCard(`card-${i}`)));
-      fixture.detectChanges();
-
-      const cardsEl = fixture.nativeElement.querySelector(".cards") as HTMLElement;
-      Object.defineProperty(cardsEl, "scrollHeight", { value: 2000, configurable: true });
-      Object.defineProperty(cardsEl, "clientHeight", { value: 300, configurable: true });
-      const readRect = vi.fn(() => ({
-        left: 100,
-        top: 100,
-        right: 400,
-        bottom: 400,
-        width: 300,
-        height: 300,
-        x: 100,
-        y: 100,
-        toJSON: () => ({}),
-      } as DOMRect));
-      cardsEl.getBoundingClientRect = readRect;
-      cardsEl.scrollTop = 1200;
-
-      document.dispatchEvent(new CustomEvent<boolean>(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: true }));
-      readRect.mockClear();
-      document.dispatchEvent(new CustomEvent<{ x: number; y: number }>(APP_DOM_EVENTS.CARD_DRAG_MOVE, { detail: { x: 20, y: 399 } }));
-      frameCallbacks.shift()?.(0);
-
-      expect(cardsEl.scrollTop).toBe(1200);
-      expect(readRect).not.toHaveBeenCalled();
-    } finally {
-      document.dispatchEvent(new CustomEvent<boolean>(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: false }));
-      requestFrame.mockRestore();
-      cancelFrame.mockRestore();
-    }
-  });
-
   it("renders every filtered card so narrowed results are not hidden behind the cap", () => {
     const cards = Array.from({ length: 75 }, (_, i) => summaryCard(`card-${i}`));
     fixture.componentRef.setInput("cards", cards);

@@ -22,6 +22,7 @@ import { openCardDetailInNewTab } from "../card-navigation.util";
 import { DUE_DATE_SLOT_OPTIONS, dueDateSlotFor, isOverdue, type DueDateSlot } from "../due-date.util";
 import { formatDate, formatDateRange } from "../../../shared/date-format";
 import { boardStateCardStore, TABLE_CARD_STORE, type TableCardStore } from "../table-view/table-card-store";
+import { localDateKey, parseDateKey, startOfLocalDay } from "../../../shared/day-key.util";
 
 type AnyCard = Card | WireCard | WireCardSummary;
 type AnyList = List | WireList;
@@ -146,7 +147,7 @@ export class BoardCalendarViewComponent {
     { id: "month", icon: "calendar-month", label: "Month" },
     { id: "week", icon: "calendar-week", label: "Week" },
   ];
-  readonly anchorDate = signal(startOfDay(new Date()));
+  readonly anchorDate = signal(startOfLocalDay(new Date()));
   readonly activeActionsCardId = signal<string | null>(null);
   readonly actionsMenuPoint = signal<{ x: number; y: number } | null>(null);
   readonly weekdayLabels = WEEKDAY_LABELS;
@@ -230,11 +231,11 @@ export class BoardCalendarViewComponent {
       ? endOfWeek(new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0))
       : addDays(rangeStart, 6);
     const cardsByDate = this.cardsByDate();
-    const todayKey = toLocalDateKey(new Date());
+    const todayKey = localDateKey(new Date());
 
     const days: CalendarDay[] = [];
     for (let d = rangeStart; d <= rangeEnd; d = addDays(d, 1)) {
-      const key = toLocalDateKey(d);
+      const key = localDateKey(d);
       days.push({
         key,
         dayNumber: d.getDate(),
@@ -260,7 +261,7 @@ export class BoardCalendarViewComponent {
     }
 
     const cardsByDate = this.cardsByDate();
-    const todayKey = toLocalDateKey(new Date());
+    const todayKey = localDateKey(new Date());
     const monthKeys = [...new Set([...cardsByDate.keys()].map((key) => key.slice(0, 7)))].sort();
     return monthKeys.map((monthKey) => {
       const year = Number(monthKey.slice(0, 4));
@@ -362,7 +363,7 @@ export class BoardCalendarViewComponent {
   }
 
   today() {
-    this.anchorDate.set(startOfDay(new Date()));
+    this.anchorDate.set(startOfLocalDay(new Date()));
   }
 
   openCard(cardId: string) {
@@ -475,7 +476,7 @@ export class BoardCalendarViewComponent {
    * belong to the neighbouring month.
    */
   dayLabel(key: string): string {
-    return formatDate(localDate(key), "short", { now: localDate(key) });
+    return formatDate(parseDateKey(key), "short", { now: parseDateKey(key) });
   }
 
   /**
@@ -488,12 +489,12 @@ export class BoardCalendarViewComponent {
 
   /** Phone list heading: "Tue 6 Oct". The weekday is spelled because no column header names it. */
   agendaDayLabel(key: string): string {
-    return formatDate(localDate(key), "weekday", { now: localDate(key) });
+    return formatDate(parseDateKey(key), "weekday", { now: parseDateKey(key) });
   }
 
   /** The full date for a phone month cell's accessible name, which otherwise reads as a bare number. */
   dayAccessibleLabel(day: CalendarDay): string {
-    const date = formatDate(localDate(day.key), "long");
+    const date = formatDate(parseDateKey(day.key), "long");
     if (!day.cards.length) return date;
     return `${date}, ${day.cards.length} ${day.cards.length === 1 ? "card" : "cards"} due`;
   }
@@ -543,24 +544,12 @@ function monthLabel(date: Date): string {
 }
 
 /** Noon, so a local date key can never land on the previous day through a timezone offset. */
-function localDate(key: string): Date {
-  return new Date(`${key}T12:00:00`);
-}
-
-function startOfDay(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
-
 function endOfWeek(date: Date): Date {
   return addDays(startOfWeek(date), 6);
 }
 
 function addDays(date: Date, days: number): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
-}
-
-function toLocalDateKey(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 function slotOrder(slot: DueDateSlot | null | undefined): number {

@@ -33,6 +33,17 @@ const boardWithOptionalCard: UrlMatcher = (segments) => {
   return null;
 };
 
+/** Settings tabs in display order; both the workspace and standalone-board settings pages mount them. */
+const WORKSPACE_SETTINGS_TABS = ["general", "boards", "lists", "fields", "templates", "automations", "labels", "members", "guests", "integrations", "api"] as const;
+
+/**
+ * Every tab is a leaf child so the settings page can read the active tab from the URL; the import
+ * guard keeps a running import from being abandoned by a tab change.
+ */
+function settingsTabRoutes(tabs: readonly string[]): Routes {
+  return tabs.map((path) => ({ path, canActivate: [importNavigationCanActivateGuard], children: [] }));
+}
+
 export const routes: Routes = [
   {
     path: "login",
@@ -146,17 +157,7 @@ export const routes: Routes = [
           import("./features/workspace-settings/workspace-settings.page").then((m) => m.WorkspaceSettingsPage),
         children: [
           { path: "", pathMatch: "full", redirectTo: "general" },
-          { path: "general", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "boards", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "lists", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "fields", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "templates", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "automations", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "labels", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "members", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "guests", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "integrations", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "api", canActivate: [importNavigationCanActivateGuard], children: [] },
+          ...settingsTabRoutes(WORKSPACE_SETTINGS_TABS),
           { path: "import", children: [] },
         ],
       },
@@ -170,17 +171,10 @@ export const routes: Routes = [
           import("./features/workspace-settings/workspace-settings.page").then((m) => m.WorkspaceSettingsPage),
         children: [
           { path: "", pathMatch: "full", redirectTo: "general" },
+          // Standalone boards have no board list or member roster of their own.
           { path: "boards", pathMatch: "full", redirectTo: "general" },
           { path: "members", pathMatch: "full", redirectTo: "general" },
-          { path: "general", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "lists", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "fields", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "templates", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "automations", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "labels", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "guests", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "integrations", canActivate: [importNavigationCanActivateGuard], children: [] },
-          { path: "api", canActivate: [importNavigationCanActivateGuard], children: [] },
+          ...settingsTabRoutes(WORKSPACE_SETTINGS_TABS.filter((tab) => tab !== "boards" && tab !== "members")),
           { path: "import", children: [] },
         ],
       },

@@ -39,15 +39,13 @@ export async function runArchivedCardCleanup({ db, log }: ArchivedCardCleanupDep
     fileKeysByClient.set(clientId, await collectAttachmentFileKeys(cardIds));
   }
 
-  // Delete DB rows first (atomically), THEN storage. Ordering matters: if we deleted files
+  // Delete DB rows first (one statement, so atomically), THEN storage. Ordering matters: if we deleted files
   // first and crashed before the row delete, surviving rows would point at missing files.
   // With rows gone first, a crash before storage cleanup only leaks orphaned objects, which
   // is strictly safer than a dangling reference. Delete by the captured ids so a card archived
   // between the select and the delete isn't swept without its keys collected.
   const cardIds = rows.map((row) => row.id);
-  await db.transaction(async (tx) => {
-    await tx.delete(cards).where(inArray(cards.id, cardIds));
-  });
+  await db.delete(cards).where(inArray(cards.id, cardIds));
 
   for (const [clientId, keys] of fileKeysByClient) {
     if (keys.length === 0) continue;

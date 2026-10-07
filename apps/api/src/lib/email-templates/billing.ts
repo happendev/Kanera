@@ -1,5 +1,6 @@
 import type { BillingEmailQueueData, BillingImpactSummary } from "@kanera/shared/schema";
 import { button, divider, emailLayout, fallbackLink, heading, mutedHtml, paragraph } from "./layout.js";
+import { escapeHtml } from "../html-escape.js";
 
 export type BillingEmailParams = BillingEmailQueueData;
 
@@ -376,6 +377,3 @@ function firstName(displayName: string): string {
   return displayName.split(" ")[0] ?? displayName;
 }
 
-function escapeHtml(str: string): string {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}

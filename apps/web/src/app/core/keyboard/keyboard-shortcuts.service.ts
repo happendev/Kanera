@@ -1,4 +1,4 @@
-import { DestroyRef, Injectable, computed, inject, signal } from "@angular/core";
+import { DestroyRef, Injectable, inject, signal } from "@angular/core";
 
 /**
  * A key description. Chords join modifiers and a key with "+" (`mod+k`, `mod+shift+.`); sequences
@@ -31,10 +31,10 @@ interface Parsed {
 /** Longest time between the presses of a two-key sequence before the first press is forgotten. */
 const SEQUENCE_TIMEOUT_MS = 1200;
 
-export const IS_APPLE = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
+const IS_APPLE = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
 /** True when a keydown originated in something the user types into, so bare-key shortcuts stand down. */
-export function isEditableTarget(target: EventTarget | null): boolean {
+function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   if (target.isContentEditable) return true;
   const tag = target.tagName;
@@ -118,7 +118,7 @@ export class KeyboardShortcutsService {
   private attached = false;
 
   /** Registry in sheet order: groups in first-registration order, entries in registration order. */
-  readonly bindings = computed(() => this.registrations());
+  readonly bindings = this.registrations.asReadonly();
 
   register(registration: ShortcutRegistration, destroyRef?: DestroyRef): () => void {
     const entry = { ...registration, parsed: parse(registration.keys) };

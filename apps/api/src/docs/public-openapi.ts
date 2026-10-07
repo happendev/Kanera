@@ -1,6 +1,6 @@
 import { dto } from "@kanera/shared";
 import { CARD_DUE_DATE_SLOTS } from "@kanera/shared/due-date-slots";
-import { MAX_CARD_PRIORITIES_PER_USER } from "@kanera/shared/schema";
+import { CLIENT_ROUTE_KEY_PATTERN, MAX_CARD_PRIORITIES_PER_USER } from "@kanera/shared/schema";
 import { z } from "zod";
 
 type HttpMethod = "get" | "post" | "patch" | "put" | "delete";
@@ -39,6 +39,12 @@ const queryParam = (name: string, schema: Schema, description?: string, required
   description,
   schema,
 });
+// Offset paging shared by every directory-style list: `limit` is one above the page size so callers
+// can detect "has more" without a count, matching dto `offsetPagedQuery`.
+const pagedQueryParams = (): Schema[] => [
+  queryParam("limit", { type: "integer", minimum: 1, maximum: 101 }),
+  queryParam("offset", { type: "integer", minimum: 0, maximum: 1_000_000, default: 0 }),
+];
 
 const personalOrganisationHeader = (): Schema => ({
   name: "X-Kanera-Organisation-Id",
@@ -723,7 +729,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         properties: {
           id: uuid,
           workspaceId: uuid,
-          organisationKey: { type: "string", pattern: "^[A-F0-9]{16}$", examples: ["0123456789ABCDEF"] },
+          organisationKey: { type: "string", pattern: CLIENT_ROUTE_KEY_PATTERN.source, examples: ["0123456789ABCDEF"] },
           number: { type: "integer", minimum: 1 },
           key: { type: "string", pattern: "^[A-Z][A-Z0-9]{1,9}-[1-9][0-9]*$", examples: ["PROJ-123"] },
           boardId: uuid,
@@ -1573,7 +1579,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       delete: operation({ tags: ["Workspaces"], summary: "Delete a workspace", description: "Permanently deletes the workspace after `confirmationName` exactly matches its current name.", operationId: "deleteWorkspace", parameters: [idParam()], requestBody: jsonBody(ref("DeleteWorkspaceBody")), responses: authedResponses({ "204": noContent }) }),
     },
     "/workspaces/{id}/members": {
-      get: operation({ tags: ["Workspaces"], summary: "List workspace members", operationId: "listWorkspaceMembers", parameters: [idParam(), queryParam("limit", { type: "integer", minimum: 1, maximum: 101 }), queryParam("offset", { type: "integer", minimum: 0, maximum: 1_000_000, default: 0 })], responses: authedResponses({ "200": ok(arrayOf(ref("WorkspaceMember"))) }) }),
+      get: operation({ tags: ["Workspaces"], summary: "List workspace members", operationId: "listWorkspaceMembers", parameters: [idParam(), ...pagedQueryParams()], responses: authedResponses({ "200": ok(arrayOf(ref("WorkspaceMember"))) }) }),
       post: operation({ tags: ["Workspaces"], summary: "Add a workspace member", operationId: "addWorkspaceMember", parameters: [idParam()], requestBody: jsonBody(ref("AddWorkspaceMemberBody")), responses: authedResponses({ "200": ok(ref("WorkspaceMember")) }) }),
     },
     "/workspaces/{id}/member-candidates": pathItem("get", operation({ tags: ["Workspaces"], summary: "List users that can be added to a workspace", operationId: "listWorkspaceMemberCandidates", parameters: [idParam()], responses: authedResponses({ "200": ok(arrayOf(ref("User"))) }) })),
@@ -1704,8 +1710,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       operationId: "listAutomationExecutions",
       parameters: [
         idParam(),
-        queryParam("limit", { type: "integer", minimum: 1, maximum: 101 }),
-        queryParam("offset", { type: "integer", minimum: 0, maximum: 1_000_000, default: 0 }),
+        ...pagedQueryParams(),
       ],
       responses: authedResponses({ "200": ok(arrayOf(ref("AutomationExecution"))) }),
     })),
@@ -1731,7 +1736,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         summary: "Create or update an external link",
         description: "Upserts a durable mapping from an external record to a Kanera entity. Use this after creating or matching a Kanera record so future sync runs are idempotent. The target entity must belong to the workspace.",
         operationId: "upsertExternalLink",
-        parameters: [idParam(), queryParam("limit", { type: "integer", minimum: 1, maximum: 101 }), queryParam("offset", { type: "integer", minimum: 0, maximum: 1_000_000, default: 0 })],
+        parameters: [idParam(), ...pagedQueryParams()],
         requestBody: jsonBody(ref("UpsertExternalLinkBody")),
         responses: authedResponses({ "200": ok(ref("ExternalLink")) }),
       }),
@@ -1756,7 +1761,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       summary: "List accessible boards",
       description: "Lists every board the credential can access, including standalone and explicitly shared cross-organisation boards.",
       operationId: "listAccessibleBoards",
-      parameters: [queryParam("limit", { type: "integer", minimum: 1, maximum: 101 }), queryParam("offset", { type: "integer", minimum: 0, maximum: 1_000_000, default: 0 })],
+      parameters: [...pagedQueryParams()],
       responses: authedResponses({ "200": ok(arrayOf(ref("AccessibleBoard"))) }),
     })),
     "/boards/{id}": {
@@ -1924,7 +1929,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         summary: "List workspace notes",
         description: "Returns a flat note-tree slice at every supported nesting level. Use parentNoteId to rebuild the hierarchy. Personal scope returns only the credential owner's notes.",
         operationId: "listWorkspaceNotes",
-        parameters: [idParam("wsId"), queryParam("scope", { type: "string", enum: ["personal", "team"] }, "Note visibility scope.", true), queryParam("limit", { type: "integer", minimum: 1, maximum: 101 }), queryParam("offset", { type: "integer", minimum: 0, maximum: 1_000_000, default: 0 })],
+        parameters: [idParam("wsId"), queryParam("scope", { type: "string", enum: ["personal", "team"] }, "Note visibility scope.", true), ...pagedQueryParams()],
         responses: authedResponses({ "200": ok(arrayOf(ref("Note"))) }),
       }),
       post: operation({ tags: ["Notes"], summary: "Create a workspace note", operationId: "createWorkspaceNote", parameters: [idParam("wsId")], requestBody: jsonBody(ref("CreateNoteBody")), responses: authedResponses({ "201": created(ref("Note")) }) }),
@@ -1935,7 +1940,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         summary: "List board notes",
         description: "Returns a flat note-tree slice at every supported nesting level. Use parentNoteId to rebuild the hierarchy. Personal scope returns only the credential owner's notes.",
         operationId: "listBoardNotes",
-        parameters: [idParam("boardId"), queryParam("scope", { type: "string", enum: ["personal", "team"] }, "Note visibility scope.", true), queryParam("limit", { type: "integer", minimum: 1, maximum: 101 }), queryParam("offset", { type: "integer", minimum: 0, maximum: 1_000_000, default: 0 })],
+        parameters: [idParam("boardId"), queryParam("scope", { type: "string", enum: ["personal", "team"] }, "Note visibility scope.", true), ...pagedQueryParams()],
         responses: authedResponses({ "200": ok(arrayOf(ref("Note"))) }),
       }),
       post: operation({ tags: ["Notes"], summary: "Create a board note", operationId: "createBoardNote", parameters: [idParam("boardId")], requestBody: jsonBody(ref("CreateNoteBody")), responses: authedResponses({ "201": created(ref("Note")) }) }),
@@ -1997,7 +2002,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       responses: authedResponses({ "200": ok({
         type: "object",
         required: ["id", "workspaceId", "organisationKey", "boardId", "listId", "number", "key", "url"],
-        properties: { id: uuid, workspaceId: uuid, organisationKey: { type: "string", pattern: "^[A-F0-9]{16}$" }, boardId: uuid, listId: uuid, number: { type: "integer", minimum: 1 }, key: { type: "string" }, url: { type: "string", format: "uri" } },
+        properties: { id: uuid, workspaceId: uuid, organisationKey: { type: "string", pattern: CLIENT_ROUTE_KEY_PATTERN.source }, boardId: uuid, listId: uuid, number: { type: "integer", minimum: 1 }, key: { type: "string" }, url: { type: "string", format: "uri" } },
         additionalProperties: false,
       }) }),
     })),

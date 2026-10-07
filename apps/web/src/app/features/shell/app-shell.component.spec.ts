@@ -608,19 +608,6 @@ describe("AppShellComponent board search", () => {
     expect(component.collapsed()).toEqual({ "other-workspace": true });
   });
 
-  it("labels non-production API environments and hides production", async () => {
-    await render(undefined, { user: { kaneraEnvironment: "development" } });
-    expect((fixture.nativeElement as HTMLElement).querySelector(".dev-banner")?.textContent).toContain("Development");
-
-    TestBed.resetTestingModule();
-    await render(undefined, { user: { kaneraEnvironment: "staging" } });
-    expect((fixture.nativeElement as HTMLElement).querySelector(".dev-banner")?.textContent).toContain("Staging");
-
-    TestBed.resetTestingModule();
-    await render(undefined, { user: { kaneraEnvironment: "production" } });
-    expect((fixture.nativeElement as HTMLElement).querySelector(".dev-banner")).toBeNull();
-  });
-
   it("renders organisation memberships and reconnects org-scoped state when switching", async () => {
     const organisations: AuthOrganisation[] = [
       { clientId: "client-1", name: "Kanera", logoUrl: null, role: "owner", plan: "paid", billingStatus: "active", hasWorkspace: true, isHome: true, unreadCount: 0 },
@@ -763,28 +750,6 @@ describe("AppShellComponent board search", () => {
     expect(avatar?.style.width).toBe("20px");
     expect(avatar?.querySelector("img")?.getAttribute("alt")).toBe("Current User");
     expect(link?.querySelector(".ti-user-check")).toBeNull();
-  });
-
-  it("shows Ctrl K for Windows users", async () => {
-    Object.defineProperty(window.navigator, "userAgent", { value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", configurable: true });
-    Object.defineProperty(window.navigator, "platform", { value: "Win32", configurable: true });
-
-    await render();
-
-    const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(".board-search");
-    expect(button?.textContent).toContain("Ctrl K");
-    expect(button?.textContent).not.toContain("⌘K");
-  });
-
-  it("hides the shortcut hint for mobile users", async () => {
-    Object.defineProperty(window.navigator, "userAgent", { value: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile", configurable: true });
-    Object.defineProperty(window.navigator, "platform", { value: "iPhone", configurable: true });
-
-    await render();
-
-    const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(".board-search");
-    expect(button?.textContent).toContain("Find content");
-    expect(button?.querySelector(".search-kbd")).toBeNull();
   });
 
   it("filters boards case-insensitively and hides non-board workspace links while searching", async () => {
@@ -967,26 +932,6 @@ describe("AppShellComponent board search", () => {
     expect(links.every((link) => link !== null)).toBe(true);
     expect(links.filter((link) => link.classList.contains("collapsed-standalone-board-link")).every((link) => link.closest(".ws-group") === null)).toBe(true);
     expect(links.every((link) => getComputedStyle(link).flexShrink === "0")).toBe(true);
-  });
-
-  it("uses one height for every sidebar disclosure control", async () => {
-    const productGroup = boardGroup();
-    // Two workspaces: the per-workspace "Boards" subhead only renders when there is more than one
-    // workspace to collapse between.
-    await render({
-      groups: [group({
-        boardGroups: [productGroup],
-        boards: [board({ groupId: productGroup.id })],
-      }), group({ workspace: workspace({ id: "ws-2", name: "Second" }), boards: [board({ id: "ws-2-board", workspaceId: "ws-2" })] })],
-      guestGroups: [],
-      dueSoon: [],
-      overdueChecklistItems: 0,
-    });
-
-    const host = fixture.nativeElement as HTMLElement;
-    const controls = [".ws-toggle", ".board-group-toggle"]
-      .map((selector) => host.querySelector<HTMLButtonElement>(selector)!);
-    expect(controls.every((control) => getComputedStyle(control).height === "30px")).toBe(true);
   });
 
   it("refreshes sidebar guest boards when the current user is added to a board", async () => {

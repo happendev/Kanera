@@ -67,6 +67,13 @@ export type AnalyzeImportResponse = z.infer<typeof analyzeImportResponse>;
 const dateLike = z.union([z.iso.datetime(), z.date()]);
 const nullableDateLike = z.union([dateLike, z.null()]);
 const kaneraBoardArchiveEntity = z.looseObject({ id: z.uuid() });
+// Shared by the archive and the manifest member rows. Older Kanera exports carry the retired
+// owner/admin board roles; normalize them to editor so legacy archives still import under the
+// editor/observer board-role model.
+const kaneraImportMemberAccess = {
+  source: z.enum(["workspace", "board"]),
+  boardRole: z.enum(["owner", "admin", "editor", "observer"]).nullable().transform((r) => (r === "owner" || r === "admin" ? "editor" : r)),
+};
 
 export const kaneraBoardImportArchive = z.looseObject({
   format: z.literal("kanera.board.export"),
@@ -92,10 +99,7 @@ export const kaneraBoardImportArchive = z.looseObject({
     userId: z.uuid(),
     displayName: z.string(),
     email: z.email().optional(),
-    source: z.enum(["workspace", "board"]),
-    // Older Kanera exports carry the retired owner/admin board roles; normalize them to editor so
-    // legacy archives still import under the editor/observer board-role model.
-    boardRole: z.enum(["owner", "admin", "editor", "observer"]).nullable().transform((r) => (r === "owner" || r === "admin" ? "editor" : r)),
+    ...kaneraImportMemberAccess,
   })),
   cards: z.array(z.looseObject({
     id: z.uuid(),
@@ -146,10 +150,7 @@ export const kaneraBoardImportManifest = trelloImportManifest.extend({
     archivedAt: z.string().nullable(),
   })),
   members: z.array(trelloImportManifest.shape.members.element.extend({
-    source: z.enum(["workspace", "board"]),
-    // Older Kanera exports carry the retired owner/admin board roles; normalize them to editor so
-    // legacy archives still import under the editor/observer board-role model.
-    boardRole: z.enum(["owner", "admin", "editor", "observer"]).nullable().transform((r) => (r === "owner" || r === "admin" ? "editor" : r)),
+    ...kaneraImportMemberAccess,
   })),
 });
 export type KaneraBoardImportManifest = z.infer<typeof kaneraBoardImportManifest>;

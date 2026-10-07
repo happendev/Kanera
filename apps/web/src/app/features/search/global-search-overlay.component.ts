@@ -221,7 +221,7 @@ type FlatResult =
       align-items: flex-start;
       justify-content: center;
       padding: 12vh 16px 16px;
-      animation: fade-in 120ms ease;
+      animation: kanera-fade-in 120ms ease;
     }
 
     .panel {
@@ -270,7 +270,7 @@ type FlatResult =
       padding: 1px 6px;
     }
 
-    .spin { animation: spin 0.8s linear infinite; color: var(--text-muted); }
+    .spin { animation: kanera-spinner 0.8s linear infinite; color: var(--text-muted); }
 
     .results {
       overflow-y: auto;
@@ -427,9 +427,7 @@ type FlatResult =
       .backdrop, .panel { animation: none; }
     }
 
-    @keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
     @keyframes slide-in { from { opacity: 0; transform: scale(0.98) translateY(-6px) } to { opacity: 1; transform: none } }
-    @keyframes spin { to { transform: rotate(360deg) } }
   `,
 })
 export class GlobalSearchOverlayComponent {

@@ -21,7 +21,7 @@ interface OrgListResponse {
     <header class="page-head">
       <h1>Organisations</h1>
     </header>
-    <a-table-controls [query]="query()" placeholder="Search organisations…" [page]="page()" [pageSize]="pageSize()" [total]="total()" [loading]="loading()" (queryChange)="onSearch($event)" (pageChange)="go($event)" (pageSizeChange)="resize($event)" />
+    <a-table-controls [query]="query()" placeholder="Search organisations…" (queryChange)="onSearch($event)" />
 
     @if (loading()) {
       <p class="muted">Loading…</p>

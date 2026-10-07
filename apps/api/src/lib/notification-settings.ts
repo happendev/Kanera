@@ -5,10 +5,8 @@ import {
   type NotificationSettings,
 } from "@kanera/shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
-import type { Db } from "../db.js";
+import type { Tx } from "../db.js";
 import { notificationDestinationPolicy } from "./ssrf.js";
-
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 export type NotificationPreferenceType =
   | "cardAssigned"

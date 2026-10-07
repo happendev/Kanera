@@ -3,6 +3,7 @@ import { ACCENTS, THEMES } from "../appearance.js";
 import { CLIENT_ROLES } from "../schema/client-roles.js";
 import { CLIENT_BILLING_STATUSES, CLIENT_PLANS } from "../schema/client.js";
 import { GENERAL_NAME_MAX_LENGTH } from "./name-limits.js";
+import { deploymentModeSchema, kaneraEnvironmentSchema } from "./deployment.js";
 
 export const storageUsageResponse = z.object({
   usedBytes: z.number().int().nonnegative(),
@@ -63,8 +64,8 @@ export const authConfigResponse = z.object({
   emailVerificationEnabled: z.boolean(),
   signupsEnabled: z.boolean(),
   turnstileSiteKey: z.string().nullable(),
-  kaneraEnvironment: z.enum(["development", "test", "staging", "production"]),
-  deploymentMode: z.enum(["self_hosted", "hosted"]),
+  kaneraEnvironment: kaneraEnvironmentSchema,
+  deploymentMode: deploymentModeSchema,
   analytics: z.object({
     enabled: z.literal(true),
     provider: z.literal("posthog"),
@@ -92,8 +93,6 @@ export const mfaChallengeBody = z.object({ challengeToken: z.string().min(1), co
 export const mfaEnrollmentStartBody = z.object({ currentPassword: z.string().min(1), code: mfaCode.optional() });
 export const mfaEnrollmentConfirmBody = z.object({ code: mfaCode });
 export const mfaProtectedActionBody = z.object({ currentPassword: z.string().min(1), code: mfaCode });
-export const mfaChallengeResponse = z.object({ status: z.literal("mfa_required"), challengeToken: z.string() });
-export const mfaEnrollmentResponse = z.object({ status: z.literal("mfa_enrollment_required"), challengeToken: z.string() });
 export type MfaChallengeBody = z.infer<typeof mfaChallengeBody>;
 export type MfaProtectedActionBody = z.infer<typeof mfaProtectedActionBody>;
 
@@ -127,8 +126,8 @@ export const authResponse = z.object({
     accent: z.enum(ACCENTS).nullable(),
     orgName: z.string(),
     logoUrl: z.string().nullable(),
-    deploymentMode: z.enum(["self_hosted", "hosted"]),
-    kaneraEnvironment: z.enum(["development", "test", "staging", "production"]),
+    deploymentMode: deploymentModeSchema,
+    kaneraEnvironment: kaneraEnvironmentSchema,
     hasWorkspace: z.boolean(),
     role: z.enum(CLIENT_ROLES),
     isClientAdmin: z.boolean().optional(),
@@ -154,9 +153,6 @@ export const resetPasswordBody = z.object({
   password: z.string().min(8).max(200),
 });
 export type ResetPasswordBody = z.infer<typeof resetPasswordBody>;
-
-export const meResponse = authResponse.shape.user;
-export type MeResponse = z.infer<typeof meResponse>;
 
 // Email is intentionally absent: changing it goes through POST /auth/me/email,
 // with a verification code required only when the deployment enables it.

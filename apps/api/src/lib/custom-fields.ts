@@ -47,7 +47,7 @@ export async function loadWorkspaceCustomFields(workspaceId: string, tx: Db = db
 
 // The typed value column that backs each custom field type. Kept here (not in the
 // route module) so the single-card and bulk write paths share one source of truth.
-export const CUSTOM_FIELD_VALUE_COLUMN_BY_TYPE = {
+const CUSTOM_FIELD_VALUE_COLUMN_BY_TYPE = {
   text: "valueText",
   number: "valueNumber",
   checkbox: "valueCheckbox",
@@ -57,7 +57,7 @@ export const CUSTOM_FIELD_VALUE_COLUMN_BY_TYPE = {
   user: "valueUserIds",
 } as const satisfies Record<CustomFieldType, keyof CardCustomFieldValue>;
 
-export const CUSTOM_FIELD_VALUE_COLUMNS = [
+const CUSTOM_FIELD_VALUE_COLUMNS = [
   "valueText",
   "valueNumber",
   "valueCheckbox",

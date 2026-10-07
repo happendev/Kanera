@@ -2,8 +2,8 @@ import { CdkTrapFocus } from "@angular/cdk/a11y";
 import type { ElementRef, OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, untracked, viewChild } from "@angular/core";
 import { ALLOWED_ATTACHMENT_MIME, ALLOWED_ATTACHMENT_EXTENSIONS, getAllowedAttachmentExtension } from "@kanera/shared/attachments";
-import type { WireBoardMemberUser, WireCard, WireCardLabel, WireCardSummary, WireChecklistTemplate, WireCustomFieldOption, WireList } from "@kanera/shared/events";
-import type { Card, CardLabel, List } from "@kanera/shared/schema";
+import type { WireBoardMemberUser, WireCard, WireCardSummary, WireChecklistTemplate, WireCustomFieldOption } from "@kanera/shared/events";
+import type { Card } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { NotificationsService } from "../../core/notifications/notifications.service";
@@ -33,6 +33,9 @@ import { LabelPickerPopover, type LabelPickerLabel } from "./label-picker.popove
 import { MemberPickerPopover } from "./member-picker.popover";
 import { SelectPickerPopover } from "./select-picker.popover";
 import { viewerTimeZone } from "../../shared/day-key.util";
+import { clipboardAttachmentFiles, hasDraggedFiles } from "../../shared/attachments/file-transfer";
+import { toggleId } from "../../shared/toggle-id";
+import { byPosition } from "../../shared/position-sort";
 
 type AnyCard = Card | WireCard | WireCardSummary;
 // Structural rather than the schema rows: the composer only reads these fields, so both a board's
@@ -324,7 +327,7 @@ export class CardComposerDialogComponent implements OnInit {
 
   /** Archived fields are excluded upstream by BoardState; this only fixes the render order. */
   readonly orderedCustomFields = computed(() =>
-    [...this.customFields()].sort((a, b) => Number(a.position) - Number(b.position))
+    [...this.customFields()].sort(byPosition)
   );
 
   readonly canSubmit = computed(() =>
@@ -512,7 +515,7 @@ export class CardComposerDialogComponent implements OnInit {
   }
 
   onDragOver(event: DragEvent): void {
-    if (!this.isFileDrag(event.dataTransfer)) return;
+    if (!hasDraggedFiles(event.dataTransfer)) return;
     // Without preventDefault the browser navigates to the dropped file, which would abandon the
     // composer entirely. Keep preventing it while uploading, even though no new files can be staged.
     event.preventDefault();
@@ -530,7 +533,7 @@ export class CardComposerDialogComponent implements OnInit {
   }
 
   onDrop(event: DragEvent): void {
-    if (!this.isFileDrag(event.dataTransfer)) return;
+    if (!hasDraggedFiles(event.dataTransfer)) return;
     event.preventDefault();
     this.dragActive.set(false);
     if (this.busy() || !this.canEdit()) return;
@@ -538,7 +541,7 @@ export class CardComposerDialogComponent implements OnInit {
   }
 
   onPaste(event: ClipboardEvent): void {
-    const files = clipboardFiles(event.clipboardData);
+    const files = clipboardAttachmentFiles(event.clipboardData);
     if (files.length === 0) return;
     // The description editor is mounted with attachments off — it has no upload target before the
     // card exists — so it leaves file pastes alone and they bubble to here regardless of whether the
@@ -550,12 +553,6 @@ export class CardComposerDialogComponent implements OnInit {
   /** Receives file pastes intercepted by the editor before its rich-text engine can insert them. */
   stagePastedAttachments(files: File[]): void {
     this.stageFiles(files);
-  }
-
-  private isFileDrag(data: DataTransfer | null): boolean {
-    if (!data) return false;
-    return Array.from(data.types ?? []).some((type) => type === "Files" || type === "application/x-moz-file")
-      || Array.from(data.items ?? []).some((item) => item.kind === "file");
   }
 
   private stageFiles(files: FileList | File[] | null): void {
@@ -793,23 +790,6 @@ export class CardComposerDialogComponent implements OnInit {
     }
     return failures;
   }
-}
-
-/**
- * Files on a clipboard payload. `items` is the reliable source for a screenshot paste (where
- * `files` is empty in some browsers); `files` is the fallback for a copied file from the OS.
- */
-function clipboardFiles(data: DataTransfer | null): File[] {
-  if (!data) return [];
-  const fromItems = Array.from(data.items ?? [])
-    .filter((item) => item.kind === "file")
-    .map((item) => item.getAsFile())
-    .filter((file): file is File => file !== null);
-  return fromItems.length > 0 ? fromItems : Array.from(data.files ?? []);
-}
-
-function toggleId(ids: string[], id: string): string[] {
-  return ids.includes(id) ? ids.filter((entry) => entry !== id) : [...ids, id];
 }
 
 function mergeIds(current: string[], extra: string[]): string[] {

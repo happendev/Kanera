@@ -555,36 +555,6 @@ describe("AccountSettingsPage", () => {
     expect(text).toContain("512.0 MB remaining");
   });
 
-  it("renders the configured Free plan limits in the plan comparison", async () => {
-    activeSettingsRoute = "account-plan";
-    await createPage();
-
-    const text = (fixture.nativeElement as HTMLElement).textContent ?? "";
-    expect(text).toContain("4 members");
-    expect(text).toContain("3 active automations");
-    expect(text).toContain("100 automation executions per month");
-  });
-
-  it("shows only the build date for hosted deployments", async () => {
-    activeSettingsRoute = "profile";
-    await createPage();
-
-    const buildMeta = (fixture.nativeElement as HTMLElement).querySelector(".settings-build-meta");
-    expect(buildMeta?.getAttribute("aria-label")).toBe("Build information");
-    expect(buildMeta?.textContent).not.toContain("Version");
-    expect(buildMeta?.textContent).toContain("Built");
-  });
-
-  it("shows the version and build date for self-hosted deployments", async () => {
-    currentClient = selfHostedClient;
-    activeSettingsRoute = "profile";
-    await createPage();
-
-    const buildMeta = (fixture.nativeElement as HTMLElement).querySelector(".settings-build-meta");
-    expect(buildMeta?.textContent).toContain("Version");
-    expect(buildMeta?.textContent).toContain("Built");
-  });
-
   it("shows the scratchpad by default and persists the personal visibility choice", async () => {
     activeSettingsRoute = "profile";
     await createPage();

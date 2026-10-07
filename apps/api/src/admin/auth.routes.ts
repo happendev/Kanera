@@ -7,9 +7,10 @@ import { env } from "../env.js";
 import { cookieDomainAttribute } from "../lib/cookie-domain.js";
 import { unauthorized } from "../lib/errors.js";
 import { verifyPasswordTimingSafe } from "../auth/password.js";
-import { hashAdminRefresh, newAdminRefreshToken, rotateAdminRefresh } from "./jwt.js";
+import { newAdminRefreshToken, rotateAdminRefresh } from "./jwt.js";
 import { signAdminAccessToken } from "./plugin.js";
 import { beginMfaEnrollment, createMfaChallenge, enableMfa, getMfaCredential, readMfaChallenge, verifyMfaCode, verifyMfaLoginCode } from "../auth/mfa.js";
+import { hashOpaqueToken } from "../lib/tokens.js";
 
 const ADMIN_REFRESH_COOKIE = "kanera_admin_rt";
 const MAX_FAILED_LOGIN_ATTEMPTS = 5;
@@ -186,7 +187,7 @@ export async function adminAuthRoutes(app: FastifyInstance, deps: AdminAuthRoute
       await db
         .update(adminRefreshTokens)
         .set({ revokedAt: new Date() })
-        .where(eq(adminRefreshTokens.tokenHash, hashAdminRefresh(raw)));
+        .where(eq(adminRefreshTokens.tokenHash, hashOpaqueToken(raw)));
     }
     reply.clearCookie(ADMIN_REFRESH_COOKIE, adminRefreshCookieOptions());
     return { ok: true };

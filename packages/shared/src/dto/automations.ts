@@ -2,6 +2,7 @@ import { z } from "zod";
 export { AUTOMATION_ACTION_LIMIT } from "../automation-limits.js";
 import { AUTOMATION_ACTION_LIMIT } from "../automation-limits.js";
 import { AUTOMATION_TRIGGER_TYPES } from "../schema/automation.js";
+import { offsetPagedQuery } from "./_pagination.js";
 import { dueDateSlot } from "./cards.js";
 
 export const automationTriggerType = z.enum(AUTOMATION_TRIGGER_TYPES).describe(
@@ -17,11 +18,13 @@ const dueDateActionConfig = z.object({
   slot: dueDateSlot.default("anyTime"),
 });
 const completionActionConfig = z.object({ completed: z.boolean() });
+/** Where a moved card lands in its destination list; shared with the workspace-template seed DTO. */
+export const automationMovePlacement = z.enum(["top", "bottom"]).default("bottom");
 const moveActionConfig = z.object({
   listId: z.uuid(),
-  placement: z.enum(["top", "bottom"]).default("bottom"),
+  placement: automationMovePlacement,
 });
-const currentDateTextFormat = z.enum(["date", "month", "month_long_short_year", "month_long_year", "datetime"]);
+export const currentDateTextFormat = z.enum(["date", "month", "month_long_short_year", "month_long_year", "datetime"]);
 const populateCustomFieldValue = z.union([
   z.object({ kind: z.literal("text"), text: z.string().trim().min(1).max(20000) }),
   z.object({ kind: z.literal("text_current_date"), format: currentDateTextFormat }),
@@ -147,10 +150,7 @@ export const updateAutomationBody = z
   );
 export type UpdateAutomationBody = z.infer<typeof updateAutomationBody>;
 
-export const listAutomationExecutionsQuery = z.object({
-  limit: z.coerce.number().int().min(1).max(101).optional(),
-  offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
-});
+export const listAutomationExecutionsQuery = offsetPagedQuery;
 export type ListAutomationExecutionsQuery = z.infer<typeof listAutomationExecutionsQuery>;
 
 export const setAutomationActionsBody = z.object({

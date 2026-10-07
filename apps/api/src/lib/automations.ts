@@ -1,44 +1,9 @@
 import type { WireAutomation, WireAutomationRunStats, WireCard, WireCardChecklist, WireComment } from "@kanera/shared/events";
-import { cardPath } from "@kanera/shared/card-links";
 import { SERVER_EVENTS } from "@kanera/shared/events";
-import {
-  ACTIVITY_ACTION,
-  automationActions,
-  automationDueDateRuns,
-  automationInactiveRuns,
-  automationRunStats,
-  automationRuns,
-  automations,
-  boardMembers,
-  boards,
-  cardAssignees,
-  cardCustomFieldValues,
-  cardChecklistItems,
-  cardChecklists,
-  cardLabelAssignments,
-  cardLabels,
-  cards,
-  comments,
-  customFieldOptions,
-  customFields,
-  lists,
-  users,
-  webhookEndpoints,
-  workspaceMembers,
-  workspaces,
-  type ActivityEvent,
-  type Automation,
-  type AutomationAction,
-  type AutomationRunStats,
-  type AutomationTriggerCustomFieldValue,
-  type Card,
-  type CardCustomFieldValue,
-  type CardDueDateSlot,
-  type CustomField,
-} from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, automationActions, automationDueDateRuns, automationInactiveRuns, automationRunStats, automationRuns, automations, boardMembers, boards, cardAssignees, cardCustomFieldValues, cardChecklistItems, cardChecklists, cardLabelAssignments, cardLabels, cards, comments, customFieldOptions, customFields, lists, users, webhookEndpoints, workspaceMembers, workspaces, type ActivityEvent, type Automation, type AutomationAction, type AutomationRunStats, type AutomationTriggerCustomFieldValue, type Card, type CardCustomFieldValue, type CardDueDateSlot, type CustomField, type AutomationTriggerType } from "@kanera/shared/schema";
 import { and, asc, desc, eq, inArray, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
-import { db, type Db } from "../db.js";
+import { db, type Db, type Tx } from "../db.js";
 import { env } from "../env.js";
 import { emitToBoard } from "../realtime/emit.js";
 import { publishAsAutomation } from "../realtime/outbox.js";
@@ -55,8 +20,8 @@ import { between } from "./position.js";
 import { emitCardRebalancedByBoard, rebalanceCards, type CardRebalancedPosition } from "./rebalance.js";
 import { resolveSmtpConfig } from "./smtp-resolve.js";
 import { startSweepScheduler } from "./sweep-scheduler.js";
-
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
+import { absoluteCardUrl } from "./wire-card.js";
+import { customFieldValueEquals, emptyValueColumns, type CustomFieldValueColumns } from "./custom-fields.js";
 
 interface AutomationEffectMetadata {
   // Automation activity remains system-authored, but user-triggered automation
@@ -106,7 +71,7 @@ class AutomationActionError extends Error {
 }
 
 /** Placeholders accepted by the post_comment template; anything else is left verbatim. */
-export const AUTOMATION_COMMENT_TEMPLATE_VARIABLES = [
+const AUTOMATION_COMMENT_TEMPLATE_VARIABLES = [
   "card.title",
   "card.key",
   "card.url",
@@ -197,16 +162,10 @@ async function recordAutomationFailureStats(automationId: string, details: Autom
   }
 }
 
-type CustomFieldValueColumns = Pick<CardCustomFieldValue, "valueText" | "valueNumber" | "valueCheckbox" | "valueDate" | "valueUrl" | "valueOptionIds" | "valueUserIds">;
-
-function cardUrl(organisationKey: string, cardKey: string): string {
-  return new URL(cardPath(organisationKey, cardKey), env.WEB_ORIGIN).toString();
-}
-
 function toWireCard(card: Card, _clientId: string): WireCard {
   return {
     ...card,
-    url: cardUrl(card.organisationKey, card.key),
+    url: absoluteCardUrl(card.organisationKey, card.key),
   };
 }
 
@@ -280,18 +239,6 @@ function formatAutomationDateText(date: Date, timezone: string, config: { format
   return pattern.replace(/MMMM|yyyy|yy|MM|dd|HH|mm/g, (token) => tokens[token as keyof typeof tokens]);
 }
 
-function emptyCustomFieldColumns(): CustomFieldValueColumns {
-  return {
-    valueText: null,
-    valueNumber: null,
-    valueCheckbox: null,
-    valueDate: null,
-    valueUrl: null,
-    valueOptionIds: null,
-    valueUserIds: null,
-  };
-}
-
 function hasCustomFieldValue(field: Pick<CustomField, "type">, value: CardCustomFieldValue | undefined): boolean {
   if (!value) return false;
   if (field.type === "text") return Boolean(value.valueText?.trim());
@@ -304,27 +251,10 @@ function hasCustomFieldValue(field: Pick<CustomField, "type">, value: CardCustom
   return false;
 }
 
-function arraysEqual(a: string[] | null, b: string[] | null): boolean {
-  if (a === b) return true;
-  if (!a || !b || a.length !== b.length) return false;
-  return a.every((value, index) => value === b[index]);
-}
-
 // Compares the column we are about to write against the card's current value for the
-// field's type only. Null-normalized so an unset value (null) is never treated as equal
-// to an explicit false/empty write.
+// field's type only. A missing current row is never "unchanged": the first write must happen.
 function customFieldColumnsUnchanged(field: Pick<CustomField, "type">, cols: CustomFieldValueColumns, current: CardCustomFieldValue | undefined): boolean {
-  if (!current) return false;
-  switch (field.type) {
-    case "text": return (cols.valueText ?? null) === (current.valueText ?? null);
-    case "number": return (cols.valueNumber ?? null) === (current.valueNumber ?? null);
-    case "checkbox": return (cols.valueCheckbox ?? null) === (current.valueCheckbox ?? null);
-    case "date": return (cols.valueDate ?? null) === (current.valueDate ?? null);
-    case "url": return (cols.valueUrl ?? null) === (current.valueUrl ?? null);
-    case "select": return arraysEqual(cols.valueOptionIds ?? null, current.valueOptionIds ?? null);
-    case "user": return arraysEqual(cols.valueUserIds ?? null, current.valueUserIds ?? null);
-    default: return false;
-  }
+  return current ? customFieldValueEquals(field.type, cols, current) : false;
 }
 
 async function describeCustomFieldValue(tx: Tx, field: Pick<CustomField, "type">, value: CustomFieldValueColumns | CardCustomFieldValue | undefined): Promise<string | null> {
@@ -356,7 +286,7 @@ async function describeCustomFieldValue(tx: Tx, field: Pick<CustomField, "type">
 function customFieldColumnsFromAutomationValue(ctx: AutomationRunContext, action: AutomationAction): CustomFieldValueColumns | null {
   if (!("value" in action.config)) return null;
   const value = action.config.value;
-  const cols = emptyCustomFieldColumns();
+  const cols = emptyValueColumns();
   if (value.kind === "text") {
     if (!value.text.trim()) return null;
     cols.valueText = value.text;
@@ -406,7 +336,7 @@ async function customFieldColumnsFromSourceField(
     .limit(1);
   if (!sourceValue || !hasCustomFieldValue(sourceField, sourceValue)) return null;
 
-  const cols = emptyCustomFieldColumns();
+  const cols = emptyValueColumns();
   switch (targetField.type) {
     case "text": cols.valueText = sourceValue.valueText; break;
     case "number": cols.valueNumber = sourceValue.valueNumber; break;
@@ -981,7 +911,7 @@ async function automationTemplateContext(tx: Tx, ctx: AutomationRunContext): Pro
  * silently blank value; values are inserted as plain text (the comment body is Markdown, and a card
  * title is not allowed to inject formatting).
  */
-export function renderAutomationCommentTemplate(template: string, values: Record<(typeof AUTOMATION_COMMENT_TEMPLATE_VARIABLES)[number], string>): string {
+function renderAutomationCommentTemplate(template: string, values: Record<(typeof AUTOMATION_COMMENT_TEMPLATE_VARIABLES)[number], string>): string {
   return template.replace(/\{\{\s*([a-zA-Z.]+)\s*\}\}/g, (match, name: string) =>
     (AUTOMATION_COMMENT_TEMPLATE_VARIABLES as readonly string[]).includes(name) ? values[name as keyof typeof values] : match,
   );
@@ -997,7 +927,7 @@ async function applyPostCommentAction(tx: Tx, ctx: AutomationRunContext, action:
   const body = renderAutomationCommentTemplate(template, {
     "card.title": ctx.card.title,
     "card.key": ctx.card.key,
-    "card.url": cardUrl(ctx.card.organisationKey, ctx.card.key),
+    "card.url": absoluteCardUrl(ctx.card.organisationKey, ctx.card.key),
     "card.dueDate": ctx.card.dueDateLocalDate ?? "",
     "list.name": context.list?.name ?? "",
     "board.name": context.boardName,
@@ -1150,23 +1080,33 @@ async function applyTriggeredAutomations(
   return { effects };
 }
 
+/**
+ * Enabled, unarchived automations of one workspace in authored order, narrowed by trigger conditions.
+ * Every event-driven runner starts from this query so the enabled/archived gate cannot drift.
+ */
+function enabledAutomationsFor(tx: Tx, workspaceId: string, ...triggerConditions: (SQL | undefined)[]) {
+  return tx
+    .select()
+    .from(automations)
+    .where(and(
+      eq(automations.workspaceId, workspaceId),
+      eq(automations.enabled, true),
+      isNull(automations.archivedAt),
+      ...triggerConditions,
+    ))
+    .orderBy(asc(automations.position));
+}
+
 export async function runListEntryAutomations(
   tx: Tx,
   opts: { cardId: string; listId: string; boardId: string; workspaceId: string; clientId: string; trigger: "create" | "move"; triggerActorId?: string | null },
 ): Promise<AutomationEffects> {
   const triggerColumn = opts.trigger === "create" ? automations.applyOnCreate : automations.applyOnMove;
-  const rows = await tx
-    .select()
-    .from(automations)
-    .where(and(
-      eq(automations.workspaceId, opts.workspaceId),
-      eq(automations.enabled, true),
-      isNull(automations.archivedAt),
-      eq(automations.triggerType, "card_enters_list"),
-      eq(automations.triggerListId, opts.listId),
-      eq(triggerColumn, true),
-    ))
-    .orderBy(asc(automations.position));
+  const rows = await enabledAutomationsFor(tx, opts.workspaceId,
+    eq(automations.triggerType, "card_enters_list"),
+    eq(automations.triggerListId, opts.listId),
+    eq(triggerColumn, true),
+  );
   if (rows.length === 0) return EMPTY_EFFECTS;
   return applyTriggeredAutomations(tx, rows, opts);
 }
@@ -1178,26 +1118,19 @@ export async function runCardMoveAutomations(
   if (opts.fromListId === opts.toListId) return EMPTY_EFFECTS;
   // Entry and exit rules share one ordered query so a single card move respects the workspace's
   // authored automation order even when both sides of the transition have matching rules.
-  const rows = await tx
-    .select()
-    .from(automations)
-    .where(and(
-      eq(automations.workspaceId, opts.workspaceId),
-      eq(automations.enabled, true),
-      isNull(automations.archivedAt),
-      or(
-        and(
-          eq(automations.triggerType, "card_enters_list"),
-          eq(automations.triggerListId, opts.toListId),
-          eq(automations.applyOnMove, true),
-        ),
-        and(
-          eq(automations.triggerType, "card_leaves_list"),
-          eq(automations.triggerListId, opts.fromListId),
-        ),
+  const rows = await enabledAutomationsFor(tx, opts.workspaceId,
+    or(
+      and(
+        eq(automations.triggerType, "card_enters_list"),
+        eq(automations.triggerListId, opts.toListId),
+        eq(automations.applyOnMove, true),
       ),
-    ))
-    .orderBy(asc(automations.position));
+      and(
+        eq(automations.triggerType, "card_leaves_list"),
+        eq(automations.triggerListId, opts.fromListId),
+      ),
+    ),
+  );
   if (rows.length === 0) return EMPTY_EFFECTS;
   return applyTriggeredAutomations(tx, rows, opts);
 }
@@ -1232,17 +1165,10 @@ export async function runCustomFieldValueChangedAutomations(
     triggerActorId?: string | null;
   },
 ): Promise<AutomationEffects> {
-  const rows = (await tx
-    .select()
-    .from(automations)
-    .where(and(
-      eq(automations.workspaceId, opts.workspaceId),
-      eq(automations.enabled, true),
-      isNull(automations.archivedAt),
-      eq(automations.triggerType, "custom_field_value_changed"),
-      eq(automations.triggerCustomFieldId, opts.fieldId),
-    ))
-    .orderBy(asc(automations.position)))
+  const rows = (await enabledAutomationsFor(tx, opts.workspaceId,
+    eq(automations.triggerType, "custom_field_value_changed"),
+    eq(automations.triggerCustomFieldId, opts.fieldId),
+  ))
     .filter((automation) => automation.triggerCustomFieldValue
       && !customFieldTriggerMatches(automation.triggerCustomFieldValue, opts.previousValue)
       && customFieldTriggerMatches(automation.triggerCustomFieldValue, opts.currentValue));
@@ -1254,16 +1180,9 @@ export async function runChecklistCompletionAutomations(
   tx: Tx,
   opts: { cardId: string; boardId: string; workspaceId: string; clientId: string; triggerActorId?: string | null },
 ): Promise<AutomationEffects> {
-  const rows = await tx
-    .select()
-    .from(automations)
-    .where(and(
-      eq(automations.workspaceId, opts.workspaceId),
-      eq(automations.enabled, true),
-      isNull(automations.archivedAt),
-      eq(automations.triggerType, "all_checklist_items_complete"),
-    ))
-    .orderBy(asc(automations.position));
+  const rows = await enabledAutomationsFor(tx, opts.workspaceId,
+    eq(automations.triggerType, "all_checklist_items_complete"),
+  );
   if (rows.length === 0) return EMPTY_EFFECTS;
 
   const items = await tx
@@ -1284,16 +1203,9 @@ export async function runCardMarkedCompleteAutomations(
 ): Promise<AutomationEffects> {
   // This runner is called only by user/API completion routes. Completion performed
   // inside an automation action must not recursively trigger more automations.
-  const rows = await tx
-    .select()
-    .from(automations)
-    .where(and(
-      eq(automations.workspaceId, opts.workspaceId),
-      eq(automations.enabled, true),
-      isNull(automations.archivedAt),
-      eq(automations.triggerType, "card_marked_complete"),
-    ))
-    .orderBy(asc(automations.position));
+  const rows = await enabledAutomationsFor(tx, opts.workspaceId,
+    eq(automations.triggerType, "card_marked_complete"),
+  );
   if (rows.length === 0) return EMPTY_EFFECTS;
 
   return applyTriggeredAutomations(tx, rows, opts, (card) => card.completedAt !== null);
@@ -1305,16 +1217,9 @@ export async function runCardAssignedAutomations(
 ): Promise<AutomationEffects> {
   const addedUserIdSet = new Set(opts.addedUserIds);
   if (addedUserIdSet.size === 0) return EMPTY_EFFECTS;
-  const rows = (await tx
-    .select()
-    .from(automations)
-    .where(and(
-      eq(automations.workspaceId, opts.workspaceId),
-      eq(automations.enabled, true),
-      isNull(automations.archivedAt),
-      eq(automations.triggerType, "card_assigned_to_user"),
-    ))
-    .orderBy(asc(automations.position)))
+  const rows = (await enabledAutomationsFor(tx, opts.workspaceId,
+    eq(automations.triggerType, "card_assigned_to_user"),
+  ))
     .filter((automation) => (automation.triggerUserIds ?? []).some((userId) => addedUserIdSet.has(userId)));
   if (rows.length === 0) return EMPTY_EFFECTS;
 
@@ -1327,17 +1232,10 @@ export async function runCardLabelSetAutomations(
 ): Promise<AutomationEffects> {
   const addedLabelIdSet = new Set(opts.addedLabelIds);
   if (addedLabelIdSet.size === 0) return EMPTY_EFFECTS;
-  const rows = await tx
-    .select()
-    .from(automations)
-    .where(and(
-      eq(automations.workspaceId, opts.workspaceId),
-      eq(automations.enabled, true),
-      isNull(automations.archivedAt),
-      eq(automations.triggerType, "card_label_set"),
-      inArray(automations.triggerLabelId, Array.from(addedLabelIdSet)),
-    ))
-    .orderBy(asc(automations.position));
+  const rows = await enabledAutomationsFor(tx, opts.workspaceId,
+    eq(automations.triggerType, "card_label_set"),
+    inArray(automations.triggerLabelId, Array.from(addedLabelIdSet)),
+  );
   if (rows.length === 0) return EMPTY_EFFECTS;
 
   return applyTriggeredAutomations(tx, rows, opts);
@@ -1420,6 +1318,48 @@ interface ScheduledWorkspaceAutomation {
   actions: AutomationAction[];
 }
 
+/**
+ * Loader for the per-workspace automation cache the scheduled sweeps share. One workspace can own
+ * many candidate cards spanning several batches and its automation set is bounded by
+ * AUTOMATION_LIMIT, so each workspace is loaded once; a workspace with no matching automations is
+ * cached as [] to avoid re-querying it.
+ */
+function ensureWorkspacesLoadedFor(
+  triggerType: AutomationTriggerType,
+  automationsByWorkspace: Map<string, ScheduledWorkspaceAutomation[]>,
+): (workspaceIds: string[]) => Promise<void> {
+  return async (workspaceIds) => {
+    const missing = workspaceIds.filter((id) => !automationsByWorkspace.has(id));
+    if (missing.length === 0) return;
+    for (const id of missing) automationsByWorkspace.set(id, []);
+    const scheduled = await db
+      .select()
+      .from(automations)
+      .where(and(
+        inArray(automations.workspaceId, missing),
+        eq(automations.enabled, true),
+        isNull(automations.archivedAt),
+        eq(automations.triggerType, triggerType),
+      ))
+      .orderBy(asc(automations.workspaceId), asc(automations.position));
+    if (scheduled.length === 0) return;
+    const actions = await db
+      .select()
+      .from(automationActions)
+      .where(inArray(automationActions.automationId, scheduled.map((automation) => automation.id)))
+      .orderBy(asc(automationActions.position));
+    const actionsByAutomation = new Map<string, AutomationAction[]>();
+    for (const action of actions) {
+      const list = actionsByAutomation.get(action.automationId);
+      if (list) list.push(action);
+      else actionsByAutomation.set(action.automationId, [action]);
+    }
+    for (const automation of scheduled) {
+      automationsByWorkspace.get(automation.workspaceId)!.push({ automation, actions: actionsByAutomation.get(automation.id) ?? [] });
+    }
+  };
+}
+
 interface DueDateCandidate {
   card: Card;
   workspaceId: string;
@@ -1435,44 +1375,8 @@ export async function runDueDateAutomationSweep(
   // boundaries are decided by isDueDateOverdue without starving overdue cards.
   const cutoffLocalDate = addDays(localDateInTimezone(now, "UTC"), 1);
 
-  // Per-workspace due-date automations + actions, cached across batches. One workspace
-  // can own many overdue cards spanning several batches, and its automation set is
-  // bounded by AUTOMATION_LIMIT, so we load each workspace once and reuse it. A
-  // workspace with no due-date automations is cached as [] to avoid re-querying.
   const automationsByWorkspace = new Map<string, ScheduledWorkspaceAutomation[]>();
-  const ensureWorkspacesLoaded = async (workspaceIds: string[]): Promise<void> => {
-    const missing = workspaceIds.filter((id) => !automationsByWorkspace.has(id));
-    if (missing.length === 0) return;
-    for (const id of missing) automationsByWorkspace.set(id, []);
-    const dueAutomations = await db
-      .select()
-      .from(automations)
-      .where(and(
-        inArray(automations.workspaceId, missing),
-        eq(automations.enabled, true),
-        isNull(automations.archivedAt),
-        eq(automations.triggerType, "due_date_arrives"),
-      ))
-      .orderBy(asc(automations.workspaceId), asc(automations.position));
-    if (dueAutomations.length === 0) return;
-    const actions = await db
-      .select()
-      .from(automationActions)
-      .where(inArray(automationActions.automationId, dueAutomations.map((automation) => automation.id)))
-      .orderBy(asc(automationActions.position));
-    const actionsByAutomation = new Map<string, AutomationAction[]>();
-    for (const action of actions) {
-      const list = actionsByAutomation.get(action.automationId);
-      if (list) list.push(action);
-      else actionsByAutomation.set(action.automationId, [action]);
-    }
-    for (const automation of dueAutomations) {
-      automationsByWorkspace.get(automation.workspaceId)!.push({
-        automation,
-        actions: actionsByAutomation.get(automation.id) ?? [],
-      });
-    }
-  };
+  const ensureWorkspacesLoaded = ensureWorkspacesLoadedFor("due_date_arrives", automationsByWorkspace);
 
   // A set_due_date action can push a card's due date forward, moving it ahead of the
   // keyset cursor so it would otherwise reappear in a later batch. Tracking handled
@@ -1586,36 +1490,7 @@ export async function runDueDateApproachingAutomationSweep(
   const broadCutoff = addDays(localDateInTimezone(now, "UTC"), 3651);
   const broadFloor = addDays(localDateInTimezone(now, "UTC"), -1);
   const automationsByWorkspace = new Map<string, ScheduledWorkspaceAutomation[]>();
-  const ensureWorkspacesLoaded = async (workspaceIds: string[]): Promise<void> => {
-    const missing = workspaceIds.filter((id) => !automationsByWorkspace.has(id));
-    if (missing.length === 0) return;
-    for (const id of missing) automationsByWorkspace.set(id, []);
-    const scheduled = await db
-      .select()
-      .from(automations)
-      .where(and(
-        inArray(automations.workspaceId, missing),
-        eq(automations.enabled, true),
-        isNull(automations.archivedAt),
-        eq(automations.triggerType, "due_date_approaching"),
-      ))
-      .orderBy(asc(automations.workspaceId), asc(automations.position));
-    if (scheduled.length === 0) return;
-    const actions = await db
-      .select()
-      .from(automationActions)
-      .where(inArray(automationActions.automationId, scheduled.map((automation) => automation.id)))
-      .orderBy(asc(automationActions.position));
-    const actionsByAutomation = new Map<string, AutomationAction[]>();
-    for (const action of actions) {
-      const list = actionsByAutomation.get(action.automationId);
-      if (list) list.push(action);
-      else actionsByAutomation.set(action.automationId, [action]);
-    }
-    for (const automation of scheduled) {
-      automationsByWorkspace.get(automation.workspaceId)!.push({ automation, actions: actionsByAutomation.get(automation.id) ?? [] });
-    }
-  };
+  const ensureWorkspacesLoaded = ensureWorkspacesLoadedFor("due_date_approaching", automationsByWorkspace);
 
   let ran = 0;
   let cursorDate: string | null = null;
@@ -1735,39 +1610,7 @@ export async function runInactivityAutomationSweep(
   batchSize = INACTIVITY_SWEEP_BATCH_SIZE,
 ): Promise<number> {
   const automationsByWorkspace = new Map<string, ScheduledWorkspaceAutomation[]>();
-  const ensureWorkspacesLoaded = async (workspaceIds: string[]): Promise<void> => {
-    const missing = workspaceIds.filter((id) => !automationsByWorkspace.has(id));
-    if (missing.length === 0) return;
-    for (const id of missing) automationsByWorkspace.set(id, []);
-    const inactiveAutomations = await db
-      .select()
-      .from(automations)
-      .where(and(
-        inArray(automations.workspaceId, missing),
-        eq(automations.enabled, true),
-        isNull(automations.archivedAt),
-        eq(automations.triggerType, "card_becomes_inactive"),
-      ))
-      .orderBy(asc(automations.workspaceId), asc(automations.position));
-    if (inactiveAutomations.length === 0) return;
-    const actions = await db
-      .select()
-      .from(automationActions)
-      .where(inArray(automationActions.automationId, inactiveAutomations.map((automation) => automation.id)))
-      .orderBy(asc(automationActions.position));
-    const actionsByAutomation = new Map<string, AutomationAction[]>();
-    for (const action of actions) {
-      const list = actionsByAutomation.get(action.automationId);
-      if (list) list.push(action);
-      else actionsByAutomation.set(action.automationId, [action]);
-    }
-    for (const automation of inactiveAutomations) {
-      automationsByWorkspace.get(automation.workspaceId)!.push({
-        automation,
-        actions: actionsByAutomation.get(automation.id) ?? [],
-      });
-    }
-  };
+  const ensureWorkspacesLoaded = ensureWorkspacesLoadedFor("card_becomes_inactive", automationsByWorkspace);
 
   const seen = new Set<string>();
   let ran = 0;

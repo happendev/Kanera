@@ -16,7 +16,7 @@ import type { PickerGroup, PickerOption } from "../../shared/picker-list.compone
  */
 
 /** Scope value for "no scope filter". Kept in sync with `GlobalWorkPage.selectSource`. */
-export const ALL_BOARDS_SCOPE = "";
+const ALL_BOARDS_SCOPE = "";
 
 function organisationLabel(name: string, external: boolean): string {
   return external ? `${name} · Guest` : name;

@@ -111,7 +111,7 @@ export async function boardRealtimeAudience(boardId: string): Promise<string[]> 
   return rows.rows.map((row) => row.userId);
 }
 
-export async function workspaceAdminRealtimeAudience(workspaceId: string): Promise<string[]> {
+async function workspaceAdminRealtimeAudience(workspaceId: string): Promise<string[]> {
   const memberAdmins = db
     .select({ userId: workspaceMembers.userId })
     .from(workspaceMembers)
@@ -142,7 +142,7 @@ export async function workspaceAdminRealtimeAudience(workspaceId: string): Promi
   return Array.from(new Set([...workspaceRows, ...orgRows].map((row) => row.userId)));
 }
 
-export async function globalWorkSeparatorRealtimeAudience(workspaceId: string, targetUserId: string): Promise<string[]> {
+async function globalWorkSeparatorRealtimeAudience(workspaceId: string, targetUserId: string): Promise<string[]> {
   return Array.from(new Set([targetUserId, ...(await workspaceAdminRealtimeAudience(workspaceId))]));
 }
 
@@ -334,4 +334,3 @@ export function emitToWorkspace<E extends keyof ServerToClientEvents>(
     });
 }
 
-export { broadcastToBoard, broadcastToWorkspace };

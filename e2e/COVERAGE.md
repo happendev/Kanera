@@ -25,3 +25,36 @@ This file describes the user flows and failures covered by each E2E spec. Update
 | `board-overview.spec.ts` | Neutral active, overdue, unassigned and inactive counts without health verdicts; Portfolio metrics without Work risk; absence of health settings; inactivity-window persistence; overdue, unassigned and inactive drill-downs excluding completed cards; clearing filters; and the overview at a 390px mobile width. |
 
 `runtimeGuard` also fails any spec on an uncaught page error, a `console.error`, or an HTTP 5xx.
+
+## Retired isolated tests
+
+Isolated (Vitest / node:test) cases removed because an E2E spec already fails on the same defect. Each
+row names the failure the case caught and the spec that now catches it; the run that was executed
+before deletion is recorded at the end of this section.
+
+| Retired case | Failure | Covering E2E spec |
+|---|---|---|
+| `card-detail.component.spec` "downloads attachments with the stored file name" | download uses the storage key instead of the original filename | `attachments.spec.ts` (`expectDownload` → `suggestedFilename`) |
+| `card-detail.component.spec` "downloads non-previewable attachments in comments…" / "keeps non-previewable activity attachments as download links" | a docx in a comment or activity row opens the lightbox instead of downloading | `attachments.spec.ts` |
+| `card-detail.component.spec` "opens attachment-added activity files in the media lightbox" / "opens PDFs from the attachment list…" / "opens PDFs linked in the card description…" | activity image, list PDF or description PDF fails to open the lightbox | `attachments.spec.ts` (all four surfaces) |
+| `board-state.spec` "re-emits board:join after reconnect" | no `board:join` after a socket reconnect, so the board misses events | `reconnect.spec.ts` |
+| `board.page.spec` "shows card counts…", "shows zero active cards…", "keeps raw counts available with a legacy…", "shows only incomplete cards with no activity for 14 days" | overview tiles / drill-downs wrong; inactive includes completed | `board-overview.spec.ts` |
+| `global-work.page.spec` "rolls up raw card counts…", "includes every board in raw metric rollups…", "keeps overdue metrics despite a legacy…" | Portfolio shows a risk verdict or drops legacy-health boards | `board-overview.spec.ts` |
+| `global-work.state.spec` "applies known realtime mutations immediately…" | `assignees:set` not reflected in My Cards without a reload | `live-card-edits.spec.ts` |
+| `global-card-detail-host.component.spec` "feeds card detail from the live route-scoped card state" | Global Work card detail not fed from live state | `live-card-edits.spec.ts` |
+| `image-lightbox.component.spec` "pinches on the backdrop…" / "double-taps the image…" | backdrop pinch closes or ignores; double-tap does not toggle zoom | `lightbox-touch.spec.ts` |
+| `login.page.spec` "signs in and stores the returned session" / "shows invalid credentials…"; `public-auth.client.spec` (whole) | session not stored; no wrong-password error; auth requests missing `credentials: include` | `auth.spec.ts` |
+| `onboarding.page.spec` "creates a standalone board from the first-run path without changing hasWorkspace" | standalone first run flips `hasWorkspace` | `onboarding.spec.ts` |
+| `workspace-settings.page.spec` "shows timing settings without board health configuration" | board-health settings reappear | `board-overview.spec.ts` |
+| `description-editor.component.spec` "uploads files chosen from the file picker" / "includes uploaded attachment ids when saving" | file-picker upload not inserted; attachment ids not saved | `attachments.spec.ts` |
+| `apps/mcp http.test.ts` "completes protocol initialization…" / "negotiates current Claude and generic MCP protocol revisions" | HTTP MCP initialise / version negotiation broken | `mcp-protocol.spec.ts` |
+
+Also removed without an E2E prerequisite: `board.page.spec` member added/removed cases (duplicated
+`board-state.spec`), plumbing-only cases (signal set/clear, fallback titles, mock-called-with-path,
+static copy, UA shortcut hint, control-height classes), `realtime/metrics.test.ts` (asserted a stub
+logger received its own arguments) and `lib/overdue-notifications.test.ts` (tested a one-line
+pass-through; its one uncovered assertion moved into `lib/due-date.test.ts`).
+
+E2E run executed before these deletions: `pnpm test:e2e`, 27/27 passed, artifacts under
+`e2e/artifacts/20261006T231129Z-1794008/` (trace, screenshots, service logs and `REPRODUCE.txt`).
+

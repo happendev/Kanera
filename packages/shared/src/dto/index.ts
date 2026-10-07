@@ -15,6 +15,7 @@ export * from "./card-priorities.js";
 export * from "./cards.js";
 export * from "./checklist-templates.js";
 export * from "./clients.js";
+export * from "./deployment.js";
 export * from "./comment-reactions.js";
 export * from "./comments.js";
 export * from "./completed-cards.js";

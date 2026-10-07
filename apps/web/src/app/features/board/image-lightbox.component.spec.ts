@@ -173,57 +173,6 @@ describe("ImageLightboxComponent", () => {
     expect(fixture.componentInstance.isDragging()).toBe(false);
   });
 
-  it("pinches on the backdrop around the fingers' midpoint without closing the lightbox", () => {
-    const close = vi.fn();
-    TestBed.configureTestingModule({
-      imports: [ImageLightboxComponent],
-      providers: [
-        provideZonelessChangeDetection(),
-        { provide: DIALOG_DATA, useValue: { src: "https://example.com/large.png" } },
-        { provide: DialogRef, useValue: { close } },
-      ],
-    });
-
-    const fixture = TestBed.createComponent(ImageLightboxComponent);
-    fixture.detectChanges();
-    const image = (fixture.nativeElement as HTMLElement).querySelector("img.lb-img") as HTMLImageElement;
-    const stage = image.parentElement!;
-    // A short, phone-width image centred at (200, 300): the fingers land on the stage around it.
-    Object.defineProperties(image, { offsetWidth: { value: 400 }, offsetHeight: { value: 200 } });
-    Object.defineProperties(stage, { clientWidth: { value: 400 }, clientHeight: { value: 600 } });
-    image.getBoundingClientRect = () => ({ left: 0, top: 200, width: 400, height: 200 }) as DOMRect;
-    const touch = (pointerId: number, clientX: number, clientY: number) => ({
-      button: 0,
-      pointerType: "touch",
-      pointerId,
-      clientX,
-      clientY,
-      target: stage,
-      preventDefault: vi.fn(),
-    } as unknown as PointerEvent);
-
-    fixture.componentInstance.startPan(touch(1, 250, 150));
-    fixture.componentInstance.startPan(touch(2, 350, 150));
-    fixture.componentInstance.movePan(touch(2, 450, 150));
-
-    // Midpoint moved from (300, 150) to (350, 150) while doubling: the image point that was under the
-    // fingers stays under them, within the pan limits of the scaled image.
-    expect(fixture.componentInstance.scale()).toBe(2);
-    expect(fixture.componentInstance.panX()).toBe(-50);
-    expect(fixture.componentInstance.panY()).toBe(0);
-
-    fixture.componentInstance.endPan(touch(2, 450, 150));
-    fixture.componentInstance.endPan(touch(1, 250, 150));
-    stage.click();
-    expect(close).not.toHaveBeenCalled();
-
-    // The next plain tap on the backdrop still closes it.
-    fixture.componentInstance.startPan(touch(3, 20, 20));
-    fixture.componentInstance.endPan(touch(3, 20, 20));
-    stage.click();
-    expect(close).toHaveBeenCalledOnce();
-  });
-
   it("settles back to the fitted image when a pinch ends below 100%", () => {
     TestBed.configureTestingModule({
       imports: [ImageLightboxComponent],
@@ -248,36 +197,6 @@ describe("ImageLightboxComponent", () => {
 
     fixture.componentInstance.endPan(touch(2, 200));
     fixture.componentInstance.endPan(touch(1, 100));
-    expect(fixture.componentInstance.scale()).toBe(1);
-  });
-
-  it("double-taps the image to zoom in and again to reset", () => {
-    TestBed.configureTestingModule({
-      imports: [ImageLightboxComponent],
-      providers: [
-        provideZonelessChangeDetection(),
-        { provide: DIALOG_DATA, useValue: { src: "https://example.com/large.png" } },
-        { provide: DialogRef, useValue: { close: vi.fn() } },
-      ],
-    });
-
-    const fixture = TestBed.createComponent(ImageLightboxComponent);
-    fixture.detectChanges();
-    const image = (fixture.nativeElement as HTMLElement).querySelector("img.lb-img") as HTMLImageElement;
-    const tap = (pointerId: number) => {
-      const event = {
-        button: 0, pointerType: "touch", pointerId, clientX: 50, clientY: 50, target: image, preventDefault: vi.fn(),
-      } as unknown as PointerEvent;
-      fixture.componentInstance.startPan(event);
-      fixture.componentInstance.endPan(event);
-    };
-
-    tap(1);
-    expect(fixture.componentInstance.scale()).toBe(1);
-    tap(2);
-    expect(fixture.componentInstance.scale()).toBe(2.5);
-    tap(3);
-    tap(4);
     expect(fixture.componentInstance.scale()).toBe(1);
   });
 

@@ -367,4 +367,3 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
   return app;
 }
 
-export { db };

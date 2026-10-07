@@ -2,12 +2,11 @@ import type { dto } from "@kanera/shared";
 import type { WireCardChecklist, WireCardChecklistItem } from "@kanera/shared/events";
 import { ACTIVITY_ACTION, cardChecklistItems, cardChecklists, type ActivityEvent } from "@kanera/shared/schema";
 import { randomUUID } from "node:crypto";
-import type { Db } from "../../db.js";
+import type { Tx } from "../../db.js";
 import { recordActivity } from "../../lib/activity.js";
 import { AppError } from "../../lib/errors.js";
 import { between, positionAtIndex } from "../../lib/position.js";
 
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 export type IssuePath = (string | number)[];
 export type NewItem = dto.NewChecklistItem | dto.NewSubChecklistItem;
 
@@ -28,7 +27,7 @@ export function checklistValidationError(path: IssuePath, message: string): AppE
   });
 }
 
-export function formatIssuePath(path: IssuePath): string {
+function formatIssuePath(path: IssuePath): string {
   return path.reduce<string>((out, segment) =>
     typeof segment === "number" ? `${out}[${segment}]` : out ? `${out}.${segment}` : segment, "");
 }

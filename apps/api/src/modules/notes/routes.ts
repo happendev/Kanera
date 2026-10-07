@@ -5,7 +5,7 @@ import type { ServerToClientEvents, WireNote, WireNoteLock } from "@kanera/share
 import { internalLinks, noteAttachments, notes, users, type Note, type NoteScope } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gt, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { db } from "../../db.js";
+import { db, type TxOnly as Tx } from "../../db.js";
 import { assertBoardAccess, assertWorkspaceAccess, assertWriteCapableCredential } from "../../lib/access.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { readAttachmentUpload } from "../../lib/read-attachment-upload.js";
@@ -15,16 +15,15 @@ import { signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, u
 import { between, positionAtIndex } from "../../lib/position.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { noteAttachmentStorageKey } from "../../lib/storage/keys.js";
-import type { StorageProvider } from "../../lib/storage/types.js";
 import { stripAttachmentReferences } from "../../lib/strip-attachment-refs.js";
 import { emitToBoard, emitToUser, emitToWorkspace } from "../../realtime/emit.js";
 import { loadBacklinksForNote, repairInternalLinksAroundNote, replaceInternalLinksForSource } from "../../lib/internal-links.js";
+import { putAttachmentFile } from "../../lib/attachment-upload.js";
 
 const LOCK_TTL_MS = 90_000; // 90 seconds
 const MAX_NOTE_TREE_DEPTH = 3;
 
 type SiblingKey = Pick<Note, "workspaceId" | "boardId" | "scope" | "ownerId" | "parentNoteId">;
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type DbLike = typeof db | Tx;
 
 const noteAttachmentRowColumns = {
@@ -227,14 +226,6 @@ function sameInstant(a: Date | string, b: Date | string): boolean {
   const base = new Date(a).getTime();
   const value = new Date(b).getTime();
   return value >= base && value < base + 1;
-}
-
-async function putAttachmentFile(storage: StorageProvider, key: string, body: Buffer, contentType: string) {
-  try {
-    await storage.put(key, body, contentType);
-  } catch {
-    throw new AppError(503, "STORAGE_UNAVAILABLE", "attachment storage unavailable");
-  }
 }
 
 function sameWireTimestamp(column: typeof notes.updatedAt, value: string) {

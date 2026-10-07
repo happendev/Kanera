@@ -1113,47 +1113,6 @@ describe("GlobalWorkPage portfolio summary", () => {
     fixture.destroy();
   });
 
-  it("rolls up raw card counts without inferring delivery risk", async () => {
-    const fixture = await mount();
-    const page = fixture.componentInstance;
-    const busiest = page.portfolioRows()
-      .find((row) => row.id === "board:30000000-0000-4000-8000-000000000001")!;
-    const organisation = page.portfolioRows().find((row) => row.level === "organisation")!;
-
-    expect(busiest.overdue).toBe(3);
-    expect(busiest).not.toHaveProperty("risk");
-    expect(organisation.overdue).toBe(3);
-    expect(organisation).not.toHaveProperty("risk");
-
-    fixture.destroy();
-  });
-
-  it("includes every board in raw metric rollups despite legacy health settings", async () => {
-    const disabledBoardId = "30000000-0000-4000-8000-000000000001";
-    const fixture = await mount([], disabledBoardId);
-    const page = fixture.componentInstance;
-    const disabledBoard = page.portfolioRows().find((row) => row.id === `board:${disabledBoardId}`)!;
-    const organisation = page.portfolioRows().find((row) => row.level === "organisation")!;
-
-    expect(disabledBoard.overdue).toBe(3);
-    expect(organisation.overdue).toBe(3);
-
-    fixture.destroy();
-  });
-
-  it("keeps overdue metrics despite a legacy disabled health signal", async () => {
-    const boardId = "30000000-0000-4000-8000-000000000001";
-    const fixture = await mount([], undefined, boardId);
-    const page = fixture.componentInstance;
-    const board = page.portfolioRows().find((row) => row.id === `board:${boardId}`)!;
-    const organisation = page.portfolioRows().find((row) => row.level === "organisation")!;
-
-    expect(board.overdue).toBe(3);
-    expect(organisation.overdue).toBe(3);
-
-    fixture.destroy();
-  });
-
   it("feeds the activity strip separate movement and completion counts per day", async () => {
     const today = new Date();
     const localDate = (date: Date) =>

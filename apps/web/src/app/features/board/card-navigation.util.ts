@@ -1,6 +1,6 @@
 import { cardPath } from "@kanera/shared/card-links";
 
-export function cardDetailUrl(organisationKey: string, cardKey: string): string {
+function cardDetailUrl(organisationKey: string, cardKey: string): string {
   return cardPath(organisationKey, cardKey);
 }
 

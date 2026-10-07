@@ -11,25 +11,14 @@ import { emitAutomationEffects, runCardMoveAutomations, type AutomationEffects }
 import { invalidateQueuesForCards } from "../../lib/card-priority-invalidation.js";
 import { badRequest, notFound } from "../../lib/errors.js";
 import { clearNotificationsForCards, emitDeletedNotifications } from "../../lib/notifications.js";
-import { between, neighbourPositions as resolveNeighbourPositions } from "../../lib/position.js";
+import { between, workspaceNeighbourPositions } from "../../lib/position.js";
 import { rebalanceLists } from "../../lib/rebalance.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { emitToBoard, emitToWorkspace } from "../../realtime/emit.js";
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
 // as targeted indexed probes so large workspaces do not pay for a full list scan.
-function neighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
-  return resolveNeighbourPositions({
-    table: lists,
-    id: lists.id,
-    position: lists.position,
-    scope: and(eq(lists.workspaceId, workspaceId), isNull(lists.archivedAt)),
-    afterId,
-    beforeId,
-    afterLabel: "afterListId",
-    beforeLabel: "beforeListId",
-  });
-}
+const neighbourPositions = workspaceNeighbourPositions(lists, "List");
 
 function listUpdateActivityValue(name: string, icon: string | null, color: string | null) {
   return { name, icon, color };

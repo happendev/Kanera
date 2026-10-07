@@ -1,6 +1,6 @@
 // The shared DTO caps bulk card mutations at 200 ids. The UI keeps list-wide selection
 // unlimited, so every bulk action batches ids per board while preserving that server contract.
-export const BULK_CARD_BATCH_SIZE = 200;
+const BULK_CARD_BATCH_SIZE = 200;
 
 type CardWithBoard = { id: string; boardId?: string };
 

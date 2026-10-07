@@ -1,5 +1,4 @@
 import { dto } from "@kanera/shared";
-import { cardPath } from "@kanera/shared/card-links";
 import type {
   AgentSearchResponse,
   AttachmentSearchResult,
@@ -27,16 +26,14 @@ import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { assignedCardVisibility, isOrgAdmin } from "../../lib/access.js";
 import { applyWorkScope, loadAccessibleBoards } from "../../lib/accessible-boards.js";
+import { escapedSearchPattern } from "../../lib/search-pattern.js";
+import { absoluteCardUrl } from "../../lib/wire-card.js";
 
 const DEFAULT_LIMIT = 8;
 
 // ts_headline options: wrap matches in <mark>, keep snippets short. Postgres
 // HTML-escapes the source text, so the only markup introduced is <mark>.
 const HEADLINE_OPTS = "StartSel=<mark>,StopSel=</mark>,MaxFragments=2,MaxWords=18,MinWords=5";
-
-function escapedSearchPattern(query: string): string {
-  return `%${query.toLowerCase().replace(/[\\%_]/g, "\\$&")}%`;
-}
 
 interface AccessScope {
   workspaceIds: string[];
@@ -116,7 +113,7 @@ function noteVisiblePredicate(scope: AccessScope): SQL {
 }
 
 const cardUrl = (organisationKey: string, cardKey: string) =>
-  new URL(cardPath(organisationKey, cardKey), env.WEB_ORIGIN).toString();
+  absoluteCardUrl(organisationKey, cardKey);
 
 const noteUrl = (note: { id: string; boardId: string | null; workspaceId: string }) => {
   const url = new URL(note.boardId ? `/b/${note.boardId}` : `/w/${note.workspaceId}/notes`, env.WEB_ORIGIN);

@@ -90,7 +90,7 @@ function formatterFor(key: string, options: Intl.DateTimeFormatOptions, timeZone
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Coerces any supported input to a Date, or null when it is missing or unparseable. */
-export function toDate(value: DateInput): Date | null {
+function toDate(value: DateInput): Date | null {
   if (value === null || value === undefined || value === "") return null;
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
   const date = typeof value === "string" && DATE_KEY.test(value) ? parseDateKey(value) : new Date(value);

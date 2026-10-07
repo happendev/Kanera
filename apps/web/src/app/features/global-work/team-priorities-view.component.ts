@@ -14,7 +14,7 @@ import { CardActionsMenuPopover } from "../board/card-actions-menu.popover";
 import { CardDragCoordinator } from "../board/card-drag-coordinator.service";
 import { suppressDropCommitTransitions } from "../board/drop-commit-transition";
 import { formatDueDate, isDueSoon, isOverdue } from "../board/due-date.util";
-import { priorityAnchorAt, type PriorityAnchor } from "./priority-anchor";
+import { priorityAnchorAt, type PriorityAnchor } from "../../shared/priority-queue/priority-queue-math";
 import type { UpNextAddableCard } from "./up-next-panel.component";
 
 export type TeamPriorityReorder = PriorityAnchor & { targetUserId: string; priorityId: string };

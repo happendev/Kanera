@@ -33,7 +33,6 @@ export { cardOverdueEmail } from "./card-overdue.js";
 export type { CardOverdueEmailParams } from "./card-overdue.js";
 export { checklistItemOverdueEmail } from "./card-checklist-item-overdue.js";
 export type { ChecklistItemOverdueEmailParams } from "./card-checklist-item-overdue.js";
-export { emailLayout } from "./layout.js";
 export { dailyDigestEmail } from "./daily-digest.js";
 export type { DailyDigestCardItem, DailyDigestEmailParams } from "./daily-digest.js";
 export { weeklyAdminRecapEmail } from "./weekly-admin-recap.js";

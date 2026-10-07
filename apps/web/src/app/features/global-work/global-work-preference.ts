@@ -10,6 +10,7 @@ import type {
 } from "@kanera/shared/dto";
 import type { WorkViewLens } from "@kanera/shared/schema";
 import { viewPreferenceKey } from "../../core/browser/browser-contracts";
+import { DUE_BUCKET_ORDER } from "../board/table-view/table-view.types";
 
 // v2: the default completion filter changed from "active" (hide completed) to
 // "activeAndRecentlyCompleted". Every stored v1 preference carries the old default as if it were a
@@ -351,7 +352,7 @@ export function sanitizeGlobalWorkDefinition(
       case "board": return new Set([...boardIds, "__none__"].map((id) => `board:${id}`));
       case "assignee": return new Set([...peopleIds, "__none__"].map((id) => `assignee:${id}`));
       case "list": return new Set([...listIds].map((id) => `list:${id}`));
-      case "dueDate": return new Set(["overdue", "today", "tomorrow", "thisWeek", "later", "noDate"].map((id) => `due:${id}`));
+      case "dueDate": return new Set(DUE_BUCKET_ORDER.map((id) => `due:${id}`));
       case "completion": return new Set(["completion:open", "completion:done"]);
       case "none": return new Set(["all"]);
     }

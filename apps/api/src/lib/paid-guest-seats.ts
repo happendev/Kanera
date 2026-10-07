@@ -1,11 +1,9 @@
 import { boardMembers, boards, clientGuestSeats, clientMembers, workspaces } from "@kanera/shared/schema";
 import { and, eq, isNull, notExists } from "drizzle-orm";
-import { db, type Db } from "../db.js";
+import { db, type Tx } from "../db.js";
 import { env } from "../env.js";
 import { assertSeatPoolAvailable } from "./tier-limits.js";
 import { hasActiveClientMembership } from "./client-membership.js";
-
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 async function guestBoardIds(params: {
   hostClientId: string;

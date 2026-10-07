@@ -21,6 +21,7 @@ import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { DEFAULT_INACTIVE_CARDS_DAYS } from "@kanera/shared/workspace-defaults";
 import { createSortedLaneProjection } from "./lane-projection";
+import { byPosition } from "../../shared/position-sort";
 
 export type AnyList = List | WireList;
 export type AnyCard = Card | WireCard | WireCardSummary;
@@ -155,7 +156,7 @@ export class BoardState {
   readonly visibleLists = computed(() =>
     [...this.lists()]
       .filter((l) => !l.archivedAt)
-      .sort((a, b) => Number(a.position) - Number(b.position)),
+      .sort(byPosition),
   );
 
   // O(1) card lookup index, memoized by the signal graph: it only rebuilds when the card set
@@ -217,7 +218,7 @@ export class BoardState {
       else map.set(separator.listId, [separator]);
     }
     for (const separators of map.values()) {
-      separators.sort((a, b) => Number(a.position) - Number(b.position));
+      separators.sort(byPosition);
     }
     return map;
   });
@@ -249,7 +250,7 @@ export class BoardState {
       }
     }
     for (const labels of map.values()) {
-      labels.sort((a, b) => Number(a.position) - Number(b.position));
+      labels.sort(byPosition);
     }
     return map;
   });
@@ -859,14 +860,6 @@ export class BoardState {
     this.bumpCardMutationSeq();
   }
 
-  removeCardsForBoard(boardId: string) {
-    const cardIds = new Set(this.cards().filter((card) => card.boardId === boardId).map((card) => card.id));
-    this.removeCardCollections(cardIds);
-    this.cards.update((cs) => cs.filter((c) => c.boardId !== boardId));
-    this.recentlyAddedCardAt.clear();
-    this.bumpCardMutationSeq();
-  }
-
   addCard(card: AnyCard) {
     let added = false;
     this.cards.update((cs) => {
@@ -878,11 +871,6 @@ export class BoardState {
     // retention protects it against a racing stale refresh until the server catches up.
     if (added) this.recentlyAddedCardAt.set(card.id, Date.now());
     this.bumpCardMutationSeq();
-  }
-
-  upsertCard(card: AnyCard) {
-    if (this.hasCard(card.id)) this.updateCard(card);
-    else this.addCard(card);
   }
 
   /**
@@ -1189,22 +1177,6 @@ export class BoardState {
     };
   }
 
-  snapshotCards() {
-    return this.cards();
-  }
-
-  restoreCards(cards: AnyCard[]) {
-    this.cards.set(cards);
-  }
-
-  snapshotSeparators() {
-    return this.separators();
-  }
-
-  restoreSeparators(separators: AnySeparator[]) {
-    this.separators.set(separators);
-  }
-
   snapshot(): Omit<OfflineBoardSnapshot, "boardId" | "cachedAt"> | null {
     const board = this.board();
     const viewerRole = this.viewerRole();
@@ -1360,7 +1332,7 @@ export class BoardState {
   }
 
   sortCustomFields(fields: AnyCustomField[]) {
-    return [...fields].sort((a, b) => Number(a.position) - Number(b.position));
+    return [...fields].sort(byPosition);
   }
 
   /**
@@ -1371,18 +1343,18 @@ export class BoardState {
     this.customFields.update((fields) =>
       fields.map((field) => {
         if (field.id !== fieldId || !("options" in field)) return field;
-        const options = [...update(field.options)].sort((a, b) => Number(a.position) - Number(b.position));
+        const options = [...update(field.options)].sort(byPosition);
         return { ...field, options };
       }),
     );
   }
 
   private sortChecklists(checklists: WireCardChecklist[]): WireCardChecklist[] {
-    return [...checklists].sort((a, b) => Number(a.position) - Number(b.position));
+    return [...checklists].sort(byPosition);
   }
 
   private sortChecklistItems(items: WireCardChecklistItem[]): WireCardChecklistItem[] {
-    return [...items].sort((a, b) => Number(a.position) - Number(b.position));
+    return [...items].sort(byPosition);
   }
 
   private updateChecklistItems(cardId: string, checklistId: string, update: (items: WireCardChecklistItem[]) => WireCardChecklistItem[]) {

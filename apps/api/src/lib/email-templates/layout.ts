@@ -1,3 +1,5 @@
+import { escapeHtml } from "../html-escape.js";
+
 export interface LayoutOptions {
   subject: string;
   preheader: string;
@@ -138,7 +140,7 @@ export function divider(margin = "0"): string {
     </table>`;
 }
 
-export function link({ href, label }: { href: string; label: string }): string {
+function link({ href, label }: { href: string; label: string }): string {
   return `<a href="${escapeAttr(href)}" target="_blank" class="email-link" style="color:${EMAIL_LINK};font-weight:600;text-decoration:underline;word-break:break-word;">${escapeHtml(label)}</a>`;
 }
 
@@ -182,10 +184,5 @@ export function quoteBlock(text: string): string {
     </table>`;
 }
 
-function escapeHtml(str: string): string {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
-function escapeAttr(str: string): string {
-  return str.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
+// Attribute values escape the same four characters as text nodes.
+const escapeAttr = escapeHtml;

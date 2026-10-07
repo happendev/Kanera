@@ -126,7 +126,7 @@ const BILLING_STATUSES = ["none", "trialing", "active", "past_due", "canceled"] 
 
       <div class="card people-card">
         <h2>Users and guests</h2>
-        <a-table-controls [query]="peopleQuery()" placeholder="Search users and guests…" [page]="peoplePage()" [pageSize]="peoplePageSize()" [total]="peopleTotal()" [loading]="peopleLoading()" (queryChange)="searchPeople($event)" (pageChange)="goPeople($event)" (pageSizeChange)="resizePeople($event)" />
+        <a-table-controls [query]="peopleQuery()" placeholder="Search users and guests…" (queryChange)="searchPeople($event)" />
         <table class="data">
           <thead><tr>@for(c of peopleColumns;track c.key){<th><button class="sort" (click)="orderPeople(c.sort)">{{c.label}} {{peopleArrow(c.sort)}}</button></th>}</tr></thead>
           <tbody>

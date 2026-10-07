@@ -96,7 +96,7 @@
       @if (usingOfflineShell()) {
       <span class="offline-copy">Offline copy</span>
       }
-      @if (isOrgAdmin() && canCreateWorkspace()) {
+      @if (isOrgAdmin()) {
       <button class="new-ws-btn ghost icon" (click)="newWorkspace()" (contextmenu)="openNavContextMenu($event, { label: 'New workspace', url: '/onboarding?mode=workspace', canMarkAllRead: false, clearBoardSearch: false })" kTooltip="New workspace" aria-label="New workspace">
         <i class="ti ti-plus"></i>
       </button>
@@ -434,7 +434,7 @@
     }
     }
 
-    @if (sidebarCollapsed() && isOrgAdmin() && canCreateWorkspace()) {
+    @if (sidebarCollapsed() && isOrgAdmin()) {
     <button class="new-ws-icon ghost icon" (click)="newWorkspace()" (contextmenu)="openNavContextMenu($event, { label: 'New workspace', url: '/onboarding?mode=workspace', canMarkAllRead: false, clearBoardSearch: false })" kTooltip="New workspace" aria-label="New workspace">
       <i class="ti ti-plus"></i>
     </button>

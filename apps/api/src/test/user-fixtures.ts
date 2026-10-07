@@ -1,7 +1,6 @@
 import { clientMembers, users, type ClientRole } from "@kanera/shared/schema";
-import type { Db } from "../db.js";
+import type { Tx } from "../db.js";
 
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 type LegacyUserFixture = typeof users.$inferInsert & {
   clientRole?: ClientRole;
   suspendedAt?: Date | null;

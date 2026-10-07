@@ -1,11 +1,9 @@
 import { eq } from "drizzle-orm";
 import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
-import { db, type Db } from "../db.js";
+import { db, type TxOnly as Tx } from "../db.js";
 import { recordActivity, type ActivityInput } from "./activity.js";
 import { between } from "./position.js";
 import type { RebalancedPosition } from "./rebalance.js";
-
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 export interface MoveOrderedEntityResult {
   /** The committed position, already reconciled against a rebalance if one ran. */

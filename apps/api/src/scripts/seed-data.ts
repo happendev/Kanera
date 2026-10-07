@@ -1,7 +1,6 @@
 import type { ColorToken } from "@kanera/shared/colors";
 import { cardPath } from "@kanera/shared/card-links";
-import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
-import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
+import { DEFAULT_WORKSPACE_CUSTOM_FIELDS, DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/workspace-templates";
 import {
   ACTIVITY_ACTION,
   activityEvents,
@@ -49,7 +48,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { hashPassword } from "../auth/password.js";
-import { db, type Db } from "../db.js";
+import { db, type TxOnly as Tx } from "../db.js";
 import { env } from "../env.js";
 import { seedBoardMembersFromWorkspace } from "../lib/board-membership.js";
 import { allocateCardKeys } from "../lib/card-keys.js";
@@ -63,8 +62,6 @@ import {
   cardAttachmentStorageKey,
   noteAttachmentStorageKey,
 } from "../lib/storage/keys.js";
-
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 type SeedUserKey =
   | "amelia"

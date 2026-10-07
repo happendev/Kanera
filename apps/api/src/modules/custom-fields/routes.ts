@@ -9,7 +9,7 @@ import { disableAutomationsReferencingCustomField, disableAutomationsReferencing
 import { loadFieldOptions } from "../../lib/custom-fields.js";
 import { badRequest, conflict, notFound } from "../../lib/errors.js";
 import { moveOrderedEntity } from "../../lib/move-ordered-entity.js";
-import { between, neighbourPositions as resolveNeighbourPositions } from "../../lib/position.js";
+import { between, neighbourPositions as resolveNeighbourPositions, workspaceNeighbourPositions } from "../../lib/position.js";
 import { rebalanceCustomFieldOptions, rebalanceCustomFields } from "../../lib/rebalance.js";
 import { emitToWorkspace, emitToWorkspaceAdmins } from "../../realtime/emit.js";
 
@@ -43,18 +43,7 @@ async function assertUniqueCustomFieldName(workspaceId: string, name: string, ex
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
 // as targeted indexed probes so large workspaces do not pay for a full custom-field scan.
-function neighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
-  return resolveNeighbourPositions({
-    table: customFields,
-    id: customFields.id,
-    position: customFields.position,
-    scope: and(eq(customFields.workspaceId, workspaceId), isNull(customFields.archivedAt)),
-    afterId,
-    beforeId,
-    afterLabel: "afterFieldId",
-    beforeLabel: "beforeFieldId",
-  });
-}
+const neighbourPositions = workspaceNeighbourPositions(customFields, "Field");
 
 export async function customFieldRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);

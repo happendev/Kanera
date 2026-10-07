@@ -16,28 +16,15 @@ import authPlugin from "./auth/plugin.js";
 import { authRoutes } from "./auth/routes.js";
 import { db } from "./db.js";
 import { env } from "./env.js";
-import { startArchivedCardCleanupScheduler } from "./lib/archived-card-cleanup.js";
 import { startCompletedPriorityCleanupScheduler } from "./lib/completed-priority-cleanup.js";
-import { startDueDateAutomationScheduler } from "./lib/automations.js";
-import { startDailyDigestScheduler } from "./lib/daily-digest.js";
-import { startEmailQueueScheduler } from "./lib/email-queue.js";
 import { registerErrorHandler } from "./lib/errors.js";
-import { startImportCleanupScheduler } from "./lib/import-cleanup.js";
 import { registerMetrics } from "./lib/metrics.js";
 import mailerPlugin from "./lib/mailer-plugin.js";
-import { startOverdueNotificationScheduler } from "./lib/overdue-notifications.js";
-import { startOrganisationDeletionScheduler } from "./lib/organisation-delete.js";
-import { startPushQueueScheduler } from "./lib/push-queue.js";
-import { startRetentionCleanupScheduler } from "./lib/retention-cleanup.js";
 import { helmetSecurityOptions, registerSecurityHeaderFallbacks } from "./lib/security-headers.js";
-import { startTrialExpiryScheduler } from "./lib/trial-expiry.js";
 import { startSeatReconcileScheduler } from "./lib/seat-reconcile.js";
-import { resolveSmtpConfig } from "./lib/smtp-resolve.js";
 import { resolveLocalUploadsRoot } from "./lib/storage/local.js";
 import { productAnalytics } from "./lib/product-analytics.js";
 import { ensureSystemWebPushConfig } from "./lib/web-push.js";
-import type { SweepScheduler } from "./lib/sweep-scheduler.js";
-import { startWebhookDeliveryScheduler } from "./lib/webhooks.js";
 import { activityRoutes } from "./modules/activity/routes.js";
 import { automationRoutes } from "./modules/automations/routes.js";
 import { boardInvitationRoutes } from "./modules/board-invitations/routes.js";
@@ -74,7 +61,6 @@ import { globalWorkSeparatorRoutes } from "./modules/global-work-separators/rout
 import { cardPriorityRoutes } from "./modules/card-priorities/routes.js";
 import { setupIo } from "./realtime/io.js";
 import { setRealtimeLogger } from "./realtime/metrics.js";
-import { startDirectRealtimeOutboxDispatcher, startRealtimeOutboxDispatcher } from "./realtime/outbox.js";
 import { initRedis } from "./redis.js";
 
 declare module "@fastify/request-context" {
@@ -153,20 +139,8 @@ function buildLoggerOptions(logger: BuildServerOptions["logger"]) {
 
 export interface BuildServerOptions {
   enableRealtime?: boolean;
-  enableOverdueScheduler?: boolean;
-  enableDueDateAutomationScheduler?: boolean;
-  enableDailyDigestScheduler?: boolean;
-  enableEmailQueueScheduler?: boolean;
-  enableArchivedCardCleanupScheduler?: boolean;
   enableCompletedPriorityCleanupScheduler?: boolean;
-  enableImportCleanupScheduler?: boolean;
-  enableOrganisationDeletionScheduler?: boolean;
-  enableRetentionCleanupScheduler?: boolean;
-  enablePushQueueScheduler?: boolean;
-  enableWebhookDeliveryScheduler?: boolean;
-  enableTrialExpiryScheduler?: boolean;
   enableSeatReconcileScheduler?: boolean;
-  enableRealtimeOutboxDispatcher?: boolean;
   logger?: FastifyServerOptions["logger"];
   slowRequestLogMs?: number;
   uploadsDir?: string;
@@ -194,20 +168,8 @@ async function bootstrapHostedPushMessaging(log: FastifyInstance["log"]) {
 export async function buildServer(options: BuildServerOptions = {}) {
   await initRedis();
   const enableRealtime = options.enableRealtime ?? true;
-  const enableOverdueScheduler = options.enableOverdueScheduler ?? true;
-  const enableDueDateAutomationScheduler = options.enableDueDateAutomationScheduler ?? true;
-  const enableDailyDigestScheduler = options.enableDailyDigestScheduler ?? true;
-  const enableEmailQueueScheduler = options.enableEmailQueueScheduler ?? true;
-  const enableArchivedCardCleanupScheduler = options.enableArchivedCardCleanupScheduler ?? true;
   const enableCompletedPriorityCleanupScheduler = options.enableCompletedPriorityCleanupScheduler ?? true;
-  const enableImportCleanupScheduler = options.enableImportCleanupScheduler ?? true;
-  const enableOrganisationDeletionScheduler = options.enableOrganisationDeletionScheduler ?? true;
-  const enableRetentionCleanupScheduler = options.enableRetentionCleanupScheduler ?? true;
-  const enablePushQueueScheduler = options.enablePushQueueScheduler ?? true;
-  const enableWebhookDeliveryScheduler = options.enableWebhookDeliveryScheduler ?? true;
-  const enableTrialExpiryScheduler = options.enableTrialExpiryScheduler ?? true;
   const enableSeatReconcileScheduler = options.enableSeatReconcileScheduler ?? true;
-  const enableRealtimeOutboxDispatcher = options.enableRealtimeOutboxDispatcher ?? true;
   const slowRequestLogMs = options.slowRequestLogMs ?? env.SLOW_REQUEST_LOG_MS;
   const requestStartedAt = new WeakMap<FastifyRequest, number>();
   const app = Fastify({
@@ -320,81 +282,18 @@ export async function buildServer(options: BuildServerOptions = {}) {
   await app.register(internalLinkRoutes);
   await app.register(searchRoutes);
 
-  let stopOverdueScheduler: (() => Promise<void>) | null = null;
-  let stopDueDateAutomationScheduler: (() => Promise<void>) | null = null;
-  let stopDailyDigestScheduler: (() => Promise<void>) | null = null;
-  let stopEmailQueueScheduler: (() => Promise<void>) | null = null;
-  let stopArchivedCardCleanupScheduler: (() => Promise<void>) | null = null;
   let stopCompletedPriorityCleanupScheduler: (() => Promise<void>) | null = null;
-  let stopImportCleanupScheduler: (() => Promise<void>) | null = null;
-  let stopOrganisationDeletionScheduler: (() => Promise<void>) | null = null;
-  let stopRetentionCleanupScheduler: (() => Promise<void>) | null = null;
-  let stopPushQueueScheduler: (() => Promise<void>) | null = null;
-  let webhookDeliveryScheduler: SweepScheduler | null = null;
-  let stopTrialExpiryScheduler: (() => Promise<void>) | null = null;
   let stopSeatReconcileScheduler: (() => Promise<void>) | null = null;
-  let stopRealtimeOutboxDispatcher: (() => Promise<void>) | null = null;
-  let stopDirectRealtimeOutboxDispatcher: (() => Promise<void>) | null = null;
-  app.addHook("onClose", async () => stopOverdueScheduler?.());
-  app.addHook("onClose", async () => stopDueDateAutomationScheduler?.());
-  app.addHook("onClose", async () => stopDailyDigestScheduler?.());
-  app.addHook("onClose", async () => stopEmailQueueScheduler?.());
-  app.addHook("onClose", async () => stopArchivedCardCleanupScheduler?.());
   app.addHook("onClose", async () => stopCompletedPriorityCleanupScheduler?.());
-  app.addHook("onClose", async () => stopImportCleanupScheduler?.());
-  app.addHook("onClose", async () => stopOrganisationDeletionScheduler?.());
-  app.addHook("onClose", async () => stopRetentionCleanupScheduler?.());
-  app.addHook("onClose", async () => stopPushQueueScheduler?.());
-  app.addHook("onClose", async () => webhookDeliveryScheduler?.stop());
-  app.addHook("onClose", async () => stopTrialExpiryScheduler?.());
   app.addHook("onClose", async () => stopSeatReconcileScheduler?.());
-  app.addHook("onClose", async () => stopRealtimeOutboxDispatcher?.());
-  app.addHook("onClose", async () => stopDirectRealtimeOutboxDispatcher?.());
   app.addHook("onClose", async () => productAnalytics.shutdown());
   app.addHook("onReady", async () => {
     if (enableRealtime) await setupIo(app);
-    // Start the webhook scheduler before the outbox dispatcher so the dispatcher can wake
-    // delivery immediately when a drain enqueues new rows, instead of leaving them to wait
-    // up to a full webhook poll interval.
-    if (enableWebhookDeliveryScheduler) {
-      webhookDeliveryScheduler = startWebhookDeliveryScheduler({ log: app.log });
-    }
-    if (enableRealtimeOutboxDispatcher) {
-      stopRealtimeOutboxDispatcher = startRealtimeOutboxDispatcher({
-        log: app.log,
-        onDeliveriesEnqueued: webhookDeliveryScheduler?.trigger,
-      });
-      stopDirectRealtimeOutboxDispatcher = startDirectRealtimeOutboxDispatcher({ log: app.log });
-    }
-    if (enableOverdueScheduler) stopOverdueScheduler = startOverdueNotificationScheduler(app.log);
-    if (enableDueDateAutomationScheduler) stopDueDateAutomationScheduler = startDueDateAutomationScheduler(app.log);
-    if (enableDailyDigestScheduler) {
-      stopDailyDigestScheduler = startDailyDigestScheduler({ db, webOrigin: env.WEB_ORIGIN, resolveSmtpConfig, log: app.log });
-    }
-    if (enableEmailQueueScheduler) {
-      stopEmailQueueScheduler = startEmailQueueScheduler({ db, resolveSmtpConfig, log: app.log });
-    }
-    if (enableArchivedCardCleanupScheduler) {
-      stopArchivedCardCleanupScheduler = startArchivedCardCleanupScheduler({ db, log: app.log });
-    }
+    // Every other background job (outbox dispatch, webhooks, digests, queues, cleanups, expiry) runs
+    // only in the worker process; see worker-server.ts. The two below stay here because they guard
+    // state this process writes and are cheap enough to run alongside the request path.
     if (enableCompletedPriorityCleanupScheduler) {
       stopCompletedPriorityCleanupScheduler = startCompletedPriorityCleanupScheduler({ db, log: app.log });
-    }
-    if (enableImportCleanupScheduler) {
-      stopImportCleanupScheduler = startImportCleanupScheduler({ db, log: app.log });
-    }
-    if (enableOrganisationDeletionScheduler) {
-      stopOrganisationDeletionScheduler = startOrganisationDeletionScheduler(app.log);
-    }
-    if (enableRetentionCleanupScheduler) {
-      stopRetentionCleanupScheduler = startRetentionCleanupScheduler({ db, log: app.log });
-    }
-    if (enablePushQueueScheduler) {
-      stopPushQueueScheduler = startPushQueueScheduler({ db, log: app.log });
-    }
-    // Reverts lapsed trials to free; the scheduler itself no-ops outside hosted mode.
-    if (enableTrialExpiryScheduler) {
-      stopTrialExpiryScheduler = startTrialExpiryScheduler(app.log, app.mailer);
     }
     // Safety net that repairs any Stripe seat-quantity drift left by a failed inline removal sync.
     if (enableSeatReconcileScheduler) {

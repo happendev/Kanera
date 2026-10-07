@@ -20,7 +20,6 @@ import type {
   AutomationRunStats,
   GlobalWorkSeparator,
   Card,
-  CardAssignee,
   CardChecklist,
   CardChecklistItem,
   CardDueDateSlot,
@@ -317,7 +316,6 @@ export type WireAutomation = Omit<Automation, "position"> & {
   // Null until the rule runs for the first time — no stats row exists before then.
   runStats: WireAutomationRunStats | null;
 };
-export type WireCustomFieldValue = CardCustomFieldValue;
 export type WireCardLabel = Omit<CardLabel, "position"> & { position: string };
 export type WireNote = Omit<Note, "position" | "searchVector"> & {
   position: string;
@@ -335,7 +333,6 @@ export interface WireNoteLock {
   editingUserAvatarUrl: string | null;
   editingExpiresAt: string;
 }
-export type WireCardAssignee = CardAssignee;
 /**
  * One agent's in-flight (or finished) work session on a card. Full entity on every event so a
  * board can render the "agent working" chip from the payload alone, without a detail fetch.

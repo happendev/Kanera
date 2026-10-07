@@ -1,6 +1,6 @@
 import { expect, test } from "./support/fixtures";
 import { SocketLink } from "./support/socket";
-import { cardTile, createCard, expectBoardLoaded, openBoard, openCard } from "./support/ui";
+import { cardTile, createCard, expectBoardLoaded, expectCardTileMounted, openBoard, openCard } from "./support/ui";
 
 test("a disconnected board converges on the latest card after its socket reconnects", async ({ page, signIn, pageAs, uniqueName }) => {
   const original = uniqueName("E2E reconnect card");
@@ -16,7 +16,7 @@ test("a disconnected board converges on the latest card after its socket reconne
   await openBoard(second, "Platform Delivery");
 
   await createCard(page, original);
-  await expect(cardTile(second, original)).toHaveCount(1);
+  await expectCardTileMounted(second, original);
 
   await link.cut();
   // Proves the cut is real: the client noticed and its reconnect attempts are being refused.
@@ -35,9 +35,10 @@ test("a disconnected board converges on the latest card after its socket reconne
   link.restore();
   // The server does not enable Socket.IO connection-state recovery, so the missed card:updated is
   // gone; the board converges only if it resyncs after rejoining its room (board:join -> onJoined).
-  await expect(cardTile(second, updated)).toHaveCount(1);
+  await expectCardTileMounted(second, updated);
   await expect(cardTile(second, original).filter({ hasNotText: "updated" })).toHaveCount(0);
   await second.reload();
   await expectBoardLoaded(second, "Platform Delivery");
-  await expect(cardTile(second, updated)).toHaveCount(1);
+  // A reload resets the lane's render window, so mount the tile again before counting it.
+  await expectCardTileMounted(second, updated);
 });

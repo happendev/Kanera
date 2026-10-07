@@ -3,26 +3,6 @@ import type { WireCardSummary } from "../events/index.js";
 import { ianaTimeZone } from "./_time-zone.js";
 
 /**
- * "Work done" historical view. The client sends the local-day boundaries as ISO
- * datetimes (start of the first day and end of the last day in the viewer's
- * timezone), the same convention the completed-cards panel uses, so day
- * attribution respects the viewer's timezone rather than the server's.
- *
- * The window may span several days. `timeZone` is what lets the server tell those
- * days apart: move coalescing must not merge across a local-day boundary, or a card
- * moved on Monday and again on Tuesday collapses into one Tuesday row and Monday's
- * work disappears. Optional, defaulting to UTC, so public/MCP callers keep working.
- */
-export const workDoneQuery = z.object({
-  from: z.iso.datetime(),
-  to: z.iso.datetime(),
-  boardId: z.uuid().optional(),
-  q: z.string().trim().min(1).max(200).optional(),
-  timeZone: ianaTimeZone,
-});
-export type WorkDoneQuery = z.infer<typeof workDoneQuery>;
-
-/**
  * A repeatable uuid query parameter.
  *
  * Fastify's query parser yields a bare string for `?ids=a` and an array only for `?ids=a&ids=b`, so a
@@ -40,6 +20,12 @@ function idListParam(max: number) {
 
 /**
  * Per-day counts for the work-done activity strip, over a window wider than the visible range.
+ *
+ * The client sends the local-day boundaries as ISO datetimes (start of the first day and end of
+ * the last day in the viewer's timezone), the same convention the completed-cards panel uses, so
+ * day attribution respects the viewer's timezone rather than the server's. `timeZone` is what lets
+ * the server tell those days apart; it is optional, defaulting to UTC, so public/MCP callers keep
+ * working.
  *
  * The strip sits above the timeline, so it must narrow with it. The timeline can filter a loaded page
  * in JS, but an aggregate cannot — every filter that affects what the rows show has to be sent here

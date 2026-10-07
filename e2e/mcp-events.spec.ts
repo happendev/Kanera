@@ -1,22 +1,16 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import ports from "./ports.json";
 import { expect, test } from "./support/fixtures";
-import { boardHref, openBoard, workspaceSettingsHref } from "./support/ui";
+import { boardIdOf, createWorkspaceApiKey, openBoard, workspaceSettingsHref } from "./support/ui";
 
 const mcpUrl = `http://localhost:${ports.mcp}/mcp`;
 
 test("MCP 2 discovers events, executes tools, rejects private callbacks and respects revoked credentials", async ({ page, signIn, playwright, apiAs, uniqueName }, testInfo) => {
   await signIn(page, "amelia");
-  const boardId = (await boardHref(page, "Platform Delivery")).split("/")[2]!;
+  const boardId = await boardIdOf(page, "Platform Delivery");
   const settings = await workspaceSettingsHref(page, "Platform Delivery");
-  await page.goto(`${settings}/api`);
   const keyName = uniqueName("MCP events key");
-  await page.locator('input[name="apiKeyName"]').fill(keyName);
-  await page.locator('select[name="apiKeyScope"]').selectOption("write");
-  await page.getByRole("button", { name: "Create API key" }).click();
-  const reveal = page.locator(".secret-reveal").filter({ has: page.getByRole("button", { name: "Copy API key" }) });
-  await expect(reveal).toBeVisible();
-  const key = (await reveal.locator("code").innerText()).trim();
+  const key = await createWorkspaceApiKey(page, settings, keyName);
   const client = await playwright.request.newContext({ extraHTTPHeaders: { authorization: `Bearer ${key}`, "MCP-Protocol-Version": "2026-07-28" } });
   const evidence: unknown[] = [];
   const meta = { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {} };

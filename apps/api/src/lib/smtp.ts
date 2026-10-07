@@ -113,7 +113,7 @@ function buildMimeMessage({ from, to, subject, html }: { from: string; to: strin
   ].join("\r\n");
 }
 
-export function formatAddress(email: string, name?: string): string {
+function formatAddress(email: string, name?: string): string {
   if (!name) return email;
   const escaped = name.replace(/["\\]/g, "\\$&");
   return `"${escaped}" <${email}>`;

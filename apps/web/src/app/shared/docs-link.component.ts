@@ -10,7 +10,7 @@ export const KANERA_DOCS_URL = "https://www.kanera.app/docs";
  * the user discovers. When a doc page is renamed on the site, this list is the single place the
  * app has to follow it.
  */
-export const DOCS_PATHS = [
+const DOCS_PATHS = [
   "ai-mcp-oauth",
   "ai-mcp-reference",
   "api",

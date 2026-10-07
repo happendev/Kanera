@@ -23,14 +23,14 @@ export type ListLookup = ReadonlyMap<string, { name: string; icon: string | null
 const LEAD_PRECEDENCE: WorkDoneEventType[] = ["created", "moved", "checklistItemCompleted", "completed"];
 
 /** Actor display branches on type: checklist completions carry their own completedBy fields. */
-export function actorNameFor(event: WorkDoneEvent): string {
+function actorNameFor(event: WorkDoneEvent): string {
   if (event.type === "checklistItemCompleted") return event.completedByName;
   // Agent output is never presented as the person's own effort: the row and the contributor
   // stack both read "Ada via Claude", and (with actorUserId null) it groups apart from Ada.
   return event.agentName ? `${event.actorName} via ${event.agentName}` : event.actorName;
 }
 
-export function actorAvatarFor(event: WorkDoneEvent): string | null {
+function actorAvatarFor(event: WorkDoneEvent): string | null {
   return event.type === "checklistItemCompleted" ? event.completedByAvatarUrl : event.actorAvatarUrl;
 }
 
@@ -38,7 +38,7 @@ export function actorUserIdFor(event: WorkDoneEvent): string | null {
   return event.type === "checklistItemCompleted" ? event.completedByUserId : event.actorUserId;
 }
 
-export function actorAgentNameFor(event: WorkDoneEvent): string | null {
+function actorAgentNameFor(event: WorkDoneEvent): string | null {
   return event.type === "checklistItemCompleted" ? null : event.agentName;
 }
 

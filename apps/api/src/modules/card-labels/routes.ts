@@ -1,30 +1,19 @@
 import { dto } from "@kanera/shared";
 import { cardLabels } from "@kanera/shared/schema";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertWorkspaceAccess } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
 import { notFound } from "../../lib/errors.js";
 import { moveOrderedEntity } from "../../lib/move-ordered-entity.js";
-import { between, neighbourPositions as resolveNeighbourPositions } from "../../lib/position.js";
+import { between, workspaceNeighbourPositions } from "../../lib/position.js";
 import { rebalanceCardLabels } from "../../lib/rebalance.js";
 import { emitToWorkspace } from "../../realtime/emit.js";
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
 // as targeted indexed probes so large workspaces do not pay for a full label scan.
-function neighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
-  return resolveNeighbourPositions({
-    table: cardLabels,
-    id: cardLabels.id,
-    position: cardLabels.position,
-    scope: and(eq(cardLabels.workspaceId, workspaceId), isNull(cardLabels.archivedAt)),
-    afterId,
-    beforeId,
-    afterLabel: "afterLabelId",
-    beforeLabel: "beforeLabelId",
-  });
-}
+const neighbourPositions = workspaceNeighbourPositions(cardLabels, "Label");
 
 export async function cardLabelRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);

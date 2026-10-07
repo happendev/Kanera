@@ -49,7 +49,7 @@ export interface RepoConfig {
 
 const EMPTY: CliConfig = { version: 1, defaultProfile: "default", profiles: {} };
 
-export function configDir(): string {
+function configDir(): string {
   const xdg = process.env.XDG_CONFIG_HOME;
   return join(xdg && xdg.trim() !== "" ? xdg : join(homedir(), ".config"), "kanera");
 }

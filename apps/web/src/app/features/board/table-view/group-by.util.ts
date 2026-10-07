@@ -16,6 +16,8 @@ import {
   type SourceWorkspaceRef,
 } from "./table-view.types";
 import type { CardCustomFieldValue } from "@kanera/shared/schema";
+import { localDateKey } from "../../../shared/day-key.util";
+import { byPosition } from "../../../shared/position-sort";
 
 export interface GroupingContext {
   lists: AnyList[];
@@ -49,22 +51,15 @@ export interface GroupingContext {
 export function dueBucket(card: AnyCard, now: Date = new Date()): DueBucket {
   const date = card.dueDateLocalDate;
   if (!date) return "noDate";
-  const today = formatLocalYMD(now);
+  const today = localDateKey(now);
   if (date < today) return card.completedAt ? "later" : "overdue";
   if (date === today) return "today";
-  const tomorrow = formatLocalYMD(new Date(now.getTime() + 24 * 60 * 60 * 1000));
+  const tomorrow = localDateKey(new Date(now.getTime() + 24 * 60 * 60 * 1000));
   if (date === tomorrow) return "tomorrow";
   // Within the next 7 days (inclusive of today + 6).
-  const sixDaysAhead = formatLocalYMD(new Date(now.getTime() + 6 * 24 * 60 * 60 * 1000));
+  const sixDaysAhead = localDateKey(new Date(now.getTime() + 6 * 24 * 60 * 60 * 1000));
   if (date <= sixDaysAhead) return "thisWeek";
   return "later";
-}
-
-function formatLocalYMD(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
 }
 
 /** Group + sort the given cards by the requested dimensions. */
@@ -303,7 +298,7 @@ function valueFor(ctx: GroupingContext, cardId: string, fieldId: string): CardCu
 function groupByList(cards: AnyCard[], ctx: GroupingContext, sortMode: SortBy): CardGroup[] {
   const sortedLists = [...ctx.lists]
     .filter((list) => !list.archivedAt)
-    .sort((a, b) => Number(a.position) - Number(b.position));
+    .sort(byPosition);
   const byList = new Map<string, AnyCard[]>();
   for (const card of cards) {
     const bucket = byList.get(card.listId);
@@ -498,7 +493,7 @@ function groupByLabel(cards: AnyCard[], ctx: GroupingContext, sortMode: SortBy):
   }
 
   const groups: CardGroup[] = [];
-  const orderedLabels = [...ctx.labels].sort((a, b) => Number(a.position) - Number(b.position));
+  const orderedLabels = [...ctx.labels].sort(byPosition);
   for (const label of orderedLabels) {
     if (!byLabel.has(label.id) && !ctx.includeEmptyGroups) continue;
     groups.push({
@@ -595,7 +590,7 @@ export function sortGroupCards(cards: AnyCard[], mode: SortBy): AnyCard[] {
   const arr = [...cards];
   switch (mode) {
     case "position":
-      return arr.sort((a, b) => Number(a.position) - Number(b.position));
+      return arr.sort(byPosition);
     case "title-asc":
       return arr.sort((a, b) => a.title.localeCompare(b.title));
     case "title-desc":

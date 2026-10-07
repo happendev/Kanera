@@ -9,33 +9,20 @@ import {
 } from "@kanera/shared/schema";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import { db, type Db } from "../../db.js";
+import { db, type Tx } from "../../db.js";
 import { assertWorkspaceAccess } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
 import { loadAutomation } from "../../lib/automations.js";
 import { loadChecklistTemplate } from "../../lib/checklist-templates.js";
 import { notFound } from "../../lib/errors.js";
 import { moveOrderedEntity } from "../../lib/move-ordered-entity.js";
-import { between, neighbourPositions as resolveNeighbourPositions, positionAtIndex } from "../../lib/position.js";
+import { between, positionAtIndex, workspaceNeighbourPositions } from "../../lib/position.js";
 import { rebalanceChecklistTemplates } from "../../lib/rebalance.js";
 import { emitToWorkspace, emitToWorkspaceAdmins } from "../../realtime/emit.js";
 
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
-
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
 // as targeted indexed probes so large workspaces do not pay for a full template scan.
-function neighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
-  return resolveNeighbourPositions({
-    table: checklistTemplates,
-    id: checklistTemplates.id,
-    position: checklistTemplates.position,
-    scope: and(eq(checklistTemplates.workspaceId, workspaceId), isNull(checklistTemplates.archivedAt)),
-    afterId,
-    beforeId,
-    afterLabel: "afterTemplateId",
-    beforeLabel: "beforeTemplateId",
-  });
-}
+const neighbourPositions = workspaceNeighbourPositions(checklistTemplates, "Template");
 
 async function replaceItems(tx: Tx, templateId: string, items: string[]) {
   await tx.delete(checklistTemplateItems).where(eq(checklistTemplateItems.templateId, templateId));

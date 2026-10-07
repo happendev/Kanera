@@ -8,6 +8,10 @@ import { credentialDigest, KaneraApiError, KaneraClient, type UpstreamTiming } f
 import { mcpToolDuration, observeUpstreamRequest } from "./metrics.js";
 
 const uuid = z.uuid();
+// Shared vocabularies are loaded with dynamic imports for the same reason as the others below: the
+// MCP typecheck stays scoped to this package while the CLI build still bundles the runtime sources.
+const { AGENT_WORK_HISTORY_PRESETS, SEARCH_RESULT_TYPES, WORK_COMPLETION_FILTERS, WORK_CUSTOM_FIELD_CONDITION_OPS, WORK_SORT_VALUES, colorTokenSchema } = await import("@kanera/shared/dto");
+const { CUSTOM_FIELD_TYPES, NOTE_SCOPES } = await import("@kanera/shared/schema");
 const pageLimit = z.number().int().min(1).max(100).default(25);
 const fileBase64 = z.string()
   .min(1)
@@ -22,11 +26,7 @@ const workScope = z.object({
 const workCustomFieldCondition = z.object({
   workspaceId: uuid.describe("Workspace UUID that owns the custom field."),
   fieldId: uuid.describe("Custom-field UUID to test."),
-  op: z.enum([
-    "contains", "equals", "eq", "neq", "gt", "gte", "lt", "lte",
-    "on", "before", "after", "between", "checked", "unchecked",
-    "isAnyOf", "isNoneOf", "isEmpty", "isNotEmpty",
-  ]).describe("Comparison operator appropriate for the field type."),
+  op: z.enum(WORK_CUSTOM_FIELD_CONDITION_OPS).describe("Comparison operator appropriate for the field type."),
   value: z.string().max(500).optional().describe("Primary scalar comparison value."),
   value2: z.string().max(500).optional().describe("Upper bound used only by the between operator."),
   ids: z.array(uuid).max(100).optional().describe("Option or user UUIDs used by set-based operators."),
@@ -37,7 +37,7 @@ const workFilters = z.object({
   listIds: z.array(uuid).max(200).optional().describe("Workflow-list UUIDs to include."),
   labelIds: z.array(uuid).max(200).optional().describe("Label UUIDs; cards matching any are included."),
   customFieldConditions: z.array(workCustomFieldCondition).max(50).optional().describe("Typed custom-field predicates combined with the other filters."),
-  completion: z.enum(["activeAndRecentlyCompleted", "active", "completed", "all"]).optional().describe("Completion-state subset to return."),
+  completion: z.enum(WORK_COMPLETION_FILTERS).optional().describe("Completion-state subset to return."),
   unassignedOnly: z.boolean().optional().describe("Return only cards with no assignees."),
   inactiveOnly: z.boolean().optional().describe("Return active cards whose canonical activity timestamp is at least 14 days old."),
   dueFrom: z.iso.date().nullable().optional().describe("Inclusive due-date lower bound in YYYY-MM-DD format."),
@@ -472,11 +472,10 @@ function describeInputParameters<T extends z.ZodRawShape>(inputSchema: T): T {
     ];
   })) as unknown as T;
 }
-const { COLOR_TOKENS } = await import("@kanera/shared/colors");
 const { AUTOMATION_ACTION_LIMIT, automationTriggerCustomFieldValue, automationTriggerType } = await import("@kanera/shared/dto");
 const { AUTOMATION_ACTION_TYPES, COMMENT_REACTION_TYPES, MAX_CARD_PRIORITIES_PER_USER } = await import("@kanera/shared/schema");
 const reactionType = z.enum(COMMENT_REACTION_TYPES);
-const colorToken = z.enum(COLOR_TOKENS);
+const colorToken = colorTokenSchema;
 const { WORKSPACE_TEMPLATES, DEFAULT_WORKSPACE_TEMPLATE } = await import("@kanera/shared/workspace-templates");
 const { describeWorkspaceTemplateAutomation, findWorkspaceTemplate, standaloneBoardCreatePayload, workspaceTemplateSeedPayload } = await import("@kanera/shared/workspace-template-payload");
 type WorkspaceTemplate = (typeof WORKSPACE_TEMPLATES)[number];
@@ -488,7 +487,7 @@ const seedList = z.object({ name: seedName, icon: iconSlug.optional() });
 const seedCustomField = z.object({
   name: seedName,
   icon: iconSlug.optional(),
-  type: z.enum(["text", "number", "checkbox", "select", "date", "url", "user"]).describe("Custom-field value type."),
+  type: z.enum(CUSTOM_FIELD_TYPES).describe("Custom-field value type."),
   allowMultiple: z.boolean().optional().describe("Whether select or user fields accept multiple values."),
   options: z.array(z.object({
     label: z.string().trim().min(1).max(100).describe("Non-empty select-option label."),
@@ -1482,7 +1481,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
   registerKaneraTool(server, "search.content", "Use this when you need to find live Kanera content by words, phrases, card keys, or filenames. Searches accessible cards, notes, comments, and attachment filenames and returns one relevance-ranked, bounded result stream with source metadata and canonical links.", {
     query: z.string().trim().min(1).max(200).describe("Words, quoted phrase, or card key to find, for example landing-page copy or MKT-42."),
     scope: workScope,
-    types: z.array(z.enum(["card", "comment", "note", "attachment"])).min(1).max(4).optional().describe("Optional entity types to search; omit to search all supported content."),
+    types: z.array(z.enum(SEARCH_RESULT_TYPES)).min(1).max(4).optional().describe("Optional entity types to search; omit to search all supported content."),
     limit: z.number().int().min(1).max(25).default(10).describe("Maximum results across all entity types combined."),
   }, (a, api) => api.post("/api/v1/search/query", a), ctx, searchOutputSchema);
   registerKaneraTool(server, "search.docs", "Search official Kanera documentation for product behavior, setup, permissions, and workflow guidance. Returns relevant sections with concise excerpts and canonical source URLs; this does not search the user's live Kanera data.", {
@@ -1814,7 +1813,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
   }, (a, api) => api.get(`/api/v1/boards/${a.boardId}/activity`, { cursor: a.cursor, limit: a.limit }), ctx);
   registerKaneraTool(server, "work.query_history", "Use this when reviewing work performed by one person across projects. Returns only that actor's created, moved, completed, and checklist-item-completed events over an exact or calendar range, with full-range counts, source names, canonical card links, and cursor pagination. Omit userId for the connected user.", {
     userId: uuid.optional().describe("Person whose actions to return; resolve workspace users with workspaces.list_members. Omit for the connected user."),
-    preset: z.enum(["today", "yesterday", "this_week", "last_week", "this_month", "last_month"]).optional(),
+    preset: z.enum(AGENT_WORK_HISTORY_PRESETS).optional(),
     from: z.iso.datetime().optional(),
     to: z.iso.datetime().optional(),
     timeZone: z.string().trim().min(1).max(100).optional(),
@@ -1831,7 +1830,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     lens: z.enum(["my", "team"]).describe("Use my for the connected user's assignments; use team with filters.assigneeIds for another person."),
     scope: workScope,
     filters: workFilters,
-    sort: z.enum(["dueAsc", "dueDesc", "titleAsc", "titleDesc", "createdAsc", "createdDesc", "updatedAsc", "updatedDesc"]).default("dueAsc"),
+    sort: z.enum(WORK_SORT_VALUES).default("dueAsc"),
     cursor: z.string().min(1).max(500_000).optional(),
     limit: z.number().int().min(1).max(100).default(50),
   }, (a, api) => api.post("/api/v1/work/cards/query", a), ctx, workCardsOutputSchema);
@@ -1869,7 +1868,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
   registerKaneraTool(server, "notes.list", "List a cursor-paginated page of flat note metadata. parentNoteId expresses the hierarchy; use notes.get for full content. Provide exactly one of workspaceId for a standard workspace or boardId for a workspace or standalone board. Personal notes are limited to the connected user.", {
     workspaceId: uuid.optional(),
     boardId: uuid.optional(),
-    scope: z.enum(["personal", "team"]).default("team"),
+    scope: z.enum(NOTE_SCOPES).default("team"),
     ...collectionPageSchema,
   }, async (a, api) => {
     const target = a.boardId ? `board:${a.boardId}` : `workspace:${a.workspaceId}`;
@@ -1981,7 +1980,7 @@ function noteMutationSchema() {
       z.object({ type: z.literal("workspace").describe("Select a standard workspace target."), workspaceId: uuid.describe("Target standard-workspace UUID.") }),
       z.object({ type: z.literal("board").describe("Select a board target."), boardId: uuid.describe("Target workspace or standalone-board UUID.") }),
     ]),
-    scope: z.enum(["personal", "team"]).default("team"),
+    scope: z.enum(NOTE_SCOPES).default("team"),
     parentNoteId: uuid.nullable().optional(),
     title: z.string().max(200).optional(),
     icon: z.string().trim().min(1).max(100).nullable().optional(),
@@ -2015,7 +2014,7 @@ function registerPrompts(server: McpServer) {
   server.registerPrompt("summarize_board_status", { description: "Summarize board progress, blockers, stale cards, and next actions.", argsSchema: z.object({ boardId: uuid }) }, (a) => ({
     messages: [{ role: "user", content: { type: "text", text: `Call boards.get for ${a.boardId}, then page the relevant lists with cards.list. Use work.query_cards scoped to this board for overdue, unassigned, and stale-card evidence, and inspect cards.list_history only for cards that need chronology. Summarize progress, blockers, risks, and next actions; distinguish observed facts from inferences.` } }],
   }));
-  server.registerPrompt("prepare_standup_update", { description: "Prepare the connected user's cross-board standup update.", argsSchema: z.object({ period: z.enum(["today", "yesterday", "this_week", "last_week", "this_month", "last_month"]).default("yesterday") }) }, (a) => ({
+  server.registerPrompt("prepare_standup_update", { description: "Prepare the connected user's cross-board standup update.", argsSchema: z.object({ period: z.enum(AGENT_WORK_HISTORY_PRESETS).default("yesterday") }) }, (a) => ({
     messages: [{ role: "user", content: { type: "text", text: `Use work.query_history with preset ${a.period} and no userId for work I performed, then use work.query_cards with lens=my and completion=active for work in flight. Draft a concise accomplishments/current work/blockers update. Identify blockers only when supported by card data, and label any inference.` } }],
   }));
   server.registerPrompt("prepare_one_on_one", {

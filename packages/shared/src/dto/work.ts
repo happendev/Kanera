@@ -87,14 +87,16 @@ export const workScopeSchema = z.object({
 });
 export type WorkScope = z.infer<typeof workScopeSchema>;
 
+export const WORK_CUSTOM_FIELD_CONDITION_OPS = [
+  "contains", "equals", "eq", "neq", "gt", "gte", "lt", "lte",
+  "on", "before", "after", "between", "checked", "unchecked",
+  "isAnyOf", "isNoneOf", "isEmpty", "isNotEmpty",
+] as const;
+
 export const workCustomFieldConditionSchema = z.object({
   workspaceId: z.uuid(),
   fieldId: z.uuid(),
-  op: z.enum([
-    "contains", "equals", "eq", "neq", "gt", "gte", "lt", "lte",
-    "on", "before", "after", "between", "checked", "unchecked",
-    "isAnyOf", "isNoneOf", "isEmpty", "isNotEmpty",
-  ]),
+  op: z.enum(WORK_CUSTOM_FIELD_CONDITION_OPS),
   value: z.string().max(500).optional(),
   value2: z.string().max(500).optional(),
   ids: z.array(z.uuid()).max(100).optional(),

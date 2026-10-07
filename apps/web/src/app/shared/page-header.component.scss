@@ -113,17 +113,7 @@
       var(--surface-hover) 50%,
       var(--surface-2) 75%);
   background-size: 200% 100%;
-  animation: ph-shimmer 1.5s ease-in-out infinite;
-}
-
-@keyframes ph-shimmer {
-  from {
-    background-position: -200% center;
-  }
-
-  to {
-    background-position: 200% center;
-  }
+  animation: kanera-shimmer 1.5s ease-in-out infinite;
 }
 
 // Actions, icon cluster and view switch. Never shrinks: the view switch is primary navigation, so

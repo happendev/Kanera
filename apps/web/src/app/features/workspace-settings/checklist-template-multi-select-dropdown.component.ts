@@ -1,109 +1,31 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, input, output } from "@angular/core";
 import type { WireChecklistTemplate } from "@kanera/shared/events";
-import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
-import { PickerListComponent, type PickerGroup } from "../../shared/picker-list.component";
+import { MultiSelectDropdownComponent } from "../../shared/multi-select-dropdown.component";
+import type { PickerGroup } from "../../shared/picker-list.component";
 
 @Component({
   selector: "k-checklist-template-multi-select-dropdown",
   standalone: true,
-  imports: [AnchoredPanelDirective, PickerListComponent],
+  imports: [MultiSelectDropdownComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="cms">
-      <button #trigger type="button" class="cms-trigger" [class.is-open]="open()" (click)="toggleOpen()" [attr.aria-expanded]="open()" aria-haspopup="listbox">
-        <i class="ti ti-list-check"></i>
-        <span class="cms-label">{{ selectedLabel() }}</span>
-        <i class="ti ti-chevron-down cms-chevron"></i>
-      </button>
-
-      @if (open()) {
-        <div
-          class="cms-panel"
-          kAnchoredPanel
-          [apAnchor]="trigger"
-          [apPlacement]="placement"
-          (apDismissed)="open.set(false)"
-        >
-          <k-picker-list
-            [groups]="pickerGroups()"
-            [selectedIds]="selectedIds()"
-            [searchThreshold]="0"
-            searchPlaceholder="Search checklists..."
-            emptyLabel="No matching checklists"
-            (pick)="toggleTemplate($event)"
-          />
-        </div>
-      }
-    </div>
+    <k-multi-select-dropdown
+      [groups]="pickerGroups()"
+      [selectedIds]="selectedIds()"
+      [label]="selectedLabel()"
+      [searchThreshold]="0"
+      searchPlaceholder="Search checklists..."
+      emptyLabel="No matching checklists"
+      (pick)="toggleTemplate($event)"
+    >
+      <i class="ti ti-list-check"></i>
+    </k-multi-select-dropdown>
   `,
   styles: `
     :host {
       display: block;
       min-width: 0;
     }
-
-    /* --field-bg lets the host seat this trigger at the same depth as its native selects; hosts that
-       do not set it keep the previous --surface-2 fill. */
-    .cms-trigger {
-      width: 100%;
-      height: 34px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      min-width: 0;
-      padding: 0 9px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      background: var(--field-bg, var(--surface-2));
-      color: var(--text);
-      cursor: pointer;
-      text-align: left;
-      font-size: 13px;
-
-      &.is-open {
-        border-color: var(--border-strong);
-        background: var(--surface-hover);
-      }
-
-      &:focus-visible {
-        border-color: var(--accent, var(--border-strong));
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, var(--border-strong)) 20%, transparent);
-        outline: none;
-      }
-    }
-
-    .cms-trigger > i:not(.cms-chevron) {
-      color: var(--text-muted);
-      font-size: 15px;
-    }
-
-    .cms-label {
-      flex: 1;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .cms-chevron {
-      color: var(--text-muted);
-      font-size: 14px;
-      flex: 0 0 auto;
-    }
-
-    .cms-panel {
-      width: var(--ap-width, 320px);
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      padding: 8px;
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius);
-      background: var(--surface-overlay);
-      box-shadow: var(--shadow-lg);
-      overflow: hidden;
-    }
-
   `,
 })
 export class ChecklistTemplateMultiSelectDropdownComponent {
@@ -111,9 +33,6 @@ export class ChecklistTemplateMultiSelectDropdownComponent {
   readonly selectedIds = input<string[]>([]);
   readonly placeholder = input("Choose checklists");
   readonly selectedIdsChange = output<string[]>();
-
-  readonly open = signal(false);
-  readonly placement = { width: 320, maxHeight: 340, minHeight: 180, gap: 4, margin: 8 } as const;
 
   readonly selectedTemplates = computed(() => {
     const selected = new Set(this.selectedIds());
@@ -138,10 +57,6 @@ export class ChecklistTemplateMultiSelectDropdownComponent {
     })),
   }]);
 
-  toggleOpen() {
-    this.open.update((value) => !value);
-  }
-
   toggleTemplate(templateId: string) {
     const selected = this.selectedIds();
     const next = selected.includes(templateId)
@@ -149,5 +64,4 @@ export class ChecklistTemplateMultiSelectDropdownComponent {
       : [...selected, templateId];
     this.selectedIdsChange.emit(next);
   }
-
 }

@@ -97,7 +97,7 @@ export function slotRankCaseSql(slotColumn: AnyPgColumn | SQL): SQL {
     end`;
 }
 
-export function currentLocalDateSql(columns: CardDueColumns): SQL {
+function currentLocalDateSql(columns: CardDueColumns): SQL {
   // Stored zones come from the user's IANA timezone setting. Falling back for null/empty values
   // mirrors the application overdue helper while keeping the global query index-friendly.
   return sql`(now() at time zone coalesce(nullif(${columns.dueDateTimezone}, ''), 'UTC'))::date`;

@@ -11,7 +11,7 @@ export interface OrganisationBillingLifecycle {
   cancelAtPeriodEnd: boolean;
 }
 
-export function planTone(plan: string, billingStatus: string): AccessTone {
+function planTone(plan: string, billingStatus: string): AccessTone {
   if (plan === "paid" && billingStatus === "trialing") return "trial";
   if (plan === "paid" && (billingStatus === "active" || billingStatus === "past_due")) return "pro";
   return "free";

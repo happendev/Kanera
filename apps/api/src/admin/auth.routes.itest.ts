@@ -7,8 +7,9 @@ import { db } from "../db.js";
 import { buildAdminIntegrationServer, buildIntegrationServer } from "../test/integration.js";
 import { adminAuthHeader, createAdmin, loginAdmin } from "../test/admin-fixtures.js";
 import { seedFirstAdmin } from "./bootstrap.js";
-import { ADMIN_REFRESH_REUSE_GRACE_MS, hashAdminRefresh } from "./jwt.js";
+import { ADMIN_REFRESH_REUSE_GRACE_MS } from "./jwt.js";
 import * as OTPAuth from "otpauth";
+import { hashOpaqueToken } from "../lib/tokens.js";
 
 const SILENT_LOG = { warn() {}, info() {} } as unknown as Parameters<typeof seedFirstAdmin>[0];
 
@@ -151,7 +152,7 @@ void test("POST /admin/auth/refresh rotates the token and detects reuse of the o
   await db
     .update(adminRefreshTokens)
     .set({ revokedAt: new Date(Date.now() - ADMIN_REFRESH_REUSE_GRACE_MS - 1000) })
-    .where(eq(adminRefreshTokens.tokenHash, hashAdminRefresh(refreshCookie)));
+    .where(eq(adminRefreshTokens.tokenHash, hashOpaqueToken(refreshCookie)));
 
   // Reusing the original (now-revoked, past-grace) token is treated as theft -> 401.
   const reuse = await app.inject({ method: "POST", url: "/admin/auth/refresh", headers: { cookie: `kanera_admin_rt=${refreshCookie}` } });

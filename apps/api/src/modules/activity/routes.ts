@@ -1,12 +1,14 @@
 import type { dto } from "@kanera/shared";
 import { activityEvents, cards, comments, users } from "@kanera/shared/schema";
-import { and, asc, desc, eq, getTableColumns, gt, lt, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, ne, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assignedCardVisibility, assertBoardAccess } from "../../lib/access.js";
 import { fetchReactionsByComment } from "../../lib/comment-reactions.js";
 import { badRequest } from "../../lib/errors.js";
 import { signedAvatarUrl, signEmbeddedMediaUrls } from "../../lib/media-keys.js";
+import { cardFeedSortPriority, compareCardFeedItems, feedAfterCursor } from "../../lib/card-feed.js";
+import { commentAuthorColumns } from "../../lib/comment-rows.js";
 
 type BoardActivityCursor = { boardId: string; createdAt: string; priority: number; id: string };
 
@@ -31,30 +33,6 @@ function decodeBoardActivityCursor(value: string | undefined, boardId: string): 
     if (error instanceof Error && "status" in error) throw error;
     throw badRequest("invalid activity cursor");
   }
-}
-
-function afterCursor(cursor: BoardActivityCursor, createdAt: typeof activityEvents.createdAt | typeof comments.createdAt, id: typeof activityEvents.id | typeof comments.id, priority: SQL) {
-  const at = new Date(cursor.createdAt);
-  return or(
-    lt(createdAt, at),
-    and(
-      eq(createdAt, at),
-      or(gt(priority, cursor.priority), and(eq(priority, cursor.priority), gt(id, cursor.id))),
-    ),
-  );
-}
-
-function cardFeedSortPriority(item: dto.CardFeedItem): number {
-  return item.type === "activity" && item.data.entityType === "card" && item.data.action === "created" ? 0 : 1;
-}
-
-function compareCardFeedItems(a: dto.CardFeedItem, b: dto.CardFeedItem): number {
-  const ta = new Date(a.data.createdAt as unknown as string).getTime();
-  const tb = new Date(b.data.createdAt as unknown as string).getTime();
-  if (ta !== tb) return tb - ta;
-  const priority = cardFeedSortPriority(a) - cardFeedSortPriority(b);
-  if (priority !== 0) return priority;
-  return String(a.data.id).localeCompare(String(b.data.id));
 }
 
 export async function activityRoutes(app: FastifyInstance) {
@@ -108,7 +86,7 @@ export async function activityRoutes(app: FastifyInstance) {
             )
           )`,
           access.assignedItemsOnly ? and(eq(activityEvents.entityType, "card"), assignedCardVisibility(req.auth.sub, activityEvents.entityId)) : undefined,
-          cursor ? afterCursor(cursor, activityEvents.createdAt, activityEvents.id, activityPriority) : undefined,
+          cursor ? feedAfterCursor(cursor, activityEvents.createdAt, activityEvents.id, activityPriority) : undefined,
         ))
         .orderBy(desc(activityEvents.createdAt), asc(activityPriority), asc(activityEvents.id))
         .limit(limit + 1),
@@ -121,8 +99,7 @@ export async function activityRoutes(app: FastifyInstance) {
           apiKeyId: comments.apiKeyId,
           apiKeyName: comments.apiKeyName,
           agentName: comments.agentName,
-          authorName: sql<string>`case when ${comments.authorKind} = 'system' then 'Kanera' when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
-          authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} in ('system', 'apiKey') then null else ${users.avatarUrl} end`,
+          ...commentAuthorColumns,
           authorClientId: users.clientId,
           body: comments.body,
           editedAt: comments.editedAt,
@@ -134,7 +111,7 @@ export async function activityRoutes(app: FastifyInstance) {
         .where(and(
           eq(cards.boardId, id),
           access.assignedItemsOnly ? assignedCardVisibility(req.auth.sub) : undefined,
-          cursor ? afterCursor(cursor, comments.createdAt, comments.id, commentPriority) : undefined,
+          cursor ? feedAfterCursor(cursor, comments.createdAt, comments.id, commentPriority) : undefined,
         ))
         .orderBy(desc(comments.createdAt), asc(comments.id))
         .limit(limit + 1),

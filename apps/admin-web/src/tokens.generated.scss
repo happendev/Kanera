@@ -174,7 +174,6 @@
   // The 1px ring is the part that does the work on dark: a soft shadow alone vanishes against
   // same-hue navy, and the ring gives the menu a hard edge the eye can find.
   --shadow-lg: 0 0 0 1px rgba(0, 0, 0, 0.5), 0 16px 40px -10px rgba(0, 0, 0, 0.7);
-  --depth-edge: inset 0 1px 2px rgba(255, 255, 255, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.18);
 
   // ─── Kanban surfaces (semantic) ──────────────────────────────────────────────
   // Dark mode keeps the existing visual: lists lighter than bg, cards lighter still.

@@ -1,7 +1,7 @@
 import { ACTIVITY_ACTION, activityEvents, boards, boardWatchers, cardAssignees, cards, cardWatchers, lists, notifications, workspaces, type ActivityEvent, type CardDueDateSlot } from "@kanera/shared/schema";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
-import { db, type Db } from "../db.js";
+import { db, type Db, type Tx } from "../db.js";
 import { env } from "../env.js";
 import { enqueueOverdueWatcherOutbound } from "./watched-activity-push.js";
 import { emitToUser } from "../realtime/emit.js";
@@ -13,8 +13,7 @@ import { createMailer, type Mailer } from "./mailer.js";
 import { enrichNotifications } from "./notifications.js";
 import { resolveSmtpConfig } from "./smtp-resolve.js";
 import { startSweepScheduler } from "./sweep-scheduler.js";
-
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
+import { delayToNextHour } from "./daily-digest.js";
 
 interface OverdueCandidate {
   cardId: string;
@@ -43,7 +42,7 @@ type OverdueActivityPayload = Record<string, unknown> & {
   dueDateTimezone: string | null;
 };
 
-export function isCandidateOverdue(candidate: OverdueCandidate, now = new Date()): boolean {
+function isCandidateOverdue(candidate: OverdueCandidate, now = new Date()): boolean {
   return isDueDateOverdue(candidate, now);
 }
 
@@ -371,12 +370,6 @@ export async function runOverdueNotificationSweep(log?: FastifyBaseLogger): Prom
   const total = insertedCount + checklistInsertedCount;
   if (total > 0) log?.info({ insertedCount, checklistInsertedCount }, "created overdue notifications");
   return total;
-}
-
-function delayToNextHour(now = new Date()): number {
-  const next = new Date(now);
-  next.setHours(now.getHours() + 1, 0, 0, 0);
-  return Math.max(1_000, next.getTime() - now.getTime());
 }
 
 export function startOverdueNotificationScheduler(log: FastifyBaseLogger): () => Promise<void> {

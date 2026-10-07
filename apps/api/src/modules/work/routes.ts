@@ -1,5 +1,4 @@
 import { dto } from "@kanera/shared";
-import { cardPath } from "@kanera/shared/card-links";
 import type {
   AgentWorkHistoryResponse,
   AgentWorkHistoryQuery,
@@ -87,15 +86,13 @@ import {
   loadWorkDoneSummary,
   type LoadWorkDoneOptions,
 } from "../../lib/work-done.js";
+import { escapedSearchPattern } from "../../lib/search-pattern.js";
+import { absoluteCardUrl } from "../../lib/wire-card.js";
 
 type WorkCursor = { asOf: string; seenIds: string[] };
 
 function uuidArray(ids: readonly string[]): SQL {
   return sql`array[${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)}]`;
-}
-
-function escapedSearchPattern(query: string): string {
-  return `%${query.toLowerCase().replace(/[\\%_]/g, "\\$&")}%`;
 }
 
 function encodeCursor(cursor: WorkCursor): string {
@@ -1218,11 +1215,11 @@ async function resolvedAgentWorkRange(auth: AuthClaims, query: AgentWorkHistoryQ
 }
 
 function cardWithUrl<T extends { organisationKey: string; key: string }>(card: T): T & { url: string } {
-  return { ...card, url: new URL(cardPath(card.organisationKey, card.key), env.WEB_ORIGIN).toString() };
+  return { ...card, url: absoluteCardUrl(card.organisationKey, card.key) };
 }
 
 function checklistAssignmentWithUrl<T extends { organisationKey: string; cardKey: string }>(item: T): T & { url: string } {
-  return { ...item, url: new URL(cardPath(item.organisationKey, item.cardKey), env.WEB_ORIGIN).toString() };
+  return { ...item, url: absoluteCardUrl(item.organisationKey, item.cardKey) };
 }
 
 async function agentWorkSources(

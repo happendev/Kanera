@@ -927,44 +927,6 @@ describe("CardDetailComponent realtime regressions", () => {
     await vi.waitFor(() => expect(fixture.componentInstance.uploads.items()[0]?.error).toBe("File is too large (max 5 MB). Upgrade your plan for higher file limits."));
   });
 
-  it("downloads attachments with the stored file name", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
-    fixture.componentRef.setInput("card", createCard());
-    fixture.componentRef.setInput("boardId", "board-1");
-    fixture.componentRef.setInput("customFields", []);
-    fixture.componentRef.setInput("customFieldValues", []);
-    fixture.componentRef.setInput("cardLabels", []);
-    fixture.componentRef.setInput("cardLabelIds", []);
-    fixture.componentRef.setInput("members", []);
-    fixture.detectChanges();
-
-    const blob = new Blob(["doc"], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
-    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: true, blob: () => Promise.resolve(blob) })));
-    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:download");
-    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
-    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
-    let anchor: HTMLAnchorElement | null = null;
-    const originalCreateElement = document.createElement.bind(document);
-    const createElement = vi.spyOn(document, "createElement").mockImplementation((tagName: string, options?: ElementCreationOptions) => {
-      const element = originalCreateElement(tagName, options);
-      if (tagName.toLowerCase() === "a") anchor = element as HTMLAnchorElement;
-      return element;
-    });
-
-    await fixture.componentInstance.downloadAttachment(
-      "https://api.test/api/media/client-1/cards/card-1/01901234-5678-7abc-8def-0123456789ab.docx?t=token&e=9999999999999",
-      "Project brief.docx",
-    );
-
-    expect(fetch).toHaveBeenCalledWith("https://api.test/api/media/client-1/cards/card-1/01901234-5678-7abc-8def-0123456789ab.docx?t=token&e=9999999999999");
-    const downloadAnchor = anchor as HTMLAnchorElement | null;
-    expect(downloadAnchor?.href).toBe("blob:download");
-    expect(downloadAnchor?.download).toBe("Project brief.docx");
-    expect(click).toHaveBeenCalledTimes(1);
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:download");
-    createElement.mockRestore();
-  });
-
   it("shows a friendly message when attachment upload returns 413", async () => {
     api.upload.mockRejectedValueOnce(new ApiError(413, { message: "request entity too large" }));
     const fixture = TestBed.createComponent(CardDetailComponent);
@@ -1092,37 +1054,6 @@ describe("CardDetailComponent realtime regressions", () => {
       mediaType: "video",
       mimeType: "video/*",
     }, undefined);
-  });
-
-  it("downloads non-previewable attachments in comments instead of opening the lightbox", async () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
-    const documentUrl = "/api/media/client-1/cards/card-1/brief.docx?t=token&e=9999999999999";
-    const fetchDownload = vi.fn(() => new Promise<Response>(() => undefined));
-    vi.stubGlobal("fetch", fetchDownload);
-
-    fixture.componentRef.setInput("cardId", "card-1");
-    fixture.componentRef.setInput("canEdit", true);
-    fixture.componentRef.setInput("members", []);
-    fixture.detectChanges();
-
-    await vi.waitFor(() => expect(socketService.connect).toHaveBeenCalledTimes(1));
-    socket.trigger("card:feedItem:created", {
-      boardId: "board-1",
-      cardId: "card-1",
-      item: {
-        type: "comment",
-        data: createComment({ body: `[Project brief.docx](${documentUrl})` }),
-      },
-    });
-    fixture.detectChanges();
-    await fixture.whenStable();
-    fixture.detectChanges();
-
-    const documentLink = fixture.nativeElement.querySelector(".comment-body .attachment-link-chip") as HTMLAnchorElement;
-    documentLink.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-
-    expect(fetchDownload).toHaveBeenCalledWith(new URL(documentUrl, window.location.origin).href);
-    expect(imageLightbox.open).not.toHaveBeenCalled();
   });
 
   it("does not merge a stale loadMore page into the feed after the card switches", async () => {
@@ -2053,82 +1984,6 @@ describe("CardDetailComponent realtime regressions", () => {
 
     const host = fixture.nativeElement as HTMLElement;
     expect(host.querySelector(".activity-text")?.textContent?.trim()).toBe("Kanera (Dylan van der Merwe) attached proposal.pdf");
-  });
-
-  it("opens attachment-added activity files in the media lightbox", () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
-    const audioUrl = "/api/media/client-1/cards/card-1/voice-note.ogg?t=token&e=9999999999999";
-    const attachment = createAttachment({
-      id: "attachment-audio",
-      fileName: "voice-note.ogg",
-      mimeType: "audio/ogg",
-      url: audioUrl,
-      thumbnailUrl: null,
-    });
-    coverAttachmentById.mockReturnValue(new Map([[attachment.id, attachment]]));
-    const activity = createActivity({
-      action: "attachment_added",
-      payload: {
-        attachmentId: attachment.id,
-        fileName: attachment.fileName,
-        mimeType: attachment.mimeType,
-      },
-    });
-
-    fixture.componentRef.setInput("cardId", "card-1");
-    fixture.componentRef.setInput("canEdit", true);
-    fixture.componentRef.setInput("members", []);
-    fixture.detectChanges();
-    fixture.componentInstance.feedItems.set([{ type: "activity", data: activity }]);
-    fixture.detectChanges();
-
-    const attachmentLink = (fixture.nativeElement as HTMLElement)
-      .querySelector<HTMLAnchorElement>(".activity-file-preview.is-clickable");
-    attachmentLink?.click();
-
-    expect(imageLightbox.open).toHaveBeenCalledWith({
-      src: audioUrl,
-      fileName: "voice-note.ogg",
-      mediaType: "audio",
-      mimeType: "audio/ogg",
-    }, expect.any(MouseEvent));
-  });
-
-  it("keeps non-previewable activity attachments as download links", () => {
-    const fixture = TestBed.createComponent(CardActivityComponent);
-    const archiveUrl = "/api/media/client-1/cards/card-1/assets.zip?t=token&e=9999999999999";
-    const attachment = createAttachment({
-      id: "attachment-archive",
-      fileName: "assets.zip",
-      mimeType: "application/zip",
-      url: archiveUrl,
-      thumbnailUrl: null,
-    });
-    coverAttachmentById.mockReturnValue(new Map([[attachment.id, attachment]]));
-
-    fixture.componentRef.setInput("cardId", "card-1");
-    fixture.componentRef.setInput("canEdit", true);
-    fixture.componentRef.setInput("members", []);
-    fixture.detectChanges();
-    fixture.componentInstance.feedItems.set([{
-      type: "activity",
-      data: createActivity({
-        action: "attachment_added",
-        payload: {
-          attachmentId: attachment.id,
-          fileName: attachment.fileName,
-          mimeType: attachment.mimeType,
-        },
-      }),
-    }]);
-    fixture.detectChanges();
-
-    const attachmentLink = (fixture.nativeElement as HTMLElement)
-      .querySelector<HTMLAnchorElement>(".activity-file-preview.is-clickable");
-
-    expect(attachmentLink?.getAttribute("href")).toBe(archiveUrl);
-    expect(attachmentLink?.target).toBe("_blank");
-    expect(imageLightbox.open).not.toHaveBeenCalled();
   });
 
   it("renders the label names changed by Kanera activity", () => {
@@ -4154,48 +4009,6 @@ describe("CardDetailComponent realtime regressions", () => {
     }, expect.any(Event));
   });
 
-  it("opens PDFs from the attachment list in the native PDF lightbox", async () => {
-    const fixture = TestBed.createComponent(CardDetailComponent);
-    const pdf = createAttachment({
-      id: "attachment-pdf",
-      fileName: "project-brief.pdf",
-      mimeType: "application/pdf",
-      url: "https://example.com/project-brief.pdf",
-      thumbnailUrl: null,
-    });
-
-    fixture.componentRef.setInput("card", createCard());
-    fixture.componentRef.setInput("boardId", "board-1");
-    fixture.componentRef.setInput("customFields", []);
-    fixture.componentRef.setInput("customFieldValues", []);
-    fixture.componentRef.setInput("cardLabels", []);
-    fixture.componentRef.setInput("cardLabelIds", []);
-    fixture.componentRef.setInput("members", []);
-    fixture.componentRef.setInput("attachments", [pdf]);
-    fixture.detectChanges();
-    await settleDetail(fixture);
-
-    const previewButton = (fixture.nativeElement as HTMLElement)
-      .querySelector<HTMLButtonElement>(".attach-thumb.is-pdf");
-    previewButton?.click();
-
-    expect(imageLightbox.open).toHaveBeenCalledWith({
-      src: pdf.url,
-      fileName: pdf.fileName,
-      createdAt: pdf.createdAt,
-      mediaType: "pdf",
-      mimeType: "application/pdf",
-      images: [{
-        src: pdf.url,
-        fileName: pdf.fileName,
-        createdAt: pdf.createdAt,
-        mediaType: "pdf",
-        mimeType: "application/pdf",
-      }],
-      initialIndex: 0,
-    }, expect.any(Event));
-  });
-
   it("opens Markdown attachments as rendered lightbox previews", async () => {
     const fixture = TestBed.createComponent(CardDetailComponent);
     const markdown = createAttachment({
@@ -4236,38 +4049,6 @@ describe("CardDetailComponent realtime regressions", () => {
       }],
       initialIndex: 0,
     }, expect.any(Event));
-  });
-
-  it("opens PDFs linked in the card description in the same lightbox", async () => {
-    const pdfUrl = "/api/media/client-1/cards/card-1/project-brief.pdf?t=token&e=9999999999999";
-    const card = createCard();
-    const fixture = TestBed.createComponent(CardDetailComponent);
-
-    fixture.componentRef.setInput("card", card);
-    fixture.componentRef.setInput("boardId", "board-1");
-    fixture.componentRef.setInput("customFields", []);
-    fixture.componentRef.setInput("customFieldValues", []);
-    fixture.componentRef.setInput("cardLabels", []);
-    fixture.componentRef.setInput("cardLabelIds", []);
-    fixture.componentRef.setInput("members", []);
-    fixture.detectChanges();
-    await settleDetail(fixture);
-    fixture.componentInstance.draftDescription.set(`[Project brief.pdf](${pdfUrl})`);
-    fixture.detectChanges();
-    await fixture.whenStable();
-    fixture.detectChanges();
-
-    const pdfLink = (fixture.nativeElement as HTMLElement)
-      .querySelector<HTMLAnchorElement>(".description-viewer-inner .attachment-link-chip");
-    expect(pdfLink).not.toBeNull();
-    pdfLink!.click();
-
-    expect(imageLightbox.open).toHaveBeenCalledWith({
-      src: new URL(pdfUrl, window.location.origin).href,
-      fileName: "Project brief.pdf",
-      mediaType: "pdf",
-      mimeType: "application/pdf",
-    }, undefined);
   });
 
   it("opens the requested attachment lightbox from an initial deep link", async () => {

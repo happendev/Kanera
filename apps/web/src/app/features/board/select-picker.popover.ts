@@ -10,6 +10,7 @@ import {
 import type { WireCustomFieldOption } from "@kanera/shared/events";
 import { ANCHORED_HOST_STYLES, anchoredSheetStyles } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
+import { byPosition } from "../../shared/position-sort";
 
 // Option picker for `select` custom fields. Single vs multi selection is decided
 // by the parent: it sets the resulting value and closes the popover for single fields.
@@ -198,7 +199,7 @@ export class SelectPickerPopover {
 
   readonly filtered = computed(() => {
     const q = this.query().trim().toLowerCase();
-    const sorted = [...this.options()].sort((a, b) => Number(a.position) - Number(b.position));
+    const sorted = [...this.options()].sort(byPosition);
     if (!q) return sorted;
     return sorted.filter((o) => o.label.toLowerCase().includes(q));
   });

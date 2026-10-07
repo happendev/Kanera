@@ -6,7 +6,6 @@ import type {
   WorkDisplayMode,
   WorkFilters,
   WorkGroupBy,
-  WorkCustomFieldCondition,
   WorkPrioritiesResponse,
   WorkPriorityQueuesResponse,
   WorkQueryResponse,
@@ -32,6 +31,8 @@ import {
   writeGlobalWorkPreference,
 } from "./global-work-preference";
 import { viewerTimeZone } from "../../shared/day-key.util";
+import { toggleId } from "../../shared/toggle-id";
+import { byPosition } from "../../shared/position-sort";
 
 const EMPTY_CATALOG: WorkCatalog = {
   organisations: [],
@@ -104,10 +105,6 @@ function defaultDefinition(lens: WorkViewLens): WorkViewDefinition {
     collapsedWorkspaceIds: [],
     collapsedSectionIds: [],
   };
-}
-
-function toggleId(ids: string[], id: string): string[] {
-  return ids.includes(id) ? ids.filter((candidate) => candidate !== id) : [...ids, id];
 }
 
 /** The card fields the query projection keeps in sync, whether from a realtime echo or a local edit. */
@@ -526,36 +523,8 @@ export class GlobalWorkState {
     this.patchFilters({ assigneeIds });
   }
 
-  setCompletion(completion: WorkFilters["completion"]): void {
-    this.patchFilters({ completion });
-  }
-
-  setOverdueOnly(overdueOnly: boolean): void {
-    this.patchFilters({ overdueOnly });
-  }
-
-  setUnreadOnly(unreadOnly: boolean): void {
-    this.patchFilters({ unreadOnly });
-  }
-
   setArchived(archived: boolean): void {
     this.patchFilters({ archived });
-  }
-
-  setDueRange(dueFrom: string | null, dueTo: string | null): void {
-    this.patchFilters({ dueFrom, dueTo });
-  }
-
-  setListIds(listIds: string[]): void {
-    this.patchFilters({ listIds });
-  }
-
-  setLabelIds(labelIds: string[]): void {
-    this.patchFilters({ labelIds });
-  }
-
-  setCustomFieldConditions(customFieldConditions: WorkCustomFieldCondition[]): void {
-    this.patchFilters({ customFieldConditions });
   }
 
   updateFilters(patch: Partial<WorkFilters>): void {
@@ -700,14 +669,6 @@ export class GlobalWorkState {
     this.definition.update((definition) => ({
       ...definition,
       collapsedWorkspaceIds: toggleId(definition.collapsedWorkspaceIds, workspaceId),
-    }));
-    this.persistPreference();
-  }
-
-  toggleSectionCollapsed(sectionId: string): void {
-    this.definition.update((definition) => ({
-      ...definition,
-      collapsedSectionIds: toggleId(definition.collapsedSectionIds, sectionId),
     }));
     this.persistPreference();
   }
@@ -888,7 +849,7 @@ export class GlobalWorkState {
       ...snapshot.separators
         .filter((separator) => separator.listId === listId)
         .map((separator) => ({ type: "separator" as const, id: separator.id, position: separator.position })),
-    ].sort((a, b) => Number(a.position) - Number(b.position) || a.type.localeCompare(b.type) || a.id.localeCompare(b.id));
+    ].sort((a, b) => byPosition(a, b) || a.type.localeCompare(b.type) || a.id.localeCompare(b.id));
     let previous: string | null = null;
     let next: string | null = null;
     const itemAnchor = "afterCardId" in anchor
@@ -1212,7 +1173,7 @@ export class GlobalWorkState {
       ...snapshot.separators
         .filter((candidate) => candidate.id !== separatorId && candidate.listId === listId)
         .map((candidate) => ({ type: "separator" as const, id: candidate.id, position: candidate.position })),
-    ].sort((a, b) => Number(a.position) - Number(b.position) || a.type.localeCompare(b.type) || a.id.localeCompare(b.id));
+    ].sort((a, b) => byPosition(a, b) || a.type.localeCompare(b.type) || a.id.localeCompare(b.id));
     let previous: string | null = null;
     let next: string | null = null;
     if (anchor.afterItem !== undefined) {

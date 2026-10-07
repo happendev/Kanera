@@ -124,7 +124,7 @@ export function isAlwaysBlockedNotificationAddress(ip: string): boolean {
   return matchesRange(ip, ALWAYS_BLOCKED_NOTIFICATION_RANGES);
 }
 
-export function privateNotificationDestinationsAllowed(): boolean {
+function privateNotificationDestinationsAllowed(): boolean {
   return env.NODE_ENV !== "production"
     || (env.KANERA_DEPLOYMENT_MODE === "self_hosted" && env.KANERA_ALLOW_PRIVATE_NOTIFICATION_DESTINATIONS);
 }

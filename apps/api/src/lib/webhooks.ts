@@ -15,7 +15,6 @@ import {
   type WebhookEndpoint,
   type WebhookPayload,
 } from "@kanera/shared/schema";
-import { cardPath } from "@kanera/shared/card-links";
 import { and, asc, eq, inArray, lt, lte, or } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { db } from "../db.js";
@@ -28,6 +27,7 @@ import { signWebhookPayload } from "./webhook-signing.js";
 import { buildChatRequest, chatContentExcerpt } from "./chat-destinations.js";
 import { cleanupMcpEvents, enqueueMcpEventDeliveries, processMcpEventDeliveries } from "./mcp-events.js";
 import { postMcpWebhook } from "./mcp-event-webhooks.js";
+import { absoluteCardUrl } from "./wire-card.js";
 
 const MAX_ATTEMPTS = 8;
 const DELIVERY_LIMIT = 25;
@@ -209,7 +209,7 @@ async function enrichChatPayloads(
           workspaceName: context.workspaceName,
           boardName: context.boardName,
           cardTitle: candidate.type === "title_changed" && candidate.toValue ? candidate.toValue : context.cardTitle,
-          cardUrl: new URL(cardPath(context.organisationKey, context.cardKey), env.WEB_ORIGIN).toString(),
+          cardUrl: absoluteCardUrl(context.organisationKey, context.cardKey),
           fromValue: candidate.fromListId ? (listNames.get(candidate.fromListId) ?? "Unknown") : candidate.fromValue,
           toValue: candidate.toListId ? (listNames.get(candidate.toListId) ?? "Unknown") : candidate.toValue,
           excerpt: candidate.excerpt,

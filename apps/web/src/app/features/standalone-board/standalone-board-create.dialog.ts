@@ -4,7 +4,7 @@ import type { Board, Workspace } from "@kanera/shared/schema";
 import type { WorkspaceTemplateId } from "@kanera/shared/workspace-templates";
 import { DEFAULT_WORKSPACE_TEMPLATE, WORKSPACE_TEMPLATES } from "@kanera/shared/workspace-templates";
 import { ApiClient, ApiError } from "../../core/api/api.client";
-import { standaloneBoardCreatePayload } from "./standalone-board-create.payload";
+import { standaloneBoardCreatePayload } from "@kanera/shared/workspace-template-payload";
 
 type CreatedStandaloneBoard = Workspace & { initialBoard: Board };
 

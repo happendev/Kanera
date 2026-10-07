@@ -1,8 +1,6 @@
 import { boards, cardChecklistItems, cardChecklists, cards, lists, workspaces, type CardDueDateSlot } from "@kanera/shared/schema";
 import { and, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
-import type { Db } from "../db.js";
-
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
+import type { Tx } from "../db.js";
 
 // One canonical join for "assigned checklist items" across the surfaces that now treat
 // checklist items as first-class work items (overdue notifications, home due-soon, and

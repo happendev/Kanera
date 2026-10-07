@@ -220,15 +220,14 @@ export class ListComponent implements OnDestroy {
   // the handoff, otherwise it briefly disappears on boards where change detection is expensive.
   private readonly committedDropItemKey = signal<string | null>(null);
 
-  private readonly baseDisplayedCards = computed(() => {
+  readonly displayedCards = computed(() => {
     const all = this.cards();
     const ids = this.filteredCardIds();
     if (!ids) return all;
     return all.filter(c => ids.has(c.id));
   });
 
-  readonly displayedCards = computed(() => this.baseDisplayedCards());
-  readonly baseDisplayedItems = computed(() => this.items().length ? this.items() : this.baseDisplayedCards().map((card): BoardLaneItem => ({ kind: "card", card })));
+  readonly baseDisplayedItems = computed(() => this.items().length ? this.items() : this.displayedCards().map((card): BoardLaneItem => ({ kind: "card", card })));
   readonly displayedItems = computed(() => this.committedDropItems() ?? this.baseDisplayedItems());
 
   readonly cardCount = computed(() => this.displayedCards().length);
@@ -711,9 +710,6 @@ export class ListComponent implements OnDestroy {
     this.lastDragPointer = event.pointerPosition;
     this.dragCoordinator.move(event.pointerPosition);
     this.dispatchTargetedListDragMove(event.pointerPosition);
-    document.dispatchEvent(new CustomEvent<{ x: number; y: number }>(APP_DOM_EVENTS.CARD_DRAG_MOVE, {
-      detail: event.pointerPosition,
-    }));
   }
 
   private dispatchTargetedListDragMove(pointer: { x: number; y: number }) {

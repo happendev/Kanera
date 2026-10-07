@@ -24,10 +24,9 @@ import { parseCompletedDateParam } from "../../lib/completed-card-visibility.js"
 import { assertWorkDoneWindow, loadWorkDone, loadWorkDoneSummary, type LoadWorkDoneOptions } from "../../lib/work-done.js";
 import { loadWorkspaceCustomFields } from "../../lib/custom-fields.js";
 import { deleteAttachmentFiles } from "../../lib/attachment-cleanup.js";
-import { assertGuestBoardLimit } from "../../lib/board-guest-limits.js";
 import { seedBoardMembersFromWorkspace } from "../../lib/board-membership.js";
 import { enrichNotifications } from "../../lib/notifications.js";
-import { prunePaidGuestSeatIfBelowLimit } from "../../lib/paid-guest-seats.js";
+import { ensureGuestBoardCapacity, prunePaidGuestSeatIfBelowLimit } from "../../lib/paid-guest-seats.js";
 import { ANALYTICS_EVENT_VERSION, analyticsCountBand, capturePremiumFeatureUsed, productAnalytics } from "../../lib/product-analytics.js";
 import { reactivatePlanArchivedBoardsIfRoom } from "../../lib/plan-conversion.js";
 import { assertBoardLimit, assertGuestsAllowed, hasBoardSyncEntitlement, lockTenant } from "../../lib/tier-limits.js";
@@ -36,12 +35,13 @@ import { moveStandaloneBoard } from "../../lib/move-standalone-board.js";
 import { moveOrderedEntity } from "../../lib/move-ordered-entity.js";
 import { deleteExternalLinks } from "../../lib/external-links.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
-import { between, neighbourPositions as resolveNeighbourPositions } from "../../lib/position.js";
+import { between, neighbourPositions as resolveNeighbourPositions, workspaceNeighbourPositions } from "../../lib/position.js";
 import { rebalanceBoardGroups, rebalanceBoards } from "../../lib/rebalance.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { deleteWorkspaceCascade } from "../../lib/workspace-delete.js";
 import { emitBoardRebalancedToVisibleUsers, emitCardPriorityInvalidated, emitToBoard, emitToBoardAudience, emitToUser, emitToUserDurable, emitToWorkspace } from "../../realtime/emit.js";
 import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
+import { escapedSearchPattern } from "../../lib/search-pattern.js";
 
 type BoardMemberUser = {
   userId: string;
@@ -56,10 +56,6 @@ type BoardMemberUser = {
   assignedItemsOnly: boolean;
   isOrganisationMember: boolean;
 };
-
-function escapedSearchPattern(query: string): string {
-  return `%${query.toLowerCase().replace(/[\\%_]/g, "\\$&")}%`;
-}
 
 function completedCardSearchPredicate(query: string): SQL {
   const keyMatch = /^([A-Za-z][A-Za-z0-9]{1,9})-([1-9][0-9]*)$/.exec(query.trim());
@@ -216,18 +212,7 @@ async function boardPayload(
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
 // as targeted indexed probes so large workspaces do not pay for a full board scan.
-function neighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
-  return resolveNeighbourPositions({
-    table: boards,
-    id: boards.id,
-    position: boards.position,
-    scope: and(eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt)),
-    afterId,
-    beforeId,
-    afterLabel: "afterBoardId",
-    beforeLabel: "beforeBoardId",
-  });
-}
+const neighbourPositions = workspaceNeighbourPositions(boards, "Board");
 
 // Board groups share the same sparse-position contract as boards; use one-neighbor
 // probes rather than materializing every group in the workspace.
@@ -1020,9 +1005,9 @@ export async function boardRoutes(app: FastifyInstance) {
     // Seat-pool gate + membership insert in one transaction so the capacity check cannot race a
     // concurrent assignment into the last seat. For cross-org guests, crossing the free guest-board
     // cap consumes a pooled seat; a full pool throws 402 SEAT_LIMIT_REACHED. Same-org members skip
-    // the seat pool (assertGuestBoardLimit is a no-op when targetClientId === hostClientId).
+    // the seat pool (ensureGuestBoardCapacity is a no-op when targetClientId === hostClientId).
     const { member, hiddenWorkspaceMember } = await db.transaction(async (tx) => {
-      await assertGuestBoardLimit({
+      await ensureGuestBoardCapacity({
         hostClientId: ctx.clientId,
         boardId: id,
         userId: body.userId,

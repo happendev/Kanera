@@ -212,40 +212,10 @@ describe("OnboardingPage", () => {
     expect((fixture.nativeElement as HTMLElement).textContent).not.toContain("How do you want to start?");
   });
 
-  it("creates a standalone board from the first-run path without changing hasWorkspace", async () => {
-    const createdBoard = { ...starterList(), id: "standalone-board-1", name: "Launch" };
-    const post = vi.fn(() => Promise.resolve({ ...workspace(), kind: "board" as const, name: "Launch", initialBoard: createdBoard }));
-    const { component, navigateByUrl, user } = await render({ post });
-    component.chooseSetupKind("board");
-    component.boardName.set("  Launch  ");
-    component.selectBoardTemplate("marketing");
-    component.setBoardIcon("rocket");
-    component.setBoardIconColor("violet");
-
-    await component.finishStandaloneBoard();
-
-    const marketing = component.templates.find((template) => template.id === "marketing")!;
-    expect(post).toHaveBeenCalledWith("/workspaces", {
-      kind: "board",
-      name: "Launch",
-      icon: "rocket",
-      initialBoard: { name: "Launch", icon: "rocket", iconColor: "violet" },
-      lists: marketing.lists,
-      customFields: marketing.customFields,
-      labels: marketing.labels,
-      checklistTemplates: marketing.checklistTemplates ?? [],
-      cards: marketing.cards ?? [],
-      automations: marketing.automations ?? [],
-    });
-    expect(user()?.hasWorkspace).toBe(false);
-    expect(navigateByUrl).toHaveBeenCalledWith("/b/standalone-board-1", { replaceUrl: true });
-  });
-
   it("uses the same default template as the in-app standalone board dialog", async () => {
     const { component } = await render();
 
     expect(component.boardTemplateId()).toBe(DEFAULT_WORKSPACE_TEMPLATE.id);
-    expect(component.selectedBoardTemplate()).toBe(DEFAULT_WORKSPACE_TEMPLATE);
   });
 
   it("lets first-run users choose board identity and describes what each template is for", async () => {

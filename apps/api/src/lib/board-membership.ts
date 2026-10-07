@@ -1,8 +1,6 @@
 import { boardMembers, boards, clientMembers, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, eq, inArray, isNull, notInArray } from "drizzle-orm";
-import type { Db } from "../db.js";
-
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
+import type { Tx } from "../db.js";
 
 /**
  * Seed a freshly created board with pinned `editor` rows for every workspace admin. Standalone boards

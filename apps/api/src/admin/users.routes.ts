@@ -1,10 +1,10 @@
 import { dto } from "@kanera/shared";
 import { boardMembers, boards, clientGuestSeats, clientMembers, clients, passwordResetTokens, refreshTokens, users, workspaceMembers, workspaces } from "@kanera/shared/schema";
 import { and, asc, desc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { db } from "../db.js";
 import { env } from "../env.js";
-import { badRequest, forbidden, notFound } from "../lib/errors.js";
+import { badRequest, notFound } from "../lib/errors.js";
 import { withSignedMedia } from "../lib/media-keys.js";
 import { countOwners } from "../lib/org-owners.js";
 import { repointActiveOrganisation } from "../lib/client-membership.js";
@@ -12,12 +12,7 @@ import { pinOrgAdminToClientBoards, unpinOrgAdminFromClientBoards } from "../lib
 import { newOpaqueToken } from "../lib/tokens.js";
 import { writeAdminAudit } from "./audit.js";
 import { resetMfa } from "../auth/mfa.js";
-
-function requireSuperadmin(req: FastifyRequest) {
-  if (req.adminAuth.role !== "superadmin") throw forbidden("superadmin required");
-}
-
-const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
+import { requireSuperadmin, iso } from "./helpers.js";
 
 async function loadUserOr404(userId: string, requestedClientId?: string) {
   const [identity] = await db

@@ -1,15 +1,14 @@
 import { mcpEventData, type McpEventArguments, type McpEventOccurrence } from "@kanera/shared/dto";
-import { cardPath } from "@kanera/shared/card-links";
 import { cards, clientMembers, lists, mcpEventDeliveries, mcpEventSubscriptions, oauthClients, oauthGrants, users, workspaceApiKeys, type EventOutbox, type EventOutboxActor, type McpDeliveryError, type McpEventSubscription } from "@kanera/shared/schema";
 import { and, eq, gt, inArray, lt, lte, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import type { AuthClaims } from "../auth/plugin.js";
 import { db } from "../db.js";
-import { env } from "../env.js";
 import { assertBoardAccess, assertCardAccess, assertWorkspaceAccess } from "./access.js";
 import { AppError, badRequest, forbidden } from "./errors.js";
 import { decryptSecret } from "./secrets.js";
 import { McpCallbackError, mcpWebhookHeaders, postMcpWebhook, type McpWebhookRequest } from "./mcp-event-webhooks.js";
+import { absoluteCardUrl } from "./wire-card.js";
 
 // Bounded retry budget from the events draft ("3 to 5 attempts spread over no more than 10 to 15
 // minutes"): attempts at 0s, 30s, 1.5m, 3.5m and 7.5m. An endpoint that is down for longer misses
@@ -94,7 +93,7 @@ async function occurrenceFor(event: EventOutbox): Promise<BaseOccurrence | null>
     ...(name === "card.moved" && typeof payload.fromListId === "string" ? { fromListId: payload.fromListId } : {}),
     ...(typeof payload.prevPosition === "string" ? { prevPosition: payload.prevPosition } : {}),
     ...(comment ? { commentId: comment.id, text: (comment.body ?? "").slice(0, 8000) } : {}),
-    ...(current?.key && current.organisationKey ? { url: new URL(cardPath(current.organisationKey, current.key), env.WEB_ORIGIN).toString() } : {}),
+    ...(current?.key && current.organisationKey ? { url: absoluteCardUrl(current.organisationKey, current.key) } : {}),
   });
   return { eventId: `evt_${event.id}`, name, timestamp: event.occurredAt.toISOString(), data, cursor: null };
 }
