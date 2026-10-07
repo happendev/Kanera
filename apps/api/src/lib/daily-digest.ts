@@ -12,7 +12,6 @@ import {
   type CardDueDateSlot,
   type SmtpConfig,
 } from "@kanera/shared/schema";
-import { cardPath } from "@kanera/shared/card-links";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { DailyDigestPriorityItem } from "./email-templates/daily-digest.js";
 import type { FastifyBaseLogger } from "fastify";
@@ -21,6 +20,8 @@ import { isDueDateOverdue } from "./due-date.js";
 import { createMailer, type Mailer } from "./mailer.js";
 import { allowsDailyDigestEmail, getNotificationSettingsForUsers, getNotificationWorkspaceRulesForUsers } from "./notification-settings.js";
 import { startSweepScheduler } from "./sweep-scheduler.js";
+import { absoluteCardUrl } from "./wire-card.js";
+import { localParts } from "./due-date.js";
 
 const DIGEST_HOUR = 8;
 const SWEEP_INTERVAL_MS = 60_000; // 60 seconds
@@ -29,11 +30,6 @@ const SWEEP_INTERVAL_MS = 60_000; // 60 seconds
  * which the head of the queue settles; a 50-row reprint would bury the due dates it sits beside.
  */
 const MAX_DIGEST_PRIORITIES = 5;
-
-interface DigestLocalParts {
-  date: string;
-  hour: number;
-}
 
 interface DigestRow {
   // Cards and assigned checklist items are both surfaced as digest work items; the kind
@@ -366,38 +362,6 @@ async function alreadyQueued(db: Db, toEmail: string, localDate: string): Promis
   return Boolean(existing);
 }
 
-function localParts(now: Date, timezone: string): DigestLocalParts {
-  let parts: Intl.DateTimeFormatPart[];
-  try {
-    parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: timezone || "UTC",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      hour12: false,
-      hourCycle: "h23",
-    }).formatToParts(now);
-  } catch {
-    parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "UTC",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      hour12: false,
-      hourCycle: "h23",
-    }).formatToParts(now);
-  }
-
-  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
-  const rawHour = Number(value("hour"));
-  return {
-    date: `${value("year")}-${value("month")}-${value("day")}`,
-    hour: rawHour === 24 ? 0 : rawHour,
-  };
-}
-
 function localDateLabel(now: Date, timezone: string): string {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: timezone || "UTC",
@@ -416,5 +380,5 @@ function shortDateLabel(localDate: string, timezone: string): string {
 }
 
 function cardUrl(webOrigin: string, organisationKey: string, cardKey: string): string {
-  return new URL(cardPath(organisationKey, cardKey), webOrigin).toString();
+  return absoluteCardUrl(organisationKey, cardKey, webOrigin);
 }

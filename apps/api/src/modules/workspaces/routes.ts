@@ -1,9 +1,7 @@
 import { dto } from "@kanera/shared";
 import type { PendingBoardInvitationSummary } from "@kanera/shared/dto";
 import { SERVER_EVENTS } from "@kanera/shared/events";
-import { DEFAULT_WORKSPACE_CUSTOM_FIELDS } from "@kanera/shared/default-workspace-custom-fields";
-import { DEFAULT_WORKSPACE_LABELS } from "@kanera/shared/default-workspace-labels";
-import { DEFAULT_WORKSPACE_LIST_NAMES } from "@kanera/shared/default-workspace-lists";
+import { DEFAULT_WORKSPACE_CUSTOM_FIELDS, DEFAULT_WORKSPACE_LABELS, DEFAULT_WORKSPACE_LIST_NAMES } from "@kanera/shared/workspace-templates";
 import { DUE_DATE_SLOT_RANK, type CardDueDateSlot } from "@kanera/shared/due-date-slots";
 import { automationActions, automations, boardGroups, boardInvitationGrants, boardInvitations, boardMembers, boardMirrors, boards, cardAssignees, cardLabelAssignments, cardLabels, cards, checklistTemplateItems, checklistTemplates, clientGuestSeats, clientMembers, clients, customFieldOptions, customFields, lists, planActions, standaloneBoardGroups, users, workspaceMembers, workspaces, type AutomationActionConfig, type Workspace } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
@@ -20,7 +18,6 @@ import { cleanupUserBoardParticipation } from "../../lib/board-participation-cle
 import { loadAutomations } from "../../lib/automations.js";
 import { applyChecklistTemplates, loadChecklistTemplates } from "../../lib/checklist-templates.js";
 import { loadWorkspaceCustomFields } from "../../lib/custom-fields.js";
-import { assertGuestBoardLimit } from "../../lib/board-guest-limits.js";
 import { pinAdminToWorkspaceBoards, seedBoardMembersFromWorkspace, unpinAdminFromWorkspaceBoards } from "../../lib/board-membership.js";
 import { addDays, isDueDateOverdue, localDateInTimezone } from "../../lib/due-date.js";
 import { isPaidTier } from "../../lib/entitlements.js";
@@ -30,23 +27,19 @@ import { deleteExternalLinks } from "../../lib/external-links.js";
 import { emitMirrorMetadataToBoards } from "../../lib/board-mirror/events.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
 import { clearNotificationsForRevokedAccess } from "../../lib/notifications.js";
-import { previewGuestBoardsCapacity, prunePaidGuestSeatIfBelowLimit } from "../../lib/paid-guest-seats.js";
+import { ensureGuestBoardCapacity, previewGuestBoardsCapacity, prunePaidGuestSeatIfBelowLimit } from "../../lib/paid-guest-seats.js";
 import { ANALYTICS_EVENT_VERSION, analyticsPlanCode, capturePremiumFeatureUsed, productAnalytics } from "../../lib/product-analytics.js";
 import { newOpaqueToken } from "../../lib/tokens.js";
 import { assertBoardLimit, assertGuestsAllowed, getAutomationExecutionsRemaining, shouldEnableSeededAutomations } from "../../lib/tier-limits.js";
 import { deleteWorkspaceCascade } from "../../lib/workspace-delete.js";
 import { emitCardPriorityInvalidated, emitToBoard, emitToBoardAudience, emitToUser, emitToWorkspace } from "../../realtime/emit.js";
 import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
+import { positionAtIndex } from "../../lib/position.js";
 
 // A workspace must retain at least one admin, otherwise no one can manage it or its boards.
 // Block removing or demoting the final admin.
 async function assertNotLastAdmin(workspaceId: string, targetUserId: string) {
-  const [target] = await db
-    .select({ role: workspaceMembers.role })
-    .from(workspaceMembers)
-    .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, targetUserId)))
-    .limit(1);
-  if (target?.role !== "admin") return;
+  if (await workspaceMemberRole(workspaceId, targetUserId) !== "admin") return;
   const [row] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(workspaceMembers)
@@ -94,11 +87,8 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           accentColor: workspaces.accentColor,
           completedCardsActiveDays: workspaces.completedCardsActiveDays,
           inactiveCardsDays: workspaces.inactiveCardsDays,
-          boardHealthEnabled: workspaces.boardHealthEnabled,
-          boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
-          boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
-          boardHealthInactiveEnabled: workspaces.boardHealthInactiveEnabled,
           boardLinkingEnabled: workspaces.boardLinkingEnabled,
+          notesEnabled: workspaces.notesEnabled,
           createdAt: workspaces.createdAt,
           updatedAt: workspaces.updatedAt,
           clientRole: clientMembers.clientRole,
@@ -146,11 +136,8 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           accentColor: workspaces.accentColor,
           completedCardsActiveDays: workspaces.completedCardsActiveDays,
           inactiveCardsDays: workspaces.inactiveCardsDays,
-          boardHealthEnabled: workspaces.boardHealthEnabled,
-          boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
-          boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
-          boardHealthInactiveEnabled: workspaces.boardHealthInactiveEnabled,
           boardLinkingEnabled: workspaces.boardLinkingEnabled,
+          notesEnabled: workspaces.notesEnabled,
           createdAt: workspaces.createdAt,
           updatedAt: workspaces.updatedAt,
           role: sql<"admin" | "member">`${req.auth.apiKeyScope === "admin" ? "admin" : "member"}::text`.as("role"),
@@ -171,11 +158,8 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           accentColor: workspaces.accentColor,
           completedCardsActiveDays: workspaces.completedCardsActiveDays,
           inactiveCardsDays: workspaces.inactiveCardsDays,
-          boardHealthEnabled: workspaces.boardHealthEnabled,
-          boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
-          boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
-          boardHealthInactiveEnabled: workspaces.boardHealthInactiveEnabled,
           boardLinkingEnabled: workspaces.boardLinkingEnabled,
+          notesEnabled: workspaces.notesEnabled,
           createdAt: workspaces.createdAt,
           updatedAt: workspaces.updatedAt,
           role: sql<"admin">`'admin'::text`.as("role"),
@@ -196,11 +180,8 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         accentColor: workspaces.accentColor,
         completedCardsActiveDays: workspaces.completedCardsActiveDays,
         inactiveCardsDays: workspaces.inactiveCardsDays,
-        boardHealthEnabled: workspaces.boardHealthEnabled,
-        boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
-        boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
-        boardHealthInactiveEnabled: workspaces.boardHealthInactiveEnabled,
         boardLinkingEnabled: workspaces.boardLinkingEnabled,
+        notesEnabled: workspaces.notesEnabled,
         createdAt: workspaces.createdAt,
         updatedAt: workspaces.updatedAt,
         role: workspaceMembers.role,
@@ -236,7 +217,6 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         .select({
           completedCardsActiveDays: clients.defaultCompletedCardsActiveDays,
           inactiveCardsDays: clients.defaultInactiveCardsDays,
-          boardHealthEnabled: clients.defaultBoardHealthEnabled,
         })
         .from(clients)
         .where(eq(clients.id, req.auth.cid))
@@ -258,7 +238,6 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           // organisation-level change silently rewriting existing board behaviour.
           completedCardsActiveDays: organisationDefaults.completedCardsActiveDays,
           inactiveCardsDays: organisationDefaults.inactiveCardsDays,
-          boardHealthEnabled: organisationDefaults.boardHealthEnabled,
         })
         .returning();
       const [member] = await tx.insert(workspaceMembers).values({
@@ -278,7 +257,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
             workspaceId: workspace!.id,
             name: list.name,
             icon: "icon" in list ? list.icon ?? null : null,
-            position: String((index + 1) * 1000),
+            position: positionAtIndex(index),
           })),
         ).returning()
         : [];
@@ -292,7 +271,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
             icon: field.icon,
             type: field.type,
             allowMultiple: "allowMultiple" in field ? field.allowMultiple : false,
-            position: String((index + 1) * 1000),
+            position: positionAtIndex(index),
           })),
         ).returning()
         : [];
@@ -302,7 +281,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
                 fieldId: initialCustomFieldRows[fieldIndex]!.id,
                 label: option.label,
                 color: option.color ?? null,
-                position: String((optionIndex + 1) * 1000),
+                position: positionAtIndex(optionIndex),
               }))
             : [],
         );
@@ -317,7 +296,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
             workspaceId: workspace!.id,
             name: label.name,
             color: label.color ?? null,
-            position: String((index + 1) * 1000),
+            position: positionAtIndex(index),
           })),
         ).returning()
         : [];
@@ -327,7 +306,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           body.checklistTemplates.map((template, index) => ({
             workspaceId: workspace!.id,
             title: template.title,
-            position: String((index + 1) * 1000),
+            position: positionAtIndex(index),
           })),
         ).returning()
         : [];
@@ -659,11 +638,8 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           ...(body.accentColor !== undefined && { accentColor: body.accentColor }),
           ...(body.completedCardsActiveDays !== undefined && { completedCardsActiveDays: body.completedCardsActiveDays }),
           ...(body.inactiveCardsDays !== undefined && { inactiveCardsDays: body.inactiveCardsDays }),
-          ...(body.boardHealthEnabled !== undefined && { boardHealthEnabled: body.boardHealthEnabled }),
-          ...(body.boardHealthOverdueEnabled !== undefined && { boardHealthOverdueEnabled: body.boardHealthOverdueEnabled }),
-          ...(body.boardHealthUnassignedEnabled !== undefined && { boardHealthUnassignedEnabled: body.boardHealthUnassignedEnabled }),
-          ...(body.boardHealthInactiveEnabled !== undefined && { boardHealthInactiveEnabled: body.boardHealthInactiveEnabled }),
           ...(body.boardLinkingEnabled !== undefined && { boardLinkingEnabled: body.boardLinkingEnabled }),
+          ...(body.notesEnabled !== undefined && { notesEnabled: body.notesEnabled }),
           updatedAt: new Date(),
         })
         .where(eq(workspaces.id, id))
@@ -1287,7 +1263,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       // Seat-pool gate + membership insert in one transaction so the capacity check is race-safe.
       // Crossing the free guest-board cap consumes a pooled seat; a full pool throws 402 SEAT_LIMIT_REACHED.
       const { row: member, guestSeat } = await db.transaction(async (tx) => {
-        const seat = await assertGuestBoardLimit({
+        const seat = await ensureGuestBoardCapacity({
           hostClientId: clientId,
           boardId: boardRow.id,
           userId: existingUser.id,
@@ -1354,21 +1330,20 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       });
       return reply.status(201).send({
         status: "added" as const,
-        guest: !existingUser.membershipClientId
-          ? {
-            boardId: boardRow.id,
-            boardName: boardRow.boardName,
-            userId: existingUser.id,
-            role: member!.role,
-            addedAt: member!.addedAt,
-            email: body.email,
-            displayName: existingUser.displayName,
-            avatarUrl: withSignedMedia(existingUser.clientId, { avatarUrl: existingUser.avatarUrl }).avatarUrl,
-            lastOnlineAt: existingUser.lastOnlineAt,
-            clientId: existingUser.clientId,
-            paidGuestSeat: guestSeat.paidGuestSeatActive,
-          }
-          : null,
+        // Organisation members were rejected above, so this path only ever adds a guest.
+        guest: {
+          boardId: boardRow.id,
+          boardName: boardRow.boardName,
+          userId: existingUser.id,
+          role: member!.role,
+          addedAt: member!.addedAt,
+          email: body.email,
+          displayName: existingUser.displayName,
+          avatarUrl: withSignedMedia(existingUser.clientId, { avatarUrl: existingUser.avatarUrl }).avatarUrl,
+          lastOnlineAt: existingUser.lastOnlineAt,
+          clientId: existingUser.clientId,
+          paidGuestSeat: guestSeat.paidGuestSeatActive,
+        },
       });
     }
 

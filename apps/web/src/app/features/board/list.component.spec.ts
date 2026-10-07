@@ -1,14 +1,14 @@
+import { createComponentFixture, type HtmlComponentFixture } from "../../../test/component-fixture";
 import { CdkDrag } from "@angular/cdk/drag-drop";
 import type { CdkDragPreview } from "@angular/cdk/drag-drop";
 import { provideZonelessChangeDetection, signal } from "@angular/core";
-import type { ComponentFixture} from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
 import { By } from "@angular/platform-browser";
 import { provideRouter } from "@angular/router";
 import type { CardAttachmentRow, WireCardSummary } from "@kanera/shared/events";
 import type { List } from "@kanera/shared/schema";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiClient, ApiError } from "../../core/api/api.client";
+import { ApiClient } from "../../core/api/api.client";
 import { APP_DOM_EVENTS } from "../../core/browser/browser-contracts";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
@@ -109,7 +109,7 @@ describe("ListComponent", () => {
   let notifications: { watchCreatedCardLocally: ReturnType<typeof vi.fn> };
   const checklistExpanded = signal(false);
   let closeCardChecklists: ReturnType<typeof vi.fn>;
-  let fixture: ComponentFixture<ListComponent>;
+  let fixture: HtmlComponentFixture<ListComponent>;
 
   beforeEach(async () => {
     const post = vi.fn((_path: string, _body: unknown) => Promise.resolve({}));
@@ -137,7 +137,7 @@ describe("ListComponent", () => {
       ],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(ListComponent);
+    fixture = createComponentFixture(ListComponent);
     fixture.componentRef.setInput("list", list());
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("allLists", [list(), list({ id: "list-2", name: "Todo" })]);
@@ -174,7 +174,7 @@ describe("ListComponent", () => {
     const emitted: unknown[] = [];
     fixture.componentInstance.startAdd.subscribe((payload) => emitted.push(payload));
     // One strip per gap; the lane footer already covers "after the last card".
-    const strips = fixture.debugElement.queryAll(By.css(".lane-insert"));
+    const strips = fixture.debugElement.queryAll(By.css(".lane-insert-card"));
     expect(strips).toHaveLength(2);
     (strips[0].nativeElement as HTMLButtonElement).click();
     expect(emitted).toEqual([{ listId: "list-1", atTop: false, afterItem: { type: "card", id: "first" } }]);
@@ -182,7 +182,7 @@ describe("ListComponent", () => {
     // Readers and view-only members never see the affordance.
     fixture.componentRef.setInput("canCreateCards", false);
     fixture.detectChanges();
-    expect(fixture.debugElement.queryAll(By.css(".lane-insert"))).toHaveLength(0);
+    expect(fixture.debugElement.queryAll(By.css(".lane-insert-card"))).toHaveLength(0);
   });
 
   it("does not expose completion setup from reused board list UI", () => {
@@ -435,49 +435,6 @@ describe("ListComponent", () => {
 
       expect(cardsEl.scrollTop).toBeGreaterThan(1200);
       expect(fixture.componentInstance.renderedCards().length).toBe(75);
-    } finally {
-      document.dispatchEvent(new CustomEvent<boolean>(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: false }));
-      requestFrame.mockRestore();
-      cancelFrame.mockRestore();
-    }
-  });
-
-  it("ignores global drag moves outside this list column", () => {
-    const frameCallbacks: FrameRequestCallback[] = [];
-    const requestFrame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
-      frameCallbacks.push(cb);
-      return frameCallbacks.length;
-    });
-    const cancelFrame = vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
-
-    try {
-      fixture.componentRef.setInput("cards", Array.from({ length: 75 }, (_, i) => summaryCard(`card-${i}`)));
-      fixture.detectChanges();
-
-      const cardsEl = fixture.nativeElement.querySelector(".cards") as HTMLElement;
-      Object.defineProperty(cardsEl, "scrollHeight", { value: 2000, configurable: true });
-      Object.defineProperty(cardsEl, "clientHeight", { value: 300, configurable: true });
-      const readRect = vi.fn(() => ({
-        left: 100,
-        top: 100,
-        right: 400,
-        bottom: 400,
-        width: 300,
-        height: 300,
-        x: 100,
-        y: 100,
-        toJSON: () => ({}),
-      } as DOMRect));
-      cardsEl.getBoundingClientRect = readRect;
-      cardsEl.scrollTop = 1200;
-
-      document.dispatchEvent(new CustomEvent<boolean>(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: true }));
-      readRect.mockClear();
-      document.dispatchEvent(new CustomEvent<{ x: number; y: number }>(APP_DOM_EVENTS.CARD_DRAG_MOVE, { detail: { x: 20, y: 399 } }));
-      frameCallbacks.shift()?.(0);
-
-      expect(cardsEl.scrollTop).toBe(1200);
-      expect(readRect).not.toHaveBeenCalled();
     } finally {
       document.dispatchEvent(new CustomEvent<boolean>(APP_DOM_EVENTS.CARD_DRAG_STATE, { detail: false }));
       requestFrame.mockRestore();

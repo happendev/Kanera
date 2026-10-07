@@ -10,6 +10,7 @@ import {
   updateIconSchema,
 } from "./_icons.js";
 import { AUTOMATION_ACTION_LIMIT, AUTOMATION_LIMIT } from "../automation-limits.js";
+import { automationMovePlacement, currentDateTextFormat } from "./automations.js";
 import { colorTokenSchema } from "./_colors.js";
 import { dueDateSlot } from "./cards.js";
 import { customFieldTypeSchema } from "./custom-fields.js";
@@ -52,7 +53,7 @@ const initialPopulateCustomFieldValue = z.union([
   z.object({ kind: z.literal("text"), text: z.string().trim().min(1).max(20000) }),
   z.object({
     kind: z.literal("text_current_date"),
-    format: z.enum(["date", "month", "month_long_short_year", "month_long_year", "datetime"]),
+    format: currentDateTextFormat,
   }),
   z.object({ kind: z.literal("number"), number: z.number() }),
   z.object({
@@ -91,7 +92,7 @@ const initialAutomationAction = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("move_to_list"),
     listName: z.string().trim().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH),
-    placement: z.enum(["top", "bottom"]).default("bottom"),
+    placement: automationMovePlacement,
   }),
   z.object({ type: z.literal("move_to_top") }),
   z.object({ type: z.literal("move_to_bottom") }),
@@ -378,11 +379,8 @@ export const updateWorkspaceBody = z.object({
   accentColor: colorTokenSchema.nullable().optional(),
   completedCardsActiveDays: z.number().int().min(0).max(365).optional(),
   inactiveCardsDays: z.number().int().min(0).max(365).optional(),
-  boardHealthEnabled: z.boolean().optional(),
-  boardHealthOverdueEnabled: z.boolean().optional(),
-  boardHealthUnassignedEnabled: z.boolean().optional(),
-  boardHealthInactiveEnabled: z.boolean().optional(),
   boardLinkingEnabled: z.boolean().optional(),
+  notesEnabled: z.boolean().optional(),
 });
 export type UpdateWorkspaceBody = z.infer<typeof updateWorkspaceBody>;
 

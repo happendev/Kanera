@@ -1,4 +1,5 @@
 import { computed, Injectable, signal } from "@angular/core";
+import { mediaQuerySignal } from "../../shared/media-query.signal";
 import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
 
 export type CardDetailMode = "panel" | "modal";
@@ -15,7 +16,7 @@ export class CardDetailLayoutService {
   // choice is available; below lg it is overridden by `effectiveMode`.
   readonly mode = this._mode.asReadonly();
 
-  private readonly belowLg = signal(this.matchesBelowLg());
+  private readonly belowLg = mediaQuerySignal(BELOW_LG_QUERY);
 
   // The mode the card detail actually renders in. Below lg the panel option is
   // removed and we always render as a modal, regardless of stored preference.
@@ -31,10 +32,6 @@ export class CardDetailLayoutService {
       this._mode.set(this.isMode(event.newValue) ? event.newValue : "panel");
     });
 
-    if (typeof window.matchMedia === "function") {
-      const mql = window.matchMedia(BELOW_LG_QUERY);
-      mql.addEventListener("change", (event) => this.belowLg.set(event.matches));
-    }
   }
 
   toggle() {
@@ -60,7 +57,4 @@ export class CardDetailLayoutService {
     return value === "panel" || value === "modal";
   }
 
-  private matchesBelowLg(): boolean {
-    return typeof window.matchMedia === "function" && window.matchMedia(BELOW_LG_QUERY).matches;
-  }
 }

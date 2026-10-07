@@ -1,7 +1,7 @@
 import { hasCoarsePointer } from "../../core/browser/input-modality";
 
-export const EDGE_SCROLL_THRESHOLD = 96;
-export const MAX_EDGE_SCROLL_STEP = 28;
+const EDGE_SCROLL_THRESHOLD = 96;
+const MAX_EDGE_SCROLL_STEP = 28;
 export const MOBILE_EDGE_SCROLL_STEP = 6;
 
 // Long-press gate on touch: a finger must hold a card this long (without moving past CDK's

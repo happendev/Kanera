@@ -1,0 +1,1 @@
+ALTER TABLE "workspace" ADD COLUMN "notes_enabled" boolean DEFAULT true NOT NULL;

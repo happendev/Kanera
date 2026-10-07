@@ -57,7 +57,7 @@ function githubPrivateKey(credentials: GitHubAppCredentials): string {
   return credentials.privateKey.replace(/\\n/g, "\n");
 }
 
-export function createGitHubAppJwt(credentials = envGitHubAppCredentials(), nowMs = Date.now()): string {
+function createGitHubAppJwt(credentials = envGitHubAppCredentials(), nowMs = Date.now()): string {
   if (!credentials) {
     throw new Error("GitHub App is not configured");
   }

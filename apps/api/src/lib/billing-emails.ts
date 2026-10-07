@@ -3,6 +3,7 @@ import {
   boardInvitations,
   boardMembers,
   boards,
+  cards,
   clientMembers,
   clients,
   emailQueue,
@@ -13,17 +14,18 @@ import {
   workspaces,
   type BillingEmailQueueData,
   type BillingImpactSummary,
-  type BillingLimitsSummary,
+  type BillingUsageSummary,
   type EmailQueueType,
 } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, isNull, notExists, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
-import { db, type Db } from "../db.js";
+import { db, type Tx } from "../db.js";
 import { env, type Env } from "../env.js";
 import { canAddPaidSeat, isPaidTier } from "./entitlements.js";
 import type { Mailer } from "./mailer.js";
+import { getFreePlanLimits } from "./tier-limits.js";
+import { pendingGuestInviteCondition } from "./pending-guest-invites.js";
 
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 type BillingEmailKind =
   | "pro_trial_started"
   | "pro_trial_warning"
@@ -65,6 +67,7 @@ export type BillingEmailContext = {
   billedUserEmail?: string | null;
   billedUserName?: string | null;
   activeSeatCount?: number | null;
+  usage?: BillingUsageSummary | null;
   dedupeKey?: string | null;
 };
 
@@ -145,7 +148,7 @@ export async function sendHostedBillingEmail(
     trialEndsAtLabel: context.trialEndsAt ? formatDate(context.trialEndsAt) : null,
     daysRemaining: context.daysRemaining ?? null,
     impact: impact ?? null,
-    limits: freeLimits(config),
+    limits: getFreePlanLimits(config),
     billingSummary: context.billingSummary ?? null,
     billingInterval: context.billingInterval ?? null,
     purchasedSeatCount: context.purchasedSeatCount ?? null,
@@ -155,6 +158,7 @@ export async function sendHostedBillingEmail(
     billedUserEmail: context.billedUserEmail ?? null,
     billedUserName: context.billedUserName ?? null,
     activeSeatCount: context.activeSeatCount ?? null,
+    usage: context.usage ?? null,
   };
 
   let sent = 0;
@@ -227,23 +231,7 @@ export async function previewDowngradeImpact(
     .from(boardInvitations)
     .innerJoin(boards, eq(boards.id, boardInvitations.boardId))
     .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
-    .where(
-      and(
-        eq(workspaces.clientId, clientId),
-        isNull(boardInvitations.acceptedAt),
-        isNull(boardInvitations.revokedAt),
-        sql`not exists (
-          select 1 from ${users}
-          inner join ${clientMembers}
-            on ${clientMembers.userId} = ${users.id}
-           and ${clientMembers.clientId} = ${clientId}
-           and ${clientMembers.suspendedAt} is null
-           and ${clientMembers.removedAt} is null
-          where ${users.email} = ${boardInvitations.email}
-            and ${users.deletedAt} is null
-        )`,
-      ),
-    );
+    .where(pendingGuestInviteCondition(clientId));
   impact.guestInvitesRevoked = pendingInvites.length;
 
   // Workspaces are unlimited on Free; only boards are capped, and that cap is org-wide.
@@ -334,15 +322,6 @@ async function hasBillingEmail(toEmail: string, type: EmailQueueType, clientId: 
   return existing !== undefined;
 }
 
-function freeLimits(config: BillingEmailEnv): BillingLimitsSummary {
-  return {
-    maxBoards: config.HOSTED_FREE_MAX_BOARDS,
-    maxOrgMembers: config.HOSTED_FREE_MAX_ORG_MEMBERS,
-    maxEnabledAutomations: config.HOSTED_FREE_MAX_ENABLED_AUTOMATIONS,
-    maxAutomationExecutionsPerMonth: config.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY,
-  };
-}
-
 function emptyImpact(): BillingImpactSummary {
   return {
     boardsArchived: 0,
@@ -357,4 +336,30 @@ function emptyImpact(): BillingImpactSummary {
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(date);
+}
+
+/**
+ * Structural "what you built" counts for the trial-warning email: live boards, cards on them, and
+ * active members. Counts only, so the summary never quotes or interprets board content.
+ */
+export async function trialUsageSummary(clientId: string, database: Tx = db): Promise<BillingUsageSummary> {
+  const result = await database.execute<BillingUsageSummary>(sql`
+    select
+      (
+        select count(*)::int from ${boards} inner join ${workspaces} on ${workspaces.id} = ${boards.workspaceId}
+        where ${workspaces.clientId} = ${clientId} and ${boards.archivedAt} is null and ${workspaces.archivedAt} is null
+      ) as boards,
+      (
+        select count(*)::int from ${cards}
+        inner join ${boards} on ${boards.id} = ${cards.boardId}
+        inner join ${workspaces} on ${workspaces.id} = ${boards.workspaceId}
+        where ${workspaces.clientId} = ${clientId} and ${boards.archivedAt} is null and ${workspaces.archivedAt} is null
+      ) as cards,
+      (
+        select count(*)::int from ${clientMembers}
+        where ${clientMembers.clientId} = ${clientId} and ${clientMembers.removedAt} is null and ${clientMembers.suspendedAt} is null
+      ) as members
+  `);
+  const row = result.rows[0];
+  return { boards: row?.boards ?? 0, cards: row?.cards ?? 0, members: row?.members ?? 0 };
 }

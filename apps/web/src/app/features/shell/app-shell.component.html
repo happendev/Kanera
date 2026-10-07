@@ -96,7 +96,7 @@
       @if (usingOfflineShell()) {
       <span class="offline-copy">Offline copy</span>
       }
-      @if (isOrgAdmin() && canCreateWorkspace()) {
+      @if (isOrgAdmin()) {
       <button class="new-ws-btn ghost icon" (click)="newWorkspace()" (contextmenu)="openNavContextMenu($event, { label: 'New workspace', url: '/onboarding?mode=workspace', canMarkAllRead: false, clearBoardSearch: false })" kTooltip="New workspace" aria-label="New workspace">
         <i class="ti ti-plus"></i>
       </button>
@@ -152,23 +152,18 @@
       }
       }
       @if (sidebarCollapsed() || boardSearchTerm() || !collapsed()[group.workspace.id]) {
-      @if (!boardSearchTerm()) {
+      @if (!boardSearchTerm() && group.workspace.notesEnabled !== false) {
       <div class="ws-me">
         <a class="board-link" [routerLink]="['/w', group.workspace.id, 'notes']" routerLinkActive="active"
           (contextmenu)="openNavContextMenu($event, { label: 'Workspace Notes', url: '/w/' + group.workspace.id + '/notes', canMarkAllRead: false, clearBoardSearch: false })">
           <i class="ti ti-notebook"></i>
-          <span class="nav-label">Workspace Notes</span>
+          <span class="nav-label">Notes</span>
         </a>
       </div>
       }
       <div class="ws-boards">
-        @if (!sidebarCollapsed() && group.boards.length > 0 && showBoardsSubhead()) {
-        <button class="ws-subhead-toggle" (click)="toggleBoards(group.workspace.id)" [attr.aria-expanded]="!!boardSearchTerm() || !boardsCollapsed()[group.workspace.id]">
-          <i [class]="!boardSearchTerm() && boardsCollapsed()[group.workspace.id] ? 'ti ti-chevron-right' : 'ti ti-chevron-down'"></i>
-          <span>Boards</span>
-        </button>
-        }
-        @if (sidebarCollapsed() || boardSearchTerm() || !showBoardsSubhead() || !boardsCollapsed()[group.workspace.id]) {
+        <!-- A workspace holds only Notes and boards, so boards sit directly under Notes with no
+             "Boards" subhead; the workspace row itself is the one collapse control. -->
         @if (sidebarCollapsed()) {
         <div class="nav-board-drop-list" cdkDropList [cdkDropListSortPredicate]="canSortNavBoard" [cdkDropListDisabled]="!canReorderBoards(group.workspace)" (cdkDropListDropped)="dropNavBoard($event, collapsedBoardLinks(group), group.workspace)">
           @for (board of collapsedBoardLinks(group); track board.id) {
@@ -232,7 +227,6 @@
           </a>
           }
         </div>
-        }
         }
         @if (group.boards.length === 0 && !sidebarCollapsed()) {
         <span class="board-empty">No boards yet</span>
@@ -440,7 +434,7 @@
     }
     }
 
-    @if (sidebarCollapsed() && isOrgAdmin() && canCreateWorkspace()) {
+    @if (sidebarCollapsed() && isOrgAdmin()) {
     <button class="new-ws-icon ghost icon" (click)="newWorkspace()" (contextmenu)="openNavContextMenu($event, { label: 'New workspace', url: '/onboarding?mode=workspace', canMarkAllRead: false, clearBoardSearch: false })" kTooltip="New workspace" aria-label="New workspace">
       <i class="ti ti-plus"></i>
     </button>
@@ -616,11 +610,13 @@
           <i class="ti ti-help-circle"></i>
           <span>Help &amp; docs</span>
         </a>
+        @if (!touchOnly()) {
         <button type="button" class="k-menu-item popover-item" (click)="openShortcuts()" role="menuitem">
           <i class="ti ti-keyboard"></i>
           <span>Keyboard shortcuts</span>
           <kbd class="k-kbd popover-kbd">?</kbd>
         </button>
+        }
         <button type="button" class="k-menu-item popover-item danger" (click)="logout()" role="menuitem">
           <i class="ti ti-logout"></i>
           <span>Log out</span>

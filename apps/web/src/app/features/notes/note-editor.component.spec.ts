@@ -1,5 +1,5 @@
+import { createComponentFixture, type HtmlComponentFixture } from "../../../test/component-fixture";
 import { provideZonelessChangeDetection, signal } from "@angular/core";
-import type { ComponentFixture} from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
 import type { NoteAttachmentRow, WireNote, WireNoteLock } from "@kanera/shared/events";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -53,7 +53,7 @@ class SocketServiceStub {
 }
 
 describe("NoteEditorComponent locking", () => {
-  let fixture: ComponentFixture<NoteEditorComponent>;
+  let fixture: HtmlComponentFixture<NoteEditorComponent>;
   let state: NotesStateStub;
   let api: ApiClientStub;
   let confirm: { open: ReturnType<typeof vi.fn> };
@@ -82,7 +82,7 @@ describe("NoteEditorComponent locking", () => {
       ],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(NoteEditorComponent);
+    fixture = createComponentFixture(NoteEditorComponent);
     fixture.componentRef.setInput("note", createNote());
     fixture.componentRef.setInput("mentionMembers", [
       {

@@ -19,7 +19,7 @@ import { db } from "../db.js";
 import { enqueueCardAssignedEmails } from "./assignee-email-notifications.js";
 import { recordActivity } from "./activity.js";
 import type { Mailer } from "./mailer.js";
-import { countUnreadNotifications, notifyUserForActivity } from "./notifications.js";
+import { countUnreadNotifications, syncDirectNotificationForActivity } from "./notifications.js";
 import { deliverPushRow } from "./push-queue.js";
 import { ensureSystemWebPushConfig, webPushClient } from "./web-push.js";
 import { buildIntegrationServer } from "../test/integration.js";
@@ -81,8 +81,8 @@ void test("two-org notifications retain event org labels, aggregate globally, an
     boardId: boardB!.id, workspaceId: workspaceB!.id, clientId: orgB!.id, actorId: actorB!.id,
     entityType: "card", entityId: cardB!.id, action: "updated", payload: { cardId: cardB!.id },
   });
-  await notifyUserForActivity({ userId: recipient!.id, activity: activityA, reason: "assigned" });
-  await notifyUserForActivity({ userId: recipient!.id, activity: activityB, reason: "assigned" });
+  await syncDirectNotificationForActivity({ userId: recipient!.id, activity: activityA, reason: "assigned" });
+  await syncDirectNotificationForActivity({ userId: recipient!.id, activity: activityB, reason: "assigned" });
 
   const stored = await db.select({ clientId: notifications.clientId }).from(notifications).where(eq(notifications.userId, recipient!.id));
   assert.deepEqual(stored.map((row) => row.clientId).sort(), [orgA!.id, orgB!.id].sort());

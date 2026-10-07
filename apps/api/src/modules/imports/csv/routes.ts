@@ -9,7 +9,7 @@ import { assertWorkspaceAccess } from "../../../lib/access.js";
 import { badRequest, conflict, notFound } from "../../../lib/errors.js";
 import { getStorageForClient } from "../../../lib/storage/index.js";
 import { runKaneraBoardImport } from "../kanera-importer.js";
-import { emitImportResult, finishImportAnalytics } from "../route-helpers.js";
+import { emitImportResult, finishImportAnalytics, sendImportCompletedEmail } from "../route-helpers.js";
 import { resolveImportTargetBoard } from "../target-board.js";
 import { deriveCsvImport } from "./derive.js";
 import { detectHeaderRow, parseCsv, type CsvSource } from "./parse.js";
@@ -146,6 +146,7 @@ export async function csvImportRoutes(app: FastifyInstance): Promise<void> {
       }).where(eq(csvImports.id, importId));
       await emitImportResult(result, row.workspaceId, targetBoardId);
       await finishImportAnalytics(req, row.workspaceId, "csv");
+      await sendImportCompletedEmail(req, result, "csv");
       return result.summary;
     } catch (error) {
       const message = error instanceof Error ? error.message : "import failed";

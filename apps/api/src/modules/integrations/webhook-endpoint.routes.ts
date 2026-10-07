@@ -70,7 +70,7 @@ function scopeCondition(workspaceId: string, scope: WebhookManagementScope): SQL
     : and(base, eq(webhookEndpoints.ownerApiKeyId, scope.owner.ownerApiKeyId!))!;
 }
 
-export function shapeWebhookEndpoint(row: WebhookEndpointWithStats) {
+function shapeWebhookEndpoint(row: WebhookEndpointWithStats) {
   const lastSuccessfulAt = row.lastSuccessfulAt
     ? row.lastSuccessfulAt instanceof Date
       ? row.lastSuccessfulAt

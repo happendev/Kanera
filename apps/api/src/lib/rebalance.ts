@@ -31,7 +31,7 @@ type Tx = Pick<Db, "execute" | "select" | "update">;
 // instead of one UPDATE per row. We build `set position = case id when <id> then <pos> ... end`
 // over the changed rows; ids and positions are parameterized, so this is injection-safe. All
 // rebalanced tables share the `id` / `position` / `updated_at` columns this relies on.
-async function applyPositions(table: PgTable, updates: RebalancedPosition[], tx: Tx): Promise<void> {
+export async function applyPositions(table: PgTable, updates: RebalancedPosition[], tx: Tx): Promise<void> {
   if (updates.length === 0) return;
   const cases = updates.map((row) => sql`when ${row.id} then ${row.position}::numeric`);
   const ids = updates.map((row) => sql`${row.id}`);

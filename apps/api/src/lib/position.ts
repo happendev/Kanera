@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, lt, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, lt, type SQL } from "drizzle-orm";
 import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
 import { db } from "../db.js";
 import { badRequest } from "./errors.js";
@@ -29,11 +29,6 @@ export function between(prev: string | null, next: string | null): PositionResul
     p !== null && n !== null ? Math.abs(n - p) : p !== null ? STEP : n !== null ? STEP : STEP;
 
   return { position: pos.toFixed(10), needsRebalance: gap < EPS };
-}
-
-// Used when the caller passes neighbour ids; the route handler resolves those to position strings.
-export function firstPosition(): string {
-  return STEP.toFixed(10);
 }
 
 export function positionAtIndex(index: number): string {
@@ -90,4 +85,25 @@ export async function neighbourPositions(options: {
   }
 
   return { prev, next };
+}
+
+/**
+ * `neighbourPositions` for a workspace-scoped, soft-deletable table whose rows are ordered by
+ * `position`: lists, custom fields, labels, boards, automations and checklist templates all share
+ * that shape. `noun` names the DTO anchor fields (`after${noun}Id` / `before${noun}Id`) in 400s.
+ */
+export function workspaceNeighbourPositions<
+  T extends PgTable & { id: AnyPgColumn; position: AnyPgColumn; workspaceId: AnyPgColumn; archivedAt: AnyPgColumn },
+>(table: T, noun: string) {
+  return (workspaceId: string, afterId?: string | null, beforeId?: string | null) =>
+    neighbourPositions({
+      table,
+      id: table.id,
+      position: table.position,
+      scope: and(eq(table.workspaceId, workspaceId), isNull(table.archivedAt)),
+      afterId,
+      beforeId,
+      afterLabel: `after${noun}Id`,
+      beforeLabel: `before${noun}Id`,
+    });
 }

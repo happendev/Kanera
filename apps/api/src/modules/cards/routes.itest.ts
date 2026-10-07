@@ -328,10 +328,10 @@ void test("card detail can manually apply active workspace checklist templates o
   assert.equal(activity.length, 1);
   assert.equal((activity[0]?.payload as { fromTemplateId?: string } | undefined)?.fromTemplateId, template.id);
 
-  const outboxRows = await db
-    .select({ eventType: eventOutbox.eventType, payload: eventOutbox.payload })
-    .from(eventOutbox)
-    .where(and(eq(eventOutbox.boardId, f.board.id), eq(eventOutbox.eventType, "card:checklist:created")));
+  // Routes enqueue durable broadcasts asynchronously; wait for persistence before checking
+  // exactly-once template application, just as the other outbox assertions in this suite do.
+  const outboxRows = (await waitForBoardOutboxEvents(f.board.id, ["card:checklist:created"]))
+    .filter((row) => row.eventType === "card:checklist:created");
   assert.equal(outboxRows.length, 1);
   assert.equal((outboxRows[0]?.payload as { cardId?: string } | undefined)?.cardId, f.card.id);
 });

@@ -79,7 +79,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
  * Flags the CLI consumes itself. Everything else is treated as tool input, so this list is also
  * the set of names a tool argument may not use.
  */
-export const GLOBAL_FLAGS = new Set([
+const GLOBAL_FLAGS = new Set([
   "help", "version", "json", "quiet", "profile", "api-key", "url", "yes", "force", "browser",
 ]);
 

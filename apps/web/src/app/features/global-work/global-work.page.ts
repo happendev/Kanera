@@ -1,10 +1,10 @@
+import { DragScrollDirective } from "../../shared/drag-scroll.directive";
 import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { ToastService } from "../../shared/toast.service";
 import type { OnDestroy, OnInit } from "@angular/core";
 import { DatePipe } from "@angular/common";
 import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal } from "@angular/core";
 import { Router } from "@angular/router";
-import { boardWorkRisk, type BoardWorkRiskAssessment, type BoardWorkRiskConfig } from "@kanera/shared/card-health";
 import { cardPath } from "@kanera/shared/card-links";
 import type {
   PortfolioBucket,
@@ -51,9 +51,9 @@ import { formatDueDate, isOverdue } from "../board/due-date.util";
 import { FilterBarComponent } from "../board/table-view/filter-bar.component";
 import { ListComponent, type BulkCardMenuPayload, type BulkCardSelectionPayload, type BulkListSelectionPayload, type CardDropPayload, type SeparatorDropPayload, type StartAddPayload } from "../board/list.component";
 import { WorkDoneViewComponent } from "../board/work-done-view/work-done-view.component";
-import { readWorkDoneLayout, writeWorkDoneLayout } from "../board/work-done-view/work-done-preferences";
+import { workDoneLayoutState } from "../board/work-done-view/work-done-preferences";
 import { readBackground, readCompactCards, writeBackground, writeCompactCards } from "../board/table-view/view-preference";
-import { NARROW_WORK_DONE_LAYOUT_QUERY, type WorkDoneLayout } from "../board/work-done-view/work-done.types";
+import type { WorkDoneLayout } from "../board/work-done-view/work-done.types";
 import { BoardTableViewComponent, type HostedTableCardReorder } from "../board/table-view/board-table-view.component";
 import { TABLE_CARD_STORE, type TableCardStore } from "../board/table-view/table-card-store";
 import type {
@@ -76,13 +76,15 @@ import { BulkCardActionsMenuPopover } from "../board/bulk-card-actions-menu.popo
 import { BulkCustomFieldsDialogComponent } from "../board/bulk-custom-fields.dialog";
 import { BULK_CARD_STORE } from "../board/bulk-card-store";
 import { globalWorkBulkCardStore } from "./global-work-bulk-card-store";
-import { priorityAnchorAt, type PriorityAnchor } from "./priority-anchor";
+import { priorityAnchorAt, type PriorityAnchor } from "../../shared/priority-queue/priority-queue-math";
 import { SaveViewPopover } from "./save-view.popover";
 import { TeamPrioritiesViewComponent, type TeamPriorityReorder } from "./team-priorities-view.component";
 import { UpNextPanelComponent, type UpNextAddableCard } from "./up-next-panel.component";
 import { boardPickerGroups, peoplePickerGroups, savedViewPickerGroups, scopePickerGroups } from "./work-pickers";
 import { createSortedLaneProjection, createLaneItemsProjection } from "../board/lane-projection";
 import { formatDate } from "../../shared/date-format";
+import { localDateKey } from "../../shared/day-key.util";
+import { byPosition } from "../../shared/position-sort";
 
 type GlobalCard = WireCardSummary & { workspaceId: string };
 type ChecklistGroup = {
@@ -118,8 +120,6 @@ type PortfolioRow = {
   inactive: number;
   completed: number;
   overdueChecklistItems: number;
-  healthEnabled: boolean;
-  risk: BoardWorkRiskAssessment;
 };
 /** Number columns of the portfolio table, in render order, with the tone their heat tint uses. */
 const PORTFOLIO_COLUMNS: { key: PortfolioMetric; label: string; tone: "danger" | "success" | "neutral" }[] = [
@@ -134,14 +134,9 @@ const PORTFOLIO_COLUMNS: { key: PortfolioMetric; label: string; tone: "danger" |
 /** Fallback window length until the first portfolio response lands; the server owns the real value. */
 const PORTFOLIO_ACTIVITY_DAYS = 60;
 
-function portfolioBucketRiskConfig(bucket: PortfolioBucket): BoardWorkRiskConfig {
-  // Optional fields keep cached responses from before workspace health configuration readable.
-  return {
-    overdue: bucket.boardHealthOverdueEnabled !== false,
-    unassigned: bucket.boardHealthUnassignedEnabled !== false,
-    inactive: bucket.boardHealthInactiveEnabled !== false,
-  };
-}
+/** Where the docked Up next sidebar becomes a bottom sheet; mirrors global-work.page.scss. */
+const UP_NEXT_SHEET_QUERY = "(max-width: 900px)";
+
 /** Smallest tint a non-zero count gets, and the curve that keeps mid-range counts distinguishable. */
 const HEAT_FLOOR = 0.16;
 const HEAT_GAMMA = 0.6;
@@ -202,6 +197,7 @@ function priorityGroupKey(userId: string): string {
     GlobalCardDetailHostComponent,
     SaveViewPopover,
     StatTileComponent,
+    DragScrollDirective,
   ],
   providers: [
     GlobalWorkState,
@@ -268,21 +264,12 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly workDoneRefreshVersion = signal(0);
   /** History-only event dimension, surfaced through the page's shared Filter panel. */
   readonly workDoneEventType = signal<WorkDoneEventType | null>(null);
-  private readonly preferredWorkDoneLayout = signal<WorkDoneLayout>(readWorkDoneLayout("global"));
-  private readonly narrowWorkDoneLayout = mediaQuerySignal(NARROW_WORK_DONE_LAYOUT_QUERY);
-  /** Keep the wide-screen choice, but render List while the grid cannot form multiple columns. */
-  readonly workDoneLayout = computed<WorkDoneLayout>(() =>
-    this.narrowWorkDoneLayout() ? "list" : this.preferredWorkDoneLayout()
-  );
-  readonly workDoneLayoutOptions = computed<readonly SegmentedOption<WorkDoneLayout>[]>(() => [
-    { id: "list", icon: "list-details", label: "List layout" },
-    { id: "grid", icon: "layout-grid", label: "Grid layout", disabled: this.narrowWorkDoneLayout() },
-  ]);
+  private readonly workDoneLayoutState = workDoneLayoutState("global");
+  readonly workDoneLayout = this.workDoneLayoutState.layout;
+  readonly workDoneLayoutOptions = this.workDoneLayoutState.options;
 
   setWorkDoneLayout(layout: WorkDoneLayout): void {
-    if (layout === "grid" && this.narrowWorkDoneLayout()) return;
-    this.preferredWorkDoneLayout.set(layout);
-    writeWorkDoneLayout("global", layout);
+    this.workDoneLayoutState.setLayout(layout);
   }
   readonly priorityLayout = signal<PriorityLayout>(storedPriorityLayout());
   readonly priorityLayoutOptions: readonly SegmentedOption<PriorityLayout>[] = [
@@ -349,18 +336,18 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly displayOptions = computed<SegmentedOption<WorkDisplayMode>[]>(() => {
     const current = this.effectiveDisplay();
     const busy = !this.state.interactionReady();
-    const option = (id: WorkDisplayMode, icon: string, label: string): SegmentedOption<WorkDisplayMode> =>
-      ({ id, icon, label, disabled: busy && current !== id });
+    const option = (id: WorkDisplayMode, icon: string, label: string, shortLabel?: string): SegmentedOption<WorkDisplayMode> =>
+      ({ id, icon, label, shortLabel, disabled: busy && current !== id });
     if (this.lens() === "portfolio") {
-      return [option("summary", "chart-bar", "Summary view"), option("table", "table", "Table view")];
+      return [option("summary", "chart-bar", "Summary view", "Summary"), option("table", "table", "Table view", "Table")];
     }
     return [
-      option("board", "layout-kanban", "Board view"),
+      option("board", "layout-kanban", "Board view", "Board"),
       // Team only: everyone's Up next queues sit immediately beside the board view, since both are
       // lane-based ways of reading the same work. My Cards already has the docked single queue.
-      ...(this.lens() === "team" ? [option("priorities", "list-numbers", "Up next view")] : []),
-      option("table", "table", "Table view"),
-      option("calendar", "calendar", "Calendar view"),
+      ...(this.lens() === "team" ? [option("priorities", "list-numbers", "Up next view", "Up next")] : []),
+      option("table", "table", "Table view", "Table"),
+      option("calendar", "calendar", "Calendar view", "Calendar"),
       option("history", "history", "Work done"),
     ];
   });
@@ -625,7 +612,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   );
   // Preserve the existing workspace-list ordering across boards, including the id tie-break.
   private readonly projectCardLanes = createSortedLaneProjection<GlobalCard>(
-    (a, b) => Number(a.position) - Number(b.position) || a.id.localeCompare(b.id),
+    (a, b) => byPosition(a, b) || a.id.localeCompare(b.id),
   );
   private readonly projectItemLanes = createLaneItemsProjection((a, b) => {
     const left = a.kind === "card" ? a.card : a.separator;
@@ -646,7 +633,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       result.set(list.workspaceId, lists);
     }
     for (const lists of result.values()) {
-      lists.sort((a, b) => Number(a.position) - Number(b.position) || a.id.localeCompare(b.id));
+      lists.sort((a, b) => byPosition(a, b) || a.id.localeCompare(b.id));
     }
     return result;
   });
@@ -1060,8 +1047,6 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
             inactive: bucket.inactive ?? 0,
             completed: bucket.completed,
             overdueChecklistItems: bucket.overdueChecklistItems,
-            healthEnabled: bucket.boardHealthEnabled !== false,
-            risk: boardWorkRisk(bucket, portfolioBucketRiskConfig(bucket)),
           });
         }
       }
@@ -1108,11 +1093,6 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     const ratio = Math.min(1, value / peak);
     const scaled = HEAT_FLOOR + (1 - HEAT_FLOOR) * ratio ** HEAT_GAMMA;
     return Math.round(scaled * 100) / 100;
-  }
-
-  portfolioRiskTitle(row: PortfolioRow): string {
-    if (!row.healthEnabled) return "Board health is disabled";
-    return `${row.risk.label}: ${row.risk.summary}`;
   }
 
   /**
@@ -1601,8 +1581,19 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     if (!this.state.interactionReady()) return "Loading Up next…";
     return "You don’t have permission to view this teammate’s Up next";
   });
+  /**
+   * Below the split point (global-work.page.scss, 900px) the panel is a bottom sheet over the page
+   * rather than a sidebar beside it. The saved open/closed preference describes the sidebar: honoured
+   * here it re-opened a 60vh sheet over the cards on every phone visit, burying the page the person
+   * navigated to. In sheet mode the panel is therefore session-only and starts closed, and toggling it
+   * leaves the desktop preference alone.
+   */
+  private readonly sheetMode = mediaQuerySignal(UP_NEXT_SHEET_QUERY);
+  private readonly sheetOpen = signal(false);
   readonly upNextOpen = computed(() =>
-    this.upNextAvailable() && this.showUpNextControl() && this.state.upNextPanelOpen()
+    this.upNextAvailable()
+    && this.showUpNextControl()
+    && (this.sheetMode() ? this.sheetOpen() : this.state.upNextPanelOpen())
   );
   /** Names the queue's owner in the panel header when curating somebody else. */
   readonly upNextTargetName = computed(() => {
@@ -1778,6 +1769,10 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   toggleUpNextPanel(): void {
     if (!this.showUpNextControl() || !this.upNextAvailable()) return;
     this.priorityError.set(null);
+    if (this.sheetMode()) {
+      this.sheetOpen.update((open) => !open);
+      return;
+    }
     this.state.setUpNextPanelOpen(!this.state.upNextPanelOpen());
   }
 
@@ -2190,7 +2185,6 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     this.state.reconcileCardsInBackground();
   }
 
-
   clearBulkSelection(): void {
     this.bulkMenuPoint.set(null);
     this.bulkCustomFieldsOpen.set(false);    this.bulkSelectedCardIds.set(new Set());
@@ -2410,7 +2404,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   drillDown(source: PortfolioRow | null, metric: PortfolioMetric): void {
     if (!this.state.interactionReady()) return;
     const now = new Date();
-    const today = this.localDate(now);
+    const today = localDateKey(now);
     const nextSeven = new Date(now);
     nextSeven.setDate(nextSeven.getDate() + 7);
     const completedFrom = new Date(now.getTime() - this.state.definition().portfolioDays * 86_400_000).toISOString();
@@ -2425,7 +2419,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       inactiveOnly: metric === "inactive",
       overdueChecklistOnly: metric === "overdueChecklistItems",
       dueFrom: metric === "dueSoon" ? today : null,
-      dueTo: metric === "dueSoon" ? this.localDate(nextSeven) : null,
+      dueTo: metric === "dueSoon" ? localDateKey(nextSeven) : null,
       completedFrom: metric === "completed" ? completedFrom : null,
       completedTo: metric === "completed" ? now.toISOString() : null,
     });
@@ -2534,10 +2528,10 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly checklistGroups = computed<ChecklistGroup[]>(() => {
     const items = this.state.response().checklistItems;
     if (items.length === 0) return [];
-    const today = this.localDate(new Date());
+    const today = localDateKey(new Date());
     const nextSeven = new Date();
     nextSeven.setDate(nextSeven.getDate() + 7);
-    const weekEnd = this.localDate(nextSeven);
+    const weekEnd = localDateKey(nextSeven);
     const groups: ChecklistGroup[] = [
       { id: "checklist:overdue", label: "Overdue", icon: "alert-circle", overdue: true, items: [] },
       { id: "checklist:today", label: "Due today", icon: "calendar-event", overdue: false, items: [] },
@@ -2573,13 +2567,6 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     return this.workspacesById().get(workspaceId)?.name ?? "Workspace";
   }
 
-  private localDate(date: Date): string {
-    const year = date.getFullYear();
-    const month = `${date.getMonth() + 1}`.padStart(2, "0");
-    const day = `${date.getDate()}`.padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }
-
   private rollupPortfolioRow(
     id: string,
     level: "organisation" | "workspace",
@@ -2589,7 +2576,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     workspaceId: string | null,
     buckets: PortfolioBucket[],
   ): PortfolioRow {
-    const row = buckets.reduce<Omit<PortfolioRow, "risk">>((row, bucket) => ({
+    const row = buckets.reduce<PortfolioRow>((row, bucket) => ({
       ...row,
       workspaceIds: row.workspaceIds.includes(bucket.workspaceId)
         ? row.workspaceIds
@@ -2602,7 +2589,6 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       inactive: row.inactive + (bucket.inactive ?? 0),
       completed: row.completed + bucket.completed,
       overdueChecklistItems: row.overdueChecklistItems + bucket.overdueChecklistItems,
-      healthEnabled: row.healthEnabled || bucket.boardHealthEnabled !== false,
     }), {
       id,
       level,
@@ -2621,49 +2607,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       inactive: 0,
       completed: 0,
       overdueChecklistItems: 0,
-      healthEnabled: false,
     });
-    return { ...row, risk: this.rollupPortfolioRisk(buckets) };
-  }
-
-  private rollupPortfolioRisk(buckets: PortfolioBucket[]): BoardWorkRiskAssessment {
-    // A disabled child must not reappear as health through a workspace or organisation rollup.
-    const assessments = buckets
-      .filter((bucket) => bucket.boardHealthEnabled !== false)
-      .map((bucket) => boardWorkRisk(bucket, portfolioBucketRiskConfig(bucket)));
-    if (assessments.length === 0) {
-      return { level: "noActiveWork", label: "No active work", summary: "Board health is disabled", signals: [] };
-    }
-    if (assessments.length === 1) return assessments[0]!;
-    const count = (level: BoardWorkRiskAssessment["level"]) =>
-      assessments.filter((assessment) => assessment.level === level).length;
-    const atRisk = count("atRisk");
-    const needsAttention = count("needsAttention");
-    const activeBoards = assessments.length - count("noActiveWork");
-    if (atRisk > 0) {
-      return {
-        level: "atRisk",
-        label: "At risk",
-        summary: `${atRisk} ${atRisk === 1 ? "board" : "boards"} at risk${needsAttention ? ` · ${needsAttention} need attention` : ""}`,
-        signals: [],
-      };
-    }
-    if (needsAttention > 0) {
-      return {
-        level: "needsAttention",
-        label: "Needs attention",
-        summary: `${needsAttention} ${needsAttention === 1 ? "board needs" : "boards need"} attention`,
-        signals: [],
-      };
-    }
-    if (activeBoards === 0) {
-      return { level: "noActiveWork", label: "No active work", summary: "No active work to assess", signals: [] };
-    }
-    return {
-      level: "onTrack",
-      label: "On track",
-      summary: `${activeBoards} active ${activeBoards === 1 ? "board" : "boards"} on track`,
-      signals: [],
-    };
+    return row;
   }
 }

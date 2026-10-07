@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./support/fixtures";
-import { boardHref, expectBoardLoaded, openBoard } from "./support/ui";
+import { boardIdOf, expectBoardLoaded, openBoard } from "./support/ui";
 
 /** A list's card drop container; `dl-<listId>` is the CDK drop-list id the board renders. */
 function listCards(page: Page, listId: string): Locator {
@@ -23,6 +23,12 @@ async function renderedOrder(page: Page, listId: string, titles: string[]): Prom
  * cross the lower half of the target first would legitimately land after it.
  */
 async function dragCard(page: Page, card: Locator, target: Locator, side: "above" | "below") {
+  // Earlier specs append cards to this seeded lane. A mounted tile can still sit below its
+  // scroll viewport, and mouse coordinates do not scroll it into view like locator actions do.
+  await target.scrollIntoViewIfNeeded();
+  await card.scrollIntoViewIfNeeded();
+  await expect(card).toBeInViewport();
+  await expect(target).toBeInViewport();
   const from = (await card.boundingBox())!;
   const to = (await target.boundingBox())!;
   const startX = from.x + from.width / 2;
@@ -46,7 +52,7 @@ test("dragged cards reorder within and across lists for every viewer and after r
   const second = uniqueName("E2E drag second");
   const titles = [first, second];
   await signIn(page, "amelia");
-  const boardId = (await boardHref(page, "Platform Delivery")).split("/")[2]!;
+  const boardId = await boardIdOf(page, "Platform Delivery");
 
   // Setup through the API: the subject is the drag, not card creation. Default placement is the
   // bottom of the list, so the two cards start adjacent and in creation order.

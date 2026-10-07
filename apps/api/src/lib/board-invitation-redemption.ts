@@ -1,16 +1,14 @@
 import type { FastifyInstance } from "fastify";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { boardInvitationGrants, boardInvitations, boardMembers, boards, clients, workspaces } from "@kanera/shared/schema";
-import { db, type Db } from "../db.js";
+import { db, type Tx } from "../db.js";
 import { captureWorkspaceMemberJoined } from "./analytics-milestones.js";
-import { assertGuestBoardLimitForBoards } from "./board-guest-limits.js";
+import { ensureGuestBoardsCapacity } from "./paid-guest-seats.js";
 import { badRequest, forbidden } from "./errors.js";
 import { notifyAdminsBoardInviteAccepted } from "./invite-accepted-notifications.js";
 import { withSignedMedia } from "./media-keys.js";
 import { hashOpaqueToken } from "./tokens.js";
 import { emitToBoard, emitToUser } from "../realtime/emit.js";
-
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 export type RedeemableBoardInvitation = {
   id: string;
@@ -141,7 +139,7 @@ export async function redeemBoardInvitationInTx(
   }
   // Capacity allocation, every membership grant, and the acceptance stamp are one unit: a bundled
   // invite must never commit partially or leave a newly-created guest account without its board.
-  await assertGuestBoardLimitForBoards({
+  await ensureGuestBoardsCapacity({
     hostClientId: params.invitation.hostClientId,
     boardIds: params.grants.map((grant) => grant.boardId),
     userId: params.userId,

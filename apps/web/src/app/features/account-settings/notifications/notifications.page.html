@@ -40,6 +40,16 @@
           </span>
         </label>
 
+        @if (settings.lifecycleEmailAvailable()) {
+        <label class="push-toggle-row">
+          <input type="checkbox" [checked]="notificationSettings.lifecycleEmail" (change)="settings.setLifecycleEmail($any($event.target).checked)" [disabled]="settings.notificationSettingsSaving() || !notificationSettings.emailEnabled" />
+          <span class="push-toggle-copy">
+            <span class="push-toggle-title">Send me onboarding and account tips</span>
+            <span class="push-toggle-help">A few emails to organisation owners about setting up and getting more from Kanera. They never include your card content.</span>
+          </span>
+        </label>
+        }
+
         @if (notificationSettings.pushEnabled || settings.pushOptInAttempted()) {
         <div class="push-status-card" [class.success]="settings.browserPush.statusTone() === 'success'" [class.warning]="settings.browserPush.statusTone() === 'warning'">
           <i class="ti ti-bell push-status-icon"></i>

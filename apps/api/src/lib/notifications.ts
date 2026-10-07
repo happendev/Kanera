@@ -29,15 +29,13 @@ import {
 } from "@kanera/shared/schema";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import type { Db } from "../db.js";
+import type { Tx } from "../db.js";
 import { db as dbSingleton } from "../db.js";
 import { signedAvatarUrl, signEmbeddedMediaUrls, withSignedMedia } from "./media-keys.js";
 import { emitToUser } from "../realtime/emit.js";
 import { inboxVisibleNotificationCondition } from "./notification-visibility.js";
 export { inboxVisibleNotificationCondition } from "./notification-visibility.js";
 import { enqueueWatchedActivityOutbound } from "./watched-activity-push.js";
-
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 // Per-source cap on notification recipients. See resolveRecipients for rationale.
 const RECIPIENT_FANOUT_LIMIT = 1000;
@@ -69,7 +67,6 @@ const fanoutErrors: unknown[] = [];
 let fanoutTail: Promise<void> = Promise.resolve();
 const notificationUsers = alias(users, "notification_users");
 const notificationClientMembers = alias(clientMembers, "notification_client_members");
-
 
 function isRetryablePostgresConflict(error: unknown): boolean {
   if (!error || typeof error !== "object" || !("code" in error)) return false;
@@ -249,7 +246,7 @@ function shouldNotifyAssigneesOnly(activity: ActivityEvent): boolean {
     || ASSIGNEES_ONLY_CARD_ACTIONS.has(activity.action as ActivityAction);
 }
 
-export async function fanoutNotificationsForActivity(
+async function fanoutNotificationsForActivity(
   activity: ActivityEvent,
   options?: { kind?: "created" | "updated" | "hidden"; suppressUserId?: string | null },
 ): Promise<void> {
@@ -386,38 +383,6 @@ export async function fanoutNotificationsForActivity(
   // activity payload are all resolved there already, so the push body costs no extra queries.
   // On a fanout retry `onConflictDoNothing` leaves `inserted` empty, so this cannot double-enqueue.
   await enqueueWatchedActivityOutbound(dbSingleton, ctx, enriched);
-}
-
-export async function notifyUserForActivity(params: {
-  userId: string;
-  activity: ActivityEvent;
-  reason: NotificationReason;
-}): Promise<void> {
-  if (params.userId === notificationActorSuppressionId(params.activity) || !params.activity.feedVisible) return;
-
-  const cardId = deriveCardId(params.activity);
-  if (!cardId) return;
-  const ctx = await loadCardContext(dbSingleton, cardId);
-  if (!ctx) return;
-
-  const [inserted] = await dbSingleton
-    .insert(notifications)
-    .values({
-      userId: params.userId,
-      clientId: ctx.clientId,
-      activityId: params.activity.id,
-      cardId,
-      listId: ctx.listId,
-      boardId: ctx.boardId,
-      workspaceId: ctx.workspaceId,
-      reason: params.reason,
-    })
-    .onConflictDoNothing({ target: [notifications.userId, notifications.activityId] })
-    .returning();
-  if (!inserted) return;
-
-  const enriched = await enrichNotification(dbSingleton, inserted.id);
-  if (enriched) emitToUser(params.userId, "notification:created", { notification: enriched });
 }
 
 export async function syncDirectNotificationForActivity(params: {

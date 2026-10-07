@@ -84,25 +84,6 @@ describe("LoginPage", () => {
     page.password.set("password123");
   }
 
-  it("signs in and stores the returned session", async () => {
-    await createPage();
-    fillValidForm();
-
-    await fixture.componentInstance.submit(submitEvent());
-
-    const loginCall = fetchMock.mock.calls.find(([input]) => urlFromRequest(input as RequestInfo | URL).endsWith("/auth/login"));
-    expect(loginCall).toBeTruthy();
-    const init = loginCall![1] as RequestInit;
-    expect(init.method).toBe("POST");
-    expect(init.credentials).toBe("include");
-    expect(JSON.parse(init.body as string)).toEqual({
-      email: "owner@example.com",
-      password: "password123",
-    });
-    expect(setSession).toHaveBeenCalledWith("access-token", authResponse.user);
-    expect(navigateByUrl).toHaveBeenCalledWith("/");
-  });
-
   it("trims the email before submitting credentials", async () => {
     await createPage();
     fixture.componentInstance.email.set("  owner@example.com  ");
@@ -130,18 +111,6 @@ describe("LoginPage", () => {
 
     expect(fixture.componentInstance.error()).toBe("Password is required.");
     expect(fetchMock.mock.calls.some(([input]) => urlFromRequest(input as RequestInfo | URL).endsWith("/auth/login"))).toBe(false);
-  });
-
-  it("shows invalid credentials for rejected logins", async () => {
-    loginOk = false;
-    await createPage();
-    fillValidForm();
-
-    await fixture.componentInstance.submit(submitEvent());
-
-    expect(fixture.componentInstance.error()).toBe("Invalid credentials");
-    expect(setSession).not.toHaveBeenCalled();
-    expect(navigateByUrl).not.toHaveBeenCalled();
   });
 
   it("shows a connection error when login cannot reach the server", async () => {

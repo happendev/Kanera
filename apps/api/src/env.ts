@@ -261,6 +261,8 @@ export function createEnvironmentSchema(options: EnvironmentSchemaOptions = {}) 
   SMTP_FROM_NAME: z.preprocess(emptyToUndefined, z.string().optional()),
   SMTP_IDENTITY_DOMAIN: z.preprocess(emptyToUndefined, z.string().min(1).max(255).optional()),
   INTERNAL_NOTIFICATION_EMAILS: z.preprocess(commaSeparatedEmails, z.array(z.email()).default([])),
+  // Hosted lifecycle emails (inactive and active check-in) invite customers to send feedback here.
+  LIFECYCLE_FEEDBACK_EMAIL: z.preprocess(emptyToUndefined, z.email().default("support@kanera.app")),
   // Lifetime of a support-session token minted by the management portal. Kept short and with NO refresh
   // companion so a support session cannot silently persist; the operator re-mints when it lapses. Hard
   // upper bound of 8h so a config typo can't mint day-long, non-revocable-until-expiry impersonation tokens.

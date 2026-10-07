@@ -1,5 +1,5 @@
 import { DestroyRef, Injectable, computed, inject, signal } from "@angular/core";
-import type { HomeDueBucket, HomeItem, HomeTodayResponse, WorkPrioritiesResponse, WorkPriorityItem } from "@kanera/shared/dto";
+import type { HomeDueBucket, HomeItem, HomeTodayResponse } from "@kanera/shared/dto";
 import { SERVER_EVENTS } from "@kanera/shared/events";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";

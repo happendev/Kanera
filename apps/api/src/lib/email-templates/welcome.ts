@@ -1,4 +1,5 @@
 import { button, divider, emailLayout, fallbackLink, heading, paragraph } from "./layout.js";
+import { escapeHtml } from "../html-escape.js";
 
 export interface WelcomeEmailParams {
   displayName: string;
@@ -37,6 +38,3 @@ function step(index: string, text: string): string {
     </tr>`;
 }
 
-function escapeHtml(str: string): string {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}

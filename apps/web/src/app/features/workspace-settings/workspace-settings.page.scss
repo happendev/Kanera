@@ -450,13 +450,7 @@ k-autosave-status {
 }
 
 .spin {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  animation: kanera-spinner 1s linear infinite;
 }
 
 .role-ref-panel {

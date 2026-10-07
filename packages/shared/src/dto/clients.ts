@@ -2,6 +2,7 @@ import { z } from "zod";
 import { CLIENT_ROLES } from "../schema/client-roles.js";
 import { CLIENT_BILLING_INTERVALS, CLIENT_BILLING_STATUSES, type ClientBillingStatus } from "../schema/client.js";
 import { GENERAL_NAME_MAX_LENGTH } from "./name-limits.js";
+import { deploymentModeSchema } from "./deployment.js";
 
 export const storageConfigSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("local") }),
@@ -45,7 +46,6 @@ export const updateClientBody = z.object({
   requireMfa: z.boolean().optional(),
   defaultCompletedCardsActiveDays: z.number().int().min(0).max(365).optional(),
   defaultInactiveCardsDays: z.number().int().min(0).max(365).optional(),
-  defaultBoardHealthEnabled: z.boolean().optional(),
   storageConfig: storageConfigSchema.optional(),
   smtpConfig: smtpConfigSchema.nullable().optional(),
 });
@@ -109,12 +109,11 @@ export const publicClientResponse = z.object({
   id: z.uuid(),
   name: z.string(),
   logoUrl: z.string().nullable(),
-  deploymentMode: z.enum(["self_hosted", "hosted"]),
+  deploymentMode: deploymentModeSchema,
   pushEnabled: z.boolean(),
   requireMfa: z.boolean(),
   defaultCompletedCardsActiveDays: z.number().int().min(0).max(365),
   defaultInactiveCardsDays: z.number().int().min(0).max(365),
-  defaultBoardHealthEnabled: z.boolean(),
   storageConfig: storageConfigSchema,
   storageConfigSource: z.enum(["env", "client"]),
   smtpConfig: smtpConfigSchema.nullable(),

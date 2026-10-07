@@ -65,6 +65,13 @@ export const COMMAND_ALIASES: CommandAlias[] = [
   { path: ["notes"], tool: "notes.list", summary: "List note metadata for a workspace or board", group: "Notes" },
   { path: ["note"], tool: "notes.get", summary: "Read a note", positionals: ["noteId"], group: "Notes" },
   { path: ["note", "create"], tool: "notes.create", summary: "Create a personal or team note", group: "Notes" },
+
+  // The run loop is what makes an agent's work visible on the board ("agent working" chip, card
+  // detail, activity), so it gets the same one-line ergonomics as card commands.
+  { path: ["runs"], tool: "runs.list", summary: "List a card's agent runs, to avoid working a card another agent holds", positionals: ["cardId"], group: "Agent runs" },
+  { path: ["run", "start"], tool: "runs.start", summary: "Show a live \"agent working\" chip on a card", positionals: ["cardId", "title"], group: "Agent runs" },
+  { path: ["run", "update"], tool: "runs.update", summary: "Report progress, a heartbeat, or --status blocked", positionals: ["runId"], group: "Agent runs" },
+  { path: ["run", "done"], tool: "runs.update", summary: "End a run as succeeded with a one-line outcome", positionals: ["runId", "summary"], defaults: { status: "succeeded" }, group: "Agent runs" },
 ];
 
 export interface AliasMatch {

@@ -44,7 +44,7 @@ const THEME_COOL_ACCENT: Record<Theme, CoolAccent> = {
 // `token` is the CSS custom property holding this option's tone for the *current* theme, so the
 // settings swatches preview the colour the user will actually get rather than a hardcoded hex.
 // Order is the display order; filtering out the unused cool option preserves it.
-export const ACCENT_OPTIONS: readonly { value: Accent; label: string; token: string }[] = [
+const ACCENT_OPTIONS: readonly { value: Accent; label: string; token: string }[] = [
   { value: "default", label: "Default", token: "--accent-default" },
   { value: "blue", label: "Blue", token: "--accent-blue" },
   { value: "green", label: "Green", token: "--accent-green" },
@@ -57,7 +57,7 @@ function isCoolAccent(accent: Accent): accent is CoolAccent {
   return accent === "blue" || accent === "green";
 }
 
-export function isDarkTheme(theme: Theme): theme is DarkTheme {
+function isDarkTheme(theme: Theme): theme is DarkTheme {
   return (DARK_THEMES as readonly Theme[]).includes(theme);
 }
 

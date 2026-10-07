@@ -2,10 +2,10 @@ import { dto } from "@kanera/shared";
 import type { ColorToken } from "@kanera/shared/colors";
 import { NOTE_ATTACHMENT_SOURCES, type NoteAttachmentRow, type NoteAttachmentSource } from "@kanera/shared/dto";
 import type { ServerToClientEvents, WireNote, WireNoteLock } from "@kanera/shared/events";
-import { internalLinks, noteAttachments, notes, users, type Note, type NoteScope } from "@kanera/shared/schema";
+import { internalLinks, noteAttachments, notes, users, workspaces, type Note, type NoteScope } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gt, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { db } from "../../db.js";
+import { db, type TxOnly as Tx } from "../../db.js";
 import { assertBoardAccess, assertWorkspaceAccess, assertWriteCapableCredential } from "../../lib/access.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { readAttachmentUpload } from "../../lib/read-attachment-upload.js";
@@ -15,16 +15,15 @@ import { signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, u
 import { between, positionAtIndex } from "../../lib/position.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { noteAttachmentStorageKey } from "../../lib/storage/keys.js";
-import type { StorageProvider } from "../../lib/storage/types.js";
 import { stripAttachmentReferences } from "../../lib/strip-attachment-refs.js";
 import { emitToBoard, emitToUser, emitToWorkspace } from "../../realtime/emit.js";
-import { loadBacklinksForNote, repairInternalLinksAroundNote, replaceInternalLinksForSource } from "../../lib/internal-links.js";
+import { EMPTY_LINK_FANOUT, emitInternalLinksChanged, linkNeighbours, loadBacklinksForNote, mergeLinkFanout, type LinkFanout, repairInternalLinksAroundNote, replaceInternalLinksForSource } from "../../lib/internal-links.js";
+import { putAttachmentFile } from "../../lib/attachment-upload.js";
 
 const LOCK_TTL_MS = 90_000; // 90 seconds
 const MAX_NOTE_TREE_DEPTH = 3;
 
 type SiblingKey = Pick<Note, "workspaceId" | "boardId" | "scope" | "ownerId" | "parentNoteId">;
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type DbLike = typeof db | Tx;
 
 const noteAttachmentRowColumns = {
@@ -229,14 +228,6 @@ function sameInstant(a: Date | string, b: Date | string): boolean {
   return value >= base && value < base + 1;
 }
 
-async function putAttachmentFile(storage: StorageProvider, key: string, body: Buffer, contentType: string) {
-  try {
-    await storage.put(key, body, contentType);
-  } catch {
-    throw new AppError(503, "STORAGE_UNAVAILABLE", "attachment storage unavailable");
-  }
-}
-
 function sameWireTimestamp(column: typeof notes.updatedAt, value: string) {
   const base = new Date(value);
   return sql`${column} >= ${base} and ${column} < ${new Date(base.getTime() + 1)}`;
@@ -318,10 +309,23 @@ async function loadOrFail(id: string): Promise<Note> {
   return note;
 }
 
+/**
+ * Notes can be switched off per workspace (and so per standalone board, via its hidden workspace).
+ * Run after the access check so outsiders still get the ordinary 403/404 rather than learning the
+ * workspace's settings. Rows are kept while disabled, so every read and write path is closed here
+ * instead of deleting anything.
+ */
+async function assertNotesEnabled(workspaceId: string) {
+  const [workspace] = await db.select({ notesEnabled: workspaces.notesEnabled }).from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1);
+  if (!workspace) throw notFound();
+  if (!workspace.notesEnabled) throw new AppError(403, "NOTES_DISABLED", "notes are disabled for this workspace");
+}
+
 async function authoriseRead(req: FastifyRequest, note: Note) {
   if (note.boardId) await assertBoardAccess(req.auth, note.boardId, "observer");
   else await assertWorkspaceAccess(req.auth, note.workspaceId, "member");
   assertScopeAccess(note, req.auth.sub);
+  await assertNotesEnabled(note.workspaceId);
 }
 
 // Returns the org that owns the note's workspace (host-pays storage attribution). Both access
@@ -337,6 +341,7 @@ async function authoriseWrite(req: FastifyRequest, note: Note): Promise<{ client
     ? await assertBoardAccess(req.auth, note.boardId, note.scope === "personal" ? "observer" : "editor")
     : await assertWorkspaceAccess(req.auth, note.workspaceId, note.scope === "personal" ? "member" : "admin");
   assertScopeAccess(note, req.auth.sub);
+  await assertNotesEnabled(note.workspaceId);
   return { clientId: ctx.clientId };
 }
 
@@ -455,6 +460,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
     const query = dto.listNotesQuery.parse(req.query);
     const directory = dto.agentDirectoryQuery.parse(req.query ?? {});
     await assertWorkspaceAccess(req.auth, workspaceId, "member");
+    await assertNotesEnabled(workspaceId);
 
     const baseFilter = and(
       eq(notes.workspaceId, workspaceId),
@@ -473,6 +479,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
     const query = dto.listNotesQuery.parse(req.query);
     const directory = dto.agentDirectoryQuery.parse(req.query ?? {});
     const { workspaceId } = await assertBoardAccess(req.auth, boardId, "observer");
+    await assertNotesEnabled(workspaceId);
 
     const baseFilter = and(
       eq(notes.workspaceId, workspaceId),
@@ -510,6 +517,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
     // team-scope creation already requires admin and is unreachable for them.
     assertWriteCapableCredential(req.auth);
     await assertWorkspaceAccess(req.auth, workspaceId, body.scope === "team" ? "admin" : "member");
+    await assertNotesEnabled(workspaceId);
 
     const parent = await resolveParent(workspaceId, null, body.parentNoteId ?? null, body.scope, req.auth.sub);
     if (await noteDepth(parent) >= MAX_NOTE_TREE_DEPTH) throw conflict("notes can only be nested 3 levels deep");
@@ -537,6 +545,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
     // Same read-scope gate as the workspace create route: personal scope passes at observer.
     assertWriteCapableCredential(req.auth);
     const { workspaceId } = await assertBoardAccess(req.auth, boardId, body.scope === "team" ? "editor" : "observer");
+    await assertNotesEnabled(workspaceId);
 
     const parent = await resolveParent(workspaceId, boardId, body.parentNoteId ?? null, body.scope, req.auth.sub);
     if (await noteDepth(parent) >= MAX_NOTE_TREE_DEPTH) throw conflict("notes can only be nested 3 levels deep");
@@ -596,6 +605,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
         : []),
     ];
 
+    let linkFanout: LinkFanout = EMPTY_LINK_FANOUT;
     const [updated] = await db.transaction(async (tx) => {
       const rows = await tx
         .update(notes)
@@ -615,7 +625,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
         .returning();
 
       if (rows[0] && content !== undefined) {
-        await replaceInternalLinksForSource({
+        linkFanout = await replaceInternalLinksForSource({
           tx,
           claims: req.auth,
           workspaceId: note.workspaceId,
@@ -642,6 +652,14 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
     const responseNote = await shapeNote(updated, req.auth.cid);
     emitNoteEvent(updated, "note:updated", { note: responseNote });
     if (shouldReleaseLock) emitNoteEvent(updated, "note:unlocked", { noteId: id });
+    // Cards and notes this note started or stopped linking list it in their linked items/backlinks.
+    // Title, icon and color are shown there and in link chips, so a rename reaches every neighbour.
+    const renamed = (body.title !== undefined && body.title !== note.title)
+      || (body.icon !== undefined && body.icon !== note.icon)
+      || (body.color !== undefined && body.color !== note.color);
+    await emitInternalLinksChanged(renamed
+      ? mergeLinkFanout(linkFanout, await linkNeighbours(note.workspaceId, "note", id))
+      : linkFanout);
     return responseNote;
   });
 
@@ -665,6 +683,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
 
     // Duplicate one document, not its descendants or binary attachments. Embedded/internal links in
     // the copied Markdown are rebuilt for the new source so backlinks remain accurate.
+    let linkFanout: LinkFanout = EMPTY_LINK_FANOUT;
     const duplicate = await db.transaction(async (tx) => {
       const inserted = await insertNote({
         workspaceId: source.workspaceId,
@@ -678,7 +697,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
         icon: source.icon,
         color: source.color,
       }, tx);
-      await replaceInternalLinksForSource({
+      linkFanout = await replaceInternalLinksForSource({
         tx,
         claims: req.auth,
         workspaceId: inserted.workspaceId,
@@ -693,6 +712,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
       scope: duplicate.scope,
       note: responseNote,
     });
+    await emitInternalLinksChanged(linkFanout);
     return reply.status(201).send(responseNote);
   });
 
@@ -893,14 +913,24 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
       const { id } = req.params as { id: string };
       const note = await loadOrFail(id);
       await authoriseWrite(req, note);
-      await db.transaction(async (tx) => {
-        await tx.delete(internalLinks).where(or(
+      const linkFanout = await db.transaction(async (tx): Promise<LinkFanout> => {
+        const removed = await tx.delete(internalLinks).where(or(
           and(eq(internalLinks.sourceType, "note"), eq(internalLinks.sourceId, id)),
           and(eq(internalLinks.targetType, "note"), eq(internalLinks.targetId, id)),
-        ));
+        )).returning({ sourceType: internalLinks.sourceType, sourceId: internalLinks.sourceId, targetType: internalLinks.targetType, targetId: internalLinks.targetId });
         await tx.delete(notes).where(eq(notes.id, id));
+        // The far end of each removed link (a card or note linking this one, or one it linked) no
+        // longer lists it, and chips pointing at it no longer resolve.
+        const ends = removed.map((link) => link.sourceType === "note" && link.sourceId === id
+          ? { type: link.targetType, id: link.targetId }
+          : { type: link.sourceType, id: link.sourceId });
+        return {
+          cardIds: ends.filter((end) => end.type === "card").map((end) => end.id),
+          noteIds: ends.filter((end) => end.type === "note").map((end) => end.id),
+        };
       });
       emitNoteEvent(note, "note:deleted", { noteId: id });
+      await emitInternalLinksChanged(linkFanout);
       return reply.status(204).send();
     });
   }

@@ -18,7 +18,6 @@ import { adminOpsRoutes } from "./admin/ops.routes.js";
 import { adminSupportRoutes } from "./admin/support.routes.js";
 import { adminInvitePublicRoutes, adminManagementRoutes } from "./admin/admins.routes.js";
 import { adminDemoRoutes } from "./admin/demo.routes.js";
-import { db } from "./db.js";
 import { env } from "./env.js";
 import { clientIpForRequest } from "./lib/client-ip.js";
 import { registerErrorHandler, tooManyRequests } from "./lib/errors.js";
@@ -187,4 +186,3 @@ export async function buildAdminServer(options: BuildAdminServerOptions = {}) {
   return app;
 }
 
-export { db };

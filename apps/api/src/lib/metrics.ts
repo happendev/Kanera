@@ -6,7 +6,7 @@ import { env } from "../env.js";
 // One Prometheus registry per process. api/worker/public-api each run as their own Node process, so a
 // single registry here is correct; Prometheus tells them apart via the per-job label on each scrape,
 // not via a service label baked into the metrics.
-export const metricsRegistry = new client.Registry();
+const metricsRegistry = new client.Registry();
 
 // Node runtime metrics: event loop lag, heap/RSS, GC pauses, active handles. Registered once at module
 // load (this module is a singleton), which keeps it idempotent even when tests build several servers
@@ -17,7 +17,7 @@ client.collectDefaultMetrics({ register: metricsRegistry });
 // /boards/:boardId), never the raw URL, so per-id paths collapse into one bounded series instead of
 // exploding cardinality. This is the same duration the slow-request hook already logs, recorded for
 // every response so the percentiles cover all traffic, not only the slow tail.
-export const httpRequestDuration = new client.Histogram({
+const httpRequestDuration = new client.Histogram({
   name: "kanera_http_request_duration_seconds",
   help: "HTTP request duration in seconds",
   labelNames: ["method", "route", "status_code"],
@@ -96,7 +96,8 @@ function notificationQueueStats(): Promise<NotificationQueueStats> | null {
   return notificationQueueStatsCache.value;
 }
 
-const notificationQueueRows = new client.Gauge({
+// These gauges register themselves and collect through callbacks; no instance references are needed.
+new client.Gauge({
   name: "kanera_notification_queue_rows",
   help: "Current durable notification queue rows by state",
   labelNames: ["queue", "state"],
@@ -112,7 +113,7 @@ const notificationQueueRows = new client.Gauge({
   },
 });
 
-const notificationQueueOldestAge = new client.Gauge({
+new client.Gauge({
   name: "kanera_notification_queue_oldest_age_seconds",
   help: "Age of the oldest unresolved notification queue row",
   labelNames: ["queue"],

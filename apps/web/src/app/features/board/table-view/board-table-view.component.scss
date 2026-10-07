@@ -1678,8 +1678,20 @@ k-card-labels.tv-labels {
 @media (max-width: 768px) {
   // The stacked layout drops the sheet rings and runs the rows full-bleed, so there is no indent left
   // for the bands to align to. Zeroing the token retires the padding and the edge guard in one place.
+  //
+  // The gutter widens to a full 44px column: in the stacked layout it is the row's leading tap
+  // target (the checkbox) rather than a sliver beside a dense grid, and every left edge below — the
+  // group checkbox, the title, the label/value rows and "New task" — keys off this one token.
+  //
+  // `!important` because the template binds --tv-gutter-w inline on .tv-view (28px, or 44px while
+  // row dragging is possible), and an inline declaration outranks any normal rule. Dragging is off in
+  // the stacked layout anyway, so the binding's reason does not apply here.
   :host {
     --tv-run-inset: 0px;
+  }
+
+  .tv-view {
+    --tv-gutter-w: 44px !important;
   }
 
   .tv-toolbar {
@@ -1705,17 +1717,20 @@ k-card-labels.tv-labels {
     display: none;
   }
 
+  // One header line — [checkbox][title][open][actions], each control a 44px square on the same
+  // top edge — then the label/value rows spanning the full width under the title. The actions cell is
+  // a grid item on that first line, not an absolute overlay, so it can never sit on the title text.
   .tv-row-grid {
     min-width: 0;
-    grid-template-columns: minmax(0, 1fr) 34px;
+    grid-template-columns: minmax(0, 1fr) 44px;
   }
 
   .tv-row {
     position: relative;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 34px;
+    grid-template-columns: minmax(0, 1fr) 44px;
     min-height: 56px;
-    padding: 7px 9px 7px 42px;
+    padding: 0 0 6px var(--tv-gutter-w);
   }
 
   .tv-cell {
@@ -1729,13 +1744,18 @@ k-card-labels.tv-labels {
 
   .tv-title-cell {
     position: static;
-    padding-left: 0;
+    grid-row: 1;
+    align-items: flex-start;
+    min-height: 44px;
+    padding: 0;
     font-size: 14px;
     border-right: 0;
   }
 
-  .tv-cell:not(.tv-title-cell) {
+  .tv-cell:not(.tv-title-cell, .tv-actions-cell) {
+    grid-column: 1 / -1;
     gap: 8px;
+    margin-right: 12px;
     border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
   }
 
@@ -1758,11 +1778,35 @@ k-card-labels.tv-labels {
   }
 
   .tv-actions-cell {
-    position: absolute;
-    top: 7px;
-    right: 6px;
-    display: flex;
-    min-height: 30px;
+    grid-row: 1;
+    grid-column: 2;
+    align-self: start;
+    min-height: 44px;
+    padding: 0;
+  }
+
+  .tv-actions-btn {
+    width: 44px;
+    min-height: 44px;
+    opacity: 1;
+  }
+
+  // The group checkbox takes the same 44px column as the row checkboxes beneath it, centred, so the
+  // two line up on one vertical axis and the chip starts on the titles' left edge.
+  // Static, not sticky: the stacked sheet never scrolls sideways, and the sticky offset (tuned for the
+  // grid's 28px gutter) would otherwise push it right onto the caret.
+  .tv-run-select {
+    position: static;
+    justify-content: center;
+    width: var(--tv-gutter-w);
+    margin-left: calc(var(--tv-gutter-w) * -1);
+  }
+
+  // Cancels the head's 7px flex gap after the checkbox column so the caret and chip start on the
+  // titles' left edge.
+  .tv-run-head-inner {
+    position: static;
+    margin-left: -7px;
   }
 
   // The run header stays on mobile, where it used to be hidden as a duplicate of each stacked row's
@@ -1802,19 +1846,72 @@ k-card-labels.tv-labels {
   // gesture, as it does elsewhere on the board.
   .tv-drag-handle { display: none; }
 
-  // The stacked layout makes .tv-title-cell static, so both overlays resolve against .tv-row
-  // instead of the cell: they are placed inside the row's 42px left inset and its top-right
-  // corner rather than against the (no longer positioned) title cell.
+  // The stacked layout makes .tv-title-cell static, so the gutter resolves against .tv-row: a
+  // 44px square in the row's leading inset, centred on the title's first line (see the trigger's
+  // 12px block padding below), so a two-line title keeps its checkbox beside the first line.
   .tv-row-gutter {
-    top: 14px;
-    left: 12px;
+    top: 0;
+    left: 0;
+    justify-content: center;
+    width: var(--tv-gutter-w);
+    height: 44px;
     opacity: 1;
   }
 
-  .tv-title-open {
-    top: 7px;
-    right: 40px;
+  // The ordinal only earns its place in a grid you scan down; on a stacked card it shared the
+  // checkbox's slot and rendered as a stray digit underneath it.
+  .tv-row-number {
+    display: none;
+  }
+
+  // A flex sibling of the title rather than an overlay, so the title wraps short of it instead of
+  // running underneath. Qualified to outrank the coarse-pointer rule below, which sizes the same
+  // button for the one-line grid row.
+  .tv-row .tv-title-cell > .tv-title-open {
+    position: static;
+    flex: none;
+    align-self: flex-start;
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    margin-right: 0;
     opacity: 1;
+    background: transparent;
+  }
+
+  // The title gets two lines instead of an early ellipsis, with the key as a quiet inline prefix in
+  // full — clipped to 11ch it read as a truncated word ("DEVELOPM…") rather than an identifier.
+  // The 12px block padding with a 20px line puts the first line's centre at 22px, the centre of
+  // the 44px checkbox, open and actions squares on the same line.
+  .tv-title-trigger {
+    align-items: flex-start;
+    min-height: 44px;
+    padding-block: 12px;
+    line-height: 20px;
+  }
+
+  .tv-title-trigger > .tv-title {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .tv-title-text {
+    display: inline;
+    white-space: normal;
+  }
+
+  .tv-card-key {
+    display: inline;
+    max-width: none;
+    margin-right: 6px;
+  }
+
+  .tv-title-trigger > .tv-unread {
+    margin-top: 6.5px;
   }
 
   // The stacked layout drops the cell's horizontal padding, so the desktop bleed has nothing to bleed
@@ -1824,6 +1921,30 @@ k-card-labels.tv-labels {
     min-width: 0;
     margin-inline: 0;
     padding-inline: 0;
+  }
+
+  // A stacked row grows downward freely, so multi-value cells wrap instead of trimming every chip to
+  // fit one line ("Repo…" beside "Feature / Enhan…"). Each label chip keeps its full text and only
+  // ellipses when it alone is wider than the value column; assignee names wrap the same way. The
+  // block padding keeps a second line of chips off the row rules either side.
+  k-card-labels.tv-labels {
+    overflow: visible;
+    --label-bar-wrap: wrap;
+    --label-bar-row-gap: 4px;
+  }
+
+  .tv-cell-trigger:has(> k-card-labels, > .tv-assignee) {
+    padding-block: 6px;
+  }
+
+  .tv-cell-trigger > .tv-assignee {
+    overflow: visible;
+    white-space: normal;
+
+    > span:not(.tv-avatars) {
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
   }
 
   .tv-new-task {
@@ -1867,11 +1988,18 @@ k-card-labels.tv-labels {
     min-width: 44px;
   }
 
-  // Exempt from the 44px floor: it overlays the title rather than sitting beside it, so a full-size
-  // target here would permanently occlude the end of every title instead of just its last few px.
+  // On touch there is no hover to reveal it, so the desktop overlay would sit permanently on the end
+  // of every title. Here it becomes a flex sibling of the title trigger instead: the title ellipses
+  // short of it and the target spans the full row height.
   .tv-cell>.tv-title-open {
-    min-width: 34px;
-    min-height: 34px;
+    position: static;
+    flex: none;
+    align-self: stretch;
+    width: 36px;
+    min-width: 36px;
+    min-height: 0;
+    margin-right: calc(var(--tv-cell-pad-x) * -1 + 2px);
+    background: transparent;
   }
 
   .tv-row-gutter,

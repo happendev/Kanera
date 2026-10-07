@@ -1,9 +1,8 @@
 import { adminAuditLogs } from "@kanera/shared/schema";
-import type { Db } from "../db.js";
+import type { Tx } from "../db.js";
 
 // Accepts the pool or an open transaction so audit writes land inside the same tx as the mutation they
 // record — mirroring the tenant recordActivity pattern.
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 export interface AdminAuditInput {
   adminUserId: string;

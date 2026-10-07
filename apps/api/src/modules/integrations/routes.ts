@@ -7,9 +7,6 @@ import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { assertWorkspaceAccess } from "../../lib/access.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
-import { encryptSecret } from "../../lib/secrets.js";
-import { assertWebhookUrlAllowed } from "../../lib/ssrf.js";
-import { newWebhookSecret } from "../../lib/webhook-signing.js";
 import { hashOpaqueToken } from "../../lib/tokens.js";
 import { assertApiKeysAllowed, assertWebhooksAllowed } from "../../lib/tier-limits.js";
 import { deliverWebhookDelivery } from "../../lib/webhooks.js";
@@ -140,6 +137,25 @@ async function assertPriorityField(
   return field.id;
 }
 
+// One shape for every workspace-key read so list, create and update return identical rows.
+const workspaceApiKeyColumns = {
+  id: workspaceApiKeys.id,
+  kind: workspaceApiKeys.kind,
+  workspaceId: workspaceApiKeys.workspaceId,
+  clientId: workspaceApiKeys.clientId,
+  createdById: workspaceApiKeys.createdById,
+  createdByName: users.displayName,
+  createdByEmail: users.email,
+  name: workspaceApiKeys.name,
+  keyPrefix: workspaceApiKeys.keyPrefix,
+  keyHash: workspaceApiKeys.keyHash,
+  scope: workspaceApiKeys.scope,
+  lastUsedAt: workspaceApiKeys.lastUsedAt,
+  revokedAt: workspaceApiKeys.revokedAt,
+  createdAt: workspaceApiKeys.createdAt,
+  updatedAt: workspaceApiKeys.updatedAt,
+} as const;
+
 export async function integrationRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
 
@@ -238,23 +254,7 @@ export async function integrationRoutes(app: FastifyInstance) {
     const { id: workspaceId } = req.params as { id: string };
     await assertWorkspaceAccess(req.auth, workspaceId, "admin");
     const rows = await db
-      .select({
-        id: workspaceApiKeys.id,
-        kind: workspaceApiKeys.kind,
-        workspaceId: workspaceApiKeys.workspaceId,
-        clientId: workspaceApiKeys.clientId,
-        createdById: workspaceApiKeys.createdById,
-        createdByName: users.displayName,
-        createdByEmail: users.email,
-        name: workspaceApiKeys.name,
-        keyPrefix: workspaceApiKeys.keyPrefix,
-        keyHash: workspaceApiKeys.keyHash,
-        scope: workspaceApiKeys.scope,
-        lastUsedAt: workspaceApiKeys.lastUsedAt,
-        revokedAt: workspaceApiKeys.revokedAt,
-        createdAt: workspaceApiKeys.createdAt,
-        updatedAt: workspaceApiKeys.updatedAt,
-      })
+      .select(workspaceApiKeyColumns)
       .from(workspaceApiKeys)
       .innerJoin(users, eq(users.id, workspaceApiKeys.createdById))
       .where(and(eq(workspaceApiKeys.workspaceId, workspaceId), isNull(workspaceApiKeys.revokedAt)))
@@ -280,23 +280,7 @@ export async function integrationRoutes(app: FastifyInstance) {
       })
       .returning();
     const [created] = await db
-      .select({
-        id: workspaceApiKeys.id,
-        kind: workspaceApiKeys.kind,
-        workspaceId: workspaceApiKeys.workspaceId,
-        clientId: workspaceApiKeys.clientId,
-        createdById: workspaceApiKeys.createdById,
-        createdByName: users.displayName,
-        createdByEmail: users.email,
-        name: workspaceApiKeys.name,
-        keyPrefix: workspaceApiKeys.keyPrefix,
-        keyHash: workspaceApiKeys.keyHash,
-        scope: workspaceApiKeys.scope,
-        lastUsedAt: workspaceApiKeys.lastUsedAt,
-        revokedAt: workspaceApiKeys.revokedAt,
-        createdAt: workspaceApiKeys.createdAt,
-        updatedAt: workspaceApiKeys.updatedAt,
-      })
+      .select(workspaceApiKeyColumns)
       .from(workspaceApiKeys)
       .innerJoin(users, eq(users.id, workspaceApiKeys.createdById))
       .where(eq(workspaceApiKeys.id, row!.id))
@@ -329,23 +313,7 @@ export async function integrationRoutes(app: FastifyInstance) {
     if (!row) throw notFound("api key not found");
 
     const [updated] = await db
-      .select({
-        id: workspaceApiKeys.id,
-        kind: workspaceApiKeys.kind,
-        workspaceId: workspaceApiKeys.workspaceId,
-        clientId: workspaceApiKeys.clientId,
-        createdById: workspaceApiKeys.createdById,
-        createdByName: users.displayName,
-        createdByEmail: users.email,
-        name: workspaceApiKeys.name,
-        keyPrefix: workspaceApiKeys.keyPrefix,
-        keyHash: workspaceApiKeys.keyHash,
-        scope: workspaceApiKeys.scope,
-        lastUsedAt: workspaceApiKeys.lastUsedAt,
-        revokedAt: workspaceApiKeys.revokedAt,
-        createdAt: workspaceApiKeys.createdAt,
-        updatedAt: workspaceApiKeys.updatedAt,
-      })
+      .select(workspaceApiKeyColumns)
       .from(workspaceApiKeys)
       .innerJoin(users, eq(users.id, workspaceApiKeys.createdById))
       .where(eq(workspaceApiKeys.id, row.id))

@@ -496,7 +496,7 @@ describe("NotificationsPanelComponent", () => {
     expect(service.loadFirstPage).toHaveBeenCalledTimes(1);
   });
 
-  it("renders the service feed verbatim and delegates include-read toggling", async () => {
+  it("renders the service feed verbatim", () => {
     // The service owns per-tab filtering; the panel mirrors items() directly,
     // so whatever the active feed holds is exactly what renders.
     service.items.set([
@@ -505,10 +505,6 @@ describe("NotificationsPanelComponent", () => {
     ]);
 
     expect(component.displayedItems().map((n) => n.id)).toEqual(["unread", "read"]);
-
-    await component.toggleIncludeRead();
-
-    expect(service.setIncludeRead).toHaveBeenCalledWith(true);
   });
 
   it("keeps the board select value when the selected board option loads after open", () => {

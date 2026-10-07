@@ -1,9 +1,7 @@
 import { CARD_KEY_PREFIX_PATTERN, cardKeyPrefixReservations, cards, clients, workspaces } from "@kanera/shared/schema";
 import { and, eq, sql } from "drizzle-orm";
-import type { Db } from "../db.js";
+import type { Tx } from "../db.js";
 import { badRequest, conflict, notFound } from "./errors.js";
-
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 export interface AllocatedCardIdentity {
   workspaceId: string;
@@ -18,11 +16,11 @@ export interface ResolvedCardIdentity extends AllocatedCardIdentity {
   listId: string;
 }
 
-export function formatCardKey(prefix: string, number: number): string {
+function formatCardKey(prefix: string, number: number): string {
   return `${prefix}-${number}`;
 }
 
-export function normalizeCardKeyPrefix(prefix: string): string {
+function normalizeCardKeyPrefix(prefix: string): string {
   const normalized = prefix.trim().toUpperCase();
   if (!CARD_KEY_PREFIX_PATTERN.test(normalized)) {
     throw badRequest("card key prefix must match ^[A-Z][A-Z0-9]{1,9}$");

@@ -1,9 +1,8 @@
 import { summariseActivityChange } from "@kanera/shared/activity-summary";
-import { cardPath } from "@kanera/shared/card-links";
 import type { NotificationRow } from "@kanera/shared/dto";
 import { NOTIFICATION_REASON, users } from "@kanera/shared/schema";
 import { inArray } from "drizzle-orm";
-import type { Db } from "../db.js";
+import type { Db, Tx } from "../db.js";
 import { env } from "../env.js";
 import {
   allowsNotificationPush,
@@ -16,8 +15,7 @@ import {
   type NotificationWorkspaceRuleScope,
 } from "./notification-settings.js";
 import { enqueuePersonalNotification, enqueuePush } from "./push-queue.js";
-
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
+import { absoluteCardUrl } from "./wire-card.js";
 
 /**
  * Push/personal-channel content for one watched-activity notification.
@@ -34,7 +32,7 @@ export function watchedActivityPushPayload(row: NotificationRow, webOrigin: stri
     kind: "card_watched_activity",
     title: row.cardTitle ?? row.boardName ?? "Kanera",
     body: `${row.actorName ?? "Someone"} ${detail}`,
-    url: new URL(cardPath(row.organisationKey!, row.cardKey!), webOrigin).toString(),
+    url: absoluteCardUrl(row.organisationKey!, row.cardKey!, webOrigin),
     // One tray entry per card. A watcher on a busy card should see the latest change, not a stack
     // of one notification per event - the delivery layer sets renotify whenever a tag is present,
     // so they are still alerted, but the OS replaces rather than accumulating.
@@ -172,7 +170,7 @@ export async function enqueueOverdueWatcherOutbound(
       kind: "card_overdue",
       title: "Card overdue",
       body: `${row.cardTitle ?? "A card"} is overdue`,
-      url: new URL(cardPath(row.organisationKey!, row.cardKey!), env.WEB_ORIGIN).toString(),
+      url: absoluteCardUrl(row.organisationKey!, row.cardKey!),
       // Same tag the assignee path uses, so someone who both watches and is assigned still sees a
       // single overdue entry per card rather than two.
       tag: `card:${row.cardId}:overdue`,

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import type { CommitImportBody } from "@kanera/shared/dto";
-import { activityEvents, boards, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cards, clients, comments, eventOutbox, kaneraBoardImports, lists, trelloImports } from "@kanera/shared/schema";
+import { activityEvents, boards, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cards, clients, comments, emailQueue, eventOutbox, kaneraBoardImports, lists, trelloImports, type ImportCompletedEmailQueueData } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
@@ -375,6 +375,17 @@ void test("POST /imports/:importId/commit imports a ready Trello session", async
   assert.ok(firstCardCreated > outboxRows.findIndex((row) => row.eventType === "board:created"));
   assert.ok(firstCardCreated > outboxRows.findIndex((row) => row.eventType === "list:created"));
   assert.ok(firstCardCreated > outboxRows.findIndex((row) => row.eventType === "cardLabel:created"));
+
+  // Migration support: the importer gets a count-only confirmation of what transferred.
+  const [confirmation] = await db.select().from(emailQueue).where(eq(emailQueue.type, "import_completed"));
+  assert.equal(confirmation?.toEmail, user.email);
+  const confirmationData = confirmation!.data as ImportCompletedEmailQueueData;
+  assert.equal(confirmationData.source, "trello");
+  assert.equal(confirmationData.boardName, "Imported Launch");
+  assert.equal(confirmationData.boardUrl, `${env.WEB_ORIGIN}/b/${result.createdBoardId}`);
+  assert.equal(confirmationData.cards, 2);
+  assert.equal(confirmationData.attachmentsSkipped, 1);
+  assert.equal(confirmationData.warningCount, result.warnings.length);
 });
 
 void test("POST /imports/:importId/commit copies Trello uploaded attachments when connected", async () => {

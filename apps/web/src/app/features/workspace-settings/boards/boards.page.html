@@ -1,38 +1,5 @@
 <div class="board-settings-section">
         <div class="guest-section-head">
-          <i class="ti ti-folders"></i>
-          <span>Groups</span>
-        </div>
-        <p class="settings-section-hint">Use groups to organize the sidebar. Boards without a group stay listed directly under Boards.</p>
-        <k-docs-link path="boards" fragment="group-boards" label="Learn more about board groups" />
-        <form class="board-form" (submit)="settings.createBoardGroup($event)">
-          <input name="boardGroup" placeholder="Group title" [value]="settings.newBoardGroupTitle()" (input)="settings.newBoardGroupTitle.set($any($event.target).value)" required class="grow" />
-          <button class="sm compact-add-button" type="submit" aria-label="Add group" kTooltip="Add group"><i class="ti ti-plus"></i><span class="mobile-hide">Add group</span></button>
-        </form>
-        <div class="boards board-groups" cdkDropList [cdkDropListData]="settings.boardGroups()" (cdkDropListDropped)="settings.dropBoardGroup($event)">
-          @for (group of settings.boardGroups(); track group.id) {
-          <div cdkDrag class="board-tile">
-            <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
-            @if (settings.editingBoardGroupId() === group.id) {
-            <input class="inline-name-input grow" [value]="settings.editingBoardGroupTitle()" (input)="settings.editingBoardGroupTitle.set($any($event.target).value)" (blur)="settings.saveBoardGroupTitle(group.id)" (keydown.enter)="settings.saveBoardGroupTitle(group.id)"
-              (keydown.escape)="settings.cancelEditBoardGroup()" autofocus />
-            } @else {
-            <span (click)="settings.startEditBoardGroup(group)" kTooltip="Click to rename" class="grow" style="cursor:pointer">{{ group.title }}</span>
-            }
-            <div class="row-actions">
-              <button class="ghost icon danger" (click)="settings.deleteBoardGroup(group.id)" aria-label="Delete group" kTooltip="Delete group">
-                <i class="ti ti-trash"></i>
-              </button>
-            </div>
-          </div>
-          }
-          @if (settings.boardGroups().length === 0) {
-          <k-empty-state size="sm" icon="folders" title="No groups yet" text="Groups collect related boards under one heading in the sidebar." />
-          }
-        </div>
-      </div>
-      <div class="board-settings-section">
-        <div class="guest-section-head">
           <i class="ti ti-layout-kanban"></i>
           <span>Boards</span>
         </div>
@@ -56,12 +23,14 @@
             <span (click)="settings.startEditBoard(board)" kTooltip="Click to rename" class="grow" style="cursor:pointer">{{ board.name }}</span>
             }
             <div class="row-actions">
+              @if (settings.boardGroups().length > 0) {
               <select class="board-group-select" [value]="board.groupId ?? ''" (change)="settings.updateBoardGroup(board.id, $any($event.target).value || null)" kTooltip="Board group" aria-label="Board group">
                 <option value="" [selected]="!board.groupId">Ungrouped</option>
                 @for (group of settings.boardGroups(); track group.id) {
                 <option [value]="group.id" [selected]="board.groupId === group.id">{{ group.title }}</option>
                 }
               </select>
+              }
               <k-icon-picker [value]="board.icon || 'layout-kanban'" (valueChange)="settings.updateBoardIcon(board.id, $event)" />
               <k-color-picker [value]="$any(board.iconColor)" (valueChange)="settings.updateBoardColor(board.id, $event)" />
               @if (settings.canManageBoardAccess()) {
@@ -102,3 +71,37 @@
         </div>
 
 </div>
+
+<div class="board-settings-section">
+        <div class="guest-section-head">
+          <i class="ti ti-folders"></i>
+          <span>Groups</span>
+        </div>
+        <p class="settings-section-hint">Use groups to organize the sidebar. Boards without a group stay listed directly under Boards.</p>
+        <k-docs-link path="boards" fragment="group-boards" label="Learn more about board groups" />
+        <form class="board-form" (submit)="settings.createBoardGroup($event)">
+          <input name="boardGroup" placeholder="Group title" [value]="settings.newBoardGroupTitle()" (input)="settings.newBoardGroupTitle.set($any($event.target).value)" required class="grow" />
+          <button class="sm compact-add-button" type="submit" aria-label="Add group" kTooltip="Add group"><i class="ti ti-plus"></i><span class="mobile-hide">Add group</span></button>
+        </form>
+        <div class="boards board-groups" cdkDropList [cdkDropListData]="settings.boardGroups()" (cdkDropListDropped)="settings.dropBoardGroup($event)">
+          @for (group of settings.boardGroups(); track group.id) {
+          <div cdkDrag class="board-tile">
+            <i class="ti ti-grip-vertical grip" cdkDragHandle></i>
+            @if (settings.editingBoardGroupId() === group.id) {
+            <input class="inline-name-input grow" [value]="settings.editingBoardGroupTitle()" (input)="settings.editingBoardGroupTitle.set($any($event.target).value)" (blur)="settings.saveBoardGroupTitle(group.id)" (keydown.enter)="settings.saveBoardGroupTitle(group.id)"
+              (keydown.escape)="settings.cancelEditBoardGroup()" autofocus />
+            } @else {
+            <span (click)="settings.startEditBoardGroup(group)" kTooltip="Click to rename" class="grow" style="cursor:pointer">{{ group.title }}</span>
+            }
+            <div class="row-actions">
+              <button class="ghost icon danger" (click)="settings.deleteBoardGroup(group.id)" aria-label="Delete group" kTooltip="Delete group">
+                <i class="ti ti-trash"></i>
+              </button>
+            </div>
+          </div>
+          }
+          @if (settings.boardGroups().length === 0) {
+          <k-empty-state size="sm" icon="folders" title="No groups yet" text="Groups collect related boards under one heading in the sidebar." />
+          }
+        </div>
+      </div>

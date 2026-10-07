@@ -371,16 +371,6 @@ export class NotificationsService {
     return this.api.get<WatcherUser[]>("/notifications/users");
   }
 
-  async refreshNotificationUserOptions(): Promise<void> {
-    if (!this.online()) return;
-    try {
-      this.setNotificationUserOptions(await this.fetchNotificationUserOptions());
-    } catch {
-      // Keep the last successful option set. A failed supporting lookup should
-      // not make the notification feed itself unavailable.
-    }
-  }
-
   private setNotificationUserOptions(rows: WatcherUser[]): void {
     if (!Array.isArray(rows)) return;
     this.notificationUserOptions.set([...rows].sort((a, b) => a.displayName.localeCompare(b.displayName) || a.userId.localeCompare(b.userId)));

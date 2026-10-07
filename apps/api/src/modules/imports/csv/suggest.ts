@@ -29,7 +29,7 @@ export function inferCustomFieldType(cells: string[]): CsvCustomFieldType {
   return "text";
 }
 
-export function suggestMultiValueDelimiter(cells: string[]): CsvColumnMapping["multiValueDelimiter"] {
+function suggestMultiValueDelimiter(cells: string[]): CsvColumnMapping["multiValueDelimiter"] {
   const candidates: Array<{ delimiter: CsvColumnMapping["multiValueDelimiter"]; token: string }> = [
     { delimiter: "newline", token: "\n" },
     { delimiter: ";", token: ";" },

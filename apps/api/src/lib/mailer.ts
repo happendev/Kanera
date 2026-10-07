@@ -1,4 +1,4 @@
-import { EMAIL_QUEUE_STATUS, emailQueue, type BoardRole, type EmailQueue, type SmtpConfig } from "@kanera/shared/schema";
+import { EMAIL_QUEUE_STATUS, emailQueue, type BoardRole, type EmailQueue, type LifecycleEmailQueueType, type SmtpConfig } from "@kanera/shared/schema";
 import { and, eq, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import type { Db } from "../db.js";
@@ -33,6 +33,15 @@ import {
   welcomeToProEmail,
   welcomeEmail,
   weeklyAdminRecapEmail,
+  importCompletedEmail,
+  lifecycleActiveCheckinEmail,
+  lifecycleEarlySuccessEmail,
+  lifecycleEmailSubject,
+  lifecycleInactiveEmail,
+  lifecycleInviteTeamEmail,
+  lifecycleNoBoardEmail,
+  type ImportCompletedEmailParams,
+  type LifecycleEmailParams,
   type BillingEmailParams,
   type BoardAccessGrantedEmailParams,
   type BoardInviteEmailParams,
@@ -77,6 +86,8 @@ export interface Mailer {
   sendProCancellationScheduled(to: string, params: BillingEmailParams): Promise<EmailQueue>;
   sendProCancellationReversed(to: string, params: BillingEmailParams): Promise<EmailQueue>;
   sendProCancelled(to: string, params: BillingEmailParams): Promise<EmailQueue>;
+  sendImportCompleted(to: string, params: ImportCompletedEmailParams): Promise<EmailQueue>;
+  sendLifecycle(to: string, type: LifecycleEmailQueueType, params: LifecycleEmailParams): Promise<EmailQueue>;
 }
 
 export interface MailerDeps {
@@ -97,7 +108,7 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
     if (!config) {
       throw new Error("no SMTP configuration available");
     }
-    await deliverEmail({ config, to: row.toEmail, subject: row.subject, html: renderEmail(row) });
+    await deliverEmail({ config, to: row.toEmail, subject: row.subject, html: renderEmail(row), headers: emailHeaders(row) });
     log.info({ emailQueueId: row.id, to: row.toEmail, subject: row.subject }, "email sent");
   }
 
@@ -128,80 +139,19 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
 
   return {
     async sendAdminInvite(to, displayName, link) {
-      const [row] = await db.insert(emailQueue).values({
-        toEmail: to,
-        subject: emailSubject("You’re invited to administer Kanera"),
-        type: "admin_invite",
-        data: { displayName, inviteUrl: link, expiresInHours: 24 },
-        status: EMAIL_QUEUE_STATUS.immediate,
-        processingLeaseExpiresAt: new Date(Date.now() + IMMEDIATE_DELIVERY_LEASE_MS),
-      }).returning();
-      try {
-        await deliver(row!);
-        return await markDelivered(row!);
-      } catch (err) {
-        return await markFailed(row!, err);
-      }
+      return queueImmediateEmail(to, "You’re invited to administer Kanera", "admin_invite", { displayName, inviteUrl: link, expiresInHours: 24 });
     },
     async sendWelcome(to, displayName) {
       const loginUrl = `${webOrigin}/login`;
-      // Store queued emails exactly as they will be sent so the queue is an audit trail,
-      // including the development subject prefix when applicable.
-      const [row] = await db
-        .insert(emailQueue)
-        .values({
-          toEmail: to,
-          subject: emailSubject("Welcome to Kanera"),
-          type: "welcome",
-          data: { displayName, loginUrl },
-          status: EMAIL_QUEUE_STATUS.queued,
-        })
-        .returning();
-      return row!;
+      return queueEmail(to, "Welcome to Kanera", "welcome", { displayName, loginUrl });
     },
 
     async sendPasswordReset(to, displayName, link) {
-      // Password reset is the only email that bypasses the background sweep:
-      // record it first, then immediately attempt delivery and update this row.
-      const [row] = await db
-        .insert(emailQueue)
-        .values({
-          toEmail: to,
-          subject: emailSubject("Reset your Kanera password"),
-          type: "password_reset",
-          data: { displayName, resetUrl: link, expiresInMinutes: PASSWORD_RESET_EXPIRY_MINUTES },
-          status: EMAIL_QUEUE_STATUS.immediate,
-          processingLeaseExpiresAt: new Date(Date.now() + IMMEDIATE_DELIVERY_LEASE_MS),
-        })
-        .returning();
-      try {
-        await deliver(row!);
-        return await markDelivered(row!);
-      } catch (err) {
-        return await markFailed(row!, err);
-      }
+      return queueImmediateEmail(to, "Reset your Kanera password", "password_reset", { displayName, resetUrl: link, expiresInMinutes: PASSWORD_RESET_EXPIRY_MINUTES });
     },
 
     async sendEmailVerificationCode(to, code, expiresInMinutes) {
-      // Like password reset, this bypasses the background sweep: the user is
-      // actively waiting on the code, so record the row then deliver immediately.
-      const [row] = await db
-        .insert(emailQueue)
-        .values({
-          toEmail: to,
-          subject: emailSubject("Verify your email for Kanera"),
-          type: "email_verification",
-          data: { code, expiresInMinutes },
-          status: EMAIL_QUEUE_STATUS.immediate,
-          processingLeaseExpiresAt: new Date(Date.now() + IMMEDIATE_DELIVERY_LEASE_MS),
-        })
-        .returning();
-      try {
-        await deliver(row!);
-        return await markDelivered(row!);
-      } catch (err) {
-        return await markFailed(row!, err);
-      }
+      return queueImmediateEmail(to, "Verify your email for Kanera", "email_verification", { code, expiresInMinutes });
     },
 
     async sendDailyDigest(to, memberRole, params) {
@@ -217,222 +167,173 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
         .limit(1);
       if (existing) return null;
 
-      const [row] = await db
-        .insert(emailQueue)
-        .values({
-          toEmail: to,
-          subject: emailSubject("Your Kanera due items"),
-          type: "daily_digest",
-          data: params,
-          status: EMAIL_QUEUE_STATUS.queued,
-        })
-        .returning();
-      return row ?? null;
+      return queueEmail(to, "Your Kanera due items", "daily_digest", params);
     },
 
     async sendCardAssigned(to, params) {
-      const [row] = await db
-        .insert(emailQueue)
-        .values({
-          toEmail: to,
-          subject: emailSubject("You were assigned a Kanera card"),
-          type: "card_assigned",
-          data: params,
-          status: EMAIL_QUEUE_STATUS.queued,
-        })
-        .returning();
-      return row!;
+      return queueEmail(to, "You were assigned a Kanera card", "card_assigned", params);
     },
 
     async sendCardCommentAdded(to, params) {
-      const [row] = await db
-        .insert(emailQueue)
-        .values({
-          toEmail: to,
-          subject: emailSubject(`New comment on ${params.cardTitle}`),
-          type: "card_comment_added",
-          data: params,
-          status: EMAIL_QUEUE_STATUS.queued,
-        })
-        .returning();
-      return row!;
+      return queueEmail(to, `New comment on ${params.cardTitle}`, "card_comment_added", params);
     },
 
     async sendCommentMentioned(to, params) {
-      const [row] = await db
-        .insert(emailQueue)
-        .values({
-          toEmail: to,
-          subject: emailSubject(`Mentioned in a comment on ${params.cardTitle}`),
-          type: "comment_mentioned",
-          data: params,
-          status: EMAIL_QUEUE_STATUS.queued,
-        })
-        .returning();
-      return row!;
+      return queueEmail(to, `Mentioned in a comment on ${params.cardTitle}`, "comment_mentioned", params);
     },
 
     async sendCardDueDateChanged(to, params) {
-      const [row] = await db
-        .insert(emailQueue)
-        .values({
-          toEmail: to,
-          subject: emailSubject("Due date changed on your Kanera card"),
-          type: "card_due_date_changed",
-          data: params,
-          status: EMAIL_QUEUE_STATUS.queued,
-        })
-        .returning();
-      return row!;
+      return queueEmail(to, "Due date changed on your Kanera card", "card_due_date_changed", params);
     },
 
     async sendCardOverdue(to, params) {
-      const [row] = await db
-        .insert(emailQueue)
-        .values({
-          toEmail: to,
-          subject: emailSubject("A Kanera card is overdue"),
-          type: "card_overdue",
-          data: params,
-          status: EMAIL_QUEUE_STATUS.queued,
-        })
-        .returning();
-      return row!;
+      return queueEmail(to, "A Kanera card is overdue", "card_overdue", params);
     },
 
     async sendChecklistItemOverdue(to, params) {
-      const [row] = await db
-        .insert(emailQueue)
-        .values({
-          toEmail: to,
-          subject: emailSubject("A Kanera checklist item is overdue"),
-          type: "checklist_item_overdue",
-          data: params,
-          status: EMAIL_QUEUE_STATUS.queued,
-        })
-        .returning();
-      return row!;
+      return queueEmail(to, "A Kanera checklist item is overdue", "checklist_item_overdue", params);
     },
 
     async sendInviteAccepted(to, params) {
-      const [row] = await db
-        .insert(emailQueue)
-        .values({
-          toEmail: to,
-          subject: emailSubject("A Kanera invite was accepted"),
-          type: "invite_accepted",
-          data: params,
-          status: EMAIL_QUEUE_STATUS.queued,
-        })
-        .returning();
-      return row!;
+      return queueEmail(to, "A Kanera invite was accepted", "invite_accepted", params);
     },
 
     async sendBoardInvite(to, params) {
-      const boardSummary = params.boards?.length === 1
-        ? params.boards[0]!.boardName
-        : params.boards?.length
-          ? `${params.boards.length} boards`
-          : params.boardName ?? "a board";
-      const [row] = await db
-        .insert(emailQueue)
-        .values({
-          toEmail: to,
-          subject: emailSubject(`You've been invited to ${boardSummary}`),
-          type: "board_invite",
-          data: params,
-          status: EMAIL_QUEUE_STATUS.queued,
-        })
-        .returning();
-      return row!;
+      const boardSummary = params.boards.length === 1 ? params.boards[0]!.boardName : `${params.boards.length} boards`;
+      return queueEmail(to, `You've been invited to ${boardSummary}`, "board_invite", params);
     },
 
     async sendBoardAccessGranted(to, params) {
-      const [row] = await db
-        .insert(emailQueue)
-        .values({
-          toEmail: to,
-          subject: emailSubject(`You now have access to ${params.boardName}`),
-          type: "board_access_granted",
-          data: params,
-          status: EMAIL_QUEUE_STATUS.queued,
-        })
-        .returning();
-      return row!;
+      return queueEmail(to, `You now have access to ${params.boardName}`, "board_access_granted", params);
     },
 
     async sendProTrialStarted(to, params) {
-      return queueBillingEmail(to, "Your Kanera Pro trial has started", "pro_trial_started", params);
+      return queueEmail(to, "Your Kanera Pro trial has started", "pro_trial_started", params);
     },
 
     async sendProTrialWarning(to, params) {
       const days = params.daysRemaining ?? 0;
-      return queueBillingEmail(to, days === 1 ? "Your Kanera Pro trial ends tomorrow" : `Your Kanera Pro trial ends in ${days} days`, "pro_trial_warning", params);
+      return queueEmail(to, days === 1 ? "Your Kanera Pro trial ends tomorrow" : `Your Kanera Pro trial ends in ${days} days`, "pro_trial_warning", params);
     },
 
     async sendDowngradedToFree(to, params) {
-      return queueBillingEmail(to, `${params.orgName} is now on Kanera Free`, "downgraded_to_free", params);
+      return queueEmail(to, `${params.orgName} is now on Kanera Free`, "downgraded_to_free", params);
     },
 
     async sendUpgradedToPro(to, params) {
-      return queueBillingEmail(to, "Kanera Pro is active", "upgraded_to_pro", params);
+      return queueEmail(to, "Kanera Pro is active", "upgraded_to_pro", params);
     },
 
     async sendWelcomeToPro(to, params) {
-      return queueBillingEmail(to, "Welcome to Kanera Pro", "welcome_to_pro", params);
+      return queueEmail(to, "Welcome to Kanera Pro", "welcome_to_pro", params);
     },
 
     async sendBillingChanged(to, params) {
-      return queueBillingEmail(to, "Your Kanera Pro subscription was updated", "billing_changed", params);
+      return queueEmail(to, "Your Kanera Pro subscription was updated", "billing_changed", params);
     },
 
     async sendBillingRenewed(to, params) {
-      return queueBillingEmail(to, "Your Kanera Pro subscription renewed", "billing_renewed", params);
+      return queueEmail(to, "Your Kanera Pro subscription renewed", "billing_renewed", params);
     },
 
     async sendBillingPaymentFailed(to, params) {
-      return queueBillingEmail(to, "Action needed: update your Kanera payment method", "billing_payment_failed", params);
+      return queueEmail(to, "Action needed: update your Kanera payment method", "billing_payment_failed", params);
     },
 
     async sendBillingPaymentRecovered(to, params) {
-      return queueBillingEmail(to, "Your Kanera Pro payment is confirmed", "billing_payment_recovered", params);
+      return queueEmail(to, "Your Kanera Pro payment is confirmed", "billing_payment_recovered", params);
     },
 
     async sendSeatBilled(to, params) {
       const subject = params.seatKind ? "A Kanera seat was billed" : "Your Kanera seat purchase is confirmed";
-      return queueBillingEmail(to, subject, "seat_billed", params);
+      return queueEmail(to, subject, "seat_billed", params);
     },
 
     async sendSeatCapacityReduced(to, params) {
-      return queueBillingEmail(to, "Your Kanera seat capacity was reduced", "seat_capacity_reduced", params);
+      return queueEmail(to, "Your Kanera seat capacity was reduced", "seat_capacity_reduced", params);
     },
 
     async sendProCancellationScheduled(to, params) {
-      return queueBillingEmail(to, `Kanera Pro will end for ${params.orgName}`, "pro_cancellation_scheduled", params);
+      return queueEmail(to, `Kanera Pro will end for ${params.orgName}`, "pro_cancellation_scheduled", params);
     },
 
     async sendProCancellationReversed(to, params) {
-      return queueBillingEmail(to, `Kanera Pro will continue for ${params.orgName}`, "pro_cancellation_reversed", params);
+      return queueEmail(to, `Kanera Pro will continue for ${params.orgName}`, "pro_cancellation_reversed", params);
     },
 
     async sendProCancelled(to, params) {
-      return queueBillingEmail(to, `${params.orgName} is now on Kanera Free`, "pro_cancelled", params);
+      return queueEmail(to, `${params.orgName} is now on Kanera Free`, "pro_cancelled", params);
+    },
+
+    async sendImportCompleted(to, params) {
+      return queueEmail(to, "Your Kanera import is complete", "import_completed", params);
+    },
+
+    async sendLifecycle(to, type, params) {
+      return queueEmail(to, lifecycleEmailSubject(type, params), type, params);
     },
   };
 
-  async function queueBillingEmail(to: string, subject: string, type: EmailQueue["type"], params: BillingEmailParams): Promise<EmailQueue> {
+  /**
+   * Records an email for the background sweep to deliver. Rows are stored exactly as they will be
+   * sent (including the development subject prefix) so the queue doubles as an audit trail.
+   */
+  async function queueEmail(to: string, subject: string, type: EmailQueue["type"], data: EmailQueue["data"]): Promise<EmailQueue> {
     const [row] = await db
       .insert(emailQueue)
       .values({
         toEmail: to,
         subject: emailSubject(subject),
         type,
-        data: params,
+        data,
         status: EMAIL_QUEUE_STATUS.queued,
       })
       .returning();
     return row!;
   }
+
+  /**
+   * Password reset, verification codes and admin invites bypass the sweep: the recipient is waiting
+   * on them, so the row is recorded first (with a lease so a concurrent sweep leaves it alone), then
+   * delivered immediately and marked on this row.
+   */
+  async function queueImmediateEmail(to: string, subject: string, type: EmailQueue["type"], data: EmailQueue["data"]): Promise<EmailQueue> {
+    const [row] = await db
+      .insert(emailQueue)
+      .values({
+        toEmail: to,
+        subject: emailSubject(subject),
+        type,
+        data,
+        status: EMAIL_QUEUE_STATUS.immediate,
+        processingLeaseExpiresAt: new Date(Date.now() + IMMEDIATE_DELIVERY_LEASE_MS),
+      })
+      .returning();
+    try {
+      await deliver(row!);
+      return await markDelivered(row!);
+    } catch (err) {
+      return await markFailed(row!, err);
+    }
+  }
+}
+
+/**
+ * Lifecycle emails are optional product mail, so they carry RFC 2369/8058 one-click unsubscribe
+ * headers. Mail providers show their own "Unsubscribe" control for these and POST to the API URL
+ * directly (no page, no session); the mailto-free HTTPS form is what Gmail and Yahoo require. The
+ * web page link stays second for clients that only open URLs. Transactional mail gets no headers.
+ */
+export function emailHeaders(row: EmailQueue): Record<string, string> | undefined {
+  if (!row.type.startsWith("lifecycle_")) return undefined;
+  const pageUrl = (row.data as LifecycleEmailParams).unsubscribeUrl;
+  const token = pageUrl ? new URL(pageUrl).searchParams.get("token") : null;
+  if (!token) return undefined;
+  const oneClickUrl = `${env.API_PUBLIC_URL}/api/email/unsubscribe/one-click?token=${encodeURIComponent(token)}`;
+  return {
+    "List-Unsubscribe": `<${oneClickUrl}>, <${pageUrl}>`,
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+  };
 }
 
 export function renderEmail(row: EmailQueue): string {
@@ -495,6 +396,18 @@ export function renderEmail(row: EmailQueue): string {
       return proCancellationReversedEmail(row.data as BillingEmailParams);
     case "pro_cancelled":
       return proCancelledEmail(row.data as BillingEmailParams);
+    case "import_completed":
+      return importCompletedEmail(row.data as ImportCompletedEmailParams);
+    case "lifecycle_no_board":
+      return lifecycleNoBoardEmail(row.data as LifecycleEmailParams);
+    case "lifecycle_invite_team":
+      return lifecycleInviteTeamEmail(row.data as LifecycleEmailParams);
+    case "lifecycle_early_success":
+      return lifecycleEarlySuccessEmail(row.data as LifecycleEmailParams);
+    case "lifecycle_inactive":
+      return lifecycleInactiveEmail(row.data as LifecycleEmailParams);
+    case "lifecycle_active_checkin":
+      return lifecycleActiveCheckinEmail(row.data as LifecycleEmailParams);
   }
 }
 
@@ -519,4 +432,3 @@ export function emailSubject(subject: string, nodeEnv = env.NODE_ENV): string {
  * Resolve SMTP config for a given client, falling back to env-level config.
  * The special client ID "__env__" skips the DB lookup and goes straight to env.
  */
-export { resolveSmtpConfig } from "./smtp-resolve.js";

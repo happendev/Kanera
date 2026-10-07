@@ -19,6 +19,30 @@ let lastHiddenAt = 0;
 export function resetTooltipWarmWindow(): void {
   lastHiddenAt = 0;
 }
+/**
+ * A tap is not a hover. Mobile browsers synthesise `mouseenter` and move focus on every tap, so
+ * without this a tooltip appears *after* the tap's own click has hidden it and then sits over the
+ * control until something else is touched — on a view switch it covered the page title. Tooltips
+ * are a hover/keyboard affordance; touch users get the visible label or the result of the tap.
+ * Recorded at document level because the synthesised events arrive on the tapped element only after
+ * its pointerdown, and a tap that moves focus into a different tooltip host must be covered too.
+ */
+const TOUCH_FOCUS_WINDOW_MS = 1_000;
+let lastTouchAt = 0;
+if (typeof document !== "undefined") {
+  document.addEventListener(
+    "pointerdown",
+    (event) => {
+      if (event.pointerType !== "mouse") lastTouchAt = Date.now();
+    },
+    { capture: true, passive: true },
+  );
+}
+
+function recentlyTouched(): boolean {
+  return Date.now() - lastTouchAt < TOUCH_FOCUS_WINDOW_MS;
+}
+
 const AUTO_HIDE_MS = 10_000;
 const TOOLTIP_OFFSET = 8;
 let nextTooltipId = 0;
@@ -81,6 +105,7 @@ export class TooltipDirective implements OnDestroy {
 
   @HostListener("mouseenter")
   onMouseEnter() {
+    if (recentlyTouched()) return;
     this.scheduleShow();
   }
 
@@ -91,6 +116,7 @@ export class TooltipDirective implements OnDestroy {
 
   @HostListener("focusin")
   onFocusIn() {
+    if (recentlyTouched()) return;
     this.show();
   }
 

@@ -15,7 +15,7 @@ import { runTrelloImport } from "./importer.js";
 import { runKaneraBoardImport } from "./kanera-importer.js";
 import { parseKaneraBoardExport } from "./kanera-parser.js";
 import { parseTrelloExport } from "./parser.js";
-import { emitImportResult, finishImportAnalytics } from "./route-helpers.js";
+import { emitImportResult, finishImportAnalytics, sendImportCompletedEmail } from "./route-helpers.js";
 import { resolveImportTargetBoard } from "./target-board.js";
 import type { NormalizedTrelloBoard } from "./types.js";
 
@@ -168,6 +168,7 @@ export async function importRoutes(app: FastifyInstance) {
 
       await emitImportResult(result, row.workspaceId, targetBoardId);
       await finishImportAnalytics(req, row.workspaceId, "trello");
+      await sendImportCompletedEmail(req, result, "trello");
       return result.summary;
     } catch (error) {
       const message = error instanceof Error ? error.message : "import failed";
@@ -211,6 +212,7 @@ export async function importRoutes(app: FastifyInstance) {
 
       await emitImportResult(result, row.workspaceId, targetBoardId);
       await finishImportAnalytics(req, row.workspaceId, "kanera");
+      await sendImportCompletedEmail(req, result, "kanera");
       return result.summary;
     } catch (error) {
       const message = error instanceof Error ? error.message : "import failed";

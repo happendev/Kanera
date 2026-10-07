@@ -20,14 +20,6 @@ export async function buildIntegrationServer(options: Partial<BuildServerOptions
   const { buildServer } = await import("../server.js");
   const app = await buildServer({
     enableRealtime: false,
-    enableOverdueScheduler: false,
-    enableDueDateAutomationScheduler: false,
-    enableDailyDigestScheduler: false,
-    enableEmailQueueScheduler: false,
-    enableArchivedCardCleanupScheduler: false,
-    enableOrganisationDeletionScheduler: false,
-    enableWebhookDeliveryScheduler: false,
-    enableRealtimeOutboxDispatcher: false,
     logger: false,
     uploadsDir: ".tmp/test-uploads",
     ...options,

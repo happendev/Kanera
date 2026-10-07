@@ -83,7 +83,7 @@ function tabularRows(data: unknown): Record<string, unknown>[] | null {
   return tabularRows(rows);
 }
 
-export function renderHuman(envelope: Envelope): string {
+function renderHuman(envelope: Envelope): string {
   if (!envelope.ok) {
     const error = envelope.error;
     const code = error?.code ? ` [${error.code}]` : "";

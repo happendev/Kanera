@@ -210,7 +210,7 @@ function personalDeliveryError(err: unknown): string {
   return "network delivery failed";
 }
 
-export async function deliverPersonalNotificationRow(
+async function deliverPersonalNotificationRow(
   db: Db,
   row: PushQueue,
   options: { ignoreEnabled?: boolean } = {},

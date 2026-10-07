@@ -51,7 +51,6 @@ function toPublicClient(row: ClientRow): PublicClientResponse {
       requireMfa: row.requireMfa,
       defaultCompletedCardsActiveDays: row.defaultCompletedCardsActiveDays,
       defaultInactiveCardsDays: row.defaultInactiveCardsDays,
-      defaultBoardHealthEnabled: row.defaultBoardHealthEnabled,
       // Hosted deployments own SMTP/storage at the environment layer, so do not expose
       // provider details or redacted secrets to tenant admins.
       storageConfig: { kind: "local" },
@@ -79,7 +78,6 @@ function toPublicClient(row: ClientRow): PublicClientResponse {
     requireMfa: row.requireMfa,
     defaultCompletedCardsActiveDays: row.defaultCompletedCardsActiveDays,
     defaultInactiveCardsDays: row.defaultInactiveCardsDays,
-    defaultBoardHealthEnabled: row.defaultBoardHealthEnabled,
     storageConfig: redact(storageConfig),
     storageConfigSource: envStorageConfig ? "env" : "client",
     smtpConfig: redactSmtpConfig(smtpConfig),
@@ -322,7 +320,6 @@ export async function clientRoutes(app: FastifyInstance) {
     if (body.requireMfa !== undefined) updates.requireMfa = body.requireMfa;
     if (body.defaultCompletedCardsActiveDays !== undefined) updates.defaultCompletedCardsActiveDays = body.defaultCompletedCardsActiveDays;
     if (body.defaultInactiveCardsDays !== undefined) updates.defaultInactiveCardsDays = body.defaultInactiveCardsDays;
-    if (body.defaultBoardHealthEnabled !== undefined) updates.defaultBoardHealthEnabled = body.defaultBoardHealthEnabled;
     if (nextStorage !== undefined) updates.storageConfig = encryptStorageConfig(nextStorage);
     if (nextSmtp !== undefined) updates.smtpConfig = encryptSmtpConfig(nextSmtp);
 

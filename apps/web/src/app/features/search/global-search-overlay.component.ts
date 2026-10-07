@@ -221,7 +221,7 @@ type FlatResult =
       align-items: flex-start;
       justify-content: center;
       padding: 12vh 16px 16px;
-      animation: fade-in 120ms ease;
+      animation: kanera-fade-in 120ms ease;
     }
 
     .panel {
@@ -270,7 +270,7 @@ type FlatResult =
       padding: 1px 6px;
     }
 
-    .spin { animation: spin 0.8s linear infinite; color: var(--text-muted); }
+    .spin { animation: kanera-spinner 0.8s linear infinite; color: var(--text-muted); }
 
     .results {
       overflow-y: auto;
@@ -394,6 +394,10 @@ type FlatResult =
     /* ─── Responsive ─────────────────────────────────────────────────────────
        Phones: the palette becomes a near-full-height sheet pinned to the top so the on-screen
        keyboard, which eats the bottom half, never hides the results. dvh tracks that keyboard. */
+    /* Touch-only tablets are wider than the phone breakpoint but still have no Esc key to press. */
+    @media (any-hover: none) and (pointer: coarse) {
+      .esc { display: none; }
+    }
     @media (max-width: 640px) {
       .backdrop { padding: 8px; align-items: stretch; }
       .panel { max-width: none; max-height: calc(100dvh - 16px); }
@@ -423,9 +427,7 @@ type FlatResult =
       .backdrop, .panel { animation: none; }
     }
 
-    @keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
     @keyframes slide-in { from { opacity: 0; transform: scale(0.98) translateY(-6px) } to { opacity: 1; transform: none } }
-    @keyframes spin { to { transform: rotate(360deg) } }
   `,
 })
 export class GlobalSearchOverlayComponent {
@@ -458,7 +460,7 @@ export class GlobalSearchOverlayComponent {
       { id: "home", label: "Go to Home", detail: "Workspace overview", icon: "home", keys: "g h", run: () => void this.router.navigate(["/"]) },
       { id: "my-cards", label: "Go to My Cards", detail: "Your work across boards", icon: "user-check", keys: "g m", run: () => void this.router.navigate(["/my-cards"]) },
       { id: "team-cards", label: "Go to Team Cards", detail: "Team work across boards", icon: "users", keys: "g t", run: () => void this.router.navigate(["/team-cards"]) },
-      { id: "portfolio", label: "Go to Portfolio", detail: "Board health and progress", icon: "chart-dots-3", keys: "g p", run: () => void this.router.navigate(["/portfolio"]) },
+      { id: "portfolio", label: "Go to Portfolio", detail: "Card counts and progress", icon: "chart-dots-3", keys: "g p", run: () => void this.router.navigate(["/portfolio"]) },
       { id: "settings", label: "Open Settings", detail: "Workspace and account preferences", icon: "settings", keys: "g s", run: () => void this.router.navigate(["/settings"]) },
     ];
     return [...this.palette.actions(), ...navigation]

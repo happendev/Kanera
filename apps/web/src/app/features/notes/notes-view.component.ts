@@ -67,7 +67,7 @@ import type { NoteScopeValue } from "./notes.types";
           {{ tabDescription() }}
         </div>
         <div class="nv-toolbar">
-          <button class="nv-new-btn" type="button" (click)="createRoot()" [disabled]="!canEdit()" [kTooltip]="editDisabledTitle()">
+          <button class="nv-new-btn" type="button" (click)="createRoot()" [disabled]="!canEdit()" [kTooltip]="editRestrictionMessage()">
             <i class="ti ti-plus"></i>
             <span>New note</span>
           </button>
@@ -155,7 +155,6 @@ export class NotesViewComponent implements OnInit, OnChanges, OnDestroy {
       ? "Team notes are read-only for board observers."
       : "Team notes are read-only for workspace members. Workspace admin access is required to edit.";
   });
-  readonly editDisabledTitle = computed(() => this.editRestrictionMessage());
   readonly editorMentionMembers = computed(() => this.mentionMembers() ?? this.workspaceMentionMembers());
 
   readonly visibleNotes = computed(() => {

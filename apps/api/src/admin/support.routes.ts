@@ -1,7 +1,7 @@
 import { dto } from "@kanera/shared";
 import { adminUsers, supportSessions } from "@kanera/shared/schema";
 import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { db } from "../db.js";
 import { env } from "../env.js";
 import { clientIpForRequest } from "../lib/client-ip.js";
@@ -10,15 +10,10 @@ import { resolveSupportTargetOwner } from "../lib/support-session.js";
 import { disconnectSupportSessionSockets } from "../realtime/io.js";
 import { writeAdminAudit } from "./audit.js";
 import { signSupportToken } from "./plugin.js";
+import { requireSuperadmin, iso } from "./helpers.js";
 
 // Impersonating into a customer's workspace is the most sensitive capability in the console, so it is
 // gated to the superadmin role — matching how destructive user/org actions are gated (users.routes.ts).
-function requireSuperadmin(req: FastifyRequest) {
-  if (req.adminAuth.role !== "superadmin") throw forbidden("superadmin required");
-}
-
-const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
-
 export async function adminSupportRoutes(app: FastifyInstance) {
   // Start a cross-tenant support session that acts as the target org's owner and return the enter URL.
   app.post("/orgs/:clientId/support-session", async (req) => {

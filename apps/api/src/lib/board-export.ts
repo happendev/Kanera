@@ -19,21 +19,13 @@ import {
   users,
   workspaceMembers,
 } from "@kanera/shared/schema";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../db.js";
 import { notFound } from "./errors.js";
 import { unsignedMediaUrl, withSignedMedia } from "./media-keys.js";
 import { assignedCardVisibility } from "./access.js";
-
-function withDownloadFileName(url: string, fileName: string): string {
-  try {
-    const parsed = new URL(url);
-    parsed.searchParams.set("fn", fileName);
-    return parsed.toString();
-  } catch {
-    return url;
-  }
-}
+import { commentAuthorColumns } from "./comment-rows.js";
+import { withDownloadFileName } from "./attachment-media.js";
 
 type ExportAttachmentRow = Pick<
   typeof cardAttachments.$inferSelect,
@@ -234,8 +226,7 @@ export async function buildBoardExportArchive(boardId: string, clientId: string,
         apiKeyName: comments.apiKeyName,
         agentGrantId: comments.agentGrantId,
         agentName: comments.agentName,
-        authorName: sql<string>`case when ${comments.authorKind} = 'system' then 'Kanera' when ${comments.authorKind} = 'apiKey' then coalesce(${comments.apiKeyName}, 'API key') else ${users.displayName} end`,
-        authorAvatarUrl: sql<string | null>`case when ${comments.authorKind} in ('system', 'apiKey') then null else ${users.avatarUrl} end`,
+        ...commentAuthorColumns,
         body: comments.body,
         editedAt: comments.editedAt,
         createdAt: comments.createdAt,

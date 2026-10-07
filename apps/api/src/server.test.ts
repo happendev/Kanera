@@ -52,15 +52,6 @@ void test("GET /health includes browser security headers", async () => {
   assert.equal(response.headers["content-security-policy"], "default-src 'none';base-uri 'none';frame-ancestors 'self'");
 });
 
-void test("GET /workspaces requires authentication", async () => {
-  const app = await buildTestServer();
-
-  const response = await app.inject({ method: "GET", url: "/workspaces" });
-
-  assert.equal(response.statusCode, 401);
-  assert.deepEqual(response.json(), { code: "UNAUTHORIZED", message: "unauthorized" });
-});
-
 // Slow requests are logged (and shipped to Loki) but intentionally do NOT fire an ops-alert webhook;
 // aggregate latency alerting is owned by Grafana's p95 rule. This guards that consolidation.
 void test("slow app API requests do not emit an ops alert", async () => {

@@ -18,19 +18,45 @@ npx -y @kanera/cli commands
 
 ## Authenticate
 
-You need a Kanera API key. Create one in the Kanera web app under **Settings → API keys**
-(personal keys, scoped read-only or read-write), or in **workspace settings** for a key tied to a
-workspace rather than a person. Choose **read-only** if the credential is for an AI agent that
-should not change anything.
-
 ```bash
-kanera auth login        # opens the API-keys page, then prompts for the key and stores it
+kanera auth login        # sign in through your browser
 kanera whoami            # who am I, and what may this credential do?
 ```
 
-In CI or an agent sandbox, skip the stored profile and set `KANERA_API_KEY` instead. Self-hosting?
-Point at your deployment with `--url https://api.your-kanera.example` during login (it is saved
-with the profile) or via `KANERA_PUBLIC_API_URL`.
+`auth login` uses the OAuth device flow, the same way Claude or Codex connects. It prints a link
+and a short code, opens the link in your browser, and finishes when you approve the code there.
+It works over SSH too: open the link on any device. Pass `--no-browser` to only print the link.
+The CLI stores a short-lived access token and a refresh token, refreshes them automatically, and
+appears under **Settings → AI agents** as "Kanera CLI (your machine)", where you can revoke it.
+`kanera auth logout` revokes it for you.
+
+When an AI agent drives the CLI, name it at sign-in so Kanera labels its work as that agent's:
+
+```bash
+kanera auth login --agent "Claude Code"   # or set KANERA_AGENT_NAME
+```
+
+The sign-in is then registered as "Claude Code (Kanera CLI on your machine)", which is what the
+consent screen, **Settings → AI agents**, and every comment, card change and run chip show as
+"via …". The name is fixed for that sign-in; use a separate `--profile` per agent on a shared
+machine. API keys cannot carry an agent name, because personal-key work is recorded as the user.
+
+Use an API key for CI, cron, or an unattended agent, where nobody can approve a browser sign-in,
+or when you want a server-enforced **read-only** credential:
+
+```bash
+kanera auth login --with-api-key        # opens the API-keys page, then prompts for the key
+kanera auth login --api-key kanera_u_…  # store a key non-interactively
+```
+
+Create keys in the web app under **Settings → API keys**, or in **workspace settings** for a key
+tied to a workspace rather than a person. In CI or an agent sandbox, skip the stored profile and
+set `KANERA_API_KEY` instead.
+
+Self-hosting? A browser sign-in needs your deployment's MCP address, because the sign-in is bound
+to it: `kanera auth login --mcp-url https://your-kanera.example/mcp` (or `KANERA_MCP_URL`). For an
+API key, point at your public API with `--url https://api.your-kanera.example` during login (it is
+saved with the profile) or via `KANERA_PUBLIC_API_URL`.
 
 ## Use
 
@@ -49,9 +75,11 @@ kanera doctor            # diagnose credentials and connectivity
 
 ## How it is built
 
-The CLI does not re-implement the public API. It opens an **in-process MCP session** against the
-same tool layer `@kanera/mcp` serves over HTTP and stdio, then exposes those tools as commands.
-Nothing crosses a socket — `InMemoryTransport` links the two ends directly.
+The CLI does not re-implement the public API. It opens an MCP session against the same tool layer
+`@kanera/mcp` serves over HTTP and stdio, then exposes those tools as commands. With an API key the
+session is **in-process**: nothing crosses a socket, `InMemoryTransport` links the two ends
+directly. With an OAuth sign-in it connects to the **remote MCP endpoint**, because OAuth tokens
+are issued for that endpoint and are never accepted by `/api/v1`.
 
 That choice is the point: card-reference resolution (`MKT-42`), cursor encoding, response size
 caps, and every tool description already live in that layer, so the CLI's command surface cannot
@@ -66,9 +94,12 @@ ships.
 
 ## Credentials
 
-Resolution order: `--api-key`, then `KANERA_API_KEY`, then a stored profile.
+Resolution order: `--api-key`, then `KANERA_API_KEY`, then a stored profile (OAuth sign-in or API
+key). An explicit key always wins, so CI never runs through a developer's personal sign-in.
 
-Profiles live in `~/.config/kanera/config.json` (mode `600`). Named profiles let one machine hold
+Profiles live in `~/.config/kanera/config.json` (mode `600`). Concurrent `kanera` processes take a
+lock before refreshing an OAuth sign-in: Kanera rotates refresh tokens and revokes a sign-in whose
+spent refresh token is presented twice, so parallel agent commands must not race. Named profiles let one machine hold
 several identities:
 
 ```bash
@@ -85,6 +116,14 @@ The non-secret, committable per-repo profile selection goes in `.kanera/config.j
 API origins are security-sensitive because they receive the bearer credential, so repository
 configuration cannot set one. Use `--url`, `KANERA_PUBLIC_API_URL`, or the origin saved with a
 profile during `auth login`. Non-loopback origins must use HTTPS.
+
+## Updates
+
+At most once a day the CLI checks npm for a newer release. If it finds one, it asks
+`Update now? [y/N]` after your command finishes, and `y` runs `npm install --global @kanera/cli@<version>`.
+It only asks when a person is at an interactive terminal. It never checks or asks in `--json` or
+`--quiet` mode, when stdin or stdout is not a TTY (which covers agents, scripts and pipes), under
+`CI`, or when the CLI was launched through `npx`. Set `KANERA_NO_UPDATE_CHECK=1` to turn the check off.
 
 ## Output
 
@@ -127,6 +166,14 @@ usage errors. The CLI never silently discards an operand.
 kanera card update MKT-42 --changes.title "Revised"     # dots nest
 kanera work --scope.boardIds[] abc --scope.boardIds[] def   # repeat or [] for arrays
 kanera call cards.update --json-args '{"cardId":"MKT-42","changes":{"title":"Revised"}}'
+```
+
+An array-typed argument also takes one JSON array, which is the simplest way to pass a list of
+objects, such as a whole checklist plan:
+
+```bash
+kanera call checklists.create --cardId MKT-42 --title Launch \
+  --items '[{"text":"Prepare release","subChecklists":[{"title":"Verification","items":[{"text":"Run smoke tests"}]}]},{"text":"Announce launch"}]'
 ```
 
 ## Agent setup

@@ -17,7 +17,7 @@ import {
   type NewPlanAction,
 } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, isNull, notExists, or, sql } from "drizzle-orm";
-import { db, type Db } from "../db.js";
+import { db, type Tx } from "../db.js";
 import { env, type Env } from "../env.js";
 import { disconnectUserRealtimeSockets } from "../realtime/io.js";
 import { emitCardPriorityInvalidated, emitToBoard, emitToBoardAudience, emitToWorkspaceAdmins } from "../realtime/emit.js";
@@ -25,8 +25,7 @@ import { emitActivityFeedItem } from "./activity.js";
 import { loadAutomation } from "./automations.js";
 import { cleanupUserBoardParticipation, type BoardParticipationCleanup } from "./board-participation-cleanup.js";
 import { hasPaidPlanEntitlement } from "./entitlements.js";
-
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
+import { pendingGuestInviteCondition } from "./pending-guest-invites.js";
 
 type PlanConversionEnv = Pick<
   Env,
@@ -302,23 +301,7 @@ async function reconcileToFreeTier(clientId: string, tx: Tx, config: PlanConvers
     .from(boardInvitations)
     .innerJoin(boards, eq(boards.id, boardInvitations.boardId))
     .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
-    .where(
-      and(
-        eq(workspaces.clientId, clientId),
-        isNull(boardInvitations.acceptedAt),
-        isNull(boardInvitations.revokedAt),
-        sql`not exists (
-          select 1 from ${users}
-          inner join ${clientMembers}
-            on ${clientMembers.userId} = ${users.id}
-           and ${clientMembers.clientId} = ${clientId}
-           and ${clientMembers.suspendedAt} is null
-           and ${clientMembers.removedAt} is null
-          where ${users.email} = ${boardInvitations.email}
-            and ${users.deletedAt} is null
-        )`,
-      ),
-    );
+    .where(pendingGuestInviteCondition(clientId));
   if (pendingInvites.length > 0) {
     const ids = pendingInvites.map((i) => i.id);
     await tx.update(boardInvitations).set({ revokedAt: new Date() }).where(inArray(boardInvitations.id, ids));

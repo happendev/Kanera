@@ -15,6 +15,7 @@ import {
   viewChild,
 } from "@angular/core";
 import { ALLOWED_ATTACHMENT_EXTENSIONS, ALLOWED_ATTACHMENT_MIME } from "@kanera/shared/attachments";
+import { Router } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
 import { SERVER_EVENTS, type NoteAttachmentRow, type ServerToClientEvents, type WireBoardMemberUser, type WireNote, type WireNoteLock } from "@kanera/shared/events";
 import type { BacklinkSummary, NoteBacklinksResponse } from "@kanera/shared/dto";
@@ -39,11 +40,14 @@ import { ColorPickerComponent } from "../../shared/color-picker.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { DescriptionEditorComponent, type EditorSaveEvent } from "../board/description-editor.component";
 import { DescriptionViewerComponent } from "../board/description-viewer.component";
+import { isPlainPrimaryClick } from "../board/card-navigation.util";
 import { ImageLightboxService } from "../board/image-lightbox.service";
 import type { ImageLightboxItem } from "../board/image-lightbox.component";
 import { NotesState } from "./notes.service";
 import { formatDateTime } from "../../shared/date-format";
 import { viewerTimeZone } from "../../shared/day-key.util";
+import { clipboardAttachmentFiles, dragTargetElement, hasDraggedFiles, isEditablePasteTarget, isEditorDropTarget } from "../../shared/attachments/file-transfer";
+import { openAttachmentPreview, toLightboxAttachments } from "../../shared/attachments/attachment-lightbox";
 
 const LOCK_HEARTBEAT_MS = 30_000; // 30 seconds
 const OFFLINE_DRAFT_MESSAGES = new Set([
@@ -153,7 +157,7 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
                 </div>
                 <div class="ne-backlinks-list">
                   @for (link of backlinks(); track link.kind + ':' + link.id) {
-                    <a class="ne-backlink" [href]="backlinkHref(link)">
+                    <a class="ne-backlink" [href]="backlinkHref(link)" (click)="openBacklink($event, link)">
                       <i [class]="'ti ti-' + backlinkIcon(link)"
                         [style.color]="backlinkColor(link) ? 'var(--color-' + backlinkColor(link) + ')' : null"></i>
                       <span class="ne-backlink-title">{{ link.title || 'Untitled' }}</span>
@@ -190,6 +194,7 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
                   <k-description-viewer
                     [value]="recoveredBodyDraft() ? editorInitialValue() : (n.content || '')"
                     [workspaceId]="n.workspaceId"
+                    [linkRevision]="linkRevision()"
                     [mentionMembers]="mentionMembers()"
                     [showCopy]="true"
                     [emptyLabel]="lockedByOther() ? lockedEmptyLabel() : 'Add a description…'"
@@ -316,6 +321,7 @@ export class NoteEditorComponent implements OnDestroy {
   private readonly unsavedDraftSource = Symbol("note-draft");
   private readonly toasts = inject(ToastService);
   private readonly sockets = inject(SocketService);
+  private readonly router = inject(Router);
   readonly imageLightbox = inject(ImageLightboxService);
 
   readonly note = input.required<WireNote | null>();
@@ -333,6 +339,8 @@ export class NoteEditorComponent implements OnDestroy {
   readonly preservedDraft = signal<string | null>(null);
   readonly recoveredBodyDraft = signal(false);
   readonly backlinks = signal<BacklinkSummary[]>([]);
+  // Passed to the body viewer so its link chips re-resolve on note:links:changed.
+  readonly linkRevision = signal(0);
   readonly attachments = signal<NoteAttachmentRow[]>([]);
   readonly uploads = inject(AttachmentUploadQueue);
   // Derived so the existing drag/paste guards and dropzone label keep working unchanged.
@@ -349,19 +357,7 @@ export class NoteEditorComponent implements OnDestroy {
   ].join(",");
   readonly canChangeAttachments = computed(() => this.canEdit() && !this.lockedByOther());
   // Match card detail: the gallery contains every renderable attachment, preserving list order.
-  readonly lightboxAttachments = computed(() => this.attachments()
-    .flatMap((attachment) => {
-      const mediaType = attachmentPreviewType(attachment.mimeType, attachment.fileName);
-      const src = visibleSignedMediaUrl(attachment.url);
-      return src && mediaType ? [{
-        id: attachment.id,
-        src,
-        fileName: attachment.fileName,
-        createdAt: attachment.createdAt,
-        mediaType,
-        mimeType: attachment.mimeType,
-      }] : [];
-    }));
+  readonly lightboxAttachments = computed(() => toLightboxAttachments(this.attachments()));
   readonly lightboxItems = computed<ImageLightboxItem[]>(() => this.lightboxAttachments()
     .map(({ id: _id, ...item }) => item));
 
@@ -472,6 +468,13 @@ export class NoteEditorComponent implements OnDestroy {
         [SERVER_EVENTS.NOTE_ATTACHMENT_DELETED]: ({ note, attachmentId }) => {
           if (note.id !== noteId) return;
           this.attachments.update((rows) => rows.filter((row) => row.id !== attachmentId));
+        },
+        // Something this note links, or that links it, was added, removed or renamed. Backlinks are
+        // access-filtered per viewer, so the event only says "re-read".
+        [SERVER_EVENTS.NOTE_LINKS_CHANGED]: ({ noteId: changedNoteId }) => {
+          if (changedNoteId !== noteId) return;
+          void this.refreshBacklinks(noteId);
+          this.linkRevision.update((revision) => revision + 1);
         },
       };
       onCleanup(registerSocketHandlers(socket, handlers));
@@ -915,12 +918,12 @@ export class NoteEditorComponent implements OnDestroy {
   }
 
   private readonly handleAttachmentDragCapture = (event: DragEvent) => {
-    if (!this.hasDraggedFiles(event)) return;
+    if (!hasDraggedFiles(event.dataTransfer)) return;
     if (
       !this.canChangeAttachments()
       || !this.isDragInsideShell(event)
-      || this.isEditorDropTarget(event.target)
-      || this.isEditablePasteTarget(event.target)
+      || isEditorDropTarget(event.target)
+      || isEditablePasteTarget(event.target)
     ) {
       this.attachmentDragActive.set(false);
     }
@@ -940,7 +943,7 @@ export class NoteEditorComponent implements OnDestroy {
   }
 
   onAttachmentDragLeave(event: DragEvent) {
-    if (!this.hasDraggedFiles(event)) return;
+    if (!hasDraggedFiles(event.dataTransfer)) return;
     const current = this.shell()?.nativeElement ?? event.currentTarget as Node | null;
     const related = event.relatedTarget as Node | null;
     if (!current || !related || !current.contains(related)) {
@@ -956,58 +959,29 @@ export class NoteEditorComponent implements OnDestroy {
   }
 
   async onNotePaste(event: ClipboardEvent) {
-    if (event.defaultPrevented || !this.canChangeAttachments() || this.isEditablePasteTarget(event.target)) return;
+    if (event.defaultPrevented || !this.canChangeAttachments() || isEditablePasteTarget(event.target)) return;
 
-    const files = this.clipboardAttachmentFiles(event.clipboardData);
+    const files = clipboardAttachmentFiles(event.clipboardData);
     if (files.length === 0) return;
 
     event.preventDefault();
     await this.uploadAttachmentFiles(files);
   }
 
-  private clipboardAttachmentFiles(data: DataTransfer | null): File[] {
-    if (!data) return [];
-    const files: File[] = [];
-    for (const item of Array.from(data.items ?? [])) {
-      if (item.kind !== "file") continue;
-      const file = item.getAsFile();
-      if (file) files.push(file);
-    }
-    return files.length > 0 ? files : Array.from(data.files ?? []);
-  }
-
-  private isEditablePasteTarget(target: EventTarget | null): boolean {
-    if (!(target instanceof Element)) return false;
-    return Boolean(target.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']"));
-  }
-
   private shouldHandleAttachmentDrag(event: DragEvent): boolean {
-    if (event.defaultPrevented || !this.hasDraggedFiles(event) || !this.isDragInsideShell(event)) return false;
-    if (this.isEditorDropTarget(event.target) || this.isEditablePasteTarget(event.target)) {
+    if (event.defaultPrevented || !hasDraggedFiles(event.dataTransfer) || !this.isDragInsideShell(event)) return false;
+    if (isEditorDropTarget(event.target) || isEditablePasteTarget(event.target)) {
       this.attachmentDragActive.set(false);
       return false;
     }
     return true;
   }
 
-  private isEditorDropTarget(target: EventTarget | null): boolean {
-    if (!(target instanceof Element)) return false;
-    // The note body editor inserts dropped files into markdown, so the shell-level
-    // note attachment target must yield while the pointer is over that editor.
-    return Boolean(target.closest("k-description-editor"));
-  }
-
   private isDragInsideShell(event: DragEvent): boolean {
     const shell = this.shell()?.nativeElement;
     if (!shell) return false;
-    const target = this.dragTargetElement(event);
+    const target = dragTargetElement(event);
     return Boolean(target && shell.contains(target));
-  }
-
-  private dragTargetElement(event: DragEvent): Element | null {
-    if (event.target instanceof Element) return event.target;
-    if (event.clientX || event.clientY) return document.elementFromPoint(event.clientX, event.clientY);
-    return null;
   }
 
   private async uploadAttachmentFiles(files: File[]) {
@@ -1015,13 +989,6 @@ export class NoteEditorComponent implements OnDestroy {
     // Validation, per-file progress, retry, and error formatting all live in the queue; on success
     // it prepends the new attachment via the onUploaded hook configured in the constructor.
     this.uploads.add(files);
-  }
-
-  private hasDraggedFiles(event: DragEvent): boolean {
-    const data = event.dataTransfer;
-    if (!data) return false;
-    if (Array.from(data.types ?? []).some((type) => type === "Files" || type === "application/x-moz-file")) return true;
-    return Array.from(data.items ?? []).some((item) => item.kind === "file");
   }
 
   async confirmDeleteAttachment(attachmentId: string, fileName: string) {
@@ -1071,18 +1038,7 @@ export class NoteEditorComponent implements OnDestroy {
   }
 
   private openAttachmentPreview(attachmentId: string, mediaType: AttachmentPreviewType, event?: Event): boolean {
-    const attachments = this.lightboxAttachments();
-    const initialIndex = attachments.findIndex((attachment) => attachment.id === attachmentId);
-    const selected = attachments[initialIndex];
-    if (!selected || selected.mediaType !== mediaType) return false;
-
-    const { id: _id, ...item } = selected;
-    this.imageLightbox.open({
-      ...item,
-      images: this.lightboxItems(),
-      initialIndex,
-    }, event);
-    return true;
+    return openAttachmentPreview(this.imageLightbox, this.lightboxAttachments(), attachmentId, mediaType, event);
   }
 
   openInlineAttachment(attachment: {
@@ -1155,6 +1111,18 @@ export class NoteEditorComponent implements OnDestroy {
     return link.boardId
       ? `/b/${link.boardId}?view=notes&noteId=${link.id}`
       : `/w/${link.workspaceId}/notes?noteId=${link.id}`;
+  }
+
+  /** Plain clicks route in-app (guards run, notes state survives); modified clicks open the href. */
+  openBacklink(event: MouseEvent, link: BacklinkSummary) {
+    if (!isPlainPrimaryClick(event)) return;
+    event.preventDefault();
+    if (link.kind === "card") {
+      // Same internal route the key URL resolves to, keeping the canonical key in the address bar.
+      void this.router.navigate(["/b", link.boardId, "c", link.id], { browserUrl: cardPath(link.organisationKey, link.key) });
+      return;
+    }
+    void this.router.navigateByUrl(this.backlinkHref(link));
   }
 
   backlinkIcon(link: BacklinkSummary): string {

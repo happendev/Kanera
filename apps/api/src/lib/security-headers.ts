@@ -3,8 +3,8 @@ import type helmet from "@fastify/helmet";
 
 type HelmetOptions = NonNullable<Parameters<typeof helmet>[1]>;
 
-export const API_CONTENT_SECURITY_POLICY = "default-src 'none'; base-uri 'none'; frame-ancestors 'self'";
-export const PERMISSIONS_POLICY = [
+const API_CONTENT_SECURITY_POLICY = "default-src 'none'; base-uri 'none'; frame-ancestors 'self'";
+const PERMISSIONS_POLICY = [
   "accelerometer=()",
   "ambient-light-sensor=()",
   "autoplay=()",

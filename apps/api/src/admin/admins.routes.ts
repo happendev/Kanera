@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { dto } from "@kanera/shared";
 import { adminInvites, adminRefreshTokens, adminUsers } from "@kanera/shared/schema";
 import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
@@ -6,15 +6,13 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { hashPassword } from "../auth/password.js";
 import { db } from "../db.js";
 import { env } from "../env.js";
-import { badRequest, conflict, forbidden, notFound, unauthorized } from "../lib/errors.js";
+import { badRequest, conflict, notFound, unauthorized } from "../lib/errors.js";
 import { writeAdminAudit } from "./audit.js";
 import { resetMfa } from "../auth/mfa.js";
+import { requireSuperadmin } from "./helpers.js";
+import { hashOpaqueToken } from "../lib/tokens.js";
 
 const INVITE_TTL_MS = 24 * 60 * 60 * 1000;
-const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
-const requireSuperadmin = (req: FastifyRequest) => {
-  if (req.adminAuth.role !== "superadmin") throw forbidden("superadmin required");
-};
 
 export interface AdminInvitePublicRouteDeps {
   // Per-IP throttle for the unauthenticated invite endpoints, supplied by the server so they share the
@@ -26,14 +24,14 @@ export async function adminInvitePublicRoutes(app: FastifyInstance, deps: AdminI
   app.get("/invites/validate", { preHandler: deps.inviteLimit }, async (req) => {
     const { token } = dto.adminInviteTokenQuery.parse(req.query);
     const [invite] = await db.select({ email: adminInvites.email, displayName: adminInvites.displayName })
-      .from(adminInvites).where(and(eq(adminInvites.tokenHash, tokenHash(token)), isNull(adminInvites.acceptedAt), isNull(adminInvites.revokedAt), gt(adminInvites.expiresAt, new Date()))).limit(1);
+      .from(adminInvites).where(and(eq(adminInvites.tokenHash, hashOpaqueToken(token)), isNull(adminInvites.acceptedAt), isNull(adminInvites.revokedAt), gt(adminInvites.expiresAt, new Date()))).limit(1);
     if (!invite) throw notFound("invalid or expired invitation");
     return invite;
   });
 
   app.post("/invites/accept", { preHandler: deps.inviteLimit }, async (req) => {
     const body = dto.adminAcceptInviteBody.parse(req.body);
-    const hashedToken = tokenHash(body.token);
+    const hashedToken = hashOpaqueToken(body.token);
 
     // Validate the invitation BEFORE running the deliberately-expensive argon2 hash, so an invalid or
     // guessed token cannot be used to burn CPU on the admin process (unauthenticated DoS). The lock-held
@@ -92,7 +90,7 @@ export async function adminManagementRoutes(app: FastifyInstance) {
       const [existing] = await tx.select({ id: adminUsers.id }).from(adminUsers).where(eq(adminUsers.email, body.email)).limit(1);
       if (existing) throw conflict("an administrator with this email already exists");
       await tx.update(adminInvites).set({ revokedAt: new Date(), updatedAt: new Date() }).where(and(eq(adminInvites.email, body.email), isNull(adminInvites.acceptedAt), isNull(adminInvites.revokedAt)));
-      const [row] = await tx.insert(adminInvites).values({ ...body, tokenHash: tokenHash(raw), invitedById: req.adminAuth.sub, expiresAt: new Date(Date.now() + INVITE_TTL_MS) }).returning();
+      const [row] = await tx.insert(adminInvites).values({ ...body, tokenHash: hashOpaqueToken(raw), invitedById: req.adminAuth.sub, expiresAt: new Date(Date.now() + INVITE_TTL_MS) }).returning();
       await writeAdminAudit(tx, { adminUserId: req.adminAuth.sub, action: "admin.invite.create", targetType: "admin_user", details: { inviteId: row!.id, email: body.email, role: body.role } });
       return row!;
     });
@@ -103,7 +101,7 @@ export async function adminManagementRoutes(app: FastifyInstance) {
   app.post("/admins/invites/:id/resend", async (req) => {
     const { id } = req.params as { id: string };
     const raw = randomBytes(32).toString("base64url");
-    const [invite] = await db.update(adminInvites).set({ tokenHash: tokenHash(raw), expiresAt: new Date(Date.now() + INVITE_TTL_MS), updatedAt: new Date() })
+    const [invite] = await db.update(adminInvites).set({ tokenHash: hashOpaqueToken(raw), expiresAt: new Date(Date.now() + INVITE_TTL_MS), updatedAt: new Date() })
       .where(and(eq(adminInvites.id, id), isNull(adminInvites.acceptedAt), isNull(adminInvites.revokedAt))).returning();
     if (!invite) throw notFound("pending invitation not found");
     await writeAdminAudit(db, { adminUserId: req.adminAuth.sub, action: "admin.invite.resend", targetType: "admin_user", details: { inviteId: id, email: invite.email } });

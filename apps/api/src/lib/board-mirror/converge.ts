@@ -1,4 +1,4 @@
-import { SERVER_EVENTS, type CardAttachmentRow, type WireCard } from "@kanera/shared/events";
+import { SERVER_EVENTS, type CardAttachmentRow } from "@kanera/shared/events";
 import { cardPath } from "@kanera/shared/card-links";
 import {
   ACTIVITY_ACTION,
@@ -33,7 +33,6 @@ import { shapeAttachmentMedia } from "../attachment-media.js";
 import { emitLaneRebalanced, positionForLaneInsert, rebalanceBoardLane } from "../board-lane.js";
 import { assertCanUploadAttachment } from "../entitlements.js";
 import { deleteExternalLinks, findExternalLink, findExternalLinks, listExternalLinksByProvider, upsertExternalLink } from "../external-links.js";
-import { signEmbeddedMediaUrls } from "../media-keys.js";
 import { withSignedMedia } from "../media-keys.js";
 import { replaceCardMentions } from "../mentions.js";
 import { clearNotificationsForCards, emitDeletedNotifications, type DeletedNotificationRef } from "../notifications.js";
@@ -49,6 +48,8 @@ import {
 } from "../../modules/cards/duplicate-card.js";
 import { mirrorActor } from "./actor.js";
 import { emitMirrorMetadataToBoards } from "./events.js";
+import { toWireCard } from "../wire-card.js";
+import { emitInternalLinksChanged, linkNeighbours } from "../internal-links.js";
 
 // Facets always run in this order, regardless of the array-union order on a dirty row. In
 // particular comments must exist before attachment associations, and every entity mapping must
@@ -71,15 +72,6 @@ function groupBy<T>(values: T[], keyFor: (value: T) => string): Map<string, T[]>
   const groups = new Map<string, T[]>();
   for (const value of values) groups.set(keyFor(value), [...(groups.get(keyFor(value)) ?? []), value]);
   return groups;
-}
-
-function toWireCard(card: typeof cards.$inferSelect, clientId: string): WireCard {
-  const { clientToken: _clientToken, ...publicCard } = card;
-  return {
-    ...publicCard,
-    description: signEmbeddedMediaUrls(card.description, clientId),
-    url: new URL(cardPath(card.organisationKey, card.key), env.WEB_ORIGIN).toString(),
-  };
 }
 
 async function targetCardFor(mirror: BoardMirror, sourceCardId: string) {
@@ -115,7 +107,7 @@ async function targetListIsMapped(mirrorId: string, targetListId: string) {
   return Boolean(mapping);
 }
 
-export async function linkSourceCard(mirror: BoardMirror, sourceCardId: string): Promise<boolean> {
+async function linkSourceCard(mirror: BoardMirror, sourceCardId: string): Promise<boolean> {
   const existingLink = await findExternalLink({
     workspaceId: mirror.targetWorkspaceId,
     provider: providerFor(mirror),
@@ -461,6 +453,10 @@ async function convergeCore(mirror: BoardMirror, sourceCardId: string, source: t
   // the native archive route does when the mirror flips its lifecycle state.
   emitDeletedNotifications(result.deletedNotifications);
   if (cardChanged) await emitToBoard(mirror.targetBoardId, SERVER_EVENTS.CARD_UPDATED, { boardId: mirror.targetBoardId, card: toWireCard(result.updated, actor.cid) });
+  // A synced rename is a rename of the destination card: cards and notes linked to it show its title.
+  if (cardChanged && source.title !== target.title) {
+    await emitInternalLinksChanged(await linkNeighbours(mirror.targetWorkspaceId, "card", target.id));
+  }
   if (result.lifecycleActivity) await emitActivityFeedItem(mirror.targetBoardId, target.id, result.lifecycleActivity, { notify: false });
   if (result.archiveComment) {
     const wireComment = { ...result.archiveComment, authorName: "Kanera", authorAvatarUrl: null, reactions: [] };

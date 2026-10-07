@@ -24,10 +24,9 @@ import { parseCompletedDateParam } from "../../lib/completed-card-visibility.js"
 import { assertWorkDoneWindow, loadWorkDone, loadWorkDoneSummary, type LoadWorkDoneOptions } from "../../lib/work-done.js";
 import { loadWorkspaceCustomFields } from "../../lib/custom-fields.js";
 import { deleteAttachmentFiles } from "../../lib/attachment-cleanup.js";
-import { assertGuestBoardLimit } from "../../lib/board-guest-limits.js";
 import { seedBoardMembersFromWorkspace } from "../../lib/board-membership.js";
 import { enrichNotifications } from "../../lib/notifications.js";
-import { prunePaidGuestSeatIfBelowLimit } from "../../lib/paid-guest-seats.js";
+import { ensureGuestBoardCapacity, prunePaidGuestSeatIfBelowLimit } from "../../lib/paid-guest-seats.js";
 import { ANALYTICS_EVENT_VERSION, analyticsCountBand, capturePremiumFeatureUsed, productAnalytics } from "../../lib/product-analytics.js";
 import { reactivatePlanArchivedBoardsIfRoom } from "../../lib/plan-conversion.js";
 import { assertBoardLimit, assertGuestsAllowed, hasBoardSyncEntitlement, lockTenant } from "../../lib/tier-limits.js";
@@ -36,12 +35,13 @@ import { moveStandaloneBoard } from "../../lib/move-standalone-board.js";
 import { moveOrderedEntity } from "../../lib/move-ordered-entity.js";
 import { deleteExternalLinks } from "../../lib/external-links.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
-import { between, neighbourPositions as resolveNeighbourPositions } from "../../lib/position.js";
+import { between, neighbourPositions as resolveNeighbourPositions, workspaceNeighbourPositions } from "../../lib/position.js";
 import { rebalanceBoardGroups, rebalanceBoards } from "../../lib/rebalance.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { deleteWorkspaceCascade } from "../../lib/workspace-delete.js";
 import { emitBoardRebalancedToVisibleUsers, emitCardPriorityInvalidated, emitToBoard, emitToBoardAudience, emitToUser, emitToUserDurable, emitToWorkspace } from "../../realtime/emit.js";
 import { disconnectUserRealtimeSockets } from "../../realtime/io.js";
+import { escapedSearchPattern } from "../../lib/search-pattern.js";
 
 type BoardMemberUser = {
   userId: string;
@@ -56,10 +56,6 @@ type BoardMemberUser = {
   assignedItemsOnly: boolean;
   isOrganisationMember: boolean;
 };
-
-function escapedSearchPattern(query: string): string {
-  return `%${query.toLowerCase().replace(/[\\%_]/g, "\\$&")}%`;
-}
 
 function completedCardSearchPredicate(query: string): SQL {
   const keyMatch = /^([A-Za-z][A-Za-z0-9]{1,9})-([1-9][0-9]*)$/.exec(query.trim());
@@ -101,11 +97,8 @@ async function boardPayload(
         kind: workspaces.kind,
         completedCardsActiveDays: workspaces.completedCardsActiveDays,
         inactiveCardsDays: workspaces.inactiveCardsDays,
-        boardHealthEnabled: workspaces.boardHealthEnabled,
-        boardHealthOverdueEnabled: workspaces.boardHealthOverdueEnabled,
-        boardHealthUnassignedEnabled: workspaces.boardHealthUnassignedEnabled,
-        boardHealthInactiveEnabled: workspaces.boardHealthInactiveEnabled,
         boardLinkingEnabled: workspaces.boardLinkingEnabled,
+        notesEnabled: workspaces.notesEnabled,
         plan: clients.plan,
         billingStatus: clients.billingStatus,
       },
@@ -215,23 +208,12 @@ async function boardPayload(
     ? hydratedCardSummaries
     : hydratedCardSummaries.slice(0, cardQuery.limit);
 
-  return { board, workspaceClientId: workspace.clientId, workspaceKind: workspace.kind, workspaceInactiveCardsDays: workspace.inactiveCardsDays, workspaceBoardHealthEnabled: workspace.boardHealthEnabled, workspaceBoardHealthOverdueEnabled: workspace.boardHealthOverdueEnabled, workspaceBoardHealthUnassignedEnabled: workspace.boardHealthUnassignedEnabled, workspaceBoardHealthInactiveEnabled: workspace.boardHealthInactiveEnabled, workspaceCardKeyPrefixes: workspaceCardKeyPrefixRows.map((row) => row.prefix), boardLinkingEnabled: workspace.boardLinkingEnabled, boardSyncAllowed: hasBoardSyncEntitlement(workspace.plan, workspace.billingStatus), hasMirrors: participatingMirrors.length > 0, lists: boardLists, ...(cardQuery.includeCards === false ? {} : { cards: cardSummaries, ...(cardQuery.limit === undefined ? {} : { cardPage: { offset: cardQuery.offset ?? 0, limit: cardQuery.limit, hasMore: hasMoreCards } }) }), separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, checklistTemplates, members, viewerRole, viewerSource, viewerCanAccessWorkspace, viewerIsWorkspaceAdmin, viewerAssignedItemsOnly: Boolean(assignedUserId), customFieldValuesComplete };
+  return { board, workspaceClientId: workspace.clientId, workspaceKind: workspace.kind, workspaceInactiveCardsDays: workspace.inactiveCardsDays, workspaceCardKeyPrefixes: workspaceCardKeyPrefixRows.map((row) => row.prefix), boardLinkingEnabled: workspace.boardLinkingEnabled, notesEnabled: workspace.notesEnabled, boardSyncAllowed: hasBoardSyncEntitlement(workspace.plan, workspace.billingStatus), hasMirrors: participatingMirrors.length > 0, lists: boardLists, ...(cardQuery.includeCards === false ? {} : { cards: cardSummaries, ...(cardQuery.limit === undefined ? {} : { cardPage: { offset: cardQuery.offset ?? 0, limit: cardQuery.limit, hasMore: hasMoreCards } }) }), separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, checklistTemplates, members, viewerRole, viewerSource, viewerCanAccessWorkspace, viewerIsWorkspaceAdmin, viewerAssignedItemsOnly: Boolean(assignedUserId), customFieldValuesComplete };
 }
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
 // as targeted indexed probes so large workspaces do not pay for a full board scan.
-function neighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
-  return resolveNeighbourPositions({
-    table: boards,
-    id: boards.id,
-    position: boards.position,
-    scope: and(eq(boards.workspaceId, workspaceId), isNull(boards.archivedAt)),
-    afterId,
-    beforeId,
-    afterLabel: "afterBoardId",
-    beforeLabel: "beforeBoardId",
-  });
-}
+const neighbourPositions = workspaceNeighbourPositions(boards, "Board");
 
 // Board groups share the same sparse-position contract as boards; use one-neighbor
 // probes rather than materializing every group in the workspace.
@@ -673,7 +655,7 @@ export async function boardRoutes(app: FastifyInstance) {
       action: "created",
       payload: { title: group!.title },
     });
-    emitToWorkspace(workspaceId, "boardGroup:created", { workspaceId, group: group! });
+    await emitToWorkspace(workspaceId, "boardGroup:created", { workspaceId, group: group! });
     return reply.status(201).send(group);
   });
 
@@ -697,7 +679,7 @@ export async function boardRoutes(app: FastifyInstance) {
       action: "updated",
       payload: { title: body.title },
     });
-    emitToWorkspace(current.workspaceId, "boardGroup:updated", { workspaceId: current.workspaceId, group: group! });
+    await emitToWorkspace(current.workspaceId, "boardGroup:updated", { workspaceId: current.workspaceId, group: group! });
     return group!;
   });
 
@@ -727,7 +709,7 @@ export async function boardRoutes(app: FastifyInstance) {
     if (rebalancedPositions) {
       await emitToWorkspace(current.workspaceId, "boardGroup:rebalanced", { workspaceId: current.workspaceId, positions: rebalancedPositions });
     }
-    emitToWorkspace(current.workspaceId, "boardGroup:moved", {
+    await emitToWorkspace(current.workspaceId, "boardGroup:moved", {
       workspaceId: current.workspaceId,
       groupId: id,
       position,
@@ -751,7 +733,7 @@ export async function boardRoutes(app: FastifyInstance) {
       action: "deleted",
       payload: { title: group.title },
     });
-    emitToWorkspace(group.workspaceId, "boardGroup:deleted", { workspaceId: group.workspaceId, groupId: id });
+    await emitToWorkspace(group.workspaceId, "boardGroup:deleted", { workspaceId: group.workspaceId, groupId: id });
     return reply.status(204).send();
   });
 
@@ -1024,9 +1006,9 @@ export async function boardRoutes(app: FastifyInstance) {
     // Seat-pool gate + membership insert in one transaction so the capacity check cannot race a
     // concurrent assignment into the last seat. For cross-org guests, crossing the free guest-board
     // cap consumes a pooled seat; a full pool throws 402 SEAT_LIMIT_REACHED. Same-org members skip
-    // the seat pool (assertGuestBoardLimit is a no-op when targetClientId === hostClientId).
+    // the seat pool (ensureGuestBoardCapacity is a no-op when targetClientId === hostClientId).
     const { member, hiddenWorkspaceMember } = await db.transaction(async (tx) => {
-      await assertGuestBoardLimit({
+      await ensureGuestBoardCapacity({
         hostClientId: ctx.clientId,
         boardId: id,
         userId: body.userId,
@@ -1084,7 +1066,7 @@ export async function boardRoutes(app: FastifyInstance) {
         isOrganisationMember: user!.orgRole !== null,
       },
     };
-    emitToBoard(id, "board:member:added", payload);
+    await emitToBoard(id, "board:member:added", payload);
     emitToUser(user.id, "board:member:added", payload);
     if (!user.membershipClientId) void capturePremiumFeatureUsed({
       organizationId: ctx.clientId,
@@ -1200,11 +1182,13 @@ export async function boardRoutes(app: FastifyInstance) {
     // A live role change is enough: every board mutation re-runs assertBoardAccess, so the new
     // role takes effect on the member's next action. Unlike a workspace-role change (which gates
     // room membership), there is no need to force-disconnect the user's sockets.
-    emitToBoard(id, "board:member:updated", payload);
+    const published = emitToBoard(id, "board:member:updated", payload);
     emitToUser(userId, "board:member:updated", payload);
     // Room membership is part of the confidentiality boundary: switching this flag must eject
     // any socket that may still be sitting in the unfiltered board room (or needs to rejoin it).
     if (member!.assignedItemsOnly !== existing.assignedItemsOnly) disconnectUserRealtimeSockets(userId);
+    // Eject restricted sockets immediately; only then wait for the durable role-change event.
+    await published;
     return member!;
   });
 

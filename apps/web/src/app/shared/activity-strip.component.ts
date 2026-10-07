@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from "@angular/core";
 import { TooltipDirective } from "./tooltip.directive";
-import { addDays, localDateKey, parseDateKey } from "./day-key.util";
+import { addDays, localDateKey } from "./day-key.util";
 import { formatDate } from "./date-format";
 
 /** One metric to plot. Counts are keyed by local YYYY-MM-DD day; missing days render as zero. */

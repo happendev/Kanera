@@ -14,6 +14,7 @@ import { ApiClient } from "../../core/api/api.client";
 import { ANCHORED_PANEL_STYLES, ANCHORED_SHEET_STYLES, type AnchoredPanelPlacement } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { PickerListComponent, type PickerGroup } from "../../shared/picker-list.component";
+import { byPosition } from "../../shared/position-sort";
 
 export type BoardPickerPick = { boardId: string; listId?: string };
 type SourceListOption = Pick<WireList, "id" | "name">;
@@ -146,7 +147,7 @@ export class BoardPickerPopover implements AfterViewInit {
   readonly listPickerGroups = computed<PickerGroup[]>(() => [{
     id: "lists",
     options: [...this.lists()]
-      .sort((a, b) => Number(a.position) - Number(b.position))
+      .sort(byPosition)
       .map((list) => ({
         id: list.id,
         label: list.name,

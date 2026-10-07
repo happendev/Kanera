@@ -3,13 +3,11 @@ import { SERVER_EVENTS } from "@kanera/shared/events";
 import { activityEvents, type ActivityAction, type ActivityCoalesceKey, type ActivityEntityType, type ActivityEvent, type DynamicActivityCoalesceKey } from "@kanera/shared/schema";
 import { requestContext } from "@fastify/request-context";
 import { and, desc, eq, gte, inArray, isNull } from "drizzle-orm";
-import type { Db } from "../db.js";
+import type { Tx } from "../db.js";
 import { queueNotificationFanout } from "./notifications.js";
 import { emitToBoard } from "../realtime/emit.js";
 import { withSignedMedia } from "./media-keys.js";
 import { getUserDisplay, type UserDisplayMetadata } from "./user-display-cache.js";
-
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 interface ActivityActor {
   displayName: string;
@@ -68,7 +66,7 @@ export type CoalescedActivityResult =
 
 const MERGED_OBJECT_PAYLOAD_KEYS = ["assigneeNamesById", "labelNamesById"] as const;
 
-export function currentAttribution(): ActivityAttribution {
+function currentAttribution(): ActivityAttribution {
   const authKind = requestContext.get("authKind");
   if (authKind === "apiKey") {
     return {

@@ -1,11 +1,11 @@
 import type {
   AfterViewInit,
+  ElementRef,
   OnInit,
 } from "@angular/core";
 import {
   ChangeDetectionStrategy,
   Component,
-  ElementRef,
   ViewChild,
   computed,
   inject,
@@ -22,6 +22,7 @@ import { DatePickerPopover } from "./date-picker.popover";
 import { dueDateInputValue, dueDateSlotFor, formatDueDate, type DueDateSlotSelection } from "./due-date.util";
 import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
+import { byPosition } from "../../shared/position-sort";
 
 @Component({
   selector: "k-card-quick-edit",
@@ -273,7 +274,7 @@ export class CardQuickEditPopover implements OnInit, AfterViewInit {
   readonly currentUserId = computed(() => this.auth.user()?.id ?? null);
   readonly labelIds = computed(() => this.state?.labelIdsForCard(this.cardId()) ?? []);
   readonly assigneeIds = computed(() => this.state?.assigneeIdsForCard(this.cardId()) ?? []);
-  readonly sortedLabels = computed(() => [...(this.state?.cardLabels() ?? [])].sort((a, b) => Number(a.position) - Number(b.position)));
+  readonly sortedLabels = computed(() => [...(this.state?.cardLabels() ?? [])].sort(byPosition));
   readonly sortedMembers = computed(() => {
     const meId = this.currentUserId();
     return (this.state?.assignableMembers() ?? []).filter((member) => member.role !== "observer").sort((a, b) => {

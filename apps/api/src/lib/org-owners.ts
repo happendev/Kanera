@@ -1,8 +1,6 @@
 import { clientMembers, users } from "@kanera/shared/schema";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { db, type Db } from "../db.js";
-
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
+import { db, type Tx } from "../db.js";
 
 // Counts active owners of an org. Used to block demoting/removing the last owner, which would leave a
 // tenant with no one able to administer it. Excludes org-removed rows; a caller inside a soft-delete flow

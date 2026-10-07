@@ -126,3 +126,7 @@ connectTarget.connect = (...args: unknown[]) => {
 
 export const db = drizzle(pool, { schema });
 export type Db = typeof db;
+/** A database handle or the transaction handle Drizzle passes to `db.transaction` callbacks. */
+export type Tx = Db | TxOnly;
+/** Only the transaction handle: for helpers that must run inside an open transaction. */
+export type TxOnly = Parameters<Parameters<Db["transaction"]>[0]>[0];

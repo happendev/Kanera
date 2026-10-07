@@ -23,7 +23,7 @@ export KANERA_E2E_ARTIFACT_DIR="$PWD/e2e/artifacts/$run_id"
 mkdir -p "$KANERA_E2E_ARTIFACT_DIR"
 
 # Each run keeps traces and screenshots for every test (~200 MB). Keep the newest runs locally;
-# CI uploads its single run as a workflow artifact instead.
+# Each CI shard uploads its run as a separately named workflow artifact instead.
 keep_runs="${KANERA_E2E_KEEP_RUNS:-10}"
 find e2e/artifacts -mindepth 1 -maxdepth 1 -type d -name '20*' | sort -r | tail -n +"$((keep_runs + 1))" | xargs -r rm -rf
 
@@ -83,4 +83,6 @@ pnpm --filter @kanera/api db:seed >"$KANERA_E2E_ARTIFACT_DIR/seed.log" 2>&1
 # writes the gitignored build-info.generated.ts and generated assets that a clean checkout (CI)
 # lacks. As a separate step, a failure here is reported instead of surfacing as a web-server timeout.
 pnpm --filter @kanera/web run prestart >"$KANERA_E2E_ARTIFACT_DIR/web-prepare.log" 2>&1
+# CLI specs run the bundled executable that npm ships, not the TypeScript sources.
+pnpm --filter @kanera/cli run build >"$KANERA_E2E_ARTIFACT_DIR/cli-build.log" 2>&1
 pnpm exec playwright test --config e2e/playwright.config.ts "$@"

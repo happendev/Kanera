@@ -1,13 +1,17 @@
-import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { CallToolResult, ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
+import { McpServer, ResourceTemplate, type CallToolResult, type ToolAnnotations } from "@modelcontextprotocol/server";
+import { registerKaneraEvents } from "./events.js";
 import { z } from "zod";
 import mcpPackage from "../package.json" with { type: "json" };
 import { docsSearchClient } from "./docs-search.js";
 import { env } from "./env.js";
-import { KaneraApiError, KaneraClient } from "./kanera-client.js";
-import { mcpToolDuration } from "./metrics.js";
+import { credentialDigest, KaneraApiError, KaneraClient, type UpstreamTiming } from "./kanera-client.js";
+import { mcpToolDuration, observeUpstreamRequest } from "./metrics.js";
 
 const uuid = z.uuid();
+// Shared vocabularies are loaded with dynamic imports for the same reason as the others below: the
+// MCP typecheck stays scoped to this package while the CLI build still bundles the runtime sources.
+const { AGENT_WORK_HISTORY_PRESETS, SEARCH_RESULT_TYPES, WORK_COMPLETION_FILTERS, WORK_CUSTOM_FIELD_CONDITION_OPS, WORK_SORT_VALUES, colorTokenSchema } = await import("@kanera/shared/dto");
+const { CUSTOM_FIELD_TYPES, NOTE_SCOPES } = await import("@kanera/shared/schema");
 const pageLimit = z.number().int().min(1).max(100).default(25);
 const fileBase64 = z.string()
   .min(1)
@@ -22,11 +26,7 @@ const workScope = z.object({
 const workCustomFieldCondition = z.object({
   workspaceId: uuid.describe("Workspace UUID that owns the custom field."),
   fieldId: uuid.describe("Custom-field UUID to test."),
-  op: z.enum([
-    "contains", "equals", "eq", "neq", "gt", "gte", "lt", "lte",
-    "on", "before", "after", "between", "checked", "unchecked",
-    "isAnyOf", "isNoneOf", "isEmpty", "isNotEmpty",
-  ]).describe("Comparison operator appropriate for the field type."),
+  op: z.enum(WORK_CUSTOM_FIELD_CONDITION_OPS).describe("Comparison operator appropriate for the field type."),
   value: z.string().max(500).optional().describe("Primary scalar comparison value."),
   value2: z.string().max(500).optional().describe("Upper bound used only by the between operator."),
   ids: z.array(uuid).max(100).optional().describe("Option or user UUIDs used by set-based operators."),
@@ -37,7 +37,7 @@ const workFilters = z.object({
   listIds: z.array(uuid).max(200).optional().describe("Workflow-list UUIDs to include."),
   labelIds: z.array(uuid).max(200).optional().describe("Label UUIDs; cards matching any are included."),
   customFieldConditions: z.array(workCustomFieldCondition).max(50).optional().describe("Typed custom-field predicates combined with the other filters."),
-  completion: z.enum(["activeAndRecentlyCompleted", "active", "completed", "all"]).optional().describe("Completion-state subset to return."),
+  completion: z.enum(WORK_COMPLETION_FILTERS).optional().describe("Completion-state subset to return."),
   unassignedOnly: z.boolean().optional().describe("Return only cards with no assignees."),
   inactiveOnly: z.boolean().optional().describe("Return active cards whose canonical activity timestamp is at least 14 days old."),
   dueFrom: z.iso.date().nullable().optional().describe("Inclusive due-date lower bound in YYYY-MM-DD format."),
@@ -162,14 +162,6 @@ const checklistItemFields = z.object({
   dueDateLocalDate: cardDueDate.optional(),
   dueDateSlot: cardDueDateSlot.optional(),
 });
-const checklistItemChanges = z.union([
-  checklistItemFields.extend({ text: checklistText }),
-  checklistItemFields.extend({ description: checklistDescription }),
-  checklistItemFields.extend({ completed: checklistCompleted }),
-  checklistItemFields.extend({ assigneeId: checklistAssigneeId }),
-  checklistItemFields.extend({ dueDateLocalDate: cardDueDate }),
-  checklistItemFields.extend({ dueDateSlot: cardDueDateSlot }),
-]);
 const bulkChecklistItemFields = z.object({
   assigneeId: checklistAssigneeId.optional(),
   dueDateLocalDate: cardDueDate.optional(),
@@ -200,6 +192,195 @@ const priorityAnchor = z.object({
   side: z.enum(["after", "before"]).describe(`Place the priority entry after or before the anchor id. ${NULL_ANCHOR_EDGES}`),
   id: uuid.nullable().describe("Priority-entry id from priorities.list; null selects an edge of the queue."),
 });
+// Checklist trees for agents. The product allows exactly one nesting level: top-level items may own
+// sub-checklists, and sub-checklist items are leaves with text and completion only. Encoding that
+// in the item schemas (strict leaf objects with no subChecklists field) lets a model see the rule
+// before submitting instead of discovering it from a rejection.
+const CHECKLIST_DEPTH_RULES = "One nesting level: only top-level items own sub-checklists; sub-checklist items take only text and completed.";
+const CHECKLIST_BATCH_RULES = "Validated in full before writing; errors name the field, e.g. items[2].subChecklists[0].items[1].text. Reuse the idempotencyKey when retrying.";
+const CHECKLIST_TARGETING_RULES = "Target the checklist by checklistId (preferred) or exact checklistTitle; an ambiguous title is rejected, never guessed.";
+const CHECKLIST_ITEM_TARGETING_RULES = "Target items by itemId (preferred) or exact itemText, optionally scoped by checklistId; ambiguous text is rejected with candidate ids, never guessed.";
+
+const checklistTitleInput = z.string().trim().min(1).max(500).describe("Checklist title, up to 500 characters.");
+const subChecklistItemInput = z.strictObject({
+  text: checklistText,
+  completed: checklistCompleted.optional(),
+}).describe("Leaf item: text and completed only.");
+const subChecklistInput = z.strictObject({
+  title: checklistTitleInput,
+  items: z.array(subChecklistItemInput).max(200).optional().describe("Leaf items in order."),
+}).describe("Sub-checklist owned by the new item.");
+const newChecklistItemShape = {
+  text: checklistText,
+  description: z.string().max(50000).optional().describe("Markdown description."),
+  completed: checklistCompleted.optional(),
+  assigneeId: uuid.optional().describe("Assignee user UUID; a non-observer board member."),
+  dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).optional().describe("Due date, YYYY-MM-DD."),
+  dueDateSlot: dueDateSlot.optional().describe("Due-time slot; needs dueDateLocalDate."),
+  subChecklists: z.array(subChecklistInput).max(20).optional().describe("Sub-checklists to create under this item, in order."),
+};
+const newChecklistItemInput = z.strictObject(newChecklistItemShape).describe("New item; only text is required.");
+const checklistTargetShape = {
+  checklistId: uuid.optional().describe("Target checklist UUID (preferred), or use checklistTitle."),
+  checklistTitle: z.string().trim().min(1).max(500).optional().describe("Exact target checklist title, case-insensitive."),
+};
+const itemTargetShape = {
+  itemId: uuid.optional().describe("Checklist-item UUID (preferred), or use itemText."),
+  itemText: z.string().trim().min(1).max(2000).optional().describe("Exact item text, case-insensitive."),
+  checklistId: uuid.optional().describe("Optional checklist that must contain the item; scopes itemText."),
+};
+const optionalItemAnchor = positionAnchor.optional().describe("Insertion point among the checklist's items; omit to append.");
+
+function itemAnchorBody(anchor: z.infer<typeof positionAnchor> | undefined) {
+  if (!anchor) return {};
+  return anchor.side === "after" ? { afterItemId: anchor.id } : { beforeItemId: anchor.id };
+}
+
+type ApiItem = {
+  id: string;
+  checklistId: string;
+  text: string;
+  description: string | null;
+  assigneeId: string | null;
+  dueDateLocalDate: string | null;
+  dueDateSlot: string | null;
+  completedAt: string | null;
+};
+type ApiChecklist = { id: string; title: string; parentItemId: string | null; items: ApiItem[] };
+
+type ChecklistTreeLeaf = { id: string; text: string; completed: boolean; completedAt: string | null };
+type ChecklistTreeItem = ChecklistTreeLeaf & {
+  description: string | null;
+  assigneeId: string | null;
+  dueDateLocalDate: string | null;
+  dueDateSlot: string | null;
+  subChecklists: Array<{ id: string; title: string; items: ChecklistTreeLeaf[] }>;
+};
+
+function treeLeaf(item: ApiItem): ChecklistTreeLeaf {
+  return { id: item.id, text: item.text, completed: item.completedAt !== null, completedAt: item.completedAt };
+}
+
+function treeItem(item: ApiItem, subChecklists: readonly ApiChecklist[]): ChecklistTreeItem {
+  return {
+    ...treeLeaf(item),
+    description: item.description,
+    assigneeId: item.assigneeId,
+    dueDateLocalDate: item.dueDateLocalDate,
+    dueDateSlot: item.dueDateSlot,
+    subChecklists: subChecklists.map((sub) => ({ id: sub.id, title: sub.title, items: sub.items.map(treeLeaf) })),
+  };
+}
+
+/**
+ * Nests the API's flat checklist array (sub-checklists name their owning item) into the shape a
+ * model reads naturally, keeping every id needed for follow-up edits and dropping storage noise
+ * such as fractional positions and timestamps. A sub-checklist whose parent is not in the input
+ * (a focused read of one sub-checklist) is returned as a root that keeps its parentItemId.
+ */
+function checklistForest(checklists: readonly ApiChecklist[]) {
+  const ids = new Set(checklists.map((checklist) => checklist.id));
+  const itemIds = new Set(checklists.flatMap((checklist) => checklist.items.map((item) => item.id)));
+  const subsByItem = new Map<string, ApiChecklist[]>();
+  for (const checklist of checklists) {
+    if (checklist.parentItemId && itemIds.has(checklist.parentItemId)) {
+      subsByItem.set(checklist.parentItemId, [...(subsByItem.get(checklist.parentItemId) ?? []), checklist]);
+    }
+  }
+  return checklists
+    .filter((checklist) => !checklist.parentItemId || !itemIds.has(checklist.parentItemId))
+    .filter((checklist) => ids.has(checklist.id))
+    .map((checklist) => ({
+      id: checklist.id,
+      title: checklist.title,
+      parentItemId: checklist.parentItemId,
+      items: checklist.parentItemId
+        ? checklist.items.map(treeLeaf)
+        : checklist.items.map((item) => treeItem(item, subsByItem.get(item.id) ?? [])),
+    }));
+}
+
+function checklistItemResult(item: ApiItem & { subChecklists?: ApiChecklist[] }) {
+  return { checklistId: item.checklistId, ...treeItem(item, item.subChecklists ?? []) };
+}
+
+function normalizedTargetText(value: string): string {
+  return value.trim().replace(/\s+/gu, " ").toLowerCase();
+}
+
+function targetError(status: 400 | 404, code: string, path: (string | number)[], message: string, extra: Record<string, unknown> = {}): never {
+  const field = formatIssuePath(path);
+  throw new KaneraApiError(status, code, field ? `${field}: ${message}` : message, null, { issues: [{ path, message }], ...extra });
+}
+
+async function cardChecklists(api: KaneraClient, cardId: string): Promise<ApiChecklist[]> {
+  return (await api.get<{ checklists: ApiChecklist[] }>(`/api/v1/cards/${cardId}/checklists`)).checklists;
+}
+
+async function resolveChecklistTarget(api: KaneraClient, cardId: string, target: { checklistId?: string; checklistTitle?: string }): Promise<string> {
+  if (target.checklistId && target.checklistTitle) validationError("provide checklistId or checklistTitle, not both");
+  if (target.checklistId) return target.checklistId;
+  if (!target.checklistTitle) validationError("provide checklistId (preferred) or checklistTitle");
+  const wanted = normalizedTargetText(target.checklistTitle);
+  const matches = (await cardChecklists(api, cardId)).filter((checklist) => normalizedTargetText(checklist.title) === wanted);
+  if (matches.length === 0) targetError(404, "NOT_FOUND", ["checklistTitle"], `no checklist on this card is titled "${target.checklistTitle}"`);
+  if (matches.length > 1) {
+    targetError(400, "AMBIGUOUS_TARGET", ["checklistTitle"], `${matches.length} checklists are titled "${target.checklistTitle}"; pass checklistId`, {
+      candidates: matches.map((checklist) => ({ checklistId: checklist.id, title: checklist.title, parentItemId: checklist.parentItemId })),
+    });
+  }
+  return matches[0]!.id;
+}
+
+/**
+ * Resolves item targets to UUIDs. UUIDs stay authoritative: text is matched only when no id is
+ * given, exactly (case- and whitespace-insensitive), and a match count other than one fails with
+ * the entry's path instead of picking a candidate. One checklist read serves the whole batch, and
+ * it is skipped entirely when every target is already a UUID with no checklist to verify.
+ */
+async function resolveItemTargets(
+  api: KaneraClient,
+  cardId: string,
+  targets: ReadonlyArray<{ itemId?: string; itemText?: string; checklistId?: string }>,
+  pathFor: (index: number) => (string | number)[],
+  options: { verifyChecklistIds?: boolean } = {},
+): Promise<string[]> {
+  targets.forEach((target, index) => {
+    if (target.itemId && target.itemText) targetError(400, "VALIDATION_ERROR", [...pathFor(index), "itemText"], "provide itemId or itemText, not both");
+    if (!target.itemId && !target.itemText) targetError(400, "VALIDATION_ERROR", [...pathFor(index), "itemId"], "provide itemId (preferred) or itemText");
+  });
+  const needsRead = targets.some((target) => target.itemText || (options.verifyChecklistIds && target.checklistId));
+  if (!needsRead) return targets.map((target) => target.itemId!);
+  const checklists = await cardChecklists(api, cardId);
+  const items = checklists.flatMap((checklist) => checklist.items.map((item) => ({ item, checklist })));
+  return targets.map((target, index) => {
+    if (target.itemId) {
+      if (target.checklistId && options.verifyChecklistIds) {
+        const found = items.find((entry) => entry.item.id === target.itemId);
+        if (!found || found.checklist.id !== target.checklistId) {
+          targetError(404, "NOT_FOUND", [...pathFor(index), "itemId"], "checklist item is not in the given checklist on this card");
+        }
+      }
+      return target.itemId;
+    }
+    const wanted = normalizedTargetText(target.itemText!);
+    const matches = items.filter((entry) =>
+      normalizedTargetText(entry.item.text) === wanted && (!target.checklistId || entry.checklist.id === target.checklistId));
+    if (matches.length === 0) targetError(404, "NOT_FOUND", [...pathFor(index), "itemText"], `no checklist item on this card matches "${target.itemText}"`);
+    if (matches.length > 1) {
+      targetError(400, "AMBIGUOUS_TARGET", [...pathFor(index), "itemText"], `${matches.length} checklist items match "${target.itemText}"; pass itemId or scope with checklistId`, {
+        candidates: matches.map(({ item, checklist }) => ({ itemId: item.id, text: item.text, checklistId: checklist.id, checklistTitle: checklist.title })),
+      });
+    }
+    return matches[0]!.item.id;
+  });
+}
+
+function formatIssuePath(path: ReadonlyArray<PropertyKey>): string {
+  return path.reduce<string>((out, segment) =>
+    typeof segment === "number" ? `${out}[${segment}]` : out ? `${out}.${String(segment)}` : String(segment), "");
+}
+
 const CARD_KEY_PATTERN = /^[A-Z][A-Z0-9]{1,9}-[1-9][0-9]*$/iu;
 const ORGANISATION_KEY_PATTERN = /^[A-F0-9]{16}$/iu;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -291,11 +472,10 @@ function describeInputParameters<T extends z.ZodRawShape>(inputSchema: T): T {
     ];
   })) as unknown as T;
 }
-const { COLOR_TOKENS } = await import("@kanera/shared/colors");
 const { AUTOMATION_ACTION_LIMIT, automationTriggerCustomFieldValue, automationTriggerType } = await import("@kanera/shared/dto");
 const { AUTOMATION_ACTION_TYPES, COMMENT_REACTION_TYPES, MAX_CARD_PRIORITIES_PER_USER } = await import("@kanera/shared/schema");
 const reactionType = z.enum(COMMENT_REACTION_TYPES);
-const colorToken = z.enum(COLOR_TOKENS);
+const colorToken = colorTokenSchema;
 const { WORKSPACE_TEMPLATES, DEFAULT_WORKSPACE_TEMPLATE } = await import("@kanera/shared/workspace-templates");
 const { describeWorkspaceTemplateAutomation, findWorkspaceTemplate, standaloneBoardCreatePayload, workspaceTemplateSeedPayload } = await import("@kanera/shared/workspace-template-payload");
 type WorkspaceTemplate = (typeof WORKSPACE_TEMPLATES)[number];
@@ -307,7 +487,7 @@ const seedList = z.object({ name: seedName, icon: iconSlug.optional() });
 const seedCustomField = z.object({
   name: seedName,
   icon: iconSlug.optional(),
-  type: z.enum(["text", "number", "checkbox", "select", "date", "url", "user"]).describe("Custom-field value type."),
+  type: z.enum(CUSTOM_FIELD_TYPES).describe("Custom-field value type."),
   allowMultiple: z.boolean().optional().describe("Whether select or user fields accept multiple values."),
   options: z.array(z.object({
     label: z.string().trim().min(1).max(100).describe("Non-empty select-option label."),
@@ -454,9 +634,15 @@ export interface KaneraMcpContext {
    * because their stdout is the command's result and callers parse it.
    */
   logToolCalls?: boolean;
+  /**
+   * Register the MCP events methods (events/list, events/subscribe, events/unsubscribe). Only the
+   * remote HTTP endpoint enables them: webhook delivery targets the hosted callback a client such
+   * as ChatGPT registers, which a local stdio or CLI session has no use for.
+   */
+  events?: boolean;
 }
 
-function client(ctx: KaneraMcpContext, options: { signal?: AbortSignal; idempotencyKey?: string } = {}) {
+function client(ctx: KaneraMcpContext, options: { signal?: AbortSignal; idempotencyKey?: string; onUpstreamRequest?: (timing: UpstreamTiming) => void } = {}) {
   return new KaneraClient({
     baseUrl: ctx.publicApiUrl ?? env.KANERA_PUBLIC_API_URL,
     apiKey: ctx.apiKey,
@@ -493,9 +679,29 @@ function content(data: unknown): CallToolResult {
   };
 }
 
+/**
+ * Surfaces field-level validation detail from the public API (Zod issues or route-level semantic
+ * checks) with dotted/bracketed paths such as items[2].subChecklists[0].items[1].text, so a model
+ * can fix the one offending field instead of re-guessing the whole payload.
+ */
+function validationIssues(details: Record<string, unknown> | undefined): Array<{ path: string; message: string }> | undefined {
+  const issues = details?.issues;
+  if (!Array.isArray(issues) || issues.length === 0) return undefined;
+  return issues.slice(0, 20).flatMap((issue: unknown) => {
+    if (!issue || typeof issue !== "object") return [];
+    const { path, message } = issue as { path?: unknown; message?: unknown };
+    return [{
+      path: Array.isArray(path) ? formatIssuePath(path as PropertyKey[]) : "",
+      message: typeof message === "string" ? message : "invalid value",
+    }];
+  });
+}
+
 function errorResult(error: unknown): CallToolResult {
   if (error instanceof KaneraApiError) {
-    const data = { error: { status: error.status, code: error.code, message: error.message, retryAfter: error.retryAfter ?? undefined } };
+    const issues = validationIssues(error.details);
+    const candidates = Array.isArray(error.details?.candidates) ? error.details.candidates : undefined;
+    const data = { error: { status: error.status, code: error.code, message: error.message, retryAfter: error.retryAfter ?? undefined, issues, candidates } };
     // Tool-domain failures must be marked as errors so the model can correct its arguments or ask
     // for authorization instead of treating the serialized problem document as a successful read.
     return {
@@ -568,12 +774,13 @@ const toolBehaviors: Record<string, ToolBehavior> = {
   "comments.add": ADD,
   "comments.list": READ,
   "comments.delete": CHANGE,
+  "checklists.get": READ,
   "checklists.create": ADD,
   "checklists.update": CHANGE,
   "checklists.delete": CHANGE,
   "checklists.move": CHANGE,
-  "checklists.add_item": ADD,
-  "checklists.update_item": CHANGE,
+  "checklists.add_items": ADD,
+  "checklists.update_items": CHANGE,
   "checklists.bulk_update_items": CHANGE,
   "checklists.delete_item": CHANGE,
   "checklists.move_item": CHANGE,
@@ -670,9 +877,45 @@ async function resolveCardInOrganisation(api: KaneraClient, reference: Canonical
   }
 }
 
+// Agents usually address cards by human key (PROJ-123) or URL on every call, and each such call
+// used to pay a search request (plus by-key lookups) before its real work: about half of a typical
+// checklist call's server time. Successful resolutions are cached per credential for a short TTL.
+// This is safe because a card id never changes and workspace card numbers are never reused, so a key
+// can never come to mean a different card. The only staleness is a card moved to another workspace:
+// its old key stops resolving, but a cached entry keeps reaching that same card until it expires.
+// Access is still enforced by the request that uses the id, so a cached entry never grants anything
+// a fresh lookup would not. Ambiguous and missing references are never cached. The HTTP transport is stateless, so the cache lives at
+// module scope; it is bounded and evicts oldest-first.
+const CARD_REFERENCE_CACHE_TTL_MS = 10 * 60_000;
+const CARD_REFERENCE_CACHE_LIMIT = 10_000;
+const cardReferenceCache = new Map<string, { id: string; expiresAt: number }>();
+
+function cardReferenceCacheKey(api: KaneraClient, reference: string): string {
+  const canonical = canonicalCardReference(reference);
+  const normalized = canonical ? `url:${canonical.organisationKey}/${canonical.cardKey}` : `key:${reference.toUpperCase()}`;
+  return `${api.credentialScope}\0${normalized}`;
+}
+
+/** Test hook: tool tests stub fetch per case, so cached resolutions must not leak between them. */
+export function clearCardReferenceCache() {
+  cardReferenceCache.clear();
+}
+
 async function resolveCardReference(api: KaneraClient, rawReference: string): Promise<string> {
   const reference = rawReference.trim();
   if (UUID_PATTERN.test(reference)) return reference;
+  const cacheKey = cardReferenceCacheKey(api, reference);
+  const cached = cardReferenceCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.id;
+  cardReferenceCache.delete(cacheKey);
+  // Key and URL lookups are attributed separately in tool timing so cache misses stay visible.
+  const id = await api.resolvingCards(() => resolveCardKeyOrUrl(api, reference));
+  cardReferenceCache.set(cacheKey, { id, expiresAt: Date.now() + CARD_REFERENCE_CACHE_TTL_MS });
+  if (cardReferenceCache.size > CARD_REFERENCE_CACHE_LIMIT) cardReferenceCache.delete(cardReferenceCache.keys().next().value!);
+  return id;
+}
+
+async function resolveCardKeyOrUrl(api: KaneraClient, reference: string): Promise<string> {
 
   const canonical = canonicalCardReference(reference);
   if (canonical) {
@@ -894,6 +1137,80 @@ async function standardWorkspaceContext(api: KaneraClient, workspaceId: string) 
   return { detail, workspaceId };
 }
 
+/**
+ * SDK v1 published tool schemas as JSON Schema draft-07 (nullable fields as `anyOf`); v2 converts
+ * to 2020-12 (nullable fields as `type` arrays). Clients and the model providers behind them differ
+ * in which dialect they accept (Gemini-backed agents are the strictest), so the SDK upgrade keeps
+ * the published schemas exactly as they were. Zod still validates and parses the arguments; only
+ * the advertised JSON Schema is pinned.
+ */
+function draft7Schema<T extends z.ZodType>(schema: T): T {
+  return {
+    "~standard": {
+      ...schema["~standard"],
+      jsonSchema: {
+        input: () => z.toJSONSchema(schema, { target: "draft-7", io: "input" }),
+        output: () => z.toJSONSchema(schema, { target: "draft-7", io: "output" }),
+      },
+    },
+  } as unknown as T;
+}
+
+function roundMs(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+/**
+ * Per-call latency breakdown for the tool log line. totalMs is time inside upstream requests;
+ * appMs is the public API's own handler time (Server-Timing), so totalMs - appMs approximates
+ * network and proxy overhead, and the tool's durationMs - totalMs is MCP-side work. Resolution
+ * is the share spent turning card keys or URLs into UUIDs.
+ */
+function summarizeUpstream(timings: readonly UpstreamTiming[]) {
+  const sum = (rows: readonly UpstreamTiming[], pick: (row: UpstreamTiming) => number | null) =>
+    roundMs(rows.reduce((total, row) => total + (pick(row) ?? 0), 0));
+  const resolution = timings.filter((timing) => timing.phase === "card_resolution");
+  return {
+    requests: timings.length,
+    totalMs: sum(timings, (row) => row.durationMs),
+    appMs: sum(timings, (row) => row.appMs),
+    resolutionRequests: resolution.length,
+    resolutionMs: sum(resolution, (row) => row.durationMs),
+    // Bounded detail for slow-call forensics; templated routes never contain ids or keys.
+    calls: timings.slice(0, 10).map((row) => ({
+      method: row.method,
+      route: row.route,
+      status: row.status,
+      phase: row.phase,
+      ms: roundMs(row.durationMs),
+      ...(row.appMs !== null && { appMs: row.appMs }),
+    })),
+  };
+}
+
+// Time between one tool call finishing and the same credential's next call starting approximates
+// agent think time plus host transport. The HTTP transport is stateless, so this is tracked per
+// process and per credential digest; it is diagnostic only and bounded so it cannot grow unbounded.
+const CALL_GAP_TRACKING_LIMIT = 5_000;
+const CALL_GAP_MAX_MS = 10 * 60_000;
+const lastCallFinishedAt = new Map<string, number>();
+
+function callGapMs(apiKey: string, now: number): number | null {
+  const finishedAt = lastCallFinishedAt.get(credentialDigest(apiKey));
+  if (finishedAt === undefined) return null;
+  const gap = now - finishedAt;
+  return gap >= 0 && gap <= CALL_GAP_MAX_MS ? gap : null;
+}
+
+function noteCallFinished(apiKey: string, now: number) {
+  const key = credentialDigest(apiKey);
+  lastCallFinishedAt.delete(key);
+  lastCallFinishedAt.set(key, now);
+  if (lastCallFinishedAt.size > CALL_GAP_TRACKING_LIMIT) {
+    lastCallFinishedAt.delete(lastCallFinishedAt.keys().next().value!);
+  }
+}
+
 function registerKaneraTool<T extends z.ZodRawShape>(
   server: McpServer,
   name: string,
@@ -912,61 +1229,71 @@ function registerKaneraTool<T extends z.ZodRawShape>(
         idempotencyKey: z.uuid().optional().describe("Stable UUID reused only when retrying the same mutation after an ambiguous failure. Retained for 24 hours."),
       }
     : inputSchema;
+  // The SDK infers handler argument types per tool; this registry erases them on purpose so one
+  // wrapper can strip idempotencyKey and map errors for every tool. The schema passed below is a
+  // z.object (the current overload); the deprecated raw-shape overload is never used.
+  // eslint-disable-next-line @typescript-eslint/no-deprecated
   const registerTool = server.registerTool.bind(server) as unknown as (
     toolName: string,
     config: {
       title: string;
       description: string;
-      inputSchema: z.ZodRawShape;
+      inputSchema: z.ZodType;
       outputSchema: z.ZodType<Record<string, unknown>>;
       annotations: ToolAnnotations;
     },
-    callback: (args: unknown, extra?: { signal: AbortSignal; requestId: string | number }) => Promise<CallToolResult>,
+    callback: (args: unknown, handlerCtx?: { mcpReq: { signal: AbortSignal } }) => Promise<CallToolResult>,
   ) => void;
   registerTool(name, {
     title: toolTitle(name),
     description,
-    inputSchema: describeInputParameters(registeredInputSchema),
-    outputSchema,
+    inputSchema: draft7Schema(z.object(describeInputParameters(registeredInputSchema))),
+    outputSchema: draft7Schema(outputSchema),
     annotations: toolAnnotations(name),
-  }, async (args, extra): Promise<CallToolResult> => {
+  }, async (args, handlerCtx): Promise<CallToolResult> => {
     const startedAt = performance.now();
     const logToolCalls = ctx.logToolCalls !== false && env.NODE_ENV !== "test" && process.env.NODE_TEST_CONTEXT === undefined;
+    const gapSinceLastCallMs = callGapMs(ctx.apiKey, Date.now());
+    const upstream: UpstreamTiming[] = [];
+    const onUpstreamRequest = (timing: UpstreamTiming) => {
+      upstream.push(timing);
+      observeUpstreamRequest(timing);
+    };
+    const logCall = (outcome: "success" | "error", errorCode?: string) => {
+      noteCallFinished(ctx.apiKey, Date.now());
+      if (!logToolCalls) return;
+      console.info(JSON.stringify({
+        event: "mcp_tool_call",
+        tool: name,
+        version: mcpPackage.version,
+        durationMs: roundMs(performance.now() - startedAt),
+        outcome,
+        ...(errorCode && { errorCode }),
+        ...(gapSinceLastCallMs !== null && { gapSinceLastCallMs }),
+        upstream: summarizeUpstream(upstream),
+      }));
+    };
     try {
       const record = args as Record<string, unknown>;
       const idempotencyKey = typeof record.idempotencyKey === "string" ? record.idempotencyKey : undefined;
       const handlerArgs = idempotencyKey
         ? Object.fromEntries(Object.entries(record).filter(([key]) => key !== "idempotencyKey"))
         : record;
-      const result = content(await handler(handlerArgs as ToolArgs<T>, client(ctx, { signal: extra?.signal, idempotencyKey })));
-      if (logToolCalls) {
-        console.info(JSON.stringify({
-          event: "mcp_tool_call",
-          tool: name,
-          version: mcpPackage.version,
-          durationMs: Math.round((performance.now() - startedAt) * 10) / 10,
-          outcome: "success",
-        }));
-      }
+      const result = content(await handler(handlerArgs as ToolArgs<T>, client(ctx, { signal: handlerCtx?.mcpReq.signal, idempotencyKey, onUpstreamRequest })));
+      logCall("success");
       mcpToolDuration.observe({ tool: name, outcome: "success", error_code: "none" }, (performance.now() - startedAt) / 1_000);
       return result;
     } catch (error) {
       const errorCode = error instanceof KaneraApiError ? error.code : "INTERNAL";
-      if (logToolCalls) {
-        console.info(JSON.stringify({
-          event: "mcp_tool_call",
-          tool: name,
-          version: mcpPackage.version,
-          durationMs: Math.round((performance.now() - startedAt) * 10) / 10,
-          outcome: "error",
-          errorCode,
-        }));
-      }
+      logCall("error", errorCode);
       mcpToolDuration.observe({ tool: name, outcome: "error", error_code: errorCode }, (performance.now() - startedAt) / 1_000);
       return errorResult(error);
     }
   });
 }
+
+const serverInstructions = "Use Kanera MCP tools instead of browser automation for every supported read or write; reserve the web interface for explicitly visual tasks and UI-only administration. For an exact human card key or canonical card URL, call cards.get directly before a mutation and reserve search.content for names, phrases, and other ambiguous text. For cross-board reporting, first resolve people with workspaces.list_members, then use work.query_cards for active or completed assignments and work.query_history for one person's actions in a date range. Use cards.get_content for selected evidence and cards.get or cards.list_history only when deeper detail is needed. search.content returns one bounded, typed result stream with canonical links. Kanera MCP is work-focused: it reads configuration needed to resolve boards, lists, labels, fields, options, members, and permissions. Organisation admins can bootstrap a standard workspace (workspaces.create), a standalone board (boards.create_standalone), or an extra board inside a standard workspace (boards.create), choosing a templateId from workspaces.list_templates or supplying explicit lists, custom fields, and labels; workspace and standalone-board creation needs a write-capable personal key or interactive OAuth grant with organisation admin role, and workspace-scoped keys cannot do it. Workspace admins can manage automations with the dedicated automation tools, while editing or deleting lists, fields, labels, members, and boards after creation remains in the Kanera UI. Standard-workspace lists, fields, labels, membership, and automations are shared across its boards; standalone boards have dedicated configuration. Card reference fields accept a UUID, human key such as PROJ-123, or canonical card URL; once a card has been read, pass its UUID to skip key resolution. Build or edit checklist plans in as few calls as possible: checklists.create takes items and sub-checklists, checklists.add_items adds items, and checklists.update_items changes one or more items, all atomically with ids returned. Use boards.list_accessible for complete discovery including standalone and guest boards, boards.get for metadata/configuration, and cards.list for bounded list pages. Use work.portfolio_summary for portfolio rollups. Use the priority tools (priorities.list, priorities.add, priorities.move, priorities.remove) to read and curate a user's ranked cross-board \"Up next\" queue; priorities.list_targets shows whose queues a manager can reach. Use search.docs for product guidance and search.content for live user data. Personal notes are private to their owner. Read-only credentials cannot mutate. Board, workspace, list, field, label, note, and note-attachment deletion or administration not represented by a tool must be completed manually in the Kanera UI.";
+const eventInstructions = "Event payloads are bounded summaries; read the matching card or comment before acting. Each event names its actor and sets actor.self when this connection caused it, so skip or confirm before reacting to your own writes. Subscriptions deliver via verified HTTPS webhooks and require periodic refresh; cursor is null (no replay).";
 
 export function createKaneraMcpServer(ctx: KaneraMcpContext) {
   const server = new McpServer(
@@ -980,12 +1307,24 @@ export function createKaneraMcpServer(ctx: KaneraMcpContext) {
       // custom MCP clients connect directly to /mcp and never discover server.json.
       icons: serverIcons,
     },
-    { instructions: "Use Kanera MCP tools instead of browser automation for every supported read or write; reserve the web interface for explicitly visual tasks and UI-only administration. For an exact human card key or canonical card URL, call cards.get directly before a mutation and reserve search.content for names, phrases, and other ambiguous text. For cross-board reporting, first resolve people with workspaces.list_members, then use work.query_cards for active or completed assignments and work.query_history for one person's actions in a date range. Use cards.get_content for selected evidence and cards.get or cards.list_history only when deeper detail is needed. search.content returns one bounded, typed result stream with canonical links. Kanera MCP is work-focused: it reads configuration needed to resolve boards, lists, labels, fields, options, members, and permissions. Organisation admins can bootstrap a standard workspace (workspaces.create), a standalone board (boards.create_standalone), or an extra board inside a standard workspace (boards.create), choosing a templateId from workspaces.list_templates or supplying explicit lists, custom fields, and labels; workspace and standalone-board creation needs a write-capable personal key or interactive OAuth grant with organisation admin role, and workspace-scoped keys cannot do it. Workspace admins can manage automations with the dedicated automation tools, while editing or deleting lists, fields, labels, members, and boards after creation remains in the Kanera UI. Standard-workspace lists, fields, labels, membership, and automations are shared across its boards; standalone boards have dedicated configuration. Card reference fields accept a UUID, human key such as PROJ-123, or canonical card URL. Use boards.list_accessible for complete discovery including standalone and guest boards, boards.get for metadata/configuration, and cards.list for bounded list pages. Use work.portfolio_summary for portfolio rollups. Use the priority tools (priorities.list, priorities.add, priorities.move, priorities.remove) to read and curate a user's ranked cross-board \"Up next\" queue; priorities.list_targets shows whose queues a manager can reach. Use search.docs for product guidance and search.content for live user data. Personal notes are private to their owner. Read-only credentials cannot mutate. Board, workspace, list, field, label, note, and note-attachment deletion or administration not represented by a tool must be completed manually in the Kanera UI." },
+    {
+      instructions: ctx.events ? `${serverInstructions} ${eventInstructions}` : serverInstructions,
+      // ttlMs/cacheScope are REQUIRED on these 2026-07-28 results. Tool, prompt and template
+      // catalogs are identical for every credential; resource reads opt out per resource.
+      cacheHints: {
+        "server/discover": { ttlMs: 3_600_000, cacheScope: "public" },
+        "tools/list": { ttlMs: 300_000, cacheScope: "public" },
+        "prompts/list": { ttlMs: 300_000, cacheScope: "public" },
+        "resources/list": { ttlMs: 300_000, cacheScope: "public" },
+        "resources/templates/list": { ttlMs: 300_000, cacheScope: "public" },
+      },
+    },
   );
 
   registerTools(server, ctx);
   registerResources(server, ctx);
   registerPrompts(server);
+  if (ctx.events) registerKaneraEvents(server, () => client(ctx));
   return server;
 }
 
@@ -1142,14 +1481,14 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
   registerKaneraTool(server, "search.content", "Use this when you need to find live Kanera content by words, phrases, card keys, or filenames. Searches accessible cards, notes, comments, and attachment filenames and returns one relevance-ranked, bounded result stream with source metadata and canonical links.", {
     query: z.string().trim().min(1).max(200).describe("Words, quoted phrase, or card key to find, for example landing-page copy or MKT-42."),
     scope: workScope,
-    types: z.array(z.enum(["card", "comment", "note", "attachment"])).min(1).max(4).optional().describe("Optional entity types to search; omit to search all supported content."),
+    types: z.array(z.enum(SEARCH_RESULT_TYPES)).min(1).max(4).optional().describe("Optional entity types to search; omit to search all supported content."),
     limit: z.number().int().min(1).max(25).default(10).describe("Maximum results across all entity types combined."),
   }, (a, api) => api.post("/api/v1/search/query", a), ctx, searchOutputSchema);
   registerKaneraTool(server, "search.docs", "Search official Kanera documentation for product behavior, setup, permissions, and workflow guidance. Returns relevant sections with concise excerpts and canonical source URLs; this does not search the user's live Kanera data.", {
     query: z.string().trim().min(1).max(200),
     limit: z.number().int().min(1).max(10).default(5),
   }, (a, _api) => docsSearchClient(ctx.docsSearchUrl).search(a.query, a.limit), ctx);
-  registerKaneraTool(server, "cards.get", "Read a card detail, including labels, assignees, checklist item descriptions, nested sub-checklists, attachments, and linked notes. Checklists are returned flat; a sub-checklist's parentItemId identifies its owning top-level item.", { cardId: cardReference }, async (a, api) =>
+  registerKaneraTool(server, "cards.get", "Read a card detail, including labels, assignees, checklist item descriptions, nested sub-checklists, attachments, and linked notes. Checklists are returned flat; a sub-checklist's parentItemId identifies its owning top-level item. For checklist-only work, checklists.get returns a nested tree. Reuse the returned card id as cardId in later calls to skip key resolution.", { cardId: cardReference }, async (a, api) =>
     api.get(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/detail`), ctx);
   registerKaneraTool(server, "cards.get_content", `Read checklist and comment content for up to 200 selected cards in one board, avoiding one detail/comment request per card during summaries, audits, and migrations. Best-effort: ids not visible on the board are returned in missingCardIds, and cards whose bounded comment history is incomplete are listed in truncatedCardIds so comments.list can page them. ${boardBatchScope}`, {
     boardId: uuid,
@@ -1373,46 +1712,100 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     cardId: cardReference,
     attachmentId: uuid.nullable(),
   }, async (a, api) => api.patch(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/cover`, { attachmentId: a.attachmentId }), ctx);
-  registerKaneraTool(server, "checklists.create", "Add a top-level checklist to a card, or create a one-level sub-checklist by passing the owning top-level parentItemId. Requires board editor access and a write-capable credential. This is not idempotent.", {
+  registerKaneraTool(server, "checklists.get", `Read one card's checklists as a nested tree: checklists > items > sub-checklists > leaf items, with every UUID needed for follow-up edits. Cheaper than cards.get when only checklists matter. Pass checklistId to return just that checklist and its items' sub-checklists. ${CHECKLIST_DEPTH_RULES}`, {
     cardId: cardReference,
-    title: z.string().trim().min(1).max(500),
+    checklistId: uuid.optional().describe("Return only this checklist (with its items' sub-checklists); omit for all checklists on the card."),
+  }, async (a, api) => {
+    const cardId = await resolveCardReference(api, a.cardId);
+    const result = await api.get<{ checklists: ApiChecklist[] }>(`/api/v1/cards/${cardId}/checklists`, { checklistId: a.checklistId });
+    return { cardId, checklists: checklistForest(result.checklists) };
+  }, ctx);
+  registerKaneraTool(server, "checklists.create", `Create a checklist with its full contents in one call: optional items, each top-level item optionally carrying description, assignee, due date, completion, and its own subChecklists. The server generates and connects all ids atomically and returns the nested tree with them, so no follow-up read is needed. With parentItemId the new checklist is itself a sub-checklist of that top-level item, and its items may set only text and completed. ${CHECKLIST_DEPTH_RULES} ${CHECKLIST_BATCH_RULES} Requires board editor access and a write-capable credential.`, {
+    cardId: cardReference,
+    title: z.string().trim().min(1).max(500).describe("Checklist title, up to 500 characters."),
     parentItemId: uuid.nullable().optional().describe("Top-level checklist item that owns this sub-checklist; omit or null for a card-level checklist."),
-  }, async (a, api) => api.post(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/checklists`, { title: a.title, parentItemId: a.parentItemId }), ctx);
+    items: z.array(newChecklistItemInput).max(200).optional().describe("Initial items in display order (up to 200; 500 including sub-checklist items). With parentItemId, items may set only text and completed."),
+  }, async (a, api) => {
+    const created = await api.post<ApiChecklist & { subChecklists?: ApiChecklist[] }>(
+      `/api/v1/cards/${await resolveCardReference(api, a.cardId)}/checklists`,
+      { title: a.title, parentItemId: a.parentItemId, ...(a.items && { items: a.items }) },
+    );
+    return checklistForest([created, ...(created.subChecklists ?? [])])[0]!;
+  }, ctx);
   registerKaneraTool(server, "checklists.update", "Rename a checklist. Requires board editor access and a write-capable credential.", { cardId: cardReference, checklistId: uuid, title: z.string().trim().min(1).max(500) }, async (a, api) =>
     api.patch(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/checklists/${a.checklistId}`, { title: a.title }), ctx);
   registerKaneraTool(server, "checklists.delete", "Delete a checklist and its items. This is destructive and requires board editor access with a write-capable credential.", { cardId: cardReference, checklistId: uuid }, async (a, api) =>
     api.delete(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/checklists/${a.checklistId}`), ctx);
-  registerKaneraTool(server, "checklists.move", "Reorder a checklist using one explicit before/after anchor; a null anchor id means the top for side \"after\" and the bottom for side \"before\". Requires board editor access and a write-capable credential.", {
+  registerKaneraTool(server, "checklists.move", "Reorder a checklist using one explicit before/after anchor; a null anchor id means the top for side \"after\" and the bottom for side \"before\". A sub-checklist reorders only among the sub-checklists of its own parent item. Requires board editor access and a write-capable credential.", {
     cardId: cardReference,
     checklistId: uuid,
     anchor: positionAnchor,
   }, async (a, api) => api.post(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/checklists/${a.checklistId}/move`,
     a.anchor.side === "after" ? { afterChecklistId: a.anchor.id } : { beforeChecklistId: a.anchor.id }), ctx);
-  registerKaneraTool(server, "checklists.add_item", "Add an item to a checklist. Items in sub-checklists are leaf rows with text and completion only. Requires board editor access and a write-capable credential. This is not idempotent.", { cardId: cardReference, checklistId: uuid, text: z.string().trim().min(1).max(2000) }, async (a, api) =>
-    api.post(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/checklists/${a.checklistId}/items`, { text: a.text }), ctx);
-  registerKaneraTool(server, "checklists.update_item", "Update a checklist item's text, completion, description, assignee, or due date. Description, assignee, and due date apply only to top-level items; sub-checklist leaves support text and completion only. Provide at least one field. Requires board editor access and a write-capable credential.", {
+  registerKaneraTool(server, "checklists.add_items", `Add one or more items to one checklist in one atomic call, in request order. Only text is required; a top-level item may also set description, assigneeId, due date, completed, and its own subChecklists. An optional anchor positions the block (default: appended). Returns every created item with its id and sub-checklist ids. ${CHECKLIST_TARGETING_RULES} ${CHECKLIST_DEPTH_RULES} ${CHECKLIST_BATCH_RULES} Requires board editor access and a write-capable credential.`, {
     cardId: cardReference,
-    checklistId: uuid,
-    itemId: uuid,
-    changes: checklistItemChanges,
-  }, async (a, api) => api.patch(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/checklists/${a.checklistId}/items/${a.itemId}`, a.changes), ctx);
-  registerKaneraTool(server, "checklists.bulk_update_items", "Set or clear the assignee or due date on all items in one checklist. Provide assigneeId or a due date. Repeating the same arguments is idempotent. Requires board editor access and a write-capable credential.", {
+    ...checklistTargetShape,
+    items: z.array(newChecklistItemInput).min(1).max(200).describe("Items to add in display order (up to 200; 500 including sub-checklist items). Items added to a sub-checklist may set only text and completed."),
+    anchor: optionalItemAnchor,
+  }, async (a, api) => {
+    const cardId = await resolveCardReference(api, a.cardId);
+    const target = await resolveChecklistTarget(api, cardId, a);
+    const created = await api.post<{ items: Array<ApiItem & { subChecklists?: ApiChecklist[] }> }>(
+      `/api/v1/cards/${cardId}/checklists/${target}/items/batch`,
+      { items: a.items, ...itemAnchorBody(a.anchor) },
+    );
+    return { checklistId: target, items: created.items.map(checklistItemResult) };
+  }, ctx);
+  registerKaneraTool(server, "checklists.update_items", `Update one or more checklist items on one card in one atomic call: text, completed, description, assignee, or due date, with different changes per item (for example completing five chosen steps or giving items different owners). Description, assignee, and due date apply only to top-level items; sub-checklist leaves take text and completed only. Each entry names an item (itemId preferred) and its own changes; the whole batch is validated before anything is written and errors name the entry, such as updates[3].changes.assigneeId. To set the same assignee or due date on every item of one checklist, use checklists.bulk_update_items instead. ${CHECKLIST_ITEM_TARGETING_RULES} Requires board editor access and a write-capable credential.`, {
+    cardId: cardReference,
+    updates: z.array(z.strictObject({
+      ...itemTargetShape,
+      // A flat object rather than a one-arm-per-field union (which would encode "non-empty" but
+      // cost ~6k catalog characters). The API rejects an empty object with the entry's path, so the
+      // rule is still enforced before anything is written.
+      changes: checklistItemFields.describe("Fields to change on this item; at least one."),
+    })).min(1).max(200).describe("Up to 200 entries, each naming one distinct item and its changes."),
+  }, async (a, api) => {
+    const cardId = await resolveCardReference(api, a.cardId);
+    // The batch route addresses items by id alone, so an entry's optional checklistId is verified
+    // here against the same read that resolves any itemText targets.
+    const itemIds = await resolveItemTargets(api, cardId, a.updates, (index) => ["updates", index], { verifyChecklistIds: true });
+    const result = await api.patch<{ items: ApiItem[] }>(`/api/v1/cards/${cardId}/checklist-items`, {
+      updates: a.updates.map((update, index) => ({ itemId: itemIds[index]!, changes: update.changes })),
+    });
+    return { items: result.items.map(checklistItemResult) };
+  }, ctx);
+  registerKaneraTool(server, "checklists.bulk_update_items", "Set or clear the same assignee or due date on EVERY item in one top-level checklist. Provide assigneeId or a due date. To change only chosen items, or give items different values, use checklists.update_items. Repeating the same arguments is idempotent. Requires board editor access and a write-capable credential.", {
     cardId: cardReference,
     checklistId: uuid,
     changes: bulkChecklistItemChanges,
   }, async (a, api) => api.patch(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/checklists/${a.checklistId}/items/bulk`, a.changes), ctx);
-  registerKaneraTool(server, "checklists.delete_item", "Delete a checklist item. This is destructive and requires board editor access with a write-capable credential.", { cardId: cardReference, checklistId: uuid, itemId: uuid }, async (a, api) =>
-    api.delete(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/checklists/${a.checklistId}/items/${a.itemId}`), ctx);
-  registerKaneraTool(server, "checklists.move_item", "Move or reorder a checklist item, optionally into another checklist, using one explicit anchor. A null anchor id means the top for side \"after\" and the bottom for side \"before\". Requires board editor access and a write-capable credential.", {
+  registerKaneraTool(server, "checklists.delete_item", `Delete a checklist item and any sub-checklists it owns. The server derives the item's checklist; checklistId is optional and, when given, must contain the item. ${CHECKLIST_ITEM_TARGETING_RULES} This is destructive and requires board editor access with a write-capable credential.`, {
     cardId: cardReference,
-    checklistId: uuid.describe("Source checklist id."),
+    ...itemTargetShape,
+  }, async (a, api) => {
+    const cardId = await resolveCardReference(api, a.cardId);
+    const [itemId] = await resolveItemTargets(api, cardId, [a], () => []);
+    return api.delete(a.checklistId
+      ? `/api/v1/cards/${cardId}/checklists/${a.checklistId}/items/${itemId}`
+      : `/api/v1/cards/${cardId}/checklist-items/${itemId}`);
+  }, ctx);
+  registerKaneraTool(server, "checklists.move_item", "Move or reorder a checklist item, optionally into another checklist, using one explicit anchor. A null anchor id means the top for side \"after\" and the bottom for side \"before\". Items move only within one ownership group: between top-level checklists, or between sub-checklists of the same parent item. An item cannot be promoted into a top-level checklist, demoted into a sub-checklist, or moved under a different parent item; recreate it instead. The server derives the source checklist from itemId. Requires board editor access and a write-capable credential.", {
+    cardId: cardReference,
+    checklistId: uuid.optional().describe("Source checklist id; optional because the server derives it from itemId. When given, it must contain the item."),
     itemId: uuid,
-    targetChecklistId: uuid.optional().describe("Destination checklist id; omit to reorder within the source checklist."),
+    targetChecklistId: uuid.optional().describe("Destination checklist id with the same parent as the source; omit to reorder within the source checklist."),
     anchor: positionAnchor,
-  }, async (a, api) => api.post(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/checklists/${a.checklistId}/items/${a.itemId}/move`, {
-    checklistId: a.targetChecklistId,
-    ...(a.anchor.side === "after" ? { afterItemId: a.anchor.id } : { beforeItemId: a.anchor.id }),
-  }), ctx);
+  }, async (a, api) => {
+    const cardId = await resolveCardReference(api, a.cardId);
+    const path = a.checklistId
+      ? `/api/v1/cards/${cardId}/checklists/${a.checklistId}/items/${a.itemId}/move`
+      : `/api/v1/cards/${cardId}/checklist-items/${a.itemId}/move`;
+    return api.post(path, {
+      checklistId: a.targetChecklistId,
+      ...(a.anchor.side === "after" ? { afterItemId: a.anchor.id } : { beforeItemId: a.anchor.id }),
+    });
+  }, ctx);
   registerKaneraTool(server, "activity.list", "List a cursor-paginated board-wide feed of recent activity and comments.", {
     boardId: uuid,
     cursor: z.string().min(1).max(1000).optional(),
@@ -1420,7 +1813,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
   }, (a, api) => api.get(`/api/v1/boards/${a.boardId}/activity`, { cursor: a.cursor, limit: a.limit }), ctx);
   registerKaneraTool(server, "work.query_history", "Use this when reviewing work performed by one person across projects. Returns only that actor's created, moved, completed, and checklist-item-completed events over an exact or calendar range, with full-range counts, source names, canonical card links, and cursor pagination. Omit userId for the connected user.", {
     userId: uuid.optional().describe("Person whose actions to return; resolve workspace users with workspaces.list_members. Omit for the connected user."),
-    preset: z.enum(["today", "yesterday", "this_week", "last_week", "this_month", "last_month"]).optional(),
+    preset: z.enum(AGENT_WORK_HISTORY_PRESETS).optional(),
     from: z.iso.datetime().optional(),
     to: z.iso.datetime().optional(),
     timeZone: z.string().trim().min(1).max(100).optional(),
@@ -1437,7 +1830,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     lens: z.enum(["my", "team"]).describe("Use my for the connected user's assignments; use team with filters.assigneeIds for another person."),
     scope: workScope,
     filters: workFilters,
-    sort: z.enum(["dueAsc", "dueDesc", "titleAsc", "titleDesc", "createdAsc", "createdDesc", "updatedAsc", "updatedDesc"]).default("dueAsc"),
+    sort: z.enum(WORK_SORT_VALUES).default("dueAsc"),
     cursor: z.string().min(1).max(500_000).optional(),
     limit: z.number().int().min(1).max(100).default(50),
   }, (a, api) => api.post("/api/v1/work/cards/query", a), ctx, workCardsOutputSchema);
@@ -1475,7 +1868,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
   registerKaneraTool(server, "notes.list", "List a cursor-paginated page of flat note metadata. parentNoteId expresses the hierarchy; use notes.get for full content. Provide exactly one of workspaceId for a standard workspace or boardId for a workspace or standalone board. Personal notes are limited to the connected user.", {
     workspaceId: uuid.optional(),
     boardId: uuid.optional(),
-    scope: z.enum(["personal", "team"]).default("team"),
+    scope: z.enum(NOTE_SCOPES).default("team"),
     ...collectionPageSchema,
   }, async (a, api) => {
     const target = a.boardId ? `board:${a.boardId}` : `workspace:${a.workspaceId}`;
@@ -1587,7 +1980,7 @@ function noteMutationSchema() {
       z.object({ type: z.literal("workspace").describe("Select a standard workspace target."), workspaceId: uuid.describe("Target standard-workspace UUID.") }),
       z.object({ type: z.literal("board").describe("Select a board target."), boardId: uuid.describe("Target workspace or standalone-board UUID.") }),
     ]),
-    scope: z.enum(["personal", "team"]).default("team"),
+    scope: z.enum(NOTE_SCOPES).default("team"),
     parentNoteId: uuid.nullable().optional(),
     title: z.string().max(200).optional(),
     icon: z.string().trim().min(1).max(100).nullable().optional(),
@@ -1610,30 +2003,31 @@ function registerResource(
   read: (vars: Record<string, string>, api: KaneraClient) => Promise<unknown>,
   ctx: KaneraMcpContext,
 ) {
-  server.registerResource(name, new ResourceTemplate(template, { list: undefined }), { description, mimeType: "application/json" }, async (uri, vars, extra) => {
-    const data = await read(vars as Record<string, string>, client(ctx, { signal: extra?.signal }));
+  // Resource reads return live, credential-scoped data: never cacheable or shareable.
+  server.registerResource(name, new ResourceTemplate(template, { list: undefined }), { description, mimeType: "application/json", cacheHint: { ttlMs: 0, cacheScope: "private" } }, async (uri, vars, handlerCtx) => {
+    const data = await read(vars as Record<string, string>, client(ctx, { signal: handlerCtx.mcpReq.signal }));
     return { contents: [{ uri: uri.toString(), mimeType: "application/json", text: JSON.stringify(data, null, 2) }] };
   });
 }
 
 function registerPrompts(server: McpServer) {
-  server.registerPrompt("summarize_board_status", { description: "Summarize board progress, blockers, stale cards, and next actions.", argsSchema: { boardId: uuid } }, (a) => ({
+  server.registerPrompt("summarize_board_status", { description: "Summarize board progress, blockers, stale cards, and next actions.", argsSchema: z.object({ boardId: uuid }) }, (a) => ({
     messages: [{ role: "user", content: { type: "text", text: `Call boards.get for ${a.boardId}, then page the relevant lists with cards.list. Use work.query_cards scoped to this board for overdue, unassigned, and stale-card evidence, and inspect cards.list_history only for cards that need chronology. Summarize progress, blockers, risks, and next actions; distinguish observed facts from inferences.` } }],
   }));
-  server.registerPrompt("prepare_standup_update", { description: "Prepare the connected user's cross-board standup update.", argsSchema: { period: z.enum(["today", "yesterday", "this_week", "last_week", "this_month", "last_month"]).default("yesterday") } }, (a) => ({
+  server.registerPrompt("prepare_standup_update", { description: "Prepare the connected user's cross-board standup update.", argsSchema: z.object({ period: z.enum(AGENT_WORK_HISTORY_PRESETS).default("yesterday") }) }, (a) => ({
     messages: [{ role: "user", content: { type: "text", text: `Use work.query_history with preset ${a.period} and no userId for work I performed, then use work.query_cards with lens=my and completion=active for work in flight. Draft a concise accomplishments/current work/blockers update. Identify blockers only when supported by card data, and label any inference.` } }],
   }));
   server.registerPrompt("prepare_one_on_one", {
     description: "Prepare a read-only cross-project one-on-one review for a workspace member.",
-    argsSchema: {
+    argsSchema: z.object({
       workspaceId: uuid,
       userId: uuid,
       period: z.enum(["this_week", "last_week", "this_month", "last_month"]).default("last_month"),
-    },
+    }),
   }, (a) => ({
     messages: [{ role: "user", content: { type: "text", text: `Do not make changes in Kanera. For workspace ${a.workspaceId} and user ${a.userId}, use work.query_cards twice with lens=team and that assignee: completion=active for current work, then completion=completed with the ${a.period} date range. Use work.query_history for the same user, workspace, and ${a.period}. Search and inspect only the most relevant supporting cards, comments, and notes. Summarize completed work, important progress, blockers or follow-ups, and 4–5 discussion points with canonical Kanera links. Distinguish observed facts from inferences.` } }],
   }));
-  server.registerPrompt("draft_card_from_notes", { description: "Draft a card title and description from one note.", argsSchema: { noteId: uuid } }, (a) => ({
+  server.registerPrompt("draft_card_from_notes", { description: "Draft a card title and description from one note.", argsSchema: z.object({ noteId: uuid }) }, (a) => ({
     messages: [{ role: "user", content: { type: "text", text: `Call notes.get for ${a.noteId} and draft a Kanera card title plus Markdown description. Do not create the card until asked.` } }],
   }));
 }

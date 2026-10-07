@@ -35,7 +35,9 @@ export async function recordAgentRunActivity(run: AgentRun, action: typeof ACTIV
     },
     ...(options?.actorKind ? { actorKind: options.actorKind } : {}),
   });
-  await emitActivityFeedItem(run.boardId, run.cardId, activity);
+  // Run start/end stays in the card feed but never reaches the inbox: it is lifecycle chatter, and
+  // what the agent actually did (comments, moves, completion) notifies through its own activity.
+  await emitActivityFeedItem(run.boardId, run.cardId, activity, { notify: false });
   return activity;
 }
 

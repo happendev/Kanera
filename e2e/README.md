@@ -5,10 +5,39 @@ Run `pnpm test:e2e` from the repository root, or pass spec names after `--` to r
 The runner:
 
 - starts isolated Postgres and Valkey containers (`docker-compose.e2e.yml`), then migrates and seeds them;
-- starts the API, public API, worker, and web app as separate processes on E2E-only ports (`e2e/ports.json`), so a local dev stack on 3000–3003 and 4200 can keep running;
+- starts the API, public API, worker, MCP server, and web app as separate processes on E2E-only ports (`e2e/ports.json`), so a local dev stack on 3000–3003 and 4200 can keep running;
+- builds the `kanera` CLI bundle that CLI specs execute;
 - runs Chromium with the timezone pinned to UTC and the locale to en-US.
 
+The web server uses `--watch=false` to serve its startup build throughout the run. Concurrent development edits must not trigger browser reloads that interrupt fetches or user flows. Restart the suite to test a new build.
+
 It never touches the development database. You need Docker and a Playwright Chromium install (`pnpm exec playwright install chromium`).
+
+## Concurrent CI runs
+
+CI splits the suite into three Playwright shards on separate GitHub-hosted runners. Each shard
+starts its own freshly migrated and seeded Postgres, Valkey, API, worker, MCP server and web app.
+Tests remain sequential within that stack (`workers: 1`, `fullyParallel: false`): seeded users,
+boards, settings and realtime rooms must not be shared by concurrently executing tests.
+Playwright assigns whole spec files to shards, keeping the tests in each file together.
+
+Reproduce an individual shard locally:
+
+```bash
+pnpm test:e2e -- --shard=1/3
+pnpm test:e2e -- --shard=2/3
+pnpm test:e2e -- --shard=3/3
+```
+
+Run those commands one at a time on a local checkout: its fixed E2E ports, Docker Compose project
+and database are protected by the runner's lock. CI concurrency comes from separate machines.
+Do not increase `--workers` against a shared stack without first isolating its test fixtures.
+
+All shards finish even if one fails, and upload separate `e2e-results-<index>-of-3` artifacts with
+traces, screenshots, service logs, reports and the exact shard command in `REPRODUCE.txt`.
+The existing `e2e` CI check passes only when every shard passes, so branch protection can continue
+requiring that check. Sharding repeats stack setup on each runner, trading more runner minutes
+for a shorter wait; it does not skip tests or retry failures.
 
 ## Topology the suite depends on
 
@@ -60,7 +89,7 @@ Each run writes `e2e/artifacts/<UTC timestamp>-<pid>/`, and the newest 10 runs a
 - `worktree.patch` and `untracked.tar.gz`, when the tree was dirty;
 - `results.json` and an HTML report (`report/`);
 - per-test traces and screenshots (`test-results/`);
-- logs for every service (`api`, `public-api`, `worker`, `web`) plus the migrate, seed and Docker logs.
+- logs for every service (`api`, `public-api`, `worker`, `mcp`, `web`) plus the migrate, seed, CLI build and Docker logs.
 
 Open a trace with `pnpm exec playwright show-trace <path>/trace.zip`.
 

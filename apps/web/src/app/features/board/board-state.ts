@@ -16,11 +16,13 @@ import type {
   WireSeparator,
 } from "@kanera/shared/events";
 import type { Board, BoardRole, BoardSeparator, Card, CardAssignee, CardCustomFieldValue, CardLabel, CardLabelAssignment, CustomField, List } from "@kanera/shared/schema";
+import type { LinkedInternalSummary } from "@kanera/shared/dto";
 import type { OfflineBoardSnapshot } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { DEFAULT_INACTIVE_CARDS_DAYS } from "@kanera/shared/workspace-defaults";
 import { createSortedLaneProjection } from "./lane-projection";
+import { byPosition } from "../../shared/position-sort";
 
 export type AnyList = List | WireList;
 export type AnyCard = Card | WireCard | WireCardSummary;
@@ -61,12 +63,10 @@ export class BoardState {
   readonly workspaceClientId = signal<string | null>(null);
   readonly workspaceKind = signal<"standard" | "board" | null>(null);
   readonly inactiveCardsDays = signal(DEFAULT_INACTIVE_CARDS_DAYS);
-  readonly boardHealthEnabled = signal(true);
-  readonly boardHealthOverdueEnabled = signal(true);
-  readonly boardHealthUnassignedEnabled = signal(true);
-  readonly boardHealthInactiveEnabled = signal(true);
   readonly workspaceCardKeyPrefixes = signal<string[]>([]);
   readonly boardLinkingEnabled = signal(true);
+  /** Workspace-level Notes switch; off hides the board's Notes view. */
+  readonly notesEnabled = signal(true);
   readonly boardSyncAllowed = signal(true);
   // This is a board-open/offline-snapshot hint used to avoid probing mirror status for unlinked
   // boards. Realtime mirror events still request status directly because they supersede the hint.
@@ -159,7 +159,7 @@ export class BoardState {
   readonly visibleLists = computed(() =>
     [...this.lists()]
       .filter((l) => !l.archivedAt)
-      .sort((a, b) => Number(a.position) - Number(b.position)),
+      .sort(byPosition),
   );
 
   // O(1) card lookup index, memoized by the signal graph: it only rebuilds when the card set
@@ -221,7 +221,7 @@ export class BoardState {
       else map.set(separator.listId, [separator]);
     }
     for (const separators of map.values()) {
-      separators.sort((a, b) => Number(a.position) - Number(b.position));
+      separators.sort(byPosition);
     }
     return map;
   });
@@ -253,7 +253,7 @@ export class BoardState {
       }
     }
     for (const labels of map.values()) {
-      labels.sort((a, b) => Number(a.position) - Number(b.position));
+      labels.sort(byPosition);
     }
     return map;
   });
@@ -511,12 +511,9 @@ export class BoardState {
     workspaceClientId?: string | null;
     workspaceKind?: "standard" | "board";
     workspaceInactiveCardsDays?: number;
-    workspaceBoardHealthEnabled?: boolean;
-    workspaceBoardHealthOverdueEnabled?: boolean;
-    workspaceBoardHealthUnassignedEnabled?: boolean;
-    workspaceBoardHealthInactiveEnabled?: boolean;
     workspaceCardKeyPrefixes?: string[];
     boardLinkingEnabled?: boolean;
+    notesEnabled?: boolean;
     boardSyncAllowed?: boolean;
     hasMirrors?: boolean;
     lists: AnyList[];
@@ -548,12 +545,9 @@ export class BoardState {
     this.workspaceClientId.set(payload.workspaceClientId ?? null);
     this.workspaceKind.set(payload.workspaceKind ?? null);
     this.inactiveCardsDays.set(payload.workspaceInactiveCardsDays ?? DEFAULT_INACTIVE_CARDS_DAYS);
-    this.boardHealthEnabled.set(payload.workspaceBoardHealthEnabled !== false);
-    this.boardHealthOverdueEnabled.set(payload.workspaceBoardHealthOverdueEnabled !== false);
-    this.boardHealthUnassignedEnabled.set(payload.workspaceBoardHealthUnassignedEnabled !== false);
-    this.boardHealthInactiveEnabled.set(payload.workspaceBoardHealthInactiveEnabled !== false);
     this.workspaceCardKeyPrefixes.set(payload.workspaceCardKeyPrefixes ?? []);
     this.boardLinkingEnabled.set(payload.boardLinkingEnabled !== false);
+    this.notesEnabled.set(payload.notesEnabled !== false);
     this.boardSyncAllowed.set(payload.boardSyncAllowed !== false);
     this.hasMirrorsAtHydration.set(payload.hasMirrors === true);
     this.lists.set(payload.lists);
@@ -689,9 +683,9 @@ export class BoardState {
     this.workspaceClientId.set(null);
     this.workspaceKind.set(null);
     this.inactiveCardsDays.set(DEFAULT_INACTIVE_CARDS_DAYS);
-    this.boardHealthEnabled.set(true);
     this.workspaceCardKeyPrefixes.set([]);
     this.boardLinkingEnabled.set(true);
+    this.notesEnabled.set(true);
     this.boardSyncAllowed.set(true);
     this.hasMirrorsAtHydration.set(false);
     this.lists.set([]);
@@ -872,14 +866,6 @@ export class BoardState {
     this.bumpCardMutationSeq();
   }
 
-  removeCardsForBoard(boardId: string) {
-    const cardIds = new Set(this.cards().filter((card) => card.boardId === boardId).map((card) => card.id));
-    this.removeCardCollections(cardIds);
-    this.cards.update((cs) => cs.filter((c) => c.boardId !== boardId));
-    this.recentlyAddedCardAt.clear();
-    this.bumpCardMutationSeq();
-  }
-
   addCard(card: AnyCard) {
     let added = false;
     this.cards.update((cs) => {
@@ -891,11 +877,6 @@ export class BoardState {
     // retention protects it against a racing stale refresh until the server catches up.
     if (added) this.recentlyAddedCardAt.set(card.id, Date.now());
     this.bumpCardMutationSeq();
-  }
-
-  upsertCard(card: AnyCard) {
-    if (this.hasCard(card.id)) this.updateCard(card);
-    else this.addCard(card);
   }
 
   /**
@@ -1012,6 +993,20 @@ export class BoardState {
       ...attachments.filter((attachment) => attachment.cardId !== detail.card.id),
       ...detail.attachments,
     ]);
+  }
+
+  /**
+   * Linked items change only through `card:links:changed` re-reads, never through another realtime
+   * event, so replacing just this slice cannot revert newer state the way a stale /detail could.
+   */
+  setCardLinkedItems(cardId: string, linkedNotes: LinkedInternalSummary[]) {
+    this.detailedCards.update((cards) => {
+      const detail = cards.get(cardId);
+      if (!detail) return cards;
+      const next = new Map(cards);
+      next.set(cardId, { ...detail, linkedNotes });
+      return next;
+    });
   }
 
   addChecklist(cardId: string, checklist: WireCardChecklist) {
@@ -1202,22 +1197,6 @@ export class BoardState {
     };
   }
 
-  snapshotCards() {
-    return this.cards();
-  }
-
-  restoreCards(cards: AnyCard[]) {
-    this.cards.set(cards);
-  }
-
-  snapshotSeparators() {
-    return this.separators();
-  }
-
-  restoreSeparators(separators: AnySeparator[]) {
-    this.separators.set(separators);
-  }
-
   snapshot(): Omit<OfflineBoardSnapshot, "boardId" | "cachedAt"> | null {
     const board = this.board();
     const viewerRole = this.viewerRole();
@@ -1227,12 +1206,9 @@ export class BoardState {
       workspaceClientId: this.workspaceClientId() ?? undefined,
       workspaceKind: this.workspaceKind() ?? undefined,
       workspaceInactiveCardsDays: this.inactiveCardsDays(),
-      workspaceBoardHealthEnabled: this.boardHealthEnabled(),
-      workspaceBoardHealthOverdueEnabled: this.boardHealthOverdueEnabled(),
-      workspaceBoardHealthUnassignedEnabled: this.boardHealthUnassignedEnabled(),
-      workspaceBoardHealthInactiveEnabled: this.boardHealthInactiveEnabled(),
       workspaceCardKeyPrefixes: this.workspaceCardKeyPrefixes(),
       boardLinkingEnabled: this.boardLinkingEnabled(),
+      notesEnabled: this.notesEnabled(),
       boardSyncAllowed: this.boardSyncAllowed(),
       hasMirrors: this.hasMirrorsAtHydration(),
       lists: this.lists(),
@@ -1267,12 +1243,9 @@ export class BoardState {
     this.workspaceClientId.set(snapshot.workspaceClientId ?? null);
     this.workspaceKind.set(snapshot.workspaceKind ?? null);
     this.inactiveCardsDays.set(snapshot.workspaceInactiveCardsDays ?? DEFAULT_INACTIVE_CARDS_DAYS);
-    this.boardHealthEnabled.set(snapshot.workspaceBoardHealthEnabled !== false);
-    this.boardHealthOverdueEnabled.set(snapshot.workspaceBoardHealthOverdueEnabled !== false);
-    this.boardHealthUnassignedEnabled.set(snapshot.workspaceBoardHealthUnassignedEnabled !== false);
-    this.boardHealthInactiveEnabled.set(snapshot.workspaceBoardHealthInactiveEnabled !== false);
     this.workspaceCardKeyPrefixes.set(snapshot.workspaceCardKeyPrefixes ?? []);
     this.boardLinkingEnabled.set(snapshot.boardLinkingEnabled !== false);
+    this.notesEnabled.set(snapshot.notesEnabled !== false);
     this.boardSyncAllowed.set(snapshot.boardSyncAllowed !== false);
     this.hasMirrorsAtHydration.set(snapshot.hasMirrors === true);
     this.lists.set(snapshot.lists);
@@ -1381,7 +1354,7 @@ export class BoardState {
   }
 
   sortCustomFields(fields: AnyCustomField[]) {
-    return [...fields].sort((a, b) => Number(a.position) - Number(b.position));
+    return [...fields].sort(byPosition);
   }
 
   /**
@@ -1392,18 +1365,18 @@ export class BoardState {
     this.customFields.update((fields) =>
       fields.map((field) => {
         if (field.id !== fieldId || !("options" in field)) return field;
-        const options = [...update(field.options)].sort((a, b) => Number(a.position) - Number(b.position));
+        const options = [...update(field.options)].sort(byPosition);
         return { ...field, options };
       }),
     );
   }
 
   private sortChecklists(checklists: WireCardChecklist[]): WireCardChecklist[] {
-    return [...checklists].sort((a, b) => Number(a.position) - Number(b.position));
+    return [...checklists].sort(byPosition);
   }
 
   private sortChecklistItems(items: WireCardChecklistItem[]): WireCardChecklistItem[] {
-    return [...items].sort((a, b) => Number(a.position) - Number(b.position));
+    return [...items].sort(byPosition);
   }
 
   private updateChecklistItems(cardId: string, checklistId: string, update: (items: WireCardChecklistItem[]) => WireCardChecklistItem[]) {

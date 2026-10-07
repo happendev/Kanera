@@ -2,5 +2,6 @@
   "web": 4210,
   "api": 3110,
   "publicApi": 3111,
-  "worker": 3113
+  "worker": 3113,
+  "mcp": 3112
 }

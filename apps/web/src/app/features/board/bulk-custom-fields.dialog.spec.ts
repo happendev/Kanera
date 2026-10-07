@@ -1,3 +1,4 @@
+import { createComponentFixture } from "../../../test/component-fixture";
 import { provideZonelessChangeDetection } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import type { CardCustomFieldValue } from "@kanera/shared/schema";
@@ -64,7 +65,7 @@ describe("BulkCustomFieldsDialogComponent", () => {
       ],
     }).compileComponents();
 
-    const fixture = TestBed.createComponent(BulkCustomFieldsDialogComponent);
+    const fixture = createComponentFixture(BulkCustomFieldsDialogComponent);
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("cardIds", ["card-1", "card-2", "card-3"]);
     fixture.componentRef.setInput("cards", [
@@ -157,7 +158,7 @@ describe("BulkCustomFieldsDialogComponent", () => {
 
     expect(fixture.nativeElement.querySelector(".saving-state")?.textContent).toContain("Updating 3 cards");
     expect(fixture.nativeElement.querySelector(".fields")).toBeNull();
-    expect(fixture.nativeElement.querySelector(".icon-btn").disabled).toBe(true);
+    expect(fixture.nativeElement.querySelector<HTMLButtonElement>(".icon-btn")?.disabled).toBe(true);
     fixture.componentInstance.dismiss();
     expect(dismissed).toBe(false);
 

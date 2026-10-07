@@ -1,3 +1,4 @@
+import { createComponentFixture } from "../../../test/component-fixture";
 import { provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { Router } from "@angular/router";
@@ -60,7 +61,7 @@ describe("CardActionsMenuPopover", () => {
       ],
     });
 
-    const fixture = TestBed.createComponent(CardActionsMenuPopover);
+    const fixture = createComponentFixture(CardActionsMenuPopover);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("workspaceId", "workspace-1");
@@ -95,7 +96,7 @@ describe("CardActionsMenuPopover", () => {
       ],
     });
 
-    const fixture = TestBed.createComponent(CardActionsMenuPopover);
+    const fixture = createComponentFixture(CardActionsMenuPopover);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("workspaceId", "workspace-1");
@@ -132,7 +133,7 @@ describe("CardActionsMenuPopover", () => {
       ],
     });
 
-    const fixture = TestBed.createComponent(CardActionsMenuPopover);
+    const fixture = createComponentFixture(CardActionsMenuPopover);
     const close = vi.fn();
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("boardId", "board-1");
@@ -182,7 +183,7 @@ describe("CardActionsMenuPopover", () => {
       ],
     });
 
-    const fixture = TestBed.createComponent(CardActionsMenuPopover);
+    const fixture = createComponentFixture(CardActionsMenuPopover);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("workspaceId", "workspace-1");
@@ -207,7 +208,7 @@ describe("CardActionsMenuPopover", () => {
       ],
     });
 
-    const fixture = TestBed.createComponent(CardActionsMenuPopover);
+    const fixture = createComponentFixture(CardActionsMenuPopover);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("boardId", "board-1");
     fixture.componentRef.setInput("workspaceId", "workspace-1");
@@ -245,7 +246,7 @@ describe("CardActionsMenuPopover", () => {
       ],
     });
 
-    const fixture = TestBed.createComponent(CardActionsMenuPopover);
+    const fixture = createComponentFixture(CardActionsMenuPopover);
     const close = vi.fn();
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("cardKey", "PROJ-1");
@@ -285,7 +286,7 @@ describe("CardActionsMenuPopover", () => {
       ],
     });
 
-    const fixture = TestBed.createComponent(CardActionsMenuPopover);
+    const fixture = createComponentFixture(CardActionsMenuPopover);
     const close = vi.fn();
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("boardId", "board-1");
@@ -320,7 +321,7 @@ describe("CardActionsMenuPopover", () => {
       ],
     });
 
-    const fixture = TestBed.createComponent(CardQuickEditPopover);
+    const fixture = createComponentFixture(CardQuickEditPopover);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("title", "Ship tests");
     fixture.componentRef.setInput("dueDateLocalDate", "2026-05-20");
@@ -350,7 +351,7 @@ describe("CardActionsMenuPopover", () => {
       ],
     });
 
-    const fixture = TestBed.createComponent(CardQuickEditPopover);
+    const fixture = createComponentFixture(CardQuickEditPopover);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("title", "Ship tests");
     fixture.detectChanges();
@@ -381,7 +382,7 @@ describe("CardActionsMenuPopover", () => {
       ],
     });
 
-    const fixture = TestBed.createComponent(CardQuickEditPopover);
+    const fixture = createComponentFixture(CardQuickEditPopover);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("title", "Ship tests");
     fixture.detectChanges();
@@ -408,7 +409,7 @@ describe("CardActionsMenuPopover", () => {
       ],
     });
 
-    const fixture = TestBed.createComponent(CardQuickEditPopover);
+    const fixture = createComponentFixture(CardQuickEditPopover);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("title", "Ship tests");
     fixture.detectChanges();
@@ -432,7 +433,7 @@ describe("CardActionsMenuPopover", () => {
       ],
     });
 
-    const fixture = TestBed.createComponent(CardQuickEditPopover);
+    const fixture = createComponentFixture(CardQuickEditPopover);
     fixture.componentRef.setInput("cardId", "card-1");
     fixture.componentRef.setInput("title", "Ship tests");
     fixture.detectChanges();

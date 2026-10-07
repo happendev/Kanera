@@ -5,7 +5,7 @@ import { eq, inArray } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { randomUUID } from "node:crypto";
 import { db, pool } from "../db.js";
-import { badRequest, conflict, forbidden } from "../lib/errors.js";
+import { badRequest, conflict } from "../lib/errors.js";
 import {
   createStorageForConfig,
   getConfiguredS3StorageConfig,
@@ -18,13 +18,10 @@ import {
   seedDatabase,
 } from "../scripts/seed-data.js";
 import { writeAdminAudit } from "./audit.js";
+import { requireSuperadmin } from "./helpers.js";
 
 const DEMO_RESET_LOCK_NAME = "kanera:admin-demo-reset";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function requireSuperadmin(req: FastifyRequest) {
-  if (req.adminAuth.role !== "superadmin") throw forbidden("superadmin required");
-}
 
 async function findDemoClients() {
   const rows = await db

@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import type { Page } from "@playwright/test";
 import { webOrigin } from "./support/env";
 import { expect, test } from "./support/fixtures";
-import { boardHref, openBoard, workspaceSettingsHref } from "./support/ui";
+import { boardIdOf, createWorkspaceApiKey, openBoard, workspaceSettingsHref } from "./support/ui";
 
 // Deployed clients reach the public API through the web origin (nginx /public-api/ -> :3001).
 const v1 = "/public-api/api/v1";
@@ -39,16 +39,11 @@ test("a public API write reaches an open board live and a signed webhook", async
   const receiver = await startReceiver();
   try {
     await signIn(page, "amelia");
-    const boardPath = await boardHref(page, "Platform Delivery");
-    const boardId = boardPath.split("/")[2]!;
+    const boardId = await boardIdOf(page, "Platform Delivery");
     const settingsHref = await workspaceSettingsHref(page, "Platform Delivery");
 
     // Credentials are created the way an integrator would: once, from workspace settings.
-    await page.goto(`${settingsHref}/api`);
-    await page.locator('input[name="apiKeyName"]').fill(uniqueName("E2E key"));
-    await page.locator('select[name="apiKeyScope"]').selectOption("write");
-    await page.getByRole("button", { name: "Create API key" }).click();
-    const apiKey = await revealedSecret(page, "Copy API key");
+    const apiKey = await createWorkspaceApiKey(page, settingsHref, uniqueName("E2E key"));
     expect(apiKey).toMatch(/^kanera_/);
 
     await page.locator('input[name="webhookName"]').fill(uniqueName("E2E webhook"));

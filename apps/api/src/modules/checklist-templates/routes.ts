@@ -9,33 +9,20 @@ import {
 } from "@kanera/shared/schema";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import { db, type Db } from "../../db.js";
+import { db, type Tx } from "../../db.js";
 import { assertWorkspaceAccess } from "../../lib/access.js";
 import { recordActivity } from "../../lib/activity.js";
 import { loadAutomation } from "../../lib/automations.js";
 import { loadChecklistTemplate } from "../../lib/checklist-templates.js";
 import { notFound } from "../../lib/errors.js";
 import { moveOrderedEntity } from "../../lib/move-ordered-entity.js";
-import { between, neighbourPositions as resolveNeighbourPositions, positionAtIndex } from "../../lib/position.js";
+import { between, positionAtIndex, workspaceNeighbourPositions } from "../../lib/position.js";
 import { rebalanceChecklistTemplates } from "../../lib/rebalance.js";
 import { emitToWorkspace, emitToWorkspaceAdmins } from "../../realtime/emit.js";
 
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
-
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
 // as targeted indexed probes so large workspaces do not pay for a full template scan.
-function neighbourPositions(workspaceId: string, afterId?: string | null, beforeId?: string | null) {
-  return resolveNeighbourPositions({
-    table: checklistTemplates,
-    id: checklistTemplates.id,
-    position: checklistTemplates.position,
-    scope: and(eq(checklistTemplates.workspaceId, workspaceId), isNull(checklistTemplates.archivedAt)),
-    afterId,
-    beforeId,
-    afterLabel: "afterTemplateId",
-    beforeLabel: "beforeTemplateId",
-  });
-}
+const neighbourPositions = workspaceNeighbourPositions(checklistTemplates, "Template");
 
 async function replaceItems(tx: Tx, templateId: string, items: string[]) {
   await tx.delete(checklistTemplateItems).where(eq(checklistTemplateItems.templateId, templateId));
@@ -121,7 +108,7 @@ export async function checklistTemplateRoutes(app: FastifyInstance) {
     });
 
     const template = await loadChecklistTemplate(templateId);
-    emitToWorkspace(workspaceId, "checklistTemplate:created", { workspaceId, template: template! });
+    await emitToWorkspace(workspaceId, "checklistTemplate:created", { workspaceId, template: template! });
     return reply.status(201).send(template);
   });
 
@@ -153,7 +140,7 @@ export async function checklistTemplateRoutes(app: FastifyInstance) {
     });
 
     const template = await loadChecklistTemplate(id);
-    emitToWorkspace(current.workspaceId, "checklistTemplate:updated", { workspaceId: current.workspaceId, template: template! });
+    await emitToWorkspace(current.workspaceId, "checklistTemplate:updated", { workspaceId: current.workspaceId, template: template! });
     return template!;
   });
 
@@ -177,7 +164,7 @@ export async function checklistTemplateRoutes(app: FastifyInstance) {
       });
       return affectedAutomationIds;
     });
-    emitToWorkspace(current.workspaceId, "checklistTemplate:deleted", { workspaceId: current.workspaceId, templateId: id });
+    await emitToWorkspace(current.workspaceId, "checklistTemplate:deleted", { workspaceId: current.workspaceId, templateId: id });
     for (const automationId of affectedAutomationIds) {
       const automation = await loadAutomation(automationId);
       if (automation) await emitToWorkspaceAdmins(current.workspaceId, "automation:updated", { workspaceId: current.workspaceId, automation });
@@ -217,7 +204,7 @@ export async function checklistTemplateRoutes(app: FastifyInstance) {
     if (rebalancedPositions) {
       await emitToWorkspace(current.workspaceId, "checklistTemplate:rebalanced", { workspaceId: current.workspaceId, positions: rebalancedPositions });
     }
-    emitToWorkspace(current.workspaceId, "checklistTemplate:moved", {
+    await emitToWorkspace(current.workspaceId, "checklistTemplate:moved", {
       workspaceId: current.workspaceId,
       templateId: id,
       position,

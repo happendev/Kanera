@@ -7,6 +7,7 @@ import { EditorDrafts } from "../../core/browser/editor-drafts";
 import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
 import { SocketService } from "../../core/realtime/socket.service";
 import { formatDate, formatTime } from "../../shared/date-format";
+import { byPosition } from "../../shared/position-sort";
 
 /**
  * Autosave debounce. Long enough that ordinary typing produces one request per pause rather than one
@@ -32,7 +33,7 @@ export const SCRATCHPAD_MIN_WIDTH = 320;
 export const SCRATCHPAD_MAX_WIDTH = 720;
 // Matches --drawer-width on the notifications and Up next drawers, so the three personal panels open
 // at one width until the user resizes this one.
-export const SCRATCHPAD_DEFAULT_WIDTH = 500;
+const SCRATCHPAD_DEFAULT_WIDTH = 500;
 /** Bottom-sheet geometry. Tall enough to write in; never so tall the page behind it is unreachable. */
 export const SCRATCHPAD_MIN_SHEET_HEIGHT = 220;
 const SHEET_VIEWPORT_RESERVE = 72;
@@ -85,7 +86,7 @@ export class ScratchpadService {
   private readonly _notes = signal<WireScratchpadNote[]>([]);
   /** Position-sorted, which is the tab-strip order. */
   readonly notes = computed(() =>
-    [...this._notes()].sort((a, b) => Number(a.position) - Number(b.position) || a.id.localeCompare(b.id)),
+    [...this._notes()].sort((a, b) => byPosition(a, b) || a.id.localeCompare(b.id)),
   );
   readonly activeNoteId = signal<string | null>(null);
   readonly activeNote = computed(() => this.notes().find((note) => note.id === this.activeNoteId()) ?? null);
@@ -719,7 +720,7 @@ export class ScratchpadService {
 
   /** After the active page disappears, land on the closest surviving tab rather than on nothing. */
   private selectNeighbour(previous: WireScratchpadNote[], removedId: string): void {
-    const ordered = [...previous].sort((a, b) => Number(a.position) - Number(b.position));
+    const ordered = [...previous].sort(byPosition);
     const index = ordered.findIndex((note) => note.id === removedId);
     const neighbour = ordered[index + 1] ?? ordered[index - 1] ?? null;
     this.setActiveNote(neighbour?.id ?? null);

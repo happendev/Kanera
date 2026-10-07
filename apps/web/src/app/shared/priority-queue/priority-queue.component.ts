@@ -159,7 +159,6 @@ export class PriorityQueueComponent {
    * so both can never be open at once.
    */
   readonly addOpenAt = signal<"head" | "list" | null>(null);
-  readonly addOpen = computed(() => this.addOpenAt() !== null);
 
   private readonly addableCardIds = computed(() => new Set(this.addableCards().map((card) => card.id)));
 

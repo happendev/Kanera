@@ -299,6 +299,7 @@ async function authenticateMcpToken(raw: string, resource: string): Promise<Auth
       apiKeyName: row.apiKeyName ?? row.client.name,
       apiKeyWorkspaceId: row.apiKeyWorkspaceId ?? undefined,
       apiKeyScope: effectiveScope,
+      oauthServiceClientId: row.client.clientId,
     };
   }
   return {
@@ -651,9 +652,20 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
   app.post("/oauth/revoke", async (req, reply) => {
     const body = z.record(z.string(), z.string()).parse(req.body ?? {});
     if (body.token) {
-      const [existing] = await db.select({ familyId: oauthTokens.familyId }).from(oauthTokens)
+      const [existing] = await db.select({ familyId: oauthTokens.familyId, grantId: oauthTokens.grantId }).from(oauthTokens)
         .where(eq(oauthTokens.tokenHash, hashOpaqueToken(body.token))).limit(1);
-      if (existing) await db.update(oauthTokens).set({ revokedAt: new Date() }).where(eq(oauthTokens.familyId, existing.familyId));
+      if (existing) {
+        const now = new Date();
+        await db.transaction(async (tx) => {
+          await tx.update(oauthTokens).set({ revokedAt: now }).where(eq(oauthTokens.familyId, existing.familyId));
+          // A client signing itself out (`kanera auth logout`) leaves a grant with no live tokens.
+          // Revoke it too, so Settings -> AI agents stops listing a connection that can no longer act.
+          if (existing.grantId) {
+            await tx.update(oauthGrants).set({ revokedAt: now, updatedAt: now })
+              .where(and(eq(oauthGrants.id, existing.grantId), isNull(oauthGrants.revokedAt)));
+          }
+        });
+      }
     }
     return reply.status(200).send();
   });

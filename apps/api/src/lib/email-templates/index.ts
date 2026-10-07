@@ -33,7 +33,6 @@ export { cardOverdueEmail } from "./card-overdue.js";
 export type { CardOverdueEmailParams } from "./card-overdue.js";
 export { checklistItemOverdueEmail } from "./card-checklist-item-overdue.js";
 export type { ChecklistItemOverdueEmailParams } from "./card-checklist-item-overdue.js";
-export { emailLayout } from "./layout.js";
 export { dailyDigestEmail } from "./daily-digest.js";
 export type { DailyDigestCardItem, DailyDigestEmailParams } from "./daily-digest.js";
 export { weeklyAdminRecapEmail } from "./weekly-admin-recap.js";
@@ -48,3 +47,14 @@ export { verificationCodeEmail } from "./verification-code.js";
 export type { VerificationCodeEmailParams } from "./verification-code.js";
 export { welcomeEmail } from "./welcome.js";
 export type { WelcomeEmailParams } from "./welcome.js";
+export { importCompletedEmail } from "./import-completed.js";
+export type { ImportCompletedEmailParams } from "./import-completed.js";
+export {
+  lifecycleActiveCheckinEmail,
+  lifecycleEarlySuccessEmail,
+  lifecycleEmailSubject,
+  lifecycleInactiveEmail,
+  lifecycleInviteTeamEmail,
+  lifecycleNoBoardEmail,
+} from "./lifecycle.js";
+export type { LifecycleEmailParams } from "./lifecycle.js";

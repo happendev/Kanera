@@ -31,8 +31,7 @@ import type { AutosaveState } from "./autosave-tracker";
     .chip[data-state="saved"] { color: var(--success); background: color-mix(in srgb, var(--success) 10%, transparent); }
     .chip[data-state="error"] { color: var(--danger); background: var(--danger-bg); }
     .chip[data-state="saving"] { background: var(--surface-2); }
-    .spin { animation: spin 0.8s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: kanera-spinner 0.8s linear infinite; }
   `,
 })
 export class AutosaveStatusComponent {

@@ -86,7 +86,7 @@ void test("templates that seed starter cards also seed a board to hold them", ()
 });
 
 void test("the default template stays compatible with DEFAULT_WORKSPACE_CUSTOM_FIELDS", () => {
-  // default-workspace-custom-fields.ts narrows the default template's field types to the three the
+  // DEFAULT_WORKSPACE_CUSTOM_FIELDS narrows the default template's field types to the three the
   // fallback path can create without options; a select field here would be seeded without options.
   for (const field of DEFAULT_WORKSPACE_TEMPLATE.customFields) {
     assert.ok(["text", "number", "checkbox"].includes(field.type), `${field.name} is ${field.type}`);

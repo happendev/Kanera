@@ -1,13 +1,11 @@
 import { requestContext } from "@fastify/request-context";
-import { cardPath } from "@kanera/shared/card-links";
 import { boards, cardAssignees, cardChecklistItems, cardChecklists, cards, users, workspaces, type CardDueDateSlot, type PushQueueReason } from "@kanera/shared/schema";
 import { eq, inArray } from "drizzle-orm";
-import type { Db } from "../db.js";
+import type { Db, Tx } from "../db.js";
 import type { Mailer } from "./mailer.js";
 import { allowsNotificationEmail, allowsNotificationPush, allowsPersonalNotificationChannel, getNotificationSettingsForUsers, getNotificationWorkspaceRulesForUsers, isClientPushEnabled, type EffectiveNotificationSettings, type EffectiveNotificationWorkspaceRule, type NotificationPreferenceType, type NotificationWorkspaceRuleScope } from "./notification-settings.js";
 import { enqueuePersonalNotification, enqueuePush } from "./push-queue.js";
-
-type Tx = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
+import { absoluteCardUrl } from "./wire-card.js";
 
 interface CardEmailContext {
   cardId: string;
@@ -497,7 +495,7 @@ async function loadRecipients(tx: Tx, userIds: string[], actorId: string | null)
     .where(inArray(users.id, uniqueUserIds));
 }
 
-export function dueLabel(input: DueLabelInput): string | null {
+function dueLabel(input: DueLabelInput): string | null {
   if (!input.dueDateLocalDate) return null;
   const date = shortDateLabel(input.dueDateLocalDate, input.dueDateTimezone || "UTC");
   const slot = slotLabel(input.dueDateSlot);
@@ -539,5 +537,5 @@ function commentEmailExcerpt(markdown: string): string {
 }
 
 function cardUrl(webOrigin: string, organisationKey: string, cardKey: string): string {
-  return new URL(cardPath(organisationKey, cardKey), webOrigin).toString();
+  return absoluteCardUrl(organisationKey, cardKey, webOrigin);
 }

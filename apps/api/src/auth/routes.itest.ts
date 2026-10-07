@@ -6,9 +6,10 @@ import { boardMembers, boards, clients, mfaCredentials, passwordResetTokens, ref
 import { db } from "../db.js";
 import { env } from "../env.js";
 import { buildIntegrationServer } from "../test/integration.js";
-import { hashRefresh, REFRESH_REUSE_GRACE_MS } from "./jwt.js";
+import { REFRESH_REUSE_GRACE_MS } from "./jwt.js";
 import * as OTPAuth from "otpauth";
 import { signupOwner } from "../test/api-fixtures.js";
+import { hashOpaqueToken } from "../lib/tokens.js";
 
 type AuthResponse = { accessToken: string; user: { id: string; showCardKeys: boolean } };
 
@@ -385,7 +386,7 @@ void test("POST /auth/refresh rotates a valid refresh token and sets a replaceme
   assert.equal(replacementCookie.httpOnly, true);
   assert.match(String(replacementCookie.maxAge), /^\d+$/);
 
-  const oldRows = await db.select().from(refreshTokens).where(eq(refreshTokens.tokenHash, hashRefresh(refreshCookie)));
+  const oldRows = await db.select().from(refreshTokens).where(eq(refreshTokens.tokenHash, hashOpaqueToken(refreshCookie)));
   assert.equal(oldRows.length, 1);
   assert.ok(oldRows[0]!.revokedAt);
   assert.ok(oldRows[0]!.replacedById);
@@ -420,7 +421,7 @@ void test("POST /auth/refresh treats old rotated token reuse outside the grace w
   await db
     .update(refreshTokens)
     .set({ revokedAt: staleRevokedAt })
-    .where(eq(refreshTokens.tokenHash, hashRefresh(refreshCookie)));
+    .where(eq(refreshTokens.tokenHash, hashOpaqueToken(refreshCookie)));
 
   const reused = await app.inject({ method: "POST", url: "/auth/refresh", cookies: { kanera_rt: refreshCookie } });
 

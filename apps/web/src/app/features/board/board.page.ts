@@ -21,12 +21,10 @@ import { AppTitleService } from "../../core/title/app-title.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
 import type { AnchoredPanelPlacement } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
-import { DocsLinkComponent } from "../../shared/docs-link.component";
 import { PanelStackService } from "../../shared/panel-stack.service";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { PageHeaderComponent } from "../../shared/page-header.component";
 import { PageToolbarComponent } from "../../shared/page-toolbar.component";
-import { mediaQuerySignal } from "../../shared/media-query.signal";
 import { SearchFieldComponent } from "../../shared/search-field.component";
 import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
 import { ToastComponent } from "../../shared/toast.component";
@@ -37,13 +35,13 @@ import { BoardMembersMenu } from "../shared/board-members-menu.popover";
 import { BoardSocketBridge } from "./board-socket-bridge";
 import { BoardState, type BoardLaneItem, type LaneAnchor } from "./board-state";
 import { BoardMenuCoordinator } from "./board-menu-coordinator.service";
-import { boardWorkRisk, isCardInactive } from "@kanera/shared/card-health";
+import { isCardInactive } from "@kanera/shared/card-timing";
 import { BulkCardActionsMenuPopover } from "./bulk-card-actions-menu.popover";
 import { BulkCustomFieldsDialogComponent } from "./bulk-custom-fields.dialog";
 import { BoardCalendarViewComponent } from "./calendar-view/board-calendar-view.component";
 import { WorkDoneViewComponent } from "./work-done-view/work-done-view.component";
-import { readWorkDoneLayout, writeWorkDoneLayout } from "./work-done-view/work-done-preferences";
-import { NARROW_WORK_DONE_LAYOUT_QUERY, type WorkDoneLayout } from "./work-done-view/work-done.types";
+import { workDoneLayoutState } from "./work-done-view/work-done-preferences";
+import type { WorkDoneLayout } from "./work-done-view/work-done.types";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
 import { CardDetailComponent } from "./card-detail.component";
 import { isOverdue } from "./due-date.util";
@@ -71,10 +69,13 @@ import { BoardMirrorsService } from "../board-mirrors/board-mirrors.service";
 
 import { createSortedLaneProjection, createLaneItemsProjection } from "./lane-projection";
 import { formatRelativeTime } from "../../shared/date-format";
+import { addDays, localDateKey } from "../../shared/day-key.util";
+import { applyAccentScope } from "../../shared/accent-scope";
+import { byPosition } from "../../shared/position-sort";
 
 type AnyCard = Card | WireCard | WireCardSummary;
 
-type BoardRiskFilter = "overdue" | "unassigned" | "inactive";
+type BoardCardFilter = "overdue" | "unassigned" | "inactive";
 const OFFLINE_COPY_PROMPT_DELAY_MS = 3000; // 3 seconds
 const SEARCH_DEBOUNCE_MS = 200;
 
@@ -99,16 +100,10 @@ function sameIdSet(a: string[], b: string[]): boolean {
 }
 
 /** `YYYY-MM-DD` for today plus `offsetDays`, in the viewer's own timezone (due dates are local). */
-function localDateKey(offsetDays: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() + offsetDays);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
 @Component({
   selector: "k-board-page",
   standalone: true,
-  imports: [EmptyStateComponent, RouterLink, MenuDirective, AnchoredPanelDirective, AvatarComponent, BoardBackgroundPopover, BoardCalendarViewComponent, BoardCanvasComponent, BoardGroupColumnComponent, BoardMembersMenu, BoardMirrorsDialogComponent, BoardTableViewComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, CardComposerDialogComponent, CardDetailComponent, CompletedCardsPanelComponent, DocsLinkComponent, FilterBarComponent, ListComponent, MirrorCreateDialogComponent, NotesViewComponent, PageHeaderComponent, PageToolbarComponent, SearchFieldComponent, SegmentedComponent, ToastComponent, TooltipDirective, WatcherPopoverComponent, WorkDoneViewComponent],
+  imports: [EmptyStateComponent, RouterLink, MenuDirective, AnchoredPanelDirective, AvatarComponent, BoardBackgroundPopover, BoardCalendarViewComponent, BoardCanvasComponent, BoardGroupColumnComponent, BoardMembersMenu, BoardMirrorsDialogComponent, BoardTableViewComponent, BulkCardActionsMenuPopover, BulkCustomFieldsDialogComponent, CardComposerDialogComponent, CardDetailComponent, CompletedCardsPanelComponent, FilterBarComponent, ListComponent, MirrorCreateDialogComponent, NotesViewComponent, PageHeaderComponent, PageToolbarComponent, SearchFieldComponent, SegmentedComponent, ToastComponent, TooltipDirective, WatcherPopoverComponent, WorkDoneViewComponent],
   providers: [BoardState, BoardSocketBridge, BoardMenuCoordinator],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./board.page.html",
@@ -155,6 +150,12 @@ export class BoardPage implements OnDestroy {
   readonly rememberedView = signal<ViewMode>("board");
   /** Resolved view mode: URL query param > localStorage > default board. */
   readonly effectiveView = computed<ViewMode>(() => {
+    const view = this.requestedView();
+    // Notes can be switched off for the workspace. A remembered view, a `?view=notes` link or a
+    // live settings change then lands on the kanban instead of a view the switch no longer offers.
+    return view === "notes" && !this.state.notesEnabled() ? "board" : view;
+  });
+  private readonly requestedView = computed<ViewMode>(() => {
     const fromUrl = this.view();
     // A `?view=list` link from before the List view was retired resolves to the Table, which is the
     // view that replaced it — the alternative is silently dropping the reader onto the kanban.
@@ -177,17 +178,17 @@ export class BoardPage implements OnDestroy {
   readonly viewHasQueryBar = computed(() => this.effectiveView() !== "notes");
 
   /**
-   * The 5-way view switch. Disabled as a set while the board loads — the switch stays mounted (it is
+   * The view switch (Notes drops out when the workspace has it off). Disabled as a set while the board loads — the switch stays mounted (it is
    * navigation) but has nothing to navigate within yet.
    */
   readonly viewOptions = computed<SegmentedOption<ViewMode>[]>(() => {
     const disabled = this.state.board() === null;
     return [
-      { id: "board", icon: "layout-kanban", label: "Board view", disabled },
-      { id: "table", icon: "table", label: "Table view", disabled },
-      { id: "calendar", icon: "calendar-week", label: "Calendar view", disabled },
+      { id: "board", icon: "layout-kanban", label: "Board view", shortLabel: "Board", disabled },
+      { id: "table", icon: "table", label: "Table view", shortLabel: "Table", disabled },
+      { id: "calendar", icon: "calendar-week", label: "Calendar view", shortLabel: "Calendar", disabled },
       { id: "history", icon: "history", label: "Work done", disabled },
-      { id: "notes", icon: "notebook", label: "Board Notes", disabled },
+      ...(this.state.notesEnabled() ? [{ id: "notes" as const, icon: "notebook", label: "Board Notes", shortLabel: "Notes", disabled }] : []),
     ];
   });
 
@@ -204,10 +205,12 @@ export class BoardPage implements OnDestroy {
       : `/w/${board.workspaceId}/settings/lists`;
   });
 
-  /** Board colour, falling back to the workspace accent, for the header's lead icon. */
+  /** Board colour, falling back to the workspace accent: the board's accent token. */
+  readonly boardAccentColor = computed(() => this.state.board()?.iconColor ?? this.workspaceAccentColor() ?? null);
+
+  /** The board accent as a CSS colour, for the header's lead icon. */
   readonly boardIconColor = computed(() => {
-    const board = this.state.board();
-    const color = board?.iconColor ?? this.workspaceAccentColor();
+    const color = this.boardAccentColor();
     return color ? `var(--color-${color})` : null;
   });
   // Derived, not stored: the route's card id is its only source. As a signal fed by an effect it
@@ -250,27 +253,18 @@ export class BoardPage implements OnDestroy {
   readonly filterCfConditions = signal<CfFilterCondition[]>([]);
   /** History-only event dimension, surfaced through the page's shared Filter panel. */
   readonly workDoneEventType = signal<WorkDoneEventType | null>(null);
-  private readonly preferredWorkDoneLayout = signal<WorkDoneLayout>(readWorkDoneLayout("board"));
-  private readonly narrowWorkDoneLayout = mediaQuerySignal(NARROW_WORK_DONE_LAYOUT_QUERY);
-  /** Grid is a wide-screen preference; a one-column "grid" is just a less readable list. */
-  readonly workDoneLayout = computed<WorkDoneLayout>(() =>
-    this.narrowWorkDoneLayout() ? "list" : this.preferredWorkDoneLayout()
-  );
-  readonly workDoneLayoutOptions = computed<readonly SegmentedOption<WorkDoneLayout>[]>(() => [
-    { id: "list", icon: "list-details", label: "List layout" },
-    { id: "grid", icon: "layout-grid", label: "Grid layout", disabled: this.narrowWorkDoneLayout() },
-  ]);
+  private readonly workDoneLayoutState = workDoneLayoutState("board");
+  readonly workDoneLayout = this.workDoneLayoutState.layout;
+  readonly workDoneLayoutOptions = this.workDoneLayoutState.options;
 
   setWorkDoneLayout(layout: WorkDoneLayout): void {
-    if (layout === "grid" && this.narrowWorkDoneLayout()) return;
-    this.preferredWorkDoneLayout.set(layout);
-    writeWorkDoneLayout("board", layout);
+    this.workDoneLayoutState.setLayout(layout);
   }
   readonly showUnreadOnly = signal(false);
   readonly showOverdueOnly = signal(false);
   readonly showInactiveOnly = signal(false);
   /** Session-local drill-down selected from Board overview; composed with the normal filter bar. */
-  readonly boardRiskFilter = signal<BoardRiskFilter | null>(null);
+  readonly boardCardFilter = signal<BoardCardFilter | null>(null);
   /** Only cards in the viewer's own "Up next" queue (`viewerPriorityRanks`). */
   readonly showPrioritySetOnly = signal(false);
   readonly showArchived = signal(false);
@@ -320,7 +314,6 @@ export class BoardPage implements OnDestroy {
   readonly mirrorInboundCount = signal(0);
   readonly mirrorCanManage = signal(false);
   readonly mirrorRefreshVersion = signal(0);
-  readonly mirrorConfigured = computed(() => this.mirrorCount() > 0);
   readonly mirrorMenuAvailable = computed(() =>
     this.state.canEditRole() && this.boardLinkingEnabled() && (this.boardSyncAvailable() || this.state.hasMirrorsAtHydration()));
   /** The menu renders only when at least one of its sections would; an empty menu is worse than none. */
@@ -376,7 +369,7 @@ export class BoardPage implements OnDestroy {
   );
 
   readonly sortedLabels = computed(() =>
-    [...this.state.cardLabels()].sort((a, b) => Number(a.position) - Number(b.position))
+    [...this.state.cardLabels()].sort(byPosition)
   );
 
   readonly sortedFilterMembers = computed(() => {
@@ -420,12 +413,12 @@ export class BoardPage implements OnDestroy {
     const unreadOnly = this.effectiveView() !== "history" && this.showUnreadOnly();
     const overdueOnly = this.showOverdueOnly();
     const inactiveOnly = this.showInactiveOnly();
-    const riskFilter = this.boardRiskFilter();
+    const cardFilter = this.boardCardFilter();
     // Like overdue, ignored while viewing archived: archived cards are never in the live queue,
     // so applying it there would blank the archive rather than filter it.
     const prioritySetOnly = this.showPrioritySetOnly();
     const showArchived = this.showArchived();
-    if (!q && !labelIds.length && !memberIds.length && !listIds.length && !conditions.length && !unreadOnly && (!overdueOnly || showArchived) && (!inactiveOnly || showArchived) && (!prioritySetOnly || showArchived) && (!riskFilter || showArchived)) return null;
+    if (!q && !labelIds.length && !memberIds.length && !listIds.length && !conditions.length && !unreadOnly && (!overdueOnly || showArchived) && (!inactiveOnly || showArchived) && (!prioritySetOnly || showArchived) && (!cardFilter || showArchived)) return null;
     const fieldsById = conditions.length ? this.state.customFieldsById() : null;
     const cfValuesByCard = conditions.length ? this.state.customFieldValuesByCardAndField() : null;
     const listSet = new Set(listIds);
@@ -444,14 +437,14 @@ export class BoardPage implements OnDestroy {
         if (labelIdsByCard && !this.hasAny(labelIdsByCard.get(card.id), labelFilterIds)) return false;
         if (assigneeIdsByCard && !this.hasAny(assigneeIdsByCard.get(card.id), memberFilterIds)) return false;
         if (!showArchived && overdueOnly && (card.completedAt || !isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone))) return false;
-        // Inactivity is a live-work signal, matching the health indicator: completed cards do not
-        // become actionable again merely because their final update is more than 14 days old.
+        // Inactivity only applies to live work: completed cards do not
+        // become actionable again merely because their final update is older than the workspace inactivity window.
         if (!showArchived && inactiveOnly && (card.completedAt || !isCardInactive(card.updatedAt, Date.now(), this.state.inactiveCardsDays()))) return false;
-        if (!showArchived && riskFilter) {
+        if (!showArchived && cardFilter) {
           if (card.completedAt) return false;
-          if (riskFilter === "overdue" && !isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone)) return false;
-          if (riskFilter === "unassigned" && (this.state.assigneesByCard().get(card.id)?.length ?? 0) > 0) return false;
-          if (riskFilter === "inactive" && !isCardInactive(card.updatedAt, Date.now(), this.state.inactiveCardsDays())) return false;
+          if (cardFilter === "overdue" && !isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone)) return false;
+          if (cardFilter === "unassigned" && (this.state.assigneesByCard().get(card.id)?.length ?? 0) > 0) return false;
+          if (cardFilter === "inactive" && !isCardInactive(card.updatedAt, Date.now(), this.state.inactiveCardsDays())) return false;
         }
         // The queue drops completed cards (they take no rank), so this also hides the board's
         // recently-completed tiles — a done card no longer has a priority set, by definition.
@@ -479,30 +472,21 @@ export class BoardPage implements OnDestroy {
   );
 
   readonly overviewOpen = signal(false);
-  private readonly workRiskClock = signal(Date.now());
+  private readonly cardTimingClock = signal(Date.now());
   readonly overviewPlacement: AnchoredPanelPlacement = { align: "end", gap: 6, width: 340, maxHeight: 520 };
   readonly boardOverview = computed(() => {
-    const now = this.workRiskClock();
+    const now = this.cardTimingClock();
     const cards = this.state.cards().filter((card) => !card.archivedAt);
     const incomplete = cards.filter((card) => !card.completedAt);
     const overdue = incomplete.filter((card) => isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone, new Date(now))).length;
-    const nextWeek = localDateKey(7);
+    const nextWeek = localDateKey(addDays(new Date(), 7));
     const dueSoon = incomplete.filter((card) => {
       const due = card.dueDateLocalDate;
-      return !!due && due >= localDateKey(0) && due <= nextWeek;
+      return !!due && due >= localDateKey(new Date()) && due <= nextWeek;
     }).length;
     const unassigned = incomplete.filter((card) => (this.state.assigneesByCard().get(card.id)?.length ?? 0) === 0).length;
     const inactive = incomplete.filter((card) => isCardInactive(card.updatedAt, now, this.state.inactiveCardsDays())).length;
-    // Workspace admins choose which observable signals participate in health; the raw counts stay
-    // visible for drill-down even when one signal is excluded from the status calculation.
-    const risk = boardWorkRisk(
-      { active: incomplete.length, overdue, unassigned, inactive },
-      {
-        overdue: this.state.boardHealthOverdueEnabled(),
-        unassigned: this.state.boardHealthUnassignedEnabled(),
-        inactive: this.state.boardHealthInactiveEnabled(),
-      },
-    );
+    // Counts support triage without inferring delivery status from card bookkeeping.
     const listCounts = this.state.visibleLists().map((list) => ({
       id: list.id,
       name: list.name,
@@ -516,7 +500,6 @@ export class BoardPage implements OnDestroy {
       dueSoon,
       unassigned,
       inactive,
-      risk,
       listCounts,
     };
   });
@@ -526,8 +509,8 @@ export class BoardPage implements OnDestroy {
     this.overviewOpen.update((open) => !open);
   }
 
-  setBoardRiskFilter(filter: BoardRiskFilter | null): void {
-    this.boardRiskFilter.set(this.boardRiskFilter() === filter ? null : filter);
+  setBoardCardFilter(filter: BoardCardFilter | null): void {
+    this.boardCardFilter.set(this.boardCardFilter() === filter ? null : filter);
   }
 
   openPortfolio(): void {
@@ -658,7 +641,7 @@ export class BoardPage implements OnDestroy {
     (this.effectiveView() !== "history" && this.showUnreadOnly()) ||
     this.showOverdueOnly() ||
     this.showInactiveOnly() ||
-    this.boardRiskFilter() !== null ||
+    this.boardCardFilter() !== null ||
     this.showPrioritySetOnly() ||
     this.showArchived() ||
     this.showCompleted()
@@ -934,7 +917,7 @@ export class BoardPage implements OnDestroy {
     this.shortcuts.registerAll("Board", [
       { keys: "c", label: "New card", when: () => ready() && this.state.canEdit() && this.effectiveView() !== "notes" && !this.showArchived(), run: () => this.openComposer() },
       { keys: "/", label: "Search cards", when: () => ready() && this.viewHasQueryBar(), run: () => this.focusCardSearch() },
-      ...views.map(([key, mode, label]) => ({ keys: key, label, when: ready, run: () => this.setView(mode) })),
+      ...views.map(([key, mode, label]) => ({ keys: key, label, when: () => ready() && (mode !== "notes" || this.state.notesEnabled()), run: () => this.setView(mode) })),
       { keys: "w", label: "Board watchers", when: ready, run: () => this.toggleBoardWatcherPopover() },
       { keys: "shift+d", label: "Toggle compact cards", when: () => ready() && this.effectiveView() === "board", run: () => this.toggleCompactCards() },
     ], this.destroyRef);
@@ -955,8 +938,8 @@ export class BoardPage implements OnDestroy {
       if (!this.overviewOpen()) return;
       // A computed cannot observe time passing. Refresh while the panel is open so due/inactivity
       // boundaries change the assessment without requiring an unrelated card mutation.
-      this.workRiskClock.set(Date.now());
-      const timer = window.setInterval(() => this.workRiskClock.set(Date.now()), 60_000);
+      this.cardTimingClock.set(Date.now());
+      const timer = window.setInterval(() => this.cardTimingClock.set(Date.now()), 60_000);
       onCleanup(() => window.clearInterval(timer));
     });
     effect((onCleanup) => {
@@ -1066,26 +1049,7 @@ export class BoardPage implements OnDestroy {
       const color = board
         ? (board.iconColor ?? this.workspaceService.accentColorForBoard(board.id))
         : null;
-      const style = this.el.nativeElement.style;
-      if (color) {
-        // The identity colour is decorative; the *-accent token is its contrast-checked action tone
-        // (light mode only — dark falls back to the identity colour and relies on --accent-ink).
-        const accent = `var(--color-${color}-accent, var(--color-${color}))`;
-        style.setProperty("--accent", accent);
-        style.setProperty("--accent-hover", `color-mix(in srgb, ${accent}, black 15%)`);
-        style.setProperty("--accent-fg", "var(--accent-ink)");
-        style.setProperty("--ring", `color-mix(in srgb, ${accent} 40%, transparent)`);
-        // --accent-soft resolves its var(--accent) where it is *declared*, so the :root
-        // definition would stay the default teal here. Rebind it with the board colour so
-        // engaged toolbar controls tint with the board rather than the app accent.
-        style.setProperty("--accent-soft", `color-mix(in srgb, var(--color-${color}) 8%, transparent)`);
-      } else {
-        style.removeProperty("--accent");
-        style.removeProperty("--accent-hover");
-        style.removeProperty("--accent-fg");
-        style.removeProperty("--ring");
-        style.removeProperty("--accent-soft");
-      }
+      applyAccentScope(this.el.nativeElement.style, color);
       this.workspaceService.setActiveAccentColor(color);
     });
 
@@ -1159,7 +1123,7 @@ export class BoardPage implements OnDestroy {
       this.showUnreadOnly.set(saved?.showUnreadOnly ?? false);
       this.showOverdueOnly.set(saved?.showOverdueOnly ?? false);
       this.showInactiveOnly.set(saved?.showInactiveOnly ?? false);
-      this.boardRiskFilter.set(null);
+      this.boardCardFilter.set(null);
       this.showPrioritySetOnly.set(saved?.showPrioritySetOnly ?? false);
       this.showArchived.set(false);
       this.membersPopoverOpen.set(false);
@@ -1411,6 +1375,7 @@ export class BoardPage implements OnDestroy {
       workspaceClientId?: string | null;
       workspaceKind?: "standard" | "board";
       boardLinkingEnabled?: boolean;
+      notesEnabled?: boolean;
       boardSyncAllowed?: boolean;
       hasMirrors?: boolean;
       lists: List[];
@@ -1567,8 +1532,8 @@ export class BoardPage implements OnDestroy {
         // Only the buckets that name a single day can seed a date; "This week" and "Overdue" are
         // ranges, and picking an arbitrary date inside one would be inventing an answer.
         const bucket = group.meta.bucket;
-        if (bucket === "today") return { dueDateLocalDate: localDateKey(0) };
-        if (bucket === "tomorrow") return { dueDateLocalDate: localDateKey(1) };
+        if (bucket === "today") return { dueDateLocalDate: localDateKey(new Date()) };
+        if (bucket === "tomorrow") return { dueDateLocalDate: localDateKey(addDays(new Date(), 1)) };
         return {};
       }
       default:
@@ -2009,7 +1974,7 @@ export class BoardPage implements OnDestroy {
     this.showUnreadOnly.set(false);
     this.showOverdueOnly.set(false);
     this.showInactiveOnly.set(false);
-    this.boardRiskFilter.set(null);
+    this.boardCardFilter.set(null);
     this.showPrioritySetOnly.set(false);
     this.showArchived.set(false);
     this.completedFrom.set("");

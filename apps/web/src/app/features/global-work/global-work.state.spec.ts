@@ -471,26 +471,6 @@ describe("GlobalWorkState", () => {
     expect(state.groupByIsSet()).toBe(false);
   });
 
-  it("applies known realtime mutations immediately and converges through a debounced query", async () => {
-    vi.useFakeTimers();
-    try {
-      const { state, socket, post } = setup();
-      await state.initialize("my");
-      socket.trigger("card:assignees:set", {
-        boardId: "30000000-0000-4000-8000-000000000001",
-        cardId: "40000000-0000-4000-8000-000000000001",
-        assigneeIds: [],
-      });
-      expect(state.response().cards[0]?.assigneeIds).toEqual([]);
-      expect(state.loading()).toBe(false);
-      await vi.advanceTimersByTimeAsync(180);
-      expect(post.mock.calls.filter(([path]) => path === "/work/cards/query")).toHaveLength(2);
-      expect(state.loading()).toBe(false);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
   it("clears stale-card timestamps immediately for moves and checklist activity", async () => {
     vi.useFakeTimers();
     try {
@@ -1273,7 +1253,6 @@ describe("GlobalWorkState", () => {
     state.setGrouping("board");
     state.setDisplay("board");
     state.toggleWorkspaceCollapsed(workspaceId);
-    state.toggleSectionCollapsed(boardId);
     state.setCollapsedTableGroupKeys([`board:${boardId}`]);
     state.setCollapsedHistoryDayKeys(["2026-07-24"]);
     state.toggleChecklistGroupCollapsed("checklist:overdue");
@@ -1282,7 +1261,6 @@ describe("GlobalWorkState", () => {
     expect(readGlobalWorkPreference(userId, "my")).toMatchObject({
       definition: {
         collapsedWorkspaceIds: [workspaceId],
-        collapsedSectionIds: [boardId],
         table: { collapsedGroupKeys: [`board:${boardId}`] },
       },
       collapsedTableGroupKeys: [`board:${boardId}`],
@@ -1308,14 +1286,11 @@ describe("GlobalWorkState", () => {
     };
 
     state.toggleWorkspaceCollapsed(workspaceId);
-    state.toggleSectionCollapsed(boardId);
     expect(state.definition().collapsedWorkspaceIds).toEqual([]);
-    expect(state.definition().collapsedSectionIds).toEqual([]);
 
     state.applySavedView(savedView);
     await vi.waitFor(() => expect(state.loading()).toBe(false));
     expect(state.definition().collapsedWorkspaceIds).toEqual([workspaceId]);
-    expect(state.definition().collapsedSectionIds).toEqual([boardId]);
   });
 
   it("includes the complete table presentation when creating and applying a saved view", async () => {

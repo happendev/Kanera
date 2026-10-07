@@ -251,7 +251,9 @@
           <i class="ti ti-chevron-right"></i>
         </a>
       </div>
-      <p class="first-run-foot">Press <kbd class="k-kbd">?</kbd> anywhere for keyboard shortcuts.</p>
+      @if (!touchOnly()) {
+        <p class="first-run-foot">Press <kbd class="k-kbd">?</kbd> anywhere for keyboard shortcuts.</p>
+      }
     </section>
     }
     <section class="focus-grid" aria-label="Focus">

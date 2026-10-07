@@ -22,7 +22,7 @@ import {
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { hashPassword } from "../auth/password.js";
-import { db, pool, type Db } from "../db.js";
+import { db, pool, type TxOnly as Tx } from "../db.js";
 import { env } from "../env.js";
 import { allocateCardKeys } from "../lib/card-keys.js";
 
@@ -71,8 +71,6 @@ const COVER_ASSETS = [
   { fileName: "benchmark-cover-square.svg", url: "/assets/perf/benchmark-cover-square.svg", width: 900, height: 900, color: "#c85f38" },
   { fileName: "benchmark-cover-tall.svg", url: "/assets/perf/benchmark-cover-tall.svg", width: 700, height: 1200, color: "#285783" },
 ] as const;
-
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 interface MemberSeed {
   id: string;
@@ -407,7 +405,6 @@ async function replaceFixture(tx: Tx): Promise<SecondarySummary> {
 
   return await insertSecondaryWorkspaces(tx, createdAt, now);
 }
-
 
 const SECONDARY_LIST_NAMES = ["Intake", "Shaping", "Building", "Review", "Blocked", "Shipping", "Watching", "Archive soon"];
 const SECONDARY_WORKSPACE_NAMES = [

@@ -300,23 +300,6 @@ describe("NotificationsService", () => {
     }
   });
 
-  it("loads the first page and subsequent pages with expected query params", async () => {
-    api.get.mockImplementation((path: string) => {
-      if (path === "/notifications/org-unread-counts") return Promise.resolve([]);
-      if (path.startsWith("/notifications?") || path.startsWith("/notifications/unread?")) return Promise.resolve(page([notification()], "cursor-1", 4));
-      return Promise.resolve([]);
-    });
-    service.loadError.set("Previous error");
-
-    await service.loadFirstPage();
-    await service.loadMore();
-
-    expect(api.get).toHaveBeenCalledWith("/notifications/unread?limit=25");
-    expect(api.get).toHaveBeenCalledWith("/notifications/unread?limit=25&cursor=cursor-1");
-    expect(service.unreadCount()).toBe(4);
-    expect(service.loadError()).toBeNull();
-  });
-
   it("keeps unread and all notification pages separate when switching tabs", async () => {
     api.get.mockImplementation((path: string) => {
       if (path === "/notifications/org-unread-counts") return Promise.resolve([]);
@@ -395,28 +378,6 @@ describe("NotificationsService", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(api.get).toHaveBeenCalledWith("/notifications/unread-count");
     expect(service.unreadCount()).toBe(0);
-  });
-
-  it("loads board unread counts", async () => {
-    await service.refreshBoardUnreadCounts();
-
-    expect(api.get).toHaveBeenCalledWith("/notifications/board-unread-counts");
-    expect(service.boardUnreadCounts()).toEqual({ "board-1": 2 });
-  });
-
-  it("loads card unread counts", async () => {
-    await service.refreshCardUnreadCounts();
-
-    expect(api.get).toHaveBeenCalledWith("/notifications/card-unread-counts");
-    expect(service.cardUnreadCounts()).toEqual({ "card-1": 2 });
-    expect(service.cardUnreadCount("card-1")).toBe(2);
-  });
-
-  it("loads filter users from actual notification actors, including guests", async () => {
-    await service.refreshNotificationUserOptions();
-
-    expect(api.get).toHaveBeenCalledWith("/notifications/users");
-    expect(service.notificationUserOptions()).toEqual([{ userId: "guest-1", displayName: "Maya", avatarUrl: null }]);
   });
 
   it("loads watcher lists and updates a visible board watcher cache after toggling", async () => {

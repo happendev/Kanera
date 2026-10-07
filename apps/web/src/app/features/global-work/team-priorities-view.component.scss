@@ -139,7 +139,9 @@
 .lane-row {
   position: relative;
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) auto;
+  // Rank and content only: the due chip lives in the meta line and the tools overlay on hover, so
+  // the title gets every pixel the lane has.
+  grid-template-columns: 22px minmax(0, 1fr);
   gap: 8px;
   align-items: center;
   min-height: 44px;
@@ -186,6 +188,12 @@
   opacity: 0.65;
 }
 
+.lane-row:not(.locked) .row-rank {
+  // Pinned to the title's first line, not centred on a row that may now be two or three lines.
+  align-self: start;
+  margin-top: 1px;
+}
+
 .row-main {
   display: grid;
   // An explicit full-width track: the global button reset's justify-content: center survives the
@@ -210,17 +218,28 @@
 }
 
 .row-title {
+  // Two lines, then clamp. A lane is ~300px on every device, so one nowrap line left a title of a
+  // word or two once the rank, due chip and tools took their share — the order read as "Reduce …,
+  // Roll out …". The title is what the lane exists to show; a second line is cheaper than guessing.
+  display: -webkit-box;
   overflow: hidden;
   font-size: 13px;
   font-weight: 550;
   line-height: 1.35;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  // Restated: `.row-main` is a <button>, and the global button reset's nowrap inherits into it.
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .row-context {
   display: flex;
-  gap: 4px;
+  // Wraps rather than clipping the key: an ellipsised key ("DEVELOPMEN") is a wrong identifier,
+  // where a board · list trail dropping to its own line is merely taller.
+  flex-wrap: wrap;
+  gap: 2px 4px;
   align-items: center;
   min-width: 0;
   overflow: hidden;
@@ -236,9 +255,25 @@
 
 .row-card-key {
   @include key.card-key;
+
+  // Its own line, as in the docked panel: a key sharing the board · list line pushed the list (and
+  // its separator) onto a ragged third line in every ~300px lane.
+  flex-basis: 100%;
+}
+
+.row-trail-part {
+  display: inline-flex;
+  flex: 0 1 auto;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .row-context-part {
+  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -248,7 +283,8 @@
 }
 
 .row-due {
-  justify-self: end;
+  // Pushed to the far end of the meta line's last line, where a date reads as a trailing fact.
+  margin-left: auto;
   padding: 1.5px 6px;
   color: var(--text-muted);
   font-size: 10px;
@@ -324,7 +360,10 @@
 }
 
 // Readable, unmistakably inert, and still holding its number. Dashed where a real row is solid.
+// Spans every track after the rank: it has no due chip or tools, and leaving their columns empty
+// stopped the dashed box short of the row's right edge.
 .row-locked {
+  grid-column: 2 / -1;
   display: flex;
   gap: 7px;
   align-items: center;
@@ -436,27 +475,80 @@
   opacity: 0.35;
 }
 
+// Touch: the panel's two-line row (see priority-queue.component.scss). With the tools always
+// visible there is no room for them beside the title, so the title and its key · board · list trail
+// keep the full width above, and the due chip pairs off with the tools on a line of their own.
 @media (pointer: coarse) {
   .lane-row {
-    grid-template-columns: 22px minmax(0, 1fr) auto auto;
-    padding: 9px 8px;
+    grid-template-columns: 22px minmax(0, 1fr);
+    align-items: start;
+    row-gap: 6px;
+    padding: 10px 10px 9px;
   }
 
-  // The tools no longer overlay, so the due chip keeps its own column and the grid grows one.
+  .row-tools {
+    grid-area: 2 / 2 / 3 / 3;
+    align-self: center;
+  }
+
+  .row-due {
+    padding: 3px 7px;
+    font-size: 11px;
+  }
+
+  // On a curatable row the date pairs off with the tools instead: it sits at the left of the tools
+  // line (the rank column + gap from the edge, centred on the 36px buttons), so the meta line stays
+  // key · board · list and the tools line is not half empty. Rows without tools keep it inline.
+  .lane-row.can-curate .row-due {
+    position: absolute;
+    bottom: 9px + 18px;
+    left: 10px + 22px + 8px;
+    margin: 0;
+    transform: translateY(50%);
+  }
+
   .row-tools {
     position: static;
+    justify-self: end;
+    // 8px apart so each button's 4px hit-area bleed (below) reaches 44px without overlapping.
+    gap: 8px;
+    padding: 0;
     background: none;
     border: 0;
     transform: none;
     opacity: 1;
 
     button {
-      width: 30px;
-      height: 30px;
+      position: relative;
+      width: 36px;
+      height: 36px;
+      font-size: 15px;
       background: var(--surface-2);
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
+
+      // A 44px touch target around a 36px visual: three full 44px squares per row read as a
+      // toolbar, not a list.
+      &::after {
+        position: absolute;
+        inset: -4px;
+        content: "";
+      }
     }
+
+    // Hover never fires on touch, so the destructive tool carries its colour at rest.
+    .row-remove {
+      color: var(--danger);
+    }
+  }
+
+  // Locked placeholders have no second line; keep them a single, touch-height row.
+  .lane-row.locked {
+    align-items: center;
+  }
+
+  .row-locked {
+    min-height: 40px;
   }
 }
 

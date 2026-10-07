@@ -32,8 +32,15 @@ export const EMAIL_QUEUE_TYPES = [
   "pro_cancellation_scheduled",
   "pro_cancellation_reversed",
   "pro_cancelled",
+  "import_completed",
+  "lifecycle_no_board",
+  "lifecycle_invite_team",
+  "lifecycle_early_success",
+  "lifecycle_inactive",
+  "lifecycle_active_checkin",
 ] as const;
 export type EmailQueueType = (typeof EMAIL_QUEUE_TYPES)[number];
+export type LifecycleEmailQueueType = Extract<EmailQueueType, `lifecycle_${string}`>;
 
 export const EMAIL_QUEUE_STATUS = {
   queued: "queued",
@@ -245,6 +252,16 @@ export type BillingLimitsSummary = {
   maxAutomationExecutionsPerMonth: number;
 };
 
+/**
+ * Trial-warning "what you achieved" summary. Counts only: lifecycle copy must never quote or infer
+ * from board content.
+ */
+export type BillingUsageSummary = {
+  boards: number;
+  cards: number;
+  members: number;
+};
+
 export type BillingEmailQueueData = {
   clientId: string;
   dedupeKey?: string | null;
@@ -264,6 +281,38 @@ export type BillingEmailQueueData = {
   billedUserEmail?: string | null;
   billedUserName?: string | null;
   activeSeatCount?: number | null;
+  /** Optional because rows queued before the summary existed must still render. */
+  usage?: BillingUsageSummary | null;
+};
+
+export type ImportCompletedEmailQueueData = {
+  displayName: string;
+  source: "trello" | "kanera" | "csv";
+  boardName: string;
+  boardUrl: string;
+  lists: number;
+  cards: number;
+  checklistItems: number;
+  comments: number;
+  attachmentsImported: number;
+  attachmentsSkipped: number;
+  warningCount: number;
+};
+
+/** Which single next workflow the early-success email introduces. */
+export type LifecycleNextStep = "automations" | "my_cards";
+
+export type LifecycleEmailQueueData = {
+  displayName: string;
+  orgName: string;
+  ctaUrl: string;
+  unsubscribeUrl: string;
+  /** early_success only. */
+  nextStep?: LifecycleNextStep | null;
+  /** active_checkin only: whether the organisation is on the free plan (expansion copy differs). */
+  onFreePlan?: boolean | null;
+  /** inactive and active_checkin: where feedback goes (LIFECYCLE_FEEDBACK_EMAIL, default support@kanera.app). */
+  feedbackEmail?: string | null;
 };
 
 export type EmailQueueData =
@@ -295,7 +344,13 @@ export type EmailQueueData =
   | { type: "seat_capacity_reduced"; data: BillingEmailQueueData }
   | { type: "pro_cancellation_scheduled"; data: BillingEmailQueueData }
   | { type: "pro_cancellation_reversed"; data: BillingEmailQueueData }
-  | { type: "pro_cancelled"; data: BillingEmailQueueData };
+  | { type: "pro_cancelled"; data: BillingEmailQueueData }
+  | { type: "import_completed"; data: ImportCompletedEmailQueueData }
+  | { type: "lifecycle_no_board"; data: LifecycleEmailQueueData }
+  | { type: "lifecycle_invite_team"; data: LifecycleEmailQueueData }
+  | { type: "lifecycle_early_success"; data: LifecycleEmailQueueData }
+  | { type: "lifecycle_inactive"; data: LifecycleEmailQueueData }
+  | { type: "lifecycle_active_checkin"; data: LifecycleEmailQueueData };
 
 export const emailQueue = pgTable(
   "email_queue",

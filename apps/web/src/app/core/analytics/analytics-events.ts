@@ -51,4 +51,3 @@ export interface AnalyticsEventMap {
 }
 
 export type AnalyticsEventName = keyof AnalyticsEventMap;
-export type AnalyticsEventProperties<TEvent extends AnalyticsEventName> = AnalyticsEventMap[TEvent];

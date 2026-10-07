@@ -1,3 +1,4 @@
+import { createComponentFixture } from "../../../test/component-fixture";
 import { provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { AuthService } from "../../core/auth/auth.service";
@@ -36,7 +37,7 @@ describe("WatcherPopoverComponent", () => {
         },
       ],
     });
-    const fixture = TestBed.createComponent(WatcherPopoverComponent);
+    const fixture = createComponentFixture(WatcherPopoverComponent);
     fixture.componentRef.setInput("kind", "card");
     fixture.componentRef.setInput("entityId", "card-1");
     fixture.componentRef.setInput("workspaceId", "workspace-1");
@@ -60,7 +61,7 @@ describe("WatcherPopoverComponent", () => {
     expect(fixture.nativeElement.textContent).toContain("Ada");
     expect(fixture.nativeElement.textContent).toContain("Stop watching card");
 
-    fixture.nativeElement.querySelector(".wp-toggle").click();
+    fixture.nativeElement.querySelector<HTMLButtonElement>(".wp-toggle")!.click();
     await fixture.whenStable();
 
     expect(notifications.toggleCardWatch).toHaveBeenCalledWith("card-1");

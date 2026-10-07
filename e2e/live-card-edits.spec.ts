@@ -1,6 +1,6 @@
 import type { APIRequestContext, Locator, Page } from "@playwright/test";
 import { expect, test } from "./support/fixtures";
-import { boardHref, completeCard, expectBoardLoaded, moveCardToList, openBoard, openCard, renameCard, setDescription } from "./support/ui";
+import { boardIdOf, completeCard, expectBoardLoaded, moveCardToList, openBoard, openCard, renameCard, setDescription } from "./support/ui";
 
 // One user edits a card through card detail; everyone else only has pages that were already open.
 // Nothing here reloads, so every assertion on a viewer's page is realtime delivery into that view.
@@ -8,13 +8,13 @@ import { boardHref, completeCard, expectBoardLoaded, moveCardToList, openBoard, 
 type BoardLists = { boardId: string; lists: Map<string, string> };
 
 async function platformDelivery(page: Page, api: APIRequestContext): Promise<BoardLists> {
-  const boardId = (await boardHref(page, "Platform Delivery")).split("/")[2]!;
+  const boardId = await boardIdOf(page, "Platform Delivery");
   const response = await api.get(`/api/boards/${boardId}?includeCards=false`);
   const { lists } = (await response.json()) as { lists: { id: string; name: string }[] };
   return { boardId, lists: new Map(lists.map((list) => [list.name, list.id])) };
 }
 
-async function createCard(api: APIRequestContext, board: BoardLists, title: string, assigneeIds: string[] = []): Promise<string> {
+async function createCardViaApi(api: APIRequestContext, board: BoardLists, title: string, assigneeIds: string[] = []): Promise<string> {
   const created = await api.post(`/api/boards/${board.boardId}/lists/${board.lists.get("Backlog")}/cards`, { data: { title, assigneeIds } });
   expect(created.ok(), await created.text()).toBe(true);
   return ((await created.json()) as { id: string }).id;
@@ -63,7 +63,7 @@ test("board detail, Kanban, table and work done follow another member's card edi
   const description = uniqueName("E2E live description");
   await signIn(page, "amelia");
   const board = await platformDelivery(page, await apiAs("amelia"));
-  const cardId = await createCard(await apiAs("amelia"), board, title);
+  const cardId = await createCardViaApi(await apiAs("amelia"), board, title);
   const inProgress = board.lists.get("In Progress")!;
 
   // Marcus watches the same card from three places: its open detail panel (over the Kanban), the
@@ -134,7 +134,7 @@ test("Global Work lenses follow another user's card edits live", async ({ page, 
   // Search by the base title, which the renamed title still contains.
   await portfolio.getByRole("searchbox", { name: "Search cards" }).fill(title);
 
-  const cardId = await createCard(await apiAs("amelia"), board, title, [marcusId]);
+  const cardId = await createCardViaApi(await apiAs("amelia"), board, title, [marcusId]);
 
   await expect(laneOf(myBoard, title)).toContainText("Backlog");
   await expect(tableRow(myTable, cardId)).toBeVisible();

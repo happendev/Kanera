@@ -92,6 +92,10 @@
 }
 
 .wd-day-date {
+  // Block, not the flex shared above: text-overflow does not apply to a flex container's text, so a
+  // flex date clipped mid-glyph instead of ending in an ellipsis. Still centred by the toggle grid.
+  display: block;
+  min-width: 0;
   overflow: hidden;
   color: var(--text-muted);
   font-size: 12px;
@@ -519,22 +523,27 @@
 //   16:42  [icon]  Completed · title
 //                  DEVELOPMEN-1  board
 //                  chips chips chips              by ⬤⬤
+// The full date is redundant next to the relative label, and it is the first thing to go: it needs
+// roughly 180px beside the label, counts, contributor stack and copy button, which a day panel only
+// has above ~780px (an iPad landscape board beside the sidebar is ~730px and clipped "202(").
+// Hidden outright rather than ellipsized, since "Saturday, 3 Octo…" reads as a rendering bug next to
+// a label that already says the day.
+@container wd-day (max-width: 780px) {
+  .wd-day-toggle {
+    grid-template-columns: 16px minmax(0, 1fr);
+  }
+
+  .wd-day-date {
+    display: none;
+  }
+}
+
 @container wd-day (max-width: 720px) {
 
   // Narrower count tracks, and the contributor track keeps its full width: shrinking it is what
   // clipped the stack mid-avatar, and alignment across days needs it to stay a constant size.
   .wd-day-head {
     gap: 4px;
-  }
-
-  .wd-day-toggle {
-    grid-template-columns: 16px minmax(0, 1fr);
-  }
-
-  // The full date is redundant next to the relative label once space is tight, and clipping it
-  // mid-word ("Wednesday, 5") reads as a rendering bug rather than as a deliberate truncation.
-  .wd-day-date {
-    display: none;
   }
 
   .wd-day-counts {

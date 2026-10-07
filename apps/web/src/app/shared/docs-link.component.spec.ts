@@ -1,3 +1,4 @@
+import { createComponentFixture } from "../../test/component-fixture";
 import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { describe, expect, it } from "vitest";
@@ -21,7 +22,7 @@ async function mount() {
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
 
-  const fixture = TestBed.createComponent(HostComponent);
+  const fixture = createComponentFixture(HostComponent);
   fixture.detectChanges();
   const anchor = () => fixture.nativeElement.querySelector("a") as HTMLAnchorElement;
   return { fixture, anchor };
@@ -36,10 +37,10 @@ describe("DocsLinkComponent", () => {
 
   it("appends a heading anchor when a fragment is set", async () => {
     const { fixture, anchor } = await mount();
-    fixture.componentInstance.path.set("board-health");
-    fixture.componentInstance.fragment.set("organisation-default");
+    fixture.componentInstance.path.set("organisations");
+    fixture.componentInstance.fragment.set("what-to-read-next");
     fixture.detectChanges();
-    expect(anchor().getAttribute("href")).toBe(`${KANERA_DOCS_URL}/board-health#organisation-default`);
+    expect(anchor().getAttribute("href")).toBe(`${KANERA_DOCS_URL}/organisations#what-to-read-next`);
   });
 
   // Docs open away from the app, so the tab-napping guard has to be on every one of these links.

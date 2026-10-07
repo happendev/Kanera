@@ -499,6 +499,14 @@ k-support-session-banner {
   gap: 1px;
 }
 
+// The organisation row is a grouping header, not a destination: keep it in the same muted,
+// small type as the other sidebar group headers so it doesn't outweigh the boards beneath it.
+.guest-org-toggle {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
 .guest-org-contents {
   display: flex;
   flex-direction: column;
@@ -553,40 +561,6 @@ k-support-session-banner {
   padding: 2px 0 4px 22px;
 }
 
-.ws-subhead {
-  font-size: var(--text-xs);
-  font-weight: 500;
-  color: var(--text-muted);
-  padding: 4px 10px 2px;
-}
-
-.ws-subhead-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 4px;
-  width: 100%;
-  padding: 4px 4px 2px;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius);
-  font-size: var(--text-xs);
-  font-weight: 500;
-  color: var(--text-muted);
-  cursor: pointer;
-  text-align: left;
-
-  i {
-    font-size: var(--text-xs);
-    flex-shrink: 0;
-  }
-
-  &:hover {
-    background: var(--surface-2);
-    color: var(--nav-text-strong);
-  }
-}
-
 .board-nav-group {
   display: flex;
   flex-direction: column;
@@ -634,7 +608,6 @@ k-support-session-banner {
 // All sidebar disclosure rows share one hit-target height. Pointer focus should not leave a
 // disclosure looking selected after it toggles, while keyboard focus remains clearly visible.
 .ws-toggle,
-.ws-subhead-toggle,
 .board-group-toggle {
   height: 30px;
   min-height: 30px;
@@ -664,7 +637,6 @@ k-support-session-banner {
     background: transparent;
   }
 
-  .ws-subhead-toggle:hover,
   .board-group-toggle:hover {
     background: transparent;
     color: var(--text-muted);

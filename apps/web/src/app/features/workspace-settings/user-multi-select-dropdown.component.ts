@@ -1,7 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from "@angular/core";
-import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
+import { ChangeDetectionStrategy, Component, computed, input, output, viewChild } from "@angular/core";
 import { AvatarComponent } from "../../shared/avatar.component";
-import { PickerListComponent, type PickerGroup } from "../../shared/picker-list.component";
+import { MultiSelectDropdownComponent } from "../../shared/multi-select-dropdown.component";
+import type { PickerGroup } from "../../shared/picker-list.component";
 
 export type UserMultiSelectOption = {
   userId: string;
@@ -13,84 +13,33 @@ export type UserMultiSelectOption = {
 @Component({
   selector: "k-user-multi-select-dropdown",
   standalone: true,
-  imports: [AnchoredPanelDirective, AvatarComponent, PickerListComponent],
+  imports: [AvatarComponent, MultiSelectDropdownComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="ums">
-      <button #trigger type="button" class="ums-trigger" [class.is-open]="open()" (click)="toggleOpen()" [attr.aria-expanded]="open()" aria-haspopup="listbox">
-        @if (selectedUsers().length) {
-          <span class="ums-selected-stack" aria-hidden="true">
-            @for (user of selectedUsers().slice(0, 3); track user.userId) {
-              <k-avatar [url]="user.avatarUrl" [name]="user.displayName" [size]="22" [userId]="user.userId" [workspaceId]="workspaceId()" />
-            }
-          </span>
-          <span class="ums-label">{{ selectedLabel() }}</span>
-        } @else {
-          <i class="ti ti-users"></i>
-          <span class="ums-label">{{ placeholder() }}</span>
-        }
-        <i class="ti ti-chevron-down ums-chevron"></i>
-      </button>
-
-      @if (open()) {
-        <div
-          class="ums-panel"
-          kAnchoredPanel
-          [apAnchor]="trigger"
-          [apPlacement]="placement"
-          (apDismissed)="open.set(false)"
-        >
-          <k-picker-list
-            [groups]="pickerGroups()"
-            [selectedIds]="selectedIds()"
-            [searchThreshold]="0"
-            searchPlaceholder="Search users..."
-            emptyLabel="No matching users"
-            (pick)="toggleUser($event)"
-          />
-        </div>
+    <k-multi-select-dropdown
+      [groups]="pickerGroups()"
+      [selectedIds]="selectedIds()"
+      [label]="selectedLabel()"
+      [searchThreshold]="0"
+      searchPlaceholder="Search users..."
+      emptyLabel="No matching users"
+      (pick)="toggleUser($event)"
+    >
+      @if (selectedUsers().length) {
+        <span class="ums-selected-stack" aria-hidden="true">
+          @for (user of selectedUsers().slice(0, 3); track user.userId) {
+            <k-avatar [url]="user.avatarUrl" [name]="user.displayName" [size]="22" [userId]="user.userId" [workspaceId]="workspaceId()" />
+          }
+        </span>
+      } @else {
+        <i class="ti ti-users"></i>
       }
-    </div>
+    </k-multi-select-dropdown>
   `,
   styles: `
     :host {
       display: block;
       min-width: 0;
-    }
-
-    /* --field-bg lets the host seat this trigger at the same depth as its native selects; hosts that
-       do not set it keep the previous --surface-2 fill. */
-    .ums-trigger {
-      width: 100%;
-      height: 34px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      min-width: 0;
-      padding: 0 9px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      background: var(--field-bg, var(--surface-2));
-      color: var(--text);
-      cursor: pointer;
-      text-align: left;
-      font-size: 13px;
-
-      &.is-open {
-        border-color: var(--border-strong);
-        background: var(--surface-hover);
-      }
-
-      &:focus-visible {
-        border-color: var(--accent, var(--border-strong));
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, var(--border-strong)) 20%, transparent);
-        outline: none;
-      }
-    }
-
-    .ums-trigger > i:not(.ums-chevron) {
-      color: var(--text-muted);
-      font-size: 15px;
     }
 
     .ums-selected-stack {
@@ -102,34 +51,6 @@ export type UserMultiSelectOption = {
         margin-left: -7px;
       }
     }
-
-    .ums-label {
-      flex: 1;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .ums-chevron {
-      color: var(--text-muted);
-      font-size: 14px;
-      flex: 0 0 auto;
-    }
-
-    .ums-panel {
-      width: var(--ap-width, 320px);
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      padding: 8px;
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius);
-      background: var(--surface-overlay);
-      box-shadow: var(--shadow-lg);
-      overflow: hidden;
-    }
-
   `,
 })
 export class UserMultiSelectDropdownComponent {
@@ -146,8 +67,7 @@ export class UserMultiSelectDropdownComponent {
   readonly max = input<number | null>(null);
   readonly selectedIdsChange = output<string[]>();
 
-  readonly open = signal(false);
-  readonly placement = { width: 320, maxHeight: 340, minHeight: 180, gap: 4, margin: 8 } as const;
+  private readonly dropdown = viewChild.required(MultiSelectDropdownComponent);
 
   readonly selectedUsers = computed(() => {
     const selected = new Set(this.selectedIds());
@@ -178,15 +98,11 @@ export class UserMultiSelectDropdownComponent {
     })),
   }]);
 
-  toggleOpen() {
-    this.open.update((value) => !value);
-  }
-
   toggleUser(userId: string) {
     const selected = this.selectedIds();
     if (!selected.includes(userId) && this.max() === 1) {
       this.selectedIdsChange.emit([userId]);
-      this.open.set(false);
+      this.dropdown().close();
       return;
     }
     const next = selected.includes(userId)
@@ -197,5 +113,4 @@ export class UserMultiSelectDropdownComponent {
     if (max !== null && next.length > max) return;
     this.selectedIdsChange.emit(next);
   }
-
 }
