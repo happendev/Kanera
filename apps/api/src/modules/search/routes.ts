@@ -212,7 +212,8 @@ async function searchData(
       .from(notes)
       .innerJoin(workspaces, eq(workspaces.id, notes.workspaceId))
       .leftJoin(boards, eq(boards.id, notes.boardId))
-      .where(and(sql`${notes.searchVector} @@ ${tsq}`, or(eq(notes.scope, "team"), eq(notes.ownerId, auth.sub)), notePredicate))
+      // Notes switched off on a workspace are kept but must not surface through search.
+      .where(and(sql`${notes.searchVector} @@ ${tsq}`, or(eq(notes.scope, "team"), eq(notes.ownerId, auth.sub)), eq(workspaces.notesEnabled, true), notePredicate))
       .orderBy(sql`ts_rank(${notes.searchVector}, ${tsq}) desc`)
       .limit(take) : Promise.resolve([]),
 

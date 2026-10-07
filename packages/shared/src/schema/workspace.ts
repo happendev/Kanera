@@ -35,6 +35,10 @@ export const workspaces = pgTable(
     // Board linking is configured on the workspace so standard workspaces and the hidden workspace
     // behind a standalone board follow the same governance and cleanup path.
     boardLinkingEnabled: boolean("board_linking_enabled").notNull().default(true),
+    // Notes follow the same pattern: one switch on the workspace covers its boards' notes and, for a
+    // standalone board, the hidden workspace's. Disabling hides notes everywhere and blocks the notes
+    // API, but keeps every row so re-enabling restores them untouched.
+    notesEnabled: boolean("notes_enabled").notNull().default(true),
     // Set when a downgrade-to-free archives a workspace beyond the free cap (mirrors boards.archivedAt).
     // Archived workspaces are hidden from listings and excluded from plan-limit counts.
     archivedAt: timestamp("archived_at", { withTimezone: true }),

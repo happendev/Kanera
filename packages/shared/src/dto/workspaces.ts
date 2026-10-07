@@ -380,6 +380,7 @@ export const updateWorkspaceBody = z.object({
   completedCardsActiveDays: z.number().int().min(0).max(365).optional(),
   inactiveCardsDays: z.number().int().min(0).max(365).optional(),
   boardLinkingEnabled: z.boolean().optional(),
+  notesEnabled: z.boolean().optional(),
 });
 export type UpdateWorkspaceBody = z.infer<typeof updateWorkspaceBody>;
 

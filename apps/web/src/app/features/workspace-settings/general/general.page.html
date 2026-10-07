@@ -114,6 +114,30 @@
 }
 <div class="board-settings-section">
   <div class="guest-section-head">
+    <i class="ti ti-notebook"></i>
+    <span>Notes</span>
+  </div>
+  <k-docs-link path="notes" fragment="turn-notes-on-or-off" label="Learn more about notes" />
+  <label class="board-linking-toggle">
+    <input type="checkbox" aria-label="Enable notes" [checked]="settings.notesEnabledDraft()" (change)="settings.updateNotesEnabled($any($event.target).checked, $any($event.target))"
+      [disabled]="settings.notesSaving()" />
+    <span class="board-linking-copy">
+      <span class="board-linking-title">Enable notes</span>
+      <span class="board-linking-help">
+        @if (settings.isStandalone()) {
+        Show Notes on this board. Turning it off hides existing notes without deleting them.
+        } @else {
+        Show Notes in this workspace and on its boards. Turning it off hides existing notes without deleting them.
+        }
+      </span>
+    </span>
+  </label>
+  @if (settings.notesError(); as message) {
+  <p class="board-linking-error" role="alert"><i class="ti ti-alert-circle"></i>{{ message }}</p>
+  }
+</div>
+<div class="board-settings-section">
+  <div class="guest-section-head">
     <i class="ti ti-circles-relation"></i>
     <span>Board linking</span>
   </div>

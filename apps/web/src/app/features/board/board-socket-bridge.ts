@@ -46,6 +46,7 @@ export class BoardSocketBridge {
         // workspace settings here so an open board updates its governance and inactivity signals
         // immediately, without waiting for a board refresh.
         state.boardLinkingEnabled.set(workspace.boardLinkingEnabled !== false);
+        state.notesEnabled.set(workspace.notesEnabled !== false);
         state.inactiveCardsDays.set(workspace.inactiveCardsDays);
         if (workspace.boardLinkingEnabled === false) state.hasMirrorsAtHydration.set(false);
         state.updateCardKeyPrefix(workspace.cardKeyPrefix);

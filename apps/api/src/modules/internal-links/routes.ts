@@ -6,7 +6,7 @@ import { and, eq, like } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertBoardAccess, assertCardAccess } from "../../lib/access.js";
-import { canReadNote, loadLinkedNotesForCard, parseInternalUrl } from "../../lib/internal-links.js";
+import { canReadNote, loadLinkedNotesForCard, notesEnabledForWorkspace, parseInternalUrl } from "../../lib/internal-links.js";
 import { notFound } from "../../lib/errors.js";
 import { resolveCardKey } from "../../lib/card-keys.js";
 
@@ -100,6 +100,8 @@ export async function internalLinkRoutes(app: FastifyInstance) {
           if (parsed.boardId && row.boardId !== parsed.boardId) return;
           if (!parsed.boardId && parsed.workspaceId && row.workspaceId !== parsed.workspaceId) return;
           if (!await canReadNote(req.auth, row)) return;
+          // Leave the link as a plain URL rather than a chip for a note the workspace has hidden.
+          if (!await notesEnabledForWorkspace(row.workspaceId)) return;
           links[raw] = {
             kind: "note",
             title: row.title,

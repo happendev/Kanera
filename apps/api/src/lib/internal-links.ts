@@ -1,6 +1,6 @@
 import type { BacklinkSummary, LinkedInternalSummary } from "@kanera/shared/dto";
 import { SERVER_EVENTS } from "@kanera/shared/events";
-import { boards, cards, internalLinks, lists, notes, type InternalLinkSourceType, type InternalLinkTargetType, type Note } from "@kanera/shared/schema";
+import { boards, cards, internalLinks, lists, notes, workspaces, type InternalLinkSourceType, type InternalLinkTargetType, type Note } from "@kanera/shared/schema";
 import { and, eq, ilike, inArray, like, or } from "drizzle-orm";
 import type { AuthClaims } from "../auth/plugin.js";
 import { db, type TxOnly as Tx } from "../db.js";
@@ -259,6 +259,17 @@ export async function emitInternalLinksChanged(fanout: LinkFanout): Promise<void
   }
 }
 
+/**
+ * Whether a workspace's Notes feature is switched on. Deliberately not part of `canReadNote`: that
+ * also gates link *recording* and repair, which run on every card open, so folding this in would
+ * delete stored card↔note links while notes are off. Presentation paths check it instead, and the
+ * links come back intact when notes are re-enabled.
+ */
+export async function notesEnabledForWorkspace(workspaceId: string): Promise<boolean> {
+  const [workspace] = await db.select({ notesEnabled: workspaces.notesEnabled }).from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1);
+  return workspace?.notesEnabled === true;
+}
+
 export async function canReadNote(claims: AuthClaims, note: Pick<Note, "workspaceId" | "boardId" | "scope" | "ownerId">): Promise<boolean> {
   try {
     if (note.boardId) await assertBoardAccess(claims, note.boardId, "observer");
@@ -273,7 +284,8 @@ export async function loadLinkedNotesForCard(claims: AuthClaims, cardId: string,
   // Both directions in one OR: the planner resolves this with a BitmapOr across the two directional
   // indexes (internal_links_workspace_source_idx / _target_idx), so it is already index-served —
   // splitting it into two queries per relation measured no faster and cost two extra round-trips.
-  const noteRows = await db
+  // Internal links never cross workspaces, so one switch decides every note row on this card.
+  const noteRows = !(await notesEnabledForWorkspace(workspaceId)) ? [] : await db
     .select({
       note: notes,
       boardName: boards.name,

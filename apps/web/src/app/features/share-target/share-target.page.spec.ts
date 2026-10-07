@@ -21,6 +21,7 @@ const workspace = (id = "workspace-1", role = "member", name = "Marketing"): Wor
   completedCardsActiveDays: 35,
   inactiveCardsDays: 14,
   boardLinkingEnabled: true,
+  notesEnabled: true,
   createdAt: new Date("2026-06-01T00:00:00.000Z"),
   updatedAt: new Date("2026-06-01T00:00:00.000Z"),
   archivedAt: null,

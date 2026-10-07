@@ -41,6 +41,7 @@ function workspace(): Workspace {
     completedCardsActiveDays: 35,
     inactiveCardsDays: 14,
     boardLinkingEnabled: true,
+    notesEnabled: true,
     createdAt: new Date("2026-05-28T00:00:00.000Z"),
     updatedAt: new Date("2026-05-28T00:00:00.000Z"),
     archivedAt: null,

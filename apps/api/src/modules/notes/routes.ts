@@ -2,7 +2,7 @@ import { dto } from "@kanera/shared";
 import type { ColorToken } from "@kanera/shared/colors";
 import { NOTE_ATTACHMENT_SOURCES, type NoteAttachmentRow, type NoteAttachmentSource } from "@kanera/shared/dto";
 import type { ServerToClientEvents, WireNote, WireNoteLock } from "@kanera/shared/events";
-import { internalLinks, noteAttachments, notes, users, type Note, type NoteScope } from "@kanera/shared/schema";
+import { internalLinks, noteAttachments, notes, users, workspaces, type Note, type NoteScope } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gt, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db, type TxOnly as Tx } from "../../db.js";
@@ -309,10 +309,23 @@ async function loadOrFail(id: string): Promise<Note> {
   return note;
 }
 
+/**
+ * Notes can be switched off per workspace (and so per standalone board, via its hidden workspace).
+ * Run after the access check so outsiders still get the ordinary 403/404 rather than learning the
+ * workspace's settings. Rows are kept while disabled, so every read and write path is closed here
+ * instead of deleting anything.
+ */
+async function assertNotesEnabled(workspaceId: string) {
+  const [workspace] = await db.select({ notesEnabled: workspaces.notesEnabled }).from(workspaces).where(eq(workspaces.id, workspaceId)).limit(1);
+  if (!workspace) throw notFound();
+  if (!workspace.notesEnabled) throw new AppError(403, "NOTES_DISABLED", "notes are disabled for this workspace");
+}
+
 async function authoriseRead(req: FastifyRequest, note: Note) {
   if (note.boardId) await assertBoardAccess(req.auth, note.boardId, "observer");
   else await assertWorkspaceAccess(req.auth, note.workspaceId, "member");
   assertScopeAccess(note, req.auth.sub);
+  await assertNotesEnabled(note.workspaceId);
 }
 
 // Returns the org that owns the note's workspace (host-pays storage attribution). Both access
@@ -328,6 +341,7 @@ async function authoriseWrite(req: FastifyRequest, note: Note): Promise<{ client
     ? await assertBoardAccess(req.auth, note.boardId, note.scope === "personal" ? "observer" : "editor")
     : await assertWorkspaceAccess(req.auth, note.workspaceId, note.scope === "personal" ? "member" : "admin");
   assertScopeAccess(note, req.auth.sub);
+  await assertNotesEnabled(note.workspaceId);
   return { clientId: ctx.clientId };
 }
 
@@ -446,6 +460,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
     const query = dto.listNotesQuery.parse(req.query);
     const directory = dto.agentDirectoryQuery.parse(req.query ?? {});
     await assertWorkspaceAccess(req.auth, workspaceId, "member");
+    await assertNotesEnabled(workspaceId);
 
     const baseFilter = and(
       eq(notes.workspaceId, workspaceId),
@@ -464,6 +479,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
     const query = dto.listNotesQuery.parse(req.query);
     const directory = dto.agentDirectoryQuery.parse(req.query ?? {});
     const { workspaceId } = await assertBoardAccess(req.auth, boardId, "observer");
+    await assertNotesEnabled(workspaceId);
 
     const baseFilter = and(
       eq(notes.workspaceId, workspaceId),
@@ -501,6 +517,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
     // team-scope creation already requires admin and is unreachable for them.
     assertWriteCapableCredential(req.auth);
     await assertWorkspaceAccess(req.auth, workspaceId, body.scope === "team" ? "admin" : "member");
+    await assertNotesEnabled(workspaceId);
 
     const parent = await resolveParent(workspaceId, null, body.parentNoteId ?? null, body.scope, req.auth.sub);
     if (await noteDepth(parent) >= MAX_NOTE_TREE_DEPTH) throw conflict("notes can only be nested 3 levels deep");
@@ -528,6 +545,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
     // Same read-scope gate as the workspace create route: personal scope passes at observer.
     assertWriteCapableCredential(req.auth);
     const { workspaceId } = await assertBoardAccess(req.auth, boardId, body.scope === "team" ? "editor" : "observer");
+    await assertNotesEnabled(workspaceId);
 
     const parent = await resolveParent(workspaceId, boardId, body.parentNoteId ?? null, body.scope, req.auth.sub);
     if (await noteDepth(parent) >= MAX_NOTE_TREE_DEPTH) throw conflict("notes can only be nested 3 levels deep");

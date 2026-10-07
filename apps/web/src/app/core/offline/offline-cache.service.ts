@@ -105,6 +105,7 @@ export type OfflineBoardSnapshot = {
   workspaceInactiveCardsDays?: number;
   workspaceCardKeyPrefixes?: string[];
   boardLinkingEnabled?: boolean;
+  notesEnabled?: boolean;
   boardSyncAllowed?: boolean;
   hasMirrors?: boolean;
   lists: (List | WireList)[];

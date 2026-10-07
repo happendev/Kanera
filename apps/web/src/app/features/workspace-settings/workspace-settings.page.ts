@@ -719,6 +719,9 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly boardLinkingEnabledDraft = signal(true);
   readonly boardLinkingSaving = signal(false);
   readonly boardLinkingError = signal<string | null>(null);
+  readonly notesEnabledDraft = signal(true);
+  readonly notesSaving = signal(false);
+  readonly notesError = signal<string | null>(null);
   readonly generalSettingsSaving = signal(false);
   readonly generalSettingsError = signal<string | null>(null);
   readonly completedCardsActiveDaysDraft = signal(DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS);
@@ -1425,6 +1428,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   private applyWorkspace(ws: Workspace | null, syncControls = false) {
     this.workspace.set(ws);
     this.boardLinkingEnabledDraft.set(ws?.boardLinkingEnabled !== false);
+    this.notesEnabledDraft.set(ws?.notesEnabled !== false);
     // Keep locally queued values visible if an unrelated workspace mutation or realtime echo lands
     // during the debounce window. The defaults save response synchronizes them after the timer clears.
     if (!this.generalSettingsSaveTimer) {
@@ -1461,7 +1465,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.nameSaveTimer = null;
   }
 
-  private async patchWorkspace(patch: { name?: string; cardKeyPrefix?: string; icon?: string | null; accentColor?: ColorToken | null; completedCardsActiveDays?: number; inactiveCardsDays?: number; boardLinkingEnabled?: boolean }) {
+  private async patchWorkspace(patch: { name?: string; cardKeyPrefix?: string; icon?: string | null; accentColor?: ColorToken | null; completedCardsActiveDays?: number; inactiveCardsDays?: number; boardLinkingEnabled?: boolean; notesEnabled?: boolean }) {
     const ws = await this.autosave.track(() => this.api.patch<Workspace>(`/workspaces/${this.workspaceId()}`, patch));
     this.applyWorkspace(ws);
   }
@@ -1607,6 +1611,35 @@ export class WorkspaceSettingsPage implements OnDestroy {
       this.boardLinkingError.set("Board linking could not be updated.");
     } finally {
       this.boardLinkingSaving.set(false);
+    }
+  }
+
+  /**
+   * Disabling notes hides them and closes the notes API but keeps every note, so unlike board
+   * linking there is nothing destructive to confirm.
+   */
+  async updateNotesEnabled(enabled: boolean, control?: HTMLInputElement) {
+    const workspace = this.workspace();
+    if (!workspace || this.notesSaving()) return;
+    const previous = workspace.notesEnabled !== false;
+    const restorePrevious = () => {
+      this.notesEnabledDraft.set(previous);
+      if (control) control.checked = previous;
+    };
+    if (previous === enabled) {
+      restorePrevious();
+      return;
+    }
+    this.notesEnabledDraft.set(enabled);
+    this.notesSaving.set(true);
+    this.notesError.set(null);
+    try {
+      await this.patchWorkspace({ notesEnabled: enabled });
+    } catch {
+      restorePrevious();
+      this.notesError.set("Notes could not be updated.");
+    } finally {
+      this.notesSaving.set(false);
     }
   }
 

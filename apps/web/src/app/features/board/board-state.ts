@@ -65,6 +65,8 @@ export class BoardState {
   readonly inactiveCardsDays = signal(DEFAULT_INACTIVE_CARDS_DAYS);
   readonly workspaceCardKeyPrefixes = signal<string[]>([]);
   readonly boardLinkingEnabled = signal(true);
+  /** Workspace-level Notes switch; off hides the board's Notes view. */
+  readonly notesEnabled = signal(true);
   readonly boardSyncAllowed = signal(true);
   // This is a board-open/offline-snapshot hint used to avoid probing mirror status for unlinked
   // boards. Realtime mirror events still request status directly because they supersede the hint.
@@ -511,6 +513,7 @@ export class BoardState {
     workspaceInactiveCardsDays?: number;
     workspaceCardKeyPrefixes?: string[];
     boardLinkingEnabled?: boolean;
+    notesEnabled?: boolean;
     boardSyncAllowed?: boolean;
     hasMirrors?: boolean;
     lists: AnyList[];
@@ -544,6 +547,7 @@ export class BoardState {
     this.inactiveCardsDays.set(payload.workspaceInactiveCardsDays ?? DEFAULT_INACTIVE_CARDS_DAYS);
     this.workspaceCardKeyPrefixes.set(payload.workspaceCardKeyPrefixes ?? []);
     this.boardLinkingEnabled.set(payload.boardLinkingEnabled !== false);
+    this.notesEnabled.set(payload.notesEnabled !== false);
     this.boardSyncAllowed.set(payload.boardSyncAllowed !== false);
     this.hasMirrorsAtHydration.set(payload.hasMirrors === true);
     this.lists.set(payload.lists);
@@ -681,6 +685,7 @@ export class BoardState {
     this.inactiveCardsDays.set(DEFAULT_INACTIVE_CARDS_DAYS);
     this.workspaceCardKeyPrefixes.set([]);
     this.boardLinkingEnabled.set(true);
+    this.notesEnabled.set(true);
     this.boardSyncAllowed.set(true);
     this.hasMirrorsAtHydration.set(false);
     this.lists.set([]);
@@ -1203,6 +1208,7 @@ export class BoardState {
       workspaceInactiveCardsDays: this.inactiveCardsDays(),
       workspaceCardKeyPrefixes: this.workspaceCardKeyPrefixes(),
       boardLinkingEnabled: this.boardLinkingEnabled(),
+      notesEnabled: this.notesEnabled(),
       boardSyncAllowed: this.boardSyncAllowed(),
       hasMirrors: this.hasMirrorsAtHydration(),
       lists: this.lists(),
@@ -1239,6 +1245,7 @@ export class BoardState {
     this.inactiveCardsDays.set(snapshot.workspaceInactiveCardsDays ?? DEFAULT_INACTIVE_CARDS_DAYS);
     this.workspaceCardKeyPrefixes.set(snapshot.workspaceCardKeyPrefixes ?? []);
     this.boardLinkingEnabled.set(snapshot.boardLinkingEnabled !== false);
+    this.notesEnabled.set(snapshot.notesEnabled !== false);
     this.boardSyncAllowed.set(snapshot.boardSyncAllowed !== false);
     this.hasMirrorsAtHydration.set(snapshot.hasMirrors === true);
     this.lists.set(snapshot.lists);

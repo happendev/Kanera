@@ -152,7 +152,7 @@
       }
       }
       @if (sidebarCollapsed() || boardSearchTerm() || !collapsed()[group.workspace.id]) {
-      @if (!boardSearchTerm()) {
+      @if (!boardSearchTerm() && group.workspace.notesEnabled !== false) {
       <div class="ws-me">
         <a class="board-link" [routerLink]="['/w', group.workspace.id, 'notes']" routerLinkActive="active"
           (contextmenu)="openNavContextMenu($event, { label: 'Workspace Notes', url: '/w/' + group.workspace.id + '/notes', canMarkAllRead: false, clearBoardSearch: false })">

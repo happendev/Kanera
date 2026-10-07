@@ -150,6 +150,12 @@ export class BoardPage implements OnDestroy {
   readonly rememberedView = signal<ViewMode>("board");
   /** Resolved view mode: URL query param > localStorage > default board. */
   readonly effectiveView = computed<ViewMode>(() => {
+    const view = this.requestedView();
+    // Notes can be switched off for the workspace. A remembered view, a `?view=notes` link or a
+    // live settings change then lands on the kanban instead of a view the switch no longer offers.
+    return view === "notes" && !this.state.notesEnabled() ? "board" : view;
+  });
+  private readonly requestedView = computed<ViewMode>(() => {
     const fromUrl = this.view();
     // A `?view=list` link from before the List view was retired resolves to the Table, which is the
     // view that replaced it — the alternative is silently dropping the reader onto the kanban.
@@ -172,7 +178,7 @@ export class BoardPage implements OnDestroy {
   readonly viewHasQueryBar = computed(() => this.effectiveView() !== "notes");
 
   /**
-   * The 5-way view switch. Disabled as a set while the board loads — the switch stays mounted (it is
+   * The view switch (Notes drops out when the workspace has it off). Disabled as a set while the board loads — the switch stays mounted (it is
    * navigation) but has nothing to navigate within yet.
    */
   readonly viewOptions = computed<SegmentedOption<ViewMode>[]>(() => {
@@ -182,7 +188,7 @@ export class BoardPage implements OnDestroy {
       { id: "table", icon: "table", label: "Table view", shortLabel: "Table", disabled },
       { id: "calendar", icon: "calendar-week", label: "Calendar view", shortLabel: "Calendar", disabled },
       { id: "history", icon: "history", label: "Work done", disabled },
-      { id: "notes", icon: "notebook", label: "Board Notes", shortLabel: "Notes", disabled },
+      ...(this.state.notesEnabled() ? [{ id: "notes" as const, icon: "notebook", label: "Board Notes", shortLabel: "Notes", disabled }] : []),
     ];
   });
 
@@ -911,7 +917,7 @@ export class BoardPage implements OnDestroy {
     this.shortcuts.registerAll("Board", [
       { keys: "c", label: "New card", when: () => ready() && this.state.canEdit() && this.effectiveView() !== "notes" && !this.showArchived(), run: () => this.openComposer() },
       { keys: "/", label: "Search cards", when: () => ready() && this.viewHasQueryBar(), run: () => this.focusCardSearch() },
-      ...views.map(([key, mode, label]) => ({ keys: key, label, when: ready, run: () => this.setView(mode) })),
+      ...views.map(([key, mode, label]) => ({ keys: key, label, when: () => ready() && (mode !== "notes" || this.state.notesEnabled()), run: () => this.setView(mode) })),
       { keys: "w", label: "Board watchers", when: ready, run: () => this.toggleBoardWatcherPopover() },
       { keys: "shift+d", label: "Toggle compact cards", when: () => ready() && this.effectiveView() === "board", run: () => this.toggleCompactCards() },
     ], this.destroyRef);
@@ -1369,6 +1375,7 @@ export class BoardPage implements OnDestroy {
       workspaceClientId?: string | null;
       workspaceKind?: "standard" | "board";
       boardLinkingEnabled?: boolean;
+      notesEnabled?: boolean;
       boardSyncAllowed?: boolean;
       hasMirrors?: boolean;
       lists: List[];

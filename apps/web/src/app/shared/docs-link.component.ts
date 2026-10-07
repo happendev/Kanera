@@ -26,6 +26,7 @@ export type DocsPath =
   | "guests"
   | "lists"
   | "managing-users"
+  | "notes"
   | "notification-channels"
   | "notification-configuration"
   | "notification-workspace-rules"

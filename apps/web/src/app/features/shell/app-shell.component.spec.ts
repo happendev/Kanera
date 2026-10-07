@@ -54,6 +54,7 @@ function workspace(overrides: Partial<Workspace & { role: string }> = {}): Works
     completedCardsActiveDays: 35,
     inactiveCardsDays: 14,
     boardLinkingEnabled: true,
+    notesEnabled: true,
     createdAt: new Date("2026-05-21T00:00:00.000Z"),
     updatedAt: new Date("2026-05-21T00:00:00.000Z"),
     archivedAt: null,
