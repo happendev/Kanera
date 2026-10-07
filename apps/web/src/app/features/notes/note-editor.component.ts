@@ -15,6 +15,7 @@ import {
   viewChild,
 } from "@angular/core";
 import { ALLOWED_ATTACHMENT_EXTENSIONS, ALLOWED_ATTACHMENT_MIME } from "@kanera/shared/attachments";
+import { Router } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
 import { SERVER_EVENTS, type NoteAttachmentRow, type ServerToClientEvents, type WireBoardMemberUser, type WireNote, type WireNoteLock } from "@kanera/shared/events";
 import type { BacklinkSummary, NoteBacklinksResponse } from "@kanera/shared/dto";
@@ -39,6 +40,7 @@ import { ColorPickerComponent } from "../../shared/color-picker.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { DescriptionEditorComponent, type EditorSaveEvent } from "../board/description-editor.component";
 import { DescriptionViewerComponent } from "../board/description-viewer.component";
+import { isPlainPrimaryClick } from "../board/card-navigation.util";
 import { ImageLightboxService } from "../board/image-lightbox.service";
 import type { ImageLightboxItem } from "../board/image-lightbox.component";
 import { NotesState } from "./notes.service";
@@ -155,7 +157,7 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
                 </div>
                 <div class="ne-backlinks-list">
                   @for (link of backlinks(); track link.kind + ':' + link.id) {
-                    <a class="ne-backlink" [href]="backlinkHref(link)">
+                    <a class="ne-backlink" [href]="backlinkHref(link)" (click)="openBacklink($event, link)">
                       <i [class]="'ti ti-' + backlinkIcon(link)"
                         [style.color]="backlinkColor(link) ? 'var(--color-' + backlinkColor(link) + ')' : null"></i>
                       <span class="ne-backlink-title">{{ link.title || 'Untitled' }}</span>
@@ -192,6 +194,7 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
                   <k-description-viewer
                     [value]="recoveredBodyDraft() ? editorInitialValue() : (n.content || '')"
                     [workspaceId]="n.workspaceId"
+                    [linkRevision]="linkRevision()"
                     [mentionMembers]="mentionMembers()"
                     [showCopy]="true"
                     [emptyLabel]="lockedByOther() ? lockedEmptyLabel() : 'Add a description…'"
@@ -318,6 +321,7 @@ export class NoteEditorComponent implements OnDestroy {
   private readonly unsavedDraftSource = Symbol("note-draft");
   private readonly toasts = inject(ToastService);
   private readonly sockets = inject(SocketService);
+  private readonly router = inject(Router);
   readonly imageLightbox = inject(ImageLightboxService);
 
   readonly note = input.required<WireNote | null>();
@@ -335,6 +339,8 @@ export class NoteEditorComponent implements OnDestroy {
   readonly preservedDraft = signal<string | null>(null);
   readonly recoveredBodyDraft = signal(false);
   readonly backlinks = signal<BacklinkSummary[]>([]);
+  // Passed to the body viewer so its link chips re-resolve on note:links:changed.
+  readonly linkRevision = signal(0);
   readonly attachments = signal<NoteAttachmentRow[]>([]);
   readonly uploads = inject(AttachmentUploadQueue);
   // Derived so the existing drag/paste guards and dropzone label keep working unchanged.
@@ -462,6 +468,13 @@ export class NoteEditorComponent implements OnDestroy {
         [SERVER_EVENTS.NOTE_ATTACHMENT_DELETED]: ({ note, attachmentId }) => {
           if (note.id !== noteId) return;
           this.attachments.update((rows) => rows.filter((row) => row.id !== attachmentId));
+        },
+        // Something this note links, or that links it, was added, removed or renamed. Backlinks are
+        // access-filtered per viewer, so the event only says "re-read".
+        [SERVER_EVENTS.NOTE_LINKS_CHANGED]: ({ noteId: changedNoteId }) => {
+          if (changedNoteId !== noteId) return;
+          void this.refreshBacklinks(noteId);
+          this.linkRevision.update((revision) => revision + 1);
         },
       };
       onCleanup(registerSocketHandlers(socket, handlers));
@@ -1098,6 +1111,18 @@ export class NoteEditorComponent implements OnDestroy {
     return link.boardId
       ? `/b/${link.boardId}?view=notes&noteId=${link.id}`
       : `/w/${link.workspaceId}/notes?noteId=${link.id}`;
+  }
+
+  /** Plain clicks route in-app (guards run, notes state survives); modified clicks open the href. */
+  openBacklink(event: MouseEvent, link: BacklinkSummary) {
+    if (!isPlainPrimaryClick(event)) return;
+    event.preventDefault();
+    if (link.kind === "card") {
+      // Same internal route the key URL resolves to, keeping the canonical key in the address bar.
+      void this.router.navigate(["/b", link.boardId, "c", link.id], { browserUrl: cardPath(link.organisationKey, link.key) });
+      return;
+    }
+    void this.router.navigateByUrl(this.backlinkHref(link));
   }
 
   backlinkIcon(link: BacklinkSummary): string {

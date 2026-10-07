@@ -25,7 +25,8 @@ import {
 } from "@angular/core";
 import { Router } from "@angular/router";
 import { ALLOWED_ATTACHMENT_EXTENSIONS, ALLOWED_ATTACHMENT_MIME } from "@kanera/shared/attachments";
-import type { CardMirrorStatus, LinkedInternalSummary } from "@kanera/shared/dto";
+import { cardPath } from "@kanera/shared/card-links";
+import type { CardLinkedItemsResponse, CardMirrorStatus, LinkedInternalSummary } from "@kanera/shared/dto";
 import { expandWireCard, SERVER_EVENTS, type CardAttachmentRow, type WireAgentRun, type ServerToClientEvents, type WireBoardMemberUser, type WireCard, type WireCardChecklist, type WireCardChecklistItem, type WireCardDetail, type WireCardLabel, type WireCardSummary, type WireChecklistTemplate, type WireCustomFieldOption } from "@kanera/shared/events";
 import type { CardCustomFieldValue, CardLabel } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
@@ -57,6 +58,7 @@ import { CardDetailLayoutService } from "./card-detail-layout.service";
 import { DatePickerPopover } from "./date-picker.popover";
 import { DescriptionEditorComponent } from "./description-editor.component";
 import { DescriptionViewerComponent } from "./description-viewer.component";
+import { isPlainPrimaryClick } from "./card-navigation.util";
 import {
   dueDateInputValue,
   dueDateSlotFor,
@@ -353,14 +355,31 @@ export class CardDetailComponent {
   ])));
 
   linkedItemHref(item: LinkedInternalSummary): string {
-    if (item.kind === "card") {
-      const tree = this.router.createUrlTree(["/c", item.key]);
-      return this.router.serializeUrl(tree);
-    }
+    // The canonical key URL, so copy-link and open-in-new-tab land on the same card.
+    if (item.kind === "card") return cardPath(item.organisationKey, item.key);
     const tree = item.boardId
       ? this.router.createUrlTree(["/b", item.boardId], { queryParams: { view: "notes", noteId: item.id } })
       : this.router.createUrlTree(["/w", item.workspaceId, "notes"], { queryParams: { noteId: item.id } });
     return this.router.serializeUrl(tree);
+  }
+
+  /**
+   * Plain clicks route inside the app (the drawer swaps to the linked card, and unsaved-work guards
+   * run); modified and middle clicks fall through to the href so new-tab behaviour is native.
+   */
+  openLinkedItem(event: MouseEvent, item: LinkedInternalSummary) {
+    if (!isPlainPrimaryClick(event)) return;
+    event.preventDefault();
+    if (item.kind === "card") {
+      // Same board keeps the current view (?view=table etc.); another board starts at its default.
+      const sameBoard = item.boardId === this.boardId();
+      void this.router.navigate(["/b", item.boardId, "c", item.id], {
+        ...(sameBoard && { queryParams: { cardId: null, lightboxAttachmentId: null }, queryParamsHandling: "merge" as const }),
+        browserUrl: cardPath(item.organisationKey, item.key),
+      });
+      return;
+    }
+    void this.router.navigateByUrl(this.linkedItemHref(item));
   }
 
   linkedItemIcon(item: LinkedInternalSummary): string {
@@ -722,6 +741,9 @@ export class CardDetailComponent {
   private openedInitialLightboxFor: string | null = null;
   private detailLoadSeq = 0;
   private mirrorLoadSeq = 0;
+  private linkedItemsLoadSeq = 0;
+  // Passed to the description viewer so its link chips re-resolve on card:links:changed.
+  readonly linkRevision = signal(0);
   readonly mirrorStatus = signal<CardMirrorStatus | null>(null);
   // Bumped when a CARD_UPDATED for the open card lands via socket. refreshDetailFromNetwork
   // snapshots it before the /detail request so a slower response can't revert a newer realtime body.
@@ -845,6 +867,13 @@ export class CardDetailComponent {
           // carry an older description) does not overwrite it with stale text.
           this.detailRealtimeVersion++;
           this.applyPublishedDescription(expanded.description ?? "");
+        },
+        // Fired for both ends of a link (and for notes linking this card), so a card shows that it was
+        // linked from elsewhere without being reopened.
+        [SERVER_EVENTS.CARD_LINKS_CHANGED]: ({ cardId: changedCardId }) => {
+          if (changedCardId !== cardId) return;
+          this.refreshLinkedItems(cardId);
+          this.linkRevision.update((revision) => revision + 1);
         },
         [SERVER_EVENTS.BOARD_MIRROR_CREATED]: () => this.refreshMirrorStatus(cardId),
         [SERVER_EVENTS.BOARD_MIRROR_UPDATED]: () => this.refreshMirrorStatus(cardId),
@@ -1045,6 +1074,20 @@ export class CardDetailComponent {
       .catch(() => undefined);
   }
 
+  /**
+   * Re-reads only the linked items. A full /detail refresh is the wrong tool here: the description
+   * save (or another user's edit) that changed the links also emits card:updated, which bumps the
+   * realtime revision mid-fetch and makes refreshDetailFromNetwork discard its response.
+   */
+  private refreshLinkedItems(cardId: string) {
+    const seq = ++this.linkedItemsLoadSeq;
+    void this.api.get<CardLinkedItemsResponse>(`/cards/${cardId}/linked-items`)
+      .then(({ linkedItems }) => {
+        if (seq === this.linkedItemsLoadSeq && cardId === this.cardId()) this.state.setCardLinkedItems(cardId, linkedItems);
+      })
+      .catch(() => undefined);
+  }
+
   private async refreshDetailFromNetwork(cardId: string, boardId: string) {
     this.refreshAgentRuns(cardId);
     const seq = ++this.detailLoadSeq;
@@ -1213,6 +1256,8 @@ export class CardDetailComponent {
       this.recoveredDescriptionDraft.set(false);
       this.exitDescriptionEdit();
       void this.refreshDetailFromNetwork(card.id, card.boardId);
+      // Don't wait for the card:links:changed echo: the author should see a new link immediately.
+      this.refreshLinkedItems(card.id);
     } finally {
       this.savingDescription.set(false);
     }
@@ -1239,7 +1284,10 @@ export class CardDetailComponent {
       }
       return;
     }
+    // card:updated also carries renames, completions and moves. With the body unchanged there is
+    // nothing to promote, and rewriting a just-opened editor would reset input that is in flight.
     const cleanEditorStillShowsPreviousBaseline = editor
+      && markdown !== previousBaseline
       && !editor.isDirty()
       && editor.markdown().trim() === previousBaseline.trim()
       && this.editorInitialValue().trim() === previousBaseline.trim();

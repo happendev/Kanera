@@ -35,6 +35,7 @@ import { allocateCardKeys } from "../../lib/card-keys.js";
 import { emptyValueColumns, hasCustomFieldValue, type CustomFieldValueColumns } from "../../lib/custom-fields.js";
 import { badRequest } from "../../lib/errors.js";
 import { unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
+import { EMPTY_LINK_FANOUT, emitInternalLinksChanged, replaceInternalLinksForSource, type LinkFanout } from "../../lib/internal-links.js";
 import { replaceCardMentions } from "../../lib/mentions.js";
 import type { StorageProvider } from "../../lib/storage/index.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
@@ -635,6 +636,7 @@ export async function duplicateCardInto({
   const { copiedAttachments, dstStorage } = await copyAttachmentsForDuplicate(sourceAttachments, srcCtx, dstCtx, newCardId);
 
   let result: { newCard: typeof cards.$inferSelect; attachmentRows: (typeof cardAttachments.$inferSelect)[]; activity: ActivityEvent };
+  let linkFanout: LinkFanout = EMPTY_LINK_FANOUT;
   try {
     result = await db.transaction(async (tx) => {
       const [identity] = await allocateCardKeys(tx, dstCtx.workspaceId, 1);
@@ -662,6 +664,16 @@ export async function duplicateCardInto({
         boardId: targetBoardId,
         cardId: inserted!.id,
         source: "description",
+        markdown: inserted!.description,
+      });
+      // The copied description links the same cards as the original, so the copy belongs in their
+      // linked items too. Recorded against the destination workspace with the actor's access.
+      linkFanout = await replaceInternalLinksForSource({
+        tx,
+        claims: actor,
+        workspaceId: dstCtx.workspaceId,
+        sourceType: "card",
+        sourceId: inserted!.id,
         markdown: inserted!.description,
       });
 
@@ -965,6 +977,7 @@ export async function duplicateCardInto({
     throw err;
   }
 
+  await emitInternalLinksChanged(linkFanout);
   return { ...result, labelIds, assigneeIds: eligibleAssigneeIds, customFieldValues: fieldValueRows };
 }
 

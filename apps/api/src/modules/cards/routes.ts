@@ -44,7 +44,7 @@ import {
   type NewItem as NewChecklistTreeItem,
 } from "./checklist-tree.js";
 import { emitToBoard } from "../../realtime/emit.js";
-import { loadLinkedNotesForCard, repairInternalLinksAroundCard, replaceInternalLinksForSource } from "../../lib/internal-links.js";
+import { EMPTY_LINK_FANOUT, emitInternalLinksChanged, linkNeighbours, mergeLinkFanout, type LinkFanout, loadLinkedNotesForCard, repairInternalLinksAroundCard, replaceInternalLinksForSource } from "../../lib/internal-links.js";
 import { assertGlobalWorkSeparatorContext, positionForGlobalWorkLaneInsert } from "../global-work-separators/routes.js";
 import { duplicateCardInto, emitDuplicatedCardIntoBoard, resolveDuplicateTargetList } from "./duplicate-card.js";
 import { absoluteCardUrl, toWireCard } from "../../lib/wire-card.js";
@@ -839,7 +839,7 @@ export async function cardRoutes(
         source: "description",
         markdown: description,
       });
-      await replaceInternalLinksForSource({
+      const linkFanout = await replaceInternalLinksForSource({
         tx,
         claims: req.auth,
         workspaceId: ctx.workspaceId,
@@ -896,12 +896,12 @@ export async function cardRoutes(
       // card:created keeps the pre-automation snapshot (automation effects emit their own events)
       // but must carry the rebalanced position, or clients would place it by a stale number.
       const createdCard = rebalanced && finalCard ? { ...card, position: finalCard.position } : card;
-      return { kind: "created", card: createdCard, finalCard: finalCard ?? card, activity, automationEffects, assignmentAutomationEffects, rebalanced, laneRebalanced } as const;
+      return { kind: "created", card: createdCard, finalCard: finalCard ?? card, activity, automationEffects, assignmentAutomationEffects, rebalanced, laneRebalanced, linkFanout } as const;
     });
     if (result.kind === "replayed") {
       return reply.status(201).send(toWireCard(result.card, req.auth.cid));
     }
-    const { card, finalCard, activity, automationEffects, assignmentAutomationEffects, rebalanced, laneRebalanced } = result;
+    const { card, finalCard, activity, automationEffects, assignmentAutomationEffects, rebalanced, laneRebalanced, linkFanout } = result;
     if (rebalanced) await emitLaneRebalanced(boardId, listId, rebalanced);
     if (laneRebalanced) await emitWorkspaceLaneRebalanced(listId, laneRebalanced);
     if (assigneeIds.length > 0) {
@@ -917,6 +917,8 @@ export async function cardRoutes(
     const wireCard = toWireCard(card, req.auth.cid);
     await emitToBoard(boardId, SERVER_EVENTS.CARD_CREATED, { boardId, card: wireCard });
     await emitCardActivityFeedItem(boardId, card.id, activity);
+    // A description that links existing cards or notes adds this card to their linked items/backlinks.
+    await emitInternalLinksChanged(linkFanout);
     await emitAutomationEffects(automationEffects);
     if (assigneeIds.length > 0) {
       // Emit the requested assignment first because automation effects contain the final set;
@@ -1449,7 +1451,7 @@ export async function cardRoutes(
     const isTitleOnlyUpdate = body.title !== undefined
       && body.description === undefined
       && !hasDueDateUpdate;
-    const { card, activity } = await db.transaction(async (tx) => {
+    const { card, activity, linkFanout } = await db.transaction(async (tx) => {
       const [card] = await tx
         .update(cards)
         .set({
@@ -1463,6 +1465,7 @@ export async function cardRoutes(
         .where(eq(cards.id, id))
         .returning();
 
+      let linkFanout: LinkFanout = EMPTY_LINK_FANOUT;
       if (body.description !== undefined) {
         await replaceCardMentions({
           tx,
@@ -1471,7 +1474,7 @@ export async function cardRoutes(
           source: "description",
           markdown: description,
         });
-        await replaceInternalLinksForSource({
+        linkFanout = await replaceInternalLinksForSource({
           tx,
           claims: req.auth,
           workspaceId: ctx.workspaceId,
@@ -1507,7 +1510,7 @@ export async function cardRoutes(
             toValue: body.title,
           })
         : await recordActivity(tx, activityInput);
-      return { card: card!, activity };
+      return { card: card!, activity, linkFanout };
     });
     if (hasDueDateUpdate) {
       await enqueueDueDateChangedEmails({
@@ -1532,6 +1535,13 @@ export async function cardRoutes(
     await emitToBoard(current.boardId, SERVER_EVENTS.CARD_UPDATED, { boardId: current.boardId, card: wireCard });
     if ("status" in activity) await emitCoalescedCardActivityFeedItem(current.boardId, id, activity);
     else await emitCardActivityFeedItem(current.boardId, id, activity);
+    // Covers both ends: this card's own linked items and everything it started or stopped linking.
+    // A rename also reaches every card and note already linked either way, since they show this
+    // card's title in their linked items, backlinks and link chips.
+    const renamed = body.title !== undefined && body.title !== current.title;
+    await emitInternalLinksChanged(renamed
+      ? mergeLinkFanout(linkFanout, await linkNeighbours(ctx.workspaceId, "card", id))
+      : linkFanout);
     return wireCard;
   });
 

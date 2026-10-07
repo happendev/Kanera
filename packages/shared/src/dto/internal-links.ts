@@ -70,6 +70,11 @@ export type LinkedCardSummary = {
 
 export type LinkedInternalSummary = LinkedNoteSummary | LinkedCardSummary;
 
+/** GET /cards/:id/linked-items — the same list card detail carries as `linkedNotes`. */
+export interface CardLinkedItemsResponse {
+  linkedItems: LinkedInternalSummary[];
+}
+
 export type BacklinkSummary =
   | {
       kind: "card";

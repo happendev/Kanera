@@ -563,6 +563,11 @@ export interface ServerToClientEvents {
   "card:assignees:set": (payload: { boardId: string; cardId: string; assigneeIds: string[] }) => void;
   "card:visibility:granted": (payload: { boardId: string; cardId: string }) => void;
   "card:visibility:revoked": (payload: { boardId: string; cardId: string }) => void;
+  // Invalidation only: a card's linked items changed — a link to or from it was added or removed, or a
+  // linked card/note was renamed. Linked items are filtered per viewer by board/note access, so the
+  // board room cannot be sent one shared list; clients showing the card re-read
+  // GET /cards/:id/linked-items and re-resolve the link chips in its description.
+  "card:links:changed": (payload: { boardId: string; cardId: string }) => void;
   "card:attachment:created": (payload: { boardId: string; cardId: string; attachment: CardAttachmentRow }) => void;
   "card:attachment:deleted": (payload: { boardId: string; cardId: string; attachmentId: string }) => void;
   "card:checklist:created": (payload: { boardId: string; cardId: string; checklist: WireCardChecklist }) => void;
@@ -730,6 +735,9 @@ export interface ServerToClientEvents {
 
   "note:locked": (payload: WireNoteLock) => void;
   "note:unlocked": (payload: { noteId: string }) => void;
+  // Invalidation only, the note counterpart of card:links:changed: re-read GET /notes/:id/backlinks
+  // and re-resolve the link chips in the note body. Routed like the note's own events.
+  "note:links:changed": (payload: { noteId: string }) => void;
   "note:attachment:created": (payload: { note: WireNote; attachment: NoteAttachmentRow }) => void;
   "note:attachment:deleted": (payload: { note: WireNote; attachmentId: string }) => void;
 
@@ -861,6 +869,7 @@ export const SERVER_EVENTS = {
   CARD_ASSIGNEES_SET: "card:assignees:set",
   CARD_VISIBILITY_GRANTED: "card:visibility:granted",
   CARD_VISIBILITY_REVOKED: "card:visibility:revoked",
+  CARD_LINKS_CHANGED: "card:links:changed",
   CARD_ATTACHMENT_CREATED: "card:attachment:created",
   CARD_ATTACHMENT_DELETED: "card:attachment:deleted",
   CARD_CHECKLIST_CREATED: "card:checklist:created",
@@ -929,6 +938,7 @@ export const SERVER_EVENTS = {
   AGENT_RUN_UPDATED: "agentRun:updated",
   NOTE_LOCKED: "note:locked",
   NOTE_UNLOCKED: "note:unlocked",
+  NOTE_LINKS_CHANGED: "note:links:changed",
   NOTE_ATTACHMENT_CREATED: "note:attachment:created",
   NOTE_ATTACHMENT_DELETED: "note:attachment:deleted",
   // User-room-only; see the doc comment on the `scratchpadNote:*` block in ServerToClientEvents.

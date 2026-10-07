@@ -17,7 +17,7 @@ import { getStorageForClient } from "../../lib/storage/index.js";
 import { noteAttachmentStorageKey } from "../../lib/storage/keys.js";
 import { stripAttachmentReferences } from "../../lib/strip-attachment-refs.js";
 import { emitToBoard, emitToUser, emitToWorkspace } from "../../realtime/emit.js";
-import { loadBacklinksForNote, repairInternalLinksAroundNote, replaceInternalLinksForSource } from "../../lib/internal-links.js";
+import { EMPTY_LINK_FANOUT, emitInternalLinksChanged, linkNeighbours, loadBacklinksForNote, mergeLinkFanout, type LinkFanout, repairInternalLinksAroundNote, replaceInternalLinksForSource } from "../../lib/internal-links.js";
 import { putAttachmentFile } from "../../lib/attachment-upload.js";
 
 const LOCK_TTL_MS = 90_000; // 90 seconds
@@ -587,6 +587,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
         : []),
     ];
 
+    let linkFanout: LinkFanout = EMPTY_LINK_FANOUT;
     const [updated] = await db.transaction(async (tx) => {
       const rows = await tx
         .update(notes)
@@ -606,7 +607,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
         .returning();
 
       if (rows[0] && content !== undefined) {
-        await replaceInternalLinksForSource({
+        linkFanout = await replaceInternalLinksForSource({
           tx,
           claims: req.auth,
           workspaceId: note.workspaceId,
@@ -633,6 +634,14 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
     const responseNote = await shapeNote(updated, req.auth.cid);
     emitNoteEvent(updated, "note:updated", { note: responseNote });
     if (shouldReleaseLock) emitNoteEvent(updated, "note:unlocked", { noteId: id });
+    // Cards and notes this note started or stopped linking list it in their linked items/backlinks.
+    // Title, icon and color are shown there and in link chips, so a rename reaches every neighbour.
+    const renamed = (body.title !== undefined && body.title !== note.title)
+      || (body.icon !== undefined && body.icon !== note.icon)
+      || (body.color !== undefined && body.color !== note.color);
+    await emitInternalLinksChanged(renamed
+      ? mergeLinkFanout(linkFanout, await linkNeighbours(note.workspaceId, "note", id))
+      : linkFanout);
     return responseNote;
   });
 
@@ -656,6 +665,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
 
     // Duplicate one document, not its descendants or binary attachments. Embedded/internal links in
     // the copied Markdown are rebuilt for the new source so backlinks remain accurate.
+    let linkFanout: LinkFanout = EMPTY_LINK_FANOUT;
     const duplicate = await db.transaction(async (tx) => {
       const inserted = await insertNote({
         workspaceId: source.workspaceId,
@@ -669,7 +679,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
         icon: source.icon,
         color: source.color,
       }, tx);
-      await replaceInternalLinksForSource({
+      linkFanout = await replaceInternalLinksForSource({
         tx,
         claims: req.auth,
         workspaceId: inserted.workspaceId,
@@ -684,6 +694,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
       scope: duplicate.scope,
       note: responseNote,
     });
+    await emitInternalLinksChanged(linkFanout);
     return reply.status(201).send(responseNote);
   });
 
@@ -884,14 +895,24 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
       const { id } = req.params as { id: string };
       const note = await loadOrFail(id);
       await authoriseWrite(req, note);
-      await db.transaction(async (tx) => {
-        await tx.delete(internalLinks).where(or(
+      const linkFanout = await db.transaction(async (tx): Promise<LinkFanout> => {
+        const removed = await tx.delete(internalLinks).where(or(
           and(eq(internalLinks.sourceType, "note"), eq(internalLinks.sourceId, id)),
           and(eq(internalLinks.targetType, "note"), eq(internalLinks.targetId, id)),
-        ));
+        )).returning({ sourceType: internalLinks.sourceType, sourceId: internalLinks.sourceId, targetType: internalLinks.targetType, targetId: internalLinks.targetId });
         await tx.delete(notes).where(eq(notes.id, id));
+        // The far end of each removed link (a card or note linking this one, or one it linked) no
+        // longer lists it, and chips pointing at it no longer resolve.
+        const ends = removed.map((link) => link.sourceType === "note" && link.sourceId === id
+          ? { type: link.targetType, id: link.targetId }
+          : { type: link.sourceType, id: link.sourceId });
+        return {
+          cardIds: ends.filter((end) => end.type === "card").map((end) => end.id),
+          noteIds: ends.filter((end) => end.type === "note").map((end) => end.id),
+        };
       });
       emitNoteEvent(note, "note:deleted", { noteId: id });
+      await emitInternalLinksChanged(linkFanout);
       return reply.status(204).send();
     });
   }

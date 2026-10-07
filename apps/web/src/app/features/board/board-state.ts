@@ -16,6 +16,7 @@ import type {
   WireSeparator,
 } from "@kanera/shared/events";
 import type { Board, BoardRole, BoardSeparator, Card, CardAssignee, CardCustomFieldValue, CardLabel, CardLabelAssignment, CustomField, List } from "@kanera/shared/schema";
+import type { LinkedInternalSummary } from "@kanera/shared/dto";
 import type { OfflineBoardSnapshot } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
@@ -987,6 +988,20 @@ export class BoardState {
       ...attachments.filter((attachment) => attachment.cardId !== detail.card.id),
       ...detail.attachments,
     ]);
+  }
+
+  /**
+   * Linked items change only through `card:links:changed` re-reads, never through another realtime
+   * event, so replacing just this slice cannot revert newer state the way a stale /detail could.
+   */
+  setCardLinkedItems(cardId: string, linkedNotes: LinkedInternalSummary[]) {
+    this.detailedCards.update((cards) => {
+      const detail = cards.get(cardId);
+      if (!detail) return cards;
+      const next = new Map(cards);
+      next.set(cardId, { ...detail, linkedNotes });
+      return next;
+    });
   }
 
   addChecklist(cardId: string, checklist: WireCardChecklist) {

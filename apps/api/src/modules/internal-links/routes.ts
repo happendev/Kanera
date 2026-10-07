@@ -1,12 +1,13 @@
 import { dto } from "@kanera/shared";
 import { cardPath } from "@kanera/shared/card-links";
-import type { ResolveInternalLinksResponse, ResolvedInternalLink } from "@kanera/shared/dto";
+import type { CardLinkedItemsResponse, ResolveInternalLinksResponse, ResolvedInternalLink } from "@kanera/shared/dto";
 import { boards, cards, externalLinks, lists, notes } from "@kanera/shared/schema";
 import { and, eq, like } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
 import { assertBoardAccess, assertCardAccess } from "../../lib/access.js";
-import { canReadNote, parseInternalUrl } from "../../lib/internal-links.js";
+import { canReadNote, loadLinkedNotesForCard, parseInternalUrl } from "../../lib/internal-links.js";
+import { notFound } from "../../lib/errors.js";
 import { resolveCardKey } from "../../lib/card-keys.js";
 
 const MAX_URLS = 50;
@@ -37,6 +38,17 @@ async function canResolveThroughAccessibleMirror(auth: Parameters<typeof assertB
 
 export async function internalLinkRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
+
+  // Linked items on their own, so an open card can re-read them on `card:links:changed` without a
+  // full /detail fetch — which would race the realtime revision guard and be discarded. App-only:
+  // public API clients read the same list from card detail.
+  app.get("/cards/:id/linked-items", async (req): Promise<CardLinkedItemsResponse> => {
+    const { id } = req.params as { id: string };
+    const [card] = await db.select({ id: cards.id, boardId: cards.boardId }).from(cards).where(eq(cards.id, id)).limit(1);
+    if (!card) throw notFound();
+    const ctx = await assertCardAccess(req.auth, card);
+    return { linkedItems: await loadLinkedNotesForCard(req.auth, id, ctx.workspaceId) };
+  });
 
   app.post("/internal-links/resolve", async (req): Promise<ResolveInternalLinksResponse> => {
     const body = dto.resolveInternalLinksBody.parse(req.body);

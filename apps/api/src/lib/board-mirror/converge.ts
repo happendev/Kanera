@@ -49,6 +49,7 @@ import {
 import { mirrorActor } from "./actor.js";
 import { emitMirrorMetadataToBoards } from "./events.js";
 import { toWireCard } from "../wire-card.js";
+import { emitInternalLinksChanged, linkNeighbours } from "../internal-links.js";
 
 // Facets always run in this order, regardless of the array-union order on a dirty row. In
 // particular comments must exist before attachment associations, and every entity mapping must
@@ -452,6 +453,10 @@ async function convergeCore(mirror: BoardMirror, sourceCardId: string, source: t
   // the native archive route does when the mirror flips its lifecycle state.
   emitDeletedNotifications(result.deletedNotifications);
   if (cardChanged) await emitToBoard(mirror.targetBoardId, SERVER_EVENTS.CARD_UPDATED, { boardId: mirror.targetBoardId, card: toWireCard(result.updated, actor.cid) });
+  // A synced rename is a rename of the destination card: cards and notes linked to it show its title.
+  if (cardChanged && source.title !== target.title) {
+    await emitInternalLinksChanged(await linkNeighbours(mirror.targetWorkspaceId, "card", target.id));
+  }
   if (result.lifecycleActivity) await emitActivityFeedItem(mirror.targetBoardId, target.id, result.lifecycleActivity, { notify: false });
   if (result.archiveComment) {
     const wireComment = { ...result.archiveComment, authorName: "Kanera", authorAvatarUrl: null, reactions: [] };

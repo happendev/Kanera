@@ -337,7 +337,7 @@
         <k-draft-banner mode="saved" [canEdit]="canEdit()" (edit)="startEditDescription()" (discard)="discardDescriptionDraft()" />
         <div class="description-viewer-wrap dv-copy-hover-scope" [class.is-readonly]="!canEdit()" [class.is-empty]="!editorInitialValue().trim()" (click)="startEditDescription()" [kTooltip]="canEdit() ? 'Click to edit' : ''">
           <div class="description-viewer-inner">
-            <k-description-viewer [value]="editorInitialValue()" [workspaceId]="workspaceId()" [mentionMembers]="members()" [showCopy]="true" [handleAttachmentLinks]="true" (imageClick)="imageLightbox.open({ src: $event })" (attachmentClick)="openInlineAttachment($event)" />
+            <k-description-viewer [value]="editorInitialValue()" [linkRevision]="linkRevision()" [workspaceId]="workspaceId()" [mentionMembers]="members()" [showCopy]="true" [handleAttachmentLinks]="true" (imageClick)="imageLightbox.open({ src: $event })" (attachmentClick)="openInlineAttachment($event)" />
           </div>
         </div>
         } @else if (!canEditRole() && !draftDescription().trim()) {
@@ -346,7 +346,7 @@
         <div class="description-viewer-wrap dv-copy-hover-scope" [class.is-readonly]="!canEdit()" [class.is-clamped]="descriptionOverflows() && !descriptionExpanded()" [class.is-empty]="!draftDescription().trim()" (click)="onDescriptionViewerClick()"
           [kTooltip]="descriptionOverflows() && !descriptionExpanded() ? 'Show full description' : (canEdit() ? 'Click to edit' : '')">
           <div #descViewerInner class="description-viewer-inner">
-            <k-description-viewer [value]="draftDescription()" [workspaceId]="workspaceId()" [mentionMembers]="members()" [showCopy]="true" [handleAttachmentLinks]="true" (imageClick)="imageLightbox.open({ src: $event })" (attachmentClick)="openInlineAttachment($event)" />
+            <k-description-viewer [value]="draftDescription()" [linkRevision]="linkRevision()" [workspaceId]="workspaceId()" [mentionMembers]="members()" [showCopy]="true" [handleAttachmentLinks]="true" (imageClick)="imageLightbox.open({ src: $event })" (attachmentClick)="openInlineAttachment($event)" />
           </div>
         </div>
         @if (descriptionOverflows()) {
@@ -804,7 +804,7 @@
         </div>
         <div class="linked-notes-list">
           @for (item of linkedNotes(); track item.kind + ':' + item.id) {
-          <a class="linked-note-item" [href]="linkedItemHref(item)">
+          <a class="linked-note-item" [href]="linkedItemHref(item)" (click)="openLinkedItem($event, item)">
             <i [class]="'ti ti-' + linkedItemIcon(item)"
               [style.color]="linkedItemColor(item) ? 'var(--color-' + linkedItemColor(item) + ')' : null"></i>
             <span class="linked-note-title">{{ item.title || 'Untitled' }}</span>
