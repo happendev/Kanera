@@ -30,6 +30,17 @@ The CLI stores a short-lived access token and a refresh token, refreshes them au
 appears under **Settings → AI agents** as "Kanera CLI (your machine)", where you can revoke it.
 `kanera auth logout` revokes it for you.
 
+When an AI agent drives the CLI, name it at sign-in so Kanera labels its work as that agent's:
+
+```bash
+kanera auth login --agent "Claude Code"   # or set KANERA_AGENT_NAME
+```
+
+The sign-in is then registered as "Claude Code (Kanera CLI on your machine)", which is what the
+consent screen, **Settings → AI agents**, and every comment, card change and run chip show as
+"via …". The name is fixed for that sign-in; use a separate `--profile` per agent on a shared
+machine. API keys cannot carry an agent name, because personal-key work is recorded as the user.
+
 Use an API key for CI, cron, or an unattended agent, where nobody can approve a browser sign-in,
 or when you want a server-enforced **read-only** credential:
 
@@ -105,6 +116,14 @@ The non-secret, committable per-repo profile selection goes in `.kanera/config.j
 API origins are security-sensitive because they receive the bearer credential, so repository
 configuration cannot set one. Use `--url`, `KANERA_PUBLIC_API_URL`, or the origin saved with a
 profile during `auth login`. Non-loopback origins must use HTTPS.
+
+## Updates
+
+At most once a day the CLI checks npm for a newer release. If it finds one, it asks
+`Update now? [y/N]` after your command finishes, and `y` runs `npm install --global @kanera/cli@<version>`.
+It only asks when a person is at an interactive terminal. It never checks or asks in `--json` or
+`--quiet` mode, when stdin or stdout is not a TTY (which covers agents, scripts and pipes), under
+`CI`, or when the CLI was launched through `npx`. Set `KANERA_NO_UPDATE_CHECK=1` to turn the check off.
 
 ## Output
 

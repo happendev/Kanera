@@ -28,6 +28,16 @@ expose. When connected Kanera MCP tools are available, prefer those tools over t
 kanera whoami --json
 \`\`\`
 
+If this exits with code 3, ask the user to approve a sign-in, naming yourself so Kanera labels your
+work "via <your name> (Kanera CLI on <computer>)" rather than as the user's own:
+
+\`\`\`bash
+kanera auth login --agent "Claude Code"
+\`\`\`
+
+Use your own product name. Show the user the printed link and code; the command finishes once they
+approve. In an unattended environment, use a user-supplied \`KANERA_API_KEY\` instead.
+
 This reports the credential's \`scope\`. **If \`scope\` is \`read\`, the credential cannot change
 anything.** Do not attempt writes; say so instead. Write attempts exit with code 4.
 
@@ -76,6 +86,24 @@ kanera call checklists.update_items --cardId MKT-42 \\
   --updates '[{"itemId":"<itemId>","changes":{"completed":true}},{"itemId":"<itemId>","changes":{"assigneeId":"<userId>"}}]'
 \`\`\`
 
+## Show your work
+
+Before multi-step work on a card, start a run so the board shows a live "agent working" chip on it.
+Check \`kanera runs\` first so two agents do not work the same card.
+
+\`\`\`bash
+kanera runs MKT-42 --quiet                                   # anyone already working it?
+kanera run start MKT-42 "Fix the login redirect" --quiet     # keep the returned run id
+kanera run update <runId> --summary "Tests passing, opening PR"
+kanera run update <runId> --status blocked --summary "Need a decision on the redirect target"
+kanera run done <runId> "Merged; redirect fixed"
+\`\`\`
+
+Update at least every 10 minutes (a run with no update for 15 minutes is marked stalled). End with
+\`kanera run done\`, or \`kanera run update <runId> --status failed\` (or \`cancelled\`) and a summary.
+Ended runs cannot be edited. A run is a status signal, not the record: still comment the outcome on
+the card.
+
 ## Setting up
 
 \`\`\`bash
@@ -89,6 +117,17 @@ Workspace and standalone-board creation needs a write-capable personal credentia
 organisation admin; a workspace-scoped key exits 4. Pass \`--templateId blank\` or explicit
 \`--lists\` for a minimal setup. Lists, fields, and labels are shared by every board in a workspace.
 
+## Product documentation
+
+\`\`\`bash
+kanera docs "how do guest boards work" --quiet    # search the docs; cite the returned URLs
+\`\`\`
+
+For a whole page, fetch its Markdown version. The index is https://www.kanera.app/llms.txt. The most
+useful pages for shell agents are https://www.kanera.app/docs/cli.md,
+https://www.kanera.app/docs/ai-coding-agents.md (the pick-up-to-done loop), and
+https://www.kanera.app/docs/ai-agent-runs.md.
+
 ## Exit codes
 
 | Code | Meaning |
@@ -96,7 +135,7 @@ organisation admin; a workspace-scoped key exits 4. Pass \`--templateId blank\` 
 | 0 | success |
 | 1 | the request failed |
 | 2 | bad usage — re-read \`kanera help <tool>\` |
-| 3 | no valid credential — the user must run \`kanera auth login\` |
+| 3 | no valid credential — the user must approve \`kanera auth login --agent "<your name>"\` |
 | 4 | forbidden — often a read-only credential, or missing access |
 | 5 | not found |
 | 6 | rate limited — back off and retry |
@@ -108,7 +147,11 @@ organisation admin; a workspace-scoped key exits 4. Pass \`--templateId blank\` 
 - Treat tools marked \`destructive\` as requiring an explicit user request; do not infer deletion,
   archival, replacement, or bulk mutation from a broader read or reporting request.
 - Deletion and post-creation administration (renaming lists, fields, labels, members) live in the Kanera UI, not here.
-- Personal notes are private to their owner.
+- Personal notes are private to their owner. A \`NOTES_DISABLED\` error means a workspace admin has
+  switched notes off for that workspace; say so rather than retrying.
+- To link cards or notes, put the target's canonical Kanera URL in a card description or note.
+  Kanera turns it into a live link with a backlink. Only items in the same workspace are tracked.
+  See https://www.kanera.app/docs/cards.md#link-cards-and-notes.
 `;
 }
 

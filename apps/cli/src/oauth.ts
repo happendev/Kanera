@@ -134,17 +134,32 @@ export async function discover(mcpUrlInput: string, deps: OAuthDeps = defaultDep
 }
 
 /**
+ * The registered client name is the only agent identity Kanera records for an OAuth grant: it is
+ * what the consent screen and Settings -> AI agents list, and what card activity, comments,
+ * notifications and run chips show as "via <name>". Naming the driving agent here is therefore how
+ * work done through the CLI reads as that agent's. The computer stays in the name so two machines'
+ * sign-ins remain distinguishable and separately revocable.
+ */
+export function cliClientName(agent?: string, host = hostname()): string {
+  return (agent ? `${agent} (Kanera CLI on ${host})` : `Kanera CLI (${host})`).slice(0, 200);
+}
+
+/**
  * Register a public client for this machine. Each machine gets its own client so the consent screen
  * and Settings -> AI agents name the computer, and revoking one laptop leaves the others signed in.
  */
-export async function registerClient(server: DiscoveredServer, deps: OAuthDeps = defaultDeps): Promise<string> {
+export async function registerClient(
+  server: DiscoveredServer,
+  deps: OAuthDeps = defaultDeps,
+  clientName: string = cliClientName(),
+): Promise<string> {
   let response: Response;
   try {
     response = await deps.fetch(server.registrationEndpoint, {
       method: "POST",
       headers: { accept: "application/json", "content-type": "application/json" },
       body: JSON.stringify({
-        client_name: `Kanera CLI (${hostname()})`.slice(0, 200),
+        client_name: clientName,
         grant_types: [DEVICE_GRANT_TYPE, "refresh_token"],
         token_endpoint_auth_method: "none",
         application_type: "native",

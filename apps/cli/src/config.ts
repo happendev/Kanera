@@ -33,6 +33,8 @@ export interface Profile {
   url?: string;
   /** Cached from `GET /api/v1/session` at login, for `auth status` without a round trip. */
   label?: string;
+  /** The agent named at OAuth login; Kanera labels this sign-in's work "via <agent> (Kanera CLI …)". */
+  agent?: string;
   scope?: string;
 }
 
@@ -49,7 +51,7 @@ export interface RepoConfig {
 
 const EMPTY: CliConfig = { version: 1, defaultProfile: "default", profiles: {} };
 
-function configDir(): string {
+export function configDir(): string {
   const xdg = process.env.XDG_CONFIG_HOME;
   return join(xdg && xdg.trim() !== "" ? xdg : join(homedir(), ".config"), "kanera");
 }

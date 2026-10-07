@@ -5,7 +5,7 @@ import {
   DEFAULT_MCP_URL, DEFAULT_PUBLIC_API_URL, DEFAULT_WEB_URL, readConfig, removeProfile, resolveCredential, saveProfile, validateApiUrl,
   type OAuthProfile,
 } from "../config.js";
-import { discover, pollForTokens, registerClient, revoke, sessionOptionsFor, startDeviceAuthorization } from "../oauth.js";
+import { cliClientName, discover, pollForTokens, registerClient, revoke, sessionOptionsFor, startDeviceAuthorization } from "../oauth.js";
 import { CliError, EXIT, usageError } from "../errors.js";
 import type { CommandContext, CommandResult } from "../context.js";
 import { openToolSession, type ToolSessionOptions } from "../tools.js";
@@ -107,8 +107,37 @@ async function login(ctx: CommandContext): Promise<CommandResult> {
   // A key on the command line, or an explicit request for one, keeps the API-key flow: CI and
   // unattended agents have nobody to approve a browser sign-in, and read-only keys are the
   // server-enforced way to keep an agent from writing.
-  if (ctx.apiKeyFlag || boolFlag(ctx.flags, "with-api-key")) return await loginWithApiKey(ctx, profile);
-  return await loginWithOAuth(ctx, profile);
+  if (ctx.apiKeyFlag || boolFlag(ctx.flags, "with-api-key")) {
+    if (ctx.flags.agent !== undefined) {
+      // A personal key is recorded as its owner by design, so a name given here could never appear.
+      throw usageError(
+        "--agent applies only to a browser sign-in",
+        "Work done with a personal API key is recorded as you. Drop --with-api-key to label the agent's work.",
+      );
+    }
+    return await loginWithApiKey(ctx, profile);
+  }
+  return await loginWithOAuth(ctx, profile, agentName(ctx));
+}
+
+/**
+ * The agent this sign-in acts for, from `--agent` or `KANERA_AGENT_NAME`. It becomes part of the
+ * OAuth client name, which is shown verbatim on the consent screen and on every card the agent
+ * touches, so it is kept short and free of control characters that could forge extra lines there.
+ */
+export function agentName(ctx: Pick<CommandContext, "flags">, env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const fromFlag = ctx.flags.agent;
+  if (fromFlag !== undefined && typeof fromFlag !== "string") throw usageError("--agent needs a name", 'For example: --agent "Claude Code"');
+  const raw = fromFlag ?? env.KANERA_AGENT_NAME;
+  if (raw === undefined) return undefined;
+  const name = raw.trim().replace(/\s+/gu, " ");
+  if (name === "") {
+    if (fromFlag !== undefined) throw usageError("--agent needs a name", 'For example: --agent "Claude Code"');
+    return undefined;
+  }
+  if (/\p{Cc}/u.test(name)) throw usageError("the agent name cannot contain control characters");
+  if (name.length > 64) throw usageError("the agent name must be 64 characters or fewer");
+  return name;
 }
 
 /** Which MCP endpoint to sign in to. Its metadata names the authorization server. */
@@ -126,14 +155,16 @@ function mcpUrlForLogin(ctx: CommandContext): string {
   return DEFAULT_MCP_URL;
 }
 
-async function loginWithOAuth(ctx: CommandContext, profile: string): Promise<CommandResult> {
+async function loginWithOAuth(ctx: CommandContext, profile: string, agent: string | undefined): Promise<CommandResult> {
   const server = await discover(mcpUrlForLogin(ctx));
-  const clientId = await registerClient(server);
+  const clientName = cliClientName(agent);
+  const clientId = await registerClient(server, undefined, clientName);
   const device = await startDeviceAuthorization(server, clientId);
   const openUrl = device.verificationUriComplete ?? device.verificationUri;
   process.stderr.write(
     `To sign in, open:\n  ${openUrl}\n\n`
     + `and check that it shows this code:\n  ${device.userCode}\n\n`
+    + `Kanera will list this sign-in, and label its work, as "${clientName}".\n\n`
     + "Waiting for approval in the browser...\n",
   );
   openBrowserIfEnabled(ctx.flags, openUrl);
@@ -141,14 +172,14 @@ async function loginWithOAuth(ctx: CommandContext, profile: string): Promise<Com
 
   // Not saved yet, so the session uses the fresh token directly instead of reading the profile.
   const session = await describeSession({ mcpUrl: oauth.mcpUrl, accessToken: async () => oauth.accessToken });
-  const previous = (await saveProfile(profile, { oauth, label: identityLabel(session), scope: session.scope ?? undefined }, true))?.oauth;
+  const previous = (await saveProfile(profile, { oauth, agent, label: identityLabel(session), scope: session.scope ?? undefined }, true))?.oauth;
   // Signing in again replaces the old sign-in; end it on the server so it does not linger in
   // Settings -> AI agents with a refresh token nobody holds.
   if (previous) await revoke(previous);
 
   return {
-    summary: `Signed in as ${identityLabel(session)} (profile "${profile}", OAuth).`,
-    data: { profile, kind: "oauth", mcpUrl: oauth.mcpUrl, scope: session.scope ?? null, session },
+    summary: `Signed in as ${identityLabel(session)} (profile "${profile}", OAuth). Work is labelled "via ${clientName}".`,
+    data: { profile, kind: "oauth", agent: agent ?? null, clientName, mcpUrl: oauth.mcpUrl, scope: session.scope ?? null, session },
   };
 }
 
@@ -241,6 +272,7 @@ function listProfiles(): CommandResult {
     kind: profile.oauth ? "oauth" : "apiKey",
     url: profile.oauth?.mcpUrl ?? profile.url ?? "",
     label: profile.label ?? "",
+    agent: profile.agent ?? "",
     scope: profile.scope ?? "",
   }));
   return { summary: rows.length === 0 ? "No stored profiles." : undefined, data: { profiles: rows } };

@@ -11,6 +11,7 @@ import { CliError, EXIT, type ExitCode } from "./errors.js";
 import { outputMode, render } from "./output.js";
 import { skillDocument } from "./skill.js";
 import { ApiFailure, coerceArguments, openToolSession, proxyRemoteMcp, stdinClosed, type ToolSession } from "./tools.js";
+import { startUpdateCheck } from "./update.js";
 
 declare const KANERA_CLI_VERSION: string;
 // Source-level tests and `tsx` development runs bypass the bundler. Published builds replace the
@@ -116,23 +117,36 @@ export async function run(argv: string[], io: Io): Promise<ExitCode> {
     },
   };
 
-  try {
-    // `mcp` replaces the process's stdio with an MCP transport, so it can never fall through to the
-    // renderer below; it is handled before anything writes to stdout.
-    if (positionals[0] === "mcp") return await serveMcp(ctx);
+  // `mcp` replaces the process's stdio with an MCP transport, so it can never fall through to the
+  // renderer below; it is handled before anything writes to stdout, and never offered an update.
+  if (positionals[0] === "mcp") {
+    try {
+      return await serveMcp(ctx);
+    } catch (error) {
+      return reportFailure(error, mode, io);
+    }
+  }
 
+  // Looked up while the command runs and offered only after its output, so the command is never
+  // delayed by the registry or held up waiting on an answer before it has done its work.
+  const update = startUpdateCheck({ currentVersion: cliVersion, mode });
+  let exitCode: ExitCode;
+  try {
     const result = await dispatch(ctx);
     const text = mode === "human" && result.raw !== undefined
       ? result.raw
       : render(mode, { ok: true, tool: result.tool, data: result.data, summary: result.summary });
     io.stdout(text.endsWith("\n") ? text : `${text}\n`);
-    return EXIT.ok;
+    exitCode = EXIT.ok;
   } catch (error) {
-    return reportFailure(error, mode, io);
+    exitCode = reportFailure(error, mode, io);
   } finally {
     await opened?.close();
     await catalogOpened?.close();
   }
+  // The update never changes the command's own exit code; the command already succeeded or failed.
+  await update?.offer();
+  return exitCode;
 }
 
 async function dispatch(ctx: CommandContext): Promise<CommandResult> {
