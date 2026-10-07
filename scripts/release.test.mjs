@@ -10,12 +10,11 @@ const scriptPath = fileURLToPath(new URL("./release.mjs", import.meta.url));
 const releaseManifestPaths = [
   "package.json",
   "apps/api/package.json",
-  "apps/cli/package.json",
   "apps/web/package.json",
   "packages/sdk/package.json",
   "packages/shared/package.json",
 ];
-const independentManifestPaths = ["apps/mcp/package.json", "apps/mcp/server.json"];
+const independentManifestPaths = ["apps/cli/package.json", "apps/mcp/package.json", "apps/mcp/server.json"];
 const realGit = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
 
 function git(repo, args) {
@@ -113,7 +112,7 @@ exec "${realGit}" "$@"
   assert.notEqual(tag.status, 0);
 });
 
-test("leaves independently versioned MCP manifests unchanged", async (t) => {
+test("leaves independently versioned CLI and MCP manifests unchanged", async (t) => {
   const fixture = await createFixture();
   t.after(() => rm(fixture.root, { recursive: true, force: true }));
   const pnpm = "#!/bin/sh\nif [ \"$1\" = \"install\" ]; then printf \"changed\\n\" > pnpm-lock.yaml; fi\nexit 0\n";

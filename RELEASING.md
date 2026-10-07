@@ -9,7 +9,7 @@ hosted application itself is documented in [DEPLOY.md](DEPLOY.md).
 
 | Artefact | Registry | Version | Workflow |
 | -------- | -------- | ------- | -------- |
-| `@kanera/cli` | npm | workspace version (`vX.Y.Z` tags) | `publish-npm.yml` |
+| `@kanera/cli` | npm | independent; published by workspace releases | `publish-npm.yml` |
 | `@kanera/sdk` | npm | workspace version (`vX.Y.Z` tags) | `publish-npm.yml` |
 | MCP server metadata | MCP registry | independent (`mcp-vX.Y.Z` tags) | `publish-mcp.yml` |
 | OpenAI Kanera plugin | OpenAI universal Plugins Directory | MCP version (`mcp-vX.Y.Z` tags) | manual review and publish through the OpenAI plugin portal |
@@ -37,7 +37,12 @@ For a change that touches agent routing, the CLI, or public setup guidance, rele
 The GitHub repository secrets currently required by the automated workflows are `NPM_TOKEN`,
 `MCP_PRIVATE_KEY`, and `GITLEAKS_LICENSE`.
 
-The workspace release script deliberately leaves `apps/mcp/package.json`, `apps/mcp/server.json`,
+The CLI versions independently: bump `apps/cli/package.json` explicitly before a workspace
+release when shipping CLI changes, and optionally add a `cli-vX.Y.Z` GitHub release to document
+them. The workspace release publishes the CLI version in that manifest alongside the SDK; a
+CLI tag alone does not trigger npm publishing.
+
+The workspace release script deliberately leaves `apps/cli/package.json`, `apps/mcp/package.json`, `apps/mcp/server.json`,
 and `integrations/plugins/kanera/.codex-plugin/plugin.json` unchanged. MCP releases bump all three
 together and use their own `mcp-vX.Y.Z` tag; a CLI or SDK release must not bump them.
 
@@ -68,7 +73,7 @@ pnpm release
 The script:
 
 1. Prompts for major/minor/patch (or a manual version).
-2. Rewrites the version in every workspace manifest **and** the `SDK_VERSION` User-Agent constant
+2. Rewrites the version in the app, SDK, and shared workspace manifests **and** the `SDK_VERSION` User-Agent constant
    in `packages/sdk/src/client.ts` — that constant is hardcoded because the SDK also runs on
    browsers and Workers, and the SDK package test fails if it ever drifts from `package.json`.
 3. Runs `pnpm install --lockfile-only`, `pnpm lint`, and `pnpm test`, rolling everything back on
@@ -87,7 +92,7 @@ gh release create vX.Y.Z --title "vX.Y.Z" --generate-notes --verify-tag
 
 Publishing the `vX.Y.Z` GitHub release triggers `.github/workflows/publish-npm.yml`, which:
 
-- refuses to run when the tag does not match the `apps/cli` and `packages/sdk` manifest versions;
+- refuses to run when the tag does not match the `packages/sdk` manifest version (the CLI versions independently);
 - runs the MCP tool-layer tests (the CLI embeds that layer), then publishes `@kanera/sdk` and
   `@kanera/cli` — each package's `prepublishOnly` reruns its own build-pack-install suite;
 - publishes with npm **provenance**, and skips any version that is already on the registry, so a
