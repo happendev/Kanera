@@ -421,10 +421,12 @@ void test("POST /billing/seats rejects trial capacity changes, invoices active i
 function setStripeSubscription(subscriptionForRetrieve: Stripe.Subscription, itemQuantity = 1) {
   let retrieveCount = 0;
   let updateCount = 0;
+  const retrievedIds: string[] = [];
   setStripeClientForTests({
     subscriptions: {
-      retrieve: async () => {
+      retrieve: async (id: string) => {
         retrieveCount += 1;
+        retrievedIds.push(id);
         return subscriptionForRetrieve;
       },
     },
@@ -438,6 +440,7 @@ function setStripeSubscription(subscriptionForRetrieve: Stripe.Subscription, ite
   } as unknown as Stripe);
   return {
     retrieveCount: () => retrieveCount,
+    retrievedIds: () => [...retrievedIds],
     updateCount: () => updateCount,
   };
 }
@@ -807,6 +810,86 @@ void test("Stripe subscription deleted downgrades and clears stale subscription 
     assert.equal(await db.$count(workspaces, and(eq(workspaces.clientId, clientId), isNull(workspaces.archivedAt))), 2);
     assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "pro_cancelled")), 1);
     assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "pro_cancellation_scheduled")), 0);
+  });
+});
+
+void test("Stripe late cancellation of a replaced subscription does not remove the replacement's access", async () => {
+  await withHostedStripe(async () => {
+    const app = await buildIntegrationServer();
+    const clientId = await createClient("stripe-late-cancel@example.com", {
+      plan: "paid",
+      billingStatus: "active",
+      stripeCustomerId: "cus_test",
+      stripeSubscriptionId: "sub_new",
+      stripeSubscriptionItemId: "si_new",
+      currentPeriodEnd: new Date(periodEnd * 1000),
+    });
+    await createWorkspaceWithBoard(clientId, "First", new Date("2026-01-01T00:00:00.000Z"));
+    await createWorkspaceWithBoard(clientId, "Second", new Date("2026-01-02T00:00:00.000Z"));
+    const calls = setStripeSubscription(subscription("active", { clientId, id: "sub_new", itemId: "si_new" }));
+
+    // Delivered after the organisation already moved onto sub_new: the cancellation belongs to sub_old only.
+    await handleStripeEvent(
+      event("customer.subscription.deleted", subscription("canceled", { clientId, id: "sub_old", itemId: "si_old" }), "evt_late_cancel_old"),
+      env,
+      app.mailer,
+    );
+
+    const [client] = await db.select().from(clients).where(eq(clients.id, clientId)).limit(1);
+    assert.equal(client?.plan, "paid");
+    assert.equal(client?.billingStatus, "active");
+    assert.equal(client?.stripeSubscriptionId, "sub_new");
+    assert.equal(client?.stripeSubscriptionItemId, "si_new");
+    assert.equal(client?.currentPeriodEnd?.getTime(), periodEnd * 1000);
+    // The mismatch is reconciled from the held subscription's live state, not the stale snapshot.
+    assert.equal(calls.retrieveCount(), 1);
+    assert.deepEqual(calls.retrievedIds(), ["sub_new"]);
+    assert.equal(await db.$count(workspaces, and(eq(workspaces.clientId, clientId), isNull(workspaces.archivedAt))), 2);
+    assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "pro_cancelled")), 0);
+    assert.equal(await db.$count(stripeEvents, eq(stripeEvents.id, "evt_late_cancel_old")), 1);
+
+    // If the held subscription was also lost and its own event never arrived, the reconcile still downgrades.
+    setStripeSubscription(subscription("canceled", { clientId, id: "sub_new", itemId: "si_new" }));
+    await handleStripeEvent(
+      event("customer.subscription.deleted", subscription("canceled", { clientId, id: "sub_old", itemId: "si_old" }), "evt_late_cancel_old_again"),
+      env,
+      app.mailer,
+    );
+    const [downgraded] = await db.select().from(clients).where(eq(clients.id, clientId)).limit(1);
+    assert.equal(downgraded?.plan, "free");
+    assert.equal(downgraded?.billingStatus, "canceled");
+    assert.equal(downgraded?.stripeSubscriptionId, null);
+    assert.equal(await db.$count(emailQueue, eq(emailQueue.type, "pro_cancelled")), 1);
+  });
+});
+
+void test("Stripe late cancellation for a replaced subscription releases the event claim when the live read fails", async () => {
+  await withHostedStripe(async () => {
+    const clientId = await createClient("stripe-late-cancel-retry@example.com", {
+      plan: "paid",
+      billingStatus: "active",
+      stripeCustomerId: "cus_test",
+      stripeSubscriptionId: "sub_new",
+      stripeSubscriptionItemId: "si_new",
+    });
+    setStripeClientForTests({
+      subscriptions: {
+        retrieve: async () => {
+          throw new Error("stripe unavailable");
+        },
+      },
+    } as unknown as Stripe);
+
+    await assert.rejects(
+      handleStripeEvent(event("customer.subscription.deleted", subscription("canceled", { clientId, id: "sub_old" }), "evt_late_cancel_unavailable")),
+      /stripe unavailable/,
+    );
+
+    const [client] = await db.select().from(clients).where(eq(clients.id, clientId)).limit(1);
+    assert.equal(client?.plan, "paid");
+    assert.equal(client?.stripeSubscriptionId, "sub_new");
+    // Claim released so Stripe's redelivery of the same event id is processed again.
+    assert.equal(await db.$count(stripeEvents, eq(stripeEvents.id, "evt_late_cancel_unavailable")), 0);
   });
 });
 
