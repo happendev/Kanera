@@ -10,7 +10,7 @@ async function readJson(path) {
   return JSON.parse(await readFile(path, "utf8"));
 }
 
-void test("the Codex plugin bundles the canonical Kanera skill", async () => {
+void test("the plugin shares Kanera workflows but excludes standalone CLI setup", async () => {
   const [canonicalSkill, bundledSkill, canonicalOpenAi, bundledOpenAi] = await Promise.all([
     readFile(canonicalSkillPath, "utf8"),
     readFile(new URL("skills/kanera/SKILL.md", pluginRoot), "utf8"),
@@ -18,7 +18,16 @@ void test("the Codex plugin bundles the canonical Kanera skill", async () => {
     readFile(new URL("skills/kanera/agents/openai.yaml", pluginRoot), "utf8"),
   ]);
 
-  assert.equal(bundledSkill, canonicalSkill);
+  // The directory package uses OAuth/MCP only; standalone skills retain CLI setup for coding agents.
+  // Keep the shared project workflows aligned while validating the submission's transport boundary.
+  const workflowHeading = "## Resolve context";
+  assert.ok(bundledSkill.includes(workflowHeading));
+  assert.ok(canonicalSkill.includes(workflowHeading));
+  assert.equal(
+    bundledSkill.slice(bundledSkill.indexOf(workflowHeading)),
+    canonicalSkill.slice(canonicalSkill.indexOf(workflowHeading)),
+  );
+  assert.doesNotMatch(bundledSkill, /```(?:bash|sh)|\bnpx\b|npm install|kanera auth login|KANERA_API_KEY/u);
   assert.equal(bundledOpenAi, canonicalOpenAi);
   assert.match(canonicalSkill, /npx -y @kanera\/cli commands/u);
   assert.match(canonicalSkill, /npm install --global @kanera\/cli/u);
