@@ -69,6 +69,27 @@ void test("a mutation with an idempotency key is retried and forwards the key", 
   assert.equal((calls[0]!.init.headers as Record<string, string>)["idempotency-key"], "11111111-1111-4111-8111-111111111111");
 });
 
+// Transport-only failure modes need a controlled fetch: a real server cannot reliably lose a
+// committed response. An empty key must not authorize retries; header casing must not replace or
+// duplicate the configured credential. These are client guarantees before any API handler runs.
+void test("an empty idempotency key does not retry an ambiguous mutation failure", async () => {
+  const calls: RequestInit[] = [];
+  const fetchImpl = ((_url: string | URL, init: RequestInit) => {
+    calls.push(init);
+    return Promise.reject(new TypeError("connection lost after write"));
+  }) as typeof fetch;
+  await assert.rejects(client(fetchImpl).post("/api/v1/cards/x/comments", { body: "hi" }, { idempotencyKey: "" }), KaneraConnectionError);
+  assert.equal(calls.length, 1);
+});
+
+void test("extra headers cannot replace or duplicate the configured authorization", async () => {
+  for (const name of ["authorization", "Authorization", "AUTHORIZATION"]) {
+    const { calls, fetchImpl } = stub([json({ ok: true })]);
+    await client(fetchImpl).get("/api/v1/session", { headers: { [name]: "Bearer another-account" } });
+    assert.equal(new Headers(calls[0]!.init.headers).get("authorization"), "Bearer kanera_u_test");
+  }
+});
+
 void test("reads are retried on rate limits and honour Retry-After", async () => {
   const { calls, fetchImpl } = stub([
     () => json({ code: "RATE_LIMITED", message: "slow down" }, 429, { "retry-after": "0" }),

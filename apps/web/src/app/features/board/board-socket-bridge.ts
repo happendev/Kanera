@@ -85,6 +85,11 @@ export class BoardSocketBridge {
       [SERVER_EVENTS.LIST_DELETED]: ({ workspaceId, listId }) => {
         if (!isCurrentWorkspace(workspaceId)) return;
         state.lists.update((ls) => ls.filter((l) => l.id !== listId));
+        // Deleting a workspace list cascades to its cards and separators in the database. The
+        // server emits one list event, so also clear the table/detail caches and recent-card
+        // retention here; removing only the lane leaves ghost cards until the next reload.
+        for (const card of state.cards().filter((card) => card.listId === listId)) state.removeCard(card.id);
+        state.separators.update((items) => items.filter((item) => item.listId !== listId));
       },
 
       // Both run events carry the full run; a terminal/stalled status in `updated` ends it. Runs are

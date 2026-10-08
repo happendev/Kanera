@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { eq } from "drizzle-orm";
 import { adminRefreshTokens, adminUsers } from "@kanera/shared/schema";
-import { db } from "../db.js";
+import { db, pool } from "../db.js";
 import { buildAdminIntegrationServer, buildIntegrationServer } from "../test/integration.js";
 import { adminAuthHeader, createAdmin, loginAdmin } from "../test/admin-fixtures.js";
 import { seedFirstAdmin } from "./bootstrap.js";
@@ -173,6 +173,44 @@ void test("POST /admin/auth/refresh accepts immediate reuse of a just-rotated to
   assert.equal(raced.statusCode, 200);
   assert.ok(raced.json<{ accessToken: string }>().accessToken);
   assert.equal(raced.cookies.some((cookie) => cookie.name === "kanera_admin_rt"), false);
+});
+
+// The browser E2E stack has no admin API. Exercise the real token transaction here: racing tabs
+// must not fork a token into multiple successors, revoke the winner, or lose its usable cookie.
+void test("concurrent admin refreshes create only one usable successor", async () => {
+  const app = await buildAdminIntegrationServer();
+  await createAdmin("race@test.local", "correct-password");
+  const { refreshCookie } = await loginAdmin(app, "race@test.local", "correct-password");
+  const blocker = await pool.connect();
+  await blocker.query("begin");
+  // Allow token reads, but hold inserts until both transactions reach a lock. Without the row
+  // lock both read the live token; with it the follower waits at SELECT FOR UPDATE instead.
+  await blocker.query("lock table admin_refresh_token in share mode");
+  const pending = Promise.all(Array.from({ length: 2 }, () => app.inject({
+    method: "POST", url: "/admin/auth/refresh", headers: { cookie: `kanera_admin_rt=${refreshCookie}` },
+  })));
+  let bothWaiting = false;
+  try {
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline) {
+      await blocker.query("select pg_stat_clear_snapshot()");
+      const waiting = await blocker.query<{ count: number }>("select count(*)::int as count from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock' and pid <> pg_backend_pid()");
+      if (waiting.rows[0]!.count === 2) { bothWaiting = true; break; }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  } finally {
+    await blocker.query("rollback");
+    blocker.release();
+  }
+  const responses = await pending;
+  assert.ok(bothWaiting, "both refresh transactions reached the database barrier");
+  assert.deepEqual(responses.map((response) => response.statusCode), [200, 200]);
+  const successors = responses.flatMap((response) => response.cookies.filter((cookie) => cookie.name === "kanera_admin_rt"));
+  assert.equal(successors.length, 1);
+  const followup = await app.inject({
+    method: "POST", url: "/admin/auth/refresh", headers: { cookie: `kanera_admin_rt=${successors[0]!.value}` },
+  });
+  assert.equal(followup.statusCode, 200);
 });
 
 void test("adminAuthenticate rejects a tenant JWT (isolation)", async () => {
