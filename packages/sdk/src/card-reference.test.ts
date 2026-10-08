@@ -104,3 +104,24 @@ void test("the resolver caches, so repeating a key in a bulk call costs one look
   assert.deepEqual(ids, [UUID, UUID, UUID]);
   assert.equal(requested.length, 1);
 });
+
+void test("a failed resolution is not cached, so a later lookup retries once the card exists", async () => {
+  // One long-lived SDK instance: the first lookup runs before the card exists (or before access is
+  // granted / while the API is unreachable). Remembering that rejection would pin the instance to
+  // "not found" forever; only successes are worth memoising.
+  const routes: Record<string, unknown> = {};
+  const { http, requested } = fakeHttp(routes);
+  const resolve = createCardReferenceResolver(http);
+
+  const first = await resolve("MKT-42").catch((e: unknown) => e);
+  assert.ok(first instanceof KaneraApiError);
+  assert.equal(first.isNotFound, true);
+
+  routes["/api/v1/search?q=MKT-42&limit=20"] = { cards: [{ cardId: UUID, cardKey: "MKT-42", organisationKey: ORG }] };
+  assert.equal(await resolve("MKT-42"), UUID);
+  assert.equal(requested.filter((path) => path.startsWith("/api/v1/search")).length, 2);
+
+  // Successes still memoise: a third call issues no request.
+  assert.equal(await resolve("mkt-42"), UUID);
+  assert.equal(requested.filter((path) => path.startsWith("/api/v1/search")).length, 2);
+});

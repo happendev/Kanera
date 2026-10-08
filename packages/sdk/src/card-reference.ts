@@ -116,6 +116,11 @@ export function createCardReferenceResolver(http: KaneraHttpClient): (reference:
     if (!pending) {
       pending = resolveCardReference(http, normalized);
       cache.set(cacheKey, pending);
+      // Only successful resolutions are worth remembering. A not-found or transient failure must not
+      // pin the instance to that answer once the card exists, access is granted, or the API is back.
+      pending.catch(() => {
+        if (cache.get(cacheKey) === pending) cache.delete(cacheKey);
+      });
     }
     return pending;
   };

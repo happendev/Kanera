@@ -1104,6 +1104,44 @@ describe("BoardState realtime regressions", () => {
     expect(state.cards()[0]).toMatchObject({ checklistDoneCount: 1, checklistTotalCount: 2 });
   });
 
+  it("removes a deleted checklist's items from the progress badge without cached card detail", () => {
+    const socket = new SocketStub();
+    socket.connected = false;
+    // The card was never opened in this tab: no checklist detail is cached, so the only source for
+    // the subtraction is the counts carried by the deletion event itself.
+    state.hydrate({
+      board: createBoard(),
+      lists: [createList()],
+      cards: [createCardSummary({ checklistDoneCount: 1, checklistTotalCount: 3 })],
+      customFields: [],
+      cardLabels: [],
+      members: [],
+      viewerRole: "editor",
+    });
+    bridge.attach(socket.asSocket(), "board-1");
+
+    socket.trigger("card:checklist:deleted", { boardId: "board-1", cardId: "card-1", checklistId: "checklist-1", checklistParentItemId: null, itemCount: 3, completedItemCount: 1 });
+    expect(state.cards()[0]).toMatchObject({ checklistDoneCount: 0, checklistTotalCount: 0 });
+  });
+
+  it("ignores a deleted nested checklist's counts for the card progress badge", () => {
+    const socket = new SocketStub();
+    socket.connected = false;
+    state.hydrate({
+      board: createBoard(),
+      lists: [createList()],
+      cards: [createCardSummary({ checklistDoneCount: 1, checklistTotalCount: 3 })],
+      customFields: [],
+      cardLabels: [],
+      members: [],
+      viewerRole: "editor",
+    });
+    bridge.attach(socket.asSocket(), "board-1");
+
+    socket.trigger("card:checklist:deleted", { boardId: "board-1", cardId: "card-1", checklistId: "nested-1", checklistParentItemId: "item-1", itemCount: 2, completedItemCount: 2 });
+    expect(state.cards()[0]).toMatchObject({ checklistDoneCount: 1, checklistTotalCount: 3 });
+  });
+
   it("keeps nested checklist item realtime events out of the card progress badge", () => {
     const socket = new SocketStub();
     socket.connected = false;

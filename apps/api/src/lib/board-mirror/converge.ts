@@ -803,7 +803,16 @@ async function convergeChecklists(mirror: BoardMirror, sourceCardId: string, tar
       completedAt: item.completedAt,
     });
   }
-  for (const checklist of deletedChecklists) await emitToBoard(mirror.targetBoardId, SERVER_EVENTS.CARD_CHECKLIST_DELETED, { boardId: mirror.targetBoardId, cardId: targetCardId, checklistId: checklist.id });
+  for (const checklist of deletedChecklists) {
+    await emitToBoard(mirror.targetBoardId, SERVER_EVENTS.CARD_CHECKLIST_DELETED, {
+      boardId: mirror.targetBoardId,
+      cardId: targetCardId,
+      checklistId: checklist.id,
+      checklistParentItemId: checklist.parentItemId,
+      itemCount: checklist.items.length,
+      completedItemCount: checklist.items.filter((item) => item.completedAt).length,
+    });
+  }
   for (const id of createdChecklistIds) {
     const checklist = finalChecklistById.get(id);
     if (checklist) await emitToBoard(mirror.targetBoardId, SERVER_EVENTS.CARD_CHECKLIST_CREATED, { boardId: mirror.targetBoardId, cardId: targetCardId, checklist });

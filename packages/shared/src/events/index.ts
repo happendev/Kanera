@@ -584,7 +584,17 @@ export interface ServerToClientEvents {
     cardId: string;
     positions: { id: string; position: string }[];
   }) => void;
-  "card:checklist:deleted": (payload: { boardId: string; cardId: string; checklistId: string }) => void;
+  // checklistParentItemId/itemCount/completedItemCount describe the deleted checklist's own (direct)
+  // items. A client that has not opened the card holds no checklist detail to subtract from its
+  // progress badge, so the event must carry the top-level contribution being removed.
+  "card:checklist:deleted": (payload: {
+    boardId: string;
+    cardId: string;
+    checklistId: string;
+    checklistParentItemId: string | null;
+    itemCount: number;
+    completedItemCount: number;
+  }) => void;
   // cardTitle/listId are included so assignee-centric consumers can build a
   // checklist work item without an extra fetch; board + list display come from the consumer's
   // own board/list sets.

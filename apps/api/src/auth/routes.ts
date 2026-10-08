@@ -31,7 +31,7 @@ import { getConfiguredS3StorageConfig, getStorageForClient } from "../lib/storag
 import { avatarStorageKey } from "../lib/storage/keys.js";
 import { notifyAdminsOrgInviteAccepted } from "../lib/invite-accepted-notifications.js";
 import { emitBoardInvitationAccepted, loadBoardInvitationGrants, loadRedeemableBoardInvitation, redeemBoardInvitationInTx, type BoardInvitationGrant, type RedeemableBoardInvitation } from "../lib/board-invitation-redemption.js";
-import { pinOrgAdminToClientBoards } from "../lib/board-membership.js";
+import { pinAdminToWorkspaceBoards, pinOrgAdminToClientBoards } from "../lib/board-membership.js";
 import { hashOpaqueToken, newOpaqueToken, newVerificationCode } from "../lib/tokens.js";
 import { emitToBoard, emitToClient, emitToClientDurable, emitToWorkspace } from "../realtime/emit.js";
 import { newRefreshToken, rotateRefresh } from "./jwt.js";
@@ -586,6 +586,12 @@ export async function authRoutes(app: FastifyInstance) {
               role: g.role,
             })),
           );
+          // Board membership is the content-access model for normal users: a workspace-admin grant
+          // alone opens workspace settings but not the boards themselves. Materialize the pinned
+          // editor rows the promote path writes, or an invited admin gets 403 on every existing board.
+          for (const grant of workspaceGrants) {
+            if (grant.role === "admin") await pinAdminToWorkspaceBoards(tx, grant.workspaceId, user!.id);
+          }
         }
 
         // An accepted organisation-admin invite is another org-role assignment path. Materialize

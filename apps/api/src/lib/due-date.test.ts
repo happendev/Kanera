@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isDueDateOverdue, localDateInTimezone } from "./due-date.js";
+import { isDueDateOverdue, localDateInTimezone, resolveDueDatePatch } from "./due-date.js";
 import { localDateParts } from "./local-date.js";
 import { dateTimeFormatter } from "./date-time-formatter.js";
 
@@ -43,4 +43,48 @@ test("formatter retention is bounded and failed zones do not poison valid entrie
   for (const zone of Intl.supportedValuesOf("timeZone").slice(0, 128)) formatter(zone);
   assert.notEqual(formatter("UTC"), original);
   assert.equal(formatter("UTC").format(new Date("2026-01-01Z")), "2026");
+});
+
+// Failure modes this guards: (1) a slot-only patch coalescing the omitted date to null and wiping
+// the due date; (2) clearing the slot wiping the date the same way; (3) a slot being attached to an
+// undated card; (4) a full date patch no longer defaulting the slot or capturing the actor's zone.
+test("resolveDueDatePatch keeps the stored date when only the slot changes", () => {
+  const current = { dueDateLocalDate: "2026-10-20", dueDateSlot: "morning" as const, dueDateTimezone: "Europe/London" };
+  assert.deepEqual(resolveDueDatePatch({ dueDateSlot: "afternoon" }, current, "UTC"), {
+    kind: "write", dueDateLocalDate: "2026-10-20", dueDateSlot: "afternoon", dueDateTimezone: "Europe/London",
+  });
+  // Clearing the slot resets it to the default for a dated card rather than deleting the date.
+  assert.deepEqual(resolveDueDatePatch({ dueDateSlot: null }, current, "UTC"), {
+    kind: "write", dueDateLocalDate: "2026-10-20", dueDateSlot: "anyTime", dueDateTimezone: "Europe/London",
+  });
+  // A stored date without a zone (legacy rows) borrows the actor's zone.
+  assert.deepEqual(resolveDueDatePatch({ dueDateSlot: "afternoon" }, { ...current, dueDateTimezone: null }, "Asia/Tokyo"), {
+    kind: "write", dueDateLocalDate: "2026-10-20", dueDateSlot: "afternoon", dueDateTimezone: "Asia/Tokyo",
+  });
+});
+
+test("resolveDueDatePatch rejects a slot for an undated card and ignores clearing one", () => {
+  const undated = { dueDateLocalDate: null, dueDateSlot: null, dueDateTimezone: null };
+  assert.deepEqual(resolveDueDatePatch({ dueDateSlot: "afternoon" }, undated, "UTC"), {
+    kind: "rejected", reason: "provide dueDateLocalDate when setting dueDateSlot",
+  });
+  assert.deepEqual(resolveDueDatePatch({ dueDateSlot: null }, undated, "UTC"), { kind: "unchanged" });
+  assert.deepEqual(resolveDueDatePatch({}, undated, "UTC"), { kind: "unchanged" });
+});
+
+test("resolveDueDatePatch sets and clears whole due dates as before", () => {
+  const current = { dueDateLocalDate: "2026-10-20", dueDateSlot: "morning" as const, dueDateTimezone: "Europe/London" };
+  assert.deepEqual(resolveDueDatePatch({ dueDateLocalDate: "2026-11-01" }, current, "Asia/Tokyo"), {
+    kind: "write", dueDateLocalDate: "2026-11-01", dueDateSlot: "anyTime", dueDateTimezone: "Asia/Tokyo",
+  });
+  assert.deepEqual(resolveDueDatePatch({ dueDateLocalDate: "2026-11-01", dueDateSlot: "endOfWorkDay" }, current, "Asia/Tokyo"), {
+    kind: "write", dueDateLocalDate: "2026-11-01", dueDateSlot: "endOfWorkDay", dueDateTimezone: "Asia/Tokyo",
+  });
+  assert.deepEqual(resolveDueDatePatch({ dueDateLocalDate: null }, current, "Asia/Tokyo"), {
+    kind: "write", dueDateLocalDate: null, dueDateSlot: null, dueDateTimezone: null,
+  });
+  // Explicit null date wins over a slot sent alongside it.
+  assert.deepEqual(resolveDueDatePatch({ dueDateLocalDate: null, dueDateSlot: "morning" }, current, "UTC"), {
+    kind: "write", dueDateLocalDate: null, dueDateSlot: null, dueDateTimezone: null,
+  });
 });

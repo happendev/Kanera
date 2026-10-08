@@ -758,7 +758,9 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
 
     const prevPosition = note.position;
     const { position, rebalancedPositions } = await db.transaction(async (tx) => {
-      const { prev, next } = await neighbourPositions(base, body.afterNoteId ?? undefined, body.beforeNoteId ?? undefined, tx);
+      // `null` is meaningful here: afterNoteId null = move to the top, beforeNoteId null = move to
+      // the end. Coalescing them to undefined made every explicit edge anchor an append.
+      const { prev, next } = await neighbourPositions(base, body.afterNoteId, body.beforeNoteId, tx);
       const result = between(prev, next);
       let position = result.position;
 

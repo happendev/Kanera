@@ -320,3 +320,64 @@ void test("webhook delivery never follows redirects", async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+void test("a Telegram success whose echoed message overflows the stored excerpt is recorded once", async () => {
+  // Telegram echoes the sent message in its JSON. The body is truncated to 2000 characters for
+  // storage; judging `ok` on that excerpt turned a delivered long message into a retried one, so
+  // the destination received the same message up to eight times.
+  const originalFetch = globalThis.fetch;
+  try {
+    const { workspace, endpoint: generic } = await seedFixture();
+    const [telegram] = await db.insert(webhookEndpoints).values({
+      workspaceId: workspace.id,
+      createdById: generic.createdById,
+      name: "Telegram",
+      provider: "telegram",
+      url: null,
+      encryptedSecret: null,
+      encryptedConfig: encryptChatDestinationConfig("telegram", { botToken: "123456:token", chatId: "42", threadId: null }),
+      eventTypes: ["comment_created"],
+    }).returning();
+    assert.ok(telegram);
+    const longText = "\"".repeat(500);
+    const [delivery] = await db.insert(webhookDeliveries).values({
+      endpointId: telegram.id,
+      workspaceId: workspace.id,
+      eventType: "comment_created",
+      payload: {
+        kind: "chat",
+        id: randomUUID(),
+        type: "comment_created",
+        workspaceId: workspace.id,
+        occurredAt: new Date().toISOString(),
+        actorName: "Owner",
+        workspaceName: "Delivery",
+        boardName: "Roadmap",
+        cardTitle: longText,
+        cardUrl: "https://app.example.test/o/ABCDEF0123456789/c/ROAD-1",
+        excerpt: longText,
+      },
+    }).returning();
+    assert.ok(delivery);
+
+    let calls = 0;
+    let echoedLength = 0;
+    globalThis.fetch = async (_input, init) => {
+      calls += 1;
+      const sent = JSON.parse(init?.body as string) as { text: string };
+      // Realistic sendMessage response: the message text comes back JSON-escaped, so the body is
+      // comfortably longer than the stored excerpt.
+      const body = JSON.stringify({ ok: true, result: { message_id: 1, chat: { id: 42 }, text: sent.text } });
+      echoedLength = body.length;
+      return new Response(body, { status: 200, headers: { "Content-Type": "application/json" } });
+    };
+    const result = await deliverWebhookDelivery(delivery, telegram);
+    assert.ok(echoedLength > 2000, `response must overflow the excerpt (${echoedLength})`);
+    assert.equal(calls, 1);
+    assert.equal(result.status, "success");
+    assert.equal(result.lastError, null);
+    assert.ok(result.responseBody && result.responseBody.length <= 2000);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

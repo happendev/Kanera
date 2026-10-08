@@ -252,6 +252,13 @@ describe("SignupPage", () => {
     expect(element.textContent).toContain("Your name");
   });
 
+  it("sends an organisation invitee who already has an account back to the invitation after login", async () => {
+    inviteToken = "org-token";
+    await createPage();
+
+    expect(fixture.componentInstance.signInLink()).toBe(`/login?returnUrl=${encodeURIComponent("/invite?token=org-token")}`);
+  });
+
   it("passes invite tokens when requesting a verification code", async () => {
     emailVerificationEnabled = true;
     inviteToken = "invite-token";

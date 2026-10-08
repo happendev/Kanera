@@ -117,11 +117,18 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
   readonly emailVerificationEnabled = signal(false);
   readonly signupsEnabled = signal(true);
   readonly publicSignupBlocked = computed(() => !this.signupsEnabled() && !this.inviteToken() && !this.boardInviteToken());
+  // Both invitation kinds must survive the hop to login, or an invitee who already has an account
+  // signs in to their ordinary home and the invitation is silently dropped. Login sends them back to
+  // the acceptance page through returnUrl.
   readonly signInLink = computed(() => {
-    const token = this.boardInviteToken();
-    if (!token) return "/login";
-    const returnUrl = `/board-invite?token=${encodeURIComponent(token)}`;
-    return `/login?returnUrl=${encodeURIComponent(returnUrl)}`;
+    const boardToken = this.boardInviteToken();
+    const inviteToken = this.inviteToken();
+    const returnUrl = boardToken
+      ? `/board-invite?token=${encodeURIComponent(boardToken)}`
+      : inviteToken
+        ? `/invite?token=${encodeURIComponent(inviteToken)}`
+        : null;
+    return returnUrl ? `/login?returnUrl=${encodeURIComponent(returnUrl)}` : "/login";
   });
   readonly kaneraEnvironment = signal<KaneraEnvironment>("production");
   readonly deploymentMode = signal<DeploymentMode>("self_hosted");

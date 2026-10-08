@@ -1,6 +1,7 @@
 import "../test/setup.integration.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { getMfaCredential, verifyMfaCode } from "./mfa.js";
 import { eq, isNull } from "drizzle-orm";
 import { boardMembers, boards, clients, mfaCredentials, passwordResetTokens, refreshTokens, users, workspaces } from "@kanera/shared/schema";
 import { db } from "../db.js";
@@ -454,4 +455,22 @@ void test("POST /auth/mfa/enroll requires a valid code before replacing an enabl
   const [replaced] = await db.select().from(mfaCredentials).where(eq(mfaCredentials.userId, userId));
   assert.notEqual(replaced?.id, before.id);
   assert.equal(replaced?.enabledAt, null, "a fresh enrollment starts unconfirmed");
+});
+
+void test("two concurrent verifications of the same TOTP code accept exactly one", async () => {
+  // Both verifiers hold the same pre-read credential, so both pass the in-memory "step is newer"
+  // check; the database claim of the timestep is what must decide the race. Before the claim was
+  // conditional, both UPDATEs succeeded and the one-time code authenticated twice.
+  const { app, accessToken, userId, email, password } = await signupUser();
+  const { secret } = await enrollMfa(app, accessToken, email, password);
+  const credential = await getMfaCredential({ kind: "user", id: userId });
+  assert.ok(credential);
+  const code = nextTotp(secret, email);
+
+  const results = await Promise.all([verifyMfaCode(credential, code), verifyMfaCode(credential, code)]);
+  assert.deepEqual(results.sort(), [false, true]);
+
+  // A sequential replay with a fresh read is still rejected.
+  const reread = await getMfaCredential({ kind: "user", id: userId });
+  assert.equal(await verifyMfaCode(reread!, code), false);
 });

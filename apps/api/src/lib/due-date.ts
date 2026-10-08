@@ -76,3 +76,56 @@ export function addDays(localDate: string, days: number): string {
   return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(next.getUTCDate()).padStart(2, "0")}`;
 }
 
+
+export interface DueDatePatchInput {
+  dueDateLocalDate?: string | null;
+  dueDateSlot?: CardDueDateSlot | null;
+}
+
+export type DueDatePatch =
+  | { kind: "unchanged" }
+  | { kind: "rejected"; reason: string }
+  | { kind: "write"; dueDateLocalDate: string | null; dueDateSlot: CardDueDateSlot | null; dueDateTimezone: string | null };
+
+/**
+ * Derive the due-date columns a partial PATCH should write.
+ *
+ * Shared by the card and checklist-item routes so their rules cannot drift:
+ * - no due-date field present: nothing to write;
+ * - a date (or `null`) present: set it; a date defaults the slot to `anyTime` and captures the
+ *   actor's zone, `null` clears all three columns;
+ * - only a slot present: keep the stored calendar date and change (or, for `null`, reset) the slot
+ *   on it. Clients that "move the time of day" send exactly this shape. The previous derivation
+ *   coalesced the omitted date to `null`, so a slot-only patch deleted the entire due date.
+ *   A slot cannot be attached to a card that has no date, so that combination is rejected
+ *   instead of being silently dropped; `null` on an undated card is a no-op.
+ */
+export function resolveDueDatePatch(
+  body: DueDatePatchInput,
+  current: DueDateCandidate,
+  actorTimezone: string,
+): DueDatePatch {
+  if (body.dueDateLocalDate === undefined && body.dueDateSlot === undefined) return { kind: "unchanged" };
+  if (body.dueDateLocalDate === undefined) {
+    if (!current.dueDateLocalDate) {
+      if (body.dueDateSlot === null) return { kind: "unchanged" };
+      return { kind: "rejected", reason: "provide dueDateLocalDate when setting dueDateSlot" };
+    }
+    return {
+      kind: "write",
+      dueDateLocalDate: current.dueDateLocalDate,
+      dueDateSlot: body.dueDateSlot ?? "anyTime",
+      // The date did not move, so the zone it was set in still describes it.
+      dueDateTimezone: current.dueDateTimezone ?? actorTimezone,
+    };
+  }
+  if (body.dueDateLocalDate === null) {
+    return { kind: "write", dueDateLocalDate: null, dueDateSlot: null, dueDateTimezone: null };
+  }
+  return {
+    kind: "write",
+    dueDateLocalDate: body.dueDateLocalDate,
+    dueDateSlot: body.dueDateSlot ?? "anyTime",
+    dueDateTimezone: actorTimezone,
+  };
+}
