@@ -7,6 +7,7 @@ const schema = z.object({
   KANERA_PUBLIC_API_URL: z.preprocess(emptyToUndefined, z.url()).default("http://localhost:3001"),
   MCP_PORT: z.coerce.number().int().positive().default(3002),
   MCP_SERVER_PUBLIC_URL: z.preprocess(emptyToUndefined, z.url().optional()),
+  OPENAI_APPS_CHALLENGE_TOKEN: z.preprocess(emptyToUndefined, z.string().regex(/^[A-Za-z0-9_-]+$/u).optional()),
   OAUTH_ISSUER_URL: z.url().default("http://localhost:3001"),
   REDIS_URL: z.url().default("redis://localhost:6379"),
   MCP_INTERNAL_SECRET: z.string().min(32).default("development-mcp-internal-secret-change-me"),
