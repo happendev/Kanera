@@ -614,6 +614,7 @@ staff, demo, seed, test, and load-test organisations.
 | `EMAIL_VERIFICATION_ENABLED` | no | Defaults to `false`, allowing signup, invite signup, and email changes before SMTP is configured. Set `true` only after outbound mail works. |
 | `PUBLIC_API_FAILED_KEY_RATE_LIMIT_PER_MINUTE` | no | Per-IP failed `kanera_*` API-key auth throttle. Defaults to `10` in compose. |
 | `MCP_SERVER_PUBLIC_URL` | yes for the MCP service | Canonical public MCP endpoint URL, for example `https://mcp.kanera.example.com/mcp`. Required in production so OAuth audiences never derive from an untrusted Host header. |
+| `OPENAI_APPS_CHALLENGE_TOKEN` | no | Public OpenAI plugin domain-verification token. When set, MCP serves it verbatim at `/.well-known/openai-apps-challenge` without authentication. Route this root path to MCP; leave unset when verification is not needed. |
 | `PUBLIC_API_OAUTH_ISSUER` | required for remote OAuth | Browser-reachable public API origin that serves OAuth metadata, registration, authorization, token, and revocation endpoints. |
 | `MCP_PUBLIC_URL` | required for remote OAuth | Canonical protected-resource URL; normally the same value as `MCP_SERVER_PUBLIC_URL`. |
 | `MCP_INTERNAL_SECRET` | yes | Stable random secret shared only by public-api and MCP for audience-bound token exchange. Must differ from `JWT_SECRET`. |

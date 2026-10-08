@@ -106,6 +106,12 @@ MCP_UPSTREAM_TIMEOUT_MS=15000
 MCP_TOOL_OUTPUT_MAX_BYTES=1048576
 ```
 
+For OpenAI plugin domain verification, set `OPENAI_APPS_CHALLENGE_TOKEN` to the
+token supplied in the submission portal and redeploy the MCP service. Route
+`/.well-known/openai-apps-challenge` on the MCP hostname to that service. The
+endpoint returns the token as public plain text, without sign-in; leave the
+variable unset on deployments that do not need verification.
+
 Route both `/.well-known/oauth-protected-resource` and the path-specific
 `/.well-known/oauth-protected-resource/mcp` to the MCP service as well as `/mcp`.
 The public API domain must expose `/.well-known/oauth-authorization-server`

@@ -209,6 +209,18 @@ export function createMcpHttpHandler(options: {
       res.end(JSON.stringify({ ok: true, service: "mcp", version: mcpPackage.version }));
       return;
     }
+    // Domain verification is public and must return only the configured token, without OAuth
+    // or JSON wrapping. Unconfigured deployments retain the normal not-found response.
+    if (pathname === "/.well-known/openai-apps-challenge" && env.OPENAI_APPS_CHALLENGE_TOKEN) {
+      if (req.method !== "GET" && req.method !== "HEAD") {
+        res.writeHead(405, { allow: "GET, HEAD" });
+        res.end();
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
+      res.end(req.method === "HEAD" ? undefined : env.OPENAI_APPS_CHALLENGE_TOKEN);
+      return;
+    }
     const resource = env.MCP_SERVER_PUBLIC_URL ?? `http://${req.headers.host ?? `localhost:${env.MCP_PORT}`}/mcp`;
     const resourceMetadataPath = `/.well-known/oauth-protected-resource${new URL(resource).pathname === "/" ? "" : new URL(resource).pathname}`;
     if (pathname === "/.well-known/oauth-protected-resource" || pathname === resourceMetadataPath) {
