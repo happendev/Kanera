@@ -1,6 +1,7 @@
 import { InjectionToken } from "@angular/core";
 import type { ApiClient } from "../../../core/api/api.client";
 import type { BoardState } from "../board-state";
+import { captureBoardCustomFieldWrite, type SettleCustomFieldWrite } from "../custom-field-write";
 import type { AnyCard } from "./table-view.types";
 
 /**
@@ -11,14 +12,14 @@ import type { AnyCard } from "./table-view.types";
  * projection in `GlobalWorkState`, which is a different shape and has its own move semantics. This
  * is the one seam between them — everything else the table does is already input-driven.
  *
- * Only the writes that change *where or how a row renders* belong here. Custom-field values are
- * deliberately absent: they do not affect row placement, so both hosts let the realtime echo apply
- * them and the table just awaits the request.
+ * Custom-field replacement writes also settle here: a second picker gesture must build on the
+ * acknowledged value even when the websocket echo has not arrived yet.
  */
 export interface TableCardStore {
   updateCard(card: AnyCard): void;
   setCardAssignees(cardId: string, userIds: string[]): void;
   setCardLabels(cardId: string, labelIds: string[]): void;
+  captureCustomFieldWrite(cardId: string, fieldId: string, boardId: string): SettleCustomFieldWrite;
   /**
    * Moves the card to the end of `listId`, owning both the optimistic placement and the request.
    * The two are one operation: each host derives the new position from its own lane model, and the
@@ -35,6 +36,7 @@ export function boardStateCardStore(state: BoardState, api: ApiClient): TableCar
     updateCard: (card) => state.updateCard(card),
     setCardAssignees: (cardId, userIds) => state.setCardAssignees(cardId, userIds),
     setCardLabels: (cardId, labelIds) => state.setCardLabels(cardId, labelIds),
+    captureCustomFieldWrite: (cardId, fieldId, boardId) => captureBoardCustomFieldWrite(state, cardId, fieldId, boardId),
     moveCardToList: async (cardId, listId) => {
       const previous = state.cardById(cardId);
       if (!previous) return;

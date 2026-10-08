@@ -1,4 +1,4 @@
-import { Injectable, effect, inject } from "@angular/core";
+import { DestroyRef, Injectable, computed, effect, inject } from "@angular/core";
 import { Router } from "@angular/router";
 import { SERVER_EVENTS, type ServerToClientEvents } from "@kanera/shared/events";
 import { AuthService, authenticatedLandingPath } from "./auth.service";
@@ -12,25 +12,45 @@ export class AuthSyncService {
   private readonly sockets = inject(SocketService);
   private reloadInFlight = false;
   private reloadPending = false;
-  private sessionSyncAttached = false;
+  private sessionGeneration = 0;
+  private readonly sessionKey = computed(() => {
+    const user = this.auth.user();
+    return user ? `${user.id}:${user.activeClientId ?? user.clientId}` : null;
+  });
 
   constructor() {
     if (typeof window === "undefined") return;
 
-    effect(() => {
-      if (!this.auth.user() || this.sessionSyncAttached) return;
-      this.attachSessionSync();
+    let previousSessionKey: string | null = null;
+    effect((onCleanup) => {
+      const key = this.sessionKey();
+      const hadSession = previousSessionKey !== null;
+      previousSessionKey = key;
+      this.sessionGeneration += 1;
+      this.reloadInFlight = false;
+      this.reloadPending = false;
+      if (!key) {
+        // React to the actual loss of the current session, not a delayed reload's false result.
+        // A reload invalidated by logout must not later pull a visitor from signup back to login.
+        if (hadSession) {
+          this.sockets.disconnect();
+          void this.router.navigateByUrl("/login");
+        }
+        return;
+      }
+      // Logout replaces the socket. Scope listeners to the authenticated identity, rather than
+      // assuming the first socket and its handlers live as long as this root service.
+      onCleanup(this.attachSessionSync());
     });
-    window.addEventListener("storage", (event) => {
+    const onStorage = (event: StorageEvent) => {
       if (!this.auth.isLogoutSyncEvent(event)) return;
       this.auth.clearSession({ disableRefresh: true });
-      this.sockets.disconnect();
-      void this.router.navigateByUrl("/login");
-    });
+    };
+    window.addEventListener("storage", onStorage);
+    inject(DestroyRef).onDestroy(() => window.removeEventListener("storage", onStorage));
   }
 
-  private attachSessionSync(): void {
-    this.sessionSyncAttached = true;
+  private attachSessionSync(): () => void {
     const socket = this.sockets.connect();
     const handlers: Partial<ServerToClientEvents> = {
       [SERVER_EVENTS.CLIENT_ENTITLEMENTS_CHANGED]: ({ clientId }) => {
@@ -57,7 +77,7 @@ export class AuthSyncService {
         this.auth.updateUser((user) => ({ ...user, theme, accent }));
       },
     };
-    registerSocketHandlers(socket, handlers);
+    return registerSocketHandlers(socket, handlers);
   }
 
   private async reloadMe(): Promise<void> {
@@ -67,22 +87,25 @@ export class AuthSyncService {
     }
 
     this.reloadInFlight = true;
+    const generation = this.sessionGeneration;
+    const session = this.auth.getSessionGeneration();
     try {
       const previousClientId = this.auth.user()?.clientId;
       const ok = await this.auth.reloadMe({ refreshToken: true });
-      if (!ok && !this.auth.user()) {
-        this.sockets.disconnect();
-        await this.router.navigateByUrl("/login");
-      } else if (ok && previousClientId && this.auth.user()?.clientId !== previousClientId) {
+      if (ok && session === this.auth.getSessionGeneration() && previousClientId && this.auth.user()?.clientId !== previousClientId) {
+        // This reload may itself install a fallback organisation and reattach the socket listeners.
+        // Only an explicit replacement login invalidates its redirect, not that expected reattach.
         // Removal or suspension can repoint the default organisation. Re-enter through a top-level
         // route so no component keeps data from the organisation that just revoked access.
         await this.router.navigateByUrl(authenticatedLandingPath(this.auth.user()));
       }
     } finally {
-      this.reloadInFlight = false;
-      if (this.reloadPending) {
-        this.reloadPending = false;
-        void this.reloadMe();
+      if (generation === this.sessionGeneration) {
+        this.reloadInFlight = false;
+        if (this.reloadPending) {
+          this.reloadPending = false;
+          void this.reloadMe();
+        }
       }
     }
   }

@@ -328,7 +328,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   template: `
-    <div #shell class="de-shell" [class.de-compact]="compact()">
+    <div #shell class="de-shell" [class.de-compact]="compact()" [attr.inert]="saving() ? '' : null">
       @if (!compact()) {
         <k-description-editor-toolbar
           [editor]="editor"
@@ -1059,7 +1059,14 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
 
   constructor() {
     effect(() => {
-      this.editor?.setEditable(this.editable());
+      // A save publishes a snapshot and its host may close/reset this editor on success. Freeze the
+      // document until that request settles so later keystrokes cannot be discarded with the snapshot.
+      // Read both signals before the optional call: this effect can first run before ngAfterViewInit,
+      // and optional-call arguments would otherwise never register their reactive dependencies.
+      const editable = this.editable();
+      const saving = this.saving();
+      // Editability is not a content edit: emitting update here can recreate a just-cleared draft.
+      this.editor?.setEditable(editable && !saving, false);
     });
   }
 
@@ -1099,7 +1106,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
       // Tiptap's strict initial checker currently flags as unknown. Listen for
       // real parser errors without enabling that incompatible false-positive.
       emitContentError: true,
-      editable: this.editable(),
+      editable: this.editable() && !this.saving(),
       // Focus through `focusEnd` on create instead of Tiptap's `"end"`, so a draft ending in a quote
       // (a comment reply) puts the caret below the quote rather than inside it.
       autofocus: false,
@@ -1620,7 +1627,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   }
 
   private readonly handlePaste = (e: ClipboardEvent) => {
-    if (!this.editable()) return;
+    if (!this.editable() || this.saving()) return;
     // Use a dedicated plain-text insertion path rather than relying on ProseMirror's internal Shift
     // tracking: our capture listener runs before its paste listener, and browsers do not put the
     // initiating modifiers on ClipboardEvent. This also bypasses Markdown auto-detection.
@@ -1736,7 +1743,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   };
 
   private readonly handleDrop = (e: DragEvent) => {
-    if (!this.editable() || !this.isFileDrag(e.dataTransfer)) return;
+    if (!this.editable() || this.saving() || !this.isFileDrag(e.dataTransfer)) return;
     e.preventDefault();
     e.stopPropagation();
     const files = e.dataTransfer?.files;
@@ -1753,9 +1760,9 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   }
 
   onSave() {
-    if (!this.editor || !this.editable()) return;
+    if (!this.editor || !this.editable() || this.saving() || this.uploader.uploading()) return;
     const md = this.markdown();
-    this.saving.set(true);
+    this.setSaving(true);
     this.save.emit({ markdown: md, attachmentIds: this.uploader.attachmentIdsSnapshot() });
   }
 
@@ -1770,7 +1777,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
 
   reset() {
     this.uploader.reset();
-    this.saving.set(false);
+    this.setSaving(false);
     this.editor?.commands.setContent("");
     this.cleanMarkdown = "";
     this.unsavedWork.setDirty(this.unsavedWorkSource, false);
@@ -1849,6 +1856,9 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
 
   setSaving(v: boolean) {
     this.saving.set(v);
+    // Apply save acknowledgements immediately, including retry/reset paths, without waiting for
+    // the signal effect to run. The effect separately follows permission changes from the host.
+    this.editor?.setEditable(this.editable() && !v, false);
   }
 
   private uploadTarget(): AttachmentTarget {

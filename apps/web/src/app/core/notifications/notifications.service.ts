@@ -141,6 +141,7 @@ export class NotificationsService {
     this.pendingReadChanges = 0;
     this.receivedNotificationIds.clear();
     this.activeCardReadRequests.clear();
+    this.createdCardWatches.clear();
     this.activeCardBoards.set({});
     if (this.reconcileTimer !== null) clearTimeout(this.reconcileTimer);
     this.reconcileTimer = null;
@@ -694,25 +695,33 @@ export class NotificationsService {
   }
 
   async loadWatchedCards(): Promise<void> {
+    const session = this.sessionVersion;
     const rows = await this.api.get<{ cardId: string }[]>("/card-watches");
+    if (session !== this.sessionVersion) return;
     const next = new Set(rows.map((r) => r.cardId));
     for (const cardId of this.createdCardWatches) next.add(cardId);
     this.watchedCards.set(next);
   }
 
   async loadWatchedBoards(): Promise<void> {
+    const session = this.sessionVersion;
     const rows = await this.api.get<{ boardId: string }[]>("/board-watches");
+    if (session !== this.sessionVersion) return;
     this.watchedBoards.set(new Set(rows.map((r) => r.boardId)));
   }
 
   async loadCardWatchers(cardId: string): Promise<WatcherUser[]> {
+    const session = this.sessionVersion;
     const rows = await this.api.get<WatcherUser[]>(`/cards/${cardId}/watchers`);
+    if (session !== this.sessionVersion) return [];
     this.cardWatchers.update((current) => ({ ...current, [cardId]: rows }));
     return rows;
   }
 
   async loadBoardWatchers(boardId: string): Promise<WatcherUser[]> {
+    const session = this.sessionVersion;
     const rows = await this.api.get<WatcherUser[]>(`/boards/${boardId}/watchers`);
+    if (session !== this.sessionVersion) return [];
     this.boardWatchers.update((current) => ({ ...current, [boardId]: rows }));
     return rows;
   }
@@ -759,6 +768,7 @@ export class NotificationsService {
 
   async toggleCardWatch(cardId: string): Promise<void> {
     if (!this.online()) return;
+    const session = this.sessionVersion;
     const watching = this.isWatchingCard(cardId);
     const wasCreatedWatch = this.createdCardWatches.has(cardId);
     if (watching) this.createdCardWatches.delete(cardId);
@@ -771,8 +781,10 @@ export class NotificationsService {
     try {
       if (watching) await this.api.delete(`/cards/${cardId}/watch`);
       else await this.api.put(`/cards/${cardId}/watch`, {});
+      if (session !== this.sessionVersion) return;
       this.updateWatcherCache("card", cardId, !watching);
     } catch {
+      if (session !== this.sessionVersion) return;
       if (watching && wasCreatedWatch) this.createdCardWatches.add(cardId);
       this.watchedCards.update((set) => {
         const next = new Set(set);
@@ -785,6 +797,7 @@ export class NotificationsService {
 
   async toggleBoardWatch(boardId: string): Promise<void> {
     if (!this.online()) return;
+    const session = this.sessionVersion;
     const watching = this.isWatchingBoard(boardId);
     this.watchedBoards.update((set) => {
       const next = new Set(set);
@@ -795,8 +808,10 @@ export class NotificationsService {
     try {
       if (watching) await this.api.delete(`/boards/${boardId}/watch`);
       else await this.api.put(`/boards/${boardId}/watch`, {});
+      if (session !== this.sessionVersion) return;
       this.updateWatcherCache("board", boardId, !watching);
     } catch {
+      if (session !== this.sessionVersion) return;
       this.watchedBoards.update((set) => {
         const next = new Set(set);
         if (watching) next.add(boardId);

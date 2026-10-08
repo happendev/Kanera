@@ -14,7 +14,7 @@ import type {
   WorkViewDefinition,
   WorkViewShareCandidate,
 } from "@kanera/shared/dto";
-import type { WorkViewLens, WorkViewVisibility } from "@kanera/shared/schema";
+import type { CardCustomFieldValue, WorkViewLens, WorkViewVisibility } from "@kanera/shared/schema";
 import { SERVER_EVENTS, expandCardSummary, type WireCardSummary, type WireGlobalWorkSeparator } from "@kanera/shared/events";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
@@ -22,6 +22,7 @@ import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
 import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
 import { SocketService, type AppSocket } from "../../core/realtime/socket.service";
+import type { SettleCustomFieldWrite } from "../board/custom-field-write";
 import { CardDragCoordinator } from "../board/card-drag-coordinator.service";
 import { optimisticPriorityPosition, reorderedQueueItems } from "../../shared/priority-queue/priority-queue-math";
 import {
@@ -284,6 +285,7 @@ export class GlobalWorkState {
   private realtimeRefreshNeedsCatalog = false;
   private queuedWhileHidden = false;
   private queuedWhileDragging = false;
+  private queuedWhileLoading = false;
   private dragIdleWaiters: Array<() => void> = [];
   private readonly roomLeaves = new Map<string, () => void>();
   private detachRealtime: (() => void) | null = null;
@@ -421,6 +423,7 @@ export class GlobalWorkState {
       if (version === this.requestVersion) {
         this.loading.set(false);
         this.reconciling.set(false);
+        this.flushQueuedRealtimeRefresh();
       }
     }
   }
@@ -444,6 +447,7 @@ export class GlobalWorkState {
       if (version === this.requestVersion) {
         this.loading.set(false);
         this.reconciling.set(false);
+        this.flushQueuedRealtimeRefresh();
       }
     }
   }
@@ -487,7 +491,10 @@ export class GlobalWorkState {
     } catch {
       if (version === this.requestVersion) this.error.set("We couldn’t apply those filters.");
     } finally {
-      if (version === this.requestVersion) this.loading.set(false);
+      if (version === this.requestVersion) {
+        this.loading.set(false);
+        this.flushQueuedRealtimeRefresh();
+      }
     }
   }
 
@@ -1501,12 +1508,14 @@ export class GlobalWorkState {
    * and then grew the board back a page at a time. That is the layout jumping around after a drop.
    */
   private async loadAllCards(version: number): Promise<WorkQueryResponse> {
+    // Background refreshes preserve the depth the reader already loaded. Replacing a table or
+    // calendar with its first page would remove later rows after any realtime edit.
+    const exhaustive = ["board", "priorities"].includes(this.definition().display);
+    const targetCount = exhaustive ? 10_000 : Math.max(100, this.response().cards.length);
     const merged = await this.loadCards();
-    // Only the board display needs every match at once; the table paginates behind "Load more".
-    if (this.definition().display !== "board") return merged;
     const seen = new Set(merged.cards.map((card) => card.id));
     let combined = merged;
-    while (version === this.requestVersion && combined.nextCursor && combined.cards.length < 10_000) {
+    while (version === this.requestVersion && combined.nextCursor && combined.cards.length < targetCount) {
       const cursor = combined.nextCursor;
       const page = await this.loadCards(cursor);
       const fresh = page.cards.filter((card) => !seen.has(card.id));
@@ -1692,7 +1701,6 @@ export class GlobalWorkState {
   }
 
   private readonly onSocketConnect = () => {
-    if (this.loading()) return;
     // Room refs are rejoined by SocketService first. Refetching after reconnect is the final
     // convergence boundary for mutations or access changes missed while disconnected. Like
     // foreground refreshes, this runs quietly against the still-usable loaded projection.
@@ -1702,7 +1710,6 @@ export class GlobalWorkState {
 
   private readonly onVisibilityChange = () => {
     if (document.visibilityState !== "visible") return;
-    if (this.loading()) return;
     // A foreground transition is itself a convergence boundary: browsers can suspend timers and
     // websocket delivery without producing a timely disconnect event.
     this.queuedWhileHidden = false;
@@ -1735,6 +1742,45 @@ export class GlobalWorkState {
     }));
   }
 
+  captureCustomFieldWrite(cardId: string, fieldId: string): SettleCustomFieldWrite {
+    const scope = this.definition().scope;
+    const lens = this.lens();
+    const readCard = () => this.response().cards.find((card) => card.id === cardId);
+    const previousValues = readCard()?.customFieldValues;
+    const previous = previousValues?.find((value) => value.fieldId === fieldId);
+    return (value) => {
+      const card = readCard();
+      // An acknowledged write still belongs to its original projection. A newer field event or
+      // query snapshot must not be overwritten after the pending picker overlay is released.
+      if (this.destroyRef.destroyed || this.lens() !== lens || this.definition().scope !== scope || !card) return;
+      if (card.customFieldValues?.find((current) => current.fieldId === fieldId) !== previous) return;
+      // Preserve a newer empty query snapshot after a SET/CLEAR cycle; undefined has no row identity.
+      if (previous === undefined && card.customFieldValues !== previousValues) return;
+      if (value) this.applyCustomFieldValue(value);
+      else this.clearCustomFieldValue(cardId, fieldId);
+    };
+  }
+
+  applyCustomFieldValue(value: CardCustomFieldValue): void {
+    this.response.update((response) => ({
+      ...response,
+      cards: response.cards.map((card) => card.id === value.cardId ? {
+        ...card,
+        customFieldValues: [...(card.customFieldValues ?? []).filter((current) => current.fieldId !== value.fieldId), value],
+      } : card),
+    }));
+  }
+
+  clearCustomFieldValue(cardId: string, fieldId: string): void {
+    this.response.update((response) => ({
+      ...response,
+      cards: response.cards.map((card) => card.id === cardId ? {
+        ...card,
+        customFieldValues: (card.customFieldValues ?? []).filter((value) => value.fieldId !== fieldId),
+      } : card),
+    }));
+  }
+
   private patchVisibleCard(card: VisibleCardPatch): void {
     this.response.update((response) => ({
       ...response,
@@ -1756,6 +1802,10 @@ export class GlobalWorkState {
 
   private scheduleRealtimeRefresh(includeCatalog: boolean): void {
     this.realtimeRefreshNeedsCatalog ||= includeCatalog;
+    if (this.loading()) {
+      this.queuedWhileLoading = true;
+      return;
+    }
     if (typeof document !== "undefined" && document.visibilityState === "hidden") {
       this.queuedWhileHidden = true;
       return;
@@ -1776,7 +1826,20 @@ export class GlobalWorkState {
     }, 180);
   }
 
+  private flushQueuedRealtimeRefresh(): void {
+    if (!this.queuedWhileLoading) return;
+    this.queuedWhileLoading = false;
+    this.scheduleRealtimeRefresh(false);
+  }
+
   private async reconcileInBackground(includeCatalog: boolean): Promise<void> {
+    // A timer can have been scheduled before a foreground filter query started. Deferring here
+    // keeps that query's request version (and its loading cleanup) authoritative until it settles.
+    if (this.loading()) {
+      this.realtimeRefreshNeedsCatalog ||= includeCatalog;
+      this.queuedWhileLoading = true;
+      return;
+    }
     const version = ++this.requestVersion;
     this.reconciling.set(true);
     try {

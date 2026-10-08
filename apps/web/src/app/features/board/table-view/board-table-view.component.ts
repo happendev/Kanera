@@ -30,6 +30,7 @@ import { AutofocusDirective } from "../../../shared/autofocus.directive";
 import { AvatarComponent } from "../../../shared/avatar.component";
 import { CardKeyDisplayService } from "../../../shared/card-key-display.service";
 import type { PickerGroup } from "../../../shared/picker-list.component";
+import { PendingCustomFieldIds } from "../../../shared/pending-custom-field-ids";
 import { TooltipDirective } from "../../../shared/tooltip.directive";
 import { BoardMenuCoordinator } from "../board-menu-coordinator.service";
 import { BoardState } from "../board-state";
@@ -210,6 +211,7 @@ interface GroupByOption {
 })
 export class BoardTableViewComponent implements OnDestroy {
   private readonly api = inject(ApiClient);
+  private readonly pendingCustomFieldIds = new PendingCustomFieldIds();
   private readonly state = inject(BoardState);
   private readonly notifications = inject(NotificationsService);
   private readonly menuCoordinator = inject(BoardMenuCoordinator);
@@ -1505,8 +1507,8 @@ export class BoardTableViewComponent implements OnDestroy {
     this.closePickers();
     if (card.listId === listId) return;
     // Ordering and grouping visibly jump on latency, so the store applies the move optimistically
-    // and then sends it. Custom fields below deliberately wait for their realtime echo because they
-    // do not affect row placement.
+    // and then sends it. Replacement-array custom fields also settle through the store so rapid
+    // picker gestures build on the last acknowledged value while realtime delivery catches up.
     await this.cardStore.moveCardToList(card.id, listId);
   }
 
@@ -1570,7 +1572,7 @@ export class BoardTableViewComponent implements OnDestroy {
   }
 
   async toggleSelectOption(card: AnyCard, field: AnyCustomField, optionId: string) {
-    const current = this.valueFor(card.id, field.id)?.valueOptionIds ?? [];
+    const current = this.optionIdsFor(card, field.id);
     const allowMultiple = field.allowMultiple;
     const next = allowMultiple
       ? current.includes(optionId) ? current.filter((id) => id !== optionId) : [...current, optionId]
@@ -1580,7 +1582,7 @@ export class BoardTableViewComponent implements OnDestroy {
   }
 
   async toggleUserValue(card: AnyCard, field: AnyCustomField, userId: string) {
-    const current = this.valueFor(card.id, field.id)?.valueUserIds ?? [];
+    const current = this.userIdsFor(card, field.id);
     const allowMultiple = field.allowMultiple;
     const next = allowMultiple
       ? current.includes(userId) ? current.filter((id) => id !== userId) : [...current, userId]
@@ -1591,6 +1593,10 @@ export class BoardTableViewComponent implements OnDestroy {
 
   async clearCustomField(card: AnyCard, field: AnyCustomField) {
     this.closePickers();
+    if (field.type === "select" || field.type === "user") {
+      await this.writeIds(card, field, field.type === "select" ? "valueOptionIds" : "valueUserIds", []);
+      return;
+    }
     await this.api.delete(`/cards/${card.id}/custom-fields/${field.id}`);
   }
 
@@ -1615,11 +1621,11 @@ export class BoardTableViewComponent implements OnDestroy {
   });
 
   optionIdsFor(card: AnyCard, fieldId: string): string[] {
-    return this.valueFor(card.id, fieldId)?.valueOptionIds ?? [];
+    return this.pendingCustomFieldIds.value(`${card.id}:${fieldId}`, this.valueFor(card.id, fieldId)?.valueOptionIds ?? []);
   }
 
   userIdsFor(card: AnyCard, fieldId: string): string[] {
-    return this.valueFor(card.id, fieldId)?.valueUserIds ?? [];
+    return this.pendingCustomFieldIds.value(`${card.id}:${fieldId}`, this.valueFor(card.id, fieldId)?.valueUserIds ?? []);
   }
 
   labelsForCard(cardId: string): AnyLabel[] {
@@ -2503,8 +2509,17 @@ export class BoardTableViewComponent implements OnDestroy {
     key: "valueOptionIds" | "valueUserIds",
     ids: string[],
   ) {
-    if (!ids.length) await this.api.delete(`/cards/${card.id}/custom-fields/${field.id}`);
-    else await this.api.put(`/cards/${card.id}/custom-fields/${field.id}`, { [key]: ids });
+    await this.pendingCustomFieldIds.write(`${card.id}:${field.id}`, ids, async (next) => {
+      const path = `/cards/${card.id}/custom-fields/${field.id}`;
+      const settle = this.cardStore.captureCustomFieldWrite(card.id, field.id, card.boardId);
+      if (!next.length) {
+        await this.api.delete(path);
+        settle(null);
+      } else {
+        const value = await this.api.put<CardCustomFieldValue>(path, { [key]: next });
+        settle(value);
+      }
+    });
   }
 }
 

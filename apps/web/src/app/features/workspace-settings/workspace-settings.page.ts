@@ -835,6 +835,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly availableAutomationRecipeCount = computed(() => this.automationRecipes().filter((recipe) => recipe.available).length);
   readonly creatingAutomation = signal(false);
   private readonly pendingAutomationSaves = new Map<string, number>();
+  private readonly automationDraftRevisions = new Map<string, { revision: number; savedRevision: number }>();
+  private readonly automationActionSaveQueues = new Map<string, Promise<void>>();
   readonly automationMembers = computed(() =>
     [...this.members()].sort((a, b) =>
       a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }) ||
@@ -1117,6 +1119,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.newTemplateItem.set({});
     this.expandedAutomationIds.set(new Set());
     this.automationActionDrafts.set({});
+    this.automationDraftRevisions.clear();
     this.labels.set([]);
     this.members.set([]);
     this.addMemberUserId.set("");
@@ -2055,8 +2058,14 @@ export class WorkspaceSettingsPage implements OnDestroy {
 
   private replaceAutomation(automation: WireAutomation, preserveDraft = false) {
     const normalized = this.normalizeAutomation(automation);
+    const current = this.automations().find((item) => item.id === normalized.id);
+    // The durable echo can arrive after a newer HTTP response. Never let that older snapshot
+    // revert either the rule metadata or an already acknowledged action draft.
+    if (current && automationTimestamp(normalized.updatedAt) < automationTimestamp(current.updatedAt)) return;
     this.automations.update((items) => items.map((item) => (item.id === normalized.id ? normalized : item)));
-    if (!preserveDraft && !this.hasIncompleteAutomationDraft(normalized.id) && this.automationActionDrafts()[normalized.id]) {
+    const draft = this.automationDraftRevisions.get(normalized.id);
+    const hasLocalChanges = draft && draft.revision > draft.savedRevision;
+    if (!preserveDraft && !hasLocalChanges && !this.hasIncompleteAutomationDraft(normalized.id) && this.automationActionDrafts()[normalized.id]) {
       this.automationActionDrafts.update((drafts) => ({ ...drafts, [normalized.id]: this.automationActionBodies(normalized) }));
     }
   }
@@ -2455,6 +2464,15 @@ export class WorkspaceSettingsPage implements OnDestroy {
   private setAutomationDraftAction(id: string, index: number, action: AutomationActionBody) {
     const actions = [...this.automationDraftActions(id)];
     actions[index] = action;
+    this.setAutomationDraftActions(id, actions);
+  }
+
+  private setAutomationDraftActions(id: string, actions: AutomationActionBody[]) {
+    // A valid draft is still unsaved work. Protect it from our own socket echo until the
+    // corresponding revision is acknowledged, including edits made during another save.
+    const draft = this.automationDraftRevisions.get(id) ?? { revision: 0, savedRevision: 0 };
+    draft.revision++;
+    this.automationDraftRevisions.set(id, draft);
     this.automationActionDrafts.update((drafts) => ({ ...drafts, [id]: actions }));
   }
 
@@ -2672,13 +2690,13 @@ export class WorkspaceSettingsPage implements OnDestroy {
   addAutomationAction(id: string) {
     if (!this.canAddAutomationAction(id)) return;
     const actions = [...this.automationDraftActions(id), this.defaultAutomationAction()];
-    this.automationActionDrafts.update((drafts) => ({ ...drafts, [id]: actions }));
+    this.setAutomationDraftActions(id, actions);
     void this.saveAutomationActions(id);
   }
 
   removeAutomationAction(id: string, index: number) {
     const actions = this.automationDraftActions(id).filter((_, itemIndex) => itemIndex !== index);
-    this.automationActionDrafts.update((drafts) => ({ ...drafts, [id]: actions }));
+    this.setAutomationDraftActions(id, actions);
     void this.saveAutomationActions(id);
   }
 
@@ -2927,8 +2945,29 @@ export class WorkspaceSettingsPage implements OnDestroy {
     // Incomplete actions cannot be persisted (the DTO rejects an empty labelIds/userIds), so they stay
     // in the draft and are surfaced in the editor as unsaved rather than vanishing without a word.
     const actions = this.automationDraftActions(id).filter((action) => this.isAutomationActionComplete(action));
-    const automation = await this.api.put<WireAutomation>(`/automations/${id}/actions`, { actions });
-    this.replaceAutomation(automation, true);
+    const draft = this.automationDraftRevisions.get(id);
+    const revision = draft?.revision ?? 0;
+    const workspaceId = this.workspaceId();
+    // Save captured snapshots in edit order, including a final flush during route teardown.
+    // Parallel PUTs replace the whole action list and can otherwise persist an older edit last.
+    const persist = async () => {
+      try {
+        const automation = await this.api.put<WireAutomation>(`/automations/${id}/actions`, { actions });
+        if (draft) draft.savedRevision = revision;
+        if (this.workspaceId() === workspaceId) {
+          this.replaceAutomation(automation, this.automationDraftRevisions.get(id) === draft);
+        }
+      } catch {
+        if (this.workspaceId() === workspaceId) {
+          this.toasts.info("Couldn't save automation actions. Your changes are still here; edit the rule to retry.", "alert-triangle");
+        }
+      }
+    };
+    const previousSave = this.automationActionSaveQueues.get(id);
+    const save = previousSave ? previousSave.then(persist) : persist();
+    this.automationActionSaveQueues.set(id, save);
+    await save;
+    if (this.automationActionSaveQueues.get(id) === save) this.automationActionSaveQueues.delete(id);
   }
 
   /**
@@ -3059,7 +3098,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     const move = reorderByIndex(this.automationDraftActions(id), event.previousIndex, event.currentIndex);
     if (!move) return;
     const actions = move.reordered;
-    this.automationActionDrafts.update((drafts) => ({ ...drafts, [id]: actions }));
+    this.setAutomationDraftActions(id, actions);
     await this.saveAutomationActions(id);
   }
 

@@ -97,6 +97,11 @@ describe("BoardTableViewComponent", () => {
     moveCard: vi.fn(),
     setCardAssignees: vi.fn(),
     setCardLabels: vi.fn(),
+    board: vi.fn(() => null),
+    customFieldValuesForCard: vi.fn(() => new Map()),
+    customFieldValueRevision: vi.fn(() => 0),
+    upsertCustomFieldValue: vi.fn(),
+    clearCustomFieldValue: vi.fn(),
   };
 
   /** Per-card unread counts the stubbed NotificationsService reports; reset before each test. */

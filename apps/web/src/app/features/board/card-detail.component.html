@@ -467,7 +467,7 @@
                   }
                 </button>
                 @if (cfPickerFieldId() === field.id && canEditRole()) {
-                <k-select-picker [options]="optionsForField(field)" [selectedIds]="fieldValue?.valueOptionIds ?? []" [allowMultiple]="$any(field).allowMultiple" [title]="field.name"
+                <k-select-picker [options]="optionsForField(field)" [selectedIds]="optionIdsFor(field.id)" [allowMultiple]="$any(field).allowMultiple" [title]="field.name"
                   (toggle)="toggleSelectOption(field, $event)" (clear)="clearCfField(field)" (close)="cfPickerFieldId.set(null)" />
                 }
               </div>
@@ -487,7 +487,7 @@
                   }
                 </button>
                 @if (cfPickerFieldId() === field.id && canEditRole()) {
-                <k-member-picker [members]="members()" [selectedIds]="fieldValue?.valueUserIds ?? []" [currentUserId]="currentUserId()" [workspaceId]="workspaceId()" [allowClear]="true" clearLabel="Clear"
+                <k-member-picker [members]="members()" [selectedIds]="userIdsFor(field.id)" [currentUserId]="currentUserId()" [workspaceId]="workspaceId()" [allowClear]="true" clearLabel="Clear"
                   (toggle)="toggleUserValue(field, $event)" (clear)="clearCfField(field)" (close)="cfPickerFieldId.set(null)" />
                 }
               </div>

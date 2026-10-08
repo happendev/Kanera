@@ -150,9 +150,9 @@ export class HomeState {
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   /** True when a refresh was requested while the tab was hidden; flushed on visibilitychange. */
   private queuedWhileHidden = false;
+  private queuedWhileLoading = false;
 
   private readonly onSocketConnect = () => {
-    if (this.loading()) return;
     // Reconnect convergence: events missed while disconnected are not replayed, so the only way
     // back to a correct agenda is a full refetch.
     this.reconciling.set(true);
@@ -161,7 +161,6 @@ export class HomeState {
 
   private readonly onVisibilityChange = () => {
     if (document.visibilityState !== "visible") return;
-    if (this.loading()) return;
     // Foregrounding is a convergence boundary even when no event was queued: time-slot cut-offs
     // and browser suspension can both make a seemingly connected agenda stale.
     this.queuedWhileHidden = false;
@@ -217,6 +216,7 @@ export class HomeState {
       if (version === this.requestVersion) {
         this.loading.set(false);
         this.reconciling.set(false);
+        this.flushQueuedRefresh();
       }
     }
   }
@@ -236,6 +236,7 @@ export class HomeState {
       if (version === this.requestVersion) {
         this.loading.set(false);
         this.reconciling.set(false);
+        this.flushQueuedRefresh();
       }
     }
   }
@@ -249,7 +250,13 @@ export class HomeState {
     } catch {
       // A failed background refresh keeps the last good payload on screen rather than blanking it.
     } finally {
-      if (version === this.requestVersion) this.reconciling.set(false);
+      if (version === this.requestVersion) {
+        // An explicit refresh can supersede initialize/retry. It then owns the foreground loading
+        // cleanup too; the stale request's version guard intentionally cannot clear that flag.
+        this.loading.set(false);
+        this.reconciling.set(false);
+        this.flushQueuedRefresh();
+      }
     }
   }
 
@@ -347,7 +354,7 @@ export class HomeState {
     }
     this.pollTimer = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      void this.refresh();
+      this.scheduleRefresh();
     }, VISIBLE_POLL_MS);
   }
 
@@ -356,7 +363,17 @@ export class HomeState {
    * hidden — home is the tab people leave open, and a background tab must not poll the API on every
    * event in a busy workspace.
    */
+  private flushQueuedRefresh(): void {
+    if (!this.queuedWhileLoading) return;
+    this.queuedWhileLoading = false;
+    this.scheduleRefresh();
+  }
+
   private scheduleRefresh(): void {
+    if (this.loading()) {
+      this.queuedWhileLoading = true;
+      return;
+    }
     if (typeof document !== "undefined" && document.visibilityState === "hidden") {
       this.queuedWhileHidden = true;
       return;
@@ -364,6 +381,11 @@ export class HomeState {
     if (this.refreshTimer !== null) clearTimeout(this.refreshTimer);
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = null;
+      // A foreground request may have started since this timer was scheduled.
+      if (this.loading()) {
+        this.queuedWhileLoading = true;
+        return;
+      }
       void this.refresh();
     }, REALTIME_REFRESH_MS);
   }

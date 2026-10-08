@@ -386,7 +386,10 @@ export class NoteEditorComponent implements OnDestroy {
   private currentLockedId: string | null = null;
   private displayedNoteId: string | null = null;
   private editBaseUpdatedAt: string | null = null;
-  private titleSaveInFlight = false;
+  private titleSaveInFlight: symbol | null = null;
+  private destroyed = false;
+  private lockGeneration = 0;
+  private lockAcquisition: Promise<boolean> = Promise.resolve(false);
 
   constructor() {
     effect((onCleanup) => {
@@ -417,6 +420,8 @@ export class NoteEditorComponent implements OnDestroy {
       const n = this.note();
       const nextId = n?.id ?? null;
       if (nextId !== this.displayedNoteId) {
+        this.lockGeneration++;
+        this.acquiringLock.set(false);
         this.displayedNoteId = nextId;
         this.title.set(n?.title ?? "");
         this.icon.set(n?.icon ?? null);
@@ -424,6 +429,7 @@ export class NoteEditorComponent implements OnDestroy {
         this.editorInitialValue.set(n?.content ?? "");
         this.editBaseUpdatedAt = n ? this.dateString(n.updatedAt) : null;
         this.editingTitle.set(false);
+        this.titleSaveInFlight = null;
         this.editing.set(false);
         this.recoveredBodyDraft.set(false);
         this.uploads.reset(); // drop any in-flight/failed uploads belonging to the previous note
@@ -483,24 +489,23 @@ export class NoteEditorComponent implements OnDestroy {
   }
 
   ngOnDestroy() {
+    this.destroyed = true;
+    this.lockGeneration++;
     document.removeEventListener("dragover", this.handleAttachmentDragCapture, { capture: true });
     document.removeEventListener("drop", this.handleAttachmentDragCapture, { capture: true });
     if (this.clockTimer) clearInterval(this.clockTimer);
     this.stopHeartbeat();
-    if (this.currentLockedId) void this.notesState.releaseLock(this.currentLockedId).catch(() => undefined);
+    if (this.currentLockedId) void this.queueLockRelease(this.currentLockedId);
     this.currentLockedId = null;
   }
 
   @HostListener("document:visibilitychange")
   onVisibilityChange() {
-    if (document.visibilityState === "hidden" && this.currentLockedId) {
-      const id = this.currentLockedId;
-      this.currentLockedId = null;
-      this.stopHeartbeat();
-      void this.notesState.releaseLock(id).catch(() => undefined);
+    if (document.visibilityState === "hidden") {
+      this.releaseCurrentLock();
     } else if (document.visibilityState === "visible") {
       const n = this.note();
-      if (n && this.editing()) void this.syncLock(n);
+      if (n && (this.editing() || this.editingTitle())) void this.syncLock(n);
     }
   }
 
@@ -509,43 +514,63 @@ export class NoteEditorComponent implements OnDestroy {
     const prev = this.currentLockedId;
     this.currentLockedId = null;
     this.stopHeartbeat();
-    await this.notesState.releaseLock(prev).catch(() => undefined);
+    await this.queueLockRelease(prev);
   }
 
-  private async syncLock(n: WireNote | null): Promise<boolean> {
-    if (this.currentLockedId && (!n || n.id !== this.currentLockedId)) {
-      // Switching to a different note — release the previous lock.
-      const prev = this.currentLockedId;
-      this.currentLockedId = null;
-      this.stopHeartbeat();
-      void this.notesState.releaseLock(prev).catch(() => undefined);
-    }
-    if (!n || n.scope !== "team") return true;
-    if (this.currentLockedId === n.id) return true;
-    try {
-      this.acquiringLock.set(true);
-      await this.notesState.acquireLock(n.id);
-      this.currentLockedId = n.id;
-      this.startHeartbeat();
-      return true;
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        const body = err.body as { lock?: WireNoteLock } | null;
-        if (body?.lock) this.notesState.receiveLock(body.lock);
-        // Lock held by someone else — UI shows the read-only banner.
-        this.currentLockedId = null;
-      }
+  private queueLockRelease(noteId: string): Promise<boolean> {
+    const release = this.lockAcquisition.then(async () => {
+      await this.notesState.releaseLock(noteId).catch(() => undefined);
       return false;
-    } finally {
-      this.acquiringLock.set(false);
-    }
+    });
+    this.lockAcquisition = release;
+    return release;
+  }
+
+  private syncLock(n: WireNote | null, renewal = false): Promise<boolean> {
+    const generation = this.lockGeneration;
+    const current = () => !this.destroyed && generation === this.lockGeneration && this.note()?.id === n?.id;
+    // Serialize acquisition and stale-lock cleanup. In an A → B → A switch, releasing the first
+    // abandoned A request must finish before the new A session acquires its own lock.
+    const request = this.lockAcquisition.then(async () => {
+      if (!n || !current() || (renewal && this.currentLockedId !== n.id)) return false;
+      if (n.scope !== "team" || (!renewal && this.currentLockedId === n.id)) return true;
+      if (!renewal) this.acquiringLock.set(true);
+      try {
+        await this.notesState.acquireLock(n.id);
+        if (!current()) {
+          // Teardown may have run while acquisition was pending, before there was a lock to release.
+          // Never start a heartbeat for that abandoned editor; undo the late acquisition instead.
+          await this.notesState.releaseLock(n.id).catch(() => undefined);
+          return false;
+        }
+        this.currentLockedId = n.id;
+        if (!renewal) this.startHeartbeat();
+        return true;
+      } catch (err) {
+        if (current() && renewal) {
+          this.handleRenewalFailure(err);
+        } else if (current() && err instanceof ApiError && err.status === 409) {
+          const body = err.body as { lock?: WireNoteLock } | null;
+          if (body?.lock) this.notesState.receiveLock(body.lock);
+          this.currentLockedId = null;
+        }
+        return false;
+      } finally {
+        if (current() && !renewal) this.acquiringLock.set(false);
+      }
+    });
+    this.lockAcquisition = request;
+    return request;
   }
 
   private startHeartbeat() {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {
-      if (!this.currentLockedId) return;
-      void this.notesState.acquireLock(this.currentLockedId).catch((err) => this.handleRenewalFailure(err));
+      const note = this.note();
+      if (!note || this.currentLockedId !== note.id) return;
+      // Renewal has the same late-response hazard as initial acquisition. Queue it with unlocks
+      // and scope failure handling to this edit session so an old failure cannot close a new editor.
+      void this.syncLock(note, true);
     }, LOCK_HEARTBEAT_MS);
   }
 
@@ -592,32 +617,45 @@ export class NoteEditorComponent implements OnDestroy {
     if (this.titleSaveInFlight) return;
     const n = this.note();
     if (!n || !this.canEdit() || this.lockedByOther()) return;
+    const title = this.title();
+    const baseUpdatedAt = this.editBaseUpdatedAt ?? this.dateString(n.updatedAt);
+    const generation = this.lockGeneration;
+    const current = () => !this.destroyed && this.note()?.id === n.id && this.lockGeneration === generation;
     this.editingTitle.set(false);
-    if (this.title() === n.title) {
+    if (title === n.title) {
       this.releaseLockIfIdle();
       return;
     }
-    this.titleSaveInFlight = true;
+    const request = Symbol("note-title-save");
+    this.titleSaveInFlight = request;
     const acquired = await this.syncLock(n);
+    if (!current()) {
+      if (this.titleSaveInFlight === request) this.titleSaveInFlight = null;
+      return;
+    }
     if (!acquired) {
-      this.titleSaveInFlight = false;
-      this.preservedDraft.set(this.title());
+      if (this.titleSaveInFlight === request) this.titleSaveInFlight = null;
+      this.preservedDraft.set(title);
       this.saveError.set("This note is being edited by someone else. Your title draft was preserved.");
       return;
     }
     try {
       this.saveError.set(null);
-      const updated = await this.notesState.updateNote(n.id, { title: this.title(), baseUpdatedAt: this.editBaseUpdatedAt ?? this.dateString(n.updatedAt) });
+      const updated = await this.notesState.updateNote(n.id, { title, baseUpdatedAt });
+      // The write still belongs in NotesState, but its acknowledgement must not rebase or unlock
+      // another note opened while the response was in flight.
+      if (!current()) return;
       // Saving the title bumps updatedAt. If the body editor is still open,
       // advance the base so the user's own title save doesn't make a following
       // body save look stale.
       this.editBaseUpdatedAt = this.dateString(updated.updatedAt);
       this.releaseLockIfIdle();
     } catch (err) {
-      this.preservedDraft.set(this.title());
+      if (!current()) return;
+      this.preservedDraft.set(title);
       this.handleSaveError(err);
     } finally {
-      this.titleSaveInFlight = false;
+      if (this.titleSaveInFlight === request) this.titleSaveInFlight = null;
     }
   }
 
@@ -640,9 +678,13 @@ export class NoteEditorComponent implements OnDestroy {
       }
       return;
     }
+    const editor = this.descriptionEditor();
+    const generation = this.lockGeneration;
+    const current = () => !this.destroyed && this.note()?.id === n.id && this.lockGeneration === generation;
     this.saveError.set(null);
     try {
       const updated = await this.notesState.updateNote(n.id, { content: event.markdown, baseUpdatedAt: this.editBaseUpdatedAt ?? this.dateString(n.updatedAt) });
+      if (!current()) return;
       // Advance the base in case the title input is still open — a following
       // title save should build on the timestamp this write just produced.
       this.editBaseUpdatedAt = this.dateString(updated.updatedAt);
@@ -655,9 +697,9 @@ export class NoteEditorComponent implements OnDestroy {
       if (event.attachmentIds.length) void this.refreshAttachments(updated.id);
       this.releaseLockIfIdle();
     } catch (err) {
-      this.handleSaveError(err);
+      if (current()) this.handleSaveError(err);
     } finally {
-      this.descriptionEditor()?.setSaving(false);
+      if (this.descriptionEditor() === editor) editor?.setSaving(false);
     }
   }
 
@@ -665,7 +707,7 @@ export class NoteEditorComponent implements OnDestroy {
     const n = this.note();
     if (!n || !this.canEdit() || this.lockedByOther()) return;
     const acquired = await this.syncLock(n);
-    if (!acquired) return;
+    if (!acquired || this.destroyed || this.note()?.id !== n.id) return;
     this.title.set(n.title ?? "");
     this.editBaseUpdatedAt = this.dateString(n.updatedAt);
     this.editingTitle.set(true);
@@ -682,7 +724,7 @@ export class NoteEditorComponent implements OnDestroy {
     const n = this.note();
     if (!n || !this.canEdit() || this.lockedByOther() || this.editing()) return;
     const acquired = await this.syncLock(n);
-    if (!acquired) return;
+    if (!acquired || this.destroyed || this.note()?.id !== n.id) return;
     const recovered = this.editorDrafts.load(this.currentUserId(), "note-body", n.id);
     this.editorInitialValue.set(recovered?.markdown ?? n.content ?? "");
     this.recoveredBodyDraft.set(Boolean(recovered));
@@ -770,6 +812,7 @@ export class NoteEditorComponent implements OnDestroy {
     }
 
     const acquired = await this.syncLock(n);
+    if (this.destroyed || this.note()?.id !== n.id) return;
     if (!acquired) {
       this.editorInitialValue.set(draft.markdown);
       this.recoveredBodyDraft.set(true);
@@ -786,11 +829,13 @@ export class NoteEditorComponent implements OnDestroy {
   }
 
   private releaseCurrentLock() {
+    this.lockGeneration++;
+    this.acquiringLock.set(false);
     if (!this.currentLockedId) return;
     const id = this.currentLockedId;
     this.currentLockedId = null;
     this.stopHeartbeat();
-    void this.notesState.releaseLock(id).catch(() => undefined);
+    void this.queueLockRelease(id);
   }
 
   /**
@@ -853,6 +898,7 @@ export class NoteEditorComponent implements OnDestroy {
   }
 
   private handleRenewalFailure(err: unknown) {
+    this.lockGeneration++;
     this.preserveCurrentDraft();
     this.stopHeartbeat();
     this.currentLockedId = null;
