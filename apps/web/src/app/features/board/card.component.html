@@ -151,12 +151,12 @@
       </div>
       @for (field of customFields(); track field.id) {
       @if (field.showOnCard && hasBadge(field)) {
-      <span class="cf-badge" [class.cf-badge--chips]="field.type === 'select'" [kTooltip]="field.name">
+      <span class="cf-badge" [class.cf-badge--chips]="field.type === 'select'" [class.cf-badge--flag]="field.type === 'checkbox'" [kTooltip]="field.name">
         <i [class]="'ti ti-' + field.icon"></i>
         <span class="cf-label">{{ field.name }}</span>
         @switch (field.type) {
         @case ('checkbox') {
-        <i class="ti cf-value" [class.ti-checkbox]="checkboxFor(field.id)" [class.ti-square]="!checkboxFor(field.id)"></i>
+        <!-- The badge only renders when checked, so the field name is the value. -->
         }
         @case ('select') {
         <span class="cf-sep">&middot;</span>

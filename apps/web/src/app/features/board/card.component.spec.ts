@@ -368,10 +368,12 @@ describe("CardComponent", () => {
     fixture.detectChanges();
 
     const badge = fixture.nativeElement.querySelector(".cf-badge") as HTMLElement | null;
-    const checkbox = badge?.querySelector(".ti-checkbox.cf-value") as HTMLElement | null;
+    const label = badge?.querySelector(".cf-label") as HTMLElement | null;
 
-    expect(badge?.textContent?.trim()).toContain("Approved");
-    expect(checkbox).not.toBeNull();
+    expect(badge?.classList.contains("cf-badge--flag")).toBe(true);
+    expect(label?.textContent?.trim()).toBe("Approved");
+    expect(getComputedStyle(label!).display).not.toBe("none");
+    expect(badge?.querySelectorAll(".ti").length).toBe(1);
   });
   it("reserves a proportional cover before the image loads", () => {
     configure(0);

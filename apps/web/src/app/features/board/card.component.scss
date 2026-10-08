@@ -496,6 +496,22 @@
   min-width: 0;
 }
 
+// A checkbox badge only exists while checked, so its name *is* the value ("Approved"). A second
+// checkbox glyph beside the field icon read as two empty controls and never said which flag was set.
+.cf-badge--flag {
+  .cf-label {
+    display: inline;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    color: var(--text);
+  }
+
+  >.ti {
+    color: var(--success);
+  }
+}
+
 .cf-badge>.ti.cf-value {
   color: var(--text);
   flex: 0 0 auto;

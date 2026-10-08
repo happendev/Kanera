@@ -2408,10 +2408,12 @@ button.member-avatar {
   }
 }
 
+// Reads as an input row (glyph + value, left-aligned) like its sibling fields, not a centred button.
 .cf-checkbox-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: flex-start;
+  gap: 8px;
   width: 100%;
   height: 36px;
   padding: 0 10px;
@@ -2424,13 +2426,13 @@ button.member-avatar {
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 
   .ti {
-    font-size: 18px;
+    font-size: 16px;
     color: var(--text-muted);
     transition: color 0.12s;
   }
 
   &:hover:not(:disabled) {
-    border-color: var(--accent);
+    border-color: var(--border-strong);
     background: transparent;
   }
 

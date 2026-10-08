@@ -2834,7 +2834,7 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(button.textContent?.trim()).toBe("Yes");
     expect(button.classList.contains("checked")).toBe(false);
     expect(button.querySelector(".ti-square")).not.toBeNull();
-    expect(button.querySelector(".ti-checkbox")).toBeNull();
+    expect(button.querySelector(".ti-square-check")).toBeNull();
 
     button.click();
 
@@ -2860,7 +2860,7 @@ describe("CardDetailComponent realtime regressions", () => {
 
     expect(button.textContent?.trim()).toBe("Yes");
     expect(button.classList.contains("checked")).toBe(true);
-    expect(button.querySelector(".ti-checkbox")).not.toBeNull();
+    expect(button.querySelector(".ti-square-check")).not.toBeNull();
     expect(button.querySelector(".ti-square")).toBeNull();
 
     button.click();

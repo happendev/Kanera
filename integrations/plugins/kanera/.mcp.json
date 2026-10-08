@@ -1,7 +1,15 @@
 {
   "mcpServers": {
     "kanera": {
-      "url": "https://mcp.kanera.app/mcp"
+      "url": "https://mcp.kanera.app/mcp",
+      "oauth_resource": "https://mcp.kanera.app/mcp",
+      "extensions": {
+        "com.openai": {
+          "auth": {
+            "type": "oauth"
+          }
+        }
+      }
     }
   }
 }

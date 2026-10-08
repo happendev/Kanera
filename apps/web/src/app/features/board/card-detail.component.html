@@ -425,7 +425,7 @@
             @switch (field.type) {
               @case ('checkbox') {
               <button type="button" class="cf-checkbox-btn" [class.checked]="fieldValue?.valueCheckbox === true" [disabled]="!canEdit()" (click)="setCheckboxField(field, fieldValue?.valueCheckbox !== true)">
-                <i class="ti" [class.ti-checkbox]="fieldValue?.valueCheckbox === true" [class.ti-square]="fieldValue?.valueCheckbox !== true"></i>
+                <i class="ti" [class.ti-square-check]="fieldValue?.valueCheckbox === true" [class.ti-square]="fieldValue?.valueCheckbox !== true"></i>
                 Yes
               </button>
               }
