@@ -31,7 +31,10 @@ export async function rotateAdminRefresh(oldRaw: string): Promise<AdminRefreshRo
       .select()
       .from(adminRefreshTokens)
       .where(eq(adminRefreshTokens.tokenHash, oldHash))
-      .limit(1);
+      .limit(1)
+      // Serialize tabs on the original token so followers see its committed replacement and
+      // take the grace path instead of creating independent, active successor sessions.
+      .for("update");
 
     if (!existing) {
       return { status: "invalid" };

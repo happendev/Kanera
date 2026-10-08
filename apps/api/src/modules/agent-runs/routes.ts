@@ -1,15 +1,18 @@
 import { dto } from "@kanera/shared";
 import { SERVER_EVENTS } from "@kanera/shared/events";
-import { ACTIVITY_ACTION, agentRuns, cards, type AgentRun } from "@kanera/shared/schema";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { ACTIVITY_ACTION, AGENT_RUN_TERMINAL_STATUSES, agentRuns, cards, type AgentRun } from "@kanera/shared/schema";
+import { and, desc, eq, getTableColumns, inArray, notInArray, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db.js";
-import { assertBoardAccess, assertCardAccess } from "../../lib/access.js";
+import { assignedCardVisibility, assertBoardAccess, assertCardAccess } from "../../lib/access.js";
 import { recordAgentRunActivity, toWireAgentRun } from "../../lib/agent-runs.js";
 import { conflict, notFound } from "../../lib/errors.js";
 import { emitToBoard } from "../../realtime/emit.js";
 
 const LIVE_STATUSES = ["running", "blocked"] as const;
+// A run follows its card. Resolve location from the card even for historical rows written before
+// board transfers relocated runs; a cached source board must never grant access to moved content.
+const runColumns = { ...getTableColumns(agentRuns), boardId: cards.boardId, workspaceId: cards.workspaceId };
 
 /**
  * Who is this run attributed to? Interactive OAuth agents carry a grant + client name; workspace
@@ -31,11 +34,16 @@ export async function agentRunRoutes(app: FastifyInstance) {
   // nothing extra on their hot path.
   app.get("/boards/:boardId/agent-runs", async (req) => {
     const { boardId } = req.params as { boardId: string };
-    await assertBoardAccess(req.auth, boardId);
+    const ctx = await assertBoardAccess(req.auth, boardId);
     const rows = await db
-      .select()
+      .select(runColumns)
       .from(agentRuns)
-      .where(and(eq(agentRuns.boardId, boardId), inArray(agentRuns.status, [...LIVE_STATUSES])))
+      .innerJoin(cards, eq(cards.id, agentRuns.cardId))
+      .where(and(
+        eq(cards.boardId, boardId),
+        inArray(agentRuns.status, [...LIVE_STATUSES]),
+        ctx.assignedItemsOnly ? assignedCardVisibility(req.auth.sub) : undefined,
+      ))
       .orderBy(desc(agentRuns.startedAt))
       .limit(500);
     return { runs: rows.map(toWireAgentRun) };
@@ -46,8 +54,9 @@ export async function agentRunRoutes(app: FastifyInstance) {
     const query = dto.listAgentRunsQuery.parse(req.query);
     await assertCardAccess(req.auth, cardId);
     const rows = await db
-      .select()
+      .select(runColumns)
       .from(agentRuns)
+      .innerJoin(cards, eq(cards.id, agentRuns.cardId))
       .where(and(
         eq(agentRuns.cardId, cardId),
         query.includeEnded ? undefined : inArray(agentRuns.status, [...LIVE_STATUSES]),
@@ -99,16 +108,20 @@ export async function agentRunRoutes(app: FastifyInstance) {
     const now = new Date();
     const nextStatus = body.status ?? existing.status;
     const ends = dto.isTerminalAgentRunStatus(nextStatus);
+    // Checking the earlier SELECT alone lets an in-flight heartbeat reopen a completed run.
+    // Recheck terminal state under the UPDATE's row lock, and leave status untouched on heartbeats.
     const [run] = await db.update(agentRuns).set({
-      status: nextStatus,
+      ...(body.status !== undefined ? { status: nextStatus, endedAt: ends ? now : null } : {}),
+      boardId: sql`(select ${cards.boardId} from ${cards} where ${cards.id} = ${agentRuns.cardId})`,
+      workspaceId: sql`(select ${cards.workspaceId} from ${cards} where ${cards.id} = ${agentRuns.cardId})`,
       ...(body.title !== undefined ? { title: body.title } : {}),
       ...(body.summary !== undefined ? { summary: body.summary } : {}),
       ...(body.externalUrl !== undefined ? { externalUrl: body.externalUrl } : {}),
       // Every update is a heartbeat, including a bare {} keep-alive.
       heartbeatAt: now,
-      endedAt: ends ? now : null,
       updatedAt: now,
-    }).where(eq(agentRuns.id, runId)).returning();
+    }).where(and(eq(agentRuns.id, runId), notInArray(agentRuns.status, [...AGENT_RUN_TERMINAL_STATUSES]))).returning();
+    if (!run) throw conflict("agent run has already ended");
     if (ends) await recordAgentRunActivity(run!, ACTIVITY_ACTION.AGENT_RUN_ENDED);
     await emitToBoard(run!.boardId, SERVER_EVENTS.AGENT_RUN_UPDATED, { boardId: run!.boardId, cardId: run!.cardId, run: toWireAgentRun(run!) });
     return toWireAgentRun(run!);
@@ -116,7 +129,9 @@ export async function agentRunRoutes(app: FastifyInstance) {
 }
 
 async function loadRun(runId: string): Promise<AgentRun> {
-  const [run] = await db.select().from(agentRuns).where(eq(agentRuns.id, runId)).limit(1);
+  const [run] = await db.select(runColumns).from(agentRuns)
+    .innerJoin(cards, eq(cards.id, agentRuns.cardId))
+    .where(eq(agentRuns.id, runId)).limit(1);
   if (!run) throw notFound("agent run not found");
   return run;
 }

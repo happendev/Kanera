@@ -1,7 +1,8 @@
 import "../../test/setup.integration.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ACTIVITY_ACTION, activityEvents, agentRuns, boards, cardWatchers, cards, lists, notifications } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, activityEvents, agentRuns, boards, cardWatchers, cards, eventOutbox, lists, notifications } from "@kanera/shared/schema";
+import { SERVER_EVENTS } from "@kanera/shared/events";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db.js";
 import { AGENT_RUN_STALL_AFTER_MS, sweepStalledAgentRuns } from "../../lib/agent-runs.js";
@@ -171,6 +172,47 @@ void test("agent runs through the public API are labelled by the credential and 
   } finally {
     await publicApi.close();
   }
+});
+
+// Legacy scope drift and a 15-minute timeout cannot be seeded through public E2E endpoints.
+// Backdate a real run and corrupt both scope columns: the sweep must repair the persisted row,
+// activity and durable socket/webhook payload, leave fresh runs alone, and emit only once.
+void test("stalled legacy runs publish the card's current board and workspace", async () => {
+  const { app, owner, workspace, card } = await setup();
+  const otherWorkspace = await app.inject({ method: "POST", url: "/workspaces", headers: owner.auth, payload: { name: "Historical scope" } });
+  assert.equal(otherWorkspace.statusCode, 201);
+  const [otherBoard] = await db.insert(boards).values({
+    workspaceId: otherWorkspace.json<{ id: string }>().id, name: "Historical board", position: "1000",
+  }).returning();
+  const started = await app.inject({ method: "POST", url: `/cards/${card.id}/agent-runs`, headers: owner.auth, payload: { title: "Legacy run" } });
+  assert.equal(started.statusCode, 201);
+  const run = started.json<RunRow>();
+  const fresh = await app.inject({ method: "POST", url: `/cards/${card.id}/agent-runs`, headers: owner.auth, payload: { title: "Fresh run" } });
+  assert.equal(fresh.statusCode, 201);
+  await db.update(agentRuns).set({
+    boardId: otherBoard!.id, workspaceId: otherBoard!.workspaceId,
+    heartbeatAt: new Date(Date.now() - AGENT_RUN_STALL_AFTER_MS - 1_000),
+  }).where(eq(agentRuns.id, run.id));
+  assert.equal(await sweepStalledAgentRuns(), 1);
+  const [stalled] = await db.select().from(agentRuns).where(eq(agentRuns.id, run.id));
+  assert.equal(stalled?.boardId, card.boardId);
+  assert.equal(stalled?.workspaceId, workspace.id);
+  assert.equal(stalled?.status, "stalled");
+  const ended = await cardActivity(card.id, ACTIVITY_ACTION.AGENT_RUN_ENDED);
+  assert.equal(ended.length, 1);
+  assert.equal(ended[0]!.boardId, card.boardId);
+  assert.equal(ended[0]!.workspaceId, workspace.id);
+  const events = await db.select().from(eventOutbox).where(eq(eventOutbox.eventType, SERVER_EVENTS.AGENT_RUN_UPDATED));
+  assert.equal(events.length, 1);
+  assert.equal(events[0]!.scopeId, card.boardId);
+  assert.equal(events[0]!.boardId, card.boardId);
+  assert.equal(events[0]!.workspaceId, workspace.id);
+  assert.deepEqual(events[0]!.payload, {
+    boardId: card.boardId, cardId: card.id, run: JSON.parse(JSON.stringify(stalled)) as unknown,
+  });
+  assert.equal(await sweepStalledAgentRuns(), 0);
+  const [freshRow] = await db.select().from(agentRuns).where(eq(agentRuns.id, fresh.json<RunRow>().id));
+  assert.equal(freshRow?.status, "running");
 });
 
 void test("agent runs require editor access on the card's board", async () => {

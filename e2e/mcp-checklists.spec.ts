@@ -6,7 +6,7 @@ import path from "node:path";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import ports from "./ports.json";
 import { expect, test } from "./support/fixtures";
-import { boardIdOf, openBoard, openCard, workspaceSettingsHref } from "./support/ui";
+import { boardIdOf, expectCardTileMounted, openBoard, openCard, workspaceSettingsHref } from "./support/ui";
 
 const mcpUrl = `http://localhost:${ports.mcp}/mcp`;
 // The bundled executable npm ships (built by scripts/test-e2e.sh), not the TypeScript sources.
@@ -90,6 +90,9 @@ test("an agent builds and edits a nested checklist plan through MCP while the ca
     const card = await call<{ id: string }>("cards.create", { boardId, listId, title });
 
     await openBoard(page, "Platform Delivery");
+    // Earlier specs append to this seeded lane. Scroll its incremental render window so the
+    // persisted card is mounted before opening it, even when it is past the first fifteen tiles.
+    await expectCardTileMounted(page, title, listId);
     const detail = await openCard(page, title);
 
     // 1. One call creates the whole tree; ids for every level come back in the result.

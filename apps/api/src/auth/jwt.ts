@@ -28,7 +28,10 @@ export async function rotateRefresh(oldRaw: string): Promise<RefreshRotationResu
       .select()
       .from(refreshTokens)
       .where(eq(refreshTokens.tokenHash, oldHash))
-      .limit(1);
+      .limit(1)
+      // Tabs can present the same cookie simultaneously. Serialize the read and replacement so
+      // every follower sees the committed rotation and takes the grace path instead of forking it.
+      .for("update");
 
     if (!existing) {
       return { status: "invalid" };

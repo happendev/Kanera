@@ -1,6 +1,6 @@
 import { dto } from "@kanera/shared";
 import { SERVER_EVENTS, type WireCard, type WireCardChecklist, type WireCardDetail } from "@kanera/shared/events";
-import { ACTIVITY_ACTION, activityEvents, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cards, cardWatchers, customFields, lists, users, type ActivityEvent } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, activityEvents, agentRuns, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cards, cardWatchers, customFields, lists, users, type ActivityEvent } from "@kanera/shared/schema";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { randomUUID } from "node:crypto";
@@ -1275,6 +1275,7 @@ export async function cardRoutes(
       const rows: {
         previous: typeof cards.$inferSelect;
         card: typeof cards.$inferSelect;
+        finalCard: typeof cards.$inferSelect;
         activity: ActivityEvent;
         automationEffects: Awaited<ReturnType<typeof runCardMoveAutomations>>;
       }[] = [];
@@ -1303,7 +1304,12 @@ export async function cardRoutes(
           clientId: ctx.clientId,
           triggerActorId: req.auth.sub,
         });
-        rows.push({ previous: current, card: card!, activity, automationEffects });
+        // Keep the initial move for ordered realtime replay, but return the committed result to
+        // callers: a list-entry automation may move or complete the card again in this transaction.
+        const [finalCard] = automationEffects.effects.length > 0
+          ? await tx.select().from(cards).where(eq(cards.id, current.id)).limit(1)
+          : [card];
+        rows.push({ previous: current, card: card!, finalCard: finalCard!, activity, automationEffects });
       }
       return rows;
     });
@@ -1320,7 +1326,7 @@ export async function cardRoutes(
       await emitCardActivityFeedItem(boardId, move.card.id, move.activity);
       await emitAutomationEffects(move.automationEffects);
     }
-    return { moved: moves.length, cards: moves.map(({ card }) => toWireCard(card, req.auth.cid)), skippedCardIds };
+    return { moved: moves.length, cards: moves.map(({ finalCard }) => toWireCard(finalCard, req.auth.cid)), skippedCardIds };
   });
 
   app.patch("/boards/:boardId/cards/bulk/archive", async (req) => {
@@ -1853,29 +1859,43 @@ export async function cardRoutes(
       .from(cardAssignees)
       .where(eq(cardAssignees.cardId, source.id));
     const currentAssigneeIds = currentAssignees.map((a) => a.userId);
-    const eligibleAssigneeIds = await ensureBoardMembershipForUsers(body.boardId, currentAssigneeIds);
+    const checklistAssignments = await db
+      .select({ assigneeId: cardChecklistItems.assigneeId, checklistId: cardChecklists.id, parentItemId: cardChecklists.parentItemId })
+      .from(cardChecklistItems)
+      .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
+      .where(and(eq(cardChecklists.cardId, id), isNotNull(cardChecklistItems.assigneeId)));
+    // Checklist ownership is independent of card ownership. Check the union for destination
+    // eligibility without promoting checklist-only owners into the card's assignee collection.
+    const assignmentCandidates = [...new Set([...currentAssigneeIds, ...checklistAssignments.map((item) => item.assigneeId!)])];
+    const eligibleAssigneeSet = new Set(await ensureBoardMembershipForUsers(body.boardId, assignmentCandidates));
+    const eligibleAssigneeIds = currentAssigneeIds.filter((userId) => eligibleAssigneeSet.has(userId));
     // Assignment is board-scoped: anyone who is not a non-observer member of the destination board
     // must be unassigned as part of the move. Leaving them on the card would keep sending them
     // comment/due-date notifications for a card (and board) they can no longer open.
-    const eligibleAssigneeSet = new Set(eligibleAssigneeIds);
     const droppedAssigneeIds = currentAssigneeIds.filter((userId) => !eligibleAssigneeSet.has(userId));
+    const droppedChecklistAssigneeIds = assignmentCandidates.filter((userId) => !eligibleAssigneeSet.has(userId));
     const droppedAssigneeNames = droppedAssigneeIds.length === 0 ? [] : (await db
       .select({ displayName: users.displayName })
       .from(users)
       .where(inArray(users.id, droppedAssigneeIds))).map((row) => row.displayName);
 
-    const { updated, activity, relocatedNotifications, automationEffects } = await db.transaction(async (tx) => {
+    const { updated, finalCard, clearedChecklistItems, activity, relocatedNotifications, automationEffects } = await db.transaction(async (tx) => {
       const [updatedCard] = await tx
         .update(cards)
         .set({ boardId: body.boardId, listId: targetListId, position, updatedAt: new Date() })
         .where(eq(cards.id, id))
         .returning();
+      // Worker heartbeats and stall events must follow the card into its new board room, not
+      // expose run summaries to members of the board the card just left.
+      await tx.update(agentRuns).set({ boardId: body.boardId, workspaceId: dstCtx.workspaceId })
+        .where(eq(agentRuns.cardId, id));
+      const checklistIds = tx.select({ id: cardChecklists.id }).from(cardChecklists).where(eq(cardChecklists.cardId, id));
+      const clearedChecklistItems = droppedChecklistAssigneeIds.length === 0 ? [] : await tx.update(cardChecklistItems)
+        .set({ assigneeId: null, updatedAt: new Date() })
+        .where(and(inArray(cardChecklistItems.checklistId, checklistIds), inArray(cardChecklistItems.assigneeId, droppedChecklistAssigneeIds)))
+        .returning();
       if (droppedAssigneeIds.length > 0) {
         await tx.delete(cardAssignees).where(and(eq(cardAssignees.cardId, id), inArray(cardAssignees.userId, droppedAssigneeIds)));
-        const checklistIds = tx.select({ id: cardChecklists.id }).from(cardChecklists).where(eq(cardChecklists.cardId, id));
-        await tx.update(cardChecklistItems)
-          .set({ assigneeId: null })
-          .where(and(inArray(cardChecklistItems.checklistId, checklistIds), inArray(cardChecklistItems.assigneeId, droppedAssigneeIds)));
         await recordActivity(tx, {
           boardId: body.boardId,
           workspaceId: dstCtx.workspaceId,
@@ -1905,7 +1925,8 @@ export async function cardRoutes(
         windowMs: 60_000,
         fromValue: { boardId: fromBoardId, listId: fromListId },
         toValue: { boardId: body.boardId, listId: targetListId },
-        payload: { fromBoardId, toBoardId: body.boardId, fromListId, toListId: targetListId, prevPosition, position },
+        payload: { fromBoardId, toBoardId: body.boardId, fromListId, toListId: targetListId, prevPosition, position,
+          clearedChecklistItemIds: clearedChecklistItems.map((item) => item.id) },
       });
       const relocated = await relocateNotificationsForCard(tx, {
         cardId: id,
@@ -1925,11 +1946,22 @@ export async function cardRoutes(
           clientId: dstCtx.clientId,
           triggerActorId: req.auth.sub,
         });
-      return { updated: updatedCard, activity: moveActivity, relocatedNotifications: relocated, automationEffects: effects };
+      const [finalCard] = effects.effects.length > 0
+        ? await tx.select().from(cards).where(eq(cards.id, id)).limit(1)
+        : [updatedCard];
+      return { updated: updatedCard, finalCard: finalCard!, clearedChecklistItems, activity: moveActivity, relocatedNotifications: relocated, automationEffects: effects };
     });
     await emitToBoard(fromBoardId, SERVER_EVENTS.CARD_DELETED, { boardId: fromBoardId, cardId: id });
     const wireUpdated = toWireCard(updated!, req.auth.cid);
     await emitToBoard(body.boardId, SERVER_EVENTS.CARD_CREATED, { boardId: body.boardId, card: wireUpdated });
+    for (const item of clearedChecklistItems) {
+      await emitToBoard(body.boardId, SERVER_EVENTS.CARD_CHECKLIST_ITEM_UPDATED, {
+        boardId: body.boardId, cardId: id, cardTitle: source.title, listId: targetListId,
+        checklistId: item.checklistId,
+        checklistParentItemId: checklistAssignments.find((assignment) => assignment.checklistId === item.checklistId)?.parentItemId ?? null,
+        item, prevCompletedAt: item.completedAt,
+      });
+    }
     await emitRelocatedNotifications(relocatedNotifications);
     await emitCoalescedCardActivityFeedItem(body.boardId, id, activity);
     await emitAutomationEffects(automationEffects);
@@ -1971,7 +2003,9 @@ export async function cardRoutes(
       });
     }
 
-    return wireUpdated;
+    // Replay the move then its automation effects above; the HTTP response represents the final
+    // state so optimistic callers cannot overwrite those effects with the intermediate card.
+    return toWireCard(finalCard, req.auth.cid);
   });
 
   // Bulk-set one custom field across many cards. Mirrors the single-card PUT/DELETE path:
@@ -3085,14 +3119,15 @@ export async function cardRoutes(
     const [item] = await tx
       .update(cardChecklistItems)
       .set({
-        text: nextText,
-        description: prepared.nextDescription,
-        assigneeId: nextAssigneeId,
+        // Preparation can overlap another request. PATCH must only write supplied fields or a
+        // completion toggle can silently restore an older title, description, or assignee.
+        ...(body.text !== undefined && { text: nextText }),
+        ...(body.description !== undefined && { description: prepared.nextDescription }),
+        ...(body.assigneeId !== undefined && { assigneeId: nextAssigneeId }),
         ...(dueDateLocalDate !== undefined && { dueDateLocalDate }),
         ...(dueDateSlot !== undefined && { dueDateSlot }),
         ...(dueDateTimezone !== undefined && { dueDateTimezone }),
-        completedAt: prepared.nextCompletedAt,
-        completedById: prepared.nextCompletedById,
+        ...(body.completed !== undefined && { completedAt: prepared.nextCompletedAt, completedById: prepared.nextCompletedById }),
         updatedAt: new Date(),
       })
       .where(eq(cardChecklistItems.id, itemId))
