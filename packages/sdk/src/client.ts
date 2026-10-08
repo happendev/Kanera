@@ -42,7 +42,7 @@ export interface KaneraClientOptions {
 }
 
 const DEFAULT_BASE_URL = "https://api.kanera.app";
-const SDK_VERSION = "1.7.0";
+const SDK_VERSION = "1.8.0";
 const RETRYABLE_METHODS = new Set(["GET", "HEAD", "DELETE", "PUT"]);
 
 function encodeQuery(query: Query | undefined): string {
@@ -135,8 +135,11 @@ export class KaneraHttpClient {
       // Provenance marker only. The API does not read it today; it exists so official SDK traffic
       // stays distinguishable from hand-rolled API-key traffic in access logs.
       "x-kanera-client": "sdk",
-      ...options.headers,
     };
+    new Headers(options.headers).forEach((value, name) => { headers[name] = value; });
+    // Header names are case-insensitive: normalize overrides before pinning the credential, or
+    // `Authorization` and `authorization` can be combined into an invalid or wrong-account value.
+    headers.authorization = `Bearer ${this.options.apiKey}`;
     if (body !== undefined && !isForm) headers["content-type"] = "application/json";
     if (options.idempotencyKey) headers["idempotency-key"] = options.idempotencyKey;
     const organisationId = options.organisationId ?? this.options.organisationId;
@@ -144,7 +147,7 @@ export class KaneraHttpClient {
 
     // A mutation is only retried when the caller supplied an idempotency key; without one, a retry
     // after an ambiguous failure could create a second card or post a second comment.
-    const retryable = RETRYABLE_METHODS.has(method) || options.idempotencyKey !== undefined;
+    const retryable = RETRYABLE_METHODS.has(method) || Boolean(options.idempotencyKey);
     const attempts = retryable ? this.maxRetries + 1 : 1;
     let lastError: unknown;
 

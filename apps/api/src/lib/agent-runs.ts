@@ -1,6 +1,6 @@
 import { SERVER_EVENTS, type WireAgentRun } from "@kanera/shared/events";
-import { ACTIVITY_ACTION, agentRuns, AGENT_RUN_LIVE_STATUSES, type AgentRun } from "@kanera/shared/schema";
-import { and, inArray, lt } from "drizzle-orm";
+import { ACTIVITY_ACTION, agentRuns, AGENT_RUN_LIVE_STATUSES, cards, type AgentRun } from "@kanera/shared/schema";
+import { and, inArray, lt, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { db } from "../db.js";
 import { emitToBoard } from "../realtime/emit.js";
@@ -51,7 +51,13 @@ export async function sweepStalledAgentRuns(log?: FastifyBaseLogger, now = new D
   const cutoff = new Date(now.getTime() - AGENT_RUN_STALL_AFTER_MS);
   const stalled = await db
     .update(agentRuns)
-    .set({ status: "stalled", updatedAt: now })
+    .set({
+      status: "stalled", updatedAt: now,
+      // Repair historical runs left on their source board by older transfers before publishing
+      // their summary. Background events obey the card's current access boundary too.
+      boardId: sql`(select ${cards.boardId} from ${cards} where ${cards.id} = ${agentRuns.cardId})`,
+      workspaceId: sql`(select ${cards.workspaceId} from ${cards} where ${cards.id} = ${agentRuns.cardId})`,
+    })
     .where(and(inArray(agentRuns.status, [...AGENT_RUN_LIVE_STATUSES]), lt(agentRuns.heartbeatAt, cutoff)))
     .returning();
   for (const run of stalled) {

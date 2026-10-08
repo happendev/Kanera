@@ -48,7 +48,8 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          for manifest in apps/cli/package.json packages/sdk/package.json; do
+          # The CLI has its own major version; the workspace tag validates the SDK.
+          for manifest in packages/sdk/package.json; do
             version=$(node -p "require('./${manifest}').version")
             if [ "${RELEASE_TAG}" != "v${version}" ]; then
               echo "Release tag ${RELEASE_TAG} does not match ${manifest} version v${version}."

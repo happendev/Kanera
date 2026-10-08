@@ -10,7 +10,6 @@ import {
   boards,
   cardAssignees,
   cardAttachments,
-  cardChecklists,
   cardChecklistItems,
   cardMentions,
   cardWatchers,
@@ -27,7 +26,7 @@ import {
   type ActivityEvent,
   type NotificationReason,
 } from "@kanera/shared/schema";
-import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, notInArray, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Tx } from "../db.js";
 import { db as dbSingleton } from "../db.js";
@@ -35,6 +34,7 @@ import { signedAvatarUrl, signEmbeddedMediaUrls, withSignedMedia } from "./media
 import { emitToUser } from "../realtime/emit.js";
 import { inboxVisibleNotificationCondition } from "./notification-visibility.js";
 export { inboxVisibleNotificationCondition } from "./notification-visibility.js";
+import { assignedCardVisibility } from "./access.js";
 import { enqueueWatchedActivityOutbound } from "./watched-activity-push.js";
 
 // Per-source cap on notification recipients. See resolveRecipients for rationale.
@@ -754,67 +754,34 @@ export async function relocateNotificationsForCard(
     clientId: string;
   },
 ): Promise<RelocatedNotifications> {
-  const candidates = await tx
-    .select({
-      id: notifications.id,
-      userId: notifications.userId,
-      userClientRole: clientMembers.clientRole,
-      boardRole: boardMembers.role,
-      assignedItemsOnly: boardMembers.assignedItemsOnly,
-    })
-    .from(notifications)
-    .innerJoin(users, eq(users.id, notifications.userId))
-    .leftJoin(clientMembers, and(
-      eq(clientMembers.clientId, params.clientId),
-      eq(clientMembers.userId, notifications.userId),
-      sql`${clientMembers.suspendedAt} is null`,
-      sql`${clientMembers.removedAt} is null`,
-    ))
-    .leftJoin(
-      boardMembers,
-      and(
-        eq(boardMembers.boardId, params.boardId),
-        eq(boardMembers.userId, notifications.userId),
+  // Watches and existing inbox rows must obey the same destination viewing rights. Observer
+  // watches remain valid; assignment eligibility would incorrectly remove them. Inactive org
+  // membership overrides a stale board grant, matching assertBoardAccess.
+  const eligibleViewers = tx.select({ userId: users.id }).from(users)
+    .leftJoin(clientMembers, and(eq(clientMembers.clientId, params.clientId), eq(clientMembers.userId, users.id)))
+    .leftJoin(boardMembers, and(eq(boardMembers.boardId, params.boardId), eq(boardMembers.userId, users.id)))
+    .where(and(
+      isNull(clientMembers.suspendedAt),
+      isNull(clientMembers.removedAt),
+      or(
+        inArray(clientMembers.clientRole, ["owner", "admin"]),
+        and(isNotNull(boardMembers.role), or(
+          eq(boardMembers.assignedItemsOnly, false),
+          assignedCardVisibility(users.id, sql`${params.cardId}`),
+        )),
       ),
-    )
-    .where(eq(notifications.cardId, params.cardId));
-  if (candidates.length === 0) return { updatedIds: [], deleted: [] };
-
-  const restrictedUserIds = candidates
-    .filter((row) => row.assignedItemsOnly)
-    .map((row) => row.userId);
-  const visibleRestrictedUserIds = new Set<string>();
-  if (restrictedUserIds.length > 0) {
-    const [cardAssignments, checklistAssignments] = await Promise.all([
-      tx
-        .select({ userId: cardAssignees.userId })
-        .from(cardAssignees)
-        .where(and(
-          eq(cardAssignees.cardId, params.cardId),
-          inArray(cardAssignees.userId, restrictedUserIds),
-        )),
-      tx
-        .select({ userId: cardChecklistItems.assigneeId })
-        .from(cardChecklistItems)
-        .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
-        .where(and(
-          eq(cardChecklists.cardId, params.cardId),
-          inArray(cardChecklistItems.assigneeId, restrictedUserIds),
-        )),
-    ]);
-    for (const row of [...cardAssignments, ...checklistAssignments]) {
-      if (row.userId) visibleRestrictedUserIds.add(row.userId);
-    }
-  }
-
-  const retainedIds: string[] = [];
-  const removedIds: string[] = [];
-  for (const row of candidates) {
-    const isOrgAdmin = row.userClientRole === "owner" || row.userClientRole === "admin";
-    const hasBoardAccess = Boolean(row.boardRole)
-      && (!row.assignedItemsOnly || visibleRestrictedUserIds.has(row.userId));
-    (isOrgAdmin || hasBoardAccess ? retainedIds : removedIds).push(row.id);
-  }
+    ));
+  // Remove subscriptions even when the watcher has no inbox rows yet; otherwise the next comment
+  // or due-date sweep can create a notification for a card they can no longer open.
+  await tx.delete(cardWatchers).where(and(
+    eq(cardWatchers.cardId, params.cardId), notInArray(cardWatchers.userId, eligibleViewers),
+  ));
+  const candidates = await tx.select({
+    id: notifications.id,
+    canView: sql<boolean>`${notifications.userId} in (${eligibleViewers})`,
+  }).from(notifications).where(eq(notifications.cardId, params.cardId));
+  const retainedIds = candidates.filter((row) => row.canView).map((row) => row.id);
+  const removedIds = candidates.filter((row) => !row.canView).map((row) => row.id);
 
   // Notification scope is actionable card context, not immutable event history. Moving a card
   // must move its existing inbox rows too, otherwise the source board keeps a badge whose link
