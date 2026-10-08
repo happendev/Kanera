@@ -324,3 +324,86 @@ test("a saved note response cannot close the next note's unsaved editor", async 
   const persisted = await (await api.get(`/api/notes/${notes[1]!.id}`)).json() as { content: string };
   expect(persisted.content).toBe("Keep the second note's draft after acknowledgement");
 });
+
+async function setVisibility(page: Page, state: "hidden" | "visible") {
+  await page.evaluate((value) => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => value });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }, state);
+}
+
+test("Ctrl+Enter in the card composer description keeps the editor usable until the card is created", async ({ page, signIn, apiAs, uniqueName }, testInfo) => {
+  const api = await apiAs("amelia");
+  const fixture = await setup(api, uniqueName("Composer shortcut"));
+  const title = uniqueName("Described before its title");
+  await signIn(page, "amelia");
+  await page.goto(`/b/${fixture.boardId}`);
+  await expectBoardLoaded(page, fixture.name);
+  await page.getByRole("button", { name: "New card", exact: true }).click();
+  const composer = page.getByRole("dialog", { name: "New card" });
+  const description = composer.locator("k-description-editor");
+  await description.locator(".tiptap").click();
+  await page.keyboard.type("Described before the title");
+  // The composer hides the editor's own actions and owns submission. With no title the dialog
+  // refuses to submit, and the description must stay editable rather than entering a saving state
+  // nobody can leave.
+  await page.keyboard.press("Control+Enter");
+  await expect(composer).toBeVisible();
+  await expect(description.locator(".de-shell")).not.toHaveAttribute("inert", "");
+  await expect(description.locator(".tiptap")).toHaveAttribute("contenteditable", "true");
+  await page.keyboard.type(" and still typing");
+  await expect(description.locator(".tiptap")).toContainText("Described before the title and still typing");
+  await page.screenshot({ path: testInfo.outputPath("composer-after-shortcut.png") });
+  await composer.locator("textarea.cmp-title-input").fill(title);
+  const created = page.waitForResponse((response) =>
+    response.request().method() === "POST" && /\/boards\/[^/]+\/lists\/[^/]+\/cards$/.test(new URL(response.url()).pathname) && response.ok());
+  await page.keyboard.press("Control+Enter");
+  await created;
+  await expect(composer).toBeHidden();
+  const detail = await openCard(page, title);
+  await expect(detail.locator(".description-viewer-wrap")).toContainText("Described before the title and still typing");
+});
+
+test("hiding the tab while a note save is in flight still applies the acknowledgement", async ({ page, signIn, apiAs, uniqueName }, testInfo) => {
+  const api = await apiAs("amelia");
+  const fixture = await setup(api, uniqueName("Hidden note save"));
+  const noteResponse = await api.post(`/api/boards/${fixture.boardId}/notes`, { data: { scope: "team", title: uniqueName("Hidden save note") } });
+  expect(noteResponse.status(), await noteResponse.text()).toBe(201);
+  const note = await noteResponse.json() as { id: string };
+  await signIn(page, "amelia");
+  await page.goto(`/b/${fixture.boardId}?view=notes&noteId=${note.id}`);
+  const noteEditor = page.locator("k-note-editor");
+  await noteEditor.locator(".ne-viewer").click();
+  const editor = noteEditor.locator("k-description-editor");
+  await editor.locator(".tiptap").fill("Saved while the tab was hidden");
+  const pending = gate();
+  let held = false;
+  await page.route(`**/api/notes/${note.id}`, async (route) => {
+    if (route.request().method() !== "PATCH" || held) return route.continue();
+    // The server commits the write; only its response is delayed, as on a slow connection.
+    const response = await route.fetch();
+    held = true;
+    await pending.promise;
+    await route.fulfill({ response });
+  });
+  try {
+    await editor.getByRole("button", { name: "Save", exact: true }).click();
+    await expect.poll(() => held).toBe(true);
+    await setVisibility(page, "hidden");
+  } finally {
+    pending.release();
+  }
+  // The acknowledgement closes the editor and rebases it, even though the tab was hidden when it
+  // arrived. Dropping it left the editor open on a stale base, so the next save was refused as stale.
+  await expect(editor).toHaveCount(0);
+  await expect(noteEditor.locator(".ne-viewer")).toContainText("Saved while the tab was hidden");
+  await setVisibility(page, "visible");
+  await noteEditor.locator(".ne-viewer").click();
+  await noteEditor.locator("k-description-editor .tiptap").fill("Saved again after returning");
+  await noteEditor.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(noteEditor.locator("k-description-editor")).toHaveCount(0);
+  await expect(noteEditor.locator(".ne-banner.is-error")).toHaveCount(0);
+  await expect(noteEditor.locator(".ne-viewer")).toContainText("Saved again after returning");
+  await expect.poll(async () => ((await (await api.get(`/api/notes/${note.id}`)).json()) as { content: string }).content).toBe("Saved again after returning");
+  await page.screenshot({ path: testInfo.outputPath("note-saved-after-hidden-tab.png") });
+});

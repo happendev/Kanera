@@ -829,7 +829,10 @@ export class NoteEditorComponent implements OnDestroy {
   }
 
   private releaseCurrentLock() {
-    this.lockGeneration++;
+    // Releasing the lock is not a session change: a title/body save whose request is still in
+    // flight (the tab was hidden, or an idle release ran after a sibling save) must still apply its
+    // acknowledgement, or the editor keeps a stale base timestamp and its next save conflicts.
+    // Only note switches, destroy and renewal failure bump lockGeneration.
     this.acquiringLock.set(false);
     if (!this.currentLockedId) return;
     const id = this.currentLockedId;

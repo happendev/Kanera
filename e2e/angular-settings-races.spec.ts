@@ -137,3 +137,67 @@ test("scratchpad reconnect refreshes the clean mounted editor before the next ke
     await api.delete(`/api/scratchpad/notes/${note.id}`);
   }
 });
+
+async function setVisibility(page: Page, state: "hidden" | "visible") {
+  await page.evaluate((value) => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => value });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }, state);
+}
+
+test("Ctrl+Enter in a scratchpad page keeps the editor writable", async ({ page, signIn, apiAs, uniqueName }, testInfo) => {
+  const api = await apiAs("amelia");
+  const title = uniqueName("Scratchpad shortcut");
+  const response = await api.post("/api/scratchpad/notes", { data: { title } });
+  expect(response.ok(), await response.text()).toBe(true);
+  const note = await response.json() as { id: string };
+  await signIn(page, "amelia");
+  const editor = await selectScratchpad(page, title);
+  try {
+    await editor.click();
+    await page.keyboard.type("First thought");
+    // The scratchpad autosaves and never answers an explicit save, so the shortcut must not put
+    // the editor into a saving state that only a host acknowledgement could leave.
+    await page.keyboard.press("Control+Enter");
+    await expect(page.locator("k-scratchpad-panel .de-shell")).not.toHaveAttribute("inert", "");
+    await expect(editor).toHaveAttribute("contenteditable", "true");
+    await page.keyboard.type(" continued");
+    await expect.poll(() => scratchpadContent(api, note.id)).toBe("First thought continued");
+    await page.screenshot({ path: testInfo.outputPath("scratchpad-after-shortcut.png") });
+  } finally {
+    await api.delete(`/api/scratchpad/notes/${note.id}`);
+  }
+});
+
+test("a foreground scratchpad refresh keeps the caret of a clean editor whose serialisation differs from the server", async ({ page, signIn, apiAs, uniqueName }, testInfo) => {
+  const api = await apiAs("amelia");
+  const title = uniqueName("Scratchpad caret");
+  const response = await api.post("/api/scratchpad/notes", { data: { title } });
+  expect(response.ok(), await response.text()).toBe(true);
+  const note = await response.json() as { id: string };
+  // Emoji shortcodes render as unicode, so the editor re-serialises this body differently from the
+  // stored string although nothing changed. A refresh that compares against the live serialisation
+  // rewrites the document and loses the caret on every foreground transition.
+  expect((await api.patch(`/api/scratchpad/notes/${note.id}`, { data: { content: "Keep the caret :smile: here" } })).ok()).toBe(true);
+  await signIn(page, "amelia");
+  const editor = await selectScratchpad(page, title);
+  try {
+    await expect(editor).toContainText("Keep the caret");
+    await editor.click();
+    await page.keyboard.press("Control+Home");
+    await page.keyboard.press("ArrowRight", { delay: 10 });
+    await page.keyboard.press("ArrowRight", { delay: 10 });
+    await page.keyboard.press("ArrowRight", { delay: 10 });
+    await page.keyboard.press("ArrowRight", { delay: 10 });
+    const refreshed = page.waitForResponse((result) => result.request().method() === "GET" && result.url().endsWith("/api/scratchpad/notes"));
+    await setVisibility(page, "hidden");
+    await setVisibility(page, "visible");
+    expect((await refreshed).ok()).toBe(true);
+    await page.keyboard.type("!");
+    await expect(editor).toHaveText("Keep! the caret 😄 here");
+    await expect.poll(() => scratchpadContent(api, note.id)).toBe("Keep! the caret 😄 here");
+    await page.screenshot({ path: testInfo.outputPath("scratchpad-caret-after-refresh.png") });
+  } finally {
+    await api.delete(`/api/scratchpad/notes/${note.id}`);
+  }
+});

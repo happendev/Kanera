@@ -327,11 +327,15 @@ export class ScratchpadService {
       const hasLocalBodyWrite = this.pending.get(note.id)?.content !== undefined
         || this.inFlight.get(note.id)?.content !== undefined;
       if (note.id !== dirtyActiveId && !hasLocalBodyWrite) {
+        const acked = this.lastAckedContent.get(note.id);
         this.lastAckedContent.set(note.id, note.content);
         // Reconnect/foreground reads recover events the socket never delivered. The mounted
         // editor is seeded only when its note changes, so replacing service state alone leaves
         // its old document visible and the next keystroke would overwrite the recovered text.
-        if (this.editor?.noteId === note.id && this.editor.currentMarkdown() !== note.content) {
+        // Compare against the last acknowledged body, not the live serialisation: a clean editor
+        // re-serialises cosmetically differently (shortcodes, trailing blank paragraphs), and
+        // replacing its document on every foreground read would throw away the reader's caret.
+        if (this.editor?.noteId === note.id && acked !== note.content) {
           this.editor.replaceWithCleanMarkdown(note.content);
         }
         return note;

@@ -1761,6 +1761,10 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
 
   onSave() {
     if (!this.editor || !this.editable() || this.saving() || this.uploader.uploading()) return;
+    // Hosts that hide the actions (card composer, scratchpad) own submission themselves and never
+    // answer `save`. Entering the saving state there would leave the document inert forever, since
+    // only a host acknowledgement through setSaving(false) or reset() can leave it again.
+    if (!this.showActions()) return;
     const md = this.markdown();
     this.setSaving(true);
     this.save.emit({ markdown: md, attachmentIds: this.uploader.attachmentIdsSnapshot() });
