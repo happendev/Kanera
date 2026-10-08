@@ -123,6 +123,9 @@ export interface VisibleCardPatch {
   updatedAt: string | Date;
 }
 
+const REALTIME_REFRESH_MS = 180;
+const REALTIME_REFRESH_MAX_MS = 1_500;
+
 @Injectable()
 export class GlobalWorkState {
   private readonly api = inject(ApiClient);
@@ -1517,6 +1520,9 @@ export class GlobalWorkState {
     // calendar with its first page would remove later rows after any realtime edit.
     const exhaustive = ["board", "priorities"].includes(this.definition().display);
     const targetCount = exhaustive ? 10_000 : Math.max(100, this.response().cards.length);
+    // Each continuation cursor carries the ids already returned, so this walk is inherently
+    // sequential: one round trip per hundred loaded rows. scheduleRealtimeRefresh scales its
+    // debounce with that depth so a burst of events pays for one walk, not one per event.
     const merged = await this.loadCards();
     const seen = new Set(merged.cards.map((card) => card.id));
     let combined = merged;
@@ -1837,7 +1843,18 @@ export class GlobalWorkState {
       this.realtimeRefreshNeedsCatalog = false;
       this.queuedWhileHidden = false;
       void this.reconcileInBackground(refreshCatalog);
-    }, 180);
+    }, this.realtimeRefreshDelay());
+  }
+
+  /**
+   * A background refresh re-walks every page the reader has loaded (loadAllCards), one sequential
+   * request per hundred rows. Scale the debounce with that cost so a busy workspace coalesces a
+   * burst of events into one walk of a deep table instead of a walk per event; a single page keeps
+   * the quick 180 ms convergence. The row itself is already patched live by the socket event.
+   */
+  private realtimeRefreshDelay(): number {
+    const pages = Math.max(1, Math.ceil(this.response().cards.length / 100));
+    return Math.min(REALTIME_REFRESH_MS * pages, REALTIME_REFRESH_MAX_MS);
   }
 
   private flushQueuedRealtimeRefresh(): void {
@@ -1901,7 +1918,10 @@ export class GlobalWorkState {
       // the socket watchdog, a later event, or the next foreground transition will retry.
     } finally {
       this.backgroundRefreshInFlight = false;
-      if (version === this.requestVersion) this.reconciling.set(false);
+      // A queued replacement invalidated this version so it would not clear the flag by itself,
+      // and that replacement may now park behind the hidden-tab or drag gate indefinitely. Clear it
+      // here; the replacement raises it again when it actually starts.
+      if (version === this.requestVersion || this.backgroundRefreshQueued) this.reconciling.set(false);
       if (this.backgroundRefreshQueued) {
         this.backgroundRefreshQueued = false;
         // A cancelled catalog refresh must not be downgraded to a cards-only refresh by the

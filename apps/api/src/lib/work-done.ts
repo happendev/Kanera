@@ -433,7 +433,9 @@ export async function loadWorkDonePage(
   opts: LoadWorkDoneOptions,
   page: { limit: number; cursor?: { at: string; id: string } | null },
 ): Promise<WorkDoneResponse & { summary: WorkDonePageSummary; hasMore: boolean }> {
-  if (!opts.boardIds.length || opts.actorUserIds?.length === 0) return loadWorkDonePageSnapshot(opts, page, db);
+  if (!opts.boardIds.length || opts.actorUserIds?.length === 0) {
+    return { events: [], summary: { created: 0, moved: 0, completed: 0, checklistItemCompleted: 0, cardsTouched: 0, totalEvents: 0 }, hasMore: false };
+  }
   // Summary, page keys and their hydration must describe one snapshot. In particular, deleting a
   // selected card between phases must not leave an empty page with a continuation and no cursor.
   return db.transaction((tx) => loadWorkDonePageSnapshot(opts, page, tx), {
@@ -446,12 +448,6 @@ async function loadWorkDonePageSnapshot(
   page: { limit: number; cursor?: { at: string; id: string } | null },
   database: Tx,
 ): Promise<WorkDoneResponse & { summary: WorkDonePageSummary; hasMore: boolean }> {
-  const emptySummary: WorkDonePageSummary = {
-    created: 0, moved: 0, completed: 0, checklistItemCompleted: 0, cardsTouched: 0, totalEvents: 0,
-  };
-  if (!opts.boardIds.length || opts.actorUserIds?.length === 0) {
-    return { events: [], summary: emptySummary, hasMore: false };
-  }
   const timeZone = opts.timeZone ?? "UTC";
   const activitySource = database.select({
     id: activityEvents.id,

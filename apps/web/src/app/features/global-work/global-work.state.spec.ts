@@ -1062,6 +1062,43 @@ describe("GlobalWorkState", () => {
     }
   });
 
+  // Not observable through the browser: `reconciling` has no rendered consumer today, but a flag
+  // stuck at true would silently misreport state to any future indicator or gate. The failure is a
+  // superseded background refresh whose queued replacement parks behind the hidden-tab gate.
+  it("clears reconciling when a superseded background refresh is replaced while the tab is hidden", async () => {
+    const gate: { release: (() => void) | null } = { release: null };
+    let holdRefresh = false;
+    const f = setup({
+      cardsQuery: async () => {
+        if (holdRefresh) await new Promise<void>((resolve) => (gate.release = resolve));
+        return response;
+      },
+    });
+    await f.state.initialize("my");
+    const cardQueryCount = () => f.post.mock.calls.filter(([path]) => path === "/work/cards/query").length;
+    try {
+      holdRefresh = true;
+      f.socket.trigger("card:created", {});
+      await vi.waitFor(() => expect(gate.release).not.toBeNull());
+      expect(f.state.reconciling()).toBe(true);
+      // A second event while the walk is in flight cancels it and queues one replacement.
+      f.socket.trigger("card:created", {});
+      Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+      holdRefresh = false;
+      gate.release?.();
+      // The replacement is parked behind the hidden-tab gate, so nothing else can clear the flag.
+      await vi.waitFor(() => expect(f.state.reconciling()).toBe(false));
+      const queriesWhileHidden = cardQueryCount();
+      Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.waitFor(() => expect(cardQueryCount()).toBeGreaterThan(queriesWhileHidden));
+      await vi.waitFor(() => expect(f.state.reconciling()).toBe(false));
+    } finally {
+      Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    }
+  });
+
   it("reconciles on foreground resume even without a queued realtime event", async () => {
     vi.useFakeTimers();
     try {

@@ -248,3 +248,60 @@ test("editing one note preserves every offline body without rewriting the other 
   }
   await testInfo.attach("offline-restoration.json", { body: JSON.stringify({ boardId: board.boardId, noteIds: notes.map((note) => note.id), failedOfflineScopes: [...failedOfflineScopes], fullBodiesMatched: notes.length }), contentType: "application/json" });
 });
+
+test("a burst of realtime events on a deep table coalesces into one background walk", async ({ page, signIn, apiAs, uniqueName }, testInfo) => {
+  test.setTimeout(150_000);
+  const api = await apiAs("amelia");
+  const board = await fixture(api, uniqueName("Deep table burst"));
+  const prefix = uniqueName("Deep table card");
+  const cards: { id: string }[] = [];
+  for (let offset = 0; offset < 201; offset += 5) {
+    const batch = Array.from({ length: Math.min(5, 201 - offset) }, (_, index) =>
+      api.post(`/api/boards/${board.boardId}/lists/${board.listId}/cards`, { data: { title: `${prefix} ${String(offset + index).padStart(3, "0")}`, assigneeIds: [board.userId] } })
+        .then((response) => json<{ id: string }>(response)));
+    cards.push(...await Promise.all(batch));
+  }
+  await signIn(page, "amelia");
+  await page.goto("/my-cards");
+  await page.getByRole("button", { name: "Table view", exact: true }).click();
+  const searched = page.waitForResponse((response) => response.url().endsWith("/api/work/cards/query")
+    && (response.request().postDataJSON() as { filters?: { q?: string } }).filters?.q === prefix);
+  await page.getByRole("searchbox", { name: "Search cards" }).fill(prefix);
+  await (await searched).finished();
+  const loadMore = page.getByRole("button", { name: "Load more", exact: true });
+  for (let remaining = 2; remaining > 0; remaining -= 1) {
+    await expect(loadMore).toBeEnabled();
+    await loadMore.click();
+  }
+  await expect(loadMore).toHaveCount(0);
+  // The table virtualises rows, so compare what is rendered rather than asserting all 201.
+  const rowsBeforeRefresh = await page.locator(".tv-row").count();
+  expect(rowsBeforeRefresh).toBeGreaterThan(50);
+
+  // Every background walk of this three-page table costs three sequential queries. Three events
+  // spaced inside the depth-scaled debounce must therefore produce one first-page refresh, where a
+  // fixed 180 ms debounce started a second walk as soon as the first one had settled.
+  const walks: { cursor: boolean; at: number }[] = [];
+  let armed = false;
+  page.on("request", (request) => {
+    if (!armed || !request.url().endsWith("/api/work/cards/query")) return;
+    const body = request.postDataJSON() as { cursor?: string; filters?: { q?: string } };
+    if (body.filters?.q === prefix) walks.push({ cursor: Boolean(body.cursor), at: Date.now() });
+  });
+  armed = true;
+  const burstStartedAt = Date.now();
+  for (const suffix of ["first", "second", "latest"]) {
+    await json(await api.patch(`/api/cards/${cards[0]!.id}`, { data: { title: `${prefix} ${suffix}` } }));
+    await page.waitForTimeout(300);
+  }
+  await expect(page.locator(".tv-row").filter({ hasText: `${prefix} latest` })).toHaveCount(1);
+  await page.waitForTimeout(2_500);
+  const firstPageRefreshes = walks.filter((walk) => !walk.cursor).length;
+  const continuations = walks.filter((walk) => walk.cursor).length;
+  await testInfo.attach("burst-walks.json", { body: JSON.stringify({ command: "pnpm test:e2e -- e2e/performance-frontend.spec.ts", boardId: board.boardId, burstStartedAt, walks, firstPageRefreshes, continuations }), contentType: "application/json" });
+  expect(firstPageRefreshes).toBe(1);
+  expect(continuations).toBe(2);
+  await expect(page.locator(".tv-row")).toHaveCount(rowsBeforeRefresh);
+  await expect(loadMore).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("table-burst-single-walk.png") });
+});
