@@ -212,6 +212,7 @@ function priorityGroupKey(userId: string): string {
         updateCard: (card) => state.applyCardUpdate(card),
         setCardAssignees: (cardId, userIds) => state.applyCardAssignees(cardId, userIds),
         setCardLabels: (cardId, labelIds) => state.applyCardLabels(cardId, labelIds),
+        captureCustomFieldWrite: (cardId, fieldId) => state.captureCustomFieldWrite(cardId, fieldId),
         // `beforeCardId: null` appends, matching the board's own status-change behaviour. Routed
         // through GlobalWorkState.moveCard so the merged cross-board lane and its personal
         // separators are accounted for, which the board's per-list position maths cannot do.

@@ -1101,6 +1101,9 @@ export class BoardPage implements OnDestroy {
 
     effect((onCleanup) => {
       const boardId = this.boardId();
+      // Filter reloads belong to this route context too. A late response from the previous board
+      // must never hydrate its cards or persist them under the newly selected board's cache key.
+      ++this.filterLoadSeq;
       // Token renewal replaces the user object after an idle tab resumes. Only a change of
       // viewer identity should restart this lifecycle and clear the board and local UI state.
       const viewerUserId = this.currentUserId();
@@ -1887,6 +1890,7 @@ export class BoardPage implements OnDestroy {
   }
 
   async toggleArchivedCards() {
+    const boardId = this.boardId();
     if (this.state.board() === null) return;
     const next = !this.showArchived();
     const seq = ++this.filterLoadSeq;
@@ -1898,31 +1902,33 @@ export class BoardPage implements OnDestroy {
       this.showInactiveOnly.set(false);
       this.showPrioritySetOnly.set(false);
     }
-    const data = await this.loadBoard(this.boardId(), false, next);
-    if (seq !== this.filterLoadSeq || this.showArchived() !== next) return;
+    const data = await this.loadBoard(boardId, false, next);
+    if (this.boardId() !== boardId || seq !== this.filterLoadSeq || this.showArchived() !== next) return;
     this.state.hydrate(data);
     const snapshot = this.state.snapshot();
     if (snapshot) void this.offlineCache.saveBoard(this.boardId(), snapshot).catch(() => undefined);
   }
 
   async applyCompletedRange(range: { from: string; to: string }) {
+    const boardId = this.boardId();
     const seq = ++this.filterLoadSeq;
     this.completedFrom.set(range.from);
     this.completedTo.set(range.to);
     writeCompletedFilter(`board:${this.boardId()}`, range);
-    const data = await this.loadBoard(this.boardId(), false, this.showArchived());
-    if (seq !== this.filterLoadSeq) return;
+    const data = await this.loadBoard(boardId, false, this.showArchived());
+    if (this.boardId() !== boardId || seq !== this.filterLoadSeq) return;
     this.state.hydrate(data);
     this.persistOfflineSnapshot();
   }
 
   async clearCompletedRange() {
+    const boardId = this.boardId();
     const seq = ++this.filterLoadSeq;
     this.completedFrom.set("");
     this.completedTo.set("");
     writeCompletedFilter(`board:${this.boardId()}`, null);
-    const data = await this.loadBoard(this.boardId(), false, this.showArchived());
-    if (seq !== this.filterLoadSeq) return;
+    const data = await this.loadBoard(boardId, false, this.showArchived());
+    if (this.boardId() !== boardId || seq !== this.filterLoadSeq) return;
     this.state.hydrate(data);
     this.persistOfflineSnapshot();
   }
@@ -1963,6 +1969,7 @@ export class BoardPage implements OnDestroy {
    * from in here silently emptied a box the panel never claimed to own.
    */
   async clearFilters() {
+    const boardId = this.boardId();
     if (this.state.board() === null) return;
     const needsActiveCardsReload = this.showArchived() || this.showCompleted();
     const seq = ++this.filterLoadSeq;
@@ -1981,8 +1988,8 @@ export class BoardPage implements OnDestroy {
     this.completedTo.set("");
     writeCompletedFilter(`board:${this.boardId()}`, null);
     if (!needsActiveCardsReload) return;
-    const data = await this.loadBoard(this.boardId(), false, false);
-    if (seq !== this.filterLoadSeq || this.showArchived()) return;
+    const data = await this.loadBoard(boardId, false, false);
+    if (this.boardId() !== boardId || seq !== this.filterLoadSeq || this.showArchived()) return;
     this.state.hydrate(data);
     const snapshot = this.state.snapshot();
     if (snapshot) void this.offlineCache.saveBoard(this.boardId(), snapshot).catch(() => undefined);

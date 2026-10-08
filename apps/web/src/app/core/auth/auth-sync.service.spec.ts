@@ -75,6 +75,7 @@ describe("AuthSyncService", () => {
           provide: AuthService,
           useValue: {
             user: authUser.asReadonly(),
+            getSessionGeneration: () => 0,
             reloadMe,
             isLogoutSyncEvent: vi.fn(() => false),
             clearSession: vi.fn(() => authUser.set(null)),
@@ -102,6 +103,7 @@ describe("AuthSyncService", () => {
           provide: AuthService,
           useValue: {
             user: authUser.asReadonly(),
+            getSessionGeneration: () => 0,
             reloadMe,
             isLogoutSyncEvent: vi.fn(() => false),
             clearSession: vi.fn(() => authUser.set(null)),
@@ -162,6 +164,7 @@ describe("AuthSyncService", () => {
     socket.trigger(SERVER_EVENTS.CLIENT_ENTITLEMENTS_CHANGED, { clientId: "client-1" });
     await Promise.resolve();
     await Promise.resolve();
+    TestBed.tick();
 
     expect(disconnect).toHaveBeenCalledTimes(1);
     expect(navigateByUrl).toHaveBeenCalledWith("/login");

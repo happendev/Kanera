@@ -9,7 +9,7 @@ import {
   output,
   signal,
   untracked,
-  ViewChild,
+  viewChild,
 } from "@angular/core";
 import { Router } from "@angular/router";
 import type { WireScratchpadNote } from "@kanera/shared/events";
@@ -209,7 +209,7 @@ export class ScratchpadPanelComponent implements OnDestroy {
     return seed ? [seed] : [];
   });
 
-  @ViewChild(DescriptionEditorComponent) private editorComponent?: DescriptionEditorComponent;
+  private readonly editorComponent = viewChild(DescriptionEditorComponent);
 
 
   private resizePointerId: number | null = null;
@@ -252,7 +252,7 @@ export class ScratchpadPanelComponent implements OnDestroy {
     // be applied to the wrong page's document after a fast tab switch.
     effect(() => {
       const note = this.activeNote();
-      const editor = this.editorComponent;
+      const editor = this.editorComponent();
       if (!note || !editor || !this.visible()) {
         this.scratchpad.registerEditor(null);
         return;

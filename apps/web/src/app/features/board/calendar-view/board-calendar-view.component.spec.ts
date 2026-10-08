@@ -405,6 +405,7 @@ describe("BoardCalendarViewComponent", () => {
         updateCard: vi.fn(),
         setCardAssignees: vi.fn(),
         setCardLabels: vi.fn(),
+        captureCustomFieldWrite: vi.fn(() => vi.fn()),
         moveCardToList: vi.fn(),
       };
       await TestBed.configureTestingModule({

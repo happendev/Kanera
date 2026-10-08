@@ -90,6 +90,8 @@ export class BoardState {
   private readonly cardDetailRealtimeRevisions = new Map<string, number>();
   readonly customFields = signal<AnyCustomField[]>([]);
   readonly customFieldValues = signal<CardCustomFieldValue[]>([]);
+  private readonly customFieldValueRevisions = new Map<string, number>();
+  private customFieldValueRevisionSeq = 0;
   // The board-open payload only inlines custom-field values for `showOnCard` fields. This is
   // false until the full set (for filters/List View/export) has been merged in via the
   // /boards/:id/custom-field-values endpoint. See BoardPage.ensureCustomFieldValuesLoaded.
@@ -649,8 +651,20 @@ export class BoardState {
     });
   }
 
+  /** Includes clear tombstones so an absent value cannot hide a newer SET/CLEAR sequence. */
+  customFieldValueRevision(cardId: string, fieldId: string): number {
+    const key = `${cardId}:${fieldId}`;
+    let revision = this.customFieldValueRevisions.get(key);
+    if (revision === undefined) {
+      revision = ++this.customFieldValueRevisionSeq;
+      this.customFieldValueRevisions.set(key, revision);
+    }
+    return revision;
+  }
+
   /** Upsert a single value row by its composite (cardId, fieldId) key. */
   upsertCustomFieldValue(value: CardCustomFieldValue) {
+    this.customFieldValueRevisions.set(`${value.cardId}:${value.fieldId}`, ++this.customFieldValueRevisionSeq);
     this.customFieldValues.update((values) => {
       const exists = values.some((v) => v.cardId === value.cardId && v.fieldId === value.fieldId);
       return exists
@@ -661,6 +675,7 @@ export class BoardState {
 
   /** Remove a single value row. */
   clearCustomFieldValue(cardId: string, fieldId: string) {
+    this.customFieldValueRevisions.set(`${cardId}:${fieldId}`, ++this.customFieldValueRevisionSeq);
     this.customFieldValues.update((values) => values.filter((v) => v.cardId !== cardId || v.fieldId !== fieldId));
   }
 
@@ -673,6 +688,9 @@ export class BoardState {
   }
 
   clear() {
+    // Do not reset the counter: a queued acknowledgement from an earlier board lifecycle must
+    // never compare equal to a newly captured absent-field revision after this map is cleared.
+    this.customFieldValueRevisions.clear();
     // clear() starts a different route lifecycle; removal tombstones only protect refreshes of the
     // current board and must not hide the same user on a board visited afterward.
     this.removedBoardMemberIds.clear();

@@ -79,6 +79,13 @@ export class AuthService {
   private refreshInFlight: Promise<RefreshResult> | null = null;
   private hydrateInFlight: Promise<void> | null = null;
   private refreshDisabled = false;
+  // Every installed/cleared session invalidates work started with the previous credentials.
+  // A boolean logout guard alone fails when another account signs in before an old response lands.
+  private sessionRevision = 0;
+  // Explicit sign-in/logout/support transitions replace an identity; routine token renewal does
+  // not. Organisation switches may overlap renewal, but must never finish in a replacement login.
+  private sessionGeneration = 0;
+  private organisationSwitchRevision = 0;
   private readonly _organisationSwitchPending = signal(false);
   private readonly _supportSession = signal<{ sessionId: string; orgName: string } | null>(null);
 
@@ -124,12 +131,23 @@ export class AuthService {
     return this.accessToken;
   }
 
+  getSessionGeneration(): number {
+    return this.sessionGeneration;
+  }
+
   broadcastLogout(): void {
     if (typeof window === "undefined") return;
     localStorage.setItem(STORAGE_KEYS.LOGOUT_SYNC, `${Date.now()}`);
   }
 
   setSession(accessToken: string, user: AuthUser): void {
+    this.sessionGeneration += 1;
+    this._organisationSwitchPending.set(false);
+    this.installSession(accessToken, user);
+  }
+
+  private installSession(accessToken: string, user: AuthUser): void {
+    this.invalidateSessionRequests();
     this.refreshDisabled = false;
     this.offlineSession.set(false);
     // Persist identity only: cookies and bearer tokens remain the server authentication boundary.
@@ -145,6 +163,9 @@ export class AuthService {
   // auto-refresh, or it would silently swap the browser back to the operator's own org via their
   // kanera_rt cookie. When the token lapses the operator re-mints from the portal.
   enterSupportSession(accessToken: string, user: AuthUser, session: { sessionId: string; orgName: string }): void {
+    this.sessionGeneration += 1;
+    this._organisationSwitchPending.set(false);
+    this.invalidateSessionRequests();
     this.forgetOfflineIdentity();
     // Suppress analytics before publishing the impersonated customer identity.
     this._supportSession.set(session);
@@ -158,6 +179,8 @@ export class AuthService {
   // authGuard can rehydrate the operator's own org from their still-valid kanera_rt cookie (the
   // support session never touched cookies).
   async exitSupportSession(): Promise<void> {
+    this.sessionGeneration += 1;
+    const revision = this.invalidateSessionRequests();
     const session = this._supportSession();
     const token = this.accessToken;
     if (session && token) {
@@ -171,6 +194,7 @@ export class AuthService {
         // operator cannot accidentally continue acting in the support session from this browser.
       }
     }
+    if (revision !== this.sessionRevision) return;
     this._supportSession.set(null);
     this.accessToken = null;
     this._user.set(null);
@@ -201,6 +225,8 @@ export class AuthService {
   }
 
   clearSession(options: { disableRefresh?: boolean; broadcast?: boolean } = {}): void {
+    this.sessionGeneration += 1;
+    this.invalidateSessionRequests();
     this.forgetOfflineIdentity();
     if (options.disableRefresh) this.refreshDisabled = true;
     this.accessToken = null;
@@ -214,10 +240,17 @@ export class AuthService {
     return (await this.refreshOnce()).token;
   }
 
+  private invalidateSessionRequests(): number {
+    this.refreshInFlight = null;
+    this.hydrateInFlight = null;
+    return ++this.sessionRevision;
+  }
+
   private async refreshOnce(): Promise<RefreshResult> {
     if (this.refreshDisabled) return { token: null, retryable: false };
     if (this.refreshInFlight) return this.refreshInFlight;
-    this.refreshInFlight = (async () => {
+    const revision = this.sessionRevision;
+    const pending = (async () => {
       if (this.refreshDisabled) return { token: null, retryable: false };
       try {
         const requestedClientId = this._user()?.activeClientId ?? this._user()?.clientId;
@@ -228,6 +261,7 @@ export class AuthService {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(requestedClientId ? { clientId: requestedClientId } : {}),
         });
+        if (revision !== this.sessionRevision) return { token: null, retryable: false };
         // A forced eviction can mean this membership was removed. The rotated cookie is already
         // returned on the 403, so retry once without the stale tab preference and let the server
         // choose the next active organisation.
@@ -240,7 +274,7 @@ export class AuthService {
             body: "{}",
           });
         }
-        if (this.refreshDisabled) return { token: null, retryable: false };
+        if (this.refreshDisabled || revision !== this.sessionRevision) return { token: null, retryable: false };
         if (!res.ok) {
           if (res.status === 401 || res.status === 403) {
             this.clearSession({ disableRefresh: true, broadcast: true });
@@ -248,21 +282,31 @@ export class AuthService {
           return { token: null, retryable: res.status === 502 || res.status === 503 || res.status === 504 };
         }
         const json = (await res.json()) as { accessToken: string; user: AuthUser };
-        this.setSession(json.accessToken, json.user);
+        if (revision !== this.sessionRevision) return { token: null, retryable: false };
+        this.installSession(json.accessToken, json.user);
         return { token: json.accessToken, retryable: false };
       } catch {
-        return { token: null, retryable: true };
-      } finally {
-        this.refreshInFlight = null;
+        return { token: null, retryable: revision === this.sessionRevision };
       }
-    })();
-    return this.refreshInFlight;
+    })().finally(() => {
+      if (this.refreshInFlight === pending) this.refreshInFlight = null;
+    });
+    this.refreshInFlight = pending;
+    return pending;
   }
 
   async switchOrg(clientId: string): Promise<AuthUser> {
+    const operation = ++this.organisationSwitchRevision;
+    const generation = this.sessionGeneration;
     this._organisationSwitchPending.set(true);
+    const assertCurrentSwitch = () => {
+      if (operation !== this.organisationSwitchRevision || generation !== this.sessionGeneration) {
+        throw new Error("session changed");
+      }
+    };
     try {
       let token = this.accessToken ?? await this.refresh();
+      assertCurrentSwitch();
       if (!token) throw new Error("not authenticated");
 
       const requestSwitch = (accessToken: string) => this.request(`${environment.apiUrl}/auth/switch-org`, {
@@ -273,21 +317,26 @@ export class AuthService {
       });
 
       let res = await requestSwitch(token);
+      assertCurrentSwitch();
       if (res.status === 401) {
         // Organisation switching uses the auth transport directly rather than ApiClient. Mirror its
         // single refresh-and-retry boundary so a five-minute access-token expiry cannot make the
         // selector appear to switch before silently restoring the organisation being left.
         token = await this.refresh();
+        assertCurrentSwitch();
         if (!token) throw new Error("not authenticated");
         res = await requestSwitch(token);
+        assertCurrentSwitch();
       }
       if (!res.ok) throw new Error(`organisation switch failed (${res.status})`);
       const session = (await res.json()) as { accessToken: string; user: AuthUser };
+      assertCurrentSwitch();
       this.setSession(session.accessToken, session.user);
+      this._organisationSwitchPending.set(true);
       return session.user;
     } catch (error) {
       // A rejected switch leaves the existing shell usable and allows another attempt.
-      this._organisationSwitchPending.set(false);
+      if (operation === this.organisationSwitchRevision) this._organisationSwitchPending.set(false);
       throw error;
     }
   }
@@ -295,24 +344,28 @@ export class AuthService {
   async hydrate(): Promise<void> {
     if (this._user()) return;
     if (this.hydrateInFlight) return this.hydrateInFlight;
-    this.hydrateInFlight = (async () => {
+    const revision = this.sessionRevision;
+    const pending = (async () => {
       // A browser-declared outage can open cached routes immediately. A failed transport below
       // also supports outages where navigator.onLine still reports a working network interface.
       if (typeof navigator !== "undefined" && !navigator.onLine && this.restoreOfflineIdentity()) return;
       let result = await this.refreshOnce();
+      if (result.token || revision !== this.sessionRevision) return;
       if (result.retryable && this.restoreOfflineIdentity()) return;
       // Dev rebuilds can reload the browser while the API watcher is briefly between processes.
       // Keep route guards pending through that transient gap, but never retry a rejected cookie.
       for (const delay of HYDRATION_RETRY_DELAYS_MS) {
-        if (result.token || !result.retryable || this.refreshDisabled) return;
+        if (result.token || !result.retryable || this.refreshDisabled || revision !== this.sessionRevision) return;
         await new Promise((resolve) => setTimeout(resolve, delay));
+        if (revision !== this.sessionRevision) return;
         result = await this.refreshOnce();
       }
     })();
+    this.hydrateInFlight = pending;
     try {
-      await this.hydrateInFlight;
+      await pending;
     } finally {
-      this.hydrateInFlight = null;
+      if (this.hydrateInFlight === pending) this.hydrateInFlight = null;
     }
   }
 
@@ -327,11 +380,15 @@ export class AuthService {
     // existing token still carries stale organisation-role claims.
     let token = options.refreshToken ? await this.refresh() : this.accessToken ?? await this.refresh();
     if (!token) return false;
+    let revision = this.sessionRevision;
     let res = await load(token);
+    if (revision !== this.sessionRevision) return false;
     if (res.status === 401) {
       token = await this.refresh();
       if (!token) return false;
+      revision = this.sessionRevision;
       res = await load(token);
+      if (revision !== this.sessionRevision) return false;
     }
     if (res.status === 401) {
       this.clearSession();
@@ -340,7 +397,8 @@ export class AuthService {
     if (!res.ok) return false;
 
     const user = (await res.json()) as AuthUser;
-    this.setSession(token, user);
+    if (revision !== this.sessionRevision) return false;
+    this.installSession(token, user);
     return true;
   }
 
@@ -351,6 +409,7 @@ export class AuthService {
   private async syncTimezone(user: AuthUser): Promise<void> {
     const timezone = viewerTimeZone();
     if (user.timezone === timezone) return;
+    const revision = this.sessionRevision;
     try {
       const res = await this.request(`${environment.apiUrl}/auth/me`, {
         method: "PATCH",
@@ -363,7 +422,10 @@ export class AuthService {
       });
       if (!res.ok) return;
       const updated = (await res.json()) as AuthUser;
-      this._user.set(updated);
+      if (revision !== this.sessionRevision) return;
+      // This response only acknowledges timezone; preserve profile/permission events received since
+      // it started instead of replacing the whole live user with its earlier snapshot.
+      this.updateUser((current) => ({ ...current, timezone: updated.timezone }));
     } catch {
       // Timezone sync is best-effort; auth should not fail if the browser blocks it.
     }

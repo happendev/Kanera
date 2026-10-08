@@ -316,16 +316,24 @@ export class ScratchpadService {
   /**
    * Adopt a server list.
    *
-   * A REST read is authoritative for everything except a page whose editor is *currently dirty*: the
-   * user's unsaved keystrokes outrank a body the server has not seen yet. Everything else — titles,
-   * positions, other pages' bodies — is replaced.
+   * A REST read is authoritative except for dirty editors and queued/in-flight body writes:
+   * unsaved keystrokes outrank a body the server has not seen yet, including a page switched away
+   * from during its save. Clean mounted editors adopt the same content as the service snapshot.
    */
   private applyNotes(notes: WireScratchpadNote[]): void {
     const dirtyActiveId = this.editor && this.editor.isDirty() ? this.editor.noteId : null;
     const previous = new Map(this._notes().map((note) => [note.id, note]));
     this._notes.set(notes.map((note) => {
-      if (note.id !== dirtyActiveId) {
+      const hasLocalBodyWrite = this.pending.get(note.id)?.content !== undefined
+        || this.inFlight.get(note.id)?.content !== undefined;
+      if (note.id !== dirtyActiveId && !hasLocalBodyWrite) {
         this.lastAckedContent.set(note.id, note.content);
+        // Reconnect/foreground reads recover events the socket never delivered. The mounted
+        // editor is seeded only when its note changes, so replacing service state alone leaves
+        // its old document visible and the next keystroke would overwrite the recovered text.
+        if (this.editor?.noteId === note.id && this.editor.currentMarkdown() !== note.content) {
+          this.editor.replaceWithCleanMarkdown(note.content);
+        }
         return note;
       }
       const local = previous.get(note.id);

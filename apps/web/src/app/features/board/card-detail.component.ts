@@ -1,6 +1,8 @@
 import { CdkTrapFocus } from "@angular/cdk/a11y";
 import { KeyboardShortcutsService } from "../../core/keyboard/keyboard-shortcuts.service";
 import { ToastService } from "../../shared/toast.service";
+import { PendingCustomFieldIds } from "../../shared/pending-custom-field-ids";
+import { captureBoardCustomFieldWrite } from "./custom-field-write";
 import type { CdkDragDrop, CdkDragMove } from "@angular/cdk/drag-drop";
 import { CdkDrag, CdkDragHandle, CdkDragPreview, CdkDropList, moveItemInArray, transferArrayItem } from "@angular/cdk/drag-drop";
 import { CdkScrollable } from "@angular/cdk/scrolling";
@@ -151,7 +153,8 @@ export class CardDetailComponent {
   private readonly destroyRef = inject(DestroyRef);
   private readonly shortcuts = inject(KeyboardShortcutsService);
   protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
-  private readonly customFieldSaveKeys = new Map<string, string>();
+  private readonly customFieldSaveKeys = new Map<string, { saveKey: string }>();
+  private readonly pendingFieldIds = new PendingCustomFieldIds();
   readonly imageLightbox = inject(ImageLightboxService);
 
   // effectiveMode forces modal below lg (panel option removed); canToggle hides
@@ -694,10 +697,9 @@ export class CardDetailComponent {
       .map((value) => [value.fieldId, value]));
   });
   readonly selectedOptionsByFieldId = computed(() => {
-    const values = this.customFieldValuesByFieldId();
     return new Map(this.customFields().map((field) => {
       const optionsById = new Map(("options" in field ? field.options : []).map((option) => [option.id, option]));
-      const options = (values.get(field.id)?.valueOptionIds ?? []).flatMap((id) => {
+      const options = this.optionIdsFor(field.id).flatMap((id) => {
         const option = optionsById.get(id);
         return option ? [option] : [];
       });
@@ -706,9 +708,9 @@ export class CardDetailComponent {
   });
   readonly selectedUsersByFieldId = computed(() => {
     const members = this.members();
-    return new Map([...this.customFieldValuesByFieldId()].map(([fieldId, value]) => {
-      const selectedIds = new Set(value.valueUserIds ?? []);
-      return [fieldId, members.filter((member) => selectedIds.has(member.userId))] as const;
+    return new Map(this.customFields().map((field) => {
+      const selectedIds = new Set(this.userIdsFor(field.id));
+      return [field.id, members.filter((member) => selectedIds.has(member.userId))] as const;
     }));
   });
   readonly checklistItemPresentationById = computed(() => {
@@ -1258,8 +1260,11 @@ export class CardDetailComponent {
       void this.refreshDetailFromNetwork(card.id, card.boardId);
       // Don't wait for the card:links:changed echo: the author should see a new link immediately.
       this.refreshLinkedItems(card.id);
+    } catch {
+      this.toasts.error("Couldn't save the description. Your draft is still available; try again.");
     } finally {
       this.savingDescription.set(false);
+      this.descriptionEditor()?.setSaving(false);
     }
   }
 
@@ -1304,11 +1309,11 @@ export class CardDetailComponent {
   }
 
   optionIdsFor(fieldId: string): string[] {
-    return this.valueRow(fieldId)?.valueOptionIds ?? [];
+    return this.pendingFieldIds.value(this.customFieldRequestKey(fieldId), this.valueRow(fieldId)?.valueOptionIds ?? []);
   }
 
   userIdsFor(fieldId: string): string[] {
-    return this.valueRow(fieldId)?.valueUserIds ?? [];
+    return this.pendingFieldIds.value(this.customFieldRequestKey(fieldId), this.valueRow(fieldId)?.valueUserIds ?? []);
   }
 
   /** Active options for a field, tolerating the plain CustomField shape (no options). */
@@ -1394,15 +1399,26 @@ export class CardDetailComponent {
   async clearCfField(field: AnyCustomField) {
     if (!this.canEdit()) return;
     this.cfPickerFieldId.set(null);
+    if (field.type === "select" || field.type === "user") {
+      await this.writeIds(field.id, field.type === "select" ? "valueOptionIds" : "valueUserIds", []);
+      return;
+    }
     await this.api.delete(`/cards/${this.card().id}/custom-fields/${field.id}`);
   }
 
   private async writeIds(fieldId: string, key: "valueOptionIds" | "valueUserIds", ids: string[]) {
-    if (ids.length === 0) {
-      await this.api.delete(`/cards/${this.card().id}/custom-fields/${fieldId}`);
-      return;
-    }
-    await this.api.put(`/cards/${this.card().id}/custom-fields/${fieldId}`, { [key]: ids });
+    const cardId = this.card().id;
+    const boardId = this.card().boardId;
+    await this.pendingFieldIds.write(`${cardId}:${fieldId}`, ids, async (next) => {
+      const settle = captureBoardCustomFieldWrite(this.state, cardId, fieldId, boardId);
+      if (next.length === 0) {
+        await this.api.delete(`/cards/${cardId}/custom-fields/${fieldId}`);
+        settle(null);
+      } else {
+        const value = await this.api.put<CardCustomFieldValue>(`/cards/${cardId}/custom-fields/${fieldId}`, { [key]: next });
+        settle(value);
+      }
+    });
   }
 
   private customFieldRequestKey(fieldId: string): string {
@@ -1410,13 +1426,15 @@ export class CardDetailComponent {
   }
 
   private async saveCustomFieldOnce(fieldKey: string, saveKey: string, save: () => Promise<unknown>) {
-    if (this.customFieldSaveKeys.get(fieldKey) === saveKey) return;
-    this.customFieldSaveKeys.set(fieldKey, saveKey);
+    if (this.customFieldSaveKeys.get(fieldKey)?.saveKey === saveKey) return;
+    const request = { saveKey };
+    this.customFieldSaveKeys.set(fieldKey, request);
     try {
       await save();
-    } catch (err) {
-      if (this.customFieldSaveKeys.get(fieldKey) === saveKey) this.customFieldSaveKeys.delete(fieldKey);
-      throw err;
+    } finally {
+      // Only deduplicate overlapping Enter/blur writes. A later realtime edit may legitimately be
+      // changed back to this value, so successful writes must not become permanent memo entries.
+      if (this.customFieldSaveKeys.get(fieldKey) === request) this.customFieldSaveKeys.delete(fieldKey);
     }
   }
 
