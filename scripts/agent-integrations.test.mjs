@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
 const canonicalSkillPath = new URL("../integrations/skills/kanera/SKILL.md", import.meta.url);
@@ -24,12 +24,13 @@ void test("the Codex plugin bundles the canonical Kanera skill", async () => {
   assert.match(canonicalSkill, /npm install --global @kanera\/cli/u);
 });
 
-void test("the Codex plugin advertises the registered Kanera app", async () => {
-  const [manifest, app, mcpPackage, server] = await Promise.all([
+void test("the submission plugin declares the hosted Kanera MCP server", async () => {
+  const [manifest, mcp, mcpPackage, server, files] = await Promise.all([
     readJson(new URL(".codex-plugin/plugin.json", pluginRoot)),
-    readJson(new URL(".app.json", pluginRoot)),
+    readJson(new URL(".mcp.json", pluginRoot)),
     readJson(new URL("../apps/mcp/package.json", import.meta.url)),
     readJson(new URL("../apps/mcp/server.json", import.meta.url)),
+    readdir(pluginRoot, { recursive: true }),
   ]);
 
   assert.equal(manifest.name, "kanera");
@@ -38,11 +39,15 @@ void test("the Codex plugin advertises the registered Kanera app", async () => {
   assert.equal(mcpPackage.version, server.version);
   assert.equal(manifest.version, server.version);
   assert.equal(manifest.skills, "./skills/");
-  assert.equal(manifest.apps, "./.app.json");
+  assert.equal(manifest.apps, undefined);
+  assert.equal(manifest.mcpServers, "./.mcp.json");
+  assert.ok(!files.some((file) => file.endsWith(".app.json")));
   assert.deepEqual(manifest.interface.capabilities, ["Read", "Write"]);
-  assert.ok(manifest.interface.defaultPrompt.some((prompt) => prompt.includes("DEV-938")));
+  assert.ok(manifest.interface.defaultPrompt.some((prompt) => prompt.includes("Kanera")));
   assert.match(manifest.description, /cards/u);
-  assert.match(app.apps.kanera.id, /^asdk_app_[a-z0-9]+$/u);
+  assert.deepEqual(mcp.mcpServers, {
+    kanera: { url: "https://mcp.kanera.app/mcp" },
+  });
 });
 
 void test("MCP registry releases trigger the publishing workflow", async () => {

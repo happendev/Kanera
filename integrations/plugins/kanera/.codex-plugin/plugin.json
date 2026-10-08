@@ -1,7 +1,7 @@
 {
   "name": "kanera",
   "version": "4.0.0",
-  "description": "Read and manage Kanera cards, boards, comments, notes, priorities, automations, and project reports.",
+  "description": "Plan work, update cards, and keep track of project progress in Kanera.",
   "author": {
     "name": "Happen Software Limited",
     "email": "hi@kanera.app",
@@ -18,11 +18,11 @@
     "mcp"
   ],
   "skills": "./skills/",
-  "apps": "./.app.json",
+  "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Kanera",
-    "shortDescription": "Read and update Kanera project work",
-    "longDescription": "Use the connected Kanera app to find, inspect, create, and update cards and other permission-scoped project work.",
+    "shortDescription": "Manage Kanera project work",
+    "longDescription": "Keep your projects moving with Kanera. Find out what needs attention, catch up on recent changes, and turn plans into cards and checklists. Update work, add comments and notes, organise what to tackle next, and get a clear picture of progress across your boards. Connect your Kanera account to get started. You can view and update work according to your existing Kanera permissions.",
     "developerName": "Happen Software Limited",
     "category": "Productivity",
     "capabilities": [
@@ -33,10 +33,13 @@
     "privacyPolicyURL": "https://www.kanera.app/privacy",
     "termsOfServiceURL": "https://www.kanera.app/terms",
     "defaultPrompt": [
-      "Update Kanera card DEV-938 with my investigation findings and agreed plan.",
+      "Find a Kanera card by its key and summarize its status and recent activity.",
       "Summarize my active Kanera work and flag blockers.",
       "Find overdue Kanera cards assigned to me."
     ],
-    "brandColor": "#14B8A6"
+    "brandColor": "#14B8A6",
+    "supportURL": "https://www.kanera.app/contact",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/icon.png"
   }
 }
