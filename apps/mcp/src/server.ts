@@ -1485,7 +1485,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
         : null,
     };
   }, ctx);
-  registerKaneraTool(server, "search.content", "Use this when you need to find live Kanera content by words, phrases, card keys, or filenames. Searches accessible cards, notes, comments, and attachment filenames and returns one relevance-ranked, bounded result stream with source metadata and canonical links.", {
+  registerKaneraTool(server, "search.content", "Use this when you need to find live Kanera content by words, phrases, card keys, or filenames. Searches accessible cards, notes, comments, and attachment filenames and returns one relevance-ranked, bounded result stream with source metadata and canonical links. Without a scope it covers every board and note the credential can access, excluding archived cards, so an empty result means nothing accessible matches; report that instead of enumerating boards.", {
     query: z.string().trim().min(1).max(200).describe("Words, quoted phrase, or card key to find, for example landing-page copy or MKT-42."),
     scope: workScope,
     types: z.array(z.enum(SEARCH_RESULT_TYPES)).min(1).max(4).optional().describe("Optional entity types to search; omit to search all supported content."),
