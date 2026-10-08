@@ -70,6 +70,13 @@ export function descriptionDiff(fromValue: unknown, toValue: unknown): Descripti
   return { lines: buildUnifiedLines(ops), hasChanges: true, formattingOnly: false };
 }
 
+/** Feed rows only need to know whether their View changes button belongs there. Keep the
+ * semantic/formatting rules identical to the modal without constructing an edit script. */
+export function hasDescriptionChanges(fromValue: unknown, toValue: unknown): boolean {
+  return normalizeDescriptionValue(fromValue) !== normalizeDescriptionValue(toValue)
+    || whitespaceNormalize(fromValue) !== whitespaceNormalize(toValue);
+}
+
 export function hasDescriptionDiffPayload(payload: Record<string, unknown>): boolean {
   return Object.prototype.hasOwnProperty.call(payload, "fromValue")
     && Object.prototype.hasOwnProperty.call(payload, "toValue");
@@ -299,24 +306,19 @@ function gapLine(count: number): DescriptionDiffUnifiedLine {
 }
 
 function lineDiff(fromLines: string[], toLines: string[]): LineOp[] {
-  const table = lcsTable(fromLines, toLines);
+  const matches = commonPairs(fromLines, toLines);
   const ops: LineOp[] = [];
-  let i = fromLines.length;
-  let j = toLines.length;
-  while (i > 0 || j > 0) {
-    if (i > 0 && j > 0 && fromLines[i - 1] === toLines[j - 1]) {
-      ops.push({ type: "equal", value: fromLines[i - 1]! });
-      i -= 1;
-      j -= 1;
-    } else if (j > 0 && (i === 0 || table[i]![j - 1]! >= table[i - 1]![j]!)) {
-      ops.push({ type: "added", value: toLines[j - 1]! });
-      j -= 1;
-    } else {
-      ops.push({ type: "removed", value: fromLines[i - 1]! });
-      i -= 1;
+  let from = 0;
+  let to = 0;
+  for (const [i, j] of [...matches, [fromLines.length, toLines.length]]) {
+    while (from < i!) ops.push({ type: "removed", value: fromLines[from++]! });
+    while (to < j!) ops.push({ type: "added", value: toLines[to++]! });
+    if (i! < fromLines.length) {
+      ops.push({ type: "equal", value: fromLines[from++]! });
+      to += 1;
     }
   }
-  return ops.reverse();
+  return ops;
 }
 
 function wordDiffChunks(fromLine: string | undefined, toLine: string | undefined, side: DescriptionDiffSide): DescriptionDiffChunk[] {
@@ -325,23 +327,7 @@ function wordDiffChunks(fromLine: string | undefined, toLine: string | undefined
   if (other === undefined) return [{ text, changed: true }];
 
   const tokens = tokenizeWords(text);
-  const otherTokens = tokenizeWords(other);
-  const table = lcsTable(tokens, otherTokens);
-  const commonIndexes = new Set<number>();
-  let i = tokens.length;
-  let j = otherTokens.length;
-  while (i > 0 && j > 0) {
-    if (tokens[i - 1] === otherTokens[j - 1]) {
-      commonIndexes.add(i - 1);
-      i -= 1;
-      j -= 1;
-    } else if (table[i]![j - 1]! >= table[i - 1]![j]!) {
-      j -= 1;
-    } else {
-      i -= 1;
-    }
-  }
-
+  const commonIndexes = new Set(commonPairs(tokens, tokenizeWords(other)).map(([index]) => index));
   return mergeChunks(tokens.map((token, index) => ({ text: token, changed: !commonIndexes.has(index) })));
 }
 
@@ -359,14 +345,70 @@ function mergeChunks(chunks: DescriptionDiffChunk[]): DescriptionDiffChunk[] {
   return merged;
 }
 
-function lcsTable<T>(a: readonly T[], b: readonly T[]): number[][] {
-  const table = Array.from({ length: a.length + 1 }, () => Array.from({ length: b.length + 1 }, () => 0));
-  for (let i = 1; i <= a.length; i += 1) {
-    for (let j = 1; j <= b.length; j += 1) {
-      table[i]![j] = a[i - 1] === b[j - 1]
-        ? table[i - 1]![j - 1]! + 1
-        : Math.max(table[i - 1]![j]!, table[i]![j - 1]!);
+/**
+ * Exact LCS backtracking with linear working memory. The previous full number[][] table grew
+ * quadratically even for a one-word edit. A rolling row carries the column where the canonical
+ * backtrack crosses the middle row, then each half reconstructs its own matches. Propagating that
+ * crossing (rather than arbitrarily choosing among equal Hirschberg scores) preserves the old
+ * left-on-ties alignment, including repeated words and whitespace.
+ *
+ * Equal suffixes are always consumed first by the old bottom-right backtrack, so trimming them
+ * is exact and makes the common small-edit case proportional to the changed prefix. A prefix
+ * cannot be trimmed the same way: repeated tokens can align with a later occurrence.
+ */
+function commonPairs(a: readonly string[], b: readonly string[]): [number, number][] {
+  const result: [number, number][] = [];
+  const visit = (aStart: number, aEnd: number, bStart: number, bEnd: number): void => {
+    const originalEnd = aEnd;
+    while (aEnd > aStart && bEnd > bStart && a[aEnd - 1] === b[bEnd - 1]) {
+      aEnd -= 1;
+      bEnd -= 1;
+    }
+    if (aEnd > aStart && bEnd > bStart) {
+      if (aEnd - aStart === 1) {
+        for (let j = bEnd - 1; j >= bStart; j -= 1) {
+          if (a[aStart] === b[j]) { result.push([aStart, j]); break; }
+        }
+      } else {
+        const middle = aStart + Math.floor((aEnd - aStart) / 2);
+        const split = crossingColumn(a, b, aStart, aEnd, bStart, bEnd, middle);
+        visit(aStart, middle, bStart, split);
+        visit(middle, aEnd, split, bEnd);
+      }
+    }
+    while (aEnd < originalEnd) result.push([aEnd++, bEnd++]);
+  };
+  visit(0, a.length, 0, b.length);
+  return result;
+}
+
+function crossingColumn(
+  a: readonly string[], b: readonly string[],
+  aStart: number, aEnd: number, bStart: number, bEnd: number, middle: number,
+): number {
+  const width = bEnd - bStart;
+  const scores = new Uint32Array(width + 1);
+  const crossings = Uint32Array.from({ length: width + 1 }, (_, index) => index);
+  for (let i = aStart; i < aEnd; i += 1) {
+    let diagonal = 0;
+    let diagonalCrossing = 0;
+    for (let j = 1; j <= width; j += 1) {
+      const above = scores[j]!;
+      const aboveCrossing = crossings[j]!;
+      let crossing: number;
+      if (a[i] === b[bStart + j - 1]) {
+        scores[j] = diagonal + 1;
+        crossing = diagonalCrossing;
+      } else if (scores[j - 1]! >= above) {
+        scores[j] = scores[j - 1]!;
+        crossing = crossings[j - 1]!;
+      } else {
+        crossing = aboveCrossing;
+      }
+      if (i >= middle) crossings[j] = crossing;
+      diagonal = above;
+      diagonalCrossing = aboveCrossing;
     }
   }
-  return table;
+  return bStart + crossings[width]!;
 }

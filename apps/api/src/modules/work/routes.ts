@@ -9,7 +9,6 @@ import type {
   PortfolioSummary,
   SavedWorkView,
   WorkCatalog,
-  WorkDoneEvent,
   WorkDoneSummaryResponse,
   WorkFilters,
   WorkQueryResponse,
@@ -84,6 +83,7 @@ import {
   assertWorkDoneWindow,
   loadWorkDone,
   loadWorkDoneSummary,
+  loadWorkDonePage,
   type LoadWorkDoneOptions,
 } from "../../lib/work-done.js";
 import { escapedSearchPattern } from "../../lib/search-pattern.js";
@@ -1251,16 +1251,6 @@ async function agentWorkSources(
   };
 }
 
-function workHistorySummary(events: WorkDoneEvent[]) {
-  const counts = { created: 0, moved: 0, completed: 0, checklistItemCompleted: 0 };
-  const cardIds = new Set<string>();
-  for (const event of events) {
-    counts[event.type] += 1;
-    cardIds.add(event.card.id);
-  }
-  return { ...counts, cardsTouched: cardIds.size, totalEvents: events.length };
-}
-
 async function agentWorkHistory(auth: AuthClaims, input: unknown): Promise<AgentWorkHistoryResponse> {
   const query = dto.agentWorkHistoryQueryBody.parse(input ?? {});
   const cursor = decodeAgentWorkCursor(query.cursor);
@@ -1298,7 +1288,7 @@ async function agentWorkHistory(auth: AuthClaims, input: unknown): Promise<Agent
   })).digest("base64url");
   if (cursor && cursor.signature !== signature) throw badRequest("work-history cursor does not match this query");
 
-  const result = await loadWorkDone({
+  const result = await loadWorkDonePage({
     clientId: auth.cid,
     boardIds: scopedBoards.map((board) => board.id),
     from: range.from,
@@ -1308,17 +1298,14 @@ async function agentWorkHistory(auth: AuthClaims, input: unknown): Promise<Agent
     actorUserId,
     visibilityUserId: auth.sub,
     visibilityRestrictedBoardIds: restrictedBoardIds,
-  });
-  const remaining = cursor
-    ? result.events.filter((event) => event.at < cursor.at || (event.at === cursor.at && event.id > cursor.id))
-    : result.events;
-  const page = remaining.slice(0, query.limit);
-  const hasMore = remaining.length > query.limit;
+  }, { limit: query.limit, cursor });
+  const page = result.events;
+  const hasMore = result.hasMore;
   const events = page.map((event) => ({ ...event, card: cardWithUrl(event.card) }));
   return {
     actor,
     range: { from: range.from.toISOString(), to: range.to.toISOString(), timeZone: range.timeZone },
-    summary: workHistorySummary(result.events),
+    summary: result.summary,
     events,
     sources: await agentWorkSources(scopedBoards, events.map((event) => event.card)),
     nextCursor: hasMore

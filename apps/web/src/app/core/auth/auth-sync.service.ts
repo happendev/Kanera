@@ -1,4 +1,4 @@
-import { DestroyRef, Injectable, computed, effect, inject } from "@angular/core";
+import { DestroyRef, Injectable, computed, effect, inject, untracked } from "@angular/core";
 import { Router } from "@angular/router";
 import { SERVER_EVENTS, type ServerToClientEvents } from "@kanera/shared/events";
 import { AuthService, authenticatedLandingPath } from "./auth.service";
@@ -34,7 +34,12 @@ export class AuthSyncService {
         // A reload invalidated by logout must not later pull a visitor from signup back to login.
         if (hadSession) {
           this.sockets.disconnect();
-          void this.router.navigateByUrl("/login");
+          // Invite acceptance can deliberately clear the old session while navigating to login
+          // with an MFA challenge. A second navigation would discard that one-use handoff state.
+          // Reading navigation untracked keeps this effect scoped to identity changes alone.
+          const navigation = untracked(this.router.currentNavigation);
+          const destination = navigation ? this.router.serializeUrl(navigation.extractedUrl).split(/[?#]/, 1)[0] : null;
+          if (destination !== "/login") void this.router.navigateByUrl("/login");
         }
         return;
       }

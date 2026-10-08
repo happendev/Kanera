@@ -5,7 +5,7 @@ import { and, eq, ilike, inArray, like, or } from "drizzle-orm";
 import type { AuthClaims } from "../auth/plugin.js";
 import { db, type TxOnly as Tx } from "../db.js";
 import { env } from "../env.js";
-import { assertBoardAccess, assertCardAccess, assertWorkspaceAccess } from "./access.js";
+import { assignedCardVisibility, assertBoardAccess, assertCardAccess, assertWorkspaceAccess } from "./access.js";
 import { resolveCardKey } from "./card-keys.js";
 import { emitToBoard, emitToUser, emitToWorkspace } from "../realtime/emit.js";
 
@@ -280,6 +280,63 @@ export async function canReadNote(claims: AuthClaims, note: Pick<Note, "workspac
   }
 }
 
+/**
+ * A link panel can reference many entities on one board. Resolve each scope once for this read;
+ * never cache across requests, since membership changes must apply on the next panel refresh.
+ * Assigned-items-only remains a per-card decision, checked in one batch after board authorization.
+ */
+function linkedEntityAccess(claims: AuthClaims) {
+  const boardChecks = new Map<string, ReturnType<typeof assertBoardAccess>>();
+  const workspaceChecks = new Map<string, ReturnType<typeof assertWorkspaceAccess>>();
+  const boardAccess = (boardId: string) => {
+    let check = boardChecks.get(boardId);
+    if (!check) {
+      check = assertBoardAccess(claims, boardId, "observer");
+      boardChecks.set(boardId, check);
+    }
+    return check;
+  };
+  return {
+    async canReadNote(note: Pick<Note, "workspaceId" | "boardId" | "scope" | "ownerId">): Promise<boolean> {
+      try {
+        if (note.boardId) await boardAccess(note.boardId);
+        else {
+          let check = workspaceChecks.get(note.workspaceId);
+          if (!check) {
+            check = assertWorkspaceAccess(claims, note.workspaceId, "member");
+            workspaceChecks.set(note.workspaceId, check);
+          }
+          await check;
+        }
+        return note.scope === "team" || note.ownerId === claims.sub;
+      } catch {
+        return false;
+      }
+    },
+    async readableCardIds(rows: { id: string; boardId: string }[]): Promise<Set<string>> {
+      const visible = new Set<string>();
+      const restricted = new Set<string>();
+      for (const row of rows) {
+        try {
+          const access = await boardAccess(row.boardId);
+          if (access.assignedItemsOnly) restricted.add(row.id);
+          else visible.add(row.id);
+        } catch {
+          // A link may outlive the viewer's membership; hide it rather than fail the whole panel.
+        }
+      }
+      if (restricted.size) {
+        const assigned = await db.select({ id: cards.id }).from(cards).where(and(
+          inArray(cards.id, [...restricted]),
+          assignedCardVisibility(claims.sub),
+        ));
+        for (const row of assigned) visible.add(row.id);
+      }
+      return visible;
+    },
+  };
+}
+
 export async function loadLinkedNotesForCard(claims: AuthClaims, cardId: string, workspaceId: string): Promise<LinkedInternalSummary[]> {
   // Both directions in one OR: the planner resolves this with a BitmapOr across the two directional
   // indexes (internal_links_workspace_source_idx / _target_idx), so it is already index-served —
@@ -319,10 +376,12 @@ export async function loadLinkedNotesForCard(claims: AuthClaims, cardId: string,
     .innerJoin(lists, eq(lists.id, cards.listId))
     .where(eq(internalLinks.workspaceId, workspaceId));
 
+  const access = linkedEntityAccess(claims);
+  const readableCardIds = await access.readableCardIds(cardRows);
   const seen = new Set<string>();
   const summaries: LinkedInternalSummary[] = [];
   for (const row of noteRows) {
-    if (seen.has(`note:${row.note.id}`) || !(await canReadNote(claims, row.note))) continue;
+    if (seen.has(`note:${row.note.id}`) || !(await access.canReadNote(row.note))) continue;
     seen.add(`note:${row.note.id}`);
     summaries.push({
       kind: "note",
@@ -338,25 +397,20 @@ export async function loadLinkedNotesForCard(claims: AuthClaims, cardId: string,
   }
 
   for (const row of cardRows) {
-    if (row.id === cardId || seen.has(`card:${row.id}`)) continue;
-    try {
-      await assertCardAccess(claims, row, "observer");
-      seen.add(`card:${row.id}`);
-      summaries.push({
-        kind: "card",
-        id: row.id,
-        organisationKey: row.organisationKey,
-        key: row.key,
-        title: row.title,
-        boardId: row.boardId,
-        boardName: row.boardName,
-        listName: row.listName,
-        icon: row.boardIcon,
-        iconColor: row.boardIconColor,
-      });
-    } catch {
-      // Related cards follow the same non-leaking board access rule as link resolution.
-    }
+    if (row.id === cardId || seen.has(`card:${row.id}`) || !readableCardIds.has(row.id)) continue;
+    seen.add(`card:${row.id}`);
+    summaries.push({
+      kind: "card",
+      id: row.id,
+      organisationKey: row.organisationKey,
+      key: row.key,
+      title: row.title,
+      boardId: row.boardId,
+      boardName: row.boardName,
+      listName: row.listName,
+      icon: row.boardIcon,
+      iconColor: row.boardIconColor,
+    });
   }
 
   return summaries.sort((a, b) => (a.title || "Untitled").localeCompare(b.title || "Untitled"));
@@ -469,6 +523,7 @@ export async function loadBacklinksForNote(claims: AuthClaims, note: Note): Prom
   const cardIds = rows.filter((r) => r.sourceType === "card").map((r) => r.sourceId);
   const noteIds = rows.filter((r) => r.sourceType === "note").map((r) => r.sourceId);
   const backlinks: BacklinkSummary[] = [];
+  const access = linkedEntityAccess(claims);
 
   if (cardIds.length) {
     const cardRows = await db.select({
@@ -482,12 +537,10 @@ export async function loadBacklinksForNote(claims: AuthClaims, note: Note): Prom
       boardIconColor: boards.iconColor,
       listName: lists.name,
     }).from(cards).innerJoin(boards, eq(boards.id, cards.boardId)).innerJoin(lists, eq(lists.id, cards.listId)).where(inArray(cards.id, cardIds));
+    const readableCardIds = await access.readableCardIds(cardRows);
     for (const row of cardRows) {
-      try {
-        await assertCardAccess(claims, row, "observer");
+      if (readableCardIds.has(row.id)) {
         backlinks.push({ kind: "card", id: row.id, organisationKey: row.organisationKey, key: row.key, title: row.title, boardId: row.boardId, boardName: row.boardName, listName: row.listName, icon: row.boardIcon, iconColor: row.boardIconColor });
-      } catch {
-        // Backlinks follow the same non-leaking access rule as link resolution.
       }
     }
   }
@@ -495,7 +548,7 @@ export async function loadBacklinksForNote(claims: AuthClaims, note: Note): Prom
   if (noteIds.length) {
     const noteRows = await db.select({ note: notes, boardName: boards.name }).from(notes).leftJoin(boards, eq(boards.id, notes.boardId)).where(inArray(notes.id, noteIds));
     for (const row of noteRows) {
-      if (!(await canReadNote(claims, row.note))) continue;
+      if (!(await access.canReadNote(row.note))) continue;
       backlinks.push({ kind: "note", id: row.note.id, title: row.note.title, workspaceId: row.note.workspaceId, boardId: row.note.boardId, boardName: row.boardName, scope: row.note.scope, icon: row.note.icon, color: row.note.color });
     }
   }

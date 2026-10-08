@@ -221,6 +221,14 @@ export const activityEvents = pgTable(
     index("activity_events_board_id_created_at_idx").on(t.boardId, t.createdAt),
     index("activity_events_workspace_id_created_at_idx").on(t.workspaceId, t.createdAt),
     index("activity_events_client_id_created_at_idx").on(t.clientId, t.createdAt),
+    // Comment mirror provenance and direct card activity filters know the entity, not its board.
+    // Keeping entity identity first avoids scanning every tenant's audit history on a comment read.
+    index("activity_events_entity_created_at_idx").on(t.entityType, t.entityId, t.createdAt),
+    // Inactivity includes both direct entities and payload references, including historical card
+    // events with a cardId payload. Index both arms without narrowing that established OR rule.
+    index("activity_events_payload_card_created_at_idx")
+      .on(sql`(${t.payload}->>'cardId')`, t.createdAt)
+      .where(sql`${t.feedVisible} = true and ${t.payload}->>'cardId' is not null`),
     // Global Work annotates a page of cards from both direct card events and child-entity events
     // whose parent card id is stored in payload. Match that CASE expression exactly so the bounded
     // page lookup does not scan the full visible activity feed.

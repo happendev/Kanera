@@ -283,6 +283,9 @@ export class GlobalWorkState {
   private realtimeAttached = false;
   private realtimeRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private realtimeRefreshNeedsCatalog = false;
+  private backgroundRefreshInFlight = false;
+  private backgroundRefreshQueued = false;
+  private destroyed = false;
   private queuedWhileHidden = false;
   private queuedWhileDragging = false;
   private queuedWhileLoading = false;
@@ -318,6 +321,8 @@ export class GlobalWorkState {
       this.scheduleRealtimeRefresh(false);
     });
     this.destroyRef.onDestroy(() => {
+      this.destroyed = true;
+      this.requestVersion += 1;
       // Layout gestures write eagerly, but this final write also captures state changed indirectly
       // by applying a saved view immediately before navigating away.
       this.persistPreference();
@@ -1801,9 +1806,18 @@ export class GlobalWorkState {
   }
 
   private scheduleRealtimeRefresh(includeCatalog: boolean): void {
+    if (this.destroyed) return;
     this.realtimeRefreshNeedsCatalog ||= includeCatalog;
     if (this.loading()) {
       this.queuedWhileLoading = true;
+      return;
+    }
+    if (this.backgroundRefreshInFlight) {
+      // Version invalidation stops the old page walk and prevents its snapshot from overwriting
+      // newer socket patches. Wait for that request to settle before starting one replacement;
+      // debounce alone allowed a slow connection to run overlapping walks of the entire view.
+      if (!this.backgroundRefreshQueued) this.requestVersion += 1;
+      this.backgroundRefreshQueued = true;
       return;
     }
     if (typeof document !== "undefined" && document.visibilityState === "hidden") {
@@ -1840,6 +1854,12 @@ export class GlobalWorkState {
       this.queuedWhileLoading = true;
       return;
     }
+    if (this.destroyed) return;
+    if (this.backgroundRefreshInFlight) {
+      this.scheduleRealtimeRefresh(includeCatalog);
+      return;
+    }
+    this.backgroundRefreshInFlight = true;
     const version = ++this.requestVersion;
     this.reconciling.set(true);
     try {
@@ -1880,8 +1900,13 @@ export class GlobalWorkState {
       // Reconciliation is best-effort. Keep the last successful live or cached projection visible;
       // the socket watchdog, a later event, or the next foreground transition will retry.
     } finally {
-      if (version === this.requestVersion) {
-        this.reconciling.set(false);
+      this.backgroundRefreshInFlight = false;
+      if (version === this.requestVersion) this.reconciling.set(false);
+      if (this.backgroundRefreshQueued) {
+        this.backgroundRefreshQueued = false;
+        // A cancelled catalog refresh must not be downgraded to a cards-only refresh by the
+        // last event in the burst. Visibility, drag and foreground-query gates still apply.
+        this.scheduleRealtimeRefresh(includeCatalog);
       }
     }
   }

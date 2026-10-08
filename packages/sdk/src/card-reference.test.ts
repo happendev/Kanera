@@ -125,3 +125,35 @@ void test("a failed resolution is not cached, so a later lookup retries once the
   assert.equal(await resolve("mkt-42"), UUID);
   assert.equal(requested.filter((path) => path.startsWith("/api/v1/search")).length, 2);
 });
+
+/* Browser flows cannot expose a long-lived SDK process's reference-cache growth. These regressions
+ * cover eviction resolving the wrong card, eviction discarding a hot entry, UUID traffic displacing
+ * useful lookups, and failed/in-flight lookups losing the existing coalescing/retry behavior (above).
+ */
+void test("large reference streams evict old keys but retain hot references", async () => {
+  const requests: string[] = [];
+  const http = { get: async (path: string) => { requests.push(path); return { id: path.split("/").at(-1) }; } } as unknown as KaneraHttpClient;
+  const resolve = createCardReferenceResolver(http);
+  const url = (n: number) => `https://app.kanera.app/o/${ORG}/c/MKT-${n}`;
+  for (let n = 1; n <= 1_100; n += 1) {
+    assert.equal(await resolve(url(n)), `MKT-${n}`);
+    assert.equal(await resolve(url(1)), "MKT-1");
+  }
+  assert.equal(requests.filter((path) => path.endsWith("/MKT-1")).length, 1);
+  assert.equal(await resolve(url(2)), "MKT-2");
+  assert.equal(requests.filter((path) => path.endsWith("/MKT-2")).length, 2);
+});
+
+void test("UUID streams do not evict useful reference lookups", async () => {
+  const { http, requested } = fakeHttp({
+    "/api/v1/search?q=MKT-42&limit=20": { cards: [{ cardId: UUID, cardKey: "MKT-42", organisationKey: ORG }] },
+  });
+  const resolve = createCardReferenceResolver(http);
+  assert.equal(await resolve("MKT-42"), UUID);
+  for (let n = 0; n < 10_000; n += 1) {
+    const uuid = `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+    assert.equal(await resolve(` ${uuid} `), uuid);
+  }
+  assert.equal(await resolve("MKT-42"), UUID);
+  assert.equal(requested.length, 1);
+});

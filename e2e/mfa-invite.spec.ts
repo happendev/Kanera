@@ -115,6 +115,9 @@ test("joining an organisation that requires MFA through an invite withholds the 
     await existing.goto(`/invite?token=${encodeURIComponent(inviteToken)}`);
     await existing.getByRole("button", { name: /Join / }).click();
 
+    // Clearing the old session must preserve the login navigation carrying the MFA challenge.
+    // Reaching enrollment directly (without another password login) catches a competing redirect
+    // from AuthSync that would discard that one-use navigation state.
     await expectEnrollmentRequired(existing);
     await existing.screenshot({ path: testInfo.outputPath("existing-enrollment-required.png") });
     // The pre-acceptance refresh cookie now points at the MFA organisation and is refused outright.

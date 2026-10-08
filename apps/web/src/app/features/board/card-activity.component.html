@@ -223,7 +223,7 @@
         }
         }
         }
-        @if (item.descriptionDiff) {
+        @if (item.hasDescriptionChanges) {
         <button type="button" class="activity-diff-toggle" (click)="openDescriptionDiff(item.data.id)">
           <i class="ti ti-arrows-diff"></i>
           <span>View changes</span>

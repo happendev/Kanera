@@ -82,7 +82,7 @@ describe("AuthSyncService", () => {
           },
         },
         { provide: SocketService, useValue: { connect, disconnect } },
-        { provide: Router, useValue: { navigateByUrl } },
+        { provide: Router, useValue: { navigateByUrl, currentNavigation: () => null } },
       ],
     });
     TestBed.inject(AuthSyncService);
@@ -110,7 +110,7 @@ describe("AuthSyncService", () => {
           },
         },
         { provide: SocketService, useValue: { connect, disconnect } },
-        { provide: Router, useValue: { navigateByUrl } },
+        { provide: Router, useValue: { navigateByUrl, currentNavigation: () => null } },
       ],
     });
     TestBed.inject(AuthSyncService);

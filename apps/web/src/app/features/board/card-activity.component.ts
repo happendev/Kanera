@@ -31,7 +31,7 @@ import { hasMarkdownContent } from "../../shared/markdown-content";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { BoardState } from "./board-state";
 import { DescriptionEditorComponent, type EditorSaveEvent } from "./description-editor.component";
-import { descriptionDiff, hasDescriptionDiffPayload, type DescriptionDiff } from "./description-diff";
+import { descriptionDiff, hasDescriptionChanges, hasDescriptionDiffPayload, type DescriptionDiff } from "./description-diff";
 import { DescriptionViewerComponent } from "./description-viewer.component";
 import { formatDueDate, type DueDateSlotSelection } from "./due-date.util";
 import { ImageLightboxService } from "./image-lightbox.service";
@@ -71,7 +71,7 @@ type CardFeedView =
       isMirror: boolean;
       actorText: string | null;
       html: string;
-      descriptionDiff: DescriptionDiff | null;
+      hasDescriptionChanges: boolean;
       attachmentPreview: ActivityAttachmentPreview | null;
     };
 
@@ -178,7 +178,7 @@ export class CardActivityComponent {
         isMirror: typeof (item.data.payload as Record<string, unknown>)["mirrorId"] === "string",
         actorText: this.activityActorText(item.data),
         html: this.activityText(item.data),
-        descriptionDiff: this.descriptionDiffForActivity(item.data),
+        hasDescriptionChanges: this.hasDescriptionChangesForActivity(item.data),
         attachmentPreview: this.attachmentPreviewForActivity(item.data),
       };
     }),
@@ -726,20 +726,31 @@ export class CardActivityComponent {
     }
   }
 
-  descriptionDiffForActivity(event: ActivityFeedEvent): DescriptionDiff | null {
-    if (event.entityType !== "card" || event.action !== "updated") return null;
+  // Activities are immutable snapshots; weak keys let removed/paged-out rows be collected. Feed
+  // refreshes reuse the cheap eligibility result, and only the opened modal computes a full diff.
+  private readonly descriptionChangeCache = new WeakMap<ActivityFeedEvent, boolean>();
+  private readonly descriptionDiffCache = new WeakMap<ActivityFeedEvent, DescriptionDiff>();
+
+  private hasDescriptionChangesForActivity(event: ActivityFeedEvent): boolean {
+    const cached = this.descriptionChangeCache.get(event);
+    if (cached !== undefined) return cached;
     const payload = event.payload as Record<string, unknown>;
-    if (!("description" in payload) || !hasDescriptionDiffPayload(payload)) return null;
-    const fromValue = payload["fromValue"];
-    const hadPriorDescription = typeof fromValue === "string" && fromValue.trim().length > 0;
-    // First-capture activity is already clear from "updated the description"; the
-    // diff modal would only show all-added text and adds noise to the feed.
-    if (!hadPriorDescription) return null;
+    const eligible = event.entityType === "card" && event.action === "updated"
+      && "description" in payload && hasDescriptionDiffPayload(payload)
+      && typeof payload["fromValue"] === "string" && payload["fromValue"].trim().length > 0
+      && hasDescriptionChanges(payload["fromValue"], payload["toValue"]);
+    this.descriptionChangeCache.set(event, eligible);
+    return eligible;
+  }
+
+  descriptionDiffForActivity(event: ActivityFeedEvent): DescriptionDiff | null {
+    if (!this.hasDescriptionChangesForActivity(event)) return null;
+    const cached = this.descriptionDiffCache.get(event);
+    if (cached) return cached;
+    const payload = event.payload as Record<string, unknown>;
     const diff = descriptionDiff(payload["fromValue"], payload["toValue"]);
-    // Show the diff for real text changes, and also for formatting/link/image-only
-    // edits (lines empty) so the modal can acknowledge them with a note rather than
-    // leaving "updated the description" unexplained.
-    return diff.hasChanges || diff.formattingOnly ? diff : null;
+    this.descriptionDiffCache.set(event, diff);
+    return diff;
   }
 
   attachmentPreviewForActivity(event: ActivityFeedEvent): ActivityAttachmentPreview | null {

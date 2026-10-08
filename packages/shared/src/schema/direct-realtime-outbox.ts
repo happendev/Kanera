@@ -31,7 +31,8 @@ export const directRealtimeOutbox = pgTable(
       sql`(${t.scope} = 'user' and ${t.userId} is not null and ${t.clientId} is null) or (${t.scope} = 'client' and ${t.clientId} is not null and ${t.userId} is null)`,
     ),
     index("direct_realtime_outbox_pending_idx")
-      .on(t.processingLeaseExpiresAt, t.createdAt)
+      // Match oldest-first claims so a backlog does not need a full scan/sort before LIMIT 50.
+      .on(t.createdAt, t.id)
       .where(sql`${t.realtimeDispatched} = false`),
     index("direct_realtime_outbox_processed_created_at_idx")
       .on(t.createdAt)
