@@ -21,8 +21,8 @@
   "apps": "./.app.json",
   "interface": {
     "displayName": "Kanera",
-    "shortDescription": "Read and update Kanera project work",
-    "longDescription": "Use the connected Kanera app to find, inspect, create, and update cards and other permission-scoped project work.",
+    "shortDescription": "Manage Kanera project work",
+    "longDescription": "Find and manage project work in Kanera: read cards and their history, create and update cards and checklists, add comments, work with notes and Up next priorities, and summarize progress across accessible boards. Workspace admins can configure automations. Connect your Kanera account through OAuth; actions follow your current board and workspace permissions. Lists, custom fields, labels, membership, and other administration after board creation remain in the Kanera web app unless a dedicated tool supports the operation.",
     "developerName": "Happen Software Limited",
     "category": "Productivity",
     "capabilities": [
@@ -33,10 +33,13 @@
     "privacyPolicyURL": "https://www.kanera.app/privacy",
     "termsOfServiceURL": "https://www.kanera.app/terms",
     "defaultPrompt": [
-      "Update Kanera card DEV-938 with my investigation findings and agreed plan.",
+      "Find a Kanera card by its key and summarize its status and recent activity.",
       "Summarize my active Kanera work and flag blockers.",
       "Find overdue Kanera cards assigned to me."
     ],
-    "brandColor": "#14B8A6"
+    "brandColor": "#14B8A6",
+    "supportURL": "https://www.kanera.app/contact",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/icon.png"
   }
 }

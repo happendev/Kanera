@@ -563,7 +563,7 @@ void test("every MCP tool declares structured output and explicit safety annotat
     assert.equal(typeof tool.annotations?.readOnlyHint, "boolean", `${name} readOnlyHint`);
     assert.equal(typeof tool.annotations?.destructiveHint, "boolean", `${name} destructiveHint`);
     assert.equal(typeof tool.annotations?.idempotentHint, "boolean", `${name} idempotentHint`);
-    assert.equal(tool.annotations?.openWorldHint, false, `${name} stays inside Kanera`);
+    assert.equal(tool.annotations?.openWorldHint, ["automations.create", "automations.update", "automations.set_enabled"].includes(name), `${name} external workflow destinations`);
   }
   assert.equal(tools["comments.delete"]?.annotations?.destructiveHint, true);
   assert.equal(tools["cards.bulk_archive"]?.annotations?.destructiveHint, true);
@@ -589,7 +589,7 @@ void test("every MCP tool declares structured output and explicit safety annotat
   assert.equal(tools["separators.delete"]?.annotations?.destructiveHint, true);
   assert.equal(tools["automations.list"]?.annotations?.readOnlyHint, true);
   assert.equal(tools["automations.list_executions"]?.annotations?.readOnlyHint, true);
-  assert.equal(tools["automations.create"]?.annotations?.destructiveHint, false);
+  assert.equal(tools["automations.create"]?.annotations?.destructiveHint, true);
   assert.equal(tools["automations.create"]?.annotations?.idempotentHint, false);
   assert.equal(tools["automations.update"]?.annotations?.destructiveHint, true);
   assert.equal(tools["automations.set_enabled"]?.annotations?.idempotentHint, true);

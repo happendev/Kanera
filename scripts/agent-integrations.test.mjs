@@ -40,7 +40,7 @@ void test("the Codex plugin advertises the registered Kanera app", async () => {
   assert.equal(manifest.skills, "./skills/");
   assert.equal(manifest.apps, "./.app.json");
   assert.deepEqual(manifest.interface.capabilities, ["Read", "Write"]);
-  assert.ok(manifest.interface.defaultPrompt.some((prompt) => prompt.includes("DEV-938")));
+  assert.ok(manifest.interface.defaultPrompt.some((prompt) => prompt.includes("Kanera")));
   assert.match(manifest.description, /cards/u);
   assert.match(app.apps.kanera.id, /^asdk_app_[a-z0-9]+$/u);
 });
