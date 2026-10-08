@@ -55,7 +55,11 @@ void test("the submission plugin declares the hosted Kanera MCP server", async (
   assert.ok(manifest.interface.defaultPrompt.some((prompt) => prompt.includes("Kanera")));
   assert.match(manifest.description, /cards/u);
   assert.deepEqual(mcp.mcpServers, {
-    kanera: { url: "https://mcp.kanera.app/mcp" },
+    kanera: {
+      type: "http",
+      url: "https://mcp.kanera.app/mcp",
+      oauth_resource: "https://mcp.kanera.app/mcp",
+    },
   });
 });
 

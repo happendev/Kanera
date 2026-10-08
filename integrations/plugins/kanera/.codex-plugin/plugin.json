@@ -33,13 +33,79 @@
     "privacyPolicyURL": "https://www.kanera.app/privacy",
     "termsOfServiceURL": "https://www.kanera.app/terms",
     "defaultPrompt": [
-      "Find a Kanera card by its key and summarize its status and recent activity.",
-      "Summarize my active Kanera work and flag blockers.",
-      "Find overdue Kanera cards assigned to me."
+      "Summarize recent changes across my Kanera projects and link to the relevant cards.",
+      "Find overdue Kanera cards assigned to me across all my projects.",
+      "Turn this project brief into Kanera cards with checklists, asking where to create them if needed."
     ],
     "brandColor": "#14B8A6",
     "supportURL": "https://www.kanera.app/contact",
     "composerIcon": "./assets/icon.png",
     "logo": "./assets/icon.png"
+  },
+  "extensions": {
+    "com.openai": {
+      "review": {
+        "demo_recording_url": "https://media.happen.zone/kanera/ChatGPT-2026-10-08-16-27-41.mp4",
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Read a demo card without modifying it",
+              "prompt": "Show me Kanera card MARKETINGC-7. Summarise its purpose and current status. Do not change anything.",
+              "tools_triggered": "session.get, cards.get",
+              "expected_behavior": "Report the actual card title, description and workflow status, with a canonical card link. Make no changes and do not invent missing information."
+            },
+            {
+              "description": "Summarise recent card activity",
+              "prompt": "What has changed recently on Kanera card MARKETINGC-7? Do not change anything.",
+              "tools_triggered": "session.get, cards.list_history",
+              "expected_behavior": "Summarise the returned recent activity and comments, preserving dates and attribution where available. Make no changes and distinguish recorded facts from inferences."
+            },
+            {
+              "description": "Find the connected user's overdue work across accessible boards; prepare overdue assigned cards on at least two demo boards and comparison cards that are completed, not overdue, or assigned only to another user",
+              "prompt": "Find overdue Kanera cards assigned to me across all my projects. Include each card's due date, board, and link. Do not change anything.",
+              "tools_triggered": "session.get, work.query_cards",
+              "expected_behavior": "Query work.query_cards with lens=my, filters.overdueOnly=true and filters.completion=active, with scope omitted or allAccessible=true. Follow nextCursor until all matching cards are retrieved. Return only accessible active overdue cards assigned to the connected user, with their actual due dates, board names and canonical links. Do not enumerate every board or infer assignment from authorship. Make no changes."
+            },
+            {
+              "description": "Create a checklist on the demo card",
+              "prompt": "Add a checklist named Plugin review to Kanera card MARKETINGC-7 with these items: Verify card details, Review recent activity, Confirm checklist works.",
+              "tools_triggered": "session.get, cards.get, checklists.create",
+              "expected_behavior": "Create one checklist named Plugin review containing the three specified incomplete items in order, using a fresh idempotencyKey for this intended write. Preserve existing card content and checklists. Confirm the addition from the returned checklist and link to the card. Reuse the same key only if retrying after an ambiguous failure."
+            },
+            {
+              "description": "Publish an explicitly requested comment",
+              "prompt": "Add this comment to Kanera card MARKETINGC-7: Plugin review: card access and checklist creation verified.",
+              "tools_triggered": "session.get, cards.get, comments.add",
+              "expected_behavior": "Publish the exact requested comment once, using a fresh idempotencyKey for this intended write. Confirm success and return a canonical card link. Preserve the card content and do not claim verification beyond the text the user asked to publish. Reuse the same key only if retrying after an ambiguous failure."
+            }
+          ],
+          "negative": [
+            {
+              "description": "An ambiguous card name must not cause a mutation; prepare two accessible demo cards titled Plugin review target on different boards",
+              "prompt": "Move the Kanera card named Plugin review target to Done.",
+              "tools_triggered": "session.get, search.content",
+              "expected_behavior": "Search accessible card content for Plugin review target. Present both matching cards with their keys, board names and canonical links, and ask which card the user means. Do not silently choose a card, guess a destination list ID, start an agent run, or call cards.move or any other mutation before the target is unambiguous."
+            },
+            {
+              "description": "Unavailable card lookup",
+              "prompt": "Show me Kanera card MARKETINGC-999999.",
+              "tools_triggered": "session.get, cards.get",
+              "expected_behavior": "When the card is not found or inaccessible, report that it is unavailable. Do not invent content, silently substitute another card, or bypass access controls."
+            },
+            {
+              "description": "Draft-only request must not publish",
+              "prompt": "Draft a comment for Kanera card MARKETINGC-7 saying the review is complete. Do not post it.",
+              "tools_triggered": "session.get, cards.get",
+              "expected_behavior": "Return a draft in the conversation. Do not call comments.add, start an agent run, or mutate the card."
+            }
+          ]
+        },
+        "commerce": false,
+        "commerce_description": "The plugin reads and updates project work in an existing Kanera account. It does not sell products, take payments, or manage subscriptions through its tools."
+      },
+      "publication": {
+        "release_notes": "Initial directory submission of Kanera 4.0.0, with OAuth-connected project tools and an MCP-only skill for reading cards and activity, managing checklists, publishing requested comments, and summarising project work."
+      }
+    }
   }
 }

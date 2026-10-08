@@ -40,14 +40,15 @@ indexed at https://www.kanera.app/llms.txt.
 
 ## Resolve context
 
-1. Call `session.get` to understand the credential scope and canonical Kanera URL.
-2. Use `boards.list_accessible` for complete board discovery, including standalone and guest boards. Use `workspaces.list` and `workspaces.list_boards` for standard-workspace navigation.
-3. Use `search.docs` for product behavior, setup, permissions, or workflow guidance, or fetch the matching page under "Look up details". Cite the canonical source URLs.
-4. For an exact human card key or canonical card URL, call `cards.get` directly. Use
-   `search.content` to resolve names, phrases, notes, comments, or attachment filenames. Never guess
-   an ID.
-5. If a name resolves ambiguously, show the candidates and ask the user to choose.
-6. Call `boards.get` for lists and configuration, then page only the needed lists with `cards.list`. Use `cards.get` for full card detail.
+Choose the lookup that fits the request; these are conditional routes, not a setup sequence.
+
+- For live project work, call `session.get` once when the current credential scope and canonical Kanera URL are unknown. Reuse that context within the conversation.
+- For an exact human card key or canonical card URL, call `cards.get` directly, or the focused card tool when only history or checklists are needed. Board discovery and documentation lookup are unnecessary for a resolved card request.
+- For names, phrases, notes, comments, or attachment filenames, use `search.content`. Never guess an ID. If a name resolves ambiguously, show the candidates and ask the user to choose before making changes.
+- `search.content` already covers every accessible board and note (archived cards excluded). If it returns no match for a named card or item, tell the user it was not found and stop; do not enumerate boards, page lists, or retry with other tools, and make no change. Offer to create it or to check archived cards only when that fits the request.
+- When the requested board or workspace is unknown, use `boards.list_accessible` for complete board discovery, including standalone and guest boards. Use `workspaces.list` and `workspaces.list_boards` for standard-workspace navigation.
+- When a task needs lists or board configuration, call `boards.get`. For list contents, page only the needed lists with `cards.list`; for cross-board work, use the reporting tools under "Read and report".
+- For questions about product behavior, setup, permissions, or workflow guidance, use `search.docs` or fetch the matching page under "Look up details". Cite the canonical source URLs. Product guidance alone does not require live account discovery.
 
 ## Respect the product model
 
