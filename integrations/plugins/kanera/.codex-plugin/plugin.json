@@ -1,7 +1,7 @@
 {
   "name": "kanera",
   "version": "4.0.0",
-  "description": "Read and manage Kanera cards, boards, comments, notes, priorities, automations, and project reports.",
+  "description": "Plan work, update cards, and keep track of project progress in Kanera.",
   "author": {
     "name": "Happen Software Limited",
     "email": "hi@kanera.app",
@@ -18,11 +18,11 @@
     "mcp"
   ],
   "skills": "./skills/",
-  "apps": "./.app.json",
+  "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Kanera",
     "shortDescription": "Manage Kanera project work",
-    "longDescription": "Find and manage project work in Kanera: read cards and their history, create and update cards and checklists, add comments, work with notes and Up next priorities, and summarize progress across accessible boards. Workspace admins can configure automations. Connect your Kanera account through OAuth; actions follow your current board and workspace permissions. Lists, custom fields, labels, membership, and other administration after board creation remain in the Kanera web app unless a dedicated tool supports the operation.",
+    "longDescription": "Keep your projects moving with Kanera. Find out what needs attention, catch up on recent changes, and turn plans into cards and checklists. Update work, add comments and notes, organise what to tackle next, and get a clear picture of progress across your boards. Connect your Kanera account to get started. You can view and update work according to your existing Kanera permissions.",
     "developerName": "Happen Software Limited",
     "category": "Productivity",
     "capabilities": [

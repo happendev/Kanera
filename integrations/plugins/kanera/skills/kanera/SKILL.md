@@ -1,6 +1,6 @@
 ---
 name: kanera
-description: Read and manage Kanera project work and search Kanera product guidance using its MCP tools or CLI. Use when the user names Kanera or the conversation already identifies Kanera as the source for the requested cards, boards, notes, checklists, priorities, or project reports.
+description: Help manage projects in Kanera. Find cards, plan work, update tasks and checklists, write comments and notes, organise priorities, and summarise progress. Use for requests about Kanera or when Kanera is already the source of project information.
 ---
 
 # Kanera
