@@ -67,3 +67,21 @@ function isStorageUsage(value: unknown): value is AuthResponse["user"]["storageU
     typeof usage.maxFileBytes === "number"
   );
 }
+
+export interface MfaEnrollmentRequiredResponse {
+  status: "mfa_enrollment_required";
+  challengeToken: string;
+}
+
+/**
+ * Router navigation-state key used to hand an organisation-mandated enrollment challenge from signup
+ * or invite acceptance to the login page, which owns the enrollment UI. Navigation state never touches
+ * the URL, so the challenge token is not exposed in history or logs.
+ */
+export const MFA_ENROLLMENT_HANDOFF_KEY = "mfaEnrollmentChallengeToken";
+
+export function isMfaEnrollmentRequired(value: unknown): value is MfaEnrollmentRequiredResponse {
+  if (!value || typeof value !== "object") return false;
+  const response = value as Partial<MfaEnrollmentRequiredResponse>;
+  return response.status === "mfa_enrollment_required" && typeof response.challengeToken === "string";
+}

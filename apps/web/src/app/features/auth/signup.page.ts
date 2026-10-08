@@ -6,7 +6,7 @@ import type { BoardInvitationLookupResponse } from "@kanera/shared/dto";
 import { AuthService } from "../../core/auth/auth.service";
 import { PublicAuthClient } from "../../core/auth/public-auth.client";
 import { TurnstileChallenge } from "../../core/auth/turnstile-challenge";
-import { parseAuthResponse } from "../../core/auth/auth-response";
+import { isMfaEnrollmentRequired, MFA_ENROLLMENT_HANDOFF_KEY, parseAuthResponse } from "../../core/auth/auth-response";
 import { LogoComponent } from "../../shared/logo.component";
 import { ThemeService, type Theme } from "../../core/theme/theme.service";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
@@ -327,7 +327,14 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
       return;
     }
     this.turnstile.reset();
-    const json = parseAuthResponse(await res.json());
+    const raw: unknown = await res.json();
+    if (isMfaEnrollmentRequired(raw)) {
+      // The account was created, but the organisation it joined mandates MFA: no session was issued.
+      // The login page owns the enrollment flow and issues the session once a factor is enabled.
+      await this.router.navigateByUrl("/login", { state: { [MFA_ENROLLMENT_HANDOFF_KEY]: raw.challengeToken } });
+      return;
+    }
+    const json = parseAuthResponse(raw);
     this.auth.setSession(json.accessToken, json.user);
     this.analytics.setSuppressed(json.user.analyticsExcluded === true);
     if (json.user.analyticsExcluded !== true) {

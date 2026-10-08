@@ -42,6 +42,7 @@ import { captureWorkspaceMemberJoined } from "../lib/analytics-milestones.js";
 import { isClientAdminRole, resolveActiveOrganisation, resolveActiveOrganisationContext, type ActiveOrganisation } from "../lib/client-membership.js";
 import { disconnectSupportSessionSockets, disconnectUserRealtimeSockets } from "../realtime/io.js";
 import { emitToUser } from "../realtime/emit.js";
+import { mfaEnrollmentRequiredFor, requiresMfaForAccess } from "./mfa-policy.js";
 import { authUserPayload as meResponseFor, issueUserSession as issueSession, REFRESH_COOKIE, refreshCookieOptions } from "./session.js";
 
 const ALLOWED_AVATAR_MIME = new Set(["image/png", "image/jpeg", "image/webp"]);
@@ -133,7 +134,6 @@ const MAX_VERIFICATION_ATTEMPTS = 5;
 const PASSWORD_RESET_RECIPIENT_LIMIT = 3;
 const PASSWORD_RESET_RECIPIENT_WINDOW_MS = 60 * 60_000;
 const TURNSTILE_SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
-
 
 function normalizeTimezone(value: string | undefined): string {
   if (!value) return "UTC";
@@ -258,30 +258,6 @@ export async function authRoutes(app: FastifyInstance) {
     }
     if (!params.inviteToken) throw forbidden("Signups are currently disabled.");
     throw unauthorized("invalid invite");
-  }
-
-  async function requiresMfaForAccess(userId: string, activeClientId: string, activeRequiresMfa: boolean) {
-    if (activeRequiresMfa) return true;
-    const [guestPolicy] = await db
-      .select({ id: boardMembers.boardId })
-      .from(boardMembers)
-      .innerJoin(boards, eq(boards.id, boardMembers.boardId))
-      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
-      .innerJoin(clients, eq(clients.id, workspaces.clientId))
-      .where(and(
-        eq(boardMembers.userId, userId),
-        ne(clients.id, activeClientId),
-        eq(clients.requireMfa, true),
-        sql`not exists (
-          select 1 from ${clientMembers} cm
-          where cm.client_id = ${clients.id}
-            and cm.user_id = ${userId}
-        )`,
-      ))
-      .limit(1);
-    // A host organisation's security policy follows its data: board-only guests must satisfy it even
-    // though authentication and MFA credentials still belong to the guest's single home identity.
-    return !!guestPolicy;
   }
 
   // Generate a fresh verification code, invalidate any prior unconsumed codes for the
@@ -630,17 +606,25 @@ export async function authRoutes(app: FastifyInstance) {
         };
       });
 
-      const accessToken = app.jwt.sign({
-        sub: result.user.id,
-        cid: result.user.clientId,
-        role: result.orgRole,
-      });
-      const refresh = newRefreshToken();
-      await db
-        .insert(refreshTokens)
-        .values({ userId: result.user.id, tokenHash: refresh.hash, expiresAt: refresh.expiresAt });
+      // An invite-driven signup joins an organisation (or a board-invite host) whose security policy may
+      // already mandate MFA. The account now exists either way, so every side effect below still runs,
+      // but tokens are withheld and the enrollment challenge is returned exactly as password login does.
+      const joinedOrganisation = await resolveActiveOrganisation(result.user.id, result.user.clientId);
+      const enrollment = joinedOrganisation ? await mfaEnrollmentRequiredFor(result.user.id, joinedOrganisation) : null;
+      let accessToken: string | null = null;
+      if (!enrollment) {
+        accessToken = app.jwt.sign({
+          sub: result.user.id,
+          cid: result.user.clientId,
+          role: result.orgRole,
+        });
+        const refresh = newRefreshToken();
+        await db
+          .insert(refreshTokens)
+          .values({ userId: result.user.id, tokenHash: refresh.hash, expiresAt: refresh.expiresAt });
 
-      reply.setCookie(REFRESH_COOKIE, refresh.raw, refreshCookieOptions());
+        reply.setCookie(REFRESH_COOKIE, refresh.raw, refreshCookieOptions());
+      }
       // Account creation is authoritative here: the user and organisation transaction has committed.
       // Analytics is fire-and-forget and can never turn a successful signup into a failed request.
       void productAnalytics.capture({
@@ -756,6 +740,7 @@ export async function authRoutes(app: FastifyInstance) {
         // seat_limit, not headcount. Capacity is only charged when the admin explicitly buys seats.
       }
 
+      if (enrollment) return enrollment;
       return { accessToken, user: { ...(await meResponseFor(result.user.id, result.user.clientId)), boardInviteRedirect: result.boardInviteRedirect } };
     } catch (err: unknown) {
       if (isUniqueViolation(err)) throw conflict(duplicateSignupMessage);

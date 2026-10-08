@@ -1,9 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from "@angular/core";
+import type { OnInit } from "@angular/core";
 import { disabled, form, FormField, submit, validate } from "@angular/forms/signals";
 import { Router, RouterLink } from "@angular/router";
 import { AuthService } from "../../core/auth/auth.service";
 import { PublicAuthClient } from "../../core/auth/public-auth.client";
-import { parseAuthResponse } from "../../core/auth/auth-response";
+import { MFA_ENROLLMENT_HANDOFF_KEY, parseAuthResponse } from "../../core/auth/auth-response";
 import { LogoComponent } from "../../shared/logo.component";
 import { mfaQrDataUrl } from "../../shared/mfa-qr";
 
@@ -21,7 +22,7 @@ interface AuthConfigResponse {
   templateUrl: "./login.page.html",
   styleUrl: "./login.page.scss",
 })
-export class LoginPage {
+export class LoginPage implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly publicAuth = inject(PublicAuthClient);
   private readonly router = inject(Router);
@@ -74,11 +75,30 @@ export class LoginPage {
   });
   readonly environmentBannerLabel = computed(() => environmentBannerLabel(this.kaneraEnvironment()));
 
+  // Signup and invite acceptance can end in an organisation-mandated enrollment instead of a session.
+  // They hand the challenge over through navigation state, which is only readable while that
+  // navigation is current, so it is captured here and acted on in ngOnInit.
+  private readonly handedOverChallenge = readHandedOverChallenge(this.router.currentNavigation()?.extras.state);
+
   constructor() {
     void this.publicAuth.get("/auth/config")
       .then(async (res) => (res.ok ? parseAuthConfigResponse(await res.json()) : { kaneraEnvironment: "production" as const }))
       .then((config) => this.kaneraEnvironment.set(config.kaneraEnvironment))
       .catch(() => this.kaneraEnvironment.set("production"));
+  }
+
+  async ngOnInit() {
+    if (!this.handedOverChallenge) return;
+    this.workflowBusy.set(true);
+    try {
+      await this.beginRequiredEnrollment(this.handedOverChallenge);
+    } catch {
+      this.workflowError.set("Your organisation requires two-factor authentication. Sign in to set it up.");
+      this.challengeToken.set("");
+      this.mfaEnrollment.set(false);
+    } finally {
+      this.workflowBusy.set(false);
+    }
   }
 
   async submit(e: Event) {
@@ -113,11 +133,7 @@ export class LoginPage {
         return undefined;
       }
       if (raw.status === "mfa_enrollment_required" && typeof raw.challengeToken === "string") {
-        this.challengeToken.set(raw.challengeToken);
-        this.mfaEnrollment.set(true);
-        const setup = await this.authPost<{ secret: string; otpauthUri: string }>("/auth/mfa/required/enroll", { challengeToken: raw.challengeToken });
-        this.mfaSecret.set(setup.secret);
-        this.mfaQrUrl.set(mfaQrDataUrl(setup.otpauthUri));
+        await this.beginRequiredEnrollment(raw.challengeToken);
         return undefined;
       }
       const json = parseAuthResponse(raw);
@@ -125,6 +141,14 @@ export class LoginPage {
       await this.router.navigateByUrl(this.safeReturnUrl());
       return undefined;
     });
+  }
+
+  private async beginRequiredEnrollment(challengeToken: string) {
+    this.challengeToken.set(challengeToken);
+    this.mfaEnrollment.set(true);
+    const setup = await this.authPost<{ secret: string; otpauthUri: string }>("/auth/mfa/required/enroll", { challengeToken });
+    this.mfaSecret.set(setup.secret);
+    this.mfaQrUrl.set(mfaQrDataUrl(setup.otpauthUri));
   }
 
   private async submitMfa() {
@@ -162,6 +186,11 @@ export class LoginPage {
     const value = this.returnUrl();
     return value?.startsWith("/") && !value.startsWith("//") ? value : "/";
   }
+}
+
+function readHandedOverChallenge(state: Record<string, unknown> | undefined): string | null {
+  const token = state?.[MFA_ENROLLMENT_HANDOFF_KEY];
+  return typeof token === "string" && token.length > 0 ? token : null;
 }
 
 function parseAuthConfigResponse(value: unknown): AuthConfigResponse {

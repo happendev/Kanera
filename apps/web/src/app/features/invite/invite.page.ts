@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, input, signal } from "@angu
 import type { OnInit } from "@angular/core";
 import { Router } from "@angular/router";
 import { ApiClient, ApiError } from "../../core/api/api.client";
+import { isMfaEnrollmentRequired, MFA_ENROLLMENT_HANDOFF_KEY, type MfaEnrollmentRequiredResponse } from "../../core/auth/auth-response";
 import { AuthService, authenticatedLandingPath, type AuthUser } from "../../core/auth/auth.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { LogoComponent } from "../../shared/logo.component";
@@ -35,6 +36,10 @@ export class InvitePage implements OnInit {
   readonly isLoggedIn = this.auth.isAuthenticated;
 
   async ngOnInit() {
+    // Invite links are opened cold (email, chat), so the refresh cookie is the only session state at
+    // this point. Hydrate before choosing between the Join button and the signup/login links, as the
+    // board-invite page does, so a signed-in recipient is not shown "Create account".
+    await this.auth.hydrate();
     const token = this.token();
     if (!token) return this.state.set("invalid");
     try {
@@ -55,7 +60,15 @@ export class InvitePage implements OnInit {
     // against the replacement session returned below.
     this.sockets.pauseForOrganisationSwitch();
     try {
-      const session = await this.api.post<{ accessToken: string; user: AuthUser }>("/invites/accept", { token });
+      const session = await this.api.post<{ accessToken: string; user: AuthUser } | MfaEnrollmentRequiredResponse>("/invites/accept", { token });
+      if (isMfaEnrollmentRequired(session)) {
+        // Membership was granted and the active organisation already moved, but the new organisation
+        // mandates MFA so no session for it was issued. The previous organisation's in-memory token is
+        // dropped (a refresh would now be refused anyway) and the login page completes enrollment.
+        this.auth.clearSession();
+        await this.router.navigateByUrl("/login", { replaceUrl: true, state: { [MFA_ENROLLMENT_HANDOFF_KEY]: session.challengeToken } });
+        return;
+      }
       this.auth.setSession(session.accessToken, session.user);
       await this.router.navigateByUrl(authenticatedLandingPath(session.user), { replaceUrl: true });
     } catch (error) {

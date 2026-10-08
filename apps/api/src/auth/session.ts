@@ -10,6 +10,7 @@ import { isClientAdminRole, listActiveOrganisations, resolveActiveOrganisationCo
 import { withSignedMedia } from "../lib/media-keys.js";
 import { getEntitlements } from "../lib/tier-limits.js";
 import { newRefreshToken } from "./jwt.js";
+import { mfaEnrollmentRequiredFor } from "./mfa-policy.js";
 
 export const REFRESH_COOKIE = "kanera_rt";
 
@@ -92,6 +93,12 @@ export async function issueUserSession(
   const context = knownContext ?? await resolveActiveOrganisationContext(userId, requestedClientId);
   const active = context.active;
   if (!active) throw unauthorized();
+  // Session issuance is the one choke point every sign-in style path shares (password login, invite
+  // acceptance, organisation creation/switch, post-deletion fallback). Enforcing the organisation's MFA
+  // policy here means an account can never receive tokens for an organisation that /auth/refresh
+  // would immediately refuse; callers return the challenge and the client completes enrollment.
+  const enrollment = await mfaEnrollmentRequiredFor(userId, active);
+  if (enrollment) return enrollment;
   await db.update(users).set({ activeClientId: active.clientId, updatedAt: new Date() }).where(eq(users.id, userId));
   const accessToken = app.jwt.sign({ sub: userId, cid: active.clientId, role: active.role });
   const refresh = newRefreshToken();

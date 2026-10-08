@@ -6,6 +6,7 @@ import { boardMembers, boards, clientMembers, clients, users, workspaceMembers, 
 import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { buildIntegrationServer } from "../../test/integration.js";
+import * as OTPAuth from "otpauth";
 
 type Session = { accessToken: string; user: { id: string; clientId: string; email: string } };
 
@@ -175,4 +176,136 @@ void test("a reusable invite link cannot lift a suspended membership", async () 
     payload: { token },
   });
   assert.equal(rejoined.statusCode, 200, rejoined.body);
+});
+
+// --- Organisation MFA policy on invitation paths -------------------------------------------------
+// Password login already withholds a session until a mandated factor is enrolled. These tests pin the
+// two other ways into an organisation (invite-driven signup and an existing account accepting an
+// invite) to the same rule, since either one issuing tokens lets the member read and edit boards
+// while unenrolled until a later refresh happens to reject them.
+
+function totp(secret: string, label: string) {
+  return new OTPAuth.TOTP({ issuer: "Kanera", label, algorithm: "SHA1", digits: 6, period: 30, secret: OTPAuth.Secret.fromBase32(secret) });
+}
+
+type EnrollmentChallenge = { status: string; challengeToken?: string; accessToken?: string };
+
+async function completeRequiredEnrollment(app: Awaited<ReturnType<typeof buildIntegrationServer>>, challengeToken: string, email: string) {
+  const started = await app.inject({ method: "POST", url: "/auth/mfa/required/enroll", payload: { challengeToken } });
+  assert.equal(started.statusCode, 200, started.body);
+  const { secret } = started.json<{ secret: string }>();
+  const confirmed = await app.inject({ method: "POST", url: "/auth/mfa/required/enroll/confirm", payload: { challengeToken, code: totp(secret, email).generate() } });
+  assert.equal(confirmed.statusCode, 200, confirmed.body);
+  const acknowledged = await app.inject({ method: "POST", url: "/auth/mfa/required/enroll/acknowledge", payload: { challengeToken } });
+  assert.equal(acknowledged.statusCode, 200, acknowledged.body);
+  assert.ok(acknowledged.cookies.find((cookie) => cookie.name === "kanera_rt"), "enrollment completion issues the refresh cookie");
+  return acknowledged.json<Session>();
+}
+
+async function mfaHostWithBoard(app: Awaited<ReturnType<typeof buildIntegrationServer>>, email: string) {
+  const host = await signup(app, email, "Secure Org");
+  await db.update(clients).set({ requireMfa: true }).where(eq(clients.id, host.user.clientId));
+  const [workspace] = await db.insert(workspaces).values({ clientId: host.user.clientId, name: "Secure workspace" }).returning();
+  const [board] = await db.insert(boards).values({ workspaceId: workspace!.id, name: "Secure board", position: "1000.0000000000" }).returning();
+  return { host, workspaceId: workspace!.id, boardId: board!.id };
+}
+
+void test("an invite-driven signup into an organisation that requires MFA gets an enrollment challenge instead of a session", async () => {
+  const app = await buildIntegrationServer();
+  const { host, workspaceId, boardId } = await mfaHostWithBoard(app, "secure-host@example.com");
+  const token = await createInvite(app, host.accessToken, { orgRole: "admin", workspaces: [{ workspaceId, role: "admin" }] });
+
+  const email = "secure-invitee@example.com";
+  const signedUp = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: { orgName: "ignored", email, password: "Abc12345", displayName: "Invitee", inviteToken: token },
+  });
+  assert.equal(signedUp.statusCode, 200, signedUp.body);
+  const challenge = signedUp.json<EnrollmentChallenge>();
+  assert.equal(challenge.status, "mfa_enrollment_required");
+  assert.ok(challenge.challengeToken);
+  assert.equal(challenge.accessToken, undefined, "no access token before enrollment");
+  assert.equal(signedUp.cookies.some((cookie) => cookie.name === "kanera_rt"), false, "no refresh cookie before enrollment");
+
+  // The account and membership exist; only the session is withheld.
+  const [created] = await db.select({ id: users.id, clientId: users.clientId }).from(users).where(eq(users.email, email)).limit(1);
+  assert.equal(created?.clientId, host.user.clientId);
+  assert.equal(await db.$count(clientMembers, and(eq(clientMembers.clientId, host.user.clientId), eq(clientMembers.userId, created!.id))), 1);
+
+  const session = await completeRequiredEnrollment(app, challenge.challengeToken!, email);
+  assert.equal(session.user.clientId, host.user.clientId);
+  const board = await app.inject({ method: "GET", url: `/boards/${boardId}`, headers: { authorization: `Bearer ${session.accessToken}` } });
+  assert.equal(board.statusCode, 200, board.body);
+
+  // From here on the account is an enrolled one: password login asks for the code, not enrollment.
+  const login = await app.inject({ method: "POST", url: "/auth/login", payload: { email, password: "Abc12345" } });
+  assert.equal(login.json<EnrollmentChallenge>().status, "mfa_required");
+});
+
+void test("an existing account without MFA that accepts an invite from an organisation requiring MFA must enroll before it receives that organisation's session", async () => {
+  const app = await buildIntegrationServer();
+  const existingSignup = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: { orgName: "Personal Org", email: "existing-no-mfa@example.com", password: "Abc12345", displayName: "Existing" },
+  });
+  assert.equal(existingSignup.statusCode, 200, existingSignup.body);
+  const existing = existingSignup.json<Session>();
+  const existingRefreshCookie = existingSignup.cookies.find((cookie) => cookie.name === "kanera_rt")!.value;
+  const { host, boardId } = await mfaHostWithBoard(app, "secure-host-2@example.com");
+  const token = await createInvite(app, host.accessToken, { orgRole: "admin" });
+
+  const accepted = await app.inject({
+    method: "POST",
+    url: "/invites/accept",
+    headers: { authorization: `Bearer ${existing.accessToken}` },
+    payload: { token },
+  });
+  assert.equal(accepted.statusCode, 200, accepted.body);
+  const challenge = accepted.json<EnrollmentChallenge>();
+  assert.equal(challenge.status, "mfa_enrollment_required");
+  assert.ok(challenge.challengeToken);
+  assert.equal(challenge.accessToken, undefined, "no access token for the MFA organisation before enrollment");
+  assert.equal(accepted.cookies.some((cookie) => cookie.name === "kanera_rt"), false);
+
+  // Membership moved, but neither the old token nor the old refresh cookie reaches the new organisation.
+  assert.equal(await db.$count(clientMembers, and(eq(clientMembers.clientId, host.user.clientId), eq(clientMembers.userId, existing.user.id))), 1);
+  const [identity] = await db.select({ activeClientId: users.activeClientId }).from(users).where(eq(users.id, existing.user.id)).limit(1);
+  assert.equal(identity?.activeClientId, host.user.clientId);
+  const boardWithOldToken = await app.inject({ method: "GET", url: `/boards/${boardId}`, headers: { authorization: `Bearer ${existing.accessToken}` } });
+  assert.notEqual(boardWithOldToken.statusCode, 200, "the pre-acceptance token is scoped to the old organisation");
+  const refreshed = await app.inject({ method: "POST", url: "/auth/refresh", cookies: { kanera_rt: existingRefreshCookie }, payload: {} });
+  assert.equal(refreshed.statusCode, 403, refreshed.body);
+
+  const session = await completeRequiredEnrollment(app, challenge.challengeToken!, "existing-no-mfa@example.com");
+  assert.equal(session.user.clientId, host.user.clientId);
+  const board = await app.inject({ method: "GET", url: `/boards/${boardId}`, headers: { authorization: `Bearer ${session.accessToken}` } });
+  assert.equal(board.statusCode, 200, board.body);
+});
+
+void test("an account that already has MFA enabled accepts an invite from an organisation requiring MFA and receives the session directly", async () => {
+  const app = await buildIntegrationServer();
+  const email = "existing-with-mfa@example.com";
+  const enrolled = await signup(app, email, "Enrolled Org");
+  const started = await app.inject({ method: "POST", url: "/auth/mfa/enroll", headers: { authorization: `Bearer ${enrolled.accessToken}` }, payload: { currentPassword: "Abc12345" } });
+  assert.equal(started.statusCode, 200, started.body);
+  const confirmed = await app.inject({
+    method: "POST",
+    url: "/auth/mfa/enroll/confirm",
+    headers: { authorization: `Bearer ${enrolled.accessToken}` },
+    payload: { code: totp(started.json<{ secret: string }>().secret, email).generate() },
+  });
+  assert.equal(confirmed.statusCode, 200, confirmed.body);
+  const { host, boardId } = await mfaHostWithBoard(app, "secure-host-3@example.com");
+  const token = await createInvite(app, host.accessToken, { orgRole: "admin" });
+
+  const accepted = await app.inject({ method: "POST", url: "/invites/accept", headers: { authorization: `Bearer ${enrolled.accessToken}` }, payload: { token } });
+  assert.equal(accepted.statusCode, 200, accepted.body);
+  const session = accepted.json<Session>();
+  assert.ok(session.accessToken, "an enrolled account is not challenged again");
+  assert.equal(session.user.clientId, host.user.clientId);
+  assert.ok(accepted.cookies.find((cookie) => cookie.name === "kanera_rt"));
+  const board = await app.inject({ method: "GET", url: `/boards/${boardId}`, headers: { authorization: `Bearer ${session.accessToken}` } });
+  assert.equal(board.statusCode, 200, board.body);
 });
