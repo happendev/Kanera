@@ -473,13 +473,25 @@ export interface WebhookDeliveryResult {
 export async function processWebhookDeliveries(log?: FastifyBaseLogger): Promise<WebhookDeliveryResult> {
   // The MCP queue drains alongside the regular one, never ahead of it: a hung callback host for
   // one subscriber must not delay unrelated customer webhooks, and vice versa.
-  const [mcpDrainedFull, due] = await Promise.all([
+  const [mcpDrainedFull, regularDrainedFull] = await Promise.all([
     processMcpEventDeliveries(postMcpWebhook, log).catch((err: unknown) => {
       log?.error({ err }, "mcp event delivery drain failed");
       return false;
     }),
-    claimWebhookDeliveries(),
+    processRegularWebhookDeliveries(log).catch((err: unknown) => {
+      // Settle both queues before the single-flight scheduler can start another sweep.
+      log?.error({ err }, "webhook delivery drain failed");
+      return false;
+    }),
   ]);
+
+  return { drainedFull: mcpDrainedFull || regularDrainedFull };
+}
+
+async function processRegularWebhookDeliveries(log?: FastifyBaseLogger): Promise<boolean> {
+  // Start the full regular drain alongside MCP delivery, not just its database claim. Otherwise
+  // every healthy regular endpoint waits through all of a slow MCP batch's timeout windows.
+  const due = await claimWebhookDeliveries();
 
   // Deliver in fixed-size concurrent chunks: a single slow/timing-out endpoint no longer
   // blocks every other due delivery behind it. allSettled keeps one failure from rejecting
@@ -494,7 +506,7 @@ export async function processWebhookDeliveries(log?: FastifyBaseLogger): Promise
     });
   }
 
-  return { drainedFull: mcpDrainedFull || due.length >= DELIVERY_LIMIT };
+  return due.length >= DELIVERY_LIMIT;
 }
 
 export async function cleanupWebhookDeliveries(log?: FastifyBaseLogger, now = new Date()): Promise<number> {

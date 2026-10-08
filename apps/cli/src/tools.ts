@@ -1,6 +1,7 @@
 import { Client, InMemoryTransport, ProtocolError, ProtocolErrorCode, type ServerCapabilities, type Transport } from "@modelcontextprotocol/client";
 import { z } from "zod";
 import { CliError, EXIT, exitCodeForApiError, usageError } from "./errors.js";
+import { ToolCatalogCache } from "./tool-cache.js";
 
 export interface ToolCatalogEntry {
   name: string;
@@ -66,8 +67,12 @@ export type ToolSessionOptions =
 // `auto` probes with the 2026-07-28 `server/discover` and falls back to the 2025 `initialize`
 // handshake only when the server gives no modern answer, so the CLI speaks the current protocol to
 // Kanera's endpoint and still works against older self-hosted MCP deployments.
-function cliClient() {
-  return new Client({ name: "kanera-cli", version: "1.0.0" }, { capabilities: {}, versionNegotiation: { mode: "auto" } });
+function cliClient(endpoint?: string) {
+  return new Client({ name: "kanera-cli", version: "1.0.0" }, {
+    capabilities: {},
+    versionNegotiation: { mode: "auto" },
+    ...(endpoint && { responseCacheStore: new ToolCatalogCache(endpoint) }),
+  });
 }
 
 /**
@@ -103,7 +108,7 @@ export async function openToolSession(options: ToolSessionOptions): Promise<Tool
   // The in-process pair carries no wire protocol worth negotiating: the same handlers answer either
   // era, and a directly connected server only speaks 2026-07-28 behind the SDK's serving entries,
   // so probing would always fall back. Only the remote endpoint negotiates.
-  const client = "mcpUrl" in options ? cliClient() : new Client({ name: "kanera-cli", version: "1.0.0" }, { capabilities: {} });
+  const client = "mcpUrl" in options ? cliClient(options.mcpUrl) : new Client({ name: "kanera-cli", version: "1.0.0" }, { capabilities: {} });
   let closeServer: () => Promise<void> = async () => {};
   if ("mcpUrl" in options) {
     const { StreamableHTTPClientTransport } = await import("@modelcontextprotocol/client");

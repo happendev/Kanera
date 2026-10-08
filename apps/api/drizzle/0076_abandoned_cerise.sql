@@ -1,0 +1,4 @@
+DROP INDEX "direct_realtime_outbox_pending_idx";--> statement-breakpoint
+CREATE INDEX "activity_events_entity_created_at_idx" ON "activity_event" USING btree ("entity_type","entity_id","created_at");--> statement-breakpoint
+CREATE INDEX "activity_events_payload_card_created_at_idx" ON "activity_event" USING btree (("payload"->>'cardId'),"created_at") WHERE "activity_event"."feed_visible" = true and "activity_event"."payload"->>'cardId' is not null;--> statement-breakpoint
+CREATE INDEX "direct_realtime_outbox_pending_idx" ON "direct_realtime_outbox" USING btree ("created_at","id") WHERE "direct_realtime_outbox"."realtime_dispatched" = false;

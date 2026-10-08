@@ -148,8 +148,7 @@ export class NotesState {
       title: input.title ?? "",
       icon: input.icon ?? null,
     });
-    this.upsertNote(note);
-    this.persistSnapshot();
+    if (this.upsertNote(note)) this.persistSnapshot();
     return note;
   }
 
@@ -159,8 +158,7 @@ export class NotesState {
   ): Promise<WireNote> {
     this.assertOnline();
     const note = await this.api.patch<WireNote>(`/notes/${id}`, patch);
-    this.upsertNote(note);
-    this.persistSnapshot();
+    if (this.upsertNote(note)) this.persistSnapshot();
     return note;
   }
 
@@ -217,8 +215,7 @@ export class NotesState {
 
   async fetchOne(id: string): Promise<WireNote> {
     const note = await this.api.get<WireNote>(`/notes/${id}`);
-    this.upsertNote(note);
-    this.persistSnapshot();
+    if (this.upsertNote(note)) this.persistSnapshot();
     return note;
   }
 
@@ -259,18 +256,26 @@ export class NotesState {
 
   private receiveNote(note: WireNote) {
     if (!this.isCurrentScope(note)) return;
-    this.upsertNote(note);
-    this.persistSnapshot();
+    if (this.upsertNote(note)) this.persistSnapshot();
   }
 
-  private upsertNote(note: WireNote) {
-    this.notes.update((rows) => {
-      const existing = rows.findIndex((n) => n.id === note.id);
-      if (existing === -1) return [...rows, note];
+  private upsertNote(note: WireNote): boolean {
+    const rows = this.notes();
+    const existing = rows.findIndex((row) => row.id === note.id);
+    const current = rows[existing];
+    // A local HTTP result and its realtime echo describe the same complete row. Preserve identity
+    // so neither the note tree/editor nor the offline cache process that acknowledgement twice.
+    // Dates arrive as strings over HTTP/socket and as Dates from older IndexedDB snapshots.
+    const comparable = (value: unknown) => value instanceof Date ? value.toISOString() : value;
+    if (current && Object.keys(current).length === Object.keys(note).length
+      && Object.entries(note).every(([key, value]) => comparable(current[key as keyof WireNote]) === comparable(value))) return false;
+    if (existing === -1) this.notes.set([...rows, note]);
+    else {
       const next = rows.slice();
       next[existing] = note;
-      return next;
-    });
+      this.notes.set(next);
+    }
+    return true;
   }
 
   private persistSnapshot() {
@@ -356,13 +361,11 @@ export class NotesState {
     const handlers: Partial<ServerToClientEvents> = {
       "note:created": ({ note }) => {
         if (!this.isCurrentScope(note)) return;
-        this.upsertNote(note);
-        this.persistSnapshot();
+        if (this.upsertNote(note)) this.persistSnapshot();
       },
       "note:updated": ({ note }) => {
         if (!this.isCurrentScope(note)) return;
-        this.upsertNote(note);
-        this.persistSnapshot();
+        if (this.upsertNote(note)) this.persistSnapshot();
       },
       "note:attachment:created": ({ note }) => this.receiveNote(note),
       "note:attachment:deleted": ({ note }) => this.receiveNote(note),

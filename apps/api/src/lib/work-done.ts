@@ -7,7 +7,7 @@ import type {
 } from "@kanera/shared/dto";
 import { ACTIVITY_ACTION, activityEvents, cardChecklistItems, cardChecklists, cardKeyPrefixReservations, cardSummaryView, cards, users } from "@kanera/shared/schema";
 import { and, eq, gte, inArray, isNull, lt, notInArray, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
-import { db } from "../db.js";
+import { db, type Tx } from "../db.js";
 import { toWireCardSummary } from "./card-summary.js";
 import { badRequest } from "./errors.js";
 import { assignedCardVisibility } from "./access.js";
@@ -227,13 +227,20 @@ function actorDisplay(activity: { actorKind: string; apiKeyName: string | null }
  * Checklist completions are sourced from the item's current completed_at value,
  * so reopening and recompleting an item attributes it to the latest completion.
  */
-export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneResponse> {
+type WorkDoneSelection = {
+  activityIds: string[];
+  checklistItemIds: string[];
+  /** Preserve run boundaries if a page omits the completion that separated two move runs. */
+  moveRunByActivityId: Map<string, string>;
+};
+
+export async function loadWorkDone(opts: LoadWorkDoneOptions, selection?: WorkDoneSelection, database: Tx = db): Promise<WorkDoneResponse> {
   if (opts.boardIds.length === 0) return { events: [] };
   if (opts.actorUserIds && opts.actorUserIds.length === 0) return { events: [] };
   const timeZone = opts.timeZone ?? "UTC";
   const localDayKey = localDayKeyFormatter(timeZone);
 
-  const activityRowsQuery = db
+  const activityRowsQuery = database
     .select()
     .from(activityEvents)
     .innerJoin(cards, eq(cards.id, activityEvents.entityId))
@@ -251,10 +258,15 @@ export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneR
       ]),
       ...workDoneActivityPredicates(opts),
       opts.q ? cardSearchPredicate(opts.q) : undefined,
+      // One coalesced move path can exceed PostgreSQL's bind-parameter limit. Preserve the
+      // complete path using one typed array parameter rather than one parameter per activity.
+      selection ? sql`${activityEvents.id} = any(${sql.param(selection.activityIds)}::uuid[])` : undefined,
     ))
-    .orderBy(activityEvents.createdAt);
+    // A stable tie-break also keeps SQL page coalescing and the full timeline identical when bulk
+    // writes share one timestamp. The public cursor already uses timestamp plus event identity.
+    .orderBy(activityEvents.createdAt, activityEvents.id);
 
-  const checklistRowsQuery = db
+  const checklistRowsQuery = database
     .select()
     .from(cardChecklistItems)
     .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
@@ -262,6 +274,7 @@ export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneR
     .leftJoin(users, eq(users.id, cardChecklistItems.completedById))
     .where(and(
       ...workDoneChecklistPredicates(opts),
+      selection ? inArray(cardChecklistItems.id, selection.checklistItemIds) : undefined,
       opts.q
         ? sql`(
             lower(${cardChecklistItems.text}) like ${escapedSearchPattern(opts.q)} escape '\\'
@@ -278,7 +291,7 @@ export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneR
     ...checklistRows.map((row) => row.card.id),
   ])];
   const richRows = cardIds.length
-    ? await db.select().from(cardSummaryView).where(inArray(cardSummaryView.id, cardIds))
+    ? await database.select().from(cardSummaryView).where(inArray(cardSummaryView.id, cardIds))
     : [];
   const richByCardId = new Map(richRows.map((row) => [row.id, row]));
 
@@ -316,7 +329,7 @@ export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneR
       agentName,
     };
 
-    const moveKey = `${card.id}:${localDayKey(activity.createdAt)}`;
+    const moveKey = selection?.moveRunByActivityId.get(activity.id) ?? `${card.id}:${localDayKey(activity.createdAt)}`;
 
     if (activity.action === ACTIVITY_ACTION.MOVED) {
       const toListId = payload.toListId ?? card.listId;
@@ -393,6 +406,142 @@ export async function loadWorkDone(opts: LoadWorkDoneOptions): Promise<WorkDoneR
   );
 
   return { events };
+}
+
+export type WorkDonePageSummary = {
+  created: number;
+  moved: number;
+  completed: number;
+  checklistItemCompleted: number;
+  cardsTouched: number;
+  totalEvents: number;
+};
+
+type WorkDonePageKey = {
+  id: string;
+  activityIds: string[];
+  checklistItemIds: string[];
+};
+
+/**
+ * Public history needs an exact report summary, but only a page of rich events. Coalesce narrow
+ * event keys in PostgreSQL, compute the summary there, and hydrate only the selected runs. A move
+ * run may contain several activities; retaining their IDs preserves its complete list path and
+ * final actor without sending every other card/description/user row through the Node process.
+ */
+export async function loadWorkDonePage(
+  opts: LoadWorkDoneOptions,
+  page: { limit: number; cursor?: { at: string; id: string } | null },
+): Promise<WorkDoneResponse & { summary: WorkDonePageSummary; hasMore: boolean }> {
+  if (!opts.boardIds.length || opts.actorUserIds?.length === 0) return loadWorkDonePageSnapshot(opts, page, db);
+  // Summary, page keys and their hydration must describe one snapshot. In particular, deleting a
+  // selected card between phases must not leave an empty page with a continuation and no cursor.
+  return db.transaction((tx) => loadWorkDonePageSnapshot(opts, page, tx), {
+    isolationLevel: "repeatable read", accessMode: "read only",
+  });
+}
+
+async function loadWorkDonePageSnapshot(
+  opts: LoadWorkDoneOptions,
+  page: { limit: number; cursor?: { at: string; id: string } | null },
+  database: Tx,
+): Promise<WorkDoneResponse & { summary: WorkDonePageSummary; hasMore: boolean }> {
+  const emptySummary: WorkDonePageSummary = {
+    created: 0, moved: 0, completed: 0, checklistItemCompleted: 0, cardsTouched: 0, totalEvents: 0,
+  };
+  if (!opts.boardIds.length || opts.actorUserIds?.length === 0) {
+    return { events: [], summary: emptySummary, hasMore: false };
+  }
+  const timeZone = opts.timeZone ?? "UTC";
+  const activitySource = database.select({
+    id: activityEvents.id,
+    cardId: sql`${cards.id}`.as("card_id"),
+    action: activityEvents.action,
+    createdAt: activityEvents.createdAt,
+    localDay: activityDayExpr(activityEvents.createdAt, timeZone).as("local_day"),
+  }).from(activityEvents).innerJoin(cards, eq(cards.id, activityEvents.entityId)).where(and(
+    // Match the timeline's strict JSON boolean test. A suppressed/no-op completion does not end
+    // a move run; removing it before the window function has the same effect as the JS continue.
+    or(
+      inArray(activityEvents.action, [ACTIVITY_ACTION.CREATED, ACTIVITY_ACTION.MOVED, ACTIVITY_ACTION.COMPLETED]),
+      and(eq(activityEvents.action, ACTIVITY_ACTION.COMPLETION_SET), sql`${activityEvents.payload}->'toValue' = 'true'::jsonb`),
+    ),
+    ...workDoneActivityPredicates(opts),
+    opts.q ? cardSearchPredicate(opts.q) : undefined,
+  ));
+  const checklistSource = database.select({
+    id: cardChecklistItems.id,
+    cardId: sql`${cards.id}`.as("card_id"),
+    completedAt: cardChecklistItems.completedAt,
+  }).from(cardChecklistItems)
+    .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
+    .innerJoin(cards, eq(cards.id, cardChecklists.cardId))
+    .where(and(
+      ...workDoneChecklistPredicates(opts),
+      opts.q ? sql`(
+        lower(${cardChecklistItems.text}) like ${escapedSearchPattern(opts.q)} escape '\\'
+        or lower(${cardChecklists.title}) like ${escapedSearchPattern(opts.q)} escape '\\'
+        or ${cardSearchPredicate(opts.q)}
+      )` : undefined,
+    ));
+  const result = await database.execute<WorkDonePageSummary & { page: WorkDonePageKey[] }>(sql`
+    with activity_source as (${activitySource}),
+    activity_runs as (
+      select *, count(*) filter (where action <> 'moved') over (
+        partition by card_id, local_day order by created_at, id rows unbounded preceding
+      ) as run
+      from activity_source
+    ),
+    event_keys as materialized (
+      select
+        (array_agg(id order by created_at, id))[1]::text as id,
+        card_id,
+        -- Wire timestamps have millisecond precision. Comparing the database's finer precision
+        -- against a wire cursor can otherwise duplicate or skip events with equal wire times.
+        date_trunc('milliseconds', max(created_at)) as at,
+        case when action = 'moved' then 'moved' when action = 'created' then 'created' else 'completed' end as type,
+        array_agg(id order by created_at, id) as activity_ids,
+        '{}'::uuid[] as checklist_item_ids
+      from activity_runs
+      group by card_id, local_day, run,
+        case when action = 'moved' then 'moved' when action = 'created' then 'created' else 'completed' end
+      union all
+      select 'checklistItem:' || id::text, card_id, date_trunc('milliseconds', completed_at),
+        'checklistItemCompleted', '{}'::uuid[], array[id]
+      from (${checklistSource}) checklist_source
+    ),
+    totals as (
+      select
+        count(*) filter (where type = 'created')::integer as created,
+        count(*) filter (where type = 'moved')::integer as moved,
+        count(*) filter (where type = 'completed')::integer as completed,
+        count(*) filter (where type = 'checklistItemCompleted')::integer as "checklistItemCompleted",
+        count(distinct card_id)::integer as "cardsTouched",
+        count(*)::integer as "totalEvents"
+      from event_keys
+    ),
+    selected as (
+      select * from event_keys
+      where ${page.cursor ? sql`(at < ${new Date(page.cursor.at)} or (at = ${new Date(page.cursor.at)} and id collate "C" > ${page.cursor.id}))` : sql`true`}
+      order by at desc, id collate "C"
+      limit ${page.limit + 1}
+    )
+    select totals.*, coalesce((
+      select json_agg(json_build_object(
+        'id', id, 'activityIds', activity_ids, 'checklistItemIds', checklist_item_ids
+      ) order by at desc, id collate "C") from selected
+    ), '[]'::json) as page from totals
+  `);
+  const { page: keys, ...summary } = result.rows[0]!;
+  const selected = keys.slice(0, page.limit);
+  const moveRunByActivityId = new Map<string, string>();
+  for (const key of selected) for (const id of key.activityIds) moveRunByActivityId.set(id, key.id);
+  const response = selected.length ? await loadWorkDone(opts, {
+    activityIds: selected.flatMap((key) => key.activityIds),
+    checklistItemIds: selected.flatMap((key) => key.checklistItemIds),
+    moveRunByActivityId,
+  }, database) : { events: [] };
+  return { ...response, summary, hasMore: keys.length > page.limit };
 }
 
 /**

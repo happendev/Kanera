@@ -44,8 +44,8 @@ export function mergeSmtpPassword(incoming: SmtpConfig, existing: SmtpConfig | n
 
 export async function testSmtpConfig(config: SmtpConfig, to: string): Promise<void> {
   const client = new SmtpProbe(config);
-  await client.connect();
   try {
+    await client.connect();
     await client.ehlo();
     if (config.security === "starttls") {
       await client.command("STARTTLS", [220]);
@@ -151,8 +151,8 @@ export async function sendEmail({ config, to, subject, html, text, headers }: Se
     : buildMimeMessage({ from, to, subject, html: html!, headers });
 
   const client = new SmtpProbe(config);
-  await client.connect();
   try {
+    await client.connect();
     await client.ehlo();
     if (config.security === "starttls") {
       await client.command("STARTTLS", [220]);
@@ -184,6 +184,8 @@ class SmtpProbe {
         this.config.security === "tls"
           ? tls.connect({ host: this.config.host, port: this.config.port, ...smtpTlsTrust(this.config.host) }, () => resolve(socket))
           : net.connect({ host: this.config.host, port: this.config.port }, () => resolve(socket));
+      // Keep the handle even when the handshake/banner fails so the caller's finally can close it.
+      this.socket = socket;
       socket.setTimeout(10000, () => socket.destroy(new Error("SMTP connection timed out.")));
       socket.once("error", onError);
     });
@@ -225,7 +227,7 @@ class SmtpProbe {
   }
 
   close() {
-    this.socket.destroy();
+    this.socket?.destroy();
   }
 
   private async read(expected: number[]): Promise<string> {
@@ -237,20 +239,38 @@ class SmtpProbe {
 
   private waitForResponse(): Promise<string> {
     return new Promise((resolve, reject) => {
-      const started = Date.now();
-      const tick = () => {
+      const socket = this.socket;
+      const cleanup = () => {
+        clearTimeout(timeout);
+        socket.off("data", onData);
+        socket.off("error", onError);
+        socket.off("close", onClose);
+      };
+      const onError = (error: Error) => {
+        cleanup();
+        reject(error);
+      };
+      const onData = () => {
+        // The connection's data listener fills the buffer first. consumeResponse waits for the
+        // terminating line of a multiline reply, including when TCP splits it across chunks.
         const response = this.consumeResponse();
         if (response) {
+          cleanup();
           resolve(response);
-          return;
+          return true;
         }
-        if (Date.now() - started > 10000) {
-          reject(new Error("SMTP server did not respond."));
-          return;
-        }
-        setTimeout(tick, 25);
+        return false;
       };
-      tick();
+      const onClose = () => {
+        if (!onData()) onError(new Error("SMTP connection closed before a complete response."));
+      };
+      const timeout = setTimeout(() => onError(new Error("SMTP server did not respond.")), 10_000);
+      socket.on("data", onData);
+      socket.once("error", onError);
+      socket.once("close", onClose);
+      // A response can already be buffered before read() is called (notably the greeting).
+      // Check it after attaching listeners so neither buffered nor newly arriving bytes are lost.
+      if (!onData() && socket.destroyed) onClose();
     });
   }
 

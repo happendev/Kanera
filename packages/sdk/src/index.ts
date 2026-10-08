@@ -27,7 +27,7 @@ import type { Session } from "./types.js";
  * ```
  *
  * Card arguments accept a UUID, a human key such as `MKT-42`, or a canonical card URL; keys are
- * resolved once per client and cached.
+ * memoized in a bounded per-client cache.
  */
 export class Kanera {
   readonly http: KaneraHttpClient;

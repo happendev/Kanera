@@ -103,9 +103,13 @@ export async function resolveCardReference(http: KaneraHttpClient, rawReference:
  * same card more than once; the cache holds the promise so concurrent callers share one request.
  */
 export function createCardReferenceResolver(http: KaneraHttpClient): (reference: string) => Promise<Uuid> {
+  // Long-lived importers can visit millions of cards. Bound reference memoization; UUIDs already
+  // name their destination and must not consume cache space merely for passing through the SDK.
+  const maximumEntries = 1_000;
   const cache = new Map<string, Promise<Uuid>>();
   return (reference) => {
     const normalized = reference.trim();
+    if (UUID_PATTERN.test(normalized)) return Promise.resolve(normalized);
     const canonical = parseCardUrl(normalized);
     const cacheKey = canonical
       ? `${canonical.organisationKey}/${canonical.cardKey}`
@@ -116,11 +120,16 @@ export function createCardReferenceResolver(http: KaneraHttpClient): (reference:
     if (!pending) {
       pending = resolveCardReference(http, normalized);
       cache.set(cacheKey, pending);
+      if (cache.size > maximumEntries) cache.delete(cache.keys().next().value!);
       // Only successful resolutions are worth remembering. A not-found or transient failure must not
       // pin the instance to that answer once the card exists, access is granted, or the API is back.
       pending.catch(() => {
         if (cache.get(cacheKey) === pending) cache.delete(cacheKey);
       });
+    } else {
+      // Keep frequently used references warm while a large batch streams past them.
+      cache.delete(cacheKey);
+      cache.set(cacheKey, pending);
     }
     return pending;
   };

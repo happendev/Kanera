@@ -1,6 +1,6 @@
 import { once } from "node:events";
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Page } from "@playwright/test";
@@ -32,12 +32,31 @@ function cliHome() {
   delete env.KANERA_PUBLIC_API_URL;
   delete env.KANERA_MCP_URL;
   const configFile = path.join(home, "kanera", "config.json");
+  const rpcLog = path.join(home, "rpc-methods.jsonl");
+  const rpcCapture = path.join(home, "capture-rpc.mjs");
+  writeFileSync(rpcLog, "");
+  // Observe the bundled process's actual HTTP calls without replacing its transport or server.
+  // Method names alone prove catalogue reuse and keep credentials/payloads out of the artifact.
+  writeFileSync(rpcCapture, `
+    import { appendFileSync } from "node:fs";
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (input, init) => {
+      if (typeof init?.body === "string") {
+        try {
+          const request = JSON.parse(init.body);
+          if (typeof request.method === "string") appendFileSync(${JSON.stringify(rpcLog)}, JSON.stringify(request.method) + "\\n");
+        } catch { /* Non-RPC request bodies are irrelevant to the catalogue assertion. */ }
+      }
+      return originalFetch(input, init);
+    };
+  `);
   return {
     home,
     configFile,
     startMcp: () => spawn(process.execPath, [cli, "mcp"], { env, stdio: ["pipe", "pipe", "pipe"] }),
     start: (args: string[]) => spawn(process.execPath, [cli, ...args], { env, stdio: ["ignore", "pipe", "pipe"] }),
-    run: (args: string[]) => finished(spawn(process.execPath, [cli, ...args], { env, stdio: ["ignore", "pipe", "pipe"] })),
+    run: (args: string[], captureRpc = false) => finished(spawn(process.execPath, [...(captureRpc ? ["--import", rpcCapture] : []), cli, ...args], { env, stdio: ["ignore", "pipe", "pipe"] })),
+    rpcMethods: () => readFileSync(rpcLog, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as string),
     profile: (): StoredProfile => (JSON.parse(readFileSync(configFile, "utf8")) as { profiles: Record<string, StoredProfile> }).profiles.default!,
     expireAccessToken: () => {
       // Simulate the 15-minute access token lapsing without waiting for it.
@@ -119,7 +138,7 @@ async function mcpRequest(child: ChildProcess, id: number, method: string, param
   });
 }
 
-test("the CLI signs in with the browser device flow, works on the board, refreshes, and signs out", async ({ page, signIn, apiAs, uniqueName }) => {
+test("the CLI signs in with the browser device flow, works on the board, refreshes, and signs out", async ({ page, signIn, apiAs, uniqueName }, testInfo) => {
   const cliEnv = cliHome();
   let bridge: ChildProcess | undefined;
   try {
@@ -168,10 +187,34 @@ test("the CLI signs in with the browser device flow, works on the board, refresh
     // The page is still on the consent screen; open the board directly.
     await page.goto(boardPath);
     await expectBoardLoaded(page, "Platform Delivery");
-    const board = json<{ lists: { id: string; name: string }[] }>(await cliEnv.run(["board", boardId, "--json"]));
+    const catalogDirectory = path.join(cliEnv.home, "kanera", "tool-cache");
+    // OAuth login validates its token with a real tool session, which already warms this cache.
+    // Clear only this test's temporary catalogue so the captured command really is a cold read.
+    rmSync(catalogDirectory, { recursive: true, force: true });
+    const board = json<{ lists: { id: string; name: string }[] }>(await cliEnv.run(["board", boardId, "--json"], true));
+    const coldMethods = cliEnv.rpcMethods();
+    expect(coldMethods.filter((method) => method === "tools/list")).toHaveLength(1);
+    // A second CLI process can reuse the public catalogue, while the live discovery below still
+    // enforces token revocation. Inspect wire methods rather than file modification times: a
+    // redundant catalogue request is a regression even if a future store skips identical writes.
+    // The isolated store tests cover expiry/version/corruption.
+    const catalogFiles = readdirSync(catalogDirectory).filter((name) => name.endsWith(".json"));
+    expect(catalogFiles).toHaveLength(1);
+    const catalogFile = path.join(catalogDirectory, catalogFiles[0]!);
+    const catalogText = readFileSync(catalogFile, "utf8");
+    expect(catalogText).not.toContain(stored.oauth!.accessToken);
+    expect(catalogText).not.toContain(stored.oauth!.refreshToken);
     const listId = board.lists[0]!.id;
     const title = uniqueName("E2E CLI OAuth card");
-    json(await cliEnv.run(["card", "create", title, "--boardId", boardId, "--listId", listId, "--json"]));
+    json(await cliEnv.run(["card", "create", title, "--boardId", boardId, "--listId", listId, "--json"], true));
+    const warmMethods = cliEnv.rpcMethods().slice(coldMethods.length);
+    expect(warmMethods.filter((method) => method === "tools/list")).toHaveLength(0);
+    expect(warmMethods.filter((method) => method === "server/discover")).toHaveLength(1);
+    expect(warmMethods.filter((method) => method === "tools/call")).toHaveLength(1);
+    await testInfo.attach("cli-catalogue-wire.json", {
+      body: JSON.stringify({ reproduce: "pnpm test:e2e -- cli-oauth.spec.ts", coldMethods, warmMethods, catalogueBytes: Buffer.byteLength(catalogText) }, null, 2),
+      contentType: "application/json",
+    });
     await expect(cardTile(page, title)).toBeVisible();
     // The same for a write an MCP host makes through the stdio bridge, relayed to the remote server.
     const bridgeTitle = uniqueName("E2E MCP bridge card");
