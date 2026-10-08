@@ -62,6 +62,19 @@ async function exercise(client: Client, cell: string, target: { boardId: string;
   // client sees a different contract than the v1 SDK published.
   const cardsCreate = tools.tools.find((tool) => tool.name === "cards.create")!;
   expect(JSON.stringify(cardsCreate.inputSchema), cell).not.toContain('"type":["');
+  // Hosts use these labels to gate irreversible publication and external workflow sends.
+  // Check the advertised wire catalog in both eras and transports, not just the registry.
+  for (const name of ["comments.add", "automations.create", "automations.update", "automations.set_enabled"]) {
+    const tool = tools.tools.find((entry) => entry.name === name)!;
+    expect(tool.annotations, `${cell}: ${name}`).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: true,
+      openWorldHint: name.startsWith("automations."),
+    });
+    expect(tool.description, `${cell}: ${name} discloses fanout`).toContain("webhook");
+  }
+  expect(cardsCreate.annotations, cell).toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: false });
+  record("safety-annotations", tools.tools.filter((tool) => ["comments.add", "automations.create", "automations.update", "automations.set_enabled"].includes(tool.name)).map((tool) => ({ name: tool.name, annotations: tool.annotations })));
   record("tools/list", { count: toolNames.length });
 
   const board = await client.callTool({ name: "boards.get", arguments: { boardId: target.boardId } });
