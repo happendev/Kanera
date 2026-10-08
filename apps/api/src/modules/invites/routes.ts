@@ -10,7 +10,7 @@ import { emitToBoard, emitToClient, emitToClientDurable, emitToUser } from "../.
 import { hashOpaqueToken, newOpaqueToken } from "../../lib/tokens.js";
 import { assertOrgMemberLimit, assertSeatPoolAvailable, lockTenant } from "../../lib/tier-limits.js";
 import { captureWorkspaceInvitationCreated, captureWorkspaceMemberJoined } from "../../lib/analytics-milestones.js";
-import { pinOrgAdminToClientBoards } from "../../lib/board-membership.js";
+import { pinAdminToWorkspaceBoards, pinOrgAdminToClientBoards } from "../../lib/board-membership.js";
 import { recordActivity } from "../../lib/activity.js";
 import { notifyAdminsOrgInviteAccepted } from "../../lib/invite-accepted-notifications.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
@@ -140,6 +140,12 @@ export async function inviteRoutes(app: FastifyInstance) {
               target: [workspaceMembers.workspaceId, workspaceMembers.userId],
               set: { role: sql`excluded.role` },
             });
+          // Same invariant as the member-promotion route: a workspace admin must hold a pinned editor
+          // row on every board in that workspace, because normal-user board access is resolved from
+          // board_members alone. Without this the invitee is "admin" yet 403s on each existing board.
+          for (const grant of grants) {
+            if (grant.role === "admin") await pinAdminToWorkspaceBoards(tx, grant.workspaceId, req.auth.sub);
+          }
         }
         const [identity] = await tx.select({
           email: users.email,

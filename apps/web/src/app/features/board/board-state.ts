@@ -1052,7 +1052,16 @@ export class BoardState {
     });
   }
 
-  removeChecklist(cardId: string, checklistId: string) {
+  /**
+   * `summary` is the server's description of the deleted checklist (see the event contract). It is
+   * the only source for the badge adjustment when this client never opened the card: with no cached
+   * detail there is nothing local to subtract, and the tile would keep showing e.g. 1/3 forever.
+   */
+  removeChecklist(
+    cardId: string,
+    checklistId: string,
+    summary?: { checklistParentItemId: string | null; itemCount: number; completedItemCount: number },
+  ) {
     const removed = this.checklistsForCard(cardId).find((c) => c.id === checklistId);
     const removedItemIds = new Set(removed?.items.map((item) => item.id) ?? []);
     this.detailedCards.update((cards) => {
@@ -1067,7 +1076,11 @@ export class BoardState {
       });
       return next;
     });
-    if (removed?.parentItemId === null) this.adjustChecklistCounts(cardId, -removed.items.filter((item) => item.completedAt).length, -removed.items.length);
+    if (removed) {
+      if (removed.parentItemId === null) this.adjustChecklistCounts(cardId, -removed.items.filter((item) => item.completedAt).length, -removed.items.length);
+    } else if (summary && summary.checklistParentItemId === null) {
+      this.adjustChecklistCounts(cardId, -summary.completedItemCount, -summary.itemCount);
+    }
   }
 
   addChecklistItem(cardId: string, checklistId: string, item: WireCardChecklistItem, checklistParentItemId?: string | null) {

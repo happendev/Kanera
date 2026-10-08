@@ -815,3 +815,40 @@ void test("a read-scoped personal API key can read but not write notes", async (
   });
   assert.equal(ownerCreate.statusCode, 201);
 });
+
+void test("an explicit null edge anchor moves a note to the top or bottom instead of appending", async () => {
+  // API/SDK/MCP callers express "move to top" as afterNoteId: null and "move to bottom" as
+  // beforeNoteId: null. The route used to coalesce both to undefined, which the neighbour lookup
+  // reads as "no anchor" and appends, so the note silently stayed where it was.
+  const { app, ownerToken, workspace } = await setupWorkspace();
+  const headers = { authorization: `Bearer ${ownerToken}` };
+  const created: { id: string; title: string }[] = [];
+  for (const title of ["A", "B", "C"]) {
+    const response = await app.inject({ method: "POST", url: `/workspaces/${workspace.id}/notes`, headers, payload: { scope: "team", title } });
+    assert.equal(response.statusCode, 201, response.body);
+    created.push(response.json());
+  }
+  const [a, b, c] = [created[0]!, created[1]!, created[2]!];
+
+  // The fixture already seeds a root team note; only the relative order of A/B/C matters here.
+  const createdIds = new Set(created.map((note) => note.id));
+  async function orderedTitles() {
+    const rows = await db.select({ id: notes.id, title: notes.title, position: notes.position }).from(notes)
+      .where(eq(notes.workspaceId, workspace.id));
+    return rows.filter((row) => createdIds.has(row.id)).sort((x, y) => Number(x.position) - Number(y.position)).map((row) => row.title);
+  }
+  assert.deepEqual(await orderedTitles(), ["A", "B", "C"]);
+
+  const toTop = await app.inject({ method: "PATCH", url: `/notes/${c.id}/move`, headers, payload: { parentNoteId: null, afterNoteId: null } });
+  assert.equal(toTop.statusCode, 200, toTop.body);
+  assert.deepEqual(await orderedTitles(), ["C", "A", "B"]);
+
+  const toBottom = await app.inject({ method: "PATCH", url: `/notes/${c.id}/move`, headers, payload: { parentNoteId: null, beforeNoteId: null } });
+  assert.equal(toBottom.statusCode, 200, toBottom.body);
+  assert.deepEqual(await orderedTitles(), ["A", "B", "C"]);
+
+  // Concrete neighbour anchors (what the UI sends) keep working.
+  const between = await app.inject({ method: "PATCH", url: `/notes/${a.id}/move`, headers, payload: { parentNoteId: null, afterNoteId: b.id, beforeNoteId: c.id } });
+  assert.equal(between.statusCode, 200, between.body);
+  assert.deepEqual(await orderedTitles(), ["B", "A", "C"]);
+});

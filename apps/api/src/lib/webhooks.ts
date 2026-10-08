@@ -417,11 +417,15 @@ export async function deliverWebhookDelivery(
     // 3xx would let a public host bounce the request (and its captured response body) to a
     // private or metadata address. Receivers must answer at the configured URL directly.
     const response = await fetch(requestUrl, { ...requestInit, redirect: "error", signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS) });
-    const responseBody = responseExcerpt(await response.text().catch(() => ""));
+    const fullResponseBody = await response.text().catch(() => "");
+    // Only an excerpt is stored, but success must be judged on the complete body: Telegram echoes
+    // the sent message in its JSON, so a long card title or comment pushes `"ok":true` past the
+    // excerpt boundary and a truncated parse would turn a delivered message into a retried one.
+    const responseBody = responseExcerpt(fullResponseBody);
     let success = response.status >= 200 && response.status < 300;
     if (success && target.provider === "telegram") {
       try {
-        success = (JSON.parse(responseBody) as { ok?: unknown }).ok === true;
+        success = (JSON.parse(fullResponseBody) as { ok?: unknown }).ok === true;
       } catch {
         success = false;
       }

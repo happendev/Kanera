@@ -24,6 +24,7 @@ import { emitLaneRebalanced, emitWorkspaceLaneRebalanced, positionForLaneInsert,
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { assertValidOptionIds, assertWorkspaceMemberIds, buildCustomFieldValueColumns, customFieldValueEquals, describeCustomFieldValue, emptyValueColumns, hasCustomFieldValue, type CustomFieldValueColumns } from "../../lib/custom-fields.js";
 import { AppError, badRequest, notFound } from "../../lib/errors.js";
+import { resolveDueDatePatch } from "../../lib/due-date.js";
 import { allocateCardKeys, resolveCardKey } from "../../lib/card-keys.js";
 import { signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls } from "../../lib/media-keys.js";
 import { replaceCardMentions } from "../../lib/mentions.js";
@@ -1422,17 +1423,15 @@ export async function cardRoutes(
       ? undefined
       : stripSignedEmbeddedMediaUrls(body.description, req.auth.cid);
     const hasDueDateUpdate = body.dueDateLocalDate !== undefined || body.dueDateSlot !== undefined;
-    const dueDateLocalDate = hasDueDateUpdate ? (body.dueDateLocalDate ?? null) : undefined;
-    const dueDateSlot = dueDateLocalDate === undefined
-      ? undefined
-      : dueDateLocalDate
-        ? (body.dueDateSlot ?? "anyTime")
-        : null;
-    const dueDateTimezone = dueDateLocalDate === undefined
-      ? undefined
-      : dueDateLocalDate
-        ? ((await db.select({ timezone: users.timezone }).from(users).where(eq(users.id, req.auth.sub)).limit(1))[0]?.timezone ?? "UTC")
-        : null;
+    // Slot-only patches keep the stored date (see resolveDueDatePatch); the zone read is skipped when
+    // the stored one is reused or nothing due-date related changes.
+    const dueDatePatch = hasDueDateUpdate
+      ? resolveDueDatePatch(body, current, body.dueDateLocalDate || !current.dueDateTimezone ? await actorTimezone(req.auth.sub) : "UTC")
+      : { kind: "unchanged" as const };
+    if (dueDatePatch.kind === "rejected") throw badRequest(dueDatePatch.reason);
+    const dueDateLocalDate = dueDatePatch.kind === "write" ? dueDatePatch.dueDateLocalDate : undefined;
+    const dueDateSlot = dueDatePatch.kind === "write" ? dueDatePatch.dueDateSlot : undefined;
+    const dueDateTimezone = dueDatePatch.kind === "write" ? dueDatePatch.dueDateTimezone : undefined;
 
     const activityPayload = {
       ...body,
@@ -2541,12 +2540,14 @@ export async function cardRoutes(
       // Deleting an empty checklist is structural cleanup, not meaningful card activity. Capture
       // this before the cascade removes its items so only destructive deletions reach the feed and
       // notification fanout; the realtime deletion event is still emitted below for client sync.
-      const [firstItem] = await tx
-        .select({ id: cardChecklistItems.id })
+      // Read the direct items before the cascade so the realtime event can carry the badge counts a
+      // viewer without cached detail needs to subtract.
+      const directItems = await tx
+        .select({ completedAt: cardChecklistItems.completedAt })
         .from(cardChecklistItems)
-        .where(eq(cardChecklistItems.checklistId, checklistId))
-        .limit(1);
-      const hadItems = Boolean(firstItem);
+        .where(eq(cardChecklistItems.checklistId, checklistId));
+      const hadItems = directItems.length > 0;
+      const completedItemCount = directItems.filter((item) => item.completedAt).length;
       await tx.delete(cardChecklists).where(eq(cardChecklists.id, checklistId));
       await tx.update(cards).set({ updatedAt: new Date() }).where(eq(cards.id, id));
       const mistakeCutoff = new Date(Date.now() - CHECKLIST_MISTAKE_WINDOW_MS);
@@ -2573,10 +2574,10 @@ export async function cardRoutes(
           .set({ feedVisible: false, updatedAt: new Date() })
           .where(eq(activityEvents.id, recentCreate.id))
           .returning();
-        return { hiddenCreate: hiddenCreate!, deletedActivity: null };
+        return { hiddenCreate: hiddenCreate!, deletedActivity: null, itemCount: directItems.length, completedItemCount };
       }
 
-      if (!hadItems) return { hiddenCreate: null, deletedActivity: null };
+      if (!hadItems) return { hiddenCreate: null, deletedActivity: null, itemCount: 0, completedItemCount };
 
       const deletedActivity = await recordActivity(tx, {
         boardId: card.boardId,
@@ -2587,7 +2588,7 @@ export async function cardRoutes(
         action: ACTIVITY_ACTION.CHECKLIST_DELETED,
         payload: { checklistId, title: current.title },
       });
-      return { hiddenCreate: null, deletedActivity };
+      return { hiddenCreate: null, deletedActivity, itemCount: directItems.length, completedItemCount };
     });
 
     if (result.hiddenCreate) {
@@ -2595,7 +2596,14 @@ export async function cardRoutes(
     } else if (result.deletedActivity) {
       await emitCardActivityFeedItem(card.boardId, id, result.deletedActivity);
     }
-    await emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_DELETED, { boardId: card.boardId, cardId: id, checklistId });
+    await emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_DELETED, {
+      boardId: card.boardId,
+      cardId: id,
+      checklistId,
+      checklistParentItemId: current.parentItemId,
+      itemCount: result.itemCount,
+      completedItemCount: result.completedItemCount,
+    });
     return reply.status(204).send();
   });
 
@@ -3035,17 +3043,16 @@ export async function cardRoutes(
     // clears slot + timezone, setting a date defaults the slot to "anyTime" and
     // captures the acting user's timezone so overdue is evaluated correctly.
     const hasDueDateUpdate = body.dueDateLocalDate !== undefined || body.dueDateSlot !== undefined;
-    const dueDateLocalDate = hasDueDateUpdate ? (body.dueDateLocalDate ?? null) : undefined;
-    const dueDateSlot = dueDateLocalDate === undefined
-      ? undefined
-      : dueDateLocalDate
-        ? (body.dueDateSlot ?? "anyTime")
-        : null;
-    const dueDateTimezone = dueDateLocalDate === undefined
-      ? undefined
-      : dueDateLocalDate
-        ? await (options.timezone ?? (() => actorTimezone(actorId)))()
-        : null;
+    const dueDatePatch = hasDueDateUpdate
+      ? resolveDueDatePatch(body, current, body.dueDateLocalDate || !current.dueDateTimezone ? await (options.timezone ?? (() => actorTimezone(actorId)))() : "UTC")
+      : { kind: "unchanged" as const };
+    if (dueDatePatch.kind === "rejected") {
+      if (options.path) throw checklistValidationError([...options.path, "dueDateSlot"], dueDatePatch.reason);
+      throw badRequest(dueDatePatch.reason);
+    }
+    const dueDateLocalDate = dueDatePatch.kind === "write" ? dueDatePatch.dueDateLocalDate : undefined;
+    const dueDateSlot = dueDatePatch.kind === "write" ? dueDatePatch.dueDateSlot : undefined;
+    const dueDateTimezone = dueDatePatch.kind === "write" ? dueDatePatch.dueDateTimezone : undefined;
 
     const nextCompletedAt = body.completed === undefined
       ? current.completedAt

@@ -76,3 +76,23 @@ void test("Discord disables mentions and Telegram includes an optional topic", (
   assert.equal(telegramBody.parse_mode, "HTML");
   assert.doesNotMatch(telegramBody.text, /<script>/);
 });
+
+void test("Discord embed titles are cut to the provider's 256-character limit", () => {
+  // Kanera accepts 500-character titles; Discord rejects the whole message above 256, and retries
+  // would resend the same invalid payload. The excerpt and the plain content line are unaffected.
+  const discord = endpoint("discord", encryptChatDestinationConfig("discord", {
+    webhookUrl: "https://discord.com/api/webhooks/123/secret",
+  }));
+  const longTitle = "x".repeat(257);
+  const body = JSON.parse(requestBody(buildChatRequest(discord, { ...payload, cardTitle: longTitle }).init)) as {
+    embeds: { title: string }[];
+  };
+  assert.equal(Array.from(body.embeds[0]!.title).length, 256);
+  assert.ok(body.embeds[0]!.title.endsWith("…"));
+  assert.ok(body.embeds[0]!.title.startsWith("x".repeat(255)));
+
+  const exact = JSON.parse(requestBody(buildChatRequest(discord, { ...payload, cardTitle: "y".repeat(256) }).init)) as {
+    embeds: { title: string }[];
+  };
+  assert.equal(exact.embeds[0]!.title, "y".repeat(256));
+});

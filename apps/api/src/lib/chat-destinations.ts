@@ -83,6 +83,14 @@ export function chatContentExcerpt(value: string | null | undefined, limit = 500
   return chars.length <= limit ? plain : `${chars.slice(0, limit - 1).join("")}…`;
 }
 
+/** Discord rejects the whole message when embed.title exceeds 256 characters; Kanera titles go to 500. */
+const DISCORD_EMBED_TITLE_LIMIT = 256;
+
+function truncateForProvider(value: string, limit: number): string {
+  const chars = Array.from(value);
+  return chars.length <= limit ? value : `${chars.slice(0, limit - 1).join("")}…`;
+}
+
 function escapeSlack(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
@@ -155,7 +163,7 @@ export function buildChatRequest(endpoint: WebhookEndpoint, payload: ChatDeliver
         body: JSON.stringify({
           content: `${payload.actorName} ${actionText(payload)}`,
           embeds: [{
-            title: payload.cardTitle ?? (payload.type === "chat:test" ? "Kanera chat destination" : "Card"),
+            title: truncateForProvider(payload.cardTitle ?? (payload.type === "chat:test" ? "Kanera chat destination" : "Card"), DISCORD_EMBED_TITLE_LIMIT),
             url: payload.cardUrl,
             description: chatContentExcerpt(payload.excerpt),
             footer: { text: contextText(payload) },

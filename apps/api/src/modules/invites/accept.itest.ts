@@ -309,3 +309,44 @@ void test("an account that already has MFA enabled accepts an invite from an org
   const board = await app.inject({ method: "GET", url: `/boards/${boardId}`, headers: { authorization: `Bearer ${session.accessToken}` } });
   assert.equal(board.statusCode, 200, board.body);
 });
+
+void test("a member invited as workspace admin can open the workspace's existing boards", async () => {
+  // Board membership is the content-access model for normal users. The invite paths wrote the
+  // workspace admin grant but not the pinned editor rows that the promote path materializes, so the
+  // invitee saw "admin" on the workspace and 403 on every existing board.
+  const app = await buildIntegrationServer();
+  const host = await signup(app, "wsadmin-host@example.com", "WS Admin Host");
+  const [workspace] = await db.insert(workspaces).values({ clientId: host.user.clientId, name: "Granted workspace" }).returning();
+  const [board] = await db.insert(boards).values({ workspaceId: workspace!.id, name: "Existing board", position: "1000.0000000000" }).returning();
+  const token = await createInvite(app, host.accessToken, {
+    orgRole: "member",
+    workspaces: [{ workspaceId: workspace!.id, role: "admin" }],
+  });
+
+  async function assertBoardOpens(session: Session) {
+    const workspaceRead = await app.inject({ method: "GET", url: `/workspaces/${workspace!.id}`, headers: { authorization: `Bearer ${session.accessToken}` } });
+    assert.equal(workspaceRead.statusCode, 200, workspaceRead.body);
+    const boardRead = await app.inject({ method: "GET", url: `/boards/${board!.id}`, headers: { authorization: `Bearer ${session.accessToken}` } });
+    assert.equal(boardRead.statusCode, 200, boardRead.body);
+    const [pinned] = await db.select({ role: boardMembers.role, pinned: boardMembers.pinned }).from(boardMembers).where(and(
+      eq(boardMembers.boardId, board!.id),
+      eq(boardMembers.userId, session.user.id),
+    )).limit(1);
+    assert.deepEqual(pinned, { role: "editor", pinned: true });
+  }
+
+  // Existing identity accepting the invitation.
+  const existing = await signup(app, "wsadmin-existing@example.com", "Existing Personal");
+  const accepted = await app.inject({ method: "POST", url: "/invites/accept", headers: { authorization: `Bearer ${existing.accessToken}` }, payload: { token } });
+  assert.equal(accepted.statusCode, 200, accepted.body);
+  await assertBoardOpens(accepted.json<Session>());
+
+  // New identity created through the invitation (the link is reusable until revoked).
+  const created = await app.inject({
+    method: "POST",
+    url: "/auth/signup",
+    payload: { inviteToken: token, email: "wsadmin-new@example.com", password: "Abc12345", displayName: "New Admin" },
+  });
+  assert.equal(created.statusCode, 200, created.body);
+  await assertBoardOpens(created.json<Session>());
+});

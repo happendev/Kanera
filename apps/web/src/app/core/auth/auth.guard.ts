@@ -24,6 +24,13 @@ export const publicAuthGuard: CanActivateFn = async (route) => {
   if (boardInviteToken) {
     return router.createUrlTree(["/board-invite"], { queryParams: { token: boardInviteToken } });
   }
+  // A signed-in user opening an organisation invitation's signup link (cold load with a live refresh
+  // cookie) is sent to accept it, mirroring the board-invite branch above; otherwise the invitation
+  // would be lost on the way to the home route.
+  const inviteToken = route.queryParamMap.get("invite")?.trim();
+  if (inviteToken) {
+    return router.createUrlTree(["/invite"], { queryParams: { token: inviteToken } });
+  }
   const returnUrl = route.queryParamMap.get("returnUrl")?.trim();
   if (returnUrl?.startsWith("/") && !returnUrl.startsWith("//")) return router.parseUrl(returnUrl);
   return router.createUrlTree(["/"]);

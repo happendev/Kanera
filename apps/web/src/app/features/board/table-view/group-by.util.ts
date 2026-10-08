@@ -137,8 +137,12 @@ function groupBySelectField(cards: AnyCard[], field: AnyCustomField, ctx: Groupi
   const byOption = new Map<string, AnyCard[]>();
   const empty: AnyCard[] = [];
 
+  // Deleting an option archives it without clearing the values that point at it, so a card can
+  // hold only ids that no longer map to an active option. Those cards must land in the empty
+  // bucket: emitting groups for active options alone would silently drop them from the view.
+  const activeOptionIds = new Set(options.map((option) => option.id));
   for (const card of cards) {
-    const ids = valueFor(ctx, card.id, field.id)?.valueOptionIds ?? [];
+    const ids = (valueFor(ctx, card.id, field.id)?.valueOptionIds ?? []).filter((id) => activeOptionIds.has(id));
     if (!ids.length) {
       empty.push(card);
       continue;

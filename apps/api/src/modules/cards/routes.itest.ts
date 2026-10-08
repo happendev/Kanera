@@ -3089,3 +3089,84 @@ void test("cards are created at typed lane anchors and never through Global Work
   await publicApp.close();
   await app.close();
 });
+
+void test("changing only the due-time slot keeps the card's and checklist item's due date", async () => {
+  // A slot-only PATCH is the shape MCP cards.update and the SDK send to "move the time of day".
+  // The old derivation coalesced the omitted date to null, so both date and slot were wiped.
+  const f = await seedChecklistTemplateApplyFixture("slot-only-due-date");
+  const card = async (route: string, payload: Record<string, unknown>) => {
+    const response = await f.app.inject({ method: "PATCH", url: `/cards/${f.card.id}${route}`, headers: f.auth, payload });
+    return response;
+  };
+
+  const dated = await card("", { dueDateLocalDate: "2026-10-20", dueDateSlot: "morning" });
+  assert.equal(dated.statusCode, 200, dated.body);
+
+  const slotChanged = await card("", { dueDateSlot: "afternoon" });
+  assert.equal(slotChanged.statusCode, 200, slotChanged.body);
+  assert.equal(slotChanged.json<{ dueDateLocalDate: string | null }>().dueDateLocalDate, "2026-10-20");
+  assert.equal(slotChanged.json<{ dueDateSlot: string | null }>().dueDateSlot, "afternoon");
+
+  const slotCleared = await card("", { dueDateSlot: null });
+  assert.equal(slotCleared.statusCode, 200, slotCleared.body);
+  assert.deepEqual(
+    (({ dueDateLocalDate, dueDateSlot }) => ({ dueDateLocalDate, dueDateSlot }))(slotCleared.json<{ dueDateLocalDate: string | null; dueDateSlot: string | null }>()),
+    { dueDateLocalDate: "2026-10-20", dueDateSlot: "anyTime" },
+  );
+
+  const cleared = await card("", { dueDateLocalDate: null });
+  assert.equal(cleared.statusCode, 200, cleared.body);
+  // A slot cannot be attached to a card that has no date.
+  const slotWithoutDate = await card("", { dueDateSlot: "morning" });
+  assert.equal(slotWithoutDate.statusCode, 400, slotWithoutDate.body);
+  const [row] = await db.select({ dueDateLocalDate: cards.dueDateLocalDate, dueDateSlot: cards.dueDateSlot }).from(cards).where(eq(cards.id, f.card.id));
+  assert.deepEqual(row, { dueDateLocalDate: null, dueDateSlot: null });
+
+  // Same contract for top-level checklist items.
+  const checklistResponse = await f.app.inject({ method: "POST", url: `/cards/${f.card.id}/checklists`, headers: f.auth, payload: { title: "Steps" } });
+  assert.equal(checklistResponse.statusCode, 201, checklistResponse.body);
+  const checklist = checklistResponse.json<{ id: string }>();
+  const itemResponse = await f.app.inject({ method: "POST", url: `/cards/${f.card.id}/checklists/${checklist.id}/items`, headers: f.auth, payload: { text: "Step one", dueDateLocalDate: "2026-10-21", dueDateSlot: "morning" } });
+  assert.equal(itemResponse.statusCode, 201, itemResponse.body);
+  const item = itemResponse.json<{ id: string }>();
+  for (const route of [`/checklists/${checklist.id}/items/${item.id}`, `/checklist-items/${item.id}`]) {
+    const response = await card(route, { dueDateSlot: "endOfWorkDay" });
+    assert.equal(response.statusCode, 200, `${route}: ${response.body}`);
+    const [itemRow] = await db.select({ dueDateLocalDate: cardChecklistItems.dueDateLocalDate, dueDateSlot: cardChecklistItems.dueDateSlot }).from(cardChecklistItems).where(eq(cardChecklistItems.id, item.id));
+    assert.deepEqual(itemRow, { dueDateLocalDate: "2026-10-21", dueDateSlot: "endOfWorkDay" });
+  }
+});
+
+void test("deleting a checklist publishes the badge counts it removes", async () => {
+  // A viewer that never opened the card has no checklist detail to subtract from its progress
+  // badge, so the realtime event must carry the deleted checklist's own item counts.
+  const f = await seedChecklistTemplateApplyFixture("checklist-deleted-counts");
+  const checklistResponse = await f.app.inject({ method: "POST", url: `/cards/${f.card.id}/checklists`, headers: f.auth, payload: { title: "Steps" } });
+  assert.equal(checklistResponse.statusCode, 201, checklistResponse.body);
+  const checklist = checklistResponse.json<{ id: string }>();
+  const itemIds: string[] = [];
+  for (const text of ["one", "two", "three"]) {
+    const response = await f.app.inject({ method: "POST", url: `/cards/${f.card.id}/checklists/${checklist.id}/items`, headers: f.auth, payload: { text } });
+    assert.equal(response.statusCode, 201, response.body);
+    itemIds.push(response.json<{ id: string }>().id);
+  }
+  const completed = await f.app.inject({ method: "PATCH", url: `/cards/${f.card.id}/checklists/${checklist.id}/items/${itemIds[0]}`, headers: f.auth, payload: { completed: true } });
+  assert.equal(completed.statusCode, 200, completed.body);
+  // A nested checklist under item two: its items must not count toward the card badge.
+  const nestedResponse = await f.app.inject({ method: "POST", url: `/cards/${f.card.id}/checklists`, headers: f.auth, payload: { title: "Nested", parentItemId: itemIds[1] } });
+  assert.equal(nestedResponse.statusCode, 201, nestedResponse.body);
+  const nested = nestedResponse.json<{ id: string }>();
+  const nestedItem = await f.app.inject({ method: "POST", url: `/cards/${f.card.id}/checklists/${nested.id}/items`, headers: f.auth, payload: { text: "leaf" } });
+  assert.equal(nestedItem.statusCode, 201, nestedItem.body);
+
+  const deleted = await f.app.inject({ method: "DELETE", url: `/cards/${f.card.id}/checklists/${checklist.id}`, headers: f.auth });
+  assert.equal(deleted.statusCode, 204, deleted.body);
+
+  const rows = await waitForBoardOutboxEvents(f.board.id, ["card:checklist:deleted"]);
+  const event = rows.find((row) => row.eventType === "card:checklist:deleted")?.payload as Record<string, unknown> | undefined;
+  assert.ok(event);
+  assert.deepEqual(
+    { checklistId: event.checklistId, checklistParentItemId: event.checklistParentItemId, itemCount: event.itemCount, completedItemCount: event.completedItemCount },
+    { checklistId: checklist.id, checklistParentItemId: null, itemCount: 3, completedItemCount: 1 },
+  );
+});

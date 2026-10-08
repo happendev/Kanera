@@ -62,13 +62,19 @@ export class LoginPage implements OnInit {
   ));
   readonly kaneraEnvironment = signal<KaneraEnvironment>("production");
   readonly returnUrl = input<string>();
+  // The reverse hop of the signup page's signInLink: a returnUrl that points at an invitation
+  // acceptance page carries its token into signup, so "Create account" from login keeps the
+  // organisation or board invitation instead of opening a plain public signup.
   readonly signupLink = computed(() => {
     const value = this.returnUrl();
     if (!value?.startsWith("/") || value.startsWith("//")) return "/signup";
     try {
       const parsed = new URL(value, "https://kanera.local");
-      const token = parsed.pathname === "/board-invite" ? parsed.searchParams.get("token")?.trim() : null;
-      return token ? `/signup?boardInviteToken=${encodeURIComponent(token)}` : "/signup";
+      const token = parsed.searchParams.get("token")?.trim();
+      if (!token) return "/signup";
+      if (parsed.pathname === "/board-invite") return `/signup?boardInviteToken=${encodeURIComponent(token)}`;
+      if (parsed.pathname === "/invite") return `/signup?invite=${encodeURIComponent(token)}`;
+      return "/signup";
     } catch {
       return "/signup";
     }

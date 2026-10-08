@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { mfaCredentials, mfaRecoveryCodes } from "@kanera/shared/schema";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import * as OTPAuth from "otpauth";
 import { db } from "../db.js";
 import { env } from "../env.js";
@@ -86,8 +86,17 @@ export async function verifyMfaCode(credential: NonNullable<Awaited<ReturnType<t
       // Reject a code at or below the last accepted step. Without this a captured/observed code could be
       // replayed for the ~90s it stays inside the skew window.
       if (credential.lastTotpStep !== null && step <= credential.lastTotpStep) return false;
-      await db.update(mfaCredentials).set({ lastTotpStep: step, updatedAt: new Date() }).where(eq(mfaCredentials.id, credential.id));
-      return true;
+      // The step check above ran on a row read before this call, so two concurrent verifications of
+      // the same code both pass it. Make the claim atomic: the UPDATE only wins when the stored step
+      // is still behind, and exactly one of the racing requests sees its row updated.
+      const claimed = await db.update(mfaCredentials)
+        .set({ lastTotpStep: step, updatedAt: new Date() })
+        .where(and(
+          eq(mfaCredentials.id, credential.id),
+          or(isNull(mfaCredentials.lastTotpStep), lt(mfaCredentials.lastTotpStep, step)),
+        ))
+        .returning({ id: mfaCredentials.id });
+      return claimed.length === 1;
     }
   }
   const hash = recoveryHash(code);

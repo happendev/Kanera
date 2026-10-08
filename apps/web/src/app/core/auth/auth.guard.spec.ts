@@ -69,6 +69,14 @@ describe("publicAuthGuard", () => {
     expect(createUrlTree).toHaveBeenCalledWith(["/board-invite"], { queryParams: { token: "board-token" } });
   });
 
+  it("sends an authenticated user opening an organisation invite signup link to accept it", async () => {
+    isAuthenticated.mockReturnValue(true);
+
+    await expect(runGuard({ invite: "org-token" })).resolves.toBe(redirectTree);
+
+    expect(createUrlTree).toHaveBeenCalledWith(["/invite"], { queryParams: { token: "org-token" } });
+  });
+
   it("uses only safe local return URLs", async () => {
     isAuthenticated.mockReturnValue(true);
 
