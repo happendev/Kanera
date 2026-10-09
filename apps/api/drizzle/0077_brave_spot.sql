@@ -1,0 +1,5 @@
+ALTER TABLE "mcp_event_subscription" DROP CONSTRAINT "mcp_subscription_scope_ck";--> statement-breakpoint
+CREATE UNIQUE INDEX "mcp_delivery_my_day_uq" ON "mcp_event_delivery" USING btree ("subscription_id",("payload"->'data'->>'localDate')) WHERE "mcp_event_delivery"."payload"->>'name' = 'my_day.ready';--> statement-breakpoint
+ALTER TABLE "mcp_event_subscription" ADD CONSTRAINT "mcp_subscription_scope_ck" CHECK (case when "mcp_event_subscription"."name" in ('priorities.changed', 'my_day.ready')
+    then "mcp_event_subscription"."target_user_id" = "mcp_event_subscription"."user_id" and "mcp_event_subscription"."workspace_id" is null and "mcp_event_subscription"."board_id" is null
+    else "mcp_event_subscription"."workspace_id" is not null and "mcp_event_subscription"."target_user_id" is null end);

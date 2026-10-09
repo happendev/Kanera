@@ -44,7 +44,8 @@ export const mcpEventSubscriptions = pgTable("mcp_event_subscription", {
 }, (t) => [
   check("mcp_subscription_owner_ck", sql`(${t.ownerApiKeyId} is null) <> (${t.ownerAgentGrantId} is null)`),
   check("mcp_subscription_last_error_ck", valueIn(t.lastError, MCP_DELIVERY_ERRORS)),
-  check("mcp_subscription_scope_ck", sql`case when ${t.name} = 'priorities.changed'
+  // User-addressed events (MCP_USER_EVENT_NAMES) pin target to subscriber; card events need a workspace.
+  check("mcp_subscription_scope_ck", sql`case when ${t.name} in ('priorities.changed', 'my_day.ready')
     then ${t.targetUserId} = ${t.userId} and ${t.workspaceId} is null and ${t.boardId} is null
     else ${t.workspaceId} is not null and ${t.targetUserId} is null end`),
   index("mcp_subscription_workspace_event_idx").on(t.workspaceId, t.name, t.expiresAt),
@@ -70,5 +71,9 @@ export const mcpEventDeliveries = pgTable("mcp_event_delivery", {
   check("mcp_delivery_status_ck", valueIn(t.status, WEBHOOK_DELIVERY_STATUSES)),
   index("mcp_delivery_pending_idx").on(t.nextAttemptAt).where(sql`${t.status} in ('queued', 'delivering')`),
   uniqueIndex("mcp_delivery_subscription_outbox_uq").on(t.subscriptionId, t.outboxEventId),
+  // The morning sweep re-runs every minute of the digest hour and may run in more than one worker;
+  // this makes "one my_day.ready per subscription per local date" a database guarantee.
+  uniqueIndex("mcp_delivery_my_day_uq").on(t.subscriptionId, sql`(${t.payload}->'data'->>'localDate')`)
+    .where(sql`${t.payload}->>'name' = 'my_day.ready'`),
 ]);
 export type McpEventSubscription = typeof mcpEventSubscriptions.$inferSelect;

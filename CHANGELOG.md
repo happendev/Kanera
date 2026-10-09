@@ -6,6 +6,10 @@ All notable changes to Kanera are documented here.
 
 ### Added
 - **Agent Workflow template:** a workspace template with Backlog, Agent Working, Waiting on Me, Review and Done lists. AI agents using the Kanera skill, MCP or CLI move cards through these lists as their runs start, block, resume and succeed, and keep the run summary current.
+- **MCP `work.my_day` and CLI `kanera my-day`:** one call returns your overdue, due-this-week, overdue-checklist and stale assigned cards across every board, plus the top of your "Up next" queue.
+- **MCP `boards.create` with a template:** pass `templateId` instead of `workspaceId` to create a standalone board seeded from a workspace template, such as Agent Workflow.
+- **MCP `my_day.ready` event:** agents can subscribe to a weekday-morning ping, sent at your daily digest hour in your time zone while the digest email is on, and respond by fetching your day with `work.my_day`.
+- **Kanera MCP:** when you have not picked a board template, agents now suggest a few that fit and ask which you want, rather than choosing silently.
 
 ### Changed
 - **Hosted Free plan:** AI agents (Claude, ChatGPT, Cursor, the CLI), MCP, and personal API keys are now included, with read and write access to Free-plan boards. Workspace API keys, unattended service agents, and webhooks remain Pro-only. Downgrading to Free now revokes only workspace API keys; personal keys keep working.

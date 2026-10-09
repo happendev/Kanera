@@ -1,4 +1,4 @@
-import { MCP_PRIORITY_EVENT_NAME, mcpEventData, type McpCardEventOccurrence, type McpEventArguments, type McpEventName, type McpPriorityEventOccurrence, type McpStoredEventArguments } from "@kanera/shared/dto";
+import { MCP_MY_DAY_EVENT_NAME, MCP_PRIORITY_EVENT_NAME, isMcpUserEventName, mcpEventData, type McpMyDayEventOccurrence, type McpCardEventOccurrence, type McpEventArguments, type McpEventName, type McpPriorityEventOccurrence, type McpStoredEventArguments } from "@kanera/shared/dto";
 import { cards, clientMembers, lists, mcpEventDeliveries, mcpEventSubscriptions, oauthClients, oauthGrants, users, workspaceApiKeys, type EventOutbox, type EventOutboxActor, type McpDeliveryError, type McpEventSubscription } from "@kanera/shared/schema";
 import { and, asc, eq, gt, inArray, lt, lte, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
@@ -9,6 +9,7 @@ import { AppError, badRequest, forbidden } from "./errors.js";
 import { decryptSecret } from "./secrets.js";
 import { McpCallbackError, mcpWebhookHeaders, postMcpWebhook, type McpWebhookRequest } from "./mcp-event-webhooks.js";
 import { absoluteCardUrl } from "./wire-card.js";
+import { localParts } from "./due-date.js";
 
 // Bounded retry budget from the events draft ("3 to 5 attempts spread over no more than 10 to 15
 // minutes"): attempts at 0s, 30s, 1.5m, 3.5m and 7.5m. An endpoint that is down for longer misses
@@ -24,9 +25,10 @@ export function mcpSubscriptionOwner(claims: AuthClaims) {
   return { principal: `${claims.oauthServiceClientId ? `service:${claims.oauthServiceClientId}:` : ""}key:${claims.apiKeyId}:${claims.sub}`, ownerApiKeyId: claims.apiKeyId, ownerAgentGrantId: null, ownerServiceClientId: claims.oauthServiceClientId ?? null };
 }
 export async function assertMcpEventAccess(claims: AuthClaims, name: McpEventName, args: McpStoredEventArguments) {
-  // Your own queue is always readable (as in priorities.list), so there is nothing to check beyond
-  // the live connection, which liveSubscriptionClaims re-verifies before every delivery.
-  if (name === MCP_PRIORITY_EVENT_NAME) return;
+  // Your own queue and day are always readable (as in priorities.list and work.my_day), so there is
+  // nothing to check beyond the live connection, which liveSubscriptionClaims re-verifies before
+  // every delivery.
+  if (isMcpUserEventName(name)) return;
   await assertCardEventAccess(claims, args as McpEventArguments);
 }
 async function assertCardEventAccess(claims: AuthClaims, args: McpEventArguments) {
@@ -194,6 +196,54 @@ export async function enqueuePriorityQueueMcpEvents(targetUserId: string, actor:
   })));
 }
 
+/**
+ * Queue today's `my_day.ready` ping for every subscriber whose local clock reads `hour` on a weekday.
+ *
+ * Runs on the daily-digest sweep and follows the digest email's gate (`allowsDigest`), so turning
+ * the digest email off silences the morning ping too. The sweep repeats every minute of that hour,
+ * possibly in several workers; the partial unique index on (subscription, localDate) keeps it to
+ * one ping per subscription per day. Only the global gate applies: the ping names no workspace, so
+ * per-workspace digest rules have nothing to filter.
+ */
+export async function enqueueMyDayMcpEvents(
+  now: Date,
+  hour: number,
+  allowsDigest: (userIds: string[]) => Promise<Set<string>>,
+): Promise<number> {
+  const subscriptions = await db.select({ sub: mcpEventSubscriptions, timezone: users.timezone })
+    .from(mcpEventSubscriptions)
+    .innerJoin(users, eq(users.id, mcpEventSubscriptions.userId))
+    .where(and(
+      eq(mcpEventSubscriptions.name, MCP_MY_DAY_EVENT_NAME),
+      gt(mcpEventSubscriptions.expiresAt, now), lte(mcpEventSubscriptions.startsAt, now),
+    ));
+  const due = subscriptions.flatMap(({ sub, timezone }) => {
+    const timeZone = timezone || "UTC";
+    const local = localParts(now, timeZone);
+    if (local.hour !== hour || isWeekend(now, timeZone)) return [];
+    return [{ sub, timeZone, localDate: local.date }];
+  });
+  if (!due.length) return 0;
+  const allowed = await allowsDigest([...new Set(due.map(({ sub }) => sub.userId))]);
+  const rows = due.filter(({ sub }) => allowed.has(sub.userId)).map(({ sub, timeZone, localDate }) => ({
+    subscriptionId: sub.id, outboxEventId: null,
+    payload: {
+      eventId: `evt_${crypto.randomUUID()}`, name: MCP_MY_DAY_EVENT_NAME, timestamp: now.toISOString(), cursor: null,
+      data: { targetUserId: sub.userId, localDate, timeZone, actor: { kind: "system", userId: null, self: false } },
+    } satisfies McpMyDayEventOccurrence,
+  }));
+  if (!rows.length) return 0;
+  const inserted = await db.insert(mcpEventDeliveries).values(rows).onConflictDoNothing().returning({ id: mcpEventDeliveries.id });
+  return inserted.length;
+}
+
+function isWeekend(now: Date, timeZone: string): boolean {
+  let weekday: string;
+  try { weekday = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "short" }).format(now); }
+  catch { weekday = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short" }).format(now); }
+  return weekday === "Sat" || weekday === "Sun";
+}
+
 // Map a failed attempt to the draft's fixed deliveryStatus.lastError categories. Redirects are
 // never followed, so a 3xx is reported with client errors as an endpoint misconfiguration.
 function deliveryErrorFor(status: number | null, error: unknown): McpDeliveryError {
@@ -230,8 +280,8 @@ async function gateFor(sub: McpEventSubscription): Promise<SubscriptionGate> {
 async function attemptDelivery(delivery: typeof mcpEventDeliveries.$inferSelect, gate: SubscriptionGate, send: McpWebhookRequest): Promise<DeliveryOutcome> {
   const { sub, claims } = gate;
   if (!claims || new Date(delivery.payload.timestamp) < sub.startsAt) return { kind: "skipped" };
-  // Queue events name no card, and only ever describe the subscriber's own queue (a database check).
-  if (delivery.payload.name !== MCP_PRIORITY_EVENT_NAME) {
+  // User events name no card, and only ever describe the subscriber's own queue or day (a database check).
+  if (delivery.payload.name !== MCP_PRIORITY_EVENT_NAME && delivery.payload.name !== MCP_MY_DAY_EVENT_NAME) {
     try {
       // Authorize the card's current board: it may have moved after this event was queued.
       // Losing one card must not expire an otherwise valid workspace/board-wide subscription.

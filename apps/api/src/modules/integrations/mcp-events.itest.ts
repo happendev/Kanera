@@ -4,14 +4,14 @@ import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { test } from "node:test";
 import { eq } from "drizzle-orm";
-import { boardMembers, cardAssignees, eventOutbox, lists, oauthClients, oauthGrants, mcpEventDeliveries, mcpEventSubscriptions, workspaceApiKeys, workspaceMembers } from "@kanera/shared/schema";
+import { boardMembers, cardAssignees, users, eventOutbox, lists, oauthClients, oauthGrants, mcpEventDeliveries, mcpEventSubscriptions, workspaceApiKeys, workspaceMembers } from "@kanera/shared/schema";
 import { db } from "../../db.js";
 import { buildPublicApiServer } from "../../public-api-server.js";
 import { buildIntegrationServer } from "../../test/integration.js";
 import { signupOwner } from "../../test/api-fixtures.js";
 import { insertTestUsers } from "../../test/user-fixtures.js";
 import { encryptSecret } from "../../lib/secrets.js";
-import { enqueueMcpEventDeliveries, processMcpEventDeliveries } from "../../lib/mcp-events.js";
+import { enqueueMcpEventDeliveries, enqueueMyDayMcpEvents, processMcpEventDeliveries } from "../../lib/mcp-events.js";
 import { McpCallbackError, postMcpWebhook, verifyMcpCallback, type McpWebhookRequest } from "../../lib/mcp-event-webhooks.js";
 import { processRealtimeOutbox } from "../../realtime/outbox.js";
 import { createMcpHttpHandler } from "../../../../mcp/src/http.js";
@@ -475,5 +475,49 @@ void test("priorities.changed only ever reports the subscriber's own Up next que
     const unsubscribed = await publicApi.inject({ method: "POST", url: "/api/v1/mcp-events/unsubscribe", headers: keyHeaders, payload: { name: "priorities.changed", arguments: {}, delivery: { mode: "webhook", url: "https://receiver.example/queue" } } });
     assert.equal(unsubscribed.statusCode, 200, unsubscribed.body);
     assert.deepEqual((await db.select().from(mcpEventSubscriptions)).map((row) => row.id), [teammateSubscriptionId], "unsubscribe removes only the caller's stream");
+  } finally { await publicApi.close(); }
+});
+
+void test("my_day.ready pings once per weekday morning, only while the digest gate allows it", async () => {
+  const f = await fixture();
+  const signingSecret = secret();
+  const delivered: Array<{ subscriptionId: string; name: string; data: Record<string, unknown> }> = [];
+  const send: McpWebhookRequest = async (_url, body, headers) => {
+    const payload = JSON.parse(body) as { type?: string; challenge?: string; name: string; data: Record<string, unknown> };
+    if (payload.type === "verification") return { status: 200, body: JSON.stringify({ challenge: payload.challenge }) };
+    checkSignature(headers, body, signingSecret);
+    delivered.push({ subscriptionId: headers["X-MCP-Subscription-Id"]!, name: payload.name, data: payload.data });
+    return { status: 204, body: "" };
+  };
+  const publicApi = await buildPublicApiServer({ logger: false, enableWebhookDeliveryScheduler: false, rateLimit: { enabled: false }, mcpWebhookRequest: send });
+  try {
+    await db.update(users).set({ timezone: "America/New_York" }).where(eq(users.id, f.owner.user.id));
+    const subscribed = await publicApi.inject({ method: "POST", url: "/api/v1/mcp-events/subscribe", headers: { authorization: `Bearer ${f.key.secret}` },
+      payload: { name: "my_day.ready", arguments: {}, delivery: { mode: "webhook", url: "https://receiver.example/day", secret: signingSecret } } });
+    assert.equal(subscribed.statusCode, 200, subscribed.body);
+    const subscriptionId = subscribed.json<{ id: string }>().id;
+    // Subscriptions live at most 24 hours; stretch this one to reach the next Monday.
+    await db.update(mcpEventSubscriptions).set({ expiresAt: new Date(Date.now() + 10 * 86_400_000) }).where(eq(mcpEventSubscriptions.id, subscriptionId));
+
+    // Future instants so the occurrence postdates the subscription's startsAt. New York is UTC-4
+    // or UTC-5, so 13:30 UTC is 08:30 or 09:30 local; derive the hour rather than hard-code DST.
+    const monday = new Date();
+    monday.setUTCDate(monday.getUTCDate() + ((8 - monday.getUTCDay()) % 7 || 7));
+    monday.setUTCHours(13, 30, 0, 0);
+    const localHour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", hourCycle: "h23" }).format(monday));
+    const localDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(monday);
+    const saturday = new Date(monday.getTime() - 2 * 86_400_000);
+    const allowAll = async (ids: string[]) => new Set(ids);
+
+    assert.equal(await enqueueMyDayMcpEvents(monday, localHour + 1, allowAll), 0, "outside the digest hour");
+    assert.equal(await enqueueMyDayMcpEvents(saturday, localHour, allowAll), 0, "never on weekends");
+    assert.equal(await enqueueMyDayMcpEvents(monday, localHour, async () => new Set()), 0, "digest email turned off");
+    assert.equal(await enqueueMyDayMcpEvents(monday, localHour, allowAll), 1);
+    assert.equal(await enqueueMyDayMcpEvents(new Date(monday.getTime() + 60_000), localHour, allowAll), 0, "the minute-by-minute sweep pings once per local date");
+
+    await processMcpEventDeliveries(send);
+    assert.deepEqual(delivered, [{ subscriptionId, name: "my_day.ready", data: {
+      targetUserId: f.owner.user.id, localDate, timeZone: "America/New_York", actor: { kind: "system", userId: null, self: false },
+    } }], "content-free, in the user's own zone");
   } finally { await publicApi.close(); }
 });

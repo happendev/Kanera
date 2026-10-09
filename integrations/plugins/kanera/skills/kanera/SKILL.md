@@ -60,6 +60,7 @@ Choose the lookup that fits the request; these are conditional routes, not a set
 ## Read and report
 
 - For a card's history, page `cards.list_history`; it combines retained, user-visible activity and comments and accepts the human card key.
+- To start a session or answer what to work on, call `work.my_day`: one call returns the connected user's overdue, due-this-week, overdue-checklist, and idle assigned cards plus the top of their Up next queue. For a recurring morning briefing, subscribe to the `my_day.ready` event (weekdays at the user's daily-digest hour, while the digest email is on) and call `work.my_day` with its `timeZone`.
 - For current, completed, overdue, or stale work, page `work.query_cards`; use its scope, assignment, completion, `lastActivityBefore`, and `lastMovedBefore` filters instead of enumerating boards manually. For another person, use the team lens with exactly that person's assignee ID.
 - For portfolio status, use `work.portfolio_summary`. For detailed project status, combine its rollups with relevant card pages and histories. Separate observed facts from recommendations.
 - For a standup or one-on-one, use `work.query_history` for the requested actor and day, week, month, or exact range, then query active and completed cards with `work.query_cards`. Both tools cover every accessible board by default and accept a workspace-wide scope. Card creation alone is not completion, and blockers inferred from status, labels, due dates, or inactivity must be identified as inferences.
@@ -69,7 +70,7 @@ Choose the lookup that fits the request; these are conditional routes, not a set
 ## Make changes safely
 
 - Draft or summarize first when the request is exploratory. Mutate only when the user asks to apply the change.
-- Organisation admins can use `workspaces.create` for a standard workspace, `boards.create_standalone` for a standalone board, and `boards.create` for an extra board in a standard workspace. Choose a `templateId` from `workspaces.list_templates` or supply explicit configuration where supported. For work the user will hand to AI agents, suggest `agent-workflow` (Backlog, Agent Working, Waiting on Me, Review, Done): its lists mirror run states.
+- Organisation admins can use `workspaces.create` for a standard workspace, `boards.create_standalone` for a standalone board, and `boards.create` for an extra board in a standard workspace; `boards.create` with `templateId` instead of `workspaceId` creates a standalone board from that template. When the user has not named a template, call `workspaces.list_templates`, suggest the two or three that best fit their project, and ask which they want; choose for them only when they say to. For work the user will hand to AI agents, suggest `agent-workflow` (Backlog, Agent Working, Waiting on Me, Review, Done): its lists mirror run states.
 - Workspace and standalone-board creation require a write-capable personal key or interactive OAuth grant with the organisation-admin role; workspace-scoped keys cannot perform them. Adding a board to a standard workspace requires workspace-admin authority and a write-capable credential.
 - Inspect the target entity immediately before a mutation when stale state could change the outcome.
 - Use list, label, and custom-field IDs from the target board's current configuration.

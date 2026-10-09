@@ -33,7 +33,7 @@ export const COMMAND_ALIASES: CommandAlias[] = [
   { path: ["templates"], tool: "workspaces.list_templates", summary: "List workspace templates and what each one seeds", group: "Setup" },
   { path: ["workspace", "create"], tool: "workspaces.create", summary: "Create a standard workspace, optionally from --templateId", positionals: ["name"], group: "Setup" },
   { path: ["standalone", "create"], tool: "boards.create_standalone", summary: "Create a standalone board, optionally from --templateId", positionals: ["name"], group: "Setup" },
-  { path: ["board", "create"], tool: "boards.create", summary: "Add a board to a standard workspace", positionals: ["workspaceId", "name"], group: "Setup" },
+  { path: ["board", "create"], tool: "boards.create", summary: "Add a board to a workspace, or a standalone board from --templateId", positionals: ["workspaceId", "name"], group: "Setup" },
 
   { path: ["cards"], tool: "cards.list", summary: "List one page of cards from one workflow list", positionals: ["boardId", "listId"], group: "Cards" },
   { path: ["card"], tool: "cards.get", summary: "Read a card by id, key (MKT-42), or URL", positionals: ["cardId"], group: "Cards" },
@@ -56,6 +56,7 @@ export const COMMAND_ALIASES: CommandAlias[] = [
 
   { path: ["work"], tool: "work.query_cards", summary: "List your work across every accessible board", defaults: { lens: "my" }, group: "Work" },
   { path: ["work", "history"], tool: "work.query_history", summary: "Report one person's actions over a date range", group: "Work" },
+  { path: ["my-day"], tool: "work.my_day", summary: "Overdue, due-this-week, stale, and Up next work in one view", group: "Work" },
   { path: ["portfolio"], tool: "work.portfolio_summary", summary: "Roll up work by organisation, workspace, and board", group: "Work" },
   { path: ["priorities"], tool: "priorities.list", summary: "Read an \"Up next\" priority queue", group: "Work" },
   { path: ["priority", "add"], tool: "priorities.add", summary: "Add a card to an \"Up next\" queue", positionals: ["cardId"], group: "Work" },

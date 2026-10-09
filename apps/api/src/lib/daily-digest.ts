@@ -22,6 +22,7 @@ import { allowsDailyDigestEmail, getNotificationSettingsForUsers, getNotificatio
 import { startSweepScheduler } from "./sweep-scheduler.js";
 import { absoluteCardUrl } from "./wire-card.js";
 import { localParts } from "./due-date.js";
+import { enqueueMyDayMcpEvents } from "./mcp-events.js";
 
 const DIGEST_HOUR = 8;
 const SWEEP_INTERVAL_MS = 60_000; // 60 seconds
@@ -216,12 +217,30 @@ export function startDailyDigestScheduler(deps: DailyDigestDeps): () => Promise<
   // cadence only catches recipients whose 8am boundary just passed).
   return startSweepScheduler({
     name: "daily-digest",
-    task: () => runDailyDigestSweep(deps),
+    task: async () => {
+      // The MCP morning ping shares the digest's hour and on/off setting, so it rides this sweep.
+      // It must not depend on the digest having due work: a ping with nothing due is still a ping.
+      try {
+        await enqueueMyDayMcpEvents(new Date(), DIGEST_HOUR, (userIds) => usersAllowingDigest(deps.db, userIds));
+      } catch (err) {
+        deps.log.error({ err }, "my_day.ready enqueue failed");
+      }
+      return runDailyDigestSweep(deps);
+    },
     runImmediately: false,
     firstDelayMs: delayToNextHour,
     nextDelayMs: SWEEP_INTERVAL_MS,
     log: deps.log,
   }).stop;
+}
+
+async function usersAllowingDigest(db: Db, userIds: string[]): Promise<Set<string>> {
+  const settingsByUser = await getNotificationSettingsForUsers(db, userIds);
+  // Same default as the digest: a user with no settings row receives it.
+  return new Set(userIds.filter((userId) => {
+    const settings = settingsByUser.get(userId);
+    return !settings || allowsDailyDigestEmail(settings);
+  }));
 }
 
 export function delayToNextHour(now = new Date()): number {

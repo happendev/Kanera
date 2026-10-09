@@ -17,6 +17,8 @@ const CK = "88888888-8888-4888-8888-888888888888";
 const IT = "99999999-9999-4999-8999-999999999999";
 const O = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const W2 = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const TODAY_UTC = new Date().toISOString().slice(0, 10);
+const WEEK_END_UTC = new Date(Date.parse(`${TODAY_UTC}T00:00:00Z`) + 6 * 86_400_000).toISOString().slice(0, 10);
 
 type Tool = {
   handler: (args: unknown) => Promise<CallToolResult>;
@@ -361,6 +363,28 @@ const multiRequestToolCases: MultiRequestToolCase[] = [
     ],
   },
   {
+    // A template instead of a workspace creates a standalone board through the bootstrap endpoint.
+    name: "boards.create",
+    args: { templateId: "blank", name: "Agent project" },
+    requests: [
+      { method: "POST", path: "/api/v1/workspaces", body: { kind: "board", name: "Agent project", icon: "layout-kanban", initialBoard: { name: "Agent project", icon: "layout-kanban" }, lists: [], customFields: [], labels: [], checklistTemplates: [], cards: [], automations: [] } },
+    ],
+  },
+  {
+    // my_day fans out four bounded work queries plus the caller's own Up next queue.
+    name: "work.my_day",
+    args: { timeZone: "UTC", limit: 5, upNextLimit: 3 },
+    requests: [
+      ...[{ overdueOnly: true }, { dueFrom: TODAY_UTC, dueTo: WEEK_END_UTC }, { overdueChecklistOnly: true }, { inactiveOnly: true }].map((filters) => ({
+        method: "POST",
+        path: "/api/v1/work/cards/query",
+        body: { lens: "my", filters: { completion: "active", ...filters }, sort: "dueAsc", limit: 5 },
+      })),
+      { method: "GET", path: "/api/v1/session" },
+      { method: "GET", path: `/api/v1/work/priorities/${U}?limit=3` },
+    ],
+  },
+  {
     // Reads use the same omitted-target convention as writes: resolve the credential owner first.
     name: "priorities.list",
     args: { limit: 10 },
@@ -428,7 +452,7 @@ const multipartToolCases: MultipartToolCase[] = [{
 void test("every MCP tool maps to the expected public API request", async () => {
   const server = internals();
   const expectedNames = [...new Set([...toolCases, ...noRequestToolCases, ...multiRequestToolCases, ...multipartToolCases].map((item) => item.name))].sort();
-  assert.equal(expectedNames.length, 89);
+  assert.equal(expectedNames.length, 90);
   assert.deepEqual(Object.keys(server._registeredTools).sort(), expectedNames);
 
   const originalFetch = globalThis.fetch;
@@ -548,6 +572,9 @@ void test("every MCP tool maps to the expected public API request", async () => 
             content: "Existing",
             updatedAt: "2026-06-30T00:00:00.000Z",
           }), { status: 200 });
+        }
+        if (url.pathname === "/api/v1/work/cards/query") {
+          return new Response(JSON.stringify({ cards: [], checklistItems: [], nextCursor: null }), { status: 200 });
         }
         const checklistStub = checklistStubResponse(url.pathname, init?.method ?? "GET");
         if (checklistStub) return checklistStub;
@@ -728,8 +755,9 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     // budget independently, and bound the extra auth metadata rather than granting schema growth.
     const withoutAuthMetadata = tools.map(({ _meta, ...tool }) => tool);
     const schemaCatalogLength = JSON.stringify(withoutAuthMetadata).length;
-    assert.ok(schemaCatalogLength <= 204_000, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
-    assert.ok(serializedToolCatalogLength <= 212_000, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
+    // Raised from 204_000 for work.my_day (one aggregate tool replacing a five-call session start).
+    assert.ok(schemaCatalogLength <= 205_500, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
+    assert.ok(serializedToolCatalogLength <= 213_500, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
     for (const name of [
       "kanera_bulk_add_comments",
       "kanera_bulk_delete_comments",
