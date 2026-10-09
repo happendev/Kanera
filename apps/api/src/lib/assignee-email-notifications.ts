@@ -383,6 +383,79 @@ export async function enqueueOverdueChecklistItemAssigneeEmails(params: {
   return enqueued;
 }
 
+/**
+ * Outbound delivery for fired card reminders. Unlike the other senders here there is no actor to
+ * suppress: the recipient set the reminder for themselves, so the person being reminded is always
+ * the one who asked. The per-type `cardReminder` row and the workspace rule still apply, so a user
+ * can keep reminders in-app only.
+ */
+export async function enqueueCardReminderOutbound(params: {
+  tx: Tx;
+  mailer: Mailer;
+  webOrigin: string;
+  reminders: { cardId: string; userId: string; reminderId: string }[];
+}): Promise<void> {
+  if (params.reminders.length === 0) return;
+  const cardIds = Array.from(new Set(params.reminders.map((row) => row.cardId)));
+  const contexts = await params.tx
+    .select({
+      cardId: cards.id,
+      organisationKey: cards.organisationKey,
+      cardKey: cards.key,
+      cardTitle: cards.title,
+      boardId: boards.id,
+      boardName: boards.name,
+      workspaceId: boards.workspaceId,
+      clientId: workspaces.clientId,
+    })
+    .from(cards)
+    .innerJoin(boards, eq(boards.id, cards.boardId))
+    .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+    .where(inArray(cards.id, cardIds));
+  const ctxByCardId = new Map(contexts.map((row) => [row.cardId, row]));
+  const recipients = await loadRecipients(params.tx, params.reminders.map((row) => row.userId), null);
+  const recipientById = new Map(recipients.map((row) => [row.id, row]));
+  const settings = await getNotificationSettingsForUsers(params.tx, recipients.map((recipient) => recipient.id));
+  const rules = await getNotificationWorkspaceRulesForUsers(
+    params.tx,
+    recipients.map((recipient) => recipient.id),
+    contexts.map((ctx) => ctx.workspaceId),
+  );
+  const clientEnabledById = new Map<string, boolean>();
+  for (const { cardId, userId, reminderId } of params.reminders) {
+    const ctx = ctxByCardId.get(cardId);
+    const recipient = recipientById.get(userId);
+    if (!ctx || !recipient) continue;
+    const preference = settings.get(recipient.id)!;
+    const scope = deliveryScope(rules, recipient.id, ctx);
+    const url = cardUrl(params.webOrigin, ctx.organisationKey, ctx.cardKey);
+    if (allowsNotificationEmail(preference, "cardReminder", scope)) {
+      await params.mailer.sendCardReminder(recipient.email, {
+        displayName: recipient.displayName,
+        cardTitle: ctx.cardTitle,
+        boardName: ctx.boardName,
+        cardUrl: url,
+      });
+    }
+    const payload = {
+      kind: "card_reminder",
+      title: "Reminder",
+      body: ctx.cardTitle,
+      url,
+      // Per reminder, not per card: a rescheduled reminder must not be collapsed into the last one.
+      tag: `card:${ctx.cardId}:reminder:${reminderId}`,
+    };
+    await enqueuePersonalChannelsForRecipient(params.tx, recipient, preference, "cardReminder", "reminder", payload, scope);
+    let clientEnabled = clientEnabledById.get(ctx.clientId);
+    if (clientEnabled === undefined) {
+      clientEnabled = await isClientPushEnabled(params.tx, ctx.clientId);
+      clientEnabledById.set(ctx.clientId, clientEnabled);
+    }
+    if (!clientEnabled || !allowsNotificationPush(preference, "cardReminder", scope)) continue;
+    await enqueuePush(params.tx as Db, { clientId: ctx.clientId, userId: recipient.id, reason: "reminder", payload });
+  }
+}
+
 async function enqueuePushForRecipients(
   tx: Tx,
   recipients: { id: string; clientId: string }[],

@@ -32,8 +32,10 @@ const MOBILE_KANBAN_QUERY = "(max-width: 768px)";
   template: "<ng-content />",
   styles: `
     :host {
+      /* Positioned (no z-index) so it paints above the earlier .board-bg layer without becoming a
+         stacking context: with one, every popover opened from a card (context menu, Quick edit, the
+         reminder picker) was trapped beneath the sticky page toolbar wherever it overlapped it. */
       position: relative;
-      z-index: 1;
       display: flex;
       flex: 1 1 auto;
       align-items: flex-start;

@@ -280,7 +280,8 @@ async function gateFor(sub: McpEventSubscription): Promise<SubscriptionGate> {
 async function attemptDelivery(delivery: typeof mcpEventDeliveries.$inferSelect, gate: SubscriptionGate, send: McpWebhookRequest): Promise<DeliveryOutcome> {
   const { sub, claims } = gate;
   if (!claims || new Date(delivery.payload.timestamp) < sub.startsAt) return { kind: "skipped" };
-  // User events name no card, and only ever describe the subscriber's own queue or day (a database check).
+  // Queue and day events name no card, and only ever describe the subscriber's own queue or day (a
+  // database check). Card events and reminder.due name a card, which must still be visible now.
   if (delivery.payload.name !== MCP_PRIORITY_EVENT_NAME && delivery.payload.name !== MCP_MY_DAY_EVENT_NAME) {
     try {
       // Authorize the card's current board: it may have moved after this event was queued.

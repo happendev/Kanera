@@ -75,9 +75,10 @@ import type { ImageLightboxItem } from "./image-lightbox.component";
 import { LabelPickerPopover } from "./label-picker.popover";
 import { MemberPickerPopover } from "./member-picker.popover";
 import { SelectPickerPopover } from "./select-picker.popover";
+import { ReminderPopoverComponent } from "./reminder-popover.component";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
 import { BoardMirrorsService } from "../board-mirrors/board-mirrors.service";
-import { formatFeedTime } from "../../shared/date-format";
+import { formatDateTime, formatFeedTime } from "../../shared/date-format";
 import { clipboardAttachmentFiles, dragTargetElement, hasDraggedFiles, isEditablePasteTarget, isEditorDropTarget } from "../../shared/attachments/file-transfer";
 import { openAttachmentPreview, toLightboxAttachments } from "../../shared/attachments/attachment-lightbox";
 
@@ -125,6 +126,7 @@ export function checklistDragScrollStep(pointerY: number, top: number, bottom: n
     DescriptionViewerComponent,
     TooltipDirective,
     WatcherPopoverComponent,
+    ReminderPopoverComponent,
     AttachmentUploadListComponent,
   ],
   // Component-scoped so each open card has its own upload queue.
@@ -176,6 +178,17 @@ export class CardDetailComponent {
   readonly isWatchingCard = computed(() => this.notifications.isWatchingCard(this.card().id));
   readonly showCardWatchButton = computed(() => !this.notifications.isWatchingBoard(this.boardId()));
   readonly watcherPopoverOpen = signal(false);
+  readonly reminderPopoverOpen = signal(false);
+  /** Only a reminder still to come lights the button; a fired one is history, shown in the popover. */
+  readonly pendingReminder = computed(() => {
+    const reminder = this.notifications.reminderFor(this.card().id);
+    return reminder && !reminder.firedAt ? reminder : null;
+  });
+  readonly reminderLabel = computed(() => {
+    const reminder = this.pendingReminder();
+    if (!reminder) return "Remind me";
+    return `Reminder: ${formatDateTime(reminder.remindAt, "weekday")}`;
+  });
   readonly panel = viewChild<ElementRef<HTMLElement>>("panel");
   readonly detailScroller = viewChild<ElementRef<HTMLElement>>("detailScroller");
   readonly descriptionEditor = viewChild<DescriptionEditorComponent>("descriptionEditor");
@@ -245,6 +258,11 @@ export class CardDetailComponent {
 
   async toggleCardWatch() {
     await this.notifications.toggleCardWatch(this.card().id);
+  }
+
+  toggleReminderPopover(event: MouseEvent) {
+    event.stopPropagation();
+    this.reminderPopoverOpen.update((open) => !open);
   }
 
   toggleCardWatcherPopover(event: MouseEvent) {

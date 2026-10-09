@@ -94,8 +94,8 @@ test("board transfers drop inaccessible watchers but preserve destination observ
   for (const [target, retained, restricted] of [[privateBoard, false, false], [observerBoard, true, false], [observerBoard, false, true]] as const) {
     if (restricted) await result(await api.patch(`/api/boards/${observerBoard.id}/members/${maya.id}`, { data: { role: "observer", assignedItemsOnly: true } }));
     const card = await result<WireCard>(await api.post(`/api/boards/${source.id}/lists/${lists[0]!.id}/cards`, { data: { title: uniqueName("Watched transfer"), assigneeIds: [] } }));
-    expect((await guest.put(`/api/cards/${card.id}/watch`)).status()).toBe(204);
-    expect((await api.put(`/api/cards/${card.id}/watch`)).status()).toBe(204);
+    expect((await guest.put(`/api/cards/${card.id}/watch`)).status()).toBe(200);
+    expect((await api.put(`/api/cards/${card.id}/watch`)).status()).toBe(200);
     await result(await api.post(`/api/cards/${card.id}/move-to-board`, { data: { boardId: target.id } }));
     const watchers = await result<{ userId: string }[]>(await api.get(`/api/cards/${card.id}/watchers`));
     evidence.push({ cardId: card.id, targetBoardId: target.id, retained, restricted, watchers });

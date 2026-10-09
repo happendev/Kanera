@@ -356,7 +356,7 @@ describe("CardDetailComponent realtime regressions", () => {
   };
   let offlineCache: { loadCardDetail: ReturnType<typeof vi.fn>; saveBoard: ReturnType<typeof vi.fn>; saveCardDetail: ReturnType<typeof vi.fn> };
   let imageLightbox: { open: ReturnType<typeof vi.fn> };
-  let notifications: { isWatchingCard: ReturnType<typeof vi.fn>; isWatchingBoard: ReturnType<typeof vi.fn>; toggleCardWatch: ReturnType<typeof vi.fn>; beginViewingCard: ReturnType<typeof vi.fn> };
+  let notifications: { isWatchingCard: ReturnType<typeof vi.fn>; reminderFor: ReturnType<typeof vi.fn>; isWatchingBoard: ReturnType<typeof vi.fn>; toggleCardWatch: ReturnType<typeof vi.fn>; beginViewingCard: ReturnType<typeof vi.fn> };
   let socket: SocketStub;
   let socketService: { connect: ReturnType<typeof vi.fn>; displayedOnline: ReturnType<typeof signal<boolean>>; joinWorkspace: ReturnType<typeof vi.fn> };
   let viewerRole: ReturnType<typeof signal<"owner" | "admin" | "editor" | "observer" | null>>;
@@ -418,6 +418,7 @@ describe("CardDetailComponent realtime regressions", () => {
     notificationStateVersion = signal(0);
     notifications = {
       isWatchingCard: vi.fn(() => false),
+      reminderFor: vi.fn(() => null),
       isWatchingBoard: vi.fn(() => false),
       toggleCardWatch: vi.fn(() => Promise.resolve()),
       // Model the real service's synchronous signal reads before returning cleanup.

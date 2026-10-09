@@ -205,7 +205,12 @@ export type DateContext = { timeZone: string; today: string };
 /** Local-date keys: values are stored as dates, so a phrase's time only selects a due slot. */
 const LOCAL_DATE_KEYS = new Set(["dueDateLocalDate", "dueFrom", "dueTo", "valueDate"]);
 /** Instant keys: a phrase without a time means the start of that day in the user's zone. */
-const INSTANT_KEYS = new Set(["completedFrom", "completedTo", "lastActivityBefore", "lastMovedBefore", "from", "to"]);
+const INSTANT_KEYS = new Set(["completedFrom", "completedTo", "lastActivityBefore", "lastMovedBefore", "from", "to", "remindAt"]);
+/**
+ * A reminder for "friday" means Friday morning, not the midnight that opens it: midnight would wake
+ * the user, and for "today" it is already in the past. Filter bounds keep the start-of-day reading.
+ */
+const DEFAULT_TIME_BY_KEY: Record<string, LocalTime> = { remindAt: DUE_DATE_SLOT_TIMES.morning };
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/u;
 
 function needsResolution(key: string, value: unknown, parent: Record<string, unknown>): value is string {
@@ -246,7 +251,7 @@ export function resolveRelativeDates<T>(value: T, context: DateContext, path: Ar
       throw error;
     }
     if (INSTANT_KEYS.has(key)) {
-      next[key] = zonedInstant(resolved.date, resolved.time ?? { hour: 0, minute: 0 }, context.timeZone);
+      next[key] = zonedInstant(resolved.date, resolved.time ?? DEFAULT_TIME_BY_KEY[key] ?? { hour: 0, minute: 0 }, context.timeZone);
       continue;
     }
     next[key] = resolved.date;

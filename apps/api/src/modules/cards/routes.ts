@@ -52,6 +52,7 @@ import { absoluteCardUrl, toWireCard } from "../../lib/wire-card.js";
 import { assertCardActive, assertIntegrationEmbeddedMediaStoredLocally } from "../../lib/card-guards.js";
 import { attachmentRowBaseColumns } from "../../lib/attachment-rows.js";
 import { ensureBoardMembershipForUsers, shouldAutoWatchAuthoredCards } from "../../lib/card-assignment.js";
+import { clearRemindersOnCompletedCards, emitClearedCardReminders, type ClearedCardReminder } from "../../lib/card-follow.js";
 import type { AuthClaims } from "../../auth/plugin.js";
 
 const CHECKLIST_MISTAKE_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
@@ -454,6 +455,7 @@ type CardCompletionWrite = {
   finalCard: typeof cards.$inferSelect;
   activity: CoalescedActivityResult;
   automationEffects: AutomationEffects;
+  clearedReminders: ClearedCardReminder[];
 };
 
 /**
@@ -501,6 +503,7 @@ async function applyCardCompletion(
   });
   if (completed) await clearOverdueNotificationsForCards(tx, [current.id]);
   else await createOverdueNotificationsForCards(tx, [current.id]);
+  const clearedReminders = completed ? await clearRemindersOnCompletedCards(tx, [current.id]) : [];
   const automationEffects = completed
     ? await runCardMarkedCompleteAutomations(tx, {
       cardId: current.id,
@@ -517,7 +520,7 @@ async function applyCardCompletion(
   const [finalCard] = automationEffects.effects.length > 0
     ? await tx.select().from(cards).where(eq(cards.id, current.id)).limit(1)
     : [card];
-  return { card: card!, finalCard: finalCard ?? card!, activity, automationEffects };
+  return { card: card!, finalCard: finalCard ?? card!, activity, automationEffects, clearedReminders };
 }
 
 /** Post-commit fanout for `applyCardCompletion`, including the queue audiences board rooms miss. */
@@ -525,8 +528,9 @@ async function emitCardCompletion(
   rows: readonly CardCompletionWrite[],
   opts: { clientId: string; completed: boolean },
 ): Promise<void> {
-  for (const { card, activity, automationEffects } of rows) {
+  for (const { card, activity, automationEffects, clearedReminders } of rows) {
     await emitToBoard(card.boardId, SERVER_EVENTS.CARD_UPDATED, { boardId: card.boardId, card: toWireCard(card, opts.clientId) });
+    emitClearedCardReminders(clearedReminders);
     await emitCoalescedCardActivityFeedItem(card.boardId, card.id, activity, { notify: opts.completed });
     await emitAutomationEffects(automationEffects);
   }

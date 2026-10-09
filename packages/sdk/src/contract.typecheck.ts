@@ -5,7 +5,7 @@ import type {
   createChecklistItemsBody, moveCardBody, setCustomFieldValueBody, updateCardBody, updateChecklistItemBody,
   updateChecklistItemsBody,
 } from "@kanera/shared/dto";
-import type { createCardPriorityBody, moveCardPriorityBody } from "@kanera/shared/dto";
+import type { createCardPriorityBody, moveCardPriorityBody, setCardReminderBody } from "@kanera/shared/dto";
 import type { createCommentBody } from "@kanera/shared/dto";
 import type { startAgentRunBody, updateAgentRunBody } from "@kanera/shared/dto";
 import type { createNoteBody, updateNoteBody } from "@kanera/shared/dto";
@@ -57,6 +57,9 @@ type _MoveCardBySeparator = AssertAssignable<
   { listId: string; afterItem: { type: "separator"; id: string } },
   z.input<typeof moveCardBody>
 >;
+
+// Reminders. setReminder() serialises a Date to the ISO instant the API validates.
+type _SetReminder = AssertAssignable<{ remindAt: string }, z.input<typeof setCardReminderBody>>;
 
 // Separators. create() and move() translate the SDK's one-anchor shape into these API fields.
 type _CreateSeparator = AssertAssignable<

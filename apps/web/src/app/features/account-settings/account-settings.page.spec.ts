@@ -45,6 +45,7 @@ const enabledWorkspaceRuleTypes = (): NotificationWorkspaceRule["types"] => ({
   commentMentioned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
   cardDueDateChanged: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
   cardOverdue: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+  cardReminder: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
 });
 
 describe("AccountSettingsPage", () => {
@@ -174,6 +175,7 @@ describe("AccountSettingsPage", () => {
         commentMentioned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
         cardDueDateChanged: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
         cardOverdue: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+        cardReminder: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
       },
       workspaceRules: [],
     };
@@ -365,8 +367,8 @@ describe("AccountSettingsPage", () => {
     expect(typeGrid?.textContent).not.toContain("ntfy");
     expect(typeGrid?.textContent).not.toContain("Gotify");
     expect(typeGrid?.textContent).not.toContain("Webhook");
-    expect(typeGrid?.querySelectorAll(".mini-toggle").length).toBe(10);
-    expect(additionalDestinations?.querySelectorAll(".personal-channel-types .mini-toggle").length).toBe(15);
+    expect(typeGrid?.querySelectorAll(".mini-toggle").length).toBe(12);
+    expect(additionalDestinations?.querySelectorAll(".personal-channel-types .mini-toggle").length).toBe(18);
   });
 
   it("keeps email and browser push available while hiding Pro-only personal destinations on Free", async () => {
@@ -431,11 +433,12 @@ describe("AccountSettingsPage", () => {
         commentMentioned: { email: true, push: false, ntfy: true, gotify: true, webhook: true },
         cardDueDateChanged: { email: true, push: false, ntfy: true, gotify: true, webhook: true },
         cardOverdue: { email: true, push: false, ntfy: true, gotify: true, webhook: true },
+        cardReminder: { email: true, push: false, ntfy: true, gotify: true, webhook: true },
       },
     });
     expect(component.notificationSettings()?.workspaceRules).toHaveLength(1);
     fixture.detectChanges();
-    expect(root.textContent).toContain("4/5 types");
+    expect(root.textContent).toContain("5/6 types");
 
     await component.resetWorkspaceRule(group.workspaceId);
     expect(api.delete).toHaveBeenCalledWith("/notifications/settings/workspaces/workspace-1");
@@ -468,7 +471,7 @@ describe("AccountSettingsPage", () => {
     expect(editor?.textContent).not.toContain("Webhook");
     expect(editor?.querySelectorAll('input[type="radio"]')).toHaveLength(0);
     expect(editor?.querySelectorAll(".workspace-switch-control")).toHaveLength(0);
-    expect(editor?.querySelectorAll(".workspace-matrix-checkbox")).toHaveLength(5);
+    expect(editor?.querySelectorAll(".workspace-matrix-checkbox")).toHaveLength(6);
     expect(editor?.querySelectorAll(".workspace-matrix-channel-heading input")).toHaveLength(1);
     expect(editor?.querySelector(".workspace-rule-pause-action")?.textContent).toContain("Pause");
     expect(editor?.textContent).toContain("Choose which types each available provider can deliver");

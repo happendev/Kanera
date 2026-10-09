@@ -1,6 +1,6 @@
 import { paginateCursor, type PageIterator } from "../pagination.js";
 import type {
-  Attachment, BulkArchiveResult, BulkCardResult, Card, CardDetail, Checklist, ChecklistItem, CreatedChecklist, CreatedChecklistItem,
+  Attachment, BulkArchiveResult, BulkCardResult, Card, CardDetail, CardFollowState, CardReminderListItem, Checklist, ChecklistItem, CreatedChecklist, CreatedChecklistItem,
   DueDateSlot, LocalDate,
   LaneItemReference, LanePositionAnchor, PositionAnchor, Uuid,
 } from "../types.js";
@@ -201,6 +201,41 @@ export class Cards {
 
   async setCover(card: string, attachmentId: Uuid | null, options: CallOptions = {}): Promise<Card> {
     return this.ctx.http.patch<Card>(`/api/v1/cards/${await this.ctx.resolveCard(card)}/cover`, { attachmentId }, options);
+  }
+
+  /** Whether you watch the card, and your reminder on it. Needs a personal key or OAuth connection. */
+  async followState(card: string, options: CallOptions = {}): Promise<CardFollowState> {
+    return this.ctx.http.get<CardFollowState>(`/api/v1/cards/${await this.ctx.resolveCard(card)}/follow`, options);
+  }
+
+  /** Watch a card: its activity reaches your notification inbox. Idempotent. */
+  async watch(card: string, options: CallOptions = {}): Promise<CardFollowState> {
+    return this.ctx.http.put<CardFollowState>(`/api/v1/cards/${await this.ctx.resolveCard(card)}/watch`, undefined, options);
+  }
+
+  /** Stop watching a card. Idempotent; your reminder on it is unaffected. */
+  async unwatch(card: string, options: CallOptions = {}): Promise<CardFollowState> {
+    return this.ctx.http.delete<CardFollowState>(`/api/v1/cards/${await this.ctx.resolveCard(card)}/watch`, options);
+  }
+
+  /**
+   * Remind yourself about a card at `remindAt` (a future instant). Replaces and re-arms any reminder
+   * you already hold on the card.
+   */
+  async setReminder(card: string, remindAt: Date | string, options: CallOptions = {}): Promise<CardFollowState> {
+    const value = remindAt instanceof Date ? remindAt.toISOString() : remindAt;
+    return this.ctx.http.put<CardFollowState>(`/api/v1/cards/${await this.ctx.resolveCard(card)}/reminder`, { remindAt: value }, options);
+  }
+
+  /** Clear your reminder on a card, pending or fired. Idempotent. */
+  async clearReminder(card: string, options: CallOptions = {}): Promise<CardFollowState> {
+    return this.ctx.http.delete<CardFollowState>(`/api/v1/cards/${await this.ctx.resolveCard(card)}/reminder`, options);
+  }
+
+  /** Your reminders, soonest first, on cards you can still read. `all` includes delivered ones. */
+  listReminders(options: { status?: "pending" | "all" } & CallOptions = {}): Promise<CardReminderListItem[]> {
+    const { status, ...call } = options;
+    return this.ctx.http.get<CardReminderListItem[]>("/api/v1/reminders", { ...call, query: { status } });
   }
 
   /** Comments and activity interleaved, newest first. */

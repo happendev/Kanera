@@ -5,6 +5,7 @@ import { db } from "./db.js";
 import { env } from "./env.js";
 import { startAgentRunStallScheduler } from "./lib/agent-runs.js";
 import { startArchivedCardCleanupScheduler } from "./lib/archived-card-cleanup.js";
+import { startCardReminderScheduler } from "./lib/card-follow.js";
 import { startBoardMirrorScheduler } from "./lib/board-mirror/scheduler.js";
 import { startDueDateAutomationScheduler } from "./lib/automations.js";
 import { startDailyDigestScheduler } from "./lib/daily-digest.js";
@@ -81,6 +82,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   let stopRealtimeOutboxDispatcher: (() => Promise<void>) | null = null;
   let stopDirectRealtimeOutboxDispatcher: (() => Promise<void>) | null = null;
   let stopOverdueScheduler: (() => Promise<void>) | null = null;
+  let stopCardReminderScheduler: (() => Promise<void>) | null = null;
   let stopDueDateAutomationScheduler: (() => Promise<void>) | null = null;
   let stopDailyDigestScheduler: (() => Promise<void>) | null = null;
   let stopEmailQueueScheduler: (() => Promise<void>) | null = null;
@@ -102,6 +104,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   app.addHook("onClose", async () => stopDirectRealtimeOutboxDispatcher?.());
   app.addHook("onClose", async () => webhookDeliveryScheduler?.stop());
   app.addHook("onClose", async () => stopOverdueScheduler?.());
+  app.addHook("onClose", async () => stopCardReminderScheduler?.());
   app.addHook("onClose", async () => stopDueDateAutomationScheduler?.());
   app.addHook("onClose", async () => stopDailyDigestScheduler?.());
   app.addHook("onClose", async () => stopEmailQueueScheduler?.());
@@ -140,6 +143,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
     stopBoardMirrorScheduler = startBoardMirrorScheduler({ log: app.log });
     stopDirectRealtimeOutboxDispatcher = startDirectRealtimeOutboxDispatcher({ log: app.log });
     stopOverdueScheduler = startOverdueNotificationScheduler(app.log);
+    stopCardReminderScheduler = startCardReminderScheduler(app.log);
     stopAgentRunStallScheduler = startAgentRunStallScheduler(app.log);
     stopDueDateAutomationScheduler = startDueDateAutomationScheduler(app.log);
     stopDailyDigestScheduler = startDailyDigestScheduler({ db, webOrigin: env.WEB_ORIGIN, resolveSmtpConfig, log: app.log });

@@ -138,6 +138,7 @@ const NOTIFICATION_ROWS: { key: NotificationSettingType; label: string }[] = [
   { key: "commentMentioned", label: "Tagged in a comment" },
   { key: "cardDueDateChanged", label: "Card due date changed" },
   { key: "cardOverdue", label: "Card overdue" },
+  { key: "cardReminder", label: "Your card reminders" },
 ];
 
 interface NotificationBoardOption {
@@ -862,6 +863,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         commentMentioned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
         cardDueDateChanged: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
         cardOverdue: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+        cardReminder: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
       },
     };
   }
@@ -961,6 +963,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         commentMentioned: { ...rule.types.commentMentioned },
         cardDueDateChanged: { ...rule.types.cardDueDateChanged },
         cardOverdue: { ...rule.types.cardOverdue },
+        cardReminder: { ...rule.types.cardReminder },
       },
     };
   }

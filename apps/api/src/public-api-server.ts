@@ -46,6 +46,7 @@ import { commentRoutes } from "./modules/comments/routes.js";
 import { customFieldRoutes } from "./modules/custom-fields/routes.js";
 import { agentRunRoutes } from "./modules/agent-runs/routes.js";
 import { externalLinkRoutes } from "./modules/external-links/routes.js";
+import { followRoutes } from "./modules/notifications/follow.routes.js";
 import { mcpEventRoutes } from "./modules/integrations/mcp-events.routes.js";
 import type { McpWebhookRequest } from "./lib/mcp-event-webhooks.js";
 import { webhookEndpointRoutes } from "./modules/integrations/webhook-endpoint.routes.js";
@@ -475,6 +476,9 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
     // per-card write authorisation stay identical; the invalidation reaches connected web clients
     // through the realtime outbox like every other public API mutation.
     await api.register(cardPriorityRoutes);
+    // Watching and reminders are the user's own subscription state; the same handlers serve the web
+    // app, and their user-scoped events reach the user's web sessions through the direct outbox.
+    await api.register(followRoutes);
     await api.register(separatorRoutes);
     await api.register((instance) => cardAttachmentRoutes(instance, { exposeCoverMetadata: false }));
     await api.register(uploadLinkRoutes);

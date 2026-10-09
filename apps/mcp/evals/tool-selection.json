@@ -329,6 +329,43 @@
         "cards.update",
         "comments.add"
       ]
+    },
+    {
+      "id": "remind-me-about-existing-card",
+      "category": "direct",
+      "prompt": "Remind me about MKT-42 on Friday at 3pm.",
+      "expectedTools": [
+        "cards.set_reminder"
+      ],
+      "expectedArguments": {
+        "cards.set_reminder": {
+          "cardId": "MKT-42",
+          "remindAt": "friday 3pm"
+        }
+      },
+      "forbiddenTools": [
+        "scratchpad.capture",
+        "cards.update",
+        "comments.add"
+      ]
+    },
+    {
+      "id": "follow-card-activity",
+      "category": "direct",
+      "prompt": "Watch MKT-42 for me so I hear about every change on it.",
+      "expectedTools": [
+        "cards.set_watching"
+      ],
+      "expectedArguments": {
+        "cards.set_watching": {
+          "cardId": "MKT-42",
+          "watching": true
+        }
+      },
+      "forbiddenTools": [
+        "cards.set_assignees",
+        "scratchpad.capture"
+      ]
     }
   ]
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { dueDateSlotForTime, RelativeDateError, resolveLocalDate } from "./relative-dates.js";
+import { dueDateSlotForTime, RelativeDateError, resolveLocalDate, resolveRelativeDates } from "./relative-dates.js";
 
 // 2026-10-09 is a Friday.
 const TODAY = "2026-10-09";
@@ -58,4 +58,16 @@ void test("a time maps to the earliest due slot that is not before it", () => {
   assert.equal(dueDateSlotForTime({ hour: 13, minute: 0 }), "afternoon");
   assert.equal(dueDateSlotForTime({ hour: 13, minute: 1 }), "endOfWorkDay");
   assert.equal(dueDateSlotForTime({ hour: 18, minute: 0 }), "anyTime");
+});
+
+// A reminder phrase without a time must not land on midnight (already past for "today", and a
+// 00:00 alarm for any other day), while filter bounds keep their start-of-day meaning.
+void test("reminder phrases resolve to an instant in the user's zone, defaulting to the morning", () => {
+  const context = { timeZone: "Europe/London", today: TODAY };
+  assert.deepEqual(resolveRelativeDates({ remindAt: "friday 3pm" }, context), { remindAt: "2026-10-09T14:00:00.000Z" });
+  assert.deepEqual(resolveRelativeDates({ remindAt: "tomorrow" }, context), { remindAt: "2026-10-10T08:00:00.000Z" });
+  // Clocks go back on 2026-10-25, so the same wall time is an hour later in UTC.
+  assert.deepEqual(resolveRelativeDates({ remindAt: "oct 26 9am" }, context), { remindAt: "2026-10-26T09:00:00.000Z" });
+  assert.deepEqual(resolveRelativeDates({ remindAt: "2026-10-12T07:30:00Z" }, context), { remindAt: "2026-10-12T07:30:00Z" });
+  assert.deepEqual(resolveRelativeDates({ completedFrom: "tomorrow" }, context), { completedFrom: "2026-10-09T23:00:00.000Z" });
 });

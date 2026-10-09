@@ -40,7 +40,9 @@ export type DateTimeStyle =
   /** "4 Mar 2026, 14:32". Build stamps, exports, tooltips. */
   | "medium"
   /** "14:32" for today, otherwise "4 Mar". Dense stamps where the day is usually today. */
-  | "compact";
+  | "compact"
+  /** "Wed, 4 Mar, 14:32". Scheduled moments (reminders), where the weekday is how people plan. */
+  | "weekday";
 
 export interface FormatOptions {
   /** IANA zone to render in. Falls back to the browser zone when the zone is unknown to it. */

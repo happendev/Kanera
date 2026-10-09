@@ -1,6 +1,7 @@
 // ── Watch button ──────────────────────────────────────────────────────────────
 
-.watch-btn.is-watching {
+.watch-btn.is-watching,
+.reminder-btn.has-reminder {
   color: var(--accent);
 
   &:hover {

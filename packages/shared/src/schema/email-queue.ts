@@ -15,6 +15,7 @@ export const EMAIL_QUEUE_TYPES = [
   "card_due_date_changed",
   "card_overdue",
   "checklist_item_overdue",
+  "card_reminder",
   "invite_accepted",
   "board_invite",
   "board_access_granted",
@@ -189,6 +190,13 @@ export type CardOverdueEmailQueueData = {
   dueLabel: string | null;
 };
 
+export type CardReminderEmailQueueData = {
+  displayName: string;
+  cardTitle: string;
+  boardName: string;
+  cardUrl: string;
+};
+
 export type ChecklistItemOverdueEmailQueueData = {
   displayName: string;
   itemText: string;
@@ -328,6 +336,7 @@ export type EmailQueueData =
   | { type: "card_due_date_changed"; data: CardDueDateChangedEmailQueueData }
   | { type: "card_overdue"; data: CardOverdueEmailQueueData }
   | { type: "checklist_item_overdue"; data: ChecklistItemOverdueEmailQueueData }
+  | { type: "card_reminder"; data: CardReminderEmailQueueData }
   | { type: "invite_accepted"; data: InviteAcceptedEmailQueueData }
   | { type: "board_invite"; data: BoardInviteEmailQueueData }
   | { type: "board_access_granted"; data: BoardAccessGrantedEmailQueueData }

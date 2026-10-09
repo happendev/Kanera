@@ -276,6 +276,11 @@ const allToolCases: ToolCase[] = [
   { name: "comments.set_reaction", args: { commentId: N, type: "thumbs_up", active: true }, method: "POST", path: `/api/v1/comments/${N}/reactions`, body: { type: "thumbs_up" } },
   { name: "cards.delete_attachment", args: { cardId: C, attachmentId: N }, method: "DELETE", path: `/api/v1/cards/${C}/attachments/${N}` },
   { name: "cards.set_cover", args: { cardId: C, attachmentId: N }, method: "PATCH", path: `/api/v1/cards/${C}/cover`, body: { attachmentId: N } },
+  { name: "cards.set_watching", args: { cardId: C, watching: true }, method: "PUT", path: `/api/v1/cards/${C}/watch` },
+  { name: "cards.set_watching", args: { cardId: C, watching: false }, method: "DELETE", path: `/api/v1/cards/${C}/watch` },
+  { name: "cards.set_reminder", args: { cardId: C, remindAt: "2026-10-12T08:00:00Z" }, method: "PUT", path: `/api/v1/cards/${C}/reminder`, body: { remindAt: "2026-10-12T08:00:00Z" } },
+  { name: "cards.set_reminder", args: { cardId: C, remindAt: null }, method: "DELETE", path: `/api/v1/cards/${C}/reminder` },
+  { name: "reminders.list", args: { status: "pending" }, method: "GET", path: "/api/v1/reminders?status=pending" },
 ];
 
 const nonDefaultToolNames = new Set([
@@ -466,7 +471,7 @@ const multipartToolCases: MultipartToolCase[] = [{
 void test("every MCP tool maps to the expected public API request", async () => {
   const server = internals();
   const expectedNames = [...new Set([...toolCases, ...noRequestToolCases, ...multiRequestToolCases, ...multipartToolCases].map((item) => item.name))].sort();
-  assert.equal(expectedNames.length, 96);
+  assert.equal(expectedNames.length, 99);
   assert.deepEqual(Object.keys(server._registeredTools).sort(), expectedNames);
 
   const originalFetch = globalThis.fetch;
@@ -773,14 +778,16 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     // Checklist trees (checklists.get and nested items on create/add_items) fit inside the existing
     // budget because single-item add/update were folded into add_items/update_items: one tool per
     // verb keeps tool choice unambiguous and the catalog small.
+    // Following and reminders (cards.set_watching, cards.set_reminder, reminders.list) add roughly
+    // 2.7k; each verb folds set and clear into one tool, and both ceilings move by that headroom.
     const serializedToolCatalogLength = JSON.stringify(tools).length;
     // OAuth declarations add a fixed per-tool cost. Preserve the original routing/schema
     // budget independently, and bound the extra auth metadata rather than granting schema growth.
     const withoutAuthMetadata = tools.map(({ _meta, ...tool }) => tool);
     const schemaCatalogLength = JSON.stringify(withoutAuthMetadata).length;
     // Ceilings track the measured catalog with a little headroom, so growth is a deliberate raise.
-    assert.ok(schemaCatalogLength <= 172_000, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
-    assert.ok(serializedToolCatalogLength <= 180_000, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
+    assert.ok(schemaCatalogLength <= 175_000, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
+    assert.ok(serializedToolCatalogLength <= 183_000, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
     // No single tool may dominate the catalog: work.query_cards is the largest at ~8k because its
     // filter object is spelled out in full. Anything bigger needs its schema reconsidered, not a
     // bigger total budget.

@@ -319,6 +319,29 @@ export interface CreatedChecklistItem extends ChecklistItem {
   subChecklists: Checklist[];
 }
 
+/** Your own one-off reminder on a card. You hold at most one per card. */
+export interface CardReminder {
+  id: Uuid;
+  cardId: Uuid;
+  /** ISO instant the reminder fires at. */
+  remindAt: string;
+  /** When it was delivered; `null` while pending. Rescheduling clears it. */
+  firedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CardReminderListItem extends CardReminder {
+  card: { id: Uuid; key: string; title: string; boardId: Uuid; workspaceId: Uuid; url: string };
+}
+
+/** Whether you watch a card, and your reminder on it. Private to the connected user. */
+export interface CardFollowState {
+  cardId: Uuid;
+  watching: boolean;
+  reminder: CardReminder | null;
+}
+
 export interface CardDetail {
   card: Card;
   customFieldValues: CustomFieldValue[];

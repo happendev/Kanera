@@ -52,6 +52,17 @@
       }
     </span>
     }
+    @if (!card().archivedAt) {
+    <span class="watcher-popover-wrap">
+      <button class="ghost icon reminder-btn" [class.has-reminder]="pendingReminder()" [class.is-active]="reminderPopoverOpen()" (click)="toggleReminderPopover($event)"
+        [attr.aria-label]="reminderLabel()" [attr.aria-expanded]="reminderPopoverOpen()" [kTooltip]="reminderLabel()">
+        <i class="ti ti-alarm"></i>
+      </button>
+      @if (reminderPopoverOpen()) {
+      <k-reminder-popover [cardId]="card().id" (dismissed)="reminderPopoverOpen.set(false)" />
+      }
+    </span>
+    }
     @if (canArchiveRole()) {
     @if (card().archivedAt) {
     <button class="ghost sm unarchive-btn" (click)="setArchived(false)" [disabled]="archiving() || !canArchive()" aria-label="Unarchive card" kTooltip="Unarchive card">

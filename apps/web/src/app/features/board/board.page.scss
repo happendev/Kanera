@@ -589,8 +589,8 @@ k-page-header.is-tight {
   // A horizontal board swipe should stay within the kanban instead of chaining to the app shell.
   overscroll-behavior-x: contain;
   align-items: flex-start;
+  // No z-index: see the :host comment in board-canvas.component.ts.
   position: relative;
-  z-index: 1;
 
   &.is-dragging {
     user-select: none;

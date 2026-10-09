@@ -30,6 +30,8 @@ export type { CommentMentionedEmailParams } from "./comment-mentioned.js";
 export { cardDueDateChangedEmail } from "./card-due-date-changed.js";
 export type { CardDueDateChangedEmailParams } from "./card-due-date-changed.js";
 export { cardOverdueEmail } from "./card-overdue.js";
+export { cardReminderEmail } from "./card-reminder.js";
+export type { CardReminderEmailParams } from "./card-reminder.js";
 export type { CardOverdueEmailParams } from "./card-overdue.js";
 export { checklistItemOverdueEmail } from "./card-checklist-item-overdue.js";
 export type { ChecklistItemOverdueEmailParams } from "./card-checklist-item-overdue.js";

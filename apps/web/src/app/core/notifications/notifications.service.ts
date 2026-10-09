@@ -1,5 +1,5 @@
 import { Injectable, computed, DestroyRef, effect, inject, signal } from "@angular/core";
-import type { NotificationGroupBy, NotificationGroupCountsResponse, NotificationRow, NotificationsPage, WatcherUser, NotificationAgentCounts } from "@kanera/shared/dto";
+import type { CardFollowState, NotificationGroupBy, NotificationGroupCountsResponse, NotificationRow, NotificationsPage, WatcherUser, NotificationAgentCounts, WireCardReminder } from "@kanera/shared/dto";
 import { SERVER_EVENTS, type ServerToClientEvents } from "@kanera/shared/events";
 import { ApiClient } from "../api/api.client";
 import { AuthService } from "../auth/auth.service";
@@ -66,6 +66,8 @@ export class NotificationsService {
   readonly watchedBoards = signal<Set<string>>(new Set());
   readonly cardWatchers = signal<Record<string, WatcherUser[]>>({});
   readonly boardWatchers = signal<Record<string, WatcherUser[]>>({});
+  /** The viewer's own reminder per card id, pending or already fired (until cleared or replaced). */
+  readonly cardReminders = signal<Record<string, WireCardReminder>>({});
   readonly notificationUserOptions = signal<WatcherUser[]>([]);
   readonly boardFilter = signal<string | null>(null);
   readonly userFilter = signal<string | null>(null);
@@ -131,6 +133,7 @@ export class NotificationsService {
     void this.refreshCardUnreadCounts().catch(() => undefined);
     void this.loadWatchedCards().catch(() => undefined);
     void this.loadWatchedBoards().catch(() => undefined);
+    void this.loadCardReminders().catch(() => undefined);
     this.attachSocket();
   }
 
@@ -173,6 +176,7 @@ export class NotificationsService {
     this.watchedBoards.set(new Set());
     this.cardWatchers.set({});
     this.boardWatchers.set({});
+    this.cardReminders.set({});
     this.notificationUserOptions.set([]);
     this.boardFilter.set(null);
     this.userFilter.set(null);
@@ -726,6 +730,58 @@ export class NotificationsService {
     return rows;
   }
 
+  async loadCardReminders(): Promise<void> {
+    const session = this.sessionVersion;
+    const rows = await this.api.get<WireCardReminder[]>("/reminders?status=all");
+    if (session !== this.sessionVersion) return;
+    this.cardReminders.set(Object.fromEntries(rows.map((row) => [row.cardId, row])));
+  }
+
+  reminderFor(cardId: string): WireCardReminder | null {
+    return this.cardReminders()[cardId] ?? null;
+  }
+
+  async setCardReminder(cardId: string, remindAt: Date): Promise<void> {
+    const session = this.sessionVersion;
+    const state = await this.api.put<CardFollowState>(`/cards/${cardId}/reminder`, { remindAt: remindAt.toISOString() });
+    if (session !== this.sessionVersion) return;
+    this.applyCardReminder(cardId, state.reminder);
+  }
+
+  async clearCardReminder(cardId: string): Promise<void> {
+    const session = this.sessionVersion;
+    await this.api.delete(`/cards/${cardId}/reminder`);
+    if (session !== this.sessionVersion) return;
+    this.applyCardReminder(cardId, null);
+  }
+
+  private applyCardReminder(cardId: string, reminder: WireCardReminder | null): void {
+    this.cardReminders.update((current) => {
+      const existing = current[cardId];
+      // The REST response and the realtime echo race; never let an older write win.
+      if (reminder && existing && existing.id === reminder.id && existing.updatedAt > reminder.updatedAt) return current;
+      if (!reminder) {
+        if (!existing) return current;
+        const { [cardId]: _removed, ...rest } = current;
+        return rest;
+      }
+      return { ...current, [cardId]: reminder };
+    });
+  }
+
+  private applyWatchChange(kind: "card" | "board", id: string, watching: boolean): void {
+    const target = kind === "card" ? this.watchedCards : this.watchedBoards;
+    if (target().has(id) === watching) return;
+    if (kind === "card" && !watching) this.createdCardWatches.delete(id);
+    target.update((set) => {
+      const next = new Set(set);
+      if (watching) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+    this.updateWatcherCache(kind, id, watching);
+  }
+
   isWatchingCard(cardId: string): boolean {
     return this.watchedCards().has(cardId);
   }
@@ -1070,7 +1126,11 @@ export class NotificationsService {
       this.refreshCardUnreadCounts().catch(() => undefined),
       this.refreshAgentCounts().catch(() => undefined),
       this.refreshOrganisationUnreadCounts().catch(() => undefined),
-      ...(readActiveCards ? [this.loadWatchedCards().catch(() => undefined), this.loadWatchedBoards().catch(() => undefined)] : []),
+      ...(readActiveCards ? [
+        this.loadWatchedCards().catch(() => undefined),
+        this.loadWatchedBoards().catch(() => undefined),
+        this.loadCardReminders().catch(() => undefined),
+      ] : []),
     ]);
     if (readActiveCards && revision === this.stateRevision) {
       // A card opened while offline still counts as viewed once it reconnects, even when the
@@ -1229,11 +1289,21 @@ export class NotificationsService {
       this.scheduleReconciliation();
     }])) as Partial<ServerToClientEvents>;
     const detachHandlers = registerSocketHandlers(socket, guardedHandlers);
+    // Follow state is user-scoped and leaves notification rows untouched, so it skips the
+    // notification-request invalidation above. These carry the resulting state, so applying them
+    // is idempotent, including the echo of this tab's own write.
+    const detachFollowHandlers = registerSocketHandlers(socket, {
+      [SERVER_EVENTS.WATCH_CHANGED]: ({ kind, id, watching }) => this.applyWatchChange(kind, id, watching),
+      [SERVER_EVENTS.CARD_REMINDER_UPDATED]: ({ reminder }) => this.applyCardReminder(reminder.cardId, reminder),
+      [SERVER_EVENTS.CARD_REMINDER_DELETED]: ({ cardId, reminderId }) => {
+        if (this.cardReminders()[cardId]?.id === reminderId) this.applyCardReminder(cardId, null);
+      },
+    });
     // A short socket outage can finish before displayedOnline changes; listen to the actual
     // connection too, otherwise changes missed in that gap never reach an already-open inbox.
     const onConnect = () => { this.invalidateNotificationRequests(); void this.resync(true); };
     socket.on("connect", onConnect);
-    this.detach = () => { detachHandlers(); socket.off("connect", onConnect); };
+    this.detach = () => { detachHandlers(); detachFollowHandlers(); socket.off("connect", onConnect); };
   }
 
   private shouldPlayAttentionSound(notification: NotificationRow): boolean {

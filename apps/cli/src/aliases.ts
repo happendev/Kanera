@@ -64,6 +64,11 @@ export const COMMAND_ALIASES: CommandAlias[] = [
   { path: ["priority", "add"], tool: "priorities.add", summary: "Add a card to an \"Up next\" queue", positionals: ["cardId"], group: "Work" },
   { path: ["priority", "move"], tool: "priorities.move", summary: "Reorder an \"Up next\" queue entry", positionals: ["priorityId"], group: "Work" },
   { path: ["priority", "remove"], tool: "priorities.remove", summary: "Remove an \"Up next\" queue entry", positionals: ["priorityId"], group: "Work" },
+  { path: ["watch"], tool: "cards.set_watching", summary: "Watch a card so its activity reaches your inbox", positionals: ["cardId"], defaults: { watching: true }, group: "Work" },
+  { path: ["unwatch"], tool: "cards.set_watching", summary: "Stop watching a card", positionals: ["cardId"], defaults: { watching: false }, group: "Work" },
+  { path: ["remind"], tool: "cards.set_reminder", summary: "Remind yourself about a card, e.g. remind MKT-42 \"friday 3pm\"", positionals: ["cardId", "remindAt"], group: "Work" },
+  { path: ["remind", "clear"], tool: "cards.set_reminder", summary: "Clear your reminder on a card", positionals: ["cardId"], defaults: { remindAt: null }, group: "Work" },
+  { path: ["reminders"], tool: "reminders.list", summary: "List your pending card reminders", group: "Work" },
 
   { path: ["notes"], tool: "notes.list", summary: "List note metadata for a workspace or board", group: "Notes" },
   { path: ["note"], tool: "notes.get", summary: "Read a note", positionals: ["noteId"], group: "Notes" },

@@ -15,6 +15,7 @@ import {
   cardCommentAddedEmail,
   cardDueDateChangedEmail,
   cardOverdueEmail,
+  cardReminderEmail,
   checklistItemOverdueEmail,
   commentMentionedEmail,
   dailyDigestEmail,
@@ -49,6 +50,7 @@ import {
   type CardCommentAddedEmailParams,
   type CardDueDateChangedEmailParams,
   type CardOverdueEmailParams,
+  type CardReminderEmailParams,
   type ChecklistItemOverdueEmailParams,
   type CommentMentionedEmailParams,
   type DailyDigestEmailParams,
@@ -68,6 +70,7 @@ export interface Mailer {
   sendCommentMentioned(to: string, params: CommentMentionedEmailParams): Promise<EmailQueue>;
   sendCardDueDateChanged(to: string, params: CardDueDateChangedEmailParams): Promise<EmailQueue>;
   sendCardOverdue(to: string, params: CardOverdueEmailParams): Promise<EmailQueue>;
+  sendCardReminder(to: string, params: CardReminderEmailParams): Promise<EmailQueue>;
   sendChecklistItemOverdue(to: string, params: ChecklistItemOverdueEmailParams): Promise<EmailQueue>;
   sendInviteAccepted(to: string, params: InviteAcceptedEmailParams): Promise<EmailQueue>;
   sendBoardInvite(to: string, params: BoardInviteEmailParams): Promise<EmailQueue>;
@@ -188,6 +191,10 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
 
     async sendCardOverdue(to, params) {
       return queueEmail(to, "A Kanera card is overdue", "card_overdue", params);
+    },
+
+    async sendCardReminder(to, params) {
+      return queueEmail(to, "Your Kanera reminder", "card_reminder", params);
     },
 
     async sendChecklistItemOverdue(to, params) {
@@ -360,6 +367,8 @@ export function renderEmail(row: EmailQueue): string {
       return cardDueDateChangedEmail(row.data as CardDueDateChangedEmailParams);
     case "card_overdue":
       return cardOverdueEmail(row.data as CardOverdueEmailParams);
+    case "card_reminder":
+      return cardReminderEmail(row.data as CardReminderEmailParams);
     case "checklist_item_overdue":
       return checklistItemOverdueEmail(row.data as ChecklistItemOverdueEmailParams);
     case "invite_accepted":

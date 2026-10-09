@@ -561,6 +561,13 @@
       "when": 1791543196882,
       "tag": "0079_gigantic_hellfire_club",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1791552320922,
+      "tag": "0080_dizzy_centennial",
+      "breakpoints": true
     }
   ]
 }

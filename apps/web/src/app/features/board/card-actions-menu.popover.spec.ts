@@ -38,9 +38,11 @@ function notificationsService(overrides: {
   isWatchingCard?: ReturnType<typeof vi.fn>;
   isWatchingBoard?: ReturnType<typeof vi.fn>;
   toggleCardWatch?: ReturnType<typeof vi.fn>;
+  reminderFor?: ReturnType<typeof vi.fn>;
 } = {}) {
   return {
     isWatchingCard: vi.fn(() => false),
+    reminderFor: vi.fn(() => null),
     isWatchingBoard: vi.fn(() => false),
     toggleCardWatch: vi.fn(() => Promise.resolve()),
     ...overrides,
@@ -168,6 +170,41 @@ describe("CardActionsMenuPopover", () => {
     expect(api.patch).toHaveBeenCalledWith("/cards/card-1/completion", { completed: true });
     expect(api.patch).toHaveBeenCalledWith("/cards/card-1/archive", { archived: true });
     expect(close).toHaveBeenCalledTimes(2);
+  });
+
+  it("offers a reminder, says when one is pending, and leaves it out for archived cards", () => {
+    const reminderFor = vi.fn(() => null as { firedAt: string | null } | null);
+    TestBed.configureTestingModule({
+      imports: [CardActionsMenuPopover],
+      providers: [
+        provideZonelessChangeDetection(),
+        { provide: ApiClient, useValue: { post: vi.fn(), patch: vi.fn(), put: vi.fn(), delete: vi.fn() } },
+        { provide: AuthService, useValue: { user: signal({ id: "user-1" }) } },
+        { provide: NotificationsService, useValue: notificationsService({ reminderFor }) },
+        { provide: Router, useValue: { createUrlTree: vi.fn(), serializeUrl: vi.fn() } },
+        { provide: BoardState, useValue: boardState() },
+      ],
+    });
+    const render = (archivedAt: string | null) => {
+      const fixture = createComponentFixture(CardActionsMenuPopover);
+      fixture.componentRef.setInput("cardId", "card-1");
+      fixture.componentRef.setInput("boardId", "board-1");
+      fixture.componentRef.setInput("workspaceId", "workspace-1");
+      fixture.componentRef.setInput("title", "Ship tests");
+      fixture.componentRef.setInput("archivedAt", archivedAt);
+      fixture.detectChanges();
+      return (fixture.nativeElement as HTMLElement).textContent ?? "";
+    };
+
+    expect(render(null)).toContain("Remind me…");
+    // A reminder that already fired is history, so the row offers a new one rather than a change.
+    reminderFor.mockReturnValue({ firedAt: "2026-10-09T09:00:00.000Z" });
+    expect(render(null)).toContain("Remind me…");
+    reminderFor.mockReturnValue({ firedAt: null });
+    expect(render(null)).toContain("Change reminder…");
+    const archived = render("2026-10-09T09:00:00.000Z");
+    expect(archived).not.toContain("Remind me");
+    expect(archived).not.toContain("Change reminder");
   });
 
   it("hides the card watch action while watching the board", () => {

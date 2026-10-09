@@ -64,6 +64,11 @@ function workspaceRuleMatrixValues(types: NotificationWorkspaceRule["types"]) {
     cardOverdueNtfy: types.cardOverdue.ntfy,
     cardOverdueGotify: types.cardOverdue.gotify,
     cardOverdueWebhook: types.cardOverdue.webhook,
+    cardReminderEmail: types.cardReminder.email,
+    cardReminderPush: types.cardReminder.push,
+    cardReminderNtfy: types.cardReminder.ntfy,
+    cardReminderGotify: types.cardReminder.gotify,
+    cardReminderWebhook: types.cardReminder.webhook,
   };
 }
 
@@ -428,6 +433,11 @@ export async function notificationsRoutes(app: FastifyInstance) {
       ...(body.types?.cardOverdue?.ntfy !== undefined ? { cardOverdueNtfy: body.types.cardOverdue.ntfy } : {}),
       ...(body.types?.cardOverdue?.gotify !== undefined ? { cardOverdueGotify: body.types.cardOverdue.gotify } : {}),
       ...(body.types?.cardOverdue?.webhook !== undefined ? { cardOverdueWebhook: body.types.cardOverdue.webhook } : {}),
+      ...(body.types?.cardReminder?.email !== undefined ? { cardReminderEmail: body.types.cardReminder.email } : {}),
+      ...(body.types?.cardReminder?.push !== undefined ? { cardReminderPush: body.types.cardReminder.push } : {}),
+      ...(body.types?.cardReminder?.ntfy !== undefined ? { cardReminderNtfy: body.types.cardReminder.ntfy } : {}),
+      ...(body.types?.cardReminder?.gotify !== undefined ? { cardReminderGotify: body.types.cardReminder.gotify } : {}),
+      ...(body.types?.cardReminder?.webhook !== undefined ? { cardReminderWebhook: body.types.cardReminder.webhook } : {}),
       updatedAt: new Date(),
     };
     const [row] = await db
@@ -799,58 +809,6 @@ export async function notificationsRoutes(app: FastifyInstance) {
       ...row,
       avatarUrl: signedAvatarUrl(userClientId, avatarUrl),
     }));
-  });
-
-  app.put("/cards/:id/watch", async (req, reply) => {
-    const { id } = req.params as { id: string };
-    const [card] = await db
-      .select({ id: cards.id, boardId: cards.boardId, workspaceId: lists.workspaceId })
-      .from(cards)
-      .innerJoin(lists, eq(lists.id, cards.listId))
-      .where(eq(cards.id, id))
-      .limit(1);
-    if (!card) throw notFound();
-    await assertCardAccess(req.auth, card);
-    await db
-      .insert(cardWatchers)
-      .values({ cardId: id, userId: req.auth.sub })
-      .onConflictDoNothing();
-    return reply.status(204).send();
-  });
-
-  app.delete("/cards/:id/watch", async (req, reply) => {
-    const { id } = req.params as { id: string };
-    const [card] = await db
-      .select({ id: cards.id, boardId: cards.boardId, workspaceId: lists.workspaceId })
-      .from(cards)
-      .innerJoin(lists, eq(lists.id, cards.listId))
-      .where(eq(cards.id, id))
-      .limit(1);
-    if (!card) throw notFound();
-    await assertCardAccess(req.auth, card);
-    await db
-      .delete(cardWatchers)
-      .where(and(eq(cardWatchers.cardId, id), eq(cardWatchers.userId, req.auth.sub)));
-    return reply.status(204).send();
-  });
-
-  app.put("/boards/:id/watch", async (req, reply) => {
-    const { id } = req.params as { id: string };
-    await assertBoardAccess(req.auth, id);
-    await db
-      .insert(boardWatchers)
-      .values({ boardId: id, userId: req.auth.sub })
-      .onConflictDoNothing();
-    return reply.status(204).send();
-  });
-
-  app.delete("/boards/:id/watch", async (req, reply) => {
-    const { id } = req.params as { id: string };
-    await assertBoardAccess(req.auth, id);
-    await db
-      .delete(boardWatchers)
-      .where(and(eq(boardWatchers.boardId, id), eq(boardWatchers.userId, req.auth.sub)));
-    return reply.status(204).send();
   });
 
 }

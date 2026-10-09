@@ -120,7 +120,7 @@ describe("CardComponent", () => {
         BoardMenuCoordinator,
         provideRouter([]),
         { provide: BoardState, useValue: boardStateStub() },
-        { provide: NotificationsService, useValue: { isWatchingCard: () => false, isWatchingBoard: () => false, cardUnreadCount: () => cardUnreadCount } },
+        { provide: NotificationsService, useValue: { isWatchingCard: () => false, reminderFor: () => null, isWatchingBoard: () => false, cardUnreadCount: () => cardUnreadCount } },
         { provide: WorkspaceService, useValue: { workspaceIdForBoard: () => "workspace-1" } },
       ],
     });
@@ -132,7 +132,7 @@ describe("CardComponent", () => {
         provideZonelessChangeDetection(),
         BoardMenuCoordinator,
         { provide: BoardState, useValue: boardStateStub() },
-        { provide: NotificationsService, useValue: { isWatchingCard: () => false, isWatchingBoard: () => false, cardUnreadCount: () => 0 } },
+        { provide: NotificationsService, useValue: { isWatchingCard: () => false, reminderFor: () => null, isWatchingBoard: () => false, cardUnreadCount: () => 0 } },
         { provide: WorkspaceService, useValue: { workspaceIdForBoard: () => "workspace-1" } },
       ],
     })
@@ -156,7 +156,7 @@ describe("CardComponent", () => {
         BoardMenuCoordinator,
         provideRouter([]),
         { provide: BoardState, useValue: state },
-        { provide: NotificationsService, useValue: { isWatchingCard: () => false, isWatchingBoard: () => false, cardUnreadCount: () => 0 } },
+        { provide: NotificationsService, useValue: { isWatchingCard: () => false, reminderFor: () => null, isWatchingBoard: () => false, cardUnreadCount: () => 0 } },
         { provide: WorkspaceService, useValue: { workspaceIdForBoard: () => "workspace-1" } },
       ],
     }).overrideComponent(CardComponent, { set: { template: "" } });
@@ -194,7 +194,7 @@ describe("CardComponent", () => {
         provideZonelessChangeDetection(),
         BoardMenuCoordinator,
         { provide: BoardState, useValue: boardStateStub() },
-        { provide: NotificationsService, useValue: { isWatchingCard: () => false, isWatchingBoard: () => false, cardUnreadCount: () => 0 } },
+        { provide: NotificationsService, useValue: { isWatchingCard: () => false, reminderFor: () => null, isWatchingBoard: () => false, cardUnreadCount: () => 0 } },
         { provide: WorkspaceService, useValue: { workspaceIdForBoard: () => "workspace-1" } },
       ],
     })

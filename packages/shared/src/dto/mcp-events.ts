@@ -4,9 +4,10 @@ import { EVENT_OUTBOX_ACTOR_KINDS } from "../schema/event-outbox.js";
 export const MCP_CARD_EVENT_NAMES = ["card.created", "card.updated", "card.moved", "comment.created"] as const;
 export const MCP_PRIORITY_EVENT_NAME = "priorities.changed";
 export const MCP_MY_DAY_EVENT_NAME = "my_day.ready";
+export const MCP_REMINDER_EVENT_NAME = "reminder.due";
 // Events addressed to the subscribing user rather than a workspace: they take no arguments and the
 // subscription row's targetUserId is always the subscriber (a database check).
-export const MCP_USER_EVENT_NAMES = [MCP_PRIORITY_EVENT_NAME, MCP_MY_DAY_EVENT_NAME] as const;
+export const MCP_USER_EVENT_NAMES = [MCP_PRIORITY_EVENT_NAME, MCP_MY_DAY_EVENT_NAME, MCP_REMINDER_EVENT_NAME] as const;
 export type McpUserEventName = (typeof MCP_USER_EVENT_NAMES)[number];
 export const MCP_EVENT_NAMES = [...MCP_CARD_EVENT_NAMES, ...MCP_USER_EVENT_NAMES] as const;
 export function isMcpUserEventName(name: string): name is McpUserEventName {
@@ -90,7 +91,19 @@ export const mcpMyDayEventData = z.strictObject({
   timeZone: z.string().describe("The user's profile time zone; pass it to work.my_day."),
   actor: mcpEventActor,
 });
+// Fired when one of the connected user's own card reminders comes due. Like the other user events it
+// names the card but carries none of its content: the subscriber reads it with cards.get under its
+// own credentials, so a card the user has since lost access to is never described by the ping.
+export const mcpReminderEventData = z.strictObject({
+  targetUserId: z.uuid().describe("The connected user, who set the reminder."),
+  reminderId: z.uuid(),
+  cardId: z.uuid().describe("The reminded card. Read it with cards.get."),
+  remindAt: z.iso.datetime({ offset: true }).describe("The instant the reminder was scheduled for."),
+  url: z.url().optional().describe("Canonical web link to the card."),
+  actor: mcpEventActor,
+});
 export type McpEventData = z.infer<typeof mcpEventData>;
+export type McpReminderEventData = z.infer<typeof mcpReminderEventData>;
 export type McpMyDayEventData = z.infer<typeof mcpMyDayEventData>;
 export type McpPriorityEventData = z.infer<typeof mcpPriorityEventData>;
 export type McpEventArguments = z.infer<typeof mcpEventArguments>;
@@ -104,19 +117,25 @@ interface McpOccurrenceBase {
 export type McpCardEventOccurrence = McpOccurrenceBase & { name: (typeof MCP_CARD_EVENT_NAMES)[number]; data: McpEventData };
 export type McpPriorityEventOccurrence = McpOccurrenceBase & { name: typeof MCP_PRIORITY_EVENT_NAME; data: McpPriorityEventData };
 export type McpMyDayEventOccurrence = McpOccurrenceBase & { name: typeof MCP_MY_DAY_EVENT_NAME; data: McpMyDayEventData };
-export type McpEventOccurrence = McpCardEventOccurrence | McpPriorityEventOccurrence | McpMyDayEventOccurrence;
+export type McpReminderEventOccurrence = McpOccurrenceBase & { name: typeof MCP_REMINDER_EVENT_NAME; data: McpReminderEventData };
+export type McpEventOccurrence = McpCardEventOccurrence | McpPriorityEventOccurrence | McpMyDayEventOccurrence | McpReminderEventOccurrence;
 const descriptions: Record<McpEventName, string> = {
   "card.created": "A card was created in the monitored workspace, board, or card scope.",
   "card.updated": "A card changed, including its title, description, completion or archive state. Read cards.get for the current full record.",
   "card.moved": "A card moved within or between lists or boards. Includes its source and destination lists and previous position.",
   "comment.created": "A new comment was posted on a card. Includes a bounded text excerpt; use comments.list for the full comment.",
   "priorities.changed": "The connected user's own \"Up next\" priority queue may have changed: an entry was added, moved or removed, or a queued card was completed, archived, restored or reassigned. Carries no queue content; call priorities.list for the current ranking.",
+  "reminder.due": "Sent when one of the connected user's own card reminders (cards.set_reminder) comes due, at most once per reminder. Carries the card id but no card content; call cards.get for the card.",
   "my_day.ready": "Sent once each weekday morning at the user's daily-digest hour, in their profile time zone, while their daily digest email is enabled. Carries no work content; call work.my_day with the included timeZone.",
 };
 const cardCatalogEntry = { inputSchema: { ...z.toJSONSchema(mcpEventArguments), dependentRequired: { cardId: ["boardId"] } }, payloadSchema: z.toJSONSchema(mcpEventData) };
 const priorityCatalogEntry = { inputSchema: z.toJSONSchema(mcpPriorityEventArguments), payloadSchema: z.toJSONSchema(mcpPriorityEventData) };
 const myDayCatalogEntry = { inputSchema: z.toJSONSchema(mcpMyDayEventArguments), payloadSchema: z.toJSONSchema(mcpMyDayEventData) };
+const reminderCatalogEntry = { inputSchema: z.toJSONSchema(mcpPriorityEventArguments), payloadSchema: z.toJSONSchema(mcpReminderEventData) };
 export const mcpEventCatalog = MCP_EVENT_NAMES.map((name) => ({
   name, description: descriptions[name], delivery: ["webhook"],
-  ...(name === MCP_PRIORITY_EVENT_NAME ? priorityCatalogEntry : name === MCP_MY_DAY_EVENT_NAME ? myDayCatalogEntry : cardCatalogEntry),
+  ...(name === MCP_PRIORITY_EVENT_NAME ? priorityCatalogEntry
+    : name === MCP_MY_DAY_EVENT_NAME ? myDayCatalogEntry
+    : name === MCP_REMINDER_EVENT_NAME ? reminderCatalogEntry
+    : cardCatalogEntry),
 }));

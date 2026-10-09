@@ -366,6 +366,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     { name: "Automations", description: "Manage workspace-scoped rules and inspect their retained execution outcomes. Automation administration requires workspace-admin authority." },
     { name: "Notes", description: "Read and manage workspace notes and board notes, including lock/unlock behavior for collaborative editing." },
     { name: "Scratchpad", description: "The connected user's private scratchpad pages, which also serve as a personal inbox for quick capture without choosing a board. Requires a personal API key or OAuth connection; workspace-scoped keys receive 403." },
+    { name: "Following", description: "The connected user's own watch and reminder state on cards and boards. Watching a card puts its activity in your notification inbox; a reminder notifies you once at a chosen time. Both are private to you, record no card activity, and need a personal API key or OAuth connection; workspace-scoped keys receive 403." },
     { name: "Cards", description: "Create and update cards, move them through workspace lists, manage checklist data, labels, assignees, completion, and custom field values." },
     { name: "Attachments", description: "Upload and read card or note media. Use URLs returned by the API as-is; signed media links should not be constructed manually." },
     { name: "Custom Fields", description: "Manage workspace-scoped custom fields that are available on cards across every board in the workspace." },
@@ -1513,6 +1514,44 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       MoveCardBody: zodSchema(dto.moveCardBody),
       CreateCardPriorityBody: zodSchema(dto.createCardPriorityBody),
       MoveCardPriorityBody: zodSchema(dto.moveCardPriorityBody),
+      SetCardReminderBody: zodSchema(dto.setCardReminderBody),
+      CardReminder: {
+        type: "object",
+        required: ["id", "cardId", "remindAt", "firedAt", "createdAt", "updatedAt"],
+        properties: {
+          id: uuid,
+          cardId: uuid,
+          remindAt: { ...dateTime, description: "When the reminder fires." },
+          firedAt: nullable({ ...dateTime, description: "When it was delivered; null while pending. Rescheduling clears it." }),
+          createdAt: dateTime,
+          updatedAt: dateTime,
+        },
+        additionalProperties: false,
+      },
+      CardReminderListItem: {
+        allOf: [ref("CardReminder"), {
+          type: "object",
+          required: ["card"],
+          properties: {
+            card: {
+              type: "object",
+              required: ["id", "key", "title", "boardId", "workspaceId", "url"],
+              properties: { id: uuid, key: { type: "string" }, title: { type: "string" }, boardId: uuid, workspaceId: uuid, url: { type: "string", format: "uri" } },
+              additionalProperties: false,
+            },
+          },
+        }],
+      },
+      CardFollowState: {
+        type: "object",
+        required: ["cardId", "watching", "reminder"],
+        properties: {
+          cardId: uuid,
+          watching: { type: "boolean", description: "Whether you watch this card. Watching a board is separate and not reflected here." },
+          reminder: nullable(ref("CardReminder")),
+        },
+        additionalProperties: false,
+      },
       DuplicateCardBody: zodSchema(dto.duplicateCardBody),
       MoveCardToBoardBody: zodSchema(dto.moveCardToBoardBody),
       SelectedCardContentQueryBody: zodSchema(dto.selectedCardContentQueryBody),
@@ -2360,6 +2399,34 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       operationId: "deleteWorkPriority",
       parameters: [idParam("id", "The priority entry id from the queue response.")],
       responses: authedResponses({ "200": ok(ref("WorkPrioritiesResponse")) }),
+    })),
+    "/cards/{id}/follow": pathItem("get", operation({
+      tags: ["Following"],
+      summary: "Read your watch and reminder state for a card",
+      description: "Returns whether you watch the card and your reminder on it, if any. Requires read access to the card.",
+      operationId: "getCardFollowState",
+      parameters: [idParam()],
+      responses: authedResponses({ "200": ok(ref("CardFollowState")) }),
+    })),
+    "/cards/{id}/watch": {
+      put: operation({ tags: ["Following"], summary: "Watch a card", description: "Adds the card's activity to your notification inbox (and to push and personal channels when watched-activity delivery is on in your notification settings). Idempotent. Read access to the card is enough; a write-capable credential is required.", operationId: "watchCard", parameters: [idParam()], responses: authedResponses({ "200": ok(ref("CardFollowState")) }) }),
+      delete: operation({ tags: ["Following"], summary: "Stop watching a card", description: "Idempotent. Your reminder on the card, if any, is unaffected. Requires a write-capable credential.", operationId: "unwatchCard", parameters: [idParam()], responses: authedResponses({ "200": ok(ref("CardFollowState")) }) }),
+    },
+    "/boards/{id}/watch": {
+      put: operation({ tags: ["Following"], summary: "Watch a board", description: "Adds activity on every card of the board to your notification inbox. Idempotent. Requires a write-capable credential.", operationId: "watchBoard", parameters: [idParam()], responses: authedResponses({ "204": noContent }) }),
+      delete: operation({ tags: ["Following"], summary: "Stop watching a board", description: "Idempotent. Cards you watch individually stay watched. Requires a write-capable credential.", operationId: "unwatchBoard", parameters: [idParam()], responses: authedResponses({ "204": noContent }) }),
+    },
+    "/cards/{id}/reminder": {
+      put: operation({ tags: ["Following"], summary: "Set your reminder on a card", description: `Schedules a one-off reminder that notifies you at \`remindAt\` (an ISO instant with offset, in the future and at most ${dto.MAX_REMINDER_LEAD_DAYS} days, eight weeks, ahead). You hold at most one reminder per card, so this replaces and re-arms any existing one, fired or not. Completing the card clears every reminder on it. Delivery uses your notification settings' Reminders row; agents can also subscribe to the \`reminder.due\` MCP event. Read access to the card is enough; a write-capable credential is required.`, operationId: "setCardReminder", parameters: [idParam()], requestBody: jsonBody(ref("SetCardReminderBody")), responses: authedResponses({ "200": ok(ref("CardFollowState")) }) }),
+      delete: operation({ tags: ["Following"], summary: "Clear your reminder on a card", description: "Removes your reminder, pending or fired. Idempotent. Requires a write-capable credential.", operationId: "clearCardReminder", parameters: [idParam()], responses: authedResponses({ "200": ok(ref("CardFollowState")) }) }),
+    },
+    "/reminders": pathItem("get", operation({
+      tags: ["Following"],
+      summary: "List your reminders",
+      description: "Lists your own card reminders, soonest first, limited to cards you can still read. `status=pending` (the default) returns those not yet delivered; `status=all` adds delivered ones you have not cleared.",
+      operationId: "listCardReminders",
+      parameters: [queryParam("status", { type: "string", enum: ["pending", "all"], default: "pending" })],
+      responses: authedResponses({ "200": ok(arrayOf(ref("CardReminderListItem"))) }),
     })),
     "/work/cards/query": pathItem("post", operation({
       tags: ["Cards"],
