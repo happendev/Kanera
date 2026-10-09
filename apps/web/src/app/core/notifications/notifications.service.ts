@@ -1,5 +1,5 @@
 import { Injectable, computed, DestroyRef, effect, inject, signal } from "@angular/core";
-import type { CardFollowState, NotificationGroupBy, NotificationGroupCountsResponse, NotificationRow, NotificationsPage, WatcherUser, NotificationAgentCounts, WireCardReminder } from "@kanera/shared/dto";
+import type { CardFollowState, NotificationGroupBy, NotificationGroupCountsResponse, NotificationRow, NotificationsPage, WatcherUser, NotificationAgentCounts, WireCardReminder, WireCardReminderListItem } from "@kanera/shared/dto";
 import { SERVER_EVENTS, type ServerToClientEvents } from "@kanera/shared/events";
 import { ApiClient } from "../api/api.client";
 import { AuthService } from "../auth/auth.service";
@@ -68,6 +68,17 @@ export class NotificationsService {
   readonly boardWatchers = signal<Record<string, WatcherUser[]>>({});
   /** The viewer's own reminder per card id, pending or already fired (until cleared or replaced). */
   readonly cardReminders = signal<Record<string, WireCardReminder>>({});
+  /** Key, title and board of each reminded card, from `/reminders`; realtime events carry only the reminder. */
+  private readonly reminderCards = signal<Record<string, WireCardReminderListItem["card"]>>({});
+  /** Pending reminders soonest first, with their card, for the Home list. */
+  readonly upcomingReminders = computed(() => {
+    const cards = this.reminderCards();
+    return Object.values(this.cardReminders())
+      .filter((reminder) => !reminder.firedAt && cards[reminder.cardId])
+      .map((reminder) => ({ ...reminder, card: cards[reminder.cardId]! }))
+      .sort((a, b) => a.remindAt.localeCompare(b.remindAt) || a.id.localeCompare(b.id));
+  });
+  private reminderReloadTimer: ReturnType<typeof setTimeout> | null = null;
   readonly notificationUserOptions = signal<WatcherUser[]>([]);
   readonly boardFilter = signal<string | null>(null);
   readonly userFilter = signal<string | null>(null);
@@ -177,6 +188,9 @@ export class NotificationsService {
     this.cardWatchers.set({});
     this.boardWatchers.set({});
     this.cardReminders.set({});
+    this.reminderCards.set({});
+    if (this.reminderReloadTimer) clearTimeout(this.reminderReloadTimer);
+    this.reminderReloadTimer = null;
     this.notificationUserOptions.set([]);
     this.boardFilter.set(null);
     this.userFilter.set(null);
@@ -732,9 +746,10 @@ export class NotificationsService {
 
   async loadCardReminders(): Promise<void> {
     const session = this.sessionVersion;
-    const rows = await this.api.get<WireCardReminder[]>("/reminders?status=all");
+    const rows = await this.api.get<WireCardReminderListItem[]>("/reminders?status=all");
     if (session !== this.sessionVersion) return;
-    this.cardReminders.set(Object.fromEntries(rows.map((row) => [row.cardId, row])));
+    this.cardReminders.set(Object.fromEntries(rows.map(({ card: _card, ...reminder }) => [reminder.cardId, reminder])));
+    this.reminderCards.set(Object.fromEntries(rows.map((row) => [row.cardId, row.card])));
   }
 
   reminderFor(cardId: string): WireCardReminder | null {
@@ -767,6 +782,17 @@ export class NotificationsService {
       }
       return { ...current, [cardId]: reminder };
     });
+    // A reminder set from another tab, an agent or the CLI arrives without its card. Fetch the list
+    // once (coalesced) so the Home list can show it; the board alarm needs nothing more.
+    if (reminder && !this.reminderCards()[cardId]) this.scheduleReminderReload();
+  }
+
+  private scheduleReminderReload(): void {
+    if (this.reminderReloadTimer) return;
+    this.reminderReloadTimer = setTimeout(() => {
+      this.reminderReloadTimer = null;
+      void this.loadCardReminders().catch(() => undefined);
+    }, 300);
   }
 
   private applyWatchChange(kind: "card" | "board", id: string, watching: boolean): void {

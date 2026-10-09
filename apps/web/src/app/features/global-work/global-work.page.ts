@@ -591,6 +591,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       // Like the board filter, this always means the signed-in viewer's own queue. A Team Cards
       // focus still scopes assignees, so selecting this there deliberately shows the intersection.
       showPrioritySetOnly: filters.prioritySetOnly,
+      // Board-only: Global Work's cards are filtered on the server, which never sees reminders.
+      showReminderSetOnly: false,
     };
   });
   // The completed-date range doubles as the "show completed" switch: an empty range means active

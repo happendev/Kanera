@@ -559,6 +559,7 @@ export class BoardTableViewComponent implements OnDestroy {
     showOverdueOnly: false,
     showInactiveOnly: false,
     showPrioritySetOnly: false,
+    showReminderSetOnly: false,
   }));
 
   /** Rank of each list in board order, so manual sort can order by list before ordering within it. */

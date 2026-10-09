@@ -184,6 +184,7 @@ describe("matchesCfConditions", () => {
       showOverdueOnly: false,
       showInactiveOnly: false,
       showPrioritySetOnly: false,
+      showReminderSetOnly: false,
     };
     it("is false when nothing is set", () => {
       expect(hasActiveFilter(empty)).toBe(false);
@@ -198,6 +199,7 @@ describe("matchesCfConditions", () => {
       expect(hasActiveFilter({ ...empty, showOverdueOnly: true })).toBe(true);
       expect(hasActiveFilter({ ...empty, showInactiveOnly: true })).toBe(true);
       expect(hasActiveFilter({ ...empty, showPrioritySetOnly: true })).toBe(true);
+      expect(hasActiveFilter({ ...empty, showReminderSetOnly: true })).toBe(true);
     });
   });
 

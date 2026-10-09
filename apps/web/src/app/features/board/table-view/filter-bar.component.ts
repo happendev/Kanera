@@ -191,6 +191,16 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                     @if (value().showPrioritySetOnly) { <i class="ti ti-check fb-row-check"></i> }
                   </button>
                 }
+                @if (showReminderSet()) {
+                  <button type="button" class="fb-row" [class.active]="value().showReminderSetOnly" (click)="toggleReminderSet()">
+                    <i class="ti ti-alarm fb-row-icon"></i>
+                    <span class="fb-row-text">
+                      <span class="fb-row-name">Reminder set</span>
+                      <small>Cards you set a reminder on</small>
+                    </span>
+                    @if (value().showReminderSetOnly) { <i class="ti ti-check fb-row-check"></i> }
+                  </button>
+                }
                 <!-- Section headings turn the previously flat menu into scannable groups: what a
                      card *is* (labels/people/place/fields) versus its lifecycle state. -->
                 @if (labels().length || (showMembers() && members().length) || (showBoards() && boards().length) || showWorkDoneType() || lists().length || customFields().length) {
@@ -543,7 +553,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
       left: var(--ap-left, 0);
       z-index: var(--z-panel, 300);
       width: var(--ap-width, min(320px, calc(100vw - 32px)));
-      max-height: var(--ap-max-height, 460px);
+      max-height: var(--ap-max-height, calc(100vh - 32px));
       visibility: hidden;
       overflow-y: auto;
       display: flex;
@@ -808,7 +818,8 @@ export class FilterBarComponent implements OnDestroy {
    * Matches the placement this panel used to compute by hand. `margin: 16` is wider than the shared
    * default because the panel is tall and sits under a header that itself has 16px gutters.
    */
-  readonly panelPlacement: AnchoredPanelPlacement = { align: "start", width: 320, gap: 6, margin: 16, maxHeight: 460 };
+  // No fixed height cap: the panel grows to fit its rows and only scrolls once it would leave the viewport.
+  readonly panelPlacement: AnchoredPanelPlacement = { align: "start", width: 320, gap: 6, margin: 16, maxHeight: Number.POSITIVE_INFINITY };
 
   readonly value = input.required<FilterValue>();
   readonly labels = input<FilterLabel[]>([]);
@@ -834,6 +845,8 @@ export class FilterBarComponent implements OnDestroy {
    * pills can belong to a curated teammate) keeps it off.
    */
   readonly showPrioritySet = input(false);
+  /** Opt in to the "Reminder set" quick filter; reminders are the viewer's own, so board pages only. */
+  readonly showReminderSet = input(false);
   readonly showCompleted = input(false);
   readonly showArchived = input(false);
   /**
@@ -898,6 +911,7 @@ export class FilterBarComponent implements OnDestroy {
     if (v.showOverdueOnly) n++;
     if (v.showInactiveOnly) n++;
     if (v.showPrioritySetOnly) n++;
+    if (v.showReminderSetOnly) n++;
     if (this.completedActive()) n++;
     if (this.archived()) n++;
     if (this.hideCompleted()) n++;
@@ -988,6 +1002,9 @@ export class FilterBarComponent implements OnDestroy {
   }
   togglePrioritySet() {
     this.emit({ showPrioritySetOnly: !this.value().showPrioritySetOnly });
+  }
+  toggleReminderSet() {
+    this.emit({ showReminderSetOnly: !this.value().showReminderSetOnly });
   }
   toggleArchived() {
     this.archivedChange.emit(!this.archived());

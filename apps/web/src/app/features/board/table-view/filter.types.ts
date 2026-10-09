@@ -55,6 +55,11 @@ export interface FilterValue {
    * belong to a curated teammate's queue rather than the viewer's.
    */
   showPrioritySetOnly: boolean;
+  /**
+   * Only cards the viewer has a pending reminder on. Reminders are private, so this always means
+   * the viewer's own; board-only, and saved filters stay in the viewer's own browser.
+   */
+  showReminderSetOnly: boolean;
 }
 
 /** Whether an operator carries no operand (drives whether the builder shows a value control). */

@@ -267,6 +267,8 @@ export class BoardPage implements OnDestroy {
   readonly boardCardFilter = signal<BoardCardFilter | null>(null);
   /** Only cards in the viewer's own "Up next" queue (`viewerPriorityRanks`). */
   readonly showPrioritySetOnly = signal(false);
+  /** Only cards the viewer has a pending reminder on (`NotificationsService.reminderFor`). */
+  readonly showReminderSetOnly = signal(false);
   readonly showArchived = signal(false);
   readonly completedFrom = signal("");
   readonly completedTo = signal("");
@@ -361,6 +363,7 @@ export class BoardPage implements OnDestroy {
     showOverdueOnly: this.showOverdueOnly(),
     showInactiveOnly: this.showInactiveOnly(),
     showPrioritySetOnly: this.showPrioritySetOnly(),
+    showReminderSetOnly: this.showReminderSetOnly(),
   }));
 
   // Every non-archived custom field is filterable via the condition builder (all seven types).
@@ -417,8 +420,9 @@ export class BoardPage implements OnDestroy {
     // Like overdue, ignored while viewing archived: archived cards are never in the live queue,
     // so applying it there would blank the archive rather than filter it.
     const prioritySetOnly = this.showPrioritySetOnly();
+    const reminderSetOnly = this.showReminderSetOnly();
     const showArchived = this.showArchived();
-    if (!q && !labelIds.length && !memberIds.length && !listIds.length && !conditions.length && !unreadOnly && (!overdueOnly || showArchived) && (!inactiveOnly || showArchived) && (!prioritySetOnly || showArchived) && (!cardFilter || showArchived)) return null;
+    if (!q && !labelIds.length && !memberIds.length && !listIds.length && !conditions.length && !unreadOnly && (!overdueOnly || showArchived) && (!inactiveOnly || showArchived) && (!prioritySetOnly || showArchived) && (!reminderSetOnly || showArchived) && (!cardFilter || showArchived)) return null;
     const fieldsById = conditions.length ? this.state.customFieldsById() : null;
     const cfValuesByCard = conditions.length ? this.state.customFieldValuesByCardAndField() : null;
     const listSet = new Set(listIds);
@@ -449,6 +453,11 @@ export class BoardPage implements OnDestroy {
         // The queue drops completed cards (they take no rank), so this also hides the board's
         // recently-completed tiles — a done card no longer has a priority set, by definition.
         if (!showArchived && priorityRanks && !priorityRanks.has(card.id)) return false;
+        // Pending only: a fired reminder is history, the same rule the tile's alarm uses.
+        if (!showArchived && reminderSetOnly) {
+          const reminder = this.notifications.reminderFor(card.id);
+          if (!reminder || reminder.firedAt) return false;
+        }
         if (fieldsById && cfValuesByCard && !matchesCfConditions(card.id, conditions, fieldsById, cfValuesByCard)) return false;
         return true;
       });
@@ -643,6 +652,7 @@ export class BoardPage implements OnDestroy {
     this.showInactiveOnly() ||
     this.boardCardFilter() !== null ||
     this.showPrioritySetOnly() ||
+    this.showReminderSetOnly() ||
     this.showArchived() ||
     this.showCompleted()
   );
@@ -1128,6 +1138,7 @@ export class BoardPage implements OnDestroy {
       this.showInactiveOnly.set(saved?.showInactiveOnly ?? false);
       this.boardCardFilter.set(null);
       this.showPrioritySetOnly.set(saved?.showPrioritySetOnly ?? false);
+      this.showReminderSetOnly.set(saved?.showReminderSetOnly ?? false);
       this.showArchived.set(false);
       this.membersPopoverOpen.set(false);
       this.completedFrom.set(completed?.from ?? "");
@@ -1362,6 +1373,7 @@ export class BoardPage implements OnDestroy {
         showOverdueOnly: this.showOverdueOnly(),
         showInactiveOnly: this.showInactiveOnly(),
         showPrioritySetOnly: this.showPrioritySetOnly(),
+        showReminderSetOnly: this.showReminderSetOnly(),
       };
       writeFilters(scope, filters);
     });
@@ -1901,6 +1913,7 @@ export class BoardPage implements OnDestroy {
       this.showOverdueOnly.set(false);
       this.showInactiveOnly.set(false);
       this.showPrioritySetOnly.set(false);
+      this.showReminderSetOnly.set(false);
     }
     const data = await this.loadBoard(boardId, false, next);
     if (this.boardId() !== boardId || seq !== this.filterLoadSeq || this.showArchived() !== next) return;
@@ -1951,6 +1964,7 @@ export class BoardPage implements OnDestroy {
     this.showOverdueOnly.set(v.showOverdueOnly);
     this.showInactiveOnly.set(v.showInactiveOnly);
     this.showPrioritySetOnly.set(v.showPrioritySetOnly);
+    this.showReminderSetOnly.set(v.showReminderSetOnly);
   }
 
   onFilterOpened() {
@@ -1983,6 +1997,7 @@ export class BoardPage implements OnDestroy {
     this.showInactiveOnly.set(false);
     this.boardCardFilter.set(null);
     this.showPrioritySetOnly.set(false);
+    this.showReminderSetOnly.set(false);
     this.showArchived.set(false);
     this.completedFrom.set("");
     this.completedTo.set("");

@@ -121,3 +121,35 @@ test("a reminder can be set from a card's right-click menu without opening the c
   await expect(page.getByRole("button", { name: "Change reminder…" })).toBeVisible();
   await page.keyboard.press("Escape");
 });
+
+test("Home lists your upcoming reminders live, and the board can filter to the cards you set one on", async ({ page, signIn, pageAs, uniqueName }) => {
+  const reminded = uniqueName("E2E reminded card");
+  const other = uniqueName("E2E unreminded card");
+  await signIn(page, "amelia");
+  const home = await pageAs("amelia");
+  await home.goto(`${webOrigin}/`);
+  await openBoard(page, "Platform Delivery");
+  await createCard(page, reminded);
+  await createCard(page, other);
+
+  // Set from the board session; the Home session learns about it over the user room.
+  await cardTile(page, reminded).click({ button: "right" });
+  await page.getByRole("button", { name: "Remind me…" }).click();
+  await page.getByRole("dialog", { name: "Remind me" }).getByRole("button", { name: /Tomorrow morning/ }).click();
+  const row = home.locator(".reminder-row").filter({ hasText: reminded });
+  await expect(row).toBeVisible();
+  await expect(row.locator(".reminder-when")).toContainText("Tomorrow");
+
+  // The board filter keeps only cards the viewer has a pending reminder on.
+  await page.getByRole("button", { name: "Filter", exact: true }).click();
+  await page.locator(".fb-row").filter({ hasText: "Reminder set" }).click();
+  await expect(cardTile(page, reminded)).toBeVisible();
+  await expect(cardTile(page, other)).toHaveCount(0);
+
+  // Clearing from Home drops it from the list and, live, from the filtered board.
+  await row.getByRole("button", { name: "Clear reminder" }).click();
+  await expect(row).toHaveCount(0);
+  await expect(cardTile(page, reminded)).toHaveCount(0);
+  await page.locator(".fb-row").filter({ hasText: "Reminder set" }).click();
+  await expect(cardTile(page, other)).toBeVisible();
+});

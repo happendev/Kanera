@@ -16,6 +16,7 @@ const EMPTY: FilterValue = {
   showOverdueOnly: false,
   showInactiveOnly: false,
   showPrioritySetOnly: false,
+  showReminderSetOnly: false,
 };
 
 
