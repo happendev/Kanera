@@ -25,7 +25,7 @@
   @for (member of settings.filteredMembers(); track member.userId) {
   <div class="org-user-row">
     <div class="org-user-identity">
-      <k-avatar class="org-user-avatar" [url]="member.avatarUrl" [name]="member.displayName" [size]="32" [userId]="member.userId" [workspaceId]="settings.workspaceId()" [showPresence]="true" [lastOnlineAt]="member.lastOnlineAt ?? null" />
+      <k-avatar class="org-user-avatar" [url]="member.avatarUrl" [name]="member.displayName" [size]="32" [userId]="member.userId" [workspaceId]="settings.workspaceId()" [showPresence]="true" [lastOnlineAt]="member.lastOnlineAt ?? null" [profile]="true" />
       <div class="org-user-name-wrap">
         <span class="org-user-name">{{ member.displayName }}</span>
         <span class="org-user-email">{{ member.email }}</span>

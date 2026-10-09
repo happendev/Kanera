@@ -41,5 +41,6 @@ export * from "./separators.js";
 export * from "./work-done.js";
 export * from "./agent-work.js";
 export * from "./work.js";
+export * from "./user-profiles.js";
 export * from "./workspaces.js";
 export * from "./mcp-events.js";

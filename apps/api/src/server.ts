@@ -55,6 +55,7 @@ import { searchRoutes } from "./modules/search/routes.js";
 import { separatorRoutes } from "./modules/separators/routes.js";
 import { workspaceRoutes } from "./modules/workspaces/routes.js";
 import { homeRoutes } from "./modules/home/routes.js";
+import { userRoutes } from "./modules/users/routes.js";
 import { scratchpadRoutes } from "./modules/scratchpad/routes.js";
 import { agentWorkRoutes, workRoutes } from "./modules/work/routes.js";
 import { globalWorkSeparatorRoutes } from "./modules/global-work-separators/routes.js";
@@ -253,6 +254,9 @@ export async function buildServer(options: BuildServerOptions = {}) {
   // Internal only: deliberately not registered on public-api-server.ts, and absent from the
   // hand-maintained public OpenAPI document. Home is a personal view, not a published contract.
   await app.register(homeRoutes);
+  // Internal only, like Home: the avatar profile card is a first-party UI projection. Its access
+  // rules lean on the interactive session (shared boards, current organisation), not on a key scope.
+  await app.register(userRoutes);
   // Internal only, and more strongly than Home: a scratchpad is private to one user, so it is
   // deliberately absent from public-api-server.ts, docs/public-openapi.ts, and the MCP surface.
   // Exposing it on a workspace-scoped credential would hand an org's integration key a member's

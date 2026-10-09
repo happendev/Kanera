@@ -1,6 +1,8 @@
 import { UnreadGlowDirective } from "./unread-glow.directive";
 import { MenuDirective } from "../../shared/menu.directive";
 import { ShortcutsSheetComponent } from "../../shared/shortcuts-sheet.component";
+import { UserProfileCardService } from "../../shared/user-profile/user-profile-card.service";
+import { UserProfilePopoverComponent } from "../../shared/user-profile/user-profile-popover.component";
 import { KeyboardShortcutsService } from "../../core/keyboard/keyboard-shortcuts.service";
 import { TOUCH_ONLY_QUERY } from "../../core/browser/input-modality";
 import { mediaQuerySignal } from "../../shared/media-query.signal";
@@ -104,7 +106,7 @@ type SidebarSwipe = {
 @Component({
   selector: "k-app-shell",
   standalone: true,
-  imports: [UnreadGlowDirective,CdkDrag, CdkDropList, CdkScrollable, MenuDirective, RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, AnchoredPanelDirective, MyPrioritiesPanelComponent, NotificationsPanelComponent, ScratchpadPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, ToastComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent, ShortcutsSheetComponent],
+  imports: [UnreadGlowDirective,CdkDrag, CdkDropList, CdkScrollable, MenuDirective, RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, AnchoredPanelDirective, MyPrioritiesPanelComponent, NotificationsPanelComponent, ScratchpadPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, ToastComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent, ShortcutsSheetComponent, UserProfilePopoverComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./app-shell.component.html",
   styleUrl: "./app-shell.component.scss",
@@ -129,6 +131,7 @@ type SidebarSwipe = {
 })
 export class AppShellComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiClient);
+  readonly profileCards = inject(UserProfileCardService);
   private readonly navigateAfterOrganisationSwitch = inject(ORGANISATION_SWITCH_NAVIGATOR);
   private readonly auth = inject(AuthService);
   private readonly browserPush = inject(BrowserPushService);

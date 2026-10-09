@@ -188,7 +188,7 @@
     <div class="assignee-stack">
       @for (m of visibleAssignees(); track m.userId) {
       <span class="assignee-avatar">
-        <k-avatar [url]="m.avatarUrl" [name]="m.displayName" [size]="24" [userId]="m.userId" [workspaceId]="workspaceId()" [showPresence]="true" [lastOnlineAt]="m.lastOnlineAt" />
+        <k-avatar [url]="m.avatarUrl" [name]="m.displayName" [size]="24" [userId]="m.userId" [workspaceId]="workspaceId()" [showPresence]="true" [lastOnlineAt]="m.lastOnlineAt" [profile]="true" />
       </span>
       }
       @if (assigneeOverflow()) {

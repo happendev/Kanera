@@ -690,3 +690,14 @@
 <k-shortcuts-sheet (closed)="shortcutsOpen.set(false)" />
 }
 }
+<!-- Last in the shell on purpose: the card opens from avatars inside card detail (--z-modal) and wins
+     over it on DOM order at the same token. Tracked by request id so every open builds a fresh card
+     that registers with the panel stack; reusing one instance would keep a card the stack had
+     already dismissed. -->
+@defer (when profileCards.current()) {
+@if (profileCards.current(); as profileRequest) {
+@for (request of [profileRequest]; track request.id) {
+<k-user-profile-popover [request]="request" />
+}
+}
+}

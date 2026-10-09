@@ -6,7 +6,7 @@
   @for (lane of lanes(); track lane.target.userId) {
     <section class="lane" [class.is-self]="lane.target.self">
       <header class="lane-head">
-        <k-avatar [url]="lane.avatarUrl" [name]="lane.target.displayName" [size]="22" [userId]="lane.target.userId" />
+        <k-avatar [url]="lane.avatarUrl" [name]="lane.target.displayName" [size]="22" [userId]="lane.target.userId" [profile]="true" />
         <span class="lane-name" [kTooltip]="lane.target.email">
           {{ lane.target.displayName }}
           @if (lane.target.self) {

@@ -50,6 +50,7 @@ import { AttachmentUploadListComponent } from "../../shared/attachments/attachme
 import { AttachmentUploadQueue } from "../../shared/attachments/attachment-upload-queue.service";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { AvatarComponent } from "../../shared/avatar.component";
+import type { UserProfileAction } from "../../shared/user-profile/user-profile-card.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { DraftBannerComponent } from "../../shared/draft-banner.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
@@ -2062,6 +2063,19 @@ export class CardDetailComponent {
       : [...current, labelId];
     await this.api.put(`/cards/${this.card().id}/labels`, { labelIds: next });
   }
+
+  /**
+   * Clicking an assignee opens their profile card, where editors find "Unassign". Unassigning used to
+   * be the avatar's own click, so a tap meant to see who someone is silently removed them instead.
+   */
+  readonly assigneeProfileActions = computed(() => {
+    const actions = new Map<string, readonly UserProfileAction[]>();
+    if (!this.canEdit()) return actions;
+    for (const userId of this.assigneeIds()) {
+      actions.set(userId, [{ id: "unassign", label: "Unassign", icon: "user-minus", tone: "danger", run: () => this.toggleAssignee(userId) }]);
+    }
+    return actions;
+  });
 
   assignedMembers(): WireBoardMemberUser[] {
     const ids = this.assigneeIds();
