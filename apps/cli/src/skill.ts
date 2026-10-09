@@ -104,11 +104,16 @@ Update at least every 10 minutes (a run with no update for 15 minutes is marked 
 Ended runs cannot be edited. A run is a status signal, not the record: still comment the outcome on
 the card.
 
+On a board with the Agent Workflow lists (Agent Working, Waiting on Me, Review), move the card with
+\`kanera card move\` as the run changes: Agent Working when you start or resume, Waiting on Me while
+\`blocked\`, Review when it succeeds. Leave Done to a person.
+
 ## Setting up
 
 \`\`\`bash
 kanera templates --json                                        # what each template seeds
 kanera workspace create "Marketing" --templateId marketing --json
+kanera workspace create "Agents" --templateId agent-workflow --json   # lists mirror agent run states
 kanera standalone create "Reading list" --templateId simple-todo --json
 kanera board create <workspaceId> "Q4 launch" --json
 \`\`\`

@@ -3,6 +3,7 @@ import type { CardDueDateSlot } from "./lib/due-date-slots.js";
 
 export type WorkspaceTemplateId =
   | "development-team"
+  | "agent-workflow"
   | "marketing"
   | "simple-todo"
   | "product-team"
@@ -135,6 +136,48 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
             value: { kind: "text_current_date", format: "month" },
           },
         ],
+      },
+    ],
+  },
+  // The lists mirror the agent run lifecycle so a board reads the same as the run chips on its
+  // cards: running → Agent Working, blocked → Waiting on Me, succeeded → Review. The Kanera skill
+  // and MCP tool descriptions tell agents to move cards into these lists as they change run status;
+  // runs themselves never move cards, so people can still drag work wherever they need it.
+  {
+    id: "agent-workflow",
+    name: "Agent Workflow",
+    description: "Hand work to AI agents and see at a glance what they are doing, what needs you, and what is ready to review.",
+    icon: "robot",
+    workspaceName: "Agents",
+    initialBoardName: "Agent Work",
+    lists: [
+      { name: "Backlog", icon: "inbox" },
+      { name: "Agent Working", icon: "robot" },
+      { name: "Waiting on Me", icon: "user-question" },
+      { name: "Review", icon: "eye" },
+      { name: "Done", icon: "circle-check" },
+    ],
+    customFields: [
+      { name: "Pull Request", icon: "git-pull-request", type: "url" },
+    ],
+    labels: [
+      { name: "Feature", color: "blue" },
+      { name: "Bug", color: "red" },
+      { name: "Chore", color: "purple" },
+      { name: "Research", color: "teal" },
+    ],
+    cards: [
+      {
+        title: "Describe a task for your agent",
+        description:
+          "Write the outcome you want and any constraints, then ask your agent to pick it up. It moves the card to Agent Working while it runs, to Waiting on Me when it needs a decision, and to Review when it is done.",
+        listName: "Backlog",
+      },
+    ],
+    automations: [
+      {
+        trigger: { type: "card_enters_list", listName: "Done" },
+        actions: [{ type: "set_completion", completed: true }],
       },
     ],
   },

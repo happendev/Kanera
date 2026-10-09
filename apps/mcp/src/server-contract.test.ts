@@ -4,6 +4,7 @@ import test from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import type { CallToolResult } from "@modelcontextprotocol/server";
 import { createKaneraMcpServer } from "./server.js";
+import { env } from "./env.js";
 
 const W = "11111111-1111-4111-8111-111111111111";
 const B = "22222222-2222-4222-8222-222222222222";
@@ -46,6 +47,39 @@ async function connectedClient() {
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   return { client, close: async () => { await client.close(); await server.close(); } };
 }
+
+// Browser E2E cannot inspect the external host's linking UI. Pin the wire failure modes:
+// expired/revoked tokens must challenge, while role denials and other errors must not loop login.
+void test("tool authentication failures expose reauthorization metadata without challenging permission failures", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalResource = env.MCP_SERVER_PUBLIC_URL;
+  env.MCP_SERVER_PUBLIC_URL = "https://mcp.kanera.test/mcp";
+  const { client, close } = await connectedClient();
+  try {
+    for (const status of [401, 403, 400]) {
+      globalThis.fetch = async () => new Response(JSON.stringify({ error: {
+        code: status === 401 ? "UNAUTHENTICATED" : status === 403 ? "FORBIDDEN" : "VALIDATION_ERROR",
+        message: "request rejected",
+      } }), { status });
+      const result = await client.callTool({ name: "session.get", arguments: {} });
+      assert.equal(result.isError, true);
+      if (status === 401) {
+        const challenges = result._meta?.["mcp/www_authenticate"] as string[];
+        assert.equal(challenges.length, 1);
+        assert.match(challenges[0]!, /resource_metadata="https:\/\/mcp\.kanera\.test\/\.well-known\/oauth-protected-resource"/u);
+        assert.match(challenges[0]!, /scope="kanera:read kanera:write"/u);
+        assert.match(challenges[0]!, /error="invalid_token"/u);
+        assert.match(challenges[0]!, /error_description="Reconnect Kanera/u);
+      } else {
+        assert.equal(result._meta?.["mcp/www_authenticate"], undefined);
+      }
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    env.MCP_SERVER_PUBLIC_URL = originalResource;
+    await close();
+  }
+});
 
 function missingParameterDescriptions(schema: Record<string, unknown>, path = ""): string[] {
   const missing: string[] = [];
@@ -635,6 +669,10 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     const getCardsContent = byName.get("cards.get_content");
 
     for (const tool of tools) {
+      assert.deepEqual(tool._meta?.securitySchemes, [{
+        type: "oauth2",
+        scopes: tool.annotations?.readOnlyHint ? ["kanera:read"] : ["kanera:read", "kanera:write"],
+      }], `${tool.name} advertises its OAuth policy over the wire`);
       const missing = missingParameterDescriptions(tool.inputSchema as Record<string, unknown>);
       assert.deepEqual(missing, [], `${tool.name} describes every accepted input: ${missing.join(", ")}`);
     }
@@ -686,7 +724,12 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     // budget because single-item add/update were folded into add_items/update_items: one tool per
     // verb keeps tool choice unambiguous and the catalog small.
     const serializedToolCatalogLength = JSON.stringify(tools).length;
-    assert.ok(serializedToolCatalogLength <= 204_000, `the default tool catalog stays within its 200k-character budget (received ${serializedToolCatalogLength})`);
+    // OAuth declarations add a fixed per-tool cost. Preserve the original routing/schema
+    // budget independently, and bound the extra auth metadata rather than granting schema growth.
+    const withoutAuthMetadata = tools.map(({ _meta, ...tool }) => tool);
+    const schemaCatalogLength = JSON.stringify(withoutAuthMetadata).length;
+    assert.ok(schemaCatalogLength <= 204_000, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
+    assert.ok(serializedToolCatalogLength <= 212_000, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
     for (const name of [
       "kanera_bulk_add_comments",
       "kanera_bulk_delete_comments",

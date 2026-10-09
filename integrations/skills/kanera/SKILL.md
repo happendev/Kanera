@@ -105,7 +105,7 @@ Choose the lookup that fits the request; these are conditional routes, not a set
 ## Make changes safely
 
 - Draft or summarize first when the request is exploratory. Mutate only when the user asks to apply the change.
-- Organisation admins can use `workspaces.create` for a standard workspace, `boards.create_standalone` for a standalone board, and `boards.create` for an extra board in a standard workspace. Choose a `templateId` from `workspaces.list_templates` or supply explicit configuration where supported.
+- Organisation admins can use `workspaces.create` for a standard workspace, `boards.create_standalone` for a standalone board, and `boards.create` for an extra board in a standard workspace. Choose a `templateId` from `workspaces.list_templates` or supply explicit configuration where supported. For work the user will hand to AI agents, suggest `agent-workflow` (Backlog, Agent Working, Waiting on Me, Review, Done): its lists mirror run states.
 - Workspace and standalone-board creation require a write-capable personal key or interactive OAuth grant with the organisation-admin role; workspace-scoped keys cannot perform them. Adding a board to a standard workspace requires workspace-admin authority and a write-capable credential.
 - Inspect the target entity immediately before a mutation when stale state could change the outcome.
 - Use list, label, and custom-field IDs from the target board's current configuration.
@@ -137,8 +137,9 @@ Choose the lookup that fits the request; these are conditional routes, not a set
 
 - Kanera records what you do as *your* work, not the user's: activity, comments, and reports label it "via <your client name>", and the user is notified about it. Never present a change as if the person made it.
 - For user-authorised multi-step implementation work on a card (not read-only reporting or exploratory planning), call `runs.start` with a short title (and `externalUrl` for the pull request, session, or thread a person can open). The board then shows a live "agent working" chip on that card and the run appears in card detail. Check `runs.list` first so two agents do not work the same card.
-- While working, call `runs.update` at least every 10 minutes (an empty update is a heartbeat); a run with no heartbeat for 15 minutes is marked stalled. Put progress in `summary`, and set `status: "blocked"` when you need a decision from a person, saying what you need in the summary.
+- While working, call `runs.update` at least every 10 minutes (an empty update is a heartbeat); a run with no heartbeat for 15 minutes is marked stalled. Put progress in `summary`, and set `status: "blocked"` when you need a decision from a person, saying what you need in the summary; return to `status: "running"` once you have the answer. Keep `summary` current: one line on what you are doing now, so a person glancing at the board can follow along.
 - When you stop, end the run with `status: "succeeded"`, `"failed"`, or `"cancelled"` and a one-line outcome in `summary`. Ended runs cannot be edited; start a new run if work resumes. Do not leave a run open across turns you are not actively working.
+- If the board has the Agent Workflow lists (**Agent Working**, **Waiting on Me**, **Review**), keep the card's list in step with the run: move it to Agent Working with `cards.move` when you start, to Waiting on Me whenever you set `status: "blocked"`, back to Agent Working when you resume, and to Review when the run succeeds. Leave a failed or cancelled card where it is and say why in the summary. Never move a card to Done yourself; a person does that after review.
 - A run is a status signal, not a record of the work. Publish an outcome comment only when reporting back to the card is part of the authorised task; otherwise report in the conversation. Link important entities with their canonical URLs.
 
 ## Handle failures

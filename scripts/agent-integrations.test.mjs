@@ -54,6 +54,13 @@ void test("the submission plugin declares the hosted Kanera MCP server", async (
   assert.deepEqual(manifest.interface.capabilities, ["Read", "Write"]);
   assert.ok(manifest.interface.defaultPrompt.some((prompt) => prompt.includes("Kanera")));
   assert.match(manifest.description, /cards/u);
+  const review = manifest.extensions["com.openai"].review;
+  assert.equal(review.test_cases.positive.length, 5);
+  assert.equal(review.test_cases.negative.length, 3);
+  for (const entry of review.test_cases.positive) {
+    assert.ok(entry.description && entry.prompt && entry.tools_triggered && entry.expected_behavior);
+  }
+  for (const entry of review.test_cases.negative) assert.ok(entry.description && entry.prompt);
   assert.deepEqual(mcp.mcpServers, {
     kanera: {
       url: "https://mcp.kanera.app/mcp",

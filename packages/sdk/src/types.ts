@@ -67,6 +67,7 @@ export type WorkspaceTemplateId =
   | "event-planning"
   | "client-onboarding"
   | "hiring-pipeline"
+  | "agent-workflow"
   | "blank";
 
 export type WorkspaceSeedAutomationTrigger =

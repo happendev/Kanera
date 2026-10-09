@@ -6,6 +6,7 @@ import { docsSearchClient } from "./docs-search.js";
 import { env } from "./env.js";
 import { credentialDigest, KaneraApiError, KaneraClient, type UpstreamTiming } from "./kanera-client.js";
 import { mcpToolDuration, observeUpstreamRequest } from "./metrics.js";
+import { MCP_RESOURCE_SCOPES, mcpAuthorizationChallenge } from "./oauth.js";
 
 const uuid = z.uuid();
 // Shared vocabularies are loaded with dynamic imports for the same reason as the others below: the
@@ -707,6 +708,16 @@ function errorResult(error: unknown): CallToolResult {
     return {
       content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
       isError: true,
+      // A revoked credential can fail after HTTP authentication, inside the tool call.
+      // Signal reauthorization to the host without turning tenant/role denials into login loops.
+      ...(error.status === 401 && {
+        _meta: {
+          "mcp/www_authenticate": [mcpAuthorizationChallenge(
+            env.MCP_SERVER_PUBLIC_URL ?? `http://localhost:${env.MCP_PORT}/mcp`,
+            "invalid_token",
+          )],
+        },
+      }),
     };
   }
   throw error;
@@ -1244,6 +1255,7 @@ function registerKaneraTool<T extends z.ZodRawShape>(
       inputSchema: z.ZodType;
       outputSchema: z.ZodType<Record<string, unknown>>;
       annotations: ToolAnnotations;
+      _meta: Record<string, unknown>;
     },
     callback: (args: unknown, handlerCtx?: { mcpReq: { signal: AbortSignal } }) => Promise<CallToolResult>,
   ) => void;
@@ -1257,6 +1269,14 @@ function registerKaneraTool<T extends z.ZodRawShape>(
     inputSchema: draft7Schema(z.object(describeInputParameters(registeredInputSchema))),
     outputSchema: draft7Schema(outputSchema),
     annotations: toolAnnotations(name),
+    // SDK 2 serializes _meta but drops a top-level securitySchemes registration field.
+    // OpenAI's compatibility location keeps the policy visible on tools/list in both eras.
+    _meta: {
+      securitySchemes: [{
+        type: "oauth2",
+        scopes: toolAnnotations(name).readOnlyHint ? [MCP_RESOURCE_SCOPES[0]] : [...MCP_RESOURCE_SCOPES],
+      }],
+    },
   }, async (args, handlerCtx): Promise<CallToolResult> => {
     const startedAt = performance.now();
     const logToolCalls = ctx.logToolCalls !== false && env.NODE_ENV !== "test" && process.env.NODE_TEST_CONTEXT === undefined;
@@ -1346,7 +1366,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
   }, ctx);
   registerKaneraTool(server, "boards.list_accessible", "Discover a cursor-paginated directory of every accessible workspace board, standalone board, and cross-organisation guest board.", collectionPageSchema, async (a, api) =>
     remoteCollectionPage(api, "/api/v1/boards", {}, a.limit, a.cursor, "accessible-boards"), ctx);
-  registerKaneraTool(server, "workspaces.list_templates", "List the built-in workspace templates with the lists, custom fields, labels, and seed-content counts each one provides. Call before workspaces.create or boards.create_standalone to choose a templateId; \"blank\" seeds nothing.", {}, async () => ({
+  registerKaneraTool(server, "workspaces.list_templates", `List the built-in workspace templates with the lists, custom fields, labels, and seed-content counts each one provides. Call before workspaces.create or boards.create_standalone to choose a templateId; "blank" seeds nothing. Use "agent-workflow" for work handed to AI agents; its lists mirror run states.`, {}, async () => ({
     defaultTemplateId: DEFAULT_WORKSPACE_TEMPLATE.id,
     items: WORKSPACE_TEMPLATES.map(describeWorkspaceTemplate),
   }), ctx);
@@ -1658,13 +1678,13 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     body: z.string().min(1).max(20000),
     attachmentIds: z.array(uuid).max(100).optional(),
   }, async (a, api) => api.post(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/comments`, { body: a.body, attachmentIds: a.attachmentIds }), ctx);
-  registerKaneraTool(server, "runs.start", "Announce that you are starting work on a card: creates a live run that shows an \"agent working\" chip on the card and records which agent started it for whom. Call before multi-step work, then runs.update to report progress and finish. Requires board editor access and a write-capable credential.", {
+  registerKaneraTool(server, "runs.start", "Announce that you are starting work on a card: creates a live run that shows an \"agent working\" chip on the card and records which agent started it for whom. Call before multi-step work, then runs.update to report progress and finish. If the board has an Agent Working list, cards.move the card there. Requires board editor access and a write-capable credential.", {
     cardId: cardReference,
     title: z.string().trim().min(1).max(200).describe("Short description of the work, e.g. \"Implementing OAuth refresh\"."),
     summary: z.string().trim().max(4000).optional().describe("Optional longer progress note shown in card detail."),
     externalUrl: z.url().max(2000).optional().describe("Where a person can watch or resume this work: a pull request, session log, or chat thread."),
   }, async (a, api) => api.post(`/api/v1/cards/${await resolveCardReference(api, a.cardId)}/agent-runs`, { title: a.title, summary: a.summary, externalUrl: a.externalUrl }), ctx);
-  registerKaneraTool(server, "runs.update", "Report progress on, or finish, a run from runs.start. Every call is a heartbeat; send one at least every 10 minutes or the run is marked stalled. A status of succeeded, failed, or cancelled ends the run (ended runs are immutable); use blocked while waiting on a person. Requires board editor access and a write-capable credential.", {
+  registerKaneraTool(server, "runs.update", "Report progress on, or finish, a run from runs.start. Every call is a heartbeat; send one at least every 10 minutes or the run is marked stalled. A status of succeeded, failed, or cancelled ends the run (ended runs are immutable); use blocked while waiting on a person and running when you resume. Keep summary to one line on current work. With Agent Workflow lists, cards.move the card to match: Waiting on Me (blocked), Agent Working (running), Review (succeeded); never Done. Requires board editor access and a write-capable credential.", {
     runId: uuid,
     status: z.enum(["running", "blocked", "succeeded", "failed", "cancelled"]).optional(),
     title: z.string().trim().min(1).max(200).optional(),

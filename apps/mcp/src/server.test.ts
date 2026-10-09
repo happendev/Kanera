@@ -399,7 +399,7 @@ void test("workspaces.list_templates answers from bundled templates without call
   assert.equal(fetchCalls, 0);
   const payload = parseToolText(result) as { defaultTemplateId: string; items: Array<{ id: string; lists: string[]; customFields: unknown[]; labels: string[]; starterCardCount: number; automations: string[] }> };
   assert.equal(payload.defaultTemplateId, "development-team");
-  assert.equal(payload.items.length, 11);
+  assert.equal(payload.items.length, 12);
   const blank = payload.items.find((item) => item.id === "blank");
   assert.deepEqual(blank, {
     id: "blank",

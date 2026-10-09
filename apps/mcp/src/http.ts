@@ -10,6 +10,9 @@ import { McpDistributedRateLimiter, type DistributedRateLimitResult } from "./di
 import { mcpAuthFailures, mcpMetricsResponse, observeMcpHttpRequest, trackActiveMcpRequest } from "./metrics.js";
 import { KaneraApiError, KaneraClient } from "./kanera-client.js";
 import { createKaneraMcpServer } from "./server.js";
+import { MCP_RESOURCE_SCOPES, mcpAuthorizationChallenge } from "./oauth.js";
+
+export { mcpAuthorizationChallenge } from "./oauth.js";
 
 const require = createRequire(import.meta.url);
 const mcpPackage = require("../package.json") as { version: string };
@@ -69,16 +72,6 @@ export class McpTokenExchangeError extends Error {
   constructor(readonly retryable: boolean) {
     super(retryable ? "MCP token exchange temporarily unavailable" : "invalid or expired MCP access token");
   }
-}
-
-const MCP_RESOURCE_SCOPES = ["kanera:read", "kanera:write"] as const;
-
-export function mcpAuthorizationChallenge(resource: string, error?: "invalid_token") {
-  const metadata = new URL("/.well-known/oauth-protected-resource", resource);
-  // The MCP endpoint exposes both read and mutation tools. Advertising only the read scope here
-  // causes clients that derive their authorization request from the challenge to mint a valid but
-  // read-only connection, even when the user later permits write actions in the client UI.
-  return `Bearer resource_metadata="${metadata.toString()}", scope="${MCP_RESOURCE_SCOPES.join(" ")}"${error ? `, error="${error}"` : ""}`;
 }
 
 async function exchangeMcpToken(token: string, resource: string): Promise<string> {
