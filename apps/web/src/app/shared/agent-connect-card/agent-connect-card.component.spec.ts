@@ -21,7 +21,7 @@ describe("AgentConnectCardComponent", () => {
     TestBed.resetTestingModule();
   });
 
-  async function render(options: { mcpUrl?: string | null; compact?: boolean; showManageLink?: boolean } = {}) {
+  async function render(options: { mcpUrl?: string | null; compact?: boolean; showManageLink?: boolean; showSnippets?: boolean } = {}) {
     const get = vi.fn(async (path: string) => {
       if (path === "/me/agent-connection-config") {
         if (options.mcpUrl === null) throw new Error("unavailable");
@@ -40,6 +40,7 @@ describe("AgentConnectCardComponent", () => {
     fixture = TestBed.createComponent(AgentConnectCardComponent);
     if (options.compact !== undefined) fixture.componentRef.setInput("compact", options.compact);
     if (options.showManageLink !== undefined) fixture.componentRef.setInput("showManageLink", options.showManageLink);
+    if (options.showSnippets !== undefined) fixture.componentRef.setInput("showSnippets", options.showSnippets);
     fixture.detectChanges();
     await settle();
     return { get };
@@ -111,5 +112,26 @@ describe("AgentConnectCardComponent", () => {
     expect(host().querySelector(".agent-card-header")).toBeNull();
     expect(host().querySelector("a[href='/settings/api-keys']")).toBeNull();
     expect(host().querySelector(".agent-card.is-compact")).not.toBeNull();
+  });
+
+  it("hides setup snippets unless the host opts in", async () => {
+    await render();
+    expect(host().querySelector(".agent-card-snippet")).toBeNull();
+  });
+
+  it("copies the setup snippet for the selected client with the live MCP address", async () => {
+    await render({ showSnippets: true });
+    const code = () => host().querySelector(".agent-card-snippet code")?.textContent;
+    expect(code()).toBe("claude mcp add --transport http kanera --scope user https://mcp.example.test/mcp");
+
+    const select = host().querySelector<HTMLSelectElement>(".agent-card-snippet select")!;
+    select.value = "cursor";
+    select.dispatchEvent(new Event("change"));
+    fixture.detectChanges();
+    expect(JSON.parse(code()!)).toEqual({ mcpServers: { kanera: { url: "https://mcp.example.test/mcp" } } });
+
+    host().querySelector<HTMLButtonElement>(".agent-card-snippet-code button")!.click();
+    await settle();
+    expect(writeText).toHaveBeenCalledWith(code());
   });
 });

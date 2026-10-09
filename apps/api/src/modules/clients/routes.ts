@@ -8,7 +8,7 @@ import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { assertOrgRole } from "../../lib/access.js";
 import { cancelBillingForPermanentDeletion } from "../../lib/billing.js";
-import { AppError, badRequest, notFound } from "../../lib/errors.js";
+import { AppError, badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { recordActivity } from "../../lib/activity.js";
 import { storageKeyFromMediaUrl, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
 import {
@@ -49,6 +49,7 @@ function toPublicClient(row: ClientRow): PublicClientResponse {
       deploymentMode: "hosted",
       pushEnabled: true,
       requireMfa: row.requireMfa,
+      mcpPolicy: row.mcpPolicy,
       defaultCompletedCardsActiveDays: row.defaultCompletedCardsActiveDays,
       defaultInactiveCardsDays: row.defaultInactiveCardsDays,
       // Hosted deployments own SMTP/storage at the environment layer, so do not expose
@@ -76,6 +77,8 @@ function toPublicClient(row: ClientRow): PublicClientResponse {
     deploymentMode: "self_hosted",
     pushEnabled: row.pushEnabled,
     requireMfa: row.requireMfa,
+    // Not enforced self-hosted (lib/mcp-policy.ts), so report the effective value.
+    mcpPolicy: "write",
     defaultCompletedCardsActiveDays: row.defaultCompletedCardsActiveDays,
     defaultInactiveCardsDays: row.defaultInactiveCardsDays,
     storageConfig: redact(storageConfig),
@@ -272,6 +275,13 @@ export async function clientRoutes(app: FastifyInstance) {
 
     const current = await loadClient(req.auth.cid);
 
+    if (body.mcpPolicy !== undefined) {
+      if (env.KANERA_DEPLOYMENT_MODE !== "hosted") throw badRequest("MCP policy applies to hosted organisations only");
+      // The policy restricts agent credentials, so only an interactive admin session may change it;
+      // an agent must never be able to lift its own cap.
+      if (req.auth.authKind !== "user") throw forbidden();
+    }
+
     if (env.KANERA_DEPLOYMENT_MODE === "hosted" && body.pushEnabled === false) {
       throw badRequest("push messaging is managed by the hosted deployment");
     }
@@ -318,6 +328,7 @@ export async function clientRoutes(app: FastifyInstance) {
     if (body.name !== undefined) updates.name = body.name;
     if (body.pushEnabled !== undefined) updates.pushEnabled = body.pushEnabled;
     if (body.requireMfa !== undefined) updates.requireMfa = body.requireMfa;
+    if (body.mcpPolicy !== undefined) updates.mcpPolicy = body.mcpPolicy;
     if (body.defaultCompletedCardsActiveDays !== undefined) updates.defaultCompletedCardsActiveDays = body.defaultCompletedCardsActiveDays;
     if (body.defaultInactiveCardsDays !== undefined) updates.defaultInactiveCardsDays = body.defaultInactiveCardsDays;
     if (nextStorage !== undefined) updates.storageConfig = encryptStorageConfig(nextStorage);

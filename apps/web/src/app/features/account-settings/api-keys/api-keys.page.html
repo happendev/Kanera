@@ -1,10 +1,10 @@
 <div class="settings-section">
         <h3 class="settings-section-title"><i class="ti ti-plug-connected"></i><span>AI agent connection</span></h3>
-        <p class="settings-section-help">Connect Claude, Copilot, Codex, ChatGPT, or another compatible agent. Kanera will open a browser sign-in and consent screen; you do not need to create an API key. An interactive connection can always read and write — for a look-only agent, create a read-only personal key below.</p>
+        <p class="settings-section-help">Connect Claude, Copilot, Codex, ChatGPT, or another compatible agent. Kanera will open a browser sign-in and consent screen; you do not need to create an API key. An interactive connection can read and write wherever you can, unless an organisation limits AI agent access. For a look-only agent, create a read-only personal key below.</p>
         @if (isPlanLimited() && apiRequestsPerSecond() !== null && apiRequestsPerMinute() !== null) {
         <p class="plan-limit-hint"><i class="ti ti-gauge"></i> On a Free organisation's boards, your AI agents and personal API keys can make up to {{ apiRequestsPerSecond() }} requests per second and {{ apiRequestsPerMinute() }} per minute. Boards in Pro organisations allow more.</p>
         }
-        <k-agent-connect-card [compact]="true" [showManageLink]="false" />
+        <k-agent-connect-card [compact]="true" [showManageLink]="false" [showSnippets]="true" />
         <div class="key-list">
           @for (connection of oauthConnections(); track connection.id) {
           <div class="key-row">

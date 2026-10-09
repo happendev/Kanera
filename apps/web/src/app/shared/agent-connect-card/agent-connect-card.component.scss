@@ -109,6 +109,64 @@
   }
 }
 
+.agent-card-snippet {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.agent-card-snippet-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.agent-card-snippet-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.agent-card-snippet .agent-card-snippet-select {
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.agent-card-snippet-where {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.agent-card-snippet-code {
+  position: relative;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2, var(--surface));
+
+  pre {
+    margin: 0;
+    padding: 10px 44px 10px 10px;
+    // Long config lines wrap rather than scrolling the settings page sideways on a phone.
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--text);
+  }
+
+  button {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    margin: 0;
+  }
+}
+
 .agent-card-manage {
   display: inline-flex;
   align-items: center;

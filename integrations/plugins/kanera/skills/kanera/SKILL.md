@@ -57,8 +57,28 @@ Choose the lookup that fits the request; these are conditional routes, not a set
 - Board access determines visible card content; cross-organisation guests may see only explicitly shared boards.
 - Personal and OAuth connections inherit their owner's permissions; workspace credentials remain pinned to their workspace. Read-only credentials cannot mutate.
 
+## Card keys and references
+
+- Every `cardId` and `cardIds` input accepts a human key such as `DEV-938`, the canonical card URL, or the card UUID. Use the human key in calls and in replies; Kanera resolves it before the write and remembers it for the connection for a few minutes, so a multi-step task does not repeat the lookup.
+- A key is `PREFIX-number`. The prefix belongs to the workspace, and a key with an earlier prefix still resolves after a rename. When the connected user can see the same key in more than one organisation, pass the canonical card URL instead.
+- Results carry the card's current key and canonical URL. Quote the key when you refer to a card and link it by URL.
+
+## Bulk changes
+
+- `cards.bulk_*` tools take one `boardId` and up to 200 `cardIds` from that board; human keys are accepted. Cards on other boards need a separate call per board, even inside one workspace. Results list what changed and which archived cards were skipped; a skipped card is not an error.
+- `cards.bulk_patch_labels` and `cards.bulk_patch_assignees` add or remove with `mode` and leave the rest in place. The single-card `cards.set_labels` and `cards.set_assignees` replace the whole set. `cards.bulk_set_custom_field` chooses with `mode`: `setAll`, `fillEmpty`, `add`, `remove`, or `clear`.
+- `lists.move_cards`, `lists.set_card_completion`, and `lists.archive_cards` act on every active card in one list and need the board ID; use them for "move everything in Review to Done", and `cards.bulk_move` for a chosen subset.
+- `cards.bulk_archive` and `lists.archive_cards` are destructive and cannot bulk-unarchive. `cards.bulk_duplicate` is not idempotent; read the board before retrying after an ambiguous result.
+
+## Custom fields
+
+- In a standard workspace, custom fields and their select options, labels, and lists are defined once and appear on every board. Read them with `boards.get` on any board of the workspace; the same `fieldId`, option, label, and list IDs are valid on all of them. A standalone board owns its own set. Creating, renaming, or re-typing a field and editing its options are UI-only.
+- Set one value with `cards.set_custom_field_value`: `value.type` must match the field's type (`text`, `number`, `checkbox`, `date`, `url`, `select`, `user`), `select` and `user` take arrays of option or user UUIDs from `boards.get`, and `null` clears. Dates accept `YYYY-MM-DD` or a phrase.
+- Filter by a field across boards with the `customFieldConditions` of `work.query_cards` (`workspaceId`, `fieldId`, `op`, and a value); use `cards.bulk_set_custom_field` to change one field on many cards.
+
 ## Read and report
 
+- Pick the read by the shape of the question. `cards.list` pages one list of one board in board order; use it when the user names a board or list ("what is in Review on Marketing"). `work.query_cards` answers questions about people, dates, and state across boards ("Ben's overdue cards", "anything idle for two weeks", "what we finished last month") and takes a workspace or board scope. Never answer a cross-board question by paging `cards.list` over every board, and never rebuild a board column from `work.query_cards`. After either, `cards.get_content` returns the full text of up to 200 chosen cards.
 - For a card's history, page `cards.list_history`; it combines retained, user-visible activity and comments and accepts the human card key.
 - To start a session or answer what to work on, call `work.my_day`: one call returns the connected user's overdue, due-this-week, overdue-checklist, and idle assigned cards plus the top of their Up next queue. For a recurring morning briefing, subscribe to the `my_day.ready` event (weekdays at the user's daily-digest hour, while the digest email is on) and call `work.my_day` with its `timeZone`.
 - For current, completed, overdue, or stale work, page `work.query_cards`; use its scope, assignment, completion, `lastActivityBefore`, and `lastMovedBefore` filters instead of enumerating boards manually. For another person, use the team lens with exactly that person's assignee ID.

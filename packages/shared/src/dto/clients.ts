@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { CLIENT_ROLES } from "../schema/client-roles.js";
-import { CLIENT_BILLING_INTERVALS, CLIENT_BILLING_STATUSES, type ClientBillingStatus } from "../schema/client.js";
+import { CLIENT_BILLING_INTERVALS, CLIENT_BILLING_STATUSES, CLIENT_MCP_POLICIES, type ClientBillingStatus } from "../schema/client.js";
 import { GENERAL_NAME_MAX_LENGTH } from "./name-limits.js";
 import { deploymentModeSchema } from "./deployment.js";
 
@@ -44,6 +44,7 @@ export const updateClientBody = z.object({
   name: z.string().min(1).max(GENERAL_NAME_MAX_LENGTH).optional(),
   pushEnabled: z.boolean().optional(),
   requireMfa: z.boolean().optional(),
+  mcpPolicy: z.enum(CLIENT_MCP_POLICIES).optional(),
   defaultCompletedCardsActiveDays: z.number().int().min(0).max(365).optional(),
   defaultInactiveCardsDays: z.number().int().min(0).max(365).optional(),
   storageConfig: storageConfigSchema.optional(),
@@ -112,6 +113,8 @@ export const publicClientResponse = z.object({
   deploymentMode: deploymentModeSchema,
   pushEnabled: z.boolean(),
   requireMfa: z.boolean(),
+  // Hosted only; self-hosted always reports `write` because the policy is not enforced there.
+  mcpPolicy: z.enum(CLIENT_MCP_POLICIES),
   defaultCompletedCardsActiveDays: z.number().int().min(0).max(365),
   defaultInactiveCardsDays: z.number().int().min(0).max(365),
   storageConfig: storageConfigSchema,

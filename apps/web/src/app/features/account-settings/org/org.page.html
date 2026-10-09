@@ -1,6 +1,14 @@
 <div class="settings-section">
-  <h3 class="settings-section-title"><i class="ti ti-photo"></i><span>Organisation logo</span></h3>
-  <p class="settings-section-help">PNG, JPEG, WEBP, or SVG. Rectangular wordmarks work best. Max 2MB.</p>
+  <h3 class="settings-section-title"><i class="ti ti-building-skyscraper"></i><span>Organisation name and logo</span></h3>
+  <k-docs-link path="organisations" label="Learn more about organisations" />
+  <div class="board-form">
+    <input name="orgName" placeholder="Organisation name" [value]="settings.orgName()" (input)="settings.orgName.set($any($event.target).value)" [disabled]="!settings.isClientAdmin() || settings.orgNameSaving()" class="grow" />
+    <button class="sm" type="button" (click)="settings.saveOrgName()" [disabled]="!settings.isClientAdmin() || settings.orgNameSaving() || !settings.orgName().trim() || settings.orgName().trim() === settings.client()?.name">
+      {{ settings.orgNameSaving() ? "Saving..." : "Save" }}
+    </button>
+  </div>
+  @if (settings.orgError()) { <p class="form-error">{{ settings.orgError() }}</p> }
+  <p class="settings-section-help">Logo: PNG, JPEG, WEBP, or SVG. Rectangular wordmarks work best. Max 2MB.</p>
   <div class="logo-row">
     <div class="logo-preview">
       @if (visibleLogoUrl()) {
@@ -64,17 +72,23 @@
       settings.requireMfaSaving() ? "Saving..." : "Save security policy" }}</button></div>
 </div>
 
+@if (settings.isHosted()) {
 <div class="settings-section">
-  <h3 class="settings-section-title"><i class="ti ti-building-skyscraper"></i><span>Organisation name</span></h3>
-  <k-docs-link path="organisations" label="Learn more about organisations" />
-  <div class="board-form">
-    <input name="orgName" placeholder="Organisation name" [value]="settings.orgName()" (input)="settings.orgName.set($any($event.target).value)" [disabled]="!settings.isClientAdmin() || settings.orgNameSaving()" class="grow" />
-    <button class="sm" type="button" (click)="settings.saveOrgName()" [disabled]="!settings.isClientAdmin() || settings.orgNameSaving() || !settings.orgName().trim() || settings.orgName().trim() === settings.client()?.name">
-      {{ settings.orgNameSaving() ? "Saving..." : "Save" }}
-    </button>
-  </div>
-  @if (settings.orgError()) { <p class="form-error">{{ settings.orgError() }}</p> }
+  <h3 class="settings-section-title"><i class="ti ti-plug-connected"></i><span>AI agent access (MCP)</span></h3>
+  <p class="settings-section-help">Controls what AI agents connected through MCP, and personal API keys, can do with this organisation's boards. It also applies to board guests from other organisations. Workspace API keys are managed separately.</p>
+  <k-segmented
+    [options]="mcpPolicyOptions"
+    [value]="settings.mcpPolicyDraft()"
+    [showLabels]="true"
+    ariaLabel="AI agent access"
+    (valueChange)="settings.mcpPolicyDraft.set($event)"
+  />
+  <p class="settings-section-help">{{ mcpPolicyHelp() }}</p>
+  @if (settings.mcpPolicyError()) { <p class="form-error">{{ settings.mcpPolicyError() }}</p> }
+  <div class="button-row"><button class="sm" type="button" (click)="settings.saveMcpPolicy()" [disabled]="!settings.isClientAdmin() || settings.mcpPolicySaving() || settings.mcpPolicyDraft() === settings.client()?.mcpPolicy">{{
+      settings.mcpPolicySaving() ? "Saving..." : "Save agent policy" }}</button></div>
 </div>
+}
 
 @if (settings.githubAppConfig()?.configured || settings.isSelfHosted()) {
 <div class="settings-section">

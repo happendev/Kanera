@@ -1,6 +1,6 @@
 import jwt from "@fastify/jwt";
 import { requestContext } from "@fastify/request-context";
-import { supportSessions, users, workspaceApiKeys, workspaces, type ClientRole, type WorkspaceApiKeyKind, type WorkspaceApiKeyScope } from "@kanera/shared/schema";
+import { supportSessions, users, workspaceApiKeys, workspaces, type ClientMcpPolicy, type ClientRole, type WorkspaceApiKeyKind, type WorkspaceApiKeyScope } from "@kanera/shared/schema";
 import { and, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
@@ -11,6 +11,7 @@ import { hashOpaqueToken } from "../lib/tokens.js";
 import { authenticateMcpDelegationToken } from "../oauth/routes.js";
 import type { ApiRateTier } from "../lib/api-rate-limit.js";
 import { resolvePersonalCredentialOrganisation } from "./personal-credential-context.js";
+import { applyMcpPolicy } from "../lib/mcp-policy.js";
 import { z } from "zod";
 
 declare module "fastify" {
@@ -82,6 +83,11 @@ export interface AuthClaims {
   // hold the personal subset ("read" | "write"); "admin" is a workspace-key value. The one
   // "admin" comparison lives in the workspace branch of assertBoardAccess.
   apiKeyScope?: WorkspaceApiKeyScope;
+  // Personal credentials only: the credential's own scope before the current organisation's MCP
+  // policy capped it into apiKeyScope, and that effective policy (see lib/mcp-policy.ts). Both are
+  // recomputed whenever the credential rebases onto another organisation.
+  apiKeyGrantedScope?: WorkspaceApiKeyScope;
+  mcpPolicy?: ClientMcpPolicy;
   // Plan tier of the credential's resolved default organisation (claims.cid at authentication). The
   // public API meters requests by the organisation that owns the touched board; this tier only applies
   // to requests that resolve no organisation themselves. Carried in claims so MCP delegation tokens
@@ -150,7 +156,7 @@ async function authenticateApiKey(req: FastifyRequest, raw: string): Promise<Aut
   // A personal key acts as its owner in a live organisation context. The key's stored client id is
   // only the default; a target resource (or explicit request header) may safely rebase it later.
   if (row.kind === "personal") {
-    return {
+    const claims: AuthClaims = {
       sub: row.userId,
       cid: organisation.clientId,
       role: organisation.role,
@@ -164,6 +170,10 @@ async function authenticateApiKey(req: FastifyRequest, raw: string): Promise<Aut
       apiKeyScope: row.scope,
       apiRateTier: organisation.apiRateTier,
     };
+    // Org-level routes that resolve no resource act in this default organisation, so cap the
+    // credential by its policy now; resource access recomputes it for the owning organisation.
+    applyMcpPolicy(claims, organisation.mcpPolicy);
+    return claims;
   }
 
   return {

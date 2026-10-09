@@ -1,0 +1,2 @@
+ALTER TABLE "client" ADD COLUMN "mcp_policy" text DEFAULT 'write' NOT NULL;--> statement-breakpoint
+ALTER TABLE "client" ADD CONSTRAINT "clients_mcp_policy_ck" CHECK ("client"."mcp_policy" in ('off', 'read', 'write'));

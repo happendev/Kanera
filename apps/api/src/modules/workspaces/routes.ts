@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { assertOrgRole, assertWorkspaceAccess, isOrgAdmin, orgRoleRanksAdmin } from "../../lib/access.js";
+import { effectiveMcpPolicy } from "../../lib/mcp-policy.js";
 import { loadAccessibleBoards } from "../../lib/accessible-boards.js";
 import { loadAssignedChecklistItems } from "../../lib/assigned-checklist-items.js";
 import { captureWorkspaceInvitationCreated, captureWorkspaceMemberJoined, evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
@@ -92,6 +93,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           updatedAt: workspaces.updatedAt,
           clientRole: clientMembers.clientRole,
           workspaceRole: workspaceMembers.role,
+          mcpPolicy: clients.mcpPolicy,
         })
         .from(workspaces)
         .innerJoin(clients, eq(clients.id, workspaces.clientId))
@@ -114,8 +116,10 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         ))
         .orderBy(asc(workspaces.createdAt));
       // Personal credentials work on every plan, so Free organisations' workspaces are listed too.
+      // Organisations whose MCP policy is off are hidden from agent credentials altogether.
       return page(rows
-        .map(({ clientRole, workspaceRole, ...workspace }) => ({
+        .filter((row) => effectiveMcpPolicy(row.mcpPolicy) !== "off")
+        .map(({ clientRole, workspaceRole, mcpPolicy: _mcpPolicy, ...workspace }) => ({
           ...workspace,
           role: orgRoleRanksAdmin(clientRole) ? "admin" as const : workspaceRole!,
         })));

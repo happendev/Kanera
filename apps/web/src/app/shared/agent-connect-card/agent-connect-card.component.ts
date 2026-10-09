@@ -1,8 +1,9 @@
 import type { OnInit } from "@angular/core";
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, input, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input, signal } from "@angular/core";
 import { RouterLink } from "@angular/router";
 import { ApiClient } from "../../core/api/api.client";
 import { buildAgentSetupPrompt } from "../agent-setup-prompt";
+import { AGENT_SNIPPET_CLIENTS, buildAgentSetupSnippet, type AgentSnippetClient } from "../agent-setup-snippets";
 import { KANERA_DOCS_URL } from "../docs-link.component";
 import { TooltipDirective } from "../tooltip.directive";
 
@@ -32,10 +33,18 @@ export class AgentConnectCardComponent implements OnInit {
   readonly compact = input(false);
   /** Link to the settings tab that lists connected agents and personal keys. */
   readonly showManageLink = input(true);
+  /** Show per-client config snippets for people who prefer to configure their agent by hand. */
+  readonly showSnippets = input(false);
 
   readonly mcpUrl = signal("");
   readonly loading = signal(true);
-  readonly copied = signal<"prompt" | "url" | null>(null);
+  readonly copied = signal<"prompt" | "url" | "snippet" | null>(null);
+  readonly snippetClients = AGENT_SNIPPET_CLIENTS;
+  readonly snippetClient = signal<AgentSnippetClient>("claude-code");
+  readonly snippet = computed(() => {
+    const url = this.mcpUrl();
+    return url ? buildAgentSetupSnippet(this.snippetClient(), url) : null;
+  });
   readonly docsUrl = `${KANERA_DOCS_URL}/ai-mcp-oauth`;
 
   private resetTimer: ReturnType<typeof setTimeout> | null = null;
@@ -64,7 +73,13 @@ export class AgentConnectCardComponent implements OnInit {
     await this.copy(url, "url");
   }
 
-  private async copy(text: string, what: "prompt" | "url") {
+  async copySnippet() {
+    const snippet = this.snippet();
+    if (!snippet) return;
+    await this.copy(snippet.code, "snippet");
+  }
+
+  private async copy(text: string, what: "prompt" | "url" | "snippet") {
     if (typeof navigator === "undefined" || !navigator.clipboard) return;
     await navigator.clipboard.writeText(text);
     this.copied.set(what);

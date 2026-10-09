@@ -1,9 +1,10 @@
-import { clientMembers, clients, type ClientBillingStatus, type ClientPlan, type ClientRole } from "@kanera/shared/schema";
+import { clientMembers, clients, type ClientBillingStatus, type ClientMcpPolicy, type ClientPlan, type ClientRole } from "@kanera/shared/schema";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { db } from "../db.js";
 import { env } from "../env.js";
 import type { ApiRateTier } from "../lib/api-rate-limit.js";
 import { hasPaidPlanEntitlement } from "../lib/entitlements.js";
+import { effectiveMcpPolicy } from "../lib/mcp-policy.js";
 
 export type PersonalCredentialOrganisation = {
   clientId: string;
@@ -13,6 +14,8 @@ export type PersonalCredentialOrganisation = {
   // a request touches; this default tier only applies to requests that resolve no organisation of
   // their own (listings, search, session).
   apiRateTier: ApiRateTier;
+  // Effective MCP policy of this organisation; only personal agent credentials are capped by it.
+  mcpPolicy: ClientMcpPolicy;
 };
 
 /**
@@ -34,6 +37,7 @@ export async function resolvePersonalCredentialOrganisation(
       role: clientMembers.clientRole,
       plan: clients.plan,
       billingStatus: clients.billingStatus,
+      mcpPolicy: clients.mcpPolicy,
     })
     .from(clientMembers)
     .innerJoin(clients, eq(clients.id, clientMembers.clientId))
@@ -54,16 +58,24 @@ export async function resolvePersonalCredentialOrganisation(
     role: row.role,
     billingStatus: row.billingStatus,
     apiRateTier: isPaid(row) ? "paid" : "free",
+    mcpPolicy: effectiveMcpPolicy(row.mcpPolicy),
   });
 
   if (options.requiredClientId) {
     const required = eligible.find((row) => row.clientId === options.requiredClientId);
     return required ? shape(required) : null;
   }
-  for (const clientId of options.preferredClientIds ?? []) {
-    if (!clientId) continue;
-    const preferred = eligible.find((row) => row.clientId === clientId);
-    if (preferred) return shape(preferred);
+  // Prefer a default organisation that allows agent access, so a member of several organisations is
+  // not stranded in one that turned it off. An all-off identity still authenticates: requests then
+  // fail with a clear 403 explaining the policy instead of an auth challenge the client would loop on.
+  const allowsAgents = eligible.filter((row) => effectiveMcpPolicy(row.mcpPolicy) !== "off");
+  for (const candidates of [allowsAgents, eligible]) {
+    for (const clientId of options.preferredClientIds ?? []) {
+      if (!clientId) continue;
+      const preferred = candidates.find((row) => row.clientId === clientId);
+      if (preferred) return shape(preferred);
+    }
   }
-  return eligible[0] ? shape(eligible[0]) : null;
+  const fallback = allowsAgents[0] ?? eligible[0];
+  return fallback ? shape(fallback) : null;
 }

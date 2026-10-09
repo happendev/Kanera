@@ -4,7 +4,7 @@ import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, NavigationEnd, Router, RouterLink } from "@angular/router";
 import type { BillingInfoResponse, NotificationSettingsResponse, NotificationSettingType, NotificationWorkspaceRule, PersonalNotificationChannel, PersonalNotificationTestResponse, PublicClientResponse, SeatChangeResponse } from "@kanera/shared/dto";
 import type { ServerToClientEvents } from "@kanera/shared/events";
-import type { SmtpConfig, StorageConfig } from "@kanera/shared/schema";
+import type { ClientMcpPolicy, SmtpConfig, StorageConfig } from "@kanera/shared/schema";
 import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS, DEFAULT_INACTIVE_CARDS_DAYS } from "@kanera/shared/workspace-defaults";
 import { filter } from "rxjs";
 import { buildInfo } from "../../../build-info.generated";
@@ -438,6 +438,10 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly requireMfaDraft = signal(false);
   readonly requireMfaSaving = signal(false);
   readonly requireMfaError = signal<string | null>(null);
+  // Hosted-only organisation cap on AI agent (MCP) credentials; the API enforces it per resource.
+  readonly mcpPolicyDraft = signal<ClientMcpPolicy>("write");
+  readonly mcpPolicySaving = signal(false);
+  readonly mcpPolicyError = signal<string | null>(null);
   readonly billingInfo = signal<BillingInfoResponse | null>(null);
   readonly isHosted = computed(() => (this.client()?.deploymentMode ?? this.user()?.deploymentMode) === "hosted");
   // Lifecycle emails are a hosted-only sweep addressed to organisation owners, so the opt-out is
@@ -719,6 +723,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     }
     this.pushEnabledDraft.set(c.pushEnabled);
     this.requireMfaDraft.set(c.requireMfa);
+    this.mcpPolicyDraft.set(c.mcpPolicy);
     this.defaultCompletedCardsActiveDays.set(c.defaultCompletedCardsActiveDays);
     this.defaultInactiveCardsDays.set(c.defaultInactiveCardsDays);
     const sc = c.storageConfig;
@@ -2038,6 +2043,15 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     try { this.applyClient(await this.api.patch<PublicClientResponse>("/clients/me", { requireMfa: this.requireMfaDraft() })); }
     catch (err) { this.requireMfaDraft.set(current.requireMfa); this.requireMfaError.set(extractErrorMessage(err)); }
     finally { this.requireMfaSaving.set(false); }
+  }
+
+  async saveMcpPolicy() {
+    const current = this.client();
+    if (!current || current.mcpPolicy === this.mcpPolicyDraft()) return;
+    this.mcpPolicySaving.set(true); this.mcpPolicyError.set(null);
+    try { this.applyClient(await this.api.patch<PublicClientResponse>("/clients/me", { mcpPolicy: this.mcpPolicyDraft() })); }
+    catch (err) { this.mcpPolicyDraft.set(current.mcpPolicy); this.mcpPolicyError.set(extractErrorMessage(err)); }
+    finally { this.mcpPolicySaving.set(false); }
   }
 
   async uploadLogo(e: Event) {

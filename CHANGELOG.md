@@ -14,7 +14,12 @@ All notable changes to Kanera are documented here.
 - **Attach local files from an agent:** MCP `cards.create_upload_link` (CLI `kanera card upload-link`) returns a single-use upload URL, valid for 15 minutes, that an agent can `curl -T` a screenshot or log file to. The link is revoked with the key that created it.
 - **Agents can read attachments:** MCP `cards.get_attachment` returns images as images (a downscaled copy for large photos) and text, Markdown, CSV, JSON, logs and email as text. The public API adds `GET /api/v1/cards/{id}/attachments/{attachmentId}/content`.
 - **Natural dates for agents:** MCP date inputs accept phrases such as "tomorrow 1pm", "next friday" or "in 2 weeks", resolved in your own time zone, and a time picks the matching due slot. `session.get` and `GET /api/v1/session` now return your `timeZone` and `today`, and `work.my_day` and `work.portfolio_summary` default to your time zone instead of UTC.
+- **Organisation AI agent policy (hosted):** organisation admins can set AI agent access to Off, Read only, or Read and write under Settings → Organisation. It applies to MCP connections and personal API keys working on the organisation's boards, including board guests from other organisations. Off hides the organisation's boards and workspaces from agents and refuses their requests. Read only blocks every write, even for members who could make it. Workspace API keys are not affected.
+- **Copyable MCP setup snippets:** Settings → API Keys now shows ready-to-paste MCP configuration for Claude Code, Cursor, VS Code / GitHub Copilot, Codex and Gemini CLI, filled in with your server's MCP address.
 
+### Changed
+- **Organisation settings:** the organisation name and logo are now one section at the top of the Org page.
+- **Kanera agent skill:** the skill agents install with `npx -y skills add` (and the Kanera ChatGPT plugin bundles) now explains card keys and references, how the bulk and list-wide tools differ from single-card tools, custom fields and labels shared across a workspace's boards, and when to read with `work.query_cards` rather than `cards.list`.
 ### Changed
 - **Kanera MCP:** the tool catalog that agents load into context is a fifth smaller. Field types such as UUIDs and timestamps are described by their JSON Schema `format` only, without a duplicate regex; values are still validated when a tool is called.
 - **Kanera MCP:** read-only keys and connections now see only read tools, rather than seeing write tools that are refused when called. List tools state the order their results come back in.

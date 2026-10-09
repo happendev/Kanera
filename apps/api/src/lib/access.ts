@@ -13,6 +13,7 @@ import {
   type BoardRole,
   type Card,
   type ClientBillingStatus,
+  type ClientMcpPolicy,
   type ClientPlan,
   type ClientRole,
   type WorkspaceRole,
@@ -23,6 +24,7 @@ import { db } from "../db.js";
 import { env } from "../env.js";
 import { meterApiOrganisation } from "./api-rate-limit.js";
 import { hasPaidPlanEntitlement, isPaidTier } from "./entitlements.js";
+import { applyMcpPolicy, assertAgentAccessAllowed } from "./mcp-policy.js";
 import { forbidden, notFound, wrongOrg } from "./errors.js";
 
 // Prepared once per process; plan is cached per connection in the pg pool.
@@ -40,6 +42,7 @@ const boardAccessQuery = db
     clientBillingStatus: clients.billingStatus,
     clientSuspendedAt: clients.suspendedAt,
     clientDeletedAt: clients.deletedAt,
+    clientMcpPolicy: clients.mcpPolicy,
     currentOrgRole: clientMembers.clientRole,
     currentOrgSuspendedAt: clientMembers.suspendedAt,
     currentOrgRemovedAt: clientMembers.removedAt,
@@ -66,6 +69,7 @@ const workspaceAccessQuery = db
     clientBillingStatus: clients.billingStatus,
     clientSuspendedAt: clients.suspendedAt,
     clientDeletedAt: clients.deletedAt,
+    clientMcpPolicy: clients.mcpPolicy,
     role: workspaceMembers.role,
     currentOrgRole: clientMembers.clientRole,
     currentOrgSuspendedAt: clientMembers.suspendedAt,
@@ -116,9 +120,10 @@ function assertBoardRank(role: BoardRole | null | undefined, minRole: BoardRole)
  * owner-private content (personal notes, the scratchpad) authorises at plain `member`/`observer`,
  * so its write routes must apply this gate themselves. Read means read regardless of key kind —
  * this covers read-scoped personal keys and read-scoped workspace keys alike. OAuth personal
- * grants always carry write (oauth/routes.ts), so they never hit this.
+ * grants carry write unless the organisation's MCP policy capped them to read (lib/mcp-policy.ts).
  */
 export function assertWriteCapableCredential(claims: AuthClaims): void {
+  assertAgentAccessAllowed(claims);
   if (claims.authKind === "apiKey" && claims.apiKeyScope === "read") throw forbidden("write-capable credential required");
 }
 
@@ -126,6 +131,7 @@ export function isOrgAdmin(claims: AuthClaims): boolean {
   // Personal credentials act as their owner. Workspace keys remain deliberately unable to borrow
   // their creator's organisation-wide authority beyond the workspace and scope pinned to the key.
   if (claims.authKind === "apiKey" && claims.apiKeyKind !== "personal") return false;
+  if (claims.apiKeyKind === "personal" && claims.mcpPolicy === "off") return false;
   return ORG_RANK[claims.role] >= ORG_RANK.admin;
 }
 
@@ -137,6 +143,7 @@ export function orgRoleRanksAdmin(role: ClientRole): boolean {
 
 export function assertOrgRole(claims: AuthClaims, minRole: ClientRole) {
   if (claims.authKind === "apiKey" && claims.apiKeyKind !== "personal") throw forbidden();
+  assertAgentAccessAllowed(claims);
   if (claims.apiKeyKind === "personal" && claims.apiKeyScope === "read" && ORG_RANK[minRole] > ORG_RANK.member) throw forbidden();
   if (ORG_RANK[claims.role] < ORG_RANK[minRole]) throw forbidden();
 }
@@ -152,6 +159,7 @@ function assertOrganisationContext(
     clientBillingStatus: ClientBillingStatus;
     clientSuspendedAt: Date | null;
     clientDeletedAt: Date | null;
+    clientMcpPolicy: ClientMcpPolicy;
   },
 ) {
   // A board row deliberately survives plan suspension so it can be restored later. Membership
@@ -174,6 +182,10 @@ function assertOrganisationContext(
     claims.cid = row.clientId;
     claims.role = row.currentOrgRole ?? "member";
     requestContext.set("clientId", row.clientId);
+    // The data owner's MCP policy governs, including for board guests from other organisations:
+    // `off` denies the resource, `read` caps the credential through the read-scope checks below.
+    applyMcpPolicy(claims, row.clientMcpPolicy);
+    assertAgentAccessAllowed(claims);
     return;
   }
   if (row.clientId !== claims.cid && row.currentOrgRole) {
@@ -215,9 +227,9 @@ export async function assertWorkspaceAccess(
   }
 
   const isPersonalKey = claims.apiKeyKind === "personal";
-  // Read-scoped personal keys are downgraded; write-scoped ones inherit the owner's full effective
-  // permissions. This branch went live with scopeable personal keys — OAuth personal grants hardcode
-  // write (oauth/routes.ts), so `kanera_u_` keys are the only read-scoped personal credentials here.
+  // Read-scoped personal credentials are downgraded; write-scoped ones inherit the owner's full
+  // effective permissions. A credential is read-scoped either by its own scope (`kanera_u_` keys) or
+  // because the organisation's MCP policy is read-only (applied in assertOrganisationContext).
   if (isPersonalKey && claims.apiKeyScope === "read" && WORKSPACE_RANK[minRole] > WORKSPACE_RANK.member) throw forbidden();
 
   if (row.currentOrgRole === "owner" || row.currentOrgRole === "admin") {
@@ -259,9 +271,8 @@ export async function assertBoardAccess(
     return { boardId: row.boardId, workspaceId: row.workspaceId, clientId: row.clientId, role: apiRole, source: "workspace" as const, canAccessWorkspace: true, isWorkspaceAdmin: claims.apiKeyScope === "admin", assignedItemsOnly: false };
   }
 
-  // A read-scoped personal key cannot mutate board content or perform board management; write-scoped
-  // keys inherit the owner's permissions. This branch went live with scopeable personal keys —
-  // OAuth personal grants hardcode write, so `kanera_u_` keys are the only credentials capped here.
+  // A read-scoped personal credential (its own scope, or a read-only organisation MCP policy) cannot
+  // mutate board content or perform board management; write-scoped ones inherit the owner's permissions.
   const isPersonalKey = claims.apiKeyKind === "personal";
   if (isPersonalKey && claims.apiKeyScope === "read" && BOARD_RANK[minRole] > BOARD_RANK.observer) {
     throw forbidden("write-capable credential required");
