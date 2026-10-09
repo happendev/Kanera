@@ -564,3 +564,58 @@ void test("MCP bootstrap tools refuse workspace-scoped credentials with an actio
     assert.equal((parseToolText(boardResult) as { error: { status: number } }).error.status, 403);
   });
 });
+
+void test("MCP agent file, capture, and date tools round-trip against the real public API", async () => {
+  const fixture = await seedFixture();
+
+  await withPublicApi(async (publicApiUrl) => {
+    const card = parseToolText<{ id: string }>(await toolHandler(fixture.personalKey, publicApiUrl, "cards.create")({
+      boardId: fixture.board.id,
+      listId: fixture.listId,
+      title: "Agent files",
+    }));
+
+    // A date phrase resolves in the user's zone (UTC for a fresh account) and a time picks the slot.
+    const updated = parseToolText<{ dueDateLocalDate: string; dueDateSlot: string }>(await toolHandler(fixture.personalKey, publicApiUrl, "cards.update")({
+      cardId: card.id,
+      changes: { dueDateLocalDate: "tomorrow 1pm" },
+    }));
+    assert.equal(updated.dueDateLocalDate, new Date(Date.now() + 86_400_000).toISOString().slice(0, 10));
+    assert.equal(updated.dueDateSlot, "afternoon");
+
+    const link = parseToolText<{ uploadUrl: string }>(await toolHandler(fixture.personalKey, publicApiUrl, "cards.create_upload_link")({
+      cardId: card.id,
+      fileName: "build.log",
+      source: "attachment",
+    }));
+    // What the agent's curl -T does, routed through the same in-process public API.
+    const uploaded = await fetch(link.uploadUrl, { method: "PUT", body: "FAILED: test/login.spec.ts\n" });
+    assert.equal(uploaded.status, 201);
+    const logAttachment = await uploaded.json() as { id: string };
+
+    const getAttachment = toolHandler(fixture.personalKey, publicApiUrl, "cards.get_attachment");
+    const log = parseToolText<{ kind: string; text: string; nextOffset: number | null }>(await getAttachment({ cardId: card.id, attachmentId: logAttachment.id, offset: 0 }));
+    assert.deepEqual([log.kind, log.text, log.nextOffset], ["text", "FAILED: test/login.spec.ts\n", null]);
+
+    const gif = parseToolText<{ id: string }>(await toolHandler(fixture.personalKey, publicApiUrl, "cards.add_attachment")({
+      cardId: card.id,
+      fileName: "pixel.gif",
+      mimeType: "image/gif",
+      fileBase64: "R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
+      source: "attachment",
+    }));
+    const image = await getAttachment({ cardId: card.id, attachmentId: gif.id, offset: 0 });
+    assert.equal(image.content[1]?.type, "image");
+    assert.equal((image.content[1] as { mimeType: string }).mimeType, "image/gif");
+
+    const captured = parseToolText<{ created: boolean; note: { title: string; content: string } }>(await toolHandler(fixture.personalKey, publicApiUrl, "scratchpad.capture")({ text: "Renew the venue insurance" }));
+    assert.equal(captured.note.title, "Inbox");
+    assert.equal(captured.note.content, "- [ ] Renew the venue insurance");
+    const listed = parseToolText<Array<{ title: string; openTasks: number }>>(await toolHandler(fixture.personalKey, publicApiUrl, "scratchpad.list")({}));
+    assert.deepEqual(listed.map((page) => [page.title, page.openTasks]), [["Inbox", 1]]);
+
+    // A workspace key acts as its creator, so it is refused the creator's private scratchpad.
+    const refused = await toolHandler(fixture.writeKey, publicApiUrl, "scratchpad.capture")({ text: "Nope" });
+    assert.equal(refused.isError, true);
+  });
+});

@@ -18,8 +18,9 @@ import {
   isStorageFull,
   storageQuotaExceededError,
 } from "../../lib/entitlements.js";
-import { badRequest, forbidden, notFound } from "../../lib/errors.js";
+import { AppError, badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { assertWriteCapableCredential } from "../../lib/access.js";
+import type { AuthClaims } from "../../auth/plugin.js";
 import { signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, unsignedMediaUrl } from "../../lib/media-keys.js";
 import { between } from "../../lib/position.js";
 import { rebalanceScratchpadNotes } from "../../lib/rebalance.js";
@@ -143,6 +144,37 @@ async function neighbourPositions(
 }
 
 /**
+ * A workspace key authenticates as its creator, so without this it would read and write that
+ * person's private pages for anyone holding the shared key. Only credentials that act as the owner
+ * themselves (a session, a personal key, or an OAuth agent grant) reach the scratchpad.
+ */
+function assertPersonalCredential(claims: AuthClaims): void {
+  if (claims.authKind === "apiKey" && claims.apiKeyKind !== "personal") {
+    throw forbidden("the scratchpad needs a personal API key or OAuth connection");
+  }
+}
+
+/** Millisecond-precision match between a client's ISO watermark and the stored timestamp. */
+function sameInstant(a: Date | string, b: Date | string): boolean {
+  const base = new Date(a).getTime();
+  const value = new Date(b).getTime();
+  return value >= base && value < base + 1;
+}
+
+function taskLine(text: string): string {
+  // One capture is one list item: line breaks would start new blocks and escape the task list.
+  return `- [ ] ${text.replace(/\s*\n\s*/gu, " ")}`;
+}
+
+/** Append a task, separating it from a preceding paragraph so Markdown keeps it a task list. */
+function appendTask(content: string, line: string): string {
+  const trimmed = content.replace(/\s+$/u, "");
+  if (trimmed === "") return line;
+  const lastLine = trimmed.slice(trimmed.lastIndexOf("\n") + 1);
+  return `${trimmed}${/^\s*[-*] \[[ xX]\] /u.test(lastLine) ? "\n" : "\n\n"}${line}`;
+}
+
+/**
  * Private per-user, per-organisation scratchpad pages.
  *
  * No `recordActivity` anywhere in this module — deliberately, and matching the notes module, which
@@ -150,8 +182,15 @@ async function neighbourPositions(
  * feed is scoped by `client_id`, not by actor), so writing one per autosave tick would both leak that
  * a private page exists and drown the feed in keystroke-rate noise.
  */
-export async function scratchpadRoutes(app: FastifyInstance) {
+export async function scratchpadRoutes(
+  app: FastifyInstance,
+  // The public API omits page deletion (permanent, and agents never need it for capture) and the
+  // embed-upload pair, which only the web editor's paste/drop flow uses.
+  options: { allowDeletes?: boolean; exposeAttachments?: boolean } = {},
+) {
+  const { allowDeletes = true, exposeAttachments = true } = options;
   app.addHook("preHandler", app.authenticate);
+  app.addHook("preHandler", async (req) => assertPersonalCredential(req.auth));
 
   app.get("/scratchpad/notes", async (req) => {
     const rows = await db
@@ -168,11 +207,9 @@ export async function scratchpadRoutes(app: FastifyInstance) {
     return rows.map(wire);
   });
 
-  // Every mutating route below calls assertWriteCapableCredential. This is a backstop, not live
-  // enforcement: these routes are app-server-only and authenticateApiKey refuses to authenticate
-  // outside /api/v1/, so no API key reaches them today. The guard is here because the scratchpad
-  // has no workspace and no role ranks — ownership alone is the only check — so exposing it on the
-  // public API later would otherwise hand a read-scoped credential the owner's private pages.
+  // Every mutating route below calls assertWriteCapableCredential. The scratchpad has no workspace
+  // and no role ranks — ownership alone is the only check — so on the public API this is the only
+  // thing stopping a read-scoped personal key from writing the owner's private pages.
   app.post("/scratchpad/notes", async (req, reply) => {
     assertWriteCapableCredential(req.auth);
     const body = dto.createScratchpadNoteBody.parse(req.body ?? {});
@@ -202,6 +239,7 @@ export async function scratchpadRoutes(app: FastifyInstance) {
           userId: req.auth.sub,
           clientId: req.auth.cid,
           title: body.title ?? "",
+          content: stripSignedEmbeddedMediaUrls(body.content ?? "", req.auth.cid) ?? "",
           position,
         })
         .returning();
@@ -211,6 +249,55 @@ export async function scratchpadRoutes(app: FastifyInstance) {
     const wired = wire(note);
     await emitToUserDurable(req.auth.sub, SERVER_EVENTS.SCRATCHPAD_NOTE_CREATED, { note: wired });
     return reply.status(201).send(wired);
+  });
+
+  /**
+   * Quick capture for "remind me to…" without choosing a board: appends one open task to the named
+   * page (default "Inbox"), creating it at the end of the tab list when absent. The append happens
+   * under the page's row lock, so it can never drop an edit that landed between an agent's read and
+   * write the way a client-side read-modify-write would.
+   */
+  app.post("/scratchpad/capture", async (req, reply) => {
+    assertWriteCapableCredential(req.auth);
+    const body = dto.captureScratchpadItemBody.parse(req.body ?? {});
+    const line = taskLine(body.text);
+
+    const { note, created } = await db.transaction(async (tx) => {
+      await lockScratchpadForWrite(req.auth.sub, req.auth.cid, tx);
+      const pages = await tx
+        .select()
+        .from(scratchpadNotes)
+        .where(and(eq(scratchpadNotes.userId, req.auth.sub), eq(scratchpadNotes.clientId, req.auth.cid)))
+        .for("update")
+        .orderBy(asc(scratchpadNotes.position));
+      // Titles are free text and need not be unique; the first matching tab is the inbox.
+      const page = pages.find((row) => row.title.trim().toLowerCase() === body.pageTitle.toLowerCase());
+      if (page) {
+        const [updated] = await tx
+          .update(scratchpadNotes)
+          .set({ content: appendTask(page.content, line), updatedAt: new Date() })
+          .where(eq(scratchpadNotes.id, page.id))
+          .returning();
+        return { note: updated!, created: false };
+      }
+      if (pages.length >= MAX_SCRATCHPAD_NOTES) {
+        throw badRequest(`a scratchpad holds at most ${MAX_SCRATCHPAD_NOTES} pages; capture to an existing page title`);
+      }
+      const { position } = between(pages.at(-1)?.position ?? null, null);
+      const [inserted] = await tx
+        .insert(scratchpadNotes)
+        .values({ userId: req.auth.sub, clientId: req.auth.cid, title: body.pageTitle, content: line, position })
+        .returning();
+      return { note: inserted!, created: true };
+    });
+
+    const wired = wire(note);
+    await emitToUserDurable(
+      req.auth.sub,
+      created ? SERVER_EVENTS.SCRATCHPAD_NOTE_CREATED : SERVER_EVENTS.SCRATCHPAD_NOTE_UPDATED,
+      { note: wired },
+    );
+    return reply.status(created ? 201 : 200).send({ note: wired, created, item: line });
   });
 
   /**
@@ -242,6 +329,9 @@ export async function scratchpadRoutes(app: FastifyInstance) {
 
     const { updated, removedAttachments } = await db.transaction(async (tx) => {
       const current = await loadOwnedForUpdate(id, req, tx);
+      if (body.baseUpdatedAt && !sameInstant(body.baseUpdatedAt, current.updatedAt)) {
+        throw new AppError(409, "SCRATCHPAD_STALE", "scratchpad page has changed since it was read", { note: wire(current) });
+      }
       const attachments = content === undefined
         ? []
         : await tx
@@ -344,7 +434,7 @@ export async function scratchpadRoutes(app: FastifyInstance) {
     return { id, position };
   });
 
-  app.delete("/scratchpad/notes/:id", async (req, reply) => {
+  if (allowDeletes) app.delete("/scratchpad/notes/:id", async (req, reply) => {
     assertWriteCapableCredential(req.auth);
     const { id } = req.params as { id: string };
     const { attachments, clientId } = await db.transaction(async (tx) => {
@@ -386,7 +476,7 @@ export async function scratchpadRoutes(app: FastifyInstance) {
    * A scratchpad page has no workspace and its owner is the only possible uploader, so quota,
    * accounting, and physical storage are all the requester's own org — `req.auth.cid` throughout.
    */
-  app.post("/scratchpad/notes/:id/attachments", async (req, reply) => {
+  if (exposeAttachments) app.post("/scratchpad/notes/:id/attachments", async (req, reply) => {
     assertWriteCapableCredential(req.auth);
     const { id } = req.params as { id: string };
     await loadOwned(id, req);
@@ -444,7 +534,7 @@ export async function scratchpadRoutes(app: FastifyInstance) {
    * If the file was already embedded, remove the reference atomically with its row so no saved page
    * can retain an invisible, broken quota consumer.
    */
-  app.delete("/scratchpad/notes/:id/attachments/:attachmentId", async (req, reply) => {
+  if (exposeAttachments) app.delete("/scratchpad/notes/:id/attachments/:attachmentId", async (req, reply) => {
     assertWriteCapableCredential(req.auth);
     const { id, attachmentId } = req.params as { id: string; attachmentId: string };
 

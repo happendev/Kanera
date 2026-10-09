@@ -9,7 +9,7 @@ import { env } from "./env.js";
 import { McpDistributedRateLimiter, type DistributedRateLimitResult } from "./distributed-rate-limit.js";
 import { mcpAuthFailures, mcpMetricsResponse, observeMcpHttpRequest, trackActiveMcpRequest } from "./metrics.js";
 import { KaneraApiError, KaneraClient } from "./kanera-client.js";
-import { createKaneraMcpServer } from "./server.js";
+import { createKaneraMcpServer, credentialIsReadOnly } from "./server.js";
 import { MCP_RESOURCE_SCOPES, mcpAuthorizationChallenge } from "./oauth.js";
 
 export { mcpAuthorizationChallenge } from "./oauth.js";
@@ -122,6 +122,25 @@ async function credentialRevoked(token: string, publicApiUrl: string | undefined
   }
 }
 
+// A credential's scope is fixed for its lifetime (keys and OAuth grants are reissued, never
+// re-scoped), so the verdict can be remembered per bearer token. Revocation does not depend on this
+// cache: the public API rejects a revoked token on every call regardless of the catalog it saw.
+const SCOPE_CACHE_TTL_MS = 5 * 60_000;
+const SCOPE_CACHE_LIMIT = 10_000;
+const scopeCache = new Map<string, { readOnly: boolean; expiresAt: number }>();
+
+async function cachedReadOnly(bearerToken: string, downstreamToken: string, publicApiUrl: string | undefined, now: number) {
+  const key = createHash("sha256").update(bearerToken).digest("base64url");
+  const cached = scopeCache.get(key);
+  if (cached && cached.expiresAt > now) return cached.readOnly;
+  const readOnly = await credentialIsReadOnly(downstreamToken, publicApiUrl);
+  if (readOnly === undefined) return false;
+  scopeCache.delete(key);
+  scopeCache.set(key, { readOnly, expiresAt: now + SCOPE_CACHE_TTL_MS });
+  if (scopeCache.size > SCOPE_CACHE_LIMIT) scopeCache.delete(scopeCache.keys().next().value!);
+  return readOnly;
+}
+
 export function createMcpHttpHandler(options: {
   bodyMaxBytes?: number;
   publicApiUrl?: string;
@@ -148,6 +167,7 @@ export function createMcpHttpHandler(options: {
   const mcpHandler = createMcpHandler(({ authInfo, era }) => createKaneraMcpServer({
     apiKey: authInfo!.token,
     publicApiUrl: options.publicApiUrl,
+    readOnly: !authInfo!.scopes.includes(MCP_RESOURCE_SCOPES[1]),
     // The events draft is defined against 2026-07-28 only. Keeping it off the legacy era leaves
     // what existing 2025-era clients (Claude, Codex, Cursor, opencode, ...) see unchanged.
     events: era === "modern",
@@ -304,7 +324,9 @@ export function createMcpHttpHandler(options: {
         res.end(JSON.stringify({ error: "invalid or revoked Kanera credential" }));
         return;
       }
-      await serveMcp(Object.assign(req, { auth: { token: downstreamToken, clientId: "kanera-mcp", scopes: [] } }), res, body);
+      const readOnly = await cachedReadOnly(bearerToken, downstreamToken, options.publicApiUrl, now);
+      const scopes = readOnly ? [MCP_RESOURCE_SCOPES[0]] : [...MCP_RESOURCE_SCOPES];
+      await serveMcp(Object.assign(req, { auth: { token: downstreamToken, clientId: "kanera-mcp", scopes } }), res, body);
     } catch (error) {
       if (!res.headersSent) {
         const statusCode = error instanceof RequestBodyError ? error.statusCode : 500;

@@ -547,6 +547,13 @@
       "when": 1791538342951,
       "tag": "0077_brave_spot",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1791540278464,
+      "tag": "0078_known_stellaris",
+      "breakpoints": true
     }
   ]
 }

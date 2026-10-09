@@ -44,6 +44,8 @@ export const COMMAND_ALIASES: CommandAlias[] = [
   { path: ["card", "reopen"], tool: "cards.set_completion", summary: "Mark a card incomplete", positionals: ["cardId"], defaults: { completed: false }, group: "Cards" },
   { path: ["card", "archive"], tool: "cards.archive", summary: "Archive a card", positionals: ["cardId"], group: "Cards" },
   { path: ["card", "history"], tool: "cards.list_history", summary: "List a card's activity and comments", positionals: ["cardId"], group: "Cards" },
+  { path: ["card", "upload-link"], tool: "cards.create_upload_link", summary: "Get a one-time URL to attach a local file with curl -T", positionals: ["cardId", "fileName"], group: "Cards" },
+  { path: ["card", "attachment"], tool: "cards.get_attachment", summary: "Read an attachment's text or image contents", positionals: ["cardId", "attachmentId"], group: "Cards" },
 
   { path: ["separator", "create"], tool: "separators.create", summary: "Add a titled, optionally colored divider to a board list", positionals: ["boardId", "listId", "title"], group: "Cards" },
   { path: ["separator", "update"], tool: "separators.update", summary: "Change a separator's title or color", positionals: ["separatorId"], group: "Cards" },
@@ -66,6 +68,8 @@ export const COMMAND_ALIASES: CommandAlias[] = [
   { path: ["notes"], tool: "notes.list", summary: "List note metadata for a workspace or board", group: "Notes" },
   { path: ["note"], tool: "notes.get", summary: "Read a note", positionals: ["noteId"], group: "Notes" },
   { path: ["note", "create"], tool: "notes.create", summary: "Create a personal or team note", group: "Notes" },
+  { path: ["capture"], tool: "scratchpad.capture", summary: "Add a task to your private scratchpad Inbox, no board needed", positionals: ["text"], group: "Notes" },
+  { path: ["scratchpad"], tool: "scratchpad.list", summary: "List your private scratchpad pages", group: "Notes" },
 
   // The run loop is what makes an agent's work visible on the board ("agent working" chip, card
   // detail, activity), so it gets the same one-line ergonomics as card commands.

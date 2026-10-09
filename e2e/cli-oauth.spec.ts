@@ -333,7 +333,8 @@ test("a read-only API key profile reads through the CLI and MCP bridge but is re
     const write = await cliEnv.run(["card", "create", title, "--boardId", boardId, "--listId", listId, "--json"]);
     expect(write.code, `stdout:\n${write.stdout}\nstderr:\n${write.stderr}`).toBe(4);
 
-    // The in-process stdio server reports the same refusal as a tool error, not a transport failure.
+    // The stdio bridge never offers a read-only key's host a write tool, so the host cannot plan
+    // around a write it would only be refused; a forced call is an unknown tool, not a transport failure.
     bridge = cliEnv.startMcp();
     const initialized = await mcpRequest(bridge, 1, "initialize", {
       protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "kanera-e2e", version: "1" },
@@ -343,10 +344,12 @@ test("a read-only API key profile reads through the CLI and MCP bridge but is re
     const read = await mcpRequest(bridge, 2, "tools/call", { name: "boards.get", arguments: { boardId } });
     expect(read.error).toBeUndefined();
     expect(read.result?.isError).not.toBe(true);
-    const refused = await mcpRequest(bridge, 3, "tools/call", { name: "cards.create", arguments: { boardId, listId, title } });
-    expect(refused.error).toBeUndefined();
-    expect(refused.result?.isError).toBe(true);
-    expect(refused.result?.content?.[0]?.text).toContain('"status": 403');
+    const listed = await mcpRequest(bridge, 3, "tools/list", {});
+    const names = (listed.result as { tools: { name: string }[] }).tools.map((tool) => tool.name);
+    expect(names).toContain("boards.get");
+    expect(names).not.toContain("cards.create");
+    const refused = await mcpRequest(bridge, 4, "tools/call", { name: "cards.create", arguments: { boardId, listId, title } });
+    expect(refused.error?.message).toContain("Tool cards.create not found");
 
     await page.goto(boardPath);
     await expectBoardLoaded(page, "Platform Delivery");

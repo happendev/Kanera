@@ -210,6 +210,11 @@ const allToolCases: ToolCase[] = [
   { name: "notes.update", args: { noteId: N, changes: { title: "Plan 2", content: "Text", baseUpdatedAt: "2026-06-30T00:00:00.000Z" } }, method: "PATCH", path: `/api/v1/notes/${N}`, body: { title: "Plan 2", content: "Text", baseUpdatedAt: "2026-06-30T00:00:00.000Z" } },
   { name: "notes.duplicate", args: { noteId: N, parentNoteId: null, title: "Plan copy" }, method: "POST", path: `/api/v1/notes/${N}/duplicate`, body: { parentNoteId: null, title: "Plan copy" } },
   { name: "notes.move", args: { noteId: N, parentNoteId: null, afterNoteId: null }, method: "PATCH", path: `/api/v1/notes/${N}/move`, body: { parentNoteId: null, afterNoteId: null } },
+  { name: "cards.create_upload_link", args: { cardId: C, fileName: "run.log" }, method: "POST", path: `/api/v1/cards/${C}/attachments/upload-links`, body: { fileName: "run.log" } },
+  { name: "scratchpad.capture", args: { text: "Call the venue" }, method: "POST", path: "/api/v1/scratchpad/capture", body: { text: "Call the venue" } },
+  { name: "scratchpad.list", args: {}, method: "GET", path: "/api/v1/scratchpad/notes" },
+  { name: "scratchpad.get", args: { noteId: N }, method: "GET", path: "/api/v1/scratchpad/notes" },
+  { name: "scratchpad.update", args: { noteId: N, content: "- [x] One", baseUpdatedAt: "2026-06-30T00:00:00.000Z" }, method: "PATCH", path: `/api/v1/scratchpad/notes/${N}`, body: { content: "- [x] One", baseUpdatedAt: "2026-06-30T00:00:00.000Z" } },
   { name: "cards.set_completion", args: { cardId: C, completed: true }, method: "PATCH", path: `/api/v1/cards/${C}/completion`, body: { completed: true } },
   { name: "workspaces.list_members", args: { workspaceId: W }, method: "GET", path: `/api/v1/workspaces/${W}/members?limit=26&offset=0` },
   { name: "checklists.create", args: { cardId: C, title: "Sub-steps", parentItemId: IT }, method: "POST", path: `/api/v1/cards/${C}/checklists`, body: { title: "Sub-steps", parentItemId: IT } },
@@ -325,6 +330,15 @@ function checklistStubResponse(pathname: string, method: string): Response | nul
   return null;
 }
 const multiRequestToolCases: MultiRequestToolCase[] = [
+  {
+    // Metadata comes from the card's attachment list; bytes from the authenticated content route.
+    name: "cards.get_attachment",
+    args: { cardId: C, attachmentId: O },
+    requests: [
+      { method: "GET", path: `/api/v1/cards/${C}/attachments` },
+      { method: "GET", path: `/api/v1/cards/${C}/attachments/${O}/content` },
+    ],
+  },
   {
     // Text targeting costs one checklist read; matching ignores case and surrounding whitespace.
     name: "checklists.update_items",
@@ -452,7 +466,7 @@ const multipartToolCases: MultipartToolCase[] = [{
 void test("every MCP tool maps to the expected public API request", async () => {
   const server = internals();
   const expectedNames = [...new Set([...toolCases, ...noRequestToolCases, ...multiRequestToolCases, ...multipartToolCases].map((item) => item.name))].sort();
-  assert.equal(expectedNames.length, 90);
+  assert.equal(expectedNames.length, 96);
   assert.deepEqual(Object.keys(server._registeredTools).sort(), expectedNames);
 
   const originalFetch = globalThis.fetch;
@@ -505,6 +519,9 @@ void test("every MCP tool maps to the expected public API request", async () => 
             content: "Existing",
             updatedAt: "2026-06-30T00:00:00.000Z",
           }), { status: 200 });
+        }
+        if (url.pathname === "/api/v1/scratchpad/notes" && (init?.method ?? "GET") === "GET") {
+          return new Response(JSON.stringify([{ id: N, title: "Inbox", content: "- [ ] One\n- [x] Two", position: "1000", updatedAt: "2026-06-30T00:00:00.000Z" }]), { status: 200 });
         }
         if (url.pathname === "/api/v1/search/query") {
           return new Response(JSON.stringify({ query: "road map", results: [] }), { status: 200 });
@@ -575,6 +592,12 @@ void test("every MCP tool maps to the expected public API request", async () => 
         }
         if (url.pathname === "/api/v1/work/cards/query") {
           return new Response(JSON.stringify({ cards: [], checklistItems: [], nextCursor: null }), { status: 200 });
+        }
+        if (url.pathname === `/api/v1/cards/${C}/attachments`) {
+          return new Response(JSON.stringify([{ id: O, cardId: C, fileName: "run.log", mimeType: "text/plain", byteSize: 11, thumbnailUrl: null, url: "https://kanera.test/api/media/x", createdAt: "2026-06-30T00:00:00.000Z" }]), { status: 200 });
+        }
+        if (url.pathname === `/api/v1/cards/${C}/attachments/${O}/content`) {
+          return new Response("hello world", { status: 206, headers: { "content-type": "text/plain", "content-range": "bytes 0-10/11" } });
         }
         const checklistStub = checklistStubResponse(url.pathname, init?.method ?? "GET");
         if (checklistStub) return checklistStub;
@@ -756,8 +779,11 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     const withoutAuthMetadata = tools.map(({ _meta, ...tool }) => tool);
     const schemaCatalogLength = JSON.stringify(withoutAuthMetadata).length;
     // Raised from 204_000 for work.my_day (one aggregate tool replacing a five-call session start).
-    assert.ok(schemaCatalogLength <= 205_500, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
-    assert.ok(serializedToolCatalogLength <= 213_500, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
+    // Raised by 6k for agent files and capture: cards.get_attachment and cards.create_upload_link
+    // (reading and attaching real files instead of base64), the four scratchpad inbox tools, date
+    // fields that accept phrases such as "tomorrow 1pm", and result order stated on list tools.
+    assert.ok(schemaCatalogLength <= 211_500, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
+    assert.ok(serializedToolCatalogLength <= 219_500, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
     for (const name of [
       "kanera_bulk_add_comments",
       "kanera_bulk_delete_comments",
@@ -1002,6 +1028,125 @@ void test("checklist targeting rejects ambiguous text and API validation errors 
     assert.equal(invalid.isError, true);
     const invalidError = JSON.parse((invalid.content[0] as { text: string }).text) as { error: { issues: Array<{ path: string; message: string }> } };
     assert.deepEqual(invalidError.error.issues, [{ path: "items[2].subChecklists[0].items[1].text", message: "Too small" }]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+void test("tools/list offers a read-only credential only read tools and keeps that catalog private", async () => {
+  const full = internals()._registeredTools;
+  const server = createKaneraMcpServer({ apiKey: "kanera_live_test", publicApiUrl: "https://api.example.test", readOnly: true });
+  const client = new Client({ name: "kanera-read-only-contract-test", version: "1" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  try {
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    const { tools } = await client.listTools();
+    const listed = new Set(tools.map((tool) => tool.name));
+    const expected = Object.entries(full).filter(([, tool]) => tool.annotations?.readOnlyHint === true).map(([name]) => name);
+    assert.deepEqual([...listed].sort(), expected.sort());
+    for (const write of ["cards.update", "cards.create", "comments.add", "priorities.add"]) assert.ok(!listed.has(write), write);
+    assert.match(client.getInstructions() ?? "", /read-only, so only read tools are listed/u);
+    await assert.rejects(client.callTool({ name: "cards.update", arguments: { cardId: C, changes: { title: "x" } } }), /Tool cards.update not found/u);
+  } finally {
+    await client.close();
+    await server.close();
+  }
+});
+
+void test("date phrases resolve in the user's zone before reaching the public API", async () => {
+  const tools = internals()._registeredTools;
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ method: string; path: string; body?: Record<string, unknown> }> = [];
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : input.toString());
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : undefined;
+    requests.push({ method: init?.method ?? "GET", path: url.pathname, body });
+    if (url.pathname === "/api/v1/session") {
+      // 2026-10-09 is a Friday in Auckland.
+      return new Response(JSON.stringify({ userId: U, timeZone: "Pacific/Auckland", today: "2026-10-09" }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ id: C, cards: [], nextCursor: null }), { status: 200 });
+  };
+  try {
+    let result = await tools["cards.update"]!.handler({ cardId: C, changes: { dueDateLocalDate: "tomorrow 1pm" } });
+    assert.equal(result.isError, undefined);
+    assert.deepEqual(requests.at(-1), { method: "PATCH", path: `/api/v1/cards/${C}`, body: { dueDateLocalDate: "2026-10-10", dueDateSlot: "afternoon" } });
+
+    // An explicit slot wins over the phrase's time; ISO dates never trigger a session read.
+    requests.length = 0;
+    await tools["cards.update"]!.handler({ cardId: C, changes: { dueDateLocalDate: "2026-11-02", dueDateSlot: "morning" } });
+    assert.deepEqual(requests.map((request) => request.path), [`/api/v1/cards/${C}`]);
+
+    // Instants resolve to the start of the local day, converted to UTC (Auckland is UTC+13 in October).
+    requests.length = 0;
+    await tools["work.query_cards"]!.handler({ lens: "my", filters: { dueTo: "next friday", completedFrom: "yesterday" }, sort: "dueAsc", limit: 10 });
+    const query = requests.at(-1)!.body as { filters: Record<string, unknown> };
+    assert.equal(query.filters.dueTo, "2026-10-16");
+    assert.equal(query.filters.completedFrom, "2026-10-07T11:00:00.000Z");
+
+    result = await tools["cards.update"]!.handler({ cardId: C, changes: { dueDateLocalDate: "someday" } });
+    assert.equal(result.isError, true);
+    assert.match(String(result.content[0]?.type === "text" && result.content[0].text), /changes\.dueDateLocalDate: Could not read the date \\"someday\\"/u);
+
+    // Without a timeZone argument, my_day uses the profile zone instead of UTC.
+    requests.length = 0;
+    const myDay = await tools["work.my_day"]!.handler({ limit: 5, upNextLimit: 0 });
+    const structured = myDay.structuredContent as { timeZone: string; today: string; dueThisWeekThrough: string };
+    assert.deepEqual([structured.timeZone, structured.today, structured.dueThisWeekThrough], ["Pacific/Auckland", "2026-10-09", "2026-10-15"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+void test("cards.get_attachment returns images as image content and pages text on UTF-8 boundaries", async () => {
+  const tools = internals()._registeredTools;
+  const originalFetch = globalThis.fetch;
+  const png = Buffer.from("89504e470d0a1a0a", "hex");
+  // 99,999 ASCII bytes then a 3-byte character straddling the 100,000-byte page boundary.
+  const text = `${"a".repeat(99_999)}✓tail`;
+  const attachments = [
+    { id: O, cardId: C, fileName: "shot.png", mimeType: "image/png", byteSize: png.byteLength, thumbnailUrl: "t", url: "u", createdAt: "2026-06-30T00:00:00.000Z" },
+    { id: IT, cardId: C, fileName: "big.png", mimeType: "image/png", byteSize: 50_000_000, thumbnailUrl: "t", url: "u", createdAt: "2026-06-30T00:00:00.000Z" },
+    { id: CK, cardId: C, fileName: "run.log", mimeType: "text/plain", byteSize: Buffer.byteLength(text), thumbnailUrl: null, url: "u", createdAt: "2026-06-30T00:00:00.000Z" },
+    { id: F, cardId: C, fileName: "spec.pdf", mimeType: "application/pdf", byteSize: 10, thumbnailUrl: null, url: "u", createdAt: "2026-06-30T00:00:00.000Z" },
+  ];
+  const downloads: string[] = [];
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : input.toString());
+    if (url.pathname === `/api/v1/cards/${C}/attachments`) return new Response(JSON.stringify(attachments), { status: 200 });
+    const headers = new Headers(init?.headers);
+    downloads.push(`${url.pathname.split("/").at(-1)}${url.search} ${headers.get("range") ?? ""}`.trim());
+    assert.equal(headers.get("authorization"), "Bearer kanera_live_test", "content reads are authenticated");
+    if (url.pathname.endsWith(`${O}/content`)) return new Response(png, { status: 200, headers: { "content-type": "image/png" } });
+    if (url.pathname.endsWith(`${IT}/content`)) {
+      if (url.searchParams.get("variant") === "cover") return new Response(JSON.stringify({ code: "NOT_FOUND", message: "no cover" }), { status: 404 });
+      return new Response(png, { status: 200, headers: { "content-type": "image/jpeg" } });
+    }
+    const [start, end] = (/bytes=(\d+)-(\d+)/u.exec(headers.get("range") ?? "") ?? []).slice(1).map(Number);
+    const bytes = Buffer.from(text).subarray(start, end! + 1);
+    return new Response(bytes, { status: 206, headers: { "content-range": `bytes ${start}-${start! + bytes.byteLength - 1}/${Buffer.byteLength(text)}` } });
+  };
+  try {
+    const image = await tools["cards.get_attachment"]!.handler({ cardId: C, attachmentId: O, offset: 0 });
+    assert.deepEqual(image.content[1], { type: "image", data: png.toString("base64"), mimeType: "image/png" });
+    assert.equal((image.structuredContent as { variant: string }).variant, "original");
+
+    // Too large inline: the cover derivative is tried first and the thumbnail when it is missing.
+    const large = await tools["cards.get_attachment"]!.handler({ cardId: C, attachmentId: IT, offset: 0 });
+    assert.equal((large.content[1] as { mimeType: string }).mimeType, "image/jpeg");
+    assert.equal((large.structuredContent as { variant: string }).variant, "thumbnail");
+    assert.deepEqual(downloads.slice(1, 3), ["content?variant=cover", "content?variant=thumbnail"]);
+
+    const page1 = (await tools["cards.get_attachment"]!.handler({ cardId: C, attachmentId: CK, offset: 0 })).structuredContent as { text: string; nextOffset: number | null };
+    assert.equal(page1.text, "a".repeat(99_999), "a split character is deferred to the next page");
+    assert.equal(page1.nextOffset, 99_999);
+    const page2 = (await tools["cards.get_attachment"]!.handler({ cardId: C, attachmentId: CK, offset: page1.nextOffset })).structuredContent as { text: string; nextOffset: number | null };
+    assert.equal(page2.text, "✓tail");
+    assert.equal(page2.nextOffset, null);
+
+    const pdf = (await tools["cards.get_attachment"]!.handler({ cardId: C, attachmentId: F, offset: 0 })).structuredContent as { kind: string; readable: boolean };
+    assert.deepEqual([pdf.kind, pdf.readable], ["binary", false]);
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -180,6 +180,39 @@ async function authenticateApiKey(req: FastifyRequest, raw: string): Promise<Aut
   };
 }
 
+/**
+ * Install a bearer credential's claims on the request: authorization (`req.auth`) plus the request
+ * context that activity attribution, rate limiting, and realtime actor fields read. Shared with
+ * routes that authenticate by a stored capability (upload links) so their writes are attributed
+ * exactly as the credential that minted them would be.
+ */
+export function applyBearerAuthContext(req: FastifyRequest, claims: AuthClaims): void {
+  req.auth = claims;
+  requestContext.set("clientId", claims.cid);
+  requestContext.set("userId", claims.sub);
+  if (claims.apiKeyId) requestContext.set("credentialApiKeyId", claims.apiKeyId);
+  if (claims.oauthServiceClientId) requestContext.set("credentialServiceClientId", claims.oauthServiceClientId);
+  if (claims.apiKeyKind === "personal" && claims.agentGrantId) {
+    // An interactive agent grant acts as its owner for authorization but must NOT be recorded
+    // as the owner's own action: Work Done, the activity feed, and self-notification
+    // suppression all key off this. actorId stays the owner; the grant identifies the agent.
+    requestContext.set("authKind", "agent");
+    requestContext.set("agentGrantId", claims.agentGrantId);
+    requestContext.set("agentName", claims.agentName);
+  } else if (claims.apiKeyKind === "personal") {
+    // A personal API key (scripts, CI) reads as its owner everywhere downstream: record authKind
+    // "user" so activity attribution (currentAttribution) shows the person, not a key name, and
+    // leave the apiKey*/workspace context unset. The per-key rate-limit bucket still uses
+    // claims.apiKeyId.
+    requestContext.set("authKind", "user");
+  } else {
+    requestContext.set("authKind", claims.authKind);
+    requestContext.set("apiKeyId", claims.apiKeyId);
+    requestContext.set("apiKeyName", claims.apiKeyName);
+    requestContext.set("workspaceId", claims.apiKeyWorkspaceId);
+  }
+}
+
 export default fp(async (app) => {
   app.register(jwt, {
     secret: env.JWT_SECRET,
@@ -196,30 +229,7 @@ export default fp(async (app) => {
         ? req.url.startsWith("/api/v1/") ? authenticateMcpDelegationToken(raw) : null
         : await authenticateApiKey(req, raw);
       if (!claims) throw unauthorized();
-      req.auth = claims;
-      requestContext.set("clientId", claims.cid);
-      requestContext.set("userId", claims.sub);
-      if (claims.apiKeyId) requestContext.set("credentialApiKeyId", claims.apiKeyId);
-      if (claims.oauthServiceClientId) requestContext.set("credentialServiceClientId", claims.oauthServiceClientId);
-      if (claims.apiKeyKind === "personal" && claims.agentGrantId) {
-        // An interactive agent grant acts as its owner for authorization but must NOT be recorded
-        // as the owner's own action: Work Done, the activity feed, and self-notification
-        // suppression all key off this. actorId stays the owner; the grant identifies the agent.
-        requestContext.set("authKind", "agent");
-        requestContext.set("agentGrantId", claims.agentGrantId);
-        requestContext.set("agentName", claims.agentName);
-      } else if (claims.apiKeyKind === "personal") {
-        // A personal API key (scripts, CI) reads as its owner everywhere downstream: record authKind
-        // "user" so activity attribution (currentAttribution) shows the person, not a key name, and
-        // leave the apiKey*/workspace context unset. The per-key rate-limit bucket still uses
-        // claims.apiKeyId.
-        requestContext.set("authKind", "user");
-      } else {
-        requestContext.set("authKind", claims.authKind);
-        requestContext.set("apiKeyId", claims.apiKeyId);
-        requestContext.set("apiKeyName", claims.apiKeyName);
-        requestContext.set("workspaceId", claims.apiKeyWorkspaceId);
-      }
+      applyBearerAuthContext(req, claims);
       return;
     }
 

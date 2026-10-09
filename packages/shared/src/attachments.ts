@@ -47,3 +47,20 @@ export function getAllowedAttachmentExtension(mimeType: string, fileName: string
   const fileExt = match[1]!.toLowerCase();
   return (ALLOWED_ATTACHMENT_EXTENSIONS as readonly string[]).includes(fileExt) ? fileExt : null;
 }
+
+// Plain-text files whose extension is not itself on the allowlist but whose content is. Agents
+// attach logs constantly; they are stored as text/plain (and keyed .txt) like any other text file.
+const TEXT_EXTENSION_ALIASES = new Set(["log", "out", "err", "trace", "ndjson", "jsonl", "yaml", "yml", "xml", "diff", "patch"]);
+
+/**
+ * The media type for a file name's extension, for callers that only know the name (an agent
+ * attaching a local file). Null when the extension is not an attachable type.
+ */
+export function inferAttachmentMimeType(fileName: string): string | null {
+  const match = /\.([A-Za-z0-9]+)$/.exec(fileName);
+  if (!match) return null;
+  const ext = match[1]!.toLowerCase();
+  if (TEXT_EXTENSION_ALIASES.has(ext)) return "text/plain";
+  const normalized = ext === "jpeg" ? "jpg" : ext === "markdown" ? "md" : ext;
+  return Object.entries(ALLOWED_ATTACHMENT_MIME).find(([, value]) => value === normalized)?.[0] ?? null;
+}

@@ -18,6 +18,7 @@ export * from "./board-watcher.js";
 export * from "./board.js";
 export * from "./card-assignee.js";
 export * from "./card-attachment.js";
+export * from "./card-attachment-upload-link.js";
 export * from "./card-checklist.js";
 export * from "./checklist-template.js";
 export * from "./card-custom-field-value.js";

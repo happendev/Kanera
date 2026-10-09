@@ -12,7 +12,7 @@ import Fastify from "fastify";
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import type { OpenAPIV3 } from "openapi-types";
-import { clients } from "@kanera/shared/schema";
+import { clients, users } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import authPlugin from "./auth/plugin.js";
 import { db } from "./db.js";
@@ -24,6 +24,7 @@ import mailerPlugin from "./lib/mailer-plugin.js";
 import { registerMetrics } from "./lib/metrics.js";
 import { registerPublicApiIdempotency } from "./lib/public-api-idempotency.js";
 import { withSignedMedia } from "./lib/media-keys.js";
+import { localParts } from "./lib/due-date.js";
 import type { ApiRateTier } from "./lib/api-rate-limit.js";
 import { AppError } from "./lib/errors.js";
 import { applyRateLimitHeaders, FixedWindowRateLimiter, tightestRateLimit, type RateLimitPolicy, type RateLimitResult } from "./lib/rate-limit.js";
@@ -33,11 +34,13 @@ import type { SweepScheduler } from "./lib/sweep-scheduler.js";
 import { startWebhookDeliveryScheduler } from "./lib/webhooks.js";
 import { activityRoutes } from "./modules/activity/routes.js";
 import { agentWorkQueryRoutes, agentWorkRoutes } from "./modules/work/routes.js";
+import { scratchpadRoutes } from "./modules/scratchpad/routes.js";
 import { automationRoutes } from "./modules/automations/routes.js";
 import { boardRoutes } from "./modules/boards/routes.js";
 import { cardLabelRoutes } from "./modules/card-labels/routes.js";
 import { cardPriorityRoutes } from "./modules/card-priorities/routes.js";
 import { cardAttachmentRoutes } from "./modules/cards/attachments.routes.js";
+import { attachmentUploadRoutes, uploadLinkRoutes } from "./modules/cards/upload-links.routes.js";
 import { cardRoutes } from "./modules/cards/routes.js";
 import { commentRoutes } from "./modules/comments/routes.js";
 import { customFieldRoutes } from "./modules/custom-fields/routes.js";
@@ -298,6 +301,9 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
   app.get("/openapi.json", async () => getPublicOpenApiDocument());
   app.get("/webhook-event-types", async () => ({ eventTypes: publicWebhookEventTypes }));
   await app.register(mediaRoutes);
+  // Single-use upload links: the link is the credential, so it sits beside media rather than inside
+  // the bearer-authenticated /api/v1 scope, and is limited per uploader IP like other non-v1 routes.
+  await app.register(attachmentUploadRoutes);
 
   const prefix = "/api/v1";
   await app.register(async (api) => {
@@ -427,7 +433,13 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
     registerPublicApiIdempotency(api);
 
     api.get("/session", async (req) => {
-      const [organisation] = await db.select({ name: clients.name, logoUrl: clients.logoUrl }).from(clients).where(eq(clients.id, req.auth.cid)).limit(1);
+      const [[organisation], [user]] = await Promise.all([
+        db.select({ name: clients.name, logoUrl: clients.logoUrl }).from(clients).where(eq(clients.id, req.auth.cid)).limit(1),
+        db.select({ timezone: users.timezone }).from(users).where(eq(users.id, req.auth.sub)).limit(1),
+      ]);
+      // Agents resolve "today" and "tomorrow 1pm" against this zone, the same one the API stamps on
+      // the due dates they set. For a workspace key the subject is the key's creator.
+      const timeZone = user?.timezone || "UTC";
       return {
         userId: req.auth.sub,
         organisationId: req.auth.cid,
@@ -441,6 +453,8 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
         scope: req.auth.apiKeyScope ?? null,
         workspaceId: req.auth.apiKeyWorkspaceId ?? null,
         webUrl: env.WEB_ORIGIN,
+        timeZone,
+        today: localParts(new Date(), timeZone).date,
       };
     });
 
@@ -451,6 +465,9 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
     await api.register(searchRoutes);
     await api.register(listRoutes);
     await api.register((instance) => noteRoutes(instance, { allowDeletes: false }));
+    // The scratchpad doubles as the agent's personal inbox ("remind me to…" without a board). Pages
+    // are owner-private, so the routes themselves refuse workspace-scoped keys.
+    await api.register((instance) => scratchpadRoutes(instance, { allowDeletes: false, exposeAttachments: false }));
     // Public API card mutations intentionally reuse the app card routes, so
     // shared side effects such as activity, realtime outbox, and automations stay aligned.
     await api.register(cardRoutes);
@@ -460,6 +477,7 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
     await api.register(cardPriorityRoutes);
     await api.register(separatorRoutes);
     await api.register((instance) => cardAttachmentRoutes(instance, { exposeCoverMetadata: false }));
+    await api.register(uploadLinkRoutes);
     await api.register(customFieldRoutes);
     await api.register(externalLinkRoutes);
     // Agent runs are the "someone is working on this now" signal for AI agents; the same handlers

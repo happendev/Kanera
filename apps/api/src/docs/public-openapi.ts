@@ -365,6 +365,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     { name: "Separators", description: "Manage board-owned, titled dividers inside a workflow list's mixed card lane, including exact card-or-separator positioning." },
     { name: "Automations", description: "Manage workspace-scoped rules and inspect their retained execution outcomes. Automation administration requires workspace-admin authority." },
     { name: "Notes", description: "Read and manage workspace notes and board notes, including lock/unlock behavior for collaborative editing." },
+    { name: "Scratchpad", description: "The connected user's private scratchpad pages, which also serve as a personal inbox for quick capture without choosing a board. Requires a personal API key or OAuth connection; workspace-scoped keys receive 403." },
     { name: "Cards", description: "Create and update cards, move them through workspace lists, manage checklist data, labels, assignees, completion, and custom field values." },
     { name: "Attachments", description: "Upload and read card or note media. Use URLs returned by the API as-is; signed media links should not be constructed manually." },
     { name: "Custom Fields", description: "Manage workspace-scoped custom fields that are available on cards across every board in the workspace." },
@@ -441,7 +442,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       Health: { type: "object", required: ["ok", "service"], properties: { ok: { type: "boolean" }, service: { type: "string" } } },
       Session: {
         type: "object",
-        required: ["userId", "organisationId", "credentialKind", "organisationScope", "workspaceId", "webUrl"],
+        required: ["userId", "organisationId", "credentialKind", "organisationScope", "workspaceId", "webUrl", "timeZone", "today"],
         properties: {
           userId: uuid,
           organisationId: uuid,
@@ -452,6 +453,8 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           scope: nullable({ type: "string", enum: ["read", "write", "admin"] }),
           workspaceId: nullable(uuid),
           webUrl: { type: "string", format: "uri" },
+          timeZone: { type: "string", description: "IANA time zone of the credential's user (a workspace key's creator); due dates are set in this zone." },
+          today: { type: "string", format: "date", description: "Today's date in timeZone." },
         },
       },
       User: {
@@ -871,6 +874,29 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           updatedAt: dateTime,
         },
         additionalProperties: true,
+      },
+      ScratchpadNote: {
+        type: "object",
+        required: ["id", "userId", "clientId", "title", "content", "position", "createdAt", "updatedAt"],
+        properties: {
+          id: uuid,
+          userId: uuid,
+          clientId: uuid,
+          title: { type: "string" },
+          content: { type: "string", description: "Markdown content. Captured items are `- [ ]` task lines." },
+          position,
+          createdAt: dateTime,
+          updatedAt: dateTime,
+        },
+      },
+      ScratchpadCapture: {
+        type: "object",
+        required: ["note", "created", "item"],
+        properties: {
+          note: ref("ScratchpadNote"),
+          created: { type: "boolean", description: "Whether the target page was created by this capture." },
+          item: { type: "string", description: "The Markdown task line that was appended." },
+        },
       },
       Note: {
         type: "object",
@@ -1466,6 +1492,9 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         },
         additionalProperties: false,
       },
+      CreateScratchpadNoteBody: zodSchema(dto.createScratchpadNoteBody),
+      UpdateScratchpadNoteBody: zodSchema(dto.updateScratchpadNoteBody),
+      CaptureScratchpadItemBody: zodSchema(dto.captureScratchpadItemBody),
       CreateNoteBody: zodSchema(dto.createNoteBody),
       UpdateNoteBody: zodSchema(dto.updateNoteBody),
       MoveNoteBody: zodSchema(dto.moveNoteBody),
@@ -1945,6 +1974,12 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       }),
       post: operation({ tags: ["Notes"], summary: "Create a board note", operationId: "createBoardNote", parameters: [idParam("boardId")], requestBody: jsonBody(ref("CreateNoteBody")), responses: authedResponses({ "201": created(ref("Note")) }) }),
     },
+    "/scratchpad/notes": {
+      get: operation({ tags: ["Scratchpad"], summary: "List scratchpad pages", description: "Returns every page with full content, in tab order (position ascending). A scratchpad holds at most 50 pages.", operationId: "listScratchpadNotes", responses: authedResponses({ "200": ok(arrayOf(ref("ScratchpadNote"))) }) }),
+      post: operation({ tags: ["Scratchpad"], summary: "Create a scratchpad page", description: "Appends a page at the end of the tab list.", operationId: "createScratchpadNote", requestBody: jsonBody(ref("CreateScratchpadNoteBody")), responses: authedResponses({ "201": created(ref("ScratchpadNote")) }) }),
+    },
+    "/scratchpad/notes/{id}": pathItem("patch", operation({ tags: ["Scratchpad"], summary: "Update a scratchpad page", description: "Replaces the title and/or Markdown content. Pass `baseUpdatedAt` from your last read to receive 409 `SCRATCHPAD_STALE` instead of overwriting edits made since; without it the write is last-write-wins.", operationId: "updateScratchpadNote", parameters: [idParam()], requestBody: jsonBody(ref("UpdateScratchpadNoteBody")), responses: authedResponses({ "200": ok(ref("ScratchpadNote")), "409": { $ref: "#/components/responses/Conflict" } }) })),
+    "/scratchpad/capture": pathItem("post", operation({ tags: ["Scratchpad"], summary: "Capture an item to the scratchpad inbox", description: "Atomically appends `text` as an open Markdown task (`- [ ] text`) to the first page titled `pageTitle` (default `Inbox`, case-insensitive), creating that page when it does not exist.", operationId: "captureScratchpadItem", requestBody: jsonBody(ref("CaptureScratchpadItemBody")), responses: authedResponses({ "200": ok(ref("ScratchpadCapture")), "201": created(ref("ScratchpadCapture")) }) })),
     "/notes/{id}": {
       get: operation({ tags: ["Notes"], summary: "Get a note", operationId: "getNote", parameters: [idParam()], responses: authedResponses({ "200": ok(ref("Note")) }) }),
       patch: operation({

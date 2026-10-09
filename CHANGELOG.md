@@ -10,8 +10,13 @@ All notable changes to Kanera are documented here.
 - **MCP `boards.create` with a template:** pass `templateId` instead of `workspaceId` to create a standalone board seeded from a workspace template, such as Agent Workflow.
 - **MCP `my_day.ready` event:** agents can subscribe to a weekday-morning ping, sent at your daily digest hour in your time zone while the digest email is on, and respond by fetching your day with `work.my_day`.
 - **Kanera MCP:** when you have not picked a board template, agents now suggest a few that fit and ask which you want, rather than choosing silently.
+- **Quick capture for agents:** ask an agent to "remind me to…" without naming a board and it adds a task to your private scratchpad's Inbox page (MCP `scratchpad.capture`, CLI `kanera capture`). The scratchpad is now available to personal API keys and AI agents through the public API, MCP and CLI; workspace keys cannot open it.
+- **Attach local files from an agent:** MCP `cards.create_upload_link` (CLI `kanera card upload-link`) returns a single-use upload URL, valid for 15 minutes, that an agent can `curl -T` a screenshot or log file to. The link is revoked with the key that created it.
+- **Agents can read attachments:** MCP `cards.get_attachment` returns images as images (a downscaled copy for large photos) and text, Markdown, CSV, JSON, logs and email as text. The public API adds `GET /api/v1/cards/{id}/attachments/{attachmentId}/content`.
+- **Natural dates for agents:** MCP date inputs accept phrases such as "tomorrow 1pm", "next friday" or "in 2 weeks", resolved in your own time zone, and a time picks the matching due slot. `session.get` and `GET /api/v1/session` now return your `timeZone` and `today`, and `work.my_day` and `work.portfolio_summary` default to your time zone instead of UTC.
 
 ### Changed
+- **Kanera MCP:** read-only keys and connections now see only read tools, rather than seeing write tools that are refused when called. List tools state the order their results come back in.
 - **Workspace team notes:** every workspace member can now create and edit team notes, not just workspace admins. Board team notes still need board editor access.
 - **Hosted Free plan:** AI agents (Claude, ChatGPT, Cursor, the CLI), MCP, and personal API keys are now included, with read and write access to Free-plan boards. Workspace API keys, unattended service agents, and webhooks remain Pro-only. Downgrading to Free now revokes only workspace API keys; personal keys keep working.
 - **Public API and MCP rate limits** are now per user, per second and per minute, at the plan limits of the organisation that owns the board being accessed: a Free organisation's boards allow 5 requests per second and 60 per minute by default, a Pro organisation's 20 and 400. A user in both gets each organisation's limits on its own boards. Bursts over the per-second limit wait in a queue of 10 and are served in the following second; requests beyond the queue, or over the per-minute limit, receive `429`.
@@ -19,6 +24,7 @@ All notable changes to Kanera are documented here.
 ### Fixed
 - **Kanera MCP:** tools declare OAuth scopes and return a reauthorization challenge when a tool encounters an expired or revoked credential. The plugin submission bundle includes the five positive and three negative review cases.
 - Concurrency, card transfer access, and realtime consistency issues.
+- Media byte-range requests past the end of a locally stored file now return the correct length and `Content-Range`.
 
 ## [1.8.0] - 2026-10-07
 

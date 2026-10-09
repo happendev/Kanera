@@ -233,7 +233,7 @@ async function serveMcp(ctx: CommandContext): Promise<ExitCode> {
     urlFlag: ctx.urlFlag,
     profileFlag: ctx.profileFlag,
   });
-  const { createKaneraMcpServer } = await import("@kanera/mcp/server");
+  const { createKaneraMcpServer, credentialIsReadOnly } = await import("@kanera/mcp/server");
   if (credential.kind === "oauth") {
     // OAuth tokens are only valid at the MCP endpoint, so the in-process server (which calls
     // /api/v1) cannot use them; relay the remote server instead.
@@ -243,10 +243,13 @@ async function serveMcp(ctx: CommandContext): Promise<ExitCode> {
     return EXIT.ok;
   }
   const { serveStdio } = await import("@modelcontextprotocol/server/stdio");
+  // A read-only key's host should never be offered write tools; resolved once per process.
+  const readOnly = await credentialIsReadOnly(credential.apiKey, credential.url) ?? false;
   // serveStdio serves both the 2026-07-28 discovery opening and the 2025 initialize handshake.
   const stdio = serveStdio(() => createKaneraMcpServer({
     apiKey: credential.apiKey,
     publicApiUrl: credential.url,
+    readOnly,
     // stdout is the MCP transport here, so tool telemetry must stay off it.
     logToolCalls: false,
   }));

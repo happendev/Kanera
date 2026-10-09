@@ -253,6 +253,82 @@
         "browser",
         "computer-use"
       ]
+    },
+    {
+      "id": "quick-capture-without-board",
+      "category": "direct",
+      "prompt": "Remind me to renew the venue insurance next week.",
+      "expectedTools": [
+        "scratchpad.capture"
+      ],
+      "expectedArguments": {
+        "scratchpad.capture": {
+          "text": "a task naming the venue insurance renewal and next week"
+        }
+      },
+      "forbiddenTools": [
+        "boards.list_accessible",
+        "cards.create",
+        "workspaces.list"
+      ]
+    },
+    {
+      "id": "relative-due-date",
+      "category": "direct",
+      "prompt": "Make DEV-938 due tomorrow at 1pm.",
+      "expectedTools": [
+        "cards.get",
+        "cards.update"
+      ],
+      "expectedArguments": {
+        "cards.update": {
+          "cardId": "DEV-938",
+          "changes": "dueDateLocalDate \"tomorrow 1pm\" (or the resolved date with dueDateSlot afternoon)"
+        }
+      },
+      "forbiddenTools": [
+        "search.content"
+      ]
+    },
+    {
+      "id": "attach-local-screenshot",
+      "category": "direct",
+      "prompt": "Attach ./artifacts/login-error.png to DEV-938.",
+      "expectedTools": [
+        "cards.create_upload_link"
+      ],
+      "expectedArguments": {
+        "cards.create_upload_link": {
+          "cardId": "DEV-938",
+          "fileName": "login-error.png"
+        }
+      },
+      "forbiddenTools": [
+        "cards.add_attachment"
+      ],
+      "forbiddenCapabilities": [
+        "browser",
+        "computer-use"
+      ]
+    },
+    {
+      "id": "read-attached-log",
+      "category": "direct",
+      "prompt": "What does the build log attached to DEV-938 say failed?",
+      "expectedTools": [
+        "cards.get",
+        "cards.get_attachment"
+      ],
+      "expectedArguments": {
+        "cards.get_attachment": {
+          "cardId": "DEV-938",
+          "attachmentId": "the log attachment id from cards.get"
+        }
+      },
+      "forbiddenTools": [
+        "cards.update",
+        "comments.add"
+      ]
     }
   ]
 }

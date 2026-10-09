@@ -39,6 +39,10 @@ export interface Session {
   workspaceId: Uuid | null;
   /** Origin of the web app, for building links a human can open. */
   webUrl: string;
+  /** IANA zone of the credential's user (a workspace key's creator); due dates are set in it. */
+  timeZone: string;
+  /** Today's date in `timeZone`, for resolving "today" or "tomorrow" without a clock of your own. */
+  today: LocalDate;
 }
 
 export type WorkspaceKind = "standard" | "board";
