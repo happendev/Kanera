@@ -1,7 +1,6 @@
 import type { OnChanges, OnInit, SimpleChanges } from "@angular/core";
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, input, signal } from "@angular/core";
 import type { ServerToClientEvents } from "@kanera/shared/events";
-import type { WorkspaceRole } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
 import { SocketService } from "../../core/realtime/socket.service";
 import { EmptyStateComponent } from "../../shared/empty-state.component";
@@ -19,7 +18,7 @@ import { NotesViewComponent } from "./notes-view.component";
       @if (notesEnabled() === false) {
         <k-empty-state icon="notebook-off" title="Notes are turned off" text="A workspace admin has turned off Notes for this workspace." />
       } @else {
-        <k-notes-view [workspaceId]="workspaceId()" [boardId]="null" [contextName]="workspaceName()" [noteId]="noteId()" [canEditTeamRole]="workspaceRole() === 'admin'" />
+        <k-notes-view [workspaceId]="workspaceId()" [boardId]="null" [contextName]="workspaceName()" [noteId]="noteId()" [canEditTeamRole]="true" />
       }
     </div>
   `,
@@ -31,7 +30,6 @@ export class WorkspaceNotesPage implements OnInit, OnChanges {
   private readonly destroyRef = inject(DestroyRef);
   readonly workspaceId = input.required<string>();
   readonly noteId = input<string | undefined>();
-  readonly workspaceRole = signal<WorkspaceRole | null>(null);
   readonly workspaceName = signal("");
   /**
    * Null until the workspace loads. The notes view renders optimistically meanwhile so the common
@@ -62,12 +60,10 @@ export class WorkspaceNotesPage implements OnInit, OnChanges {
   private async loadWorkspace() {
     const loadVersion = ++this.loadVersion;
     const workspaceId = this.workspaceId();
-    this.workspaceRole.set(null);
     this.workspaceName.set("");
     this.notesEnabled.set(null);
-    const detail = await this.api.get<{ workspace: { name: string; notesEnabled?: boolean }; role: WorkspaceRole }>(`/workspaces/${workspaceId}`).catch(() => null);
+    const detail = await this.api.get<{ workspace: { name: string; notesEnabled?: boolean } }>(`/workspaces/${workspaceId}`).catch(() => null);
     if (loadVersion !== this.loadVersion || this.workspaceId() !== workspaceId) return;
-    this.workspaceRole.set(detail?.role ?? null);
     this.workspaceName.set(detail?.workspace.name ?? "");
     this.notesEnabled.set(detail ? detail.workspace.notesEnabled !== false : null);
   }

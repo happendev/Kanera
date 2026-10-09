@@ -35,8 +35,6 @@ async function setupWorkspace() {
   assert.equal(workspaceCreated.statusCode, 201);
   const workspace = workspaceCreated.json();
 
-  // Editing a workspace team note requires workspace admin (shared workspace content), so the second
-  // user contending for the lock is another admin, not a plain member.
   const [otherAdmin] = await insertTestUsers(db, {
       clientId: owner.clientId,
       email: "admin-notes@example.com",
@@ -740,6 +738,36 @@ void test("users outside the workspace cannot delete note attachments", async ()
     headers: { authorization: `Bearer ${outsiderToken}` },
   });
   assert.equal(deleted.statusCode, 403);
+});
+
+void test("plain workspace members can create and edit workspace team notes", async () => {
+  const { app, owner, workspace, note } = await setupWorkspace();
+  const [member] = await insertTestUsers(db, {
+      clientId: owner.clientId,
+      email: "member-notes@example.com",
+      passwordHash: "x",
+      displayName: "Member",
+    })
+    .returning();
+  assert.ok(member);
+  await db.insert(workspaceMembers).values({ workspaceId: workspace.id, userId: member.id, role: "member" });
+  const memberToken = app.jwt.sign({ sub: member.id, cid: owner.clientId, role: "member" });
+
+  const created = await app.inject({
+    method: "POST",
+    url: `/workspaces/${workspace.id}/notes`,
+    headers: { authorization: `Bearer ${memberToken}` },
+    payload: { scope: "team", title: "Member team note" },
+  });
+  assert.equal(created.statusCode, 201, created.body);
+
+  const edited = await app.inject({
+    method: "PATCH",
+    url: `/notes/${note.id}`,
+    headers: { authorization: `Bearer ${memberToken}` },
+    payload: { content: "Edited by a member", baseUpdatedAt: note.updatedAt },
+  });
+  assert.equal(edited.statusCode, 200, edited.body);
 });
 
 void test("saving a locked team note clears the holder lock", async () => {

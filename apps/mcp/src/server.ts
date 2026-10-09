@@ -1980,7 +1980,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     const rows = await api.get<unknown[]>(`/api/v1/notes/${a.noteId}/attachments`);
     return { items: rows.slice(0, 100), truncated: rows.length > 100, total: rows.length };
   }, ctx);
-  registerKaneraTool(server, "notes.create", "Create a personal or team note at any supported hierarchy level. The required target explicitly selects a standard workspace or a board. Personal notes are private to the connected user. Team notes require workspace administration or board editor access; creation is not idempotent.", noteMutationSchema(), (a, api) =>
+  registerKaneraTool(server, "notes.create", "Create a personal or team note at any supported hierarchy level. The required target explicitly selects a standard workspace or a board. Personal notes are private to the connected user. Team notes require workspace membership or board editor access; creation is not idempotent.", noteMutationSchema(), (a, api) =>
     api.post(a.target.type === "workspace"
       ? `/api/v1/workspaces/${a.target.workspaceId}/notes`
       : `/api/v1/boards/${a.target.boardId}/notes`, {

@@ -127,8 +127,8 @@ export class NotesViewComponent implements OnInit, OnChanges, OnDestroy {
   readonly contextName = input("");
   readonly noteId = input<string | undefined>();
   readonly mentionMembers = input<WireBoardMemberUser[] | null>(null);
-  // Team-note mutations use different API gates depending on the host (board editor versus
-  // workspace admin), so the host supplies the effective role instead of this shared view guessing.
+  // Team-note mutations use different API gates depending on the host (board editor versus any
+  // workspace member), so the host supplies the effective role instead of this shared view guessing.
   readonly canEditTeamRole = input(false);
 
   readonly activeTab = signal<NoteScopeValue>("personal");
@@ -151,9 +151,7 @@ export class NotesViewComponent implements OnInit, OnChanges, OnDestroy {
   readonly editRestrictionMessage = computed(() => {
     if (!this.state.online()) return "You're offline - changes are paused.";
     if (this.activeTab() !== "team" || this.canEditTeamRole()) return null;
-    return this.boardId()
-      ? "Team notes are read-only for board observers."
-      : "Team notes are read-only for workspace members. Workspace admin access is required to edit.";
+    return "Team notes are read-only for board observers.";
   });
   readonly editorMentionMembers = computed(() => this.mentionMembers() ?? this.workspaceMentionMembers());
 

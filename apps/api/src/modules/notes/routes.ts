@@ -335,11 +335,11 @@ async function authoriseWrite(req: FastifyRequest, note: Note): Promise<{ client
   // credential: gate it here (see assertWriteCapableCredential).
   assertWriteCapableCredential(req.auth);
   // Board and workspace roles are different scales. Personal notes only need read-level access to
-  // manage one's own; team notes are shared, so board team notes need editor and workspace team
-  // notes need admin (a plain workspace member cannot edit shared workspace content).
+  // manage one's own; team notes are shared, so board team notes need editor. Workspace team notes
+  // are editable by every workspace member: they are the team's shared space, not admin config.
   const ctx = note.boardId
     ? await assertBoardAccess(req.auth, note.boardId, note.scope === "personal" ? "observer" : "editor")
-    : await assertWorkspaceAccess(req.auth, note.workspaceId, note.scope === "personal" ? "member" : "admin");
+    : await assertWorkspaceAccess(req.auth, note.workspaceId, "member");
   assertScopeAccess(note, req.auth.sub);
   await assertNotesEnabled(note.workspaceId);
   return { clientId: ctx.clientId };
@@ -513,10 +513,10 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
   app.post("/workspaces/:wsId/notes", async (req, reply) => {
     const { wsId: workspaceId } = req.params as { wsId: string };
     const body = dto.createNoteBody.parse(req.body);
-    // Personal-scope creation passes at plain member, so gate read-scoped credentials explicitly;
-    // team-scope creation already requires admin and is unreachable for them.
+    // Creation passes at plain member for both scopes (team notes are shared with every workspace
+    // member), so gate read-scoped credentials explicitly.
     assertWriteCapableCredential(req.auth);
-    await assertWorkspaceAccess(req.auth, workspaceId, body.scope === "team" ? "admin" : "member");
+    await assertWorkspaceAccess(req.auth, workspaceId, "member");
     await assertNotesEnabled(workspaceId);
 
     const parent = await resolveParent(workspaceId, null, body.parentNoteId ?? null, body.scope, req.auth.sub);
