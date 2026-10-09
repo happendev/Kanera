@@ -3,7 +3,7 @@ import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { ToastService } from "../../shared/toast.service";
 import type { OnDestroy, OnInit } from "@angular/core";
 import { DatePipe } from "@angular/common";
-import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal, untracked } from "@angular/core";
 import { Router } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
 import type {
@@ -243,6 +243,9 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
   readonly lens = input.required<WorkViewLens>();
   readonly cardId = input<string | undefined>();
+  /** `?person=<userId>` on Team Cards focuses that teammate; the profile card's "View cards" sends it. */
+  readonly person = input<string | undefined>();
+  private handledPersonParam: string | null = null;
 
   readonly openMenu = signal<WorkMenu | null>(null);
   readonly displayMenuPlacement: AnchoredPanelPlacement = { align: "end", width: 240, gap: 4, minHeight: 90, maxHeight: 420 };
@@ -1132,6 +1135,33 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
         : null;
       this.syncCardFromRoute(requestedCardId, visibleCard);
     });
+    effect(() => {
+      const person = this.person();
+      if (!person) {
+        this.handledPersonParam = null;
+        return;
+      }
+      // Wait for the first network projection: the stored preference and cached catalog are applied
+      // during initialisation and would otherwise overwrite the teammate chosen here. The query this
+      // triggers flips readiness again before the parameter is gone, hence the handled guard.
+      if (this.lens() !== "team" || !this.state.interactionReady() || this.handledPersonParam === person) return;
+      this.handledPersonParam = person;
+      untracked(() => this.focusTeamPersonFromRoute(person));
+    });
+  }
+
+  /**
+   * Applies a `?person=` deep link once, then drops the parameter so a reload or a later filter
+   * change does not keep snapping the page back to that teammate. A person outside the remembered
+   * source scope widens it to every board first, since "View cards" means all of their cards.
+   */
+  private focusTeamPersonFromRoute(userId: string): void {
+    const known = this.state.catalog().people.some((person) => person.userId === userId);
+    if (known && userId !== this.state.auth.user()?.id) {
+      if (!this.teamPeople().some((person) => person.userId === userId)) this.state.setScope([], []);
+      this.selectTeamPerson(userId);
+    }
+    void this.router.navigate([], { queryParams: { person: null }, queryParamsHandling: "merge", replaceUrl: true });
   }
 
   ngOnInit(): void {

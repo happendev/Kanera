@@ -74,7 +74,7 @@
           @for (guest of settings.sortedAcceptedGuests(); track guest.boardId + ':' + guest.userId) {
           <div class="guest-row">
             <div class="org-user-identity">
-              <k-avatar class="org-user-avatar" [url]="guest.avatarUrl" [name]="guest.displayName" [size]="32" [userId]="guest.userId" [workspaceId]="settings.workspaceId()" [showPresence]="true" [lastOnlineAt]="guest.lastOnlineAt ?? null" />
+              <k-avatar class="org-user-avatar" [url]="guest.avatarUrl" [name]="guest.displayName" [size]="32" [userId]="guest.userId" [workspaceId]="settings.workspaceId()" [showPresence]="true" [lastOnlineAt]="guest.lastOnlineAt ?? null" [profile]="true" />
               <div class="org-user-name-wrap">
                 <span class="org-user-name-line">
                   <span class="org-user-name">{{ guest.displayName }}</span>

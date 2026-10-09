@@ -126,6 +126,26 @@ export function formatTime(value: DateInput, opts: FormatOptions = {}): string {
   return formatterFor("time", TIME_OPTIONS, opts.timeZone).format(date);
 }
 
+/**
+ * Minutes a zone is ahead of UTC at `at` (negative west of Greenwich), or null for a zone this
+ * browser does not know. Lives here so "local time" lines reuse the cached formatters above.
+ */
+export function timeZoneOffsetMinutes(timeZone: string, at: Date = new Date()): number | null {
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone });
+  } catch {
+    return null;
+  }
+  const part = formatterFor("offset", { timeZoneName: "longOffset" }, timeZone)
+    .formatToParts(at)
+    .find((entry) => entry.type === "timeZoneName")?.value ?? "";
+  // "GMT" alone is UTC; otherwise "GMT+05:30" / "GMT-04:00".
+  const match = /GMT([+-])(\d{1,2})(?::(\d{2}))?/.exec(part);
+  if (!match) return part === "GMT" ? 0 : null;
+  const minutes = Number(match[2]) * 60 + Number(match[3] ?? 0);
+  return match[1] === "-" ? -minutes : minutes;
+}
+
 /** Date and time together. */
 export function formatDateTime(value: DateInput, style: DateTimeStyle = "short", opts: FormatOptions = {}): string {
   const date = toDate(value);

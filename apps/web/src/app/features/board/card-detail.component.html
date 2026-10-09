@@ -190,15 +190,10 @@
         </div>
         <div class="members-row">
           @for (m of assignedMembers(); track m.userId) {
-          @if (canEditRole()) {
-          <button type="button" class="member-avatar" [disabled]="!canEdit()" (click)="toggleAssignee(m.userId)" [attr.aria-label]="'Unassign ' + m.displayName" [kTooltip]="'Unassign ' + m.displayName">
-            <k-avatar [url]="m.avatarUrl" [name]="m.displayName" [size]="32" [userId]="m.userId" [workspaceId]="workspaceId()" [showPresence]="true" [showTooltip]="false" [lastOnlineAt]="m.lastOnlineAt" />
-          </button>
-          } @else {
           <span class="member-avatar">
-            <k-avatar [url]="m.avatarUrl" [name]="m.displayName" [size]="32" [userId]="m.userId" [workspaceId]="workspaceId()" [showPresence]="true" [lastOnlineAt]="m.lastOnlineAt" />
+            <k-avatar [url]="m.avatarUrl" [name]="m.displayName" [size]="32" [userId]="m.userId" [workspaceId]="workspaceId()" [showPresence]="true" [lastOnlineAt]="m.lastOnlineAt"
+              [profile]="true" [profileActions]="assigneeProfileActions().get(m.userId) ?? null" />
           </span>
-          }
           }
           @if (canEditRole()) {
           <div class="member-picker-wrap">
