@@ -568,6 +568,13 @@
       "when": 1791552320922,
       "tag": "0080_dizzy_centennial",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1791566957683,
+      "tag": "0081_careful_human_torch",
+      "breakpoints": true
     }
   ]
 }

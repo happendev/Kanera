@@ -222,6 +222,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly usingOfflineShell = signal(false);
   readonly user = this.auth.user;
   readonly showScratchpad = computed(() => this.user()?.showScratchpad ?? true);
+  // Organisation admins can hide Portfolio; sessions cached before the setting existed keep it.
+  readonly showPortfolio = computed(() => this.user()?.portfolioEnabled ?? true);
   // String queries keep the component classes out of the eager shell import graph. The types
   // still describe their public API without preventing Angular from deferring the components.
   readonly notificationsPanel = viewChild<NotificationsPanelComponent>("notificationsPanel");
@@ -722,7 +724,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
       { keys: "g h", label: "Home", run: go("/") },
       { keys: "g m", label: "My cards", run: go("/my-cards") },
       { keys: "g t", label: "Team cards", run: go("/team-cards") },
-      { keys: "g p", label: "Portfolio", run: go("/portfolio") },
+      { keys: "g p", label: "Portfolio", when: () => this.showPortfolio(), run: go("/portfolio") },
       { keys: "g s", label: "Settings", run: go("/settings") },
     ], this.destroyRef);
   }

@@ -49,6 +49,7 @@ function toPublicClient(row: ClientRow): PublicClientResponse {
       deploymentMode: "hosted",
       pushEnabled: true,
       requireMfa: row.requireMfa,
+      portfolioEnabled: row.portfolioEnabled,
       mcpPolicy: row.mcpPolicy,
       defaultCompletedCardsActiveDays: row.defaultCompletedCardsActiveDays,
       defaultInactiveCardsDays: row.defaultInactiveCardsDays,
@@ -77,6 +78,7 @@ function toPublicClient(row: ClientRow): PublicClientResponse {
     deploymentMode: "self_hosted",
     pushEnabled: row.pushEnabled,
     requireMfa: row.requireMfa,
+    portfolioEnabled: row.portfolioEnabled,
     // Not enforced self-hosted (lib/mcp-policy.ts), so report the effective value.
     mcpPolicy: "write",
     defaultCompletedCardsActiveDays: row.defaultCompletedCardsActiveDays,
@@ -328,6 +330,7 @@ export async function clientRoutes(app: FastifyInstance) {
     if (body.name !== undefined) updates.name = body.name;
     if (body.pushEnabled !== undefined) updates.pushEnabled = body.pushEnabled;
     if (body.requireMfa !== undefined) updates.requireMfa = body.requireMfa;
+    if (body.portfolioEnabled !== undefined) updates.portfolioEnabled = body.portfolioEnabled;
     if (body.mcpPolicy !== undefined) updates.mcpPolicy = body.mcpPolicy;
     if (body.defaultCompletedCardsActiveDays !== undefined) updates.defaultCompletedCardsActiveDays = body.defaultCompletedCardsActiveDays;
     if (body.defaultInactiveCardsDays !== undefined) updates.defaultInactiveCardsDays = body.defaultInactiveCardsDays;

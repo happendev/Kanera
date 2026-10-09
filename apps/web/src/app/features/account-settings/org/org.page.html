@@ -61,6 +61,16 @@
 </div>
 
 <div class="settings-section">
+  <h3 class="settings-section-title"><i class="ti ti-chart-bar"></i><span>Portfolio</span></h3>
+  <p class="settings-section-help">Portfolio rolls up card counts and progress across every board a member can see. Turn it off to remove it from the sidebar, search and shortcuts for everyone in this organisation.</p>
+  <label class="push-toggle-row">
+    <input type="checkbox" [checked]="settings.portfolioEnabledDraft()" (change)="settings.savePortfolioEnabled($any($event.target).checked)" [disabled]="!settings.isClientAdmin() || settings.portfolioEnabledSaving()" />
+    <span class="push-toggle-copy"><span class="push-toggle-title">Show Portfolio</span></span>
+  </label>
+  @if (settings.portfolioEnabledError()) { <p class="form-error">{{ settings.portfolioEnabledError() }}</p> }
+</div>
+
+<div class="settings-section">
   <h3 class="settings-section-title"><i class="ti ti-shield-lock"></i><span>Two-factor authentication</span></h3>
   <p class="settings-section-help">Require every organisation member to enroll an authenticator before their next fresh sign-in. Existing signed-in sessions remain active.</p>
   <label class="push-toggle-row">

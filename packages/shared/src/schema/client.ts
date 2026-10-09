@@ -64,6 +64,9 @@ export const clients = pgTable(
     pushEnabled: boolean("push_enabled").notNull().default(false),
     // When enabled, password login cannot issue a session until the member has completed TOTP setup.
     requireMfa: boolean("require_mfa").notNull().default(false),
+    // Shows the Portfolio rollup in this organisation's web navigation. Some teams don't want a
+    // cross-board counts view, so admins can hide it; it is a navigation choice, not an access control.
+    portfolioEnabled: boolean("portfolio_enabled").notNull().default(true),
     // Applies to every personal agent credential (interactive OAuth grants and personal API keys)
     // touching this organisation's data, including board guests from other organisations, because
     // the data owner decides. Workspace keys are admin-issued integrations and are not capped here.

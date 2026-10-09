@@ -20,6 +20,8 @@ export interface AuthUser {
   deploymentMode: "self_hosted" | "hosted";
   kaneraEnvironment?: KaneraEnvironment;
   hasWorkspace: boolean;
+  // Active organisation's choice; absent on sessions cached before the setting existed.
+  portfolioEnabled?: boolean;
   role: OrgRole;
   organisations?: AuthOrganisation[];
   canCreateOrganisation?: boolean;
