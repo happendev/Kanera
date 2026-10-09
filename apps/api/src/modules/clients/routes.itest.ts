@@ -366,6 +366,8 @@ void test("hosted mode bootstraps push messaging for existing and new organisati
       maxOrgMembers: env.HOSTED_FREE_MAX_ORG_MEMBERS,
       maxEnabledAutomations: env.HOSTED_FREE_MAX_ENABLED_AUTOMATIONS,
       maxAutomationExecutionsPerMonth: env.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY,
+      apiRequestsPerSecond: env.HOSTED_FREE_API_RATE_LIMIT_PER_SECOND,
+      apiRequestsPerMinute: env.HOSTED_FREE_API_RATE_LIMIT_PER_MINUTE,
     });
 
     const pushConfig = await app.inject({

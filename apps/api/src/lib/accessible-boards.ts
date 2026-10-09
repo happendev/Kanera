@@ -14,9 +14,7 @@ import {
 import { and, asc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import type { AuthClaims } from "../auth/plugin.js";
 import { db } from "../db.js";
-import { env } from "../env.js";
 import { isOrgAdmin } from "./access.js";
-import { isPaidTier } from "./entitlements.js";
 
 declare module "@fastify/request-context" {
   interface RequestContextData {
@@ -306,7 +304,6 @@ async function loadAccessibleBoardsUncached(auth: AuthClaims): Promise<Accessibl
         workspaceKind: workspaces.kind,
         clientId: clients.id,
         clientName: clients.name,
-        billingStatus: clients.billingStatus,
         boardName: boards.name,
         boardIcon: boards.icon,
         boardIconColor: boards.iconColor,
@@ -347,10 +344,9 @@ async function loadAccessibleBoardsUncached(auth: AuthClaims): Promise<Accessibl
       ))
       .orderBy(asc(workspaces.createdAt), asc(boards.position));
 
-    const eligible = rows.filter((row) =>
-      env.KANERA_DEPLOYMENT_MODE !== "hosted" || isPaidTier(row.billingStatus)
-    );
-    return applyNavigationOrder(auth.cid, eligible.map((row) => {
+    // Personal credentials reach boards in Free organisations too; only unattended workspace
+    // credentials are restricted to paid organisations (enforced at authentication).
+    return applyNavigationOrder(auth.cid, rows.map((row) => {
       const orgAdmin = row.clientRole === "owner" || row.clientRole === "admin";
       return {
         id: row.boardId,

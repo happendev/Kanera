@@ -111,7 +111,13 @@ export class AuthService {
   readonly entitlements = computed<Entitlements | null>(() => this._user()?.entitlements ?? null);
   readonly isPlanLimited = computed(() => this.entitlements()?.limited ?? false);
   readonly guestsAllowed = computed(() => this.entitlements()?.guestsAllowed ?? true);
-  readonly apiAllowed = computed(() => this.entitlements()?.apiAllowed ?? true);
+  // Personal API keys and interactive agent connections are on every plan; only workspace keys and
+  // unattended service agents are gated.
+  readonly serviceAgentsAllowed = computed(() => this.entitlements()?.serviceAgentsAllowed ?? true);
+  // Agent/API request limits per user on the active organisation's boards (they follow the
+  // organisation that owns each board); null when the payload predates them.
+  readonly apiRequestsPerSecond = computed(() => this.entitlements()?.apiRequestsPerSecond ?? null);
+  readonly apiRequestsPerMinute = computed(() => this.entitlements()?.apiRequestsPerMinute ?? null);
   readonly webhooksAllowed = computed(() => this.entitlements()?.webhooksAllowed ?? true);
   readonly boardSyncAllowed = computed(() => this.entitlements()?.boardSyncAllowed ?? true);
   readonly maxBoards = computed(() => this.entitlements()?.maxBoards ?? null);

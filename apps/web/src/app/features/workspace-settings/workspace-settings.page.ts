@@ -923,7 +923,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   // Plan-tier gating. The API enforces every limit; these only drive UI affordances (disabled
   // buttons + upgrade hints). A null max means unlimited (trial/paid/self-hosted).
   readonly guestsAllowed = this.auth.guestsAllowed;
-  readonly apiAllowed = this.auth.apiAllowed;
+  readonly serviceAgentsAllowed = this.auth.serviceAgentsAllowed;
   readonly webhooksAllowed = this.auth.webhooksAllowed;
   readonly boardLimitReached = computed(() => {
     const max = this.auth.maxBoards();

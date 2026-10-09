@@ -59,9 +59,19 @@ export function createEnvironmentSchema(options: EnvironmentSchemaOptions = {}) 
     .default(true),
   PUBLIC_API_IP_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(60),
   PUBLIC_API_FAILED_KEY_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(10),
+  // Pro (and self-hosted) agent limits, applied per user per organisation and as every user's overall
+  // ceiling; workspace/service credentials are metered per credential. MCP's front door also reads
+  // the per-minute value.
+  PUBLIC_API_KEY_RATE_LIMIT_PER_SECOND: z.coerce.number().int().positive().default(20),
   PUBLIC_API_KEY_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(400),
   PUBLIC_API_UPLOAD_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(30),
   PUBLIC_API_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+  // Credential per-second buckets hold up to this many over-limit requests per user (per API
+  // replica) and serve them in the next second, instead of failing them immediately; per-minute
+  // buckets reject outright. A request never waits longer than the max wait, which must stay below
+  // the MCP bridge's MCP_UPSTREAM_TIMEOUT_MS (15s) so a queued tool call does not time out upstream.
+  PUBLIC_API_RATE_LIMIT_QUEUE_SIZE: z.coerce.number().int().nonnegative().default(10),
+  PUBLIC_API_RATE_LIMIT_QUEUE_MAX_WAIT_MS: z.coerce.number().int().nonnegative().default(10_000),
   PUBLIC_API_TRUST_PROXY: z
     .union([z.string(), z.boolean()])
     .transform((v) => v === true || v === "true")
@@ -102,6 +112,10 @@ export function createEnvironmentSchema(options: EnvironmentSchemaOptions = {}) 
   HOSTED_FREE_MAX_ORG_MEMBERS: z.coerce.number().int().positive().default(4),
   HOSTED_FREE_MAX_ENABLED_AUTOMATIONS: z.coerce.number().int().positive().default(3),
   HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY: z.coerce.number().int().positive().default(100),
+  // Agent limits on a Free organisation's boards, per user (so extra keys or agent connections do
+  // not multiply them). The same user gets Pro limits on a Pro organisation's boards.
+  HOSTED_FREE_API_RATE_LIMIT_PER_SECOND: z.coerce.number().int().positive().default(5),
+  HOSTED_FREE_API_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(60),
   // Cross-organisation guests remain board-scoped. One board is free by default; crossing this
   // deployment-configurable threshold consumes one purchased seat regardless of further boards.
   HOSTED_FREE_MAX_GUEST_BOARDS: z.coerce.number().int().positive().default(1),

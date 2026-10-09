@@ -9,6 +9,7 @@ import { env } from "../env.js";
 import { unauthorized } from "../lib/errors.js";
 import { hashOpaqueToken } from "../lib/tokens.js";
 import { authenticateMcpDelegationToken } from "../oauth/routes.js";
+import type { ApiRateTier } from "../lib/api-rate-limit.js";
 import { resolvePersonalCredentialOrganisation } from "./personal-credential-context.js";
 import { z } from "zod";
 
@@ -81,6 +82,11 @@ export interface AuthClaims {
   // hold the personal subset ("read" | "write"); "admin" is a workspace-key value. The one
   // "admin" comparison lives in the workspace branch of assertBoardAccess.
   apiKeyScope?: WorkspaceApiKeyScope;
+  // Plan tier of the credential's resolved default organisation (claims.cid at authentication). The
+  // public API meters requests by the organisation that owns the touched board; this tier only applies
+  // to requests that resolve no organisation themselves. Carried in claims so MCP delegation tokens
+  // keep it. Absent on interactive session JWTs, which the public API does not meter by credential.
+  apiRateTier?: ApiRateTier;
   support?: SupportClaims;
 }
 
@@ -120,12 +126,14 @@ async function authenticateApiKey(req: FastifyRequest, raw: string): Promise<Aut
       : null;
   if (requestedOrganisation === null) return null;
   if (!row.clientId) return null;
+  // Personal keys work on every plan; workspace keys are unattended service credentials and only
+  // authenticate while their pinned organisation is paid (they are also revoked on downgrade).
   const organisation = await resolvePersonalCredentialOrganisation(row.userId, row.kind === "personal"
     ? {
         ...(requestedOrganisation ? { requiredClientId: requestedOrganisation } : {}),
         preferredClientIds: [row.clientId, row.activeClientId],
       }
-    : { requiredClientId: row.clientId });
+    : { requiredClientId: row.clientId, requirePaidOrganisation: true });
   if (!organisation) return null;
 
   const lastUsedCutoff = new Date(Date.now() - API_KEY_LAST_USED_THROTTLE_MS);
@@ -154,6 +162,7 @@ async function authenticateApiKey(req: FastifyRequest, raw: string): Promise<Aut
       // deliberate — attribution ("acts as its owner") is governed by authKind, authorization
       // ("may do less than its owner") by apiKeyScope — and the two must not be conflated.
       apiKeyScope: row.scope,
+      apiRateTier: organisation.apiRateTier,
     };
   }
 
@@ -167,6 +176,7 @@ async function authenticateApiKey(req: FastifyRequest, raw: string): Promise<Aut
     apiKeyName: row.apiKeyName ?? undefined,
     apiKeyWorkspaceId: row.workspaceId ?? undefined,
     apiKeyScope: row.scope,
+    apiRateTier: "paid",
   };
 }
 

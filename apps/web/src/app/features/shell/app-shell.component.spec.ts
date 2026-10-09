@@ -275,7 +275,9 @@ describe("AppShellComponent board search", () => {
       maxEnabledAutomations: null,
       maxAutomationExecutionsPerMonth: null,
       guestsAllowed: true,
-      apiAllowed: true,
+      serviceAgentsAllowed: true,
+      apiRequestsPerSecond: 20,
+      apiRequestsPerMinute: 400,
       webhooksAllowed: true,
       boardSyncAllowed: true,
     });

@@ -109,22 +109,6 @@
   }
 }
 
-.agent-card-callout {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 10px;
-  padding: 10px 12px;
-  border: 1px dashed var(--border);
-  border-radius: var(--radius);
-  font-size: 13px;
-  color: var(--text-muted);
-
-  button {
-    margin: 0 0 0 auto;
-  }
-}
-
 .agent-card-manage {
   display: inline-flex;
   align-items: center;

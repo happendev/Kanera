@@ -37,7 +37,9 @@
         <li><i class="ti ti-bolt"></i> {{ settings.freePlanMaxAutomationExecutionsPerMonth() }} automation executions per month</li>
         <li><i class="ti ti-palette"></i> Custom fields, colors, and all views</li>
         <li><i class="ti ti-database"></i> 250 MiB shared storage</li>
-        <li><i class="ti ti-lock"></i> No guests or API access</li>
+        <li><i class="ti ti-sparkles"></i> Connect Claude, ChatGPT, Cursor, and other AI agents</li>
+        <li><i class="ti ti-code"></i> MCP and personal API keys with fair-use limits</li>
+        <li><i class="ti ti-lock"></i> No guests, webhooks, or unattended agents</li>
       </ul>
     </div>
     <div class="plan-card plan-card--pro" [class.plan-card--current]="settings.planTier() === 'paid'">
@@ -56,8 +58,8 @@
         <li><i class="ti ti-infinity"></i> Unlimited members, boards, automations, and executions</li>
         <li><i class="ti ti-user-star"></i> Guest collaboration</li>
         <li><i class="ti ti-database"></i> 200 GiB shared storage</li>
-        <li><i class="ti ti-code"></i> Full API access and webhooks</li>
-        <li><i class="ti ti-sparkles"></i> MCP for AI agents</li>
+        <li><i class="ti ti-sparkles"></i> Higher MCP and API limits</li>
+        <li><i class="ti ti-code"></i> Workspace API keys, webhooks, and unattended agents</li>
         <li><i class="ti ti-headset"></i> Support</li>
       </ul>
     </div>

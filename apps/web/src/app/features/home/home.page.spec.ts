@@ -161,7 +161,6 @@ describe("HomePage", () => {
               role: options.role ?? (options.isOrgAdmin ? "admin" : "member"),
             }),
             isOrgAdmin: signal(options.isOrgAdmin ?? false),
-            apiAllowed: signal((options.entitlements as { apiAllowed?: boolean } | undefined)?.apiAllowed ?? true),
             entitlements: signal(options.entitlements ?? null),
             maxBoards: signal((options.entitlements as { maxBoards?: number | null } | undefined)?.maxBoards ?? null),
           },
@@ -717,16 +716,17 @@ describe("HomePage", () => {
     expect(text()).not.toContain("Create workspace");
   });
 
-  it("gates the agent connection behind Pro when the plan has no API access", async () => {
+  it("offers the agent connection on the Free plan, where interactive agents are included", async () => {
     await render({
       hasWorkspace: false,
       isOrgAdmin: true,
-      entitlements: { tier: "free", billingStatus: "none", apiAllowed: false },
+      entitlements: { tier: "free", billingStatus: "none", serviceAgentsAllowed: false },
       response: payload({ boardCount: 0 }),
     });
 
-    expect(text()).toContain("Connecting an AI agent is part of Kanera Pro");
-    expect(text()).not.toContain("Copy agent setup prompt");
+    expect(text()).toContain("Copy agent setup prompt");
+    expect(host().querySelector("k-agent-connect-card .pro-marker")).toBeNull();
+    expect(text()).not.toContain("part of Kanera Pro");
   });
 
   it("renders the full page for a standalone-only account, which reports no workspace", async () => {

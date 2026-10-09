@@ -424,7 +424,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       Forbidden: { description: "Authenticated principal does not have access.", content: { "application/json": { schema: ref("Error") } } },
       NotFound: { description: "Resource not found.", content: { "application/json": { schema: ref("Error") } } },
       Conflict: { description: "Resource conflict.", content: { "application/json": { schema: ref("Error") } } },
-      TooManyRequests: { description: "Rate limit exceeded. Inspect the rate-limit response headers before retrying.", content: { "application/json": { schema: ref("Error") } } },
+      TooManyRequests: { description: "Rate limit exceeded. Credential requests are limited per user per second and per minute, at the plan limits of the organisation that owns the board being accessed (requests without a board, such as listings, use the credential's current organisation). Requests over the per-second limit first wait in a queue of up to 10 and are served in the following second, so a per-second 429 means that queue was also full; per-minute limits reject immediately. Inspect the rate-limit response headers before retrying. When a hosted Free organisation's limit is reached, the response also includes `limit` (`apiRequestsPerSecond` or `apiRequestsPerMinute`), `max`, `organisationId`, and `upgradePlan`.", content: { "application/json": { schema: ref("Error") } } },
       Internal: { description: "Unexpected server error.", content: { "application/json": { schema: ref("Error") } } },
     },
     schemas: {

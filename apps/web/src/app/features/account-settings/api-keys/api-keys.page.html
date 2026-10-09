@@ -1,7 +1,10 @@
 <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-plug-connected"></i><span>AI agent connection</span>@if (settings.isHosted()) { <span class="pro-marker">Pro</span> }</h3>
+        <h3 class="settings-section-title"><i class="ti ti-plug-connected"></i><span>AI agent connection</span></h3>
         <p class="settings-section-help">Connect Claude, Copilot, Codex, ChatGPT, or another compatible agent. Kanera will open a browser sign-in and consent screen; you do not need to create an API key. An interactive connection can always read and write — for a look-only agent, create a read-only personal key below.</p>
-        <k-agent-connect-card source="account_settings" [compact]="true" [showManageLink]="false" />
+        @if (isPlanLimited() && apiRequestsPerSecond() !== null && apiRequestsPerMinute() !== null) {
+        <p class="plan-limit-hint"><i class="ti ti-gauge"></i> On a Free organisation's boards, your AI agents and personal API keys can make up to {{ apiRequestsPerSecond() }} requests per second and {{ apiRequestsPerMinute() }} per minute. Boards in Pro organisations allow more.</p>
+        }
+        <k-agent-connect-card [compact]="true" [showManageLink]="false" />
         <div class="key-list">
           @for (connection of oauthConnections(); track connection.id) {
           <div class="key-row">
@@ -20,7 +23,7 @@
       </div>
 
       <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-key"></i><span>Personal API keys</span>@if (settings.isHosted()) { <span class="pro-marker">Pro</span> }</h3>
+        <h3 class="settings-section-title"><i class="ti ti-key"></i><span>Personal API keys</span></h3>
         <p class="settings-section-help">
           A personal key acts as you: it is evaluated against everything you can access, and activity done with it shows up as you.
           A write key can create and edit anything you can, including workspace administration where you are an admin.
@@ -28,7 +31,6 @@
           A key's scope can't be changed after creation; revoke it and create a new one instead.
         </p>
         <k-docs-link path="api" fragment="create-a-personal-api-key" label="Learn more about personal API keys" />
-        @if (apiAllowed()) {
         <form class="board-form" (submit)="createPersonalKey($event)">
           <input name="personalKeyLabel" placeholder="Label (optional, e.g. 'CI script')" [maxLength]="apiKeyNameMaxLength" [value]="newPersonalKeyLabel()" (input)="newPersonalKeyLabel.set($any($event.target).value); personalKeyError.set(null)" class="grow" />
           <select name="personalKeyScope" aria-label="Key scope" [value]="newPersonalKeyScope()" (input)="newPersonalKeyScope.set($any($event.target).value); personalKeyError.set(null)">
@@ -37,9 +39,6 @@
           </select>
           <button class="sm" type="submit" [disabled]="personalKeyBusy()">{{ personalKeyBusy() ? "Creating..." : "Create key" }}</button>
         </form>
-        } @else {
-        <p class="plan-limit-hint"><i class="ti ti-lock"></i> Personal API keys aren't available on your plan.</p>
-        }
         @if (personalKeyError()) { <p class="form-error">{{ personalKeyError() }}</p> }
         @if (revealedPersonalKeySecret()) {
         <div class="key-secret-reveal">

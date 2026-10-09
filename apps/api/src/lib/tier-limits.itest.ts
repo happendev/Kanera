@@ -135,8 +135,10 @@ void test("auth account payload returns free, paid, trial, and self-hosted entit
         maxOrgMembers: 7,
         maxEnabledAutomations: 3,
         maxAutomationExecutionsPerMonth: 100,
+        apiRequestsPerSecond: env.HOSTED_FREE_API_RATE_LIMIT_PER_SECOND,
+        apiRequestsPerMinute: env.HOSTED_FREE_API_RATE_LIMIT_PER_MINUTE,
         guestsAllowed: false,
-        apiAllowed: false,
+        serviceAgentsAllowed: false,
         webhooksAllowed: false,
         boardSyncAllowed: false,
       });
@@ -147,6 +149,8 @@ void test("auth account payload returns free, paid, trial, and self-hosted entit
       assert.equal(paidMe.json<{ entitlements: { limited: boolean } }>().entitlements.limited, false);
       assert.equal(paidMe.json<{ entitlements: { guestsAllowed: boolean } }>().entitlements.guestsAllowed, true);
       assert.equal(paidMe.json<{ entitlements: { boardSyncAllowed: boolean } }>().entitlements.boardSyncAllowed, true);
+      assert.equal(paidMe.json<{ entitlements: { apiRequestsPerSecond: number } }>().entitlements.apiRequestsPerSecond, env.PUBLIC_API_KEY_RATE_LIMIT_PER_SECOND);
+      assert.equal(paidMe.json<{ entitlements: { apiRequestsPerMinute: number } }>().entitlements.apiRequestsPerMinute, env.PUBLIC_API_KEY_RATE_LIMIT_PER_MINUTE);
 
       const trialEnd = new Date("2026-07-01T00:00:00.000Z");
       await db.update(clients).set({ plan: "paid", billingStatus: "trialing", currentPeriodEnd: trialEnd }).where(eq(clients.id, user.clientId));

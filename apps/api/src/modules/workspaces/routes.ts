@@ -20,7 +20,6 @@ import { applyChecklistTemplates, loadChecklistTemplates } from "../../lib/check
 import { loadWorkspaceCustomFields } from "../../lib/custom-fields.js";
 import { pinAdminToWorkspaceBoards, seedBoardMembersFromWorkspace, unpinAdminFromWorkspaceBoards } from "../../lib/board-membership.js";
 import { addDays, isDueDateOverdue, localDateInTimezone } from "../../lib/due-date.js";
-import { isPaidTier } from "../../lib/entitlements.js";
 import { badRequest, conflict, notFound } from "../../lib/errors.js";
 import { allocateCardKeys, changeWorkspaceCardKeyPrefix, reserveCardKeyPrefix } from "../../lib/card-keys.js";
 import { deleteExternalLinks } from "../../lib/external-links.js";
@@ -93,7 +92,6 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           updatedAt: workspaces.updatedAt,
           clientRole: clientMembers.clientRole,
           workspaceRole: workspaceMembers.role,
-          billingStatus: clients.billingStatus,
         })
         .from(workspaces)
         .innerJoin(clients, eq(clients.id, workspaces.clientId))
@@ -115,9 +113,9 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           or(inArray(clientMembers.clientRole, ["owner", "admin"]), isNotNull(workspaceMembers.userId)),
         ))
         .orderBy(asc(workspaces.createdAt));
+      // Personal credentials work on every plan, so Free organisations' workspaces are listed too.
       return page(rows
-        .filter((row) => env.KANERA_DEPLOYMENT_MODE !== "hosted" || isPaidTier(row.billingStatus))
-        .map(({ clientRole, workspaceRole, billingStatus: _billingStatus, ...workspace }) => ({
+        .map(({ clientRole, workspaceRole, ...workspace }) => ({
           ...workspace,
           role: orgRoleRanksAdmin(clientRole) ? "admin" as const : workspaceRole!,
         })));

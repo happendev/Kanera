@@ -11,7 +11,7 @@
           <i class="ti ti-key"></i>
           <span>API keys</span>
         </div>
-        @if (settings.apiAllowed()) {
+        @if (settings.serviceAgentsAllowed()) {
         <form class="integration-form" (submit)="settings.createApiKey($event)">
           <label class="integration-field">
             <span>Name</span>
@@ -31,8 +31,8 @@
         <div class="upgrade-action-callout">
           <span class="upgrade-action-icon"><i class="ti ti-plug-connected"></i></span>
           <span class="upgrade-action-copy">
-            <strong>Connect your tools and AI agents</strong>
-            <span>API keys and MCP connections are available with Pro.</span>
+            <strong>Run integrations and unattended agents</strong>
+            <span>Workspace API keys and unattended AI agents are available with Pro. You can still connect your own AI agent or create a personal API key on any plan.</span>
           </span>
           <button class="secondary sm upgrade-action-button" type="button" (click)="settings.openUpgradePrompt('api')">
             View connections <i class="ti ti-arrow-right"></i>
@@ -163,7 +163,7 @@
         <div class="integration-section-head"><i class="ti ti-sparkles"></i><span>Unattended AI agents</span></div>
         <p class="settings-section-help">Create an OAuth client for CI, cron, or a server-side custom agent. The secret is shown once.</p>
         <k-docs-link path="ai-mcp-reference" label="Learn more about AI agent connections" />
-        @if (settings.apiAllowed()) {
+        @if (settings.serviceAgentsAllowed()) {
         <form class="integration-form" (submit)="settings.createAgentConnection($event)">
           <label class="integration-field"><span>Name</span><input [value]="settings.newAgentConnectionName()" (input)="settings.newAgentConnectionName.set($any($event.target).value); settings.agentConnectionError.set(null)" required /></label>
           <label class="integration-field"><span>Maximum scope</span><select [value]="settings.newAgentConnectionScope()" (input)="settings.newAgentConnectionScope.set($any($event.target).value)"><option value="read">Read</option><option value="write">Write</option><option value="admin">Admin</option></select></label>

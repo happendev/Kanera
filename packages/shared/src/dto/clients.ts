@@ -129,6 +129,8 @@ export const publicClientResponse = z.object({
     maxOrgMembers: z.number().int().positive(),
     maxEnabledAutomations: z.number().int().positive(),
     maxAutomationExecutionsPerMonth: z.number().int().positive(),
+    apiRequestsPerSecond: z.number().int().positive(),
+    apiRequestsPerMinute: z.number().int().positive(),
   }).nullable(),
 });
 export type PublicClientResponse = z.infer<typeof publicClientResponse>;
@@ -204,7 +206,15 @@ export type Entitlements = {
   maxEnabledAutomations: number | null;
   maxAutomationExecutionsPerMonth: number | null;
   guestsAllowed: boolean;
-  apiAllowed: boolean;
+  // Personal API keys and interactive AI agent connections (Claude, ChatGPT, Cursor, the CLI) are
+  // available on every plan, metered by the limits below. Workspace API keys and unattended service
+  // agents (OAuth client_credentials) stay Pro-only.
+  serviceAgentsAllowed: boolean;
+  // Agent/API request limits per user on this organisation's boards. Limits follow the organisation
+  // that owns the board, so the same user may have different limits in another organisation.
+  // Optional for compatibility with cached auth payloads.
+  apiRequestsPerSecond?: number;
+  apiRequestsPerMinute?: number;
   webhooksAllowed: boolean;
   // Optional for compatibility with cached auth payloads produced before board sync became Pro-only.
   boardSyncAllowed?: boolean;

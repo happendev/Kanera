@@ -1,18 +1,15 @@
-import { provideZonelessChangeDetection, signal } from "@angular/core";
+import { provideZonelessChangeDetection } from "@angular/core";
 import type { ComponentFixture } from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
 import { provideRouter } from "@angular/router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
-import { AuthService } from "../../core/auth/auth.service";
 import { buildAgentSetupPrompt } from "../agent-setup-prompt";
-import { UpgradePromptService } from "../upgrade-prompt.service";
 import { AgentConnectCardComponent } from "./agent-connect-card.component";
 
 describe("AgentConnectCardComponent", () => {
   let fixture: ComponentFixture<AgentConnectCardComponent>;
   const writeText = vi.fn(async () => undefined);
-  const upgradeOpen = vi.fn(async () => undefined);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -24,7 +21,7 @@ describe("AgentConnectCardComponent", () => {
     TestBed.resetTestingModule();
   });
 
-  async function render(options: { mcpUrl?: string | null; apiAllowed?: boolean; compact?: boolean; showManageLink?: boolean } = {}) {
+  async function render(options: { mcpUrl?: string | null; compact?: boolean; showManageLink?: boolean } = {}) {
     const get = vi.fn(async (path: string) => {
       if (path === "/me/agent-connection-config") {
         if (options.mcpUrl === null) throw new Error("unavailable");
@@ -38,18 +35,9 @@ describe("AgentConnectCardComponent", () => {
         provideZonelessChangeDetection(),
         provideRouter([]),
         { provide: ApiClient, useValue: { get } },
-        {
-          provide: AuthService,
-          useValue: {
-            user: signal({ id: "user-1", clientId: "client-1", deploymentMode: "hosted" }),
-            apiAllowed: signal(options.apiAllowed ?? true),
-          },
-        },
-        { provide: UpgradePromptService, useValue: { open: upgradeOpen } },
       ],
     }).compileComponents();
     fixture = TestBed.createComponent(AgentConnectCardComponent);
-    fixture.componentRef.setInput("source", "home");
     if (options.compact !== undefined) fixture.componentRef.setInput("compact", options.compact);
     if (options.showManageLink !== undefined) fixture.componentRef.setInput("showManageLink", options.showManageLink);
     fixture.detectChanges();
@@ -111,13 +99,11 @@ describe("AgentConnectCardComponent", () => {
     expect(host().textContent).toContain("Setup guide");
   });
 
-  it("shows the Pro callout and opens the upgrade prompt when the plan lacks API access", async () => {
-    await render({ apiAllowed: false });
-    expect(host().textContent).toContain("Connecting an AI agent is part of Kanera Pro");
-    expect(buttonWithText("Copy agent setup prompt")).toBeUndefined();
-
-    buttonWithText("See Pro")!.click();
-    expect(upgradeOpen).toHaveBeenCalledWith({ reason: "api", source: "home" });
+  it("has no plan gate: interactive agent connections are included on every plan", async () => {
+    await render();
+    expect(host().querySelector(".pro-marker")).toBeNull();
+    expect(host().textContent).not.toContain("Kanera Pro");
+    expect(buttonWithText("Copy agent setup prompt")).toBeDefined();
   });
 
   it("drops its own heading and manage link when embedded under a host section title", async () => {

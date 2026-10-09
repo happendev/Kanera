@@ -4,6 +4,10 @@ All notable changes to Kanera are documented here.
 
 ## [1.9.0] - Unreleased
 
+### Changed
+- **Hosted Free plan:** AI agents (Claude, ChatGPT, Cursor, the CLI), MCP, and personal API keys are now included, with read and write access to Free-plan boards. Workspace API keys, unattended service agents, and webhooks remain Pro-only. Downgrading to Free now revokes only workspace API keys; personal keys keep working.
+- **Public API and MCP rate limits** are now per user, per second and per minute, at the plan limits of the organisation that owns the board being accessed: a Free organisation's boards allow 5 requests per second and 60 per minute by default, a Pro organisation's 20 and 400. A user in both gets each organisation's limits on its own boards. Bursts over the per-second limit wait in a queue of 10 and are served in the following second; requests beyond the queue, or over the per-minute limit, receive `429`.
+
 ### Fixed
 - Concurrency, card transfer access, and realtime consistency issues.
 

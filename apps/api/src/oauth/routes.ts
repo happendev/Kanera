@@ -19,7 +19,6 @@ import { db } from "../db.js";
 import { env } from "../env.js";
 import { badRequest, forbidden, notFound, unauthorized } from "../lib/errors.js";
 import { hashOpaqueToken } from "../lib/tokens.js";
-import { assertApiKeysAllowed } from "../lib/tier-limits.js";
 import { oauthOperationsTotal } from "../lib/metrics.js";
 
 const ACCESS_TTL_MS = 15 * 60_000;
@@ -268,8 +267,10 @@ async function authenticateMcpToken(raw: string, resource: string): Promise<Auth
   if (!row) return null;
 
   const pinnedClientId = row.apiKeyClientId ?? row.workspaceClientId;
+  // Service connections are unattended agents and require their pinned organisation to be paid.
+  // Interactive grants (Claude, ChatGPT, Cursor, the CLI) act as the user on every plan.
   const organisation = await resolvePersonalCredentialOrganisation(row.userId, row.client.kind === "service"
-    ? { requiredClientId: pinnedClientId ?? undefined }
+    ? { requiredClientId: pinnedClientId ?? undefined, requirePaidOrganisation: true }
     : { preferredClientIds: [row.grantOrgClientId, row.activeClientId] });
   if (!organisation) return null;
   const lastUsedCutoff = new Date(Date.now() - 5 * 60_000);
@@ -300,6 +301,7 @@ async function authenticateMcpToken(raw: string, resource: string): Promise<Auth
       apiKeyWorkspaceId: row.apiKeyWorkspaceId ?? undefined,
       apiKeyScope: effectiveScope,
       oauthServiceClientId: row.client.clientId,
+      apiRateTier: "paid",
     };
   }
   return {
@@ -322,6 +324,7 @@ async function authenticateMcpToken(raw: string, resource: string): Promise<Auth
     // tool may run; Kanera still evaluates the represented user's live role on every resource.
     // Keeping this unconditional also upgrades access tokens minted before this policy changed.
     apiKeyScope: "write",
+    apiRateTier: organisation.apiRateTier,
   };
 }
 
@@ -673,9 +676,10 @@ export async function oauthPublicRoutes(app: FastifyInstance) {
 
 export async function oauthUserRoutes(app: FastifyInstance) {
   app.addHook("preHandler", app.authenticate);
+  // Consent here only ever creates interactive (public-client) grants, which act as the signed-in
+  // user and are available on every plan. Fair-use limits are applied per request by the public API.
 
   app.get("/oauth/device/context", async (req) => {
-    await assertApiKeysAllowed(req.auth.cid);
     const { user_code: userCode } = z.object({ user_code: z.string().trim().min(4).max(32) }).parse(req.query);
     const normalized = normalizeDeviceUserCode(userCode);
     const [row] = await db.select({ request: oauthDeviceCodes, client: oauthClients })
@@ -699,7 +703,6 @@ export async function oauthUserRoutes(app: FastifyInstance) {
   });
 
   app.post("/oauth/device/consent", async (req) => {
-    await assertApiKeysAllowed(req.auth.cid);
     const body = deviceConsentSchema.parse(req.body);
     const normalized = normalizeDeviceUserCode(body.user_code);
     const result = await db.transaction(async (tx) => {
@@ -743,7 +746,6 @@ export async function oauthUserRoutes(app: FastifyInstance) {
   });
 
   app.get("/oauth/authorize/context", async (req) => {
-    await assertApiKeysAllowed(req.auth.cid);
     const params = authorizationSchema.parse(req.query);
     const client = await activeClient(params.client_id);
     // Mirror the invariants enforced by the public GET /oauth/authorize: a logged-in browser can hit
@@ -776,7 +778,6 @@ export async function oauthUserRoutes(app: FastifyInstance) {
   });
 
   app.post("/oauth/authorize/consent", async (req) => {
-    await assertApiKeysAllowed(req.auth.cid);
     const params = authorizationSchema.parse(req.body);
     const client = await activeClient(params.client_id);
     // Mirror the invariants enforced by the public GET /oauth/authorize: a logged-in browser can hit

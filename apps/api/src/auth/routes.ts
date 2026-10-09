@@ -156,10 +156,10 @@ export async function authRoutes(app: FastifyInstance) {
   // buckets global across API processes; keys stay action-scoped so login attempts do not drain
   // signup or password-reset allowance.
   const authRateLimiter = env.AUTH_RATE_LIMIT_ENABLED
-    ? new FixedWindowRateLimiter(env.AUTH_RATE_LIMIT_WINDOW_MS, { log: app.log })
+    ? new FixedWindowRateLimiter()
     : null;
   if (authRateLimiter) app.addHook("onClose", async () => authRateLimiter.close());
-  const passwordResetRecipientLimiter = new FixedWindowRateLimiter(PASSWORD_RESET_RECIPIENT_WINDOW_MS, { log: app.log });
+  const passwordResetRecipientLimiter = new FixedWindowRateLimiter();
   app.addHook("onClose", async () => passwordResetRecipientLimiter.close());
   const authRateLimitPolicy: RateLimitPolicy = {
     limit: env.AUTH_RATE_LIMIT_MAX,

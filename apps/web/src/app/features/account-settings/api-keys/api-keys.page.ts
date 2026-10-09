@@ -65,9 +65,12 @@ export class AccountSettingsApiKeysPage implements OnInit {
   private readonly confirm = inject(ConfirmService);
   protected readonly settings = inject(AccountSettingsPage);
 
-  // Personal API keys are gated behind the same paid entitlement as workspace keys; the server still
-  // enforces it. The list/secret follow the one-time-reveal pattern used for MFA recovery codes.
-  protected readonly apiAllowed = this.auth.apiAllowed;
+  // Personal keys and agent connections exist on every plan. Limits follow the organisation that
+  // owns each board; a Free organisation's lower limits are surfaced here so a throttled agent is not
+  // a surprise. The list/secret follow the one-time-reveal pattern used for MFA recovery codes.
+  protected readonly isPlanLimited = this.auth.isPlanLimited;
+  protected readonly apiRequestsPerSecond = this.auth.apiRequestsPerSecond;
+  protected readonly apiRequestsPerMinute = this.auth.apiRequestsPerMinute;
   protected readonly personalApiKeys = signal<PersonalApiKeyRow[]>([]);
   protected readonly oauthConnections = signal<OauthConnectionRow[]>([]);
   protected readonly newPersonalKeyLabel = signal("");

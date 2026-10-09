@@ -331,7 +331,7 @@ function impactItems(impact: BillingImpactSummary | null | undefined, mode: "for
         user: ["member will be suspended", "members will be suspended"],
         automation: ["automation will be disabled", "automations will be disabled"],
         webhook: ["webhook will be disabled", "webhooks will be disabled"],
-        apiKey: ["API key will be revoked", "API keys will be revoked"],
+        apiKey: ["workspace API key will be revoked", "workspace API keys will be revoked"],
         guest: ["guest will be removed from your boards", "guests will be removed from your boards"],
         invite: ["guest invite will be revoked", "guest invites will be revoked"],
       }
@@ -350,7 +350,7 @@ function impactItems(impact: BillingImpactSummary | null | undefined, mode: "for
           user: ["member suspended", "members suspended"],
           automation: ["automation disabled", "automations disabled"],
           webhook: ["webhook disabled", "webhooks disabled"],
-          apiKey: ["API key revoked", "API keys revoked"],
+          apiKey: ["workspace API key revoked", "workspace API keys revoked"],
           guest: ["guest removed from your boards", "guests removed from your boards"],
           invite: ["guest invite revoked", "guest invites revoked"],
         };

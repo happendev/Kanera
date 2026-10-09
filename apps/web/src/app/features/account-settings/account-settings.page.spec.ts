@@ -138,7 +138,9 @@ describe("AccountSettingsPage", () => {
       maxEnabledAutomations: null,
       maxAutomationExecutionsPerMonth: null,
       guestsAllowed: true,
-      apiAllowed: true,
+      serviceAgentsAllowed: true,
+      apiRequestsPerSecond: 20,
+      apiRequestsPerMinute: 400,
       webhooksAllowed: true,
     });
     maxOrgMembers = signal<number | null>(null);
@@ -377,7 +379,9 @@ describe("AccountSettingsPage", () => {
       maxEnabledAutomations: 1,
       maxAutomationExecutionsPerMonth: 100,
       guestsAllowed: false,
-      apiAllowed: false,
+      serviceAgentsAllowed: false,
+      apiRequestsPerSecond: 5,
+      apiRequestsPerMinute: 60,
       webhooksAllowed: false,
     });
     activeSettingsRoute = "notifications";
@@ -678,7 +682,9 @@ describe("AccountSettingsPage", () => {
       maxEnabledAutomations: 1,
       maxAutomationExecutionsPerMonth: 100,
       guestsAllowed: false,
-      apiAllowed: false,
+      serviceAgentsAllowed: false,
+      apiRequestsPerSecond: 5,
+      apiRequestsPerMinute: 60,
       webhooksAllowed: false,
     });
     await createPage();
@@ -1243,7 +1249,9 @@ describe("AccountSettingsPage", () => {
       maxEnabledAutomations: 1,
       maxAutomationExecutionsPerMonth: 100,
       guestsAllowed: false,
-      apiAllowed: false,
+      serviceAgentsAllowed: false,
+      apiRequestsPerSecond: 5,
+      apiRequestsPerMinute: 60,
       webhooksAllowed: false,
     });
     await createPage();

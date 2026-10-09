@@ -1,6 +1,6 @@
 import { MCP_PRIORITY_EVENT_NAME, mcpEventData, type McpCardEventOccurrence, type McpEventArguments, type McpEventName, type McpPriorityEventOccurrence, type McpStoredEventArguments } from "@kanera/shared/dto";
 import { cards, clientMembers, lists, mcpEventDeliveries, mcpEventSubscriptions, oauthClients, oauthGrants, users, workspaceApiKeys, type EventOutbox, type EventOutboxActor, type McpDeliveryError, type McpEventSubscription } from "@kanera/shared/schema";
-import { and, eq, gt, inArray, lt, lte, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, lt, lte, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import type { AuthClaims } from "../auth/plugin.js";
 import { db } from "../db.js";
@@ -260,7 +260,7 @@ export async function processMcpEventDeliveries(send: McpWebhookRequest = postMc
     const rows = await tx.select().from(mcpEventDeliveries).where(and(
       lte(mcpEventDeliveries.nextAttemptAt, new Date()),
       inArray(mcpEventDeliveries.status, ["queued", "delivering"]),
-    )).orderBy(mcpEventDeliveries.createdAt).limit(DELIVERY_BATCH).for("update", { skipLocked: true });
+    )).orderBy(asc(mcpEventDeliveries.createdAt), asc(mcpEventDeliveries.id)).limit(DELIVERY_BATCH).for("update", { skipLocked: true });
     if (!rows.length) return [];
     return tx.update(mcpEventDeliveries).set({ status: "delivering", nextAttemptAt: new Date(Date.now() + 120_000), attempts: sql`${mcpEventDeliveries.attempts} + 1` })
       .where(inArray(mcpEventDeliveries.id, rows.map((row) => row.id))).returning();
@@ -273,18 +273,28 @@ export async function processMcpEventDeliveries(send: McpWebhookRequest = postMc
     try { gates.set(sub.id, await gateFor(sub)); }
     catch (err) { log?.error({ err, subscriptionId: sub.id }, "mcp subscription authorization failed"); }
   }));
-  for (let i = 0; i < due.length; i += 5) {
-    await Promise.all(due.slice(i, i + 5).map(async (delivery) => {
-      // A failure here must stay local to this row: the sweep that called us also drains the
-      // regular webhook queue, and a corrupt secret or DB hiccup on one subscription must not
-      // starve every other endpoint. The lease above makes the row retry later on its own.
-      try {
-        const gate = gates.get(delivery.subscriptionId);
-        if (!gate) return;
-        const outcome = await attemptDelivery(delivery, gate, send);
-        await recordOutcome(delivery, gate.sub, outcome);
-      } catch (err) {
-        log?.error({ err, deliveryId: delivery.id, subscriptionId: delivery.subscriptionId }, "mcp event delivery failed");
+  // One subscription's occurrences are posted one at a time, oldest first, so a list watcher sees a
+  // card arrive before it departs; up to five subscriptions deliver concurrently. Order is best
+  // effort: a row that fails and retries is posted after occurrences that succeeded in the meantime.
+  const bySubscription = new Map<string, typeof due>();
+  for (const delivery of due.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))) {
+    bySubscription.set(delivery.subscriptionId, [...(bySubscription.get(delivery.subscriptionId) ?? []), delivery]);
+  }
+  const streams = [...bySubscription.values()];
+  for (let i = 0; i < streams.length; i += 5) {
+    await Promise.all(streams.slice(i, i + 5).map(async (stream) => {
+      for (const delivery of stream) {
+        // A failure here must stay local to this row: the sweep that called us also drains the
+        // regular webhook queue, and a corrupt secret or DB hiccup on one subscription must not
+        // starve every other endpoint. The lease above makes the row retry later on its own.
+        try {
+          const gate = gates.get(delivery.subscriptionId);
+          if (!gate) continue;
+          const outcome = await attemptDelivery(delivery, gate, send);
+          await recordOutcome(delivery, gate.sub, outcome);
+        } catch (err) {
+          log?.error({ err, deliveryId: delivery.id, subscriptionId: delivery.subscriptionId }, "mcp event delivery failed");
+        }
       }
     }));
   }
