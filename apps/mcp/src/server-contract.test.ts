@@ -782,8 +782,24 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     // Raised by 6k for agent files and capture: cards.get_attachment and cards.create_upload_link
     // (reading and attaching real files instead of base64), the four scratchpad inbox tools, date
     // fields that accept phrases such as "tomorrow 1pm", and result order stated on list tools.
-    assert.ok(schemaCatalogLength <= 211_500, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
-    assert.ok(serializedToolCatalogLength <= 219_500, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
+    // Lowered from 211_500 / 219_500 (DEV-1648): the regex `pattern` Zod emits beside every `format`
+    // (uuid, date-time, base64) was a fifth of the payload and is stripped in draft7Schema. The
+    // ceilings track the measured catalog with a little headroom, so new tools or fields show up as
+    // a deliberate raise here rather than silent context growth.
+    assert.ok(schemaCatalogLength <= 170_000, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
+    assert.ok(serializedToolCatalogLength <= 178_000, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
+    // No single tool may dominate the catalog: work.query_cards is the largest at ~8k because its
+    // filter object is spelled out in full. Anything bigger needs its schema reconsidered, not a
+    // bigger total budget.
+    for (const tool of withoutAuthMetadata) {
+      const size = JSON.stringify(tool).length;
+      assert.ok(size <= 8_500, `${tool.name} schema stays under the per-tool ceiling (received ${size})`);
+    }
+    assert.doesNotMatch(
+      JSON.stringify(tools),
+      /"format":"[^"]+","pattern"|"pattern":"[^"]+","format"/u,
+      "format-typed values do not also carry their regex pattern in the catalog",
+    );
     for (const name of [
       "kanera_bulk_add_comments",
       "kanera_bulk_delete_comments",

@@ -16,6 +16,7 @@ All notable changes to Kanera are documented here.
 - **Natural dates for agents:** MCP date inputs accept phrases such as "tomorrow 1pm", "next friday" or "in 2 weeks", resolved in your own time zone, and a time picks the matching due slot. `session.get` and `GET /api/v1/session` now return your `timeZone` and `today`, and `work.my_day` and `work.portfolio_summary` default to your time zone instead of UTC.
 
 ### Changed
+- **Kanera MCP:** the tool catalog that agents load into context is a fifth smaller. Field types such as UUIDs and timestamps are described by their JSON Schema `format` only, without a duplicate regex; values are still validated when a tool is called.
 - **Kanera MCP:** read-only keys and connections now see only read tools, rather than seeing write tools that are refused when called. List tools state the order their results come back in.
 - **Workspace team notes:** every workspace member can now create and edit team notes, not just workspace admins. Board team notes still need board editor access.
 - **Hosted Free plan:** AI agents (Claude, ChatGPT, Cursor, the CLI), MCP, and personal API keys are now included, with read and write access to Free-plan boards. Workspace API keys, unattended service agents, and webhooks remain Pro-only. Downgrading to Free now revokes only workspace API keys; personal keys keep working.

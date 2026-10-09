@@ -1261,13 +1261,30 @@ async function standardWorkspaceContext(api: KaneraClient, workspaceId: string) 
  * the published schemas exactly as they were. Zod still validates and parses the arguments; only
  * the advertised JSON Schema is pinned.
  */
+/**
+ * Zod emits a regex `pattern` next to every `format` (uuid, date-time, base64, ...). The UUID regex
+ * alone is ~180 characters and appeared 235 times, a fifth of the whole tools/list payload that every
+ * host loads into model context. `format` already tells the model what to send, and the Zod schema
+ * still enforces the full pattern when the tool is called, so the catalog copy is pure cost.
+ */
+function stripRedundantPatterns(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(stripRedundantPatterns);
+  if (node === null || typeof node !== "object") return node;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(node)) {
+    if (key === "pattern" && typeof (node as { format?: unknown }).format === "string") continue;
+    out[key] = stripRedundantPatterns(value);
+  }
+  return out;
+}
+
 function draft7Schema<T extends z.ZodType>(schema: T): T {
   return {
     "~standard": {
       ...schema["~standard"],
       jsonSchema: {
-        input: () => z.toJSONSchema(schema, { target: "draft-7", io: "input" }),
-        output: () => z.toJSONSchema(schema, { target: "draft-7", io: "output" }),
+        input: () => stripRedundantPatterns(z.toJSONSchema(schema, { target: "draft-7", io: "input" })),
+        output: () => stripRedundantPatterns(z.toJSONSchema(schema, { target: "draft-7", io: "output" })),
       },
     },
   } as unknown as T;
