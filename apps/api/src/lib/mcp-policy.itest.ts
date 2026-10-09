@@ -98,6 +98,11 @@ void test("organisation MCP policy caps personal agent credentials on the organi
       assert.equal(workspacesRes.statusCode, 200, workspacesRes.body);
       assert.ok(!workspacesRes.body.includes(home.workspaceId));
       assert.equal((await createCard(home)).statusCode, 403);
+      // Org-scoped agent surfaces outside board access honour it too.
+      assert.equal((await publicApi.inject({ method: "GET", url: "/api/v1/scratchpad/notes", headers: bearer })).statusCode, 403);
+      const targets = await publicApi.inject({ method: "GET", url: "/api/v1/work/priority-targets", headers: bearer });
+      assert.equal(targets.statusCode, 200, targets.body);
+      assert.ok(!targets.body.includes(home.workspaceId), "off organisation's workspaces grant no priority targets");
 
       await setPolicy(app, home.accessToken, "write");
       await setPolicy(app, host.accessToken, "write");

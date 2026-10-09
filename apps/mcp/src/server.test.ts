@@ -237,7 +237,7 @@ void test("standard workspace tools reject a standalone configuration id", async
     error: {
       status: 400,
       code: "VALIDATION_ERROR",
-      message: "workspaceId must identify a standard workspace; use standaloneBoardId for a standalone board",
+      message: "workspaceId must identify a standard workspace; for a standalone board use boards.get_standalone_settings with its boardId",
     },
   });
 });

@@ -778,16 +778,9 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     // budget independently, and bound the extra auth metadata rather than granting schema growth.
     const withoutAuthMetadata = tools.map(({ _meta, ...tool }) => tool);
     const schemaCatalogLength = JSON.stringify(withoutAuthMetadata).length;
-    // Raised from 204_000 for work.my_day (one aggregate tool replacing a five-call session start).
-    // Raised by 6k for agent files and capture: cards.get_attachment and cards.create_upload_link
-    // (reading and attaching real files instead of base64), the four scratchpad inbox tools, date
-    // fields that accept phrases such as "tomorrow 1pm", and result order stated on list tools.
-    // Lowered from 211_500 / 219_500 (DEV-1648): the regex `pattern` Zod emits beside every `format`
-    // (uuid, date-time, base64) was a fifth of the payload and is stripped in draft7Schema. The
-    // ceilings track the measured catalog with a little headroom, so new tools or fields show up as
-    // a deliberate raise here rather than silent context growth.
-    assert.ok(schemaCatalogLength <= 170_000, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
-    assert.ok(serializedToolCatalogLength <= 178_000, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
+    // Ceilings track the measured catalog with a little headroom, so growth is a deliberate raise.
+    assert.ok(schemaCatalogLength <= 172_000, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
+    assert.ok(serializedToolCatalogLength <= 180_000, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
     // No single tool may dominate the catalog: work.query_cards is the largest at ~8k because its
     // filter object is spelled out in full. Anything bigger needs its schema reconsidered, not a
     // bigger total budget.

@@ -105,6 +105,9 @@ void test("agent runs: start, heartbeat, block, finish, and refuse edits after t
 
   const liveAfter = await app.inject({ method: "GET", url: `/cards/${card.id}/agent-runs`, headers: owner.auth });
   assert.equal(liveAfter.json<{ runs: RunRow[] }>().runs.length, 0, "ended runs are excluded by default");
+  // MCP runs.list always sends the flag; the string "false" must not coerce to true.
+  const explicitlyLive = await app.inject({ method: "GET", url: `/cards/${card.id}/agent-runs?includeEnded=false`, headers: owner.auth });
+  assert.equal(explicitlyLive.json<{ runs: RunRow[] }>().runs.length, 0, "includeEnded=false excludes ended runs");
   const history = await app.inject({ method: "GET", url: `/cards/${card.id}/agent-runs?includeEnded=true`, headers: owner.auth });
   assert.equal(history.json<{ runs: RunRow[] }>().runs.length, 1);
 

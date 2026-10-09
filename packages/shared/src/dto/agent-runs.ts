@@ -29,7 +29,8 @@ export type UpdateAgentRunBody = z.infer<typeof updateAgentRunBody>;
 
 export const listAgentRunsQuery = z.object({
   // Default to live runs only; card detail asks for everything.
-  includeEnded: z.coerce.boolean().default(false),
+  // z.coerce.boolean() would turn the query string "false" into true; parse the literal instead.
+  includeEnded: z.stringbool().default(false),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 export type ListAgentRunsQuery = z.infer<typeof listAgentRunsQuery>;

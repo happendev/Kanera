@@ -122,9 +122,10 @@ async function credentialRevoked(token: string, publicApiUrl: string | undefined
   }
 }
 
-// A credential's scope is fixed for its lifetime (keys and OAuth grants are reissued, never
-// re-scoped), so the verdict can be remembered per bearer token. Revocation does not depend on this
-// cache: the public API rejects a revoked token on every call regardless of the catalog it saw.
+// A credential's own scope is fixed for its lifetime (keys and OAuth grants are reissued, never
+// re-scoped), but an organisation's AI agent access setting can change its effective scope, so the
+// verdict is only remembered for the TTL below. Neither revocation nor the policy depends on this
+// cache: the public API enforces both on every call regardless of the catalog the client saw.
 const SCOPE_CACHE_TTL_MS = 5 * 60_000;
 const SCOPE_CACHE_LIMIT = 10_000;
 const scopeCache = new Map<string, { readOnly: boolean; expiresAt: number }>();

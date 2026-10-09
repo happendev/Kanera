@@ -13,6 +13,7 @@ import {
   cardPriorities,
   cardSummaryView,
   cards,
+  clients,
   MAX_CARD_PRIORITIES_PER_USER,
   users,
   workspaceMembers,
@@ -33,6 +34,7 @@ import {
   toPriorityQueueItem,
 } from "../../lib/card-priority-queue.js";
 import { badRequest, conflict, forbidden, notFound } from "../../lib/errors.js";
+import { effectiveMcpPolicy } from "../../lib/mcp-policy.js";
 import { between } from "../../lib/position.js";
 import { rebalanceCardPriorities } from "../../lib/rebalance.js";
 import { emitCardPriorityInvalidated } from "../../realtime/emit.js";
@@ -329,7 +331,16 @@ async function loadPriorityTargets(
       ? db.select({ workspaceId: workspaces.id }).from(workspaces).where(eq(workspaces.clientId, auth.cid))
       : Promise.resolve([] as { workspaceId: string }[]),
   ]);
-  const authorityWorkspaceIds = [...new Set([...adminRows, ...ownedRows].map((row) => row.workspaceId))];
+  let authorityWorkspaceIds = [...new Set([...adminRows, ...ownedRows].map((row) => row.workspaceId))];
+  // Personal agent credentials must not list teammates of organisations whose MCP policy is off.
+  if (auth.apiKeyKind === "personal" && authorityWorkspaceIds.length) {
+    const allowed = await db
+      .select({ workspaceId: workspaces.id, mcpPolicy: clients.mcpPolicy })
+      .from(workspaces)
+      .innerJoin(clients, eq(clients.id, workspaces.clientId))
+      .where(inArray(workspaces.id, authorityWorkspaceIds));
+    authorityWorkspaceIds = allowed.filter((row) => effectiveMcpPolicy(row.mcpPolicy) !== "off").map((row) => row.workspaceId);
+  }
 
   const memberRows = authorityWorkspaceIds.length
     ? await db

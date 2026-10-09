@@ -20,6 +20,7 @@ import {
 } from "../../lib/entitlements.js";
 import { AppError, badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { assertWriteCapableCredential } from "../../lib/access.js";
+import { assertAgentAccessAllowed } from "../../lib/mcp-policy.js";
 import type { AuthClaims } from "../../auth/plugin.js";
 import { signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, unsignedMediaUrl } from "../../lib/media-keys.js";
 import { between } from "../../lib/position.js";
@@ -152,6 +153,8 @@ function assertPersonalCredential(claims: AuthClaims): void {
   if (claims.authKind === "apiKey" && claims.apiKeyKind !== "personal") {
     throw forbidden("the scratchpad needs a personal API key or OAuth connection");
   }
+  // The scratchpad lives in the credential's current organisation, so its MCP policy governs it.
+  assertAgentAccessAllowed(claims);
 }
 
 /** Millisecond-precision match between a client's ISO watermark and the stored timestamp. */
