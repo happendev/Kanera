@@ -150,6 +150,8 @@ const allToolCases: ToolCase[] = [
   // Bootstrap: no template and no explicit configuration leaves the seed keys absent so the API
   // applies its own defaults; a template expands to the exact web-onboarding payload.
   { name: "workspaces.create", args: { name: "Delivery" }, method: "POST", path: "/api/v1/workspaces", body: { kind: "standard", name: "Delivery" } },
+  // The agent's own cards replace template starter cards and land on a board named for the workspace.
+  { name: "workspaces.create", args: { name: "Delivery", lists: [{ name: "Todo" }, { name: "Done" }], labels: [{ name: "Bug" }], cards: [{ title: "Ship it", listName: "todo", labelNames: ["bug"] }] }, method: "POST", path: "/api/v1/workspaces", body: { kind: "standard", name: "Delivery", initialBoard: { name: "Delivery" }, lists: [{ name: "Todo" }, { name: "Done" }], labels: [{ name: "Bug" }], cards: [{ title: "Ship it", listName: "todo", labelNames: ["bug"] }] } },
   { name: "boards.create_standalone", args: { name: "Solo", templateId: "blank" }, method: "POST", path: "/api/v1/workspaces", body: { kind: "board", name: "Solo", icon: "layout-kanban", initialBoard: { name: "Solo", icon: "layout-kanban" }, lists: [], customFields: [], labels: [], checklistTemplates: [], cards: [], automations: [] } },
   { name: "kanera_update_workspace", args: { workspaceId: W, name: "Delivery Ops", completedCardsActiveDays: 30 }, method: "PATCH", path: `/api/v1/workspaces/${W}`, body: { name: "Delivery Ops", completedCardsActiveDays: 30 } },
   { name: "workspaces.create_board", args: { workspaceId: W, name: "Launch", groupId: null, description: "Launch plan" }, method: "POST", path: `/api/v1/workspaces/${W}/boards`, body: { name: "Launch", groupId: null, description: "Launch plan" } },
@@ -174,7 +176,8 @@ const allToolCases: ToolCase[] = [
   { name: "cards.get", args: { cardId: C }, method: "GET", path: `/api/v1/cards/${C}/detail` },
   { name: "cards.list_history", args: { cardId: C, limit: 50 }, method: "GET", path: `/api/v1/cards/${C}/feed?limit=50` },
   { name: "cards.get_content", args: { boardId: B, cardIds: [C] }, method: "POST", path: `/api/v1/boards/${B}/cards/content/query`, body: { cardIds: [C] } },
-  { name: "cards.create", args: { boardId: B, listId: L, title: "Title", description: "Body", atTop: true, idempotencyKey: C }, method: "POST", path: `/api/v1/boards/${B}/lists/${L}/cards`, body: { title: "Title", description: "Body", atTop: true } },
+  { name: "cards.create", args: { boardId: B, listId: L, title: "Title", description: "Body", atTop: true, labelIds: [O], assigneeIds: [U], dueDateLocalDate: "2026-10-16", dueDateSlot: "morning", idempotencyKey: C }, method: "POST", path: `/api/v1/boards/${B}/lists/${L}/cards`, body: { title: "Title", description: "Body", atTop: true, labelIds: [O], assigneeIds: [U], dueDateLocalDate: "2026-10-16", dueDateSlot: "morning" } },
+  { name: "cards.bulk_create", args: { boardId: B, cards: [{ listId: L, title: "One", labelIds: [O] }, { listId: L, title: "Two", assigneeIds: [U], dueDateLocalDate: "2026-10-16" }] }, method: "POST", path: `/api/v1/boards/${B}/cards/bulk/create`, body: { cards: [{ listId: L, title: "One", labelIds: [O] }, { listId: L, title: "Two", assigneeIds: [U], dueDateLocalDate: "2026-10-16" }] } },
   { name: "cards.update", args: { cardId: C, changes: { title: "New", dueDateLocalDate: "2026-07-01", dueDateSlot: "morning" } }, method: "PATCH", path: `/api/v1/cards/${C}`, body: { title: "New", dueDateLocalDate: "2026-07-01", dueDateSlot: "morning" } },
   { name: "cards.move", args: { cardId: C, listId: L, anchor: { side: "before", item: { type: "separator", id: O } } }, method: "POST", path: `/api/v1/cards/${C}/move`, body: { listId: L, beforeItem: { type: "separator", id: O } } },
   { name: "cards.archive", args: { cardId: C, archived: true }, method: "PATCH", path: `/api/v1/cards/${C}/archive`, body: { archived: true } },
@@ -281,6 +284,7 @@ const allToolCases: ToolCase[] = [
   { name: "cards.set_reminder", args: { cardId: C, remindAt: "2026-10-12T08:00:00Z" }, method: "PUT", path: `/api/v1/cards/${C}/reminder`, body: { remindAt: "2026-10-12T08:00:00Z" } },
   { name: "cards.set_reminder", args: { cardId: C, remindAt: null }, method: "DELETE", path: `/api/v1/cards/${C}/reminder` },
   { name: "reminders.list", args: { status: "pending" }, method: "GET", path: "/api/v1/reminders?status=pending" },
+  { name: "notifications.list", args: { since: "2026-10-11T08:00:00.000Z|abc", limit: 20, includeSelf: false }, method: "GET", path: "/api/v1/notifications?since=2026-10-11T08%3A00%3A00.000Z%7Cabc&limit=20&includeSelf=false" },
 ];
 
 const nonDefaultToolNames = new Set([
@@ -471,7 +475,7 @@ const multipartToolCases: MultipartToolCase[] = [{
 void test("every MCP tool maps to the expected public API request", async () => {
   const server = internals();
   const expectedNames = [...new Set([...toolCases, ...noRequestToolCases, ...multiRequestToolCases, ...multipartToolCases].map((item) => item.name))].sort();
-  assert.equal(expectedNames.length, 99);
+  assert.equal(expectedNames.length, 101);
   assert.deepEqual(Object.keys(server._registeredTools).sort(), expectedNames);
 
   const originalFetch = globalThis.fetch;
@@ -780,14 +784,17 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     // verb keeps tool choice unambiguous and the catalog small.
     // Following and reminders (cards.set_watching, cards.set_reminder, reminders.list) add roughly
     // 2.7k; each verb folds set and clear into one tool, and both ceilings move by that headroom.
+    // Agent follow-through (cards.bulk_create, notifications.list, seed cards on workspace bootstrap,
+    // and labels/assignees/due date on cards.create) adds roughly 6k; the schema budget is 185k and
+    // the OAuth-inclusive ceiling keeps its 8k margin above it.
     const serializedToolCatalogLength = JSON.stringify(tools).length;
     // OAuth declarations add a fixed per-tool cost. Preserve the original routing/schema
     // budget independently, and bound the extra auth metadata rather than granting schema growth.
     const withoutAuthMetadata = tools.map(({ _meta, ...tool }) => tool);
     const schemaCatalogLength = JSON.stringify(withoutAuthMetadata).length;
     // Ceilings track the measured catalog with a little headroom, so growth is a deliberate raise.
-    assert.ok(schemaCatalogLength <= 175_000, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
-    assert.ok(serializedToolCatalogLength <= 183_000, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
+    assert.ok(schemaCatalogLength <= 185_000, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
+    assert.ok(serializedToolCatalogLength <= 193_000, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
     // No single tool may dominate the catalog: work.query_cards is the largest at ~8k because its
     // filter object is spelled out in full. Anything bigger needs its schema reconsidered, not a
     // bigger total budget.

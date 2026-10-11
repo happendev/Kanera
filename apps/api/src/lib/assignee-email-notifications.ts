@@ -5,6 +5,7 @@ import type { Db, Tx } from "../db.js";
 import type { Mailer } from "./mailer.js";
 import { allowsNotificationEmail, allowsNotificationPush, allowsPersonalNotificationChannel, getNotificationSettingsForUsers, getNotificationWorkspaceRulesForUsers, isClientPushEnabled, type EffectiveNotificationSettings, type EffectiveNotificationWorkspaceRule, type NotificationPreferenceType, type NotificationWorkspaceRuleScope } from "./notification-settings.js";
 import { enqueuePersonalNotification, enqueuePush } from "./push-queue.js";
+import { agentActorName } from "./agent-actor-name.js";
 import { absoluteCardUrl } from "./wire-card.js";
 
 interface CardEmailContext {
@@ -546,17 +547,25 @@ async function loadUser(tx: Tx, userId: string) {
 }
 
 async function resolveActorName(tx: Tx, actorId: string): Promise<string | null> {
-  if (requestContext.get("authKind") === "apiKey") {
+  const authKind = requestContext.get("authKind");
+  if (authKind === "apiKey") {
     // API keys borrow the creator user id for tenancy, but human-facing outbound
     // notifications should name the integration that actually made the change.
     return requestContext.get("apiKeyName") ?? "API key";
   }
   const actor = await loadUser(tx, actorId);
-  return actor?.displayName ?? null;
+  if (!actor) return null;
+  // An agent acts as its owner, so the person is the actor; naming the agent too matches the
+  // in-app "via <agent>" chip and tells the owner this was delegated work, not their own.
+  if (authKind === "agent") return agentActorName(actor.displayName, requestContext.get("agentName"));
+  return actor.displayName;
 }
 
 function actorSuppressionId(actorId: string): string | null {
-  return requestContext.get("authKind") === "apiKey" ? null : actorId;
+  // Self-suppression is for people acting by hand. API keys and agents borrow the owner's id, and
+  // the owner needs to hear about what was done on their behalf (see notificationActorSuppressionId).
+  const authKind = requestContext.get("authKind");
+  return authKind === "apiKey" || authKind === "agent" ? null : actorId;
 }
 
 async function loadRecipients(tx: Tx, userIds: string[], actorId: string | null) {

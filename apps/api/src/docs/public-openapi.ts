@@ -1,6 +1,6 @@
 import { dto } from "@kanera/shared";
 import { CARD_DUE_DATE_SLOTS } from "@kanera/shared/due-date-slots";
-import { CLIENT_ROUTE_KEY_PATTERN, MAX_CARD_PRIORITIES_PER_USER } from "@kanera/shared/schema";
+import { CLIENT_ROUTE_KEY_PATTERN, MAX_CARD_PRIORITIES_PER_USER, NOTIFICATION_REASONS } from "@kanera/shared/schema";
 import { z } from "zod";
 
 type HttpMethod = "get" | "post" | "patch" | "put" | "delete";
@@ -1510,6 +1510,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       BulkMoveCardsBody: zodSchema(dto.bulkMoveCardsBody),
       BulkArchiveCardsBody: zodSchema(dto.bulkArchiveCardsBody),
       BulkDuplicateCardsBody: zodSchema(dto.bulkDuplicateCardsBody),
+      BulkCreateCardsBody: zodSchema(dto.bulkCreateCardsBody),
       BulkSetCardCustomFieldBody: zodSchema(dto.bulkSetCardCustomFieldBody),
       MoveCardBody: zodSchema(dto.moveCardBody),
       CreateCardPriorityBody: zodSchema(dto.createCardPriorityBody),
@@ -2144,6 +2145,15 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       tags: ["Cards"], summary: "Duplicate selected cards", operationId: "bulkDuplicateCards", parameters: [idParam("boardId")], requestBody: jsonBody(ref("BulkDuplicateCardsBody")),
       responses: authedResponses({ "201": created({ type: "object", required: ["duplicated", "cards", "skippedCardIds"], properties: { duplicated: { type: "integer" }, cards: arrayOf(ref("Card")), skippedCardIds: arrayOf(uuid) } }) }),
     })),
+    "/boards/{boardId}/cards/bulk/create": pathItem("post", operation({
+      tags: ["Cards"],
+      summary: "Create several cards",
+      description: `Creates up to ${dto.BULK_CREATE_CARDS_MAX} cards on one board, each with optional labels, assignees, and due date, appended to the bottom of its list in request order. Every card is validated before any is created, so an invalid label, assignee, or list rejects the whole request and names the offending \`cards[i]\`. Each card then fires the same automations, notifications, and webhooks as a single create. Send an Idempotency-Key to retry safely.`,
+      operationId: "bulkCreateCards",
+      parameters: [idParam("boardId")],
+      requestBody: jsonBody(ref("BulkCreateCardsBody")),
+      responses: authedResponses({ "201": created({ type: "object", required: ["created", "cards"], properties: { created: { type: "integer" }, cards: arrayOf(ref("Card")) } }) }),
+    })),
     "/boards/{boardId}/cards/bulk/custom-fields": pathItem("patch", operation({
       tags: ["Cards"], summary: "Set one custom field on selected cards", operationId: "bulkSetCardCustomField", parameters: [idParam("boardId")], requestBody: jsonBody(ref("BulkSetCardCustomFieldBody")),
       responses: authedResponses({ "200": ok({ type: "object", required: ["updated", "values", "clearedCardIds", "skippedCardIds"], properties: { updated: { type: "integer" }, values: arrayOf(ref("CustomFieldValue")), clearedCardIds: arrayOf(uuid), skippedCardIds: arrayOf(uuid) } }) }),
@@ -2420,6 +2430,45 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       put: operation({ tags: ["Following"], summary: "Set your reminder on a card", description: `Schedules a one-off reminder that notifies you at \`remindAt\` (an ISO instant with offset, in the future and at most ${dto.MAX_REMINDER_LEAD_DAYS} days, eight weeks, ahead). You hold at most one reminder per card, so this replaces and re-arms any existing one, fired or not. Completing the card clears every reminder on it. Delivery uses your notification settings' Reminders row; agents can also subscribe to the \`reminder.due\` MCP event. Read access to the card is enough; a write-capable credential is required.`, operationId: "setCardReminder", parameters: [idParam()], requestBody: jsonBody(ref("SetCardReminderBody")), responses: authedResponses({ "200": ok(ref("CardFollowState")) }) }),
       delete: operation({ tags: ["Following"], summary: "Clear your reminder on a card", description: "Removes your reminder, pending or fired. Idempotent. Requires a write-capable credential.", operationId: "clearCardReminder", parameters: [idParam()], responses: authedResponses({ "200": ok(ref("CardFollowState")) }) }),
     },
+    "/notifications": pathItem("get", operation({
+      tags: ["Following"],
+      summary: "Poll your notification inbox",
+      description: "Reads your notification inbox forward from a cursor, oldest first: the same rows as the web inbox, so replies, mentions, assignments, and changes on cards you watch or are assigned (including cards your AI agent created). The first call without `since` returns the latest rows as a baseline; pass the returned `cursor` as `since` on every later call, and repeat while `hasMore` is true. Rows appear a few seconds after the event. An OAuth agent connection does not see notifications caused by its own writes unless `includeSelf=true`. Needs a personal API key or OAuth connection.",
+      operationId: "pollNotifications",
+      parameters: [
+        queryParam("since", { type: "string" }),
+        queryParam("limit", { type: "integer", minimum: 1, maximum: 100, default: 50 }),
+        queryParam("includeSelf", { type: "boolean", default: false }),
+      ],
+      responses: authedResponses({ "200": ok({
+        type: "object",
+        required: ["items", "cursor", "hasMore"],
+        properties: {
+          items: arrayOf({
+            type: "object",
+            required: ["id", "createdAt", "reason", "read", "summary", "action", "actor", "card", "board", "commentExcerpt"],
+            properties: {
+              id: uuid,
+              createdAt: { type: "string", format: "date-time" },
+              reason: { type: "string", enum: [...NOTIFICATION_REASONS] },
+              read: { type: "boolean" },
+              summary: { type: "string" },
+              action: nullable({ type: "string" }),
+              actor: nullable({
+                type: "object",
+                required: ["userId", "name", "kind", "agentName", "self"],
+                properties: { userId: nullable(uuid), name: nullable({ type: "string" }), kind: { type: "string" }, agentName: nullable({ type: "string" }), self: { type: "boolean" } },
+              }),
+              card: nullable({ type: "object", required: ["id", "key", "title", "url"], properties: { id: uuid, key: { type: "string" }, title: { type: "string" }, url: { type: "string", format: "uri" } } }),
+              board: nullable({ type: "object", required: ["id", "name"], properties: { id: uuid, name: nullable({ type: "string" }) } }),
+              commentExcerpt: nullable({ type: "string" }),
+            },
+          }),
+          cursor: { type: "string" },
+          hasMore: { type: "boolean" },
+        },
+      }) }),
+    })),
     "/reminders": pathItem("get", operation({
       tags: ["Following"],
       summary: "List your reminders",

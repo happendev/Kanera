@@ -161,6 +161,44 @@ export const listNotificationsQuery = z.object({
 });
 export type ListNotificationsQuery = z.infer<typeof listNotificationsQuery>;
 
+// Public-API inbox for agents that poll instead of holding a socket or webhook. It reads forward from
+// an opaque cursor (oldest first), so a poll loop never misses or repeats a row.
+export const notificationInboxQuery = z.object({
+  since: z.string().min(1).max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  includeSelf: z.preprocess((value) => value === "true" ? true : value === "false" ? false : value, z.boolean()).default(false),
+});
+export type NotificationInboxQuery = z.infer<typeof notificationInboxQuery>;
+
+export interface NotificationInboxItem {
+  id: string;
+  createdAt: string;
+  reason: NotificationReason;
+  read: boolean;
+  /** One line, the same wording as the web inbox and push: "Priya commented: …". */
+  summary: string;
+  action: string | null;
+  actor: {
+    userId: string | null;
+    name: string | null;
+    kind: string;
+    /** Set when an AI agent acted for the named person. */
+    agentName: string | null;
+    /** The polling connection caused this itself. */
+    self: boolean;
+  } | null;
+  card: { id: string; key: string; title: string; url: string } | null;
+  board: { id: string; name: string | null } | null;
+  commentExcerpt: string | null;
+}
+
+export interface NotificationInboxPage {
+  items: NotificationInboxItem[];
+  /** Pass back as `since` on the next poll. Always present, even when items is empty. */
+  cursor: string;
+  hasMore: boolean;
+}
+
 export const notificationGroupBy = z.enum(["day", "board", "user", "organisation"]);
 export type NotificationGroupBy = z.infer<typeof notificationGroupBy>;
 

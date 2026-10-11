@@ -47,6 +47,7 @@ import { customFieldRoutes } from "./modules/custom-fields/routes.js";
 import { agentRunRoutes } from "./modules/agent-runs/routes.js";
 import { externalLinkRoutes } from "./modules/external-links/routes.js";
 import { followRoutes } from "./modules/notifications/follow.routes.js";
+import { notificationInboxRoutes } from "./modules/notifications/inbox.routes.js";
 import { mcpEventRoutes } from "./modules/integrations/mcp-events.routes.js";
 import type { McpWebhookRequest } from "./lib/mcp-event-webhooks.js";
 import { webhookEndpointRoutes } from "./modules/integrations/webhook-endpoint.routes.js";
@@ -479,6 +480,8 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
     // Watching and reminders are the user's own subscription state; the same handlers serve the web
     // app, and their user-scoped events reach the user's web sessions through the direct outbox.
     await api.register(followRoutes);
+    // A forward-reading view of the same inbox, for agents that poll rather than subscribe.
+    await api.register(notificationInboxRoutes);
     await api.register(separatorRoutes);
     await api.register((instance) => cardAttachmentRoutes(instance, { exposeCoverMetadata: false }));
     await api.register(uploadLinkRoutes);

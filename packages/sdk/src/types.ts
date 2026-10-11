@@ -335,6 +335,28 @@ export interface CardReminderListItem extends CardReminder {
   card: { id: Uuid; key: string; title: string; boardId: Uuid; workspaceId: Uuid; url: string };
 }
 
+/** One row of the polled notification inbox; `summary` reads like the web inbox. */
+export interface NotificationInboxItem {
+  id: Uuid;
+  createdAt: string;
+  reason: "assigned" | "watching" | "mentioned" | "overdue" | "checklist_item_overdue" | "board_member_left" | "reminder";
+  read: boolean;
+  summary: string;
+  action: string | null;
+  /** `self` is true when the polling connection caused the notification. */
+  actor: { userId: Uuid | null; name: string | null; kind: string; agentName: string | null; self: boolean } | null;
+  card: { id: Uuid; key: string; title: string; url: string } | null;
+  board: { id: Uuid; name: string | null } | null;
+  commentExcerpt: string | null;
+}
+
+export interface NotificationInboxPage {
+  items: NotificationInboxItem[];
+  /** Pass back as `since` on the next poll. */
+  cursor: string;
+  hasMore: boolean;
+}
+
 /** Whether you watch a card, and your reminder on it. Private to the connected user. */
 export interface CardFollowState {
   cardId: Uuid;

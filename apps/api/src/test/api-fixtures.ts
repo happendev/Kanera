@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import type { FastifyInstance } from "fastify";
-import { boards, lists } from "@kanera/shared/schema";
+import { boards, lists, oauthClients, oauthGrants, oauthTokens } from "@kanera/shared/schema";
 import { and, asc, eq } from "drizzle-orm";
+import { randomBytes, randomUUID } from "node:crypto";
 import { db } from "../db.js";
+import { hashOpaqueToken } from "../lib/tokens.js";
 
 /**
  * Integration-test factories for the "sign up, get a workspace, get a board" preamble.
@@ -111,4 +113,47 @@ export async function seedWorkspace(
   assert.ok(board, "workspace should be seeded with a default board");
 
   return { id: workspace.id, cardKeyPrefix: workspace.cardKeyPrefix, boardId: board.id, listId: list.id };
+}
+
+/**
+ * A public-API bearer for an interactive AI agent grant acting for `user`, as the MCP server would
+ * obtain it: an MCP-audience access token bound to a grant, exchanged at /oauth/mcp/delegate. Skips
+ * the browser consent flow, which oauth/routes.itest.ts covers.
+ */
+export async function mintAgentToken(
+  publicApi: FastifyInstance,
+  user: { id: string; clientId: string },
+  agentName = "Claude",
+): Promise<{ authorization: string; grantId: string }> {
+  const resource = "http://localhost:3002/mcp";
+  const clientId = `test_agent_${randomUUID()}`;
+  await db.insert(oauthClients).values({ clientId, kind: "public", name: agentName, grantTypes: ["authorization_code"] });
+  const [grant] = await db.insert(oauthGrants).values({
+    clientId,
+    userId: user.id,
+    orgClientId: user.clientId,
+    scopes: ["kanera:read", "kanera:write"],
+    resource,
+  }).returning();
+  assert.ok(grant);
+  const raw = `kanera_mcp_${randomBytes(32).toString("base64url")}`;
+  await db.insert(oauthTokens).values({
+    kind: "access",
+    tokenHash: hashOpaqueToken(raw),
+    clientId,
+    grantId: grant.id,
+    userId: user.id,
+    familyId: randomUUID(),
+    scopes: ["kanera:read", "kanera:write"],
+    resource,
+    expiresAt: new Date(Date.now() + 15 * 60_000),
+  });
+  const delegated = await publicApi.inject({
+    method: "POST",
+    url: "/oauth/mcp/delegate",
+    headers: { "x-kanera-mcp-secret": process.env.MCP_INTERNAL_SECRET! },
+    payload: { token: raw, resource },
+  });
+  assert.equal(delegated.statusCode, 200, delegated.body);
+  return { authorization: `Bearer ${delegated.json<{ accessToken: string }>().accessToken}`, grantId: grant.id };
 }

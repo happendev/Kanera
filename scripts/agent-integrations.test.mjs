@@ -67,7 +67,7 @@ void test("the submission plugin declares the hosted Kanera MCP server", async (
       oauth_resource: "https://mcp.kanera.app/mcp",
       extensions: {
         "com.openai": {
-          auth: { type: "oauth" },
+          auth: { type: "oauth", client: { mode: "dcr" } },
         },
       },
     },

@@ -69,6 +69,7 @@ export const COMMAND_ALIASES: CommandAlias[] = [
   { path: ["remind"], tool: "cards.set_reminder", summary: "Remind yourself about a card, e.g. remind MKT-42 \"friday 3pm\"", positionals: ["cardId", "remindAt"], group: "Work" },
   { path: ["remind", "clear"], tool: "cards.set_reminder", summary: "Clear your reminder on a card", positionals: ["cardId"], defaults: { remindAt: null }, group: "Work" },
   { path: ["reminders"], tool: "reminders.list", summary: "List your pending card reminders", group: "Work" },
+  { path: ["inbox"], tool: "notifications.list", summary: "Poll your notification inbox; pass --since <cursor> for only what is new", group: "Work" },
 
   { path: ["notes"], tool: "notes.list", summary: "List note metadata for a workspace or board", group: "Notes" },
   { path: ["note"], tool: "notes.get", summary: "Read a note", positionals: ["noteId"], group: "Notes" },
