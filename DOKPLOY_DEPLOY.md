@@ -46,7 +46,7 @@ PUBLIC_API_TRUST_PROXY=true
 API_REPLICAS=2
 PUBLIC_API_REPLICAS=1
 MCP_REPLICAS=1
-REALTIME_WEBSOCKET_COMPRESSION_ENABLED=true
+REALTIME_WEBSOCKET_COMPRESSION_ENABLED=false
 REALTIME_WEBSOCKET_COMPRESSION_THRESHOLD_BYTES=1024
 
 POSTGRES_PASSWORD=<openssl rand -hex 32>
@@ -57,6 +57,13 @@ MEDIA_SIGNING_SECRET=<openssl rand -hex 32>
 SECRETS_ENCRYPTION_KEY=<openssl rand -hex 32>
 KANERA_ALLOW_PRIVATE_NOTIFICATION_DESTINATIONS=false
 ```
+
+Realtime compression is disabled by default to avoid compression work and delivery queues for
+Kanera's typically small messages. Set `REALTIME_WEBSOCKET_COMPRESSION_ENABLED=true` to opt in when
+bandwidth is constrained and large updates are common. When enabled, messages above the 1024-byte
+threshold use fast deflate (level 1) without server context takeover. These settings apply to both
+hosted and self-hosted deployments. Existing deployments explicitly set to `true` remain opted in;
+change that setting to `false` and recreate the API containers to adopt the new default.
 
 Product analytics remains disabled for ordinary self-hosted Dokploy installations. A
 Kanera-operated hosted deployment may opt in with the four `ANALYTICS_*`/`POSTHOG_*` variables

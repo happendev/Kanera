@@ -123,10 +123,17 @@ export async function setupIo(app: FastifyInstance): Promise<IoServer> {
   io = new Server(app.server, {
     cors: { origin: env.WEB_ORIGIN, credentials: true },
     transports: ["websocket"],
-    // Kanera only enables websocket transport, so per-message deflate is the compression path that
-    // shrinks realtime frames. Keep a threshold so tiny presence/move events do not burn CPU.
+    // ws only honors its compression threshold without server context takeover. Otherwise even
+    // tiny presence/move events enter the zlib queue, delaying fanout behind compression work.
+    // Fast independent messages keep large updates compressed without spending CPU on tiny ones;
+    // the bandwidth tradeoff is intentional. Use transport options: the installed Engine.IO
+    // WebSocket sender does not forward Socket.IO's per-packet .compress(false) flag to ws.
     perMessageDeflate: env.REALTIME_WEBSOCKET_COMPRESSION_ENABLED
-      ? { threshold: env.REALTIME_WEBSOCKET_COMPRESSION_THRESHOLD_BYTES }
+      ? {
+          threshold: env.REALTIME_WEBSOCKET_COMPRESSION_THRESHOLD_BYTES,
+          serverNoContextTakeover: true,
+          zlibDeflateOptions: { level: 1 },
+        }
       : false,
     // Client→server traffic is only room join/leave (a UUID plus an ack); see
     // ClientToServerEvents in @kanera/shared/events. Cap the per-message buffer well below the
