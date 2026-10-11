@@ -2,6 +2,16 @@
 
 All notable changes to Kanera are documented here.
 
+## [Unreleased]
+
+### Changed
+
+- Cards with unread activity now stand out on busy boards: alongside the bold title and dot, the tile gets a faint accent tint and an accent ring.
+
+### Fixed
+
+- Default avatars now use colours that stay visible on every theme; near-black and pale ones no longer disappear into the background.
+
 ## [1.9.0] - 2026-10-11
 
 Ships alongside **CLI 2.1.0** and **MCP 4.1.0**.

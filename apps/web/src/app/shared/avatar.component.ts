@@ -1,5 +1,6 @@
 import { NgOptimizedImage } from "@angular/common";
 import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal } from "@angular/core";
+import type { BlobatarOptions } from "blobatar";
 import { blobatarUri } from "blobatar/uri";
 import { visibleSignedMediaUrl } from "../core/media/signed-media-url";
 import { PresenceService } from "../core/realtime/presence.service";
@@ -19,6 +20,14 @@ export function avatarFallbackColorStyle(userId: string | null | undefined, name
   const colorIndex = avatarColorIndex(userId, name);
   return `--mention-avatar-bg: var(--avatar-color-${colorIndex}-bg); --mention-avatar-fg: var(--avatar-color-${colorIndex}-fg);`;
 }
+
+/**
+ * Blobatars render on a transparent backdrop, and the library's tone set spans pastel to near-black, so
+ * pale bodies vanish on light themes and ink bodies on dark ones. Pinning the tone to its vivid and deep
+ * swatches keeps every body at >=2.2:1 against both light and dark surfaces; hue and shape still come
+ * from the identity, so people stay distinguishable.
+ */
+export const BLOBATAR_OPTIONS: BlobatarOptions = { traits: { tone: [0.5, 0.7] } };
 
 const relativeTimeNow = signal(Date.now());
 let relativeTimeTimer: number | null = null;
@@ -188,7 +197,7 @@ export class AvatarComponent {
   protected readonly fallbackUrl = computed(() => {
     // Prefer the immutable user id so a rename does not unexpectedly change a person's identity.
     const identity = this.userId()?.trim() || this.name().trim().toLocaleLowerCase() || "?";
-    return blobatarUri(identity);
+    return blobatarUri(identity, BLOBATAR_OPTIONS);
   });
   protected readonly online = computed(() => {
     if (!this.shouldCheckPresence()) return false;
