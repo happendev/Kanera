@@ -1,7 +1,7 @@
 import type { APIRequestContext, APIResponse, Page } from "@playwright/test";
 import { users } from "./support/env";
 import { expect, test } from "./support/fixtures";
-import { boardIdOf, expectBoardLoaded, moveCardToBoard, openCard } from "./support/ui";
+import { boardIdOf, expectBoardLoaded, expectCardTileMounted, moveCardToBoard, openCard } from "./support/ui";
 
 type WireCard = { id: string; title: string; listId: string; position: string; completedAt: string | null };
 type WireCardDetail = {
@@ -188,6 +188,7 @@ test("concurrent checklist edits preserve changes to different fields", async ({
   expect(after.checklists[0]!.items[0]!.completedAt).not.toBeNull();
   await page.goto(`/b/${boardId}`);
   await expectBoardLoaded(page, "Platform Delivery");
+  await expectCardTileMounted(page, title, card.listId);
   const detail = await openCard(page, title);
   await expect(detail.locator(".checklist-item-text").filter({ hasText: "Renamed concurrently" })).toHaveClass(/is-done/);
 });

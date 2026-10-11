@@ -2,11 +2,12 @@
 
 All notable changes to Kanera are documented here.
 
-## [1.9.0] - Unreleased
+## [1.9.0] - 2026-10-11
 
-Ships alongside updated **CLI** and **MCP** releases.
+Ships alongside **CLI 2.1.0** and **MCP 4.1.0**.
 
 ### Added
+- **Prebuilt self-host images:** releases publish amd64 and arm64 Docker images and attach a standalone Compose file plus example environment files.
 - **Card reminders:** remind yourself about any card from card detail or its right-click menu, with quick picks (in an hour, tomorrow morning, next Monday) or any date and time within 8 weeks. Reminders are private, arrive once as a notification, email, push or personal channel, show as an alarm on the card tile, and are listed on Home. The board filter has a **Reminder set** quick filter, and completing a card clears its reminders.
 - **Storage management:** Settings → Organisation → Storage shows usage by card attachments, notes, personal files and workspace. Admins can find large or old files, including those on archived cards, and delete up to 100 at a time. Hosted organisations get a warning email at 80% of their allowance; self-hosted deployments choose local disk or S3 here.
 - **User profiles:** click a person's avatar for a profile card with their details and recent activity.
@@ -23,6 +24,7 @@ Ships alongside updated **CLI** and **MCP** releases.
 - **Copyable MCP setup snippets** for Claude Code, Cursor, VS Code / Copilot, Codex and Gemini CLI under Settings → API Keys.
 
 ### Changed
+- Web bundle size warnings allow room for growth; Angular retains higher error limits, while compressed-size budgets are advisory.
 - **Free plan includes AI agents:** Claude, ChatGPT, Cursor, the CLI, MCP and personal API keys now work on Free-plan boards. Workspace API keys, service agents and webhooks remain Pro-only.
 - **Per-user API rate limits** apply per second and per minute at the plan of the organisation that owns the board, with a short queue for bursts.
 - **You follow your AI agent's work:** cards an agent creates for you are watched automatically, and its activity reaches you as "You via Claude".

@@ -22,3 +22,4 @@ apps/web/dist
 .codex
 *.tsbuildinfo
 *.log
+e2e/artifacts
