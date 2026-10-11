@@ -55,15 +55,19 @@ test("MCP 2 discovers events, executes tools, rejects private callbacks and resp
     expect(cancelled.body).toBeNull();
     const catalog = await rpc<{ events: Array<{ name: string; delivery: string[]; payloadSchema: { required: string[]; properties: Record<string, unknown> }; inputSchema: { properties: Record<string, unknown> } }> }>("events/list");
     expect(catalog.body.result.events.every((event) => event.payloadSchema.required.includes("actor"))).toBe(true);
-    // Card events accept list filters; the personal queue invalidation has no scope arguments
-    // or queue content, because the caller must re-read priorities under its own credentials.
-    const cardEvents = catalog.body.result.events.filter((event) => event.name !== "priorities.changed");
+    // Card events accept list filters; the user events (queue invalidation, morning ping, reminder)
+    // have no scope arguments or work content, because the caller re-reads under its own credentials.
+    const userEventNames = ["priorities.changed", "my_day.ready", "reminder.due"];
+    const cardEvents = catalog.body.result.events.filter((event) => !userEventNames.includes(event.name));
     expect(cardEvents.every((event) => !!event.inputSchema.properties.listId)).toBe(true);
     const priorityEvent = catalog.body.result.events.find((event) => event.name === "priorities.changed");
     expect(priorityEvent?.inputSchema.properties).toEqual({});
     expect(priorityEvent?.payloadSchema.required).toEqual(["targetUserId", "actor"]);
     expect(Object.keys(priorityEvent!.payloadSchema.properties)).toEqual(["targetUserId", "actor"]);
-    expect(catalog.body.result.events.map((event: { name: string }) => event.name)).toEqual(["card.created", "card.updated", "card.moved", "comment.created", "priorities.changed"]);
+    const reminderEvent = catalog.body.result.events.find((event) => event.name === "reminder.due");
+    expect(reminderEvent?.inputSchema.properties).toEqual({});
+    expect(reminderEvent?.payloadSchema.properties).not.toHaveProperty("title");
+    expect(catalog.body.result.events.map((event: { name: string }) => event.name)).toEqual(["card.created", "card.updated", "card.moved", "comment.created", "priorities.changed", "my_day.ready", "reminder.due"]);
     expect(catalog.body.result.events.every((event: { delivery: string[] }) => event.delivery.join() === "webhook")).toBe(true);
     const tools = await rpc<{ tools: Array<{ name: string }>; ttlMs: number; cacheScope: string }>("tools/list");
     expect(tools.body.result).toMatchObject({ resultType: "complete", ttlMs: expect.any(Number), cacheScope: "public" });

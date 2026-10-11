@@ -15,6 +15,7 @@ import {
   cardCommentAddedEmail,
   cardDueDateChangedEmail,
   cardOverdueEmail,
+  cardReminderEmail,
   checklistItemOverdueEmail,
   commentMentionedEmail,
   dailyDigestEmail,
@@ -28,6 +29,7 @@ import {
   proTrialWarningEmail,
   seatBilledEmail,
   seatCapacityReducedEmail,
+  storageWarningEmail,
   upgradedToProEmail,
   verificationCodeEmail,
   welcomeToProEmail,
@@ -49,10 +51,12 @@ import {
   type CardCommentAddedEmailParams,
   type CardDueDateChangedEmailParams,
   type CardOverdueEmailParams,
+  type CardReminderEmailParams,
   type ChecklistItemOverdueEmailParams,
   type CommentMentionedEmailParams,
   type DailyDigestEmailParams,
   type InviteAcceptedEmailParams,
+  type StorageWarningEmailParams,
   type WeeklyAdminRecapEmailParams,
 } from "./email-templates/index.js";
 import { sendEmail, type SendEmailOptions } from "./smtp.js";
@@ -68,6 +72,7 @@ export interface Mailer {
   sendCommentMentioned(to: string, params: CommentMentionedEmailParams): Promise<EmailQueue>;
   sendCardDueDateChanged(to: string, params: CardDueDateChangedEmailParams): Promise<EmailQueue>;
   sendCardOverdue(to: string, params: CardOverdueEmailParams): Promise<EmailQueue>;
+  sendCardReminder(to: string, params: CardReminderEmailParams): Promise<EmailQueue>;
   sendChecklistItemOverdue(to: string, params: ChecklistItemOverdueEmailParams): Promise<EmailQueue>;
   sendInviteAccepted(to: string, params: InviteAcceptedEmailParams): Promise<EmailQueue>;
   sendBoardInvite(to: string, params: BoardInviteEmailParams): Promise<EmailQueue>;
@@ -87,6 +92,7 @@ export interface Mailer {
   sendProCancellationReversed(to: string, params: BillingEmailParams): Promise<EmailQueue>;
   sendProCancelled(to: string, params: BillingEmailParams): Promise<EmailQueue>;
   sendImportCompleted(to: string, params: ImportCompletedEmailParams): Promise<EmailQueue>;
+  sendStorageWarning(to: string, params: StorageWarningEmailParams): Promise<EmailQueue>;
   sendLifecycle(to: string, type: LifecycleEmailQueueType, params: LifecycleEmailParams): Promise<EmailQueue>;
 }
 
@@ -190,6 +196,10 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
       return queueEmail(to, "A Kanera card is overdue", "card_overdue", params);
     },
 
+    async sendCardReminder(to, params) {
+      return queueEmail(to, "Your Kanera reminder", "card_reminder", params);
+    },
+
     async sendChecklistItemOverdue(to, params) {
       return queueEmail(to, "A Kanera checklist item is overdue", "checklist_item_overdue", params);
     },
@@ -267,6 +277,10 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
 
     async sendImportCompleted(to, params) {
       return queueEmail(to, "Your Kanera import is complete", "import_completed", params);
+    },
+
+    async sendStorageWarning(to, params) {
+      return queueEmail(to, `${params.orgName} is running out of storage`, "storage_warning", params);
     },
 
     async sendLifecycle(to, type, params) {
@@ -360,6 +374,8 @@ export function renderEmail(row: EmailQueue): string {
       return cardDueDateChangedEmail(row.data as CardDueDateChangedEmailParams);
     case "card_overdue":
       return cardOverdueEmail(row.data as CardOverdueEmailParams);
+    case "card_reminder":
+      return cardReminderEmail(row.data as CardReminderEmailParams);
     case "checklist_item_overdue":
       return checklistItemOverdueEmail(row.data as ChecklistItemOverdueEmailParams);
     case "invite_accepted":
@@ -398,6 +414,8 @@ export function renderEmail(row: EmailQueue): string {
       return proCancelledEmail(row.data as BillingEmailParams);
     case "import_completed":
       return importCompletedEmail(row.data as ImportCompletedEmailParams);
+    case "storage_warning":
+      return storageWarningEmail(row.data as StorageWarningEmailParams);
     case "lifecycle_no_board":
       return lifecycleNoBoardEmail(row.data as LifecycleEmailParams);
     case "lifecycle_invite_team":

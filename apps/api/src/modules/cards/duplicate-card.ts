@@ -677,7 +677,7 @@ export async function duplicateCardInto({
         markdown: inserted!.description,
       });
 
-      if (autoWatch && shouldAutoWatchAuthoredCards(actor.authKind)) {
+      if (autoWatch && shouldAutoWatchAuthoredCards(actor)) {
         await tx.insert(cardWatchers).values({ cardId: inserted!.id, userId: actor.sub }).onConflictDoNothing();
       }
 

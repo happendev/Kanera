@@ -49,6 +49,7 @@ const enabledWorkspaceRuleTypes = (): NotificationWorkspaceRule["types"] => ({
   commentMentioned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
   cardDueDateChanged: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
   cardOverdue: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+  cardReminder: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
 });
 
 async function overdueRowsForCard(cardId: string) {
@@ -1182,6 +1183,7 @@ void test("notification settings default enabled and patch merges type settings"
       commentMentioned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
       cardDueDateChanged: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
       cardOverdue: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+      cardReminder: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
     },
     push: {
       status: "enabled",
@@ -1962,9 +1964,9 @@ void test("card and board watch endpoints enforce access, are idempotent, and de
   const f = await seed();
 
   const publicCardWatch = await f.app.inject({ method: "PUT", url: `/cards/${f.publicCard.id}/watch`, headers: { authorization: `Bearer ${f.memberToken}` }, payload: {} });
-  assert.equal(publicCardWatch.statusCode, 204);
+  assert.equal(publicCardWatch.statusCode, 200);
   const publicCardWatchAgain = await f.app.inject({ method: "PUT", url: `/cards/${f.publicCard.id}/watch`, headers: { authorization: `Bearer ${f.memberToken}` }, payload: {} });
-  assert.equal(publicCardWatchAgain.statusCode, 204);
+  assert.equal(publicCardWatchAgain.statusCode, 200);
   assert.equal((await db.select().from(cardWatchers).where(eq(cardWatchers.cardId, f.publicCard.id))).length, 1);
 
   // `other` is not a member of the restricted board, so board-membership access control forbids
@@ -1974,7 +1976,7 @@ void test("card and board watch endpoints enforce access, are idempotent, and de
 
   await db.insert(cardWatchers).values({ cardId: f.publicCard.id, userId: f.other.id });
   const deleteOwn = await f.app.inject({ method: "DELETE", url: `/cards/${f.publicCard.id}/watch`, headers: { authorization: `Bearer ${f.memberToken}` } });
-  assert.equal(deleteOwn.statusCode, 204);
+  assert.equal(deleteOwn.statusCode, 200);
   const remainingCardWatches = await db.select().from(cardWatchers).where(eq(cardWatchers.cardId, f.publicCard.id));
   assert.deepEqual(remainingCardWatches.map((w) => w.userId), [f.other.id]);
 

@@ -50,6 +50,7 @@ import { mirrorActor } from "./actor.js";
 import { emitMirrorMetadataToBoards } from "./events.js";
 import { toWireCard } from "../wire-card.js";
 import { emitInternalLinksChanged, linkNeighbours } from "../internal-links.js";
+import { clearRemindersOnCompletedCards, emitClearedCardReminders } from "../card-follow.js";
 
 // Facets always run in this order, regardless of the array-union order on a dirty row. In
 // particular comments must exist before attachment associations, and every entity mapping must
@@ -444,7 +445,9 @@ async function convergeCore(mirror: BoardMirror, sourceCardId: string, source: t
       }).where(eq(cards.id, target.id)).returning()
       : [target];
     if (source.description !== target.description) await replaceCardMentions({ tx, boardId: mirror.targetBoardId, cardId: target.id, source: "description", markdown: source.description });
-    return { updated: updated!, rebalance, archiveComment, lifecycleActivity, deletedNotifications };
+    // A mirrored completion completes the destination card too, so its reminders go like a native one's.
+    const clearedReminders = source.completedAt && !target.completedAt ? await clearRemindersOnCompletedCards(tx, [target.id]) : [];
+    return { updated: updated!, rebalance, archiveComment, lifecycleActivity, deletedNotifications, clearedReminders };
   });
   // Rebalance must be visible before the corresponding move or clients can apply stale positions.
   if (result.rebalance && mapping) await emitLaneRebalanced(mirror.targetBoardId, mapping.targetListId, result.rebalance);
@@ -452,6 +455,7 @@ async function convergeCore(mirror: BoardMirror, sourceCardId: string, source: t
   // The CARD_UPDATED payload now carries archivedAt, so target boards add/remove the card exactly as
   // the native archive route does when the mirror flips its lifecycle state.
   emitDeletedNotifications(result.deletedNotifications);
+  emitClearedCardReminders(result.clearedReminders);
   if (cardChanged) await emitToBoard(mirror.targetBoardId, SERVER_EVENTS.CARD_UPDATED, { boardId: mirror.targetBoardId, card: toWireCard(result.updated, actor.cid) });
   // A synced rename is a rename of the destination card: cards and notes linked to it show its title.
   if (cardChanged && source.title !== target.title) {
@@ -803,7 +807,16 @@ async function convergeChecklists(mirror: BoardMirror, sourceCardId: string, tar
       completedAt: item.completedAt,
     });
   }
-  for (const checklist of deletedChecklists) await emitToBoard(mirror.targetBoardId, SERVER_EVENTS.CARD_CHECKLIST_DELETED, { boardId: mirror.targetBoardId, cardId: targetCardId, checklistId: checklist.id });
+  for (const checklist of deletedChecklists) {
+    await emitToBoard(mirror.targetBoardId, SERVER_EVENTS.CARD_CHECKLIST_DELETED, {
+      boardId: mirror.targetBoardId,
+      cardId: targetCardId,
+      checklistId: checklist.id,
+      checklistParentItemId: checklist.parentItemId,
+      itemCount: checklist.items.length,
+      completedItemCount: checklist.items.filter((item) => item.completedAt).length,
+    });
+  }
   for (const id of createdChecklistIds) {
     const checklist = finalChecklistById.get(id);
     if (checklist) await emitToBoard(mirror.targetBoardId, SERVER_EVENTS.CARD_CHECKLIST_CREATED, { boardId: mirror.targetBoardId, cardId: targetCardId, checklist });

@@ -120,7 +120,7 @@ describe("CardComponent", () => {
         BoardMenuCoordinator,
         provideRouter([]),
         { provide: BoardState, useValue: boardStateStub() },
-        { provide: NotificationsService, useValue: { isWatchingCard: () => false, isWatchingBoard: () => false, cardUnreadCount: () => cardUnreadCount } },
+        { provide: NotificationsService, useValue: { isWatchingCard: () => false, reminderFor: () => null, isWatchingBoard: () => false, cardUnreadCount: () => cardUnreadCount } },
         { provide: WorkspaceService, useValue: { workspaceIdForBoard: () => "workspace-1" } },
       ],
     });
@@ -132,7 +132,7 @@ describe("CardComponent", () => {
         provideZonelessChangeDetection(),
         BoardMenuCoordinator,
         { provide: BoardState, useValue: boardStateStub() },
-        { provide: NotificationsService, useValue: { isWatchingCard: () => false, isWatchingBoard: () => false, cardUnreadCount: () => 0 } },
+        { provide: NotificationsService, useValue: { isWatchingCard: () => false, reminderFor: () => null, isWatchingBoard: () => false, cardUnreadCount: () => 0 } },
         { provide: WorkspaceService, useValue: { workspaceIdForBoard: () => "workspace-1" } },
       ],
     })
@@ -156,7 +156,7 @@ describe("CardComponent", () => {
         BoardMenuCoordinator,
         provideRouter([]),
         { provide: BoardState, useValue: state },
-        { provide: NotificationsService, useValue: { isWatchingCard: () => false, isWatchingBoard: () => false, cardUnreadCount: () => 0 } },
+        { provide: NotificationsService, useValue: { isWatchingCard: () => false, reminderFor: () => null, isWatchingBoard: () => false, cardUnreadCount: () => 0 } },
         { provide: WorkspaceService, useValue: { workspaceIdForBoard: () => "workspace-1" } },
       ],
     }).overrideComponent(CardComponent, { set: { template: "" } });
@@ -194,7 +194,7 @@ describe("CardComponent", () => {
         provideZonelessChangeDetection(),
         BoardMenuCoordinator,
         { provide: BoardState, useValue: boardStateStub() },
-        { provide: NotificationsService, useValue: { isWatchingCard: () => false, isWatchingBoard: () => false, cardUnreadCount: () => 0 } },
+        { provide: NotificationsService, useValue: { isWatchingCard: () => false, reminderFor: () => null, isWatchingBoard: () => false, cardUnreadCount: () => 0 } },
         { provide: WorkspaceService, useValue: { workspaceIdForBoard: () => "workspace-1" } },
       ],
     })
@@ -368,10 +368,12 @@ describe("CardComponent", () => {
     fixture.detectChanges();
 
     const badge = fixture.nativeElement.querySelector(".cf-badge") as HTMLElement | null;
-    const checkbox = badge?.querySelector(".ti-checkbox.cf-value") as HTMLElement | null;
+    const label = badge?.querySelector(".cf-label") as HTMLElement | null;
 
-    expect(badge?.textContent?.trim()).toContain("Approved");
-    expect(checkbox).not.toBeNull();
+    expect(badge?.classList.contains("cf-badge--flag")).toBe(true);
+    expect(label?.textContent?.trim()).toBe("Approved");
+    expect(getComputedStyle(label!).display).not.toBe("none");
+    expect(badge?.querySelectorAll(".ti").length).toBe(1);
   });
   it("reserves a proportional cover before the image loads", () => {
     configure(0);

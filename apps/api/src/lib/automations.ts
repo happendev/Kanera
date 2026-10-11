@@ -22,6 +22,7 @@ import { resolveSmtpConfig } from "./smtp-resolve.js";
 import { startSweepScheduler } from "./sweep-scheduler.js";
 import { absoluteCardUrl } from "./wire-card.js";
 import { customFieldValueEquals, emptyValueColumns, type CustomFieldValueColumns } from "./custom-fields.js";
+import { clearRemindersOnCompletedCards, emitClearedCardReminders, type ClearedCardReminder } from "./card-follow.js";
 
 interface AutomationEffectMetadata {
   // Automation activity remains system-authored, but user-triggered automation
@@ -36,7 +37,8 @@ export type AutomationEffect =
   | ({ type: "customFieldValueSet"; boardId: string; cardId: string; fieldId: string; value: CustomFieldValueColumns; activity: ActivityEvent } & AutomationEffectMetadata)
   // queueLifecycleChanged marks a completion flip: the emit pass must also ping any "Up next"
   // queue holding the card, which plain field updates (e.g. the due-date action) never require.
-  | ({ type: "cardUpdated"; boardId: string; card: WireCard; activity: ActivityEvent; notify?: boolean; queueLifecycleChanged?: boolean } & AutomationEffectMetadata)
+  // clearedReminders: completing the card cleared these personal reminders (see card-follow.ts).
+  | ({ type: "cardUpdated"; boardId: string; card: WireCard; activity: ActivityEvent; notify?: boolean; queueLifecycleChanged?: boolean; clearedReminders?: ClearedCardReminder[] } & AutomationEffectMetadata)
   | ({ type: "commentCreated"; boardId: string; cardId: string; comment: WireComment; activity: ActivityEvent } & AutomationEffectMetadata)
   // The webhook is not called here. The emit pass publishes this to the board outbox and the
   // webhook enqueue step turns it into exactly one delivery row for `endpointId`, so the call
@@ -702,6 +704,7 @@ async function applyCompletionAction(tx: Tx, ctx: AutomationRunContext, action: 
   ctx.card = card!;
   if (completed) await clearOverdueNotificationsForCards(tx, [ctx.card.id]);
   else await createOverdueNotificationsForCards(tx, [ctx.card.id]);
+  const clearedReminders = completed ? await clearRemindersOnCompletedCards(tx, [ctx.card.id]) : [];
   const activity = await recordActivity(tx, {
     boardId: ctx.boardId,
     workspaceId: ctx.workspaceId,
@@ -712,7 +715,7 @@ async function applyCompletionAction(tx: Tx, ctx: AutomationRunContext, action: 
     action: completed ? ACTIVITY_ACTION.COMPLETED : ACTIVITY_ACTION.UNCOMPLETED,
     payload: { completedAt, automationActionId: action.id },
   });
-  return { type: "cardUpdated", boardId: ctx.boardId, card: toWireCard(card!, ctx.clientId), activity, notify: completed, queueLifecycleChanged: true, suppressNotificationUserId: ctx.triggerActorId };
+  return { type: "cardUpdated", boardId: ctx.boardId, card: toWireCard(card!, ctx.clientId), activity, notify: completed, queueLifecycleChanged: true, clearedReminders, suppressNotificationUserId: ctx.triggerActorId };
 }
 
 async function applyMoveAction(tx: Tx, ctx: AutomationRunContext, action: AutomationAction): Promise<AutomationEffect | null> {
@@ -1292,6 +1295,7 @@ async function emitAutomationEffectsInScope(effects: AutomationEffects): Promise
       // An automation completing the card silently drops it from any "Up next" queue holding it —
       // the same fanout the completion routes owe (see card-priority-invalidation.ts).
       if (effect.queueLifecycleChanged) await invalidateQueuesForCards([effect.card.id]);
+      if (effect.clearedReminders) emitClearedCardReminders(effect.clearedReminders);
     } else {
       if (effect.rebalancedPositions) {
         await emitCardRebalancedByBoard(effect.toListId, effect.rebalancedPositions);

@@ -4,6 +4,7 @@ import test from "node:test";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import type { CallToolResult } from "@modelcontextprotocol/server";
 import { createKaneraMcpServer } from "./server.js";
+import { env } from "./env.js";
 
 const W = "11111111-1111-4111-8111-111111111111";
 const B = "22222222-2222-4222-8222-222222222222";
@@ -16,6 +17,8 @@ const CK = "88888888-8888-4888-8888-888888888888";
 const IT = "99999999-9999-4999-8999-999999999999";
 const O = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const W2 = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const TODAY_UTC = new Date().toISOString().slice(0, 10);
+const WEEK_END_UTC = new Date(Date.parse(`${TODAY_UTC}T00:00:00Z`) + 6 * 86_400_000).toISOString().slice(0, 10);
 
 type Tool = {
   handler: (args: unknown) => Promise<CallToolResult>;
@@ -46,6 +49,39 @@ async function connectedClient() {
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   return { client, close: async () => { await client.close(); await server.close(); } };
 }
+
+// Browser E2E cannot inspect the external host's linking UI. Pin the wire failure modes:
+// expired/revoked tokens must challenge, while role denials and other errors must not loop login.
+void test("tool authentication failures expose reauthorization metadata without challenging permission failures", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalResource = env.MCP_SERVER_PUBLIC_URL;
+  env.MCP_SERVER_PUBLIC_URL = "https://mcp.kanera.test/mcp";
+  const { client, close } = await connectedClient();
+  try {
+    for (const status of [401, 403, 400]) {
+      globalThis.fetch = async () => new Response(JSON.stringify({ error: {
+        code: status === 401 ? "UNAUTHENTICATED" : status === 403 ? "FORBIDDEN" : "VALIDATION_ERROR",
+        message: "request rejected",
+      } }), { status });
+      const result = await client.callTool({ name: "session.get", arguments: {} });
+      assert.equal(result.isError, true);
+      if (status === 401) {
+        const challenges = result._meta?.["mcp/www_authenticate"] as string[];
+        assert.equal(challenges.length, 1);
+        assert.match(challenges[0]!, /resource_metadata="https:\/\/mcp\.kanera\.test\/\.well-known\/oauth-protected-resource"/u);
+        assert.match(challenges[0]!, /scope="kanera:read kanera:write"/u);
+        assert.match(challenges[0]!, /error="invalid_token"/u);
+        assert.match(challenges[0]!, /error_description="Reconnect Kanera/u);
+      } else {
+        assert.equal(result._meta?.["mcp/www_authenticate"], undefined);
+      }
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    env.MCP_SERVER_PUBLIC_URL = originalResource;
+    await close();
+  }
+});
 
 function missingParameterDescriptions(schema: Record<string, unknown>, path = ""): string[] {
   const missing: string[] = [];
@@ -114,6 +150,8 @@ const allToolCases: ToolCase[] = [
   // Bootstrap: no template and no explicit configuration leaves the seed keys absent so the API
   // applies its own defaults; a template expands to the exact web-onboarding payload.
   { name: "workspaces.create", args: { name: "Delivery" }, method: "POST", path: "/api/v1/workspaces", body: { kind: "standard", name: "Delivery" } },
+  // The agent's own cards replace template starter cards and land on a board named for the workspace.
+  { name: "workspaces.create", args: { name: "Delivery", lists: [{ name: "Todo" }, { name: "Done" }], labels: [{ name: "Bug" }], cards: [{ title: "Ship it", listName: "todo", labelNames: ["bug"] }] }, method: "POST", path: "/api/v1/workspaces", body: { kind: "standard", name: "Delivery", initialBoard: { name: "Delivery" }, lists: [{ name: "Todo" }, { name: "Done" }], labels: [{ name: "Bug" }], cards: [{ title: "Ship it", listName: "todo", labelNames: ["bug"] }] } },
   { name: "boards.create_standalone", args: { name: "Solo", templateId: "blank" }, method: "POST", path: "/api/v1/workspaces", body: { kind: "board", name: "Solo", icon: "layout-kanban", initialBoard: { name: "Solo", icon: "layout-kanban" }, lists: [], customFields: [], labels: [], checklistTemplates: [], cards: [], automations: [] } },
   { name: "kanera_update_workspace", args: { workspaceId: W, name: "Delivery Ops", completedCardsActiveDays: 30 }, method: "PATCH", path: `/api/v1/workspaces/${W}`, body: { name: "Delivery Ops", completedCardsActiveDays: 30 } },
   { name: "workspaces.create_board", args: { workspaceId: W, name: "Launch", groupId: null, description: "Launch plan" }, method: "POST", path: `/api/v1/workspaces/${W}/boards`, body: { name: "Launch", groupId: null, description: "Launch plan" } },
@@ -138,7 +176,8 @@ const allToolCases: ToolCase[] = [
   { name: "cards.get", args: { cardId: C }, method: "GET", path: `/api/v1/cards/${C}/detail` },
   { name: "cards.list_history", args: { cardId: C, limit: 50 }, method: "GET", path: `/api/v1/cards/${C}/feed?limit=50` },
   { name: "cards.get_content", args: { boardId: B, cardIds: [C] }, method: "POST", path: `/api/v1/boards/${B}/cards/content/query`, body: { cardIds: [C] } },
-  { name: "cards.create", args: { boardId: B, listId: L, title: "Title", description: "Body", atTop: true, idempotencyKey: C }, method: "POST", path: `/api/v1/boards/${B}/lists/${L}/cards`, body: { title: "Title", description: "Body", atTop: true } },
+  { name: "cards.create", args: { boardId: B, listId: L, title: "Title", description: "Body", atTop: true, labelIds: [O], assigneeIds: [U], dueDateLocalDate: "2026-10-16", dueDateSlot: "morning", idempotencyKey: C }, method: "POST", path: `/api/v1/boards/${B}/lists/${L}/cards`, body: { title: "Title", description: "Body", atTop: true, labelIds: [O], assigneeIds: [U], dueDateLocalDate: "2026-10-16", dueDateSlot: "morning" } },
+  { name: "cards.bulk_create", args: { boardId: B, cards: [{ listId: L, title: "One", labelIds: [O] }, { listId: L, title: "Two", assigneeIds: [U], dueDateLocalDate: "2026-10-16" }] }, method: "POST", path: `/api/v1/boards/${B}/cards/bulk/create`, body: { cards: [{ listId: L, title: "One", labelIds: [O] }, { listId: L, title: "Two", assigneeIds: [U], dueDateLocalDate: "2026-10-16" }] } },
   { name: "cards.update", args: { cardId: C, changes: { title: "New", dueDateLocalDate: "2026-07-01", dueDateSlot: "morning" } }, method: "PATCH", path: `/api/v1/cards/${C}`, body: { title: "New", dueDateLocalDate: "2026-07-01", dueDateSlot: "morning" } },
   { name: "cards.move", args: { cardId: C, listId: L, anchor: { side: "before", item: { type: "separator", id: O } } }, method: "POST", path: `/api/v1/cards/${C}/move`, body: { listId: L, beforeItem: { type: "separator", id: O } } },
   { name: "cards.archive", args: { cardId: C, archived: true }, method: "PATCH", path: `/api/v1/cards/${C}/archive`, body: { archived: true } },
@@ -174,6 +213,11 @@ const allToolCases: ToolCase[] = [
   { name: "notes.update", args: { noteId: N, changes: { title: "Plan 2", content: "Text", baseUpdatedAt: "2026-06-30T00:00:00.000Z" } }, method: "PATCH", path: `/api/v1/notes/${N}`, body: { title: "Plan 2", content: "Text", baseUpdatedAt: "2026-06-30T00:00:00.000Z" } },
   { name: "notes.duplicate", args: { noteId: N, parentNoteId: null, title: "Plan copy" }, method: "POST", path: `/api/v1/notes/${N}/duplicate`, body: { parentNoteId: null, title: "Plan copy" } },
   { name: "notes.move", args: { noteId: N, parentNoteId: null, afterNoteId: null }, method: "PATCH", path: `/api/v1/notes/${N}/move`, body: { parentNoteId: null, afterNoteId: null } },
+  { name: "cards.create_upload_link", args: { cardId: C, fileName: "run.log" }, method: "POST", path: `/api/v1/cards/${C}/attachments/upload-links`, body: { fileName: "run.log" } },
+  { name: "scratchpad.capture", args: { text: "Call the venue" }, method: "POST", path: "/api/v1/scratchpad/capture", body: { text: "Call the venue" } },
+  { name: "scratchpad.list", args: {}, method: "GET", path: "/api/v1/scratchpad/notes" },
+  { name: "scratchpad.get", args: { noteId: N }, method: "GET", path: "/api/v1/scratchpad/notes" },
+  { name: "scratchpad.update", args: { noteId: N, content: "- [x] One", baseUpdatedAt: "2026-06-30T00:00:00.000Z" }, method: "PATCH", path: `/api/v1/scratchpad/notes/${N}`, body: { content: "- [x] One", baseUpdatedAt: "2026-06-30T00:00:00.000Z" } },
   { name: "cards.set_completion", args: { cardId: C, completed: true }, method: "PATCH", path: `/api/v1/cards/${C}/completion`, body: { completed: true } },
   { name: "workspaces.list_members", args: { workspaceId: W }, method: "GET", path: `/api/v1/workspaces/${W}/members?limit=26&offset=0` },
   { name: "checklists.create", args: { cardId: C, title: "Sub-steps", parentItemId: IT }, method: "POST", path: `/api/v1/cards/${C}/checklists`, body: { title: "Sub-steps", parentItemId: IT } },
@@ -235,6 +279,12 @@ const allToolCases: ToolCase[] = [
   { name: "comments.set_reaction", args: { commentId: N, type: "thumbs_up", active: true }, method: "POST", path: `/api/v1/comments/${N}/reactions`, body: { type: "thumbs_up" } },
   { name: "cards.delete_attachment", args: { cardId: C, attachmentId: N }, method: "DELETE", path: `/api/v1/cards/${C}/attachments/${N}` },
   { name: "cards.set_cover", args: { cardId: C, attachmentId: N }, method: "PATCH", path: `/api/v1/cards/${C}/cover`, body: { attachmentId: N } },
+  { name: "cards.set_watching", args: { cardId: C, watching: true }, method: "PUT", path: `/api/v1/cards/${C}/watch` },
+  { name: "cards.set_watching", args: { cardId: C, watching: false }, method: "DELETE", path: `/api/v1/cards/${C}/watch` },
+  { name: "cards.set_reminder", args: { cardId: C, remindAt: "2026-10-12T08:00:00Z" }, method: "PUT", path: `/api/v1/cards/${C}/reminder`, body: { remindAt: "2026-10-12T08:00:00Z" } },
+  { name: "cards.set_reminder", args: { cardId: C, remindAt: null }, method: "DELETE", path: `/api/v1/cards/${C}/reminder` },
+  { name: "reminders.list", args: { status: "pending" }, method: "GET", path: "/api/v1/reminders?status=pending" },
+  { name: "notifications.list", args: { since: "2026-10-11T08:00:00.000Z|abc", limit: 20, includeSelf: false }, method: "GET", path: "/api/v1/notifications?since=2026-10-11T08%3A00%3A00.000Z%7Cabc&limit=20&includeSelf=false" },
 ];
 
 const nonDefaultToolNames = new Set([
@@ -290,6 +340,15 @@ function checklistStubResponse(pathname: string, method: string): Response | nul
 }
 const multiRequestToolCases: MultiRequestToolCase[] = [
   {
+    // Metadata comes from the card's attachment list; bytes from the authenticated content route.
+    name: "cards.get_attachment",
+    args: { cardId: C, attachmentId: O },
+    requests: [
+      { method: "GET", path: `/api/v1/cards/${C}/attachments` },
+      { method: "GET", path: `/api/v1/cards/${C}/attachments/${O}/content` },
+    ],
+  },
+  {
     // Text targeting costs one checklist read; matching ignores case and surrounding whitespace.
     name: "checklists.update_items",
     args: { cardId: C, updates: [{ itemText: "  prepare RELEASE ", changes: { completed: true } }] },
@@ -324,6 +383,28 @@ const multiRequestToolCases: MultiRequestToolCase[] = [
     requests: [
       { method: "GET", path: `/api/v1/workspaces/${W2}` },
       { method: "POST", path: `/api/v1/workspaces/${W2}/boards`, body: { name: "Launch", description: "Launch plan" } },
+    ],
+  },
+  {
+    // A template instead of a workspace creates a standalone board through the bootstrap endpoint.
+    name: "boards.create",
+    args: { templateId: "blank", name: "Agent project" },
+    requests: [
+      { method: "POST", path: "/api/v1/workspaces", body: { kind: "board", name: "Agent project", icon: "layout-kanban", initialBoard: { name: "Agent project", icon: "layout-kanban" }, lists: [], customFields: [], labels: [], checklistTemplates: [], cards: [], automations: [] } },
+    ],
+  },
+  {
+    // my_day fans out four bounded work queries plus the caller's own Up next queue.
+    name: "work.my_day",
+    args: { timeZone: "UTC", limit: 5, upNextLimit: 3 },
+    requests: [
+      ...[{ overdueOnly: true }, { dueFrom: TODAY_UTC, dueTo: WEEK_END_UTC }, { overdueChecklistOnly: true }, { inactiveOnly: true }].map((filters) => ({
+        method: "POST",
+        path: "/api/v1/work/cards/query",
+        body: { lens: "my", filters: { completion: "active", ...filters }, sort: "dueAsc", limit: 5 },
+      })),
+      { method: "GET", path: "/api/v1/session" },
+      { method: "GET", path: `/api/v1/work/priorities/${U}?limit=3` },
     ],
   },
   {
@@ -394,7 +475,7 @@ const multipartToolCases: MultipartToolCase[] = [{
 void test("every MCP tool maps to the expected public API request", async () => {
   const server = internals();
   const expectedNames = [...new Set([...toolCases, ...noRequestToolCases, ...multiRequestToolCases, ...multipartToolCases].map((item) => item.name))].sort();
-  assert.equal(expectedNames.length, 89);
+  assert.equal(expectedNames.length, 101);
   assert.deepEqual(Object.keys(server._registeredTools).sort(), expectedNames);
 
   const originalFetch = globalThis.fetch;
@@ -447,6 +528,9 @@ void test("every MCP tool maps to the expected public API request", async () => 
             content: "Existing",
             updatedAt: "2026-06-30T00:00:00.000Z",
           }), { status: 200 });
+        }
+        if (url.pathname === "/api/v1/scratchpad/notes" && (init?.method ?? "GET") === "GET") {
+          return new Response(JSON.stringify([{ id: N, title: "Inbox", content: "- [ ] One\n- [x] Two", position: "1000", updatedAt: "2026-06-30T00:00:00.000Z" }]), { status: 200 });
         }
         if (url.pathname === "/api/v1/search/query") {
           return new Response(JSON.stringify({ query: "road map", results: [] }), { status: 200 });
@@ -514,6 +598,15 @@ void test("every MCP tool maps to the expected public API request", async () => 
             content: "Existing",
             updatedAt: "2026-06-30T00:00:00.000Z",
           }), { status: 200 });
+        }
+        if (url.pathname === "/api/v1/work/cards/query") {
+          return new Response(JSON.stringify({ cards: [], checklistItems: [], nextCursor: null }), { status: 200 });
+        }
+        if (url.pathname === `/api/v1/cards/${C}/attachments`) {
+          return new Response(JSON.stringify([{ id: O, cardId: C, fileName: "run.log", mimeType: "text/plain", byteSize: 11, thumbnailUrl: null, url: "https://kanera.test/api/media/x", createdAt: "2026-06-30T00:00:00.000Z" }]), { status: 200 });
+        }
+        if (url.pathname === `/api/v1/cards/${C}/attachments/${O}/content`) {
+          return new Response("hello world", { status: 206, headers: { "content-type": "text/plain", "content-range": "bytes 0-10/11" } });
         }
         const checklistStub = checklistStubResponse(url.pathname, init?.method ?? "GET");
         if (checklistStub) return checklistStub;
@@ -635,6 +728,10 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     const getCardsContent = byName.get("cards.get_content");
 
     for (const tool of tools) {
+      assert.deepEqual(tool._meta?.securitySchemes, [{
+        type: "oauth2",
+        scopes: tool.annotations?.readOnlyHint ? ["kanera:read"] : ["kanera:read", "kanera:write"],
+      }], `${tool.name} advertises its OAuth policy over the wire`);
       const missing = missingParameterDescriptions(tool.inputSchema as Record<string, unknown>);
       assert.deepEqual(missing, [], `${tool.name} describes every accepted input: ${missing.join(", ")}`);
     }
@@ -685,8 +782,31 @@ void test("tools/list exposes bounded batch content, constrained work mutations,
     // Checklist trees (checklists.get and nested items on create/add_items) fit inside the existing
     // budget because single-item add/update were folded into add_items/update_items: one tool per
     // verb keeps tool choice unambiguous and the catalog small.
+    // Following and reminders (cards.set_watching, cards.set_reminder, reminders.list) add roughly
+    // 2.7k; each verb folds set and clear into one tool, and both ceilings move by that headroom.
+    // Agent follow-through (cards.bulk_create, notifications.list, seed cards on workspace bootstrap,
+    // and labels/assignees/due date on cards.create) adds roughly 6k; the schema budget is 185k and
+    // the OAuth-inclusive ceiling keeps its 8k margin above it.
     const serializedToolCatalogLength = JSON.stringify(tools).length;
-    assert.ok(serializedToolCatalogLength <= 204_000, `the default tool catalog stays within its 200k-character budget (received ${serializedToolCatalogLength})`);
+    // OAuth declarations add a fixed per-tool cost. Preserve the original routing/schema
+    // budget independently, and bound the extra auth metadata rather than granting schema growth.
+    const withoutAuthMetadata = tools.map(({ _meta, ...tool }) => tool);
+    const schemaCatalogLength = JSON.stringify(withoutAuthMetadata).length;
+    // Ceilings track the measured catalog with a little headroom, so growth is a deliberate raise.
+    assert.ok(schemaCatalogLength <= 185_000, `the tool schemas stay within their existing budget (received ${schemaCatalogLength})`);
+    assert.ok(serializedToolCatalogLength <= 193_000, `the catalog including OAuth metadata stays bounded (received ${serializedToolCatalogLength})`);
+    // No single tool may dominate the catalog: work.query_cards is the largest at ~8k because its
+    // filter object is spelled out in full. Anything bigger needs its schema reconsidered, not a
+    // bigger total budget.
+    for (const tool of withoutAuthMetadata) {
+      const size = JSON.stringify(tool).length;
+      assert.ok(size <= 8_500, `${tool.name} schema stays under the per-tool ceiling (received ${size})`);
+    }
+    assert.doesNotMatch(
+      JSON.stringify(tools),
+      /"format":"[^"]+","pattern"|"pattern":"[^"]+","format"/u,
+      "format-typed values do not also carry their regex pattern in the catalog",
+    );
     for (const name of [
       "kanera_bulk_add_comments",
       "kanera_bulk_delete_comments",
@@ -931,6 +1051,125 @@ void test("checklist targeting rejects ambiguous text and API validation errors 
     assert.equal(invalid.isError, true);
     const invalidError = JSON.parse((invalid.content[0] as { text: string }).text) as { error: { issues: Array<{ path: string; message: string }> } };
     assert.deepEqual(invalidError.error.issues, [{ path: "items[2].subChecklists[0].items[1].text", message: "Too small" }]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+void test("tools/list offers a read-only credential only read tools and keeps that catalog private", async () => {
+  const full = internals()._registeredTools;
+  const server = createKaneraMcpServer({ apiKey: "kanera_live_test", publicApiUrl: "https://api.example.test", readOnly: true });
+  const client = new Client({ name: "kanera-read-only-contract-test", version: "1" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  try {
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    const { tools } = await client.listTools();
+    const listed = new Set(tools.map((tool) => tool.name));
+    const expected = Object.entries(full).filter(([, tool]) => tool.annotations?.readOnlyHint === true).map(([name]) => name);
+    assert.deepEqual([...listed].sort(), expected.sort());
+    for (const write of ["cards.update", "cards.create", "comments.add", "priorities.add"]) assert.ok(!listed.has(write), write);
+    assert.match(client.getInstructions() ?? "", /read-only, so only read tools are listed/u);
+    await assert.rejects(client.callTool({ name: "cards.update", arguments: { cardId: C, changes: { title: "x" } } }), /Tool cards.update not found/u);
+  } finally {
+    await client.close();
+    await server.close();
+  }
+});
+
+void test("date phrases resolve in the user's zone before reaching the public API", async () => {
+  const tools = internals()._registeredTools;
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ method: string; path: string; body?: Record<string, unknown> }> = [];
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : input.toString());
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : undefined;
+    requests.push({ method: init?.method ?? "GET", path: url.pathname, body });
+    if (url.pathname === "/api/v1/session") {
+      // 2026-10-09 is a Friday in Auckland.
+      return new Response(JSON.stringify({ userId: U, timeZone: "Pacific/Auckland", today: "2026-10-09" }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ id: C, cards: [], nextCursor: null }), { status: 200 });
+  };
+  try {
+    let result = await tools["cards.update"]!.handler({ cardId: C, changes: { dueDateLocalDate: "tomorrow 1pm" } });
+    assert.equal(result.isError, undefined);
+    assert.deepEqual(requests.at(-1), { method: "PATCH", path: `/api/v1/cards/${C}`, body: { dueDateLocalDate: "2026-10-10", dueDateSlot: "afternoon" } });
+
+    // An explicit slot wins over the phrase's time; ISO dates never trigger a session read.
+    requests.length = 0;
+    await tools["cards.update"]!.handler({ cardId: C, changes: { dueDateLocalDate: "2026-11-02", dueDateSlot: "morning" } });
+    assert.deepEqual(requests.map((request) => request.path), [`/api/v1/cards/${C}`]);
+
+    // Instants resolve to the start of the local day, converted to UTC (Auckland is UTC+13 in October).
+    requests.length = 0;
+    await tools["work.query_cards"]!.handler({ lens: "my", filters: { dueTo: "next friday", completedFrom: "yesterday" }, sort: "dueAsc", limit: 10 });
+    const query = requests.at(-1)!.body as { filters: Record<string, unknown> };
+    assert.equal(query.filters.dueTo, "2026-10-16");
+    assert.equal(query.filters.completedFrom, "2026-10-07T11:00:00.000Z");
+
+    result = await tools["cards.update"]!.handler({ cardId: C, changes: { dueDateLocalDate: "someday" } });
+    assert.equal(result.isError, true);
+    assert.match(String(result.content[0]?.type === "text" && result.content[0].text), /changes\.dueDateLocalDate: Could not read the date \\"someday\\"/u);
+
+    // Without a timeZone argument, my_day uses the profile zone instead of UTC.
+    requests.length = 0;
+    const myDay = await tools["work.my_day"]!.handler({ limit: 5, upNextLimit: 0 });
+    const structured = myDay.structuredContent as { timeZone: string; today: string; dueThisWeekThrough: string };
+    assert.deepEqual([structured.timeZone, structured.today, structured.dueThisWeekThrough], ["Pacific/Auckland", "2026-10-09", "2026-10-15"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+void test("cards.get_attachment returns images as image content and pages text on UTF-8 boundaries", async () => {
+  const tools = internals()._registeredTools;
+  const originalFetch = globalThis.fetch;
+  const png = Buffer.from("89504e470d0a1a0a", "hex");
+  // 99,999 ASCII bytes then a 3-byte character straddling the 100,000-byte page boundary.
+  const text = `${"a".repeat(99_999)}✓tail`;
+  const attachments = [
+    { id: O, cardId: C, fileName: "shot.png", mimeType: "image/png", byteSize: png.byteLength, thumbnailUrl: "t", url: "u", createdAt: "2026-06-30T00:00:00.000Z" },
+    { id: IT, cardId: C, fileName: "big.png", mimeType: "image/png", byteSize: 50_000_000, thumbnailUrl: "t", url: "u", createdAt: "2026-06-30T00:00:00.000Z" },
+    { id: CK, cardId: C, fileName: "run.log", mimeType: "text/plain", byteSize: Buffer.byteLength(text), thumbnailUrl: null, url: "u", createdAt: "2026-06-30T00:00:00.000Z" },
+    { id: F, cardId: C, fileName: "spec.pdf", mimeType: "application/pdf", byteSize: 10, thumbnailUrl: null, url: "u", createdAt: "2026-06-30T00:00:00.000Z" },
+  ];
+  const downloads: string[] = [];
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : input.toString());
+    if (url.pathname === `/api/v1/cards/${C}/attachments`) return new Response(JSON.stringify(attachments), { status: 200 });
+    const headers = new Headers(init?.headers);
+    downloads.push(`${url.pathname.split("/").at(-1)}${url.search} ${headers.get("range") ?? ""}`.trim());
+    assert.equal(headers.get("authorization"), "Bearer kanera_live_test", "content reads are authenticated");
+    if (url.pathname.endsWith(`${O}/content`)) return new Response(png, { status: 200, headers: { "content-type": "image/png" } });
+    if (url.pathname.endsWith(`${IT}/content`)) {
+      if (url.searchParams.get("variant") === "cover") return new Response(JSON.stringify({ code: "NOT_FOUND", message: "no cover" }), { status: 404 });
+      return new Response(png, { status: 200, headers: { "content-type": "image/jpeg" } });
+    }
+    const [start, end] = (/bytes=(\d+)-(\d+)/u.exec(headers.get("range") ?? "") ?? []).slice(1).map(Number);
+    const bytes = Buffer.from(text).subarray(start, end! + 1);
+    return new Response(bytes, { status: 206, headers: { "content-range": `bytes ${start}-${start! + bytes.byteLength - 1}/${Buffer.byteLength(text)}` } });
+  };
+  try {
+    const image = await tools["cards.get_attachment"]!.handler({ cardId: C, attachmentId: O, offset: 0 });
+    assert.deepEqual(image.content[1], { type: "image", data: png.toString("base64"), mimeType: "image/png" });
+    assert.equal((image.structuredContent as { variant: string }).variant, "original");
+
+    // Too large inline: the cover derivative is tried first and the thumbnail when it is missing.
+    const large = await tools["cards.get_attachment"]!.handler({ cardId: C, attachmentId: IT, offset: 0 });
+    assert.equal((large.content[1] as { mimeType: string }).mimeType, "image/jpeg");
+    assert.equal((large.structuredContent as { variant: string }).variant, "thumbnail");
+    assert.deepEqual(downloads.slice(1, 3), ["content?variant=cover", "content?variant=thumbnail"]);
+
+    const page1 = (await tools["cards.get_attachment"]!.handler({ cardId: C, attachmentId: CK, offset: 0 })).structuredContent as { text: string; nextOffset: number | null };
+    assert.equal(page1.text, "a".repeat(99_999), "a split character is deferred to the next page");
+    assert.equal(page1.nextOffset, 99_999);
+    const page2 = (await tools["cards.get_attachment"]!.handler({ cardId: C, attachmentId: CK, offset: page1.nextOffset })).structuredContent as { text: string; nextOffset: number | null };
+    assert.equal(page2.text, "✓tail");
+    assert.equal(page2.nextOffset, null);
+
+    const pdf = (await tools["cards.get_attachment"]!.handler({ cardId: C, attachmentId: F, offset: 0 })).structuredContent as { kind: string; readable: boolean };
+    assert.deepEqual([pdf.kind, pdf.readable], ["binary", false]);
   } finally {
     globalThis.fetch = originalFetch;
   }

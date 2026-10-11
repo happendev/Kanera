@@ -76,7 +76,7 @@ export async function buildAdminServer(options: BuildAdminServerOptions = {}) {
   });
 
   // Keyed by IP, used only to throttle unauthenticated login. Fails open on a Valkey outage (see limiter).
-  const loginRateLimiter = new FixedWindowRateLimiter(env.ADMIN_LOGIN_RATE_LIMIT_WINDOW_MS, { log: app.log });
+  const loginRateLimiter = new FixedWindowRateLimiter();
   app.addHook("onClose", async () => loginRateLimiter.close());
 
   await app.register(fastifyRequestContext, {

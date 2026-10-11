@@ -151,7 +151,7 @@ describe("PageToolbarComponent", () => {
     fixture.detectChanges();
 
     // PanelStackService writes the inline order; the component must not compete with a literal.
-    expect(body()?.style.zIndex).toBe("calc(var(--z-panel, 300) + 0)");
+    expect(body()?.style.zIndex).toBe("calc(var(--ap-z-base, var(--z-panel, 300)) + 0)");
   });
 
   it("accents the trigger when a control is away from its default", async () => {

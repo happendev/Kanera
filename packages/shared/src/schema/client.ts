@@ -42,6 +42,12 @@ export type ClientBillingStatus = (typeof CLIENT_BILLING_STATUSES)[number];
 export const CLIENT_BILLING_INTERVALS = ["monthly", "annual"] as const;
 export type ClientBillingInterval = (typeof CLIENT_BILLING_INTERVALS)[number];
 
+// Organisation-wide cap on what AI agents may do with this organisation's data in hosted mode:
+// `off` blocks agent credentials entirely, `read` downgrades them to read-only, `write` leaves the
+// member's own permissions in charge. Self-hosted deployments ignore it.
+export const CLIENT_MCP_POLICIES = ["off", "read", "write"] as const;
+export type ClientMcpPolicy = (typeof CLIENT_MCP_POLICIES)[number];
+
 export const CLIENT_ROUTE_KEY_PATTERN = /^[A-F0-9]{16}$/;
 
 export const clients = pgTable(
@@ -58,6 +64,13 @@ export const clients = pgTable(
     pushEnabled: boolean("push_enabled").notNull().default(false),
     // When enabled, password login cannot issue a session until the member has completed TOTP setup.
     requireMfa: boolean("require_mfa").notNull().default(false),
+    // Shows the Portfolio rollup in this organisation's web navigation. Some teams don't want a
+    // cross-board counts view, so admins can hide it; it is a navigation choice, not an access control.
+    portfolioEnabled: boolean("portfolio_enabled").notNull().default(true),
+    // Applies to every personal agent credential (interactive OAuth grants and personal API keys)
+    // touching this organisation's data, including board guests from other organisations, because
+    // the data owner decides. Workspace keys are admin-issued integrations and are not capped here.
+    mcpPolicy: text("mcp_policy", { enum: CLIENT_MCP_POLICIES }).notNull().default("write"),
     // Creation routes copy these values onto new standard and hidden standalone-board workspaces.
     // Existing workspaces remain independent when an organisation changes its defaults.
     defaultCompletedCardsActiveDays: integer("default_completed_cards_active_days").notNull().default(DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS),
@@ -71,6 +84,10 @@ export const clients = pgTable(
     billingStatus: text("billing_status", { enum: CLIENT_BILLING_STATUSES }).notNull().default("none"),
     billingInterval: text("billing_interval", { enum: CLIENT_BILLING_INTERVALS }),
     storageQuotaBytes: bigint("storage_quota_bytes", { mode: "number" }),
+    // Set when owners and admins were emailed that the organisation is close to its storage quota.
+    // The worker clears it only once usage falls well back below the threshold, so the warning goes
+    // out once per approach instead of on every sweep while usage hovers near the line.
+    storageWarningSentAt: timestamp("storage_warning_sent_at", { withTimezone: true }),
     stripeCustomerId: text("stripe_customer_id"),
     stripeSubscriptionId: text("stripe_subscription_id"),
     stripeSubscriptionItemId: text("stripe_subscription_item_id"),
@@ -107,6 +124,7 @@ export const clients = pgTable(
   (t) => [
     check("clients_plan_ck", valueIn(t.plan, CLIENT_PLANS)),
     check("clients_billing_status_ck", valueIn(t.billingStatus, CLIENT_BILLING_STATUSES)),
+    check("clients_mcp_policy_ck", valueIn(t.mcpPolicy, CLIENT_MCP_POLICIES)),
     check("clients_billing_interval_ck", valueIn(t.billingInterval, CLIENT_BILLING_INTERVALS)),
     check("clients_route_key_ck", sql`${t.routeKey} ~ '^[A-F0-9]{16}$'`),
     uniqueIndex("clients_route_key_key").on(t.routeKey),

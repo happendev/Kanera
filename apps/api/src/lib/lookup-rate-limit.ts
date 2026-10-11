@@ -8,9 +8,9 @@ const LOOKUP_WINDOW_MS = 60_000;
 
 let limiter: FixedWindowRateLimiter | null = null;
 
-function lookupRateLimiter(req: FastifyRequest) {
+function lookupRateLimiter() {
   if (!limiter) {
-    limiter = new FixedWindowRateLimiter(LOOKUP_WINDOW_MS, { log: req.log });
+    limiter = new FixedWindowRateLimiter();
   }
   return limiter;
 }
@@ -18,7 +18,7 @@ function lookupRateLimiter(req: FastifyRequest) {
 export async function enforceUnauthenticatedLookupRateLimit(req: FastifyRequest, reply: FastifyReply) {
   // Org and board invite tokens are opaque, but unauthenticated lookup still gives an enumerable
   // existence oracle. Share one modest IP bucket across lookup routes so probing one drains both.
-  const result = await lookupRateLimiter(req).check(`invite-lookup:${clientIpForRequest(req)}`, {
+  const result = await lookupRateLimiter().check(`invite-lookup:${clientIpForRequest(req)}`, {
     limit: LOOKUP_LIMIT,
     windowMs: LOOKUP_WINDOW_MS,
   });

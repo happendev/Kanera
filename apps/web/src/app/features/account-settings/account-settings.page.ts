@@ -4,7 +4,7 @@ import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { ActivatedRoute, NavigationEnd, Router, RouterLink } from "@angular/router";
 import type { BillingInfoResponse, NotificationSettingsResponse, NotificationSettingType, NotificationWorkspaceRule, PersonalNotificationChannel, PersonalNotificationTestResponse, PublicClientResponse, SeatChangeResponse } from "@kanera/shared/dto";
 import type { ServerToClientEvents } from "@kanera/shared/events";
-import type { SmtpConfig, StorageConfig } from "@kanera/shared/schema";
+import type { ClientMcpPolicy, SmtpConfig, StorageConfig } from "@kanera/shared/schema";
 import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS, DEFAULT_INACTIVE_CARDS_DAYS } from "@kanera/shared/workspace-defaults";
 import { filter } from "rxjs";
 import { buildInfo } from "../../../build-info.generated";
@@ -29,12 +29,20 @@ import { UpgradePromptService } from "../../shared/upgrade-prompt.service";
 import { AccountSettingsPlanPage } from "./account-plan/account-plan.page";
 import { AccountSettingsApiKeysPage } from "./api-keys/api-keys.page";
 import { AccountSettingsNotificationsPage } from "./notifications/notifications.page";
+import { AccountSettingsIntegrationsPage } from "./integrations/integrations.page";
 import { AccountSettingsOrgPage } from "./org/org.page";
 import { AccountSettingsProfilePage } from "./profile/profile.page";
+import { AccountSettingsSecurityPage } from "./security/security.page";
+import { AccountSettingsStoragePage } from "./storage/storage.page";
 import { AccountSettingsUsersPage } from "./users/users.page";
 import { formatDate, formatDateTime } from "../../shared/date-format";
 
-type Tab = "profile" | "notifications" | "api-keys" | "org" | "users" | "account-plan";
+// Two groups: the signed-in person's own settings, then organisation settings for owners and admins.
+// "org" is the organisation's General tab; its path predates the split and is linked from emails.
+const ACCOUNT_TABS = ["profile", "notifications", "api-keys"] as const;
+const ORG_TABS = ["org", "users", "security", "integrations", "storage", "account-plan"] as const;
+type Tab = (typeof ACCOUNT_TABS)[number] | (typeof ORG_TABS)[number];
+const ALL_TABS: readonly string[] = [...ACCOUNT_TABS, ...ORG_TABS];
 const WORKSPACE_DEFAULTS_SAVE_DEBOUNCE_MS = 300;
 
 type WorkspaceGrant = { workspaceId: string; workspaceName: string; role: "admin" | "member" };
@@ -138,6 +146,7 @@ const NOTIFICATION_ROWS: { key: NotificationSettingType; label: string }[] = [
   { key: "commentMentioned", label: "Tagged in a comment" },
   { key: "cardDueDateChanged", label: "Card due date changed" },
   { key: "cardOverdue", label: "Card overdue" },
+  { key: "cardReminder", label: "Your card reminders" },
 ];
 
 interface NotificationBoardOption {
@@ -198,7 +207,7 @@ function formatCents(value: number): string {
 @Component({
   selector: "k-account-settings",
   standalone: true,
-  imports: [PageHeaderComponent, RouterLink, TabStripDirective, AccountSettingsProfilePage, AccountSettingsNotificationsPage, AccountSettingsApiKeysPage, AccountSettingsUsersPage, AccountSettingsOrgPage, AccountSettingsPlanPage],
+  imports: [PageHeaderComponent, RouterLink, TabStripDirective, AccountSettingsProfilePage, AccountSettingsNotificationsPage, AccountSettingsApiKeysPage, AccountSettingsUsersPage, AccountSettingsOrgPage, AccountSettingsSecurityPage, AccountSettingsIntegrationsPage, AccountSettingsStoragePage, AccountSettingsPlanPage],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: "./account-settings.page.html",
@@ -438,6 +447,13 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly requireMfaDraft = signal(false);
   readonly requireMfaSaving = signal(false);
   readonly requireMfaError = signal<string | null>(null);
+  readonly portfolioEnabledDraft = signal(true);
+  readonly portfolioEnabledSaving = signal(false);
+  readonly portfolioEnabledError = signal<string | null>(null);
+  // Hosted-only organisation cap on AI agent (MCP) credentials; the API enforces it per resource.
+  readonly mcpPolicyDraft = signal<ClientMcpPolicy>("write");
+  readonly mcpPolicySaving = signal(false);
+  readonly mcpPolicyError = signal<string | null>(null);
   readonly billingInfo = signal<BillingInfoResponse | null>(null);
   readonly isHosted = computed(() => (this.client()?.deploymentMode ?? this.user()?.deploymentMode) === "hosted");
   // Lifecycle emails are a hosted-only sweep addressed to organisation owners, so the opt-out is
@@ -447,6 +463,8 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   // Plan/trial state for the hosted-mode Account section. Derived from the org-wide entitlements on
   // /me; the actual purchase + upgrade flow will live in this section later.
   readonly planTier = computed(() => this.auth.entitlements()?.tier ?? null);
+  // Hosted deployments own push and SMTP, so their Integrations tab exists only for the GitHub App.
+  readonly integrationsAvailable = computed(() => this.isSelfHosted() || !!this.githubAppConfig()?.configured);
   readonly planLabel = computed(() => {
     switch (this.planTier()) {
       case "trial": return "Pro trial";
@@ -609,14 +627,14 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     effect(() => {
       if (!this.user()) return;
       const t = this.routeTab();
-      if (((t === "org" || t === "users" || t === "account-plan") && !this.isClientAdmin()) || (t === "account-plan" && !this.isHosted())) {
+      if (t && ALL_TABS.includes(t) && !this.tabAllowed(t as Tab)) {
         this.selectedTab.set("profile");
         void this.router.navigate(["profile"], {
           relativeTo: this.route,
           replaceUrl: true,
         });
-      } else if (t === "org" || t === "users" || t === "notifications" || t === "api-keys" || t === "account-plan") {
-        this.selectedTab.set(t);
+      } else if (t && ALL_TABS.includes(t)) {
+        this.selectedTab.set(t as Tab);
       } else {
         this.selectedTab.set("profile");
       }
@@ -638,7 +656,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     effect(() => {
       const tab = this.selectedTab();
       if (!this.user()) return;
-      if (((tab === "org" || tab === "users" || tab === "account-plan") && !this.isClientAdmin()) || (tab === "account-plan" && !this.isHosted())) {
+      if (!this.tabAllowed(tab)) {
         this.selectTab("profile", true);
       }
     });
@@ -719,6 +737,8 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     }
     this.pushEnabledDraft.set(c.pushEnabled);
     this.requireMfaDraft.set(c.requireMfa);
+    this.portfolioEnabledDraft.set(c.portfolioEnabled);
+    this.mcpPolicyDraft.set(c.mcpPolicy);
     this.defaultCompletedCardsActiveDays.set(c.defaultCompletedCardsActiveDays);
     this.defaultInactiveCardsDays.set(c.defaultInactiveCardsDays);
     const sc = c.storageConfig;
@@ -792,13 +812,14 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     this.theme.setTheme(theme);
   }
 
+  private tabAllowed(tab: Tab): boolean {
+    if ((ORG_TABS as readonly string[]).includes(tab) && !this.isClientAdmin()) return false;
+    if (tab === "account-plan" && !this.isHosted()) return false;
+    return true;
+  }
+
   selectTab(tab: Tab, replaceUrl = false) {
-    if ((tab === "org" || tab === "users" || tab === "account-plan") && !this.isClientAdmin()) {
-      tab = "profile";
-    }
-    if (tab === "account-plan" && !this.isHosted()) {
-      tab = "profile";
-    }
+    if (!this.tabAllowed(tab)) tab = "profile";
     this.selectedTab.set(tab);
     void this.router.navigate([tab], {
       relativeTo: this.route,
@@ -857,6 +878,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         commentMentioned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
         cardDueDateChanged: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
         cardOverdue: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+        cardReminder: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
       },
     };
   }
@@ -956,6 +978,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         commentMentioned: { ...rule.types.commentMentioned },
         cardDueDateChanged: { ...rule.types.cardDueDateChanged },
         cardOverdue: { ...rule.types.cardOverdue },
+        cardReminder: { ...rule.types.cardReminder },
       },
     };
   }
@@ -2038,6 +2061,30 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     try { this.applyClient(await this.api.patch<PublicClientResponse>("/clients/me", { requireMfa: this.requireMfaDraft() })); }
     catch (err) { this.requireMfaDraft.set(current.requireMfa); this.requireMfaError.set(extractErrorMessage(err)); }
     finally { this.requireMfaSaving.set(false); }
+  }
+
+  async savePortfolioEnabled(next: boolean) {
+    const current = this.client();
+    if (!current || current.portfolioEnabled === next) return;
+    this.portfolioEnabledDraft.set(next);
+    this.portfolioEnabledSaving.set(true); this.portfolioEnabledError.set(null);
+    try {
+      const updated = await this.api.patch<PublicClientResponse>("/clients/me", { portfolioEnabled: next });
+      this.applyClient(updated);
+      // Other members pick the change up on their next session refresh.
+      this.auth.updateUser((u) => ({ ...u, portfolioEnabled: updated.portfolioEnabled }));
+    }
+    catch (err) { this.portfolioEnabledDraft.set(current.portfolioEnabled); this.portfolioEnabledError.set(extractErrorMessage(err)); }
+    finally { this.portfolioEnabledSaving.set(false); }
+  }
+
+  async saveMcpPolicy() {
+    const current = this.client();
+    if (!current || current.mcpPolicy === this.mcpPolicyDraft()) return;
+    this.mcpPolicySaving.set(true); this.mcpPolicyError.set(null);
+    try { this.applyClient(await this.api.patch<PublicClientResponse>("/clients/me", { mcpPolicy: this.mcpPolicyDraft() })); }
+    catch (err) { this.mcpPolicyDraft.set(current.mcpPolicy); this.mcpPolicyError.set(extractErrorMessage(err)); }
+    finally { this.mcpPolicySaving.set(false); }
   }
 
   async uploadLogo(e: Event) {

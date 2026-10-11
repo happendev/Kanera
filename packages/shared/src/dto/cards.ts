@@ -19,8 +19,16 @@ export const createCardBody = z.object({
   // neighbours come from several boards and personal separators. Rejected by the public API.
   globalWorkUserId: z.uuid().optional(),
   assigneeIds: z.array(z.uuid()).optional(),
+  // Set at creation so an integration gets a fully described card in one atomic write instead of
+  // create + set labels + set due date (three activity rows and three chances to fail half way).
+  labelIds: z.array(z.uuid()).max(100).optional(),
+  dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dueDateSlot: dueDateSlot.optional(),
   clientToken: z.uuid().optional(),
 }).refine(
+  (v) => v.dueDateSlot === undefined || v.dueDateLocalDate !== undefined,
+  "provide dueDateLocalDate when setting dueDateSlot",
+).refine(
   (v) => !(v.afterItem !== undefined && v.beforeItem !== undefined),
   "provide at most one of afterItem or beforeItem",
 ).refine(
@@ -108,6 +116,27 @@ export const bulkDuplicateCardsBody = bulkCardSelectionBody.extend({
   listId: z.uuid().optional(),
 });
 export type BulkDuplicateCardsBody = z.infer<typeof bulkDuplicateCardsBody>;
+
+export const BULK_CREATE_CARDS_MAX = 50;
+export const bulkCreateCardItem = z.object({
+  listId: z.uuid(),
+  title: z.string().min(1).max(CARD_TITLE_MAX_LENGTH),
+  description: z.string().max(50000).optional(),
+  labelIds: z.array(z.uuid()).max(100).optional(),
+  assigneeIds: z.array(z.uuid()).max(100).optional(),
+  dueDateLocalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dueDateSlot: dueDateSlot.optional(),
+}).refine(
+  (v) => v.dueDateSlot === undefined || v.dueDateLocalDate !== undefined,
+  "provide dueDateLocalDate when setting dueDateSlot",
+);
+export type BulkCreateCardItem = z.infer<typeof bulkCreateCardItem>;
+
+// Cards land at the bottom of their list in request order, so a plan reads top to bottom as written.
+export const bulkCreateCardsBody = z.object({
+  cards: z.array(bulkCreateCardItem).min(1).max(BULK_CREATE_CARDS_MAX),
+});
+export type BulkCreateCardsBody = z.infer<typeof bulkCreateCardsBody>;
 
 export const bulkArchiveCardsBody = bulkCardSelectionBody.extend({
   archived: z.literal(true),

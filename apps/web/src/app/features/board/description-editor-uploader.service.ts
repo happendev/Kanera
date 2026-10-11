@@ -1,4 +1,4 @@
-import { Injectable, inject, signal } from "@angular/core";
+import { Injectable, computed, inject, signal } from "@angular/core";
 import { ALLOWED_ATTACHMENT_EXTENSIONS, ALLOWED_ATTACHMENT_MIME, getAllowedAttachmentExtension } from "@kanera/shared/attachments";
 import type { Editor } from "@tiptap/core";
 import { ApiClient, ApiError } from "../../core/api/api.client";
@@ -25,7 +25,8 @@ export class DescriptionEditorUploader {
   private readonly auth = inject(AuthService);
   private attachmentIds: string[] = [];
 
-  readonly uploading = signal(false);
+  private readonly activeUploads = signal(0);
+  readonly uploading = computed(() => this.activeUploads() > 0);
   readonly error = signal<string | null>(null);
 
   attachmentIdsSnapshot(): string[] {
@@ -45,7 +46,9 @@ export class DescriptionEditorUploader {
       return;
     }
 
-    this.uploading.set(true);
+    // Paste/drop can start several uploads concurrently. Publishing must wait for every embed,
+    // including a slow upload whose siblings have already finished.
+    this.activeUploads.update((count) => count + 1);
     let uploaded: { id: string; url: string } | null = null;
     try {
       const form = new FormData();
@@ -91,7 +94,7 @@ export class DescriptionEditorUploader {
       }
       this.error.set(err instanceof ApiError ? this.formatApiError(err) : "Upload failed");
     } finally {
-      this.uploading.set(false);
+      this.activeUploads.update((count) => count - 1);
     }
   }
 

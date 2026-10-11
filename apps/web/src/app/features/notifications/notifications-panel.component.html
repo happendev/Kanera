@@ -144,9 +144,11 @@
       <li class="notif-item" [class.is-read]="n.readAt" [style.--board-color]="n.boardIconColor ? 'var(--color-' + n.boardIconColor + ')' : null"
         (contextmenu)="openCardActions($event, n)">
         <a class="notif-card-link" [href]="notificationUrl(n)" (click)="openNotification(n, $event)" [attr.aria-label]="n.cardId ? 'Open card ' + (n.cardTitle ?? 'notification') : 'Open board ' + n.boardName"></a>
-        <div class="notif-actor" [class.notif-actor--overdue]="n.reason === 'overdue'">
+        <div class="notif-actor" [class.notif-actor--overdue]="n.reason === 'overdue'" [class.notif-actor--reminder]="n.reason === 'reminder'">
           @if (n.reason === 'overdue') {
           <i class="ti ti-calendar-exclamation"></i>
+          } @else if (n.reason === 'reminder') {
+          <i class="ti ti-alarm"></i>
           } @else {
           <k-avatar [url]="n.actorAvatarUrl ?? null" [name]="n.actorName ?? ''" [size]="32" [userId]="n.activity?.actorId ?? null" [workspaceId]="n.workspaceId" [showPresence]="n.activity?.actorKind === 'user'" />
           }
@@ -182,6 +184,10 @@
           @if (n.reason === 'overdue') {
           <div class="notif-overdue-badge">
             Card is overdue
+          </div>
+          } @else if (n.reason === 'reminder') {
+          <div class="notif-reminder-badge">
+            Your reminder
           </div>
           } @else {
           <div class="notif-action">
@@ -290,9 +296,12 @@
         <ul class="notif-cluster-entries">
           @for (item of cluster.entries; track item.notification.id) {
           <li class="notif-entry">
-            <div class="notif-entry-actor" [class.notif-entry-actor--overdue]="item.notification.reason === 'overdue' || item.notification.reason === 'checklist_item_overdue'">
+            <div class="notif-entry-actor" [class.notif-entry-actor--overdue]="item.notification.reason === 'overdue' || item.notification.reason === 'checklist_item_overdue'"
+              [class.notif-entry-actor--reminder]="item.notification.reason === 'reminder'">
               @if (item.notification.reason === 'overdue' || item.notification.reason === 'checklist_item_overdue') {
               <i class="ti ti-calendar-exclamation"></i>
+              } @else if (item.notification.reason === 'reminder') {
+              <i class="ti ti-alarm"></i>
               } @else {
               <k-avatar [url]="item.notification.actorAvatarUrl ?? null" [name]="item.notification.actorName ?? ''" [size]="20" [userId]="item.notification.activity?.actorId ?? null" [workspaceId]="item.notification.workspaceId"
                 [showPresence]="item.notification.activity?.actorKind === 'user'" />

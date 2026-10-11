@@ -1,6 +1,8 @@
 import { UnreadGlowDirective } from "./unread-glow.directive";
 import { MenuDirective } from "../../shared/menu.directive";
 import { ShortcutsSheetComponent } from "../../shared/shortcuts-sheet.component";
+import { UserProfileCardService } from "../../shared/user-profile/user-profile-card.service";
+import { UserProfilePopoverComponent } from "../../shared/user-profile/user-profile-popover.component";
 import { KeyboardShortcutsService } from "../../core/keyboard/keyboard-shortcuts.service";
 import { TOUCH_ONLY_QUERY } from "../../core/browser/input-modality";
 import { mediaQuerySignal } from "../../shared/media-query.signal";
@@ -104,7 +106,7 @@ type SidebarSwipe = {
 @Component({
   selector: "k-app-shell",
   standalone: true,
-  imports: [UnreadGlowDirective,CdkDrag, CdkDropList, CdkScrollable, MenuDirective, RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, AnchoredPanelDirective, MyPrioritiesPanelComponent, NotificationsPanelComponent, ScratchpadPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, ToastComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent, ShortcutsSheetComponent],
+  imports: [UnreadGlowDirective,CdkDrag, CdkDropList, CdkScrollable, MenuDirective, RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, LogoComponent, AvatarComponent, AnchoredPanelDirective, MyPrioritiesPanelComponent, NotificationsPanelComponent, ScratchpadPanelComponent, UpdatePromptComponent, DisconnectPromptComponent, ToastComponent, GlobalSearchOverlayComponent, TooltipDirective, SupportSessionBannerComponent, ShortcutsSheetComponent, UserProfilePopoverComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./app-shell.component.html",
   styleUrl: "./app-shell.component.scss",
@@ -129,6 +131,7 @@ type SidebarSwipe = {
 })
 export class AppShellComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiClient);
+  readonly profileCards = inject(UserProfileCardService);
   private readonly navigateAfterOrganisationSwitch = inject(ORGANISATION_SWITCH_NAVIGATOR);
   private readonly auth = inject(AuthService);
   private readonly browserPush = inject(BrowserPushService);
@@ -219,6 +222,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly usingOfflineShell = signal(false);
   readonly user = this.auth.user;
   readonly showScratchpad = computed(() => this.user()?.showScratchpad ?? true);
+  // Organisation admins can hide Portfolio; sessions cached before the setting existed keep it.
+  readonly showPortfolio = computed(() => this.user()?.portfolioEnabled ?? true);
   // String queries keep the component classes out of the eager shell import graph. The types
   // still describe their public API without preventing Angular from deferring the components.
   readonly notificationsPanel = viewChild<NotificationsPanelComponent>("notificationsPanel");
@@ -363,6 +368,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
   private sidebarClickReset: ReturnType<typeof setTimeout> | null = null;
   private sidebarSettleTimer: ReturnType<typeof setTimeout> | null = null;
   private shellRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private shellLoadVersion = 0;
+  private destroyed = false;
   private readonly onResize = () => {
     this.isMobile.set(window.innerWidth <= AppShellComponent.MOBILE_BREAKPOINT);
     this.isScratchpadSheet.set(window.innerWidth <= AppShellComponent.AUTO_COLLAPSE_BREAKPOINT);
@@ -717,7 +724,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
       { keys: "g h", label: "Home", run: go("/") },
       { keys: "g m", label: "My cards", run: go("/my-cards") },
       { keys: "g t", label: "Team cards", run: go("/team-cards") },
-      { keys: "g p", label: "Portfolio", run: go("/portfolio") },
+      { keys: "g p", label: "Portfolio", when: () => this.showPortfolio(), run: go("/portfolio") },
       { keys: "g s", label: "Settings", run: go("/settings") },
     ], this.destroyRef);
   }
@@ -839,6 +846,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit() {
+    const user = this.user();
+    if (!user) return;
+    const version = ++this.shellLoadVersion;
+    const sessionKey = this.shellSessionKey();
     // Badges and their realtime subscriptions belong to the shell, not to the deferred drawers.
     // Initialise before any panel opens; both services are idempotent when a drawer later mounts.
     this.notifications.initialise();
@@ -863,6 +874,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     let guestGroups: GuestHomeGroup[];
     try {
       const response = await this.api.get<HomeResponse>("/home/boards");
+      if (!this.isCurrentShellLoad(version, sessionKey)) return;
       groups = response.groups;
       guestGroups = response.guestGroups ?? [];
       this.pendingInvitations.setFromHome({
@@ -871,9 +883,11 @@ export class AppShellComponent implements OnInit, OnDestroy {
       });
       this.standaloneBoardGroups.set(response.standaloneBoardGroups ?? []);
       this.usingOfflineShell.set(false);
-      void this.offlineCache.saveShell(this.user()!.clientId, response.groups, guestGroups, response.standaloneBoardGroups ?? []).catch(() => undefined);
+      void this.offlineCache.saveShell(user.clientId, response.groups, guestGroups, response.standaloneBoardGroups ?? []).catch(() => undefined);
     } catch (error) {
-      const cached = await this.offlineCache.loadShell(this.user()!.clientId).catch(() => null);
+      if (!this.isCurrentShellLoad(version, sessionKey)) return;
+      const cached = await this.offlineCache.loadShell(user.clientId).catch(() => null);
+      if (!this.isCurrentShellLoad(version, sessionKey)) return;
       if (!cached) throw error;
       groups = cached.groups;
       guestGroups = cached.guestGroups ?? [];
@@ -1159,10 +1173,35 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   private async refreshShellBoards(): Promise<void> {
+    const version = ++this.shellLoadVersion;
+    const sessionKey = this.shellSessionKey();
+    const clientId = this.user()?.clientId;
+    if (!clientId || this.destroyed) return;
     const response = await this.api.get<HomeResponse>("/home/boards");
+    if (!this.isCurrentShellLoad(version, sessionKey)) return;
     this.usingOfflineShell.set(false);
     this.applyHomeResponse(response);
-    void this.offlineCache.saveShell(this.user()!.clientId, response.groups, response.guestGroups ?? [], response.standaloneBoardGroups ?? []).catch(() => undefined);
+    void this.offlineCache.saveShell(clientId, response.groups, response.guestGroups ?? [], response.standaloneBoardGroups ?? []).catch(() => undefined);
+  }
+
+  private shellSessionKey(): string | null {
+    const user = this.user();
+    return user ? `${user.id}:${user.activeClientId ?? user.clientId}` : null;
+  }
+
+  private isCurrentShellLoad(version: number, sessionKey: string | null): boolean {
+    return !this.destroyed && version === this.shellLoadVersion && sessionKey === this.shellSessionKey();
+  }
+
+  private teardownSessionState(): void {
+    // Root-provided stores outlive the shell. Clear private data and invalidate their outstanding
+    // requests for both explicit logout and session expiry/cross-tab logout that destroys the shell.
+    this.scratchpad.teardown();
+    this.notifications.teardown();
+    this.myPriorities.teardown();
+    this.workspaceService.clear();
+    this.pendingInvitations.setFromHome({ guestGroups: [], pendingBoardInvitations: [] });
+    this.search.close();
   }
 
   private scheduleShellBoardsRefresh(): void {
@@ -1183,10 +1222,9 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    // ScratchpadService is root-provided, so destroying the authenticated shell does not destroy its
-    // state. Explicitly erase private pages at this account boundary to protect shared browsers and
-    // prevent late autosave responses from landing in the next session.
-    this.scratchpad.teardown();
+    this.destroyed = true;
+    this.shellLoadVersion += 1;
+    this.teardownSessionState();
     this.detach?.();
     this.routerSub?.unsubscribe();
     window.removeEventListener("resize", this.onResize);
@@ -1552,7 +1590,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
     // Flush while the outgoing token still exists, then synchronously erase the root service before
     // the login screen (or another account) can render in this SPA instance.
-    this.scratchpad.teardown();
+    this.teardownSessionState();
     this.auth.broadcastLogout();
     this.auth.clearSession({ disableRefresh: true });
     this.sockets.disconnect();

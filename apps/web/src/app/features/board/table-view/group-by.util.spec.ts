@@ -462,6 +462,46 @@ describe("groupCards with includeEmptyGroups", () => {
   });
 });
 
+describe("select grouping with deleted options", () => {
+  // Deleting an option archives it but leaves card values pointing at its id. A kanban grouped by
+  // that field emits one column per active option, so the card used to vanish until grouping was
+  // switched off; it must fall into the "No <field>" bucket instead.
+  it("places a card whose only selected option was deleted in the empty bucket", () => {
+    const field = {
+      ...customField("f1", "Stage", "select"),
+      options: [{ id: "retained", label: "Retained" }],
+    } as unknown as AnyCustomField;
+    const groups = groupCards([card({ id: "orphan" }), card({ id: "kept" })], "cf:f1", "position", {
+      ...baseCtx,
+      customFields: [field],
+      customFieldValuesByCardAndField: valuesByCard([
+        fieldValue("orphan", "f1", { valueOptionIds: ["deleted"] }),
+        fieldValue("kept", "f1", { valueOptionIds: ["retained"] }),
+      ]),
+      includeEmptyGroups: true,
+    });
+
+    expect(groups.map((group) => [group.label, group.cards.map((c) => c.id)])).toEqual([
+      ["Retained", ["kept"]],
+      ["No Stage", ["orphan"]],
+    ]);
+  });
+
+  it("keeps a multi-value card only under its surviving options", () => {
+    const field = {
+      ...customField("f1", "Stage", "select"),
+      options: [{ id: "retained", label: "Retained" }],
+    } as unknown as AnyCustomField;
+    const groups = groupCards([card({ id: "mixed" })], "cf:f1", "position", {
+      ...baseCtx,
+      customFields: [field],
+      customFieldValuesByCardAndField: valuesByCard([fieldValue("mixed", "f1", { valueOptionIds: ["deleted", "retained"] })]),
+    });
+
+    expect(groups.map((group) => [group.label, group.cards.map((c) => c.id)])).toEqual([["Retained", ["mixed"]]]);
+  });
+});
+
 describe("custom-field group meta", () => {
   // The kanban turns a column back into a write payload from `fieldValueKey`; without it a drop
   // would know which field it targets but not which value.

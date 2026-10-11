@@ -1,7 +1,7 @@
 import type { APIRequestContext, APIResponse, Page } from "@playwright/test";
 import { users } from "./support/env";
 import { expect, test } from "./support/fixtures";
-import { boardIdOf, expectBoardLoaded, moveCardToBoard, openCard } from "./support/ui";
+import { boardIdOf, expectBoardLoaded, expectCardTileMounted, moveCardToBoard, openCard } from "./support/ui";
 
 type WireCard = { id: string; title: string; listId: string; position: string; completedAt: string | null };
 type WireCardDetail = {
@@ -94,8 +94,8 @@ test("board transfers drop inaccessible watchers but preserve destination observ
   for (const [target, retained, restricted] of [[privateBoard, false, false], [observerBoard, true, false], [observerBoard, false, true]] as const) {
     if (restricted) await result(await api.patch(`/api/boards/${observerBoard.id}/members/${maya.id}`, { data: { role: "observer", assignedItemsOnly: true } }));
     const card = await result<WireCard>(await api.post(`/api/boards/${source.id}/lists/${lists[0]!.id}/cards`, { data: { title: uniqueName("Watched transfer"), assigneeIds: [] } }));
-    expect((await guest.put(`/api/cards/${card.id}/watch`)).status()).toBe(204);
-    expect((await api.put(`/api/cards/${card.id}/watch`)).status()).toBe(204);
+    expect((await guest.put(`/api/cards/${card.id}/watch`)).status()).toBe(200);
+    expect((await api.put(`/api/cards/${card.id}/watch`)).status()).toBe(200);
     await result(await api.post(`/api/cards/${card.id}/move-to-board`, { data: { boardId: target.id } }));
     const watchers = await result<{ userId: string }[]>(await api.get(`/api/cards/${card.id}/watchers`));
     evidence.push({ cardId: card.id, targetBoardId: target.id, retained, restricted, watchers });
@@ -188,6 +188,7 @@ test("concurrent checklist edits preserve changes to different fields", async ({
   expect(after.checklists[0]!.items[0]!.completedAt).not.toBeNull();
   await page.goto(`/b/${boardId}`);
   await expectBoardLoaded(page, "Platform Delivery");
+  await expectCardTileMounted(page, title, card.listId);
   const detail = await openCard(page, title);
   await expect(detail.locator(".checklist-item-text").filter({ hasText: "Renamed concurrently" })).toHaveClass(/is-done/);
 });

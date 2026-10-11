@@ -61,7 +61,7 @@ describe("CardComponent context menu", () => {
         provideZonelessChangeDetection(),
         BoardMenuCoordinator,
         { provide: BoardState, useValue: { canEdit: signal(true), canEditRole: signal(true), isCardChecklistExpanded: () => false, checklistsForCard: () => [] } },
-        { provide: NotificationsService, useValue: { isWatchingCard: () => false, isWatchingBoard: () => false, cardUnreadCount: () => 0 } },
+        { provide: NotificationsService, useValue: { isWatchingCard: () => false, reminderFor: () => null, isWatchingBoard: () => false, cardUnreadCount: () => 0 } },
         { provide: WorkspaceService, useValue: { workspaceIdForBoard: () => "workspace-1" } },
       ],
     }).overrideComponent(CardComponent, { set: { template: "" } });

@@ -50,8 +50,8 @@ jobs:
 
       - run: pnpm test:sdk
 
-      # This aliases the web package's standard production build, which enforces the same budgets
-      # locally and in Docker so CI is not the first place bundle growth becomes visible.
+      # Production builds report advisory bundle sizes locally, in Docker and in CI.
+      # Angular size error limits, compilation and offline packaging errors still fail this step.
       - run: pnpm bundle:web:check
 
   e2e-shard:

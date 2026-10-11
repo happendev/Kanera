@@ -36,6 +36,7 @@ import { cardAttachmentRoutes } from "./modules/cards/attachments.routes.js";
 import { cardRoutes } from "./modules/cards/routes.js";
 import { clientRoutes } from "./modules/clients/routes.js";
 import { checklistTemplateRoutes } from "./modules/checklist-templates/routes.js";
+import { clientStorageRoutes } from "./modules/clients/storage.js";
 import { clientUserRoutes } from "./modules/clients/users.js";
 import { commentRoutes } from "./modules/comments/routes.js";
 import { customFieldRoutes } from "./modules/custom-fields/routes.js";
@@ -50,11 +51,13 @@ import { internalLinkRoutes } from "./modules/internal-links/routes.js";
 import { listRoutes } from "./modules/lists/routes.js";
 import { mediaRoutes } from "./modules/media/routes.js";
 import { noteRoutes } from "./modules/notes/routes.js";
+import { followRoutes } from "./modules/notifications/follow.routes.js";
 import { emailPreferencePublicRoutes, notificationsRoutes, pushPublicRoutes } from "./modules/notifications/routes.js";
 import { searchRoutes } from "./modules/search/routes.js";
 import { separatorRoutes } from "./modules/separators/routes.js";
 import { workspaceRoutes } from "./modules/workspaces/routes.js";
 import { homeRoutes } from "./modules/home/routes.js";
+import { userRoutes } from "./modules/users/routes.js";
 import { scratchpadRoutes } from "./modules/scratchpad/routes.js";
 import { agentWorkRoutes, workRoutes } from "./modules/work/routes.js";
 import { globalWorkSeparatorRoutes } from "./modules/global-work-separators/routes.js";
@@ -253,6 +256,9 @@ export async function buildServer(options: BuildServerOptions = {}) {
   // Internal only: deliberately not registered on public-api-server.ts, and absent from the
   // hand-maintained public OpenAPI document. Home is a personal view, not a published contract.
   await app.register(homeRoutes);
+  // Internal only, like Home: the avatar profile card is a first-party UI projection. Its access
+  // rules lean on the interactive session (shared boards, current organisation), not on a key scope.
+  await app.register(userRoutes);
   // Internal only, and more strongly than Home: a scratchpad is private to one user, so it is
   // deliberately absent from public-api-server.ts, docs/public-openapi.ts, and the MCP surface.
   // Exposing it on a workspace-scoped credential would hand an org's integration key a member's
@@ -274,10 +280,12 @@ export async function buildServer(options: BuildServerOptions = {}) {
   await app.register(commentRoutes);
   await app.register(activityRoutes);
   await app.register(notificationsRoutes);
+  await app.register(followRoutes);
   await app.register(pushPublicRoutes);
   await app.register(emailPreferencePublicRoutes);
   await app.register(clientRoutes);
   await app.register(clientUserRoutes);
+  await app.register(clientStorageRoutes);
   await app.register(integrationRoutes);
   await app.register(oauthUserRoutes);
   await app.register(internalLinkRoutes);

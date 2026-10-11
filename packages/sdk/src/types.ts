@@ -39,6 +39,10 @@ export interface Session {
   workspaceId: Uuid | null;
   /** Origin of the web app, for building links a human can open. */
   webUrl: string;
+  /** IANA zone of the credential's user (a workspace key's creator); due dates are set in it. */
+  timeZone: string;
+  /** Today's date in `timeZone`, for resolving "today" or "tomorrow" without a clock of your own. */
+  today: LocalDate;
 }
 
 export type WorkspaceKind = "standard" | "board";
@@ -67,6 +71,7 @@ export type WorkspaceTemplateId =
   | "event-planning"
   | "client-onboarding"
   | "hiring-pipeline"
+  | "agent-workflow"
   | "blank";
 
 export type WorkspaceSeedAutomationTrigger =
@@ -312,6 +317,51 @@ export interface CreatedChecklist extends Checklist {
 /** A created item plus the sub-checklists created under it in the same request. */
 export interface CreatedChecklistItem extends ChecklistItem {
   subChecklists: Checklist[];
+}
+
+/** Your own one-off reminder on a card. You hold at most one per card. */
+export interface CardReminder {
+  id: Uuid;
+  cardId: Uuid;
+  /** ISO instant the reminder fires at. */
+  remindAt: string;
+  /** When it was delivered; `null` while pending. Rescheduling clears it. */
+  firedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CardReminderListItem extends CardReminder {
+  card: { id: Uuid; key: string; title: string; boardId: Uuid; workspaceId: Uuid; url: string };
+}
+
+/** One row of the polled notification inbox; `summary` reads like the web inbox. */
+export interface NotificationInboxItem {
+  id: Uuid;
+  createdAt: string;
+  reason: "assigned" | "watching" | "mentioned" | "overdue" | "checklist_item_overdue" | "board_member_left" | "reminder";
+  read: boolean;
+  summary: string;
+  action: string | null;
+  /** `self` is true when the polling connection caused the notification. */
+  actor: { userId: Uuid | null; name: string | null; kind: string; agentName: string | null; self: boolean } | null;
+  card: { id: Uuid; key: string; title: string; url: string } | null;
+  board: { id: Uuid; name: string | null } | null;
+  commentExcerpt: string | null;
+}
+
+export interface NotificationInboxPage {
+  items: NotificationInboxItem[];
+  /** Pass back as `since` on the next poll. */
+  cursor: string;
+  hasMore: boolean;
+}
+
+/** Whether you watch a card, and your reminder on it. Private to the connected user. */
+export interface CardFollowState {
+  cardId: Uuid;
+  watching: boolean;
+  reminder: CardReminder | null;
 }
 
 export interface CardDetail {

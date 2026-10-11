@@ -76,6 +76,16 @@ export class Boards {
     });
   }
 
+  /** Watch a board: activity on all of its cards reaches your notification inbox. Idempotent. */
+  watch(boardId: Uuid, options: CallOptions = {}): Promise<void> {
+    return this.ctx.http.put<void>(`/api/v1/boards/${boardId}/watch`, undefined, options);
+  }
+
+  /** Stop watching a board. Cards you watch individually stay watched. */
+  unwatch(boardId: Uuid, options: CallOptions = {}): Promise<void> {
+    return this.ctx.http.delete<void>(`/api/v1/boards/${boardId}/watch`, options);
+  }
+
   /** One bounded page of cards from exactly one workflow list. */
   async cards(
     boardId: Uuid,

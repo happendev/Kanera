@@ -94,6 +94,7 @@ const ENTITIES: { name: string; table: unknown; synthetic?: string[]; omitted?: 
     omitted: ["searchVector", "agentGrantId"],
   },
   { name: "AgentRun", table: schema.agentRuns },
+  { name: "ScratchpadNote", table: schema.scratchpadNotes },
   {
     name: "WebhookEndpoint",
     table: schema.webhookEndpoints,

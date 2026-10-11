@@ -3,19 +3,13 @@
   <header class="agent-card-header">
     <span class="agent-card-icon"><i class="ti ti-plug-connected"></i></span>
     <div class="agent-card-heading">
-      <h3>Connect an AI agent @if (isHosted()) {<span class="pro-marker">Pro</span>}</h3>
+      <h3>Connect an AI agent</h3>
       <p>Let Claude, Copilot, Codex, ChatGPT, or any other agent set up boards and manage work for you. Your AI Agent can do all the heavy lifting and get you productive faster.</p>
     </div>
   </header>
   }
 
-  @if (!apiAllowed()) {
-  <div class="agent-card-callout" role="status">
-    <i class="ti ti-lock"></i>
-    <span>Connecting an AI agent is part of Kanera Pro.</span>
-    <button type="button" class="sm" (click)="upgrade()">See Pro</button>
-  </div>
-  } @else if (mcpUrl()) {
+  @if (mcpUrl()) {
   <div class="agent-card-actions">
     <button type="button" class="sm" (click)="copyPrompt()">
       <i [class]="copied() === 'prompt' ? 'ti ti-check' : 'ti ti-sparkles'"></i>
@@ -32,6 +26,25 @@
       <i [class]="copied() === 'url' ? 'ti ti-check' : 'ti ti-copy'"></i>
     </button>
   </div>
+  @if (showSnippets() && snippet(); as current) {
+  <div class="agent-card-snippet">
+    <div class="agent-card-snippet-head">
+      <label class="agent-card-snippet-label" for="agent-snippet-client">Or configure it by hand</label>
+      <select id="agent-snippet-client" class="agent-card-snippet-select" (change)="snippetClient.set($any($event.target).value)">
+        @for (client of snippetClients; track client.id) {
+        <option [value]="client.id" [selected]="client.id === snippetClient()">{{ client.label }}</option>
+        }
+      </select>
+    </div>
+    <p class="agent-card-snippet-where">{{ current.where }}</p>
+    <div class="agent-card-snippet-code">
+      <pre><code>{{ current.code }}</code></pre>
+      <button type="button" class="ghost icon" (click)="copySnippet()" [attr.aria-label]="'Copy ' + current.label + ' setup'" [kTooltip]="copied() === 'snippet' ? 'Copied' : 'Copy setup snippet'">
+        <i [class]="copied() === 'snippet' ? 'ti ti-check' : 'ti ti-copy'"></i>
+      </button>
+    </div>
+  </div>
+  }
   } @else if (!loading()) {
   <div class="agent-card-actions">
     <a class="ghost sm" [href]="docsUrl" target="_blank" rel="noopener noreferrer">

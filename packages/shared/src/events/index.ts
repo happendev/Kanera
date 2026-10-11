@@ -1,5 +1,6 @@
 import type { Accent, Theme } from "../appearance.js";
 import type { BoardMirrorRow } from "../dto/board-mirrors.js";
+import type { WireCardReminder } from "../dto/card-follow.js";
 import type { WorkPriorityQueueSnapshot } from "../dto/card-priorities.js";
 import type { CardAttachmentRow } from "../dto/card-attachments.js";
 import type { NoteAttachmentRow } from "../dto/note-attachments.js";
@@ -584,7 +585,17 @@ export interface ServerToClientEvents {
     cardId: string;
     positions: { id: string; position: string }[];
   }) => void;
-  "card:checklist:deleted": (payload: { boardId: string; cardId: string; checklistId: string }) => void;
+  // checklistParentItemId/itemCount/completedItemCount describe the deleted checklist's own (direct)
+  // items. A client that has not opened the card holds no checklist detail to subtract from its
+  // progress badge, so the event must carry the top-level contribution being removed.
+  "card:checklist:deleted": (payload: {
+    boardId: string;
+    cardId: string;
+    checklistId: string;
+    checklistParentItemId: string | null;
+    itemCount: number;
+    completedItemCount: number;
+  }) => void;
   // cardTitle/listId are included so assignee-centric consumers can build a
   // checklist work item without an extra fetch; board + list display come from the consumer's
   // own board/list sets.
@@ -778,6 +789,18 @@ export interface ServerToClientEvents {
    */
   "user:appearance:updated": (payload: { theme: Theme | null; accent: Accent | null }) => void;
 
+  /**
+   * Following a card or board, and card reminders, are personal state. Emitted with `emitToUser` for
+   * the same reason as the scratchpad events: routing them through a board or workspace room would
+   * tell teammates (and the organisation's webhook subscribers) who is watching what and when they
+   * asked to be reminded. They exist so the user's other sessions, including ones the public API
+   * wrote through on their behalf, converge without a reload. Each carries the resulting state, not
+   * the change, so a session that missed an earlier event still lands in the right place.
+   */
+  "watch:changed": (payload: { kind: "card" | "board"; id: string; boardId: string; workspaceId: string; watching: boolean }) => void;
+  "cardReminder:updated": (payload: { reminder: WireCardReminder }) => void;
+  "cardReminder:deleted": (payload: { cardId: string; reminderId: string }) => void;
+
   "notification:created": (payload: { notification: NotificationRow }) => void;
   "notification:updated": (payload: { notification: NotificationRow }) => void;
   "notification:deleted": (payload: { notificationIds: string[] }) => void;
@@ -919,6 +942,10 @@ export const SERVER_EVENTS = {
   CLIENT_ENTITLEMENTS_CHANGED: "client:entitlements:changed",
   USER_PROFILE_UPDATED: "user:profile:updated",
   USER_APPEARANCE_UPDATED: "user:appearance:updated",
+  // User-room-only; see the doc comment on the `watch:changed` block in ServerToClientEvents.
+  WATCH_CHANGED: "watch:changed",
+  CARD_REMINDER_UPDATED: "cardReminder:updated",
+  CARD_REMINDER_DELETED: "cardReminder:deleted",
   WORKSPACE_UPDATED: "workspace:updated",
   WORKSPACE_DELETED: "workspace:deleted",
   WORKSPACE_MEMBER_ADDED: "workspace:member:added",

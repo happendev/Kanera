@@ -133,6 +133,7 @@ export class MyPrioritiesService {
   private joinedBoardIds = new Set<string>();
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
   private requestVersion = 0;
+  private sessionVersion = 0;
   /** Independent from queue reads: a reconnecting queue refresh must not cancel a slower candidate load. */
   private candidateRequestVersion = 0;
   /**
@@ -183,6 +184,7 @@ export class MyPrioritiesService {
 
   /** Called when the organisation switches: every id in the queue belongs to the old tenant. */
   teardown(): void {
+    this.sessionVersion += 1;
     this.detach?.();
     this.detach = null;
     if (this.refreshTimer !== null) {
@@ -240,14 +242,18 @@ export class MyPrioritiesService {
   async addPriority(cardId: string, anchor: PriorityAnchor): Promise<void> {
     const userId = this.auth.user()?.id;
     if (!userId) return;
+    const session = this.sessionVersion;
     const snapshot = this.queue();
     this.applyOptimistic(null, cardId, anchor);
     try {
-      this.applyQueue(await this.api.post<WorkPrioritiesResponse>(
+      const response = await this.api.post<WorkPrioritiesResponse>(
         `/work/priorities/${userId}/cards`,
         { cardId, ...anchor },
-      ));
+      );
+      if (session !== this.sessionVersion) return;
+      this.applyQueue(response);
     } catch (error) {
+      if (session !== this.sessionVersion) return;
       this.queue.set(snapshot);
       // A rejected add means this candidate was not addable after all — most often it was completed
       // or archived by somebody else since the pool loaded. Drop it and let the next open refetch, so
@@ -259,20 +265,25 @@ export class MyPrioritiesService {
   }
 
   async movePriority(priorityId: string, anchor: PriorityAnchor): Promise<void> {
+    const session = this.sessionVersion;
     const snapshot = this.queue();
     this.applyOptimistic(priorityId, null, anchor);
     try {
-      this.applyQueue(await this.api.post<WorkPrioritiesResponse>(
+      const response = await this.api.post<WorkPrioritiesResponse>(
         `/card-priorities/${priorityId}/move`,
         anchor,
-      ));
+      );
+      if (session !== this.sessionVersion) return;
+      this.applyQueue(response);
     } catch (error) {
+      if (session !== this.sessionVersion) return;
       this.queue.set(snapshot);
       throw error;
     }
   }
 
   async removePriority(priorityId: string): Promise<void> {
+    const session = this.sessionVersion;
     const snapshot = this.queue();
     this.queue.update((queue) => queue && {
       ...queue,
@@ -280,8 +291,11 @@ export class MyPrioritiesService {
       totalCount: Math.max(0, queue.totalCount - 1),
     });
     try {
-      this.applyQueue(await this.api.delete<WorkPrioritiesResponse>(`/card-priorities/${priorityId}`));
+      const response = await this.api.delete<WorkPrioritiesResponse>(`/card-priorities/${priorityId}`);
+      if (session !== this.sessionVersion) return;
+      this.applyQueue(response);
     } catch (error) {
+      if (session !== this.sessionVersion) return;
       this.queue.set(snapshot);
       throw error;
     }
@@ -293,11 +307,13 @@ export class MyPrioritiesService {
    * card's own completion state, which keeps the row from flashing "incomplete" until it does.
    */
   async setCardCompleted(cardId: string, completed: boolean): Promise<void> {
+    const session = this.sessionVersion;
     const snapshot = this.queue();
     this.patchCard(cardId, (card) => ({ ...card, completedAt: completed ? new Date() : null }));
     try {
       await this.api.patch<WireCard>(`/cards/${cardId}/completion`, { completed });
     } catch (error) {
+      if (session !== this.sessionVersion) return;
       this.queue.set(snapshot);
       throw error;
     }
@@ -624,8 +640,12 @@ export class MyPrioritiesService {
         this.dropCandidate(cardId);
       },
     };
-    this.detach = registerSocketHandlers(socket, handlers);
+    const detachHandlers = registerSocketHandlers(socket, handlers);
     socket.on("connect", this.onSocketConnect);
+    this.detach = () => {
+      detachHandlers();
+      socket.off("connect", this.onSocketConnect);
+    };
   }
 
   private readonly onSocketConnect = () => {

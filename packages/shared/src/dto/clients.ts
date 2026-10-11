@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { CLIENT_ROLES } from "../schema/client-roles.js";
-import { CLIENT_BILLING_INTERVALS, CLIENT_BILLING_STATUSES, type ClientBillingStatus } from "../schema/client.js";
+import { CLIENT_BILLING_INTERVALS, CLIENT_BILLING_STATUSES, CLIENT_MCP_POLICIES, type ClientBillingStatus } from "../schema/client.js";
 import { GENERAL_NAME_MAX_LENGTH } from "./name-limits.js";
 import { deploymentModeSchema } from "./deployment.js";
 
@@ -44,6 +44,8 @@ export const updateClientBody = z.object({
   name: z.string().min(1).max(GENERAL_NAME_MAX_LENGTH).optional(),
   pushEnabled: z.boolean().optional(),
   requireMfa: z.boolean().optional(),
+  portfolioEnabled: z.boolean().optional(),
+  mcpPolicy: z.enum(CLIENT_MCP_POLICIES).optional(),
   defaultCompletedCardsActiveDays: z.number().int().min(0).max(365).optional(),
   defaultInactiveCardsDays: z.number().int().min(0).max(365).optional(),
   storageConfig: storageConfigSchema.optional(),
@@ -112,6 +114,9 @@ export const publicClientResponse = z.object({
   deploymentMode: deploymentModeSchema,
   pushEnabled: z.boolean(),
   requireMfa: z.boolean(),
+  portfolioEnabled: z.boolean(),
+  // Hosted only; self-hosted always reports `write` because the policy is not enforced there.
+  mcpPolicy: z.enum(CLIENT_MCP_POLICIES),
   defaultCompletedCardsActiveDays: z.number().int().min(0).max(365),
   defaultInactiveCardsDays: z.number().int().min(0).max(365),
   storageConfig: storageConfigSchema,
@@ -129,6 +134,8 @@ export const publicClientResponse = z.object({
     maxOrgMembers: z.number().int().positive(),
     maxEnabledAutomations: z.number().int().positive(),
     maxAutomationExecutionsPerMonth: z.number().int().positive(),
+    apiRequestsPerSecond: z.number().int().positive(),
+    apiRequestsPerMinute: z.number().int().positive(),
   }).nullable(),
 });
 export type PublicClientResponse = z.infer<typeof publicClientResponse>;
@@ -204,7 +211,15 @@ export type Entitlements = {
   maxEnabledAutomations: number | null;
   maxAutomationExecutionsPerMonth: number | null;
   guestsAllowed: boolean;
-  apiAllowed: boolean;
+  // Personal API keys and interactive AI agent connections (Claude, ChatGPT, Cursor, the CLI) are
+  // available on every plan, metered by the limits below. Workspace API keys and unattended service
+  // agents (OAuth client_credentials) stay Pro-only.
+  serviceAgentsAllowed: boolean;
+  // Agent/API request limits per user on this organisation's boards. Limits follow the organisation
+  // that owns the board, so the same user may have different limits in another organisation.
+  // Optional for compatibility with cached auth payloads.
+  apiRequestsPerSecond?: number;
+  apiRequestsPerMinute?: number;
   webhooksAllowed: boolean;
   // Optional for compatibility with cached auth payloads produced before board sync became Pro-only.
   boardSyncAllowed?: boolean;

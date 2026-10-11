@@ -4,42 +4,55 @@ import {
   GetObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
-  S3Client,
+  type S3Client,
 } from "@aws-sdk/client-s3";
 import type { StorageConfig } from "@kanera/shared/schema";
 import { Readable } from "node:stream";
 import type { StorageProvider } from "./types.js";
+import { acquireS3Client } from "./s3-client-cache.js";
 
 type S3Config = Extract<StorageConfig, { kind: "s3" }>;
 
 const S3_OPERATION_TIMEOUT_MS = 30_000; // 30 seconds
 
 export function createS3Storage(clientId: string, config: S3Config): StorageProvider {
-  const client = new S3Client({
-    region: config.region,
-    endpoint: config.endpoint,
-    forcePathStyle: !!config.endpoint,
-    credentials: {
-      accessKeyId: config.accessKeyId,
-      secretAccessKey: config.secretAccessKey,
-    },
-  });
-
   const keyFor = (key: string) => `${clientId}/${key}`;
 
-  async function withTimeout<T>(send: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  async function withTimeout<T>(
+    send: (client: S3Client, signal: AbortSignal) => Promise<T>,
+    responseBody?: (response: T) => unknown,
+  ): Promise<T> {
+    const lease = acquireS3Client(config);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), S3_OPERATION_TIMEOUT_MS);
+    let streaming = false;
     try {
-      return await send(controller.signal);
+      const response = await send(lease.client, controller.signal);
+      const body = responseBody?.(response);
+      if (body instanceof Readable && !body.destroyed && !body.readableEnded) {
+        // GetObject resolves at headers, before Fastify (or get()) consumes the body. Keep its
+        // client pinned until the stream finishes so cache churn cannot destroy this download.
+        streaming = true;
+        const release = () => {
+          body.off("end", release);
+          body.off("close", release);
+          body.off("error", release);
+          lease.release();
+        };
+        body.once("end", release);
+        body.once("close", release);
+        body.once("error", release);
+      }
+      return response;
     } finally {
       clearTimeout(timeout);
+      if (!streaming) lease.release();
     }
   }
 
   return {
     async put(key, body, contentType) {
-      await withTimeout((abortSignal) =>
+      await withTimeout((client, abortSignal) =>
         client.send(
           new PutObjectCommand({
             Bucket: config.bucket,
@@ -53,8 +66,9 @@ export function createS3Storage(clientId: string, config: S3Config): StorageProv
       return { key };
     },
     async get(key) {
-      const resp = await withTimeout((abortSignal) =>
+      const resp = await withTimeout((client, abortSignal) =>
         client.send(new GetObjectCommand({ Bucket: config.bucket, Key: keyFor(key) }), { abortSignal }),
+        (response) => response.Body,
       );
       const stream = resp.Body as NodeJS.ReadableStream;
       const chunks: Buffer[] = [];
@@ -62,7 +76,7 @@ export function createS3Storage(clientId: string, config: S3Config): StorageProv
       return Buffer.concat(chunks);
     },
     async getObject(key, range) {
-      const resp = await withTimeout((abortSignal) =>
+      const resp = await withTimeout((client, abortSignal) =>
         client.send(
           new GetObjectCommand({
             Bucket: config.bucket,
@@ -71,6 +85,7 @@ export function createS3Storage(clientId: string, config: S3Config): StorageProv
           }),
           { abortSignal },
         ),
+        (response) => response.Body,
       );
       const body = resp.Body;
       if (!body || !(body instanceof Readable)) throw new Error("empty s3 object body");
@@ -81,7 +96,7 @@ export function createS3Storage(clientId: string, config: S3Config): StorageProv
       };
     },
     async delete(key) {
-      await withTimeout((abortSignal) =>
+      await withTimeout((client, abortSignal) =>
         client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: keyFor(key) }), { abortSignal }),
       );
     },
@@ -89,7 +104,7 @@ export function createS3Storage(clientId: string, config: S3Config): StorageProv
       const prefix = `${clientId}/`;
       let continuationToken: string | undefined;
       do {
-        const listed = await withTimeout((abortSignal) =>
+        const listed = await withTimeout((client, abortSignal) =>
           client.send(
             new ListObjectsV2Command({
               Bucket: config.bucket,
@@ -101,7 +116,7 @@ export function createS3Storage(clientId: string, config: S3Config): StorageProv
         );
         const keys = (listed.Contents ?? []).flatMap((object) => object.Key ? [{ Key: object.Key }] : []);
         if (keys.length > 0) {
-          const deleted = await withTimeout((abortSignal) =>
+          const deleted = await withTimeout((client, abortSignal) =>
             client.send(
               new DeleteObjectsCommand({
                 Bucket: config.bucket,

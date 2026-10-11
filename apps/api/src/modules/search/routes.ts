@@ -192,7 +192,10 @@ async function searchData(
       .innerJoin(lists, eq(lists.id, cards.listId))
       .innerJoin(boards, eq(boards.id, cards.boardId))
       .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
-      .where(and(or(exactCardKeyMatch, sql`${cards.searchVector} @@ ${tsq}`, cardTitleMatch), isNull(cards.archivedAt), cardPredicate))
+      // Text hits stay live-only, but an exact card key is a direct reference: SDK/MCP/CLI callers
+      // resolve bare keys through this route, and an archived card must stay addressable so it can
+      // be restored by its advertised key, not only by UUID or canonical URL.
+      .where(and(or(exactCardKeyMatch, and(or(sql`${cards.searchVector} @@ ${tsq}`, cardTitleMatch), isNull(cards.archivedAt))), cardPredicate))
       .orderBy(sql`case when ${exactCardKeyMatch} then 1 else 0 end desc`, sql`ts_rank(${cards.searchVector}, ${tsq}) desc`)
       .limit(take) : Promise.resolve([]),
 

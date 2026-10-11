@@ -2,10 +2,44 @@
 
 All notable changes to Kanera are documented here.
 
-## [1.9.0] - Unreleased
+## [1.9.0] - 2026-10-11
+
+Ships alongside **CLI 2.1.0** and **MCP 4.1.0**.
+
+### Added
+- **Prebuilt self-host images:** releases publish amd64 and arm64 Docker images and attach a standalone Compose file plus example environment files.
+- **Card reminders:** remind yourself about any card from card detail or its right-click menu, with quick picks (in an hour, tomorrow morning, next Monday) or any date and time within 8 weeks. Reminders are private, arrive once as a notification, email, push or personal channel, show as an alarm on the card tile, and are listed on Home. The board filter has a **Reminder set** quick filter, and completing a card clears its reminders.
+- **Storage management:** Settings → Organisation → Storage shows usage by card attachments, notes, personal files and workspace. Admins can find large or old files, including those on archived cards, and delete up to 100 at a time. Hosted organisations get a warning email at 80% of their allowance; self-hosted deployments choose local disk or S3 here.
+- **User profiles:** click a person's avatar for a profile card with their details and recent activity.
+- **Hide Portfolio:** organisation admins can turn Portfolio off for the whole organisation.
+- **Organisation AI agent policy (hosted):** admins set agent access to Off, Read only, or Read and write under Settings → Organisation → Security. It covers MCP connections and personal API keys, including board guests.
+- **Agent Workflow template:** Backlog, Agent Working, Waiting on Me, Review and Done lists that AI agents move cards through as their runs start, block, resume and finish.
+- **My day for agents:** MCP `work.my_day` and CLI `kanera my-day` return your overdue, due-this-week and stale cards across every board plus your "Up next" queue. A weekday-morning `my_day.ready` MCP event lets agents act on it unprompted.
+- **Quick capture:** tell an agent "remind me to…" and it adds a task to your scratchpad Inbox (MCP `scratchpad.capture`, CLI `kanera capture`).
+- **Reminders and watching for agents:** MCP `cards.set_reminder`, `cards.set_watching`, `reminders.list` and a `reminder.due` event, with matching CLI commands, SDK methods and public API routes.
+- **Bulk card creation:** MCP `cards.bulk_create` (public API, SDK) creates up to 50 cards in one validated call. `workspaces.create` and `boards.create_standalone` accept seed `cards`, and `boards.create` can start a standalone board from a template.
+- **Notification inbox for polling agents:** MCP `notifications.list` (CLI `kanera inbox`, SDK `cards.pollNotifications`) lets a local agent pick up replies and @mentions without a webhook.
+- **Attachments for agents:** agents can read images and text-based attachments (`cards.get_attachment`) and upload local files through a single-use link (`cards.create_upload_link`, CLI `kanera card upload-link`).
+- **Natural dates for agents:** MCP accepts "tomorrow 1pm" or "next friday", resolved in your time zone.
+- **Copyable MCP setup snippets** for Claude Code, Cursor, VS Code / Copilot, Codex and Gemini CLI under Settings → API Keys.
+
+### Changed
+- Web bundle size warnings allow room for growth; Angular retains higher error limits, while compressed-size budgets are advisory.
+- **Free plan includes AI agents:** Claude, ChatGPT, Cursor, the CLI, MCP and personal API keys now work on Free-plan boards. Workspace API keys, service agents and webhooks remain Pro-only.
+- **Per-user API rate limits** apply per second and per minute at the plan of the organisation that owns the board, with a short queue for bursts.
+- **You follow your AI agent's work:** cards an agent creates for you are watched automatically, and its activity reaches you as "You via Claude".
+- **Leaner MCP:** the tool catalog is a fifth smaller, read-only connections see only read tools, and unknown fields now fail loudly instead of being ignored.
+- **Settings reorganised** into **Your account** and **Organisation** tabs; old links still work.
+- **Workspace team notes** can be edited by every workspace member.
+- **Faster app:** fewer database queries, renders and transport round trips.
 
 ### Fixed
-- Concurrency, card transfer access, and realtime consistency issues.
+- Editor freezes, note saving, and Global Work refresh regressions.
+- Organisation invitations could bypass mandatory MFA.
+- Subscription handling for late cancellations, with reconciliation.
+- Angular concurrency, state sync, invitation, due-date, realtime and integration bugs.
+- Cards showing checkbox custom fields incorrectly.
+- MCP tools now return a reauthorization challenge on expired or revoked credentials.
 
 ## [1.8.0] - 2026-10-07
 

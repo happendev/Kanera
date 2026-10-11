@@ -34,6 +34,10 @@ export interface ActivityChangeSummaryInput {
 export function summariseActivityChange(input: ActivityChangeSummaryInput): ActivityChangeSummary {
   // Checklist-item overdue rows carry no activity, so this must precede the
   // generic overdue branch below (which would otherwise read as "card is overdue").
+  // Reminders are the viewer's own alarm and carry no activity either.
+  if (input.reason === "reminder") {
+    return { icon: "ti ti-alarm", text: "reminder" };
+  }
   if (input.reason === "checklist_item_overdue") {
     return { icon: "ti ti-calendar-exclamation", text: "checklist item is overdue" };
   }

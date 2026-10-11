@@ -11,6 +11,7 @@ hosted application itself is documented in [DEPLOY.md](DEPLOY.md).
 | -------- | -------- | ------- | -------- |
 | `@kanera/cli` | npm | independent; published by workspace releases | `publish-npm.yml` |
 | `@kanera/sdk` | npm | workspace version (`vX.Y.Z` tags) | `publish-npm.yml` |
+| Self-host images and standalone `docker-compose.yml` | GHCR (`ghcr.io/happendev/kanera-*`) and GitHub release assets | workspace version (`vX.Y.Z` tags) | `publish-images.yml` |
 | MCP server metadata | MCP registry | independent (`mcp-vX.Y.Z` tags) | `publish-mcp.yml` |
 | OpenAI Kanera plugin | OpenAI universal Plugins Directory | MCP version (`mcp-vX.Y.Z` tags) | manual review and publish through the OpenAI plugin portal |
 | Kanera Agent Skill | GitHub and `www.kanera.app` | source snapshot | merge this repo, then deploy Kanera-site |
@@ -35,7 +36,7 @@ For a change that touches agent routing, the CLI, or public setup guidance, rele
    new submission for an implementation-only MCP deployment.
 
 The GitHub repository secrets currently required by the automated workflows are `NPM_TOKEN`,
-`MCP_PRIVATE_KEY`, and `GITLEAKS_LICENSE`.
+`MCP_PRIVATE_KEY`, and `GITLEAKS_LICENSE`. Image publishing uses the built-in `GITHUB_TOKEN`.
 
 The CLI versions independently: bump `apps/cli/package.json` explicitly before a workspace
 release when shipping CLI changes, and optionally add a `cli-vX.Y.Z` GitHub release to document
@@ -87,6 +88,29 @@ git push origin main
 git push origin vX.Y.Z
 gh release create vX.Y.Z --title "vX.Y.Z" --generate-notes --verify-tag
 ```
+
+Publishing the release starts `publish-images.yml`, which builds `kanera-api`, `kanera-web`,
+`kanera-mcp`, and `kanera-db-backup` for amd64 and arm64, tags them `X.Y.Z`, `X.Y`, and `X`, and
+attaches `docker-compose.yml`, `env.example`, and `env.full.example` to the release. Self-hosters
+install and update from those assets, so check that all three are attached before announcing the
+release. Rerun it for an existing tag from the Actions tab (workflow_dispatch with the tag).
+
+Self-hosted install and update instructions download from `releases/latest/download/...`, so the
+newest `vX.Y.Z` release must keep GitHub's **Latest** badge. `publish-images.yml` claims it for the
+highest workspace tag, but a CLI or MCP release created afterwards would take it back and break those
+links. Create `cli-vX.Y.Z` and `mcp-vX.Y.Z` releases with `--latest=false`:
+
+```bash
+gh release create mcp-vX.Y.Z --title "MCP vX.Y.Z" --generate-notes --verify-tag --latest=false
+```
+
+Write release notes for operators as well as users: a self-hosted deployment can jump several
+releases at once, so call out any new required setting, one-time reconnect, or manual step under the
+release that introduces it.
+
+One-time setup: after the first run, set each of the four GHCR packages to **Public** under the
+organisation's Packages settings and link it to this repository. New GHCR packages start private, so
+anonymous `docker compose pull` fails until then.
 
 ## Publishing to npm
 

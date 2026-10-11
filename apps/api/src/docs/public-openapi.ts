@@ -1,6 +1,6 @@
 import { dto } from "@kanera/shared";
 import { CARD_DUE_DATE_SLOTS } from "@kanera/shared/due-date-slots";
-import { CLIENT_ROUTE_KEY_PATTERN, MAX_CARD_PRIORITIES_PER_USER } from "@kanera/shared/schema";
+import { CLIENT_ROUTE_KEY_PATTERN, MAX_CARD_PRIORITIES_PER_USER, NOTIFICATION_REASONS } from "@kanera/shared/schema";
 import { z } from "zod";
 
 type HttpMethod = "get" | "post" | "patch" | "put" | "delete";
@@ -365,6 +365,8 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     { name: "Separators", description: "Manage board-owned, titled dividers inside a workflow list's mixed card lane, including exact card-or-separator positioning." },
     { name: "Automations", description: "Manage workspace-scoped rules and inspect their retained execution outcomes. Automation administration requires workspace-admin authority." },
     { name: "Notes", description: "Read and manage workspace notes and board notes, including lock/unlock behavior for collaborative editing." },
+    { name: "Scratchpad", description: "The connected user's private scratchpad pages, which also serve as a personal inbox for quick capture without choosing a board. Requires a personal API key or OAuth connection; workspace-scoped keys receive 403." },
+    { name: "Following", description: "The connected user's own watch and reminder state on cards and boards. Watching a card puts its activity in your notification inbox; a reminder notifies you once at a chosen time. Both are private to you, record no card activity, and need a personal API key or OAuth connection; workspace-scoped keys receive 403." },
     { name: "Cards", description: "Create and update cards, move them through workspace lists, manage checklist data, labels, assignees, completion, and custom field values." },
     { name: "Attachments", description: "Upload and read card or note media. Use URLs returned by the API as-is; signed media links should not be constructed manually." },
     { name: "Custom Fields", description: "Manage workspace-scoped custom fields that are available on cards across every board in the workspace." },
@@ -424,7 +426,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       Forbidden: { description: "Authenticated principal does not have access.", content: { "application/json": { schema: ref("Error") } } },
       NotFound: { description: "Resource not found.", content: { "application/json": { schema: ref("Error") } } },
       Conflict: { description: "Resource conflict.", content: { "application/json": { schema: ref("Error") } } },
-      TooManyRequests: { description: "Rate limit exceeded. Inspect the rate-limit response headers before retrying.", content: { "application/json": { schema: ref("Error") } } },
+      TooManyRequests: { description: "Rate limit exceeded. Credential requests are limited per user per second and per minute, at the plan limits of the organisation that owns the board being accessed (requests without a board, such as listings, use the credential's current organisation). Requests over the per-second limit first wait in a queue of up to 10 and are served in the following second, so a per-second 429 means that queue was also full; per-minute limits reject immediately. Inspect the rate-limit response headers before retrying. When a hosted Free organisation's limit is reached, the response also includes `limit` (`apiRequestsPerSecond` or `apiRequestsPerMinute`), `max`, `organisationId`, and `upgradePlan`.", content: { "application/json": { schema: ref("Error") } } },
       Internal: { description: "Unexpected server error.", content: { "application/json": { schema: ref("Error") } } },
     },
     schemas: {
@@ -441,7 +443,7 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       Health: { type: "object", required: ["ok", "service"], properties: { ok: { type: "boolean" }, service: { type: "string" } } },
       Session: {
         type: "object",
-        required: ["userId", "organisationId", "credentialKind", "organisationScope", "workspaceId", "webUrl"],
+        required: ["userId", "organisationId", "credentialKind", "organisationScope", "workspaceId", "webUrl", "timeZone", "today"],
         properties: {
           userId: uuid,
           organisationId: uuid,
@@ -452,6 +454,8 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           scope: nullable({ type: "string", enum: ["read", "write", "admin"] }),
           workspaceId: nullable(uuid),
           webUrl: { type: "string", format: "uri" },
+          timeZone: { type: "string", description: "IANA time zone of the credential's user (a workspace key's creator); due dates are set in this zone." },
+          today: { type: "string", format: "date", description: "Today's date in timeZone." },
         },
       },
       User: {
@@ -871,6 +875,29 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           updatedAt: dateTime,
         },
         additionalProperties: true,
+      },
+      ScratchpadNote: {
+        type: "object",
+        required: ["id", "userId", "clientId", "title", "content", "position", "createdAt", "updatedAt"],
+        properties: {
+          id: uuid,
+          userId: uuid,
+          clientId: uuid,
+          title: { type: "string" },
+          content: { type: "string", description: "Markdown content. Captured items are `- [ ]` task lines." },
+          position,
+          createdAt: dateTime,
+          updatedAt: dateTime,
+        },
+      },
+      ScratchpadCapture: {
+        type: "object",
+        required: ["note", "created", "item"],
+        properties: {
+          note: ref("ScratchpadNote"),
+          created: { type: "boolean", description: "Whether the target page was created by this capture." },
+          item: { type: "string", description: "The Markdown task line that was appended." },
+        },
       },
       Note: {
         type: "object",
@@ -1466,6 +1493,9 @@ export const publicOpenApiDocument: Record<string, unknown> = {
         },
         additionalProperties: false,
       },
+      CreateScratchpadNoteBody: zodSchema(dto.createScratchpadNoteBody),
+      UpdateScratchpadNoteBody: zodSchema(dto.updateScratchpadNoteBody),
+      CaptureScratchpadItemBody: zodSchema(dto.captureScratchpadItemBody),
       CreateNoteBody: zodSchema(dto.createNoteBody),
       UpdateNoteBody: zodSchema(dto.updateNoteBody),
       MoveNoteBody: zodSchema(dto.moveNoteBody),
@@ -1480,10 +1510,49 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       BulkMoveCardsBody: zodSchema(dto.bulkMoveCardsBody),
       BulkArchiveCardsBody: zodSchema(dto.bulkArchiveCardsBody),
       BulkDuplicateCardsBody: zodSchema(dto.bulkDuplicateCardsBody),
+      BulkCreateCardsBody: zodSchema(dto.bulkCreateCardsBody),
       BulkSetCardCustomFieldBody: zodSchema(dto.bulkSetCardCustomFieldBody),
       MoveCardBody: zodSchema(dto.moveCardBody),
       CreateCardPriorityBody: zodSchema(dto.createCardPriorityBody),
       MoveCardPriorityBody: zodSchema(dto.moveCardPriorityBody),
+      SetCardReminderBody: zodSchema(dto.setCardReminderBody),
+      CardReminder: {
+        type: "object",
+        required: ["id", "cardId", "remindAt", "firedAt", "createdAt", "updatedAt"],
+        properties: {
+          id: uuid,
+          cardId: uuid,
+          remindAt: { ...dateTime, description: "When the reminder fires." },
+          firedAt: nullable({ ...dateTime, description: "When it was delivered; null while pending. Rescheduling clears it." }),
+          createdAt: dateTime,
+          updatedAt: dateTime,
+        },
+        additionalProperties: false,
+      },
+      CardReminderListItem: {
+        allOf: [ref("CardReminder"), {
+          type: "object",
+          required: ["card"],
+          properties: {
+            card: {
+              type: "object",
+              required: ["id", "key", "title", "boardId", "workspaceId", "url"],
+              properties: { id: uuid, key: { type: "string" }, title: { type: "string" }, boardId: uuid, workspaceId: uuid, url: { type: "string", format: "uri" } },
+              additionalProperties: false,
+            },
+          },
+        }],
+      },
+      CardFollowState: {
+        type: "object",
+        required: ["cardId", "watching", "reminder"],
+        properties: {
+          cardId: uuid,
+          watching: { type: "boolean", description: "Whether you watch this card. Watching a board is separate and not reflected here." },
+          reminder: nullable(ref("CardReminder")),
+        },
+        additionalProperties: false,
+      },
       DuplicateCardBody: zodSchema(dto.duplicateCardBody),
       MoveCardToBoardBody: zodSchema(dto.moveCardToBoardBody),
       SelectedCardContentQueryBody: zodSchema(dto.selectedCardContentQueryBody),
@@ -1945,6 +2014,12 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       }),
       post: operation({ tags: ["Notes"], summary: "Create a board note", operationId: "createBoardNote", parameters: [idParam("boardId")], requestBody: jsonBody(ref("CreateNoteBody")), responses: authedResponses({ "201": created(ref("Note")) }) }),
     },
+    "/scratchpad/notes": {
+      get: operation({ tags: ["Scratchpad"], summary: "List scratchpad pages", description: "Returns every page with full content, in tab order (position ascending). A scratchpad holds at most 50 pages.", operationId: "listScratchpadNotes", responses: authedResponses({ "200": ok(arrayOf(ref("ScratchpadNote"))) }) }),
+      post: operation({ tags: ["Scratchpad"], summary: "Create a scratchpad page", description: "Appends a page at the end of the tab list.", operationId: "createScratchpadNote", requestBody: jsonBody(ref("CreateScratchpadNoteBody")), responses: authedResponses({ "201": created(ref("ScratchpadNote")) }) }),
+    },
+    "/scratchpad/notes/{id}": pathItem("patch", operation({ tags: ["Scratchpad"], summary: "Update a scratchpad page", description: "Replaces the title and/or Markdown content. Pass `baseUpdatedAt` from your last read to receive 409 `SCRATCHPAD_STALE` instead of overwriting edits made since; without it the write is last-write-wins.", operationId: "updateScratchpadNote", parameters: [idParam()], requestBody: jsonBody(ref("UpdateScratchpadNoteBody")), responses: authedResponses({ "200": ok(ref("ScratchpadNote")), "409": { $ref: "#/components/responses/Conflict" } }) })),
+    "/scratchpad/capture": pathItem("post", operation({ tags: ["Scratchpad"], summary: "Capture an item to the scratchpad inbox", description: "Atomically appends `text` as an open Markdown task (`- [ ] text`) to the first page titled `pageTitle` (default `Inbox`, case-insensitive), creating that page when it does not exist.", operationId: "captureScratchpadItem", requestBody: jsonBody(ref("CaptureScratchpadItemBody")), responses: authedResponses({ "200": ok(ref("ScratchpadCapture")), "201": created(ref("ScratchpadCapture")) }) })),
     "/notes/{id}": {
       get: operation({ tags: ["Notes"], summary: "Get a note", operationId: "getNote", parameters: [idParam()], responses: authedResponses({ "200": ok(ref("Note")) }) }),
       patch: operation({
@@ -2069,6 +2144,15 @@ export const publicOpenApiDocument: Record<string, unknown> = {
     "/boards/{boardId}/cards/bulk/duplicate": pathItem("post", operation({
       tags: ["Cards"], summary: "Duplicate selected cards", operationId: "bulkDuplicateCards", parameters: [idParam("boardId")], requestBody: jsonBody(ref("BulkDuplicateCardsBody")),
       responses: authedResponses({ "201": created({ type: "object", required: ["duplicated", "cards", "skippedCardIds"], properties: { duplicated: { type: "integer" }, cards: arrayOf(ref("Card")), skippedCardIds: arrayOf(uuid) } }) }),
+    })),
+    "/boards/{boardId}/cards/bulk/create": pathItem("post", operation({
+      tags: ["Cards"],
+      summary: "Create several cards",
+      description: `Creates up to ${dto.BULK_CREATE_CARDS_MAX} cards on one board, each with optional labels, assignees, and due date, appended to the bottom of its list in request order. Every card is validated before any is created, so an invalid label, assignee, or list rejects the whole request and names the offending \`cards[i]\`. Each card then fires the same automations, notifications, and webhooks as a single create. Send an Idempotency-Key to retry safely.`,
+      operationId: "bulkCreateCards",
+      parameters: [idParam("boardId")],
+      requestBody: jsonBody(ref("BulkCreateCardsBody")),
+      responses: authedResponses({ "201": created({ type: "object", required: ["created", "cards"], properties: { created: { type: "integer" }, cards: arrayOf(ref("Card")) } }) }),
     })),
     "/boards/{boardId}/cards/bulk/custom-fields": pathItem("patch", operation({
       tags: ["Cards"], summary: "Set one custom field on selected cards", operationId: "bulkSetCardCustomField", parameters: [idParam("boardId")], requestBody: jsonBody(ref("BulkSetCardCustomFieldBody")),
@@ -2325,6 +2409,73 @@ export const publicOpenApiDocument: Record<string, unknown> = {
       operationId: "deleteWorkPriority",
       parameters: [idParam("id", "The priority entry id from the queue response.")],
       responses: authedResponses({ "200": ok(ref("WorkPrioritiesResponse")) }),
+    })),
+    "/cards/{id}/follow": pathItem("get", operation({
+      tags: ["Following"],
+      summary: "Read your watch and reminder state for a card",
+      description: "Returns whether you watch the card and your reminder on it, if any. Requires read access to the card.",
+      operationId: "getCardFollowState",
+      parameters: [idParam()],
+      responses: authedResponses({ "200": ok(ref("CardFollowState")) }),
+    })),
+    "/cards/{id}/watch": {
+      put: operation({ tags: ["Following"], summary: "Watch a card", description: "Adds the card's activity to your notification inbox (and to push and personal channels when watched-activity delivery is on in your notification settings). Idempotent. Read access to the card is enough; a write-capable credential is required.", operationId: "watchCard", parameters: [idParam()], responses: authedResponses({ "200": ok(ref("CardFollowState")) }) }),
+      delete: operation({ tags: ["Following"], summary: "Stop watching a card", description: "Idempotent. Your reminder on the card, if any, is unaffected. Requires a write-capable credential.", operationId: "unwatchCard", parameters: [idParam()], responses: authedResponses({ "200": ok(ref("CardFollowState")) }) }),
+    },
+    "/boards/{id}/watch": {
+      put: operation({ tags: ["Following"], summary: "Watch a board", description: "Adds activity on every card of the board to your notification inbox. Idempotent. Requires a write-capable credential.", operationId: "watchBoard", parameters: [idParam()], responses: authedResponses({ "204": noContent }) }),
+      delete: operation({ tags: ["Following"], summary: "Stop watching a board", description: "Idempotent. Cards you watch individually stay watched. Requires a write-capable credential.", operationId: "unwatchBoard", parameters: [idParam()], responses: authedResponses({ "204": noContent }) }),
+    },
+    "/cards/{id}/reminder": {
+      put: operation({ tags: ["Following"], summary: "Set your reminder on a card", description: `Schedules a one-off reminder that notifies you at \`remindAt\` (an ISO instant with offset, in the future and at most ${dto.MAX_REMINDER_LEAD_DAYS} days, eight weeks, ahead). You hold at most one reminder per card, so this replaces and re-arms any existing one, fired or not. Completing the card clears every reminder on it. Delivery uses your notification settings' Reminders row; agents can also subscribe to the \`reminder.due\` MCP event. Read access to the card is enough; a write-capable credential is required.`, operationId: "setCardReminder", parameters: [idParam()], requestBody: jsonBody(ref("SetCardReminderBody")), responses: authedResponses({ "200": ok(ref("CardFollowState")) }) }),
+      delete: operation({ tags: ["Following"], summary: "Clear your reminder on a card", description: "Removes your reminder, pending or fired. Idempotent. Requires a write-capable credential.", operationId: "clearCardReminder", parameters: [idParam()], responses: authedResponses({ "200": ok(ref("CardFollowState")) }) }),
+    },
+    "/notifications": pathItem("get", operation({
+      tags: ["Following"],
+      summary: "Poll your notification inbox",
+      description: "Reads your notification inbox forward from a cursor, oldest first: the same rows as the web inbox, so replies, mentions, assignments, and changes on cards you watch or are assigned (including cards your AI agent created). The first call without `since` returns the latest rows as a baseline; pass the returned `cursor` as `since` on every later call, and repeat while `hasMore` is true. Rows appear a few seconds after the event. An OAuth agent connection does not see notifications caused by its own writes unless `includeSelf=true`. Needs a personal API key or OAuth connection.",
+      operationId: "pollNotifications",
+      parameters: [
+        queryParam("since", { type: "string" }),
+        queryParam("limit", { type: "integer", minimum: 1, maximum: 100, default: 50 }),
+        queryParam("includeSelf", { type: "boolean", default: false }),
+      ],
+      responses: authedResponses({ "200": ok({
+        type: "object",
+        required: ["items", "cursor", "hasMore"],
+        properties: {
+          items: arrayOf({
+            type: "object",
+            required: ["id", "createdAt", "reason", "read", "summary", "action", "actor", "card", "board", "commentExcerpt"],
+            properties: {
+              id: uuid,
+              createdAt: { type: "string", format: "date-time" },
+              reason: { type: "string", enum: [...NOTIFICATION_REASONS] },
+              read: { type: "boolean" },
+              summary: { type: "string" },
+              action: nullable({ type: "string" }),
+              actor: nullable({
+                type: "object",
+                required: ["userId", "name", "kind", "agentName", "self"],
+                properties: { userId: nullable(uuid), name: nullable({ type: "string" }), kind: { type: "string" }, agentName: nullable({ type: "string" }), self: { type: "boolean" } },
+              }),
+              card: nullable({ type: "object", required: ["id", "key", "title", "url"], properties: { id: uuid, key: { type: "string" }, title: { type: "string" }, url: { type: "string", format: "uri" } } }),
+              board: nullable({ type: "object", required: ["id", "name"], properties: { id: uuid, name: nullable({ type: "string" }) } }),
+              commentExcerpt: nullable({ type: "string" }),
+            },
+          }),
+          cursor: { type: "string" },
+          hasMore: { type: "boolean" },
+        },
+      }) }),
+    })),
+    "/reminders": pathItem("get", operation({
+      tags: ["Following"],
+      summary: "List your reminders",
+      description: "Lists your own card reminders, soonest first, limited to cards you can still read. `status=pending` (the default) returns those not yet delivered; `status=all` adds delivered ones you have not cleared.",
+      operationId: "listCardReminders",
+      parameters: [queryParam("status", { type: "string", enum: ["pending", "all"], default: "pending" })],
+      responses: authedResponses({ "200": ok(arrayOf(ref("CardReminderListItem"))) }),
     })),
     "/work/cards/query": pathItem("post", operation({
       tags: ["Cards"],

@@ -106,7 +106,7 @@
     <span class="card-title-text">{{ card().title }}</span>
   </div>
 
-  @if (showCardWatchIndicator() || hasDescription() || checklistTotalCount() || commentCount() || attachmentCount() || assignees().length || hasDueDate() || hasVisibleCustomFieldBadges()) {
+  @if (showCardWatchIndicator() || reminderLabel() || hasDescription() || checklistTotalCount() || commentCount() || attachmentCount() || assignees().length || hasDueDate() || hasVisibleCustomFieldBadges()) {
   <div class="card-footer">
     <div class="card-footer-left">
       @if (hasDueDate()) {
@@ -125,6 +125,11 @@
           @if (watcherPopoverOpen()) {
           <k-watcher-popover kind="card" [entityId]="card().id" [workspaceId]="workspaceId()" [showToggle]="false" (dismissed)="watcherPopoverOpen.set(false)" />
           }
+        </span>
+        }
+        @if (reminderLabel(); as label) {
+        <span class="card-indicator card-reminder-indicator" [attr.aria-label]="label" [kTooltip]="label">
+          <i class="ti ti-alarm"></i>
         </span>
         }
         @if (hasDescription()) {
@@ -151,12 +156,12 @@
       </div>
       @for (field of customFields(); track field.id) {
       @if (field.showOnCard && hasBadge(field)) {
-      <span class="cf-badge" [class.cf-badge--chips]="field.type === 'select'" [kTooltip]="field.name">
+      <span class="cf-badge" [class.cf-badge--chips]="field.type === 'select'" [class.cf-badge--flag]="field.type === 'checkbox'" [kTooltip]="field.name">
         <i [class]="'ti ti-' + field.icon"></i>
         <span class="cf-label">{{ field.name }}</span>
         @switch (field.type) {
         @case ('checkbox') {
-        <i class="ti cf-value" [class.ti-checkbox]="checkboxFor(field.id)" [class.ti-square]="!checkboxFor(field.id)"></i>
+        <!-- The badge only renders when checked, so the field name is the value. -->
         }
         @case ('select') {
         <span class="cf-sep">&middot;</span>
@@ -188,7 +193,7 @@
     <div class="assignee-stack">
       @for (m of visibleAssignees(); track m.userId) {
       <span class="assignee-avatar">
-        <k-avatar [url]="m.avatarUrl" [name]="m.displayName" [size]="24" [userId]="m.userId" [workspaceId]="workspaceId()" [showPresence]="true" [lastOnlineAt]="m.lastOnlineAt" />
+        <k-avatar [url]="m.avatarUrl" [name]="m.displayName" [size]="24" [userId]="m.userId" [workspaceId]="workspaceId()" [showPresence]="true" [lastOnlineAt]="m.lastOnlineAt" [profile]="true" />
       </span>
       }
       @if (assigneeOverflow()) {

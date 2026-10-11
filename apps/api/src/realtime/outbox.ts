@@ -250,7 +250,8 @@ export async function processRealtimeOutbox(options: { log?: FastifyBaseLogger; 
   const completedIds: string[] = [];
   for (const event of events) {
     try {
-      await processEvent(event, endpointsByWorkspace.get(event.workspaceId), mcpSubscriptionsByWorkspace.get(event.workspaceId) ?? []);
+      // An absent map entry is a cached empty result, not a request to query this workspace again.
+      await processEvent(event, endpointsByWorkspace.get(event.workspaceId) ?? [], mcpSubscriptionsByWorkspace.get(event.workspaceId) ?? []);
       completedIds.push(event.id);
     } catch (err) {
       options.log?.error({ err, eventId: event.id, eventType: event.eventType }, "event outbox processing failed");

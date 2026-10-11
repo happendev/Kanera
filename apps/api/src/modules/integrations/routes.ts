@@ -8,7 +8,7 @@ import { env } from "../../env.js";
 import { assertWorkspaceAccess } from "../../lib/access.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { hashOpaqueToken } from "../../lib/tokens.js";
-import { assertApiKeysAllowed, assertWebhooksAllowed } from "../../lib/tier-limits.js";
+import { assertServiceAgentsAllowed, assertWebhooksAllowed } from "../../lib/tier-limits.js";
 import { deliverWebhookDelivery } from "../../lib/webhooks.js";
 import { chatDestinationConnectionSummary, encryptChatDestinationConfig, testChatPayload, validateChatDestinationConfig, type ChatDestinationConfig } from "../../lib/chat-destinations.js";
 import { newServiceClientId, newServiceClientSecret } from "../../oauth/routes.js";
@@ -198,8 +198,8 @@ export async function integrationRoutes(app: FastifyInstance) {
     // full-power personal key for its creator. Support sessions are blocked too: a key minted
     // during one would outlive it. Same gate as /auth/switch-org and leaving an organisation.
     if (req.auth.authKind !== "user") throw forbidden();
-    // Gate on the owner's org plan, mirroring workspace keys (both are paid-only).
-    await assertApiKeysAllowed(req.auth.cid);
+    // Personal keys act as their owner and are available on every plan; usage is metered by the
+    // public API's fair-use limits rather than gated here.
     const body = dto.createPersonalApiKeyBody.parse(req.body ?? {});
     const secret = newPersonalApiKeySecret();
     const [row] = await db
@@ -219,15 +219,6 @@ export async function integrationRoutes(app: FastifyInstance) {
       })
       .returning();
     const [organisation] = await db.select({ orgName: clients.name, orgLogoUrl: clients.logoUrl }).from(clients).where(eq(clients.id, req.auth.cid)).limit(1);
-    void capturePremiumFeatureUsed({
-      organizationId: req.auth.cid,
-      workspaceId: req.auth.cid,
-      actorId: req.auth.sub,
-      premiumFeature: "api",
-      // The authKind guard above rejects every non-user caller, so no support-session attribution
-      // can reach here (unlike the workspace-key route below, which still accepts them).
-      supportSession: false,
-    });
     return reply.status(201).send({ ...shapePersonalApiKey({ ...row!, ...organisation }), secret });
   });
 
@@ -265,7 +256,7 @@ export async function integrationRoutes(app: FastifyInstance) {
   app.post("/workspaces/:id/api-keys", async (req, reply) => {
     const { id: workspaceId } = req.params as { id: string };
     const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
-    await assertApiKeysAllowed(clientId);
+    await assertServiceAgentsAllowed(clientId);
     const body = dto.createWorkspaceApiKeyBody.parse(req.body);
     const secret = newApiKeySecret();
     const [row] = await db
@@ -352,7 +343,7 @@ export async function integrationRoutes(app: FastifyInstance) {
   app.post("/workspaces/:id/agent-connections", async (req, reply) => {
     const { id: workspaceId } = req.params as { id: string };
     const { clientId } = await assertWorkspaceAccess(req.auth, workspaceId, "admin");
-    await assertApiKeysAllowed(clientId);
+    await assertServiceAgentsAllowed(clientId);
     const body = dto.createAgentConnectionBody.parse(req.body);
     const serviceClientId = newServiceClientId();
     const secret = newServiceClientSecret();

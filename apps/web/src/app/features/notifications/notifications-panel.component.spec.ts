@@ -146,6 +146,7 @@ describe("NotificationsPanelComponent", () => {
     markUnread: ReturnType<typeof vi.fn>;
     markAllRead: ReturnType<typeof vi.fn>;
     isWatchingCard: ReturnType<typeof vi.fn>;
+    reminderFor: ReturnType<typeof vi.fn>;
     isWatchingBoard: ReturnType<typeof vi.fn>;
     toggleCardWatch: ReturnType<typeof vi.fn>;
   };
@@ -239,6 +240,7 @@ describe("NotificationsPanelComponent", () => {
       markUnread: vi.fn(() => Promise.resolve()),
       markAllRead: vi.fn(() => Promise.resolve()),
       isWatchingCard: vi.fn(() => false),
+      reminderFor: vi.fn(() => null),
       isWatchingBoard: vi.fn(() => false),
       toggleCardWatch: vi.fn(() => Promise.resolve()),
     };

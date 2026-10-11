@@ -125,8 +125,8 @@ describe("PanelStackService", () => {
     const outer = layer("outer");
     const inner = layer("inner", { hostEl: outer.hostEl.appendChild(document.createElement("div")) });
 
-    expect(outer.hostEl.style.zIndex).toBe("calc(var(--z-panel, 300) + 0)");
-    expect(inner.hostEl.style.zIndex).toBe("calc(var(--z-panel, 300) + 1)");
+    expect(outer.hostEl.style.zIndex).toBe("calc(var(--ap-z-base, var(--z-panel, 300)) + 0)");
+    expect(inner.hostEl.style.zIndex).toBe("calc(var(--ap-z-base, var(--z-panel, 300)) + 1)");
   });
 
   it("dismisses a nested panel and its opener innermost-first when the pointer lands outside both", () => {

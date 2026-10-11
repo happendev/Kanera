@@ -37,6 +37,11 @@ Seeded workspaces:
 - `Marketing`
 - `DevOps`
 
+Seeded standalone boards (owned by Amelia):
+
+- `Launch Checklist`
+- `Customer Portal Revamp`: built from the Agent Workflow template, with live Claude agent runs on the cards in Agent Working, Waiting on Me, and Review. Live runs stall 15 minutes after seeding.
+
 ## Layout
 
 - `attachments/images`: redistributable JPEG and PNG card-cover fixtures, including generated demo artwork

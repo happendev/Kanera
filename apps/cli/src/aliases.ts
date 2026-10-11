@@ -33,7 +33,7 @@ export const COMMAND_ALIASES: CommandAlias[] = [
   { path: ["templates"], tool: "workspaces.list_templates", summary: "List workspace templates and what each one seeds", group: "Setup" },
   { path: ["workspace", "create"], tool: "workspaces.create", summary: "Create a standard workspace, optionally from --templateId", positionals: ["name"], group: "Setup" },
   { path: ["standalone", "create"], tool: "boards.create_standalone", summary: "Create a standalone board, optionally from --templateId", positionals: ["name"], group: "Setup" },
-  { path: ["board", "create"], tool: "boards.create", summary: "Add a board to a standard workspace", positionals: ["workspaceId", "name"], group: "Setup" },
+  { path: ["board", "create"], tool: "boards.create", summary: "Add a board to a workspace, or a standalone board from --templateId", positionals: ["workspaceId", "name"], group: "Setup" },
 
   { path: ["cards"], tool: "cards.list", summary: "List one page of cards from one workflow list", positionals: ["boardId", "listId"], group: "Cards" },
   { path: ["card"], tool: "cards.get", summary: "Read a card by id, key (MKT-42), or URL", positionals: ["cardId"], group: "Cards" },
@@ -44,6 +44,8 @@ export const COMMAND_ALIASES: CommandAlias[] = [
   { path: ["card", "reopen"], tool: "cards.set_completion", summary: "Mark a card incomplete", positionals: ["cardId"], defaults: { completed: false }, group: "Cards" },
   { path: ["card", "archive"], tool: "cards.archive", summary: "Archive a card", positionals: ["cardId"], group: "Cards" },
   { path: ["card", "history"], tool: "cards.list_history", summary: "List a card's activity and comments", positionals: ["cardId"], group: "Cards" },
+  { path: ["card", "upload-link"], tool: "cards.create_upload_link", summary: "Get a one-time URL to attach a local file with curl -T", positionals: ["cardId", "fileName"], group: "Cards" },
+  { path: ["card", "attachment"], tool: "cards.get_attachment", summary: "Read an attachment's text or image contents", positionals: ["cardId", "attachmentId"], group: "Cards" },
 
   { path: ["separator", "create"], tool: "separators.create", summary: "Add a titled, optionally colored divider to a board list", positionals: ["boardId", "listId", "title"], group: "Cards" },
   { path: ["separator", "update"], tool: "separators.update", summary: "Change a separator's title or color", positionals: ["separatorId"], group: "Cards" },
@@ -56,15 +58,24 @@ export const COMMAND_ALIASES: CommandAlias[] = [
 
   { path: ["work"], tool: "work.query_cards", summary: "List your work across every accessible board", defaults: { lens: "my" }, group: "Work" },
   { path: ["work", "history"], tool: "work.query_history", summary: "Report one person's actions over a date range", group: "Work" },
+  { path: ["my-day"], tool: "work.my_day", summary: "Overdue, due-this-week, stale, and Up next work in one view", group: "Work" },
   { path: ["portfolio"], tool: "work.portfolio_summary", summary: "Roll up work by organisation, workspace, and board", group: "Work" },
   { path: ["priorities"], tool: "priorities.list", summary: "Read an \"Up next\" priority queue", group: "Work" },
   { path: ["priority", "add"], tool: "priorities.add", summary: "Add a card to an \"Up next\" queue", positionals: ["cardId"], group: "Work" },
   { path: ["priority", "move"], tool: "priorities.move", summary: "Reorder an \"Up next\" queue entry", positionals: ["priorityId"], group: "Work" },
   { path: ["priority", "remove"], tool: "priorities.remove", summary: "Remove an \"Up next\" queue entry", positionals: ["priorityId"], group: "Work" },
+  { path: ["watch"], tool: "cards.set_watching", summary: "Watch a card so its activity reaches your inbox", positionals: ["cardId"], defaults: { watching: true }, group: "Work" },
+  { path: ["unwatch"], tool: "cards.set_watching", summary: "Stop watching a card", positionals: ["cardId"], defaults: { watching: false }, group: "Work" },
+  { path: ["remind"], tool: "cards.set_reminder", summary: "Remind yourself about a card, e.g. remind MKT-42 \"friday 3pm\"", positionals: ["cardId", "remindAt"], group: "Work" },
+  { path: ["remind", "clear"], tool: "cards.set_reminder", summary: "Clear your reminder on a card", positionals: ["cardId"], defaults: { remindAt: null }, group: "Work" },
+  { path: ["reminders"], tool: "reminders.list", summary: "List your pending card reminders", group: "Work" },
+  { path: ["inbox"], tool: "notifications.list", summary: "Poll your notification inbox; pass --since <cursor> for only what is new", group: "Work" },
 
   { path: ["notes"], tool: "notes.list", summary: "List note metadata for a workspace or board", group: "Notes" },
   { path: ["note"], tool: "notes.get", summary: "Read a note", positionals: ["noteId"], group: "Notes" },
   { path: ["note", "create"], tool: "notes.create", summary: "Create a personal or team note", group: "Notes" },
+  { path: ["capture"], tool: "scratchpad.capture", summary: "Add a task to your private scratchpad Inbox, no board needed", positionals: ["text"], group: "Notes" },
+  { path: ["scratchpad"], tool: "scratchpad.list", summary: "List your private scratchpad pages", group: "Notes" },
 
   // The run loop is what makes an agent's work visible on the board ("agent working" chip, card
   // detail, activity), so it gets the same one-line ergonomics as card commands.

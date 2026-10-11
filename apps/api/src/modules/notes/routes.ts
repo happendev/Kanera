@@ -335,11 +335,11 @@ async function authoriseWrite(req: FastifyRequest, note: Note): Promise<{ client
   // credential: gate it here (see assertWriteCapableCredential).
   assertWriteCapableCredential(req.auth);
   // Board and workspace roles are different scales. Personal notes only need read-level access to
-  // manage one's own; team notes are shared, so board team notes need editor and workspace team
-  // notes need admin (a plain workspace member cannot edit shared workspace content).
+  // manage one's own; team notes are shared, so board team notes need editor. Workspace team notes
+  // are editable by every workspace member: they are the team's shared space, not admin config.
   const ctx = note.boardId
     ? await assertBoardAccess(req.auth, note.boardId, note.scope === "personal" ? "observer" : "editor")
-    : await assertWorkspaceAccess(req.auth, note.workspaceId, note.scope === "personal" ? "member" : "admin");
+    : await assertWorkspaceAccess(req.auth, note.workspaceId, "member");
   assertScopeAccess(note, req.auth.sub);
   await assertNotesEnabled(note.workspaceId);
   return { clientId: ctx.clientId };
@@ -513,10 +513,10 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
   app.post("/workspaces/:wsId/notes", async (req, reply) => {
     const { wsId: workspaceId } = req.params as { wsId: string };
     const body = dto.createNoteBody.parse(req.body);
-    // Personal-scope creation passes at plain member, so gate read-scoped credentials explicitly;
-    // team-scope creation already requires admin and is unreachable for them.
+    // Creation passes at plain member for both scopes (team notes are shared with every workspace
+    // member), so gate read-scoped credentials explicitly.
     assertWriteCapableCredential(req.auth);
-    await assertWorkspaceAccess(req.auth, workspaceId, body.scope === "team" ? "admin" : "member");
+    await assertWorkspaceAccess(req.auth, workspaceId, "member");
     await assertNotesEnabled(workspaceId);
 
     const parent = await resolveParent(workspaceId, null, body.parentNoteId ?? null, body.scope, req.auth.sub);
@@ -758,7 +758,9 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
 
     const prevPosition = note.position;
     const { position, rebalancedPositions } = await db.transaction(async (tx) => {
-      const { prev, next } = await neighbourPositions(base, body.afterNoteId ?? undefined, body.beforeNoteId ?? undefined, tx);
+      // `null` is meaningful here: afterNoteId null = move to the top, beforeNoteId null = move to
+      // the end. Coalescing them to undefined made every explicit edge anchor an append.
+      const { prev, next } = await neighbourPositions(base, body.afterNoteId, body.beforeNoteId, tx);
       const result = between(prev, next);
       let position = result.position;
 
@@ -880,31 +882,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
         .limit(1);
       if (!attachment) throw notFound();
 
-      await db.delete(noteAttachments).where(eq(noteAttachments.id, attachmentId));
-
-      const storage = await getStorageForClient(req.auth.cid);
-      await storage.delete(attachment.fileKey).catch(() => undefined);
-
-      const storedAttachmentUrl = unsignedMediaUrl(req.auth.cid, attachment.fileKey)!;
-      const stripped = stripAttachmentReferences(note.content, storedAttachmentUrl);
-      const now = new Date();
-      const [updatedNote] = await db
-        .update(notes)
-        .set({
-          ...(stripped.changed && { content: stripped.body ?? "" }),
-          lastEditedById: req.auth.sub,
-          lastEditedAt: now,
-          updatedAt: now,
-        })
-        .where(eq(notes.id, id))
-        .returning();
-      const responseNote = await shapeNote(updatedNote!, req.auth.cid);
-
-      emitNoteEvent(updatedNote!, "note:updated", { note: responseNote });
-      emitNoteEvent(updatedNote!, "note:attachment:deleted", {
-        note: responseNote,
-        attachmentId,
-      });
+      await removeNoteAttachment({ note, attachment, actorId: req.auth.sub, mediaClientId: req.auth.cid });
 
       return reply.status(204).send();
     });
@@ -982,5 +960,43 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
       .returning();
     if (updated) emitNoteEvent(updated, "note:unlocked", { noteId: id });
     return reply.status(204).send();
+  });
+}
+
+/**
+ * Removes one note attachment: the row, its file, and inline references in the note body, then
+ * echoes the edited note. Shared by the note route and the organisation storage cleanup.
+ */
+export async function removeNoteAttachment(params: {
+  note: Note;
+  attachment: typeof noteAttachments.$inferSelect;
+  actorId: string;
+  mediaClientId: string;
+}): Promise<void> {
+  const { note, attachment, actorId, mediaClientId } = params;
+  await db.delete(noteAttachments).where(eq(noteAttachments.id, attachment.id));
+
+  const storage = await getStorageForClient(mediaClientId);
+  await storage.delete(attachment.fileKey).catch(() => undefined);
+
+  const storedAttachmentUrl = unsignedMediaUrl(mediaClientId, attachment.fileKey)!;
+  const stripped = stripAttachmentReferences(note.content, storedAttachmentUrl);
+  const now = new Date();
+  const [updatedNote] = await db
+    .update(notes)
+    .set({
+      ...(stripped.changed && { content: stripped.body ?? "" }),
+      lastEditedById: actorId,
+      lastEditedAt: now,
+      updatedAt: now,
+    })
+    .where(eq(notes.id, note.id))
+    .returning();
+  const responseNote = await shapeNote(updatedNote!, mediaClientId);
+
+  emitNoteEvent(updatedNote!, "note:updated", { note: responseNote });
+  emitNoteEvent(updatedNote!, "note:attachment:deleted", {
+    note: responseNote,
+    attachmentId: attachment.id,
   });
 }

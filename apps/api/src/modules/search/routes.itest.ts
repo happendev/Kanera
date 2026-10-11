@@ -346,3 +346,21 @@ void test("global search lets board-only guests find only their explicit board c
   assert.deepEqual(body.attachments.map((a) => a.fileName), ["guestonly-visible.pdf"]);
   assert.deepEqual(body.notes.map((n) => n.title), ["Guestonly visible board note"]);
 });
+
+void test("an exact card key finds an archived card while text search stays live-only", async () => {
+  // SDK, MCP and CLI resolve bare keys through this route. Archived cards must stay addressable by
+  // their advertised key so `cards.setArchived(key, false)` can restore them; ordinary text and
+  // title matches keep excluding archived content as before.
+  const app = await buildIntegrationServer();
+  const { client, userA, publicCard } = await seed();
+  const token = app.jwt.sign({ sub: userA.id, cid: client.id, role: "member" });
+  await db.update(cards).set({ archivedAt: new Date() }).where(eq(cards.id, publicCard.id));
+
+  const byKey = await app.inject({ method: "GET", url: `/search?q=${encodeURIComponent(publicCard.key)}`, headers: { authorization: `Bearer ${token}` } });
+  assert.equal(byKey.statusCode, 200, byKey.body);
+  assert.deepEqual(byKey.json<WireSearchResults>().cards.map((card) => card.id), [publicCard.id]);
+
+  const byTitle = await app.inject({ method: "GET", url: "/search?q=onboarding", headers: { authorization: `Bearer ${token}` } });
+  assert.equal(byTitle.statusCode, 200, byTitle.body);
+  assert.deepEqual(byTitle.json<WireSearchResults>().cards, []);
+});

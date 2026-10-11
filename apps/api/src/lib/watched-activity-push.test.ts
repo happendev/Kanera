@@ -90,3 +90,17 @@ void test("a missing actor and card title still produce a sendable notification"
   assert.equal(payload.title, "Delivery");
   assert.equal(payload.body, "Someone moved this card to In Progress");
 });
+
+void test("an agent's change names the agent after its owner, matching the drawer chip", () => {
+  const payload = watchedActivityPushPayload(row({
+    activity: {
+      entityType: "card",
+      action: "moved",
+      payload: {},
+      actorKind: "agent",
+      actorId: "actor-1",
+      agentName: "Claude",
+    },
+  } as Partial<NotificationRow>), WEB_ORIGIN);
+  assert.equal(payload.body, "Dylan via Claude moved this card to In Progress");
+});

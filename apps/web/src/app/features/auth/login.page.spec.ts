@@ -65,7 +65,7 @@ describe("LoginPage", () => {
       providers: [
         provideZonelessChangeDetection(),
         { provide: ActivatedRoute, useValue: {} },
-        { provide: Router, useValue: { navigateByUrl } },
+        { provide: Router, useValue: { navigateByUrl, currentNavigation: () => null } },
         { provide: AuthService, useValue: { setSession } },
         { provide: ThemeService, useValue: { theme: signal("dark"), isDark: signal(true) } },
       ],
@@ -146,6 +146,14 @@ describe("LoginPage", () => {
     await fixture.whenStable();
 
     expect(fixture.componentInstance.signupLink()).toBe("/signup?boardInviteToken=board-token");
+  });
+
+  it("preserves an organisation invitation when linking to signup", async () => {
+    await createPage();
+    fixture.componentRef.setInput("returnUrl", "/invite?token=org-token");
+    await fixture.whenStable();
+
+    expect(fixture.componentInstance.signupLink()).toBe("/signup?invite=org-token");
   });
 });
 

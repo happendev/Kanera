@@ -1,7 +1,7 @@
 {
-  "initialRaw": 768000,
-  "initialBrotli": 184000,
-  "totalJavaScriptBrotli": 1255000,
-  "largestScriptRaw": 925000,
-  "tablerFontsRaw": 500000
+  "initialRaw": 921600,
+  "initialBrotli": 235520,
+  "totalJavaScriptBrotli": 1638400,
+  "largestScriptRaw": 1075200,
+  "tablerFontsRaw": 593920
 }

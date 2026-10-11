@@ -20,6 +20,7 @@ import { priorityRankHeat } from "../../shared/priority-rank";
 import { CardLabelsComponent, type CardLabelPresentation } from "./card-labels.component";
 import { openCardDetailInNewTab } from "./card-navigation.util";
 import { formatDueDate, isDueSoon, isOverdue } from "./due-date.util";
+import { formatDateTime } from "../../shared/date-format";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
 
 type AnyCard = Card | WireCard | WireCardSummary;
@@ -123,6 +124,12 @@ export class CardComponent {
   readonly cardUnreadCount = computed(() => this.notifications.cardUnreadCount(this.card().id));
   readonly hasUnreadNotifications = computed(() => this.cardUnreadCount() > 0);
   readonly unreadMarkLabel = computed(() => unreadMarkLabel(this.cardUnreadCount()));
+  /** The viewer's own reminder, shown on the tile only while it is still to come. */
+  readonly reminderLabel = computed(() => {
+    const reminder = this.notifications.reminderFor(this.card().id);
+    if (!reminder || reminder.firedAt) return null;
+    return `Reminder: ${formatDateTime(reminder.remindAt, "weekday")}`;
+  });
   readonly showCardWatchIndicator = computed(() => this.isWatchingCard() && !this.notifications.isWatchingBoard(this.card().boardId));
   readonly actionsMenuOpen = signal(false);
   readonly actionsMenuPoint = signal<{ x: number; y: number } | null>(null);
