@@ -72,18 +72,21 @@ per complete operation. It checks that every selected experiment has three measu
 
 ## Experiments
 
-The P1 implementation makes JSON identifier arrays part of the checked-in baseline. Compare
-`HYDRATION_ONLY=pg-arrays-full-1,baseline-full-1` to measure this change alone. `baseline` is
-always the current product query; older saved reports predate this change. Other variants now
-measure incremental changes on top of JSON identifier arrays.
+The checked-in baseline now includes JSON identifier arrays, native null omission for board-open
+custom fields and unused-cover-column removal. Compare `HYDRATION_ONLY=p1-full-1,baseline-full-1`
+to measure the compact projection beyond P1. `p1` restores full custom-field objects and unused
+cover columns; `pg-arrays` also restores the original UUID-array transport. Non-baseline historical
+variants first restore the full projection, then apply their named transformations. Older saved
+reports predate these product changes; `baseline` always means the current query.
 
 | Variant | Change being measured |
 | --- | --- |
 | `baseline` | Checked-in summary query and board mapping. |
+| `p1` | JSON identifier arrays with full custom-field objects and unused cover columns: the before-projection control. |
 | `pg-arrays` | Restore the old PostgreSQL UUID-array transport for label and assignee IDs as a before-change control. |
 | `sql-compact` | Strip null custom-field properties inside Postgres before driver decoding. |
 | `sql-absent` | Construct custom-field JSON with `ABSENT ON NULL`, avoiding a second JSON walk; requires Postgres 16 or later. |
-| `json-arrays` | Aggregate label and assignee IDs as JSON arrays, preserving ordering; now identical to `baseline`. Retained for historical SQL captures. |
+| `json-arrays` | JSON identifier arrays with the full projection; now identical to `p1`. Retained for historical SQL captures. |
 | `sql-combined` | `sql-compact` plus `json-arrays`. |
 | `lean-cover` | Omit unused cover file-key and MIME columns from the summary query. |
 | `sql-all` | `sql-combined` plus `lean-cover`. |

@@ -39,6 +39,7 @@ http.createServer(async (req, res) => {
         session = new Session(); session.connect();
         await post('Profiler.enable'); await post('Profiler.start');
       }
+      globalThis.__mixedDiagnostics?.reset();
       loop.reset(); cpu = process.cpuUsage(); wall = performance.now(); elu = performance.eventLoopUtilization();
       data = { ok: true };
     } else if (req.url === '/snapshot') {
@@ -46,6 +47,7 @@ http.createServer(async (req, res) => {
       data = { elapsedMs: performance.now() - wall, cpuMs: (cpuDelta.user + cpuDelta.system) / 1000,
         elu: performance.eventLoopUtilization(elu), rssMiB: process.memoryUsage().rss / 1048576,
         loop: { meanMs: loop.mean / 1e6, p95Ms: loop.percentile(95) / 1e6, p99Ms: loop.percentile(99) / 1e6, maxMs: loop.max / 1e6 } };
+      if (globalThis.__mixedDiagnostics) data.diagnostics = globalThis.__mixedDiagnostics.snapshot();
       if (session) { data.profile = (await post('Profiler.stop')).profile; session.disconnect(); session = undefined; }
     } else if (req.url === '/query') data = summaryQuery ?? null;
     else { res.writeHead(404); res.end(); return; }

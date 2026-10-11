@@ -10,6 +10,7 @@ import { resolve, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 const root = resolve(import.meta.dirname, '../..');
 const experiments = [
+  ['p1', 'full', 1],
   ['pg-arrays', 'full', 1],
   ['baseline', 'full', 1], ['sql-compact', 'full', 1], ['json-arrays', 'full', 1], ['sql-combined', 'full', 1], ['lean-cover', 'full', 1], ['sql-all', 'full', 1],
   ['sql-absent', 'full', 1], ['sql-absent-combined', 'full', 1], ['json-rows', 'full', 1], ['sql-all-json-rows', 'full', 1], ['sql-absent-json-rows', 'full', 1],

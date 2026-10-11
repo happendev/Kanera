@@ -1,12 +1,15 @@
-import type { WireCardSummary } from "@kanera/shared/events";
+import type { CompactCardCustomFieldValue, WireCardSummary } from "@kanera/shared/events";
 import type { cardSummaryView } from "@kanera/shared/schema";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "../db.js";
 import { signedAttachmentMediaUrl } from "./attachment-media.js";
 
-type CardSummaryRow = typeof cardSummaryView.$inferSelect & {
-  coverMimeType?: string | null;
-};
+// Summary consumers use signed URLs and geometry, never storage keys or MIME. Keep the row
+// type honest when omitting those columns from the database-to-API transfer.
+type CardSummaryRow<Value extends CompactCardCustomFieldValue = WireCardSummary["customFieldValues"][number]> = Omit<
+  typeof cardSummaryView.$inferSelect,
+  "customFieldValues" | "coverFileKey" | "coverThumbnailFileKey" | "coverImageFileKey"
+> & { customFieldValues: Value[] };
 
 function completedVisibilityPredicate(options: {
   includeCompleted: boolean;
@@ -31,12 +34,15 @@ function completedVisibilityPredicate(options: {
   return sql`(c.completed_at is null or c.completed_at >= ${completedCutoff})`;
 }
 
-async function loadCardSummariesFromFilteredCards(
+async function loadCardSummariesFromFilteredCards<Compact extends boolean>(
   whereClause: SQL,
-  page?: { limit: number; offset: number },
-  shownCustomFieldsOnly = false,
-): Promise<CardSummaryRow[]> {
-  const result = await db.execute<CardSummaryRow>(sql`
+  page: { limit: number; offset: number } | undefined,
+  shownCustomFieldsOnly: boolean,
+  compactCustomFields: Compact,
+): Promise<CardSummaryRow<Compact extends true ? CompactCardCustomFieldValue : WireCardSummary["customFieldValues"][number]>[]> {
+  // Only the board-open path can omit null value properties. Full summaries used outside
+  // board hydration retain every property, including nulls, rather than widening their contract.
+  const result = await db.execute<CardSummaryRow<Compact extends true ? CompactCardCustomFieldValue : WireCardSummary["customFieldValues"][number]>>(sql`
     with filtered_cards as materialized (
       -- Explicit column list, not c.*: this CTE is materialized, so every listed column is copied
       -- into a tuplestore for the whole matched set. c.* dragged the full description text and the
@@ -105,18 +111,18 @@ async function loadCardSummariesFromFilteredCards(
       select
         cfv.card_id,
         json_agg(
-          json_build_object(
-            'cardId', cfv.card_id,
-            'fieldId', cfv.field_id,
-            'valueText', cfv.value_text,
-            'valueNumber', cfv.value_number::text,
-            'valueCheckbox', cfv.value_checkbox,
-            'valueDate', cfv.value_date,
-            'valueUrl', cfv.value_url,
-            'valueOptionIds', cfv.value_option_ids,
-            'valueUserIds', cfv.value_user_ids,
-            'updatedAt', cfv.updated_at
-          )
+          json_object(
+            'cardId' VALUE cfv.card_id,
+            'fieldId' VALUE cfv.field_id,
+            'valueText' VALUE cfv.value_text,
+            'valueNumber' VALUE cfv.value_number::text,
+            'valueCheckbox' VALUE cfv.value_checkbox,
+            'valueDate' VALUE cfv.value_date,
+            'valueUrl' VALUE cfv.value_url,
+            'valueOptionIds' VALUE cfv.value_option_ids,
+            'valueUserIds' VALUE cfv.value_user_ids,
+            'updatedAt' VALUE cfv.updated_at
+          ${compactCustomFields ? sql`ABSENT ON NULL` : sql`NULL ON NULL`} RETURNING json)
           order by cfv.field_id
         ) as custom_field_values
       from card_custom_field_value cfv
@@ -152,12 +158,8 @@ async function loadCardSummariesFromFilteredCards(
       coalesce(label_ids.label_ids, '[]'::json) as "labelIds",
       coalesce(assignee_ids.assignee_ids, '[]'::json) as "assigneeIds",
       coalesce(custom_field_values.custom_field_values, '[]'::json) as "customFieldValues",
-      cover.file_key as "coverFileKey",
       cover.url as "coverUrl",
-      cover.mime_type as "coverMimeType",
-      cover.thumbnail_file_key as "coverThumbnailFileKey",
       cover.thumbnail_url as "coverThumbnailUrl",
-      cover.cover_image_file_key as "coverImageFileKey",
       cover.cover_image_url as "coverImageUrl",
       cover.cover_image_width as "coverImageWidth",
       cover.cover_image_height as "coverImageHeight",
@@ -175,7 +177,7 @@ async function loadCardSummariesFromFilteredCards(
   return result.rows;
 }
 
-export async function loadBoardCardSummaries(options: {
+type BoardSummaryOptions = {
   boardId: string;
   includeCompleted: boolean;
   includeArchived: boolean;
@@ -188,7 +190,11 @@ export async function loadBoardCardSummaries(options: {
   offset?: number;
   /** Board-open only: avoid aggregating and transferring values its compact payload discards. */
   shownCustomFieldsOnly?: boolean;
-}): Promise<CardSummaryRow[]> {
+};
+
+export function loadBoardCardSummaries(options: BoardSummaryOptions & { projection: "board-open" }): Promise<CardSummaryRow<CompactCardCustomFieldValue>[]>;
+export function loadBoardCardSummaries(options: BoardSummaryOptions & { projection?: "full" }): Promise<CardSummaryRow[]>;
+export function loadBoardCardSummaries(options: BoardSummaryOptions & { projection?: "full" | "board-open" }): Promise<CardSummaryRow<CompactCardCustomFieldValue>[]> {
   return loadCardSummariesFromFilteredCards(sql`
     c.board_id = ${options.boardId}
     and ${options.listId ? sql`c.list_id = ${options.listId}` : sql`true`}
@@ -202,17 +208,17 @@ export async function loadBoardCardSummaries(options: {
         where vc.card_id = c.id and vi.assignee_id = ${options.assignedUserId}
       )
     )` : sql`true`}
-  `, options.limit === undefined ? undefined : { limit: options.limit, offset: options.offset ?? 0 }, options.shownCustomFieldsOnly);
+  `, options.limit === undefined ? undefined : { limit: options.limit, offset: options.offset ?? 0 }, options.projection === "board-open" || Boolean(options.shownCustomFieldsOnly), options.projection === "board-open");
 }
 
-export function toWireCardSummary(
-  row: CardSummaryRow,
+export function toWireCardSummary<Value extends CompactCardCustomFieldValue>(
+  row: CardSummaryRow<Value>,
   _clientId: string,
   // When provided, only inline custom-field values for these field ids. The board-open
   // payload uses this to ship just the values rendered as card badges (showOnCard fields);
   // the full set loads lazily for filters/List View. Pass null/undefined to inline all.
   customFieldIds?: ReadonlySet<string> | null,
-): WireCardSummary {
+): Omit<WireCardSummary, "customFieldValues"> & { customFieldValues: Value[] } {
   // Board summaries feed compact card tiles, so prefer the 400px derivative. Card detail loads
   // attachment rows separately and continues to use the full original/large image.
   // Sign only the derivative that is returned. Eagerly signing all three media references wastes

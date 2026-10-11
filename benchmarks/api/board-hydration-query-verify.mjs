@@ -19,7 +19,7 @@ const start = source.indexOf('    with filtered_cards as materialized');
 assert.notEqual(start, -1, 'Could not find current card-summary SQL template');
 const end = source.indexOf('\n  `);', start);
 assert.notEqual(end, -1, 'Could not find end of current card-summary SQL template');
-const original = source.slice(start, end);
+const original = source.slice(start, end).replace('${compactCustomFields ? sql`ABSENT ON NULL` : sql`NULL ON NULL`}', 'ABSENT ON NULL');
 const checked = [];
 const check = (name, actual, expected) => { assert.deepEqual(actual, expected, name); checked.push(name); };
 const base = {
@@ -41,9 +41,9 @@ const expression = (sql) => {
 await client.connect();
 try {
   const version = (await client.query('select version()')).rows[0].version;
-  const full = (await client.query(`select ${expression(original)} as value from ${records} order by cfv.field_id`, [JSON.stringify(fixtures)])).rows.map((row) => row.value);
+  const full = (await client.query(`select ${expression(transformSummaryQuery(original, 'p1'))} as value from ${records} order by cfv.field_id`, [JSON.stringify(fixtures)])).rows.map((row) => row.value);
   const compact = full.map((value) => Object.fromEntries(Object.entries(value).filter(([, item]) => item !== null)));
-  for (const variant of ['sql-compact', 'sql-absent', 'sql-combined', 'sql-absent-combined', 'sql-absent-json-rows']) {
+  for (const variant of ['baseline', 'sql-compact', 'sql-absent', 'sql-combined', 'sql-absent-combined', 'sql-absent-json-rows']) {
     const transformed = transformSummaryQuery(original, variant);
     const rows = (await client.query(`select ${expression(transformed)} as value from ${records} order by cfv.field_id`, [JSON.stringify(fixtures)])).rows.map((row) => row.value);
     check(`${variant}: absent nulls; preserve false/empty/zero/decimal/Unicode/dates/array-null-elements`, rows, compact);

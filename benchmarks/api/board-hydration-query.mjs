@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 
 export const SUMMARY_QUERY_VARIANTS = Object.freeze([
   'baseline',
+  'p1',
   'pg-arrays',
   'sql-compact',
   'json-arrays',
@@ -26,6 +27,25 @@ function replaceOnce(text, before, after) {
   assert.equal(text.indexOf(before, offset + before.length), -1,
     `Board summary query changed; duplicate fragment: ${before}`);
   return text.slice(0, offset) + after + text.slice(offset + before.length);
+}
+
+function restoreFullProjection(text) {
+  // Restore the P1 transport, not a captured fixture query: predicates and bindings remain
+  // those of the current request. Historical variants are defined relative to this projection.
+  if (text.includes("'cardId' VALUE")) {
+    const constructor = /json_object\(\n            'cardId' VALUE[\s\S]*?\n          (?:ABSENT|NULL) ON NULL RETURNING json\)/;
+    const matches = text.match(new RegExp(constructor.source, 'g'));
+    assert.equal(matches?.length, 1, 'Expected one native custom-field constructor');
+    text = replaceOnce(text, matches[0], matches[0]
+      .replace('json_object(', 'json_build_object(')
+      .replace(/'([^']+)' VALUE /g, "'$1', ")
+      .replace(/(?:ABSENT|NULL) ON NULL RETURNING json\)/, ')'));
+  }
+  if (!text.includes('cover.file_key as "coverFileKey"')) {
+    text = replaceOnce(text, '      cover.url as "coverUrl",',
+      '      cover.file_key as "coverFileKey",\n      cover.mime_type as "coverMimeType",\n      cover.thumbnail_file_key as "coverThumbnailFileKey",\n      cover.cover_image_file_key as "coverImageFileKey",\n      cover.url as "coverUrl",');
+  }
+  return text;
 }
 
 function compactCustomFields(text) {
@@ -105,6 +125,8 @@ export function transformSummaryQuery(text, variant = 'baseline') {
   if (variant === 'baseline') return text;
   assert.match(text, /with filtered_cards as materialized\s*\(/,
     'Only the board-card-summary SQL can be transformed');
+  text = restoreFullProjection(text);
+  if (variant === 'p1') return identifierArrays(text);
   if (variant === 'pg-arrays') return identifierArrays(text, false);
   if (['sql-compact', 'sql-combined', 'sql-all', 'sql-all-json-rows'].includes(variant)) text = compactCustomFields(text);
   if (['sql-absent', 'sql-absent-combined', 'sql-absent-json-rows'].includes(variant)) text = absentCustomFields(text);
