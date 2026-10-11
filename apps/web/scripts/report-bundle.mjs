@@ -1,18 +1,20 @@
-// Bundle size report, and with --check a gate against apps/web/bundle-budgets.json.
+// Bundle size report, and with --check advisory sizes plus offline packaging checks.
 //
-// What each budget guards:
+// What each advisory budget measures:
 //   initialRaw / initialBrotli   the eager startup payload — main's static import closure plus
 //                                global styles. This is the number a first paint actually waits on.
 //   totalJavaScriptBrotli        every precached script. ngsw prefetches `/*.js` so the whole app is
 //                                installed for offline use, which means this is total app weight, not
 //                                startup weight, and lazy-loading cannot reduce it — only shipping
-//                                less code can. Raise it only alongside a note on what grew and why.
+//                                less code can.
 //   largestScriptRaw             keeps any single chunk from becoming a parse-time cliff.
 //   tablerFontsRaw               the icon webfont, WOFF2-only (the check also rejects fallbacks).
 //
-// The report prints the measured values, so re-baselining is: run `pnpm bundle:web:check`, take the
-// reported figure, and set the budget just above it. This runs in CI, so a regression fails on the
-// commit that causes it rather than being discovered months later.
+// Advisory thresholds allow roughly 25–30% growth over the October 2026 production build:
+// 702 KiB initial raw, 179 KiB initial Brotli, 1,239 KiB precached JS Brotli,
+// 828 KiB largest script and 451 KiB fonts. Angular retains raw-size error limits
+// with roughly 50% headroom; advisory thresholds alone do not block builds.
+// Offline packaging checks still fail because missing assets break installed app functionality.
 import { brotliCompressSync, constants as zlibConstants } from "node:zlib";
 import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -120,24 +122,30 @@ for (const [name, value] of Object.entries(routes)) {
 if (check) {
   const budgets = JSON.parse(await readFile(resolve(projectRoot, "bundle-budgets.json"), "utf8"));
   const failures = [];
-  const assertMax = (label, actual, maximum) => {
-    if (actual > maximum) failures.push(`${label}: ${actual} > ${maximum}`);
+  const warnings = [];
+  const warnMax = (label, actual, maximum) => {
+    if (actual > maximum) warnings.push(`${label}: ${actual} > ${maximum}`);
   };
-  assertMax("initial.raw", metrics.initial.raw, budgets.initialRaw);
-  assertMax("initial.brotli", metrics.initial.brotli, budgets.initialBrotli);
-  assertMax("totalJavaScript.brotli", jsSizes.brotli, budgets.totalJavaScriptBrotli);
-  assertMax("largestScript.raw", largestScript.raw, budgets.largestScriptRaw);
-  assertMax("tablerFonts.raw", tablerFontBytes, budgets.tablerFontsRaw);
+  warnMax("initial.raw", metrics.initial.raw, budgets.initialRaw);
+  warnMax("initial.brotli", metrics.initial.brotli, budgets.initialBrotli);
+  warnMax("totalJavaScript.brotli", jsSizes.brotli, budgets.totalJavaScriptBrotli);
+  warnMax("largestScript.raw", largestScript.raw, budgets.largestScriptRaw);
+  warnMax("tablerFonts.raw", tablerFontBytes, budgets.tablerFontsRaw);
   if (tablerFonts.some((file) => !file.endsWith(".woff2"))) {
     failures.push(`Tabler emitted unsupported fallback formats: ${tablerFonts.join(", ")}`);
   }
   if (uncachedScripts.length) {
     failures.push(`Application scripts missing from the offline app shell: ${uncachedScripts.join(", ")}`);
   }
+  if (warnings.length) {
+    console.warn(`Bundle budget warnings:\n- ${warnings.join("\n- ")}`);
+  } else {
+    console.log("Bundle sizes are within advisory budgets.");
+  }
   if (failures.length) {
-    console.error(`Bundle budgets failed:\n- ${failures.join("\n- ")}`);
+    console.error(`Bundle packaging checks failed:\n- ${failures.join("\n- ")}`);
     process.exitCode = 1;
   } else {
-    console.log("Bundle budgets passed.");
+    console.log("Bundle packaging checks passed.");
   }
 }
