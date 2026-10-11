@@ -108,8 +108,11 @@ test("Global Work stays editable when realtime arrives during a foreground query
 
 test("Home leaves its loading skeleton after an event during its initial request", async ({ page, signIn, apiAs, uniqueName }, testInfo) => {
   let connected = false;
+  const socketFrames: string[] = [];
   page.on("websocket", (socket) => socket.on("framereceived", ({ payload }) => {
-    if (String(payload).startsWith("40")) connected = true;
+    const frame = String(payload);
+    socketFrames.push(frame);
+    if (frame.startsWith("40")) connected = true;
   }));
   const api = await apiAs("amelia");
   const captured = gate();
@@ -134,9 +137,11 @@ test("Home leaves its loading skeleton after an event during its initial request
   // The held agenda request can begin before Socket.IO connects; publish only once it can observe.
   await expect.poll(() => connected).toBe(true);
   const createdName = uniqueName("Home event workspace");
-  await ownBoard(api, createdName);
+  const board = await ownBoard(api, createdName);
   // board:created is delivered through the user room even before the agenda has joined any board.
-  await expect(page.locator("a.board-link").filter({ hasText: createdName }).first()).toBeVisible();
+  // Observe transport delivery directly: the sidebar may have collapsed this new workspace while
+  // its initial tree request races the event, which is unrelated to Home's held agenda response.
+  await expect.poll(() => socketFrames.some((frame) => frame.includes("board:created") && frame.includes(board.boardId))).toBe(true);
   await page.waitForTimeout(300);
   release.release();
   await expect(page.getByLabel("Loading your day", { exact: true })).toHaveCount(0);
