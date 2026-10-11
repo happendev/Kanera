@@ -19,12 +19,13 @@ import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { BoardPickerPopover, type BoardPickerPick } from "./board-picker.popover";
 import { BoardState } from "./board-state";
 import { CardQuickEditPopover } from "./card-quick-edit.popover";
+import { ReminderPopoverComponent } from "./reminder-popover.component";
 import type { DueDateSlotSelection } from "./due-date.util";
 
 @Component({
   selector: "k-card-actions-menu",
   standalone: true,
-  imports: [MenuDirective, BoardPickerPopover, CardQuickEditPopover],
+  imports: [MenuDirective, BoardPickerPopover, CardQuickEditPopover, ReminderPopoverComponent],
   hostDirectives: [AnchoredPanelDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -64,6 +65,24 @@ import type { DueDateSlotSelection } from "./due-date.util";
         <i [class]="isWatchingCard() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
         <span>{{ isWatchingCard() ? 'Stop watching' : 'Watch card' }}</span>
       </button>
+      }
+      <!-- A reminder on an archived card would fire silently, so the menu does not offer one. -->
+      @if (!archivedAt()) {
+      <div class="cam-sub">
+        <button type="button" class="k-menu-item cam-item" [class.is-active]="reminderOpen()" (click)="toggleReminder($event)">
+          <i class="ti ti-alarm"></i>
+          <span>{{ hasPendingReminder() ? 'Change reminder…' : 'Remind me…' }}</span>
+          <i class="ti ti-chevron-right cam-chev"></i>
+        </button>
+        @if (reminderOpen()) {
+          <!-- Beside the row like Quick edit; closing it (or saving) closes the whole menu. -->
+          <k-reminder-popover
+            [cardId]="cardId()"
+            [panelPlacement]="{ side: 'right', align: 'start', gap: 4 }"
+            (dismissed)="close.emit()"
+          />
+        }
+      </div>
       }
       @if (allowDuplicate()) {
       <button type="button" class="k-menu-item cam-item" (click)="duplicate($event)" [disabled]="duplicating()">
@@ -269,6 +288,11 @@ export class CardActionsMenuPopover {
   readonly quickEditOpen = signal(false);
   readonly copyOpen = signal(false);
   readonly moveOpen = signal(false);
+  readonly reminderOpen = signal(false);
+  readonly hasPendingReminder = computed(() => {
+    const reminder = this.notifications.reminderFor(this.cardId());
+    return Boolean(reminder && !reminder.firedAt);
+  });
   readonly confirmingDelete = signal(false);
   readonly archiving = signal(false);
   readonly savingCompletion = signal(false);
@@ -288,11 +312,21 @@ export class CardActionsMenuPopover {
     });
   }
 
+  toggleReminder(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.quickEditOpen.set(false);
+    this.copyOpen.set(false);
+    this.moveOpen.set(false);
+    this.reminderOpen.update((v) => !v);
+  }
+
   toggleCopy(event: MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
     this.quickEditOpen.set(false);
     this.moveOpen.set(false);
+    this.reminderOpen.set(false);
     this.copyOpen.update((v) => !v);
   }
 
@@ -301,6 +335,7 @@ export class CardActionsMenuPopover {
     event.stopPropagation();
     this.quickEditOpen.set(false);
     this.copyOpen.set(false);
+    this.reminderOpen.set(false);
     this.moveOpen.update((v) => !v);
   }
 
@@ -309,6 +344,7 @@ export class CardActionsMenuPopover {
     event.stopPropagation();
     this.copyOpen.set(false);
     this.moveOpen.set(false);
+    this.reminderOpen.set(false);
     this.quickEditOpen.update((v) => !v);
   }
 

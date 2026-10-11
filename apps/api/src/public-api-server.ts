@@ -7,12 +7,12 @@ import sensible from "@fastify/sensible";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import scalarApiReference from "@scalar/fastify-api-reference";
-import type { FastifyReply, FastifyServerOptions } from "fastify";
+import type { FastifyReply, FastifyRequest, FastifyServerOptions } from "fastify";
 import Fastify from "fastify";
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import type { OpenAPIV3 } from "openapi-types";
-import { clients } from "@kanera/shared/schema";
+import { clients, users } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import authPlugin from "./auth/plugin.js";
 import { db } from "./db.js";
@@ -24,23 +24,30 @@ import mailerPlugin from "./lib/mailer-plugin.js";
 import { registerMetrics } from "./lib/metrics.js";
 import { registerPublicApiIdempotency } from "./lib/public-api-idempotency.js";
 import { withSignedMedia } from "./lib/media-keys.js";
-import { applyRateLimitHeaders, FixedWindowRateLimiter, type RateLimitPolicy } from "./lib/rate-limit.js";
+import { localParts } from "./lib/due-date.js";
+import type { ApiRateTier } from "./lib/api-rate-limit.js";
+import { AppError } from "./lib/errors.js";
+import { applyRateLimitHeaders, FixedWindowRateLimiter, tightestRateLimit, type RateLimitPolicy, type RateLimitResult } from "./lib/rate-limit.js";
 import { helmetSecurityOptionsWithoutCsp, registerApiContentSecurityPolicy, registerSecurityHeaderFallbacks } from "./lib/security-headers.js";
 import { resolveLocalUploadsRoot } from "./lib/storage/local.js";
 import type { SweepScheduler } from "./lib/sweep-scheduler.js";
 import { startWebhookDeliveryScheduler } from "./lib/webhooks.js";
 import { activityRoutes } from "./modules/activity/routes.js";
 import { agentWorkQueryRoutes, agentWorkRoutes } from "./modules/work/routes.js";
+import { scratchpadRoutes } from "./modules/scratchpad/routes.js";
 import { automationRoutes } from "./modules/automations/routes.js";
 import { boardRoutes } from "./modules/boards/routes.js";
 import { cardLabelRoutes } from "./modules/card-labels/routes.js";
 import { cardPriorityRoutes } from "./modules/card-priorities/routes.js";
 import { cardAttachmentRoutes } from "./modules/cards/attachments.routes.js";
+import { attachmentUploadRoutes, uploadLinkRoutes } from "./modules/cards/upload-links.routes.js";
 import { cardRoutes } from "./modules/cards/routes.js";
 import { commentRoutes } from "./modules/comments/routes.js";
 import { customFieldRoutes } from "./modules/custom-fields/routes.js";
 import { agentRunRoutes } from "./modules/agent-runs/routes.js";
 import { externalLinkRoutes } from "./modules/external-links/routes.js";
+import { followRoutes } from "./modules/notifications/follow.routes.js";
+import { notificationInboxRoutes } from "./modules/notifications/inbox.routes.js";
 import { mcpEventRoutes } from "./modules/integrations/mcp-events.routes.js";
 import type { McpWebhookRequest } from "./lib/mcp-event-webhooks.js";
 import { webhookEndpointRoutes } from "./modules/integrations/webhook-endpoint.routes.js";
@@ -76,6 +83,43 @@ export interface PublicApiRateLimitOptions {
   failedApiKeyLimitPerMinute?: number;
   apiKeyLimitPerMinute?: number;
   uploadLimitPerMinute?: number;
+  apiKeyLimitPerSecond?: number;
+  freeUserLimitPerSecond?: number;
+  freeUserLimitPerMinute?: number;
+  queueSize?: number;
+  queueMaxWaitMs?: number;
+}
+
+type AgentRateLimits = { perSecond: number; perMinute: number };
+type MeteredScope = { kind: "ceiling" } | { kind: "organisation"; tier: ApiRateTier; clientId: string };
+type MeteredBucket = { key: string; limit: number; windowMs: number; scope: MeteredScope; window: "second" | "minute" };
+
+const SECOND_MS = 1_000;
+
+function meteredBuckets(prefix: string, limits: AgentRateLimits, scope: MeteredScope, minuteWindowMs: number): MeteredBucket[] {
+  return [
+    { key: `${prefix}:second`, limit: limits.perSecond, windowMs: SECOND_MS, scope, window: "second" },
+    { key: `${prefix}:minute`, limit: limits.perMinute, windowMs: minuteWindowMs, scope, window: "minute" },
+  ];
+}
+
+// Only a Free organisation's limit explains itself: the agent can then tell its user why it slowed
+// down and that the organisation's plan, not the user, sets the limit. Ceiling and Pro rejections
+// keep the plain shape.
+function rateLimitedError(bucket: MeteredBucket): AppError {
+  if (bucket.scope.kind !== "organisation" || bucket.scope.tier !== "free") return new AppError(429, "RATE_LIMITED", "rate limit exceeded");
+  const queueFull = bucket.window === "second" ? ", and the request queue is full" : "";
+  return new AppError(
+    429,
+    "RATE_LIMITED",
+    `This organisation is on the Free plan, which allows your AI agents and API keys ${bucket.limit} requests per ${bucket.window} on its boards${queueFull}. Retry shortly; Kanera Pro raises these limits.`,
+    {
+      limit: bucket.window === "second" ? "apiRequestsPerSecond" : "apiRequestsPerMinute",
+      max: bucket.limit,
+      organisationId: bucket.scope.clientId,
+      upgradePlan: "paid",
+    },
+  );
 }
 
 export interface BuildPublicApiServerOptions {
@@ -110,6 +154,11 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
     failedApiKeyLimitPerMinute: options.rateLimit?.failedApiKeyLimitPerMinute ?? env.PUBLIC_API_FAILED_KEY_RATE_LIMIT_PER_MINUTE,
     apiKeyLimitPerMinute: options.rateLimit?.apiKeyLimitPerMinute ?? env.PUBLIC_API_KEY_RATE_LIMIT_PER_MINUTE,
     uploadLimitPerMinute: options.rateLimit?.uploadLimitPerMinute ?? env.PUBLIC_API_UPLOAD_RATE_LIMIT_PER_MINUTE,
+    apiKeyLimitPerSecond: options.rateLimit?.apiKeyLimitPerSecond ?? env.PUBLIC_API_KEY_RATE_LIMIT_PER_SECOND,
+    freeUserLimitPerSecond: options.rateLimit?.freeUserLimitPerSecond ?? env.HOSTED_FREE_API_RATE_LIMIT_PER_SECOND,
+    freeUserLimitPerMinute: options.rateLimit?.freeUserLimitPerMinute ?? env.HOSTED_FREE_API_RATE_LIMIT_PER_MINUTE,
+    queueSize: options.rateLimit?.queueSize ?? env.PUBLIC_API_RATE_LIMIT_QUEUE_SIZE,
+    queueMaxWaitMs: options.rateLimit?.queueMaxWaitMs ?? env.PUBLIC_API_RATE_LIMIT_QUEUE_MAX_WAIT_MS,
   };
   const requestStartedAt = new WeakMap<object, number>();
   const app = Fastify({
@@ -135,9 +184,7 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
   });
   setRealtimeLogger(app.log);
 
-  // Constructed after the app so the limiter can fail open and log against the request logger when
-  // Valkey is unavailable, instead of letting an outage 500 every request on this hot path.
-  const rateLimiter = rateLimitOptions.enabled ? new FixedWindowRateLimiter(rateLimitOptions.windowMs, { log: app.log }) : null;
+  const rateLimiter = rateLimitOptions.enabled ? new FixedWindowRateLimiter() : null;
 
   await app.register(fastifyRequestContext, {
     defaultStoreValues: (req) => ({
@@ -192,7 +239,11 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
   await app.register(mailerPlugin);
   await app.register(oauthPublicRoutes);
 
-  const checkRateLimit = async (key: string, policy: RateLimitPolicy, reply: FastifyReply) => {
+  const checkRateLimit = async (
+    key: string,
+    policy: RateLimitPolicy,
+    reply: FastifyReply,
+  ) => {
     if (!rateLimiter) return false;
     const result = await rateLimiter.check(key, policy);
     applyRateLimitHeaders(reply, result);
@@ -200,6 +251,8 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
     reply.status(429).send({ code: "RATE_LIMITED", message: "rate limit exceeded" });
     return true;
   };
+  const paidLimits: AgentRateLimits = { perSecond: rateLimitOptions.apiKeyLimitPerSecond, perMinute: rateLimitOptions.apiKeyLimitPerMinute };
+  const freeLimits: AgentRateLimits = { perSecond: rateLimitOptions.freeUserLimitPerSecond, perMinute: rateLimitOptions.freeUserLimitPerMinute };
   const wouldRateLimit = async (key: string, policy: RateLimitPolicy, reply: FastifyReply) => {
     if (!rateLimiter) return false;
     const result = await rateLimiter.wouldLimit(key, policy);
@@ -250,6 +303,9 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
   app.get("/openapi.json", async () => getPublicOpenApiDocument());
   app.get("/webhook-event-types", async () => ({ eventTypes: publicWebhookEventTypes }));
   await app.register(mediaRoutes);
+  // Single-use upload links: the link is the credential, so it sits beside media rather than inside
+  // the bearer-authenticated /api/v1 scope, and is limited per uploader IP like other non-v1 routes.
+  await app.register(attachmentUploadRoutes);
 
   const prefix = "/api/v1";
   await app.register(async (api) => {
@@ -284,25 +340,108 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
         throw error;
       }
     });
+    // Credential (API key / agent) traffic is metered per user, per second and per minute, at the
+    // plan limits of the organisation whose boards the request touches:
+    //  - a ceiling per user at Pro limits on every request, so membership in many organisations
+    //    cannot multiply the allowance (workspace/service credentials are metered per credential);
+    //  - a bucket per user per organisation at that organisation's plan limits, charged by the
+    //    access helpers as they resolve each board/workspace (see meterApiOrganisation). Requests
+    //    that resolve no organisation (listings, search, session) charge the credential's default
+    //    organisation instead.
+    // Each bucket is a fixed window. Per-second buckets absorb bursts: an over-limit request waits in
+    // a bounded queue for the next second rather than failing, and every charge of one request shares
+    // a single deadline so its total wait stays under the MCP bridge's upstream timeout. Per-minute
+    // buckets reject outright: waiting out a minute window would outlast that timeout anyway, and a
+    // spent minute means sustained load, not a burst.
+    const pendingMeters = new WeakMap<FastifyRequest, { charged: Set<string>; charge: (clientId: string, tier: ApiRateTier) => Promise<void>; defaultClientId: string; defaultTier: ApiRateTier }>();
     api.addHook("preHandler", async (req, reply) => {
-      // Valid API-key requests get their own bucket after authentication resolves the key id.
       if (req.method === "OPTIONS") return;
       const apiKeyId = req.auth.apiKeyId;
-      const key = apiKeyId ? `apiKey:${apiKeyId}` : `ip:${clientIpForRequest(req)}`;
       const isUpload = req.method === "POST"
         && /^\/api\/v1\/(?:cards|notes)\/[^/]+\/attachments(?:\?|$|\/)/.test(req.url);
-      const policy = {
-        limit: isUpload ? rateLimitOptions.uploadLimitPerMinute : rateLimitOptions.apiKeyLimitPerMinute,
-        windowMs: rateLimitOptions.windowMs,
+      // Session-JWT callers fall back to the IP bucket, which stays a plain fixed window.
+      if (!apiKeyId) {
+        const policy = { limit: isUpload ? rateLimitOptions.uploadLimitPerMinute : rateLimitOptions.apiKeyLimitPerMinute, windowMs: rateLimitOptions.windowMs };
+        if (await checkRateLimit(`ip:${clientIpForRequest(req)}`, policy, reply)) return reply;
+        return;
+      }
+      if (!rateLimiter) return;
+
+      const actor = req.auth.apiKeyKind === "personal" ? `user:${req.auth.sub}` : `key:${apiKeyId}`;
+      const queue = { queueSize: rateLimitOptions.queueSize, expiresAt: Date.now() + rateLimitOptions.queueMaxWaitMs };
+      const results: RateLimitResult[] = [];
+      const reserve = async (buckets: MeteredBucket[]) => {
+        // Buckets are charged in order (per-second before per-minute) and stop at the first
+        // rejection, so a request queued out of its second does not also spend its minute.
+        for (const bucket of buckets) {
+          const policy = { limit: bucket.limit, windowMs: bucket.windowMs };
+          const result = bucket.window === "second"
+            ? await rateLimiter.queue(bucket.key, policy, queue)
+            : await rateLimiter.check(bucket.key, policy);
+          results.push(result);
+          const headers = tightestRateLimit(results);
+          if (headers) applyRateLimitHeaders(reply, headers);
+          if (!result.allowed) throw rateLimitedError(bucket);
+        }
       };
-      if (await checkRateLimit(key, policy, reply)) return reply;
+      const organisationBuckets = (clientId: string, tier: ApiRateTier) =>
+        // The tier is part of the key so an upgrade lifts limits on the very next request, rather
+        // than leaving the caller at a Free count measured against Pro limits until the window ends.
+        meteredBuckets(`apiOrg:${clientId}:${tier}:${actor}`, tier === "free" ? freeLimits : paidLimits, { kind: "organisation", tier, clientId }, rateLimitOptions.windowMs);
+
+      const meter = {
+        charged: new Set<string>(),
+        defaultClientId: req.auth.cid,
+        // Workspace/service credentials only authenticate inside paid organisations.
+        defaultTier: req.auth.apiRateTier ?? "paid",
+        async charge(clientId: string, tier: ApiRateTier) {
+          // A request touching the same organisation repeatedly (e.g. a move within one board)
+          // pays once; touching two organisations pays in each.
+          if (meter.charged.has(clientId)) return;
+          meter.charged.add(clientId);
+          await reserve(organisationBuckets(clientId, tier));
+        },
+      };
+      pendingMeters.set(req, meter);
+      requestContext.set("apiOrganisationMeter", meter);
+
+      const ceiling = meteredBuckets(`apiActor:${actor}`, paidLimits, { kind: "ceiling" }, rateLimitOptions.windowMs);
+      if (isUpload) ceiling.push({ key: `apiUpload:${actor}`, limit: rateLimitOptions.uploadLimitPerMinute, windowMs: rateLimitOptions.windowMs, scope: { kind: "ceiling" }, window: "minute" });
+      // Routes without path parameters (listings, search, session) never resolve an organisation
+      // through the access helpers, so charge the credential's default organisation up front, in
+      // the same reservation as the ceiling.
+      const resolvesOrganisation = (req.routeOptions.url ?? "").includes(":");
+      if (resolvesOrganisation) {
+        await reserve(ceiling);
+      } else {
+        meter.charged.add(meter.defaultClientId);
+        await reserve([...ceiling, ...organisationBuckets(meter.defaultClientId, meter.defaultTier)]);
+      }
+    });
+    api.addHook("onResponse", async (req) => {
+      // Safety net for parameterised routes that never resolve an organisation (e.g. personal
+      // scratchpad content): charge the default organisation after the fact so the traffic still
+      // counts toward the next request's limit.
+      const meter = pendingMeters.get(req);
+      pendingMeters.delete(req);
+      if (!meter || meter.charged.size > 0 || !rateLimiter) return;
+      const actor = req.auth.apiKeyKind === "personal" ? `user:${req.auth.sub}` : `key:${req.auth.apiKeyId}`;
+      const limits = meter.defaultTier === "free" ? freeLimits : paidLimits;
+      const buckets = meteredBuckets(`apiOrg:${meter.defaultClientId}:${meter.defaultTier}:${actor}`, limits, { kind: "organisation", tier: meter.defaultTier, clientId: meter.defaultClientId }, rateLimitOptions.windowMs);
+      await Promise.all(buckets.map((bucket) => rateLimiter.penalty(bucket.key, { limit: bucket.limit, windowMs: bucket.windowMs })));
     });
     // JSON mutations may opt into replay protection without changing the reused app route handlers.
     // The hook runs after authentication so keys are isolated by the resolved credential identity.
     registerPublicApiIdempotency(api);
 
     api.get("/session", async (req) => {
-      const [organisation] = await db.select({ name: clients.name, logoUrl: clients.logoUrl }).from(clients).where(eq(clients.id, req.auth.cid)).limit(1);
+      const [[organisation], [user]] = await Promise.all([
+        db.select({ name: clients.name, logoUrl: clients.logoUrl }).from(clients).where(eq(clients.id, req.auth.cid)).limit(1),
+        db.select({ timezone: users.timezone }).from(users).where(eq(users.id, req.auth.sub)).limit(1),
+      ]);
+      // Agents resolve "today" and "tomorrow 1pm" against this zone, the same one the API stamps on
+      // the due dates they set. For a workspace key the subject is the key's creator.
+      const timeZone = user?.timezone || "UTC";
       return {
         userId: req.auth.sub,
         organisationId: req.auth.cid,
@@ -316,6 +455,8 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
         scope: req.auth.apiKeyScope ?? null,
         workspaceId: req.auth.apiKeyWorkspaceId ?? null,
         webUrl: env.WEB_ORIGIN,
+        timeZone,
+        today: localParts(new Date(), timeZone).date,
       };
     });
 
@@ -326,6 +467,9 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
     await api.register(searchRoutes);
     await api.register(listRoutes);
     await api.register((instance) => noteRoutes(instance, { allowDeletes: false }));
+    // The scratchpad doubles as the agent's personal inbox ("remind me to…" without a board). Pages
+    // are owner-private, so the routes themselves refuse workspace-scoped keys.
+    await api.register((instance) => scratchpadRoutes(instance, { allowDeletes: false, exposeAttachments: false }));
     // Public API card mutations intentionally reuse the app card routes, so
     // shared side effects such as activity, realtime outbox, and automations stay aligned.
     await api.register(cardRoutes);
@@ -333,8 +477,14 @@ export async function buildPublicApiServer(options: BuildPublicApiServerOptions 
     // per-card write authorisation stay identical; the invalidation reaches connected web clients
     // through the realtime outbox like every other public API mutation.
     await api.register(cardPriorityRoutes);
+    // Watching and reminders are the user's own subscription state; the same handlers serve the web
+    // app, and their user-scoped events reach the user's web sessions through the direct outbox.
+    await api.register(followRoutes);
+    // A forward-reading view of the same inbox, for agents that poll rather than subscribe.
+    await api.register(notificationInboxRoutes);
     await api.register(separatorRoutes);
     await api.register((instance) => cardAttachmentRoutes(instance, { exposeCoverMetadata: false }));
+    await api.register(uploadLinkRoutes);
     await api.register(customFieldRoutes);
     await api.register(externalLinkRoutes);
     // Agent runs are the "someone is working on this now" signal for AI agents; the same handlers

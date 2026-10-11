@@ -24,6 +24,7 @@ import { emitLaneRebalanced, emitWorkspaceLaneRebalanced, positionForLaneInsert,
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { assertValidOptionIds, assertWorkspaceMemberIds, buildCustomFieldValueColumns, customFieldValueEquals, describeCustomFieldValue, emptyValueColumns, hasCustomFieldValue, type CustomFieldValueColumns } from "../../lib/custom-fields.js";
 import { AppError, badRequest, notFound } from "../../lib/errors.js";
+import { resolveDueDatePatch } from "../../lib/due-date.js";
 import { allocateCardKeys, resolveCardKey } from "../../lib/card-keys.js";
 import { signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls } from "../../lib/media-keys.js";
 import { replaceCardMentions } from "../../lib/mentions.js";
@@ -51,6 +52,7 @@ import { absoluteCardUrl, toWireCard } from "../../lib/wire-card.js";
 import { assertCardActive, assertIntegrationEmbeddedMediaStoredLocally } from "../../lib/card-guards.js";
 import { attachmentRowBaseColumns } from "../../lib/attachment-rows.js";
 import { ensureBoardMembershipForUsers, shouldAutoWatchAuthoredCards } from "../../lib/card-assignment.js";
+import { clearRemindersOnCompletedCards, emitClearedCardReminders, type ClearedCardReminder } from "../../lib/card-follow.js";
 import type { AuthClaims } from "../../auth/plugin.js";
 
 const CHECKLIST_MISTAKE_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
@@ -453,6 +455,7 @@ type CardCompletionWrite = {
   finalCard: typeof cards.$inferSelect;
   activity: CoalescedActivityResult;
   automationEffects: AutomationEffects;
+  clearedReminders: ClearedCardReminder[];
 };
 
 /**
@@ -500,6 +503,7 @@ async function applyCardCompletion(
   });
   if (completed) await clearOverdueNotificationsForCards(tx, [current.id]);
   else await createOverdueNotificationsForCards(tx, [current.id]);
+  const clearedReminders = completed ? await clearRemindersOnCompletedCards(tx, [current.id]) : [];
   const automationEffects = completed
     ? await runCardMarkedCompleteAutomations(tx, {
       cardId: current.id,
@@ -516,7 +520,7 @@ async function applyCardCompletion(
   const [finalCard] = automationEffects.effects.length > 0
     ? await tx.select().from(cards).where(eq(cards.id, current.id)).limit(1)
     : [card];
-  return { card: card!, finalCard: finalCard ?? card!, activity, automationEffects };
+  return { card: card!, finalCard: finalCard ?? card!, activity, automationEffects, clearedReminders };
 }
 
 /** Post-commit fanout for `applyCardCompletion`, including the queue audiences board rooms miss. */
@@ -524,8 +528,9 @@ async function emitCardCompletion(
   rows: readonly CardCompletionWrite[],
   opts: { clientId: string; completed: boolean },
 ): Promise<void> {
-  for (const { card, activity, automationEffects } of rows) {
+  for (const { card, activity, automationEffects, clearedReminders } of rows) {
     await emitToBoard(card.boardId, SERVER_EVENTS.CARD_UPDATED, { boardId: card.boardId, card: toWireCard(card, opts.clientId) });
+    emitClearedCardReminders(clearedReminders);
     await emitCoalescedCardActivityFeedItem(card.boardId, card.id, activity, { notify: opts.completed });
     await emitAutomationEffects(automationEffects);
   }
@@ -710,21 +715,40 @@ export async function cardRoutes(
     };
   });
 
-  app.post("/boards/:boardId/lists/:id/cards", async (req, reply) => {
-    const { boardId, id: listId } = req.params as { boardId: string; id: string };
-    const body = dto.createCardBody.parse(req.body);
+  interface CardCreatePlan {
+    boardId: string;
+    listId: string;
+    ctx: Awaited<ReturnType<typeof assertBoardAccess>>;
+    body: dto.CreateCardBody;
+    description: string | null;
+    assigneeIds: string[];
+    labelIds: string[];
+    dueDate: { dueDateLocalDate: string; dueDateSlot: dto.DueDateSlot; dueDateTimezone: string } | null;
+  }
+
+  /**
+   * Every check a card create makes before writing. Bulk create runs this for the whole batch first,
+   * so one bad label or assignee rejects the request before any card exists.
+   */
+  async function prepareCardCreate(
+    auth: AuthClaims,
+    boardId: string,
+    listId: string,
+    body: dto.CreateCardBody,
+  ): Promise<{ kind: "replayed"; card: typeof cards.$inferSelect } | { kind: "ready"; plan: CardCreatePlan }> {
     const assigneeIds = Array.from(new Set(body.assigneeIds ?? []));
+    const labelIds = Array.from(new Set(body.labelIds ?? []));
 
     const [list] = await db.select().from(lists).where(eq(lists.id, listId)).limit(1);
     if (!list) throw notFound();
-    const ctx = await assertBoardAccess(req.auth, boardId, "editor");
+    const ctx = await assertBoardAccess(auth, boardId, "editor");
     // Identity-wide personal credentials adopt the target organisation during access validation;
     // tenant-bound media handling must use that rebased context.
-    assertIntegrationEmbeddedMediaStoredLocally(body.description, req.auth.cid, req.auth.authKind);
-    const description = stripSignedEmbeddedMediaUrls(body.description ?? null, req.auth.cid);
+    assertIntegrationEmbeddedMediaStoredLocally(body.description, auth.cid, auth.authKind);
+    const description = stripSignedEmbeddedMediaUrls(body.description ?? null, auth.cid);
     // Restricted editors must retain access to cards they create; make that grant atomic with the
     // card creation rather than relying on a follow-up client request.
-    if (ctx.assignedItemsOnly && !assigneeIds.includes(req.auth.sub)) assigneeIds.push(req.auth.sub);
+    if (ctx.assignedItemsOnly && !assigneeIds.includes(auth.sub)) assigneeIds.push(auth.sub);
     if (list.workspaceId !== ctx.workspaceId) throw badRequest("target list not in board workspace");
     if (body.globalWorkUserId && !options.allowGlobalWorkLayoutMoves) {
       // Public integrations create against real board lanes only; see the same guard on move.
@@ -732,7 +756,7 @@ export async function cardRoutes(
     }
     if (body.globalWorkUserId) {
       await assertGlobalWorkSeparatorContext({
-        auth: req.auth,
+        auth,
         workspaceId: ctx.workspaceId,
         targetUserId: body.globalWorkUserId,
         listId,
@@ -745,12 +769,12 @@ export async function cardRoutes(
     if (body.clientToken) {
       const [existing] = await db.select().from(cards).where(eq(cards.clientToken, body.clientToken)).limit(1);
       if (existing) {
-        if (existing.boardId !== boardId || existing.listId !== listId || existing.createdById !== req.auth.sub) {
+        if (existing.boardId !== boardId || existing.listId !== listId || existing.createdById !== auth.sub) {
           throw badRequest("client token was already used for another card create");
         }
         // At-least-once delivery can replay a create whose committed response was lost. Returning
         // the first result avoids duplicating activity, automations, emails, and realtime events.
-        return reply.status(201).send(toWireCard(existing, req.auth.cid));
+        return { kind: "replayed", card: existing };
       }
     }
 
@@ -760,7 +784,24 @@ export async function cardRoutes(
         throw badRequest("one or more user ids are not assignable members");
       }
     }
+    if (labelIds.length > 0) {
+      // Labels are workspace-scoped, so any active label of the board's workspace is valid here.
+      const validLabels = await db
+        .select({ id: cardLabels.id })
+        .from(cardLabels)
+        .where(and(eq(cardLabels.workspaceId, ctx.workspaceId), inArray(cardLabels.id, labelIds), isNull(cardLabels.archivedAt)));
+      if (validLabels.length !== labelIds.length) throw badRequest("one or more label ids are invalid");
+    }
+    // A due date set at creation captures the creator's zone, exactly as a later PATCH would.
+    const dueDate = body.dueDateLocalDate
+      ? { dueDateLocalDate: body.dueDateLocalDate, dueDateSlot: body.dueDateSlot ?? "anyTime" as const, dueDateTimezone: await actorTimezone(auth.sub) }
+      : null;
 
+    return { kind: "ready", plan: { boardId, listId, ctx, body, description, assigneeIds, labelIds, dueDate } };
+  }
+
+  async function commitCardCreate(auth: AuthClaims, plan: CardCreatePlan): Promise<WireCard> {
+    const { boardId, listId, ctx, body, description, assigneeIds, labelIds, dueDate } = plan;
     const result = await db.transaction(async (tx) => {
       if (body.clientToken) {
         // Serialize idempotent replays before touching the workspace counter. A concurrent retry
@@ -768,7 +809,7 @@ export async function cardRoutes(
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${body.clientToken}, 0))`);
         const [existing] = await tx.select().from(cards).where(eq(cards.clientToken, body.clientToken)).limit(1);
         if (existing) {
-          if (existing.boardId !== boardId || existing.listId !== listId || existing.createdById !== req.auth.sub) {
+          if (existing.boardId !== boardId || existing.listId !== listId || existing.createdById !== auth.sub) {
             throw badRequest("client token was already used for another card create");
           }
           return { kind: "replayed", card: existing } as const;
@@ -788,7 +829,7 @@ export async function cardRoutes(
       // board-lane rebalance below; its workspace-wide rebalance is emitted separately.
       const globalWorkPlacement = body.globalWorkUserId
         ? await positionForGlobalWorkLaneInsert({
-            auth: req.auth,
+            auth,
             workspaceId: ctx.workspaceId,
             targetUserId: body.globalWorkUserId,
             listId,
@@ -811,8 +852,9 @@ export async function cardRoutes(
           boardId,
           title: body.title,
           description,
+          ...dueDate,
           position,
-          createdById: req.auth.sub,
+          createdById: auth.sub,
         })
         // The predicate matches the partial unique index. A concurrent retry waits for the first
         // insert and then takes the replay path below without repeating any create side effects.
@@ -831,6 +873,9 @@ export async function cardRoutes(
       if (assigneeIds.length > 0) {
         await tx.insert(cardAssignees).values(assigneeIds.map((userId) => ({ cardId: card.id, userId })));
       }
+      if (labelIds.length > 0) {
+        await tx.insert(cardLabelAssignments).values(labelIds.map((labelId) => ({ cardId: card.id, labelId })));
+      }
 
       await replaceCardMentions({
         tx,
@@ -841,28 +886,35 @@ export async function cardRoutes(
       });
       const linkFanout = await replaceInternalLinksForSource({
         tx,
-        claims: req.auth,
+        claims: auth,
         workspaceId: ctx.workspaceId,
         sourceType: "card",
         sourceId: card.id,
         markdown: description,
       });
 
-      if (shouldAutoWatchAuthoredCards(req.auth.authKind)) {
+      if (shouldAutoWatchAuthoredCards(auth)) {
         await tx
           .insert(cardWatchers)
-          .values({ cardId: card.id, userId: req.auth.sub })
+          .values({ cardId: card.id, userId: auth.sub })
           .onConflictDoNothing();
       }
 
       const activity = await recordActivity(tx, {
         boardId,
         workspaceId: ctx.workspaceId,
-        actorId: req.auth.sub,
+        actorId: auth.sub,
         entityType: "card",
         entityId: card.id,
         action: ACTIVITY_ACTION.CREATED,
-        payload: { title: card.title, listId },
+        payload: {
+          title: card.title,
+          listId,
+          // Labels and due date set at creation belong to the creation event; the card's history
+          // records no separate label or due-date change for them.
+          ...(labelIds.length > 0 && { labelIds }),
+          ...(dueDate && dueDate),
+        },
       });
       // App and public API card creation share this route; keep list-entry
       // automations here so both surfaces behave the same.
@@ -875,7 +927,7 @@ export async function cardRoutes(
         // a cross-org guest's req.auth.cid would charge (and cap) the wrong tenant.
         clientId: ctx.clientId,
         trigger: "create",
-        triggerActorId: req.auth.sub,
+        triggerActorId: auth.sub,
       });
       // Creating from Global Work assigns the card immediately, so assignment-triggered
       // automations and notifications need to see the same committed card as ordinary creation.
@@ -886,7 +938,19 @@ export async function cardRoutes(
             boardId,
             workspaceId: ctx.workspaceId,
             clientId: ctx.clientId,
-            triggerActorId: req.auth.sub,
+            triggerActorId: auth.sub,
+          })
+        : { effects: [] };
+      // Labels given at creation fire label-set rules exactly as create-then-label would, so an
+      // integration that switches to the one-call form keeps the board's automations.
+      const labelAutomationEffects: AutomationEffects = labelIds.length > 0
+        ? await runCardLabelSetAutomations(tx, {
+            cardId: card.id,
+            addedLabelIds: labelIds,
+            boardId,
+            workspaceId: ctx.workspaceId,
+            clientId: ctx.clientId,
+            triggerActorId: auth.sub,
           })
         : { effects: [] };
       // Rebalance after the row exists so the new card takes part in the renumbering; the emit
@@ -896,12 +960,10 @@ export async function cardRoutes(
       // card:created keeps the pre-automation snapshot (automation effects emit their own events)
       // but must carry the rebalanced position, or clients would place it by a stale number.
       const createdCard = rebalanced && finalCard ? { ...card, position: finalCard.position } : card;
-      return { kind: "created", card: createdCard, finalCard: finalCard ?? card, activity, automationEffects, assignmentAutomationEffects, rebalanced, laneRebalanced, linkFanout } as const;
+      return { kind: "created", card: createdCard, finalCard: finalCard ?? card, activity, automationEffects, assignmentAutomationEffects, labelAutomationEffects, rebalanced, laneRebalanced, linkFanout } as const;
     });
-    if (result.kind === "replayed") {
-      return reply.status(201).send(toWireCard(result.card, req.auth.cid));
-    }
-    const { card, finalCard, activity, automationEffects, assignmentAutomationEffects, rebalanced, laneRebalanced, linkFanout } = result;
+    if (result.kind === "replayed") return toWireCard(result.card, auth.cid);
+    const { card, finalCard, activity, automationEffects, assignmentAutomationEffects, labelAutomationEffects, rebalanced, laneRebalanced, linkFanout } = result;
     if (rebalanced) await emitLaneRebalanced(boardId, listId, rebalanced);
     if (laneRebalanced) await emitWorkspaceLaneRebalanced(listId, laneRebalanced);
     if (assigneeIds.length > 0) {
@@ -910,11 +972,11 @@ export async function cardRoutes(
         mailer: app.mailer,
         webOrigin: env.WEB_ORIGIN,
         cardId: card.id,
-        actorId: req.auth.sub,
+        actorId: auth.sub,
         recipientUserIds: assigneeIds,
       });
     }
-    const wireCard = toWireCard(card, req.auth.cid);
+    const wireCard = toWireCard(card, auth.cid);
     await emitToBoard(boardId, SERVER_EVENTS.CARD_CREATED, { boardId, card: wireCard });
     await emitCardActivityFeedItem(boardId, card.id, activity);
     // A description that links existing cards or notes adds this card to their linked items/backlinks.
@@ -926,16 +988,53 @@ export async function cardRoutes(
       await emitToBoard(boardId, SERVER_EVENTS.CARD_ASSIGNEES_SET, { boardId, cardId: card.id, assigneeIds });
       await emitAutomationEffects(assignmentAutomationEffects);
     }
+    if (labelIds.length > 0) {
+      // Same ordering rule as assignees: the requested set first, then any automation snapshots.
+      await emitToBoard(boardId, SERVER_EVENTS.CARD_LABELS_SET, { boardId, cardId: card.id, labelIds });
+      await emitAutomationEffects(labelAutomationEffects);
+    }
     // Card activity stays in Kanera's audit log. PostHog receives only the durable activation
     // milestone below, never one event per card mutation.
     await evaluateWorkspaceAnalyticsMilestones({
       workspaceId: ctx.workspaceId,
-      actorId: req.auth.sub,
+      actorId: auth.sub,
       // API and MCP card creation is real customer work. Board-mirror copies use system activity
       // and never pass through this route, so they remain excluded from the milestone.
-      supportSession: req.auth.authKind === "support",
+      supportSession: auth.authKind === "support",
     });
-    return reply.status(201).send(toWireCard(finalCard, req.auth.cid));
+    return toWireCard(finalCard, auth.cid);
+  }
+
+  app.post("/boards/:boardId/lists/:id/cards", async (req, reply) => {
+    const { boardId, id: listId } = req.params as { boardId: string; id: string };
+    const body = dto.createCardBody.parse(req.body);
+    const prepared = await prepareCardCreate(req.auth, boardId, listId, body);
+    if (prepared.kind === "replayed") return reply.status(201).send(toWireCard(prepared.card, req.auth.cid));
+    return reply.status(201).send(await commitCardCreate(req.auth, prepared.plan));
+  });
+
+  app.post("/boards/:boardId/cards/bulk/create", async (req, reply) => {
+    const { boardId } = req.params as { boardId: string };
+    const body = dto.bulkCreateCardsBody.parse(req.body);
+    const plans: CardCreatePlan[] = [];
+    for (const [index, { listId, ...item }] of body.cards.entries()) {
+      try {
+        const prepared = await prepareCardCreate(req.auth, boardId, listId, item);
+        // Bulk items carry no clientToken, so nothing can replay; the public API's Idempotency-Key
+        // covers the whole batch instead.
+        if (prepared.kind === "ready") plans.push(prepared.plan);
+      } catch (error) {
+        // Name the offending entry; "one or more label ids are invalid" alone is unactionable in a
+        // batch of fifty.
+        if (error instanceof AppError) throw new AppError(error.statusCode, error.code, `cards[${index}]: ${error.message}`, error.details);
+        throw error;
+      }
+    }
+    // Each card commits on its own, like bulk duplicate: one card's automations and emits never
+    // hold a transaction open across the batch. Validation above makes a mid-batch failure rare.
+    const created: WireCard[] = [];
+    for (const plan of plans) created.push(await commitCardCreate(req.auth, plan));
+    return reply.status(201).send({ created: created.length, cards: created });
   });
 
   app.post("/boards/:boardId/lists/:id/cards/completion", async (req) => {
@@ -1422,17 +1521,15 @@ export async function cardRoutes(
       ? undefined
       : stripSignedEmbeddedMediaUrls(body.description, req.auth.cid);
     const hasDueDateUpdate = body.dueDateLocalDate !== undefined || body.dueDateSlot !== undefined;
-    const dueDateLocalDate = hasDueDateUpdate ? (body.dueDateLocalDate ?? null) : undefined;
-    const dueDateSlot = dueDateLocalDate === undefined
-      ? undefined
-      : dueDateLocalDate
-        ? (body.dueDateSlot ?? "anyTime")
-        : null;
-    const dueDateTimezone = dueDateLocalDate === undefined
-      ? undefined
-      : dueDateLocalDate
-        ? ((await db.select({ timezone: users.timezone }).from(users).where(eq(users.id, req.auth.sub)).limit(1))[0]?.timezone ?? "UTC")
-        : null;
+    // Slot-only patches keep the stored date (see resolveDueDatePatch); the zone read is skipped when
+    // the stored one is reused or nothing due-date related changes.
+    const dueDatePatch = hasDueDateUpdate
+      ? resolveDueDatePatch(body, current, body.dueDateLocalDate || !current.dueDateTimezone ? await actorTimezone(req.auth.sub) : "UTC")
+      : { kind: "unchanged" as const };
+    if (dueDatePatch.kind === "rejected") throw badRequest(dueDatePatch.reason);
+    const dueDateLocalDate = dueDatePatch.kind === "write" ? dueDatePatch.dueDateLocalDate : undefined;
+    const dueDateSlot = dueDatePatch.kind === "write" ? dueDatePatch.dueDateSlot : undefined;
+    const dueDateTimezone = dueDatePatch.kind === "write" ? dueDatePatch.dueDateTimezone : undefined;
 
     const activityPayload = {
       ...body,
@@ -2541,12 +2638,14 @@ export async function cardRoutes(
       // Deleting an empty checklist is structural cleanup, not meaningful card activity. Capture
       // this before the cascade removes its items so only destructive deletions reach the feed and
       // notification fanout; the realtime deletion event is still emitted below for client sync.
-      const [firstItem] = await tx
-        .select({ id: cardChecklistItems.id })
+      // Read the direct items before the cascade so the realtime event can carry the badge counts a
+      // viewer without cached detail needs to subtract.
+      const directItems = await tx
+        .select({ completedAt: cardChecklistItems.completedAt })
         .from(cardChecklistItems)
-        .where(eq(cardChecklistItems.checklistId, checklistId))
-        .limit(1);
-      const hadItems = Boolean(firstItem);
+        .where(eq(cardChecklistItems.checklistId, checklistId));
+      const hadItems = directItems.length > 0;
+      const completedItemCount = directItems.filter((item) => item.completedAt).length;
       await tx.delete(cardChecklists).where(eq(cardChecklists.id, checklistId));
       await tx.update(cards).set({ updatedAt: new Date() }).where(eq(cards.id, id));
       const mistakeCutoff = new Date(Date.now() - CHECKLIST_MISTAKE_WINDOW_MS);
@@ -2573,10 +2672,10 @@ export async function cardRoutes(
           .set({ feedVisible: false, updatedAt: new Date() })
           .where(eq(activityEvents.id, recentCreate.id))
           .returning();
-        return { hiddenCreate: hiddenCreate!, deletedActivity: null };
+        return { hiddenCreate: hiddenCreate!, deletedActivity: null, itemCount: directItems.length, completedItemCount };
       }
 
-      if (!hadItems) return { hiddenCreate: null, deletedActivity: null };
+      if (!hadItems) return { hiddenCreate: null, deletedActivity: null, itemCount: 0, completedItemCount };
 
       const deletedActivity = await recordActivity(tx, {
         boardId: card.boardId,
@@ -2587,7 +2686,7 @@ export async function cardRoutes(
         action: ACTIVITY_ACTION.CHECKLIST_DELETED,
         payload: { checklistId, title: current.title },
       });
-      return { hiddenCreate: null, deletedActivity };
+      return { hiddenCreate: null, deletedActivity, itemCount: directItems.length, completedItemCount };
     });
 
     if (result.hiddenCreate) {
@@ -2595,7 +2694,14 @@ export async function cardRoutes(
     } else if (result.deletedActivity) {
       await emitCardActivityFeedItem(card.boardId, id, result.deletedActivity);
     }
-    await emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_DELETED, { boardId: card.boardId, cardId: id, checklistId });
+    await emitToBoard(card.boardId, SERVER_EVENTS.CARD_CHECKLIST_DELETED, {
+      boardId: card.boardId,
+      cardId: id,
+      checklistId,
+      checklistParentItemId: current.parentItemId,
+      itemCount: result.itemCount,
+      completedItemCount: result.completedItemCount,
+    });
     return reply.status(204).send();
   });
 
@@ -3035,17 +3141,16 @@ export async function cardRoutes(
     // clears slot + timezone, setting a date defaults the slot to "anyTime" and
     // captures the acting user's timezone so overdue is evaluated correctly.
     const hasDueDateUpdate = body.dueDateLocalDate !== undefined || body.dueDateSlot !== undefined;
-    const dueDateLocalDate = hasDueDateUpdate ? (body.dueDateLocalDate ?? null) : undefined;
-    const dueDateSlot = dueDateLocalDate === undefined
-      ? undefined
-      : dueDateLocalDate
-        ? (body.dueDateSlot ?? "anyTime")
-        : null;
-    const dueDateTimezone = dueDateLocalDate === undefined
-      ? undefined
-      : dueDateLocalDate
-        ? await (options.timezone ?? (() => actorTimezone(actorId)))()
-        : null;
+    const dueDatePatch = hasDueDateUpdate
+      ? resolveDueDatePatch(body, current, body.dueDateLocalDate || !current.dueDateTimezone ? await (options.timezone ?? (() => actorTimezone(actorId)))() : "UTC")
+      : { kind: "unchanged" as const };
+    if (dueDatePatch.kind === "rejected") {
+      if (options.path) throw checklistValidationError([...options.path, "dueDateSlot"], dueDatePatch.reason);
+      throw badRequest(dueDatePatch.reason);
+    }
+    const dueDateLocalDate = dueDatePatch.kind === "write" ? dueDatePatch.dueDateLocalDate : undefined;
+    const dueDateSlot = dueDatePatch.kind === "write" ? dueDatePatch.dueDateSlot : undefined;
+    const dueDateTimezone = dueDatePatch.kind === "write" ? dueDatePatch.dueDateTimezone : undefined;
 
     const nextCompletedAt = body.completed === undefined
       ? current.completedAt

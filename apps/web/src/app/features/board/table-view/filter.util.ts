@@ -19,7 +19,8 @@ export function hasActiveFilter(v: FilterValue): boolean {
     v.showUnreadOnly ||
     v.showOverdueOnly ||
     v.showInactiveOnly ||
-    v.showPrioritySetOnly
+    v.showPrioritySetOnly ||
+    v.showReminderSetOnly
   );
 }
 

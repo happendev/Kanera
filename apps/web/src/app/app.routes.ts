@@ -1,7 +1,7 @@
 import { inject } from "@angular/core";
 import type { Routes, UrlMatcher, UrlSegment } from "@angular/router";
 import { authGuard, publicAuthGuard, resetPasswordGuard } from "./core/auth/auth.guard";
-import { onboardingGuard, standaloneBoardSettingsGuard, workspaceGuard, workspaceSettingsGuard } from "./core/auth/workspace.guard";
+import { onboardingGuard, portfolioGuard, standaloneBoardSettingsGuard, workspaceGuard, workspaceSettingsGuard } from "./core/auth/workspace.guard";
 import { unsavedWorkCanDeactivateGuard } from "./core/browser/unsaved-work.service";
 import { importNavigationCanActivateGuard, importNavigationCanDeactivateGuard } from "./features/import/import-navigation-guard.service";
 import { ToastService } from "./shared/toast.service";
@@ -153,6 +153,7 @@ export const routes: Routes = [
         matcher: collectionWithOptionalCard("portfolio"),
         title: "Portfolio",
         data: { lens: "portfolio", routePattern: "/portfolio", cardRoutePattern: "/portfolio/c/:cardId" },
+        canActivate: [portfolioGuard],
         canDeactivate: [unsavedWorkCanDeactivateGuard],
         loadComponent: () => import("./features/global-work/global-work.page").then((m) => m.GlobalWorkPage),
       },
@@ -200,6 +201,9 @@ export const routes: Routes = [
           { path: "api-keys", children: [] },
           { path: "users", children: [] },
           { path: "org", children: [] },
+          { path: "security", children: [] },
+          { path: "integrations", children: [] },
+          { path: "storage", children: [] },
           { path: "account", pathMatch: "full", redirectTo: "account-plan" },
           { path: "account-plan", children: [] },
         ],

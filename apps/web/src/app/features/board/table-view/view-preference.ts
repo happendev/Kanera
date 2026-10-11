@@ -25,6 +25,7 @@ export interface StoredFilters {
   showOverdueOnly: boolean;
   showInactiveOnly: boolean;
   showPrioritySetOnly: boolean;
+  showReminderSetOnly: boolean;
 }
 
 const CF_FILTER_OPERATORS: readonly CfFilterOperator[] = [
@@ -53,6 +54,7 @@ export function readFilters(scope: string): StoredFilters | null {
       showOverdueOnly: obj["showOverdueOnly"] === true,
       showInactiveOnly: obj["showInactiveOnly"] === true,
       showPrioritySetOnly: obj["showPrioritySetOnly"] === true,
+      showReminderSetOnly: obj["showReminderSetOnly"] === true,
     };
     return hasAnyFilter(filters) ? filters : null;
   } catch {
@@ -77,7 +79,8 @@ function hasAnyFilter(f: StoredFilters): boolean {
     f.showUnreadOnly ||
     f.showOverdueOnly ||
     f.showInactiveOnly ||
-    f.showPrioritySetOnly
+    f.showPrioritySetOnly ||
+    f.showReminderSetOnly
   );
 }
 

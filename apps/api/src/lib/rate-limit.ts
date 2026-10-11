@@ -1,9 +1,17 @@
-import type { FastifyBaseLogger, FastifyReply } from "fastify";
+import type { FastifyReply } from "fastify";
+import { RateLimiterMemory, RateLimiterQueue, RateLimiterQueueError, RateLimiterRedis, RateLimiterRes } from "rate-limiter-flexible";
 import { getRedis, type RedisClient } from "../redis.js";
 
 export interface RateLimitPolicy {
   limit: number;
   windowMs: number;
+}
+
+export interface QueueOptions {
+  /** Over-limit requests that may wait for capacity instead of failing. 0 disables queueing. */
+  queueSize: number;
+  /** Epoch ms after which a still-queued request is rejected instead of waiting longer. */
+  expiresAt: number;
 }
 
 export interface RateLimitResult {
@@ -14,49 +22,68 @@ export interface RateLimitResult {
   retryAfterSeconds: number;
 }
 
-const CHECK_SCRIPT = `
-local count = redis.call("INCR", KEYS[1])
-if count == 1 then
-  redis.call("PEXPIRE", KEYS[1], ARGV[1])
-end
-local ttl = redis.call("PTTL", KEYS[1])
-return { count, ttl }
-`;
-
+/**
+ * Fixed-window rate limiting on rate-limiter-flexible's `RateLimiterRedis`, shared across API
+ * replicas through Valkey. Callers pass a policy per check, so one limiter instance is kept per
+ * (limit, window). Counters are keyed by window, not limit, so a caller whose limit changes (a plan
+ * change) keeps its current window's count.
+ *
+ * When Valkey is unavailable the library falls back to a per-process in-memory limiter of the same
+ * shape, so an outage neither 500s the request hot path nor removes limiting entirely.
+ */
 export class FixedWindowRateLimiter {
   private readonly redis: RedisClient;
-  private readonly log?: FastifyBaseLogger;
+  private readonly limiters = new Map<string, RateLimiterRedis>();
+  private readonly queues = new Map<string, RateLimiterQueue>();
 
-  constructor(private readonly defaultWindowMs = 60_000, options: { redis?: RedisClient; log?: FastifyBaseLogger } = {}) {
+  constructor(options: { redis?: RedisClient } = {}) {
     this.redis = options.redis ?? getRedis();
-    this.log = options.log;
   }
 
-  async check(key: string, policy: RateLimitPolicy, now = Date.now()): Promise<RateLimitResult> {
-    const redisKey = this.key(key, policy);
+  /** Consume one request, rejecting once the window is spent. */
+  async check(key: string, policy: RateLimitPolicy): Promise<RateLimitResult> {
     try {
-      const [countValue, ttlValue] = await this.redis.eval(CHECK_SCRIPT, 1, redisKey, policy.windowMs) as [number | string, number | string];
-      const count = Number(countValue);
-      const ttlMs = Math.max(0, Number(ttlValue));
-      return this.result(policy, count, now + ttlMs, now);
-    } catch (err) {
-      // Fail open: a Valkey outage must not take down the request hot path. Treat the request as the
-      // first in its window (allowed) and log so the degraded limiter is visible rather than silent.
-      this.log?.warn({ err }, "rate limiter unavailable; allowing request (fail-open)");
-      return this.result(policy, 1, now + policy.windowMs, now);
+      return result(policy, await this.limiter(policy).consume(key), true);
+    } catch (rejection) {
+      if (rejection instanceof RateLimiterRes) return result(policy, rejection, false);
+      throw rejection;
     }
   }
 
-  async wouldLimit(key: string, policy: RateLimitPolicy, now = Date.now()): Promise<RateLimitResult> {
-    const redisKey = this.key(key, policy);
+  /** Report whether the next request would be limited, without consuming anything. */
+  async wouldLimit(key: string, policy: RateLimitPolicy): Promise<RateLimitResult> {
+    const current = await this.limiter(policy).get(key);
+    if (!current) return { allowed: true, limit: policy.limit, remaining: policy.limit - 1, resetAt: Date.now() + policy.windowMs, retryAfterSeconds: retryAfter(policy.windowMs) };
+    const next = current.consumedPoints + 1;
+    const msBeforeNext = Math.max(0, current.msBeforeNext);
+    return { allowed: next <= policy.limit, limit: policy.limit, remaining: Math.max(0, policy.limit - next), resetAt: Date.now() + msBeforeNext, retryAfterSeconds: retryAfter(msBeforeNext) };
+  }
+
+  /** Count a request that has already been served, without rejecting it. */
+  async penalty(key: string, policy: RateLimitPolicy): Promise<void> {
+    await this.limiter(policy).penalty(key);
+  }
+
+  /**
+   * Consume one request, waiting in a FIFO queue for the next window instead of failing when the
+   * current one is spent. The queue (rate-limiter-flexible's `RateLimiterQueue`) is per key and per
+   * process, so each API replica holds at most `queueSize` waiters per key; requests beyond that,
+   * or still queued at `expiresAt`, are rejected.
+   */
+  async queue(key: string, policy: RateLimitPolicy, options: QueueOptions): Promise<RateLimitResult> {
+    const limiter = this.limiter(policy);
+    const id = `${limiterId(policy)}:${options.queueSize}`;
+    let queue = this.queues.get(id);
+    if (!queue) {
+      queue = new RateLimiterQueue(limiter, { maxQueueSize: options.queueSize });
+      this.queues.set(id, queue);
+    }
     try {
-      const [current, ttl] = await Promise.all([this.redis.get(redisKey), this.redis.pttl(redisKey)]);
-      const count = Number(current ?? 0) + 1;
-      const resetAt = ttl > 0 ? now + ttl : now + policy.windowMs;
-      return this.result(policy, count, resetAt, now);
-    } catch (err) {
-      this.log?.warn({ err }, "rate limiter unavailable; allowing request (fail-open)");
-      return this.result(policy, 1, now + policy.windowMs, now);
+      const remaining = await queue.removeTokens(1, key, Math.ceil(options.expiresAt / 1000));
+      return { allowed: true, limit: policy.limit, remaining, resetAt: Date.now() + policy.windowMs, retryAfterSeconds: retryAfter(policy.windowMs) };
+    } catch (error) {
+      if (!(error instanceof RateLimiterQueueError)) throw error;
+      return { allowed: false, limit: policy.limit, remaining: 0, resetAt: Date.now() + policy.windowMs, retryAfterSeconds: retryAfter(policy.windowMs) };
     }
   }
 
@@ -64,21 +91,53 @@ export class FixedWindowRateLimiter {
     // The limiter uses the shared Valkey/Redis-protocol client, so individual route plugins do not own a connection.
   }
 
-  private result(policy: RateLimitPolicy, count: number, resetAt: number, now: number): RateLimitResult {
-    const retryAfterSeconds = Math.max(1, Math.ceil((resetAt - now) / 1000));
-    const remaining = Math.max(0, policy.limit - count);
-    return {
-      allowed: count <= policy.limit,
-      limit: policy.limit,
-      remaining,
-      resetAt,
-      retryAfterSeconds,
-    };
+  private limiter(policy: RateLimitPolicy): RateLimiterRedis {
+    const id = limiterId(policy);
+    let limiter = this.limiters.get(id);
+    if (!limiter) {
+      const duration = windowSeconds(policy);
+      limiter = new RateLimiterRedis({
+        storeClient: this.redis,
+        keyPrefix: `rate-limit:${duration}s`,
+        points: policy.limit,
+        duration,
+        // Go straight to the in-memory insurance limiter while the client is reconnecting, rather
+        // than holding requests until the command timeout.
+        rejectIfRedisNotReady: true,
+        insuranceLimiter: new RateLimiterMemory({ points: policy.limit, duration }),
+      });
+      this.limiters.set(id, limiter);
+    }
+    return limiter;
   }
+}
 
-  private key(key: string, policy: RateLimitPolicy): string {
-    return `rate-limit:v1:${policy.windowMs || this.defaultWindowMs}:${key}`;
-  }
+// rate-limiter-flexible windows are whole seconds.
+function windowSeconds(policy: RateLimitPolicy): number {
+  return Math.max(1, Math.ceil(policy.windowMs / 1000));
+}
+
+function limiterId(policy: RateLimitPolicy): string {
+  return `${policy.limit}:${windowSeconds(policy)}`;
+}
+
+function retryAfter(ms: number): number {
+  return Math.max(1, Math.ceil(ms / 1000));
+}
+
+function result(policy: RateLimitPolicy, res: RateLimiterRes, allowed: boolean): RateLimitResult {
+  const msBeforeNext = Math.max(0, res.msBeforeNext);
+  return { allowed, limit: policy.limit, remaining: res.remainingPoints, resetAt: Date.now() + msBeforeNext, retryAfterSeconds: retryAfter(msBeforeNext) };
+}
+
+/** The result whose RateLimit-* headers best describe the caller's headroom: the fewest remaining. */
+export function tightestRateLimit(results: RateLimitResult[]): RateLimitResult | null {
+  return results.reduce<RateLimitResult | null>((tightest, result) => {
+    if (!tightest) return result;
+    if (!result.allowed && tightest.allowed) return result;
+    if (result.allowed !== tightest.allowed) return tightest;
+    return result.remaining < tightest.remaining ? result : tightest;
+  }, null);
 }
 
 export function applyRateLimitHeaders(reply: FastifyReply, result: RateLimitResult) {

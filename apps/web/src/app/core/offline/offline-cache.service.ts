@@ -16,7 +16,7 @@ import type {
   StandaloneBoardGroup,
   Workspace,
 } from "@kanera/shared/schema";
-import { openDB, type DBSchema, type IDBPDatabase, type StoreValue } from "idb";
+import { openDB, type DBSchema, type IDBPDatabase, type IDBPTransaction, type StoreValue } from "idb";
 
 export type HomeWorkspaceMember = {
   userId: string;
@@ -165,6 +165,14 @@ export type OfflineHomeTodaySnapshot = {
   response: HomeTodayResponse;
 };
 
+interface StoredNotesSnapshot extends Omit<OfflineNotesSnapshot, "notes"> {
+  entries: { id: string; token: string; bytes: number }[];
+}
+interface StoredNoteEntry {
+  snapshotKey: string;
+  note: WireNote;
+}
+
 type CacheStore = "shell" | "boards" | "cardDetails" | "notes" | "globalWork" | "homeToday";
 const CACHE_STORES: CacheStore[] = ["shell", "boards", "cardDetails", "notes", "globalWork", "homeToday"];
 const CACHE_BUDGET_BYTES = 32 * 1024 * 1024;
@@ -190,7 +198,12 @@ interface KaneraOfflineDb extends DBSchema {
   };
   notes: {
     key: string;
-    value: OfflineNotesSnapshot;
+    value: OfflineNotesSnapshot | StoredNotesSnapshot;
+  };
+  noteEntries: {
+    key: string;
+    value: StoredNoteEntry;
+    indexes: { snapshotKey: string };
   };
   globalWork: {
     key: string;
@@ -202,9 +215,14 @@ interface KaneraOfflineDb extends DBSchema {
   };
 }
 
+type CacheTransaction = IDBPTransaction<KaneraOfflineDb, (CacheStore | "cacheMeta" | "noteEntries")[], "readwrite">;
+
 @Injectable({ providedIn: "root" })
 export class OfflineCacheService {
   private readonly failedWrites = new Set<string>();
+  // Weak keys do not retain notes after their route closes. Tokens identify the exact object saved
+  // by this tab; the persisted manifest prevents another tab or an eviction from fooling this memo.
+  private readonly noteVersions = new WeakMap<WireNote, { token: string; bytes: number }>();
   readonly persistenceError = signal<string | null>(null);
   private dbPromise: Promise<IDBPDatabase<KaneraOfflineDb>> | null = null;
 
@@ -241,7 +259,7 @@ export class OfflineCacheService {
 
   async revokeBoardAccess(boardId: string): Promise<void> {
     const db = await this.db();
-    const tx = db.transaction([...CACHE_STORES, "cacheMeta"], "readwrite");
+    const tx = db.transaction([...CACHE_STORES, "cacheMeta", "noteEntries"], "readwrite");
     const shellStore = tx.objectStore("shell");
     const [shells, shellKeys] = await Promise.all([shellStore.getAll(), shellStore.getAllKeys()]);
     for (let index = 0; index < shells.length; index += 1) {
@@ -262,7 +280,7 @@ export class OfflineCacheService {
     // Revocation must remove detail rows too; otherwise an inaccessible card can remain readable
     // from IndexedDB even after its containing board snapshot and navigation entry are gone.
     const notes = await tx.objectStore("notes").getAll();
-    await Promise.all(notes.filter((entry) => entry.boardId === boardId).map((entry) => tx.objectStore("notes").delete(entry.key)));
+    await Promise.all(notes.filter((entry) => entry.boardId === boardId).map((entry) => this.deleteEntry(tx, "notes", entry.key)));
     const cardDetails = await tx.objectStore("cardDetails").index("boardId").getAll(boardId);
     await Promise.all(cardDetails
       .filter((entry) => entry.detail.card.boardId === boardId)
@@ -296,12 +314,54 @@ export class OfflineCacheService {
 
   async saveNotes(workspaceId: string, boardId: string | null, notes: WireNote[]): Promise<void> {
     const key = this.notesKey(workspaceId, boardId);
-    await this.put("notes", { key, cachedAt: new Date().toISOString(), workspaceId, boardId, notes }, key);
+    const entries = notes.map((note) => {
+      let version = this.noteVersions.get(note);
+      if (!version) {
+        // randomUUID is secure-context-only; getRandomValues also works on HTTP LAN installs.
+        const token = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+        version = { token, bytes: JSON.stringify(note).length * 2 };
+        this.noteVersions.set(note, version);
+      }
+      return { id: note.id, ...version };
+    });
+    const snapshot: StoredNotesSnapshot = { key, cachedAt: new Date().toISOString(), workspaceId, boardId, entries };
+    // Keep complete offline snapshots and their existing budget/eviction semantics. Only the
+    // physical storage is normalized: editing one title need not clone every other note body.
+    const bytes = JSON.stringify(snapshot).length * 2 + entries.reduce((sum, entry) => sum + entry.bytes, 0);
+    await this.put("notes", snapshot, key, {
+      bytes,
+      write: async (tx) => {
+        const previous = await tx.objectStore("notes").get(key);
+        const oldEntries = new Map(previous && "entries" in previous ? previous.entries.map((entry) => [entry.id, entry]) : []);
+        const ids = new Set(entries.map((entry) => entry.id));
+        const store = tx.objectStore("noteEntries");
+        for (const id of oldEntries.keys()) if (!ids.has(id)) await store.delete(`${key}:${id}`);
+        for (const [index, entry] of entries.entries()) {
+          if (oldEntries.get(entry.id)?.token === entry.token) continue;
+          await store.put({ snapshotKey: key, note: notes[index]! }, `${key}:${entry.id}`);
+        }
+        await tx.objectStore("notes").put(snapshot, key);
+      },
+    });
   }
 
   async loadNotes(workspaceId: string, boardId: string | null): Promise<OfflineNotesSnapshot | null> {
     const db = await this.db();
-    return (await db.get("notes", this.notesKey(workspaceId, boardId))) ?? null;
+    const tx = db.transaction(["notes", "noteEntries"]);
+    const snapshot = await tx.objectStore("notes").get(this.notesKey(workspaceId, boardId));
+    if (!snapshot) return null;
+    // Version-10 snapshots stay readable without a migration that rewrites every document body.
+    if ("notes" in snapshot) return snapshot;
+    const rows = await Promise.all(snapshot.entries.map((entry) => tx.objectStore("noteEntries").get(`${snapshot.key}:${entry.id}`)));
+    if (rows.some((row) => !row)) return null;
+    const notes = rows.map((row, index) => {
+      const note = row!.note;
+      const { token, bytes } = snapshot.entries[index]!;
+      this.noteVersions.set(note, { token, bytes });
+      return note;
+    });
+    const { entries: _entries, ...metadata } = snapshot;
+    return { ...metadata, notes };
   }
 
   async saveGlobalWork(
@@ -352,20 +412,23 @@ export class OfflineCacheService {
     this.failedWrites.clear();
     this.persistenceError.set(null);
     const db = await this.db();
-    const tx = db.transaction([...CACHE_STORES, "cacheMeta"], "readwrite");
-    await Promise.all([...CACHE_STORES, "cacheMeta" as const].map((store) => tx.objectStore(store).clear()));
+    const tx = db.transaction([...CACHE_STORES, "cacheMeta", "noteEntries"], "readwrite");
+    await Promise.all([...CACHE_STORES, "cacheMeta" as const, "noteEntries" as const].map((store) => tx.objectStore(store).clear()));
     await tx.done;
   }
 
-  private async put<S extends CacheStore>(store: S, value: StoreValue<KaneraOfflineDb, S>, key: string): Promise<void> {
+  private async put<S extends CacheStore>(
+    store: S, value: StoreValue<KaneraOfflineDb, S>, key: string,
+    options?: { bytes: number; write: (tx: CacheTransaction) => Promise<void> },
+  ): Promise<void> {
     try {
       // A conservative UTF-16 estimate bounds stored payloads without scanning/cloning every
       // cached board. Metadata and data eviction commit together, including across browser tabs.
-      const bytes = JSON.stringify(value).length * 2;
+      const bytes = options?.bytes ?? JSON.stringify(value).length * 2;
       if (bytes > CACHE_BUDGET_BYTES) throw new Error("Snapshot exceeds offline cache capacity");
       const db = await this.db();
       const write = async (budget: number) => {
-        const tx = db.transaction([...CACHE_STORES, "cacheMeta"], "readwrite");
+        const tx = db.transaction([...CACHE_STORES, "cacheMeta", "noteEntries"], "readwrite");
         try {
           const meta = tx.objectStore("cacheMeta");
           const id = `${store}:${key}`;
@@ -374,11 +437,12 @@ export class OfflineCacheService {
           for (const row of rows) {
             if (row.store === store && row.key === key) continue;
             if (total <= budget && Date.now() - row.savedAt <= CACHE_MAX_AGE_MS) continue;
-            await tx.objectStore(row.store).delete(row.key);
+            await this.deleteEntry(tx, row.store, row.key);
             await meta.delete(`${row.store}:${row.key}`);
             total -= row.bytes;
           }
-          await tx.objectStore(store).put(value, key);
+          if (options) await options.write(tx);
+          else await tx.objectStore(store).put(value, key);
           await meta.put({ store, key, bytes, savedAt: Date.now() }, id);
           await tx.done;
         } catch (error) {
@@ -391,10 +455,10 @@ export class OfflineCacheService {
         if (!(error instanceof DOMException) || error.name !== "QuotaExceededError") throw error;
         // The origin may share its quota with media/service-worker assets. Commit eviction first
         // so browsers can reclaim space before retrying the failed write once.
-        const tx = db.transaction([...CACHE_STORES, "cacheMeta"], "readwrite");
+        const tx = db.transaction([...CACHE_STORES, "cacheMeta", "noteEntries"], "readwrite");
         const rows = (await tx.objectStore("cacheMeta").getAll()).sort((a, b) => a.savedAt - b.savedAt);
         for (const row of rows.slice(0, Math.max(1, Math.ceil(rows.length / 2)))) {
-          await tx.objectStore(row.store).delete(row.key);
+          await this.deleteEntry(tx, row.store, row.key);
           await tx.objectStore("cacheMeta").delete(`${row.store}:${row.key}`);
         }
         await tx.done;
@@ -409,6 +473,17 @@ export class OfflineCacheService {
     }
   }
 
+  private async deleteEntry(tx: CacheTransaction, store: CacheStore, key: string): Promise<void> {
+    if (store === "notes") {
+      // A manifest and all its bodies share one lifetime and transaction. Budget eviction or
+      // access revocation must never leave an incomplete offline tree or orphaned private notes.
+      const entries = tx.objectStore("noteEntries");
+      const keys = await entries.index("snapshotKey").getAllKeys(key);
+      await Promise.all(keys.map((entryKey) => entries.delete(entryKey)));
+    }
+    await tx.objectStore(store).delete(key);
+  }
+
   private notesKey(workspaceId: string, boardId: string | null): string {
     return `${workspaceId}:${boardId ?? "workspace"}`;
   }
@@ -420,8 +495,13 @@ export class OfflineCacheService {
     // the retired workspace-scoped work page. Version 9 drops `homePriorities` and deletes the
     // stored queue from Global Work snapshots: priority order is never served from cache, because a
     // stale sequence reads as an instruction the reader cannot date.
-    this.dbPromise ??= openDB<KaneraOfflineDb>("kanera-offline", 10, {
+    this.dbPromise ??= openDB<KaneraOfflineDb>("kanera-offline", 11, {
       upgrade(db, oldVersion, _newVersion, transaction) {
+        // Version 11 splits note bodies from their complete snapshot manifest. Existing snapshots
+        // remain readable and are converted atomically on their next successful live save.
+        if (!db.objectStoreNames.contains("noteEntries")) {
+          db.createObjectStore("noteEntries").createIndex("snapshotKey", "snapshotKey");
+        }
         // Version 10 adds bounded storage accounting and an indexed card-to-board lookup.
         if (!db.objectStoreNames.contains("cacheMeta")) db.createObjectStore("cacheMeta");
         if (!db.objectStoreNames.contains("shell")) db.createObjectStore("shell");

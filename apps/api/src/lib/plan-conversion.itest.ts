@@ -132,7 +132,8 @@ void test("downgrade to free disables over-limit resources; upgrade restores the
     for (let i = 0; i < 2; i++) {
       await db.insert(workspaceApiKeys).values({ workspaceId: ws1, createdById: ownerId, name: `Key ${i}`, keyPrefix: "kan", keyHash: randomUUID(), scope: "read" });
     }
-    // A personal key has no workspace, so it is located via its owner's client on downgrade/upgrade.
+    // A personal key acts as a present user and is available on Free, so a downgrade must leave it
+    // working; only the unattended workspace keys are revoked (and restored on upgrade).
     const [personalKey] = await db
       .insert(workspaceApiKeys)
       .values({ kind: "personal", workspaceId: null, clientId, createdById: ownerId, name: null, keyPrefix: "kan", keyHash: randomUUID() })
@@ -148,6 +149,7 @@ void test("downgrade to free disables over-limit resources; upgrade restores the
     const { impactFromPlanActions, previewDowngradeImpact } = await import("./billing-emails.js");
     const previewImpact = await previewDowngradeImpact(clientId);
     assert.equal(previewImpact.guestMembersRemoved, 1, "preview counts one guest shared across multiple boards once");
+    assert.equal(previewImpact.apiKeysRevoked, 2, "preview counts workspace keys only, not the personal key");
     await db.insert(clientGuestSeats).values({ clientId, userId: guestUserId, createdById: ownerId });
     const [list] = await db.insert(lists).values({ workspaceId: ws1, name: "Todo", position: "1000.0000000000" }).returning({ id: lists.id });
     const [card] = await db
@@ -192,7 +194,7 @@ void test("downgrade to free disables over-limit resources; upgrade restores the
       "email and browser push remain unchanged",
     );
     assert.equal(await db.$count(workspaceApiKeys, and(eq(workspaceApiKeys.workspaceId, ws1), isNull(workspaceApiKeys.revokedAt))), 0, "no active api keys");
-    assert.equal(await db.$count(workspaceApiKeys, and(eq(workspaceApiKeys.id, personalKey!.id), isNull(workspaceApiKeys.revokedAt))), 0, "personal key revoked on downgrade");
+    assert.equal(await db.$count(workspaceApiKeys, and(eq(workspaceApiKeys.id, personalKey!.id), isNull(workspaceApiKeys.revokedAt))), 1, "personal key kept on downgrade");
     assert.equal(await db.$count(clientMembers, and(eq(clientMembers.clientId, clientId), isNull(clientMembers.suspendedAt))), 2, "two active members remain");
     const [owner] = await db.select({ suspendedAt: clientMembers.suspendedAt }).from(clientMembers).where(and(eq(clientMembers.clientId, clientId), eq(clientMembers.userId, ownerId)));
     assert.equal(owner!.suspendedAt, null, "owner is never suspended");
@@ -252,7 +254,7 @@ void test("downgrade to free disables over-limit resources; upgrade restores the
       "member personal destinations restored exactly",
     );
     assert.equal(await db.$count(workspaceApiKeys, and(eq(workspaceApiKeys.workspaceId, ws1), isNull(workspaceApiKeys.revokedAt))), 2, "api keys un-revoked");
-    assert.equal(await db.$count(workspaceApiKeys, and(eq(workspaceApiKeys.id, personalKey!.id), isNull(workspaceApiKeys.revokedAt))), 1, "personal key un-revoked on upgrade");
+    assert.equal(await db.$count(workspaceApiKeys, and(eq(workspaceApiKeys.id, personalKey!.id), isNull(workspaceApiKeys.revokedAt))), 1, "personal key still active after upgrade");
     assert.equal(await db.$count(clientMembers, and(eq(clientMembers.clientId, clientId), isNull(clientMembers.suspendedAt))), 4, "all members active again");
     assert.equal(await db.$count(boardMembers, eq(boardMembers.userId, guestUserId)), 2, "guest memberships re-inserted");
     assert.equal(await db.$count(clientGuestSeats, and(eq(clientGuestSeats.clientId, clientId), eq(clientGuestSeats.userId, guestUserId))), 1, "paid guest seat restored");

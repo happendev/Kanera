@@ -5,6 +5,7 @@ import { db } from "./db.js";
 import { env } from "./env.js";
 import { startAgentRunStallScheduler } from "./lib/agent-runs.js";
 import { startArchivedCardCleanupScheduler } from "./lib/archived-card-cleanup.js";
+import { startCardReminderScheduler } from "./lib/card-follow.js";
 import { startBoardMirrorScheduler } from "./lib/board-mirror/scheduler.js";
 import { startDueDateAutomationScheduler } from "./lib/automations.js";
 import { startDailyDigestScheduler } from "./lib/daily-digest.js";
@@ -18,6 +19,7 @@ import { startOrganisationDeletionScheduler } from "./lib/organisation-delete.js
 import { startPushQueueScheduler } from "./lib/push-queue.js";
 import { startRetentionCleanupScheduler } from "./lib/retention-cleanup.js";
 import { resolveSmtpConfig } from "./lib/smtp-resolve.js";
+import { startStorageWarningScheduler } from "./lib/storage-warning.js";
 import type { SweepScheduler } from "./lib/sweep-scheduler.js";
 import { startTrialExpiryScheduler } from "./lib/trial-expiry.js";
 import { startWebhookDeliveryScheduler } from "./lib/webhooks.js";
@@ -81,6 +83,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   let stopRealtimeOutboxDispatcher: (() => Promise<void>) | null = null;
   let stopDirectRealtimeOutboxDispatcher: (() => Promise<void>) | null = null;
   let stopOverdueScheduler: (() => Promise<void>) | null = null;
+  let stopCardReminderScheduler: (() => Promise<void>) | null = null;
   let stopDueDateAutomationScheduler: (() => Promise<void>) | null = null;
   let stopDailyDigestScheduler: (() => Promise<void>) | null = null;
   let stopEmailQueueScheduler: (() => Promise<void>) | null = null;
@@ -90,6 +93,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   let stopPushQueueScheduler: (() => Promise<void>) | null = null;
   let stopRetentionCleanupScheduler: (() => Promise<void>) | null = null;
   let stopTrialExpiryScheduler: (() => Promise<void>) | null = null;
+  let stopStorageWarningScheduler: (() => Promise<void>) | null = null;
   let stopLifecycleEmailScheduler: (() => Promise<void>) | null = null;
   let stopBoardMirrorScheduler: (() => Promise<void>) | null = null;
   let stopWeeklyAdminRecapScheduler: (() => Promise<void>) | null = null;
@@ -102,6 +106,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   app.addHook("onClose", async () => stopDirectRealtimeOutboxDispatcher?.());
   app.addHook("onClose", async () => webhookDeliveryScheduler?.stop());
   app.addHook("onClose", async () => stopOverdueScheduler?.());
+  app.addHook("onClose", async () => stopCardReminderScheduler?.());
   app.addHook("onClose", async () => stopDueDateAutomationScheduler?.());
   app.addHook("onClose", async () => stopDailyDigestScheduler?.());
   app.addHook("onClose", async () => stopEmailQueueScheduler?.());
@@ -111,6 +116,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   app.addHook("onClose", async () => stopPushQueueScheduler?.());
   app.addHook("onClose", async () => stopRetentionCleanupScheduler?.());
   app.addHook("onClose", async () => stopTrialExpiryScheduler?.());
+  app.addHook("onClose", async () => stopStorageWarningScheduler?.());
   app.addHook("onClose", async () => stopLifecycleEmailScheduler?.());
   app.addHook("onClose", async () => stopBoardMirrorScheduler?.());
   app.addHook("onClose", async () => stopWeeklyAdminRecapScheduler?.());
@@ -140,6 +146,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
     stopBoardMirrorScheduler = startBoardMirrorScheduler({ log: app.log });
     stopDirectRealtimeOutboxDispatcher = startDirectRealtimeOutboxDispatcher({ log: app.log });
     stopOverdueScheduler = startOverdueNotificationScheduler(app.log);
+    stopCardReminderScheduler = startCardReminderScheduler(app.log);
     stopAgentRunStallScheduler = startAgentRunStallScheduler(app.log);
     stopDueDateAutomationScheduler = startDueDateAutomationScheduler(app.log);
     stopDailyDigestScheduler = startDailyDigestScheduler({ db, webOrigin: env.WEB_ORIGIN, resolveSmtpConfig, log: app.log });
@@ -150,6 +157,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
     stopPushQueueScheduler = startPushQueueScheduler({ db, log: app.log });
     stopRetentionCleanupScheduler = startRetentionCleanupScheduler({ db, log: app.log });
     stopTrialExpiryScheduler = startTrialExpiryScheduler(app.log, app.mailer);
+    stopStorageWarningScheduler = startStorageWarningScheduler(app.log, app.mailer);
     stopLifecycleEmailScheduler = startLifecycleEmailScheduler(app.log, app.mailer);
     stopWeeklyAdminRecapScheduler = startWeeklyAdminRecapScheduler({
       db,

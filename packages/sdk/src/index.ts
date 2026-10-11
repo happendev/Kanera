@@ -27,7 +27,7 @@ import type { Session } from "./types.js";
  * ```
  *
  * Card arguments accept a UUID, a human key such as `MKT-42`, or a canonical card URL; keys are
- * resolved once per client and cached.
+ * memoized in a bounded per-client cache.
  */
 export class Kanera {
   readonly http: KaneraHttpClient;
@@ -87,7 +87,7 @@ export type { CallOptions, ResourceContext } from "./resources/base.js";
 export { Boards, Lists, type BoardDetail, type OpenBoardOptions } from "./resources/boards.js";
 export {
   BulkCards, CardAttachments, Cards, Checklists,
-  type ChecklistItemUpdate, type CreateCardInput, type CreateChecklistInput, type CreateChecklistItemInput,
+  type BulkCreateCardInput, type ChecklistItemUpdate, type CreateCardInput, type CreateChecklistInput, type CreateChecklistItemInput,
   type CustomFieldValueInput, type MoveCardInput, type NewChecklistItemInput, type NewSubChecklistInput,
   type NewSubChecklistItemInput, type UpdateAllChecklistItemsInput, type UpdateCardInput, type UpdateChecklistItemInput,
 } from "./resources/cards.js";

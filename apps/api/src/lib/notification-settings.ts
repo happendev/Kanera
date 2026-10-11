@@ -13,7 +13,8 @@ export type NotificationPreferenceType =
   | "cardCommentAdded"
   | "commentMentioned"
   | "cardDueDateChanged"
-  | "cardOverdue";
+  | "cardOverdue"
+  | "cardReminder";
 
 export type PersonalNotificationChannel = "ntfy" | "gotify" | "webhook";
 
@@ -77,6 +78,7 @@ export function defaultNotificationSettings(userId: string): EffectiveNotificati
       commentMentioned: defaultTypeChannels(),
       cardDueDateChanged: defaultTypeChannels(),
       cardOverdue: defaultTypeChannels(),
+      cardReminder: defaultTypeChannels(),
     },
     personalChannels: {
       destinationPolicy: notificationDestinationPolicy(),
@@ -104,6 +106,7 @@ export function toEffectiveNotificationSettings(row: NotificationSettings | null
       commentMentioned: { email: row.commentMentionedEmail, push: row.commentMentionedPush, ntfy: row.commentMentionedNtfy, gotify: row.commentMentionedGotify, webhook: row.commentMentionedWebhook },
       cardDueDateChanged: { email: row.cardDueDateChangedEmail, push: row.cardDueDateChangedPush, ntfy: row.cardDueDateChangedNtfy, gotify: row.cardDueDateChangedGotify, webhook: row.cardDueDateChangedWebhook },
       cardOverdue: { email: row.cardOverdueEmail, push: row.cardOverduePush, ntfy: row.cardOverdueNtfy, gotify: row.cardOverdueGotify, webhook: row.cardOverdueWebhook },
+      cardReminder: { email: row.cardReminderEmail, push: row.cardReminderPush, ntfy: row.cardReminderNtfy, gotify: row.cardReminderGotify, webhook: row.cardReminderWebhook },
     },
     personalChannels: {
       destinationPolicy: notificationDestinationPolicy(),
@@ -174,6 +177,7 @@ export async function getNotificationWorkspaceRulesForUsers(
         commentMentioned: { email: row.commentMentionedEmail, push: row.commentMentionedPush, ntfy: row.commentMentionedNtfy, gotify: row.commentMentionedGotify, webhook: row.commentMentionedWebhook },
         cardDueDateChanged: { email: row.cardDueDateChangedEmail, push: row.cardDueDateChangedPush, ntfy: row.cardDueDateChangedNtfy, gotify: row.cardDueDateChangedGotify, webhook: row.cardDueDateChangedWebhook },
         cardOverdue: { email: row.cardOverdueEmail, push: row.cardOverduePush, ntfy: row.cardOverdueNtfy, gotify: row.cardOverdueGotify, webhook: row.cardOverdueWebhook },
+        cardReminder: { email: row.cardReminderEmail, push: row.cardReminderPush, ntfy: row.cardReminderNtfy, gotify: row.cardReminderGotify, webhook: row.cardReminderWebhook },
       },
     });
   }

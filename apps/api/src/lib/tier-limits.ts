@@ -13,6 +13,10 @@ type TierLimitEnv = Pick<
   | "HOSTED_FREE_MAX_ORG_MEMBERS"
   | "HOSTED_FREE_MAX_ENABLED_AUTOMATIONS"
   | "HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY"
+  | "HOSTED_FREE_API_RATE_LIMIT_PER_SECOND"
+  | "HOSTED_FREE_API_RATE_LIMIT_PER_MINUTE"
+  | "PUBLIC_API_KEY_RATE_LIMIT_PER_SECOND"
+  | "PUBLIC_API_KEY_RATE_LIMIT_PER_MINUTE"
 >;
 
 export type FreePlanLimits = {
@@ -20,14 +24,20 @@ export type FreePlanLimits = {
   maxOrgMembers: number;
   maxEnabledAutomations: number;
   maxAutomationExecutionsPerMonth: number;
+  apiRequestsPerSecond: number;
+  apiRequestsPerMinute: number;
 };
 
-export function getFreePlanLimits(config: TierLimitEnv = env): FreePlanLimits {
+type FreePlanLimitEnv = Omit<TierLimitEnv, "KANERA_DEPLOYMENT_MODE" | "PUBLIC_API_KEY_RATE_LIMIT_PER_SECOND" | "PUBLIC_API_KEY_RATE_LIMIT_PER_MINUTE">;
+
+export function getFreePlanLimits(config: FreePlanLimitEnv = env): FreePlanLimits {
   return {
     maxBoards: config.HOSTED_FREE_MAX_BOARDS,
     maxOrgMembers: config.HOSTED_FREE_MAX_ORG_MEMBERS,
     maxEnabledAutomations: config.HOSTED_FREE_MAX_ENABLED_AUTOMATIONS,
     maxAutomationExecutionsPerMonth: config.HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY,
+    apiRequestsPerSecond: config.HOSTED_FREE_API_RATE_LIMIT_PER_SECOND,
+    apiRequestsPerMinute: config.HOSTED_FREE_API_RATE_LIMIT_PER_MINUTE,
   };
 }
 
@@ -211,10 +221,13 @@ export async function assertGuestsAllowed(clientId: string, tx: Tx = db, config:
   });
 }
 
-export async function assertApiKeysAllowed(clientId: string, tx: Tx = db, config: TierLimitEnv = env): Promise<void> {
+// Personal API keys and interactive agent connections act as a present user, so every plan gets
+// them (metered by the fair-use limits). Workspace API keys and OAuth service clients run unattended
+// on the organisation's behalf; those remain a Pro capability and are revoked on downgrade.
+export async function assertServiceAgentsAllowed(clientId: string, tx: Tx = db, config: TierLimitEnv = env): Promise<void> {
   if (await isUnlimited(clientId, tx, config)) return;
-  throw new AppError(403, "PLAN_LIMIT", "API keys are not available on your plan. Upgrade to create API keys.", {
-    limit: "apiKeys",
+  throw new AppError(403, "PLAN_LIMIT", "Workspace API keys and unattended AI agents are not available on your plan. Upgrade to create them, or use a personal API key or interactive agent connection.", {
+    limit: "serviceAgents",
     upgradePlan: "paid",
   });
 }
@@ -296,7 +309,9 @@ export function getEntitlements(
       maxEnabledAutomations: null,
       maxAutomationExecutionsPerMonth: null,
       guestsAllowed: true,
-      apiAllowed: true,
+      serviceAgentsAllowed: true,
+      apiRequestsPerSecond: config.PUBLIC_API_KEY_RATE_LIMIT_PER_SECOND,
+      apiRequestsPerMinute: config.PUBLIC_API_KEY_RATE_LIMIT_PER_MINUTE,
       webhooksAllowed: true,
       boardSyncAllowed: true,
     };
@@ -308,7 +323,7 @@ export function getEntitlements(
     limited: true,
     ...getFreePlanLimits(config),
     guestsAllowed: false,
-    apiAllowed: false,
+    serviceAgentsAllowed: false,
     webhooksAllowed: false,
     boardSyncAllowed: false,
   };

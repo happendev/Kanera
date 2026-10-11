@@ -132,6 +132,46 @@ export class KaneraClient {
     }));
   }
 
+  /**
+   * Fetches raw bytes from an authenticated public API route, optionally a byte range. Errors still
+   * arrive as JSON problem documents and map to KaneraApiError like every other call.
+   */
+  async download(path: string, options: { range?: { start: number; end: number }; query?: Record<string, string | undefined> } = {}): Promise<{ bytes: Uint8Array; contentType: string; totalBytes: number | null }> {
+    const url = this.url(path, options.query);
+    const phase: UpstreamPhase = this.phaseDepth > 0 ? "card_resolution" : "api";
+    const startedAt = performance.now();
+    let status = 0;
+    try {
+      const response = await this.fetchResponse(url, {
+        method: "GET",
+        headers: {
+          ...this.headers(),
+          accept: "*/*",
+          ...(options.range ? { range: `bytes=${options.range.start}-${options.range.end}` } : {}),
+        },
+        signal: this.signal(),
+      });
+      status = response.status;
+      if (!response.ok) return await this.responsePayload<never>(response);
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      const contentRange = /\/(\d+)$/u.exec(response.headers.get("content-range") ?? "");
+      return {
+        bytes,
+        contentType: response.headers.get("content-type") ?? "application/octet-stream",
+        totalBytes: contentRange ? Number(contentRange[1]) : response.status === 200 ? bytes.byteLength : null,
+      };
+    } finally {
+      this.options.onUpstreamRequest?.({
+        method: "GET",
+        route: upstreamRouteTemplate(url.pathname),
+        status,
+        phase,
+        durationMs: performance.now() - startedAt,
+        appMs: null,
+      });
+    }
+  }
+
   private async request<T>(
     method: string,
     path: string,

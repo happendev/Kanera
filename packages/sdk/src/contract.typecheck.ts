@@ -1,11 +1,11 @@
 import type { z } from "zod";
 import type {
-  bulkArchiveCardsBody, bulkPatchCardAssigneesBody, bulkPatchCardLabelsBody,
+  bulkArchiveCardsBody, bulkCreateCardsBody, bulkPatchCardAssigneesBody, bulkPatchCardLabelsBody,
   bulkSetCardCustomFieldBody, bulkUpdateChecklistItemsBody, createCardBody, createChecklistBody, createChecklistItemBody,
   createChecklistItemsBody, moveCardBody, setCustomFieldValueBody, updateCardBody, updateChecklistItemBody,
   updateChecklistItemsBody,
 } from "@kanera/shared/dto";
-import type { createCardPriorityBody, moveCardPriorityBody } from "@kanera/shared/dto";
+import type { createCardPriorityBody, moveCardPriorityBody, setCardReminderBody } from "@kanera/shared/dto";
 import type { createCommentBody } from "@kanera/shared/dto";
 import type { startAgentRunBody, updateAgentRunBody } from "@kanera/shared/dto";
 import type { createNoteBody, updateNoteBody } from "@kanera/shared/dto";
@@ -16,7 +16,7 @@ import type { createBoardBody, createWorkspaceBody } from "@kanera/shared/dto";
 import type { createWebhookEndpointBody, updateWebhookEndpointBody } from "@kanera/shared/dto";
 import type { WorkspaceTemplateId as SharedWorkspaceTemplateId } from "@kanera/shared/workspace-templates";
 import type {
-  ChecklistItemUpdate, CreateCardInput, CreateChecklistInput, CreateChecklistItemInput, CustomFieldValueInput,
+  BulkCreateCardInput, ChecklistItemUpdate, CreateCardInput, CreateChecklistInput, CreateChecklistItemInput, CustomFieldValueInput,
   NewChecklistItemInput, UpdateAllChecklistItemsInput, UpdateCardInput, UpdateChecklistItemInput,
 } from "./resources/cards.js";
 import type { CreateNoteInput, UpdateNoteInput } from "./resources/notes.js";
@@ -50,6 +50,7 @@ type _TemplateIdBackward = AssertAssignable<SharedWorkspaceTemplateId, Workspace
 
 // Cards.
 type _CreateCard = AssertAssignable<CreateCardInput, z.input<typeof createCardBody>>;
+type _BulkCreateCards = AssertAssignable<{ cards: BulkCreateCardInput[] }, z.input<typeof bulkCreateCardsBody>>;
 type _UpdateCard = AssertAssignable<UpdateCardInput, z.input<typeof updateCardBody>>;
 // move() translates its PositionAnchor into the anchor fields the API expects.
 type _MoveCard = AssertAssignable<{ listId: string; beforeCardId: string | null }, z.input<typeof moveCardBody>>;
@@ -57,6 +58,9 @@ type _MoveCardBySeparator = AssertAssignable<
   { listId: string; afterItem: { type: "separator"; id: string } },
   z.input<typeof moveCardBody>
 >;
+
+// Reminders. setReminder() serialises a Date to the ISO instant the API validates.
+type _SetReminder = AssertAssignable<{ remindAt: string }, z.input<typeof setCardReminderBody>>;
 
 // Separators. create() and move() translate the SDK's one-anchor shape into these API fields.
 type _CreateSeparator = AssertAssignable<

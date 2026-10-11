@@ -1,0 +1,1 @@
+ALTER TABLE "client" ADD COLUMN "portfolio_enabled" boolean DEFAULT true NOT NULL;

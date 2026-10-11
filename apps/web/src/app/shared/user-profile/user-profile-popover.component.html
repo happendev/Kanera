@@ -1,0 +1,218 @@
+<div #panelEl class="up-panel" role="dialog" tabindex="-1" [attr.aria-label]="displayName() + ' profile'" [attr.aria-busy]="loading()">
+  <header class="up-head">
+    <div class="up-avatar">
+      <k-avatar
+        [url]="avatarUrl()"
+        [name]="displayName()"
+        [size]="56"
+        [userId]="request().userId"
+        [workspaceId]="presenceWorkspaceId()"
+        [showPresence]="true"
+        [showTooltip]="false"
+        [lastOnlineAt]="profile()?.user?.lastOnlineAt ?? request().lastOnlineAt"
+      />
+    </div>
+    <div class="up-identity">
+      <div class="up-name-row">
+        <h2 class="up-name">{{ displayName() }}</h2>
+        @if (isSelf()) {
+        <span class="up-you">You</span>
+        }
+      </div>
+      <div class="up-status-row">
+        <span class="up-presence" [class.is-online]="online()">
+          <span class="up-presence-dot" aria-hidden="true"></span>
+          {{ presenceLabel() }}
+        </span>
+        @if (roleLabel(); as role) {
+        <span class="up-role" [attr.data-role]="profile()?.role" [kTooltip]="roleHint()">{{ role }}</span>
+        }
+      </div>
+      @if (profile()?.user?.email; as email) {
+      <div class="up-contact">
+        <a class="up-email" [href]="'mailto:' + email" [kTooltip]="'Email ' + displayName()">{{ email }}</a>
+        <button type="button" class="up-icon-btn" (click)="copyEmail(email)" aria-label="Copy email address" kTooltip="Copy email">
+          <i class="ti ti-copy"></i>
+        </button>
+      </div>
+      } @else if (profile()?.user?.homeOrganisationName; as organisation) {
+      <div class="up-contact">
+        <span class="up-org"><i class="ti ti-building"></i>{{ organisation }}</span>
+      </div>
+      }
+    </div>
+    <button type="button" class="up-icon-btn up-close" (click)="close(true)" aria-label="Close profile">
+      <i class="ti ti-x"></i>
+    </button>
+  </header>
+
+  @if (localTime(); as clock) {
+  <div class="up-clock" [kTooltip]="clock.zone">
+    <i class="ti ti-clock"></i>
+    <span><strong>{{ clock.time }}</strong> local time</span>
+    @if (clock.difference) {
+    <span class="up-muted">· {{ clock.difference }}</span>
+    }
+  </div>
+  }
+
+  @if (failed()) {
+  <div class="up-error">
+    <i class="ti ti-cloud-off"></i>
+    <span>Couldn't load this profile.</span>
+    <button type="button" class="up-text-btn" (click)="load(true)">Try again</button>
+  </div>
+  } @else {
+  <section class="up-stats" aria-label="Work summary">
+    <div class="up-stat">
+      @if (profile(); as p) {
+      <strong>{{ p.stats.openCards }}</strong>
+      } @else {
+      <span class="up-skeleton up-skeleton-value"></span>
+      }
+      <span>Open cards</span>
+    </div>
+    <div class="up-stat" [class.is-alert]="(profile()?.stats?.overdueCards ?? 0) > 0">
+      @if (profile(); as p) {
+      <strong>{{ p.stats.overdueCards }}</strong>
+      } @else {
+      <span class="up-skeleton up-skeleton-value"></span>
+      }
+      <span>Overdue</span>
+    </div>
+    <div class="up-stat">
+      @if (profile(); as p) {
+      <strong>{{ p.stats.completedCards }}</strong>
+      } @else {
+      <span class="up-skeleton up-skeleton-value"></span>
+      }
+      <span>Done · {{ profile()?.stats?.completedDays ?? 30 }}d</span>
+    </div>
+  </section>
+
+  <section class="up-section up-activity" aria-label="Completed cards">
+    <div class="up-section-head">
+      <h3>Completed</h3>
+      @if (profile(); as p) {
+      <span class="up-muted">{{ p.activity.total === 0 ? 'No cards' : p.activity.total + (p.activity.total === 1 ? ' card' : ' cards') }} in {{ weeks() }} weeks</span>
+      }
+      <i class="ti ti-info-circle up-hint" [kTooltip]="'Cards ' + (isSelf() ? 'you' : displayName()) + ' completed on boards you can open, counted as on Work done'"></i>
+    </div>
+    <div class="up-grid" [class.is-loading]="!grid()" [style.--up-weeks]="grid()?.weeks?.length ?? skeletonWeeks.length">
+      <div class="up-grid-days" aria-hidden="true">
+        <span class="up-grid-month-spacer"></span>
+        @for (label of weekdayLabels; track $index) {
+        <span>{{ label }}</span>
+        }
+      </div>
+      <div class="up-grid-body">
+        @if (grid(); as g) {
+        <div class="up-grid-months" aria-hidden="true">
+          @for (month of g.months; track $index) {
+          <span>{{ month }}</span>
+          }
+        </div>
+        <div class="up-grid-weeks" role="img" [attr.aria-label]="(profile()?.activity?.total ?? 0) + ' cards completed over ' + g.activeDays + ' days in the last ' + weeks() + ' weeks'">
+          @for (week of g.weeks; track week[0].date) {
+          <div class="up-week">
+            @for (cell of week; track cell.date) {
+            @if (cell.level === 'future') {
+            <i class="up-cell is-future"></i>
+            } @else {
+            <i class="up-cell" [attr.data-level]="cell.level" [kTooltip]="cell.label"></i>
+            }
+            }
+          </div>
+          }
+        </div>
+        } @else {
+        <div class="up-grid-months"><span></span></div>
+        <div class="up-grid-weeks">
+          @for (week of skeletonWeeks; track week) {
+          <div class="up-week">
+            @for (day of weekdayLabels; track $index) {
+            <i class="up-cell is-skeleton"></i>
+            }
+          </div>
+          }
+        </div>
+        }
+      </div>
+    </div>
+    <div class="up-legend" aria-hidden="true">
+      <span>Less</span>
+      @for (level of legendLevels; track level) {
+      <i class="up-cell" [attr.data-level]="level"></i>
+      }
+      <span>More</span>
+    </div>
+  </section>
+
+  @if (loading() && !profile()) {
+  <section class="up-section">
+    <div class="up-section-head"><h3>Recently worked on</h3></div>
+    <div class="up-skeleton up-skeleton-row"></div>
+    <div class="up-skeleton up-skeleton-row"></div>
+  </section>
+  } @else if (recentCards().length) {
+  <section class="up-section" aria-label="Recently worked on">
+    <div class="up-section-head"><h3>Recently worked on</h3></div>
+    <ul class="up-cards">
+      @for (card of recentCards(); track card.id) {
+      <li>
+        @if (cardHref(card); as href) {
+        <a class="up-card" [routerLink]="href" (click)="close()" [kTooltip]="card.boardName">
+          <i class="ti" [class.ti-circle-check]="card.completed" [class.ti-cards]="!card.completed" [class.is-done]="card.completed"></i>
+          @if (showCardKeys()) {
+          <span class="up-card-key">{{ card.cardKey }}</span>
+          }
+          <span class="up-card-title">{{ card.title }}</span>
+          <span class="up-card-time">{{ relative(card.lastActivityAt) }}</span>
+        </a>
+        }
+      </li>
+      }
+    </ul>
+  </section>
+  }
+
+  @if (boards().length) {
+  <section class="up-section" [attr.aria-label]="boardsHeading()">
+    <div class="up-section-head">
+      <h3>{{ boardsHeading() }}</h3>
+      <span class="up-muted">{{ profile()?.sharedBoards?.total }}</span>
+    </div>
+    <div class="up-boards">
+      @for (board of boards(); track board.id) {
+      <a class="up-board" [routerLink]="['/b', board.id]" (click)="close()" [kTooltip]="board.workspaceKind === 'standard' ? board.workspaceName + ' · ' + board.name : board.name">
+        <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="boardIconColor(board.iconColor)"></i>
+        <span>{{ board.name }}</span>
+      </a>
+      }
+      @if (hiddenBoardCount() > 0) {
+      <span class="up-board up-board-more">+{{ hiddenBoardCount() }}</span>
+      }
+    </div>
+  </section>
+  }
+  }
+
+  <footer class="up-actions">
+    <a class="up-action" [routerLink]="cardsLink().path" [queryParams]="cardsLink().query" (click)="close()">
+      <i class="ti ti-cards"></i>
+      {{ isSelf() ? 'My cards' : 'View cards' }}
+    </a>
+    @if (isSelf()) {
+    <a class="up-action" routerLink="/settings/profile" (click)="close()">
+      <i class="ti ti-user-edit"></i>
+      Edit profile
+    </a>
+    }
+    @for (action of actions(); track action.id) {
+    <button type="button" class="up-action" [class.is-danger]="action.tone === 'danger'" [disabled]="runningAction() !== null" (click)="runAction(action)">
+      <i [class]="'ti ti-' + action.icon"></i>
+      {{ action.label }}
+    </button>
+    }
+  </footer>
+</div>

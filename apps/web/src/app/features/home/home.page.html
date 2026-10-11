@@ -179,7 +179,7 @@
       }
 
       <div class="get-started-or" aria-hidden="true"><span>or let an agent do it</span></div>
-      <k-agent-connect-card source="home" />
+      <k-agent-connect-card />
     </div>
     } @else {
     <k-empty-state class="no-workspace-empty" icon="layout-kanban" title="No boards yet" text="You don't have access to any boards yet. Ask an administrator to add you to a workspace or board to get started." />
@@ -298,6 +298,10 @@
       Nothing has been added to your Up next yet. <a routerLink="/my-cards">Open My Cards</a> to add and order cards.
     </p>
     }
+
+    <!-- Under Up next: both answer "what do I come back to", and reminders often sit on cards that
+         are not yours to own, which the agenda below never shows. Renders nothing when empty. -->
+    <k-upcoming-reminders />
 
     @if (recentBoards().length > 0) {
     <section class="recent-section">

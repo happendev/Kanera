@@ -53,7 +53,8 @@ export function createLocalStorage(clientId: string): StorageProvider {
       const filePath = resolveWithin(clientDir, safeKey);
       const info = await stat(filePath);
       const start = range?.start ?? 0;
-      const end = range?.end ?? info.size - 1;
+      // Clamp like S3 does: a range past the end must not advertise bytes the file does not have.
+      const end = Math.min(range?.end ?? info.size - 1, info.size - 1);
       return {
         body: createReadStream(filePath, { start, end }),
         contentLength: Math.max(0, end - start + 1),

@@ -1,5 +1,5 @@
 import { boardMirrorDirtyCards, boardMirrors, eventOutbox, type BoardMirror, type BoardMirrorFacet } from "@kanera/shared/schema";
-import { and, asc, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
@@ -10,6 +10,10 @@ import { dispatchMirrorEvent } from "./dispatch.js";
 
 const TAIL_BATCH_SIZE = 100;
 const GAP_SAFETY_MARGIN_MS = 60 * 60 * 1000;
+// Quiet boards still need a durable observation time: after a worker outage the retention-gap
+// check must distinguish silence from missed/purged events. Batch that checkpoint once a minute,
+// comfortably inside the one-hour gap margin, instead of writing every mirror on every poll.
+const IDLE_CHECKPOINT_INTERVAL_MS = 60_000;
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : typeof error === "string" ? error : "board mirror drain failed";
@@ -97,11 +101,24 @@ export interface ProcessBoardMirrorsResult {
 }
 
 export async function processBoardMirrors(options: { log?: FastifyBaseLogger } = {}): Promise<ProcessBoardMirrorsResult> {
-  const manuallyActive = await db.select().from(boardMirrors).where(and(
+  const now = new Date();
+  const purgeFloorWithMargin = new Date(now.getTime() - env.REALTIME_OUTBOX_RETENTION_DAYS * 24 * 60 * 60 * 1000 - GAP_SAFETY_MARGIN_MS);
+  const observations = await db.select({
+    mirror: boardMirrors,
+    // One indexed existence check per source/cursor in a single round trip. The full tail is
+    // loaded only when there is work; a notification for an unrelated board stays cheap.
+    hasPendingEvents: sql<boolean>`exists (
+      select 1 from ${eventOutbox}
+      where ${eventOutbox.boardId} = ${boardMirrors.sourceBoardId}
+        and (${eventOutbox.createdAt}, ${eventOutbox.id}) > (${boardMirrors.cursorEventCreatedAt}, ${boardMirrors.cursorEventId})
+    )`,
+  }).from(boardMirrors).where(and(
     isNull(boardMirrors.pausedAt),
     isNull(boardMirrors.sourceDisabledAt),
-    or(isNull(boardMirrors.nextRetryAt), lte(boardMirrors.nextRetryAt, new Date())),
+    or(isNull(boardMirrors.nextRetryAt), lte(boardMirrors.nextRetryAt, now)),
   ));
+  const manuallyActive = observations.map(({ mirror }) => mirror);
+  const pendingMirrorIds = new Set(observations.filter(({ hasPendingEvents }) => hasPendingEvents).map(({ mirror }) => mirror.id));
   const eligibleWorkspaceIds = await boardSyncEligibleWorkspaceIds(manuallyActive.flatMap((mirror) => [mirror.sourceWorkspaceId, mirror.targetWorkspaceId]));
   // Membership is deliberately absent from this decision: the relationship belongs to the boards,
   // but both owning organisations must still have Pro. Leaving the cursor untouched lets an upgrade
@@ -110,7 +127,15 @@ export async function processBoardMirrors(options: { log?: FastifyBaseLogger } =
   let tailedEvents = 0;
   let drainedFull = false;
   const activeById = new Map(active.map((mirror) => [mirror.id, mirror]));
+  const idleCheckpointIds: string[] = [];
   for (const mirror of active) {
+    const observedAt = mirror.lastSyncAt ?? mirror.createdAt;
+    const needsRecovery = mirror.reconcileRequestedAt || observedAt < purgeFloorWithMargin
+      || mirror.lastError || mirror.consecutiveFailures > 0 || mirror.nextRetryAt;
+    if (!pendingMirrorIds.has(mirror.id) && !needsRecovery) {
+      if (!mirror.lastSyncAt || now.getTime() - observedAt.getTime() >= IDLE_CHECKPOINT_INTERVAL_MS) idleCheckpointIds.push(mirror.id);
+      continue;
+    }
     try {
       const result = await drainMirror(mirror);
       tailedEvents += result.read;
@@ -121,6 +146,18 @@ export async function processBoardMirrors(options: { log?: FastifyBaseLogger } =
       await db.update(boardMirrors).set({ consecutiveFailures: failures, nextRetryAt: mirrorRetryAt(failures), lastError: errorMessage(error), updatedAt: new Date() }).where(eq(boardMirrors.id, mirror.id));
     }
   }
+  if (idleCheckpointIds.length > 0) {
+    // Never checkpoint past a retention gap or an explicit reconcile request: those mirrors must
+    // recover from their old observation time first. Events arriving after the readiness query
+    // remain beyond the unchanged cursor and are picked up on the next wake/poll.
+    await db.update(boardMirrors).set({ lastSyncAt: now, updatedAt: now }).where(and(
+      inArray(boardMirrors.id, idleCheckpointIds),
+      isNull(boardMirrors.pausedAt),
+      isNull(boardMirrors.sourceDisabledAt),
+      isNull(boardMirrors.reconcileRequestedAt),
+    ));
+  }
+  // Dirty-card retry work is independent of whether a source produced a new outbox event.
   const dirtyResult = await applyDirtyCards(activeById, options.log);
   return {
     mirrors: active.length,

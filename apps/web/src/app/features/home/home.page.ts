@@ -26,6 +26,7 @@ import { BoardMenuCoordinator } from "../board/board-menu-coordinator.service";
 import { PriorityQueueComponent } from "../../shared/priority-queue/priority-queue.component";
 import { StandaloneBoardCreateDialogComponent } from "../standalone-board/standalone-board-create.dialog";
 import { AgendaGroupComponent } from "./agenda-group.component";
+import { UpcomingRemindersComponent } from "./upcoming-reminders.component";
 import { HomeState } from "./home.state";
 
 /**
@@ -72,7 +73,7 @@ const HERO_SCATTER: readonly ScatterItem[] = [
 @Component({
   selector: "k-home",
   standalone: true,
-  imports: [ActivityStripComponent, EmptyStateComponent, AgendaGroupComponent, AgentConnectCardComponent, DatePipe, PageHeaderComponent, PriorityQueueComponent, RouterLink, StatTileComponent, TooltipDirective],
+  imports: [ActivityStripComponent, EmptyStateComponent, AgendaGroupComponent, AgentConnectCardComponent, DatePipe, PageHeaderComponent, PriorityQueueComponent, RouterLink, StatTileComponent, TooltipDirective, UpcomingRemindersComponent],
   // BoardMenuCoordinator owns the shared "labels compressed" preference that k-card-labels reads.
   // It is deliberately not root-provided (it holds document listeners), so every surface rendering
   // board chips provides it — same as GlobalWorkPage.

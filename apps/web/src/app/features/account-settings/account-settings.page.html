@@ -3,18 +3,25 @@
     <section class="ws-card settings-card">
       <k-page-header variant="page" class="settings-header" icon="settings" [iconBadge]="true" title="Settings" />
 
-      <div class="settings-tabs" kTabStrip>
+      <nav class="settings-tabs account-settings-tabs" kTabStrip aria-label="Settings sections">
+        @if (isClientAdmin()) { <span class="settings-tab-group" id="settings-group-account">Your account</span> }
         <a [class]="selectedTab() === 'profile' ? 'sm active' : 'ghost sm'" routerLink="profile"><i class="ti ti-user-circle"></i> Profile</a>
         <a [class]="selectedTab() === 'notifications' ? 'sm active' : 'ghost sm'" routerLink="notifications"><i class="ti ti-bell"></i> Notifications</a>
         <a [class]="selectedTab() === 'api-keys' ? 'sm active' : 'ghost sm'" routerLink="api-keys"><i class="ti ti-key"></i> API Keys @if (isHosted()) { <span class="pro-marker">Pro</span> }</a>
         @if (isClientAdmin()) {
+        <span class="settings-tab-group settings-tab-group--org" id="settings-group-org">Organisation</span>
+        <a [class]="selectedTab() === 'org' ? 'sm active' : 'ghost sm'" routerLink="org"><i class="ti ti-building-skyscraper"></i> General</a>
         <a [class]="selectedTab() === 'users' ? 'sm active' : 'ghost sm'" routerLink="users"><i class="ti ti-users"></i> Users</a>
-        <a [class]="selectedTab() === 'org' ? 'sm active' : 'ghost sm'" routerLink="org"><i class="ti ti-building-skyscraper"></i> Organisation</a>
+        <a [class]="selectedTab() === 'security' ? 'sm active' : 'ghost sm'" routerLink="security"><i class="ti ti-shield-lock"></i> Security</a>
+        @if (integrationsAvailable()) {
+        <a [class]="selectedTab() === 'integrations' ? 'sm active' : 'ghost sm'" routerLink="integrations"><i class="ti ti-plug-connected"></i> Integrations</a>
+        }
+        <a [class]="selectedTab() === 'storage' ? 'sm active' : 'ghost sm'" routerLink="storage"><i class="ti ti-database"></i> Storage</a>
         @if (isHosted()) {
         <a [class]="selectedTab() === 'account-plan' ? 'sm active' : 'ghost sm'" routerLink="account-plan"><i class="ti ti-credit-card"></i> Account Plan</a>
         }
         }
-      </div>
+      </nav>
 
       @let activeTab = selectedTab();
       @switch (activeTab) {
@@ -23,6 +30,9 @@
         @case ('api-keys') { <k-account-settings-api-keys /> }
         @case ('users') { <k-account-settings-users /> }
         @case ('org') { <k-account-settings-org /> }
+        @case ('security') { <k-account-settings-security /> }
+        @case ('integrations') { <k-account-settings-integrations /> }
+        @case ('storage') { <k-account-settings-storage /> }
         @case ('account-plan') { <k-account-settings-plan /> }
         @default never;
       }

@@ -20,6 +20,7 @@ function rule(overrides: Partial<EffectiveNotificationWorkspaceRule> = {}): Effe
       commentMentioned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
       cardDueDateChanged: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
       cardOverdue: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+      cardReminder: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
     },
     ...overrides,
   };

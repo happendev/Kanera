@@ -15,6 +15,7 @@ import {
   type NotificationWorkspaceRuleScope,
 } from "./notification-settings.js";
 import { enqueuePersonalNotification, enqueuePush } from "./push-queue.js";
+import { agentActorName } from "./agent-actor-name.js";
 import { absoluteCardUrl } from "./wire-card.js";
 
 /**
@@ -28,10 +29,12 @@ import { absoluteCardUrl } from "./wire-card.js";
 export function watchedActivityPushPayload(row: NotificationRow, webOrigin: string) {
   const summary = summariseActivityChange(row);
   const detail = summary.value ? `${summary.text} ${summary.value}` : summary.text;
+  const actorName = row.actorName ?? "Someone";
   return {
     kind: "card_watched_activity",
     title: row.cardTitle ?? row.boardName ?? "Kanera",
-    body: `${row.actorName ?? "Someone"} ${detail}`,
+    // Matches the drawer's "via <agent>" chip, so an owner can tell their agent's work from their own.
+    body: `${row.activity?.actorKind === "agent" ? agentActorName(actorName, row.activity.agentName) : actorName} ${detail}`,
     url: absoluteCardUrl(row.organisationKey!, row.cardKey!, webOrigin),
     // One tray entry per card. A watcher on a busy card should see the latest change, not a stack
     // of one notification per event - the delivery layer sets renotify whenever a tag is present,

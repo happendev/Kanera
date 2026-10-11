@@ -752,6 +752,17 @@
       font-size: 12px;
     }
   }
+
+  &--reminder {
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
+    border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+    border-radius: 50%;
+    color: var(--accent);
+
+    i {
+      font-size: 12px;
+    }
+  }
 }
 
 .notif-actor {
@@ -767,6 +778,17 @@
     border: 1px solid color-mix(in srgb, var(--danger) 28%, transparent);
     border-radius: 50%;
     color: var(--danger);
+
+    i {
+      font-size: 16px;
+    }
+  }
+
+  &--reminder {
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface-2));
+    border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+    border-radius: 50%;
+    color: var(--accent);
 
     i {
       font-size: 16px;
@@ -831,7 +853,8 @@
   }
 }
 
-.notif-overdue-badge {
+.notif-overdue-badge,
+.notif-reminder-badge {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -1232,4 +1255,12 @@
   vertical-align: baseline;
 
   i { font-size: 12px; }
+}
+
+// Same shape as the overdue badge, in the accent rather than danger: a reminder is something the
+// viewer asked for, not something that went wrong.
+.notif-reminder-badge {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 25%, transparent);
 }

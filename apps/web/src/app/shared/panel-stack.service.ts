@@ -192,6 +192,10 @@ export class PanelStackService implements OnDestroy {
    * Give every open DOM layer a deterministic paint order. A nested fixed panel lives inside its
    * parent's stacking context, so sharing the exact same z-index can leave a border or menu row over
    * the child at their touching edges. Opener order plus nesting depth keeps the child on top.
+   *
+   * The base is `--ap-z-base` when a layer declares one, else `--z-panel`. A layer that is mounted
+   * outside the drawer it opens from (the shell-level profile card over card detail) declares
+   * `--z-modal` there; every other layer keeps the panel token.
    */
   private refreshStacking(): void {
     const depth = (layer: Registration): number => {
@@ -203,7 +207,7 @@ export class PanelStackService implements OnDestroy {
       .filter((layer) => layer.active && !!layer.hostEl)
       .sort((a, b) => depth(a) - depth(b) || this.layers.indexOf(a) - this.layers.indexOf(b));
     order.forEach((layer, index) => {
-      layer.hostEl?.style.setProperty("z-index", `calc(var(--z-panel, 300) + ${index})`);
+      layer.hostEl?.style.setProperty("z-index", `calc(var(--ap-z-base, var(--z-panel, 300)) + ${index})`);
     });
   }
 

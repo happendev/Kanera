@@ -1,4 +1,4 @@
-import { MCP_EVENT_NAMES, MCP_PRIORITY_EVENT_NAME, mcpEventCatalog, mcpEventSubscribe, mcpEventUnsubscribe, type McpEventArguments } from "@kanera/shared/dto";
+import { MCP_EVENT_NAMES, isMcpUserEventName, mcpEventCatalog, mcpEventSubscribe, mcpEventUnsubscribe, type McpEventArguments } from "@kanera/shared/dto";
 import { mcpEventSubscriptions } from "@kanera/shared/schema";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
@@ -10,9 +10,9 @@ import { decryptSecret, encryptSecret } from "../../lib/secrets.js";
 import { McpCallbackError, verifyMcpCallback, type McpWebhookRequest } from "../../lib/mcp-event-webhooks.js";
 
 // Hash ordered scalar fields rather than raw JSON: argument key order never changes identity.
-// A priorities.changed subscription takes no arguments; the principal already names its user.
+// User-addressed subscriptions take no arguments; the principal already names its user.
 function subscriptionId(principal: string, url: string, name: string, args: McpEventArguments | Record<string, never>) {
-  if (name === MCP_PRIORITY_EVENT_NAME || !("workspaceId" in args)) return `sub_${createHash("sha256").update(JSON.stringify([principal, url, name])).digest("hex")}`;
+  if (isMcpUserEventName(name) || !("workspaceId" in args)) return `sub_${createHash("sha256").update(JSON.stringify([principal, url, name])).digest("hex")}`;
   return `sub_${createHash("sha256").update(JSON.stringify([principal, url, name, args.workspaceId, args.boardId ?? null, args.cardId ?? null,
     // Preserve existing IDs for unfiltered subscriptions while making each list a distinct stream.
     ...(args.listId ? [args.listId] : []),
@@ -85,8 +85,8 @@ export async function mcpEventRoutes(app: FastifyInstance, options: { webhookReq
       const health = active ? {} : { lastDeliveryAt: null, lastError: null, failedSince: null };
       await tx.insert(mcpEventSubscriptions).values({
         id, userId: req.auth.sub,
-        // Your own queue only: the target is always the subscribing user (also a database check).
-        ...(body.name === MCP_PRIORITY_EVENT_NAME ? { targetUserId: req.auth.sub } : { workspaceId: body.arguments.workspaceId, boardId: body.arguments.boardId }),
+        // Your own queue or day only: the target is always the subscribing user (also a database check).
+        ...(isMcpUserEventName(body.name) ? { targetUserId: req.auth.sub } : { workspaceId: body.arguments.workspaceId, boardId: body.arguments.boardId }),
         ownerApiKeyId: owner.ownerApiKeyId, ownerAgentGrantId: owner.ownerAgentGrantId, ownerServiceClientId: owner.ownerServiceClientId,
         name: body.name, arguments: body.arguments, url: body.delivery.url,
         encryptedSecret: encryptSecret(body.delivery.secret), verifiedAt, expiresAt, ...rotation,

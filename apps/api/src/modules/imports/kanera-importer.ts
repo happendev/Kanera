@@ -93,14 +93,18 @@ interface ImportContext {
   sourceLabel: "kanera" | "csv";
 }
 
-function uniqueCardUserRows(rows: { cardId: string; userId: string }[]): { cardId: string; userId: string }[] {
+function uniqueRows<T>(rows: T[], keyOf: (row: T) => string): T[] {
   const seen = new Set<string>();
   return rows.filter((row) => {
-    const key = `${row.cardId}:${row.userId}`;
+    const key = keyOf(row);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+}
+
+function uniqueCardUserRows(rows: { cardId: string; userId: string }[]): { cardId: string; userId: string }[] {
+  return uniqueRows(rows, (row) => `${row.cardId}:${row.userId}`);
 }
 
 function toDate(value: unknown): Date | null {
@@ -458,17 +462,19 @@ export async function runKaneraBoardImport(tx: Tx, args: { source: BoardExportAr
   const cardIdBySourceId = new Map<string, string>();
   insertedCards.forEach((card, index) => cardIdBySourceId.set(importCards[index]!.id, card.id));
 
-  const labelAssignments = ctx.source.cardLabelAssignments
+  // Two source labels may be mapped onto one destination label; collapse the pairs per card or the
+  // composite primary key rejects the second row and rolls the whole import back.
+  const labelAssignments = uniqueRows(ctx.source.cardLabelAssignments
     .map((row) => ({ cardId: cardIdBySourceId.get(row.cardId), labelId: labelMapping.map.get(row.labelId) }))
-    .filter((row): row is { cardId: string; labelId: string } => !!row.cardId && !!row.labelId);
+    .filter((row): row is { cardId: string; labelId: string } => !!row.cardId && !!row.labelId), (row) => `${row.cardId}:${row.labelId}`);
   // Multiple source identities may intentionally or automatically map to the same workspace user.
   // Collapse those mappings per card before inserting the composite-primary-key relation.
   const assignees = uniqueCardUserRows(ctx.source.cardAssignees
     .map((row) => ({ cardId: cardIdBySourceId.get(row.cardId), userId: memberMap.get(row.userId) }))
     .filter((row): row is { cardId: string; userId: string } => !!row.cardId && !!row.userId));
-  const watchers = ctx.source.cardWatchers
+  const watchers = uniqueCardUserRows(ctx.source.cardWatchers
     .map((row) => ({ cardId: cardIdBySourceId.get(row.cardId), userId: memberMap.get(row.userId) }))
-    .filter((row): row is { cardId: string; userId: string } => !!row.cardId && !!row.userId);
+    .filter((row): row is { cardId: string; userId: string } => !!row.cardId && !!row.userId));
   const fieldValues = ctx.source.cardCustomFieldValues.flatMap((value) => {
     const cardId = cardIdBySourceId.get(value.cardId);
     const field = fieldMapping.map.get(value.fieldId);

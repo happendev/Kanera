@@ -31,7 +31,7 @@ import { getConfiguredS3StorageConfig, getStorageForClient } from "../lib/storag
 import { avatarStorageKey } from "../lib/storage/keys.js";
 import { notifyAdminsOrgInviteAccepted } from "../lib/invite-accepted-notifications.js";
 import { emitBoardInvitationAccepted, loadBoardInvitationGrants, loadRedeemableBoardInvitation, redeemBoardInvitationInTx, type BoardInvitationGrant, type RedeemableBoardInvitation } from "../lib/board-invitation-redemption.js";
-import { pinOrgAdminToClientBoards } from "../lib/board-membership.js";
+import { pinAdminToWorkspaceBoards, pinOrgAdminToClientBoards } from "../lib/board-membership.js";
 import { hashOpaqueToken, newOpaqueToken, newVerificationCode } from "../lib/tokens.js";
 import { emitToBoard, emitToClient, emitToClientDurable, emitToWorkspace } from "../realtime/emit.js";
 import { newRefreshToken, rotateRefresh } from "./jwt.js";
@@ -42,6 +42,7 @@ import { captureWorkspaceMemberJoined } from "../lib/analytics-milestones.js";
 import { isClientAdminRole, resolveActiveOrganisation, resolveActiveOrganisationContext, type ActiveOrganisation } from "../lib/client-membership.js";
 import { disconnectSupportSessionSockets, disconnectUserRealtimeSockets } from "../realtime/io.js";
 import { emitToUser } from "../realtime/emit.js";
+import { mfaEnrollmentRequiredFor, requiresMfaForAccess } from "./mfa-policy.js";
 import { authUserPayload as meResponseFor, issueUserSession as issueSession, REFRESH_COOKIE, refreshCookieOptions } from "./session.js";
 
 const ALLOWED_AVATAR_MIME = new Set(["image/png", "image/jpeg", "image/webp"]);
@@ -134,7 +135,6 @@ const PASSWORD_RESET_RECIPIENT_LIMIT = 3;
 const PASSWORD_RESET_RECIPIENT_WINDOW_MS = 60 * 60_000;
 const TURNSTILE_SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
-
 function normalizeTimezone(value: string | undefined): string {
   if (!value) return "UTC";
   try {
@@ -156,10 +156,10 @@ export async function authRoutes(app: FastifyInstance) {
   // buckets global across API processes; keys stay action-scoped so login attempts do not drain
   // signup or password-reset allowance.
   const authRateLimiter = env.AUTH_RATE_LIMIT_ENABLED
-    ? new FixedWindowRateLimiter(env.AUTH_RATE_LIMIT_WINDOW_MS, { log: app.log })
+    ? new FixedWindowRateLimiter()
     : null;
   if (authRateLimiter) app.addHook("onClose", async () => authRateLimiter.close());
-  const passwordResetRecipientLimiter = new FixedWindowRateLimiter(PASSWORD_RESET_RECIPIENT_WINDOW_MS, { log: app.log });
+  const passwordResetRecipientLimiter = new FixedWindowRateLimiter();
   app.addHook("onClose", async () => passwordResetRecipientLimiter.close());
   const authRateLimitPolicy: RateLimitPolicy = {
     limit: env.AUTH_RATE_LIMIT_MAX,
@@ -258,30 +258,6 @@ export async function authRoutes(app: FastifyInstance) {
     }
     if (!params.inviteToken) throw forbidden("Signups are currently disabled.");
     throw unauthorized("invalid invite");
-  }
-
-  async function requiresMfaForAccess(userId: string, activeClientId: string, activeRequiresMfa: boolean) {
-    if (activeRequiresMfa) return true;
-    const [guestPolicy] = await db
-      .select({ id: boardMembers.boardId })
-      .from(boardMembers)
-      .innerJoin(boards, eq(boards.id, boardMembers.boardId))
-      .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
-      .innerJoin(clients, eq(clients.id, workspaces.clientId))
-      .where(and(
-        eq(boardMembers.userId, userId),
-        ne(clients.id, activeClientId),
-        eq(clients.requireMfa, true),
-        sql`not exists (
-          select 1 from ${clientMembers} cm
-          where cm.client_id = ${clients.id}
-            and cm.user_id = ${userId}
-        )`,
-      ))
-      .limit(1);
-    // A host organisation's security policy follows its data: board-only guests must satisfy it even
-    // though authentication and MFA credentials still belong to the guest's single home identity.
-    return !!guestPolicy;
   }
 
   // Generate a fresh verification code, invalidate any prior unconsumed codes for the
@@ -610,6 +586,12 @@ export async function authRoutes(app: FastifyInstance) {
               role: g.role,
             })),
           );
+          // Board membership is the content-access model for normal users: a workspace-admin grant
+          // alone opens workspace settings but not the boards themselves. Materialize the pinned
+          // editor rows the promote path writes, or an invited admin gets 403 on every existing board.
+          for (const grant of workspaceGrants) {
+            if (grant.role === "admin") await pinAdminToWorkspaceBoards(tx, grant.workspaceId, user!.id);
+          }
         }
 
         // An accepted organisation-admin invite is another org-role assignment path. Materialize
@@ -630,17 +612,25 @@ export async function authRoutes(app: FastifyInstance) {
         };
       });
 
-      const accessToken = app.jwt.sign({
-        sub: result.user.id,
-        cid: result.user.clientId,
-        role: result.orgRole,
-      });
-      const refresh = newRefreshToken();
-      await db
-        .insert(refreshTokens)
-        .values({ userId: result.user.id, tokenHash: refresh.hash, expiresAt: refresh.expiresAt });
+      // An invite-driven signup joins an organisation (or a board-invite host) whose security policy may
+      // already mandate MFA. The account now exists either way, so every side effect below still runs,
+      // but tokens are withheld and the enrollment challenge is returned exactly as password login does.
+      const joinedOrganisation = await resolveActiveOrganisation(result.user.id, result.user.clientId);
+      const enrollment = joinedOrganisation ? await mfaEnrollmentRequiredFor(result.user.id, joinedOrganisation) : null;
+      let accessToken: string | null = null;
+      if (!enrollment) {
+        accessToken = app.jwt.sign({
+          sub: result.user.id,
+          cid: result.user.clientId,
+          role: result.orgRole,
+        });
+        const refresh = newRefreshToken();
+        await db
+          .insert(refreshTokens)
+          .values({ userId: result.user.id, tokenHash: refresh.hash, expiresAt: refresh.expiresAt });
 
-      reply.setCookie(REFRESH_COOKIE, refresh.raw, refreshCookieOptions());
+        reply.setCookie(REFRESH_COOKIE, refresh.raw, refreshCookieOptions());
+      }
       // Account creation is authoritative here: the user and organisation transaction has committed.
       // Analytics is fire-and-forget and can never turn a successful signup into a failed request.
       void productAnalytics.capture({
@@ -756,6 +746,7 @@ export async function authRoutes(app: FastifyInstance) {
         // seat_limit, not headcount. Capacity is only charged when the admin explicitly buys seats.
       }
 
+      if (enrollment) return enrollment;
       return { accessToken, user: { ...(await meResponseFor(result.user.id, result.user.clientId)), boardInviteRedirect: result.boardInviteRedirect } };
     } catch (err: unknown) {
       if (isUniqueViolation(err)) throw conflict(duplicateSignupMessage);

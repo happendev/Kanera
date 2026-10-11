@@ -92,6 +92,35 @@ void test("public API keys are rate limited by API key id", async () => {
   }
 });
 
+// Failure caught: over-limit credential requests failing immediately instead of waiting their turn,
+// waiting without the request then succeeding, or a full queue still accepting more.
+void test("over-limit API key requests queue for their slot before the queue overflows", async () => {
+  const secret = await createWorkspaceApiKey();
+  const publicApi = await buildPublicApiServer({
+    enableWebhookDeliveryScheduler: false,
+    logger: false,
+    // Two per second; two more may wait for the next second, the fifth concurrent request may not.
+    rateLimit: { apiKeyLimitPerSecond: 2, apiKeyLimitPerMinute: 100, ipLimitPerMinute: 100, uploadLimitPerMinute: 100, windowMs: 60_000, queueSize: 2, queueMaxWaitMs: 5_000 },
+    uploadsDir: testUploadsDir("test-public-uploads"),
+  });
+
+  try {
+    const outcomes = await Promise.all(Array.from({ length: 5 }, async () => {
+      const startedAt = performance.now();
+      const response = await publicApi.inject({ method: "GET", url: "/api/v1/workspaces", headers: { authorization: `Bearer ${secret}` } });
+      return { status: response.statusCode, ms: performance.now() - startedAt, body: response.body };
+    }));
+    const succeeded = outcomes.filter((outcome) => outcome.status === 200).sort((a, b) => a.ms - b.ms);
+    const limited = outcomes.filter((outcome) => outcome.status === 429);
+    assert.equal(succeeded.length, 4, JSON.stringify(outcomes));
+    assert.equal(limited.length, 1, JSON.stringify(outcomes));
+    assert.ok(succeeded[2]!.ms >= 500, `queued requests waited for the next window (${succeeded[2]!.ms}ms)`);
+    assert.ok(limited[0]!.ms < succeeded[2]!.ms, "the overflow request fails fast rather than waiting");
+  } finally {
+    await publicApi.close();
+  }
+});
+
 void test("failed public API key auth is rate limited by IP", async () => {
   const publicApi = await buildPublicApiServer({
     enableWebhookDeliveryScheduler: false,

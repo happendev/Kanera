@@ -383,9 +383,9 @@ export class BoardSocketBridge {
         for (const position of positions) state.moveChecklist(cardId, position.id, position.position);
         state.noteCardDetailRealtimeMutation(cardId);
       },
-      [SERVER_EVENTS.CARD_CHECKLIST_DELETED]: ({ boardId: eventBoardId, cardId, checklistId }) => {
+      [SERVER_EVENTS.CARD_CHECKLIST_DELETED]: ({ boardId: eventBoardId, cardId, checklistId, checklistParentItemId, itemCount, completedItemCount }) => {
         if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
-        state.removeChecklist(cardId, checklistId);
+        state.removeChecklist(cardId, checklistId, { checklistParentItemId, itemCount, completedItemCount });
         state.touchCardActivity(cardId);
         state.noteCardDetailRealtimeMutation(cardId);
       },

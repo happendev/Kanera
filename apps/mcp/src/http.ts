@@ -9,7 +9,10 @@ import { env } from "./env.js";
 import { McpDistributedRateLimiter, type DistributedRateLimitResult } from "./distributed-rate-limit.js";
 import { mcpAuthFailures, mcpMetricsResponse, observeMcpHttpRequest, trackActiveMcpRequest } from "./metrics.js";
 import { KaneraApiError, KaneraClient } from "./kanera-client.js";
-import { createKaneraMcpServer } from "./server.js";
+import { createKaneraMcpServer, credentialIsReadOnly } from "./server.js";
+import { MCP_RESOURCE_SCOPES, mcpAuthorizationChallenge } from "./oauth.js";
+
+export { mcpAuthorizationChallenge } from "./oauth.js";
 
 const require = createRequire(import.meta.url);
 const mcpPackage = require("../package.json") as { version: string };
@@ -71,16 +74,6 @@ export class McpTokenExchangeError extends Error {
   }
 }
 
-const MCP_RESOURCE_SCOPES = ["kanera:read", "kanera:write"] as const;
-
-export function mcpAuthorizationChallenge(resource: string, error?: "invalid_token") {
-  const metadata = new URL("/.well-known/oauth-protected-resource", resource);
-  // The MCP endpoint exposes both read and mutation tools. Advertising only the read scope here
-  // causes clients that derive their authorization request from the challenge to mint a valid but
-  // read-only connection, even when the user later permits write actions in the client UI.
-  return `Bearer resource_metadata="${metadata.toString()}", scope="${MCP_RESOURCE_SCOPES.join(" ")}"${error ? `, error="${error}"` : ""}`;
-}
-
 async function exchangeMcpToken(token: string, resource: string): Promise<string> {
   let response: Response;
   try {
@@ -129,6 +122,26 @@ async function credentialRevoked(token: string, publicApiUrl: string | undefined
   }
 }
 
+// A credential's own scope is fixed for its lifetime (keys and OAuth grants are reissued, never
+// re-scoped), but an organisation's AI agent access setting can change its effective scope, so the
+// verdict is only remembered for the TTL below. Neither revocation nor the policy depends on this
+// cache: the public API enforces both on every call regardless of the catalog the client saw.
+const SCOPE_CACHE_TTL_MS = 5 * 60_000;
+const SCOPE_CACHE_LIMIT = 10_000;
+const scopeCache = new Map<string, { readOnly: boolean; expiresAt: number }>();
+
+async function cachedReadOnly(bearerToken: string, downstreamToken: string, publicApiUrl: string | undefined, now: number) {
+  const key = createHash("sha256").update(bearerToken).digest("base64url");
+  const cached = scopeCache.get(key);
+  if (cached && cached.expiresAt > now) return cached.readOnly;
+  const readOnly = await credentialIsReadOnly(downstreamToken, publicApiUrl);
+  if (readOnly === undefined) return false;
+  scopeCache.delete(key);
+  scopeCache.set(key, { readOnly, expiresAt: now + SCOPE_CACHE_TTL_MS });
+  if (scopeCache.size > SCOPE_CACHE_LIMIT) scopeCache.delete(scopeCache.keys().next().value!);
+  return readOnly;
+}
+
 export function createMcpHttpHandler(options: {
   bodyMaxBytes?: number;
   publicApiUrl?: string;
@@ -155,6 +168,7 @@ export function createMcpHttpHandler(options: {
   const mcpHandler = createMcpHandler(({ authInfo, era }) => createKaneraMcpServer({
     apiKey: authInfo!.token,
     publicApiUrl: options.publicApiUrl,
+    readOnly: !authInfo!.scopes.includes(MCP_RESOURCE_SCOPES[1]),
     // The events draft is defined against 2026-07-28 only. Keeping it off the legacy era leaves
     // what existing 2025-era clients (Claude, Codex, Cursor, opencode, ...) see unchanged.
     events: era === "modern",
@@ -311,7 +325,9 @@ export function createMcpHttpHandler(options: {
         res.end(JSON.stringify({ error: "invalid or revoked Kanera credential" }));
         return;
       }
-      await serveMcp(Object.assign(req, { auth: { token: downstreamToken, clientId: "kanera-mcp", scopes: [] } }), res, body);
+      const readOnly = await cachedReadOnly(bearerToken, downstreamToken, options.publicApiUrl, now);
+      const scopes = readOnly ? [MCP_RESOURCE_SCOPES[0]] : [...MCP_RESOURCE_SCOPES];
+      await serveMcp(Object.assign(req, { auth: { token: downstreamToken, clientId: "kanera-mcp", scopes } }), res, body);
     } catch (error) {
       if (!res.headersSent) {
         const statusCode = error instanceof RequestBodyError ? error.statusCode : 500;

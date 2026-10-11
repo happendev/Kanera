@@ -40,6 +40,7 @@ export async function listActiveOrganisations(userId: string, tx: Tx = db, known
       billingStatus: clients.billingStatus,
       analyticsExcluded: clients.analyticsExcluded,
       requireMfa: clients.requireMfa,
+      portfolioEnabled: clients.portfolioEnabled,
       addedAt: clientMembers.addedAt,
       hasWorkspace: sql<boolean>`case
         when ${clientMembers.clientRole} in ('owner', 'admin') then exists (
@@ -90,6 +91,7 @@ export async function listActiveOrganisations(userId: string, tx: Tx = db, known
     addedAt: row.addedAt,
     analyticsExcluded: row.analyticsExcluded,
     requireMfa: row.requireMfa,
+    portfolioEnabled: row.portfolioEnabled,
   }));
 }
 

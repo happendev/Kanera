@@ -228,19 +228,16 @@ async function reconcileToFreeTier(clientId: string, tx: Tx, config: PlanConvers
     }
   }
 
-  // --- API keys: a paid-only feature, so revoke every active key. ---
-  // Workspace keys are located via their workspace; personal keys carry the organisation pinned at
-  // creation. Both are restored by id on re-upgrade (idsFor("api_key_revoked")).
+  // --- Workspace API keys: unattended/service credentials are paid-only, so revoke them. ---
+  // This also disables OAuth service connections, which authenticate through their backing
+  // workspace key. Personal keys are deliberately kept: they act as a present user and remain
+  // available on Free under fair-use limits. Restored by id on re-upgrade (idsFor("api_key_revoked")).
   const activeWorkspaceApiKeys = await tx
     .select({ id: workspaceApiKeys.id })
     .from(workspaceApiKeys)
     .innerJoin(workspaces, eq(workspaces.id, workspaceApiKeys.workspaceId))
     .where(and(eq(workspaces.clientId, clientId), isNull(workspaceApiKeys.revokedAt)));
-  const activePersonalApiKeys = await tx
-    .select({ id: workspaceApiKeys.id })
-    .from(workspaceApiKeys)
-    .where(and(eq(workspaceApiKeys.kind, "personal"), eq(workspaceApiKeys.clientId, clientId), isNull(workspaceApiKeys.revokedAt)));
-  const activeApiKeyIds = [...activeWorkspaceApiKeys, ...activePersonalApiKeys].map((k) => k.id);
+  const activeApiKeyIds = activeWorkspaceApiKeys.map((k) => k.id);
   if (activeApiKeyIds.length > 0) {
     await tx.update(workspaceApiKeys).set({ revokedAt: new Date(), updatedAt: new Date() }).where(inArray(workspaceApiKeys.id, activeApiKeyIds));
     for (const id of activeApiKeyIds) pending.push(actionRow(clientId, "api_key_revoked", { apiKeyId: id }));

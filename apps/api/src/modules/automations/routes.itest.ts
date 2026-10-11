@@ -25,6 +25,7 @@ import {
   cardWatchers,
   cards,
   cardCustomFieldValues,
+  cardReminders,
   comments,
   customFieldOptions,
   emailQueue,
@@ -3358,4 +3359,33 @@ void test("post_comment and call_webhook actions run, and executions record card
   assert.match(latest.error ?? "", /webhook endpoint no longer exists/);
   const stats = await loadAutomationRunStats(automation.id);
   assert.equal(stats?.failedRunCount, 1);
+});
+
+void test("an automation that completes a card clears the reminders on it", async () => {
+  const f = await setupWorkspace("owner-automation-reminders@example.com");
+  const [card] = await db
+    .insert(cards)
+    .values({ boardId: f.board.id, listId: f.list.id, title: "Done by automation", position: "1000.0000000000", createdById: f.user.id })
+    .returning();
+  assert.ok(card);
+  await db.insert(cardReminders).values({ cardId: card.id, userId: f.user.id, remindAt: new Date(Date.now() + 60_000) });
+  const [automation] = await db
+    .insert(automations)
+    .values({ workspaceId: f.workspace.id, enabled: true, position: "1000.0000000000", triggerType: "card_enters_list", triggerListId: f.list.id })
+    .returning();
+  assert.ok(automation);
+  await db.insert(automationActions).values({ automationId: automation.id, type: "set_completion", position: "1000.0000000000", config: { completed: true } });
+
+  const result = await runListEntryAutomations(db, {
+    cardId: card.id,
+    listId: f.list.id,
+    boardId: f.board.id,
+    workspaceId: f.workspace.id,
+    clientId: f.user.clientId,
+    trigger: "create",
+  });
+
+  const completion = result.effects.find((effect) => effect.type === "cardUpdated");
+  assert.equal(completion?.type === "cardUpdated" ? completion.clearedReminders?.length : null, 1);
+  assert.deepEqual(await db.select().from(cardReminders).where(eq(cardReminders.cardId, card.id)), []);
 });

@@ -417,11 +417,15 @@ export async function deliverWebhookDelivery(
     // 3xx would let a public host bounce the request (and its captured response body) to a
     // private or metadata address. Receivers must answer at the configured URL directly.
     const response = await fetch(requestUrl, { ...requestInit, redirect: "error", signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS) });
-    const responseBody = responseExcerpt(await response.text().catch(() => ""));
+    const fullResponseBody = await response.text().catch(() => "");
+    // Only an excerpt is stored, but success must be judged on the complete body: Telegram echoes
+    // the sent message in its JSON, so a long card title or comment pushes `"ok":true` past the
+    // excerpt boundary and a truncated parse would turn a delivered message into a retried one.
+    const responseBody = responseExcerpt(fullResponseBody);
     let success = response.status >= 200 && response.status < 300;
     if (success && target.provider === "telegram") {
       try {
-        success = (JSON.parse(responseBody) as { ok?: unknown }).ok === true;
+        success = (JSON.parse(fullResponseBody) as { ok?: unknown }).ok === true;
       } catch {
         success = false;
       }
@@ -469,13 +473,25 @@ export interface WebhookDeliveryResult {
 export async function processWebhookDeliveries(log?: FastifyBaseLogger): Promise<WebhookDeliveryResult> {
   // The MCP queue drains alongside the regular one, never ahead of it: a hung callback host for
   // one subscriber must not delay unrelated customer webhooks, and vice versa.
-  const [mcpDrainedFull, due] = await Promise.all([
+  const [mcpDrainedFull, regularDrainedFull] = await Promise.all([
     processMcpEventDeliveries(postMcpWebhook, log).catch((err: unknown) => {
       log?.error({ err }, "mcp event delivery drain failed");
       return false;
     }),
-    claimWebhookDeliveries(),
+    processRegularWebhookDeliveries(log).catch((err: unknown) => {
+      // Settle both queues before the single-flight scheduler can start another sweep.
+      log?.error({ err }, "webhook delivery drain failed");
+      return false;
+    }),
   ]);
+
+  return { drainedFull: mcpDrainedFull || regularDrainedFull };
+}
+
+async function processRegularWebhookDeliveries(log?: FastifyBaseLogger): Promise<boolean> {
+  // Start the full regular drain alongside MCP delivery, not just its database claim. Otherwise
+  // every healthy regular endpoint waits through all of a slow MCP batch's timeout windows.
+  const due = await claimWebhookDeliveries();
 
   // Deliver in fixed-size concurrent chunks: a single slow/timing-out endpoint no longer
   // blocks every other due delivery behind it. allSettled keeps one failure from rejecting
@@ -490,7 +506,7 @@ export async function processWebhookDeliveries(log?: FastifyBaseLogger): Promise
     });
   }
 
-  return { drainedFull: mcpDrainedFull || due.length >= DELIVERY_LIMIT };
+  return due.length >= DELIVERY_LIMIT;
 }
 
 export async function cleanupWebhookDeliveries(log?: FastifyBaseLogger, now = new Date()): Promise<number> {

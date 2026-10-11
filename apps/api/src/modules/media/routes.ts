@@ -98,7 +98,7 @@ async function serveMedia(req: FastifyRequest, reply: FastifyReply) {
       .header("Accept-Ranges", "bytes")
       .header("Content-Length", String(object.contentLength));
     if (range && object.totalLength !== undefined) {
-      const end = range.end ?? range.start + object.contentLength - 1;
+      const end = range.start + object.contentLength - 1;
       reply.status(206).header("Content-Range", `bytes ${range.start}-${end}/${object.totalLength}`);
     }
     if (query.fn) {
@@ -111,7 +111,7 @@ function hasDotSegment(key: string): boolean {
   return key.split("/").some((part) => part === "" || part === "." || part === "..");
 }
 
-function parseRangeHeader(value: string | undefined): { start: number; end?: number } | null {
+export function parseRangeHeader(value: string | undefined): { start: number; end?: number } | null {
   if (!value) return null;
   const match = /^bytes=(\d+)-(\d*)$/.exec(value);
   if (!match) return null;

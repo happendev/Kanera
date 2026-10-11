@@ -19,6 +19,7 @@ import { WorkspaceService } from "../../core/workspace/workspace.service";
 import { ConfirmService } from "../../shared/confirm.service";
 import { BoardState } from "./board-state";
 import { CardActivityComponent } from "./card-activity.component";
+import { UserProfileCardService } from "../../shared/user-profile/user-profile-card.service";
 import { CardDetailComponent, checklistDragScrollStep } from "./card-detail.component";
 
 describe("card detail checklist drag scrolling", () => {
@@ -355,7 +356,7 @@ describe("CardDetailComponent realtime regressions", () => {
   };
   let offlineCache: { loadCardDetail: ReturnType<typeof vi.fn>; saveBoard: ReturnType<typeof vi.fn>; saveCardDetail: ReturnType<typeof vi.fn> };
   let imageLightbox: { open: ReturnType<typeof vi.fn> };
-  let notifications: { isWatchingCard: ReturnType<typeof vi.fn>; isWatchingBoard: ReturnType<typeof vi.fn>; toggleCardWatch: ReturnType<typeof vi.fn>; beginViewingCard: ReturnType<typeof vi.fn> };
+  let notifications: { isWatchingCard: ReturnType<typeof vi.fn>; reminderFor: ReturnType<typeof vi.fn>; isWatchingBoard: ReturnType<typeof vi.fn>; toggleCardWatch: ReturnType<typeof vi.fn>; beginViewingCard: ReturnType<typeof vi.fn> };
   let socket: SocketStub;
   let socketService: { connect: ReturnType<typeof vi.fn>; displayedOnline: ReturnType<typeof signal<boolean>>; joinWorkspace: ReturnType<typeof vi.fn> };
   let viewerRole: ReturnType<typeof signal<"owner" | "admin" | "editor" | "observer" | null>>;
@@ -417,6 +418,7 @@ describe("CardDetailComponent realtime regressions", () => {
     notificationStateVersion = signal(0);
     notifications = {
       isWatchingCard: vi.fn(() => false),
+      reminderFor: vi.fn(() => null),
       isWatchingBoard: vi.fn(() => false),
       toggleCardWatch: vi.fn(() => Promise.resolve()),
       // Model the real service's synchronous signal reads before returning cleanup.
@@ -2834,7 +2836,7 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(button.textContent?.trim()).toBe("Yes");
     expect(button.classList.contains("checked")).toBe(false);
     expect(button.querySelector(".ti-square")).not.toBeNull();
-    expect(button.querySelector(".ti-checkbox")).toBeNull();
+    expect(button.querySelector(".ti-square-check")).toBeNull();
 
     button.click();
 
@@ -2860,7 +2862,7 @@ describe("CardDetailComponent realtime regressions", () => {
 
     expect(button.textContent?.trim()).toBe("Yes");
     expect(button.classList.contains("checked")).toBe(true);
-    expect(button.querySelector(".ti-checkbox")).not.toBeNull();
+    expect(button.querySelector(".ti-square-check")).not.toBeNull();
     expect(button.querySelector(".ti-square")).toBeNull();
 
     button.click();
@@ -3586,7 +3588,11 @@ describe("CardDetailComponent realtime regressions", () => {
     expect(document.querySelector(".k-tooltip")?.textContent).toBe("Unassign Ada Lovelace");
   });
 
-  it("shows only the unassign tooltip for clickable card assignees", () => {
+  // Clicking an assignee used to unassign them. It now opens their profile card, which carries
+  // "Unassign" as an action, so a tap meant to see who someone is can no longer remove them. The
+  // original guard here (one tooltip per assignee, never the avatar's and a wrapper's stacked) still
+  // applies, so it is kept alongside the new click contract.
+  it("opens the assignee's profile with an unassign action instead of unassigning on click", () => {
     vi.useFakeTimers();
     const assignee = {
       userId: "user-2",
@@ -3596,6 +3602,7 @@ describe("CardDetailComponent realtime regressions", () => {
       source: "workspace" as const,
     };
     const fixture = createComponentFixture(CardDetailComponent);
+    const profileCards = TestBed.inject(UserProfileCardService);
 
     fixture.componentRef.setInput("card", createCard());
     fixture.componentRef.setInput("boardId", "board-1");
@@ -3608,19 +3615,25 @@ describe("CardDetailComponent realtime regressions", () => {
     fixture.componentRef.setInput("checklists", []);
     fixture.detectChanges();
 
-    const button = fixture.nativeElement.querySelector(".member-avatar") as HTMLButtonElement;
-    const avatarBody = button.querySelector(".avatar-body") as HTMLElement;
-    avatarBody.dispatchEvent(new Event("mouseenter"));
+    const wrapper = fixture.nativeElement.querySelector(".member-avatar") as HTMLElement;
+    expect(wrapper.tagName).toBe("SPAN");
+    const avatar = wrapper.querySelector("k-avatar") as HTMLElement;
+    avatar.querySelector(".avatar-body")!.dispatchEvent(new Event("mouseenter"));
     vi.advanceTimersByTime(300);
     fixture.detectChanges();
 
-    expect(document.querySelector(".k-tooltip")).toBeNull();
+    expect(document.querySelectorAll(".k-tooltip")).toHaveLength(1);
+    expect(document.querySelector(".k-tooltip")?.textContent).toBe("Ada Lovelace");
 
-    button.dispatchEvent(new Event("mouseenter"));
-    vi.advanceTimersByTime(300);
+    avatar.click();
     fixture.detectChanges();
 
-    expect(document.querySelector(".k-tooltip")?.textContent).toBe("Unassign Ada Lovelace");
+    expect(api.put).not.toHaveBeenCalled();
+    const request = profileCards.current();
+    expect(request?.userId).toBe("user-2");
+    expect(request?.anchor).toBe(avatar);
+    expect(request?.actions?.map((action) => action.label)).toEqual(["Unassign"]);
+    profileCards.close();
   });
 
   it("bulk sets a due date on every checklist item", async () => {

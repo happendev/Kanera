@@ -186,7 +186,7 @@
     <div class="org-user-row">
       <div class="org-user-identity">
         <k-avatar class="org-user-avatar" [url]="orgUser.avatarUrl" [name]="orgUser.displayName" [size]="32" [userId]="orgUser.id" [workspaceId]="settings.orgUserPresenceWorkspaceId(orgUser)" [showPresence]="true"
-          [lastOnlineAt]="orgUser.lastOnlineAt" />
+          [lastOnlineAt]="orgUser.lastOnlineAt" [profile]="true" />
         <div class="org-user-name-wrap">
           <span class="org-user-name-line">
             <span class="org-user-name">{{ orgUser.displayName }}</span>
@@ -237,7 +237,7 @@
     @for (guest of settings.orgGuestSeatRows(); track guest.userId) {
     <div class="guest-seat-row">
       <div class="guest-seat-identity">
-        <k-avatar class="org-user-avatar" [url]="guest.avatarUrl" [name]="guest.displayName" [size]="32" [userId]="guest.userId" [showPresence]="false" [lastOnlineAt]="guest.lastOnlineAt" />
+        <k-avatar class="org-user-avatar" [url]="guest.avatarUrl" [name]="guest.displayName" [size]="32" [userId]="guest.userId" [showPresence]="false" [lastOnlineAt]="guest.lastOnlineAt" [profile]="true" />
         <div class="org-user-name-wrap">
           <span class="org-user-name-line">
             <span class="org-user-name">{{ guest.displayName }}</span>

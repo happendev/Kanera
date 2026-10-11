@@ -179,6 +179,46 @@ void test("HTTP MCP endpoint accepts the personal-key (kanera_u_) shape", async 
   });
 });
 
+void test("HTTP MCP endpoint lists only read tools for a read-only credential and remembers the scope", async () => {
+  let sessionReads = 0;
+  const api = createServer((req, res) => {
+    if (req.url === "/api/v1/session") sessionReads += 1;
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ userId: "u", scope: "read" }));
+  });
+  await new Promise<void>((resolve) => api.listen(0, "127.0.0.1", resolve));
+  const address = api.address();
+  assert.ok(address && typeof address !== "string");
+  try {
+    await withHttpServer(async (baseUrl) => {
+      const listTools = async () => {
+        const response = await fetch(`${baseUrl}/mcp`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer kanera_u_test_${"R".repeat(43)}`,
+            accept: "application/json, text/event-stream",
+            "content-type": "application/json",
+            "mcp-protocol-version": "2025-06-18",
+          },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
+        });
+        assert.equal(response.status, 200);
+        const text = await response.text();
+        const payload = JSON.parse(text.startsWith("{") ? text : text.split("\n").find((line) => line.startsWith("data: "))!.slice(6)) as { result: { tools: Array<{ name: string; annotations?: { readOnlyHint?: boolean } }> } };
+        return payload.result.tools;
+      };
+      const tools = await listTools();
+      assert.ok(tools.some((tool) => tool.name === "cards.get"));
+      assert.ok(!tools.some((tool) => tool.name === "cards.update"));
+      assert.ok(tools.every((tool) => tool.annotations?.readOnlyHint === true));
+      await listTools();
+      assert.equal(sessionReads, 1);
+    }, { publicApiUrl: `http://127.0.0.1:${address.port}` });
+  } finally {
+    await new Promise<void>((resolve) => api.close(() => resolve()));
+  }
+});
+
 void test("HTTP MCP endpoint caps request bodies and sends security headers", async () => {
   const server = createServer(createMcpHttpHandler({ bodyMaxBytes: 32 }));
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

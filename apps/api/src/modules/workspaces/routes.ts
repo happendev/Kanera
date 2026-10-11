@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { assertOrgRole, assertWorkspaceAccess, isOrgAdmin, orgRoleRanksAdmin } from "../../lib/access.js";
+import { effectiveMcpPolicy } from "../../lib/mcp-policy.js";
 import { loadAccessibleBoards } from "../../lib/accessible-boards.js";
 import { loadAssignedChecklistItems } from "../../lib/assigned-checklist-items.js";
 import { captureWorkspaceInvitationCreated, captureWorkspaceMemberJoined, evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
@@ -20,7 +21,6 @@ import { applyChecklistTemplates, loadChecklistTemplates } from "../../lib/check
 import { loadWorkspaceCustomFields } from "../../lib/custom-fields.js";
 import { pinAdminToWorkspaceBoards, seedBoardMembersFromWorkspace, unpinAdminFromWorkspaceBoards } from "../../lib/board-membership.js";
 import { addDays, isDueDateOverdue, localDateInTimezone } from "../../lib/due-date.js";
-import { isPaidTier } from "../../lib/entitlements.js";
 import { badRequest, conflict, notFound } from "../../lib/errors.js";
 import { allocateCardKeys, changeWorkspaceCardKeyPrefix, reserveCardKeyPrefix } from "../../lib/card-keys.js";
 import { deleteExternalLinks } from "../../lib/external-links.js";
@@ -93,7 +93,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           updatedAt: workspaces.updatedAt,
           clientRole: clientMembers.clientRole,
           workspaceRole: workspaceMembers.role,
-          billingStatus: clients.billingStatus,
+          mcpPolicy: clients.mcpPolicy,
         })
         .from(workspaces)
         .innerJoin(clients, eq(clients.id, workspaces.clientId))
@@ -115,9 +115,11 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           or(inArray(clientMembers.clientRole, ["owner", "admin"]), isNotNull(workspaceMembers.userId)),
         ))
         .orderBy(asc(workspaces.createdAt));
+      // Personal credentials work on every plan, so Free organisations' workspaces are listed too.
+      // Organisations whose MCP policy is off are hidden from agent credentials altogether.
       return page(rows
-        .filter((row) => env.KANERA_DEPLOYMENT_MODE !== "hosted" || isPaidTier(row.billingStatus))
-        .map(({ clientRole, workspaceRole, billingStatus: _billingStatus, ...workspace }) => ({
+        .filter((row) => effectiveMcpPolicy(row.mcpPolicy) !== "off")
+        .map(({ clientRole, workspaceRole, mcpPolicy: _mcpPolicy, ...workspace }) => ({
           ...workspace,
           role: orgRoleRanksAdmin(clientRole) ? "admin" as const : workspaceRole!,
         })));

@@ -14,7 +14,7 @@ import type {
   WorkViewDefinition,
   WorkViewShareCandidate,
 } from "@kanera/shared/dto";
-import type { WorkViewLens, WorkViewVisibility } from "@kanera/shared/schema";
+import type { CardCustomFieldValue, WorkViewLens, WorkViewVisibility } from "@kanera/shared/schema";
 import { SERVER_EVENTS, expandCardSummary, type WireCardSummary, type WireGlobalWorkSeparator } from "@kanera/shared/events";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
@@ -22,6 +22,7 @@ import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { MyPrioritiesService } from "../../core/priorities/my-priorities.service";
 import { registerSocketHandlers } from "../../core/realtime/socket-handlers";
 import { SocketService, type AppSocket } from "../../core/realtime/socket.service";
+import type { SettleCustomFieldWrite } from "../board/custom-field-write";
 import { CardDragCoordinator } from "../board/card-drag-coordinator.service";
 import { optimisticPriorityPosition, reorderedQueueItems } from "../../shared/priority-queue/priority-queue-math";
 import {
@@ -121,6 +122,9 @@ export interface VisibleCardPatch {
   archivedAt?: string | Date | null;
   updatedAt: string | Date;
 }
+
+const REALTIME_REFRESH_MS = 180;
+const REALTIME_REFRESH_MAX_MS = 1_500;
 
 @Injectable()
 export class GlobalWorkState {
@@ -282,8 +286,12 @@ export class GlobalWorkState {
   private realtimeAttached = false;
   private realtimeRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private realtimeRefreshNeedsCatalog = false;
+  private backgroundRefreshInFlight = false;
+  private backgroundRefreshQueued = false;
+  private destroyed = false;
   private queuedWhileHidden = false;
   private queuedWhileDragging = false;
+  private queuedWhileLoading = false;
   private dragIdleWaiters: Array<() => void> = [];
   private readonly roomLeaves = new Map<string, () => void>();
   private detachRealtime: (() => void) | null = null;
@@ -316,6 +324,8 @@ export class GlobalWorkState {
       this.scheduleRealtimeRefresh(false);
     });
     this.destroyRef.onDestroy(() => {
+      this.destroyed = true;
+      this.requestVersion += 1;
       // Layout gestures write eagerly, but this final write also captures state changed indirectly
       // by applying a saved view immediately before navigating away.
       this.persistPreference();
@@ -421,6 +431,7 @@ export class GlobalWorkState {
       if (version === this.requestVersion) {
         this.loading.set(false);
         this.reconciling.set(false);
+        this.flushQueuedRealtimeRefresh();
       }
     }
   }
@@ -444,6 +455,7 @@ export class GlobalWorkState {
       if (version === this.requestVersion) {
         this.loading.set(false);
         this.reconciling.set(false);
+        this.flushQueuedRealtimeRefresh();
       }
     }
   }
@@ -487,7 +499,10 @@ export class GlobalWorkState {
     } catch {
       if (version === this.requestVersion) this.error.set("We couldn’t apply those filters.");
     } finally {
-      if (version === this.requestVersion) this.loading.set(false);
+      if (version === this.requestVersion) {
+        this.loading.set(false);
+        this.flushQueuedRealtimeRefresh();
+      }
     }
   }
 
@@ -1501,12 +1516,17 @@ export class GlobalWorkState {
    * and then grew the board back a page at a time. That is the layout jumping around after a drop.
    */
   private async loadAllCards(version: number): Promise<WorkQueryResponse> {
+    // Background refreshes preserve the depth the reader already loaded. Replacing a table or
+    // calendar with its first page would remove later rows after any realtime edit.
+    const exhaustive = ["board", "priorities"].includes(this.definition().display);
+    const targetCount = exhaustive ? 10_000 : Math.max(100, this.response().cards.length);
+    // Each continuation cursor carries the ids already returned, so this walk is inherently
+    // sequential: one round trip per hundred loaded rows. scheduleRealtimeRefresh scales its
+    // debounce with that depth so a burst of events pays for one walk, not one per event.
     const merged = await this.loadCards();
-    // Only the board display needs every match at once; the table paginates behind "Load more".
-    if (this.definition().display !== "board") return merged;
     const seen = new Set(merged.cards.map((card) => card.id));
     let combined = merged;
-    while (version === this.requestVersion && combined.nextCursor && combined.cards.length < 10_000) {
+    while (version === this.requestVersion && combined.nextCursor && combined.cards.length < targetCount) {
       const cursor = combined.nextCursor;
       const page = await this.loadCards(cursor);
       const fresh = page.cards.filter((card) => !seen.has(card.id));
@@ -1692,7 +1712,6 @@ export class GlobalWorkState {
   }
 
   private readonly onSocketConnect = () => {
-    if (this.loading()) return;
     // Room refs are rejoined by SocketService first. Refetching after reconnect is the final
     // convergence boundary for mutations or access changes missed while disconnected. Like
     // foreground refreshes, this runs quietly against the still-usable loaded projection.
@@ -1702,7 +1721,6 @@ export class GlobalWorkState {
 
   private readonly onVisibilityChange = () => {
     if (document.visibilityState !== "visible") return;
-    if (this.loading()) return;
     // A foreground transition is itself a convergence boundary: browsers can suspend timers and
     // websocket delivery without producing a timely disconnect event.
     this.queuedWhileHidden = false;
@@ -1735,6 +1753,45 @@ export class GlobalWorkState {
     }));
   }
 
+  captureCustomFieldWrite(cardId: string, fieldId: string): SettleCustomFieldWrite {
+    const scope = this.definition().scope;
+    const lens = this.lens();
+    const readCard = () => this.response().cards.find((card) => card.id === cardId);
+    const previousValues = readCard()?.customFieldValues;
+    const previous = previousValues?.find((value) => value.fieldId === fieldId);
+    return (value) => {
+      const card = readCard();
+      // An acknowledged write still belongs to its original projection. A newer field event or
+      // query snapshot must not be overwritten after the pending picker overlay is released.
+      if (this.destroyRef.destroyed || this.lens() !== lens || this.definition().scope !== scope || !card) return;
+      if (card.customFieldValues?.find((current) => current.fieldId === fieldId) !== previous) return;
+      // Preserve a newer empty query snapshot after a SET/CLEAR cycle; undefined has no row identity.
+      if (previous === undefined && card.customFieldValues !== previousValues) return;
+      if (value) this.applyCustomFieldValue(value);
+      else this.clearCustomFieldValue(cardId, fieldId);
+    };
+  }
+
+  applyCustomFieldValue(value: CardCustomFieldValue): void {
+    this.response.update((response) => ({
+      ...response,
+      cards: response.cards.map((card) => card.id === value.cardId ? {
+        ...card,
+        customFieldValues: [...(card.customFieldValues ?? []).filter((current) => current.fieldId !== value.fieldId), value],
+      } : card),
+    }));
+  }
+
+  clearCustomFieldValue(cardId: string, fieldId: string): void {
+    this.response.update((response) => ({
+      ...response,
+      cards: response.cards.map((card) => card.id === cardId ? {
+        ...card,
+        customFieldValues: (card.customFieldValues ?? []).filter((value) => value.fieldId !== fieldId),
+      } : card),
+    }));
+  }
+
   private patchVisibleCard(card: VisibleCardPatch): void {
     this.response.update((response) => ({
       ...response,
@@ -1755,7 +1812,20 @@ export class GlobalWorkState {
   }
 
   private scheduleRealtimeRefresh(includeCatalog: boolean): void {
+    if (this.destroyed) return;
     this.realtimeRefreshNeedsCatalog ||= includeCatalog;
+    if (this.loading()) {
+      this.queuedWhileLoading = true;
+      return;
+    }
+    if (this.backgroundRefreshInFlight) {
+      // Version invalidation stops the old page walk and prevents its snapshot from overwriting
+      // newer socket patches. Wait for that request to settle before starting one replacement;
+      // debounce alone allowed a slow connection to run overlapping walks of the entire view.
+      if (!this.backgroundRefreshQueued) this.requestVersion += 1;
+      this.backgroundRefreshQueued = true;
+      return;
+    }
     if (typeof document !== "undefined" && document.visibilityState === "hidden") {
       this.queuedWhileHidden = true;
       return;
@@ -1773,10 +1843,40 @@ export class GlobalWorkState {
       this.realtimeRefreshNeedsCatalog = false;
       this.queuedWhileHidden = false;
       void this.reconcileInBackground(refreshCatalog);
-    }, 180);
+    }, this.realtimeRefreshDelay());
+  }
+
+  /**
+   * A background refresh re-walks every page the reader has loaded (loadAllCards), one sequential
+   * request per hundred rows. Scale the debounce with that cost so a busy workspace coalesces a
+   * burst of events into one walk of a deep table instead of a walk per event; a single page keeps
+   * the quick 180 ms convergence. The row itself is already patched live by the socket event.
+   */
+  private realtimeRefreshDelay(): number {
+    const pages = Math.max(1, Math.ceil(this.response().cards.length / 100));
+    return Math.min(REALTIME_REFRESH_MS * pages, REALTIME_REFRESH_MAX_MS);
+  }
+
+  private flushQueuedRealtimeRefresh(): void {
+    if (!this.queuedWhileLoading) return;
+    this.queuedWhileLoading = false;
+    this.scheduleRealtimeRefresh(false);
   }
 
   private async reconcileInBackground(includeCatalog: boolean): Promise<void> {
+    // A timer can have been scheduled before a foreground filter query started. Deferring here
+    // keeps that query's request version (and its loading cleanup) authoritative until it settles.
+    if (this.loading()) {
+      this.realtimeRefreshNeedsCatalog ||= includeCatalog;
+      this.queuedWhileLoading = true;
+      return;
+    }
+    if (this.destroyed) return;
+    if (this.backgroundRefreshInFlight) {
+      this.scheduleRealtimeRefresh(includeCatalog);
+      return;
+    }
+    this.backgroundRefreshInFlight = true;
     const version = ++this.requestVersion;
     this.reconciling.set(true);
     try {
@@ -1817,8 +1917,16 @@ export class GlobalWorkState {
       // Reconciliation is best-effort. Keep the last successful live or cached projection visible;
       // the socket watchdog, a later event, or the next foreground transition will retry.
     } finally {
-      if (version === this.requestVersion) {
-        this.reconciling.set(false);
+      this.backgroundRefreshInFlight = false;
+      // A queued replacement invalidated this version so it would not clear the flag by itself,
+      // and that replacement may now park behind the hidden-tab or drag gate indefinitely. Clear it
+      // here; the replacement raises it again when it actually starts.
+      if (version === this.requestVersion || this.backgroundRefreshQueued) this.reconciling.set(false);
+      if (this.backgroundRefreshQueued) {
+        this.backgroundRefreshQueued = false;
+        // A cancelled catalog refresh must not be downgraded to a cards-only refresh by the
+        // last event in the burst. Visibility, drag and foreground-query gates still apply.
+        this.scheduleRealtimeRefresh(includeCatalog);
       }
     }
   }

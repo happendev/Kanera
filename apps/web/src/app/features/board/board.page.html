@@ -83,7 +83,9 @@
         }
         <div class="board-overview-actions">
           <button type="button" (click)="setView('history'); overviewOpen.set(false)"><i class="ti ti-history"></i> Work done</button>
+          @if (auth.user()?.portfolioEnabled !== false) {
           <button type="button" (click)="openPortfolio()"><i class="ti ti-chart-dots-3"></i> Portfolio</button>
+          }
         </div>
       </section>
       }
@@ -232,6 +234,7 @@
       [workDoneEventType]="workDoneEventType()"
       [showActivity]="effectiveView() !== 'history'"
       [showPrioritySet]="effectiveView() !== 'history'"
+      [showReminderSet]="effectiveView() !== 'history'"
       [showCompleted]="effectiveView() !== 'history'"
       [showArchived]="effectiveView() !== 'history'"
       [completedFrom]="completedFrom()"

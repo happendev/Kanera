@@ -12,7 +12,7 @@
     "start": "ng serve --port 4200 --host 0.0.0.0 --proxy-config proxy.https.conf.json",
     "start:https": "ng serve --configuration push-https --port 4200 --host 0.0.0.0 --ssl --ssl-cert ../../.certs/localhost.pem --ssl-key ../../.certs/localhost-key.pem --proxy-config proxy.https.conf.json",
     "prebuild": "node scripts/write-build-info.mjs && pnpm assets:generate",
-    "build": "ng build --configuration production --stats-json && node scripts/report-bundle.mjs --check",
+    "build": "ng build --configuration production --stats-json && node scripts/report-bundle.mjs --check && node scripts/precompress.mjs",
     "bundle:report": "node scripts/report-bundle.mjs",
     "bundle:analyze": "ng build --configuration production --stats-json && pnpm bundle:report",
     "bundle:check": "pnpm build",

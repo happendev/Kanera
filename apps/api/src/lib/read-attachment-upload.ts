@@ -3,7 +3,7 @@ import type { FastifyRequest } from "fastify";
 import { AppError, badRequest } from "./errors.js";
 import { formatStorageBytes } from "./entitlements.js";
 
-function fileTooLargeError(maxFileBytes: number, attemptedBytes?: number) {
+export function fileTooLargeError(maxFileBytes: number, attemptedBytes?: number) {
   return new AppError(
     400,
     "FILE_TOO_LARGE",

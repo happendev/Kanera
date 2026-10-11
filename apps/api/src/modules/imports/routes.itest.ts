@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import type { CommitImportBody } from "@kanera/shared/dto";
-import { activityEvents, boards, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cards, clients, comments, emailQueue, eventOutbox, kaneraBoardImports, lists, trelloImports, type ImportCompletedEmailQueueData } from "@kanera/shared/schema";
+import { activityEvents, boards, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardLabelAssignments, cardLabels, cards, clients, comments, emailQueue, eventOutbox, kaneraBoardImports, lists, trelloImports, type ImportCompletedEmailQueueData } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
@@ -863,4 +863,50 @@ void test("Kanera board import round-trips nested checklist detail and item desc
   assert.equal(importedNested.parentItemId, importedParentItem.id);
   const importedSubItems = await db.select().from(cardChecklistItems).where(eq(cardChecklistItems.checklistId, importedNested.id));
   assert.deepEqual(importedSubItems.map((i) => i.text), ["Sub item"]);
+});
+
+void test("Kanera board import collapses label assignments when two source labels map to one destination label", async () => {
+  // A card that carried both source labels would otherwise produce two identical
+  // (card_id, label_id) rows and the composite primary key would abort the whole import.
+  const { user, workspace, targetList } = await setupImportTarget("Acme Kanera Label Mapping", "owner-kanera-label-mapping@example.com");
+  const [sourceBoard] = await db.insert(boards).values({ workspaceId: workspace.id, name: "Source", position: "9000.0000000000" }).returning();
+  const [sourceList] = await db.insert(lists).values({ workspaceId: workspace.id, name: "Source list", position: "9000.0000000000" }).returning();
+  assert.ok(sourceBoard);
+  assert.ok(sourceList);
+  const [sourceCard] = await db.insert(cards).values({ listId: sourceList.id, boardId: sourceBoard.id, title: "Doubly labelled", position: "1000.0000000000", createdById: user.id }).returning();
+  assert.ok(sourceCard);
+  const [labelA, labelB, destination] = await db.insert(cardLabels).values([
+    { workspaceId: workspace.id, name: "Urgent", color: "red", position: "1000.0000000000" },
+    { workspaceId: workspace.id, name: "Blocker", color: "orange", position: "2000.0000000000" },
+    { workspaceId: workspace.id, name: "Priority", color: "red", position: "3000.0000000000" },
+  ]).returning();
+  assert.ok(labelA && labelB && destination);
+  await db.insert(cardLabelAssignments).values([
+    { cardId: sourceCard.id, labelId: labelA.id },
+    { cardId: sourceCard.id, labelId: labelB.id },
+  ]);
+
+  const archive = await buildBoardExportArchive(sourceBoard.id, user.clientId);
+  assert.equal(archive.cardLabelAssignments.filter((row) => row.cardId === sourceCard.id).length, 2);
+  const body: CommitImportBody = {
+    board: { name: "Imported Kanera", icon: "layout-kanban" },
+    lists: { [sourceList.id]: { action: "map", targetListId: targetList.id } },
+    labels: {
+      [labelA.id]: { action: "map", targetLabelId: destination.id },
+      [labelB.id]: { action: "map", targetLabelId: destination.id },
+    },
+    customFields: {},
+    members: {},
+    options: { includeArchived: false, importComments: false, importCustomFields: false, attachmentCopyMode: "skip" },
+  };
+  const storage = await getStorageForClient(user.clientId);
+
+  const result = await db.transaction((tx) =>
+    runKaneraBoardImport(tx, { source: archive, body, workspaceId: workspace.id, clientId: user.clientId, actorId: user.id, storage })
+  );
+
+  const [importedCard] = await db.select().from(cards).where(and(eq(cards.boardId, result.board.id), eq(cards.title, "Doubly labelled"))).limit(1);
+  assert.ok(importedCard);
+  const assignments = await db.select({ labelId: cardLabelAssignments.labelId }).from(cardLabelAssignments).where(eq(cardLabelAssignments.cardId, importedCard.id));
+  assert.deepEqual(assignments, [{ labelId: destination.id }]);
 });

@@ -6,7 +6,7 @@ import type { BoardInvitationLookupResponse } from "@kanera/shared/dto";
 import { AuthService } from "../../core/auth/auth.service";
 import { PublicAuthClient } from "../../core/auth/public-auth.client";
 import { TurnstileChallenge } from "../../core/auth/turnstile-challenge";
-import { parseAuthResponse } from "../../core/auth/auth-response";
+import { isMfaEnrollmentRequired, MFA_ENROLLMENT_HANDOFF_KEY, parseAuthResponse } from "../../core/auth/auth-response";
 import { LogoComponent } from "../../shared/logo.component";
 import { ThemeService, type Theme } from "../../core/theme/theme.service";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
@@ -117,11 +117,18 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
   readonly emailVerificationEnabled = signal(false);
   readonly signupsEnabled = signal(true);
   readonly publicSignupBlocked = computed(() => !this.signupsEnabled() && !this.inviteToken() && !this.boardInviteToken());
+  // Both invitation kinds must survive the hop to login, or an invitee who already has an account
+  // signs in to their ordinary home and the invitation is silently dropped. Login sends them back to
+  // the acceptance page through returnUrl.
   readonly signInLink = computed(() => {
-    const token = this.boardInviteToken();
-    if (!token) return "/login";
-    const returnUrl = `/board-invite?token=${encodeURIComponent(token)}`;
-    return `/login?returnUrl=${encodeURIComponent(returnUrl)}`;
+    const boardToken = this.boardInviteToken();
+    const inviteToken = this.inviteToken();
+    const returnUrl = boardToken
+      ? `/board-invite?token=${encodeURIComponent(boardToken)}`
+      : inviteToken
+        ? `/invite?token=${encodeURIComponent(inviteToken)}`
+        : null;
+    return returnUrl ? `/login?returnUrl=${encodeURIComponent(returnUrl)}` : "/login";
   });
   readonly kaneraEnvironment = signal<KaneraEnvironment>("production");
   readonly deploymentMode = signal<DeploymentMode>("self_hosted");
@@ -327,7 +334,14 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
       return;
     }
     this.turnstile.reset();
-    const json = parseAuthResponse(await res.json());
+    const raw: unknown = await res.json();
+    if (isMfaEnrollmentRequired(raw)) {
+      // The account was created, but the organisation it joined mandates MFA: no session was issued.
+      // The login page owns the enrollment flow and issues the session once a factor is enabled.
+      await this.router.navigateByUrl("/login", { state: { [MFA_ENROLLMENT_HANDOFF_KEY]: raw.challengeToken } });
+      return;
+    }
+    const json = parseAuthResponse(raw);
     this.auth.setSession(json.accessToken, json.user);
     this.analytics.setSuppressed(json.user.analyticsExcluded === true);
     if (json.user.analyticsExcluded !== true) {

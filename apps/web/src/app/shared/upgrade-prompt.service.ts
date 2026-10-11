@@ -181,11 +181,11 @@ export class UpgradePromptService {
         };
       case "api":
         return {
-          headline: "Connect Kanera to your systems and AI agents with Pro.",
-          attemptedAction: "Open API or MCP setup",
+          headline: "Run integrations and unattended AI agents with Pro.",
+          attemptedAction: "Create a workspace API key or unattended agent",
           valueReceived: "Your boards and workflows are ready to become the source for connected systems and agents.",
           cost,
-          freeConsequence: "Your work stays in Kanera, but API keys, webhooks, and MCP connections remain unavailable.",
+          freeConsequence: "Your own AI agents and personal API keys keep working within fair-use limits, but workspace API keys, webhooks, and unattended agents remain unavailable.",
         };
       case "integration":
         return {

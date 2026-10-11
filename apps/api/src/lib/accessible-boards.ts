@@ -14,9 +14,8 @@ import {
 import { and, asc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import type { AuthClaims } from "../auth/plugin.js";
 import { db } from "../db.js";
-import { env } from "../env.js";
 import { isOrgAdmin } from "./access.js";
-import { isPaidTier } from "./entitlements.js";
+import { effectiveMcpPolicy } from "./mcp-policy.js";
 
 declare module "@fastify/request-context" {
   interface RequestContextData {
@@ -306,7 +305,6 @@ async function loadAccessibleBoardsUncached(auth: AuthClaims): Promise<Accessibl
         workspaceKind: workspaces.kind,
         clientId: clients.id,
         clientName: clients.name,
-        billingStatus: clients.billingStatus,
         boardName: boards.name,
         boardIcon: boards.icon,
         boardIconColor: boards.iconColor,
@@ -316,6 +314,7 @@ async function loadAccessibleBoardsUncached(auth: AuthClaims): Promise<Accessibl
         boardRole: boardMembers.role,
         assignedItemsOnly: boardMembers.assignedItemsOnly,
         workspaceMemberId: workspaceMembers.userId,
+        mcpPolicy: clients.mcpPolicy,
       })
       .from(boards)
       .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
@@ -347,12 +346,17 @@ async function loadAccessibleBoardsUncached(auth: AuthClaims): Promise<Accessibl
       ))
       .orderBy(asc(workspaces.createdAt), asc(boards.position));
 
-    const eligible = rows.filter((row) =>
-      env.KANERA_DEPLOYMENT_MODE !== "hosted" || isPaidTier(row.billingStatus)
-    );
-    return applyNavigationOrder(auth.cid, eligible.map((row) => {
+    // Personal credentials reach boards in Free organisations too; only unattended workspace
+    // credentials are restricted to paid organisations (enforced at authentication). Each board's
+    // owning organisation applies its MCP policy: `off` hides the board, `read` makes it observe-only.
+    // The credential's own scope is read before any per-organisation cap left on the claims.
+    const grantedReadOnly = (auth.apiKeyGrantedScope ?? auth.apiKeyScope) === "read";
+    return applyNavigationOrder(auth.cid, rows.flatMap((row) => {
+      const policy = effectiveMcpPolicy(row.mcpPolicy);
+      if (policy === "off") return [];
+      const readOnly = grantedReadOnly || policy === "read";
       const orgAdmin = row.clientRole === "owner" || row.clientRole === "admin";
-      return {
+      return [{
         id: row.boardId,
         workspaceId: row.workspaceId,
         workspaceName: row.workspaceName,
@@ -364,10 +368,10 @@ async function loadAccessibleBoardsUncached(auth: AuthClaims): Promise<Accessibl
         name: row.boardName,
         icon: row.boardIcon,
         iconColor: row.boardIconColor,
-        viewerRole: readOnlyCredential ? "observer" as const : orgAdmin ? "editor" as const : row.boardRole!,
+        viewerRole: readOnly ? "observer" as const : orgAdmin ? "editor" as const : row.boardRole!,
         assignedItemsOnly: orgAdmin ? false : row.assignedItemsOnly ?? false,
         canAccessWorkspace: Boolean(row.clientRole && (orgAdmin || row.workspaceMemberId)),
-      };
+      }];
     }));
   }
 

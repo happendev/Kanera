@@ -243,6 +243,10 @@ void test("a read-scoped personal key reads but cannot mutate via the public API
     const session = await publicApi.inject({ method: "GET", url: "/api/v1/session", headers: keyAuth });
     assert.equal(session.statusCode, 200, session.body);
     assert.equal(session.json<{ scope: string | null }>().scope, "read");
+    // Agents resolve relative dates against the user's zone and today's date there.
+    const { timeZone, today } = session.json<{ timeZone: string; today: string }>();
+    assert.equal(timeZone, "UTC");
+    assert.equal(today, new Date().toISOString().slice(0, 10));
 
     // Reads resolve through the owner's access.
     const detail = await publicApi.inject({ method: "GET", url: `/api/v1/cards/${cardId}/detail`, headers: keyAuth });

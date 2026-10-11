@@ -52,6 +52,17 @@
       }
     </span>
     }
+    @if (!card().archivedAt) {
+    <span class="watcher-popover-wrap">
+      <button class="ghost icon reminder-btn" [class.has-reminder]="pendingReminder()" [class.is-active]="reminderPopoverOpen()" (click)="toggleReminderPopover($event)"
+        [attr.aria-label]="reminderLabel()" [attr.aria-expanded]="reminderPopoverOpen()" [kTooltip]="reminderLabel()">
+        <i class="ti ti-alarm"></i>
+      </button>
+      @if (reminderPopoverOpen()) {
+      <k-reminder-popover [cardId]="card().id" (dismissed)="reminderPopoverOpen.set(false)" />
+      }
+    </span>
+    }
     @if (canArchiveRole()) {
     @if (card().archivedAt) {
     <button class="ghost sm unarchive-btn" (click)="setArchived(false)" [disabled]="archiving() || !canArchive()" aria-label="Unarchive card" kTooltip="Unarchive card">
@@ -190,15 +201,10 @@
         </div>
         <div class="members-row">
           @for (m of assignedMembers(); track m.userId) {
-          @if (canEditRole()) {
-          <button type="button" class="member-avatar" [disabled]="!canEdit()" (click)="toggleAssignee(m.userId)" [attr.aria-label]="'Unassign ' + m.displayName" [kTooltip]="'Unassign ' + m.displayName">
-            <k-avatar [url]="m.avatarUrl" [name]="m.displayName" [size]="32" [userId]="m.userId" [workspaceId]="workspaceId()" [showPresence]="true" [showTooltip]="false" [lastOnlineAt]="m.lastOnlineAt" />
-          </button>
-          } @else {
           <span class="member-avatar">
-            <k-avatar [url]="m.avatarUrl" [name]="m.displayName" [size]="32" [userId]="m.userId" [workspaceId]="workspaceId()" [showPresence]="true" [lastOnlineAt]="m.lastOnlineAt" />
+            <k-avatar [url]="m.avatarUrl" [name]="m.displayName" [size]="32" [userId]="m.userId" [workspaceId]="workspaceId()" [showPresence]="true" [lastOnlineAt]="m.lastOnlineAt"
+              [profile]="true" [profileActions]="assigneeProfileActions().get(m.userId) ?? null" />
           </span>
-          }
           }
           @if (canEditRole()) {
           <div class="member-picker-wrap">
@@ -425,7 +431,7 @@
             @switch (field.type) {
               @case ('checkbox') {
               <button type="button" class="cf-checkbox-btn" [class.checked]="fieldValue?.valueCheckbox === true" [disabled]="!canEdit()" (click)="setCheckboxField(field, fieldValue?.valueCheckbox !== true)">
-                <i class="ti" [class.ti-checkbox]="fieldValue?.valueCheckbox === true" [class.ti-square]="fieldValue?.valueCheckbox !== true"></i>
+                <i class="ti" [class.ti-square-check]="fieldValue?.valueCheckbox === true" [class.ti-square]="fieldValue?.valueCheckbox !== true"></i>
                 Yes
               </button>
               }
@@ -467,7 +473,7 @@
                   }
                 </button>
                 @if (cfPickerFieldId() === field.id && canEditRole()) {
-                <k-select-picker [options]="optionsForField(field)" [selectedIds]="fieldValue?.valueOptionIds ?? []" [allowMultiple]="$any(field).allowMultiple" [title]="field.name"
+                <k-select-picker [options]="optionsForField(field)" [selectedIds]="optionIdsFor(field.id)" [allowMultiple]="$any(field).allowMultiple" [title]="field.name"
                   (toggle)="toggleSelectOption(field, $event)" (clear)="clearCfField(field)" (close)="cfPickerFieldId.set(null)" />
                 }
               </div>
@@ -487,7 +493,7 @@
                   }
                 </button>
                 @if (cfPickerFieldId() === field.id && canEditRole()) {
-                <k-member-picker [members]="members()" [selectedIds]="fieldValue?.valueUserIds ?? []" [currentUserId]="currentUserId()" [workspaceId]="workspaceId()" [allowClear]="true" clearLabel="Clear"
+                <k-member-picker [members]="members()" [selectedIds]="userIdsFor(field.id)" [currentUserId]="currentUserId()" [workspaceId]="workspaceId()" [allowClear]="true" clearLabel="Clear"
                   (toggle)="toggleUserValue(field, $event)" (clear)="clearCfField(field)" (close)="cfPickerFieldId.set(null)" />
                 }
               </div>

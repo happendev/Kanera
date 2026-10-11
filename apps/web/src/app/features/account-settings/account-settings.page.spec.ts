@@ -2,7 +2,7 @@ import { computed, provideZonelessChangeDetection, signal, type WritableSignal }
 import type { ComponentFixture } from "@angular/core/testing";
 import { TestBed } from "@angular/core/testing";
 import { ActivatedRoute, Router } from "@angular/router";
-import type { Entitlements, NotificationSettingsResponse, NotificationWorkspaceRule } from "@kanera/shared/dto";
+import type { Entitlements, NotificationSettingsResponse, NotificationWorkspaceRule, StorageFilesResponse, StorageOverviewResponse } from "@kanera/shared/dto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import type { AuthUser } from "../../core/auth/auth.service";
@@ -45,6 +45,7 @@ const enabledWorkspaceRuleTypes = (): NotificationWorkspaceRule["types"] => ({
   commentMentioned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
   cardDueDateChanged: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
   cardOverdue: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+  cardReminder: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
 });
 
 describe("AccountSettingsPage", () => {
@@ -70,6 +71,8 @@ describe("AccountSettingsPage", () => {
   let orgUsersResponse: unknown[];
   let orgGuestSeatsResponse: unknown[];
   let archivedWorkspacesResponse: unknown[];
+  let storageOverviewResponse: StorageOverviewResponse;
+  let storageFilesResponse: StorageFilesResponse;
   let emailVerificationEnabled: boolean;
   let githubConfigResponse: unknown;
   let githubInstallationResponse: unknown;
@@ -138,7 +141,9 @@ describe("AccountSettingsPage", () => {
       maxEnabledAutomations: null,
       maxAutomationExecutionsPerMonth: null,
       guestsAllowed: true,
-      apiAllowed: true,
+      serviceAgentsAllowed: true,
+      apiRequestsPerSecond: 20,
+      apiRequestsPerMinute: 400,
       webhooksAllowed: true,
     });
     maxOrgMembers = signal<number | null>(null);
@@ -151,6 +156,41 @@ describe("AccountSettingsPage", () => {
     orgUsersResponse = [];
     orgGuestSeatsResponse = [];
     archivedWorkspacesResponse = [];
+    storageOverviewResponse = {
+      usage: { usedBytes: 210 * 1024 * 1024, quotaBytes: 250 * 1024 * 1024, remainingBytes: 40 * 1024 * 1024, limited: true, maxFileBytes: 5 * 1024 * 1024 },
+      warningPercent: 80,
+      categories: [
+        { key: "cards", bytes: 200 * 1024 * 1024, count: 12 },
+        { key: "notes", bytes: 9 * 1024 * 1024, count: 2 },
+        { key: "personal", bytes: 1024 * 1024, count: 1 },
+      ],
+      workspaces: [{ workspaceId: "workspace-1", name: "Workspace", kind: "standard", bytes: 209 * 1024 * 1024, count: 14 }],
+    };
+    storageFilesResponse = {
+      total: 1,
+      totalBytes: 40 * 1024 * 1024,
+      items: [{
+        kind: "card",
+        id: "019ed5a7-8b12-7e60-8599-3f0069ce7281",
+        fileName: "launch-video.mp4",
+        mimeType: "video/mp4",
+        byteSize: 40 * 1024 * 1024,
+        createdAt: "2026-01-02T10:00:00.000Z",
+        uploadedByName: "Priya",
+        workspaceId: "workspace-1",
+        workspaceName: "Workspace",
+        workspaceKind: "standard",
+        boardId: "019ed5a7-8b12-7e60-8599-3f0069ce7282",
+        boardName: "Roadmap",
+        cardId: "019ed5a7-8b12-7e60-8599-3f0069ce7283",
+        cardKey: "DEV-7",
+        organisationKey: "0123456789ABCDEF",
+        cardTitle: "Launch",
+        noteId: null,
+        noteTitle: null,
+        archived: true,
+      }],
+    };
     emailVerificationEnabled = false;
     githubConfigResponse = { configured: false, installUrl: null, appSlug: null, source: null };
     githubInstallationResponse = null;
@@ -172,6 +212,7 @@ describe("AccountSettingsPage", () => {
         commentMentioned: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
         cardDueDateChanged: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
         cardOverdue: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+        cardReminder: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
       },
       workspaceRules: [],
     };
@@ -206,6 +247,8 @@ describe("AccountSettingsPage", () => {
         if (path === "/clients/me/invites") return [];
         if (path === "/workspaces") return [{ id: "workspace-1", name: "Workspace" }];
         if (path === "/clients/me/archived-workspaces") return archivedWorkspacesResponse;
+        if (path === "/clients/me/storage") return storageOverviewResponse;
+        if (path.startsWith("/clients/me/storage/files")) return storageFilesResponse;
         if (path === "/clients/me/github-app/config") return githubConfigResponse;
         if (path === "/clients/me/github-app/installation") return githubInstallationResponse;
         if (path === "/notifications/settings") return notificationSettingsResponse;
@@ -363,8 +406,8 @@ describe("AccountSettingsPage", () => {
     expect(typeGrid?.textContent).not.toContain("ntfy");
     expect(typeGrid?.textContent).not.toContain("Gotify");
     expect(typeGrid?.textContent).not.toContain("Webhook");
-    expect(typeGrid?.querySelectorAll(".mini-toggle").length).toBe(10);
-    expect(additionalDestinations?.querySelectorAll(".personal-channel-types .mini-toggle").length).toBe(15);
+    expect(typeGrid?.querySelectorAll(".mini-toggle").length).toBe(12);
+    expect(additionalDestinations?.querySelectorAll(".personal-channel-types .mini-toggle").length).toBe(18);
   });
 
   it("keeps email and browser push available while hiding Pro-only personal destinations on Free", async () => {
@@ -377,7 +420,9 @@ describe("AccountSettingsPage", () => {
       maxEnabledAutomations: 1,
       maxAutomationExecutionsPerMonth: 100,
       guestsAllowed: false,
-      apiAllowed: false,
+      serviceAgentsAllowed: false,
+      apiRequestsPerSecond: 5,
+      apiRequestsPerMinute: 60,
       webhooksAllowed: false,
     });
     activeSettingsRoute = "notifications";
@@ -427,11 +472,12 @@ describe("AccountSettingsPage", () => {
         commentMentioned: { email: true, push: false, ntfy: true, gotify: true, webhook: true },
         cardDueDateChanged: { email: true, push: false, ntfy: true, gotify: true, webhook: true },
         cardOverdue: { email: true, push: false, ntfy: true, gotify: true, webhook: true },
+        cardReminder: { email: true, push: false, ntfy: true, gotify: true, webhook: true },
       },
     });
     expect(component.notificationSettings()?.workspaceRules).toHaveLength(1);
     fixture.detectChanges();
-    expect(root.textContent).toContain("4/5 types");
+    expect(root.textContent).toContain("5/6 types");
 
     await component.resetWorkspaceRule(group.workspaceId);
     expect(api.delete).toHaveBeenCalledWith("/notifications/settings/workspaces/workspace-1");
@@ -464,7 +510,7 @@ describe("AccountSettingsPage", () => {
     expect(editor?.textContent).not.toContain("Webhook");
     expect(editor?.querySelectorAll('input[type="radio"]')).toHaveLength(0);
     expect(editor?.querySelectorAll(".workspace-switch-control")).toHaveLength(0);
-    expect(editor?.querySelectorAll(".workspace-matrix-checkbox")).toHaveLength(5);
+    expect(editor?.querySelectorAll(".workspace-matrix-checkbox")).toHaveLength(6);
     expect(editor?.querySelectorAll(".workspace-matrix-channel-heading input")).toHaveLength(1);
     expect(editor?.querySelector(".workspace-rule-pause-action")?.textContent).toContain("Pause");
     expect(editor?.textContent).toContain("Choose which types each available provider can deliver");
@@ -678,7 +724,9 @@ describe("AccountSettingsPage", () => {
       maxEnabledAutomations: 1,
       maxAutomationExecutionsPerMonth: 100,
       guestsAllowed: false,
-      apiAllowed: false,
+      serviceAgentsAllowed: false,
+      apiRequestsPerSecond: 5,
+      apiRequestsPerMinute: 60,
       webhooksAllowed: false,
     });
     await createPage();
@@ -1100,7 +1148,7 @@ describe("AccountSettingsPage", () => {
   });
 
   it("shows hosted GitHub App installation when deployment credentials are configured", async () => {
-    activeSettingsRoute = "org";
+    activeSettingsRoute = "integrations";
     githubConfigResponse = {
       configured: true,
       installUrl: "https://github.com/apps/kanera-board/installations/new",
@@ -1126,7 +1174,7 @@ describe("AccountSettingsPage", () => {
   });
 
   it("warns when a hosted GitHub installation has no selected private repositories", async () => {
-    activeSettingsRoute = "org";
+    activeSettingsRoute = "integrations";
     githubConfigResponse = {
       configured: true,
       installUrl: "https://github.com/apps/kanera-board/installations/new",
@@ -1243,7 +1291,9 @@ describe("AccountSettingsPage", () => {
       maxEnabledAutomations: 1,
       maxAutomationExecutionsPerMonth: 100,
       guestsAllowed: false,
-      apiAllowed: false,
+      serviceAgentsAllowed: false,
+      apiRequestsPerSecond: 5,
+      apiRequestsPerMinute: 60,
       webhooksAllowed: false,
     });
     await createPage();
@@ -1389,12 +1439,18 @@ describe("AccountSettingsPage", () => {
     expect(text).not.toContain("Current plan");
     expect(text).not.toContain("Upgrade to Pro");
     expect(text).not.toContain("Cancel plan");
+    expect(text).toContain("Organisation name");
+
+    await navigateToSettingsRoute("integrations");
+    text = (fixture.nativeElement as HTMLElement).textContent ?? "";
     expect(text).toContain("GitHub App");
     expect(text).toContain("Enable push message");
     expect(text).toContain("Allow browser push for this organisation");
-    expect(text).toContain("Storage");
     expect(text).toContain("SMTP");
-    expect(text).toContain("Organisation name");
+
+    await navigateToSettingsRoute("storage");
+    text = (fixture.nativeElement as HTMLElement).textContent ?? "";
+    expect(text).toContain("Storage backend");
 
     await navigateToSettingsRoute("users");
 
@@ -1553,5 +1609,68 @@ describe("AccountSettingsPage", () => {
     fixture.detectChanges();
     expect(inputs.every((input) => input.value === "")).toBe(true);
     expect(submitButton?.textContent).toContain("Change password");
+  });
+  it("groups personal settings apart from organisation settings, which only admins see", async () => {
+    activeSettingsRoute = "profile";
+    await createPage();
+    const labels = () => Array.from((fixture.nativeElement as HTMLElement).querySelectorAll(".settings-tab-group")).map((el) => el.textContent?.trim());
+    const tabs = () => Array.from((fixture.nativeElement as HTMLElement).querySelectorAll(".settings-tabs a")).map((el) => el.textContent?.trim());
+    expect(labels()).toEqual(["Your account", "Organisation"]);
+    expect(tabs()).toEqual(expect.arrayContaining(["General", "Users", "Security", "Storage"]));
+
+    isOrgAdmin.set(false);
+    fixture.detectChanges();
+    expect(labels()).toEqual([]);
+    expect(tabs()).toEqual(["Profile", "Notifications", expect.stringContaining("API Keys")]);
+  });
+
+  it("shows storage usage near the limit and deletes the selected files", async () => {
+    activeSettingsRoute = "storage";
+    await createPage();
+    const root = fixture.nativeElement as HTMLElement;
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(root.querySelector(".storage-file")).not.toBeNull();
+    });
+
+    const text = root.textContent ?? "";
+    expect(text).toContain("210.0 MB");
+    expect(text).toContain("of 250.0 MB used");
+    expect(text).toContain("84%");
+    expect(text).toContain("close to its storage limit");
+    expect(text).toContain("launch-video.mp4");
+    expect(text).toContain("DEV-7 Launch");
+    expect(text).toContain("Archived");
+    expect(api.get).toHaveBeenCalledWith("/clients/me/storage/files?sort=largest&limit=50&offset=0");
+
+    const checkbox = root.querySelector<HTMLInputElement>(".storage-file input[type=checkbox]")!;
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new Event("change"));
+    fixture.detectChanges();
+    api.post.mockResolvedValueOnce({ deletedCount: 1, freedBytes: 40 * 1024 * 1024 });
+    root.querySelector<HTMLButtonElement>(".storage-delete-button")!.click();
+
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/clients/me/storage/files/delete", {
+      files: [{ kind: "card", id: "019ed5a7-8b12-7e60-8599-3f0069ce7281" }],
+    }));
+    expect(confirmOpen).toHaveBeenCalledWith(expect.objectContaining({ title: "Delete this file?", danger: true }));
+  });
+
+  it("reloads the storage file list when a filter changes", async () => {
+    activeSettingsRoute = "storage";
+    await createPage();
+    const root = fixture.nativeElement as HTMLElement;
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(root.querySelector(".storage-file")).not.toBeNull();
+    });
+
+    const archived = Array.from(root.querySelectorAll<HTMLLabelElement>(".storage-filters .storage-filter-check"))
+      .find((label) => label.textContent?.includes("Archived only"))!.querySelector("input")!;
+    archived.checked = true;
+    archived.dispatchEvent(new Event("change"));
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/clients/me/storage/files?sort=largest&limit=50&offset=0&archivedOnly=true"));
   });
 });

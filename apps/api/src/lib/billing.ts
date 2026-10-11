@@ -633,7 +633,14 @@ function analyticsPaymentReason(reason: Stripe.Invoice.BillingReason | null): Su
 async function applySubscription(
   subscription: Stripe.Subscription,
   config: StripeEnv = env,
-  notifications?: { mailer?: Mailer; eventId?: string; allowUnpaidSeatIncrease?: boolean },
+  notifications?: {
+    mailer?: Mailer;
+    eventId?: string;
+    allowUnpaidSeatIncrease?: boolean;
+    // Set on the single recursive call made after a subscription-id mismatch; it stops a second
+    // mismatch (Stripe answering with yet another id) from recursing again.
+    reconciledFromHeldSubscription?: boolean;
+  },
 ): Promise<string | null> {
   const sub = subscription as SubscriptionLike;
   const clientId = typeof sub.metadata?.clientId === "string" ? sub.metadata.clientId : null;
@@ -665,6 +672,21 @@ async function applySubscription(
     .from(clients)
     .where(eq(clients.id, client.id))
     .limit(1);
+  // Stripe does not guarantee webhook ordering, so a terminal event (canceled, unpaid, paused, ...) for
+  // an older subscription can land after the organisation has already moved onto a replacement
+  // subscription. A downgrade is only valid for the subscription Kanera currently holds, so instead of
+  // trusting the stale snapshot, reconcile from the live state of the held subscription: if it is still
+  // paid nothing changes, and if it was also lost (its own event dropped) the downgrade still happens.
+  // A Stripe read failure propagates so handleStripeEvent releases the event claim for retry.
+  if (
+    !isPaidTier(target.billingStatus)
+    && previous?.stripeSubscriptionId
+    && previous.stripeSubscriptionId !== sub.id
+    && notifications?.reconciledFromHeldSubscription !== true
+  ) {
+    const held = await stripe(config).subscriptions.retrieve(previous.stripeSubscriptionId, { expand: ["latest_invoice"] });
+    return applySubscription(held, config, { ...notifications, reconciledFromHeldSubscription: true });
+  }
   const downgradeImpact = !isPaidTier(target.billingStatus) ? await previewDowngradeImpact(client.id) : null;
   const restoreImpact = isPaidTier(target.billingStatus) ? await impactFromPlanActions(client.id) : null;
 

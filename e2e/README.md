@@ -80,6 +80,8 @@ Rules that keep results trustworthy:
 - **Own the state you change.** A test that revokes access, deletes something, or changes shared settings creates its own board, card, or field first. It must not depend on which spec ran before it.
 - **Prove the negative before relying on it.** If a test disconnects something, assert that the disconnection happened, as `reconnect.spec.ts` does with `refusedAttempts` and a bounded check that nothing arrived.
 - **Check a new assertion can fail.** When adding a check for a bug, run it once against the unfixed behaviour and confirm it fails.
+- **Mind the lane render cap.** A lane mounts only its first 15 cards (`INITIAL_RENDER_CAP` in `list.component.ts`). By late in a full run, seed lists exceed that, so a newly created tile can be in state but not in an observing page's DOM. Assert late tiles with `expectCardTileMounted(page, title, listId?)`. A realtime spec that fails only in the full suite and only for the newest cards is usually this, not a fanout regression.
+- **Record coverage.** Add each new spec's caught failures to `COVERAGE.md`.
 
 ## Artifacts
 

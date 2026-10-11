@@ -1,6 +1,6 @@
 import jwt from "@fastify/jwt";
 import { requestContext } from "@fastify/request-context";
-import { supportSessions, users, workspaceApiKeys, workspaces, type ClientRole, type WorkspaceApiKeyKind, type WorkspaceApiKeyScope } from "@kanera/shared/schema";
+import { supportSessions, users, workspaceApiKeys, workspaces, type ClientMcpPolicy, type ClientRole, type WorkspaceApiKeyKind, type WorkspaceApiKeyScope } from "@kanera/shared/schema";
 import { and, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
@@ -9,7 +9,9 @@ import { env } from "../env.js";
 import { unauthorized } from "../lib/errors.js";
 import { hashOpaqueToken } from "../lib/tokens.js";
 import { authenticateMcpDelegationToken } from "../oauth/routes.js";
+import type { ApiRateTier } from "../lib/api-rate-limit.js";
 import { resolvePersonalCredentialOrganisation } from "./personal-credential-context.js";
+import { applyMcpPolicy } from "../lib/mcp-policy.js";
 import { z } from "zod";
 
 declare module "fastify" {
@@ -81,6 +83,16 @@ export interface AuthClaims {
   // hold the personal subset ("read" | "write"); "admin" is a workspace-key value. The one
   // "admin" comparison lives in the workspace branch of assertBoardAccess.
   apiKeyScope?: WorkspaceApiKeyScope;
+  // Personal credentials only: the credential's own scope before the current organisation's MCP
+  // policy capped it into apiKeyScope, and that effective policy (see lib/mcp-policy.ts). Both are
+  // recomputed whenever the credential rebases onto another organisation.
+  apiKeyGrantedScope?: WorkspaceApiKeyScope;
+  mcpPolicy?: ClientMcpPolicy;
+  // Plan tier of the credential's resolved default organisation (claims.cid at authentication). The
+  // public API meters requests by the organisation that owns the touched board; this tier only applies
+  // to requests that resolve no organisation themselves. Carried in claims so MCP delegation tokens
+  // keep it. Absent on interactive session JWTs, which the public API does not meter by credential.
+  apiRateTier?: ApiRateTier;
   support?: SupportClaims;
 }
 
@@ -120,12 +132,14 @@ async function authenticateApiKey(req: FastifyRequest, raw: string): Promise<Aut
       : null;
   if (requestedOrganisation === null) return null;
   if (!row.clientId) return null;
+  // Personal keys work on every plan; workspace keys are unattended service credentials and only
+  // authenticate while their pinned organisation is paid (they are also revoked on downgrade).
   const organisation = await resolvePersonalCredentialOrganisation(row.userId, row.kind === "personal"
     ? {
         ...(requestedOrganisation ? { requiredClientId: requestedOrganisation } : {}),
         preferredClientIds: [row.clientId, row.activeClientId],
       }
-    : { requiredClientId: row.clientId });
+    : { requiredClientId: row.clientId, requirePaidOrganisation: true });
   if (!organisation) return null;
 
   const lastUsedCutoff = new Date(Date.now() - API_KEY_LAST_USED_THROTTLE_MS);
@@ -142,7 +156,7 @@ async function authenticateApiKey(req: FastifyRequest, raw: string): Promise<Aut
   // A personal key acts as its owner in a live organisation context. The key's stored client id is
   // only the default; a target resource (or explicit request header) may safely rebase it later.
   if (row.kind === "personal") {
-    return {
+    const claims: AuthClaims = {
       sub: row.userId,
       cid: organisation.clientId,
       role: organisation.role,
@@ -154,7 +168,12 @@ async function authenticateApiKey(req: FastifyRequest, raw: string): Promise<Aut
       // deliberate — attribution ("acts as its owner") is governed by authKind, authorization
       // ("may do less than its owner") by apiKeyScope — and the two must not be conflated.
       apiKeyScope: row.scope,
+      apiRateTier: organisation.apiRateTier,
     };
+    // Org-level routes that resolve no resource act in this default organisation, so cap the
+    // credential by its policy now; resource access recomputes it for the owning organisation.
+    applyMcpPolicy(claims, organisation.mcpPolicy);
+    return claims;
   }
 
   return {
@@ -167,7 +186,41 @@ async function authenticateApiKey(req: FastifyRequest, raw: string): Promise<Aut
     apiKeyName: row.apiKeyName ?? undefined,
     apiKeyWorkspaceId: row.workspaceId ?? undefined,
     apiKeyScope: row.scope,
+    apiRateTier: "paid",
   };
+}
+
+/**
+ * Install a bearer credential's claims on the request: authorization (`req.auth`) plus the request
+ * context that activity attribution, rate limiting, and realtime actor fields read. Shared with
+ * routes that authenticate by a stored capability (upload links) so their writes are attributed
+ * exactly as the credential that minted them would be.
+ */
+export function applyBearerAuthContext(req: FastifyRequest, claims: AuthClaims): void {
+  req.auth = claims;
+  requestContext.set("clientId", claims.cid);
+  requestContext.set("userId", claims.sub);
+  if (claims.apiKeyId) requestContext.set("credentialApiKeyId", claims.apiKeyId);
+  if (claims.oauthServiceClientId) requestContext.set("credentialServiceClientId", claims.oauthServiceClientId);
+  if (claims.apiKeyKind === "personal" && claims.agentGrantId) {
+    // An interactive agent grant acts as its owner for authorization but must NOT be recorded
+    // as the owner's own action: Work Done, the activity feed, and self-notification
+    // suppression all key off this. actorId stays the owner; the grant identifies the agent.
+    requestContext.set("authKind", "agent");
+    requestContext.set("agentGrantId", claims.agentGrantId);
+    requestContext.set("agentName", claims.agentName);
+  } else if (claims.apiKeyKind === "personal") {
+    // A personal API key (scripts, CI) reads as its owner everywhere downstream: record authKind
+    // "user" so activity attribution (currentAttribution) shows the person, not a key name, and
+    // leave the apiKey*/workspace context unset. The per-key rate-limit bucket still uses
+    // claims.apiKeyId.
+    requestContext.set("authKind", "user");
+  } else {
+    requestContext.set("authKind", claims.authKind);
+    requestContext.set("apiKeyId", claims.apiKeyId);
+    requestContext.set("apiKeyName", claims.apiKeyName);
+    requestContext.set("workspaceId", claims.apiKeyWorkspaceId);
+  }
 }
 
 export default fp(async (app) => {
@@ -186,30 +239,7 @@ export default fp(async (app) => {
         ? req.url.startsWith("/api/v1/") ? authenticateMcpDelegationToken(raw) : null
         : await authenticateApiKey(req, raw);
       if (!claims) throw unauthorized();
-      req.auth = claims;
-      requestContext.set("clientId", claims.cid);
-      requestContext.set("userId", claims.sub);
-      if (claims.apiKeyId) requestContext.set("credentialApiKeyId", claims.apiKeyId);
-      if (claims.oauthServiceClientId) requestContext.set("credentialServiceClientId", claims.oauthServiceClientId);
-      if (claims.apiKeyKind === "personal" && claims.agentGrantId) {
-        // An interactive agent grant acts as its owner for authorization but must NOT be recorded
-        // as the owner's own action: Work Done, the activity feed, and self-notification
-        // suppression all key off this. actorId stays the owner; the grant identifies the agent.
-        requestContext.set("authKind", "agent");
-        requestContext.set("agentGrantId", claims.agentGrantId);
-        requestContext.set("agentName", claims.agentName);
-      } else if (claims.apiKeyKind === "personal") {
-        // A personal API key (scripts, CI) reads as its owner everywhere downstream: record authKind
-        // "user" so activity attribution (currentAttribution) shows the person, not a key name, and
-        // leave the apiKey*/workspace context unset. The per-key rate-limit bucket still uses
-        // claims.apiKeyId.
-        requestContext.set("authKind", "user");
-      } else {
-        requestContext.set("authKind", claims.authKind);
-        requestContext.set("apiKeyId", claims.apiKeyId);
-        requestContext.set("apiKeyName", claims.apiKeyName);
-        requestContext.set("workspaceId", claims.apiKeyWorkspaceId);
-      }
+      applyBearerAuthContext(req, claims);
       return;
     }
 

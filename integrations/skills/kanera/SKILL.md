@@ -93,9 +93,30 @@ Choose the lookup that fits the request; these are conditional routes, not a set
 - Board access determines visible card content; cross-organisation guests may see only explicitly shared boards.
 - Personal and OAuth connections inherit their owner's permissions; workspace credentials remain pinned to their workspace. Read-only credentials cannot mutate.
 
+## Card keys and references
+
+- Every `cardId` and `cardIds` input accepts a human key such as `DEV-938`, the canonical card URL, or the card UUID. Use the human key in calls and in replies; Kanera resolves it before the write and remembers it for the connection for a few minutes, so a multi-step task does not repeat the lookup.
+- A key is `PREFIX-number`. The prefix belongs to the workspace, and a key with an earlier prefix still resolves after a rename. When the connected user can see the same key in more than one organisation, pass the canonical card URL instead.
+- Results carry the card's current key and canonical URL. Quote the key when you refer to a card and link it by URL.
+
+## Bulk changes
+
+- `cards.bulk_*` tools take one `boardId` and up to 200 `cardIds` from that board; human keys are accepted. Cards on other boards need a separate call per board, even inside one workspace. Results list what changed and which archived cards were skipped; a skipped card is not an error.
+- `cards.bulk_patch_labels` and `cards.bulk_patch_assignees` add or remove with `mode` and leave the rest in place. The single-card `cards.set_labels` and `cards.set_assignees` replace the whole set. `cards.bulk_set_custom_field` chooses with `mode`: `setAll`, `fillEmpty`, `add`, `remove`, or `clear`.
+- `lists.move_cards`, `lists.set_card_completion`, and `lists.archive_cards` act on every active card in one list and need the board ID; use them for "move everything in Review to Done", and `cards.bulk_move` for a chosen subset.
+- `cards.bulk_archive` and `lists.archive_cards` are destructive and cannot bulk-unarchive. `cards.bulk_duplicate` is not idempotent; read the board before retrying after an ambiguous result.
+
+## Custom fields
+
+- In a standard workspace, custom fields and their select options, labels, and lists are defined once and appear on every board. Read them with `boards.get` on any board of the workspace; the same `fieldId`, option, label, and list IDs are valid on all of them. A standalone board owns its own set. Creating, renaming, or re-typing a field and editing its options are UI-only.
+- Set one value with `cards.set_custom_field_value`: `value.type` must match the field's type (`text`, `number`, `checkbox`, `date`, `url`, `select`, `user`), `select` and `user` take arrays of option or user UUIDs from `boards.get`, and `null` clears. Dates accept `YYYY-MM-DD` or a phrase.
+- Filter by a field across boards with the `customFieldConditions` of `work.query_cards` (`workspaceId`, `fieldId`, `op`, and a value); use `cards.bulk_set_custom_field` to change one field on many cards.
+
 ## Read and report
 
+- Pick the read by the shape of the question. `cards.list` pages one list of one board in board order; use it when the user names a board or list ("what is in Review on Marketing"). `work.query_cards` answers questions about people, dates, and state across boards ("Ben's overdue cards", "anything idle for two weeks", "what we finished last month") and takes a workspace or board scope. Never answer a cross-board question by paging `cards.list` over every board, and never rebuild a board column from `work.query_cards`. After either, `cards.get_content` returns the full text of up to 200 chosen cards.
 - For a card's history, page `cards.list_history`; it combines retained, user-visible activity and comments and accepts the human card key.
+- To start a session or answer what to work on, call `work.my_day`: one call returns the connected user's overdue, due-this-week, overdue-checklist, and idle assigned cards plus the top of their Up next queue. For a recurring morning briefing, subscribe to the `my_day.ready` event (weekdays at the user's daily-digest hour, while the digest email is on) and call `work.my_day` with its `timeZone`.
 - For current, completed, overdue, or stale work, page `work.query_cards`; use its scope, assignment, completion, `lastActivityBefore`, and `lastMovedBefore` filters instead of enumerating boards manually. For another person, use the team lens with exactly that person's assignee ID.
 - For portfolio status, use `work.portfolio_summary`. For detailed project status, combine its rollups with relevant card pages and histories. Separate observed facts from recommendations.
 - For a standup or one-on-one, use `work.query_history` for the requested actor and day, week, month, or exact range, then query active and completed cards with `work.query_cards`. Both tools cover every accessible board by default and accept a workspace-wide scope. Card creation alone is not completion, and blockers inferred from status, labels, due dates, or inactivity must be identified as inferences.
@@ -105,10 +126,11 @@ Choose the lookup that fits the request; these are conditional routes, not a set
 ## Make changes safely
 
 - Draft or summarize first when the request is exploratory. Mutate only when the user asks to apply the change.
-- Organisation admins can use `workspaces.create` for a standard workspace, `boards.create_standalone` for a standalone board, and `boards.create` for an extra board in a standard workspace. Choose a `templateId` from `workspaces.list_templates` or supply explicit configuration where supported.
+- Organisation admins can use `workspaces.create` for a standard workspace, `boards.create_standalone` for a standalone board, and `boards.create` for an extra board in a standard workspace; `boards.create` with `templateId` instead of `workspaceId` creates a standalone board from that template. When the user has not named a template, call `workspaces.list_templates`, suggest the two or three that best fit their project, and ask which they want; choose for them only when they say to. For work the user will hand to AI agents, suggest `agent-workflow` (Backlog, Agent Working, Waiting on Me, Review, Done): its lists mirror run states.
 - Workspace and standalone-board creation require a write-capable personal key or interactive OAuth grant with the organisation-admin role; workspace-scoped keys cannot perform them. Adding a board to a standard workspace requires workspace-admin authority and a write-capable credential.
 - Inspect the target entity immediately before a mutation when stale state could change the outcome.
 - Use list, label, and custom-field IDs from the target board's current configuration.
+- `cards.create` sets labels, assignees, and a due date in the same write. To lay out a plan, create up to 50 cards in one `cards.bulk_create` call; every card is validated first, so a bad label or assignee rejects the call and names `cards[i]`. When the plan comes with a new workspace or standalone board, pass `cards` (title, description, `listName`, `labelNames`) to `workspaces.create` or `boards.create_standalone` instead of seeding the template's example cards.
 - Every creation tool that accepts `idempotencyKey` (cards, checklists, items, comments, notes, runs, and others) replays the original result when the same key is reused. Pass a fresh UUID per intended write and reuse it only when retrying that write after an ambiguous transport failure.
 - Do not retry a creation tool without `idempotencyKey` (attachment uploads) after an ambiguous success; read the card first.
 - Treat archive and available delete tools as destructive. State the exact target when user intent is not already explicit.
@@ -119,7 +141,12 @@ Choose the lookup that fits the request; these are conditional routes, not a set
 ## Discuss, note, link, and prioritise
 
 - Comments are published to authorised board users and can trigger notifications and configured webhook deliveries. Draft-only requests do not authorise publishing. Comment on a card with `comments.add`; read the thread with `comments.list`, or `cards.list_history` for comments and activity together.
+- To get a person's attention, including the user you work for, mention them in a comment or description as `@[Display Name](kanera-user:<userId>)`, with the user ID from `workspaces.list_members` (or `boards.get` on a standalone board). They are notified by inbox, email, and push. Plain `@name` text notifies no one.
 - Read and write notes with `notes.list`, `notes.get`, `notes.create`, and `notes.update`. Personal notes are private to their owner; team-note edits respect note locks.
+- For "remind me to…", "jot down…", or any quick personal capture where the user names no board, call `scratchpad.capture`: it adds an open task to the user's private scratchpad Inbox page without asking which board. Read it back with `scratchpad.list` and `scratchpad.get`; tick an item off with `scratchpad.update`, passing the `baseUpdatedAt` you read. The scratchpad needs a personal key or OAuth connection.
+- To remind the user about an existing card at a time ("remind me about MKT-42 friday 3pm"), call `cards.set_reminder` with a phrase or ISO instant and repeat the resolved time back; pass `remindAt: null` to clear it, and `reminders.list` shows what is pending. To follow a card's activity, call `cards.set_watching`. Both are private to the user and need a personal key or OAuth connection. Agents can subscribe to the `reminder.due` event to act when a reminder fires.
+- Date inputs accept `YYYY-MM-DD` or phrases such as "tomorrow 1pm", "next friday", or "in 2 weeks", resolved in the user's own time zone (`session.get` returns `timeZone` and `today`). A time picks the matching due slot. Repeat the resolved date to the user when their phrase was loose.
+- To attach a local file (a screenshot, log, or build output), call `cards.create_upload_link` and run the returned `curl -T` command with the file path instead of base64-encoding it. To read an attachment, call `cards.get_attachment`: images come back as images, text files as text in pages.
 - To link cards or notes to each other, put the target's canonical Kanera URL in a card description or a note. Kanera turns it into a live link with a backlink (`notes.get_backlinks`). Only items in the same workspace are tracked, and URLs in comments do not create links.
 - Each person has a ranked cross-board "Up next" queue: read it with `priorities.list` and curate it with `priorities.add`, `priorities.move`, and `priorities.remove`. `priorities.list_targets` shows whose queues a manager can reach.
 - Separators are titled dividers inside a list (`separators.create`, `separators.move`, `separators.update`, `separators.delete`); they never change cards.
@@ -137,8 +164,11 @@ Choose the lookup that fits the request; these are conditional routes, not a set
 
 - Kanera records what you do as *your* work, not the user's: activity, comments, and reports label it "via <your client name>", and the user is notified about it. Never present a change as if the person made it.
 - For user-authorised multi-step implementation work on a card (not read-only reporting or exploratory planning), call `runs.start` with a short title (and `externalUrl` for the pull request, session, or thread a person can open). The board then shows a live "agent working" chip on that card and the run appears in card detail. Check `runs.list` first so two agents do not work the same card.
-- While working, call `runs.update` at least every 10 minutes (an empty update is a heartbeat); a run with no heartbeat for 15 minutes is marked stalled. Put progress in `summary`, and set `status: "blocked"` when you need a decision from a person, saying what you need in the summary.
+- While working, call `runs.update` at least every 10 minutes (an empty update is a heartbeat); a run with no heartbeat for 15 minutes is marked stalled. Put progress in `summary`, and set `status: "blocked"` when you need a decision from a person, saying what you need in the summary; return to `status: "running"` once you have the answer. Keep `summary` current: one line on what you are doing now, so a person glancing at the board can follow along.
 - When you stop, end the run with `status: "succeeded"`, `"failed"`, or `"cancelled"` and a one-line outcome in `summary`. Ended runs cannot be edited; start a new run if work resumes. Do not leave a run open across turns you are not actively working.
+- If the board has the Agent Workflow lists (**Agent Working**, **Waiting on Me**, **Review**), keep the card's list in step with the run: move it to Agent Working with `cards.move` when you start, to Waiting on Me whenever you set `status: "blocked"`, back to Agent Working when you resume, and to Review when the run succeeds. Leave a failed or cancelled card where it is and say why in the summary. Never move a card to Done yourself; a person does that after review.
+- The user automatically watches the cards you create, so replies and changes on them reach their inbox, email, and push marked "via <your client name>".
+- To hear back without a webhook or event subscription, poll `notifications.list`: the first call returns the latest rows and a `cursor`; pass that `cursor` as `since` on every later call (repeat while `hasMore`) to get only what is new. It covers replies, @mentions, and assignments on cards the user watches or is assigned, and leaves out what you caused yourself. Read the card or comment before acting on a row.
 - A run is a status signal, not a record of the work. Publish an outcome comment only when reporting back to the card is part of the authorised task; otherwise report in the conversation. Link important entities with their canonical URLs.
 
 ## Handle failures

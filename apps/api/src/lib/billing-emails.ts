@@ -50,6 +50,8 @@ type BillingEmailEnv = Pick<
   | "HOSTED_FREE_MAX_ORG_MEMBERS"
   | "HOSTED_FREE_MAX_ENABLED_AUTOMATIONS"
   | "HOSTED_FREE_MAX_AUTOMATION_EXECUTIONS_MONTHLY"
+  | "HOSTED_FREE_API_RATE_LIMIT_PER_SECOND"
+  | "HOSTED_FREE_API_RATE_LIMIT_PER_MINUTE"
 >;
 
 export type BillingEmailContext = {
@@ -196,18 +198,14 @@ export async function previewDowngradeImpact(
     .where(and(eq(workspaces.clientId, clientId), eq(webhookEndpoints.enabled, true)));
   impact.webhooksDisabled = enabledWebhooks.length;
 
-  // Count both workspace keys (via workspace's client) and personal keys (via owner's client), so the
-  // downgrade-impact preview matches what the conversion actually revokes.
+  // Only workspace keys (which also back unattended agent connections) are revoked on downgrade;
+  // personal keys stay usable on Free under fair-use limits. Must match plan-conversion.ts.
   const activeWorkspaceApiKeys = await database
     .select({ id: workspaceApiKeys.id })
     .from(workspaceApiKeys)
     .innerJoin(workspaces, eq(workspaces.id, workspaceApiKeys.workspaceId))
     .where(and(eq(workspaces.clientId, clientId), isNull(workspaceApiKeys.revokedAt)));
-  const activePersonalApiKeys = await database
-    .select({ id: workspaceApiKeys.id })
-    .from(workspaceApiKeys)
-    .where(and(eq(workspaceApiKeys.kind, "personal"), eq(workspaceApiKeys.clientId, clientId), isNull(workspaceApiKeys.revokedAt)));
-  impact.apiKeysRevoked = activeWorkspaceApiKeys.length + activePersonalApiKeys.length;
+  impact.apiKeysRevoked = activeWorkspaceApiKeys.length;
 
   const guestMembers = await database
     .selectDistinct({ userId: boardMembers.userId })

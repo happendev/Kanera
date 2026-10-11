@@ -339,7 +339,7 @@ describe("WorkspaceSettingsPage", () => {
             user: signal({ id: "user-1", displayName: "Me User" }),
             isOrgAdmin: signal(false),
             guestsAllowed: signal(true),
-            apiAllowed: signal(true),
+            serviceAgentsAllowed: signal(true),
             webhooksAllowed: signal(auth.webhooksAllowed ?? true),
             maxBoards: signal(auth.maxBoards ?? null),
             maxOrgMembers: signal(null),

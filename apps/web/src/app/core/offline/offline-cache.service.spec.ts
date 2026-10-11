@@ -1,7 +1,7 @@
 import * as fakeIDB from "fake-indexeddb";
 import { IDBFactory, IDBKeyRange, IDBObjectStore } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { WireCardDetail } from "@kanera/shared/events";
+import type { WireCardDetail, WireNote } from "@kanera/shared/events";
 import { OfflineCacheService, type OfflineBoardSnapshot } from "./offline-cache.service";
 
 function detail(id: string): WireCardDetail {
@@ -83,5 +83,85 @@ describe("offline storage", () => {
     await expect(cache.saveBoard("failed", board())).rejects.toThrow("full");
     expect(cache.persistenceError()).toContain("could not be updated");
     spy.mockRestore();
+  });
+});
+
+// Failure modes that a browser flow cannot reliably force: upgrading an already populated old
+// IndexedDB version; a second tab replacing a manifest; eviction between two saves of the same
+// object; a quota retry removing a manifest and its bodies. These storage-level assertions retain
+// complete snapshot atomicity and privacy while proving unchanged bodies are not cloned again.
+describe("normalized offline notes", () => {
+  beforeEach(() => {
+    for (const [key, value] of Object.entries(fakeIDB)) if (key.startsWith("IDB")) vi.stubGlobal(key, value);
+    vi.stubGlobal("indexedDB", new IDBFactory());
+    vi.stubGlobal("IDBKeyRange", IDBKeyRange);
+  });
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+  const note = (id: string, content = "Complete offline content"): WireNote => ({
+    id, workspaceId: "workspace-1", boardId: null, title: id, content,
+  }) as WireNote;
+
+  it("writes only the changed body and restores every unchanged document in order", async () => {
+    const cache = new OfflineCacheService();
+    const first = note("first");
+    const second = note("second");
+    await cache.saveNotes("workspace-1", null, [first, second]);
+    const put = vi.spyOn(IDBObjectStore.prototype, "put");
+    const changed = { ...first, title: "Renamed" };
+    await Promise.all([
+      cache.saveNotes("workspace-1", null, [changed, second]),
+      cache.saveNotes("workspace-1", null, [changed, second]),
+    ]);
+    const bodyWrites = put.mock.contexts.filter((store) => (store as IDBObjectStore).name === "noteEntries");
+    expect(bodyWrites).toHaveLength(1);
+    expect((await cache.loadNotes("workspace-1", null))?.notes).toEqual([changed, second]);
+    await cache.saveNotes("workspace-1", null, [second]);
+    expect((await cache.loadNotes("workspace-1", null))?.notes).toEqual([second]);
+  });
+
+  it("does not mistake a memoized body for one preserved after another tab writes", async () => {
+    const firstTab = new OfflineCacheService();
+    const secondTab = new OfflineCacheService();
+    const original = note("first");
+    await firstTab.saveNotes("workspace-1", null, [original]);
+    await secondTab.saveNotes("workspace-1", null, [{ ...original, title: "Other tab" }]);
+    await firstTab.saveNotes("workspace-1", null, [original]);
+    expect((await secondTab.loadNotes("workspace-1", null))?.notes).toEqual([original]);
+    await firstTab.clearAll();
+    await firstTab.saveNotes("workspace-1", null, [original]);
+    expect((await firstTab.loadNotes("workspace-1", null))?.notes).toEqual([original]);
+  });
+
+  it("retains legacy complete snapshots and atomically converts their next update", async () => {
+    const original = note("legacy");
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open("kanera-offline", 9);
+      request.onupgradeneeded = () => {
+        for (const store of ["shell", "boards", "cardDetails", "notes", "globalWork", "homeToday"]) request.result.createObjectStore(store);
+        request.transaction!.objectStore("notes").put({ key: "workspace-1:workspace", cachedAt: new Date().toISOString(), workspaceId: "workspace-1", boardId: null, notes: [original] }, "workspace-1:workspace");
+      };
+      request.onsuccess = () => { request.result.close(); resolve(); };
+      request.onerror = () => reject(request.error ?? new Error("Could not open legacy notes cache"));
+    });
+    const cache = new OfflineCacheService();
+    expect((await cache.loadNotes("workspace-1", null))?.notes).toEqual([original]);
+    const changed = { ...original, title: "Converted" };
+    await cache.saveNotes("workspace-1", null, [changed]);
+    expect((await cache.loadNotes("workspace-1", null))?.notes).toEqual([changed]);
+  });
+
+  it("revokes and evicts complete trees without leaving note bodies behind", async () => {
+    const cache = new OfflineCacheService();
+    const first = { ...note("private"), boardId: "board-1" };
+    await cache.saveNotes("workspace-1", "board-1", [first]);
+    await cache.revokeBoardAccess("board-1");
+    expect(await cache.loadNotes("workspace-1", "board-1")).toBeNull();
+    const removed = vi.spyOn(IDBObjectStore.prototype, "delete");
+    await cache.saveNotes("workspace-1", null, [note("large", "x".repeat(6 * 1024 * 1024))]);
+    await cache.saveBoard("middle", { ...board(), padding: "x".repeat(6 * 1024 * 1024) } as unknown as Omit<OfflineBoardSnapshot, "boardId" | "cachedAt">);
+    await cache.saveBoard("latest", { ...board(), padding: "x".repeat(6 * 1024 * 1024) } as unknown as Omit<OfflineBoardSnapshot, "boardId" | "cachedAt">);
+    expect(await cache.loadNotes("workspace-1", null)).toBeNull();
+    expect(removed.mock.contexts.some((store) => (store as IDBObjectStore).name === "noteEntries")).toBe(true);
   });
 });
