@@ -1,6 +1,8 @@
 import { NgOptimizedImage } from "@angular/common";
 import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal } from "@angular/core";
+import type { BlobatarOptions } from "blobatar";
 import { blobatarUri } from "blobatar/uri";
+import { isDarkTheme, type Theme } from "../core/theme/theme.service";
 import { visibleSignedMediaUrl } from "../core/media/signed-media-url";
 import { PresenceService } from "../core/realtime/presence.service";
 import { TooltipDirective } from "./tooltip.directive";
@@ -18,6 +20,41 @@ export function avatarColorIndex(userId: string | null | undefined, name: string
 export function avatarFallbackColorStyle(userId: string | null | undefined, name: string): string {
   const colorIndex = avatarColorIndex(userId, name);
   return `--mention-avatar-bg: var(--avatar-color-${colorIndex}-bg); --mention-avatar-fg: var(--avatar-color-${colorIndex}-fg);`;
+}
+
+/**
+ * Blobatars render on a transparent backdrop, and the library's tone set spans pastel to near-black, so
+ * pale bodies vanish on light themes and ink bodies on dark ones. Each theme family drops only the tones
+ * that fail on it: dark keeps the pastels and loses ink, light keeps ink and loses the pale swatches.
+ * Positions are swatch midpoints (pastel, grey-pale, vivid, deep, light, ink). A person's tone can change
+ * with the theme; hue and shape come from the identity alone, so they stay recognisable.
+ */
+const BLOBATAR_DARK_THEME_OPTIONS: BlobatarOptions = { traits: { tone: [0.1, 0.28, 0.5, 0.7, 0.86] } };
+const BLOBATAR_LIGHT_THEME_OPTIONS: BlobatarOptions = { traits: { tone: [0.5, 0.7, 0.96] } };
+
+/**
+ * Tracks the `data-theme` attribute ThemeService stamps on <html>, rather than injecting ThemeService:
+ * avatars render inside nearly every component, and pulling the service's matchMedia/storage setup into
+ * all of their tests (and the admin console) is not worth it for one boolean.
+ */
+let documentThemeDark: ReturnType<typeof signal<boolean>> | null = null;
+
+export function documentThemeIsDark(): boolean {
+  if (!documentThemeDark) {
+    const root = document.documentElement;
+    // Before index.html stamps the attribute, styles.scss follows the OS scheme, so mirror that.
+    const read = () => {
+      const theme = root.dataset["theme"] as Theme | undefined;
+      return theme ? isDarkTheme(theme) : Boolean(window.matchMedia?.("(prefers-color-scheme: dark)").matches);
+    };
+    documentThemeDark = signal(read());
+    new MutationObserver(() => documentThemeDark?.set(read())).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+  }
+  return documentThemeDark();
+}
+
+export function blobatarFallbackUri(identity: string, isDark: boolean): string {
+  return blobatarUri(identity, isDark ? BLOBATAR_DARK_THEME_OPTIONS : BLOBATAR_LIGHT_THEME_OPTIONS);
 }
 
 const relativeTimeNow = signal(Date.now());
@@ -188,7 +225,7 @@ export class AvatarComponent {
   protected readonly fallbackUrl = computed(() => {
     // Prefer the immutable user id so a rename does not unexpectedly change a person's identity.
     const identity = this.userId()?.trim() || this.name().trim().toLocaleLowerCase() || "?";
-    return blobatarUri(identity);
+    return blobatarFallbackUri(identity, documentThemeIsDark());
   });
   protected readonly online = computed(() => {
     if (!this.shouldCheckPresence()) return false;
