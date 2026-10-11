@@ -184,11 +184,18 @@ test("a foreground scratchpad refresh keeps the caret of a clean editor whose se
   try {
     await expect(editor).toContainText("Keep the caret");
     await editor.click();
-    await page.keyboard.press("Control+Home");
-    await page.keyboard.press("ArrowRight", { delay: 10 });
-    await page.keyboard.press("ArrowRight", { delay: 10 });
-    await page.keyboard.press("ArrowRight", { delay: 10 });
-    await page.keyboard.press("ArrowRight", { delay: 10 });
+    // Establish the exact starting caret independently of keyboard/layout timing. The refresh
+    // and subsequent real keystroke still exercise whether the mounted editor preserves it.
+    await editor.evaluate((element) => {
+      const text = element.querySelector("p")!.firstChild!;
+      const range = document.createRange();
+      range.setStart(text, 4);
+      range.collapse(true);
+      const selection = window.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+    expect(await editor.evaluate(() => window.getSelection()?.anchorOffset)).toBe(4);
     const refreshed = page.waitForResponse((result) => result.request().method() === "GET" && result.url().endsWith("/api/scratchpad/notes"));
     await setVisibility(page, "hidden");
     await setVisibility(page, "visible");
