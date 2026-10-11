@@ -11,6 +11,7 @@ All notable changes to Kanera are documented here.
 ### Fixed
 
 - Default avatars now pick colours that suit the active theme, so near-black ones no longer vanish on dark themes and pale ones on light themes.
+- @mention chips are now clearly tinted in each person's colour, and the palette no longer has near-identical neighbours (blue/indigo, teal/cyan), so different people's mentions are easier to tell apart.
 
 ## [1.9.0] - 2026-10-11
 

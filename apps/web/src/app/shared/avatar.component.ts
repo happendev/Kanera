@@ -8,13 +8,16 @@ import { PresenceService } from "../core/realtime/presence.service";
 import { TooltipDirective } from "./tooltip.directive";
 import { UserProfileCardService, type UserProfileAction } from "./user-profile/user-profile-card.service";
 
+/** Number of `--avatar-color-N-*` slots defined in styles.scss. */
+const AVATAR_COLOR_COUNT = 10;
+
 export function avatarColorIndex(userId: string | null | undefined, name: string): number {
   const key = userId?.trim() || name.trim().toLocaleLowerCase() || "?";
   let hash = 0;
   for (let i = 0; i < key.length; i += 1) {
     hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
   }
-  return hash % 12;
+  return hash % AVATAR_COLOR_COUNT;
 }
 
 export function avatarFallbackColorStyle(userId: string | null | undefined, name: string): string {

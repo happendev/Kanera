@@ -350,10 +350,12 @@ function normalizePlainText(value: string): string {
       /* The flex baseline comes from fallback text but from the element edge for
          an image avatar. Middle alignment keeps both chip variants on one line. */
       vertical-align: middle;
-      border: 1px solid color-mix(in srgb, var(--mention-avatar-bg) 55%, var(--border));
+      /* Tint from the saturated fg token: the bg token is already a faint wash,
+         and diluting it again left every person's chip the same grey. */
+      border: 1px solid color-mix(in srgb, var(--mention-avatar-fg) 45%, transparent);
       border-radius: 999px;
-      background: color-mix(in srgb, var(--mention-avatar-bg) 18%, var(--surface));
-      color: color-mix(in srgb, var(--mention-avatar-fg) 76%, var(--text));
+      background: color-mix(in srgb, var(--mention-avatar-fg) 14%, var(--surface));
+      color: color-mix(in srgb, var(--mention-avatar-fg) 92%, var(--text));
       font-weight: 600;
       font-size: 0.92em;
       line-height: 1.35;
