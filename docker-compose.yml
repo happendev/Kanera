@@ -110,6 +110,9 @@ services:
       - "shared_preload_libraries=pg_stat_statements"
       - "-c"
       - "pg_stat_statements.track=top"
+      # Large board-summary sorts otherwise spill to disk at Postgres's stock 4 MB limit.
+      - "-c"
+      - "work_mem=${POSTGRES_WORK_MEM:-16MB}"
     environment:
       POSTGRES_USER: kanera
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}

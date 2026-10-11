@@ -15,6 +15,8 @@ services:
       - "shared_preload_libraries=pg_stat_statements"
       - "-c"
       - "pg_stat_statements.track=top"
+      - "-c"
+      - "work_mem=${POSTGRES_WORK_MEM:-16MB}"
     environment:
       POSTGRES_USER: kanera
       POSTGRES_PASSWORD: kanera

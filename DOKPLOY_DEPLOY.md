@@ -263,6 +263,15 @@ set `DATABASE_SSL=true` if your provider requires SSL, and remove the bundled
 you replace the bundled Valkey service with a managed Valkey or Redis-compatible
 instance, set `REDIS_URL` for `api`, `worker`, and `public-api`.
 
+The bundled Postgres service defaults to `work_mem=16MB`, configurable with
+`POSTGRES_WORK_MEM` in Dokploy's Compose environment. Deploy the updated Compose
+file so Dokploy recreates **postgres**, not just the API services. This applies
+to existing data volumes and briefly restarts the database. After deployment,
+verify with `docker compose exec -T postgres psql -U kanera -d kanera -c 'SHOW work_mem;'`.
+Set `POSTGRES_WORK_MEM=4MB` and redeploy Postgres to roll back. The limit is per
+sort/hash operation, so concurrent operations can multiply memory use. Managed
+Postgres requires changing the default through the provider instead.
+
 The bundled Postgres service only publishes to host loopback. For temporary remote access, tunnel
 the loopback port over SSH (including over WireGuard) instead of exposing Postgres on an interface:
 
