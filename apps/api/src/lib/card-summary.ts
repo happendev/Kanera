@@ -88,13 +88,15 @@ async function loadCardSummariesFromFilteredCards(
       group by cl.card_id
     ),
     label_ids as (
-      select cla.card_id, array_agg(cla.label_id order by cla.assigned_at, cla.label_id) as label_ids
+      -- JSON uses the driver's native JSON.parse path instead of its JavaScript PostgreSQL-array
+      -- decoder, reducing event-loop work on large boards while preserving UUID strings and order.
+      select cla.card_id, json_agg(cla.label_id order by cla.assigned_at, cla.label_id) as label_ids
       from card_label_assignment cla
       inner join filtered_cards fc on fc.id = cla.card_id
       group by cla.card_id
     ),
     assignee_ids as (
-      select ca.card_id, array_agg(ca.user_id order by ca.assigned_at, ca.user_id) as assignee_ids
+      select ca.card_id, json_agg(ca.user_id order by ca.assigned_at, ca.user_id) as assignee_ids
       from card_assignee ca
       inner join filtered_cards fc on fc.id = ca.card_id
       group by ca.card_id
@@ -147,8 +149,8 @@ async function loadCardSummariesFromFilteredCards(
       coalesce(attachment_counts.attachment_count, 0)::integer as "attachmentCount",
       coalesce(checklist_counts.done_count, 0)::integer as "checklistDoneCount",
       coalesce(checklist_counts.total_count, 0)::integer as "checklistTotalCount",
-      coalesce(label_ids.label_ids, '{}'::uuid[]) as "labelIds",
-      coalesce(assignee_ids.assignee_ids, '{}'::uuid[]) as "assigneeIds",
+      coalesce(label_ids.label_ids, '[]'::json) as "labelIds",
+      coalesce(assignee_ids.assignee_ids, '[]'::json) as "assigneeIds",
       coalesce(custom_field_values.custom_field_values, '[]'::json) as "customFieldValues",
       cover.file_key as "coverFileKey",
       cover.url as "coverUrl",

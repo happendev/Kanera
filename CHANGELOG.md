@@ -6,6 +6,7 @@ All notable changes to Kanera are documented here.
 
 ### Changed
 
+- Large boards use less API CPU when opening by decoding label and assignee IDs as JSON arrays, preserving the complete board response and assignment order.
 - Realtime WebSocket compression is now disabled by default to reduce CPU use and fanout delays for typical small updates. Bandwidth-constrained deployments can opt in; enabled compression uses fast deflate only for larger messages.
 - Hosted subscription payment analytics are recorded against the organisation creator, so PostHog's first-touch acquisition properties attribute revenue.
 - Cards with unread activity now stand out on busy boards: alongside the bold title and dot, the tile gets a faint accent tint and an accent ring.
