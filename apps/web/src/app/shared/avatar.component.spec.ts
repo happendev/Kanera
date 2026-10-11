@@ -115,6 +115,41 @@ describe("AvatarComponent", () => {
     expect(host.querySelector<HTMLImageElement>("img.blobatar")!.src).toBe(firstUrl);
   });
 
+  it("re-renders the blobatar when the theme family changes", async () => {
+    // Tone sets differ per theme family, so a theme switch must swap the fallback without a reload.
+    await TestBed.configureTestingModule({
+      imports: [FallbackColorAvatarHostComponent],
+      providers: [provideZonelessChangeDetection(), { provide: PresenceService, useValue: presence }],
+    }).compileComponents();
+
+    const root = document.documentElement;
+    const previousTheme = root.dataset["theme"];
+    root.dataset["theme"] = "dark";
+    try {
+      const fixture = createComponentFixture(FallbackColorAvatarHostComponent);
+      fixture.detectChanges();
+      const host = fixture.nativeElement as HTMLElement;
+      const blobatarSrc = () => host.querySelector<HTMLImageElement>("img.blobatar")!.src;
+      const darkUrls = new Set<string>();
+      const lightUrls = new Set<string>();
+      for (const id of ["user-1", "user-2", "user-3", "user-4", "user-5", "user-6"]) {
+        fixture.componentInstance.userId.set(id);
+        root.dataset["theme"] = "dark";
+        await Promise.resolve();
+        fixture.detectChanges();
+        darkUrls.add(blobatarSrc());
+        root.dataset["theme"] = "light";
+        await Promise.resolve();
+        fixture.detectChanges();
+        lightUrls.add(blobatarSrc());
+      }
+      expect([...lightUrls].some((url) => !darkUrls.has(url))).toBe(true);
+    } finally {
+      if (previousTheme === undefined) delete root.dataset["theme"];
+      else root.dataset["theme"] = previousTheme;
+    }
+  });
+
   it("uses different blobatars for different stable identities", async () => {
     await TestBed.configureTestingModule({
       imports: [FallbackColorAvatarHostComponent],

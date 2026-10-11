@@ -81,6 +81,11 @@ test("a rejected description save keeps the draft editable and can be retried", 
   await expect(editor.locator(".tiptap")).toHaveAttribute("contenteditable", "true");
   await expect(editor.locator(".tiptap")).toContainText("Keep this draft after rejection");
   await page.screenshot({ path: testInfo.outputPath("description-retry-ready.png") });
+  const viewport = page.viewportSize();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(editor.locator(".tiptap")).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("description-retry-ready-phone.png"), animations: "disabled" });
+  if (viewport) await page.setViewportSize(viewport);
   await editor.getByRole("button", { name: "Save", exact: true }).click();
   await expect(editor).toHaveCount(0);
   await expect(detail.locator(".description-viewer-wrap")).toContainText("Keep this draft after rejection");
