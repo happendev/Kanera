@@ -1,13 +1,31 @@
 # Deploy Kanera with Docker
 
-This guide is for a standard Docker deployment using the `docker-compose.yml`
-file in this repository.
+Most deployments should use the prebuilt images. Every release publishes them to GHCR
+(`ghcr.io/happendev/kanera-api`, `kanera-web`, `kanera-mcp`, `kanera-db-backup`) and attaches a
+standalone `docker-compose.yml` that pulls them, so the server needs no checkout and no build:
+
+```bash
+mkdir kanera && cd kanera
+curl -fsSLo docker-compose.yml https://github.com/happendev/Kanera/releases/latest/download/docker-compose.yml
+curl -fsSLo .env https://github.com/happendev/Kanera/releases/latest/download/env.example
+# edit .env, then:
+docker compose up -d
+```
+
+To update, download the new release's `docker-compose.yml` over the old one and run
+`docker compose pull && docker compose up -d`. The standalone file is generated from this
+repository's `docker-compose.yml` by `scripts/build-release-compose.mjs`; it leaves out the
+monitoring profile, which needs the config files under `docker/monitoring/`.
+
+The rest of this guide covers building from a checkout of this repository, which you need only to
+run modified code or the monitoring stack. Every section except the build and upgrade commands
+applies to both.
 
 For Dokploy, use [DOKPLOY_DEPLOY.md](DOKPLOY_DEPLOY.md).
 
 ## Requirements
 
-- Docker with Docker Compose
+- Docker with Docker Compose 2.23 or newer (`docker compose version`)
 - A domain name pointing at your server
 - HTTPS in front of the web container, usually with Caddy, Traefik, nginx, or a
   cloud load balancer
@@ -144,14 +162,17 @@ above the pool math above plus room for backups and maintenance.
 
 ## 1. Create your environment file
 
-On the server, copy the example file:
+With the release images, download the example file next to `docker-compose.yml`:
 
 ```bash
-cp .env.example .env
+curl -fsSLo .env https://github.com/happendev/Kanera/releases/latest/download/env.example
 ```
 
+From a checkout, copy it instead: `cp .env.example .env`.
+
 The minimal template contains only settings required to start Compose. Use
-`.env.full.example` as the reference for every optional setting and default.
+`.env.full.example` (attached to each release as `env.full.example`) as the reference for every
+optional setting and default.
 
 Edit `.env` and set these production values:
 
@@ -331,11 +352,15 @@ Kanera OAuth; legacy `Authorization: Bearer kanera_<env>_...` API keys continue
 to work. Set `KANERA_ENVIRONMENT=staging` on staging so newly generated API keys
 use `kanera_stg_`; production uses `kanera_live_`.
 
-## 3. Build and start
+## 3. Start
+
+With the release images:
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
+
+From a checkout, build the images first with `docker compose up -d --build`.
 
 The dedicated one-shot `migrate` service applies pending database migrations. The `api`, `worker`,
 and `public-api` services start only after it completes successfully; never add migration commands
@@ -364,22 +389,38 @@ The MCP health check only works if you expose `mcp`.
 
 ## Upgrading
 
-From the repository root on the server:
+With the release images, from the directory holding `docker-compose.yml` and `.env`:
 
 ```bash
-git pull
-docker compose up -d --build api public-api mcp web
+curl -fsSLo docker-compose.yml https://github.com/happendev/Kanera/releases/latest/download/docker-compose.yml
+docker compose pull
+docker compose up -d
 ```
 
-If a release includes new database migrations, the rebuilt `api` service applies
-them before starting.
+Use `releases/download/vX.Y.Z/docker-compose.yml` instead of `releases/latest/download/...` to move
+to a specific release. Releases can be skipped: the one-shot `migrate` service applies every pending
+migration in order before the API, worker, and public API start.
+
+From a checkout, check out the release tag and rebuild:
+
+```bash
+git fetch --tags
+git checkout vX.Y.Z
+docker compose up -d --build
+```
+
+Back up first (see [Backups](#backups)) and read the release notes for every release between the
+running version and the target. `docker compose images api` shows the running version.
+
+Rolling back means restoring the pre-update database: an older release cannot run against a schema a
+newer one has migrated. Keep the previous `docker-compose.yml` (or tag) until the update is verified.
 
 Postgres, Valkey, and the monitoring images are pinned to exact patch versions in
-`docker-compose.yml`, so the command above never moves them — it only rebuilds the
-application services. That is deliberate: a routine code deploy should not restart
-your database. Those versions move when you merge a Dependabot image PR, which
-changes the pinned tag in the repository. After pulling such a change, recreate the
-affected service explicitly:
+`docker-compose.yml`, so a routine update leaves them alone unless the release itself moved a pin.
+That is deliberate: a routine code deploy should not restart your database. Those versions move when
+a Dependabot image PR is merged and released. With the release images, `docker compose up -d` after
+downloading that release's compose file recreates the affected service automatically. From a
+checkout, recreate it explicitly after pulling the change:
 
 ```bash
 docker compose up -d postgres
@@ -460,7 +501,9 @@ MONITORING_BIND_IP=172.30.0.102
 PROMETHEUS_RETENTION=30d
 ```
 
-Then:
+The monitoring services and their config files under `docker/monitoring/` are only in the
+repository, not in the standalone release compose file, so run this from a checkout of the release
+tag:
 
 ```bash
 docker compose --profile monitoring up -d --build

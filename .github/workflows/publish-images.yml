@@ -1,0 +1,168 @@
+name: Publish Docker images
+
+# Builds the Kanera images for each release, pushes them to GHCR, and attaches the standalone
+# docker-compose.yml and env.example that self-hosters download. Images are built natively on
+# amd64 and arm64 runners (QEMU would make the Angular build take far longer), pushed by digest,
+# then joined into one multi-arch tag per image.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to (re)publish, e.g. v1.9.0
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-images-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io/happendev
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+jobs:
+  build:
+    # Workspace releases are tagged vX.Y.Z; mcp-vX.Y.Z releases belong to publish-mcp.yml.
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v') }}
+    strategy:
+      fail-fast: true
+      matrix:
+        image:
+          - { name: kanera-api, dockerfile: apps/api/Dockerfile }
+          - { name: kanera-web, dockerfile: apps/web/Dockerfile }
+          - { name: kanera-mcp, dockerfile: apps/mcp/Dockerfile }
+          - { name: kanera-db-backup, dockerfile: docker/db-backup/Dockerfile }
+        platform:
+          - { arch: amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.image.dockerfile }}
+          platforms: linux/${{ matrix.platform.arch }}
+          pull: true
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ env.TAG }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ matrix.image.name }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.image.name }}-${{ matrix.platform.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}-${{ matrix.platform.arch }}
+
+      - run: echo "${{ steps.build.outputs.digest }}" > digest.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.image.name }}-${{ matrix.platform.arch }}
+          path: digest.txt
+          retention-days: 1
+
+  manifest:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        image: [kanera-api, kanera-web, kanera-mcp, kanera-db-backup]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: digest-${{ matrix.image }}-*
+          path: digests
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # vX.Y.Z publishes X.Y.Z, X.Y and X so operators can choose how closely to follow releases.
+      # The release compose file always pins the exact X.Y.Z. There is deliberately no `latest`.
+      - name: Create multi-arch tags
+        run: |
+          version="${TAG#v}"
+          minor="${version%.*}"
+          major="${version%%.*}"
+          image="$REGISTRY/${{ matrix.image }}"
+          sources=$(cat digests/*/digest.txt | sed "s|^|$image@|" | tr '\n' ' ')
+          docker buildx imagetools create \
+            -t "$image:$version" -t "$image:$minor" -t "$image:$major" \
+            $sources
+          docker buildx imagetools inspect "$image:$version"
+
+  release-assets:
+    needs: manifest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Build standalone compose file
+        run: |
+          node scripts/build-release-compose.mjs "$TAG" docker-compose.yml.release
+          mkdir assets
+          mv docker-compose.yml.release assets/docker-compose.yml
+          # GitHub renames release assets that start with a dot, so ship the examples without one.
+          cp .env.example assets/env.example
+          cp .env.full.example assets/env.full.example
+          # Same check the operator's first `docker compose up` makes, against the shipped example env.
+          cp .env.example assets/.env
+          docker compose -f assets/docker-compose.yml --env-file assets/.env config --quiet
+          rm assets/.env
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$TAG" assets/docker-compose.yml assets/env.example assets/env.full.example --clobber --repo "${{ github.repository }}"
+
+      # Install and update docs download from releases/latest/download/..., so the newest Kanera
+      # release must hold GitHub's "Latest" badge even when CLI or MCP releases are published after it.
+      # Only claim it when this tag is the highest vX.Y.Z, so republishing an older tag cannot.
+      - name: Mark as the latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git fetch --tags --quiet
+          highest=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)
+          if [ "$highest" = "$TAG" ]; then
+            gh release edit "$TAG" --latest --repo "${{ github.repository }}"
+          else
+            echo "$TAG is not the highest release ($highest); leaving Latest unchanged."
+          fi
