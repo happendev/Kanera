@@ -336,6 +336,26 @@
   border-color: var(--accent);
 }
 
+// Completed + unread: each signal keeps one channel. The success wash (with the tick and muted
+// title) still says "done"; the accent ring says "something new" — a comment on a closed card is
+// often the one you most need to see. Without this the green border sat under the accent ring as a
+// muddy double line. In the completed drawer the card falls back to the plain unread look.
+:host.has-unread.is-completed-card {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+:host.has-unread.is-completed-card:hover {
+  border-color: var(--accent);
+}
+
+:host.has-unread.no-complete-accent.is-completed-card {
+  background: color-mix(in srgb, var(--accent) 7%, var(--card-bg));
+}
+
+:host.has-unread.no-complete-accent.is-completed-card:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--card-bg-hover));
+}
+
 // Both dark-family themes get the same lifted card shadow; light recesses instead (below).
 :host-context([data-theme="dark"]),
 :host-context([data-theme="carbon"]) {

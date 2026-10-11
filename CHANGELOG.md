@@ -10,7 +10,7 @@ All notable changes to Kanera are documented here.
 
 ### Fixed
 
-- Default avatars now use colours that stay visible on every theme; near-black and pale ones no longer disappear into the background.
+- Default avatars now pick colours that suit the active theme, so near-black ones no longer vanish on dark themes and pale ones on light themes.
 
 ## [1.9.0] - 2026-10-11
 

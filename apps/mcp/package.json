@@ -21,7 +21,7 @@
     "@modelcontextprotocol/server": "^2.3.0",
     "@prometheus-io/client": "^0.16.1",
     "ioredis": "^5.11.1",
-    "zod": "^4.4.3"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "^2.3.0",

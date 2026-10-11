@@ -57,7 +57,7 @@ function isCoolAccent(accent: Accent): accent is CoolAccent {
   return accent === "blue" || accent === "green";
 }
 
-function isDarkTheme(theme: Theme): theme is DarkTheme {
+export function isDarkTheme(theme: Theme): theme is DarkTheme {
   return (DARK_THEMES as readonly Theme[]).includes(theme);
 }
 

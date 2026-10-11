@@ -15,7 +15,6 @@ import { Router } from "@angular/router";
 import { isPlainPrimaryClick } from "./card-navigation.util";
 import type { ResolveGitHubLinksResponse, ResolvedGitHubLink, ResolveInternalLinksResponse, ResolvedInternalLink } from "@kanera/shared/dto";
 import type { WireBoardMemberUser } from "@kanera/shared/events";
-import { blobatarUri } from "blobatar/uri";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { ApiClient } from "../../core/api/api.client";
@@ -23,7 +22,7 @@ import { MediaDownloadService } from "../../core/media/media-download.service";
 import { isSignedMediaUrlExpired, visibleSignedMediaUrl } from "../../core/media/signed-media-url";
 import { attachmentIconClass } from "../../shared/attachment-icons";
 import { attachmentPreviewType, type AttachmentPreviewType } from "../../shared/attachment-preview";
-import { BLOBATAR_OPTIONS, avatarFallbackColorStyle } from "../../shared/avatar.component";
+import { avatarFallbackColorStyle, blobatarFallbackUri, documentThemeIsDark } from "../../shared/avatar.component";
 import { stripEmptyTaskItems } from "../../shared/markdown-content";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 
@@ -823,7 +822,7 @@ export class DescriptionViewerComponent {
     // Drop an expired signed avatar URL (stale cached member list) so the chip
     // uses the same deterministic fallback as every other person surface.
     const avatarUrl = visibleSignedMediaUrl(member?.avatarUrl);
-    const visibleAvatarUrl = avatarUrl ?? blobatarUri(userId || displayName.trim().toLocaleLowerCase() || "?", BLOBATAR_OPTIONS);
+    const visibleAvatarUrl = avatarUrl ?? blobatarFallbackUri(userId || displayName.trim().toLocaleLowerCase() || "?", documentThemeIsDark());
     const avatar = `<span class="mention-chip-avatar"><img src="${this.escapeAttr(visibleAvatarUrl)}" alt="" /></span>`;
     return `<span class="mention-chip" data-user-id="${this.escapeAttr(userId)}" style="${this.escapeAttr(style)}">${avatar}<span>@${this.escapeHtml(label)}</span></span>`;
   }

@@ -35,7 +35,7 @@
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",
-    "zod": "^4.4.3"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "typescript": "~5.9.3"
