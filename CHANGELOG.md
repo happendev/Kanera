@@ -6,6 +6,7 @@ All notable changes to Kanera are documented here.
 
 ### Changed
 
+- Hosted subscription payment analytics are recorded against the organisation creator, so PostHog's first-touch acquisition properties attribute revenue.
 - Cards with unread activity now stand out on busy boards: alongside the bold title and dot, the tile gets a faint accent tint and an accent ring.
 
 ### Fixed
