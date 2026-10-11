@@ -33,6 +33,7 @@ import { cardCommentAddedEmail } from "../lib/email-templates/card-comment-added
 import { cardDueDateChangedEmail } from "../lib/email-templates/card-due-date-changed.js";
 import { cardOverdueEmail } from "../lib/email-templates/card-overdue.js";
 import { cardReminderEmail } from "../lib/email-templates/card-reminder.js";
+import { storageWarningEmail } from "../lib/email-templates/storage-warning.js";
 import { checklistItemOverdueEmail } from "../lib/email-templates/card-checklist-item-overdue.js";
 import { commentMentionedEmail } from "../lib/email-templates/comment-mentioned.js";
 import { dailyDigestEmail } from "../lib/email-templates/daily-digest.js";
@@ -225,6 +226,18 @@ const templates = [
       cardTitle: "Confirm production checklist",
       boardName: "Website Refresh",
       cardUrl: "http://localhost:4200/o/0123456789ABCDEF/c/WEB-42",
+    }),
+  },
+  {
+    name: "storage-warning",
+    html: storageWarningEmail({
+      displayName: "Amelia Hart",
+      orgName: "Northstar Studio",
+      usedLabel: "208.4 MB",
+      quotaLabel: "250.0 MB",
+      percentUsed: 83,
+      storageUrl: "http://localhost:4200/settings/storage",
+      upgradeQuotaLabel: "200.0 GB",
     }),
   },
   {

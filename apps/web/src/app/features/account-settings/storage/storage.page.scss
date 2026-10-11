@@ -1,0 +1,424 @@
+// Organisation → Storage. Shared settings chrome (.settings-section, .storage-usage-block,
+// .storage-usage-meter, .source-badge) comes from the parent page's global stylesheet.
+
+:host {
+  display: block;
+}
+
+.storage-usage-headline {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.storage-usage-used {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.storage-usage-of {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.storage-usage-percent {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+
+  &.warning {
+    color: var(--danger);
+  }
+}
+
+.storage-usage-meter.warning span {
+  background: var(--danger);
+}
+
+.storage-near-limit {
+  align-items: flex-start;
+
+  i {
+    margin-top: 2px;
+  }
+}
+
+.storage-breakdown,
+.storage-workspaces {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-top: 12px;
+}
+
+.storage-breakdown-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto 80px;
+  grid-template-areas:
+    "icon label count bytes"
+    "icon bar bar bar";
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 6px;
+  padding: 10px 12px;
+  font-size: 13px;
+  flex: none;
+
+  & + & {
+    border-top: 1px solid var(--border);
+  }
+
+  > i {
+    grid-area: icon;
+    align-self: start;
+    margin-top: 1px;
+    color: var(--text-muted);
+    font-size: 16px;
+  }
+}
+
+.storage-breakdown-label {
+  grid-area: label;
+  color: var(--text);
+  min-width: 0;
+}
+
+.storage-breakdown-count {
+  grid-area: count;
+  color: var(--text-muted);
+}
+
+.storage-breakdown-bytes {
+  grid-area: bytes;
+  text-align: right;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.storage-bar {
+  grid-area: bar;
+  display: block;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+
+  span {
+    display: block;
+    height: 100%;
+    min-width: 2px;
+    background: var(--accent);
+    border-radius: inherit;
+  }
+}
+
+.storage-personal-help {
+  margin-top: 8px;
+}
+
+// Whole-row buttons: reset the global button height/background so the row reads as a list item.
+.storage-workspace-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "icon name meta"
+    "icon bar bar";
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 6px;
+  height: auto;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 400;
+  text-align: left;
+  justify-content: stretch;
+  flex: none;
+
+  & + & {
+    border-top: 1px solid var(--border);
+  }
+
+  &:hover:not(:disabled),
+  &.active,
+  &.active:hover:not(:disabled) {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+
+  > i {
+    grid-area: icon;
+    color: var(--text-muted);
+    font-size: 16px;
+  }
+
+  .storage-bar {
+    grid-area: bar;
+  }
+}
+
+.storage-workspace-name {
+  grid-area: name;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.storage-workspace-meta {
+  grid-area: meta;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.storage-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.storage-filters select.storage-filter-select {
+  flex: 1 1 150px;
+  width: auto;
+  max-width: 220px;
+  height: 30px;
+  padding: 0 28px 0 10px;
+  font-size: 13px;
+}
+
+.storage-filter-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+
+  input {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    margin: 0;
+  }
+}
+
+.storage-files-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: var(--surface-2);
+
+  .storage-filter-check {
+    color: var(--text-muted);
+  }
+
+  .storage-delete-button {
+    margin-left: auto;
+  }
+}
+
+.storage-files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 0 0 var(--radius) var(--radius);
+  transition: opacity var(--motion-fast);
+
+  // The previous results stay put while a filter change loads, dimmed so they don't read as current.
+  &.loading {
+    opacity: 0.55;
+  }
+}
+
+.storage-file {
+  display: grid;
+  grid-template-columns: 16px 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  flex: none;
+
+  & + & {
+    border-top: 1px solid var(--border);
+  }
+
+  &.selected {
+    background: var(--accent-soft);
+  }
+
+  input.storage-file-check {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+  }
+}
+
+.storage-file-icon {
+  color: var(--text-muted);
+  font-size: 18px;
+}
+
+.storage-file-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.storage-file-name {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-file-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 2px;
+  font-size: 12px;
+  color: var(--text-muted);
+  min-width: 0;
+
+  // Block, not flex: text-overflow only ellipsises a block's own inline content.
+  a {
+    display: block;
+    min-width: 0;
+    color: var(--text);
+    text-decoration: none;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &:hover {
+      text-decoration: underline;
+    }
+
+    i {
+      margin-right: 4px;
+      vertical-align: -1px;
+    }
+  }
+
+  .source-badge {
+    height: 18px;
+    padding: 0 6px;
+    font-size: 11px;
+  }
+}
+
+.storage-file-size {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.storage-files-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  .storage-file,
+  .storage-workspace-row {
+    min-height: 44px;
+  }
+
+  .storage-file input.storage-file-check,
+  .storage-filter-check input {
+    width: 20px;
+    height: 20px;
+  }
+
+  .storage-file {
+    grid-template-columns: 20px 18px minmax(0, 1fr) auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .storage-breakdown-row {
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "icon label bytes"
+      "icon count count"
+      "icon bar bar";
+  }
+
+  .storage-files-toolbar .storage-delete-button {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  // Phones: drop the type icon and let the location line run the full row width under the name
+  // and size, instead of squeezing all three into one narrow column.
+  .storage-file {
+    grid-template-columns: 20px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "check name size"
+      "check meta meta";
+    align-items: start;
+    row-gap: 4px;
+
+    input.storage-file-check {
+      grid-area: check;
+      margin-top: 1px;
+    }
+  }
+
+  .storage-file-icon {
+    display: none;
+  }
+
+  .storage-filters select.storage-filter-select {
+    max-width: none;
+  }
+
+  .storage-file-body {
+    display: contents;
+  }
+
+  .storage-file-name {
+    grid-area: name;
+  }
+
+  .storage-file-meta {
+    grid-area: meta;
+  }
+
+  .storage-file-size {
+    grid-area: size;
+  }
+}

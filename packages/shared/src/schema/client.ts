@@ -84,6 +84,10 @@ export const clients = pgTable(
     billingStatus: text("billing_status", { enum: CLIENT_BILLING_STATUSES }).notNull().default("none"),
     billingInterval: text("billing_interval", { enum: CLIENT_BILLING_INTERVALS }),
     storageQuotaBytes: bigint("storage_quota_bytes", { mode: "number" }),
+    // Set when owners and admins were emailed that the organisation is close to its storage quota.
+    // The worker clears it only once usage falls well back below the threshold, so the warning goes
+    // out once per approach instead of on every sweep while usage hovers near the line.
+    storageWarningSentAt: timestamp("storage_warning_sent_at", { withTimezone: true }),
     stripeCustomerId: text("stripe_customer_id"),
     stripeSubscriptionId: text("stripe_subscription_id"),
     stripeSubscriptionItemId: text("stripe_subscription_item_id"),

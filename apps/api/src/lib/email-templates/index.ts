@@ -44,6 +44,8 @@ export type { InviteAcceptedEmailParams } from "./invite-accepted.js";
 export { passwordResetEmail } from "./password-reset.js";
 export type { PasswordResetEmailParams } from "./password-reset.js";
 export { smtpTestEmail } from "./smtp-test.js";
+export { storageWarningEmail } from "./storage-warning.js";
+export type { StorageWarningEmailParams } from "./storage-warning.js";
 export type { SmtpTestEmailParams } from "./smtp-test.js";
 export { verificationCodeEmail } from "./verification-code.js";
 export type { VerificationCodeEmailParams } from "./verification-code.js";

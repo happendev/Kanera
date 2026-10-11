@@ -29,6 +29,7 @@ import {
   proTrialWarningEmail,
   seatBilledEmail,
   seatCapacityReducedEmail,
+  storageWarningEmail,
   upgradedToProEmail,
   verificationCodeEmail,
   welcomeToProEmail,
@@ -55,6 +56,7 @@ import {
   type CommentMentionedEmailParams,
   type DailyDigestEmailParams,
   type InviteAcceptedEmailParams,
+  type StorageWarningEmailParams,
   type WeeklyAdminRecapEmailParams,
 } from "./email-templates/index.js";
 import { sendEmail, type SendEmailOptions } from "./smtp.js";
@@ -90,6 +92,7 @@ export interface Mailer {
   sendProCancellationReversed(to: string, params: BillingEmailParams): Promise<EmailQueue>;
   sendProCancelled(to: string, params: BillingEmailParams): Promise<EmailQueue>;
   sendImportCompleted(to: string, params: ImportCompletedEmailParams): Promise<EmailQueue>;
+  sendStorageWarning(to: string, params: StorageWarningEmailParams): Promise<EmailQueue>;
   sendLifecycle(to: string, type: LifecycleEmailQueueType, params: LifecycleEmailParams): Promise<EmailQueue>;
 }
 
@@ -276,6 +279,10 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
       return queueEmail(to, "Your Kanera import is complete", "import_completed", params);
     },
 
+    async sendStorageWarning(to, params) {
+      return queueEmail(to, `${params.orgName} is running out of storage`, "storage_warning", params);
+    },
+
     async sendLifecycle(to, type, params) {
       return queueEmail(to, lifecycleEmailSubject(type, params), type, params);
     },
@@ -407,6 +414,8 @@ export function renderEmail(row: EmailQueue): string {
       return proCancelledEmail(row.data as BillingEmailParams);
     case "import_completed":
       return importCompletedEmail(row.data as ImportCompletedEmailParams);
+    case "storage_warning":
+      return storageWarningEmail(row.data as StorageWarningEmailParams);
     case "lifecycle_no_board":
       return lifecycleNoBoardEmail(row.data as LifecycleEmailParams);
     case "lifecycle_invite_team":

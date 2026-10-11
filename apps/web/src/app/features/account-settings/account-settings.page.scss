@@ -1861,3 +1861,39 @@
     border-top: 1px solid var(--border);
   }
 }
+
+// ─── Settings groups ─────────────────────────────────────────────────────────
+// Personal settings come first, organisation settings (owners and admins only) after. In the wide
+// navigation column the labels head each group; in the narrow swipeable strip they sit inline as
+// quiet dividers so the strip still scrolls as one row.
+.account-settings-tabs .settings-tab-group {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.account-settings-tabs .settings-tab-group--org {
+  margin-left: 6px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
+
+@media (min-width: 900px) {
+  .settings-card > .account-settings-tabs .settings-tab-group {
+    padding: 0 10px 4px;
+  }
+
+  .settings-card > .account-settings-tabs .settings-tab-group--org {
+    margin: 14px 0 0;
+    padding-top: 12px;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+}

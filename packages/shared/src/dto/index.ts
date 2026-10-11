@@ -39,6 +39,8 @@ export * from "./push-subscriptions.js";
 export * from "./public-api.js";
 export * from "./scratchpad-notes.js";
 export * from "./search.js";
+export * from "./storage.js";
+export * from "./storage-limits.js";
 export * from "./separators.js";
 export * from "./work-done.js";
 export * from "./agent-work.js";

@@ -882,31 +882,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
         .limit(1);
       if (!attachment) throw notFound();
 
-      await db.delete(noteAttachments).where(eq(noteAttachments.id, attachmentId));
-
-      const storage = await getStorageForClient(req.auth.cid);
-      await storage.delete(attachment.fileKey).catch(() => undefined);
-
-      const storedAttachmentUrl = unsignedMediaUrl(req.auth.cid, attachment.fileKey)!;
-      const stripped = stripAttachmentReferences(note.content, storedAttachmentUrl);
-      const now = new Date();
-      const [updatedNote] = await db
-        .update(notes)
-        .set({
-          ...(stripped.changed && { content: stripped.body ?? "" }),
-          lastEditedById: req.auth.sub,
-          lastEditedAt: now,
-          updatedAt: now,
-        })
-        .where(eq(notes.id, id))
-        .returning();
-      const responseNote = await shapeNote(updatedNote!, req.auth.cid);
-
-      emitNoteEvent(updatedNote!, "note:updated", { note: responseNote });
-      emitNoteEvent(updatedNote!, "note:attachment:deleted", {
-        note: responseNote,
-        attachmentId,
-      });
+      await removeNoteAttachment({ note, attachment, actorId: req.auth.sub, mediaClientId: req.auth.cid });
 
       return reply.status(204).send();
     });
@@ -984,5 +960,43 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
       .returning();
     if (updated) emitNoteEvent(updated, "note:unlocked", { noteId: id });
     return reply.status(204).send();
+  });
+}
+
+/**
+ * Removes one note attachment: the row, its file, and inline references in the note body, then
+ * echoes the edited note. Shared by the note route and the organisation storage cleanup.
+ */
+export async function removeNoteAttachment(params: {
+  note: Note;
+  attachment: typeof noteAttachments.$inferSelect;
+  actorId: string;
+  mediaClientId: string;
+}): Promise<void> {
+  const { note, attachment, actorId, mediaClientId } = params;
+  await db.delete(noteAttachments).where(eq(noteAttachments.id, attachment.id));
+
+  const storage = await getStorageForClient(mediaClientId);
+  await storage.delete(attachment.fileKey).catch(() => undefined);
+
+  const storedAttachmentUrl = unsignedMediaUrl(mediaClientId, attachment.fileKey)!;
+  const stripped = stripAttachmentReferences(note.content, storedAttachmentUrl);
+  const now = new Date();
+  const [updatedNote] = await db
+    .update(notes)
+    .set({
+      ...(stripped.changed && { content: stripped.body ?? "" }),
+      lastEditedById: actorId,
+      lastEditedAt: now,
+      updatedAt: now,
+    })
+    .where(eq(notes.id, note.id))
+    .returning();
+  const responseNote = await shapeNote(updatedNote!, mediaClientId);
+
+  emitNoteEvent(updatedNote!, "note:updated", { note: responseNote });
+  emitNoteEvent(updatedNote!, "note:attachment:deleted", {
+    note: responseNote,
+    attachmentId: attachment.id,
   });
 }

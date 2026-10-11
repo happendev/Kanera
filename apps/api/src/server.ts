@@ -36,6 +36,7 @@ import { cardAttachmentRoutes } from "./modules/cards/attachments.routes.js";
 import { cardRoutes } from "./modules/cards/routes.js";
 import { clientRoutes } from "./modules/clients/routes.js";
 import { checklistTemplateRoutes } from "./modules/checklist-templates/routes.js";
+import { clientStorageRoutes } from "./modules/clients/storage.js";
 import { clientUserRoutes } from "./modules/clients/users.js";
 import { commentRoutes } from "./modules/comments/routes.js";
 import { customFieldRoutes } from "./modules/custom-fields/routes.js";
@@ -284,6 +285,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
   await app.register(emailPreferencePublicRoutes);
   await app.register(clientRoutes);
   await app.register(clientUserRoutes);
+  await app.register(clientStorageRoutes);
   await app.register(integrationRoutes);
   await app.register(oauthUserRoutes);
   await app.register(internalLinkRoutes);

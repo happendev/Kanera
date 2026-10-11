@@ -575,6 +575,13 @@
       "when": 1791566957683,
       "tag": "0081_careful_human_torch",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1791568832028,
+      "tag": "0082_silent_forgotten_one",
+      "breakpoints": true
     }
   ]
 }

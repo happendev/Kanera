@@ -19,6 +19,7 @@ import { startOrganisationDeletionScheduler } from "./lib/organisation-delete.js
 import { startPushQueueScheduler } from "./lib/push-queue.js";
 import { startRetentionCleanupScheduler } from "./lib/retention-cleanup.js";
 import { resolveSmtpConfig } from "./lib/smtp-resolve.js";
+import { startStorageWarningScheduler } from "./lib/storage-warning.js";
 import type { SweepScheduler } from "./lib/sweep-scheduler.js";
 import { startTrialExpiryScheduler } from "./lib/trial-expiry.js";
 import { startWebhookDeliveryScheduler } from "./lib/webhooks.js";
@@ -92,6 +93,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   let stopPushQueueScheduler: (() => Promise<void>) | null = null;
   let stopRetentionCleanupScheduler: (() => Promise<void>) | null = null;
   let stopTrialExpiryScheduler: (() => Promise<void>) | null = null;
+  let stopStorageWarningScheduler: (() => Promise<void>) | null = null;
   let stopLifecycleEmailScheduler: (() => Promise<void>) | null = null;
   let stopBoardMirrorScheduler: (() => Promise<void>) | null = null;
   let stopWeeklyAdminRecapScheduler: (() => Promise<void>) | null = null;
@@ -114,6 +116,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   app.addHook("onClose", async () => stopPushQueueScheduler?.());
   app.addHook("onClose", async () => stopRetentionCleanupScheduler?.());
   app.addHook("onClose", async () => stopTrialExpiryScheduler?.());
+  app.addHook("onClose", async () => stopStorageWarningScheduler?.());
   app.addHook("onClose", async () => stopLifecycleEmailScheduler?.());
   app.addHook("onClose", async () => stopBoardMirrorScheduler?.());
   app.addHook("onClose", async () => stopWeeklyAdminRecapScheduler?.());
@@ -154,6 +157,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
     stopPushQueueScheduler = startPushQueueScheduler({ db, log: app.log });
     stopRetentionCleanupScheduler = startRetentionCleanupScheduler({ db, log: app.log });
     stopTrialExpiryScheduler = startTrialExpiryScheduler(app.log, app.mailer);
+    stopStorageWarningScheduler = startStorageWarningScheduler(app.log, app.mailer);
     stopLifecycleEmailScheduler = startLifecycleEmailScheduler(app.log, app.mailer);
     stopWeeklyAdminRecapScheduler = startWeeklyAdminRecapScheduler({
       db,

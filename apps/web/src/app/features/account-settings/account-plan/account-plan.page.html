@@ -203,6 +203,7 @@
     </div>
     <p class="account-plan-note account-plan-note--muted">
       {{ settings.storageRemainingLabel() }} — shared across your whole organisation. Files you upload to another organisation's board count against their storage, not yours.
+      <a routerLink="/settings/storage">Manage storage</a>
     </p>
     @if (settings.storageFull() && settings.planTier() === 'paid') {
     <p class="account-plan-note account-plan-note--warning">

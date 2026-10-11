@@ -34,6 +34,7 @@ export const EMAIL_QUEUE_TYPES = [
   "pro_cancellation_reversed",
   "pro_cancelled",
   "import_completed",
+  "storage_warning",
   "lifecycle_no_board",
   "lifecycle_invite_team",
   "lifecycle_early_success",
@@ -307,6 +308,17 @@ export type ImportCompletedEmailQueueData = {
   warningCount: number;
 };
 
+export type StorageWarningEmailQueueData = {
+  displayName: string;
+  orgName: string;
+  usedLabel: string;
+  quotaLabel: string;
+  percentUsed: number;
+  storageUrl: string;
+  /** The paid allowance a Free organisation would move to; null when upgrading would not add storage. */
+  upgradeQuotaLabel: string | null;
+};
+
 /** Which single next workflow the early-success email introduces. */
 export type LifecycleNextStep = "automations" | "my_cards";
 
@@ -355,6 +367,7 @@ export type EmailQueueData =
   | { type: "pro_cancellation_reversed"; data: BillingEmailQueueData }
   | { type: "pro_cancelled"; data: BillingEmailQueueData }
   | { type: "import_completed"; data: ImportCompletedEmailQueueData }
+  | { type: "storage_warning"; data: StorageWarningEmailQueueData }
   | { type: "lifecycle_no_board"; data: LifecycleEmailQueueData }
   | { type: "lifecycle_invite_team"; data: LifecycleEmailQueueData }
   | { type: "lifecycle_early_success"; data: LifecycleEmailQueueData }
