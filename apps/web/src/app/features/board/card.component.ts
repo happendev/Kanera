@@ -203,7 +203,7 @@ export class CardComponent {
     return Boolean(this.card().completedAt);
   }
 
-  // Drives the tile-wide unread treatment (left stripe, heavier title). The badge beside the title
+  // Drives the tile-wide unread treatment (accent wash and ring, heavier title). The badge beside the title
   // says how much is new; this says "something here is new" from across a full column.
   @HostBinding("class.has-unread")
   get hasUnreadClass(): boolean {

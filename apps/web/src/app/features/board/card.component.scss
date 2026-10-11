@@ -271,6 +271,25 @@
   border-color: var(--accent);
 }
 
+// Unread: the bold title and dot read at arm's length but vanish in a busy column, so the whole tile
+// lifts: a faint accent wash plus an accent ring (the shared ::after overlay, so the box never
+// reflows). Kept fainter than selection so a column of unread cards doesn't read as selected;
+// selection is declared after this and still wins. No leading-edge stripe: Kanera doesn't use them.
+:host.has-unread {
+  background: color-mix(in srgb, var(--accent) 7%, var(--card-bg));
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+:host.has-unread:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--card-bg-hover));
+  border-color: var(--accent);
+}
+
+:host.has-unread::after {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
 :host.is-selected {
   background: color-mix(in srgb, var(--accent) 6%, var(--card-bg));
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
