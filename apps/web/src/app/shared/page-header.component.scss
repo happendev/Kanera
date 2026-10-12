@@ -177,8 +177,10 @@
   // across the view switch. Sizing it from the band instead of from the text makes every chrome
   // header's first row identical and puts anything on a second row below the buttons by
   // construction, rather than by each page happening to be tall enough.
+  // Less the bar's 1px bottom border, so the bar's outer edge is exactly the band height and lines
+  // up with the sidebar's brand row (56px including its border) rather than sitting 1px lower.
   .ph-identity {
-    min-height: var(--bell-clearance-height);
+    min-height: calc(var(--bell-clearance-height) - 1px);
   }
 
   .ph-icon {
