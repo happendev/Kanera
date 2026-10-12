@@ -261,6 +261,10 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
                         <button type="button" class="ne-attach-thumb is-doc" (click)="openAttachmentMarkdown(a.id, $event)" [kTooltip]="'Preview ' + a.fileName" [attr.aria-label]="'Preview Markdown ' + a.fileName">
                           <i class="ti ti-markdown"></i>
                         </button>
+                      } @else if (isTextAttachment(a.mimeType, a.fileName)) {
+                        <button type="button" class="ne-attach-thumb is-doc" (click)="openAttachmentText(a.id, $event)" [kTooltip]="'Preview ' + a.fileName" [attr.aria-label]="'Preview text file ' + a.fileName">
+                          <i class="ti ti-file-text"></i>
+                        </button>
                       } @else {
                         <a class="ne-attach-thumb is-doc" [href]="a.url" (click)="downloadAttachment(a.url, a.fileName); $event.preventDefault()" [kTooltip]="a.fileName">
                           <i class="ti {{ attachmentIconClass(a.mimeType, a.fileName) }}"></i>
@@ -278,6 +282,8 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
                             <a class="ne-attach-name" [href]="a.url" (click)="openAttachmentPdf(a.id, $event)">{{ a.fileName }}</a>
                           } @else if (isMarkdownAttachment(a.mimeType, a.fileName)) {
                             <a class="ne-attach-name" [href]="a.url" (click)="openAttachmentMarkdown(a.id, $event)">{{ a.fileName }}</a>
+                          } @else if (isTextAttachment(a.mimeType, a.fileName)) {
+                            <a class="ne-attach-name" [href]="a.url" (click)="openAttachmentText(a.id, $event)">{{ a.fileName }}</a>
                           } @else {
                             <a class="ne-attach-name" [href]="a.url" (click)="downloadAttachment(a.url, a.fileName); $event.preventDefault()">{{ a.fileName }}</a>
                           }
@@ -1086,6 +1092,10 @@ export class NoteEditorComponent implements OnDestroy {
     return this.openAttachmentPreview(attachmentId, "markdown", event);
   }
 
+  openAttachmentText(attachmentId: string, event?: Event): boolean {
+    return this.openAttachmentPreview(attachmentId, "text", event);
+  }
+
   private openAttachmentPreview(attachmentId: string, mediaType: AttachmentPreviewType, event?: Event): boolean {
     return openAttachmentPreview(this.imageLightbox, this.lightboxAttachments(), attachmentId, mediaType, event);
   }
@@ -1123,6 +1133,10 @@ export class NoteEditorComponent implements OnDestroy {
 
   isMarkdownAttachment(mime: string, fileName: string): boolean {
     return attachmentPreviewType(mime, fileName) === "markdown";
+  }
+
+  isTextAttachment(mime: string, fileName: string): boolean {
+    return attachmentPreviewType(mime, fileName) === "text";
   }
 
   // Suppress an attachment image / lock avatar whose signed token has expired

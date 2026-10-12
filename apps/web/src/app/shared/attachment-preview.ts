@@ -1,4 +1,4 @@
-export type AttachmentPreviewType = "image" | "video" | "audio" | "pdf" | "markdown";
+export type AttachmentPreviewType = "image" | "video" | "audio" | "pdf" | "markdown" | "text";
 
 // This is the single previewability rule for attachment surfaces. A format belongs here only when
 // the shared lightbox can render its contents; everything else downloads.
@@ -11,5 +11,7 @@ export function attachmentPreviewType(mimeType: string, fileName = ""): Attachme
   // Some browsers and import sources report Markdown as plain text or octet-stream, so retain the
   // filename check as part of the durable preview rule instead of relying on upload MIME metadata.
   if (mime === "text/markdown" || mime === "text/x-markdown" || /\.(?:md|markdown)$/i.test(fileName)) return "markdown";
+  // Plain text gets the same filename fallback; other text/* formats (CSV, HTML) keep downloading.
+  if (mime === "text/plain" || /\.(?:txt|log)$/i.test(fileName)) return "text";
   return null;
 }

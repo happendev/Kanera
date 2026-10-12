@@ -852,11 +852,19 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       font-size: 14px;
     }
 
-    .de-emoji-popover .de-emoji-tab:hover,
-    .de-emoji-popover .de-emoji-tab.is-active {
+    .de-emoji-popover .de-emoji-tab:hover:not(:disabled) {
       background: var(--surface-2);
       border-color: var(--border);
       filter: grayscale(1) opacity(0.75);
+    }
+
+    /* The active category drops the grayscale entirely and takes an accent ring,
+       so it reads as selected rather than merely hovered. */
+    .de-emoji-popover .de-emoji-tab.is-active,
+    .de-emoji-popover .de-emoji-tab.is-active:hover:not(:disabled) {
+      background: color-mix(in srgb, var(--accent) 14%, transparent);
+      border-color: var(--accent);
+      filter: none;
     }
 
     .de-emoji-grid {

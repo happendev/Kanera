@@ -373,6 +373,7 @@ export class CardDetailComponent {
       isAudio: this.isAudioMime(attachment.mimeType),
       isPdf: attachmentPreviewType(attachment.mimeType, attachment.fileName) === "pdf",
       isMarkdown: attachmentPreviewType(attachment.mimeType, attachment.fileName) === "markdown",
+      isText: attachmentPreviewType(attachment.mimeType, attachment.fileName) === "text",
       thumbnailUrl: this.attachmentThumbUrl(attachment),
       iconClass: attachmentIconClass(attachment.mimeType, attachment.fileName),
       subtitle: `${attachment.uploadedByName} • ${this.formatFeedTime(attachment.createdAt)} • ${this.formatBytes(attachment.byteSize)}`,
@@ -466,6 +467,10 @@ export class CardDetailComponent {
     return this.openAttachmentPreview(attachmentId, "markdown", event);
   }
 
+  openAttachmentText(attachmentId: string, event?: Event): boolean {
+    return this.openAttachmentPreview(attachmentId, "text", event);
+  }
+
   private openAttachmentPreview(attachmentId: string, mediaType: AttachmentPreviewType, event?: Event): boolean {
     return openAttachmentPreview(this.imageLightbox, this.lightboxAttachments(), attachmentId, mediaType, event);
   }
@@ -485,7 +490,8 @@ export class CardDetailComponent {
       || this.openAttachmentVideo(attachmentId, event)
       || this.openAttachmentAudio(attachmentId, event)
       || this.openAttachmentPdf(attachmentId, event)
-      || this.openAttachmentMarkdown(attachmentId, event);
+      || this.openAttachmentMarkdown(attachmentId, event)
+      || this.openAttachmentText(attachmentId, event);
   }
 
   readonly currentUserId = computed(() => this.auth.user()?.id);

@@ -315,3 +315,12 @@
     font-size: var(--ph-page-title-compact-size, 22px);
   }
 }
+
+// Compact: the controls stay on the title's row and the title ellipsises instead. Here the wrap above
+// only ever produced a row holding two or three icons, under a title row with nothing beside it, and
+// pages keep that row short on purpose (the board folds its secondary icons into its menu).
+@media (max-width: bp.$bp-compact) {
+  :host(.is-chrome) .ph-identity {
+    flex: 1 1 0;
+  }
+}
