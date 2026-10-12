@@ -37,7 +37,8 @@ test("board overview and portfolio show card counts without health verdicts or s
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(href);
   await expect(page.getByRole("heading", { level: 1, name: "Platform Delivery" })).toBeVisible();
-  await trigger.click();
+  await page.getByRole("button", { name: "Board menu", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Board overview$/ }).click();
   await expect(overview).toBeVisible();
   const bounds = await overview.boundingBox();
   expect(bounds!.x).toBeGreaterThanOrEqual(0);
