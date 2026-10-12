@@ -22,6 +22,7 @@ import { WorkspaceService } from "../../core/workspace/workspace.service";
 import type { AnchoredPanelPlacement } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { PanelStackService } from "../../shared/panel-stack.service";
+import { mediaQuerySignal } from "../../shared/media-query.signal";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { PageHeaderComponent } from "../../shared/page-header.component";
 import { PageToolbarComponent } from "../../shared/page-toolbar.component";
@@ -318,10 +319,16 @@ export class BoardPage implements OnDestroy {
   readonly mirrorRefreshVersion = signal(0);
   readonly mirrorMenuAvailable = computed(() =>
     this.state.canEditRole() && this.boardLinkingEnabled() && (this.boardSyncAvailable() || this.state.hasMirrorsAtHydration()));
+  /**
+   * Compact width ($bp-compact). The title row cannot hold the title, members, New card and four icons,
+   * so it wrapped the actions onto a row of their own; folding overview and watch into the board
+   * menu keeps everything on one row.
+   */
+  readonly phoneHeader = mediaQuerySignal("(max-width: 720px)");
   /** The menu renders only when at least one of its sections would; an empty menu is worse than none. */
   readonly boardMenuAvailable = computed(() =>
     this.state.board() !== null
-    && (this.effectiveView() === "board" || this.state.canEdit() || (this.state.canEditRole() && !this.viewOwnsChrome()) || this.mirrorMenuAvailable()));
+    && (this.phoneHeader() || this.effectiveView() === "board" || this.state.canEdit() || (this.state.canEditRole() && !this.viewOwnsChrome()) || this.mirrorMenuAvailable()));
   readonly boardSyncAvailable = computed(() => {
     if (!this.state.boardSyncAllowed()) return false;
     // The board-open value describes the board owner and is essential for guest boards. When the
@@ -1792,6 +1799,16 @@ export class BoardPage implements OnDestroy {
     const next = !this.compactCards();
     this.compactCards.set(next);
     writeCompactCards(this.kanbanScopeKey(), next);
+  }
+
+  openOverviewFromMenu() {
+    this.boardMenuOpen.set(false);
+    this.overviewOpen.set(true);
+  }
+
+  openWatchersFromMenu() {
+    this.boardMenuOpen.set(false);
+    this.watcherPopoverOpen.set(true);
   }
 
   openBackgroundFromMenu() {

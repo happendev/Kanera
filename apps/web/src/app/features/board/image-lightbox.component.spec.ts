@@ -368,6 +368,35 @@ describe("ImageLightboxComponent", () => {
     expect(fetch).toHaveBeenCalledWith(markdownUrl, { signal: expect.any(AbortSignal) });
   });
 
+  it("renders plain text attachments verbatim without Markdown formatting", async () => {
+    const text = "# not a heading\n<b>raw</b>";
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({
+      ok: true,
+      blob: () => Promise.resolve({ size: text.length, text: () => Promise.resolve(text) }),
+    })));
+
+    TestBed.configureTestingModule({
+      imports: [ImageLightboxComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        {
+          provide: DIALOG_DATA,
+          useValue: { src: "https://api.test/notes.txt", fileName: "notes.txt", mediaType: "text", mimeType: "text/plain" },
+        },
+        { provide: DialogRef, useValue: { close: vi.fn() } },
+      ],
+    });
+
+    const fixture = TestBed.createComponent(ImageLightboxComponent);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(host.querySelector(".lb-text-body")?.textContent).toBe(text);
+    });
+    expect(host.querySelector(".lb-text h1, .lb-text b")).toBeNull();
+  });
+
   it("loads a PDF reached through gallery navigation and aborts it when navigating away", async () => {
     let resolvePdf!: (response: Response) => void;
     let resolvePdfBlob!: (blob: Blob) => void;

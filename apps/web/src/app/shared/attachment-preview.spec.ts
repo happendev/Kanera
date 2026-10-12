@@ -9,7 +9,9 @@ describe("attachmentPreviewType", () => {
     expect(attachmentPreviewType("application/octet-stream", "output.markdown")).toBe("markdown");
   });
 
-  it("does not preview ordinary text files as Markdown", () => {
-    expect(attachmentPreviewType("text/plain", "notes.txt")).toBeNull();
+  it("previews plain text files as text, not Markdown", () => {
+    expect(attachmentPreviewType("text/plain", "notes.txt")).toBe("text");
+    expect(attachmentPreviewType("application/octet-stream", "server.LOG")).toBe("text");
+    expect(attachmentPreviewType("text/csv", "export.csv")).toBeNull();
   });
 });

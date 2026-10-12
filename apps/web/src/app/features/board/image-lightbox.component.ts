@@ -129,6 +129,22 @@ export type ImageLightboxData = ImageLightboxItem & {
             </div>
             }
           </article>
+        } @else if (isText()) {
+          <article class="lb-markdown lb-text" (click)="$event.stopPropagation()">
+            @if (text(); as value) {
+            <pre class="lb-text-body">{{ value }}</pre>
+            } @else {
+            <div class="lb-file-card lb-markdown-state">
+              <i class="ti ti-file-text lb-file-icon"></i>
+              <span class="lb-file-card-name">{{ activeImage().fileName || 'Text attachment' }}</span>
+              @if (markdownLoading()) {
+              <span class="lb-file-hint">Loading preview…</span>
+              } @else {
+              <span class="lb-file-hint">{{ markdownError() || 'This text file is empty.' }}</span>
+              }
+            </div>
+            }
+          </article>
         } @else {
         <img
           #lightboxImage
@@ -438,6 +454,20 @@ export type ImageLightboxData = ImageLightboxItem & {
       cursor: default;
     }
 
+    .lb-text {
+      padding: clamp(16px, 4vw, 32px);
+    }
+
+    .lb-text-body {
+      margin: 0;
+      font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+      font-size: 13px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      color: var(--text);
+    }
+
     .lb-markdown-state {
       width: 100%;
       min-height: 100%;
@@ -542,9 +572,12 @@ export class ImageLightboxComponent implements OnDestroy {
   readonly isAudio = computed(() => this.activeImage().mediaType === "audio");
   readonly isPdf = computed(() => this.activeImage().mediaType === "pdf");
   readonly isMarkdown = computed(() => this.activeImage().mediaType === "markdown");
+  readonly isText = computed(() => this.activeImage().mediaType === "text");
   readonly pdfSrc = signal<SafeResourceUrl | null>(null);
   readonly pdfLoading = signal(false);
   readonly markdown = signal<string | null>(null);
+  // Markdown and plain text share one fetch path; the active media type picks how it renders.
+  readonly text = this.markdown;
   readonly markdownLoading = signal(false);
   readonly markdownError = signal<string | null>(null);
   readonly positionLabel = computed(() => `${this.currentIndex() + 1} / ${this.images.length}`);
@@ -562,7 +595,7 @@ export class ImageLightboxComponent implements OnDestroy {
         const controller = new AbortController();
         this.pdfAbortController = controller;
         void this.loadPdfPreview(image.src, controller);
-      } else if (this.isMarkdown()) {
+      } else if (this.isMarkdown() || this.isText()) {
         const controller = new AbortController();
         this.markdownAbortController = controller;
         void this.loadMarkdownPreview(image.src, controller);
@@ -721,13 +754,14 @@ export class ImageLightboxComponent implements OnDestroy {
   }
 
   private async loadMarkdownPreview(src: string, controller: AbortController) {
+    const label = this.isText() ? "text file" : "Markdown file";
     this.markdownLoading.set(true);
     try {
       const response = await fetch(src, { signal: controller.signal });
       if (!response.ok) throw new Error(`Markdown preview failed with status ${response.status}`);
       const source = await response.blob();
       if (source.size > MARKDOWN_PREVIEW_MAX_BYTES) {
-        throw new Error("This Markdown file is too large to preview. Download it to view the full file.");
+        throw new Error(`This ${label} is too large to preview. Download it to view the full file.`);
       }
       const value = await source.text();
       if (controller.signal.aborted || this.markdownAbortController !== controller) return;
@@ -735,9 +769,9 @@ export class ImageLightboxComponent implements OnDestroy {
     } catch (error) {
       if (controller.signal.aborted || this.markdownAbortController !== controller) return;
       this.markdown.set(null);
-      this.markdownError.set(error instanceof Error && error.message.startsWith("This Markdown file")
+      this.markdownError.set(error instanceof Error && error.message.startsWith(`This ${label}`)
         ? error.message
-        : "Preview unavailable. Download the Markdown file to view it.");
+        : `Preview unavailable. Download the ${label} to view it.`);
     } finally {
       if (this.markdownAbortController === controller) this.markdownLoading.set(false);
     }
