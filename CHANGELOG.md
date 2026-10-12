@@ -10,6 +10,7 @@ All notable changes to Kanera are documented here.
 - **More efficient realtime and background processing:** notifications and emails arrive sooner under load, with less repeated work and fewer processing pauses across automations, push delivery, webhooks, daily digests and cleanup.
 - Hosted subscription payment analytics are recorded against the organisation creator, so PostHog's first-touch acquisition properties attribute revenue.
 - Cards with unread activity now stand out on busy boards: alongside the bold title and dot, the tile gets a faint accent tint and an accent ring.
+- Emails now show dates day-first with the month named (for example "12 Oct 2026") instead of US month-first order, so they read unambiguously everywhere.
 
 ### Fixed
 

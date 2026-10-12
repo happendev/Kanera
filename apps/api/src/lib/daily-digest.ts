@@ -22,13 +22,13 @@ import { allowsDailyDigestEmail, getNotificationSettingsForUsers, getNotificatio
 import { startSweepScheduler } from "./sweep-scheduler.js";
 import { absoluteCardUrl } from "./wire-card.js";
 import { localParts } from "./due-date.js";
-import { dateTimeFormatter } from "./date-time-formatter.js";
+import { dateTimeFormatter, EMAIL_DATE_LOCALE } from "./date-time-formatter.js";
 import { enqueueMyDayMcpEvents } from "./mcp-events.js";
 
 // A digest can contain thousands of items. Reuse bounded ICU formatter caches across them,
 // while formatting each date afresh so timezone and day-boundary behavior stays unchanged.
-const digestDateFormatter = dateTimeFormatter({ month: "long", day: "numeric", year: "numeric" }, "en-US");
-const digestShortDateFormatter = dateTimeFormatter({ month: "short", day: "numeric" }, "en-US");
+const digestDateFormatter = dateTimeFormatter({ month: "long", day: "numeric", year: "numeric" }, EMAIL_DATE_LOCALE);
+const digestShortDateFormatter = dateTimeFormatter({ month: "short", day: "numeric" }, EMAIL_DATE_LOCALE);
 const DIGEST_HOUR = 8;
 const SWEEP_INTERVAL_MS = 60_000; // 60 seconds
 /**

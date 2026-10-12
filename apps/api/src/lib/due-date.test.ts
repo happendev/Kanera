@@ -23,7 +23,7 @@ test("local dates preserve midnight, DST, fractional offsets and invalid-zone fa
     for (const instant of ["2026-03-08T06:59:00Z", "2026-03-08T07:01:00Z", "2026-11-01T06:01:00Z", "2026-09-05T00:00:00Z"]) {
       const date = new Date(instant);
       const validZone = zone && zone !== "invalid" ? zone : "UTC";
-      const parts = new Intl.DateTimeFormat("en-CA", { timeZone: validZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hour12: false }).formatToParts(date);
+      const parts = new Intl.DateTimeFormat("en-US", { timeZone: validZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" }).formatToParts(date);
       const value = (type: string) => parts.find((part) => part.type === type)!.value;
       const expectedDate = `${value("year")}-${value("month")}-${value("day")}`;
       assert.equal(localDateInTimezone(date, zone), expectedDate);
@@ -35,7 +35,7 @@ test("local dates preserve midnight, DST, fractional offsets and invalid-zone fa
 });
 
 test("formatter retention is bounded and failed zones do not poison valid entries", () => {
-  const formatter = dateTimeFormatter({ year: "numeric" });
+  const formatter = dateTimeFormatter({ year: "numeric" }, "en-US");
   const original = formatter("UTC");
   assert.equal(formatter("UTC"), original);
   assert.throws(() => formatter("invalid"), RangeError);

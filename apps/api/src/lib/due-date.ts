@@ -1,12 +1,6 @@
 import { DUE_DATE_SLOT_TIMES, type CardDueDateSlot } from "@kanera/shared/due-date-slots";
 
-import { dateTimeFormatter } from "./date-time-formatter.js";
-
-const dateFormatter = dateTimeFormatter({ year: "numeric", month: "2-digit", day: "2-digit" });
-const minuteFormatter = dateTimeFormatter({
-  year: "numeric", month: "2-digit", day: "2-digit",
-  hour: "2-digit", minute: "2-digit", hour12: false, hourCycle: "h23",
-});
+import { wallClockPartsOrUtc } from "./date-time-formatter.js";
 
 export interface DueDateCandidate {
   dueDateLocalDate: string | null;
@@ -16,20 +10,8 @@ export interface DueDateCandidate {
 
 /** Local calendar date and wall-clock time in `timezone`, falling back to UTC for unknown zones. */
 export function localParts(now: Date, timezone: string): { date: string; hour: number; minute: number } {
-  let parts: Intl.DateTimeFormatPart[];
-  try {
-    parts = minuteFormatter(timezone || "UTC").formatToParts(now);
-  } catch {
-    parts = minuteFormatter("UTC").formatToParts(now);
-  }
-
-  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
-  const rawHour = Number(value("hour"));
-  return {
-    date: `${value("year")}-${value("month")}-${value("day")}`,
-    hour: rawHour === 24 ? 0 : rawHour,
-    minute: Number(value("minute")),
-  };
+  const { date, hour, minute } = wallClockPartsOrUtc(now, timezone);
+  return { date, hour, minute };
 }
 
 export function isDueDateOverdue(candidate: DueDateCandidate, now = new Date()): boolean {
@@ -43,21 +25,11 @@ export function isDueDateOverdue(candidate: DueDateCandidate, now = new Date()):
 }
 
 /**
- * The YYYY-MM-DD wall-clock date an instant falls on in the given zone.
- *
- * `en-CA` is used because its short date format is already ISO-ordered. An unknown or malformed
- * zone falls back to UTC rather than throwing, matching `isDueDateOverdue` above — a bad stored
- * zone must degrade, not take down a read path.
+ * The YYYY-MM-DD wall-clock date an instant falls on in the given zone. An unknown or malformed
+ * zone falls back to UTC rather than throwing, matching `isDueDateOverdue` above.
  */
 export function localDateInTimezone(date: Date, timezone: string): string {
-  let parts: Intl.DateTimeFormatPart[];
-  try {
-    parts = dateFormatter(timezone || "UTC").formatToParts(date);
-  } catch {
-    parts = dateFormatter("UTC").formatToParts(date);
-  }
-  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
-  return `${value("year")}-${value("month")}-${value("day")}`;
+  return wallClockPartsOrUtc(date, timezone).date;
 }
 
 /**

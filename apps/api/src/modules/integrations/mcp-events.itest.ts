@@ -12,6 +12,7 @@ import { signupOwner } from "../../test/api-fixtures.js";
 import { insertTestUsers } from "../../test/user-fixtures.js";
 import { encryptSecret } from "../../lib/secrets.js";
 import { enqueueMcpEventDeliveries, enqueueMyDayMcpEvents, processMcpEventDeliveries } from "../../lib/mcp-events.js";
+import { localDateInTimezone } from "../../lib/due-date.js";
 import { McpCallbackError, postMcpWebhook, verifyMcpCallback, type McpWebhookRequest } from "../../lib/mcp-event-webhooks.js";
 import { processRealtimeOutbox } from "../../realtime/outbox.js";
 import { createMcpHttpHandler } from "../../../../mcp/src/http.js";
@@ -505,7 +506,7 @@ void test("my_day.ready pings once per weekday morning, only while the digest ga
     monday.setUTCDate(monday.getUTCDate() + ((8 - monday.getUTCDay()) % 7 || 7));
     monday.setUTCHours(13, 30, 0, 0);
     const localHour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", hourCycle: "h23" }).format(monday));
-    const localDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(monday);
+    const localDate = localDateInTimezone(monday, "America/New_York");
     const saturday = new Date(monday.getTime() - 2 * 86_400_000);
     const allowAll = async (ids: string[]) => new Set(ids);
 

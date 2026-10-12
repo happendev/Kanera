@@ -1266,10 +1266,14 @@ async function createStandaloneBoard(
   };
 }
 
-/** Wall-clock YYYY-MM-DD in an IANA zone; en-CA formats dates as ISO. */
+/** Wall-clock YYYY-MM-DD in an IANA zone, assembled from parts so no locale's date order applies. */
 function localDateIn(timeZone: string): string {
   try {
-    return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone, calendar: "gregory", numberingSystem: "latn", year: "numeric", month: "2-digit", day: "2-digit",
+    }).formatToParts(new Date());
+    const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+    return `${value("year").padStart(4, "0")}-${value("month")}-${value("day")}`;
   } catch {
     return validationError(`unknown time zone ${timeZone}`);
   }

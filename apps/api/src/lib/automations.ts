@@ -11,6 +11,7 @@ import { invalidateQueuesForCards } from "./card-priority-invalidation.js";
 import { emitActivityFeedItem, recordActivity } from "./activity.js";
 import { enqueueCardAssignedEmails } from "./assignee-email-notifications.js";
 import { applyChecklistTemplates } from "./checklist-templates.js";
+import { dateTimeFormatter, wallClockPartsOrUtc } from "./date-time-formatter.js";
 import { addDays, isDueDateOverdue, localDateInTimezone } from "./due-date.js";
 import { createMailer } from "./mailer.js";
 import { clearOverdueNotificationsForCards } from "./notifications.js";
@@ -173,50 +174,27 @@ function toWireCard(card: Card, _clientId: string): WireCard {
   };
 }
 
+// The long month name is user-visible text, so it stays explicitly English for automations.
+const automationMonthFormatter = dateTimeFormatter({ year: "2-digit", month: "long" }, "en");
+
 function localDateTimePartsInTimezone(date: Date, timezone: string): { year: string; year2: string; month: string; monthLong: string; day: string; hour: string; minute: string } {
-  let parts: Intl.DateTimeFormatPart[];
+  const zone = timezone || "UTC";
   let longMonthParts: Intl.DateTimeFormatPart[];
   try {
-    parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: timezone || "UTC",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    }).formatToParts(date);
-    longMonthParts = new Intl.DateTimeFormat("en", {
-      timeZone: timezone || "UTC",
-      year: "2-digit",
-      month: "long",
-    }).formatToParts(date);
+    longMonthParts = automationMonthFormatter(zone).formatToParts(date);
   } catch {
-    parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "UTC",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    }).formatToParts(date);
-    longMonthParts = new Intl.DateTimeFormat("en", {
-      timeZone: "UTC",
-      year: "2-digit",
-      month: "long",
-    }).formatToParts(date);
+    longMonthParts = automationMonthFormatter("UTC").formatToParts(date);
   }
-  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  const parts = wallClockPartsOrUtc(date, zone);
   const longMonthValue = (type: string) => longMonthParts.find((part) => part.type === type)?.value ?? "";
   return {
-    year: value("year"),
+    year: parts.year,
     year2: longMonthValue("year"),
-    month: value("month"),
+    month: parts.month,
     monthLong: longMonthValue("month"),
-    day: value("day"),
-    hour: value("hour"),
-    minute: value("minute"),
+    day: parts.day,
+    hour: String(parts.hour).padStart(2, "0"),
+    minute: String(parts.minute).padStart(2, "0"),
   };
 }
 
