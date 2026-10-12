@@ -21,6 +21,7 @@ import { and, asc, eq, inArray, isNull, notExists, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { db, type Tx } from "../db.js";
 import { env, type Env } from "../env.js";
+import { EMAIL_DATE_LOCALE } from "./date-time-formatter.js";
 import { canAddPaidSeat, isPaidTier } from "./entitlements.js";
 import type { Mailer } from "./mailer.js";
 import { getFreePlanLimits } from "./tier-limits.js";
@@ -333,7 +334,7 @@ function emptyImpact(): BillingImpactSummary {
 }
 
 function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(date);
+  return new Intl.DateTimeFormat(EMAIL_DATE_LOCALE, { dateStyle: "medium" }).format(date);
 }
 
 /**

@@ -649,8 +649,8 @@ staff, demo, seed, test, and load-test organisations.
 | `NODE_OPTIONS` | no | Passed to Node. Use to pin the heap, for example `--max-old-space-size=8192`. Empty by default. See Performance tuning. |
 | `UV_THREADPOOL_SIZE` | no | libuv worker-thread pool size for native work. Defaults to `16` in compose. |
 | `WORKER_PORT` | no | Internal worker healthcheck port. Defaults to `3003`. |
-| `REALTIME_WEBSOCKET_COMPRESSION_ENABLED` | no | Enables per-message deflate for browser Socket.IO websocket frames. Defaults to `true`. |
-| `REALTIME_WEBSOCKET_COMPRESSION_THRESHOLD_BYTES` | no | Minimum websocket frame size to compress. Defaults to `1024`; raise it if API CPU is more constrained than bandwidth. |
+| `REALTIME_WEBSOCKET_COMPRESSION_ENABLED` | no | Defaults to `false` to avoid compression CPU and fanout queueing for typical small realtime messages. Set `true` to opt in to fast deflate (level 1, no server context takeover) when bandwidth is constrained and large updates are common. Existing explicit `true` settings remain enabled; set `false` and restart/recreate the app API to adopt the default. HTTP compression is unaffected. |
+| `REALTIME_WEBSOCKET_COMPRESSION_THRESHOLD_BYTES` | no | Used only when websocket compression is enabled. Minimum outgoing message size to compress; defaults to `1024`. Server context takeover is disabled so this threshold takes effect. |
 | `JWT_ACCESS_TTL` | no | Defaults to `5m`. |
 | `JWT_REFRESH_TTL_DAYS` | no | Defaults to `10`. |
 | `SIGNUPS_ENABLED` | no | Defaults to `true`. Set `false` to close public self-signup/new organisation creation while still allowing existing organisation invite links. |

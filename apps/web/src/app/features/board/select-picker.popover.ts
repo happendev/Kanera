@@ -8,7 +8,7 @@ import {
   signal,
 } from "@angular/core";
 import type { WireCustomFieldOption } from "@kanera/shared/events";
-import { ANCHORED_HOST_STYLES, anchoredSheetStyles } from "../../shared/anchored-panel";
+import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { byPosition } from "../../shared/position-sort";
 
@@ -174,7 +174,6 @@ import { byPosition } from "../../shared/position-sort";
       &:hover { background: var(--surface-hover); color: var(--text); }
     }
   `,
-    anchoredSheetStyles("lp-panel"),
   ],
 })
 export class SelectPickerPopover {

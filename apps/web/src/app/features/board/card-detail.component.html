@@ -1,6 +1,6 @@
 <div class="backdrop" [class.closing]="closing()" (click)="requestClose()"></div>
 
-<aside #panel class="panel" [class.mode-modal]="mode() === 'modal'" [class.closing]="closing()" [class.is-attachment-drag-active]="attachmentDragActive()" role="dialog" aria-modal="true" [attr.aria-label]="'Card detail: ' + card().title" tabindex="-1"
+<aside #panel cdkScrollable class="panel" [class.mode-modal]="mode() === 'modal'" [class.closing]="closing()" [class.is-attachment-drag-active]="attachmentDragActive()" role="dialog" aria-modal="true" [attr.aria-label]="'Card detail: ' + card().title" tabindex="-1"
   (paste)="onCardDetailPaste($event)">
   @if (attachmentDragActive()) {
   <div class="panel-drop-overlay" aria-hidden="true">

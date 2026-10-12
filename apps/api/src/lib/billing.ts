@@ -911,9 +911,14 @@ export async function handleStripeEvent(
           if (clientId && invoice.amount_paid > 0) {
             const firstItem = (subscription as SubscriptionLike).items.data[0] ?? null;
             const billingReason = analyticsPaymentReason(invoice.billing_reason);
+            // Attribute revenue to the organisation creator's PostHog person so its first-touch
+            // $initial_utm_* properties apply; the organization group still carries the rollup.
+            // Later members and guests never replace that acquisition.
+            const [creator] = await db.select({ userId: clients.createdByUserId })
+              .from(clients).where(eq(clients.id, clientId)).limit(1);
             await productAnalytics.capture({
               event: "subscription_payment_succeeded",
-              distinctId: `organization:${clientId}`,
+              distinctId: creator?.userId ?? `organization:${clientId}`,
               organizationId: clientId,
               properties: {
                 workspace_id: clientId,

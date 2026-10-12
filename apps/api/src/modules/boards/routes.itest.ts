@@ -2,6 +2,7 @@ import "../../test/setup.integration.js";
 import { insertTestNotifications } from "../../test/notification-fixtures.js";
 import { insertTestUsers } from "../../test/user-fixtures.js";
 import type { BoardExportArchive } from "@kanera/shared/dto";
+import { expandCardCustomFieldValue } from "@kanera/shared/events";
 import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS } from "@kanera/shared/workspace-defaults";
 import {
   activityEvents,
@@ -547,12 +548,19 @@ void test("board open omits non-showOnCard custom-field values, which load from 
   // value. Exercise the loader directly so a later serializer filter cannot hide a regression.
   const { loadBoardCardSummaries } = await import("../../lib/card-summary.js");
   const options = { boardId: board!.id, includeCompleted: true, includeArchived: false, completedCardsActiveDays: 7 };
-  const [completeRows, shownRows] = await Promise.all([
+  const [completeRows, shownRows, compactRows] = await Promise.all([
     loadBoardCardSummaries(options),
     loadBoardCardSummaries({ ...options, shownCustomFieldsOnly: true }),
+    loadBoardCardSummaries({ ...options, projection: "board-open" }),
   ]);
   assert.equal(completeRows.find((row) => row.id === card!.id)!.customFieldValues.length, 2);
   assert.deepEqual(shownRows.find((row) => row.id === card!.id)!.customFieldValues.map((value) => value.fieldId), [shownField!.id]);
+  const shownValues = shownRows.find((row) => row.id === card!.id)!.customFieldValues;
+  const compactValues = compactRows.find((row) => row.id === card!.id)!.customFieldValues;
+  assert.equal(shownValues[0]!.valueNumber, null, "full summaries retain nullable properties");
+  assert.equal("valueNumber" in compactValues[0]!, false, "board-open SQL omits nulls before driver decoding");
+  assert.deepEqual(compactValues.map(expandCardCustomFieldValue), shownValues);
+  assert.equal("coverFileKey" in compactRows[0]!, false, "summary SQL omits unused storage keys");
   await db.update(customFields).set({ archivedAt: new Date() }).where(eq(customFields.id, shownField!.id));
   const archivedRows = await loadBoardCardSummaries({ ...options, shownCustomFieldsOnly: true });
   assert.ok(archivedRows.every((row) => row.customFieldValues.length === 0));

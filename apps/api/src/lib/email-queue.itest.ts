@@ -520,3 +520,43 @@ test("queue cleanup purges rows older than 30 days", async () => {
   assert.equal(rows.length, 2);
   assert.deepEqual(new Set(rows.map((row) => row.toEmail)), new Set(["old-pending@example.com", "new@example.com"]));
 });
+
+// A browser cannot hold individual SMTP sends open deterministically. This catches both serial
+// head-of-line blocking and accidentally unbounded connection fanout without timing thresholds.
+void test("queue sweep bounds concurrency and lets other recipients start during a blocked send", async () => {
+  await db.insert(emailQueue).values(Array.from({ length: 12 }, (_, index) => ({
+    toEmail: `concurrent-${index}@example.com`, subject: "Concurrent delivery", type: "welcome" as const,
+    data: { displayName: "Recipient", loginUrl: "https://kanera.example/login" },
+  })));
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let firstWave!: () => void;
+  const started = new Promise<void>((resolve) => { firstWave = resolve; });
+  let active = 0;
+  let maxActive = 0;
+  const delivered: string[] = [];
+  const run = runEmailQueueSweep({ db, log, resolveSmtpConfig: async () => smtpConfig, sendEmail: async ({ to }) => {
+    active += 1;
+    maxActive = Math.max(maxActive, active);
+    delivered.push(to);
+    if (delivered.length === 5) firstWave();
+    await gate;
+    active -= 1;
+  } });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([started, new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("Healthy recipients were blocked behind the first send")), 5000);
+    })]);
+    assert.equal(active, 5);
+    assert.equal(delivered.length, 5);
+  } finally {
+    clearTimeout(timer);
+    release();
+    await run;
+  }
+  assert.equal(new Set(delivered).size, 12);
+  assert.equal(maxActive, 5);
+  const rows = await db.select().from(emailQueue);
+  assert.ok(rows.every((row) => row.status === EMAIL_QUEUE_STATUS.success && row.processingLeaseExpiresAt === null));
+});

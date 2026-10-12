@@ -637,6 +637,9 @@ void test("Stripe invoice paid captures one privacy-safe subscription payment ev
       analyticsSubscriptionStartedAt: new Date("2026-07-01T00:00:00.000Z"),
       seatLimit: 5,
     });
+    const [creator] = await db.select({ id: users.id }).from(users).where(eq(users.clientId, clientId)).limit(1);
+    assert.ok(creator);
+    await db.update(clients).set({ createdByUserId: creator.id }).where(eq(clients.id, clientId));
     setStripeSubscription(subscription("active", { clientId, priceId: "price_monthly", quantity: 5 }), 5);
     const captured: ServerAnalyticsEvent[] = [];
     const capture = mock.method(productAnalytics, "capture", async (input: ServerAnalyticsEvent) => {
@@ -662,7 +665,7 @@ void test("Stripe invoice paid captures one privacy-safe subscription payment ev
       const payments = captured.filter((item) => item.event === "subscription_payment_succeeded");
       assert.deepEqual(payments, [{
         event: "subscription_payment_succeeded",
-        distinctId: `organization:${clientId}`,
+        distinctId: creator.id,
         organizationId: clientId,
         properties: {
           workspace_id: clientId,

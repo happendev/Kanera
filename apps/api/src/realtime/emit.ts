@@ -6,7 +6,7 @@ import { loadOwnPriorityQueueSnapshot } from "../lib/card-priority-queue.js";
 import { enqueuePriorityQueueMcpEvents } from "../lib/mcp-events.js";
 import { broadcastToBoard, broadcastToClient, broadcastToUser, broadcastToWorkspace } from "./broadcast.js";
 import { logRealtimePublishFailure } from "./metrics.js";
-import { currentOutboxActor, publishDirectRealtimeEvent, publishRealtimeEvent } from "./outbox.js";
+import { currentOutboxActor, publishDirectRealtimeEvent, publishUserRealtimeEvents, publishRealtimeEvent } from "./outbox.js";
 
 type EventPayload<E extends keyof ServerToClientEvents> = Parameters<ServerToClientEvents[E]>[0];
 type BoardLifecycleEvent =
@@ -85,6 +85,16 @@ export async function emitToUserDurable<E extends keyof ServerToClientEvents>(
   const realtimeDispatched = broadcastToUser(userId, event, args[0]);
   await publishDirectRealtimeEvent("user", userId, event, args[0], { realtimeDispatched })
     .catch((err) => { logRealtimePublishFailure(err, { scope: "user", scopeId: userId, event }); });
+}
+
+/** Notification payloads are recipient-specific; never broadcast one user's row to an audience. */
+export async function emitToUsersDurable<E extends keyof ServerToClientEvents>(
+  event: E,
+  recipients: UserPayload<E>[],
+): Promise<void> {
+  const pending = recipients.filter(({ userId, payload }) => !broadcastToUser(userId, event, payload));
+  await publishUserRealtimeEvents(event, pending)
+    .catch((err) => { logRealtimePublishFailure(err, { scope: "user", scopeId: pending[0]?.userId ?? "", event }); });
 }
 
 async function workspaceIdForBoard(boardId: string): Promise<string | null> {

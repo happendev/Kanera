@@ -46,7 +46,7 @@ PUBLIC_API_TRUST_PROXY=true
 API_REPLICAS=2
 PUBLIC_API_REPLICAS=1
 MCP_REPLICAS=1
-REALTIME_WEBSOCKET_COMPRESSION_ENABLED=true
+REALTIME_WEBSOCKET_COMPRESSION_ENABLED=false
 REALTIME_WEBSOCKET_COMPRESSION_THRESHOLD_BYTES=1024
 
 POSTGRES_PASSWORD=<openssl rand -hex 32>
@@ -57,6 +57,13 @@ MEDIA_SIGNING_SECRET=<openssl rand -hex 32>
 SECRETS_ENCRYPTION_KEY=<openssl rand -hex 32>
 KANERA_ALLOW_PRIVATE_NOTIFICATION_DESTINATIONS=false
 ```
+
+Realtime compression is disabled by default to avoid compression work and delivery queues for
+Kanera's typically small messages. Set `REALTIME_WEBSOCKET_COMPRESSION_ENABLED=true` to opt in when
+bandwidth is constrained and large updates are common. When enabled, messages above the 1024-byte
+threshold use fast deflate (level 1) without server context takeover. These settings apply to both
+hosted and self-hosted deployments. Existing deployments explicitly set to `true` remain opted in;
+change that setting to `false` and recreate the API containers to adopt the new default.
 
 Product analytics remains disabled for ordinary self-hosted Dokploy installations. A
 Kanera-operated hosted deployment may opt in with the four `ANALYTICS_*`/`POSTHOG_*` variables
@@ -262,6 +269,15 @@ set `DATABASE_SSL=true` if your provider requires SSL, and remove the bundled
 `postgres` service from your compose setup. Valkey is also a hard dependency; if
 you replace the bundled Valkey service with a managed Valkey or Redis-compatible
 instance, set `REDIS_URL` for `api`, `worker`, and `public-api`.
+
+The bundled Postgres service defaults to `work_mem=16MB`, configurable with
+`POSTGRES_WORK_MEM` in Dokploy's Compose environment. Deploy the updated Compose
+file so Dokploy recreates **postgres**, not just the API services. This applies
+to existing data volumes and briefly restarts the database. After deployment,
+verify with `docker compose exec -T postgres psql -U kanera -d kanera -c 'SHOW work_mem;'`.
+Set `POSTGRES_WORK_MEM=4MB` and redeploy Postgres to roll back. The limit is per
+sort/hash operation, so concurrent operations can multiply memory use. Managed
+Postgres requires changing the default through the provider instead.
 
 The bundled Postgres service only publishes to host loopback. For temporary remote access, tunnel
 the loopback port over SSH (including over WireGuard) instead of exposing Postgres on an interface:

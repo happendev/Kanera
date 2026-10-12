@@ -11,7 +11,7 @@ import {
 import type { BoardTransferTarget } from "@kanera/shared/dto";
 import type { WireBoard, WireList } from "@kanera/shared/events";
 import { ApiClient } from "../../core/api/api.client";
-import { ANCHORED_PANEL_STYLES, ANCHORED_SHEET_STYLES, type AnchoredPanelPlacement } from "../../shared/anchored-panel";
+import { ANCHORED_PANEL_STYLES, type AnchoredPanelPlacement } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { PickerListComponent, type PickerGroup } from "../../shared/picker-list.component";
 import { byPosition } from "../../shared/position-sort";
@@ -59,7 +59,6 @@ type SourceListOption = Pick<WireList, "id" | "name">;
   `,
   styles: [
     ANCHORED_PANEL_STYLES,
-    ANCHORED_SHEET_STYLES,
     `
     k-picker-list { min-height: 0; }
 

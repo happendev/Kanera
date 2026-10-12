@@ -182,7 +182,9 @@ export function createEnvironmentSchema(options: EnvironmentSchemaOptions = {}) 
   REALTIME_WEBSOCKET_COMPRESSION_ENABLED: z
     .union([z.string(), z.boolean()])
     .transform((v) => v === true || v === "true")
-    .default(true),
+    // Representative seed updates are small; prefer avoiding zlib work and fanout queues.
+    .default(false),
+  // setupIo disables server context takeover so ws applies this threshold to outgoing messages.
   REALTIME_WEBSOCKET_COMPRESSION_THRESHOLD_BYTES: z.coerce.number().int().nonnegative().default(1024),
   REALTIME_OUTBOX_POLL_MS: z.coerce.number().int().positive().default(1_000),
   REALTIME_OUTBOX_RETENTION_DAYS: z.coerce.number().int().positive().default(30),

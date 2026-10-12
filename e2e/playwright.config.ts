@@ -14,6 +14,9 @@ const serviceEnv = {
   PUBLIC_API_PORT: String(ports.publicApi),
   WORKER_PORT: String(ports.worker),
   WEB_ORIGIN: webOrigin,
+  // Do not let the API's dotenv loader inherit a developer's legacy opt-in from the root .env.
+  // The schema's absent-variable default is checked separately; explicit CLI opt-in still works.
+  REALTIME_WEBSOCKET_COMPRESSION_ENABLED: process.env.REALTIME_WEBSOCKET_COMPRESSION_ENABLED ?? "false",
   // OAuth tokens are bound to the MCP URL as their resource, so the issuer (public API) and the MCP
   // server must agree on it, and the MCP server must name the issuer in its resource metadata.
   PUBLIC_API_OAUTH_ISSUER: publicApiOrigin,

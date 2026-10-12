@@ -5,10 +5,12 @@ import type { Db } from "../db.js";
 import { emailHeaders, errorMessage, renderEmail } from "./mailer.js";
 import { notificationDeliveryDuration, notificationDeliveryTotal, notificationQueueWaitDuration } from "./metrics.js";
 import { sendEmail, type SendEmailOptions } from "./smtp.js";
+import { forEachConcurrent } from "./concurrent-delivery.js";
 import { startSweepScheduler } from "./sweep-scheduler.js";
 
 const MAX_RETRIES = 3;
 const SWEEP_BATCH_SIZE = 25;
+const DELIVERY_CONCURRENCY = 5;
 const SWEEP_INTERVAL_MS = 30_000; // 30 seconds
 const PROCESSING_LEASE_MS = 15 * 60_000; // 15 minutes
 const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 1,440 minutes
@@ -47,7 +49,9 @@ export async function runEmailQueueSweep({
 
     // Drain every email that is currently due before the scheduler starts its next idle window.
     // Claims stay bounded so a large backlog never becomes one oversized database transaction.
-    for (const row of rows) {
+    // Bound outbound connections while letting healthy recipients proceed during a slow send.
+    // Each claimed row keeps its own lease, retry window and terminal result.
+    await forEachConcurrent(rows, DELIVERY_CONCURRENCY, async (row) => {
       const startedAt = Date.now();
       let outcome = "error";
       notificationQueueWaitDuration.observe(
@@ -84,7 +88,7 @@ export async function runEmailQueueSweep({
         notificationDeliveryDuration.observe({ queue: "email", channel: "smtp" }, (Date.now() - startedAt) / 1000);
         notificationDeliveryTotal.inc({ queue: "email", channel: "smtp", outcome });
       }
-    }
+    });
     processed += rows.length;
   }
 }

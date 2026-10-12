@@ -12,6 +12,7 @@ import { toWireCardSummary } from "./card-summary.js";
 import { badRequest } from "./errors.js";
 import { assignedCardVisibility } from "./access.js";
 import { signedAvatarUrl } from "./media-keys.js";
+import { wallClockParts } from "./date-time-formatter.js";
 import { escapedSearchPattern } from "./search-pattern.js";
 
 /** Furthest back the historical view may look — keeps the queryable window bounded. */
@@ -114,18 +115,12 @@ function cardSearchPredicate(query: string): SQL {
 }
 
 /**
- * Returns a YYYY-MM-DD key for a timestamp in the given zone. Uses `en-CA`, whose short date format
- * is already ISO-ordered, so no part reassembly is needed. The formatter is built once per query
- * because constructing an Intl.DateTimeFormat per row is measurably slow over a wide window.
+ * Returns a YYYY-MM-DD key for a timestamp in the given zone. Unlike the read-path helpers this
+ * rejects an unknown zone up front, before any query runs, rather than silently bucketing into UTC.
  */
 function localDayKeyFormatter(timeZone: string): (at: Date) => string {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  return (at: Date) => formatter.format(at);
+  wallClockParts(new Date(0), timeZone); // validates the zone and warms the cached formatter
+  return (at: Date) => wallClockParts(at, timeZone).date;
 }
 
 /**

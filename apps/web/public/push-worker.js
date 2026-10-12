@@ -1,3 +1,32 @@
+// Registered before Angular's worker so it runs first and can stop ngsw's own handler. ngsw's
+// navigateLastFocusedOrOpen awaits a full navigate() before focus(); by then the click's
+// user-activation window has expired, so Android refuses focus() and the card never surfaces
+// (and an uncontrolled client makes navigate() reject outright). Focus first, inside the
+// activation window, then navigate, falling back to a new window if either step fails.
+self.addEventListener("notificationclick", (event) => {
+  const target = event.notification.data?.onActionClick?.default;
+  if (event.action || !target?.url) return;
+
+  event.stopImmediatePropagation();
+  event.notification.close();
+  const url = new URL(target.url, self.registration.scope).href;
+
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const client = windows.find((candidate) => candidate.url.startsWith(self.registration.scope));
+    if (client) {
+      try {
+        const focused = await client.focus();
+        if (focused.url !== url) await focused.navigate(url);
+        return;
+      } catch {
+        // Fall through to opening a fresh window at the card.
+      }
+    }
+    await self.clients.openWindow(url);
+  })());
+});
+
 importScripts("./ngsw-worker.js");
 
 const SHARE_TARGET_CACHE = "kanera-share-target-v1";

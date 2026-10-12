@@ -26,6 +26,15 @@ const hostedStripe = {
 const hostedModeToken = "test-only-hosted-mode-token";
 const hostedModeTokenSha256 = createHash("sha256").update(hostedModeToken, "utf8").digest("hex");
 
+// E2E pins this variable to keep the developer's root .env from overriding the isolated stack.
+// These schema cases catch an accidentally enabled absent-variable default, lost opt-in, or the
+// string "false" becoming truthy; browser E2E covers negotiation and real delivery for both modes.
+void test("websocket compression defaults off and preserves explicit opt-in and opt-out", () => {
+  assert.equal(mainApiEnvironmentSchema.parse(base).REALTIME_WEBSOCKET_COMPRESSION_ENABLED, false);
+  assert.equal(mainApiEnvironmentSchema.parse({ ...base, REALTIME_WEBSOCKET_COMPRESSION_ENABLED: "true" }).REALTIME_WEBSOCKET_COMPRESSION_ENABLED, true);
+  assert.equal(mainApiEnvironmentSchema.parse({ ...base, REALTIME_WEBSOCKET_COMPRESSION_ENABLED: "false" }).REALTIME_WEBSOCKET_COMPRESSION_ENABLED, false);
+});
+
 void test("operational alerts default to enabled and require an explicit false to disable", () => {
   const defaulted = mainApiEnvironmentSchema.safeParse(base);
   assert.equal(defaulted.success, true);

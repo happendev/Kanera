@@ -9,7 +9,7 @@ import {
 } from "@angular/core";
 import type { WireBoardMemberUser } from "@kanera/shared/events";
 import { AvatarComponent } from "../../shared/avatar.component";
-import { ANCHORED_HOST_STYLES, anchoredSheetStyles } from "../../shared/anchored-panel";
+import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 
 @Component({
@@ -182,7 +182,6 @@ import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
       }
     }
   `,
-    anchoredSheetStyles("mp-panel"),
   ],
 })
 export class MemberPickerPopover {

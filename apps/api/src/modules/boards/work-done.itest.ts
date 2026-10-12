@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { db } from "../../db.js";
+import { localDateInTimezone } from "../../lib/due-date.js";
 import { buildIntegrationServer } from "../../test/integration.js";
 import { signupOwner } from "../../test/api-fixtures.js";
 
@@ -519,7 +520,7 @@ void test("work-done summary buckets every event type into the requested zone's 
   const at = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
   at.setUTCHours(22, 0, 0, 0);
   const utcDay = at.toISOString().slice(0, 10);
-  const aucklandDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Pacific/Auckland" }).format(at);
+  const aucklandDay = localDateInTimezone(at, "Pacific/Auckland");
   assert.notEqual(utcDay, aucklandDay, "22:00 UTC must fall on the next Auckland day for this test to mean anything");
   await db.insert(activityEvents).values([
     {

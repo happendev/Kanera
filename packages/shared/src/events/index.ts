@@ -153,20 +153,21 @@ export type WireCardSummary = Pick<
 export type CompactCardCustomFieldValue = Pick<CardCustomFieldValue, "cardId" | "fieldId" | "updatedAt"> &
   Partial<CardCustomFieldValue>;
 
-export function compactCardCustomFieldValue(value: CardCustomFieldValue): CompactCardCustomFieldValue {
+export function compactCardCustomFieldValue(value: CompactCardCustomFieldValue): CompactCardCustomFieldValue {
   const out: CompactCardCustomFieldValue = {
     cardId: value.cardId,
     fieldId: value.fieldId,
     updatedAt: value.updatedAt,
   };
-  // Keep `false` (a meaningful checkbox value) and any populated field; drop only nulls.
-  if (value.valueText !== null) out.valueText = value.valueText;
-  if (value.valueNumber !== null) out.valueNumber = value.valueNumber;
-  if (value.valueCheckbox !== null) out.valueCheckbox = value.valueCheckbox;
-  if (value.valueDate !== null) out.valueDate = value.valueDate;
-  if (value.valueUrl !== null) out.valueUrl = value.valueUrl;
-  if (value.valueOptionIds !== null) out.valueOptionIds = value.valueOptionIds;
-  if (value.valueUserIds !== null) out.valueUserIds = value.valueUserIds;
+  // SQL board-open projections may already omit nulls. Accept both forms without restoring
+  // defaults, while retaining false, zero, empty strings and empty arrays as meaningful values.
+  if (value.valueText != null) out.valueText = value.valueText;
+  if (value.valueNumber != null) out.valueNumber = value.valueNumber;
+  if (value.valueCheckbox != null) out.valueCheckbox = value.valueCheckbox;
+  if (value.valueDate != null) out.valueDate = value.valueDate;
+  if (value.valueUrl != null) out.valueUrl = value.valueUrl;
+  if (value.valueOptionIds != null) out.valueOptionIds = value.valueOptionIds;
+  if (value.valueUserIds != null) out.valueUserIds = value.valueUserIds;
   return out;
 }
 
@@ -195,7 +196,9 @@ export type CompactCardSummary = Pick<
 > &
   Partial<Omit<WireCardSummary, "customFieldValues">> & { customFieldValues?: CompactCardCustomFieldValue[] };
 
-export function compactCardSummary(card: WireCardSummary): CompactCardSummary {
+export function compactCardSummary(
+  card: Omit<WireCardSummary, "customFieldValues"> & { customFieldValues: CompactCardCustomFieldValue[] },
+): CompactCardSummary {
   const out: CompactCardSummary = {
     id: card.id,
     workspaceId: card.workspaceId,
