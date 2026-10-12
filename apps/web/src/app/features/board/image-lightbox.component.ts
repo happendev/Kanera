@@ -184,7 +184,20 @@ export type ImageLightboxData = ImageLightboxItem & {
           <i class="ti ti-chevron-right"></i>
         </button>
         }
+        @if (isImage() || hasMultiple()) {
         <span class="lb-ctrl-sep"></span>
+        }
+        @if (isText() && text() !== null) {
+        <button
+          type="button"
+          class="lb-ctrl-btn"
+          (click)="copyText($event)"
+          [attr.aria-label]="textCopied() ? 'Copied text' : 'Copy text'"
+          [kTooltip]="textCopied() ? 'Copied' : 'Copy text'"
+        >
+          <i class="ti" [class.ti-copy]="!textCopied()" [class.ti-copy-check]="textCopied()"></i>
+        </button>
+        }
         <button
           type="button"
           class="lb-ctrl-btn"
@@ -578,6 +591,8 @@ export class ImageLightboxComponent implements OnDestroy {
   readonly markdown = signal<string | null>(null);
   // Markdown and plain text share one fetch path; the active media type picks how it renders.
   readonly text = this.markdown;
+  readonly textCopied = signal(false);
+  private textCopiedTimer: number | null = null;
   readonly markdownLoading = signal(false);
   readonly markdownError = signal<string | null>(null);
   readonly positionLabel = computed(() => `${this.currentIndex() + 1} / ${this.images.length}`);
@@ -603,7 +618,21 @@ export class ImageLightboxComponent implements OnDestroy {
     });
   }
 
+  async copyText(event: Event) {
+    event.stopPropagation();
+    const value = this.text();
+    if (value === null) return;
+    await navigator.clipboard?.writeText(value).catch(() => undefined);
+    this.textCopied.set(true);
+    if (this.textCopiedTimer !== null) window.clearTimeout(this.textCopiedTimer);
+    this.textCopiedTimer = window.setTimeout(() => {
+      this.textCopied.set(false);
+      this.textCopiedTimer = null;
+    }, 1400);
+  }
+
   ngOnDestroy() {
+    if (this.textCopiedTimer !== null) window.clearTimeout(this.textCopiedTimer);
     this.resetPdfPreview();
     this.resetMarkdownPreview();
   }
