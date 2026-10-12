@@ -10,7 +10,7 @@
 
 See what is assigned, what changed, what is blocked, and what has been completed across every project, client, and team.
 
-[Start free](https://board.kanera.app/signup) · [Explore features](https://www.kanera.app/features) · [Read the docs](https://www.kanera.app/docs) · [CLI and MCP for AI agents](#cli-mcp-and-ai-agents) · [Self-host Kanera](https://www.kanera.app/docs/self-host)
+[Start free](https://board.kanera.app/signup) · [Explore features](https://www.kanera.app/features) · [Read the docs](https://www.kanera.app/docs) · [Work with AI agents](#work-with-ai-agents-with-progress-you-can-see) · [Self-host Kanera](https://www.kanera.app/docs/self-host)
 
 </div>
 
@@ -28,6 +28,7 @@ Use the hosted service and get started in minutes, or self-host Kanera on your o
 - **Make progress visible.** Review what was created, moved, completed, or checked off without chasing another status update.
 - **Keep knowledge nearby.** Use personal, workspace, and board notes for decisions, processes, references, and project context, with Scratchpad ready for quick capture.
 - **Stay in flow from the keyboard.** Open search and personal tools, jump between core pages, switch board views, create cards, and update an open card with contextual shortcuts. Press `?` to see what is available.
+- **Delegate to AI agents.** Give your agent cards to work on, follow live runs and blockers, and review results with clear agent attribution.
 - **Automate and integrate.** Handle repetitive updates with trigger-based automations, post card activity into Slack, Discord, Telegram, or Zulip, and connect other tools through the REST API, webhooks, and MCP server.
 - **Get told what matters, where you want it.** Choose per notification type whether an update reaches email, browser push, ntfy, Gotify, or your own webhook, then add per-workspace exceptions so one busy board does not drown out the rest.
 - **Work together in real time.** Stay current with live updates, mentions, activity history, and controlled guest access.
@@ -49,6 +50,54 @@ Use a workspace when several boards should follow the same operating model. List
 That means a status like `In Review` or a field like `Client` has the same meaning everywhere—no rebuilding each board or reconciling mismatched setups later.
 
 For work that does not need to share that setup, create a standalone board. It keeps its own lists, labels, custom fields, checklist templates, automations, members, access, and integrations independently of your workspaces.
+
+## Work with AI agents, with progress you can see
+
+Use Claude, ChatGPT, Codex, Cursor, or another agent you already work with to pick up cards, read their context, carry out tasks, and report back in Kanera. Agent work stays on the same boards as your team's work, with live progress, visible blockers, and a record of who did what for whom.
+
+### A board for delegating work and reviewing results
+
+Start with the **Agent Workflow** template: **Backlog → Agent Working → Waiting on Me → Review → Done**. Describe the task on a card, then ask your agent to pick it up. Following Kanera's agent instructions, it moves the card as work starts, needs your input, or finishes. You review the result and decide when it belongs in Done.
+
+![Kanera Agent Workflow board with Backlog, Agent Working, Waiting on Me, Review, and Done lists, including live agent run chips](docs/readme-assets/agent-workflow.jpg)
+
+The workflow combines ordinary cards with **agent runs**. Runs track a working session; card moves remain explicit actions by the agent or a person, so starting or finishing a run does not silently move the card.
+
+### Know what is running and what needs you
+
+An agent opens a run before multi-step work and updates it with a short progress note. Everyone viewing the board sees a live chip on the card; it turns amber when the agent is waiting on a person. Open the card to see the agent, its current work, and when it last reported. A pull request or session link can take you straight to the result.
+
+![Kanera card detail showing a live Claude run with a progress note and agent-attributed comments and finished work in the activity feed](docs/readme-assets/agent-runs.jpg)
+
+When the run ends, its outcome and closing summary stay in the card's activity. Runs that stop reporting are marked stalled after fifteen minutes, so an interrupted agent does not leave work looking active. A blocked run makes the wait visible; the agent should also comment with its question so watchers and assignees are notified.
+
+### Follow your agent's work without losing attribution
+
+With an OAuth connection, comments and changes show the person the agent acted for plus a **via Claude**, **via Codex**, or other agent badge. That includes browser sign-in through the CLI: name the agent with `kanera auth login --agent "Claude Code"`. Personal API keys attribute actions to their owner without a via badge; workspace and board keys use the key's name.
+
+![Kanera notification drawer on the Agent tab showing card completion and a comment attributed to Amelia Hart via Claude](docs/readme-assets/agent-notifications.jpg)
+
+Your agent's changes can notify you even though it acts on your behalf. The **Agent** tab brings those updates together, and **Work Done** distinguishes agent output from your own actions. Agents still operate within the connected person's current board permissions, and read-only credentials prevent writes at the server.
+
+Read more about [agent runs, attribution, and the Agent Workflow template](https://www.kanera.app/docs/ai-agent-runs).
+
+### Connect your agent through MCP or the CLI
+
+| Interface | Use it for | Get started |
+| --- | --- | --- |
+| **`kanera` CLI** | Terminals, scripts, CI, and coding agents that can run shell commands | `npm install --global @kanera/cli` · [CLI docs](https://www.kanera.app/docs/cli) |
+| **MCP server** | Claude, ChatGPT, Codex, GitHub Copilot, Cursor, Gemini CLI, OpenCode, and other MCP clients, connected with OAuth | `https://mcp.kanera.app/mcp` · [MCP setup guides](https://www.kanera.app/docs/ai-mcp) |
+| **Agent Skill** | Teaching Claude Code, Codex, and other agents to use Kanera reliably | `kanera setup claude` or `npx -y skills add https://github.com/happendev/Kanera/tree/main/integrations/skills/kanera` · [skill source](integrations/skills/kanera) |
+| **TypeScript SDK** | Your own applications and integrations | `npm install @kanera/sdk` · [SDK docs](packages/sdk/README.md) |
+| **REST API and webhooks** | Any language, sync jobs, and event-driven integrations | [API docs](https://www.kanera.app/docs/api) |
+
+The CLI and the MCP server expose the same tool layer, so anything an agent can do over MCP it can also do with `kanera` from a shell. Try the CLI without installing it:
+
+```bash
+npx -y @kanera/cli commands
+```
+
+Read-only credentials are enforced by the server, and self-hosted Kanera exposes its own MCP address and API for the same CLI and SDK. See [Work with coding agents from the terminal](https://www.kanera.app/docs/ai-coding-agents) for picking up cards and reporting progress from Claude Code or Codex.
 
 ## See Kanera in action
 
@@ -138,26 +187,6 @@ For Jira, ClickUp, Asana, monday.com, Notion, Linear, spreadsheets, or an intern
 
 - [Import from Trello](https://www.kanera.app/trello-migration)
 - [Explore migration options](https://www.kanera.app/migration)
-
-## CLI, MCP, and AI agents
-
-Kanera does not ship its own chatbot. It is built so the AI tools you already use can work on your boards, with every change attributed to the agent that made it.
-
-| Interface | Use it for | Get started |
-| --- | --- | --- |
-| **`kanera` CLI** | Terminals, scripts, CI, and coding agents that can run shell commands | `npm install --global @kanera/cli` · [CLI docs](https://www.kanera.app/docs/cli) |
-| **MCP server** | Claude, ChatGPT, Codex, GitHub Copilot, Cursor, Gemini CLI, OpenCode, and other MCP clients, connected with OAuth | `https://mcp.kanera.app/mcp` · [MCP setup guides](https://www.kanera.app/docs/ai-mcp) |
-| **Agent Skill** | Teaching Claude Code, Codex, and other agents to use Kanera reliably | `kanera setup claude` or `npx -y skills add https://github.com/happendev/Kanera/tree/main/integrations/skills/kanera` · [skill source](integrations/skills/kanera) |
-| **TypeScript SDK** | Your own applications and integrations | `npm install @kanera/sdk` · [SDK docs](packages/sdk/README.md) |
-| **REST API and webhooks** | Any language, sync jobs, and event-driven integrations | [API docs](https://www.kanera.app/docs/api) |
-
-The CLI and the MCP server expose the same tool layer, so anything an agent can do over MCP it can also do with `kanera` from a shell. Try the CLI without installing it:
-
-```bash
-npx -y @kanera/cli commands
-```
-
-Agents can be given read-only credentials that the server enforces, and self-hosted Kanera exposes its own MCP address and API for the same CLI and SDK. See [Work with coding agents from the terminal](https://www.kanera.app/docs/ai-coding-agents) for picking up cards and reporting progress from Claude Code or Codex.
 
 ## Hosted or self-hosted
 
