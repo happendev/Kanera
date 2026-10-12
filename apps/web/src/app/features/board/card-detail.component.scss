@@ -812,8 +812,10 @@
       padding-right: max(54px, calc(env(safe-area-inset-right) + 54px));
     }
 
+    // Fixed, not absolute: the panel itself scrolls at this width (see below) and the close button
+    // must stay reachable. The panel is full-screen here, so viewport coordinates line up with it.
     .close-btn {
-      position: absolute;
+      position: fixed;
       top: max(8px, calc(env(safe-area-inset-top) + 8px));
       right: max(8px, calc(env(safe-area-inset-right) + 8px));
       z-index: 30;
@@ -834,6 +836,37 @@
     justify-content: flex-end;
     align-items: stretch;
     padding: 0;
+  }
+
+  // One scroll surface on phones. With the cover, header and subheader pinned, the body was left a
+  // sliver of the screen to scroll in; scrolling the whole panel lets them move out of the way so
+  // the description, checklists and attachments get the full height. The status-bar backing stays
+  // pinned so content never scrolls under the notch.
+  .panel {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+
+    &::before {
+      position: sticky;
+      top: 0;
+      z-index: 31;
+    }
+
+    >* {
+      flex-shrink: 0;
+    }
+  }
+
+  .panel-body {
+    flex: 1 0 auto;
+    overflow: visible;
+  }
+
+  .col-main,
+  .col-comments {
+    flex: 1 0 auto;
+    overflow-y: visible;
   }
 
   .panel.mode-modal {
