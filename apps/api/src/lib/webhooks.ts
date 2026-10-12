@@ -21,6 +21,7 @@ import { db } from "../db.js";
 import { env } from "../env.js";
 import { hasPaidPlanEntitlement } from "./entitlements.js";
 import { decryptSecret } from "./secrets.js";
+import { forEachConcurrent } from "./concurrent-delivery.js";
 import { startSweepScheduler, type SweepScheduler } from "./sweep-scheduler.js";
 import { assertResolvedHostAllowed } from "./ssrf.js";
 import { signWebhookPayload } from "./webhook-signing.js";
@@ -33,7 +34,7 @@ const MAX_ATTEMPTS = 8;
 const DELIVERY_LIMIT = 25;
 const RESPONSE_BODY_LIMIT = 2000;
 // Cap how long a single delivery can hold an outbound connection so a slow/hanging endpoint
-// can't tie up the delivery worker (which runs deliveries in small concurrent chunks).
+// can't tie up the delivery worker (which runs deliveries in bounded concurrency).
 const DELIVERY_TIMEOUT_MS = 10_000;
 // Circuit breaker: a single outbox event fans out one delivery row per matching endpoint.
 // Endpoint counts are bounded by workspace config in practice, so this only guards against
@@ -42,7 +43,7 @@ const ENDPOINT_FANOUT_LIMIT = 1000;
 // Run a few deliveries concurrently so one slow endpoint can't stall the whole batch,
 // while staying small enough to bound outbound connections.
 const DELIVERY_CONCURRENCY = 5;
-// A claimed batch may take several timeout windows to drain because delivery is chunked.
+// A claimed batch may take several timeout windows to drain because concurrency is bounded.
 // Keep the lease comfortably above the worst normal batch duration so another worker
 // only reclaims rows after a crash or severe stall, not while later chunks are waiting.
 const DELIVERY_LEASE_MS = 2 * 60_000;
@@ -493,18 +494,16 @@ async function processRegularWebhookDeliveries(log?: FastifyBaseLogger): Promise
   // every healthy regular endpoint waits through all of a slow MCP batch's timeout windows.
   const due = await claimWebhookDeliveries();
 
-  // Deliver in fixed-size concurrent chunks: a single slow/timing-out endpoint no longer
-  // blocks every other due delivery behind it. allSettled keeps one failure from rejecting
-  // the chunk; deliverWebhookDelivery already persists failures, so we only log here.
-  for (let i = 0; i < due.length; i += DELIVERY_CONCURRENCY) {
-    const chunk = due.slice(i, i + DELIVERY_CONCURRENCY);
-    const results = await Promise.allSettled(chunk.map((delivery) => deliverWebhookDelivery(delivery)));
-    results.forEach((result, index) => {
-      if (result.status === "rejected") {
-        log?.error({ err: result.reason, deliveryId: chunk[index]!.id }, "webhook delivery failed");
-      }
-    });
-  }
+  // Reuse each freed slot immediately: one slow destination must not idle the other four.
+  // Delivery persists retries itself; unexpected failures are logged per row without aborting
+  // other claimed deliveries, and the scheduler waits for the whole batch to settle.
+  await forEachConcurrent(due, DELIVERY_CONCURRENCY, async (delivery) => {
+    try {
+      await deliverWebhookDelivery(delivery);
+    } catch (err) {
+      log?.error({ err, deliveryId: delivery.id }, "webhook delivery failed");
+    }
+  });
 
   return due.length >= DELIVERY_LIMIT;
 }

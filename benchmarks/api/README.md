@@ -1,5 +1,13 @@
 # API load test
 
+For controlled 3,000-card hydration experiments, see
+[board hydration and event-loop benchmarks](board-hydration.README.md). The companion
+[payload benchmark](event-loop.README.md) compares serialization, worker copying, compression,
+wire encodings and chunk sizes. These distinguish complete-board work from a smaller first page.
+
+For concurrent reads, writes, real outbox delivery, private-media signing and nginx compression,
+see the isolated [mixed-workload benchmark](mixed-workload.README.md).
+
 An opt-in concurrent load test for the read paths that dominate server cost. It does not run in CI,
 does not modify application code, and every scenario is a read — nothing is written.
 

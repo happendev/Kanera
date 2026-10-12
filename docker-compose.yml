@@ -110,6 +110,9 @@ services:
       - "shared_preload_libraries=pg_stat_statements"
       - "-c"
       - "pg_stat_statements.track=top"
+      # Large board-summary sorts otherwise spill to disk at Postgres's stock 4 MB limit.
+      - "-c"
+      - "work_mem=${POSTGRES_WORK_MEM:-16MB}"
     environment:
       POSTGRES_USER: kanera
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
@@ -206,7 +209,8 @@ services:
       AUTH_RATE_LIMIT_ENABLED: ${AUTH_RATE_LIMIT_ENABLED:-true}
       AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-10}
       AUTH_RATE_LIMIT_WINDOW_MS: ${AUTH_RATE_LIMIT_WINDOW_MS:-60000}
-      REALTIME_WEBSOCKET_COMPRESSION_ENABLED: ${REALTIME_WEBSOCKET_COMPRESSION_ENABLED:-true}
+      # Opt-in only: typical realtime messages are small enough to favor CPU/latency over compression.
+      REALTIME_WEBSOCKET_COMPRESSION_ENABLED: ${REALTIME_WEBSOCKET_COMPRESSION_ENABLED:-false}
       REALTIME_WEBSOCKET_COMPRESSION_THRESHOLD_BYTES: ${REALTIME_WEBSOCKET_COMPRESSION_THRESHOLD_BYTES:-1024}
     volumes:
       - kanera_uploads:/data/uploads

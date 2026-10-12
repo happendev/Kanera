@@ -2,6 +2,7 @@ import { requestContext } from "@fastify/request-context";
 import { boards, cardAssignees, cardChecklistItems, cardChecklists, cards, users, workspaces, type CardDueDateSlot, type PushQueueReason } from "@kanera/shared/schema";
 import { eq, inArray } from "drizzle-orm";
 import type { Db, Tx } from "../db.js";
+import { EMAIL_DATE_LOCALE } from "./date-time-formatter.js";
 import type { Mailer } from "./mailer.js";
 import { allowsNotificationEmail, allowsNotificationPush, allowsPersonalNotificationChannel, getNotificationSettingsForUsers, getNotificationWorkspaceRulesForUsers, isClientPushEnabled, type EffectiveNotificationSettings, type EffectiveNotificationWorkspaceRule, type NotificationPreferenceType, type NotificationWorkspaceRuleScope } from "./notification-settings.js";
 import { enqueuePersonalNotification, enqueuePush } from "./push-queue.js";
@@ -599,7 +600,7 @@ function slotLabel(slot: CardDueDateSlot | null): string | null {
 }
 
 function shortDateLabel(localDate: string, timezone: string): string {
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(EMAIL_DATE_LOCALE, {
     timeZone: timezone || "UTC",
     month: "short",
     day: "numeric",

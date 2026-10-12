@@ -129,7 +129,7 @@ async function boardPayload(
       // Load one sentinel row beyond the public page size so hasMore is known without a count scan.
       limit: cardQuery.limit === undefined ? undefined : cardQuery.limit + 1,
       offset: cardQuery.offset,
-      shownCustomFieldsOnly: true,
+      projection: "board-open",
     }),
     db
       .select()

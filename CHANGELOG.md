@@ -6,11 +6,18 @@ All notable changes to Kanera are documented here.
 
 ### Changed
 
+- **Faster boards and global views:** large boards open with less server work, while My Cards and Team Cards refresh around 65% faster with over 40% less API CPU in large-workload benchmarks.
+- **More efficient realtime and background processing:** notifications and emails arrive sooner under load, with less repeated work and fewer processing pauses across automations, push delivery, webhooks, daily digests and cleanup.
+- Hosted subscription payment analytics are recorded against the organisation creator, so PostHog's first-touch acquisition properties attribute revenue.
 - Cards with unread activity now stand out on busy boards: alongside the bold title and dot, the tile gets a faint accent tint and an accent ring.
+- Emails now show dates day-first with the month named (for example "12 Oct 2026") instead of US month-first order, so they read unambiguously everywhere.
 
 ### Fixed
 
+- On phones, pickers and menus (assignees, labels, dates, boards and others) now open right beside the button you tapped instead of at the bottom of the screen, leaving a gap.
+- Tapping a push notification on Android now opens the card again, instead of leaving Kanera in the background.
 - Default avatars now pick colours that suit the active theme, so near-black ones no longer vanish on dark themes and pale ones on light themes.
+- @mention chips are now clearly tinted in each person's colour, and the palette no longer has near-identical neighbours (blue/indigo, teal/cyan), so different people's mentions are easier to tell apart.
 
 ## [1.9.0] - 2026-10-11
 

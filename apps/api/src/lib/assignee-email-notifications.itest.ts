@@ -326,9 +326,9 @@ void test("due date set, change, and clear emails assignees with old and new lab
       return [data.previousDueLabel, data.nextDueLabel];
     }),
     [
-      [null, "May 26, 2026, morning"],
-      ["May 26, 2026, morning", "May 27, 2026, end of workday"],
-      ["May 27, 2026, end of workday", null],
+      [null, "26 May 2026, morning"],
+      ["26 May 2026, morning", "27 May 2026, end of workday"],
+      ["27 May 2026, end of workday", null],
     ],
   );
 
@@ -357,7 +357,7 @@ void test("overdue emails are queued once for assignees only", async () => {
 
   const rows = await db.select().from(emailQueue).where(and(eq(emailQueue.type, "card_overdue"), eq(emailQueue.toEmail, f.memberEmail)));
   assert.equal(rows.length, 1);
-  assert.equal((rows[0]!.data as { dueLabel: string }).dueLabel, "May 20, 2026");
+  assert.equal((rows[0]!.data as { dueLabel: string }).dueLabel, "20 May 2026");
   const watcherRows = await db.select().from(emailQueue).where(and(eq(emailQueue.type, "card_overdue"), eq(emailQueue.toEmail, f.otherEmail)));
   assert.equal(watcherRows.length, 0);
 });

@@ -30,14 +30,7 @@ type GuestInviteResponse = { status: "added" | "invited"; token?: string; invite
 type DueSlot = "anyTime" | "morning" | "afternoon" | "endOfWorkDay";
 
 function utcLocalDate(date: Date): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "UTC",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date);
-  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
-  return `${value("year")}-${value("month")}-${value("day")}`;
+  return date.toISOString().slice(0, 10);
 }
 
 void test("POST /workspaces creates workspace-scoped defaults and admin membership", async () => {

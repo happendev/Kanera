@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, output } from "@angular/core";
-import { ANCHORED_PANEL_STYLES, ANCHORED_SHEET_STYLES } from "../../../shared/anchored-panel";
+import { ANCHORED_PANEL_STYLES } from "../../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../../shared/anchored-panel.directive";
 import { WorkspaceSettingsPage } from "../workspace-settings.page";
 
@@ -65,7 +65,6 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
   `,
   styles: [
     ANCHORED_PANEL_STYLES,
-    ANCHORED_SHEET_STYLES,
     `
       .ae-body {
         display: grid;

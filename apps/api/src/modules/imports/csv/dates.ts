@@ -1,3 +1,4 @@
+import { wallClockParts } from "../../../lib/date-time-formatter.js";
 import { localDateParts } from "../../../lib/local-date.js";
 
 export interface CsvDateParts {
@@ -120,13 +121,8 @@ export function toLocalDate(parts: CsvDateParts, timezone: string): string {
 }
 
 function timezoneOffsetMs(date: Date, timezone: string): number {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
-  });
-  const map = new Map(formatter.formatToParts(date).map((part) => [part.type, part.value]));
-  const hour = Number(map.get("hour")) % 24;
-  const rendered = Date.UTC(Number(map.get("year")), Number(map.get("month")) - 1, Number(map.get("day")), hour, Number(map.get("minute")), Number(map.get("second")));
+  const local = wallClockParts(date, timezone);
+  const rendered = Date.UTC(Number(local.year), Number(local.month) - 1, Number(local.day), local.hour, local.minute, local.second);
   return rendered - date.getTime();
 }
 

@@ -218,7 +218,10 @@ export class CardDetailComponent {
 
     const tick = () => {
       this.checklistDragScrollFrame = window.requestAnimationFrame(tick);
-      const scroller = this.detailScroller()?.nativeElement;
+      // On phones the whole panel scrolls and .col-main grows to its content, so auto-scroll the
+      // panel instead whenever the detail column has nothing of its own to scroll.
+      const column = this.detailScroller()?.nativeElement;
+      const scroller = column && column.scrollHeight > column.clientHeight ? column : this.panel()?.nativeElement;
       if (this.checklistDragPointerY === null || !scroller) return;
       const rect = scroller.getBoundingClientRect();
       const step = checklistDragScrollStep(this.checklistDragPointerY, rect.top, rect.bottom);

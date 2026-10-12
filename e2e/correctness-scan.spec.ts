@@ -112,11 +112,16 @@ test("bulk and cross-board moves return the final card after list automations", 
   const sourceName = uniqueName("Automation source");
   const source = await result<{ id: string }>(await api.post(`/api/workspaces/${board.workspaceId}/boards`, { data: { name: sourceName } }));
   const target = await result<{ id: string }>(await api.post(`/api/workspaces/${board.workspaceId}/boards`, { data: { name: uniqueName("Automation target") } }));
-  const trigger = await result<{ id: string }>(await api.post(`/api/workspaces/${board.workspaceId}/lists`, { data: { name: uniqueName("Automation trigger") } }));
-  const destination = await result<{ id: string }>(await api.post(`/api/workspaces/${board.workspaceId}/lists`, { data: { name: uniqueName("Automation destination") } }));
+  const trigger = await result<{ id: string; name: string }>(await api.post(`/api/workspaces/${board.workspaceId}/lists`, { data: { name: uniqueName("Automation trigger") } }));
+  const destination = await result<{ id: string; name: string }>(await api.post(`/api/workspaces/${board.workspaceId}/lists`, { data: { name: uniqueName("Automation destination") } }));
   await result(await api.post(`/api/workspaces/${board.workspaceId}/automations`, { data: {
     enabled: true, triggerType: "card_enters_list", triggerListId: trigger.id, applyOnCreate: false,
-    actions: [{ type: "set_completion", config: { completed: true } }, { type: "move_to_list", config: { listId: destination.id } }],
+    actions: [
+      { type: "post_comment", config: { template: "Before move: {{list.name}}" } },
+      { type: "set_completion", config: { completed: true } },
+      { type: "move_to_list", config: { listId: destination.id } },
+      { type: "post_comment", config: { template: "After move: {{list.name}}" } },
+    ],
   } }));
   const create = (title: string) => api.post(`/api/boards/${source.id}/lists/${lists[0]!.id}/cards`, { data: { title } }).then(result<WireCard>);
   const bulkCard = await create(uniqueName("Bulk automation"));
@@ -131,6 +136,14 @@ test("bulk and cross-board moves return the final card after list automations", 
     expect(card.listId).toBe(destination.id);
     expect(card.completedAt).not.toBeNull();
     expect(card).toMatchObject({ listId: persisted[index]!.card.listId, position: persisted[index]!.card.position, completedAt: persisted[index]!.card.completedAt });
+  }
+  // Reusing template context must not retain the source list after a preceding action moves it.
+  for (const card of [bulkCard, transferredCard]) {
+    const comments = await result<{ items: Array<{ body: string }> }>(await api.get(`/api/cards/${card.id}/comments`));
+    expect(comments.items.map((comment) => comment.body)).toEqual(expect.arrayContaining([
+      `Before move: ${trigger.name}`,
+      `After move: ${destination.name}`,
+    ]));
   }
   // Extra workspace lists can be outside the horizontally virtualized board viewport. The table
   // exposes the final status without depending on which lanes happen to be mounted.

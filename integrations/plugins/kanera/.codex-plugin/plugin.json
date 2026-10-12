@@ -104,7 +104,7 @@
         "commerce_description": "The plugin reads and updates project work in an existing Kanera account. It does not sell products, take payments, or manage subscriptions through its tools."
       },
       "publication": {
-        "release_notes": "Initial directory submission of Kanera 4.0.0, with OAuth-connected project tools and an MCP-only skill for reading cards and activity, managing checklists, publishing requested comments, and summarising project work."
+        "release_notes": "Updated directory submission aligned with Kanera MCP 4.1.0, with explicit dynamic OAuth client registration, five positive and three negative review cases, and an MCP-only skill for managing project work."
       }
     }
   }

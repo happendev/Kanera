@@ -1440,6 +1440,7 @@ export class GlobalWorkState {
     if (viewerId && laneUserIds.includes(viewerId)) passes.push({ lens: "my", assigneeIds: [] });
 
     for (const pass of passes) {
+      if (cards.length >= 10_000) break;
       let cursor: string | undefined;
       do {
         const page = await this.api.post<WorkQueryResponse>("/work/cards/query", {
@@ -1449,7 +1450,7 @@ export class GlobalWorkState {
           // exact durable candidate rule instead of inheriting transient page filters.
           filters: { assigneeIds: pass.assigneeIds, labelIds: [], listIds: [], customFieldValues: [], completion: "active" },
           sort: "dueAsc",
-          limit: 100,
+          limit: Math.min(500, 10_000 - cards.length),
           includeMetadata: false,
           ...(cursor ? { cursor } : {}),
         });
@@ -1465,14 +1466,14 @@ export class GlobalWorkState {
     return cards;
   }
 
-  private loadCards(cursor?: string): Promise<WorkQueryResponse> {
+  private loadCards(cursor?: string, limit = 100): Promise<WorkQueryResponse> {
     const definition = this.definition();
     return this.api.post<WorkQueryResponse>("/work/cards/query", {
       lens: this.lens(),
       scope: definition.scope,
       filters: definition.filters,
       sort: definition.sort,
-      limit: 100,
+      limit,
       includeMetadata: !cursor,
       ...(cursor ? { cursor } : {}),
     });
@@ -1483,11 +1484,11 @@ export class GlobalWorkState {
     this.loadingMore.set(true);
     try {
       // A board's "Next" card is only meaningful when every matching lane item is loaded.
-      // Keep each request bounded at 100, but converge the interactive board before enabling drag.
+      // Keep the first paint small, then use bounded larger pages to converge before enabling drag.
       while (version === this.requestVersion && this.response().nextCursor && this.response().cards.length < 10_000) {
         const cursor = this.response().nextCursor;
         if (!cursor) break;
-        const page = await this.loadCards(cursor);
+        const page = await this.loadCards(cursor, Math.min(500, 10_000 - this.response().cards.length));
         if (version !== this.requestVersion) return;
         const current = this.response();
         const seen = new Set(current.cards.map((card) => card.id));
@@ -1521,14 +1522,14 @@ export class GlobalWorkState {
     const exhaustive = ["board", "priorities"].includes(this.definition().display);
     const targetCount = exhaustive ? 10_000 : Math.max(100, this.response().cards.length);
     // Each continuation cursor carries the ids already returned, so this walk is inherently
-    // sequential: one round trip per hundred loaded rows. scheduleRealtimeRefresh scales its
+    // sequential: one round trip per bounded page. scheduleRealtimeRefresh scales its
     // debounce with that depth so a burst of events pays for one walk, not one per event.
-    const merged = await this.loadCards();
+    const merged = await this.loadCards(undefined, Math.min(500, targetCount));
     const seen = new Set(merged.cards.map((card) => card.id));
     let combined = merged;
     while (version === this.requestVersion && combined.nextCursor && combined.cards.length < targetCount) {
       const cursor = combined.nextCursor;
-      const page = await this.loadCards(cursor);
+      const page = await this.loadCards(cursor, Math.min(500, targetCount - combined.cards.length));
       const fresh = page.cards.filter((card) => !seen.has(card.id));
       for (const card of fresh) seen.add(card.id);
       combined = {

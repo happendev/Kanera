@@ -17,6 +17,5 @@ $bp-collapse: 1024px;
 /// The identity row stacks into two rows, and control labels drop to icon-only.
 $bp-compact: 720px;
 
-/// Anchored panels dock as bottom sheets. Must stay in step with `anchoredSheetStyles()` in
-/// shared/anchored-panel.ts, which hard-codes the same width.
+/// Phone width: the calendar swaps to its phone layout and dense popovers tighten up.
 $bp-sheet: 560px;

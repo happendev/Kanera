@@ -13,6 +13,7 @@ export default tseslint.config(
     ignores: [
       '**/dist/**',
       '**/coverage/**',
+      'e2e/artifacts/**',
       '**/.angular/**',
       '**/node_modules/**',
       '**/out-tsc/**',

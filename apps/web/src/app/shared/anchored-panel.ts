@@ -3,8 +3,9 @@
  *
  * The panel is a `position: fixed` host anchored to a trigger element, a pre-measured rect, or a
  * cursor point. Placement is published as CSS custom properties instead of inline `top`/`left` so a
- * panel's own media query can re-anchor it — the opt-in `ANCHORED_SHEET_STYLES` branch turns the same
- * panel into a bottom sheet without fighting inline styles.
+ * panel's own media query can adjust it without fighting inline styles. Phones get the same anchored
+ * placement as desktop (clamped to the viewport) rather than a bottom sheet: a sheet pinned to the
+ * bottom of a tall phone opens far from its trigger and reads as a detached gap.
  *
  * Beware ancestors that become a containing block for `position: fixed`: a trapped panel is placed
  * against that ancestor's box instead of the viewport. `transform`, `perspective`, `filter`,
@@ -256,8 +257,6 @@ export const ANCHORED_HOST_STYLES = `
 /**
  * Shared chrome for anchored popover panels. Imported into a component's `styles` array so every
  * popover shares the same placement contract, radius and elevation.
- *
- * The mobile bottom-sheet fallback is deliberately *not* in here — see `ANCHORED_SHEET_STYLES`.
  */
 export const ANCHORED_PANEL_STYLES = `
   ${ANCHORED_HOST_STYLES}
@@ -308,38 +307,6 @@ export const ANCHORED_PANEL_STYLES = `
   }
 
 `;
-
-/**
- * Opt-in phone bottom-sheet fallback, appended after `ANCHORED_PANEL_STYLES`.
- *
- * Only worth it for content-heavy panels (pickers, create forms) where a trigger near the edge of a
- * phone screen would otherwise open something cramped. It is deliberately separate rather than baked
- * into `ANCHORED_PANEL_STYLES`: applied wholesale it would turn every four-item context menu into a
- * full-width sheet, which reads as a bug. Add `ap-stay-anchored` to a compact selector's component
- * host to opt it out. `:host(.is-above)` is listed explicitly so the sheet still outranks the
- * flip-above rule, which is equally specific.
- */
-export function anchoredSheetStyles(panelClass = "ap-panel"): string {
-  return `
-  @media (max-width: 560px) {
-    :host:not(.ap-stay-anchored),
-    :host(.is-above):not(.ap-stay-anchored) {
-      top: auto;
-      right: 8px;
-      /* The sheet sat under the iOS home indicator, which is exactly where a picker's last rows are. */
-      bottom: max(8px, calc(env(safe-area-inset-bottom) + 8px));
-      left: 8px;
-      width: auto;
-    }
-
-    /* dvh, not vh: a phone's collapsing URL bar otherwise sizes the sheet to a viewport taller than
-       the one it is actually being shown in. */
-    :host:not(.ap-stay-anchored) .${panelClass} { max-height: min(70dvh, 480px); }
-  }
-`;
-}
-
-export const ANCHORED_SHEET_STYLES = anchoredSheetStyles();
 
 /**
  * Compact text input for popover panels (`class="ap-input"`).

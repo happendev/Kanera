@@ -14,6 +14,7 @@ import {
 import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import type { Db } from "../db.js";
+import { EMAIL_DATE_LOCALE } from "./date-time-formatter.js";
 import { emailSubject } from "./mailer.js";
 import { startSweepScheduler } from "./sweep-scheduler.js";
 
@@ -256,7 +257,7 @@ function isoDate(date: Date): string {
 }
 
 function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).format(date);
+  return new Intl.DateTimeFormat(EMAIL_DATE_LOCALE, { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).format(date);
 }
 
 function dateRangeLabel(start: Date, end: Date): string {

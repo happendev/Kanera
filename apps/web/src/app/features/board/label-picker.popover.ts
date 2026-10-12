@@ -7,7 +7,7 @@ import {
   output,
   signal,
 } from "@angular/core";
-import { ANCHORED_HOST_STYLES, anchoredSheetStyles } from "../../shared/anchored-panel";
+import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 
 /**
@@ -158,7 +158,6 @@ export interface LabelPickerLabel {
       font-size: 14px;
     }
   `,
-    anchoredSheetStyles("lp-panel"),
   ],
 })
 export class LabelPickerPopover {

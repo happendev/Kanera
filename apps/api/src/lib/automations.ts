@@ -11,6 +11,7 @@ import { invalidateQueuesForCards } from "./card-priority-invalidation.js";
 import { emitActivityFeedItem, recordActivity } from "./activity.js";
 import { enqueueCardAssignedEmails } from "./assignee-email-notifications.js";
 import { applyChecklistTemplates } from "./checklist-templates.js";
+import { dateTimeFormatter, wallClockPartsOrUtc } from "./date-time-formatter.js";
 import { addDays, isDueDateOverdue, localDateInTimezone } from "./due-date.js";
 import { createMailer } from "./mailer.js";
 import { clearOverdueNotificationsForCards } from "./notifications.js";
@@ -95,6 +96,8 @@ interface AutomationRunContext {
   fireDateLocalDate: string;
   fireDate: Date;
   triggerActorId?: string | null;
+  commentAuthorId?: string | null;
+  templateContexts?: Map<string, { list: { id: string; name: string } | null; boardName: string; workspaceName: string }>;
 }
 
 export const EMPTY_EFFECTS: AutomationEffects = { effects: [] };
@@ -171,50 +174,27 @@ function toWireCard(card: Card, _clientId: string): WireCard {
   };
 }
 
+// The long month name is user-visible text, so it stays explicitly English for automations.
+const automationMonthFormatter = dateTimeFormatter({ year: "2-digit", month: "long" }, "en");
+
 function localDateTimePartsInTimezone(date: Date, timezone: string): { year: string; year2: string; month: string; monthLong: string; day: string; hour: string; minute: string } {
-  let parts: Intl.DateTimeFormatPart[];
+  const zone = timezone || "UTC";
   let longMonthParts: Intl.DateTimeFormatPart[];
   try {
-    parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: timezone || "UTC",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    }).formatToParts(date);
-    longMonthParts = new Intl.DateTimeFormat("en", {
-      timeZone: timezone || "UTC",
-      year: "2-digit",
-      month: "long",
-    }).formatToParts(date);
+    longMonthParts = automationMonthFormatter(zone).formatToParts(date);
   } catch {
-    parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "UTC",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    }).formatToParts(date);
-    longMonthParts = new Intl.DateTimeFormat("en", {
-      timeZone: "UTC",
-      year: "2-digit",
-      month: "long",
-    }).formatToParts(date);
+    longMonthParts = automationMonthFormatter("UTC").formatToParts(date);
   }
-  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  const parts = wallClockPartsOrUtc(date, zone);
   const longMonthValue = (type: string) => longMonthParts.find((part) => part.type === type)?.value ?? "";
   return {
-    year: value("year"),
+    year: parts.year,
     year2: longMonthValue("year"),
-    month: value("month"),
+    month: parts.month,
     monthLong: longMonthValue("month"),
-    day: value("day"),
-    hour: value("hour"),
-    minute: value("minute"),
+    day: parts.day,
+    hour: String(parts.hour).padStart(2, "0"),
+    minute: String(parts.minute).padStart(2, "0"),
   };
 }
 
@@ -883,6 +863,7 @@ async function applyPopulateCustomFieldAction(tx: Tx, ctx: AutomationRunContext,
  */
 async function automationCommentAuthorId(tx: Tx, ctx: AutomationRunContext): Promise<string | null> {
   if (ctx.triggerActorId) return ctx.triggerActorId;
+  if (ctx.commentAuthorId !== undefined) return ctx.commentAuthorId;
   const [admin] = await tx
     .select({ userId: workspaceMembers.userId })
     .from(workspaceMembers)
@@ -890,10 +871,14 @@ async function automationCommentAuthorId(tx: Tx, ctx: AutomationRunContext): Pro
     .where(and(eq(workspaceMembers.workspaceId, ctx.workspaceId), eq(workspaceMembers.role, "admin"), isNull(users.deletedAt)))
     .orderBy(asc(workspaceMembers.userId))
     .limit(1);
-  return admin?.userId ?? null;
+  return ctx.commentAuthorId = admin?.userId ?? null;
 }
 
 async function automationTemplateContext(tx: Tx, ctx: AutomationRunContext): Promise<{ list: { id: string; name: string } | null; boardName: string; workspaceName: string }> {
+  // These names cannot change through an automation action. Cache within this card's transaction,
+  // keyed by list so a preceding move still renders the destination's name in later comments.
+  const cached = ctx.templateContexts?.get(ctx.card.listId);
+  if (cached) return cached;
   const [row] = await tx
     .select({ listId: lists.id, listName: lists.name, boardName: boards.name, workspaceName: workspaces.name })
     .from(boards)
@@ -901,11 +886,13 @@ async function automationTemplateContext(tx: Tx, ctx: AutomationRunContext): Pro
     .leftJoin(lists, eq(lists.id, ctx.card.listId))
     .where(eq(boards.id, ctx.boardId))
     .limit(1);
-  return {
+  const context = {
     list: row?.listId && row.listName !== null ? { id: row.listId, name: row.listName } : null,
     boardName: row?.boardName ?? "",
     workspaceName: row?.workspaceName ?? "",
   };
+  (ctx.templateContexts ??= new Map()).set(ctx.card.listId, context);
+  return context;
 }
 
 /**

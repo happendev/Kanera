@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { anchoredSheetStyles, positionAnchoredPanel } from "./anchored-panel";
+import { positionAnchoredPanel } from "./anchored-panel";
 
 function anchorAt(rect: { top: number; bottom: number; left: number; right: number }): HTMLElement {
   const anchor = document.createElement("div");
@@ -374,16 +374,5 @@ describe("positionAnchoredPanel", () => {
       expect(panel.bottomVar).toBe("");
       expect(panel.top + panel.maxHeight).toBeLessThanOrEqual(356);
     });
-  });
-});
-
-describe("anchoredSheetStyles", () => {
-  it("scopes phone sheet sizing to a caller-provided panel class", () => {
-    const styles = anchoredSheetStyles("sp-panel");
-    expect(styles).toContain("@media (max-width: 560px)");
-    expect(styles).toContain(":host:not(.ap-stay-anchored)");
-    expect(styles).toContain(":host(.is-above):not(.ap-stay-anchored)");
-    expect(styles).toContain(".sp-panel");
-    expect(styles).not.toContain(".ap-panel");
   });
 });

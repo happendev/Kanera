@@ -278,16 +278,17 @@ test("a burst of realtime events on a deep table coalesces into one background w
   const rowsBeforeRefresh = await page.locator(".tv-row").count();
   expect(rowsBeforeRefresh).toBeGreaterThan(50);
 
-  // Every background walk of this three-page table costs three sequential queries. Three events
-  // spaced inside the depth-scaled debounce must therefore produce one first-page refresh, where a
-  // fixed 180 ms debounce started a second walk as soon as the first one had settled.
-  const walks: { cursor: boolean; at: number }[] = [];
+  // A loaded 201-card table fits in one bounded refresh page. The first paint and manual
+  // pagination stay small, while a realtime burst must preserve every loaded row in one request.
+  const walks: { cursor: boolean; limit: number; at: number }[] = [];
   let armed = false;
   page.on("request", (request) => {
     if (!armed || !request.url().endsWith("/api/work/cards/query")) return;
-    const body = request.postDataJSON() as { cursor?: string; filters?: { q?: string } };
-    if (body.filters?.q === prefix) walks.push({ cursor: Boolean(body.cursor), at: Date.now() });
+    const body = request.postDataJSON() as { cursor?: string; limit: number; filters?: { q?: string } };
+    if (body.filters?.q === prefix) walks.push({ cursor: Boolean(body.cursor), limit: body.limit, at: Date.now() });
   });
+  const refreshed = page.waitForResponse((response) => response.url().endsWith("/api/work/cards/query")
+    && (response.request().postDataJSON() as { filters?: { q?: string } }).filters?.q === prefix);
   armed = true;
   const burstStartedAt = Date.now();
   for (const suffix of ["first", "second", "latest"]) {
@@ -300,8 +301,14 @@ test("a burst of realtime events on a deep table coalesces into one background w
   const continuations = walks.filter((walk) => walk.cursor).length;
   await testInfo.attach("burst-walks.json", { body: JSON.stringify({ command: "pnpm test:e2e -- e2e/performance-frontend.spec.ts", boardId: board.boardId, burstStartedAt, walks, firstPageRefreshes, continuations }), contentType: "application/json" });
   expect(firstPageRefreshes).toBe(1);
-  expect(continuations).toBe(2);
+  expect(continuations).toBe(0);
+  expect(walks[0]!.limit).toBe(201);
+  const refreshedCards = await (await refreshed).json() as { cards: { id: string }[] };
+  expect(refreshedCards.cards.map((card) => card.id).sort()).toEqual(cards.map((card) => card.id).sort());
   await expect(page.locator(".tv-row")).toHaveCount(rowsBeforeRefresh);
   await expect(loadMore).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath("table-burst-single-walk.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator(".tv-row").filter({ hasText: `${prefix} latest` })).toHaveCount(1);
+  await page.screenshot({ path: testInfo.outputPath("table-burst-phone.png") });
 });
