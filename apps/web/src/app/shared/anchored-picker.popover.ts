@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, input, output } from "@angular/core";
-import { ANCHORED_PANEL_STYLES, ANCHORED_SHEET_STYLES } from "./anchored-panel";
+import { ANCHORED_PANEL_STYLES } from "./anchored-panel";
 import { AnchoredPanelDirective } from "./anchored-panel.directive";
 import { PickerListComponent, type PickerGroup } from "./picker-list.component";
 
@@ -32,7 +32,7 @@ import { PickerListComponent, type PickerGroup } from "./picker-list.component";
       />
     </div>
   `,
-  styles: [ANCHORED_PANEL_STYLES, ANCHORED_SHEET_STYLES, `k-picker-list { min-height: 0; }`],
+  styles: [ANCHORED_PANEL_STYLES, `k-picker-list { min-height: 0; }`],
 })
 export class AnchoredPickerPopover {
   private readonly panel = inject(AnchoredPanelDirective);

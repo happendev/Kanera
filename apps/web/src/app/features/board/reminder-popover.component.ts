@@ -486,9 +486,8 @@ function instantFor(dayKey: string, minutes: number): Date | null {
     }
   `,
     /*
-     * Deliberately no bottom-sheet fallback (anchoredSheetStyles): pinned to the bottom of a tall phone
-     * the picker opened a long way from its alarm button. It stays anchored under the button like the
-     * watcher popover, spanning the phone's width, with touch-sized day rows.
+     * Anchored under the alarm button like every other popover, spanning the phone's width, with
+     * touch-sized day rows.
      */
     `
     @media (max-width: 560px) {

@@ -6,7 +6,7 @@ import { cardPath } from "@kanera/shared/card-links";
 import type { UserProfileRecentCard, UserProfileResponse, UserProfileRole } from "@kanera/shared/dto";
 import { AuthService } from "../../core/auth/auth.service";
 import { PresenceService } from "../../core/realtime/presence.service";
-import { ANCHORED_HOST_STYLES, anchoredSheetStyles } from "../anchored-panel";
+import { ANCHORED_HOST_STYLES } from "../anchored-panel";
 import type { AnchorRect } from "../anchored-panel";
 import { AnchoredPanelDirective } from "../anchored-panel.directive";
 import { AvatarComponent, formatLastOnline } from "../avatar.component";
@@ -70,7 +70,7 @@ function zoneDifferenceLabel(theirZone: string, viewerZone: string, at: Date): s
   templateUrl: "./user-profile-popover.component.html",
   // Phones get the shared bottom sheet: a profile opened from a tile near the screen edge would
   // otherwise squeeze the activity grid into a sliver beside it.
-  styles: [ANCHORED_HOST_STYLES, anchoredSheetStyles("up-panel")],
+  styles: [ANCHORED_HOST_STYLES],
   styleUrl: "./user-profile-popover.component.scss",
 })
 export class UserProfilePopoverComponent implements OnInit, AfterViewInit {
@@ -111,8 +111,7 @@ export class UserProfilePopoverComponent implements OnInit, AfterViewInit {
         this.lastAnchorRect = anchor.getBoundingClientRect();
         return anchor;
       },
-      // margin 8 matches the phone sheet's side insets, so its inline max-width (viewport minus two
-      // margins) never leaves a wider gutter on the right than on the left.
+      // Equal 8px margins keep the inline max-width (viewport minus two margins) symmetric on phones.
       placement: () => {
         // Sized to the card's full content rather than a fixed cap, so it only scrolls when the
         // viewport itself is too short. Requiring the whole height makes placement flip above the

@@ -9,7 +9,6 @@ import {
 import type { WorkViewVisibility } from "@kanera/shared/schema";
 import {
   ANCHORED_PANEL_STYLES,
-  ANCHORED_SHEET_STYLES,
   PANEL_INPUT_STYLES,
 } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
@@ -183,7 +182,6 @@ import { GlobalWorkState } from "./global-work.state";
   `,
   styles: [
     ANCHORED_PANEL_STYLES,
-    ANCHORED_SHEET_STYLES,
     PANEL_INPUT_STYLES,
     `
       .sv-body {

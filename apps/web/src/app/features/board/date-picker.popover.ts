@@ -8,7 +8,7 @@ import {
   output,
   signal,
 } from "@angular/core";
-import { ANCHORED_HOST_STYLES, anchoredSheetStyles, type AnchoredPanelPlacement } from "../../shared/anchored-panel";
+import { ANCHORED_HOST_STYLES, type AnchoredPanelPlacement } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { WEEKDAY_LABELS } from "../../shared/week-start";
@@ -395,7 +395,6 @@ type CalendarDay = {
       }
     }
   `,
-    anchoredSheetStyles("dp-panel"),
   ],
 })
 export class DatePickerPopover implements OnInit {

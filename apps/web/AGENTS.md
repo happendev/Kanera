@@ -60,8 +60,8 @@ Phones, tablets and the installed PWA are first-class, so design for them up fro
   Precedents are `.work-table` vs `.portfolio-table` in `global-work.page.scss`.
 - Touch suppresses `contextmenu` (it collides with CDK drag), so every right-click affordance needs a
   visible button. Hover-revealed controls stay visible on coarse pointers.
-- Anchored panels become bottom sheets via `ANCHORED_SHEET_STYLES`. Use `dvh`, not `vh`, and
-  `max(8px, calc(env(safe-area-inset-bottom) + 8px))` for safe areas.
+- Anchored panels stay anchored to their trigger on phones too (no bottom sheets); placement clamps
+  them to the viewport. Use `dvh`, not `vh`, and `env(safe-area-inset-*)` for safe areas.
 - Breakpoints in use: 480, 640, 720, 768, 1024. Reuse them.
 
 ## CSS traps

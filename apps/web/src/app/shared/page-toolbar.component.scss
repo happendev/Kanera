@@ -166,10 +166,8 @@
       // No z-index on purpose: an open panel is a registered PanelStackService layer, and the stack
       // assigns its --z-panel-derived order along with every other open panel.
       gap: 6px;
-      // Between $bp-sheet and $bp-collapse a picker opened from low in a tall panel flips above its
-      // trigger and overlays the panel. Capping the panel's height keeps that rare and keeps the
-      // panel itself reachable; below $bp-sheet the pickers dock as bottom sheets and it stops
-      // mattering.
+      // A picker opened from low in a tall panel flips above its trigger and overlays the panel.
+      // Capping the panel's height keeps that rare and keeps the panel itself reachable.
       max-height: calc(100dvh - 160px);
       overflow-y: auto;
       padding: var(--space-2);

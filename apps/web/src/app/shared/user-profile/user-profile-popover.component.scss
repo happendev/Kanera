@@ -1,4 +1,3 @@
-@use "../breakpoints" as bp;
 @use "../card-key" as card-key;
 
 // Placement comes from ANCHORED_HOST_STYLES (see the component's `styles`). This block only lifts the
@@ -744,28 +743,5 @@ button.up-text-btn {
   .up-action,
   button.up-action {
     height: 44px;
-  }
-}
-
-@media (max-width: bp.$bp-sheet) {
-  // The host keeps the anchored placement's height cap (room below the avatar), which is shorter than
-  // the sheet; the sheet's own max-height on the panel is the only limit that should apply, or the
-  // panel hangs off the bottom of the screen past its bottom-pinned host.
-  :host(.k-anchored-panel:not(.ap-stay-anchored)) {
-    max-height: none;
-  }
-
-  // The shared sheet caps panels at 70dvh for pickers; this card is read, not scanned, so it takes
-  // the height it needs and only scrolls when the phone is genuinely too short for it. A 56px strip
-  // of the page always stays visible above it: with no backdrop, that strip is the tap-out target.
-  :host(.k-anchored-panel:not(.ap-stay-anchored)) .up-panel {
-    gap: 12px;
-    max-height: calc(100dvh - 64px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
-  }
-
-  // As a bottom sheet the card is as wide as the phone; the extra width goes to the grid, whose
-  // square cells simply grow, and the footer keeps clear of the home indicator.
-  .up-actions {
-    padding-bottom: max(12px, calc(env(safe-area-inset-bottom) + 4px));
   }
 }
