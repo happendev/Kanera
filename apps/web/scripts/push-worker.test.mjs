@@ -8,10 +8,13 @@ function listenerCount(eventName) {
   return source.match(new RegExp(`self\\.addEventListener\\(\\s*["']${eventName}["']\\s*,`, "gu"))?.length ?? 0;
 }
 
-void test("push worker leaves notification display and clicks exclusively to Angular", () => {
-  assert.match(source, /^importScripts\(["']\.\/ngsw-worker\.js["']\);/u);
+void test("push worker handles card clicks before Angular and leaves notification display to Angular", () => {
+  const clickHandler = source.indexOf('self.addEventListener("notificationclick"');
+  const angularWorker = source.indexOf('importScripts("./ngsw-worker.js")');
+  assert.ok(clickHandler >= 0 && angularWorker > clickHandler, "card click handler must register before Angular's worker");
+  assert.match(source.slice(clickHandler, angularWorker), /event\.stopImmediatePropagation\(\)/u);
   assert.equal(listenerCount("push"), 0);
-  assert.equal(listenerCount("notificationclick"), 0);
+  assert.equal(listenerCount("notificationclick"), 1);
 
   assert.equal(listenerCount("fetch"), 1, "share-target listener must remain");
   assert.equal(listenerCount("activate"), 1, "navigation-preload listener must remain");
