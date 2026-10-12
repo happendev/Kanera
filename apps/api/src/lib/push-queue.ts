@@ -21,6 +21,7 @@ import { AppError } from "./errors.js";
 import { notificationDeliveryDuration, notificationDeliveryTotal, notificationQueueWaitDuration } from "./metrics.js";
 import { decryptSecret } from "./secrets.js";
 import { assertResolvedNotificationDestinationAllowed } from "./ssrf.js";
+import { forEachConcurrent } from "./concurrent-delivery.js";
 import { startSweepScheduler } from "./sweep-scheduler.js";
 import { DEFAULT_PUSH_TTL, ensureWebPushReady, handleSubscriptionError, toPushSubscription, webPushClient } from "./web-push.js";
 import { signWebhookPayload } from "./webhook-signing.js";
@@ -141,33 +142,30 @@ export async function deliverPushRow(db: Db, row: PushQueue): Promise<PushDelive
   const payload = JSON.stringify({ notification: queuePayload.notification });
 
   // A slow provider or one unhealthy device must not hold every other subscription behind it.
-  for (let index = 0; index < subscriptions.length; index += SUBSCRIPTION_CONCURRENCY) {
-    const chunk = subscriptions.slice(index, index + SUBSCRIPTION_CONCURRENCY);
-    await Promise.all(chunk.map(async (sub) => {
-      try {
-        await webPushClient.sendNotification(
-          toPushSubscription(sub),
-          payload,
-          {
-            TTL: ttl,
-            urgency: "high",
-            timeout: WEB_PUSH_TIMEOUT_MS,
-            ...(sub.contentEncoding ? { contentEncoding: sub.contentEncoding as ContentEncoding } : {}),
-          },
-        );
-        result.delivered += 1;
-        await clearSubscriptionErrors(db, sub);
-      } catch (err) {
-        const outcome = await handleSubscriptionError(db, sub, err);
-        if (outcome === "disabled") {
-          result.disabled += 1;
-        } else {
-          result.failed += 1;
-          result.failedSubscriptionIds.push(sub.id);
-        }
+  await forEachConcurrent(subscriptions, SUBSCRIPTION_CONCURRENCY, async (sub) => {
+    try {
+      await webPushClient.sendNotification(
+        toPushSubscription(sub),
+        payload,
+        {
+          TTL: ttl,
+          urgency: "high",
+          timeout: WEB_PUSH_TIMEOUT_MS,
+          ...(sub.contentEncoding ? { contentEncoding: sub.contentEncoding as ContentEncoding } : {}),
+        },
+      );
+      result.delivered += 1;
+      await clearSubscriptionErrors(db, sub);
+    } catch (err) {
+      const outcome = await handleSubscriptionError(db, sub, err);
+      if (outcome === "disabled") {
+        result.disabled += 1;
+      } else {
+        result.failed += 1;
+        result.failedSubscriptionIds.push(sub.id);
       }
-    }));
-  }
+    }
+  });
 
   return result;
 }
@@ -395,10 +393,7 @@ export async function runPushQueueSweep({ db, log }: PushQueueDeps): Promise<num
 
     // Empty the eligible backlog before the scheduler waits another 30 seconds. Each claim remains
     // bounded so delivery work does not hold one database transaction open for the whole drain.
-    for (let index = 0; index < rows.length; index += DELIVERY_CONCURRENCY) {
-      const chunk = rows.slice(index, index + DELIVERY_CONCURRENCY);
-      await Promise.all(chunk.map((row) => processPushQueueRow({ db, log }, row)));
-    }
+    await forEachConcurrent(rows, DELIVERY_CONCURRENCY, (row) => processPushQueueRow({ db, log }, row));
     processed += rows.length;
   }
 }

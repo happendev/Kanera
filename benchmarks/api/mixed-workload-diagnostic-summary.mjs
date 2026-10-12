@@ -23,6 +23,7 @@ for (const variant of environment.variants) for (let round = 1; round <= environ
     if (!sample.direct) assert.ok(nginx, `Missing nginx trace for ${client.id}`);
     const kind = client.path.endsWith('/open') ? 'board' : client.path.endsWith('/health') ? 'health' : client.path.endsWith('/detail') ? 'detail' : client.path.includes('/watch') ? 'publicWatch' : client.path.startsWith('/public-api') ? 'publicEdit' : 'appEdit';
     const queries = server.queries, summary = queries.find(q => q.kind === 'board-summary');
+    if (kind === 'board') assert.equal(summary?.rows, 3000, `Incomplete board SQL trace for ${client.id}`);
     const row = { id: client.id, kind, process: server.process,
       httpMs: client.finished-client.started,
       clientSocketWaitMs: client.socketAssigned-client.started,

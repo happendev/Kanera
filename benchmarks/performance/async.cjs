@@ -37,8 +37,9 @@ const output = [];
 async function testWebhooks(){
  let release;const gate = new Promise(r=>release=r);let called=0;
  let start,deliveredAt;
+ const concurrency = source('apps/api/src/lib/webhooks.ts').includes('forEachConcurrent') ? extract('apps/api/src/lib/concurrent-delivery.ts', ['forEachConcurrent']) : {};
  const mod=extract('apps/api/src/lib/webhooks.ts',['processWebhookDeliveries', ...(source('apps/api/src/lib/webhooks.ts').includes('async function processRegularWebhookDeliveries(') ? ['processRegularWebhookDeliveries'] : [])],{
-  processMcpEventDeliveries:()=>gate,postMcpWebhook:noop,claimWebhookDeliveries:async()=>[{id:'regular-delivery'}],
+  ...concurrency, processMcpEventDeliveries:()=>gate,postMcpWebhook:noop,claimWebhookDeliveries:async()=>[{id:'regular-delivery'}],
   deliverWebhookDelivery:async()=>{called++;deliveredAt=performance.now()-start},DELIVERY_CONCURRENCY:5,DELIVERY_LIMIT:25});
  start=performance.now();const pending=mod.processWebhookDeliveries();
  await new Promise(r=>setTimeout(r,120));const whileBlocked=called;

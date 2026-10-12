@@ -154,6 +154,20 @@ export async function publishDirectRealtimeEvent<E extends keyof ServerToClientE
   return event ?? null;
 }
 
+/** Preserve one durable row per recipient while avoiding one INSERT/NOTIFY round trip per user. */
+export async function publishUserRealtimeEvents<E extends keyof ServerToClientEvents>(
+  eventType: E,
+  recipients: { userId: string; payload: DirectEventPayload<E> }[],
+): Promise<void> {
+  // Keep SQL parameter and JSON allocation sizes bounded even at the notification fanout cap.
+  for (let offset = 0; offset < recipients.length; offset += 100) {
+    const events = await db.insert(directRealtimeOutbox).values(recipients.slice(offset, offset + 100).map(({ userId, payload }) => ({
+      scope: "user" as const, userId, eventType, payload, realtimeDispatched: false,
+    }))).returning({ id: directRealtimeOutbox.id });
+    if (events[0]) void notifyDirectOutbox(events[0].id).catch(() => undefined);
+  }
+}
+
 async function processEvent(event: EventOutbox, endpoints: WebhookEndpoint[] | undefined, mcpSubscriptions: McpEventSubscription[]): Promise<void> {
   if (!event.realtimeDispatched) {
     if (event.scope === "board") {

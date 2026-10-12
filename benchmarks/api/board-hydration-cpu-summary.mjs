@@ -54,10 +54,11 @@ function topFunctions(metric) {
 const report = {
   profile: path, durationMs: rounded((profile.endTime-profile.startTime)/1000), samples: profile.samples.length,
   sampledMs: rounded(sampledUs/1000), activeWorkSampledMs: rounded(activeUs/1000),
-  method: 'V8 sampling profile with each timeDelta attributed to its sample; idle and inspector control overhead removed only for active-work percentages. Categories use nearest recognizable workload on the sampled call stack. Inclusive times overlap and must not be summed. Native JSON/buffer work may be charged to its JS caller. The baseline single-client profile has profiler overhead and is diagnostic only.',
+  method: 'V8 sampling profile with each timeDelta attributed to its sample; idle and inspector control overhead removed only for active-work percentages. Categories use nearest recognizable workload on the sampled call stack. Inclusive times overlap and must not be summed. Native JSON/buffer work may be charged to its JS caller. CPU profiles have sampling overhead and are diagnostic; compare unprofiled runs for capacity and latency.',
   categories: [...categories.entries()].sort((a,b) => b[1]-a[1]).map(([category,us]) => ({ category, ...measures(us, ['idle', 'profiler control overhead'].includes(category)) })),
   topSelfFunctions: topFunctions(self), topInclusiveFunctions: topFunctions(inclusive),
   topSelfFiles: [...files.entries()].sort((a,b) => b[1]-a[1]).slice(0,30).map(([file,us]) => ({file,...measures(us, file === '[(idle)]' || file === 'node:inspector')})),
 };
-writeFileSync(`${out}/cpu-profile-summary.json`, JSON.stringify(report,null,2)+'\n');
-console.log(JSON.stringify({output:`${out}/cpu-profile-summary.json`,categories:report.categories,topSelf:report.topSelfFunctions.slice(0,15)},null,2));
+const output = process.argv[3] ?? `${out}/cpu-profile-summary.json`;
+writeFileSync(output, JSON.stringify(report,null,2)+'\n');
+console.log(JSON.stringify({output,categories:report.categories,topSelf:report.topSelfFunctions.slice(0,15)},null,2));

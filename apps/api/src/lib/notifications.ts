@@ -31,10 +31,11 @@ import { alias } from "drizzle-orm/pg-core";
 import type { Tx } from "../db.js";
 import { db as dbSingleton } from "../db.js";
 import { signedAvatarUrl, signEmbeddedMediaUrls, withSignedMedia } from "./media-keys.js";
-import { emitToUser } from "../realtime/emit.js";
+import { emitToUser, emitToUsersDurable } from "../realtime/emit.js";
 import { inboxVisibleNotificationCondition } from "./notification-visibility.js";
 export { inboxVisibleNotificationCondition } from "./notification-visibility.js";
 import { assignedCardVisibility } from "./access.js";
+import { createKeyedTaskQueue } from "./keyed-task-queue.js";
 import { enqueueWatchedActivityOutbound } from "./watched-activity-push.js";
 
 // Per-source cap on notification recipients. See resolveRecipients for rationale.
@@ -62,9 +63,15 @@ const AUTOMATION_ASSIGNEES_ONLY_CARD_ACTIONS = new Set<ActivityAction>([
   ACTIVITY_ACTION.COMPLETION_SET,
 ]);
 
-const pendingFanout = new Set<Promise<void>>();
 const fanoutErrors: unknown[] = [];
-let fanoutTail: Promise<void> = Promise.resolve();
+type FanoutOptions = { kind?: "created" | "updated" | "hidden"; suppressUserId?: string | null };
+const fanoutQueue = createKeyedTaskQueue<{ activity: ActivityEvent; options?: FanoutOptions }>(2,
+  ({ activity, options }) => runWithNotificationFanoutRetry(() => fanoutNotificationsForActivity(activity, options)),
+  (error) => {
+    if (process.env.NODE_ENV === "test") fanoutErrors.push(error);
+    else console.warn("notification fanout failed", error);
+  },
+);
 const notificationUsers = alias(users, "notification_users");
 const notificationClientMembers = alias(clientMembers, "notification_client_members");
 
@@ -96,31 +103,17 @@ function notificationActorSuppressionId(activity: ActivityEvent): string | null 
   return activity.actorKind === "apiKey" || activity.actorKind === "agent" ? null : activity.actorId;
 }
 
-export function queueNotificationFanout(
-  activity: ActivityEvent,
-  options?: { kind?: "created" | "updated" | "hidden"; suppressUserId?: string | null },
-): void {
-  // Notification fanout is intentionally decoupled from route latency, but the
-  // database writes still target the same activity/notification indexes. Keep
-  // queued work ordered so coalesced create/update/hide jobs cannot race each
-  // other and leave tests or clients with stale notification rows.
-  const pending = fanoutTail
-    .catch(() => undefined)
-    .then(() => runWithNotificationFanoutRetry(() => fanoutNotificationsForActivity(activity, options)))
-    .catch((error: unknown) => {
-      if (process.env.NODE_ENV === "test") fanoutErrors.push(error);
-      else console.warn("notification fanout failed", error);
-    })
-    .finally(() => pendingFanout.delete(pending));
-  fanoutTail = pending;
-  pendingFanout.add(pending);
+export function queueNotificationFanout(activity: ActivityEvent, options?: FanoutOptions): void {
+  // Coalescing targets one activity/notification key. Keep that key ordered while unrelated
+  // activities use the other slot; retain only the latest pending state during a burst. Updated
+  // fanout creates missing recipients too, and hidden fanout deletes them, so queued intermediate
+  // snapshots are unnecessary. This bounds active work, not durability: the queue is process-local.
+  fanoutQueue.enqueue(activity.id, { activity, options });
 }
 
 export async function waitForNotificationFanoutForTests(): Promise<void> {
   if (process.env.NODE_ENV !== "test") return;
-  while (pendingFanout.size > 0) {
-    await Promise.allSettled([...pendingFanout]);
-  }
+  await fanoutQueue.idle();
   if (fanoutErrors.length > 0) {
     const errors = fanoutErrors.splice(0);
     throw new AggregateError(errors, "notification fanout failed");
@@ -321,9 +314,7 @@ async function fanoutNotificationsForActivity(
       // Enrich all newly inserted rows in one multi-join query rather than one per
       // recipient — a busy card can fan out to dozens of watchers/assignees.
       const enriched = await enrichNotifications(dbSingleton, inserted.map((row) => row.id));
-      for (const row of enriched) {
-        emitToUser(row.userId, "notification:created", { notification: row });
-      }
+      await emitToUsersDurable("notification:created", enriched.map((row) => ({ userId: row.userId, payload: { notification: row } })));
       // Only the rows just inserted - a watcher who started watching mid-burst. Rows that already
       // existed are handled by the visibleExisting branch below, which deliberately does not push.
       await enqueueWatchedActivityOutbound(dbSingleton, ctx, enriched);
@@ -342,10 +333,9 @@ async function fanoutNotificationsForActivity(
           .set({ readAt: null })
           .where(inArray(notifications.id, enriched.map((row) => row.id)));
       }
-      for (const row of enriched) {
-        const refreshed = { ...row, readAt: null };
-        emitToUser(refreshed.userId, "notification:updated", { notification: refreshed });
-      }
+      await emitToUsersDurable("notification:updated", enriched.map((row) => ({
+        userId: row.userId, payload: { notification: { ...row, readAt: null } },
+      })));
       // Intentionally no watched-activity push here. This branch re-fires on every tick of a
       // coalescing window for rows that already exist, so pushing would send one notification per
       // burst update. The drawer resurfaces the entry; the device stays quiet after the first push.
@@ -376,9 +366,7 @@ async function fanoutNotificationsForActivity(
     dbSingleton,
     inserted.map((row) => row.id),
   );
-  for (const row of enriched) {
-    emitToUser(row.userId, "notification:created", { notification: row });
-  }
+  await emitToUsersDurable("notification:created", enriched.map((row) => ({ userId: row.userId, payload: { notification: row } })));
   // Reuses the rows just enriched for the socket emit: actor name, card/board/list names and the
   // activity payload are all resolved there already, so the push body costs no extra queries.
   // On a fanout retry `onConflictDoNothing` leaves `inserted` empty, so this cannot double-enqueue.
@@ -844,7 +832,13 @@ export function emitDeletedNotifications(deleted: DeletedNotificationRef[]): voi
 
 export async function enqueueDeletedNotifications(tx: Tx, deleted: DeletedNotificationRef[]): Promise<void> {
   const byUser = new Map<string, string[]>();
-  for (const row of deleted) byUser.set(row.userId, [...(byUser.get(row.userId) ?? []), row.id]);
+  // A retained activity can own thousands of inbox rows. Append in place so a cleanup does not
+  // copy a growing recipient array on every row (quadratic allocation on one large inbox).
+  for (const row of deleted) {
+    const ids = byUser.get(row.userId);
+    if (ids) ids.push(row.id);
+    else byUser.set(row.userId, [row.id]);
+  }
   if (byUser.size === 0) return;
   // Persist with the deletion: the dispatcher cannot see this event until commit, and rollback
   // removes it too. Broadcasting inside the transaction let badge refreshes read pre-delete rows.

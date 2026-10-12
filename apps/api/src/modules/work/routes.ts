@@ -76,7 +76,7 @@ import { addDays, isDueDateOverdue, localDateInTimezone } from "../../lib/due-da
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { isOrgAdmin } from "../../lib/access.js";
 import { signedAvatarUrl } from "../../lib/media-keys.js";
-import { toWireCardSummary } from "../../lib/card-summary.js";
+import { loadWorkCardSummaries, toWireCardSummary } from "../../lib/card-summary.js";
 import {
   activityCompletedPredicate,
   activityDayExpr,
@@ -717,7 +717,7 @@ async function workCards(auth: AuthClaims, allBoards: AccessibleBoard[], input: 
   end`;
   const [richRows, checklistItems, separatorResult, activityRows, viewerQueueRanks] = await Promise.all([
     pageCardIds.length
-      ? db.select().from(cardSummaryView).where(inArray(cardSummaryView.id, pageCardIds))
+      ? loadWorkCardSummaries(pageCardIds)
       : Promise.resolve([]),
     query.includeMetadata ? checklistAssignments(
       authUserId,
@@ -760,9 +760,8 @@ async function workCards(auth: AuthClaims, allBoards: AccessibleBoard[], input: 
   };
 
   return {
-    // Hydration is deliberately bounded by the selected page. The summary view's lateral
-    // aggregates are useful here, but running them before filtering made every page expand every
-    // accessible card and discard almost all of that work afterwards.
+    // Hydrate only the authorized page. Grouped aggregates and compact JSON reduce driver work
+    // without expanding every accessible card or omitting fields needed by Global Work tables.
     cards: page.flatMap((row) => {
       const rich = richByCardId.get(row.id);
       return rich ? [{

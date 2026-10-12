@@ -3,7 +3,8 @@
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
-import { cpSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync, readFileSync, openSync, closeSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { cpSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync, readFileSync, openSync, closeSync, rmSync, existsSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { cpus, loadavg, tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
@@ -14,6 +15,12 @@ const count = (name, fallback, minimum, maximum) => {
   assert.ok(Number.isInteger(value) && value >= minimum && value <= maximum, `${name} must be ${minimum}..${maximum}`);
   return value;
 };
+const systemWorkload = process.env.MIXED_WORKLOAD === 'system';
+const beforeSource = process.env.MIXED_SOURCE_BEFORE;
+if (systemWorkload) assert.ok(beforeSource && existsSync(`${beforeSource}/worker-server.ts`), 'System comparison requires MIXED_SOURCE_BEFORE API source snapshot');
+const systemMembers = count('MIXED_SYSTEM_MEMBERS', 40, 8, 200);
+const systemPageSize = count('MIXED_SYSTEM_PAGE_SIZE', 100, 1, 500);
+const systemFocus = process.env.MIXED_SYSTEM_FOCUS === '1';
 const rounds = count('MIXED_ROUNDS', 3, 1, 10);
 const durationMs = count('MIXED_DURATION_MS', 20000, 2000, 120000);
 const readers = count('MIXED_READERS', 25, 1, 100);
@@ -24,11 +31,13 @@ const gzipLevel = count('MIXED_GZIP_LEVEL', 5, 0, 9);
 const direct = process.env.MIXED_DIRECT === '1';
 const diagnostics = process.env.MIXED_DIAGNOSTICS === '1';
 const profile = process.env.MIXED_PROFILE === '1';
+assert.ok(!systemWorkload || !diagnostics, 'System workload uses its own SQL/fanout counters');
 const observers = count('MIXED_OBSERVERS', 8, 2, 40);
-const variants = (process.env.MIXED_VARIANTS ?? 'p1,baseline').split(',');
-assert.ok(variants.length > 0 && new Set(variants).size === variants.length && variants.every(v => ['p1', 'baseline'].includes(v)), 'MIXED_VARIANTS must select p1 and/or baseline');
+const variants = (process.env.MIXED_VARIANTS ?? (systemWorkload ? 'before,after' : 'p1,baseline')).split(',');
+assert.ok(variants.length > 0 && new Set(variants).size === variants.length && variants.every(v => (systemWorkload ? ['before', 'after'] : ['p1', 'baseline']).includes(v)), 'MIXED_VARIANTS must select p1 and/or baseline');
 const out = resolve(process.env.MIXED_OUTPUT ?? `${root}/benchmarks/api/results/mixed-${Date.now()}`);
 const ports = { app0: 3100, app1: 3101, public: 3120, worker: 3121, proxy: 3180, app0Control: 3198, app1Control: 3199, publicControl: 3196, workerControl: 3197, redis: 56389 };
+if (systemWorkload) Object.assign(ports, { smtp: 3194, receiver: 3195 });
 for (const port of Object.values(ports)) await new Promise((accept, reject) => {
   const probe = createServer(); probe.once('error', reject); probe.listen(port, '127.0.0.1', () => probe.close(accept));
 });
@@ -36,8 +45,10 @@ const docker = args => execFileSync('docker', args, { encoding: 'utf8', stdio: [
 const images = { proxy: 'nginx:1.30.4-alpine', redis: 'valkey/valkey:9.1.2-alpine' };
 // No implicit downloads or replacements of the user's running infrastructure.
 for (const image of Object.values(images)) docker(['image', 'inspect', image]);
+assert.ok(!existsSync(out), 'Use a fresh MIXED_OUTPUT directory; existing results are never overwritten');
 mkdirSync(out, { recursive: true });
 const scratch = mkdtempSync(join(tmpdir(), 'kanera-mixed-'));
+const fixtureFile = process.env.MIXED_FIXTURE_FILE ? resolve(process.env.MIXED_FIXTURE_FILE) : undefined;
 const database = `kanera_mixed_${process.pid}`;
 const template = `${database}_seed`;
 let templateCreated = false;
@@ -54,6 +65,7 @@ const env = { ...process.env, NODE_ENV: 'production', KANERA_ENVIRONMENT: 'test'
   JWT_SECRET: `mixed-local-jwt-secret-${process.pid}`, MCP_INTERNAL_SECRET: 'mixed-local-mcp-internal-secret-32-chars', MFA_ENCRYPTION_KEY: 'mixed-local-mfa-encryption-secret-32-chars',
   MEDIA_SIGNING_SECRET: 'mixed-local-media-signing-secret', SECRETS_ENCRYPTION_KEY: 'mixed-local-secrets-encryption-key', ADMIN_JWT_SECRET: 'mixed-local-admin-jwt-secret',
   AUTH_RATE_LIMIT_ENABLED: 'false', PUBLIC_API_RATE_LIMIT_ENABLED: 'false', ANALYTICS_ENABLED: 'false', METRICS_ENABLED: 'true',
+  ...(systemWorkload ? { KANERA_ALLOW_PRIVATE_NOTIFICATION_DESTINATIONS: 'true' } : {}),
   SMTP_HOST: '', SMTP_USER: '', SMTP_PASSWORD: '', INTERNAL_NOTIFICATION_EMAILS: '',
   REALTIME_WEBSOCKET_COMPRESSION_ENABLED: 'false', JWT_ACCESS_TTL: '2h', UPLOADS_DIR: `${scratch}/uploads`, HYDRATION_ROOT: root };
 const running = [], containers = [];
@@ -96,10 +108,20 @@ function cleanup() {
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => { void cleanup().then(() => process.exit(130)); });
 try {
   pg(['createdb', '-U', 'kanera', database]); created = true;
-  await run(['--import', tsx, `${root}/apps/api/src/scripts/migrate.ts`], 'migrate');
-  await run(['--import', tsx, `${root}/apps/api/src/scripts/seed-web-performance.ts`], 'seed', { NODE_ENV: 'development', PERF_CARD_COUNT: '3000', PERF_WORKSPACE_COUNT: '6', PERF_MEMBER_COUNT: '40' });
-  // Private references are unique per covered card: signing cannot collapse to three cached URLs.
-  sql(`update card_attachment set url='/api/media/70000000-0000-4000-8000-000000000001/bench/'||id||'/original.jpg', thumbnail_url='/api/media/70000000-0000-4000-8000-000000000001/bench/'||id||'/thumb.jpg', cover_image_url='/api/media/70000000-0000-4000-8000-000000000001/bench/'||id||'/cover.jpg'; ANALYZE`);
+  if (fixtureFile && existsSync(fixtureFile)) {
+    execFileSync('docker', ['exec', '-i', 'kanera-postgres', 'pg_restore', '-U', 'kanera', '-d', database, '--exit-on-error'], { input: readFileSync(fixtureFile), maxBuffer: 256 * 1024 * 1024 });
+  } else {
+    await run(['--import', tsx, `${root}/apps/api/src/scripts/migrate.ts`], 'migrate');
+    await run(['--import', tsx, `${root}/apps/api/src/scripts/seed-web-performance.ts`], 'seed', { NODE_ENV: 'development', PERF_CARD_COUNT: '3000', PERF_WORKSPACE_COUNT: '6', PERF_MEMBER_COUNT: String(systemWorkload ? systemMembers : 40) });
+    // Private references are unique per covered card: signing cannot collapse to three cached URLs.
+    sql(`update card_attachment set url='/api/media/70000000-0000-4000-8000-000000000001/bench/'||id||'/original.jpg', thumbnail_url='/api/media/70000000-0000-4000-8000-000000000001/bench/'||id||'/thumb.jpg', cover_image_url='/api/media/70000000-0000-4000-8000-000000000001/bench/'||id||'/cover.jpg'; ANALYZE`);
+    if (fixtureFile) writeFileSync(fixtureFile, execFileSync('docker', ['exec', 'kanera-postgres', 'pg_dump', '-U', 'kanera', '-Fc', database], { maxBuffer: 256 * 1024 * 1024 }));
+  }
+  if (systemWorkload) {
+    sql("update card set created_at=now()-interval '1 day', due_date_local_date=null, due_date_slot=null, due_date_timezone=null, completed_at=null, archived_at=null; update card_checklist_item set due_date_local_date=null, due_date_slot=null, due_date_timezone=null; insert into notification_settings(user_id,email_enabled,lifecycle_email) select id,false,false from \"user\" on conflict(user_id) do update set email_enabled=false,lifecycle_email=false");
+  }
+  // pg_dump does not preserve planner statistics. Every restored fixture needs the same analysis.
+  sql('ANALYZE');
   pg(['createdb', '-U', 'kanera', '-T', database, template]); templateCreated = true;
   docker(['create', '--name', names.redis, '--network', 'host', images.redis, 'valkey-server', '--bind', '127.0.0.1', '--port', String(ports.redis), '--save', '', '--appendonly', 'no']); containers.push(names.redis);
   docker(['start', names.redis]);
@@ -120,13 +142,13 @@ try {
     { name: 'public', entry: 'public-api-index.ts', port: ports.public, control: ports.publicControl, pool: 5, key: 'PUBLIC_API_PORT' },
     { name: 'worker', entry: 'worker-index.ts', port: ports.worker, control: ports.workerControl, pool: 5, key: 'WORKER_PORT' },
   ];
-  writeFileSync(`${out}/environment.json`, JSON.stringify({ node: process.version, cpu: cpus()[0].model, logicalCpus: cpus().length, rounds, durationMs, readers, boardRps, observers, variants, warmupMs, diagnostics, profile, direct, proxyWorkers, gzipLevel, proxyCpuQuota: 2,
-    database, scratch, names, ports, services, workMem: '16MB', mode: 'self_hosted', images: Object.fromEntries(Object.entries(images).map(([name, image]) => [name, JSON.parse(docker(['image', 'inspect', image]))[0].Id])),
+  writeFileSync(`${out}/environment.json`, JSON.stringify({ node: process.version, cpu: cpus()[0].model, logicalCpus: cpus().length, systemMembers, systemPageSize, systemFocus, rounds, durationMs, readers, boardRps, observers, variants, warmupMs, diagnostics, profile, direct, proxyWorkers, gzipLevel, proxyCpuQuota: 2,
+    database, fixtureFile, fixtureSha256: fixtureFile ? createHash('sha256').update(readFileSync(fixtureFile)).digest('hex') : undefined, scratch, names, ports, services, workMem: '16MB', mode: 'self_hosted', images: Object.fromEntries(Object.entries(images).map(([name, image]) => [name, JSON.parse(docker(['image', 'inspect', image]))[0].Id])),
     postgres: sql('select version()'), commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
-    workload: 'Two app APIs, public API, worker; total pool 30; private cover signing; real nginx gzip5; board readers plus sequential app/public title writers and public watch toggles at target 1/s each, detail reads at 2/s, app health at 1/s; observers on WebSocket.' }, null, 2));
+    workload: systemWorkload ? 'Fixed-work Global Work, notification fanout, triggered/scheduled automations, SMTP, personal push and workspace webhook delivery/retry phases; see system-workload.README.md.' : `Two app APIs, public API, worker; total pool 30; private cover signing; ${direct ? 'direct HTTP/WebSocket' : `nginx with ${proxyWorkers} worker(s), gzip level ${gzipLevel}`}; board readers plus sequential app/public title writers and public watch toggles at target 1/s each, detail reads at 2/s, app health at 1/s; observers on WebSocket.` }, null, 2));
   writeFileSync(`${out}/worktree.patch`, execFileSync('git', ['diff', 'HEAD'], { cwd: root, encoding: 'utf8' }));
   mkdirSync(`${out}/harness`);
-  for (const file of ['mixed-workload.mjs', 'mixed-workload-client.mjs', 'mixed-workload-summary.mjs', 'board-hydration-preload.mjs', 'board-hydration-query.mjs', 'mixed-workload-diagnostics.mjs']) cpSync(`${root}/benchmarks/api/${file}`, `${out}/harness/${file}`);
+  for (const file of ['system-workload-summary.mjs', 'system-workload.README.md', 'system-workload-preload.mjs', 'system-workload-hooks.mjs', 'system-workload-client.mjs', 'mixed-workload.mjs', 'mixed-workload-client.mjs', 'mixed-workload-summary.mjs', 'board-hydration-preload.mjs', 'board-hydration-query.mjs', 'mixed-workload-diagnostics.mjs', 'mixed-workload-diagnostic-summary.mjs', 'mixed-workload-proxy-matrix.mjs', 'mixed-workload-proxy-summary.mjs', 'board-hydration-cpu-summary.mjs']) cpSync(`${root}/benchmarks/api/${file}`, `${out}/harness/${file}`);
   for (let round = 1; round <= rounds; round++) for (const variant of round % 2 ? variants : [...variants].reverse()) {
     const label = `${variant}-r${round}`, current = [];
     console.log(`Running ${label}`);
@@ -134,7 +156,21 @@ try {
     pg(['dropdb', '-U', 'kanera', database]); created = false;
     pg(['createdb', '-U', 'kanera', '-T', template, database]); created = true;
     const source = `${scratch}/${label}`; cpSync(`${root}/apps/api/src`, source, { recursive: true });
+    if (systemWorkload) {
+      if (variant === 'before') cpSync(beforeSource, source, { recursive: true });
+      const { instrumentSystemSource } = await import('./system-workload-hooks.mjs');
+      const archive = `${out}/api-source-${variant}.tar.gz`;
+      if (!existsSync(archive)) execFileSync('tar', ['-czf', archive, '-C', source, '.']);
+      instrumentSystemSource(source);
+    }
     try {
+      // Explicit completion is needed: a CPU-quiet window can occur while a sweep awaits I/O.
+      const scheduler = `${source}/lib/sweep-scheduler.ts`;
+      let schedulerText = readFileSync(scheduler, 'utf8');
+      assert.ok(schedulerText.includes('    running = true;') && schedulerText.includes('.then(({ result }) => {'));
+      schedulerText = schedulerText.replace('    running = true;', '    running = true;\n    globalThis.__mixedStartup.start(name);')
+        .replace('.then(({ result }) => {', '.then(({ result, ok }) => {\n        globalThis.__mixedStartup.finish(name, ok);');
+      writeFileSync(scheduler, schedulerText);
       if (diagnostics) {
         for (const file of ['server.ts', 'public-api-server.ts']) {
           const path = `${source}/${file}`, text = readFileSync(path, 'utf8');
@@ -155,13 +191,20 @@ try {
       for (const service of services) {
         const entry = `${source}/${service.entry}`;
         writeFileSync(entry, readFileSync(entry, 'utf8').replace('host: "0.0.0.0"', 'host: "127.0.0.1"'));
-        const child = launch(['--import', `${root}/benchmarks/api/board-hydration-preload.mjs`, ...(diagnostics ? ['--import', `${root}/benchmarks/api/mixed-workload-diagnostics.mjs`] : []), '--import', tsx, entry], `${label}-${service.name}`, {
-          [service.key]: String(service.port), PG_POOL_MAX: String(service.pool), HYDRATION_VARIANT: variant, HYDRATION_CONTROL_PORT: String(service.control),
+        const child = launch(['--import', `${root}/benchmarks/api/board-hydration-preload.mjs`, ...(systemWorkload ? ['--import', `${root}/benchmarks/api/system-workload-preload.mjs`] : []), ...(diagnostics ? ['--import', `${root}/benchmarks/api/mixed-workload-diagnostics.mjs`] : []), '--import', tsx, entry], `${label}-${service.name}`, {
+          [service.key]: String(service.port), PG_POOL_MAX: String(service.pool), HYDRATION_VARIANT: systemWorkload ? 'baseline' : variant, HYDRATION_CONTROL_PORT: String(service.control),
         }); current.push(child); await ready(service.port, child);
       }
       // Require three quiet one-second worker windows after the minimum startup warm-up.
       await delay(warmupMs);
       let quiet = 0; const warmStarted = Date.now(); const warmWindows = [];
+      let startup;
+      do {
+        assert.ok(Date.now() - warmStarted < 120000, 'Initial overdue sweep failed to complete');
+        startup = await (await fetch(`http://127.0.0.1:${ports.workerControl}/startup`)).json();
+        assert.equal(startup['overdue-notification']?.failed ?? 0, 0, 'Initial overdue sweep failed');
+        if (!startup['overdue-notification']?.completed) await delay(500);
+      } while (!startup['overdue-notification']?.completed);
       while (quiet < 3) {
         assert.ok(Date.now() - warmStarted < 120000, 'Background worker failed to settle');
         await fetch(`http://127.0.0.1:${ports.workerControl}/reset`); await delay(1000);
@@ -171,14 +214,11 @@ try {
         warmWindows.push({ cpuMs: snapshot.cpuMs, elapsedMs: snapshot.elapsedMs, pending }); quiet = idle ? quiet + 1 : 0;
       }
       const loadBefore = loadavg();
-      await run([`${root}/benchmarks/api/mixed-workload-client.mjs`], `${label}-client`, { MIXED_CLIENT: JSON.stringify({ root, origin, variant, round, label, durationMs, readers, boardRps, observers, services, diagnostics, profile, direct, gzipLevel, warmupMs, containers: names, mediaSecret: env.MEDIA_SIGNING_SECRET, output: `${out}/${label}.json` }) });
+      await run([`${root}/benchmarks/api/${systemWorkload ? 'system-workload-client' : 'mixed-workload-client'}.mjs`], `${label}-client`, { MIXED_CLIENT: JSON.stringify({ root, origin, variant, round, label, systemWorkload, systemMembers, systemPageSize, systemFocus, durationMs, readers, boardRps, observers, services, diagnostics, profile, direct, gzipLevel, warmupMs, containers: names, mediaSecret: env.MEDIA_SIGNING_SECRET, output: `${out}/${label}.json` }) });
       const result = JSON.parse(readFileSync(`${out}/${label}.json`, 'utf8'));
-      result.warmup = { minimumMs: warmupMs, quietWindows: warmWindows };
+      result.warmup = { minimumMs: warmupMs, startupJobs: startup, quietWindows: warmWindows };
       if (diagnostics) {
         docker(['cp', `${names.proxy}:/tmp/benchmark-access.log`, `${out}/${label}-nginx.jsonl`]);
-        for (const server of result.servers) if (server.profile) {
-          writeFileSync(`${out}/${label}-${server.name}.cpuprofile`, JSON.stringify(server.profile)); delete server.profile;
-        }
       }
       for (const server of result.servers) if (server.profile) { writeFileSync(`${out}/${label}-${server.name}.cpuprofile`, JSON.stringify(server.profile)); delete server.profile; }
       result.hostLoadAverage = { before: loadBefore, after: loadavg() };
@@ -190,7 +230,7 @@ try {
       assert.deepEqual(pending, { board: 0, direct: 0 }, 'Undelivered durable events after client drain');
       result.outboxPending = pending; result.outboxDrainMs = Date.now() - drainStarted;
       writeFileSync(`${out}/${label}.json`, JSON.stringify(result, null, 2));
-      console.log(`${label}: ${result.boardReadsPerSecond.toFixed(2)} boards/s, ${result.realtime.deliveries} verified realtime deliveries`);
+      console.log(systemWorkload ? `${label}: system phases complete` : `${label}: ${result.boardReadsPerSecond.toFixed(2)} boards/s, ${result.realtime.deliveries} verified realtime deliveries`);
     } finally { for (const child of current.reverse()) await stop(child); rmSync(source, { recursive: true }); }
   }
 } finally { await cleanup(); }

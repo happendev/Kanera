@@ -42,7 +42,7 @@ realtime from the development stack. SMTP and analytics are disabled.
 
 Two app API processes (pool 10 each), a public API (pool 5) and a worker (pool 5) run from temporary
 source copies. Both variants have total pool capacity 30. An isolated nginx container uses the
-actual web nginx configuration with only local ports/upstreams changed and a single worker.
+actual web nginx configuration with local ports/upstreams changed. The default is one worker; the proxy container has a fixed two-CPU quota for every experiment.
 API JSON is gzip-compressed at the configured level 5; Socket.IO uses WebSocket without deflate.
 
 Ports must be free: API 3100/3101, public API 3120, worker 3121, nginx 3180, measurement controls
@@ -74,14 +74,12 @@ the run. It also checks that both durable realtime outboxes have drained.
 Every covered card has its own private media reference. Before timing, all 1,500 selected thumbnail
 URLs are checked for the expected tenant/path, valid expiry and exact HMAC signature. Signing is
 included in every board read. The benchmark does not download image bytes or measure object storage.
-Gzip is asserted on every board response; wire bytes are measured before decompression. Initial and
+The expected gzip or identity encoding is asserted on every board response; wire bytes are measured before decompression. Initial and
 final board snapshots must contain all 3,000 cards and the final persisted edited titles.
 
 Control variables: `MIXED_ROUNDS` (default 3), `MIXED_DURATION_MS` (20000), `MIXED_READERS` (25),
 `MIXED_OBSERVERS` (8), `MIXED_BOARD_RPS` (0 for uncapped), `MIXED_VARIANTS` (`p1,baseline`) and `MIXED_OUTPUT`. Variants restore only the
-query projection; current access predicates, bindings and application logic remain in place. Titles
-and watch state reset between runs; activity/outbox history remains, and alternating order helps
-expose order effects. Each sample records actual elapsed time including requests draining after
+query projection; current access predicates, bindings and application logic remain in place. Every sample clones the same complete seeded database, including initial activity, outbox and reminder history. Before each sample, the runner waits at least 15 seconds, requires the initial overdue-notification sweep to complete successfully, and then requires three consecutive one-second worker windows below 10% CPU with no realtime backlog. CPU-quiet windows alone are insufficient because a startup sweep can be awaiting I/O. The client then warms reads for another 15 seconds. Alternating order helps expose remaining host/order effects. Each sample records actual elapsed time including requests draining after
 the scheduled deadline. Never compare a two-reader smoke run against a 25-reader measured run.
 
 ## Metrics and limits
@@ -101,3 +99,71 @@ capacity, WAN/TLS/HTTP2 behavior, hosted billing performance, browser rendering 
 throughput. Real browser and webhook behavior is covered separately by `pnpm test:e2e --
 board.spec.ts reconnect.spec.ts shared-fields.spec.ts guest-access.spec.ts live-card-edits.spec.ts
 public-api.spec.ts`.
+
+## Warmed timing, CPU profiles and proxy experiments
+
+A longer matched-rate comparison with request-level diagnostics:
+
+```bash
+MIXED_ROUNDS=3 MIXED_DURATION_MS=60000 MIXED_BOARD_RPS=20 MIXED_DIAGNOSTICS=1 \
+  MIXED_OUTPUT=/tmp/kanera-warmed node benchmarks/api/mixed-workload.mjs
+node benchmarks/api/mixed-workload-summary.mjs /tmp/kanera-warmed
+node benchmarks/api/mixed-workload-diagnostic-summary.mjs /tmp/kanera-warmed
+```
+
+Diagnostic hooks are installed only in temporary source copies. Production files, API contracts and
+production environment variables are untouched. Correlation headers link client timing to nginx
+access logs and app/public request traces. Measurements cover pool acquisition, query completion,
+row decoding, preSerialization-to-onSend, response finish, GC pauses and durable realtime insert
+acknowledgement, claim and broadcast. The analyzer joins individual observations before calculating
+percentiles; it never subtracts independent p95s. Missing request/event traces fail analysis.
+
+Query completion includes PostgreSQL execution, network transfer, decoding and callback scheduling;
+it is **not** an isolated database execution timer. Row decoding is a subset. Parallel query/pool
+sums overlap and cannot be added to response latency. Request arrival includes proxy/network and
+app scheduling. Proxy upstream duration includes reading the response; its residual is not pure
+compression CPU. Same-host monotonic epoch timestamps permit cross-process joins. An outbox insert
+acknowledgement occurs after autocommit, so a fast consumer can claim before the publisher callback
+runs. App edits broadcast inline and are excluded from the public outbox-stage breakdown.
+
+Collect V8 profiles separately from latency comparisons, optionally without stage instrumentation:
+
+```bash
+MIXED_ROUNDS=1 MIXED_DURATION_MS=45000 MIXED_BOARD_RPS=20 MIXED_PROFILE=1 \
+  MIXED_OUTPUT=/tmp/kanera-profiles node benchmarks/api/mixed-workload.mjs
+node benchmarks/api/board-hydration-cpu-summary.mjs \
+  /tmp/kanera-profiles/baseline-r1-app0.cpuprofile /tmp/kanera-profiles/app0-summary.json
+```
+
+Profiles are saved for both app replicas. Sampling categories are stack-based heuristics, with
+native work sometimes charged to its JavaScript caller. Profiling overhead means those runs must
+not establish a capacity/latency improvement.
+
+Compare proxy conditions in interleaved order, using the same fixture dump for every condition:
+
+```bash
+MIXED_MATRIX_ROUNDS=3 MIXED_DURATION_MS=30000 \
+  MIXED_OUTPUT=/tmp/kanera-proxy-matrix node benchmarks/api/mixed-workload-proxy-matrix.mjs
+node benchmarks/api/mixed-workload-proxy-summary.mjs /tmp/kanera-proxy-matrix
+```
+
+Conditions are `gzip5` (one worker, default level 5), `gzip1`, `workers2` (two workers, level 5),
+`gzip0` (compression off), and `direct` (no proxy on HTTP or WebSocket). Both worker counts have the
+same two-CPU container quota; Node process count, pool sizes and host scheduling remain unchanged.
+This controls available resources, but does not dedicate CPUs or suppress external host load.
+Direct requests alternate across app replicas, and public paths retain their public-API prefix.
+Direct and gzip-off results measure local CPU/headroom only: their increased response bytes must be
+considered before drawing conclusions for WAN clients. Private media URLs still refer to the same
+proxy origin and their signatures remain verified; image bytes are not fetched.
+
+`MIXED_MATRIX_CASES=gzip5,gzip1` selects a subset. `MIXED_BOARD_RPS=20` runs the same matrix at matched
+traffic. Other controls: `MIXED_WARMUP_MS` (15000, for each of startup and read warm-up),
+`MIXED_PROXY_WORKERS` (1), `MIXED_GZIP_LEVEL` (5; 0 disables gzip), `MIXED_DIRECT=1`,
+`MIXED_DIAGNOSTICS=1`, `MIXED_PROFILE=1`, and `MIXED_FIXTURE_FILE` (optional local pg_dump archive,
+created if missing). Restored archives are analyzed before cloning because pg_dump does not preserve planner statistics. Restore always targets the runner's newly created local database.
+
+The matrix saves its order/settings in `matrix.json` and a normal benchmark directory for each
+condition/round. Diagnostic raw traces, joined observations, profiles, warm-up windows and source
+snapshots are reviewable artifacts. Keep diagnostic/profile runs distinct from uninstrumented
+performance controls. All isolated databases, source copies and containers are cleaned on exit;
+the saved fixture archive is retained with the results.

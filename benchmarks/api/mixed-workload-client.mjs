@@ -147,6 +147,7 @@ try {
   async function paced(name, intervalMs, operation) {
     let sequence = 0, next = started, maximumStartLagMs = 0;
     while (performance.now() < deadline) {
+      if (next >= deadline) break;
       if (next > performance.now()) await delay(Math.ceil(next - performance.now()));
       if (performance.now() >= deadline) break;
       maximumStartLagMs = Math.max(maximumStartLagMs, performance.now() - next);

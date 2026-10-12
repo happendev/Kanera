@@ -22,8 +22,13 @@ import { allowsDailyDigestEmail, getNotificationSettingsForUsers, getNotificatio
 import { startSweepScheduler } from "./sweep-scheduler.js";
 import { absoluteCardUrl } from "./wire-card.js";
 import { localParts } from "./due-date.js";
+import { dateTimeFormatter } from "./date-time-formatter.js";
 import { enqueueMyDayMcpEvents } from "./mcp-events.js";
 
+// A digest can contain thousands of items. Reuse bounded ICU formatter caches across them,
+// while formatting each date afresh so timezone and day-boundary behavior stays unchanged.
+const digestDateFormatter = dateTimeFormatter({ month: "long", day: "numeric", year: "numeric" }, "en-US");
+const digestShortDateFormatter = dateTimeFormatter({ month: "short", day: "numeric" }, "en-US");
 const DIGEST_HOUR = 8;
 const SWEEP_INTERVAL_MS = 60_000; // 60 seconds
 /**
@@ -382,20 +387,11 @@ async function alreadyQueued(db: Db, toEmail: string, localDate: string): Promis
 }
 
 function localDateLabel(now: Date, timezone: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone || "UTC",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  }).format(now);
+  return digestDateFormatter(timezone || "UTC").format(now);
 }
 
 function shortDateLabel(localDate: string, timezone: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone || "UTC",
-    month: "short",
-    day: "numeric",
-  }).format(new Date(`${localDate}T12:00:00Z`));
+  return digestShortDateFormatter(timezone || "UTC").format(new Date(`${localDate}T12:00:00Z`));
 }
 
 function cardUrl(webOrigin: string, organisationKey: string, cardKey: string): string {

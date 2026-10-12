@@ -39,9 +39,10 @@ async function loadCardSummariesFromFilteredCards<Compact extends boolean>(
   page: { limit: number; offset: number } | undefined,
   shownCustomFieldsOnly: boolean,
   compactCustomFields: Compact,
+  rootChecklistsOnly = false,
 ): Promise<CardSummaryRow<Compact extends true ? CompactCardCustomFieldValue : WireCardSummary["customFieldValues"][number]>[]> {
-  // Only the board-open path can omit null value properties. Full summaries used outside
-  // board hydration retain every property, including nulls, rather than widening their contract.
+  // Compact consumers can omit null value properties before transfer and decoding. Full
+  // summaries retain every property, including nulls, rather than widening their contract.
   const result = await db.execute<CardSummaryRow<Compact extends true ? CompactCardCustomFieldValue : WireCardSummary["customFieldValues"][number]>>(sql`
     with filtered_cards as materialized (
       -- Explicit column list, not c.*: this CTE is materialized, so every listed column is copied
@@ -91,6 +92,7 @@ async function loadCardSummariesFromFilteredCards<Compact extends boolean>(
       from card_checklist cl
       inner join filtered_cards fc on fc.id = cl.card_id
       inner join card_checklist_item ci on ci.checklist_id = cl.id
+      ${rootChecklistsOnly ? sql`where cl.parent_item_id is null` : sql``}
       group by cl.card_id
     ),
     label_ids as (
@@ -209,6 +211,24 @@ export function loadBoardCardSummaries(options: BoardSummaryOptions & { projecti
       )
     )` : sql`true`}
   `, options.limit === undefined ? undefined : { limit: options.limit, offset: options.offset ?? 0 }, options.projection === "board-open" || Boolean(options.shownCustomFieldsOnly), options.projection === "board-open");
+}
+
+/** Hydrate only the already-authorized page; Global Work needs all custom fields for its table. */
+export async function loadWorkCardSummaries(cardIds: string[]): Promise<CardSummaryRow<CompactCardCustomFieldValue>[]> {
+  if (cardIds.length === 0) return [];
+  const rows = await loadCardSummariesFromFilteredCards(
+    sql`c.id in (${sql.join(cardIds.map((id) => sql`${id}`), sql`, `)})`,
+    undefined, false, true, true,
+  );
+  // The view query used Drizzle's timestamp mapping. Raw SQL preserves PG timestamp text, so
+  // restore that mapping here to keep the existing Work response's ISO date representation.
+  return rows.map((row) => ({
+    ...row,
+    createdAt: new Date(row.createdAt),
+    updatedAt: new Date(row.updatedAt),
+    completedAt: row.completedAt ? new Date(row.completedAt) : null,
+    archivedAt: row.archivedAt ? new Date(row.archivedAt) : null,
+  }));
 }
 
 export function toWireCardSummary<Value extends CompactCardCustomFieldValue>(

@@ -8,6 +8,11 @@ import { transformSummaryQuery, transformSummaryResult } from './board-hydration
 const require = createRequire(`${process.env.HYDRATION_ROOT}/apps/api/package.json`);
 // Use the API's installed dependency; the root benchmark package does not own pg.
 const pg = require(`${process.env.HYDRATION_ROOT}/apps/api/node_modules/pg`);
+const startupJobs = new Map();
+globalThis.__mixedStartup = {
+  start(name) { const job = startupJobs.get(name) ?? { completed: 0, failed: 0 }; job.running = true; startupJobs.set(name, job); },
+  finish(name, ok) { const job = startupJobs.get(name); job.running = false; job.completed++; if (!ok) job.failed++; },
+};
 let summaryQuery;
 const originalQuery = pg.Client.prototype.query;
 pg.Client.prototype.query = function (...args) {
@@ -49,7 +54,8 @@ http.createServer(async (req, res) => {
         loop: { meanMs: loop.mean / 1e6, p95Ms: loop.percentile(95) / 1e6, p99Ms: loop.percentile(99) / 1e6, maxMs: loop.max / 1e6 } };
       if (globalThis.__mixedDiagnostics) data.diagnostics = globalThis.__mixedDiagnostics.snapshot();
       if (session) { data.profile = (await post('Profiler.stop')).profile; session.disconnect(); session = undefined; }
-    } else if (req.url === '/query') data = summaryQuery ?? null;
+    } else if (req.url === '/startup') data = Object.fromEntries(startupJobs);
+    else if (req.url === '/query') data = summaryQuery ?? null;
     else { res.writeHead(404); res.end(); return; }
     res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(data));
   } catch (error) { res.writeHead(500); res.end(String(error)); }

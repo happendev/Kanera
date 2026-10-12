@@ -95,6 +95,8 @@ interface AutomationRunContext {
   fireDateLocalDate: string;
   fireDate: Date;
   triggerActorId?: string | null;
+  commentAuthorId?: string | null;
+  templateContexts?: Map<string, { list: { id: string; name: string } | null; boardName: string; workspaceName: string }>;
 }
 
 export const EMPTY_EFFECTS: AutomationEffects = { effects: [] };
@@ -883,6 +885,7 @@ async function applyPopulateCustomFieldAction(tx: Tx, ctx: AutomationRunContext,
  */
 async function automationCommentAuthorId(tx: Tx, ctx: AutomationRunContext): Promise<string | null> {
   if (ctx.triggerActorId) return ctx.triggerActorId;
+  if (ctx.commentAuthorId !== undefined) return ctx.commentAuthorId;
   const [admin] = await tx
     .select({ userId: workspaceMembers.userId })
     .from(workspaceMembers)
@@ -890,10 +893,14 @@ async function automationCommentAuthorId(tx: Tx, ctx: AutomationRunContext): Pro
     .where(and(eq(workspaceMembers.workspaceId, ctx.workspaceId), eq(workspaceMembers.role, "admin"), isNull(users.deletedAt)))
     .orderBy(asc(workspaceMembers.userId))
     .limit(1);
-  return admin?.userId ?? null;
+  return ctx.commentAuthorId = admin?.userId ?? null;
 }
 
 async function automationTemplateContext(tx: Tx, ctx: AutomationRunContext): Promise<{ list: { id: string; name: string } | null; boardName: string; workspaceName: string }> {
+  // These names cannot change through an automation action. Cache within this card's transaction,
+  // keyed by list so a preceding move still renders the destination's name in later comments.
+  const cached = ctx.templateContexts?.get(ctx.card.listId);
+  if (cached) return cached;
   const [row] = await tx
     .select({ listId: lists.id, listName: lists.name, boardName: boards.name, workspaceName: workspaces.name })
     .from(boards)
@@ -901,11 +908,13 @@ async function automationTemplateContext(tx: Tx, ctx: AutomationRunContext): Pro
     .leftJoin(lists, eq(lists.id, ctx.card.listId))
     .where(eq(boards.id, ctx.boardId))
     .limit(1);
-  return {
+  const context = {
     list: row?.listId && row.listName !== null ? { id: row.listId, name: row.listName } : null,
     boardName: row?.boardName ?? "",
     workspaceName: row?.workspaceName ?? "",
   };
+  (ctx.templateContexts ??= new Map()).set(ctx.card.listId, context);
+  return context;
 }
 
 /**
