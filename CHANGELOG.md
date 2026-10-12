@@ -6,6 +6,8 @@ All notable changes to Kanera are documented here.
 
 ### Changed
 
+- Plain text attachments (.txt, .log) now open in the preview viewer like images, PDFs and Markdown instead of downloading.
+
 - On phones and tablets the board header keeps New card and the board menu beside the title; Board overview and Watch move into the board menu.
 - **Faster boards and global views:** large boards open with less server work, while My Cards and Team Cards refresh around 65% faster with over 40% less API CPU in large-workload benchmarks.
 - **More efficient realtime and background processing:** notifications and emails arrive sooner under load, with less repeated work and fewer processing pauses across automations, push delivery, webhooks, daily digests and cleanup.
