@@ -54,12 +54,17 @@
   <!-- Board-level chrome actions. These moved up from row 2 so that row is purely query controls. -->
   @if (state.board(); as board) {
   <span phIcons class="board-icon-cluster">
-    <span class="menu-anchor">
-      <button #overviewTrigger type="button" class="k-toolbar-icon-btn is-ghost board-overview-trigger" [class.is-open]="overviewOpen()" (click)="toggleOverview()" aria-label="Board overview" [attr.aria-expanded]="overviewOpen()" kTooltip="Board overview">
+    <!-- On a phone the overview and watch triggers move into the board menu so New card and the menu
+         stay on the title's row; their panels still anchor to these (then empty) wrappers, which sit
+         directly beside the menu trigger. -->
+    <span class="menu-anchor" #overviewAnchor>
+      @if (!phoneHeader()) {
+      <button type="button" class="k-toolbar-icon-btn is-ghost board-overview-trigger" [class.is-open]="overviewOpen()" (click)="toggleOverview()" aria-label="Board overview" [attr.aria-expanded]="overviewOpen()" kTooltip="Board overview">
         <i class="ti ti-radar-2"></i>
       </button>
+      }
       @if (overviewOpen()) {
-      <section class="board-overview" kAnchoredPanel [apAnchor]="overviewTrigger" [apPlacement]="overviewPlacement" (apDismissed)="overviewOpen.set(false)" aria-label="Board overview">
+      <section class="board-overview" kAnchoredPanel [apAnchor]="overviewAnchor" [apPlacement]="overviewPlacement" (apDismissed)="overviewOpen.set(false)" aria-label="Board overview">
         @let overview = boardOverview();
         <div class="board-overview-head">
           <div><strong>Board overview</strong><span>Card counts and upcoming work</span></div>
@@ -91,10 +96,12 @@
       }
     </span>
     <span class="menu-anchor watcher-popover-wrap">
+      @if (!phoneHeader()) {
       <button type="button" class="k-toolbar-icon-btn is-ghost watch-btn" [class.is-watching]="isWatchingBoard()" [class.is-open]="watcherPopoverOpen()" (click)="toggleBoardWatcherPopover()" [attr.aria-label]="isWatchingBoard() ? 'Board watchers' : 'Watch board'"
         [attr.aria-expanded]="watcherPopoverOpen()" kTooltip="Board watchers">
         <i [class]="isWatchingBoard() ? 'ti ti-eye-check' : 'ti ti-eye'"></i>
       </button>
+      }
       @if (watcherPopoverOpen()) {
       <k-watcher-popover kind="board" [entityId]="boardId()" [workspaceId]="board.workspaceId" (dismissed)="watcherPopoverOpen.set(false)" />
       }
@@ -109,6 +116,16 @@
       </button>
       @if (boardMenuOpen()) {
       <div kMenu class="board-export-menu board-menu" role="menu" aria-label="Board menu" kAnchoredPanel [apAnchor]="boardMenuTrigger" [apPlacement]="boardMenuPlacement" (apDismissed)="boardMenuOpen.set(false)">
+        @if (phoneHeader()) {
+        <button type="button" class="k-menu-item board-export-item" role="menuitem" (click)="openOverviewFromMenu()">
+          <i class="ti ti-radar-2"></i>
+          <span>Board overview</span>
+        </button>
+        <button type="button" class="k-menu-item board-export-item" role="menuitem" (click)="openWatchersFromMenu()">
+          <i [class]="isWatchingBoard() ? 'ti ti-eye-check' : 'ti ti-eye'"></i>
+          <span>{{ isWatchingBoard() ? 'Board watchers' : 'Watch board' }}</span>
+        </button>
+        }
         @if (effectiveView() === 'board') {
         <div class="k-menu-heading board-menu-heading">Display</div>
         <button type="button" class="k-menu-item board-export-item" role="menuitemcheckbox" [attr.aria-checked]="compactCards()" (click)="toggleCompactCards()">

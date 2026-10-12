@@ -6,6 +6,7 @@ All notable changes to Kanera are documented here.
 
 ### Changed
 
+- On phones and tablets the board header keeps New card and the board menu beside the title; Board overview and Watch move into the board menu.
 - **Faster boards and global views:** large boards open with less server work, while My Cards and Team Cards refresh around 65% faster with over 40% less API CPU in large-workload benchmarks.
 - **More efficient realtime and background processing:** notifications and emails arrive sooner under load, with less repeated work and fewer processing pauses across automations, push delivery, webhooks, daily digests and cleanup.
 - Hosted subscription payment analytics are recorded against the organisation creator, so PostHog's first-touch acquisition properties attribute revenue.
