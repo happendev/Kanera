@@ -107,6 +107,10 @@ const TITLE_COLUMN_ID = "title";
 const ACTIONS_COLUMN_WIDTH = 38;
 /** Mirrors `--tv-run-inset`: the strip the full-width bands pay as inline padding on both sides. */
 const TABLE_RUN_INSET = 10;
+/** Most of a narrow sheet the frozen Title column takes by default; see `titleWidthCap`. */
+const TITLE_MAX_SHEET_SHARE = 0.42;
+/** Title track width below which the grid drops the card-key prefix; see `compactTitle`. */
+const COMPACT_TITLE_WIDTH = 300;
 /** Breathing room after an auto-fit, so the widest value does not sit flush against the divider. */
 const AUTO_FIT_SLACK = 4;
 /** Regions where a background pan would steal a gesture that already means something else. */
@@ -513,7 +517,7 @@ export class BoardTableViewComponent implements OnDestroy {
    * as padding and the fixed actions column, both of which sit in the same grid. When the columns
    * already exceed that, there is no slack and the sheet keeps its natural width and scrolls.
    */
-  readonly gridTemplate = computed(() => {
+  private readonly columnTrackWidths = computed(() => {
     const ids = [TITLE_COLUMN_ID, ...this.visibleColumns()];
     const available = this.scrollportWidth() - TABLE_RUN_INSET * 2 - ACTIONS_COLUMN_WIDTH;
     const widths = distributeColumnSlack({
@@ -528,8 +532,21 @@ export class BoardTableViewComponent implements OnDestroy {
         Math.ceil(this.measuredContentWidths()[id] ?? 0) + AUTO_FIT_SLACK,
       ),
     });
-    return gridTemplateFrom(ids, (id) => widths[id] ?? this.widthForColumn(id), [ACTIONS_COLUMN_WIDTH]);
+    return { ids, widthFor: (id: string) => widths[id] ?? this.widthForColumn(id) };
   });
+
+  readonly gridTemplate = computed(() => {
+    const { ids, widthFor } = this.columnTrackWidths();
+    return gridTemplateFrom(ids, widthFor, [ACTIONS_COLUMN_WIDTH]);
+  });
+
+  /**
+   * A Title column this narrow (a capped tablet sheet, or one dragged in by hand) cannot spare the
+   * card key its ~11ch: with the touch-visible open button beside it, the key left a word or two of
+   * title. The key yields there for this view only; the viewer's key preference is untouched, and
+   * the stacked phone layout still shows it in full on its own line.
+   */
+  readonly compactTitle = computed(() => this.columnTrackWidths().widthFor(TITLE_COLUMN_ID) < COMPACT_TITLE_WIDTH);
 
   readonly groupingContext = computed(() => ({
     lists: this.lists(),
@@ -2387,7 +2404,21 @@ export class BoardTableViewComponent implements OnDestroy {
       created: 120,
       updated: 120,
     };
-    return this.clampColumn(id, this.columnWidths()[id] ?? defaults[id] ?? 180);
+    const pinned = this.columnWidths()[id];
+    if (pinned !== undefined) return this.clampColumn(id, pinned);
+    const base = defaults[id] ?? 180;
+    return this.clampColumn(id, id === TITLE_COLUMN_ID ? Math.min(base, this.titleWidthCap()) : base);
+  }
+
+  /**
+   * Title is the frozen column, so on a narrow sheet (a tablet, or a pane beside the sidebar) its
+   * 400px default would cover most of the scrollport and leave only a sliver for the columns
+   * scrolling beside it. The default gives way to a share of the sheet instead; a width the viewer set
+   * by hand is left alone, so a drag always takes. No cap before the first measurement.
+   */
+  private titleWidthCap(): number {
+    const sheet = this.scrollportWidth() - TABLE_RUN_INSET * 2 - ACTIONS_COLUMN_WIDTH;
+    return sheet > 0 ? Math.round(sheet * TITLE_MAX_SHEET_SHARE) : Number.POSITIVE_INFINITY;
   }
 
   private exportCell(card: AnyCard, column: string): string {

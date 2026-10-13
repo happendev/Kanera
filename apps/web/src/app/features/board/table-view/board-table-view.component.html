@@ -4,6 +4,7 @@
 <section
   class="tv-view"
   [class.is-embedded]="embedded()"
+  [class.is-compact-title]="compactTitle()"
   [attr.aria-busy]="loading()"
   [style.--tv-grid-template]="gridTemplate()"
   [style.--tv-gutter-w]="dragEnabled() ? '44px' : '28px'"
