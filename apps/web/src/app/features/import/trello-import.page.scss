@@ -603,6 +603,12 @@ input[type="text"],
     flex-direction: column;
   }
 
+  /* In the stacked column the 240px flex-basis would apply to height, not width. */
+  .mapping-controls input,
+  .mapping-controls select {
+    flex: none;
+  }
+
   .csv-column-row {
     grid-template-columns: 1fr;
 

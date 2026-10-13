@@ -17,6 +17,7 @@ All notable changes to Kanera are documented here.
 
 ### Fixed
 
+- On narrow screens the import wizard's Create rows show a normal name field again instead of a tall empty box.
 - On phones, pickers and menus (assignees, labels, dates, boards and others) now open right beside the button you tapped instead of at the bottom of the screen, leaving a gap.
 - Tapping a push notification on Android now opens the card again, instead of leaving Kanera in the background.
 - Default avatars now pick colours that suit the active theme, so near-black ones no longer vanish on dark themes and pale ones on light themes.
