@@ -31,6 +31,7 @@ type TrelloAuthConfig = { enabled: boolean; apiKey?: string };
 const DEFAULT_STEPS: Step[] = ["upload", "lists", "labels", "fields", "members", "options", "result"];
 const CSV_STEPS: Step[] = ["upload", "columns", "lists", "labels", "fields", "members", "options", "result"];
 const cappedName = (value: string, maxLength: number) => value.trim().slice(0, maxLength);
+const DELIMITER_NAMES: Record<string, string> = { ",": "comma", ";": "semicolon", "\t": "tab", "|": "pipe" };
 const STEP_COPY: Record<Step, { title: string; description: string }> = {
   upload: {
     title: "Upload Export",
@@ -140,6 +141,10 @@ export class TrelloImportPage implements OnDestroy {
   readonly trelloToken = signal<string | null>(null);
   readonly attachmentProgress = signal<ImportAttachmentProgress | null>(null);
   readonly csvPreview = signal<CsvImportPreview | null>(null);
+  readonly csvDelimiterName = computed(() => {
+    const delimiter = this.csvPreview()?.delimiter ?? "";
+    return DELIMITER_NAMES[delimiter] ?? `"${delimiter}"`;
+  });
   readonly csvMapping = signal<CsvColumnMapping | null>(null);
   readonly csvIssues = signal<CsvImportIssues | null>(null);
   private readonly analyzedMembers = signal<MemberRow[]>([]);
@@ -549,8 +554,9 @@ export class TrelloImportPage implements OnDestroy {
       this.fileName.set(null);
       return;
     }
+    // The upload panel already names the chosen file; the header chip appears only once
+    // analysis succeeds, so choosing a file doesn't shift the panel down on narrow screens.
     this.selectedFile.set(file);
-    this.fileName.set(file.name);
   }
 
   private eventHasFiles(event: DragEvent): boolean {

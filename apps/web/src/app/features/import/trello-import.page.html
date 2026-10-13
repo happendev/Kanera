@@ -6,7 +6,7 @@
     </div>
     <p class="settings-section-hint">{{ sourceCopy().hint }}</p>
     @if (fileName()) {
-    <span class="file-chip"><i class="ti" [class.ti-file-type-csv]="source() === 'csv'" [class.ti-file-type-json]="source() !== 'csv'"></i>{{ fileName() }}</span>
+    <span class="file-chip" [title]="fileName()"><i class="ti" [class.ti-file-type-csv]="source() === 'csv'" [class.ti-file-type-json]="source() !== 'csv'"></i><span>{{ fileName() }}</span></span>
     }
   </div>
 
@@ -37,7 +37,7 @@
     </label>
     <div class="upload-file-meta">
       @if (selectedFile()) {
-      <span class="upload-file-name"><i class="ti" [class.ti-file-type-csv]="source() === 'csv'" [class.ti-file-type-json]="source() !== 'csv'"></i>{{ selectedFile()!.name }}</span>
+      <span class="upload-file-name" [title]="selectedFile()!.name"><i class="ti" [class.ti-file-type-csv]="source() === 'csv'" [class.ti-file-type-json]="source() !== 'csv'"></i><span>{{ selectedFile()!.name }}</span></span>
       <span>{{ (selectedFile()!.size / 1024 / 1024).toFixed(1) }} MB</span>
       } @else {
       <span>{{ sourceCopy().upload }}</span>
@@ -71,7 +71,7 @@
         <option value="mdy" [selected]="mapping.dateOrder === 'mdy'">Month / day / year</option>
       </select>
     </label>
-    <span class="csv-timezone">Detected {{ preview.encoding }} · {{ preview.delimiter === '\t' ? 'tab' : preview.delimiter }} delimiter.</span>
+    <span class="csv-timezone">Detected {{ preview.encoding }} · {{ csvDelimiterName() }} delimiter.</span>
     <span class="csv-timezone">Due dates use your timezone ({{ mapping.timezone }}).</span>
   </div>
   @if (csvAmbiguousDates()) {
@@ -142,7 +142,7 @@
     <div class="mapping-row">
       <div class="mapping-main">
         <strong>{{ list.name }}</strong>
-        <span>{{ list.cardCount }} cards@if (list.closed) { <span> · archived in source</span> }</span>
+        <span>{{ list.cardCount }} card{{ list.cardCount === 1 ? '' : 's' }}@if (list.closed) { <span> · archived in source</span> }</span>
       </div>
       <div class="segmented">
         <button type="button" [class.is-selected]="listMappings()[list.id].action === 'create'" (click)="setListAction(list.id, 'create')">Create</button>
@@ -269,8 +269,8 @@
     </div>
     }
     <div class="summary-box">
-      <span>{{ manifest.counts.cards - skippedCardCount() }} cards will be imported</span>
-      <span>{{ skippedCardCount() }} cards skipped by list mapping</span>
+      <span>{{ manifest.counts.cards - skippedCardCount() }} card{{ manifest.counts.cards - skippedCardCount() === 1 ? '' : 's' }} will be imported</span>
+      <span>{{ skippedCardCount() }} card{{ skippedCardCount() === 1 ? '' : 's' }} skipped by list mapping</span>
       @if (source() === 'csv' && csvIssues(); as issues) {
       <span>{{ issues.rowsWithoutTitle }} card{{ issues.rowsWithoutTitle === 1 ? '' : 's' }} skipped: no title</span>
       <span>{{ issues.unparseableDates }} dates could not be read</span>
