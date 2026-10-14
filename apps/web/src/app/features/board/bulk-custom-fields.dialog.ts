@@ -6,7 +6,10 @@ import type { CompactCardCustomFieldValue, WireBoardMemberUser, WireCard, WireCa
 import { expandCardCustomFieldValue } from "@kanera/shared/events";
 import type { Card, CardCustomFieldValue } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
+import { icu } from "../../core/i18n/icu";
+import { appLocale } from "../../core/i18n/locale";
 import { AvatarComponent } from "../../shared/avatar.component";
+import { formatDate } from "../../shared/date-format";
 import { BoardState, type AnyCustomField } from "./board-state";
 import { cardIdBatchesByBoard, cardIdsByBoard } from "./bulk-card-batches.util";
 
@@ -39,6 +42,20 @@ interface BulkCustomFieldResult {
 
 type TriState = "all" | "mixed" | "none";
 
+const CHECKED = $localize`:Checkbox custom field value:Checked`;
+const UNCHECKED = $localize`:Checkbox custom field value:Unchecked`;
+const ONE_SELECTED = $localize`:Summary of a select or person field whose value is not in the loaded list:1 selected`;
+const WILL_CLEAR = $localize`:Staged bulk edit that clears the field:Will clear`;
+
+let numberFormat: Intl.NumberFormat | null = null;
+
+function formatFieldNumber(value: number | string): string {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return String(value);
+  numberFormat ??= new Intl.NumberFormat(appLocale(), { maximumFractionDigits: 20 });
+  return numberFormat.format(number);
+}
+
 @Component({
   selector: "k-bulk-custom-fields-dialog",
   standalone: true,
@@ -46,23 +63,23 @@ type TriState = "all" | "mixed" | "none";
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="backdrop" (click)="dismiss()">
-      <div class="dialog" (click)="$event.stopPropagation()" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-label="Edit custom fields" [attr.aria-busy]="loading() || saving()">
+      <div class="dialog" (click)="$event.stopPropagation()" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-label="Edit custom fields" i18n-aria-label [attr.aria-busy]="loading() || saving()">
         <header class="head">
           <div>
-            <h3 class="title">Edit custom fields</h3>
-            <p class="sub">{{ cardIds().length }} card{{ cardIds().length === 1 ? '' : 's' }} selected</p>
+            <h3 class="title" i18n>Edit custom fields</h3>
+            <p class="sub" i18n>{ cardIds().length, plural, one {{{ cardIds().length }} card selected} other {{{ cardIds().length }} cards selected} }</p>
           </div>
-          <button type="button" class="icon-btn" (click)="dismiss()" aria-label="Close" [disabled]="saving()"><i class="ti ti-x"></i></button>
+          <button type="button" class="icon-btn" (click)="dismiss()" aria-label="Close" i18n-aria-label [disabled]="saving()"><i class="ti ti-x"></i></button>
         </header>
 
         @if (saving()) {
           <div class="saving-state" role="status">
             <i class="ti ti-loader-2 kanera-spin"></i>
-            <strong>Saving changes…</strong>
-            <span>Updating {{ cardIds().length }} card{{ cardIds().length === 1 ? '' : 's' }}. This may take a moment.</span>
+            <strong i18n>Saving changes…</strong>
+            <span i18n>{ cardIds().length, plural, one {Updating {{ cardIds().length }} card. This may take a moment.} other {Updating {{ cardIds().length }} cards. This may take a moment.} }</span>
           </div>
         } @else if (loading()) {
-          <p class="notice"><i class="ti ti-loader-2 kanera-spin"></i><span>Loading current values…</span></p>
+          <p class="notice"><i class="ti ti-loader-2 kanera-spin"></i><span i18n>Loading current values…</span></p>
         } @else {
           <div class="fields">
             @for (field of fields(); track field.id) {
@@ -79,13 +96,13 @@ type TriState = "all" | "mixed" | "none";
                     @switch (field.type) {
                       @case ('checkbox') {
                         <div class="seg">
-                          <button type="button" [class.on]="checkboxStaged(field.id) === true" (click)="stageCheckbox(field, true)">Checked</button>
-                          <button type="button" [class.on]="checkboxStaged(field.id) === false" (click)="stageCheckbox(field, false)">Unchecked</button>
+                          <button type="button" [class.on]="checkboxStaged(field.id) === true" (click)="stageCheckbox(field, true)" i18n="Checkbox custom field value">Checked</button>
+                          <button type="button" [class.on]="checkboxStaged(field.id) === false" (click)="stageCheckbox(field, false)" i18n="Checkbox custom field value">Unchecked</button>
                         </div>
                       }
                       @case ('number') {
                         <input class="in" type="number" [value]="numberStaged(field.id) ?? ''"
-                          (input)="stageNumber(field, $any($event.target).value)" placeholder="Set number…" />
+                          (input)="stageNumber(field, $any($event.target).value)" placeholder="Set number…" i18n-placeholder />
                       }
                       @case ('date') {
                         <input class="in" type="date" [value]="scalarStaged(field.id, 'valueDate') ?? ''"
@@ -105,7 +122,7 @@ type TriState = "all" | "mixed" | "none";
                               @else if (optionSelected(field, opt.id) === 'mixed') { <i class="ti ti-square-half"></i> }
                             </button>
                           } @empty {
-                            <p class="empty">No options</p>
+                            <p class="empty" i18n>No options</p>
                           }
                         </div>
                       }
@@ -114,18 +131,18 @@ type TriState = "all" | "mixed" | "none";
                           @for (m of members(); track m.userId) {
                             <button type="button" class="row" [class.sel]="userSelected(field, m.userId) !== 'none'" (click)="toggleUser(field, m.userId)">
                               <k-avatar [url]="m.avatarUrl" [name]="m.displayName" [size]="22" [userId]="m.userId" />
-                              <span class="rlabel">{{ m.userId === currentUserId() ? 'Me' : m.displayName }}</span>
+                              <span class="rlabel">{{ m.userId === currentUserId() ? meLabel : m.displayName }}</span>
                               @if (userSelected(field, m.userId) === 'all') { <i class="ti ti-check"></i> }
                               @else if (userSelected(field, m.userId) === 'mixed') { <i class="ti ti-square-half"></i> }
                             </button>
                           } @empty {
-                            <p class="empty">No members</p>
+                            <p class="empty" i18n>No members</p>
                           }
                         </div>
                       }
                       @default {
                         <input class="in" type="text" [value]="scalarStaged(field.id, 'valueText') ?? ''"
-                          (input)="stageScalar(field, 'valueText', $any($event.target).value)" placeholder="Set text…" />
+                          (input)="stageScalar(field, 'valueText', $any($event.target).value)" placeholder="Set text…" i18n-placeholder />
                       }
                     }
 
@@ -133,17 +150,17 @@ type TriState = "all" | "mixed" | "none";
                       @if (!isMulti(field)) {
                         <!-- Scope only matters once a value is staged: apply to all, or only to cards with no value yet. -->
                         <div class="scope" [class.disabled]="!hasSetStage(field.id)">
-                          <button type="button" [class.on]="scopeFor(field.id) === 'setAll'" (click)="setScope(field, 'setAll')" [disabled]="!hasSetStage(field.id)">All cards</button>
-                          <button type="button" [class.on]="scopeFor(field.id) === 'fillEmpty'" (click)="setScope(field, 'fillEmpty')" [disabled]="!hasSetStage(field.id)">Only empty</button>
+                          <button type="button" [class.on]="scopeFor(field.id) === 'setAll'" (click)="setScope(field, 'setAll')" [disabled]="!hasSetStage(field.id)" i18n="Bulk edit scope: apply the value to every selected card">All cards</button>
+                          <button type="button" [class.on]="scopeFor(field.id) === 'fillEmpty'" (click)="setScope(field, 'fillEmpty')" [disabled]="!hasSetStage(field.id)" i18n="Bulk edit scope: apply the value only to cards with no value yet">Only empty</button>
                         </div>
                       }
-                      <button type="button" class="clear-btn" (click)="stageClear(field)" [class.on]="isClearStaged(field.id)">Clear on all</button>
+                      <button type="button" class="clear-btn" (click)="stageClear(field)" [class.on]="isClearStaged(field.id)" i18n="Button: clear this field on every selected card">Clear on all</button>
                     </div>
                   </div>
                 }
               </div>
             } @empty {
-              <p class="empty">This workspace has no custom fields.</p>
+              <p class="empty" i18n>This workspace has no custom fields.</p>
             }
           </div>
 
@@ -152,10 +169,16 @@ type TriState = "all" | "mixed" | "none";
           }
 
           <footer class="foot">
-            <button type="button" class="ghost sm" (click)="dismiss()">{{ applyNotice() ? 'Close' : 'Cancel' }}</button>
+            <button type="button" class="ghost sm" (click)="dismiss()">
+              @if (applyNotice()) { <ng-container i18n="Button: close the dialog">Close</ng-container> } @else { <ng-container i18n>Cancel</ng-container> }
+            </button>
             <button type="button" class="sm" (click)="apply()" [disabled]="saving() || stagedCount() === 0">
               @if (saving()) { <i class="ti ti-loader-2 kanera-spin"></i> }
-              Apply{{ stagedCount() > 0 ? ' (' + stagedCount() + ')' : '' }}
+              @if (stagedCount() > 0) {
+                <ng-container i18n="Button: apply the staged custom field changes; the number of changed fields follows">Apply ({{ stagedCount() // i18n(ph="count") }})</ng-container>
+              } @else {
+                <ng-container i18n="Button: apply the staged custom field changes">Apply</ng-container>
+              }
             </button>
           </footer>
         }
@@ -332,6 +355,7 @@ export class BulkCustomFieldsDialogComponent implements OnInit {
   readonly dismissed = output<void>();
   readonly done = output<void>();
 
+  readonly meLabel = $localize`:The viewer, in a list of people:Me`;
   readonly loading = signal(false);
   readonly saving = signal(false);
   readonly expandedId = signal<string | null>(null);
@@ -437,11 +461,13 @@ export class BulkCustomFieldsDialogComponent implements OnInit {
   currentSummary(field: AnyCustomField): string {
     if (this.isMulti(field)) return ""; // multi rows show their own tri-state
     const { mixed, value } = this.sharedCell(field);
-    if (mixed) return "Mixed";
+    if (mixed) return $localize`:Summary when the selected cards hold different values:Mixed`;
     if (value === null) return "—";
-    if (field.type === "checkbox") return value === "true" ? "Checked" : "Unchecked";
-    if (field.type === "select") return this.optionsForField(field).find((o) => o.id === value)?.label ?? "1 selected";
-    if (field.type === "user") return this.members().find((m) => m.userId === value)?.displayName ?? "1 selected";
+    if (field.type === "checkbox") return value === "true" ? CHECKED : UNCHECKED;
+    if (field.type === "select") return this.optionsForField(field).find((o) => o.id === value)?.label ?? ONE_SELECTED;
+    if (field.type === "user") return this.members().find((m) => m.userId === value)?.displayName ?? ONE_SELECTED;
+    if (field.type === "date") return formatDate(value, "medium") || value;
+    if (field.type === "number") return formatFieldNumber(value);
     return value;
   }
 
@@ -450,26 +476,28 @@ export class BulkCustomFieldsDialogComponent implements OnInit {
   stagedSummary(field: AnyCustomField): string | null {
     const stage = this.staged().get(field.id);
     if (!stage) return null;
-    if (stage.type === "clear") return "Will clear";
+    if (stage.type === "clear") return WILL_CLEAR;
     if (stage.type === "multi") {
       const parts: string[] = [];
       if (stage.addIds.length) parts.push(`+${stage.addIds.length}`);
       if (stage.removeIds.length) parts.push(`−${stage.removeIds.length}`);
       return parts.length ? parts.join(" ") : null;
     }
-    const scope = stage.scope === "fillEmpty" ? " (empty only)" : "";
-    return this.describeValue(field, stage.value) + scope;
+    const description = this.describeValue(field, stage.value);
+    return stage.scope === "fillEmpty"
+      ? $localize`:Staged bulk edit that only fills cards with no value; the staged value comes first:${description}:value: (empty only)`
+      : description;
   }
 
   private describeValue(field: AnyCustomField, value: ValuePayload): string {
     switch (field.type) {
-      case "checkbox": return value.valueCheckbox ? "→ Checked" : "→ Unchecked";
-      case "select": return "→ " + (this.optionsForField(field).find((o) => o.id === value.valueOptionIds?.[0])?.label ?? "1 selected");
-      case "user": return "→ " + (this.members().find((m) => m.userId === value.valueUserIds?.[0])?.displayName ?? "1 selected");
-      case "number": return value.valueNumber == null ? "Will clear" : `→ ${value.valueNumber}`;
-      case "date": return value.valueDate ? `→ ${value.valueDate}` : "Will clear";
-      case "url": return value.valueUrl ? `→ ${value.valueUrl}` : "Will clear";
-      default: return value.valueText ? `→ ${value.valueText}` : "Will clear";
+      case "checkbox": return `→ ${value.valueCheckbox ? CHECKED : UNCHECKED}`;
+      case "select": return "→ " + (this.optionsForField(field).find((o) => o.id === value.valueOptionIds?.[0])?.label ?? ONE_SELECTED);
+      case "user": return "→ " + (this.members().find((m) => m.userId === value.valueUserIds?.[0])?.displayName ?? ONE_SELECTED);
+      case "number": return value.valueNumber == null ? WILL_CLEAR : `→ ${formatFieldNumber(value.valueNumber)}`;
+      case "date": return value.valueDate ? `→ ${formatDate(value.valueDate, "medium") || value.valueDate}` : WILL_CLEAR;
+      case "url": return value.valueUrl ? `→ ${value.valueUrl}` : WILL_CLEAR;
+      default: return value.valueText ? `→ ${value.valueText}` : WILL_CLEAR;
     }
   }
 
@@ -632,10 +660,13 @@ export class BulkCustomFieldsDialogComponent implements OnInit {
     if (skipped.size > 0) {
       // Keep the dialog open to report ineligible (archived) cards; user closes explicitly.
       this.staged.set(new Map());
-      this.applyNotice.set(`${skipped.size} card${skipped.size === 1 ? " was" : "s were"} skipped (archived).`);
+      this.applyNotice.set(icu(
+        $localize`:Notice after a bulk custom field edit:{count, plural, one {# card was skipped (archived).} other {# cards were skipped (archived).}}`,
+        { count: skipped.size },
+      ));
       return;
     }
-    this.toasts.success("Custom fields updated for the selected cards.", "forms");
+    this.toasts.success($localize`Custom fields updated for the selected cards.`, "forms");
     this.done.emit();
     this.dismissed.emit();
   }

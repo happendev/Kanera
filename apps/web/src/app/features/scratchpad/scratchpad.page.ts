@@ -52,7 +52,7 @@ export class ScratchpadPage {
     // there immediately. The route's own "Scratchpad" title stays as the fallback while nothing is
     // selected, and remains the second part so the tab still reads as part of the app.
     effect(() => {
-      this.title.set(this.pageName(), "Scratchpad");
+      this.title.set(this.pageName(), $localize`:Browser tab title - scratchpad:Scratchpad`);
     });
   }
 }

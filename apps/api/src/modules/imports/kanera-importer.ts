@@ -1,3 +1,5 @@
+import { SOURCE_LOCALE, type Locale } from "@kanera/shared/locales";
+import { importText } from "../../lib/i18n/messages/imports.js";
 import { getAllowedAttachmentExtension } from "@kanera/shared/attachments";
 import type { BoardExportArchive, CardAttachmentRow, CardFeedItem, CommentRow, CommitImportBody, ImportResultSummary, ReactionUserSummary } from "@kanera/shared/dto";
 import type { WireCard, WireCardChecklist, WireCardChecklistItem, WireCustomField, WireCustomFieldOption } from "@kanera/shared/events";
@@ -79,6 +81,7 @@ export interface KaneraBoardImportResult {
 }
 
 interface ImportContext {
+  locale: Locale;
   tx: Tx;
   source: BoardExportArchive;
   body: CommitImportBody;
@@ -229,7 +232,7 @@ async function mapCustomFields(ctx: ImportContext): Promise<{ map: Map<string, C
     if (mapping.action === "map") {
       const field = existingById.get(mapping.targetFieldId!);
       if (!field) throw badRequest("custom field mapping target not found");
-      if (field.type !== sourceField.type) ctx.warnings.push(`Skipped values for "${sourceField.name}" because the mapped Kanera field type is ${field.type}.`);
+      if (field.type !== sourceField.type) ctx.warnings.push(importText(ctx.locale, "fieldType", { name: sourceField.name, type: field.type }));
       map.set(sourceField.id, field);
       continue;
     }
@@ -338,7 +341,7 @@ async function copyAttachments(ctx: ImportContext, cardIdBySourceId: Map<string,
   const rows: CardAttachmentRow[] = [];
   const coverUpdates = new Map<string, string>();
   if (ctx.body.options.attachmentCopyMode === "skip") {
-    if (ctx.source.attachments.length) ctx.warnings.push(`${ctx.source.attachments.length} attachment${ctx.source.attachments.length === 1 ? "" : "s"} skipped by import option.`);
+    if (ctx.source.attachments.length) ctx.warnings.push(importText(ctx.locale, "attachmentsSkipped", { count: ctx.source.attachments.length }));
     return { rows, coverUpdates };
   }
 
@@ -353,7 +356,7 @@ async function copyAttachments(ctx: ImportContext, cardIdBySourceId: Map<string,
     .filter((candidate): candidate is { attachment: BoardExportArchive["attachments"][number]; cardId: string } => !!candidate.cardId);
   const prepared = await mapWithConcurrency(candidates, ATTACHMENT_COPY_CONCURRENCY, async ({ attachment, cardId }): Promise<Prepared> => {
     const ext = getAllowedAttachmentExtension(attachment.mimeType, attachment.fileName);
-    if (!ext) return { warning: `Skipped attachment "${attachment.fileName}" because its file type is unsupported.` };
+    if (!ext) return { warning: importText(ctx.locale, "attachmentUnsupported", { name: attachment.fileName }) };
     try {
       const buffer = await readArchiveAttachment(ctx, attachment.url);
       const fileKey = cardAttachmentStorageKey(cardId, ext);
@@ -362,7 +365,7 @@ async function copyAttachments(ctx: ImportContext, cardIdBySourceId: Map<string,
     } catch {
       // Exported attachment URLs are signed and may expire before import. Keep the board import
       // moving and surface the missed file in the result instead of rolling back all entities.
-      return { warning: `Could not copy attachment "${attachment.fileName}".` };
+      return { warning: importText(ctx.locale, "attachmentFailed", { name: attachment.fileName }) };
     }
   });
 
@@ -405,8 +408,8 @@ async function copyAttachments(ctx: ImportContext, cardIdBySourceId: Map<string,
   return { rows, coverUpdates };
 }
 
-export async function runKaneraBoardImport(tx: Tx, args: { source: BoardExportArchive; body: CommitImportBody; workspaceId: string; clientId: string; actorId: string; targetBoardId?: string | null; storage: StorageProvider; sourceLabel?: "kanera" | "csv" }): Promise<KaneraBoardImportResult> {
-  const ctx: ImportContext = { tx, warnings: [], actorName: "Importer", actorAvatarUrl: null, targetBoardId: null, sourceLabel: "kanera", ...args };
+export async function runKaneraBoardImport(tx: Tx, args: { locale?: Locale; source: BoardExportArchive; body: CommitImportBody; workspaceId: string; clientId: string; actorId: string; targetBoardId?: string | null; storage: StorageProvider; sourceLabel?: "kanera" | "csv" }): Promise<KaneraBoardImportResult> {
+  const ctx: ImportContext = { tx, locale: SOURCE_LOCALE, warnings: [], actorName: "Importer", actorAvatarUrl: null, targetBoardId: null, sourceLabel: "kanera", ...args };
   const [workspaceUserRows, actorRow] = await Promise.all([
     tx.select({ userId: workspaceMembers.userId }).from(workspaceMembers).where(eq(workspaceMembers.workspaceId, ctx.workspaceId)),
     tx.select({ displayName: users.displayName, avatarUrl: users.avatarUrl, homeClientId: users.clientId }).from(users).where(eq(users.id, ctx.actorId)).limit(1),
@@ -577,9 +580,9 @@ export async function runKaneraBoardImport(tx: Tx, args: { source: BoardExportAr
   }
 
   const skippedByList = ctx.source.cards.filter((card) => skippedListIds.has(card.listId)).length;
-  if (skippedByList) ctx.warnings.push(`${skippedByList} card${skippedByList === 1 ? "" : "s"} skipped because their list was skipped.`);
+  if (skippedByList) ctx.warnings.push(importText(ctx.locale, "listSkipped", { count: skippedByList }));
   const skippedArchived = ctx.source.cards.filter((card) => card.archivedAt && listMapping.map.has(card.listId) && !ctx.body.options.includeArchived).length;
-  if (skippedArchived) ctx.warnings.push(`${skippedArchived} archived card${skippedArchived === 1 ? "" : "s"} skipped by default.`);
+  if (skippedArchived) ctx.warnings.push(importText(ctx.locale, "archived", { count: skippedArchived }));
 
   const summary: ImportResultSummary = {
     createdBoardId: board.id,

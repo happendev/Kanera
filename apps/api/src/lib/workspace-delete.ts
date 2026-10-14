@@ -4,7 +4,7 @@ import { and, eq, inArray, notExists, or } from "drizzle-orm";
 import { db } from "../db.js";
 import { emitToBoardAudience, emitToWorkspace } from "../realtime/emit.js";
 import { emitMirrorMetadataToBoards } from "./board-mirror/events.js";
-import { deleteAttachmentFiles } from "./attachment-cleanup.js";
+import { collectWorkspaceNoteFiles, deleteAttachmentFiles, deleteNoteFiles } from "./attachment-cleanup.js";
 import { deleteExternalLinks } from "./external-links.js";
 import { prunePaidGuestSeatIfBelowLimit } from "./paid-guest-seats.js";
 import { reactivatePlanArchivedBoardsIfRoom } from "./plan-conversion.js";
@@ -20,6 +20,9 @@ export async function deleteWorkspaceCascade(params: { workspaceId: string; clie
     eq(boardMirrors.sourceWorkspaceId, params.workspaceId),
     eq(boardMirrors.targetWorkspaceId, params.workspaceId),
   ));
+
+  // Notes (board and workspace scoped) cascade with the workspace; capture their file keys now.
+  const noteFiles = await collectWorkspaceNoteFiles(params.workspaceId);
 
   let externalUserIds: string[] = [];
   if (boardIds.length > 0) {
@@ -65,6 +68,7 @@ export async function deleteWorkspaceCascade(params: { workspaceId: string; clie
     await clearNotificationsForScope(tx, { workspaceId: params.workspaceId });
     await tx.delete(workspaces).where(eq(workspaces.id, params.workspaceId));
   });
+  await deleteNoteFiles(noteFiles);
 
   // Deleting a workspace can free the same guest and board capacity as deleting boards one by one.
   for (const userId of externalUserIds) {

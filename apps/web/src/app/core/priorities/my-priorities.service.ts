@@ -20,9 +20,9 @@ import { viewPreferenceKey } from "../browser/browser-contracts";
 import { registerSocketHandlers } from "../realtime/socket-handlers";
 import { SocketService } from "../realtime/socket.service";
 
-const OFFLINE_LOAD_ERROR = "You're offline. Reconnect to see what's next.";
-const GENERIC_LOAD_ERROR = "Couldn't load Up next. Try again in a moment.";
-const CANDIDATE_LOAD_ERROR = "Couldn’t load the cards you can add. Try again in a moment.";
+const OFFLINE_LOAD_ERROR = $localize`:Error in the Up next panel while offline:You're offline. Reconnect to see what's next.`;
+const GENERIC_LOAD_ERROR = $localize`:Error in the Up next panel ("Up next" is the personal priority queue):Couldn't load Up next. Try again in a moment.`;
+const CANDIDATE_LOAD_ERROR = $localize`:Error in the Up next panel's card picker:Couldn’t load the cards you can add. Try again in a moment.`;
 /**
  * One refetch per burst. The same 180 ms the Global Work and Home consumers use, so a drag that
  * fires several moves costs one round trip on every surface.

@@ -1,3 +1,4 @@
+import { requestLocale } from "../../lib/i18n/request-locale.js";
 import { dto } from "@kanera/shared";
 import type { BoardExportArchive } from "@kanera/shared/dto";
 import { MAX_KANERA_BOARD_IMPORT_BYTES, MAX_TRELLO_IMPORT_BYTES } from "@kanera/shared/dto";
@@ -144,6 +145,7 @@ export async function importRoutes(app: FastifyInstance) {
       const uploadEntitlements = await getUploadEntitlements(db, req.auth.cid);
       const result = await db.transaction((tx) =>
         runTrelloImport(tx, {
+          locale: requestLocale(req),
           source: row.source as NormalizedTrelloBoard,
           body,
           workspaceId: row.workspaceId,
@@ -197,6 +199,7 @@ export async function importRoutes(app: FastifyInstance) {
       const storage = await getStorageForClient(req.auth.cid);
       const result = await db.transaction((tx) =>
         runKaneraBoardImport(tx, {
+          locale: requestLocale(req),
           source: row.source as BoardExportArchive,
           body,
           workspaceId: row.workspaceId,

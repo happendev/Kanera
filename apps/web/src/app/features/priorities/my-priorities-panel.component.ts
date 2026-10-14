@@ -7,6 +7,7 @@ import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { PriorityQueueComponent } from "../../shared/priority-queue/priority-queue.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { isDueSoon, isOverdue } from "../board/due-date.util";
+import { icu } from "../../core/i18n/icu";
 
 /** How long the close animation runs; the drawer unmounts after it. Matches the notifications drawer. */
 const CLOSE_ANIMATION_MS = 110;
@@ -57,6 +58,13 @@ export class MyPrioritiesPanelComponent {
   readonly addCandidatesLoading = this.priorities.addCandidatesLoading;
   readonly addCandidatesLoadError = this.priorities.addCandidatesLoadError;
   readonly changedSinceSeen = this.priorities.changedSinceSeen;
+
+  readonly triggerLabel = computed(() => {
+    const count = this.totalCount();
+    return count > 0
+      ? icu($localize`:Up next trigger button label with its queued card count:Up next ({count, plural, one {# card} other {# cards}})`, { count })
+      : $localize`:Name of the personal priority queue drawer:Up next`;
+  });
 
   /** Errors from drawer gestures render inside the drawer, above the row that failed. */
   readonly actionError = signal<string | null>(null);
@@ -219,14 +227,14 @@ export class MyPrioritiesPanelComponent {
     this.actionError.set(null);
     const { priorityId, ...anchor } = event;
     void this.priorities.movePriority(priorityId, anchor).catch(() => {
-      this.actionError.set("We couldn’t reorder that card. Its previous position has been restored.");
+      this.actionError.set($localize`We couldn’t reorder that card. Its previous position has been restored.`);
     });
   }
 
   onRemoved(event: { priorityId: string }): void {
     this.actionError.set(null);
     void this.priorities.removePriority(event.priorityId).catch(() => {
-      this.actionError.set("We couldn’t remove that card from Up next. It has been put back.");
+      this.actionError.set($localize`We couldn’t remove that card from Up next. It has been put back.`);
     });
   }
 
@@ -234,14 +242,14 @@ export class MyPrioritiesPanelComponent {
     this.actionError.set(null);
     const { cardId, ...anchor } = event;
     void this.priorities.addPriority(cardId, anchor).catch(() => {
-      this.actionError.set("We couldn’t add that card to Up next. Nothing has changed.");
+      this.actionError.set($localize`We couldn’t add that card to Up next. Nothing has changed.`);
     });
   }
 
   onCompleted(event: { cardId: string; completed: boolean }): void {
     this.actionError.set(null);
     void this.priorities.setCardCompleted(event.cardId, event.completed).catch(() => {
-      this.actionError.set("We couldn’t update that card. Nothing has changed.");
+      this.actionError.set($localize`We couldn’t update that card. Nothing has changed.`);
     });
   }
 }

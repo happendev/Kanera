@@ -7,14 +7,14 @@
   [class.mobile-open]="isMobile() && (!sidebarCollapsed() || sidebarSwipeWidth() !== null)"
   [class.swiping]="sidebarSwipeWidth() !== null" [class.settling]="sidebarSwipeSettling()">
   <div class="brand-row">
-    <a class="brand" routerLink="/" [kTooltip]="sidebarCollapsed() ? 'Home' : ''">
+    <a class="brand" routerLink="/" [kTooltip]="sidebarCollapsed() ? text.home : ''">
       @if (sidebarCollapsed()) {
       <k-logo variant="icon" [height]="28" />
       } @else {
       <k-logo [height]="28" />
       }
     </a>
-    <button class="collapse-btn ghost icon" (click)="toggleSidebar()" [kTooltip]="sidebarCollapsed() ? 'Expand sidebar' : 'Collapse sidebar'" [attr.aria-label]="sidebarCollapsed() ? 'Expand sidebar' : 'Collapse sidebar'">
+    <button class="collapse-btn ghost icon" (click)="toggleSidebar()" [kTooltip]="sidebarCollapsed() ? text.expandSidebar : text.collapseSidebar" [attr.aria-label]="sidebarCollapsed() ? text.expandSidebar : text.collapseSidebar">
       <i [class]="sidebarCollapsed() ? 'ti ti-layout-sidebar-left-expand' : 'ti ti-layout-sidebar-left-collapse'"></i>
     </button>
   </div>
@@ -22,17 +22,17 @@
   <!-- Personal surfaces that used to float over every page as fixed buttons. Living here, under the
        logo, they no longer force a clearance band into every page header, and the top of the sidebar is
        the one place to look for "mine": Up next, notifications, scratchpad, help. -->
-  <div class="utility-row" role="toolbar" aria-label="Personal tools">
+  <div class="utility-row" role="toolbar" aria-label="Personal tools" i18n-aria-label="Toolbar of personal panels in the sidebar">
     @if (showScratchpad()) {
-    <button type="button" class="utility-btn" [class.is-active]="scratchpad.open()" (click)="scratchpad.toggle()" aria-label="Scratchpad" [attr.aria-expanded]="scratchpad.open()" [kTooltip]="scratchpadTooltip()">
+    <button type="button" class="utility-btn" [class.is-active]="scratchpad.open()" (click)="scratchpad.toggle()" aria-label="Scratchpad" i18n-aria-label="Button: the scratchpad panel" [attr.aria-expanded]="scratchpad.open()" [kTooltip]="scratchpadTooltip()">
       <i class="ti ti-notes"></i>
     </button>
     }
-    <button type="button" class="utility-btn" [class.has-badge]="myPriorities.totalCount() > 0" (click)="togglePanel('priorities')" [attr.aria-label]="'Up next' + (myPriorities.totalCount() > 0 ? ' (' + myPriorities.totalCount() + ' cards' + (myPriorities.overdueCount() > 0 ? ', ' + myPriorities.overdueCount() + ' overdue' : '') + ')' : '')" [attr.aria-expanded]="pendingPanel() === 'priorities' || (prioritiesPanel()?.open() ?? false)" [kTooltip]="myPriorities.overdueCount() > 0 ? 'Up next · ' + myPriorities.overdueCount() + ' overdue · U' : 'Up next · U'">
+    <button type="button" class="utility-btn" [class.has-badge]="myPriorities.totalCount() > 0" (click)="togglePanel('priorities')" [attr.aria-label]="upNextLabel()" [attr.aria-expanded]="pendingPanel() === 'priorities' || (prioritiesPanel()?.open() ?? false)" [kTooltip]="upNextTooltip()">
       <i class="ti ti-list-numbers"></i>
       @if (myPriorities.totalCount() > 0) { <span class="utility-badge" [class.is-danger]="myPriorities.overdueCount() > 0">{{ myPriorities.totalCount() > 99 ? '99+' : myPriorities.totalCount() }}</span> }
     </button>
-    <button type="button" class="utility-btn" [class.has-badge]="notifications.unreadCount() > 0" [class.is-alert]="notifications.unreadCount() > 0" (click)="togglePanel('notifications')" [attr.aria-label]="'Notifications' + (notifications.unreadCount() > 0 ? ' (' + notifications.unreadCount() + ' unread)' : '')" [attr.aria-expanded]="pendingPanel() === 'notifications' || (notificationsPanel()?.open() ?? false)" kTooltip="Notifications · N">
+    <button type="button" class="utility-btn" [class.has-badge]="notifications.unreadCount() > 0" [class.is-alert]="notifications.unreadCount() > 0" (click)="togglePanel('notifications')" [attr.aria-label]="notificationsLabel()" [attr.aria-expanded]="pendingPanel() === 'notifications' || (notificationsPanel()?.open() ?? false)" kTooltip="Notifications · N" i18n-kTooltip="Tooltip: notifications button; N is its keyboard shortcut">
       <i [class]="notifications.unreadCount() > 0 ? 'ti ti-bell-ringing' : 'ti ti-bell'"></i>
       @if (notifications.unreadCount() > 0) { <span kUnreadGlow class="utility-badge is-accent">{{ notifications.unreadCount() > 99 ? '99+' : notifications.unreadCount() }}</span> }
     </button>
@@ -51,55 +51,55 @@
   <nav class="nav" cdkScrollable>
     @if (boardReorderError()) { <div class="workspace-limit-feedback" role="alert">{{ boardReorderError() }}</div> }
     <div class="nav-item-row">
-      <a class="nav-item" routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" [kTooltip]="sidebarCollapsed() ? 'Home' : ''"
+      <a class="nav-item" routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" [kTooltip]="sidebarCollapsed() ? text.home : ''"
         (contextmenu)="openNavContextMenu($event, { label: 'Home', url: '/', canMarkAllRead: false, clearBoardSearch: false })">
         <i class="ti ti-home-2"></i>
-        <span class="nav-label">Home</span>
+        <span class="nav-label" i18n="Sidebar link to the home page">Home</span>
       </a>
       @if (!sidebarCollapsed()) {
       }
     </div>
     <div class="nav-item-row">
-      <a class="nav-item user-link" routerLink="/my-cards" routerLinkActive="active" [kTooltip]="sidebarCollapsed() ? 'My Cards' : ''"
+      <a class="nav-item user-link" routerLink="/my-cards" routerLinkActive="active" [kTooltip]="sidebarCollapsed() ? text.myCards : ''"
         (contextmenu)="openNavContextMenu($event, { label: 'My Cards', url: '/my-cards', canMarkAllRead: false, clearBoardSearch: false })">
-        <k-avatar [url]="user()?.avatarUrl ?? null" [name]="user()?.displayName || 'Me'" [size]="20" [userId]="user()?.id ?? null" />
-        <span class="nav-label">My Cards</span>
+        <k-avatar [url]="user()?.avatarUrl ?? null" [name]="user()?.displayName || text.me" [size]="20" [userId]="user()?.id ?? null" />
+        <span class="nav-label" i18n="Sidebar link to the My Cards page">My Cards</span>
       </a>
     </div>
     <div class="nav-item-row">
-      <a class="nav-item" routerLink="/team-cards" routerLinkActive="active" [kTooltip]="sidebarCollapsed() ? 'Team Cards' : ''"
+      <a class="nav-item" routerLink="/team-cards" routerLinkActive="active" [kTooltip]="sidebarCollapsed() ? text.teamCards : ''"
         (contextmenu)="openNavContextMenu($event, { label: 'Team Cards', url: '/team-cards', canMarkAllRead: false, clearBoardSearch: false })">
         <i class="ti ti-users"></i>
-        <span class="nav-label">Team Cards</span>
+        <span class="nav-label" i18n="Sidebar link to the Team Cards page">Team Cards</span>
       </a>
     </div>
     @if (showPortfolio()) {
     <div class="nav-item-row">
-      <a class="nav-item" routerLink="/portfolio" routerLinkActive="active" [kTooltip]="sidebarCollapsed() ? 'Portfolio' : ''"
+      <a class="nav-item" routerLink="/portfolio" routerLinkActive="active" [kTooltip]="sidebarCollapsed() ? text.portfolio : ''"
         (contextmenu)="openNavContextMenu($event, { label: 'Portfolio', url: '/portfolio', canMarkAllRead: false, clearBoardSearch: false })">
         <i class="ti ti-chart-bar"></i>
-        <span class="nav-label">Portfolio</span>
+        <span class="nav-label" i18n="Sidebar link to the Portfolio page">Portfolio</span>
       </a>
     </div>
     }
 
     @if (!sidebarCollapsed()) {
     @if (hasNavBoards()) {
-    <button type="button" class="board-search" (click)="search.open()" aria-label="Find content">
+    <button type="button" class="board-search" (click)="search.open()" aria-label="Find content" i18n-aria-label="Button: open search">
       <i class="ti ti-search"></i>
-      <span>Find content</span>
+      <span i18n="Button: open search">Find content</span>
       @if (searchShortcutLabel(); as shortcutLabel) {
       <kbd class="search-kbd">{{ shortcutLabel }}</kbd>
       }
     </button>
     }
     <div class="section-label">
-      <span>Workspaces</span>
+      <span i18n="Sidebar section heading">Workspaces</span>
       @if (usingOfflineShell()) {
-      <span class="offline-copy">Offline copy</span>
+      <span class="offline-copy" i18n="Badge: the sidebar shows cached data while offline">Offline copy</span>
       }
       @if (isOrgAdmin()) {
-      <button class="new-ws-btn ghost icon" (click)="newWorkspace()" (contextmenu)="openNavContextMenu($event, { label: 'New workspace', url: '/onboarding?mode=workspace', canMarkAllRead: false, clearBoardSearch: false })" kTooltip="New workspace" aria-label="New workspace">
+      <button class="new-ws-btn ghost icon" (click)="newWorkspace()" (contextmenu)="openNavContextMenu($event, { label: 'New workspace', url: '/onboarding?mode=workspace', canMarkAllRead: false, clearBoardSearch: false })" kTooltip="New workspace" i18n-kTooltip aria-label="New workspace" i18n-aria-label>
         <i class="ti ti-plus"></i>
       </button>
       }
@@ -120,7 +120,7 @@
     @if (boardSearchTerm() && !hasBoardSearchMatches() && !sidebarCollapsed()) {
     <div class="board-search-empty">
       <i class="ti ti-search-off"></i>
-      <span>No boards found</span>
+      <span i18n="Sidebar board search: no matches">No boards found</span>
     </div>
     }
 
@@ -135,7 +135,7 @@
           <span class="ws-name">{{ group.workspace.name }}</span>
         </button>
         @if (canManageWorkspace(group.workspace)) {
-        <a class="ws-settings" [routerLink]="['/w', group.workspace.id, 'settings']" routerLinkActive="active" kTooltip="Workspace settings"
+        <a class="ws-settings" [routerLink]="['/w', group.workspace.id, 'settings']" routerLinkActive="active" kTooltip="Workspace settings" i18n-kTooltip
           (contextmenu)="openNavContextMenu($event, { label: group.workspace.name + ' settings', url: '/w/' + group.workspace.id + '/settings', canMarkAllRead: false, clearBoardSearch: false })">
           <i class="ti ti-settings"></i>
         </a>
@@ -159,7 +159,7 @@
         <a class="board-link" [routerLink]="['/w', group.workspace.id, 'notes']" routerLinkActive="active"
           (contextmenu)="openNavContextMenu($event, { label: 'Workspace Notes', url: '/w/' + group.workspace.id + '/notes', canMarkAllRead: false, clearBoardSearch: false })">
           <i class="ti ti-notebook"></i>
-          <span class="nav-label">Notes</span>
+          <span class="nav-label" i18n="Sidebar link to the workspace notes">Notes</span>
         </a>
       </div>
       }
@@ -176,7 +176,7 @@
               [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
             <span class="nav-label">{{ board.name }}</span>
             @if (isPlanDisabled(board)) {
-            <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span>Disabled</span></span>
+            <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span i18n="Badge on a board disabled by the plan">Disabled</span></span>
             } @else if (boardAttentionCount(board.id) > 0) {
             <span class="board-attention-dot" aria-hidden="true"></span>
             <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
@@ -201,7 +201,7 @@
                 [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
               <span class="nav-label">{{ board.name }}</span>
               @if (isPlanDisabled(board)) {
-              <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span>Disabled</span></span>
+              <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span i18n="Badge on a board disabled by the plan">Disabled</span></span>
               } @else if (boardAttentionCount(board.id) > 0) {
               <span class="board-attention-dot" aria-hidden="true"></span>
               <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
@@ -221,7 +221,7 @@
               [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : (accentColorForWorkspace(group.workspace.id) ? 'var(--color-' + accentColorForWorkspace(group.workspace.id) + ')' : null)"></i>
             <span class="nav-label">{{ board.name }}</span>
             @if (isPlanDisabled(board)) {
-            <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span>Disabled</span></span>
+            <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span i18n="Badge on a board disabled by the plan">Disabled</span></span>
             } @else if (boardAttentionCount(board.id) > 0) {
             <span class="board-attention-dot" aria-hidden="true"></span>
             <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
@@ -231,7 +231,7 @@
         </div>
         }
         @if (group.boards.length === 0 && !sidebarCollapsed()) {
-        <span class="board-empty">No boards yet</span>
+        <span class="board-empty" i18n>No boards yet</span>
         }
       </div>
       }
@@ -242,9 +242,9 @@
     @if (standaloneGroups().length > 0 || isOrgAdmin()) {
     @if (!sidebarCollapsed()) {
     <div class="section-label">
-      <span>Boards</span>
+      <span i18n="Sidebar section heading: standalone boards">Boards</span>
       @if (isOrgAdmin()) {
-      <button class="new-board-btn ghost icon" (click)="newStandaloneBoard()" kTooltip="New standalone board" aria-label="New standalone board">
+      <button class="new-board-btn ghost icon" (click)="newStandaloneBoard()" kTooltip="New standalone board" i18n-kTooltip aria-label="New standalone board" i18n-aria-label>
         <i class="ti ti-plus"></i>
       </button>
       }
@@ -270,7 +270,7 @@
         <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
         <span class="nav-label">{{ board.name }}</span>
         @if (isPlanDisabled(board)) {
-        <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span>Disabled</span></span>
+        <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span i18n="Badge on a board disabled by the plan">Disabled</span></span>
         } @else if (boardAttentionCount(board.id) > 0) {
         <span class="board-attention-dot" aria-hidden="true"></span>
         <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
@@ -295,14 +295,14 @@
             <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
             <span class="nav-label">{{ board.name }}</span>
             @if (isPlanDisabled(board)) {
-            <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span>Disabled</span></span>
+            <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span i18n="Badge on a board disabled by the plan">Disabled</span></span>
             } @else if (boardAttentionCount(board.id) > 0) {
             <span class="board-attention-dot" aria-hidden="true"></span>
             <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
             }
           </a>
           @if (canManageWorkspace(item.homeGroup.workspace) && !isPlanDisabled(board)) {
-          <a class="ws-settings" [routerLink]="['/b', board.id, 'settings']" routerLinkActive="active" kTooltip="Board settings" [attr.aria-label]="board.name + ' settings'"
+          <a class="ws-settings" [routerLink]="['/b', board.id, 'settings']" routerLinkActive="active" kTooltip="Board settings" i18n-kTooltip [attr.aria-label]="boardSettingsLabel(board.name)"
             (contextmenu)="openNavContextMenu($event, { label: board.name + ' settings', url: '/b/' + board.id + '/settings', canMarkAllRead: false, clearBoardSearch: false })">
             <i class="ti ti-settings"></i>
           </a>
@@ -323,14 +323,14 @@
           <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
           <span class="nav-label">{{ board.name }}</span>
           @if (isPlanDisabled(board)) {
-          <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span>Disabled</span></span>
+          <span class="plan-disabled-badge"><i class="ti ti-lock"></i><span i18n="Badge on a board disabled by the plan">Disabled</span></span>
           } @else if (boardAttentionCount(board.id) > 0) {
           <span class="board-attention-dot" aria-hidden="true"></span>
           <span class="board-attention-count" aria-hidden="true">{{ boardAttentionBadge(board.id) }}</span>
           }
         </a>
         @if (canManageWorkspace(item.homeGroup.workspace) && !isPlanDisabled(board)) {
-        <a class="ws-settings" [routerLink]="['/b', board.id, 'settings']" routerLinkActive="active" kTooltip="Board settings" [attr.aria-label]="board.name + ' settings'"
+        <a class="ws-settings" [routerLink]="['/b', board.id, 'settings']" routerLinkActive="active" kTooltip="Board settings" i18n-kTooltip [attr.aria-label]="boardSettingsLabel(board.name)"
           (contextmenu)="openNavContextMenu($event, { label: board.name + ' settings', url: '/b/' + board.id + '/settings', canMarkAllRead: false, clearBoardSearch: false })">
           <i class="ti ti-settings"></i>
         </a>
@@ -345,7 +345,7 @@
     @if (guestOrganisations().length > 0) {
     @if (!sidebarCollapsed()) {
     <div class="section-label guest-section-label">
-      <span>Guest boards</span>
+      <span i18n="Sidebar section heading: boards shared from other organisations">Guest boards</span>
     </div>
     } @else {
     <div class="section-divider" aria-hidden="true"></div>
@@ -437,7 +437,7 @@
     }
 
     @if (sidebarCollapsed() && isOrgAdmin()) {
-    <button class="new-ws-icon ghost icon" (click)="newWorkspace()" (contextmenu)="openNavContextMenu($event, { label: 'New workspace', url: '/onboarding?mode=workspace', canMarkAllRead: false, clearBoardSearch: false })" kTooltip="New workspace" aria-label="New workspace">
+    <button class="new-ws-icon ghost icon" (click)="newWorkspace()" (contextmenu)="openNavContextMenu($event, { label: 'New workspace', url: '/onboarding?mode=workspace', canMarkAllRead: false, clearBoardSearch: false })" kTooltip="New workspace" i18n-kTooltip aria-label="New workspace" i18n-aria-label>
       <i class="ti ti-plus"></i>
     </button>
     }
@@ -445,12 +445,12 @@
 
   @if (visibleOrgLogoUrl() && !sidebarCollapsed()) {
   <div class="org-logo-block">
-    <img [ngSrc]="visibleOrgLogoUrl()!" [alt]="user()!.orgName || 'Logo'" width="160" height="40" (error)="hideFailedOrgLogo()" />
+    <img [ngSrc]="visibleOrgLogoUrl()!" [alt]="user()!.orgName || text.logo" width="160" height="40" (error)="hideFailedOrgLogo()" />
   </div>
   }
 
   <div class="user-block" [class.open]="userMenuOpen()">
-    <button #userMenuTrigger type="button" class="user-trigger" (click)="toggleUserMenu()" [attr.aria-expanded]="userMenuOpen()" [attr.aria-label]="user()?.displayName || 'Account menu'"
+    <button #userMenuTrigger type="button" class="user-trigger" (click)="toggleUserMenu()" [attr.aria-expanded]="userMenuOpen()" [attr.aria-label]="user()?.displayName || text.accountMenu"
       [kTooltip]="sidebarCollapsed() ? userMenuTooltip() : ''">
       <div class="user-avatar">
         <k-avatar [url]="user()?.avatarUrl ?? null" [name]="user()?.displayName || '?'" [size]="32" [userId]="user()?.id ?? null" />
@@ -496,7 +496,7 @@
       </div>
       @if (visibleOrgLogoUrl()) {
       <div class="popover-client-logo">
-        <img [ngSrc]="visibleOrgLogoUrl()!" [alt]="user()!.orgName || 'Logo'" width="160" height="40" />
+        <img [ngSrc]="visibleOrgLogoUrl()!" [alt]="user()!.orgName || text.logo" width="160" height="40" />
       </div>
       }
       <div class="k-menu-separator user-popover-divider"></div>
@@ -505,7 +505,7 @@
            one row instead of pushing the everyday account items down the menu. The flyout is a DOM
            descendant of this panel, which is how PanelStackService derives it as a nested layer and
            keeps the account menu open while the submenu is up. -->
-      <div class="popover-group organisation-switcher" role="group" aria-label="Organisation">
+      <div class="popover-group organisation-switcher" role="group" aria-label="Organisation" i18n-aria-label="Menu group">
         <button #organisationMenuTrigger type="button" class="k-menu-item popover-item organisation-trigger" [class.active]="organisationMenuOpen()"
           [attr.aria-expanded]="organisationMenuOpen()" (click)="toggleOrganisationMenu()" role="menuitem">
           @if (activeOrganisation()?.logoUrl) {
@@ -515,7 +515,7 @@
           }
           <span class="organisation-trigger-text">
             <span class="organisation-trigger-name">{{ activeOrganisation()?.name ?? user()?.orgName }}</span>
-            <span class="organisation-trigger-sub">Organisation</span>
+            <span class="organisation-trigger-sub" i18n="Account menu row label under the current organisation's name">Organisation</span>
           </span>
           <i class="ti ti-chevron-right organisation-chev" aria-hidden="true"></i>
         </button>
@@ -525,12 +525,13 @@
           class="organisation-flyout"
           role="menu"
           aria-label="Organisations"
+          i18n-aria-label="Menu name"
           kAnchoredPanel
           [apAnchor]="organisationMenuTrigger"
           [apPlacement]="organisationMenuPlacement"
           (apDismissed)="closeOrganisationMenu()"
         >
-          <div class="k-menu-heading popover-group-label" aria-hidden="true">Organisations</div>
+          <div class="k-menu-heading popover-group-label" aria-hidden="true" i18n="Menu heading">Organisations</div>
           @for (organisation of organisations(); track organisation.clientId) {
           <button type="button" class="k-menu-item popover-item organisation-item"
             [class.active]="organisation.clientId === activeClientId()"
@@ -543,85 +544,85 @@
             }
             <span class="organisation-name">{{ organisation.name }}</span>
             @if (organisation.clientId === activeClientId()) {
-            <i class="ti ti-check organisation-active" aria-label="Active organisation"></i>
+            <i class="ti ti-check organisation-active" aria-label="Active organisation" i18n-aria-label></i>
             } @else if (switchingOrganisationId() === organisation.clientId) {
-            <i class="ti ti-loader-2 organisation-active spinning" aria-label="Switching organisation"></i>
+            <i class="ti ti-loader-2 organisation-active spinning" aria-label="Switching organisation" i18n-aria-label></i>
             }
           </button>
           }
           <div class="organisation-actions">
             <button type="button" class="k-menu-item popover-item organisation-action" [disabled]="!!switchingOrganisationId()" (click)="createOrganisation()" role="menuitem">
               <i class="ti ti-building-plus"></i>
-              <span>Create organisation</span>
+              <span i18n="Menu item">Create organisation</span>
             </button>
             <button type="button" class="k-menu-item popover-item organisation-action" (click)="joinOrganisation()" role="menuitem">
               <i class="ti ti-link-plus"></i>
-              <span>Join organisation</span>
+              <span i18n="Menu item">Join organisation</span>
             </button>
           </div>
         </div>
         }
       </div>
       }
-      <div class="popover-group" role="group" aria-label="Account">
-        <div class="k-menu-heading popover-group-label" aria-hidden="true">Account</div>
+      <div class="popover-group" role="group" aria-label="Account" i18n-aria-label="Account menu group">
+        <div class="k-menu-heading popover-group-label" aria-hidden="true" i18n="Account menu group heading">Account</div>
         <a class="k-menu-item popover-item" routerLink="/settings" (click)="closeUserMenu()" role="menuitem">
           <i class="ti ti-user-circle"></i>
-          <span>Profile settings</span>
+          <span i18n="Menu item">Profile settings</span>
         </a>
         <a class="k-menu-item popover-item" [routerLink]="['/settings', 'notifications']" (click)="closeUserMenu()" role="menuitem">
           <i class="ti ti-bell"></i>
-          <span>Notifications</span>
+          <span i18n="Menu item: notification settings">Notifications</span>
         </a>
       </div>
       @if (isOrgAdmin()) {
-      <div class="popover-group" role="group" aria-label="Administration">
-        <div class="k-menu-heading popover-group-label" aria-hidden="true">Administration</div>
+      <div class="popover-group" role="group" aria-label="Administration" i18n-aria-label="Account menu group">
+        <div class="k-menu-heading popover-group-label" aria-hidden="true" i18n="Account menu group heading">Administration</div>
         <a class="k-menu-item popover-item" [routerLink]="['/settings', 'users']" (click)="closeUserMenu()" role="menuitem">
           <i class="ti ti-users"></i>
-          <span>Manage users</span>
+          <span i18n="Menu item">Manage users</span>
         </a>
         @if (isHosted()) {
         <a class="k-menu-item popover-item" [routerLink]="['/settings', 'account-plan']" (click)="closeUserMenu()" role="menuitem">
           <i class="ti ti-credit-card"></i>
-          <span>Account plan</span>
+          <span i18n="Menu item: billing plan">Account plan</span>
         </a>
         }
         <a class="k-menu-item popover-item" [routerLink]="['/settings', 'org']" (click)="closeUserMenu()" role="menuitem">
           <i class="ti ti-building-skyscraper"></i>
-          <span>Organisation settings</span>
+          <span i18n="Menu item">Organisation settings</span>
         </a>
       </div>
       }
       <div class="k-menu-separator user-popover-divider"></div>
-      <div class="popover-group" role="group" aria-label="Support and session">
+      <div class="popover-group" role="group" aria-label="Support and session" i18n-aria-label="Account menu group">
         @if (!pwaInstall.installed()) {
         @if (pwaInstall.canPrompt()) {
         <button type="button" class="k-menu-item popover-item" (click)="installKanera()" role="menuitem">
           <i class="ti ti-device-mobile-plus"></i>
-          <span>Install Kanera</span>
+          <span i18n="Menu item: install the app">Install Kanera</span>
         </button>
         } @else {
         <a class="k-menu-item popover-item" [href]="installGuideUrl" target="_blank" rel="noopener noreferrer" (click)="closeUserMenu()" role="menuitem">
           <i class="ti ti-device-mobile-plus"></i>
-          <span>How to install Kanera</span>
+          <span i18n="Menu item: link to install instructions">How to install Kanera</span>
         </a>
         }
         }
         <a class="k-menu-item popover-item" [href]="docsUrl" target="_blank" rel="noopener noreferrer" (click)="closeUserMenu()" role="menuitem">
           <i class="ti ti-help-circle"></i>
-          <span>Help &amp; docs</span>
+          <span i18n="Menu item: link to documentation">Help &amp; docs</span>
         </a>
         @if (!touchOnly()) {
         <button type="button" class="k-menu-item popover-item" (click)="openShortcuts()" role="menuitem">
           <i class="ti ti-keyboard"></i>
-          <span>Keyboard shortcuts</span>
+          <span i18n="Menu item: open the shortcuts sheet">Keyboard shortcuts</span>
           <kbd class="k-kbd popover-kbd">?</kbd>
         </button>
         }
         <button type="button" class="k-menu-item popover-item danger" (click)="logout()" role="menuitem">
           <i class="ti ti-logout"></i>
-          <span>Log out</span>
+          <span i18n="Menu item">Log out</span>
         </button>
       </div>
     </div>
@@ -642,17 +643,17 @@
     @if (!menu.isCurrentTarget) {
     <button type="button" class="k-menu-item nav-context-item" role="menuitem" (click)="openNavContextTarget()">
       <i class="ti ti-arrow-up-right"></i>
-      <span>Open</span>
+      <span i18n="verb|Context menu item: open the link">Open</span>
     </button>
     }
     <button type="button" class="k-menu-item nav-context-item" role="menuitem" (click)="openNavContextTargetInNewTab()">
       <i class="ti ti-external-link"></i>
-      <span>Open in new tab</span>
+      <span i18n="Context menu item">Open in new tab</span>
     </button>
     @if (menu.canMarkAllRead) {
     <button type="button" class="k-menu-item nav-context-item" role="menuitem" (click)="markAllNavContextRead()" [disabled]="!notificationsOnline()">
       <i class="ti ti-mail-check"></i>
-      <span>Mark all as read</span>
+      <span i18n="Context menu item: mark the board's notifications as read">Mark all as read</span>
     </button>
     }
   </div>

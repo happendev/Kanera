@@ -7,11 +7,15 @@ import { ANCHORED_HOST_STYLES, type AnchoredPanelPlacement } from "../../shared/
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { formatDate, formatDateTime, formatTime } from "../../shared/date-format";
 import { addDays, localDateKey, parseDateInputValue } from "../../shared/day-key.util";
+import { WEEKDAY_LABELS } from "../../shared/week-start";
 import { buildMonthGrid, monthStart, shiftMonth } from "../../shared/month-grid";
 import { ToastService } from "../../shared/toast.service";
 import { TooltipDirective } from "../../shared/tooltip.directive";
-import { WEEKDAY_LABELS } from "../../shared/week-start";
 import { parseTimeInput, sanitizeTimeInput, stepTime, TIME_INPUT_MAX_LENGTH } from "./reminder-time.util";
+
+// Weekday headers in the interface language; the grid always starts on Monday (see
+// shared/week-start.ts).
+const WEEKDAY_NAMES = WEEKDAY_LABELS;
 
 interface ReminderPreset {
   id: string;
@@ -52,19 +56,19 @@ function instantFor(dayKey: string, minutes: number): Date | null {
     <!-- Contained: when opened from a card's context menu, keys typed here must not drive the menu's
          arrow-key and type-to-select navigation, and clicks must not reach the card tile underneath.
          Escape still bubbles so the panel's dismissal sees it. -->
-    <div class="rp-panel" role="dialog" aria-label="Remind me" (keydown)="$event.key === 'Escape' || $event.stopPropagation()" (click)="$event.stopPropagation()">
+    <div class="rp-panel" role="dialog" aria-label="Remind me" i18n-aria-label (keydown)="$event.key === 'Escape' || $event.stopPropagation()" (click)="$event.stopPropagation()">
       <div class="rp-head">
         <i class="ti ti-alarm"></i>
-        <span class="rp-title">Remind me</span>
+        <span class="rp-title" i18n="Popover heading for setting a personal card reminder">Remind me</span>
         @if (reminder(); as current) {
         <span class="rp-current" [class.is-fired]="current.firedAt">
-          {{ current.firedAt ? 'Reminded' : 'Set for' }} {{ format(current.firedAt ?? current.remindAt) }}
+          {{ currentLabel(current) }}
         </span>
         }
       </div>
 
       <div class="rp-body">
-        <section class="rp-quick" aria-label="Quick picks">
+        <section class="rp-quick" aria-label="Quick picks" i18n-aria-label>
           @for (preset of presets(); track preset.id) {
           <button type="button" class="rp-preset" (click)="save(preset.at)" [disabled]="saving()">
             <span class="rp-preset-label">{{ preset.label }}</span>
@@ -73,13 +77,13 @@ function instantFor(dayKey: string, minutes: number): Date | null {
           }
         </section>
 
-        <section class="rp-calendar" aria-label="Pick a day">
+        <section class="rp-calendar" aria-label="Pick a day" i18n-aria-label>
           <div class="rp-month">
-            <button type="button" class="rp-icon-btn" (click)="previousMonth()" [disabled]="!canGoBack()" aria-label="Previous month" kTooltip="Previous month">
+            <button type="button" class="rp-icon-btn" (click)="previousMonth()" [disabled]="!canGoBack()" aria-label="Previous month" i18n-aria-label kTooltip="Previous month" i18n-kTooltip>
               <i class="ti ti-chevron-left"></i>
             </button>
             <div class="rp-month-label" aria-live="polite">{{ monthLabel() }}</div>
-            <button type="button" class="rp-icon-btn" (click)="nextMonth()" [disabled]="!canGoForward()" aria-label="Next month" kTooltip="Next month">
+            <button type="button" class="rp-icon-btn" (click)="nextMonth()" [disabled]="!canGoForward()" aria-label="Next month" i18n-aria-label kTooltip="Next month" i18n-kTooltip>
               <i class="ti ti-chevron-right"></i>
             </button>
           </div>
@@ -105,9 +109,9 @@ function instantFor(dayKey: string, minutes: number): Date | null {
           </div>
         </section>
 
-        <section class="rp-time" aria-label="Pick a time">
+        <section class="rp-time" aria-label="Pick a time" i18n-aria-label>
           <div class="rp-clock">
-            <button type="button" class="rp-icon-btn" (click)="step(-1)" aria-label="15 minutes earlier" kTooltip="15 minutes earlier">
+            <button type="button" class="rp-icon-btn" (click)="step(-1)" aria-label="15 minutes earlier" i18n-aria-label kTooltip="15 minutes earlier" i18n-kTooltip>
               <i class="ti ti-minus"></i>
             </button>
             <label class="rp-clock-field">
@@ -120,6 +124,7 @@ function instantFor(dayKey: string, minutes: number): Date | null {
                 autocomplete="off"
                 spellcheck="false"
                 aria-label="Time"
+                i18n-aria-label="Label for the reminder time input"
                 [value]="timeText()"
                 (focus)="$any($event.target).select()"
                 (input)="onTimeInput($any($event.target))"
@@ -129,7 +134,7 @@ function instantFor(dayKey: string, minutes: number): Date | null {
                 (keydown.arrowdown)="$event.preventDefault(); step(-1)"
               />
             </label>
-            <button type="button" class="rp-icon-btn" (click)="step(1)" aria-label="15 minutes later" kTooltip="15 minutes later">
+            <button type="button" class="rp-icon-btn" (click)="step(1)" aria-label="15 minutes later" i18n-aria-label kTooltip="15 minutes later" i18n-kTooltip>
               <i class="ti ti-plus"></i>
             </button>
           </div>
@@ -138,12 +143,12 @@ function instantFor(dayKey: string, minutes: number): Date | null {
 
       <div class="rp-foot">
         @if (reminder()) {
-        <button type="button" class="rp-clear" (click)="clear()" [disabled]="saving()">Clear</button>
+        <button type="button" class="rp-clear" (click)="clear()" [disabled]="saving()" i18n="Button: remove the card reminder">Clear</button>
         }
         <span class="rp-summary" [class.is-error]="draftProblem()" aria-live="polite">
           {{ draftProblem() ?? format(draftInstant()!) }}
         </span>
-        <button type="button" class="rp-set" (click)="saveDraft()" [disabled]="saving() || !!draftProblem()">Set reminder</button>
+        <button type="button" class="rp-set" (click)="saveDraft()" [disabled]="saving() || !!draftProblem()" i18n>Set reminder</button>
       </div>
     </div>
   `,
@@ -506,7 +511,7 @@ export class ReminderPopoverComponent implements OnInit {
   readonly panelPlacement = input<AnchoredPanelPlacement | null>(null);
   readonly dismissed = output<void>();
 
-  readonly weekdays = WEEKDAY_LABELS;
+  readonly weekdays = WEEKDAY_NAMES;
   readonly saving = signal(false);
   readonly reminder = computed(() => this.notifications.reminderFor(this.cardId()));
 
@@ -521,14 +526,14 @@ export class ReminderPopoverComponent implements OnInit {
   readonly presets = computed<ReminderPreset[]>(() => {
     const now = this.openedAt;
     const morning = DUE_DATE_SLOT_TIMES.morning;
-    const presets: ReminderPreset[] = [{ id: "hour", label: "In 1 hour", at: new Date(now.getTime() + 60 * 60 * 1000) }];
+    const presets: ReminderPreset[] = [{ id: "hour", label: $localize`:Reminder quick pick:In 1 hour`, at: new Date(now.getTime() + 60 * 60 * 1000) }];
     // "Later today" only while there is a meaningful gap before the end of the working day.
-    if (now.getHours() < 16) presets.push({ id: "later", label: "Later today", at: atLocal(now, 0, DUE_DATE_SLOT_TIMES.endOfWorkDay.hour) });
-    presets.push({ id: "tomorrow", label: "Tomorrow morning", at: atLocal(now, 1, morning.hour, morning.minute) });
+    if (now.getHours() < 16) presets.push({ id: "later", label: $localize`:Reminder quick pick:Later today`, at: atLocal(now, 0, DUE_DATE_SLOT_TIMES.endOfWorkDay.hour) });
+    presets.push({ id: "tomorrow", label: $localize`:Reminder quick pick:Tomorrow morning`, at: atLocal(now, 1, morning.hour, morning.minute) });
     const daysToMonday = ((8 - now.getDay()) % 7) || 7;
-    presets.push({ id: "monday", label: "Next Monday", at: atLocal(now, daysToMonday, morning.hour, morning.minute) });
+    presets.push({ id: "monday", label: $localize`:Reminder quick pick:Next Monday`, at: atLocal(now, daysToMonday, morning.hour, morning.minute) });
     // Keep the grid even when "Later today" has dropped out.
-    if (presets.length < 4) presets.push({ id: "week", label: "Next week", at: atLocal(now, 7, morning.hour, morning.minute) });
+    if (presets.length < 4) presets.push({ id: "week", label: $localize`:Reminder quick pick - one week from now:Next week`, at: atLocal(now, 7, morning.hour, morning.minute) });
     return presets;
   });
 
@@ -555,10 +560,10 @@ export class ReminderPopoverComponent implements OnInit {
   /** Why the composed time cannot be saved, or null when it can. Shown in place of the summary. */
   readonly draftProblem = computed<string | null>(() => {
     const at = this.draftInstant();
-    if (!at) return "Pick a day";
-    if (at.getTime() <= this.openedAt.getTime()) return "That time has already passed";
+    if (!at) return $localize`:Reminder validation hint:Pick a day`;
+    if (at.getTime() <= this.openedAt.getTime()) return $localize`:Reminder validation hint:That time has already passed`;
     // Only reachable on the last allowed day, when the time is later than now.
-    if (at.getTime() > this.latest.getTime()) return "Reminders can be at most 8 weeks ahead";
+    if (at.getTime() > this.latest.getTime()) return $localize`:Reminder validation hint:Reminders can be at most 8 weeks ahead`;
     return null;
   });
 
@@ -596,9 +601,15 @@ export class ReminderPopoverComponent implements OnInit {
   format(value: Date | string): string {
     const date = typeof value === "string" ? new Date(value) : value;
     const today = new Date();
-    if (date.toDateString() === today.toDateString()) return `Today, ${formatTime(date)}`;
-    if (date.toDateString() === addDays(today, 1).toDateString()) return `Tomorrow, ${formatTime(date)}`;
+    if (date.toDateString() === today.toDateString()) return $localize`:Reminder time today; time is e.g. 14.30:Today, ${formatTime(date)}:time:`;
+    if (date.toDateString() === addDays(today, 1).toDateString()) return $localize`:Reminder time tomorrow; time is e.g. 14.30:Tomorrow, ${formatTime(date)}:time:`;
     return formatDateTime(date, "weekday");
+  }
+
+  currentLabel(current: { firedAt?: string | null; remindAt: string }): string {
+    return current.firedAt
+      ? $localize`:Status of a reminder that has already gone off; when is e.g. "Today, 09.00":Reminded ${this.format(current.firedAt)}:when:`
+      : $localize`:Status of a pending reminder; when is e.g. "Tomorrow, 09.00":Set for ${this.format(current.remindAt)}:when:`;
   }
 
   timeLabel(minutes: number): string {
@@ -660,16 +671,16 @@ export class ReminderPopoverComponent implements OnInit {
   async save(at: Date): Promise<void> {
     if (this.saving()) return;
     if (at.getTime() <= Date.now()) {
-      this.toasts.error("That time has already passed. Pick a later one.");
+      this.toasts.error($localize`That time has already passed. Pick a later one.`);
       return;
     }
     this.saving.set(true);
     try {
       await this.notifications.setCardReminder(this.cardId(), at);
-      this.toasts.success(`Reminder set for ${this.format(at)}`, "alarm");
+      this.toasts.success($localize`:Toast; when is e.g. "Tomorrow, 09.00":Reminder set for ${this.format(at)}:when:`, "alarm");
       this.dismissed.emit();
     } catch {
-      this.toasts.error("Couldn't set the reminder. Try again.");
+      this.toasts.error($localize`Couldn't set the reminder. Try again.`);
     } finally {
       this.saving.set(false);
     }
@@ -682,7 +693,7 @@ export class ReminderPopoverComponent implements OnInit {
       await this.notifications.clearCardReminder(this.cardId());
       this.dismissed.emit();
     } catch {
-      this.toasts.error("Couldn't clear the reminder. Try again.");
+      this.toasts.error($localize`Couldn't clear the reminder. Try again.`);
     } finally {
       this.saving.set(false);
     }

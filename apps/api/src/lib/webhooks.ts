@@ -200,6 +200,7 @@ async function enrichChatPayloads(
         endpoint,
         payload: {
           kind: "chat",
+          locale: endpoint.locale,
           id: event.id,
           type: candidate.type,
           workspaceId: event.workspaceId,

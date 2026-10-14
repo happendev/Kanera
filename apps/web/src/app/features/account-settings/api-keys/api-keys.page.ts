@@ -39,6 +39,8 @@ interface OauthConnectionRow {
   createdAt: string | Date;
 }
 
+const NEVER_USED = $localize`:Last-used date of a key that has never been used:Never`;
+
 function apiKeyUsageTime(value: string | Date | null): number {
   if (!value) return Number.NEGATIVE_INFINITY;
   const time = value instanceof Date ? value.getTime() : new Date(value).getTime();
@@ -123,8 +125,8 @@ export class AccountSettingsApiKeysPage implements OnInit {
   protected async deletePersonalKey(id: string) {
     const key = this.personalApiKeys().find((item) => item.id === id);
     if (!key) return;
-    const title = key.label ? `Delete "${key.label}"?` : "Delete this personal API key?";
-    if (!await this.confirm.open({ title, message: "Anything using this key will lose access immediately." })) return;
+    const title = key.label ? $localize`Delete "${key.label}:label:"?` : $localize`Delete this personal API key?`;
+    if (!await this.confirm.open({ title, message: $localize`Anything using this key will lose access immediately.` })) return;
     this.personalKeyError.set(null);
     try {
       await this.api.delete(`/me/api-keys/${id}`);
@@ -137,7 +139,7 @@ export class AccountSettingsApiKeysPage implements OnInit {
   protected async revokeOauthConnection(id: string) {
     const connection = this.oauthConnections().find((item) => item.id === id);
     if (!connection) return;
-    if (!await this.confirm.open({ title: `Disconnect ${connection.clientName}?`, message: "Its access and refresh tokens will stop working immediately." })) return;
+    if (!await this.confirm.open({ title: $localize`Disconnect ${connection.clientName}:agent:?`, message: $localize`Its access and refresh tokens will stop working immediately.` })) return;
     await this.api.delete(`/me/oauth-connections/${id}`);
     this.oauthConnections.update((items) => items.filter((item) => item.id !== id));
   }
@@ -148,8 +150,8 @@ export class AccountSettingsApiKeysPage implements OnInit {
   }
 
   protected formatKeyLastUsed(value: string | Date | null | undefined): string {
-    if (!value) return "Never";
-    return formatDateTime(value, "short") || "Never";
+    if (!value) return NEVER_USED;
+    return formatDateTime(value, "short") || NEVER_USED;
   }
 }
 
@@ -157,8 +159,8 @@ function extractErrorMessage(err: unknown): string {
   if (err instanceof ApiError) {
     const message = (err.body as { message?: unknown } | null)?.message;
     if (typeof message === "string" && message.trim()) return message;
-    return "Unable to update personal API keys. Try again.";
+    return $localize`Unable to update personal API keys. Try again.`;
   }
   if (err instanceof Error) return err.message;
-  return "Something went wrong.";
+  return $localize`Something went wrong.`;
 }

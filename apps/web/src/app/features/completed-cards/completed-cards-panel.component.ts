@@ -26,6 +26,7 @@ import {
 import type { CardGroup } from "../board/table-view/table-view.types";
 import { DateRangePickerPopover } from "./date-range-picker.popover";
 import { formatDate } from "../../shared/date-format";
+import { icu } from "../../core/i18n/icu";
 import { localDateKey } from "../../shared/day-key.util";
 
 type CompletedCardGroup = {
@@ -95,10 +96,9 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
   readonly retentionNote = computed(() => {
     const days = this.activeDays();
     if (days === null) return null;
-    const window = days === 0
-      ? "as soon as they are completed"
-      : `${days} ${days === 1 ? "day" : "days"} after they are completed`;
-    return `Cards leave the board ${window}, as configured for this workspace. They are not deleted - every completed card stays here.`;
+    return days === 0
+      ? $localize`:Completed cards panel note about the workspace's completed-card retention:Cards leave the board as soon as they are completed, as configured for this workspace. They are not deleted - every completed card stays here.`
+      : icu($localize`:Completed cards panel note about the workspace's completed-card retention:Cards leave the board {days, plural, one {# day} other {# days}} after they are completed, as configured for this workspace. They are not deleted - every completed card stays here.`, { days });
   });
   readonly labelsById = computed(() => new Map(this.cardLabels().map((label) => [label.id, label])));
   readonly membersById = computed(() => new Map(this.members().map((member) => [member.userId, member])));
@@ -201,15 +201,23 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
   }
 
   dateLabel(value: string): string {
-    if (!value) return "Any date";
+    if (!value) return $localize`:Completed date filter with no range set:Any date`;
     return formatDate(value, "medium") || value;
   }
 
   dateRangeLabel(): string {
-    if (this.from() && this.to()) return `${this.dateLabel(this.from())} - ${this.dateLabel(this.to())}`;
-    if (this.from()) return `From ${this.dateLabel(this.from())}`;
-    if (this.to()) return `Until ${this.dateLabel(this.to())}`;
-    return "Any date";
+    if (this.from() && this.to()) return $localize`:Completed date filter range:${this.dateLabel(this.from())}:startDate: - ${this.dateLabel(this.to())}:endDate:`;
+    if (this.from()) return $localize`:Completed date filter with only a start date:From ${this.dateLabel(this.from())}:startDate:`;
+    if (this.to()) return $localize`:Completed date filter with only an end date:Until ${this.dateLabel(this.to())}:endDate:`;
+    return $localize`:Completed date filter with no range set:Any date`;
+  }
+
+  dateFilterAriaLabel(): string {
+    return $localize`:Accessible label of the completed date filter button:Filter by completed date: ${this.dateRangeLabel()}:range:`;
+  }
+
+  groupCountLabel(count: number): string {
+    return icu($localize`:Accessible label of a completed-cards day group's count:{count, plural, one {# completed card} other {# completed cards}}`, { count });
   }
 
   toggleDateRange(event: MouseEvent) {
@@ -278,7 +286,7 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
       this.downloadBlob(JSON.stringify(payload, null, 2), "application/json", this.exportFileName(payload, "json"));
       this.exportMenuOpen.set(false);
     } catch {
-      this.error.set("Completed cards could not be exported.");
+      this.error.set($localize`Completed cards could not be exported.`);
     } finally {
       this.exporting.set(false);
     }
@@ -299,7 +307,7 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
       }).toFile(this.exportFileName(payload, "xlsx"));
       this.exportMenuOpen.set(false);
     } catch {
-      this.error.set("Completed cards could not be exported.");
+      this.error.set($localize`Completed cards could not be exported.`);
     } finally {
       this.exporting.set(false);
     }
@@ -315,7 +323,7 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
   }
 
   private completedGroupDateLabel(card: WireCardSummary): string {
-    if (!card.completedAt) return "Unknown date";
+    if (!card.completedAt) return $localize`:Group heading for completed cards with no completion date:Unknown date`;
     return formatDate(card.completedAt, "long");
   }
 
@@ -331,7 +339,7 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
       this.nextCursor.set(page.nextCursor);
       this.activeDays.set(page.completedCardsActiveDays);
     } catch {
-      if (seq === this.loadSeq) this.error.set("Completed cards could not be loaded.");
+      if (seq === this.loadSeq) this.error.set($localize`Completed cards could not be loaded.`);
     } finally {
       if (seq === this.loadSeq) this.loading.set(false);
     }
@@ -347,7 +355,7 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
       this.cards.update((cards) => [...cards, ...page.cards]);
       this.nextCursor.set(page.nextCursor);
     } catch {
-      this.error.set("More completed cards could not be loaded.");
+      this.error.set($localize`More completed cards could not be loaded.`);
     } finally {
       this.loadingMore.set(false);
     }
@@ -390,13 +398,13 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
         name: this.exportSourceName(),
       },
       exportedAt: new Date().toISOString(),
-      groupBy: "Completed date",
-      sortBy: "Completed date",
+      groupBy: $localize`:Export metadata, how completed cards are grouped and sorted:Completed date`,
+      sortBy: $localize`:Export metadata, how completed cards are grouped and sorted:Completed date`,
       columns,
       aggregateConfig: {},
       // The completed-cards export groups by completed date and offers no aggregates, so no breakdown.
       aggregateSplitBy: "none",
-      aggregateSplitLabel: "No breakdown",
+      aggregateSplitLabel: $localize`:Export metadata, no aggregate breakdown:No breakdown`,
       groups: this.exportGroupsFor(snapshot),
       lists: this.lists(),
       cardLabels: this.cardLabels(),
@@ -414,16 +422,16 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
 
   private exportColumns(): BoardExportColumn[] {
     const columns: BoardExportColumn[] = [
-      { id: "status", label: "List" },
+      { id: "status", label: $localize`:Export column heading, the card's list:List` },
     ];
     columns.push(
-      { id: "assignees", label: "Assignees" },
-      { id: "due", label: "Due date" },
-      { id: "labels", label: "Labels" },
-      { id: "checklist", label: "Checklist" },
-      { id: "updated", label: "Updated" },
-      { id: "created", label: "Created" },
-      { id: "description", label: "Description" },
+      { id: "assignees", label: $localize`:Export column heading:Assignees` },
+      { id: "due", label: $localize`:Export column heading:Due date` },
+      { id: "labels", label: $localize`:Export column heading:Labels` },
+      { id: "checklist", label: $localize`:Export column heading:Checklist` },
+      { id: "updated", label: $localize`:Export column heading, when the card was last updated:Updated` },
+      { id: "created", label: $localize`:Export column heading, when the card was created:Created` },
+      { id: "description", label: $localize`:Export column heading:Description` },
       ...this.customFields().map((field) => ({ id: `cf:${field.id}`, label: field.name })),
     );
     return columns;
@@ -452,7 +460,7 @@ export class CompletedCardsPanelComponent implements OnInit, OnDestroy {
   }
 
   private exportSourceName(): string {
-    return this.boardName() ?? "Completed cards";
+    return this.boardName() ?? $localize`Completed cards`;
   }
 
   private exportFileName(payload: BoardExportPayload, extension: "json" | "xlsx"): string {

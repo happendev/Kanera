@@ -45,15 +45,25 @@ import { ImageLightboxService } from "../board/image-lightbox.service";
 import type { ImageLightboxItem } from "../board/image-lightbox.component";
 import { NotesState } from "./notes.service";
 import { formatDateTime } from "../../shared/date-format";
+import { icu } from "../../core/i18n/icu";
+import { appLocale } from "../../core/i18n/locale";
 import { viewerTimeZone } from "../../shared/day-key.util";
 import { clipboardAttachmentFiles, dragTargetElement, hasDraggedFiles, isEditablePasteTarget, isEditorDropTarget } from "../../shared/attachments/file-transfer";
 import { openAttachmentPreview, toLightboxAttachments } from "../../shared/attachments/attachment-lightbox";
 
 const LOCK_HEARTBEAT_MS = 30_000; // 30 seconds
+const OFFLINE_DRAFT_MESSAGE = $localize`:Error banner when a note edit is interrupted by going offline:You're offline - your draft was preserved. Reconnect before editing notes.`;
 const OFFLINE_DRAFT_MESSAGES = new Set([
-  "You're offline - your draft was preserved. Reconnect before editing notes.",
-  "Saved as draft. Reconnect to publish.",
+  OFFLINE_DRAFT_MESSAGE,
+  // Same message as the shared draft banner's offline text, so both clear on reconnect.
+  $localize`Saved as draft. Reconnect to publish.`,
 ]);
+const SOMEONE = $localize`:Fallback name for an unknown person editing a note:Someone`;
+const UNTITLED = $localize`:Fallback title for a note without one:Untitled`;
+const OFFLINE_PAUSED = $localize`:Tooltip on a disabled control while offline:You're offline - changes are paused`;
+const DRAFT_TAKEN = $localize`:Error banner on a note:Someone else started editing this note. Your draft was preserved.`;
+const SESSION_EXPIRED = $localize`:Error banner on a note when the sign-in session expired:Your session expired. Refresh the page and sign in again.`;
+const SIZE_FORMAT_OPTIONS: Intl.NumberFormatOptions = { minimumFractionDigits: 1, maximumFractionDigits: 1 };
 @Component({
   selector: "k-note-editor",
   standalone: true,
@@ -67,7 +77,7 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
         @if (attachmentDragActive()) {
           <div class="ne-drop-overlay" aria-hidden="true">
             <i class="ti ti-upload"></i>
-            <span>Drop to attach</span>
+            <span i18n="Overlay shown while dragging files over a note">Drop to attach</span>
           </div>
         }
         @if (heldByOther()) {
@@ -77,9 +87,9 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
               @if (visibleMediaUrl(lock.editingUserAvatarUrl); as avatarUrl) {
                 <img class="ne-lock-avatar" [src]="avatarUrl" alt="" />
               }
-              <span>{{ lockHolderName(lock) }} is editing this note. Your view is read-only{{ lockTimeHint(lock) }}.</span>
+              <span>{{ lockBannerText(lock) }}</span>
               @if (lockExpired()) {
-                <button type="button" class="ne-banner-action" (click)="startBodyEdit()">Edit anyway</button>
+                <button type="button" class="ne-banner-action" (click)="startBodyEdit()" i18n="Button: edit a note whose lock has expired">Edit anyway</button>
               }
             }
           </div>
@@ -88,7 +98,7 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
           <div class="ne-banner is-error" role="alert">
             <i class="ti ti-alert-triangle"></i>
             <span>{{ err }}</span>
-            <button type="button" class="ne-banner-dismiss" (click)="saveError.set(null)" aria-label="Dismiss">
+            <button type="button" class="ne-banner-dismiss" (click)="saveError.set(null)" aria-label="Dismiss" i18n-aria-label="Button label: dismiss an error banner">
               <i class="ti ti-x"></i>
             </button>
           </div>
@@ -113,6 +123,7 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
                   class="ne-title-input"
                   type="text"
                   placeholder="Untitled"
+                  i18n-placeholder="Placeholder for a note title"
                   [value]="title()"
                   [disabled]="!canEdit() || lockedByOther() || acquiringLock()"
                   (input)="title.set($any($event.target).value)"
@@ -121,18 +132,18 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
                   (keydown.escape)="cancelTitleEdit()"
                   autofocus />
               } @else {
-                <h2 class="ne-title" [class.is-readonly]="!canEdit() || lockedByOther()" (click)="startTitleEdit()">{{ title() || 'Untitled' }}</h2>
+                <h2 class="ne-title" [class.is-readonly]="!canEdit() || lockedByOther()" (click)="startTitleEdit()">{{ title() || untitledLabel }}</h2>
               }
-              <button type="button" class="ne-copy-link" (click)="copyNoteLink(n); $event.stopPropagation()" aria-label="Copy note link" kTooltip="Copy note link">
+              <button type="button" class="ne-copy-link" (click)="copyNoteLink(n); $event.stopPropagation()" aria-label="Copy note link" i18n-aria-label kTooltip="Copy note link" i18n-kTooltip>
                 <i class="ti ti-link"></i>
               </button>
             </div>
             <div class="ne-meta">
               <span class="ne-meta-chip" [class.personal]="n.scope === 'personal'" [class.team]="n.scope === 'team'">
                 @if (n.scope === 'personal') {
-                  <i class="ti ti-user"></i><span>Private</span>
+                  <i class="ti ti-user"></i><span i18n="Note scope chip: visible only to you">Private</span>
                 } @else {
-                  <i class="ti ti-users"></i><span>Team</span>
+                  <i class="ti ti-users"></i><span i18n="Note scope chip: shared with the team">Team</span>
                 }
               </span>
               <span class="ne-last-edit">
@@ -142,7 +153,7 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
                   [size]="20"
                   [userId]="n.lastEditedById"
                   [showTooltip]="false" />
-                <span>Last edited by <strong>{{ n.lastEditedByName }}</strong></span>
+                <span i18n="Note metadata">Last edited by <strong>{{ n.lastEditedByName // i18n(ph="person") }}</strong></span>
                 <span class="ne-meta-separator" aria-hidden="true">·</span>
                 <time [attr.datetime]="dateString(n.lastEditedAt)" [title]="lastEditedTimeZone()">
                   {{ formatLastEditedAt(n.lastEditedAt) }}
@@ -153,14 +164,14 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
               <div class="ne-backlinks">
                 <div class="ne-backlinks-label">
                   <i class="ti ti-arrow-back-up"></i>
-                  <span>Backlinks</span>
+                  <span i18n="Section heading: items that link to this note">Backlinks</span>
                 </div>
                 <div class="ne-backlinks-list">
                   @for (link of backlinks(); track link.kind + ':' + link.id) {
                     <a class="ne-backlink" [href]="backlinkHref(link)" (click)="openBacklink($event, link)">
                       <i [class]="'ti ti-' + backlinkIcon(link)"
                         [style.color]="backlinkColor(link) ? 'var(--color-' + backlinkColor(link) + ')' : null"></i>
-                      <span class="ne-backlink-title">{{ link.title || 'Untitled' }}</span>
+                      <span class="ne-backlink-title">{{ link.title || untitledLabel }}</span>
                       <span class="ne-backlink-hint">{{ backlinkHint(link) }}</span>
                     </a>
                   }
@@ -181,8 +192,10 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
                   [mentionMembers]="mentionMembers()"
                   [autofocus]="false"
                   [showCancel]="true"
-                  [submitLabel]="'Save'"
-                  [placeholder]="'Write your note in markdown…'"
+                  submitLabel="Save"
+                  i18n-submitLabel="Button: save the note body"
+                  placeholder="Write your note in markdown…"
+                  i18n-placeholder="Placeholder for the note body editor"
                   (contentChange)="onBodyDraftChange($event)"
                   (cancel)="cancelBodyEdit()"
                   (save)="onContentSave($event)" />
@@ -197,7 +210,7 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
                     [linkRevision]="linkRevision()"
                     [mentionMembers]="mentionMembers()"
                     [showCopy]="true"
-                    [emptyLabel]="lockedByOther() ? lockedEmptyLabel() : 'Add a description…'"
+                    [emptyLabel]="lockedByOther() ? lockedEmptyLabel() : addDescriptionLabel"
                     [emptyIcon]="lockedByOther() ? 'lock' : 'pencil'"
                     [handleAttachmentLinks]="true"
                     (imageClick)="imageLightbox.open({ src: $event })"
@@ -208,7 +221,7 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
             <section class="ne-attachments">
               <div class="ne-section-label">
                 <i class="ti ti-paperclip"></i>
-                <span>Attachments</span>
+                <span i18n="Section heading">Attachments</span>
                 @if (attachments().length) {
                   <span class="ne-count">{{ attachments().length }}</span>
                 }
@@ -218,12 +231,12 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
                 <div class="ne-attach-dropzone" [class.is-drag-active]="attachmentDragActive()">
                   <label class="ne-attach-upload">
                     <i class="ti ti-upload"></i>
-                    Add attachment
+                    <ng-container i18n="Button: upload a file to the note">Add attachment</ng-container>
                     <input type="file" hidden multiple [accept]="acceptAttr" (change)="onAttachmentSelected($event)" />
                   </label>
                   <div class="ne-attach-drop-hint" aria-hidden="true">
                     <i class="ti ti-drag-drop"></i>
-                    Drop files here
+                    <ng-container i18n="Drop zone hint">Drop files here</ng-container>
                   </div>
                 </div>
 
@@ -246,23 +259,23 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
                           }
                         </button>
                       } @else if (isVideoMime(a.mimeType)) {
-                        <button type="button" class="ne-attach-thumb is-doc is-video" (click)="openAttachmentVideo(a.id, $event)" [kTooltip]="'Play ' + a.fileName" [attr.aria-label]="'Play video ' + a.fileName">
+                        <button type="button" class="ne-attach-thumb is-doc is-video" (click)="openAttachmentVideo(a.id, $event)" [kTooltip]="playLabel(a.fileName)" [attr.aria-label]="playVideoLabel(a.fileName)">
                           <i class="ti ti-video"></i>
                         </button>
                       } @else if (isAudioMime(a.mimeType)) {
-                        <button type="button" class="ne-attach-thumb is-doc is-audio" (click)="openAttachmentAudio(a.id, $event)" [kTooltip]="'Play ' + a.fileName" [attr.aria-label]="'Play audio ' + a.fileName">
+                        <button type="button" class="ne-attach-thumb is-doc is-audio" (click)="openAttachmentAudio(a.id, $event)" [kTooltip]="playLabel(a.fileName)" [attr.aria-label]="playAudioLabel(a.fileName)">
                           <i class="ti ti-file-music"></i>
                         </button>
                       } @else if (isPdfMime(a.mimeType)) {
-                        <button type="button" class="ne-attach-thumb is-doc is-pdf" (click)="openAttachmentPdf(a.id, $event)" [kTooltip]="'Preview ' + a.fileName" [attr.aria-label]="'Preview PDF ' + a.fileName">
+                        <button type="button" class="ne-attach-thumb is-doc is-pdf" (click)="openAttachmentPdf(a.id, $event)" [kTooltip]="previewLabel(a.fileName)" [attr.aria-label]="previewPdfLabel(a.fileName)">
                           <i class="ti ti-file-type-pdf"></i>
                         </button>
                       } @else if (isMarkdownAttachment(a.mimeType, a.fileName)) {
-                        <button type="button" class="ne-attach-thumb is-doc" (click)="openAttachmentMarkdown(a.id, $event)" [kTooltip]="'Preview ' + a.fileName" [attr.aria-label]="'Preview Markdown ' + a.fileName">
+                        <button type="button" class="ne-attach-thumb is-doc" (click)="openAttachmentMarkdown(a.id, $event)" [kTooltip]="previewLabel(a.fileName)" [attr.aria-label]="previewMarkdownLabel(a.fileName)">
                           <i class="ti ti-markdown"></i>
                         </button>
                       } @else if (isTextAttachment(a.mimeType, a.fileName)) {
-                        <button type="button" class="ne-attach-thumb is-doc" (click)="openAttachmentText(a.id, $event)" [kTooltip]="'Preview ' + a.fileName" [attr.aria-label]="'Preview text file ' + a.fileName">
+                        <button type="button" class="ne-attach-thumb is-doc" (click)="openAttachmentText(a.id, $event)" [kTooltip]="previewLabel(a.fileName)" [attr.aria-label]="previewTextLabel(a.fileName)">
                           <i class="ti ti-file-text"></i>
                         </button>
                       } @else {
@@ -288,17 +301,17 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
                             <a class="ne-attach-name" [href]="a.url" (click)="downloadAttachment(a.url, a.fileName); $event.preventDefault()">{{ a.fileName }}</a>
                           }
                           @if (a.source === 'description') {
-                            <span class="ne-source-pill" kTooltip="Added in description"><i class="ti ti-align-left"></i> description</span>
+                            <span class="ne-source-pill" kTooltip="Added in description" i18n-kTooltip="Tooltip: the attachment was added inside the note body"><i class="ti ti-align-left"></i> <ng-container i18n="Pill on an attachment that was added inside the note body">description</ng-container></span>
                           }
                         </div>
                         <span class="ne-attach-sub">{{ a.uploadedByName }} • {{ formatFeedTime(a.createdAt) }} • {{ formatBytes(a.byteSize) }}</span>
                       </div>
                       <div class="ne-attach-actions">
-                        <button type="button" class="ne-icon-btn" (click)="downloadAttachment(a.url, a.fileName)" kTooltip="Download" aria-label="Download attachment">
+                        <button type="button" class="ne-icon-btn" (click)="downloadAttachment(a.url, a.fileName)" kTooltip="Download" i18n-kTooltip="Tooltip: download the attachment" aria-label="Download attachment" i18n-aria-label>
                           <i class="ti ti-download"></i>
                         </button>
                         @if (canChangeAttachments()) {
-                          <button type="button" class="ne-icon-btn" (click)="confirmDeleteAttachment(a.id, a.fileName)" kTooltip="Delete" aria-label="Delete attachment">
+                          <button type="button" class="ne-icon-btn" (click)="confirmDeleteAttachment(a.id, a.fileName)" kTooltip="Delete" i18n-kTooltip="Tooltip: delete the attachment" aria-label="Delete attachment" i18n-aria-label>
                             <i class="ti ti-trash"></i>
                           </button>
                         }
@@ -312,7 +325,7 @@ const OFFLINE_DRAFT_MESSAGES = new Set([
         </div>
       </div>
     } @else {
-      <k-empty-state class="ne-placeholder" [plain]="true" icon="notebook" title="No note selected" text="Pick one from the tree or create a new note to start writing." />
+      <k-empty-state class="ne-placeholder" [plain]="true" icon="notebook" title="No note selected" i18n-title="Empty state title" text="Pick one from the tree or create a new note to start writing." i18n-text="Empty state text" />
     }
   `,
   styleUrl: "./note-editor.component.scss",
@@ -334,6 +347,9 @@ export class NoteEditorComponent implements OnDestroy {
   readonly mentionMembers = input<WireBoardMemberUser[]>([]);
   readonly canEdit = input(true);
   readonly editorKey = computed(() => this.note()?.id ?? null);
+
+  protected readonly untitledLabel = UNTITLED;
+  protected readonly addDescriptionLabel = $localize`:Placeholder in an empty note body:Add a description…`;
 
   readonly title = signal<string>("");
   readonly icon = signal<string | null>(null);
@@ -461,7 +477,7 @@ export class NoteEditorComponent implements OnDestroy {
       this.editingTitle.set(false);
       // Body drafts already render the shared saved-draft banner; adding the
       // generic offline error would show two draft notices for one action.
-      if (!wasEditingBody) this.saveError.set("You're offline - your draft was preserved. Reconnect before editing notes.");
+      if (!wasEditingBody) this.saveError.set(OFFLINE_DRAFT_MESSAGE);
       this.releaseCurrentLock();
     });
     effect(() => {
@@ -642,7 +658,7 @@ export class NoteEditorComponent implements OnDestroy {
     if (!acquired) {
       if (this.titleSaveInFlight === request) this.titleSaveInFlight = null;
       this.preservedDraft.set(title);
-      this.saveError.set("This note is being edited by someone else. Your title draft was preserved.");
+      this.saveError.set($localize`:Error banner on a note:This note is being edited by someone else. Your title draft was preserved.`);
       return;
     }
     try {
@@ -680,7 +696,7 @@ export class NoteEditorComponent implements OnDestroy {
       // the conflict instead of dropping the body silently.
       if (n && this.lockedByOther()) {
         this.preserveBodyDraft(event.markdown);
-        this.saveError.set("Someone else started editing this note. Your draft was preserved.");
+        this.saveError.set(DRAFT_TAKEN);
       }
       return;
     }
@@ -772,31 +788,67 @@ export class NoteEditorComponent implements OnDestroy {
 
   lockHolderName(lock: WireNoteLock): string {
     const member = this.mentionMembers().find((m) => m.userId === lock.editingUserId);
-    return member?.displayName || lock.editingUserName || "Someone";
+    return member?.displayName || lock.editingUserName || SOMEONE;
   }
 
-  lockTimeHint(lock: WireNoteLock): string {
+  lockBannerText(lock: WireNoteLock): string {
     this.clock();
+    const name = this.lockHolderName(lock);
     const remainingMs = new Date(lock.editingExpiresAt).getTime() - Date.now();
-    if (remainingMs <= 0) return ", but their edit session has expired";
+    if (remainingMs <= 0) {
+      return icu($localize`:Banner on a note locked by someone whose lock has lapsed:{name} is editing this note. Your view is read-only, but their edit session has expired.`, { name });
+    }
     const seconds = Math.ceil(remainingMs / 1000);
-    return ` for about ${seconds < 60 ? `${seconds} seconds` : `${Math.ceil(seconds / 60)} minutes`}`;
+    if (seconds < 60) {
+      return icu($localize`:Banner on a note locked by someone else:{name} is editing this note. Your view is read-only for about {count, plural, one {# second} other {# seconds}}.`, { name, count: seconds });
+    }
+    return icu($localize`:Banner on a note locked by someone else:{name} is editing this note. Your view is read-only for about {count, plural, one {# minute} other {# minutes}}.`, { name, count: Math.ceil(seconds / 60) });
   }
 
   lockedEmptyLabel(): string {
     const lock = this.activeLock();
-    return lock ? `${this.lockHolderName(lock)} is writing this note…` : "This note is being edited…";
+    return lock
+      ? icu($localize`:Placeholder in a note body while another person edits it:{name} is writing this note…`, { name: this.lockHolderName(lock) })
+      : $localize`:Placeholder in a note body while another person edits it:This note is being edited…`;
   }
 
   viewerTitle(): string {
     if (!this.canEdit() || this.lockedByOther()) return "";
-    return "Click to edit";
+    return $localize`:Tooltip on the note body:Click to edit`;
   }
 
   disabledTitle(): string | null {
-    if (!this.canEdit()) return "You're offline - changes are paused";
-    if (this.lockedByOther()) return "This note is being edited";
+    if (!this.canEdit()) return OFFLINE_PAUSED;
+    if (this.lockedByOther()) return $localize`:Tooltip on a disabled control while another person edits the note:This note is being edited`;
     return null;
+  }
+
+  playLabel(fileName: string): string {
+    return $localize`:Tooltip - play a video or audio attachment:Play ${fileName}:fileName:`;
+  }
+
+  playVideoLabel(fileName: string): string {
+    return $localize`:Button label:Play video ${fileName}:fileName:`;
+  }
+
+  playAudioLabel(fileName: string): string {
+    return $localize`:Button label:Play audio ${fileName}:fileName:`;
+  }
+
+  previewLabel(fileName: string): string {
+    return $localize`:Tooltip - preview an attachment:Preview ${fileName}:fileName:`;
+  }
+
+  previewPdfLabel(fileName: string): string {
+    return $localize`:Button label:Preview PDF ${fileName}:fileName:`;
+  }
+
+  previewMarkdownLabel(fileName: string): string {
+    return $localize`:Button label:Preview Markdown ${fileName}:fileName:`;
+  }
+
+  previewTextLabel(fileName: string): string {
+    return $localize`:Button label:Preview text file ${fileName}:fileName:`;
   }
 
   discardPreservedDraft() {
@@ -813,7 +865,7 @@ export class NoteEditorComponent implements OnDestroy {
       this.editorInitialValue.set(draft.markdown);
       this.recoveredBodyDraft.set(true);
       this.preservedDraft.set(null);
-      this.saveError.set("This note is being edited by someone else.");
+      this.saveError.set($localize`This note is being edited by someone else.`);
       return;
     }
 
@@ -823,7 +875,7 @@ export class NoteEditorComponent implements OnDestroy {
       this.editorInitialValue.set(draft.markdown);
       this.recoveredBodyDraft.set(true);
       this.preservedDraft.set(null);
-      this.saveError.set("This note is being edited by someone else.");
+      this.saveError.set($localize`This note is being edited by someone else.`);
       return;
     }
 
@@ -866,19 +918,21 @@ export class NoteEditorComponent implements OnDestroy {
         const body = err.body as { code?: string; lock?: WireNoteLock } | null;
         if (body?.lock) this.notesState.receiveLock(body.lock);
         this.saveError.set(body?.code === "NOTE_STALE"
-          ? "This note changed since you started editing. Your draft was preserved."
-          : "Someone else started editing this note. Your draft was preserved.");
+          ? $localize`:Error banner on a note:This note changed since you started editing. Your draft was preserved.`
+          : DRAFT_TAKEN);
         return;
       }
       if (err.status === 401) {
-        this.saveError.set("Your session expired. Refresh the page and sign in again.");
+        this.saveError.set(SESSION_EXPIRED);
         return;
       }
       const body = err.body as { message?: string } | null;
-      this.saveError.set(body?.message ? `Failed to save: ${body.message}` : `Failed to save (${err.status}).`);
+      this.saveError.set(body?.message
+        ? $localize`:Error banner on a note; the reason comes from the server:Failed to save: ${body.message}:reason:`
+        : $localize`:Error banner on a note; status is an HTTP status code:Failed to save (${err.status}:status:).`);
       return;
     }
-    this.saveError.set("Failed to save. Check your connection and try again.");
+    this.saveError.set($localize`:Error banner on a note:Failed to save. Check your connection and try again.`);
   }
 
   private preserveCurrentDraft() {
@@ -914,10 +968,10 @@ export class NoteEditorComponent implements OnDestroy {
     this.editing.set(false);
     this.editingTitle.set(false);
     if (err instanceof ApiError && err.status === 401) {
-      this.saveError.set("Your session expired. Your draft was preserved.");
+      this.saveError.set($localize`:Error banner on a note when the sign-in session expired:Your session expired. Your draft was preserved.`);
       return;
     }
-    this.saveError.set("Your edit session ended before saving. Your draft was preserved.");
+    this.saveError.set($localize`:Error banner on a note when its edit lock lapsed:Your edit session ended before saving. Your draft was preserved.`);
   }
 
   private async refreshBacklinks(noteId: string | null) {
@@ -1057,7 +1111,7 @@ export class NoteEditorComponent implements OnDestroy {
     // Undo instead of confirm: the row hides now and the DELETE waits for the toast (see card-detail).
     this.attachments.update((rows) => rows.filter((item) => item.id !== attachmentId));
     this.toasts.undoable({
-      message: `"${fileName}" deleted.`,
+      message: $localize`:Undo toast after deleting an attachment:"${fileName}:fileName:" deleted.`,
       icon: "trash",
       undo: restore,
       commit: async () => {
@@ -1066,7 +1120,7 @@ export class NoteEditorComponent implements OnDestroy {
           await this.notesState.fetchOne(n.id).catch(() => undefined);
         } catch {
           restore();
-          this.toasts.info(`Couldn't delete "${fileName}".`, "alert-triangle");
+          this.toasts.info($localize`:Toast when deleting an attachment failed:Couldn't delete "${fileName}:fileName:".`, "alert-triangle");
         }
       },
     });
@@ -1110,9 +1164,10 @@ export class NoteEditorComponent implements OnDestroy {
   }
 
   formatBytes(n: number): string {
-    if (n < 1024) return `${n} B`;
-    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-    return `${(n / 1024 / 1024).toFixed(1)} MB`;
+    if (n < 1024) return $localize`:File size in bytes:${n}:size: B`;
+    const format = new Intl.NumberFormat(appLocale(), SIZE_FORMAT_OPTIONS);
+    if (n < 1024 * 1024) return $localize`:File size in kilobytes:${format.format(n / 1024)}:size: KB`;
+    return $localize`:File size in megabytes:${format.format(n / 1024 / 1024)}:size: MB`;
   }
 
   isImageMime(mime: string): boolean {
@@ -1201,8 +1256,10 @@ export class NoteEditorComponent implements OnDestroy {
 
   backlinkHint(link: BacklinkSummary): string {
     if (link.kind === "card") return `${link.boardName} - ${link.listName}`;
-    if (link.kind === "board") return "Board";
-    return link.boardName ?? (link.scope === "personal" ? "Private note" : "Team note");
+    if (link.kind === "board") return $localize`:Backlink hint - the linking item is a board:Board`;
+    return link.boardName ?? (link.scope === "personal"
+      ? $localize`:Backlink hint - the linking item is a private note:Private note`
+      : $localize`:Backlink hint - the linking item is a team note:Team note`);
   }
 
   async copyNoteLink(note: WireNote) {

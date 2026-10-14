@@ -1,3 +1,4 @@
+import type { Locale } from "@kanera/shared/locales";
 import {
   activityEvents,
   boardInvitations,
@@ -8,13 +9,15 @@ import {
   users,
   workspaces,
   type BillingEmailQueueData,
-  type WeeklyAdminRecapEmailQueueData,
   type WeeklyAdminRecapUpcomingGroup,
 } from "@kanera/shared/schema";
 import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import type { Db } from "../db.js";
-import { EMAIL_DATE_LOCALE } from "./date-time-formatter.js";
+import type { WeeklyAdminRecapEmailParams } from "./email-templates/index.js";
+import { formatDate } from "./i18n/format.js";
+import { serverMessages } from "./i18n/messages/index.js";
+import { recipientLocale } from "./i18n/request-locale.js";
 import { emailSubject } from "./mailer.js";
 import { startSweepScheduler } from "./sweep-scheduler.js";
 
@@ -43,12 +46,15 @@ export async function runWeeklyAdminRecapSweep(deps: WeeklyAdminRecapDeps, now =
 
   const lastMonday = new Date(thisMonday.getTime() - 7 * DAY_MS);
   const nextMonday = new Date(thisMonday.getTime() + 7 * DAY_MS);
-  const data = await buildWeeklyAdminRecap(deps.db, lastMonday, thisMonday, nextMonday, deps.adminUrl);
+  // The recap address is configuration, not an account; if it belongs to one, use its language.
+  const [adminAccount] = await deps.db.select({ locale: users.locale }).from(users).where(eq(users.email, deps.adminEmail)).limit(1);
+  const locale = recipientLocale(adminAccount?.locale);
+  const data = await buildWeeklyAdminRecap(deps.db, locale, lastMonday, thisMonday, nextMonday, deps.adminUrl);
   const [queued] = await deps.db
     .insert(emailQueue)
     .values({
       toEmail: deps.adminEmail,
-      subject: emailSubject(`Kanera weekly recap · ${data.lastWeekLabel}`),
+      subject: emailSubject(serverMessages(locale).email.weeklyAdminRecap.queueSubject({ period: data.lastWeekLabel })),
       type: "weekly_admin_recap",
       data,
       status: EMAIL_QUEUE_STATUS.queued,
@@ -64,11 +70,12 @@ export async function runWeeklyAdminRecapSweep(deps: WeeklyAdminRecapDeps, now =
 
 async function buildWeeklyAdminRecap(
   database: Db,
+  locale: Locale,
   lastMonday: Date,
   thisMonday: Date,
   nextMonday: Date,
   adminUrl: string,
-): Promise<WeeklyAdminRecapEmailQueueData> {
+): Promise<WeeklyAdminRecapEmailParams> {
   const countRows = async (query: Promise<Array<{ count: unknown }>>) => Number((await query)[0]?.count ?? 0);
 
   const [
@@ -175,9 +182,10 @@ async function buildWeeklyAdminRecap(
   }
 
   return {
+    locale,
     periodStart: isoDate(thisMonday),
-    lastWeekLabel: dateRangeLabel(lastMonday, new Date(thisMonday.getTime() - DAY_MS)),
-    thisWeekLabel: dateRangeLabel(thisMonday, new Date(nextMonday.getTime() - DAY_MS)),
+    lastWeekLabel: dateRangeLabel(locale, lastMonday, new Date(thisMonday.getTime() - DAY_MS)),
+    thisWeekLabel: dateRangeLabel(locale, thisMonday, new Date(nextMonday.getTime() - DAY_MS)),
     lastWeek: {
       newAccounts,
       newOrganisations,
@@ -195,9 +203,9 @@ async function buildWeeklyAdminRecap(
       purchasedSeats: Number(purchasedSeatsRow[0]?.count ?? 0),
     },
     upcoming: {
-      renewals: groupUpcoming(renewals),
-      trialEnds: groupUpcoming(trialEnds),
-      cancellations: groupUpcoming(cancellations),
+      renewals: groupUpcoming(locale, renewals),
+      trialEnds: groupUpcoming(locale, trialEnds),
+      cancellations: groupUpcoming(locale, cancellations),
     },
     adminUrl,
   };
@@ -235,7 +243,7 @@ function seatsPurchased(rows: Array<{ type: string; data: unknown; createdAt: Da
   return total;
 }
 
-function groupUpcoming(rows: UpcomingSubscription[]): WeeklyAdminRecapUpcomingGroup[] {
+function groupUpcoming(locale: Locale, rows: UpcomingSubscription[]): WeeklyAdminRecapUpcomingGroup[] {
   const groups = new Map<string, UpcomingSubscription[]>();
   for (const row of rows) {
     const date = isoDate(row.currentPeriodEnd);
@@ -244,10 +252,12 @@ function groupUpcoming(rows: UpcomingSubscription[]): WeeklyAdminRecapUpcomingGr
   return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, items]) => {
     const names = items.map((item) => item.name).sort((a, b) => a.localeCompare(b));
     return {
-      dateLabel: formatDate(new Date(`${date}T00:00:00.000Z`)),
+      dateLabel: recapDate(locale, new Date(`${date}T00:00:00.000Z`)),
       organisationCount: items.length,
       seatCount: items.reduce((sum, item) => sum + item.seatLimit, 0),
-      organisations: names.length <= 5 ? names : [...names.slice(0, 5), `+${names.length - 5} more`],
+      organisations: names.length <= 5
+        ? names
+        : [...names.slice(0, 5), serverMessages(locale).email.weeklyAdminRecap.moreOrganisations({ count: names.length - 5 })],
     };
   });
 }
@@ -256,10 +266,10 @@ function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat(EMAIL_DATE_LOCALE, { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).format(date);
+function recapDate(locale: Locale, date: Date): string {
+  return formatDate(locale, date, { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" });
 }
 
-function dateRangeLabel(start: Date, end: Date): string {
-  return `${formatDate(start)}–${formatDate(end)}`;
+function dateRangeLabel(locale: Locale, start: Date, end: Date): string {
+  return serverMessages(locale).email.weeklyAdminRecap.dateRange({ start: recapDate(locale, start), end: recapDate(locale, end) });
 }

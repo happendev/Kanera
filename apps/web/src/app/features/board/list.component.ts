@@ -398,6 +398,7 @@ export class ListComponent implements OnDestroy {
    */
   readonly moveListPlacement: AnchoredPanelPlacement = { side: "right", align: "start", gap: 4, width: "measure", maxHeight: 240 };
   readonly confirmClear = signal(false);
+  readonly viewOnlyHint = $localize`:Tooltip on a disabled button:This board is view-only for you`;
   readonly clearing = signal(false);
   readonly savingCompletion = signal(false);
   readonly showMoveListPicker = signal(false);
@@ -573,11 +574,11 @@ export class ListComponent implements OnDestroy {
   async moveAllCards(targetListId: string) {
     if (!this.canEdit() || this.movingCards()) return;
     const sourceName = this.list().name;
-    const targetName = this.allLists().find((list) => list.id === targetListId)?.name ?? "the selected list";
+    const targetName = this.allLists().find((list) => list.id === targetListId)?.name ?? $localize`:Stand-in when the destination list is unknown:the selected list`;
     this.movingCards.set(true);
     try {
       await this.api.post(`/lists/${this.list().id}/cards/move`, { targetListId, boardId: this.boardId() });
-      this.toasts.success(`Cards in ${sourceName} moved to ${targetName}.`, "arrows-transfer-down");
+      this.toasts.success($localize`Cards in ${sourceName}:sourceList: moved to ${targetName}:targetList:.`, "arrows-transfer-down");
       this.menuOpen.set(false);
       this.showMoveListPicker.set(false);
     } finally {
@@ -599,7 +600,7 @@ export class ListComponent implements OnDestroy {
       this.menuOpen.set(false);
       this.confirmClear.set(false);
       this.toasts.undoable({
-        message: `Cards in ${listName} archived.`,
+        message: $localize`Cards in ${listName}:list: archived.`,
         icon: "archive",
         undo: async () => {
           if (cardIds.length === 0) return;
@@ -616,7 +617,11 @@ export class ListComponent implements OnDestroy {
     this.savingCompletion.set(true);
     try {
       await this.api.post(`/boards/${this.boardId()}/lists/${this.list().id}/cards/completion`, { completed });
-      this.toasts.success(`Cards in ${this.list().name} ${completed ? "marked complete" : "reopened"}.`, completed ? "circle-check" : "circle");
+      const listName = this.list().name;
+      this.toasts.success(
+        completed ? $localize`Cards in ${listName}:list: marked complete.` : $localize`Cards in ${listName}:list: reopened.`,
+        completed ? "circle-check" : "circle",
+      );
       this.menuOpen.set(false);
     } finally {
       this.savingCompletion.set(false);

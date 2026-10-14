@@ -880,3 +880,99 @@ void test("an explicit null edge anchor moves a note to the top or bottom instea
   assert.equal(between.statusCode, 200, between.body);
   assert.deepEqual(await orderedTitles(), ["B", "A", "C"]);
 });
+
+void test("deleting a note removes stored files for it and its child pages, keeping files a duplicate still embeds", async () => {
+  const { app, owner, ownerToken, workspace, note } = await setupWorkspace();
+  const auth = { authorization: `Bearer ${ownerToken}` };
+
+  const childResponse = await app.inject({
+    method: "POST",
+    url: `/workspaces/${workspace.id}/notes`,
+    headers: auth,
+    payload: { scope: "team", title: "Child", parentNoteId: note.id },
+  });
+  assert.equal(childResponse.statusCode, 201);
+  const child = childResponse.json<{ id: string }>();
+
+  const upload = async (noteId: string, name: string) => {
+    const response = await app.inject({ method: "POST", url: `/notes/${noteId}/attachments`, headers: auth, payload: textForm(name, name) });
+    assert.equal(response.statusCode, 201);
+    return response.json<{ url: string }>();
+  };
+  const childFile = await upload(child.id, "child.txt");
+  const parentFile = await upload(note.id, "parent.txt");
+  const sharedFile = await upload(note.id, "shared.txt");
+
+  // Read the post-upload body: an upload edits the note, so its updatedAt has moved on.
+  const current = (await app.inject({ method: "GET", url: `/notes/${note.id}`, headers: auth })).json<{ updatedAt: string }>();
+  const embedded = await app.inject({
+    method: "PATCH",
+    url: `/notes/${note.id}`,
+    headers: auth,
+    payload: { content: `![shared](${sharedFile.url})`, baseUpdatedAt: current.updatedAt },
+  });
+  assert.equal(embedded.statusCode, 200);
+  // A note duplicated before duplication copied files shares the original's file via its Markdown.
+  await db.insert(notes).values({
+    workspaceId: workspace.id,
+    scope: "team",
+    ownerId: owner.id,
+    lastEditedById: owner.id,
+    title: "Legacy duplicate",
+    content: `![shared](${sharedFile.url})`,
+    position: "9000.0000000000",
+  });
+
+  const deleted = await app.inject({ method: "DELETE", url: `/notes/${note.id}`, headers: auth });
+  assert.equal(deleted.statusCode, 204);
+
+  const status = async (url: string) => (await app.inject({ method: "GET", url: mediaPath(url) })).statusCode;
+  assert.equal(await status(childFile.url), 404);
+  assert.equal(await status(parentFile.url), 404);
+  // The legacy duplicate's Markdown still points at this file, so deleting it would break the copy.
+  assert.equal(await status(sharedFile.url), 200);
+});
+
+void test("deleting a workspace removes the stored files of its notes", async () => {
+  const { app, ownerToken, workspace, note } = await setupWorkspace();
+  const auth = { authorization: `Bearer ${ownerToken}` };
+
+  const upload = await app.inject({ method: "POST", url: `/notes/${note.id}/attachments`, headers: auth, payload: textForm("ws.txt", "ws") });
+  assert.equal(upload.statusCode, 201);
+  const file = upload.json<{ url: string }>();
+
+  const deleted = await app.inject({ method: "DELETE", url: `/workspaces/${workspace.id}`, headers: auth, payload: { confirmationName: workspace.name } });
+  assert.equal(deleted.statusCode, 204);
+  assert.equal((await app.inject({ method: "GET", url: mediaPath(file.url) })).statusCode, 404);
+});
+
+void test("duplicating a note copies its attachments and points inline images at the copies", async () => {
+  const { app, ownerToken, note } = await setupWorkspace();
+  const auth = { authorization: `Bearer ${ownerToken}` };
+
+  const upload = await app.inject({ method: "POST", url: `/notes/${note.id}/attachments?source=description`, headers: auth, payload: svgForm("inline.svg") });
+  assert.equal(upload.statusCode, 201);
+  const sourceAttachment = upload.json<{ id: string }>();
+  const [sourceRow] = await db.select().from(noteAttachments).where(eq(noteAttachments.id, sourceAttachment.id));
+  assert.ok(sourceRow);
+  await db.update(notes).set({ content: `Before ![inline](${sourceRow.url}) after` }).where(eq(notes.id, note.id));
+
+  const duplicated = await app.inject({ method: "POST", url: `/notes/${note.id}/duplicate`, headers: auth, payload: {} });
+  assert.equal(duplicated.statusCode, 201);
+  const duplicate = duplicated.json<{ id: string }>();
+
+  const [copyRow] = await db.select().from(noteAttachments).where(eq(noteAttachments.noteId, duplicate.id));
+  assert.ok(copyRow);
+  assert.notEqual(copyRow.url, sourceRow.url);
+  assert.equal(copyRow.source, "description");
+  const [copyNote] = await db.select({ content: notes.content }).from(notes).where(eq(notes.id, duplicate.id));
+  assert.equal(copyNote?.content, `Before ![inline](${copyRow.url}) after`);
+
+  // Deleting the original note takes its file; the copy's image must still load.
+  assert.equal((await app.inject({ method: "DELETE", url: `/notes/${note.id}`, headers: auth })).statusCode, 204);
+  const listed = await app.inject({ method: "GET", url: `/notes/${duplicate.id}/attachments?source=description`, headers: auth });
+  assert.equal(listed.statusCode, 200);
+  const [copyAttachment] = listed.json<Array<{ url: string }>>();
+  assert.ok(copyAttachment);
+  assert.equal((await app.inject({ method: "GET", url: mediaPath(copyAttachment.url) })).statusCode, 200);
+});

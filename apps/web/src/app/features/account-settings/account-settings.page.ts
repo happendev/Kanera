@@ -5,6 +5,7 @@ import { ActivatedRoute, NavigationEnd, Router, RouterLink } from "@angular/rout
 import type { BillingInfoResponse, NotificationSettingsResponse, NotificationSettingType, NotificationWorkspaceRule, PersonalNotificationChannel, PersonalNotificationTestResponse, PublicClientResponse, SeatChangeResponse } from "@kanera/shared/dto";
 import type { ServerToClientEvents } from "@kanera/shared/events";
 import type { ClientMcpPolicy, SmtpConfig, StorageConfig } from "@kanera/shared/schema";
+import type { Locale } from "@kanera/shared/locales";
 import { DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS, DEFAULT_INACTIVE_CARDS_DAYS } from "@kanera/shared/workspace-defaults";
 import { filter } from "rxjs";
 import { buildInfo } from "../../../build-info.generated";
@@ -16,6 +17,8 @@ import { STORAGE_KEYS } from "../../core/browser/browser-contracts";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { BrowserPushService } from "../../core/notifications/browser-push.service";
 import { MentionSoundService } from "../../core/notifications/mention-sound.service";
+import { icu } from "../../core/i18n/icu";
+import { appLocale, applyLocale } from "../../core/i18n/locale";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { ThemeService, type Accent, type Theme } from "../../core/theme/theme.service";
@@ -59,6 +62,12 @@ interface OrgUser {
   suspendedAt: string | null;
   workspaces: WorkspaceGrant[];
 }
+
+const ORG_ROLE_LABELS: Record<OrgRole, string> = {
+  owner: $localize`:Organisation role:Owner`,
+  admin: $localize`:Organisation role:Admin`,
+  member: $localize`:Organisation role:Member`,
+};
 
 const ORG_ROLE_RANK: Record<OrgRole, number> = {
   owner: 0,
@@ -141,12 +150,12 @@ type AuthConfigResponse = {
 };
 
 const NOTIFICATION_ROWS: { key: NotificationSettingType; label: string }[] = [
-  { key: "cardAssigned", label: "Card assigned" },
-  { key: "cardCommentAdded", label: "Card comment added" },
-  { key: "commentMentioned", label: "Tagged in a comment" },
-  { key: "cardDueDateChanged", label: "Card due date changed" },
-  { key: "cardOverdue", label: "Card overdue" },
-  { key: "cardReminder", label: "Your card reminders" },
+  { key: "cardAssigned", label: $localize`:Notification type:Card assigned` },
+  { key: "cardCommentAdded", label: $localize`:Notification type:Card comment added` },
+  { key: "commentMentioned", label: $localize`:Notification type:Tagged in a comment` },
+  { key: "cardDueDateChanged", label: $localize`:Notification type:Card due date changed` },
+  { key: "cardOverdue", label: $localize`:Notification type:Card overdue` },
+  { key: "cardReminder", label: $localize`:Notification type:Your card reminders` },
 ];
 
 interface NotificationBoardOption {
@@ -171,31 +180,41 @@ interface NotificationWorkspaceGroup {
 type WorkspaceNotificationChannel = keyof NotificationSettingsResponse["types"]["cardAssigned"];
 
 const WORKSPACE_NOTIFICATION_CHANNELS = [
-  { key: "email", label: "Email", icon: "mail" },
-  { key: "push", label: "Push", icon: "bell" },
+  { key: "email", label: $localize`:Notification channel name:Email`, icon: "mail" },
+  { key: "push", label: $localize`:Notification channel name (browser push notifications):Push`, icon: "bell" },
   { key: "ntfy", label: "ntfy", icon: "broadcast" },
   { key: "gotify", label: "Gotify", icon: "device-mobile-message" },
-  { key: "webhook", label: "Webhook", icon: "webhook" },
+  { key: "webhook", label: $localize`:Notification channel name:Webhook`, icon: "webhook" },
 ] as const satisfies ReadonlyArray<{
   key: WorkspaceNotificationChannel;
   label: string;
   icon: string;
 }>;
 
+const OPENING_GITHUB_TEXT = $localize`:Shown in the pop-up window while it redirects to GitHub:Opening GitHub...`;
+const ACCOUNT_DEFAULTS_LABEL = $localize`:Workspace notification rule status — follows the account-wide settings:Account defaults`;
+
 function formatBuildDate(value: string) {
   return formatDateTime(value, "medium") || value;
 }
 
 function formatBytes(value: number): string {
-  if (value < 1024) return `${value} B`;
-  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
-  if (value < 1024 * 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
-  return `${(value / 1024 / 1024 / 1024).toFixed(1)} GB`;
+  const oneDecimal = (n: number) => new Intl.NumberFormat(appLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(n);
+  if (value < 1024) return $localize`:File size in bytes:${new Intl.NumberFormat(appLocale()).format(value)}:size: B`;
+  if (value < 1024 * 1024) return $localize`:File size in kilobytes:${oneDecimal(value / 1024)}:size: KB`;
+  if (value < 1024 * 1024 * 1024) return $localize`:File size in megabytes:${oneDecimal(value / 1024 / 1024)}:size: MB`;
+  return $localize`:File size in gigabytes:${oneDecimal(value / 1024 / 1024 / 1024)}:size: GB`;
+}
+
+/** Display name of a personal notification channel. ntfy and Gotify are product names. */
+function personalChannelLabel(channel: PersonalNotificationChannel): string {
+  return channel === "ntfy" ? "ntfy" : channel === "gotify" ? "Gotify" : $localize`:Notification channel name:Webhook`;
 }
 
 function formatCents(value: number): string {
   const dollars = value / 100;
-  return new Intl.NumberFormat(undefined, {
+  // Prices are always charged in USD; only the number formatting follows the interface language.
+  return new Intl.NumberFormat(appLocale(), {
     style: "currency",
     currency: "USD",
     // narrowSymbol renders "$" rather than the locale-dependent "US$" some locales use for USD.
@@ -256,12 +275,14 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     const usage = this.user()?.storageUsage;
     if (!usage) return "";
     const used = formatBytes(usage.usedBytes);
-    return usage.limited && usage.quotaBytes !== null ? `${used} of ${formatBytes(usage.quotaBytes)} used` : `${used} used`;
+    return usage.limited && usage.quotaBytes !== null
+      ? $localize`:Storage usage, e.g. "1.2 GB of 5.0 GB used":${used}:used: of ${formatBytes(usage.quotaBytes)}:quota: used`
+      : $localize`:Storage usage, e.g. "1.2 GB used":${used}:used: used`;
   });
   readonly storageRemainingLabel = computed(() => {
     const usage = this.user()?.storageUsage;
-    if (!usage?.limited || usage.remainingBytes === null) return "Storage is unlimited on this deployment.";
-    return `${formatBytes(usage.remainingBytes)} remaining`;
+    if (!usage?.limited || usage.remainingBytes === null) return $localize`Storage is unlimited on this deployment.`;
+    return $localize`:Storage left, e.g. "3.8 GB remaining":${formatBytes(usage.remainingBytes)}:size: remaining`;
   });
   // A paid org that has exhausted its pool can't self-serve an upgrade (it's already on the top tier),
   // so the account-plan UI points it at support instead of an upgrade CTA.
@@ -295,7 +316,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       : this.orgUsers();
     return [...users].sort(
       (a, b) => ORG_ROLE_RANK[a.role] - ORG_ROLE_RANK[b.role]
-        || a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }),
+        || a.displayName.localeCompare(b.displayName, appLocale(), { sensitivity: "base" }),
     );
   });
   readonly orgInvites = signal<OrgInvite[]>([]);
@@ -331,6 +352,10 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly cardKeysSaving = signal(false);
   readonly cardKeysError = signal<string | null>(null);
   readonly scratchpadVisibilitySaving = signal(false);
+  // What this page is rendering in; the account value can only differ for a moment before reload.
+  readonly activeLocale = appLocale();
+  readonly localeSaving = signal(false);
+  readonly localeError = signal<string | null>(null);
   readonly scratchpadVisibilityError = signal<string | null>(null);
 
   readonly email = signal("");
@@ -433,10 +458,10 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly pushToggleHelp = computed(() => {
     const settings = this.notificationSettings();
     if (!settings) return "";
-    if (settings.push.status === "org-disabled") return "Push notifications are turned off for this organisation.";
-    if (settings.push.status === "system-disabled") return "Push notifications are not configured for this Kanera deployment yet.";
+    if (settings.push.status === "org-disabled") return $localize`Push notifications are turned off for this organisation.`;
+    if (settings.push.status === "system-disabled") return $localize`Push notifications are not configured for this Kanera deployment yet.`;
     if (settings.pushEnabled || this.pushOptInAttempted() || this.pushToggleDisabled()) return this.browserPush.statusMessage();
-    return "Turn on push to receive selected notifications in this browser.";
+    return $localize`Turn on push to receive selected notifications in this browser.`;
   });
   readonly pushStatusTitle = computed(() => `${this.browserPush.statusBadge()} - ${this.browserPush.permissionLabel()}`);
 
@@ -467,9 +492,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly integrationsAvailable = computed(() => this.isSelfHosted() || !!this.githubAppConfig()?.configured);
   readonly planLabel = computed(() => {
     switch (this.planTier()) {
-      case "trial": return "Pro trial";
-      case "paid": return "Pro";
-      case "free": return "Kanera Free";
+      case "trial": return $localize`:Plan name:Pro trial`;
+      case "paid": return $localize`:Plan name:Pro`;
+      case "free": return $localize`:Plan name:Kanera Free`;
       default: return "—";
     }
   });
@@ -496,10 +521,10 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   // than always reading "/mo".
   readonly selectedProPriceLabel = computed(() => {
     const pricing = this.proPricing();
-    if (!pricing) return "Contact us";
+    if (!pricing) return $localize`:Shown instead of a price:Contact us`;
     return this.billingInterval() === "annual"
-      ? `${formatCents(pricing.annualCents)}/user/yr`
-      : `${formatCents(pricing.monthlyCents)}/user/mo`;
+      ? $localize`:Price per user per year:${formatCents(pricing.annualCents)}:price:/user/yr`
+      : $localize`:Price per user per month:${formatCents(pricing.monthlyCents)}:price:/user/mo`;
   });
   // Seats currently occupied (members + paid guest seats).
   readonly usedSeats = computed(() => this.billingInfo()?.usedSeats ?? this.billingInfo()?.seatCount ?? 1);
@@ -516,34 +541,34 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   // Cost projections track the desired (to-be-purchased) capacity, since that is what Stripe bills.
   readonly checkoutTotalLabel = computed(() => {
     const pricing = this.proPricing();
-    if (!pricing) return "Contact us";
+    if (!pricing) return $localize`:Shown instead of a price:Contact us`;
     const seats = this.desiredSeats();
     if (this.billingInterval() === "annual") {
-      return `${formatCents(pricing.annualCents * seats)} billed yearly`;
+      return $localize`:Checkout total for annual billing:${formatCents(pricing.annualCents * seats)}:price: billed yearly`;
     }
-    return `${formatCents(pricing.monthlyCents * seats)}/mo total`;
+    return $localize`:Checkout total for monthly billing:${formatCents(pricing.monthlyCents * seats)}:price:/mo total`;
   });
   readonly checkoutSeatLabel = computed(() => {
     const seats = this.desiredSeats();
-    return `${seats} seat${seats === 1 ? "" : "s"}`;
+    return icu($localize`:Number of paid seats:{count, plural, one {# seat} other {# seats}}`, { count: seats });
   });
   readonly checkoutAnnualTotalLabel = computed(() => {
     const pricing = this.proPricing();
     if (!pricing) return "";
     // Rounded because a yearly total need not divide evenly into 12 months.
-    return `${formatCents(Math.round(pricing.annualCents / 12))}/user/mo equivalent`;
+    return $localize`:Annual price expressed per month:${formatCents(Math.round(pricing.annualCents / 12))}:price:/user/mo equivalent`;
   });
   readonly proSeatPriceLabel = computed(() => {
     const pricing = this.proPricing();
-    return pricing ? `${formatCents(pricing.monthlyCents)}/user/mo` : "the Pro seat price";
+    return pricing ? $localize`:Price per user per month:${formatCents(pricing.monthlyCents)}:price:/user/mo` : $localize`:Fallback inside a sentence when the price is unknown:the Pro seat price`;
   });
   readonly monthlyBillingLabel = computed(() => {
     const monthlyCents = this.proPricing()?.monthlyCents;
-    return monthlyCents === undefined ? "Monthly billing" : `${formatCents(monthlyCents)}/user/month`;
+    return monthlyCents === undefined ? $localize`Monthly billing` : $localize`:Monthly billing option price:${formatCents(monthlyCents)}:price:/user/month`;
   });
   readonly annualBillingLabel = computed(() => {
     const annualCents = this.proPricing()?.annualCents;
-    return annualCents === undefined ? "" : `${formatCents(annualCents)}/user billed yearly`;
+    return annualCents === undefined ? "" : $localize`:Annual billing option price:${formatCents(annualCents)}:price:/user billed yearly`;
   });
   readonly annualSavingsLabel = computed(() => {
     const pricing = this.proPricing();
@@ -552,7 +577,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     const savingsCents = monthlyYearlyCents - pricing.annualCents;
     if (savingsCents <= 0 || monthlyYearlyCents <= 0) return "";
     const percent = Math.round((savingsCents / monthlyYearlyCents) * 100);
-    return `Save ${percent}% (${formatCents(savingsCents)}/user/year)`;
+    return $localize`:Annual billing savings:Save ${percent}:percent:% (${formatCents(savingsCents)}:price:/user/year)`;
   });
   readonly orgName = signal("");
   readonly orgNameSaving = signal(false);
@@ -689,9 +714,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     if (status === "succeeded") {
       await this.settleSeatPayment();
     } else if (status === "pending") {
-      this.setSeatPaymentPendingNotice("Payment submitted. Revolut is still confirming it with Stripe. We haven't added seats yet, and we'll add them automatically once the payment is fully confirmed.");
+      this.setSeatPaymentPendingNotice($localize`Payment submitted. Revolut is still confirming it with Stripe. We haven't added seats yet, and we'll add them automatically once the payment is fully confirmed.`);
     } else if (status) {
-      this.seatNotice.set({ kind: "warning", message: "Payment wasn't completed, so no seats were added." });
+      this.seatNotice.set({ kind: "warning", message: $localize`Payment wasn't completed, so no seats were added.` });
     }
   }
 
@@ -910,10 +935,10 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   }
 
   workspaceRuleSummary(group: NotificationWorkspaceGroup): string {
-    if (!group.customized) return "Account defaults";
+    if (!group.customized) return ACCOUNT_DEFAULTS_LABEL;
     const rule = this.notificationSettings()?.workspaceRules.find((candidate) => candidate.workspaceId === group.workspaceId);
-    if (rule?.paused) return "Paused";
-    if (!rule) return "Account defaults";
+    if (rule?.paused) return $localize`:Workspace notification rule status:Paused`;
+    if (!rule) return ACCOUNT_DEFAULTS_LABEL;
     const availableChannels = this.availableWorkspaceNotificationChannels();
     const channelLabels = availableChannels
       // Unavailable account-level providers are omitted from both the editor and its summary. Their
@@ -924,20 +949,27 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         ),
       )
       .map((channel) => channel.label);
-    const channelSummary = channelLabels.length > 0 ? channelLabels.join(" + ") : "No channels";
+    const channelSummary = channelLabels.length > 0 ? channelLabels.join(" + ") : $localize`:Workspace notification rule summary:No channels`;
     const enabledTypeCount = NOTIFICATION_ROWS.filter((row) =>
       availableChannels.some(
         (channel) => this.workspaceTypeChannelGloballyAvailable(row.key, channel.key) && rule.types[row.key][channel.key],
       ),
     ).length;
-    const typeSummary = enabledTypeCount === NOTIFICATION_ROWS.length ? "" : ` · ${enabledTypeCount}/${NOTIFICATION_ROWS.length} types`;
-    if (group.workspaceKind === "board") return `${channelSummary}${typeSummary} · This board`;
+    const typeSummary = enabledTypeCount === NOTIFICATION_ROWS.length
+      ? ""
+      : ` · ${$localize`:Notification types enabled out of the total, e.g. "3/6 types":${enabledTypeCount}:enabled:/${NOTIFICATION_ROWS.length}:total: types`}`;
+    if (group.workspaceKind === "board") return $localize`:Notification rule summary for a standalone board:${channelSummary}:channels:${typeSummary}:types: · This board`;
     return `${channelSummary}${typeSummary}`;
+  }
+
+  workspaceRulePaused(group: NotificationWorkspaceGroup): boolean {
+    if (!group.customized) return false;
+    return !!this.notificationSettings()?.workspaceRules.find((candidate) => candidate.workspaceId === group.workspaceId)?.paused;
   }
 
   workspaceRuleContextLabel(group: NotificationWorkspaceGroup): string | null {
     const externalOrganisation = group.clientId !== this.user()?.clientId ? group.clientName : null;
-    if (group.workspaceKind === "board") return externalOrganisation ? `${externalOrganisation} · Standalone board` : "Standalone board";
+    if (group.workspaceKind === "board") return externalOrganisation ? $localize`:Organisation name, then board kind:${externalOrganisation}:organisation: · Standalone board` : $localize`Standalone board`;
     return externalOrganisation;
   }
 
@@ -1091,7 +1123,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         workspaceRules: settings.workspaceRules.filter((rule) => rule.workspaceId !== workspaceId),
       } : settings);
       this.updateWorkspaceRule(workspaceId, () => this.defaultWorkspaceRule(workspaceId));
-      this.toasts.success("Workspace now uses global notification defaults.");
+      this.toasts.success($localize`Workspace now uses global notification defaults.`);
       this.workspaceRuleEditorId.set(null);
     } catch (err) {
       this.notificationSettingsError.set(extractErrorMessage(err));
@@ -1135,7 +1167,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         personalChannels: { [channel]: channelUpdate },
       });
       this.applyNotificationSettings(updated);
-      this.toasts.success(`${channel === "ntfy" ? "ntfy" : channel === "gotify" ? "Gotify" : "Webhook"} configuration saved.`);
+      this.toasts.success($localize`:Toast; channel is ntfy, Gotify or Webhook:${personalChannelLabel(channel)}:channel: configuration saved.`);
     } catch (err) {
       this.notificationSettingsError.set(extractErrorMessage(err));
     } finally {
@@ -1152,7 +1184,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         personalChannels: { [channel]: { token: null } },
       });
       this.applyNotificationSettings(updated);
-      this.toasts.success(`${channel === "ntfy" ? "ntfy" : "Gotify"} token removed.`);
+      this.toasts.success($localize`:Toast; channel is ntfy or Gotify:${personalChannelLabel(channel)}:channel: token removed.`);
     } catch (err) {
       this.notificationSettingsError.set(extractErrorMessage(err));
     } finally {
@@ -1162,9 +1194,11 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
 
   async removePersonalChannel(channel: PersonalNotificationChannel): Promise<void> {
     if (!await this.confirm.open({
-      title: `Remove ${channel === "ntfy" ? "ntfy" : channel === "gotify" ? "Gotify" : "personal webhook"} configuration?`,
-      message: "Pending deliveries for this channel will be cancelled.",
-      confirmLabel: "Remove",
+      title: channel === "webhook"
+        ? $localize`Remove personal webhook configuration?`
+        : $localize`:Confirm title; channel is ntfy or Gotify:Remove ${personalChannelLabel(channel)}:channel: configuration?`,
+      message: $localize`Pending deliveries for this channel will be cancelled.`,
+      confirmLabel: $localize`:Confirm button:Remove`,
       danger: true,
     })) return;
     this.personalChannelBusy.set(channel);
@@ -1178,7 +1212,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       const updated = await this.api.patch<NotificationSettingsResponse>("/notifications/settings", { personalChannels: { [channel]: channelUpdate } });
       this.generatedWebhookSecret.set(null);
       this.applyNotificationSettings(updated);
-      this.toasts.success("Notification channel removed.");
+      this.toasts.success($localize`Notification channel removed.`);
     } catch (err) {
       this.notificationSettingsError.set(extractErrorMessage(err));
     } finally {
@@ -1192,8 +1226,8 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     this.notificationSettingsError.set(null);
     try {
       const result = await this.api.post<PersonalNotificationTestResponse>(`/notifications/channels/${channel}/test`, {});
-      if (result.delivered) this.toasts.success(`${channel === "ntfy" ? "ntfy" : channel === "gotify" ? "Gotify" : "Webhook"} test delivered.`);
-      else this.notificationSettingsError.set(result.error ?? "Test delivery failed.");
+      if (result.delivered) this.toasts.success($localize`:Toast; channel is ntfy, Gotify or Webhook:${personalChannelLabel(channel)}:channel: test delivered.`);
+      else this.notificationSettingsError.set(result.error ?? $localize`Test delivery failed.`);
     } catch (err) {
       this.notificationSettingsError.set(extractErrorMessage(err));
     } finally {
@@ -1203,7 +1237,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
 
   async rotatePersonalWebhookSecret(): Promise<void> {
     if (this.personalChannelBusy()) return;
-    if (!await this.confirm.open({ title: "Rotate the personal webhook secret?", message: "Deliveries will immediately use the new secret. Update your receiver before sending another notification.", confirmLabel: "Rotate secret" })) return;
+    if (!await this.confirm.open({ title: $localize`Rotate the personal webhook secret?`, message: $localize`Deliveries will immediately use the new secret. Update your receiver before sending another notification.`, confirmLabel: $localize`:Confirm button:Rotate secret` })) return;
     this.personalChannelBusy.set("webhook");
     this.notificationSettingsError.set(null);
     try {
@@ -1213,7 +1247,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         ...settings,
         personalChannels: { ...settings.personalChannels, webhook: { ...settings.personalChannels.webhook, secretConfigured: true, configured: Boolean(settings.personalChannels.webhook.url) } },
       } : settings);
-      this.toasts.success("Webhook secret rotated.");
+      this.toasts.success($localize`Webhook secret rotated.`);
     } catch (err) {
       this.notificationSettingsError.set(extractErrorMessage(err));
     } finally {
@@ -1226,9 +1260,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     if (!secret) return;
     try {
       await navigator.clipboard.writeText(secret);
-      this.toasts.success("Webhook secret copied.");
+      this.toasts.success($localize`Webhook secret copied.`);
     } catch {
-      this.notificationSettingsError.set("Could not copy the webhook secret. Copy it manually.");
+      this.notificationSettingsError.set($localize`Could not copy the webhook secret. Copy it manually.`);
     }
   }
 
@@ -1285,7 +1319,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       const updated = await this.api.patch<NotificationSettingsResponse>("/notifications/settings", { pushEnabled: true });
       this.notificationSettings.set(updated);
       this.setPendingPushOptIn(false);
-      this.toasts.success("Push notifications enabled.");
+      this.toasts.success($localize`Push notifications enabled.`);
     } catch (err) {
       this.notificationSettingsError.set(extractErrorMessage(err));
     } finally {
@@ -1472,9 +1506,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     if (!orgUser) return;
     if (orgUser.role === "owner" && !this.isOrgOwner()) return;
     if (!await this.confirm.open({
-      title: `Remove ${orgUser.displayName} from the organisation?`,
-      message: "They will lose access to every workspace and board in this organisation.",
-      confirmLabel: "Remove",
+      title: $localize`Remove ${orgUser.displayName}:person: from the organisation?`,
+      message: $localize`They will lose access to every workspace and board in this organisation.`,
+      confirmLabel: $localize`:Confirm button:Remove`,
       danger: true,
     })) return;
     try {
@@ -1496,7 +1530,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       return;
     }
     if (!this.inviteWorkspaces().some((w) => w.selected)) {
-      this.inviteError.set("Select at least one workspace before creating an invite.");
+      this.inviteError.set($localize`Select at least one workspace before creating an invite.`);
       return;
     }
     this.inviteBusy.set(true);
@@ -1540,9 +1574,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     // Revoking is irreversible and instantly breaks a link that may already be in someone's inbox,
     // so it is confirmed like the other destructive membership actions on this page.
     if (!await this.confirm.open({
-      title: "Revoke this invite link?",
-      message: "Anyone who still has the link will no longer be able to join. People who already accepted it keep their access.",
-      confirmLabel: "Revoke",
+      title: $localize`Revoke this invite link?`,
+      message: $localize`Anyone who still has the link will no longer be able to join. People who already accepted it keep their access.`,
+      confirmLabel: $localize`:Confirm button — revoke an invite link:Revoke`,
       danger: true,
     })) return;
     try {
@@ -1557,14 +1591,15 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   // scannability. The API already filters out expired invites, but an open admin session can hold a
   // row past its expiry, hence the "Expired" branch.
   inviteExpiry(invite: OrgInvite): { label: string; tooltip: string; urgent: boolean } {
-    if (!invite.expiresAt) return { label: "Never", tooltip: "This link stays valid until it is revoked.", urgent: false };
+    if (!invite.expiresAt) return { label: $localize`:Invite expiry — the link never expires:Never`, tooltip: $localize`This link stays valid until it is revoked.`, urgent: false };
     const expiresAt = new Date(invite.expiresAt);
     const absolute = formatDateTime(expiresAt, "medium");
     const days = Math.ceil((expiresAt.getTime() - Date.now()) / 86_400_000);
-    if (days < 0) return { label: "Expired", tooltip: `Expired ${absolute}.`, urgent: true };
-    if (days === 0) return { label: "Today", tooltip: `Expires ${absolute}.`, urgent: true };
-    if (days === 1) return { label: "Tomorrow", tooltip: `Expires ${absolute}.`, urgent: true };
-    return { label: `In ${days} days`, tooltip: `Expires ${absolute}.`, urgent: days <= 3 };
+    const expiresTooltip = $localize`:Invite expiry tooltip:Expires ${absolute}:date:.`;
+    if (days < 0) return { label: $localize`:Invite expiry status:Expired`, tooltip: $localize`:Invite expiry tooltip:Expired ${absolute}:date:.`, urgent: true };
+    if (days === 0) return { label: $localize`:Invite expiry — expires today:Today`, tooltip: expiresTooltip, urgent: true };
+    if (days === 1) return { label: $localize`:Invite expiry — expires tomorrow:Tomorrow`, tooltip: expiresTooltip, urgent: true };
+    return { label: icu($localize`:Invite expiry — days until the link expires:{count, plural, one {In # day} other {In # days}}`, { count: days }), tooltip: expiresTooltip, urgent: days <= 3 };
   }
 
   // Attribution resolves against the already-loaded roster; falls back to the bare date when the
@@ -1572,11 +1607,11 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   inviteCreatedLabel(invite: OrgInvite): string {
     const created = formatDate(invite.createdAt, "medium");
     const author = this.orgUsers().find((u) => u.id === invite.createdById)?.displayName;
-    return author ? `Created ${created} by ${author}` : `Created ${created}`;
+    return author ? $localize`:Invite creation date and creator:Created ${created}:date: by ${author}:person:` : $localize`:Invite creation date:Created ${created}:date:`;
   }
 
-  capitalize(value: string) {
-    return value.charAt(0).toUpperCase() + value.slice(1);
+  orgRoleLabel(role: OrgRole): string {
+    return ORG_ROLE_LABELS[role];
   }
 
   /** Runs on blur and Enter. An emptied field is restored rather than saved, since a blank name is invalid. */
@@ -1639,6 +1674,21 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     }
   }
 
+  async setLocale(next: Locale) {
+    if (next === (this.user()?.locale ?? appLocale())) return;
+    this.localeSaving.set(true);
+    this.localeError.set(null);
+    try {
+      await this.api.patch("/auth/me", { locale: next });
+      this.auth.updateUser((user) => ({ ...user, locale: next }));
+      // Messages are resolved when the app first runs, so the new language needs a fresh load.
+      applyLocale(next);
+    } catch (err) {
+      this.localeError.set(extractErrorMessage(err));
+      this.localeSaving.set(false);
+    }
+  }
+
   // Step 1: email a verification code to the new address. We never write the new email
   // until the user proves they control it (step 2).
   async requestEmailChange() {
@@ -1651,7 +1701,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       if (!this.emailVerificationEnabled()) {
         await this.api.post("/auth/me/email", { email: next });
         this.auth.updateUser((u) => ({ ...u, email: next }));
-        this.toasts.success("Email address updated.");
+        this.toasts.success($localize`Email address updated.`);
         return;
       }
       await this.api.post("/auth/me/email/request-verification", { email: next });
@@ -1659,7 +1709,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       this.emailStep.set("code");
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        this.emailError.set("That email address is already registered.");
+        this.emailError.set($localize`That email address is already registered.`);
       } else {
         this.emailError.set(extractErrorMessage(err));
       }
@@ -1673,7 +1723,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     const next = this.email().trim();
     const code = this.emailCode().trim();
     if (!next || !/^\d{6}$/.test(code)) {
-      this.emailError.set("Enter the 6-digit code from your email.");
+      this.emailError.set($localize`Enter the 6-digit code from your email.`);
       return;
     }
     this.emailSaving.set(true);
@@ -1683,10 +1733,10 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       this.auth.updateUser((u) => ({ ...u, email: next }));
       this.emailStep.set("idle");
       this.emailCode.set("");
-      this.toasts.success("Email address updated.");
+      this.toasts.success($localize`Email address updated.`);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        this.emailError.set("That email address is already registered.");
+        this.emailError.set($localize`That email address is already registered.`);
       } else {
         this.emailError.set(extractErrorMessage(err));
       }
@@ -1709,9 +1759,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     const client = this.client();
     if (!client || !this.isOrgOwner() || this.organisationDeleteBusy()) return;
     if (!await this.confirm.open({
-      title: `Delete organisation "${client.name}"?`,
-      message: "This permanently deletes every workspace, standalone board, card, setting, and stored file.",
-      confirmLabel: "Delete organisation",
+      title: $localize`Delete organisation "${client.name}:organisation:"?`,
+      message: $localize`This permanently deletes every workspace, standalone board, card, setting, and stored file.`,
+      confirmLabel: $localize`:Confirm button:Delete organisation`,
       confirmationText: client.name,
     })) return;
 
@@ -1799,7 +1849,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     if (!this.isHosted() || this.seatBusy()) return;
     const target = Math.max(1, Math.floor(next));
     if (target < this.usedSeats()) {
-      this.seatError.set(`You have ${this.usedSeats()} seats assigned. Remove members or guests before reducing capacity.`);
+      this.seatError.set(icu($localize`{count, plural, one {You have # seat assigned.} other {You have # seats assigned.}} Remove members or guests before reducing capacity.`, { count: this.usedSeats() }));
       this.seatNotice.set(null);
       this.seatPaymentActionRequired.set(false);
       return;
@@ -1827,7 +1877,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       if (ambiguousFailure) {
         this.seatNotice.set({
           kind: "warning",
-          message: "We couldn't confirm the seat update yet. Check its status before trying again so you don't submit the same change twice.",
+          message: $localize`We couldn't confirm the seat update yet. Check its status before trying again so you don't submit the same change twice.`,
           action: "refresh_capacity",
         });
         return;
@@ -1836,7 +1886,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       // A genuine decline (no usable payment method) still routes the admin to update their payment method.
       this.seatPaymentActionRequired.set(body?.code === "BILLING_PAYMENT_ACTION_REQUIRED" && body?.portalIntent === "payment_method");
       if (this.seatPaymentActionRequired()) {
-        this.seatNotice.set({ kind: "error", message: "We couldn't charge your payment method. Update your payment method, then try adding seats again.", action: "payment_method" });
+        this.seatNotice.set({ kind: "error", message: $localize`We couldn't charge your payment method. Update your payment method, then try adding seats again.`, action: "payment_method" });
       } else {
         this.seatError.set(extractErrorMessage(err));
       }
@@ -1850,11 +1900,11 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   private async confirmSeatPayment(pc: { clientSecret: string; publishableKey: string }) {
     const result = await this.seatPayment.open({ clientSecret: pc.clientSecret, publishableKey: pc.publishableKey });
     if (result.status === "pending") {
-      this.setSeatPaymentPendingNotice("Payment submitted. We're waiting for Stripe to finish confirming it. Seats haven't been added yet, but they'll appear automatically as soon as the payment is fully confirmed.");
+      this.setSeatPaymentPendingNotice($localize`Payment submitted. We're waiting for Stripe to finish confirming it. Seats haven't been added yet, but they'll appear automatically as soon as the payment is fully confirmed.`);
       return;
     }
     if (result.status === "cancelled") {
-      this.seatNotice.set({ kind: "warning", message: "Payment wasn't completed, so no seats were added." });
+      this.seatNotice.set({ kind: "warning", message: $localize`Payment wasn't completed, so no seats were added.` });
       return;
     }
     if (result.status === "error") {
@@ -1891,14 +1941,14 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         this.billingInfo.set(billing);
         this.seatNotice.set({
           kind: "warning",
-          message: "The seat update isn't confirmed yet. Wait a moment and check again before retrying.",
+          message: $localize`The seat update isn't confirmed yet. Wait a moment and check again before retrying.`,
           action: "refresh_capacity",
         });
       }
     } catch {
       this.seatNotice.set({
         kind: "warning",
-        message: "We still couldn't verify the seat update. Wait a moment and check again before retrying.",
+        message: $localize`We still couldn't verify the seat update. Wait a moment and check again before retrying.`,
         action: "refresh_capacity",
       });
     } finally {
@@ -1913,11 +1963,11 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       const billing = await this.api.post<BillingInfoResponse>("/billing/seats/confirm", {});
       this.applySeatBilling(billing);
       this.seatError.set(null);
-      this.seatNotice.set({ kind: "success", message: "Payment confirmed. Seats have been added." });
+      this.seatNotice.set({ kind: "success", message: $localize`Payment confirmed. Seats have been added.` });
     } catch (err) {
       const body = err instanceof ApiError ? err.body as { code?: string } | undefined : undefined;
       if (body?.code === "BILLING_PAYMENT_INCOMPLETE") {
-        this.setSeatPaymentPendingNotice("Payment submitted. We're finalising your invoice with Stripe. Seats haven't been added yet, and we'll add them automatically once the payment is fully confirmed.");
+        this.setSeatPaymentPendingNotice($localize`Payment submitted. We're finalising your invoice with Stripe. Seats haven't been added yet, and we'll add them automatically once the payment is fully confirmed.`);
       } else {
         this.seatError.set(extractErrorMessage(err));
       }
@@ -1945,7 +1995,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     this.seatError.set(null);
     this.seatNotice.set({
       kind: "success",
-      message: `Seat update confirmed. Your Pro plan now includes ${seatLimit} purchased seat${seatLimit === 1 ? "" : "s"}.`,
+      message: icu($localize`Seat update confirmed. Your Pro plan now includes {count, plural, one {# purchased seat} other {# purchased seats}}.`, { count: seatLimit }),
     });
   }
 
@@ -1977,7 +2027,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     try {
       const updated = await this.api.patch<PublicClientResponse>("/clients/me", { name: next });
       this.applyClient(updated);
-      this.toasts.success("Organisation name saved.");
+      this.toasts.success($localize`Organisation name saved.`);
       this.auth.updateUser((u) => ({ ...u, orgName: updated.name }));
     } catch (err) {
       this.orgError.set(extractErrorMessage(err));
@@ -2045,7 +2095,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     try {
       const updated = await this.api.patch<PublicClientResponse>("/clients/me", { pushEnabled: next });
       this.applyClient(updated);
-      this.toasts.success(updated.pushEnabled ? "Browser push enabled for this organisation." : "Browser push disabled for this organisation.");
+      this.toasts.success(updated.pushEnabled ? $localize`Browser push enabled for this organisation.` : $localize`Browser push disabled for this organisation.`);
     } catch (err) {
       this.pushEnabledDraft.set(current.pushEnabled);
       this.pushError.set(extractErrorMessage(err));
@@ -2094,7 +2144,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     this.logoError.set(null);
 
     if (file.size > 2 * 1024 * 1024) {
-      this.logoError.set("Logo must be 2MB or smaller.");
+      this.logoError.set($localize`Logo must be 2MB or smaller.`);
       input.value = "";
       return;
     }
@@ -2137,10 +2187,10 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   }
 
   githubRepositoryAccessLabel(installation: GitHubAppInstallationRow): string {
-    if (installation.repositorySelection === "all") return "All repositories";
+    if (installation.repositorySelection === "all") return $localize`All repositories`;
     const count = installation.repositories.length;
-    if (count === 0) return "No private repositories selected";
-    return `${count} selected repositor${count === 1 ? "y" : "ies"}`;
+    if (count === 0) return $localize`No private repositories selected`;
+    return icu($localize`{count, plural, one {# selected repository} other {# selected repositories}}`, { count });
   }
 
   private githubInstallHrefFromConfig(config: GitHubAppConfig | null): string | null {
@@ -2207,11 +2257,11 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     if (!accountLogin) return;
     const popup = window.open("", "_blank");
     if (!popup) {
-      this.githubError.set("Your browser blocked the GitHub setup window. Allow pop-ups for Kanera and try again.");
+      this.githubError.set($localize`Your browser blocked the GitHub setup window. Allow pop-ups for Kanera and try again.`);
       return;
     }
-    popup.document.title = "Opening GitHub";
-    popup.document.body.textContent = "Opening GitHub...";
+    popup.document.title = $localize`:Title of the pop-up window while it redirects to GitHub:Opening GitHub`;
+    popup.document.body.textContent = OPENING_GITHUB_TEXT;
 
     this.githubManifestStarting.set(true);
     this.githubError.set(null);
@@ -2228,7 +2278,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
 
   private submitGitHubManifest(manifestForm: GitHubManifestResponse, targetWindow: Window) {
     const doc = targetWindow.document;
-    doc.body.textContent = "Opening GitHub...";
+    doc.body.textContent = OPENING_GITHUB_TEXT;
 
     const form = doc.createElement("form");
     form.method = "POST";
@@ -2249,7 +2299,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   async disconnectGitHub() {
     const installation = this.githubInstallation();
     if (!installation) return;
-    if (!await this.confirm.open({ title: `Disconnect GitHub from ${installation.accountLogin}?`, message: "Kanera will keep the GitHub App configured so you can reinstall it without setting it up again." })) return;
+    if (!await this.confirm.open({ title: $localize`Disconnect GitHub from ${installation.accountLogin}:account:?`, message: $localize`Kanera will keep the GitHub App configured so you can reinstall it without setting it up again.` })) return;
     this.githubError.set(null);
     try {
       await this.api.delete("/clients/me/github-app/installation");
@@ -2269,7 +2319,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
 
   async forgetGitHubApp() {
     if (!this.isSelfHosted()) return;
-    if (!await this.confirm.open({ title: "Forget GitHub App setup?", message: "This removes the stored GitHub App credentials from Kanera. You will need to set up a new GitHub App to reconnect." })) return;
+    if (!await this.confirm.open({ title: $localize`Forget GitHub App setup?`, message: $localize`This removes the stored GitHub App credentials from Kanera. You will need to set up a new GitHub App to reconnect.` })) return;
     this.githubError.set(null);
     try {
       await this.api.delete("/clients/me/github-app");
@@ -2290,7 +2340,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     try {
       const updated = await this.api.patch<PublicClientResponse>("/clients/me", { storageConfig });
       this.applyClient(updated);
-      this.toasts.success("Storage settings saved.");
+      this.toasts.success($localize`Storage settings saved.`);
     } catch (err) {
       this.storageError.set(extractErrorMessage(err));
     } finally {
@@ -2307,7 +2357,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     this.storageTesting.set(true);
     try {
       await this.api.post("/clients/me/storage/test", storageConfig ? { storageConfig } : {});
-      this.toasts.success("Storage test passed. Uploaded and deleted a 1KB test file.");
+      this.toasts.success($localize`Storage test passed. Uploaded and deleted a 1KB test file.`);
     } catch (err) {
       this.storageTestError.set(extractErrorMessage(err));
     } finally {
@@ -2324,7 +2374,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     try {
       const updated = await this.api.patch<PublicClientResponse>("/clients/me", { smtpConfig });
       this.applyClient(updated);
-      this.toasts.success("SMTP settings saved.");
+      this.toasts.success($localize`SMTP settings saved.`);
     } catch (err) {
       this.smtpError.set(extractErrorMessage(err));
     } finally {
@@ -2339,7 +2389,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     try {
       const updated = await this.api.patch<PublicClientResponse>("/clients/me", { smtpConfig: null });
       this.applyClient(updated);
-      this.toasts.success(updated.smtpConfigSource === "env" ? "Using Docker environment SMTP settings." : "SMTP settings cleared.");
+      this.toasts.success(updated.smtpConfigSource === "env" ? $localize`Using Docker environment SMTP settings.` : $localize`SMTP settings cleared.`);
     } catch (err) {
       this.smtpError.set(extractErrorMessage(err));
     } finally {
@@ -2353,14 +2403,14 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     if (!this.smtpFromEnv() && !smtpConfig) return;
     const to = this.smtpTestTo().trim();
     if (!to) {
-      this.smtpTestError.set("Test recipient is required.");
+      this.smtpTestError.set($localize`Test recipient is required.`);
       return;
     }
     this.smtpTestError.set(null);
     this.smtpTesting.set(true);
     try {
       await this.api.post("/clients/me/smtp/test", smtpConfig ? { smtpConfig, to } : { to });
-      this.toasts.success(`Test email sent to ${to}.`, "mail-check");
+      this.toasts.success($localize`Test email sent to ${to}:email:.`, "mail-check");
     } catch (err) {
       this.smtpTestError.set(extractErrorMessage(err));
     } finally {
@@ -2383,11 +2433,11 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     const fromEmail = this.smtpFromEmail().trim();
     const fromName = this.smtpFromName().trim();
     if (!host || !port || !fromEmail) {
-      this.setSmtpError(errorTarget, "Host, port, and from email are required.");
+      this.setSmtpError(errorTarget, $localize`Host, port, and from email are required.`);
       return null;
     }
     if ((username || this.smtpUsernameIsSaved()) && !password && !this.smtpPasswordIsSaved()) {
-      this.setSmtpError(errorTarget, "SMTP password is required when a username is set.");
+      this.setSmtpError(errorTarget, $localize`SMTP password is required when a username is set.`);
       return null;
     }
     return {
@@ -2414,12 +2464,12 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     const publicUrlPrefix = this.s3PublicUrlPrefix().trim();
 
     if (!region || !bucket || (!accessKeyId && !this.s3AccessKeyIsSaved())) {
-      this.setStorageError(errorTarget, "Region, bucket, and access key are required.");
+      this.setStorageError(errorTarget, $localize`Region, bucket, and access key are required.`);
       return null;
     }
 
     if (!typedSecret && !this.s3SecretIsSaved()) {
-      this.setStorageError(errorTarget, "Secret access key is required.");
+      this.setStorageError(errorTarget, $localize`Secret access key is required.`);
       return null;
     }
 
@@ -2454,7 +2504,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
 function extractErrorMessage(err: unknown): string {
   if (err instanceof ApiError) {
     const body = err.body as { message?: string } | undefined;
-    return body?.message ?? `Request failed (${err.status})`;
+    return body?.message ?? $localize`Request failed (${err.status}:status:)`;
   }
-  return err instanceof Error ? err.message : "Something went wrong.";
+  return err instanceof Error ? err.message : $localize`Something went wrong.`;
 }

@@ -7,13 +7,13 @@
         [icon]="icon()"
         [iconColor]="accentColor() ? 'var(--color-' + accentColor() + ')' : null"
         [iconBadge]="true"
-        [title]="(workspace()?.name || entityLabelTitle()) + ' Settings'"
+        [title]="pageTitle()"
       />
       <!-- Icons to match account settings: the two tab strips sit at the same place on the same card
            and read as one control, so one of them carrying glyphs and the other not was the tell. -->
-      <div class="settings-tabs" kTabStrip [attr.aria-label]="entityLabelTitle() + ' settings sections'">
+      <div class="settings-tabs" kTabStrip [attr.aria-label]="tabStripLabel()">
         @for (tab of settingsTabs(); track tab.id) {
-        <a [class]="selectedTab() === tab.id ? 'sm active' : 'ghost sm'" [routerLink]="tab.id"><i [class]="'ti ti-' + tab.icon"></i> {{ tab.label }} @if (tab.pro) { <span class="pro-marker">Pro</span> }</a>
+        <a [class]="selectedTab() === tab.id ? 'sm active' : 'ghost sm'" [routerLink]="tab.id"><i [class]="'ti ti-' + tab.icon"></i> {{ tab.label }} @if (tab.pro) { <span class="pro-marker" i18n="Badge: feature needs the Pro plan">Pro</span> }</a>
         }
       </div>
 

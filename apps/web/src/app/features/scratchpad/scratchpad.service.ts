@@ -295,7 +295,7 @@ export class ScratchpadService {
       this.loading.set(false);
       // Not an error banner on a warm panel: whatever is already on screen is still the user's text,
       // and the drafts layer is holding anything unsaved.
-      if (this._notes().length === 0) this.loadError.set("You're offline. Reconnect to load your scratchpad.");
+      if (this._notes().length === 0) this.loadError.set($localize`:Scratchpad load error while offline:You're offline. Reconnect to load your scratchpad.`);
       return;
     }
     const version = ++this.requestVersion;
@@ -307,7 +307,7 @@ export class ScratchpadService {
       this.loadError.set(null);
     } catch {
       if (version !== this.requestVersion) return;
-      this.loadError.set("Couldn't load your scratchpad. Try again in a moment.");
+      this.loadError.set($localize`:Scratchpad load error:Couldn't load your scratchpad. Try again in a moment.`);
     } finally {
       if (version === this.requestVersion) this.loading.set(false);
     }
@@ -417,7 +417,7 @@ export class ScratchpadService {
   /** `11 Aug at 14:32` in the user's locale — a name you can place in time without opening the page. */
   private defaultTitle(): string {
     const now = new Date();
-    return `${formatDate(now, "short")} at ${formatTime(now)}`;
+    return $localize`:Default name for a new scratchpad page, for example "11 Aug at 2.32 PM":${formatDate(now, "short")}:date: at ${formatTime(now)}:time:`;
   }
 
   /**

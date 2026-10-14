@@ -1,10 +1,10 @@
-<k-docs-link class="spaced" [path]="docsPath()" label="Learn more about importing" />
+<k-docs-link class="spaced" [path]="docsPath()" label="Learn more about importing" i18n-label />
 <k-segmented
   class="import-source-switch"
   [options]="sourceOptions"
   [value]="source()"
   [showLabels]="true"
-  ariaLabel="Import source"
+  ariaLabel="Import source" i18n-ariaLabel
   (valueChange)="setSource($any($event))"
 />
 

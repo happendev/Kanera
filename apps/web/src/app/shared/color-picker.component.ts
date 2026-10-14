@@ -11,9 +11,26 @@ import { AnchoredPanelDirective } from "./anchored-panel.directive";
 import { TooltipDirective } from "./tooltip.directive";
 
 const COLOR_LABELS: Record<ColorToken, string> = {
-  rose: "Rose", pink: "Pink", red: "Red", orange: "Orange", amber: "Amber", yellow: "Yellow",
-  lime: "Lime", green: "Green", emerald: "Emerald", teal: "Teal", cyan: "Cyan", sky: "Sky",
-  blue: "Blue", indigo: "Indigo", violet: "Violet", purple: "Purple", fuchsia: "Fuchsia", gray: "Gray", olive: "Olive", brown: "Brown",
+  rose: $localize`:Colour name in the colour picker:Rose`,
+  pink: $localize`:Colour name in the colour picker:Pink`,
+  red: $localize`:Colour name in the colour picker:Red`,
+  orange: $localize`:Colour name in the colour picker:Orange`,
+  amber: $localize`:Colour name in the colour picker:Amber`,
+  yellow: $localize`:Colour name in the colour picker:Yellow`,
+  lime: $localize`:Colour name in the colour picker:Lime`,
+  green: $localize`:Colour name in the colour picker:Green`,
+  emerald: $localize`:Colour name in the colour picker:Emerald`,
+  teal: $localize`:Colour name in the colour picker:Teal`,
+  cyan: $localize`:Colour name in the colour picker:Cyan`,
+  sky: $localize`:Colour name in the colour picker:Sky`,
+  blue: $localize`:Colour name in the colour picker:Blue`,
+  indigo: $localize`:Colour name in the colour picker:Indigo`,
+  violet: $localize`:Colour name in the colour picker:Violet`,
+  purple: $localize`:Colour name in the colour picker:Purple`,
+  fuchsia: $localize`:Colour name in the colour picker:Fuchsia`,
+  gray: $localize`:Colour name in the colour picker:Gray`,
+  olive: $localize`:Colour name in the colour picker:Olive`,
+  brown: $localize`:Colour name in the colour picker:Brown`,
 };
 
 @Component({
@@ -23,7 +40,7 @@ const COLOR_LABELS: Record<ColorToken, string> = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="cp-wrapper">
-      <button #trigger type="button" class="cp-trigger" [kTooltip]="value() ? colorLabel(value()!) : 'Color'" (click)="toggle()">
+      <button #trigger type="button" class="cp-trigger" [kTooltip]="value() ? colorLabel(value()!) : colorTooltip" (click)="toggle()">
         @if (value()) {
           <span class="cp-swatch" [style.background]="'var(--color-' + value() + ')'"></span>
         } @else {
@@ -45,6 +62,7 @@ const COLOR_LABELS: Record<ColorToken, string> = {
               class="cp-cell cp-no-color"
               [class.is-selected]="!value()"
               kTooltip="No color"
+              i18n-kTooltip="Colour picker option that clears the colour"
               (click)="select(null)"
             >
               <i class="ti ti-square"></i>
@@ -136,6 +154,8 @@ export class ColorPickerComponent {
   readonly open = signal(false);
   readonly tokens = COLOR_TOKENS;
   readonly placement = { width: 258, maxHeight: 150, minHeight: 130 } as const;
+
+  readonly colorTooltip = $localize`:Tooltip on the colour picker button when no colour is set:Color`;
 
   colorLabel(token: ColorToken): string {
     return COLOR_LABELS[token];

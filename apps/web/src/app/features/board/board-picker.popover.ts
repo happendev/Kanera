@@ -29,29 +29,33 @@ type SourceListOption = Pick<WireList, "id" | "name">;
     <div class="ap-panel">
       <div class="ap-head">
         @if (phase() === 'lists') {
-          <button type="button" class="ap-icon-button" (click)="backToBoards($event)" aria-label="Back to boards">
+          <button type="button" class="ap-icon-button" (click)="backToBoards($event)" aria-label="Back to boards" i18n-aria-label>
             <i class="ti ti-arrow-left"></i>
           </button>
         }
-        <span class="ap-title">{{ phase() === 'boards' ? title() : 'Choose a list' }}</span>
-        <button type="button" class="ap-icon-button" aria-label="Close" (click)="close.emit()">
+        <span class="ap-title">{{ phase() === 'boards' ? title() : chooseListTitle }}</span>
+        <button type="button" class="ap-icon-button" aria-label="Close" i18n-aria-label (click)="close.emit()">
           <i class="ti ti-x"></i>
         </button>
       </div>
       @if (loading()) {
-        <p class="bp-empty">Loading…</p>
+        <p class="bp-empty" i18n>Loading…</p>
       } @else if (phase() === 'boards') {
         <k-picker-list
           [groups]="boardPickerGroups()"
           searchPlaceholder="Search boards…"
+          i18n-searchPlaceholder
           emptyLabel="No other boards"
+          i18n-emptyLabel
           (pick)="selectBoardId($event)"
         />
       } @else {
         <k-picker-list
           [groups]="listPickerGroups()"
           searchPlaceholder="Search lists…"
+          i18n-searchPlaceholder
           emptyLabel="No lists"
+          i18n-emptyLabel
           (pick)="selectList($event)"
         />
       }
@@ -83,7 +87,8 @@ export class BoardPickerPopover implements AfterViewInit {
   readonly sourceListId = input<string | null>(null);
   readonly sourceListName = input<string | null>(null);
   readonly sourceLists = input<SourceListOption[]>([]);
-  readonly title = input<string>("Pick a board");
+  readonly title = input<string>($localize`:Board picker heading:Pick a board`);
+  readonly chooseListTitle = $localize`:Board picker heading after choosing a board in another workspace:Choose a list`;
   readonly panelPlacement = input<AnchoredPanelPlacement | null>(null);
   readonly pick = output<BoardPickerPick>();
   readonly close = output<void>();
@@ -108,7 +113,7 @@ export class BoardPickerPopover implements AfterViewInit {
 
     for (const board of targets) {
       const organisationName = board.organisationExternal
-        ? `${board.organisationName} · Guest`
+        ? $localize`:Organisation name in the board picker when the viewer is a guest there:${board.organisationName}:organisation: · Guest`
         : board.organisationName;
       const standaloneGroup = board.workspaceKind === "board";
       const groupId = standaloneGroup

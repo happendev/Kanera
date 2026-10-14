@@ -1,12 +1,19 @@
 import { Injectable, InjectionToken, inject, untracked } from "@angular/core";
 import { environment } from "../../../environments/environment";
 import { AuthService } from "../auth/auth.service";
+import { appLocale } from "../i18n/locale";
 import { SocketService } from "../realtime/socket.service";
 
 export const ORGANISATION_SWITCH_NAVIGATOR = new InjectionToken<(url?: string) => void>("ORGANISATION_SWITCH_NAVIGATOR", {
   providedIn: "root",
   factory: () => (url) => window.location.assign(url ?? window.location.href),
 });
+
+// Client-side failures surface to the user exactly like a server error body's message.
+const OFFLINE_COPY_MESSAGE = $localize`You’re viewing an offline copy. Reconnect to continue.`;
+const OFFLINE_PAUSED_MESSAGE = $localize`:Error when trying to save while offline:You're offline - changes are paused`;
+const UPLOAD_CANCELLED_MESSAGE = $localize`:File upload status:Upload cancelled`;
+const UPLOAD_FAILED_MESSAGE = $localize`:File upload status:Upload failed`;
 
 @Injectable({ providedIn: "root" })
 export class ApiClient {
@@ -16,7 +23,7 @@ export class ApiClient {
 
   async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     if (untracked(() => this.auth.offlineSession?.())) {
-      throw new ApiError(0, { message: "You’re viewing an offline copy. Reconnect to continue." });
+      throw new ApiError(0, { message: OFFLINE_COPY_MESSAGE });
     }
     const method = (init.method ?? "GET").toUpperCase();
     // Point-in-time connectivity guard. Read it untracked: request() is frequently called from
@@ -25,7 +32,7 @@ export class ApiClient {
     // previously caused the whole board-load effect to re-run on every offline/online flip — which
     // called state.clear(), tearing down and rebuilding the board (lists, card detail) DOM.
     if (method !== "GET" && !untracked(() => this.sockets.displayedOnline())) {
-      throw new ApiError(0, { message: "You're offline - changes are paused" });
+      throw new ApiError(0, { message: OFFLINE_PAUSED_MESSAGE });
     }
 
     const doFetch = async (token: string | null): Promise<Response> => {
@@ -34,6 +41,8 @@ export class ApiClient {
         headers.set("Content-Type", "application/json");
       }
       if (token) headers.set("Authorization", `Bearer ${token}`);
+      // The API writes user-facing error messages in the interface language, not the browser's.
+      headers.set("Accept-Language", appLocale());
       return fetch(`${environment.apiUrl}${path}`, { ...init, headers, credentials: "include" });
     };
 
@@ -86,12 +95,12 @@ export class ApiClient {
   ): Promise<T> {
     // Same point-in-time, untracked connectivity guard as request() (see note there).
     if (untracked(() => this.auth.offlineSession?.()) || !untracked(() => this.sockets.displayedOnline())) {
-      throw new ApiError(0, { message: "You're offline - changes are paused" });
+      throw new ApiError(0, { message: OFFLINE_PAUSED_MESSAGE });
     }
 
     const send = (token: string | null): Promise<{ status: number; text: string }> => {
       if (opts.signal?.aborted) {
-        return Promise.reject(new ApiError(0, { message: "Upload cancelled" }));
+        return Promise.reject(new ApiError(0, { message: UPLOAD_CANCELLED_MESSAGE }));
       }
 
       return new Promise((resolve, reject) => {
@@ -120,18 +129,19 @@ export class ApiClient {
           xhr.abort();
           // Some XMLHttpRequest implementations do not emit `abort` before send(), so settle here
           // as well. rejectOnce keeps the subsequent browser abort event harmless.
-          rejectOnce(new ApiError(0, { message: "Upload cancelled" }));
+          rejectOnce(new ApiError(0, { message: UPLOAD_CANCELLED_MESSAGE }));
         };
 
         xhr.open("POST", `${environment.apiUrl}${path}`);
         xhr.withCredentials = true; // send the kanera_rt cookie, matching credentials: "include"
         if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+        xhr.setRequestHeader("Accept-Language", appLocale());
         // Intentionally do not set Content-Type: the browser must add the multipart boundary
         // itself (mirrors request()'s FormData branch, which skips the JSON Content-Type header).
         if (opts.onProgress) xhr.upload.addEventListener("progress", progress);
         xhr.addEventListener("load", () => resolveOnce({ status: xhr.status, text: xhr.responseText }), { once: true });
-        xhr.addEventListener("error", () => rejectOnce(new ApiError(0, { message: "Upload failed" })), { once: true });
-        xhr.addEventListener("abort", () => rejectOnce(new ApiError(0, { message: "Upload cancelled" })), { once: true });
+        xhr.addEventListener("error", () => rejectOnce(new ApiError(0, { message: UPLOAD_FAILED_MESSAGE })), { once: true });
+        xhr.addEventListener("abort", () => rejectOnce(new ApiError(0, { message: UPLOAD_CANCELLED_MESSAGE })), { once: true });
         opts.signal?.addEventListener("abort", abortFromSignal, { once: true });
         xhr.send(form);
       });
@@ -150,7 +160,7 @@ export class ApiClient {
       }
     };
     if (res.status < 200 || res.status >= 300) {
-      throw new ApiError(res.status, parse(res.text) ?? { message: "Upload failed" });
+      throw new ApiError(res.status, parse(res.text) ?? { message: UPLOAD_FAILED_MESSAGE });
     }
     return (parse(res.text) ?? undefined) as T;
   }

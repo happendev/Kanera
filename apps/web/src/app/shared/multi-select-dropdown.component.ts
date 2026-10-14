@@ -130,8 +130,8 @@ export class MultiSelectDropdownComponent {
   readonly placement = input<AnchoredPanelPlacement>({ width: 320, maxHeight: 340, minHeight: 180, gap: 4, margin: 8 });
   /** Passed through to `k-picker-list`; the default matches its own (search only for longer lists). */
   readonly searchThreshold = input(8);
-  readonly searchPlaceholder = input("Search...");
-  readonly emptyLabel = input("Nothing to choose from");
+  readonly searchPlaceholder = input($localize`:Picker search placeholder:Search...`);
+  readonly emptyLabel = input($localize`:Picker empty state:Nothing to choose from`);
   readonly ariaLabel = input<string | null>(null);
   readonly pick = output<string>();
 

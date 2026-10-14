@@ -3,39 +3,40 @@
     <k-page-header
       variant="page"
       class="share-header"
-      [eyebrow]="hasIncomingContent() ? 'Shared to Kanera' : 'Quick capture'"
+      [eyebrow]="hasIncomingContent() ? sharedEyebrow : quickCaptureEyebrow"
       title="Create card"
+      i18n-title="Page heading"
     >
       <button phActions type="button" class="ghost sm" (click)="cancel()">
         <i class="ti ti-x"></i>
-        Cancel
+        <ng-container i18n="Button: leave without creating a card">Cancel</ng-container>
       </button>
     </k-page-header>
 
     @if (loading()) {
     <div class="k-loading" role="status" aria-live="polite">
       <i class="ti ti-loader-2"></i>
-      <span>Loading boards…</span>
+      <span i18n>Loading boards…</span>
     </div>
     } @else if (groups().length === 0) {
-    <k-empty-state icon="layout-kanban" title="No editable boards available" text="You need editor access to a board before captured items can become cards." />
+    <k-empty-state icon="layout-kanban" title="No editable boards available" i18n-title text="You need editor access to a board before captured items can become cards." i18n-text />
     } @else {
     <form class="share-form" (submit)="$event.preventDefault(); save()">
       @if (!hasIncomingContent()) {
       <div class="capture-hint">
         <i class="ti ti-share-3"></i>
-        <p>On Android, install Kanera and choose it from any app's Share menu. On other devices, copy text or a link and paste it here.</p>
+        <p i18n>On Android, install Kanera and choose it from any app's Share menu. On other devices, copy text or a link and paste it here.</p>
       </div>
       }
 
       <label>
-        <span>Title</span>
+        <span i18n="Form field label: card title">Title</span>
         <input [value]="cardTitle()" maxlength="500" autocomplete="off" (input)="setTitle($any($event.target).value)" />
       </label>
 
       <div class="destination-grid">
         <label>
-          <span>Workspace</span>
+          <span i18n="Form field label">Workspace</span>
           <select [value]="selectedWorkspaceId()" (input)="onWorkspaceChange($any($event.target).value)">
             @for (group of groups(); track group.workspace.id) {
             <option [value]="group.workspace.id" [selected]="group.workspace.id === selectedWorkspaceId()">{{ group.label }}</option>
@@ -44,7 +45,7 @@
         </label>
 
         <label>
-          <span>Board</span>
+          <span i18n="Form field label">Board</span>
           <select [value]="selectedBoardId()" [disabled]="destinationLoading()" (input)="onBoardChange($any($event.target).value)">
             @for (board of selectedBoards(); track board.id) {
             <option [value]="board.id" [selected]="board.id === selectedBoardId()">{{ board.name }}</option>
@@ -53,12 +54,12 @@
         </label>
 
         <label>
-          <span>List</span>
+          <span i18n="Form field label: list on a board">List</span>
           <select [value]="selectedListId()" [disabled]="destinationLoading()" (input)="onListChange($any($event.target).value)">
             @if (destinationLoading()) {
-            <option value="" selected>Loading lists...</option>
+            <option value="" selected i18n>Loading lists...</option>
             } @else if (selectedLists().length === 0) {
-            <option value="" selected>No lists available</option>
+            <option value="" selected i18n>No lists available</option>
             }
             @for (list of selectedLists(); track list.id) {
             <option [value]="list.id" [selected]="list.id === selectedListId()">{{ list.name }}</option>
@@ -69,10 +70,10 @@
 
       <label>
         <span class="field-heading">
-          <span>Description</span>
+          <span i18n="Form field label: card description">Description</span>
           <button type="button" class="ghost sm paste-button" [disabled]="pasteBusy()" (click)="pasteFromClipboard()">
             <i class="ti ti-clipboard"></i>
-            {{ pasteBusy() ? 'Pasting...' : 'Paste' }}
+            @if (pasteBusy()) { <ng-container i18n="Button while pasting from the clipboard">Pasting...</ng-container> } @else { <ng-container i18n="Button: paste from the clipboard">Paste</ng-container> }
           </button>
         </span>
         <textarea rows="8" [value]="description()" maxlength="50000" (input)="setDescription($any($event.target).value)"></textarea>
@@ -95,7 +96,7 @@
       <div class="actions">
         <button type="submit" [disabled]="!canSave()">
           <i class="ti ti-plus"></i>
-          {{ saving() ? "Creating..." : "Create card" }}
+          @if (saving()) { <ng-container i18n="Button while the card is being created">Creating...</ng-container> } @else { <ng-container i18n="Button: create the card">Create card</ng-container> }
         </button>
       </div>
     </form>

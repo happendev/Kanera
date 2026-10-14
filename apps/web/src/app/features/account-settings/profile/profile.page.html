@@ -1,6 +1,6 @@
 <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-user-circle"></i><span>Profile picture</span></h3>
-        <p class="settings-section-help">Upload a square avatar and adjust the circle crop before saving.</p>
+        <h3 class="settings-section-title"><i class="ti ti-user-circle"></i><span i18n="Settings section heading">Profile picture</span></h3>
+        <p class="settings-section-help" i18n>Upload a square avatar and adjust the circle crop before saving.</p>
         <div class="avatar-row">
           <div class="profile-avatar-preview">
             <k-avatar [url]="settings.user()?.avatarUrl ?? null" [name]="settings.user()?.displayName || '?'" [size]="72" [userId]="settings.user()?.id ?? null" />
@@ -8,11 +8,11 @@
           <div class="logo-actions">
             <label class="sm logo-button" [class.disabled]="avatarUploading()">
               <i class="ti ti-upload"></i>
-              {{ settings.user()?.avatarUrl ? "Replace picture" : "Upload picture" }}
+              @if (settings.user()?.avatarUrl) { <ng-container i18n="Button">Replace picture</ng-container> } @else { <ng-container i18n="Button">Upload picture</ng-container> }
               <input type="file" accept="image/png,image/jpeg,image/webp" (change)="selectAvatar($event)" [disabled]="avatarUploading()" hidden />
             </label>
             @if (settings.user()?.avatarUrl) {
-            <button class="ghost sm" type="button" (click)="deleteAvatar()" [disabled]="avatarUploading()">Remove</button>
+            <button class="ghost sm" type="button" (click)="deleteAvatar()" [disabled]="avatarUploading()" i18n="Button: remove the profile picture">Remove</button>
             }
           </div>
         </div>
@@ -31,16 +31,17 @@
             (pointercancel)="endAvatarDrag()"
             (lostpointercapture)="endAvatarDrag()"
             aria-label="Avatar crop preview"
+            i18n-aria-label
           ></canvas>
           <label class="settings-field crop-zoom">
-            <span>Zoom</span>
+            <span i18n="Slider label: zoom the avatar crop">Zoom</span>
             <input type="range" min="1" max="3" step="0.05" [value]="avatarZoom()" (input)="setAvatarZoom($any($event.target).value)" [disabled]="avatarUploading()" />
           </label>
           <div class="logo-actions">
             <button class="sm" type="button" (click)="uploadAvatarCrop()" [disabled]="avatarUploading()">
-              {{ avatarUploading() ? "Saving..." : "Save picture" }}
+              @if (avatarUploading()) { <ng-container i18n="Button state">Saving...</ng-container> } @else { <ng-container i18n="Button">Save picture</ng-container> }
             </button>
-            <button class="ghost sm" type="button" (click)="cancelAvatarCrop()" [disabled]="avatarUploading()">Cancel</button>
+            <button class="ghost sm" type="button" (click)="cancelAvatarCrop()" [disabled]="avatarUploading()" i18n="Button">Cancel</button>
           </div>
         </div>
         }
@@ -50,41 +51,41 @@
       <div class="settings-section">
         <div class="section-heading-row">
           <div>
-            <h3 class="settings-section-title"><i class="ti ti-id"></i><span>Display name</span></h3>
-            <p class="settings-section-help">Shown to teammates across the workspace.</p>
+            <h3 class="settings-section-title"><i class="ti ti-id"></i><span i18n="Settings section heading">Display name</span></h3>
+            <p class="settings-section-help" i18n>Shown to teammates across the workspace.</p>
           </div>
           <k-autosave-status [state]="settings.nameAutosave.state()" />
         </div>
         <div class="board-form">
-          <input name="displayName" placeholder="Your name" [value]="settings.displayName()" (input)="settings.displayName.set($any($event.target).value)" (blur)="settings.saveDisplayName()" (keydown.enter)="settings.saveDisplayName()" class="grow" />
+          <input name="displayName" placeholder="Your name" i18n-placeholder [value]="settings.displayName()" (input)="settings.displayName.set($any($event.target).value)" (blur)="settings.saveDisplayName()" (keydown.enter)="settings.saveDisplayName()" class="grow" />
         </div>
         @if (settings.nameError()) { <p class="form-error">{{ settings.nameError() }}</p> }
       </div>
 
       <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-palette"></i><span>Appearance</span></h3>
-        <p class="settings-section-help">Choose the theme and accent colour used on this device.</p>
-        <div class="theme-options" role="radiogroup" aria-label="Theme color">
+        <h3 class="settings-section-title"><i class="ti ti-palette"></i><span i18n="Settings section heading">Appearance</span></h3>
+        <p class="settings-section-help" i18n>Choose the theme and accent colour used on this device.</p>
+        <div class="theme-options" role="radiogroup" aria-label="Theme color" i18n-aria-label>
           <button type="button" class="theme-option" [class.active]="settings.theme.theme() === 'dark'" [attr.aria-checked]="settings.theme.theme() === 'dark'" role="radio" (click)="settings.setTheme('dark')">
             <i class="ti ti-moon"></i>
-            Dark
+            <ng-container i18n="Theme name">Dark</ng-container>
           </button>
           <button type="button" class="theme-option" [class.active]="settings.theme.theme() === 'carbon'" [attr.aria-checked]="settings.theme.theme() === 'carbon'" role="radio" (click)="settings.setTheme('carbon')">
             <i class="ti ti-moon-stars"></i>
-            Carbon
+            <ng-container i18n="Theme name">Carbon</ng-container>
           </button>
           <button type="button" class="theme-option" [class.active]="settings.theme.theme() === 'light'" [attr.aria-checked]="settings.theme.theme() === 'light'" role="radio" (click)="settings.setTheme('light')">
             <i class="ti ti-sun"></i>
-            Light
+            <ng-container i18n="Theme name">Light</ng-container>
           </button>
           <button type="button" class="theme-option" [class.active]="settings.theme.theme() === 'paper'" [attr.aria-checked]="settings.theme.theme() === 'paper'" role="radio" (click)="settings.setTheme('paper')">
             <i class="ti ti-note"></i>
-            Paper
+            <ng-container i18n="Theme name">Paper</ng-container>
           </button>
         </div>
 
-        <p class="settings-section-help accent-help">Accent colour</p>
-        <div class="accent-options" role="radiogroup" aria-label="Accent colour">
+        <p class="settings-section-help accent-help" i18n>Accent colour</p>
+        <div class="accent-options" role="radiogroup" aria-label="Accent colour" i18n-aria-label>
           @for (accent of settings.accentOptions(); track accent.value) {
           <button
             type="button"
@@ -104,25 +105,32 @@
       </div>
 
       <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-hash"></i><span>Card keys</span></h3>
+        <h3 class="settings-section-title"><i class="ti ti-language"></i><span i18n="Settings section heading">Language</span></h3>
+        <p class="settings-section-help" i18n>Used across Kanera on every device you sign in to, and for your emails and notifications. Dates follow the language you choose.</p>
+        <k-language-menu [value]="settings.activeLocale" [disabled]="settings.localeSaving()" (picked)="settings.setLocale($event)" />
+        @if (settings.localeError()) { <p class="form-error">{{ settings.localeError() }}</p> }
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title"><i class="ti ti-hash"></i><span i18n="Settings section heading">Card keys</span></h3>
         <label class="push-toggle-row">
           <input type="checkbox" [checked]="settings.user()?.showCardKeys ?? true" (change)="settings.setShowCardKeys($any($event.target).checked)" [disabled]="settings.cardKeysSaving()" />
           <span class="push-toggle-copy">
-            <span class="push-toggle-title">Show card keys</span>
-            <span class="push-toggle-help">Card keys are short references like KAN-123 that identify a card. Turn this off to hide them from view across the app.</span>
+            <span class="push-toggle-title" i18n>Show card keys</span>
+            <span class="push-toggle-help" i18n>Card keys are short references like KAN-123 that identify a card. Turn this off to hide them from view across the app.</span>
           </span>
         </label>
         @if (settings.cardKeysError()) { <p class="form-error">{{ settings.cardKeysError() }}</p> }
       </div>
 
       <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-notes"></i><span>Scratchpad</span></h3>
-        <k-docs-link path="scratchpad" label="Learn more about the scratchpad" />
+        <h3 class="settings-section-title"><i class="ti ti-notes"></i><span i18n="Settings section heading">Scratchpad</span></h3>
+        <k-docs-link path="scratchpad" label="Learn more about the scratchpad" i18n-label />
         <label class="push-toggle-row">
           <input type="checkbox" [checked]="settings.user()?.showScratchpad ?? true" (change)="settings.setShowScratchpad($any($event.target).checked)" [disabled]="settings.scratchpadVisibilitySaving()" />
           <span class="push-toggle-copy">
-            <span class="push-toggle-title">Show scratchpad</span>
-            <span class="push-toggle-help">Keep the scratchpad button available in the app header. Turn this off if you do not use the scratchpad.</span>
+            <span class="push-toggle-title" i18n>Show scratchpad</span>
+            <span class="push-toggle-help" i18n>Keep the scratchpad button available in the app header. Turn this off if you do not use the scratchpad.</span>
           </span>
         </label>
         @if (settings.scratchpadVisibilityError()) { <p class="form-error">{{ settings.scratchpadVisibilityError() }}</p> }
@@ -130,89 +138,93 @@
 
       @if (consent.available()) {
       <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-cookie"></i><span>Privacy</span></h3>
-        <p class="settings-section-help">Review or change the optional analytics choice stored on this device.</p>
+        <h3 class="settings-section-title"><i class="ti ti-cookie"></i><span i18n="Settings section heading">Privacy</span></h3>
+        <p class="settings-section-help" i18n>Review or change the optional analytics choice stored on this device.</p>
         <button class="sm" type="button" (click)="consent.openSettings()">
           <i class="ti ti-adjustments-horizontal"></i>
-          Cookie settings
+          <ng-container i18n="Button">Cookie settings</ng-container>
         </button>
       </div>
       }
 
       <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-mail"></i><span>Email</span></h3>
+        <h3 class="settings-section-title"><i class="ti ti-mail"></i><span i18n="Settings section heading: the account email address">Email</span></h3>
         <p class="settings-section-help">
-          Your email address is used to sign in.
+          <ng-container i18n>Your email address is used to sign in.</ng-container>
           @if (settings.emailVerificationEnabled()) {
-            Changing it requires verifying the new address.
+            <ng-container i18n>Changing it requires verifying the new address.</ng-container>
           }
         </p>
         <div class="board-form">
           <input name="email" type="email" autocomplete="email" placeholder="you@example.com" [value]="settings.email()" (input)="settings.email.set($any($event.target).value)" [disabled]="settings.emailSaving() || settings.emailStep() === 'code'" class="grow" />
           @if (settings.emailStep() === 'idle') {
             <button class="sm" type="button" (click)="settings.requestEmailChange()" [disabled]="settings.emailSaving() || !settings.email().trim() || settings.email().trim() === settings.user()?.email">
-              {{ settings.emailSaving() ? (settings.emailVerificationEnabled() ? "Sending..." : "Saving...") : (settings.emailVerificationEnabled() ? "Verify & save" : "Save") }}
+              @if (settings.emailSaving()) {
+                @if (settings.emailVerificationEnabled()) { <ng-container i18n="Button state">Sending...</ng-container> } @else { <ng-container i18n="Button state">Saving...</ng-container> }
+              } @else {
+                @if (settings.emailVerificationEnabled()) { <ng-container i18n="Button">Verify &amp; save</ng-container> } @else { <ng-container i18n="Button">Save</ng-container> }
+              }
             </button>
           }
         </div>
         @if (settings.emailStep() === 'code') {
-          <p class="settings-section-help">Enter the 6-digit code we sent to {{ settings.email() }}.</p>
+          <p class="settings-section-help" i18n>Enter the 6-digit code we sent to {{ settings.email() // i18n(ph="email") }}.</p>
           <div class="board-form">
             <input name="emailCode" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="6" [value]="settings.emailCode()" (input)="settings.emailCode.set($any($event.target).value)" [disabled]="settings.emailSaving()" class="grow" />
             <button class="sm" type="button" (click)="settings.confirmEmailChange()" [disabled]="settings.emailSaving() || settings.emailCode().trim().length !== 6">
-              {{ settings.emailSaving() ? "Saving..." : "Confirm" }}
+              @if (settings.emailSaving()) { <ng-container i18n="Button state">Saving...</ng-container> } @else { <ng-container i18n="Button">Confirm</ng-container> }
             </button>
-            <button class="sm secondary" type="button" (click)="settings.cancelEmailChange()" [disabled]="settings.emailSaving()">Cancel</button>
+            <button class="sm secondary" type="button" (click)="settings.cancelEmailChange()" [disabled]="settings.emailSaving()" i18n="Button">Cancel</button>
           </div>
         }
         @if (settings.emailError()) { <p class="form-error">{{ settings.emailError() }}</p> }
       </div>
 
       <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-shield-lock"></i><span>Two-factor authentication</span></h3>
-        <p class="settings-section-help">Protect fresh sign-ins with an authenticator app or a one-time recovery code.</p>
-        <k-docs-link path="profile-security" label="Learn more about account security" />
+        <h3 class="settings-section-title"><i class="ti ti-shield-lock"></i><span i18n="Settings section heading">Two-factor authentication</span></h3>
+        <p class="settings-section-help" i18n>Protect fresh sign-ins with an authenticator app or a one-time recovery code.</p>
+        <k-docs-link path="profile-security" label="Learn more about account security" i18n-label />
         @if (!mfaEnabled() && !mfaSecret()) {
-          <div class="board-form"><input type="password" autocomplete="current-password" placeholder="Current password" [value]="mfaPassword()" (input)="mfaPassword.set($any($event.target).value)" /><button class="sm" type="button" (click)="startMfa()" [disabled]="mfaBusy()">Set up authenticator</button></div>
+          <div class="board-form"><input type="password" autocomplete="current-password" placeholder="Current password" i18n-placeholder [value]="mfaPassword()" (input)="mfaPassword.set($any($event.target).value)" /><button class="sm" type="button" (click)="startMfa()" [disabled]="mfaBusy()" i18n="Button">Set up authenticator</button></div>
         } @else if (mfaSecret()) {
-          <p>Scan the QR code, or enter <code>{{ mfaSecret() }}</code> manually.</p>
-          @if (mfaQrUrl()) { <img [src]="mfaQrUrl()" width="200" height="200" alt="Authenticator setup QR code" /> }
-          <div class="board-form"><input autocomplete="one-time-code" inputmode="numeric" placeholder="123456" [value]="mfaCode()" (input)="mfaCode.set($any($event.target).value)" /><button class="sm" type="button" (click)="confirmMfa()" [disabled]="mfaBusy()">Confirm</button></div>
+          <p i18n>Scan the QR code, or enter <code>{{ mfaSecret() // i18n(ph="secret") }}</code> manually.</p>
+          @if (mfaQrUrl()) { <img [src]="mfaQrUrl()" width="200" height="200" alt="Authenticator setup QR code" i18n-alt /> }
+          <div class="board-form"><input autocomplete="one-time-code" inputmode="numeric" placeholder="123456" [value]="mfaCode()" (input)="mfaCode.set($any($event.target).value)" /><button class="sm" type="button" (click)="confirmMfa()" [disabled]="mfaBusy()" i18n="Button">Confirm</button></div>
         } @else {
-          <p class="settings-section-help mfa-enabled"><i class="ti ti-shield-check"></i>Two-factor authentication is enabled.</p>
-          <div class="settings-form"><input type="password" autocomplete="current-password" placeholder="Current password" [value]="mfaPassword()" (input)="mfaPassword.set($any($event.target).value)" /><input autocomplete="one-time-code" placeholder="Authenticator or recovery code" [value]="mfaCode()" (input)="mfaCode.set($any($event.target).value)" /><div class="logo-actions"><button class="sm" type="button" (click)="regenerateMfaCodes()" [disabled]="mfaBusy()">New recovery codes</button><button class="ghost sm" type="button" (click)="disableMfa()" [disabled]="mfaBusy()">Disable</button></div></div>
+          <p class="settings-section-help mfa-enabled"><i class="ti ti-shield-check"></i><ng-container i18n>Two-factor authentication is enabled.</ng-container></p>
+          <div class="settings-form"><input type="password" autocomplete="current-password" placeholder="Current password" i18n-placeholder [value]="mfaPassword()" (input)="mfaPassword.set($any($event.target).value)" /><input autocomplete="one-time-code" placeholder="Authenticator or recovery code" i18n-placeholder [value]="mfaCode()" (input)="mfaCode.set($any($event.target).value)" /><div class="logo-actions"><button class="sm" type="button" (click)="regenerateMfaCodes()" [disabled]="mfaBusy()" i18n="Button">New recovery codes</button><button class="ghost sm" type="button" (click)="disableMfa()" [disabled]="mfaBusy()" i18n="Button: turn off two-factor authentication">Disable</button></div></div>
         }
-        @if (mfaRecoveryCodes().length) { <p><strong>Save these recovery codes now. They will not be shown again.</strong></p><pre>{{ mfaRecoveryCodes().join('\n') }}</pre> }
+        @if (mfaRecoveryCodes().length) { <p><strong i18n>Save these recovery codes now. They will not be shown again.</strong></p><pre>{{ mfaRecoveryCodes().join('\n') }}</pre> }
         @if (mfaError()) { <p class="form-error">{{ mfaError() }}</p> }
       </div>
 
       <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-lock"></i><span>Change password</span></h3>
-        <p class="settings-section-help">You'll be signed out from all other sessions after changing.</p>
+        <h3 class="settings-section-title"><i class="ti ti-lock"></i><span i18n="Settings section heading">Change password</span></h3>
+        <p class="settings-section-help" i18n>You'll be signed out from all other sessions after changing.</p>
         <form class="settings-form" (submit)="changePassword($event)">
           <label class="settings-field">
-            <span>Current password</span>
+            <span i18n="Field label">Current password</span>
             <div class="input-wrap">
               <input [type]="showCurrentPassword() ? 'text' : 'password'" autocomplete="current-password" [formField]="passwordForm.currentPassword" />
-              <button type="button" class="reveal-btn" tabindex="-1" (click)="showCurrentPassword.set(!showCurrentPassword())" [attr.aria-label]="showCurrentPassword() ? 'Hide password' : 'Show password'">
+              <button type="button" class="reveal-btn" tabindex="-1" (click)="showCurrentPassword.set(!showCurrentPassword())" [attr.aria-label]="showCurrentPassword() ? hidePasswordLabel : showPasswordLabel">
                 <i [class]="showCurrentPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
               </button>
             </div>
           </label>
           <label class="settings-field">
-            <span>New password</span>
+            <span i18n="Field label">New password</span>
             <div class="input-wrap">
               <input [type]="showNewPassword() ? 'text' : 'password'" autocomplete="new-password" [formField]="passwordForm.newPassword" />
-              <button type="button" class="reveal-btn" tabindex="-1" (click)="showNewPassword.set(!showNewPassword())" [attr.aria-label]="showNewPassword() ? 'Hide password' : 'Show password'">
+              <button type="button" class="reveal-btn" tabindex="-1" (click)="showNewPassword.set(!showNewPassword())" [attr.aria-label]="showNewPassword() ? hidePasswordLabel : showPasswordLabel">
                 <i [class]="showNewPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
               </button>
             </div>
           </label>
           <label class="settings-field">
-            <span>Confirm new password</span>
+            <span i18n="Field label">Confirm new password</span>
             <div class="input-wrap">
               <input [type]="showConfirmPassword() ? 'text' : 'password'" autocomplete="new-password" [formField]="passwordForm.confirmPassword" />
-              <button type="button" class="reveal-btn" tabindex="-1" (click)="showConfirmPassword.set(!showConfirmPassword())" [attr.aria-label]="showConfirmPassword() ? 'Hide password' : 'Show password'">
+              <button type="button" class="reveal-btn" tabindex="-1" (click)="showConfirmPassword.set(!showConfirmPassword())" [attr.aria-label]="showConfirmPassword() ? hidePasswordLabel : showPasswordLabel">
                 <i [class]="showConfirmPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
               </button>
             </div>
@@ -220,7 +232,7 @@
           @if (passwordForm().touched() && passwordForm().errorSummary()[0]; as error) { <p class="form-error">{{ error.message }}</p> }
           <div>
             <button class="sm" type="submit" [disabled]="passwordForm().submitting()">
-              {{ passwordForm().submitting() ? "Saving..." : "Change password" }}
+              @if (passwordForm().submitting()) { <ng-container i18n="Button state">Saving...</ng-container> } @else { <ng-container i18n="Button">Change password</ng-container> }
             </button>
           </div>
         </form>

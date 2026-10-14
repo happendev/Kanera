@@ -28,68 +28,74 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
 
     @if (a.type === 'add_labels' || a.type === 'remove_labels') {
       <div class="aaf-field">
-        <span class="aaf-label">Labels</span>
+        <span class="aaf-label" i18n="Field label: card labels">Labels</span>
         @if (settings.labels().length) {
           <k-token-multi-select-dropdown
             icon="ti-tag"
             [options]="labelOptions()"
             [selectedIds]="settings.automationActionLabelIds(a)"
             placeholder="Choose labels"
+            i18n-placeholder
             searchPlaceholder="Search labels..."
+            i18n-searchPlaceholder
             emptyMessage="No labels match"
+            i18n-emptyMessage
             ariaLabel="Labels"
+            i18n-ariaLabel="Field label: card labels"
             (selectedIdsChange)="settings.updateAutomationActionLabels(automationId(), index(), $event)"
           />
         } @else {
-          <p class="aaf-missing">This {{ settings.entityLabel() }} has no labels yet.</p>
+          <p class="aaf-missing" i18n>{ settings.entityKind(), select, board {This board has no labels yet.} other {This workspace has no labels yet.} }</p>
         }
       </div>
     } @else if (a.type === 'add_assignees' || a.type === 'remove_assignees') {
       <div class="aaf-field">
-        <span class="aaf-label">Members</span>
+        <span class="aaf-label" i18n="Field label">Members</span>
         <k-user-multi-select-dropdown
           [users]="settings.automationMembers()"
           [selectedIds]="settings.automationActionUserIds(a)"
           [workspaceId]="settings.workspaceId()"
           [allowEmpty]="true"
           placeholder="Choose members"
+          i18n-placeholder
           (selectedIdsChange)="settings.updateAutomationActionAssignees(automationId(), index(), $event)"
         />
       </div>
     } @else if (a.type === 'apply_checklists') {
       <div class="aaf-field">
-        <span class="aaf-label">Checklist templates</span>
+        <span class="aaf-label" i18n="Field label">Checklist templates</span>
         @if (settings.templates().length) {
           <k-checklist-template-multi-select-dropdown
             [templates]="settings.templates()"
             [selectedIds]="settings.automationActionTemplateIds(a)"
             placeholder="Choose checklists"
+            i18n-placeholder
             (selectedIdsChange)="settings.updateAutomationActionTemplates(automationId(), index(), $event)"
           />
         } @else {
-          <p class="aaf-missing">This {{ settings.entityLabel() }} has no checklist templates yet.</p>
+          <p class="aaf-missing" i18n>{ settings.entityKind(), select, board {This board has no checklist templates yet.} other {This workspace has no checklist templates yet.} }</p>
         }
       </div>
     } @else if (a.type === 'move_to_list') {
       <label class="aaf-field">
-        <span class="aaf-label">Destination list</span>
+        <span class="aaf-label" i18n="Field label">Destination list</span>
         <select [value]="settings.automationActionTargetValue(a)" (change)="settings.updateAutomationActionTarget(automationId(), index(), $any($event.target).value)">
-          <option value="" [selected]="!settings.automationActionTargetValue(a)">Choose list</option>
+          <option value="" [selected]="!settings.automationActionTargetValue(a)" i18n="Select placeholder">Choose list</option>
           @for (list of settings.lists(); track list.id) {
             <option [value]="list.id" [selected]="settings.automationActionTargetValue(a) === list.id">{{ list.name }}</option>
           }
         </select>
       </label>
       <label class="aaf-field aaf-narrow">
-        <span class="aaf-label">Place at</span>
+        <span class="aaf-label" i18n="Field label: position in the destination list (Top or Bottom)">Place at</span>
         <select [value]="settings.automationMovePlacementValue(a)" (change)="settings.updateAutomationMovePlacement(automationId(), index(), $any($event.target).value)">
-          <option value="bottom" [selected]="settings.automationMovePlacementValue(a) === 'bottom'">Bottom</option>
-          <option value="top" [selected]="settings.automationMovePlacementValue(a) === 'top'">Top</option>
+          <option value="bottom" [selected]="settings.automationMovePlacementValue(a) === 'bottom'" i18n="Position in a list">Bottom</option>
+          <option value="top" [selected]="settings.automationMovePlacementValue(a) === 'top'" i18n="Position in a list">Top</option>
         </select>
       </label>
     } @else if (a.type === 'set_due_date') {
       <label class="aaf-field aaf-narrow">
-        <span class="aaf-label">Due</span>
+        <span class="aaf-label" i18n="Field label: when the due date is set to">Due</span>
         <select [value]="duePreset()" (change)="settings.updateAutomationDueDatePreset(automationId(), index(), $any($event.target).value)">
           @for (preset of settings.automationDueDatePresets; track preset.value) {
             <option [value]="preset.value" [selected]="duePreset() === preset.value">{{ preset.label }}</option>
@@ -98,7 +104,7 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
       </label>
       @if (settings.isAutomationDueDateCustom(a, automationId(), index())) {
         <label class="aaf-field aaf-narrow">
-          <span class="aaf-label">Days from trigger</span>
+          <span class="aaf-label" i18n="Field label: number of days after the automation runs">Days from trigger</span>
           <input
             type="number"
             [value]="settings.automationDueOffsetValue(a)"
@@ -108,7 +114,7 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
         </label>
       }
       <label class="aaf-field aaf-narrow">
-        <span class="aaf-label">Time of day</span>
+        <span class="aaf-label" i18n="Field label">Time of day</span>
         <select [value]="settings.automationDueSlotValue(a)" (change)="settings.updateAutomationDueSlot(automationId(), index(), $any($event.target).value)">
           @for (slot of settings.dueDateSlots; track slot) {
             <option [value]="slot" [selected]="settings.automationDueSlotValue(a) === slot">{{ settings.automationDueSlotLabel(slot) }}</option>
@@ -117,64 +123,64 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
       </label>
     } @else if (a.type === 'set_completion') {
       <label class="aaf-field aaf-narrow">
-        <span class="aaf-label">Mark as</span>
+        <span class="aaf-label" i18n="Field label; followed by Complete or Incomplete">Mark as</span>
         <select [value]="settings.automationCompletionValue(a)" (change)="settings.updateAutomationCompletion(automationId(), index(), $any($event.target).value === 'true')">
-          <option value="true" [selected]="settings.automationCompletionValue(a) === 'true'">Complete</option>
-          <option value="false" [selected]="settings.automationCompletionValue(a) === 'false'">Incomplete</option>
+          <option value="true" [selected]="settings.automationCompletionValue(a) === 'true'" i18n="Card completion state">Complete</option>
+          <option value="false" [selected]="settings.automationCompletionValue(a) === 'false'" i18n="Card completion state">Incomplete</option>
         </select>
       </label>
     } @else if (a.type === 'populate_custom_field') {
       <label class="aaf-field">
-        <span class="aaf-label">Custom field</span>
+        <span class="aaf-label" i18n="Field label">Custom field</span>
         @if (settings.automationSetCustomFields().length) {
           <select [value]="settings.automationActionTargetValue(a)" (change)="settings.updateAutomationActionTarget(automationId(), index(), $any($event.target).value)">
-            <option value="" [selected]="!settings.automationActionTargetValue(a)">Choose field</option>
+            <option value="" [selected]="!settings.automationActionTargetValue(a)" i18n="Select placeholder: custom field">Choose field</option>
             @for (field of settings.automationSetCustomFields(); track field.id) {
               <option [value]="field.id" [selected]="settings.automationActionTargetValue(a) === field.id">{{ field.name }}</option>
             }
           </select>
         } @else {
-          <p class="aaf-missing">No fillable custom fields in this {{ settings.entityLabel() }} yet.</p>
+          <p class="aaf-missing" i18n>{ settings.entityKind(), select, board {No fillable custom fields in this board yet.} other {No fillable custom fields in this workspace yet.} }</p>
         }
       </label>
 
       @if (settings.automationSetCustomField(a); as field) {
         <label class="aaf-field aaf-narrow">
-          <span class="aaf-label">Value from</span>
+          <span class="aaf-label" i18n="Field label; options: A fixed value / Another field">Value from</span>
           <select [value]="settings.automationPopulateMode(a)" (change)="settings.updateAutomationPopulateMode(automationId(), index(), $any($event.target).value)">
-            <option value="value" [selected]="settings.automationPopulateMode(a) === 'value'">A fixed value</option>
-            <option value="field" [selected]="settings.automationPopulateMode(a) === 'field'">Another field</option>
+            <option value="value" [selected]="settings.automationPopulateMode(a) === 'value'" i18n>A fixed value</option>
+            <option value="field" [selected]="settings.automationPopulateMode(a) === 'field'" i18n="Copy the value from another custom field">Another field</option>
           </select>
         </label>
 
         @if (settings.automationPopulateMode(a) === 'field') {
           <label class="aaf-field">
-            <span class="aaf-label">Copy from</span>
+            <span class="aaf-label" i18n="Field label: source custom field">Copy from</span>
             @if (settings.automationPopulateSourceFields(a).length) {
               <select [value]="settings.automationPopulateSourceFieldId(a)" (change)="settings.updateAutomationPopulateSourceField(automationId(), index(), $any($event.target).value)">
-                <option value="" [selected]="!settings.automationPopulateSourceFieldId(a)">Choose field</option>
+                <option value="" [selected]="!settings.automationPopulateSourceFieldId(a)" i18n="Select placeholder: custom field">Choose field</option>
                 @for (source of settings.automationPopulateSourceFields(a); track source.id) {
                   <option [value]="source.id" [selected]="settings.automationPopulateSourceFieldId(a) === source.id">{{ source.name }}</option>
                 }
               </select>
             } @else {
-              <p class="aaf-missing">No other {{ field.type }} field to copy from.</p>
+              <p class="aaf-missing" i18n>{ field.type, select, text {No other text field to copy from.} number {No other number field to copy from.} date {No other date field to copy from.} checkbox {No other checkbox field to copy from.} select {No other select field to copy from.} user {No other user field to copy from.} url {No other url field to copy from.} other {No other field of this type to copy from.} }</p>
             }
           </label>
         } @else if (field.type === 'text') {
           <label class="aaf-field aaf-narrow">
-            <span class="aaf-label">Write</span>
+            <span class="aaf-label" i18n="Field label: what to write into a text field (Fixed text / The run date)">Write</span>
             <select [value]="settings.automationPopulateTextSource(a)" (change)="settings.updateAutomationPopulateTextSource(automationId(), index(), $any($event.target).value)">
-              <option value="text" [selected]="settings.automationPopulateTextSource(a) === 'text'">Fixed text</option>
-              <option value="current_date" [selected]="settings.automationPopulateTextSource(a) === 'current_date'">The run date</option>
+              <option value="text" [selected]="settings.automationPopulateTextSource(a) === 'text'" i18n>Fixed text</option>
+              <option value="current_date" [selected]="settings.automationPopulateTextSource(a) === 'current_date'" i18n="The date the automation runs">The run date</option>
             </select>
           </label>
           @if (settings.automationPopulateTextSource(a) === 'text') {
             <label class="aaf-field">
-              <span class="aaf-label">Text</span>
+              <span class="aaf-label" i18n="Field label: text value">Text</span>
               <input
                 type="text"
-                placeholder="Text to write"
+                placeholder="Text to write" i18n-placeholder
                 [value]="settings.automationPopulateTextValue(a)"
                 (input)="settings.updateAutomationPopulateText(automationId(), index(), $any($event.target).value)"
                 (blur)="settings.flushAutomationActionsSave(automationId())"
@@ -182,7 +188,7 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
             </label>
           } @else {
             <label class="aaf-field aaf-narrow">
-              <span class="aaf-label">Format</span>
+              <span class="aaf-label" i18n="Field label: date format">Format</span>
               <select [value]="settings.automationPopulateTextDateFormat(a)" (change)="settings.updateAutomationPopulateTextDateFormat(automationId(), index(), $any($event.target).value)">
                 @for (format of settings.automationTextDateFormats; track format) {
                   <option [value]="format" [selected]="settings.automationPopulateTextDateFormat(a) === format">{{ settings.automationPopulateTextDateFormatLabel(format) }}</option>
@@ -192,7 +198,7 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
           }
         } @else if (field.type === 'number') {
           <label class="aaf-field aaf-narrow">
-            <span class="aaf-label">Number</span>
+            <span class="aaf-label" i18n="Field label: number value">Number</span>
             <input
               type="number"
               placeholder="0"
@@ -203,15 +209,15 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
           </label>
         } @else if (field.type === 'date') {
           <label class="aaf-field aaf-narrow">
-            <span class="aaf-label">Date</span>
+            <span class="aaf-label" i18n="Field label: date value">Date</span>
             <select [value]="settings.automationPopulateDateSource(a)" (change)="settings.updateAutomationPopulateDateSource(automationId(), index(), $any($event.target).value)">
-              <option value="current" [selected]="settings.automationPopulateDateSource(a) === 'current'">The run date</option>
-              <option value="fixed" [selected]="settings.automationPopulateDateSource(a) === 'fixed'">A fixed date</option>
+              <option value="current" [selected]="settings.automationPopulateDateSource(a) === 'current'" i18n="The date the automation runs">The run date</option>
+              <option value="fixed" [selected]="settings.automationPopulateDateSource(a) === 'fixed'" i18n>A fixed date</option>
             </select>
           </label>
           @if (settings.automationPopulateDateSource(a) === 'fixed') {
             <label class="aaf-field aaf-narrow">
-              <span class="aaf-label">On</span>
+              <span class="aaf-label" i18n="Field label: the fixed date">On</span>
               <input
                 type="date"
                 [value]="settings.automationPopulateDateValue(a)"
@@ -222,88 +228,91 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
           }
         } @else if (field.type === 'checkbox') {
           <label class="aaf-field aaf-narrow">
-            <span class="aaf-label">Set to</span>
+            <span class="aaf-label" i18n="Field label: checkbox value (Checked / Unchecked)">Set to</span>
             <select [value]="settings.automationPopulateCheckboxValue(a)" (change)="settings.updateAutomationPopulateCheckbox(automationId(), index(), $any($event.target).value === 'true')">
-              <option value="true" [selected]="settings.automationPopulateCheckboxValue(a) === 'true'">Checked</option>
-              <option value="false" [selected]="settings.automationPopulateCheckboxValue(a) === 'false'">Unchecked</option>
+              <option value="true" [selected]="settings.automationPopulateCheckboxValue(a) === 'true'" i18n="Checkbox custom field value">Checked</option>
+              <option value="false" [selected]="settings.automationPopulateCheckboxValue(a) === 'false'" i18n="Checkbox custom field value">Unchecked</option>
             </select>
           </label>
         } @else if (field.type === 'select') {
           <div class="aaf-field">
-            <span class="aaf-label">{{ field.allowMultiple ? "Options" : "Option" }}</span>
+            <span class="aaf-label">@if (field.allowMultiple) { <ng-container i18n="Field label: select custom field options">Options</ng-container> } @else { <ng-container i18n="Field label: select custom field option">Option</ng-container> }</span>
             <k-token-multi-select-dropdown
               icon="ti-list"
               [options]="fieldOptions()"
               [selectedIds]="settings.automationPopulateOptionIds(a)"
               [max]="field.allowMultiple ? null : 1"
-              [placeholder]="field.allowMultiple ? 'Choose options' : 'Choose an option'"
+              [placeholder]="field.allowMultiple ? chooseOptionsLabel : chooseOptionLabel"
               searchPlaceholder="Search options..."
+              i18n-searchPlaceholder
               emptyMessage="This field has no options"
+              i18n-emptyMessage
               ariaLabel="Custom field option"
+              i18n-ariaLabel
               (selectedIdsChange)="settings.updateAutomationPopulateIds(automationId(), index(), 'select', $event)"
             />
           </div>
         } @else if (field.type === 'user') {
           <div class="aaf-field">
-            <span class="aaf-label">{{ field.allowMultiple ? "Members" : "Member" }}</span>
+            <span class="aaf-label">@if (field.allowMultiple) { <ng-container i18n="Field label">Members</ng-container> } @else { <ng-container i18n="Field label">Member</ng-container> }</span>
             <k-user-multi-select-dropdown
               [users]="settings.automationMembers()"
               [selectedIds]="settings.automationPopulateUserIds(a)"
               [workspaceId]="settings.workspaceId()"
               [max]="field.allowMultiple ? null : 1"
               [allowEmpty]="true"
-              [placeholder]="field.allowMultiple ? 'Choose members' : 'Choose a member'"
+              [placeholder]="field.allowMultiple ? chooseMembersLabel : chooseMemberLabel"
               (selectedIdsChange)="settings.updateAutomationPopulateIds(automationId(), index(), 'user', $event)"
             />
           </div>
         }
 
         <div class="aaf-field aaf-wide">
-          <span class="aaf-label">When the field already has a value</span>
+          <span class="aaf-label" i18n>When the field already has a value</span>
           <div class="aaf-choice">
             <button type="button" class="aaf-choice-option" [class.is-active]="settings.automationPopulatePolicyValue(a) === 'empty'" (click)="settings.updateAutomationPopulatePolicy(automationId(), index(), 'empty')" [attr.aria-pressed]="settings.automationPopulatePolicyValue(a) === 'empty'">
-              <i class="ti ti-shield-check"></i> Leave it alone
+              <i class="ti ti-shield-check"></i> <ng-container i18n="Option: keep the existing custom field value">Leave it alone</ng-container>
             </button>
             <button type="button" class="aaf-choice-option" [class.is-active]="settings.automationPopulatePolicyValue(a) === 'overwrite'" (click)="settings.updateAutomationPopulatePolicy(automationId(), index(), 'overwrite')" [attr.aria-pressed]="settings.automationPopulatePolicyValue(a) === 'overwrite'">
-              <i class="ti ti-pencil"></i> Overwrite it
+              <i class="ti ti-pencil"></i> <ng-container i18n="Option: replace the existing custom field value">Overwrite it</ng-container>
             </button>
           </div>
         </div>
       }
     } @else if (a.type === 'post_comment') {
       <label class="aaf-field aaf-wide">
-        <span class="aaf-label">Comment</span>
+        <span class="aaf-label" i18n="Field label: comment template">Comment</span>
         <textarea
           rows="3"
-          placeholder="Markdown. Use the placeholders below for card details."
+          placeholder="Markdown. Use the placeholders below for card details." i18n-placeholder
           [value]="settings.automationCommentTemplateValue(a)"
           (input)="settings.updateAutomationCommentTemplate(automationId(), index(), $any($event.target).value)"
           (blur)="settings.flushAutomationActionsSave(automationId())"
         ></textarea>
       </label>
-      <div class="aaf-field aaf-wide aaf-variables" aria-label="Available placeholders">
+      <div class="aaf-field aaf-wide aaf-variables" aria-label="Available placeholders" i18n-aria-label>
         @for (variable of settings.automationCommentTemplateVariables; track variable.token) {
           <code class="aaf-variable" [kTooltip]="variable.label">{{ variable.token }}</code>
         }
       </div>
     } @else if (a.type === 'call_webhook') {
       <label class="aaf-field">
-        <span class="aaf-label">Webhook endpoint</span>
+        <span class="aaf-label" i18n="Field label">Webhook endpoint</span>
         @if (settings.webhooks().length) {
           <select [value]="settings.automationActionTargetValue(a)" (change)="settings.updateAutomationActionTarget(automationId(), index(), $any($event.target).value)">
-            <option value="" [selected]="!settings.automationActionTargetValue(a)">Choose endpoint</option>
+            <option value="" [selected]="!settings.automationActionTargetValue(a)" i18n="Select placeholder: webhook endpoint">Choose endpoint</option>
             @for (hook of settings.webhooks(); track hook.id) {
-              <option [value]="hook.id" [selected]="settings.automationActionTargetValue(a) === hook.id">{{ hook.name }}{{ hook.enabled ? '' : ' (disabled)' }}</option>
+              <option [value]="hook.id" [selected]="settings.automationActionTargetValue(a) === hook.id">@if (hook.enabled) { {{ hook.name }} } @else { <ng-container i18n="Webhook endpoint that is turned off">{{ hook.name // i18n(ph="endpoint") }} (disabled)</ng-container> }</option>
             }
           </select>
         } @else {
-          <p class="aaf-missing">No webhook endpoints yet. Add one under the API tab first.</p>
+          <p class="aaf-missing" i18n>No webhook endpoints yet. Add one under the API tab first.</p>
         }
       </label>
     } @else {
       <!-- clear_due_date, move_to_top, move_to_bottom: no configuration. Say so rather than
            rendering the old literal "No target" placeholder in the middle of the row. -->
-      <p class="aaf-no-config"><i class="ti ti-check"></i> Runs as-is — nothing to configure.</p>
+      <p class="aaf-no-config"><i class="ti ti-check"></i> <ng-container i18n>Runs as-is — nothing to configure.</ng-container></p>
     }
   `,
   styleUrl: "./automation-action-fields.component.scss",
@@ -329,6 +338,11 @@ export class AutomationActionFieldsComponent {
     if (!field || field.type !== "select") return [];
     return field.options.map((option) => ({ id: option.id, name: option.label, color: null }));
   });
+
+  protected readonly chooseOptionsLabel = $localize`Choose options`;
+  protected readonly chooseOptionLabel = $localize`Choose an option`;
+  protected readonly chooseMembersLabel = $localize`Choose members`;
+  protected readonly chooseMemberLabel = $localize`Choose a member`;
 
   protected readonly duePreset = computed(() =>
     this.settings.automationDueDatePresetValue(this.action(), this.automationId(), this.index()),

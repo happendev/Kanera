@@ -1,7 +1,11 @@
+import type { Locale } from "@kanera/shared/locales";
+import { serverMessages } from "../i18n/messages/index.js";
+import { roleLabel } from "./role-label.js";
 import { button, divider, emailLayout, fallbackLink, heading, paragraph } from "./layout.js";
 
 export type InviteAcceptedEmailParams = {
   context?: "org";
+  locale: Locale;
   displayName: string;
   acceptedByName: string;
   acceptedByEmail: string;
@@ -10,6 +14,7 @@ export type InviteAcceptedEmailParams = {
   membersUrl: string;
 } | {
   context: "board";
+  locale: Locale;
   displayName: string;
   acceptedByName: string;
   acceptedByEmail: string;
@@ -20,38 +25,41 @@ export type InviteAcceptedEmailParams = {
 };
 
 export function inviteAcceptedEmail(params: InviteAcceptedEmailParams): string {
-  const { displayName, acceptedByName, acceptedByEmail, orgName } = params;
+  const { locale, displayName, acceptedByName, acceptedByEmail, orgName } = params;
+  const m = serverMessages(locale).email.inviteAccepted;
   const firstName = displayName.split(" ")[0] ?? displayName;
 
   if (params.context === "board") {
-    const roleLabel = params.boardRole.charAt(0).toUpperCase() + params.boardRole.slice(1);
+    const b = m.board;
     return emailLayout({
-      subject: "A Kanera invite was accepted",
-      preheader: `${acceptedByName} joined ${params.boardName}.`,
+      locale,
+      subject: m.subject,
+      preheader: b.preheader({ name: acceptedByName, board: params.boardName }),
       body: `
-        ${heading("Board invite accepted")}
-        ${paragraph(`Hi ${firstName}, ${acceptedByName} accepted an invite and joined ${params.boardName} in ${orgName}.`)}
+        ${heading(b.heading)}
+        ${paragraph(b.intro({ firstName, name: acceptedByName, board: params.boardName, org: orgName }))}
         ${divider("0 0 24px 0")}
-        ${paragraph(`New guest: ${acceptedByName} (${acceptedByEmail})`, "0 0 8px 0")}
-        ${paragraph(`Board role: ${roleLabel}`, "0 0 24px 0")}
-        ${button({ href: params.boardUrl, label: "View board" })}
-        ${fallbackLink(params.boardUrl)}
+        ${paragraph(b.newGuest({ name: acceptedByName, email: acceptedByEmail }), "0 0 8px 0")}
+        ${paragraph(b.role({ role: roleLabel(params.boardRole, locale) }), "0 0 24px 0")}
+        ${button({ href: params.boardUrl, label: b.button })}
+        ${fallbackLink(params.boardUrl, locale)}
       `,
     });
   }
-  const roleLabel = params.orgRole.charAt(0).toUpperCase() + params.orgRole.slice(1);
+  const o = m.org;
 
   return emailLayout({
-    subject: "A Kanera invite was accepted",
-    preheader: `${acceptedByName} joined ${orgName}.`,
+    locale,
+    subject: m.subject,
+    preheader: o.preheader({ name: acceptedByName, org: orgName }),
     body: `
-      ${heading("Invite accepted")}
-      ${paragraph(`Hi ${firstName}, ${acceptedByName} accepted an invite and joined ${orgName}.`)}
+      ${heading(o.heading)}
+      ${paragraph(o.intro({ firstName, name: acceptedByName, org: orgName }))}
       ${divider("0 0 24px 0")}
-      ${paragraph(`New member: ${acceptedByName} (${acceptedByEmail})`, "0 0 8px 0")}
-      ${paragraph(`Organisation role: ${roleLabel}`, "0 0 24px 0")}
-      ${button({ href: params.membersUrl, label: "View members" })}
-      ${fallbackLink(params.membersUrl)}
+      ${paragraph(o.newMember({ name: acceptedByName, email: acceptedByEmail }), "0 0 8px 0")}
+      ${paragraph(o.role({ role: roleLabel(params.orgRole, locale) }), "0 0 24px 0")}
+      ${button({ href: params.membersUrl, label: o.button })}
+      ${fallbackLink(params.membersUrl, locale)}
     `,
   });
 }

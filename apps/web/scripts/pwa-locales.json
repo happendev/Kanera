@@ -1,0 +1,13 @@
+{
+  "en-GB": ["Kanera — All your team's work in one place.", "Kanera home dashboard on a phone", "Kanera board view", "Kanera home dashboard", "Quick capture", "Capture", "Create a Kanera card from text or a link"],
+  "en-US": ["Kanera — All your team's work in one place.", "Kanera home dashboard on a phone", "Kanera board view", "Kanera home dashboard", "Quick capture", "Capture", "Create a Kanera card from text or a link"],
+  "es": ["Kanera — Todo el trabajo de tu equipo en un solo lugar.", "Panel de inicio de Kanera en un teléfono", "Vista de tablero de Kanera", "Panel de inicio de Kanera", "Captura rápida", "Capturar", "Crea una tarjeta de Kanera a partir de texto o un enlace"],
+  "pt-BR": ["Kanera — Todo o trabalho da sua equipe em um só lugar.", "Painel inicial do Kanera em um celular", "Visualização de quadro do Kanera", "Painel inicial do Kanera", "Captura rápida", "Capturar", "Crie um cartão do Kanera a partir de texto ou de um link"],
+  "fr": ["Kanera — Tout le travail de votre équipe au même endroit.", "Tableau de bord d’accueil Kanera sur téléphone", "Vue tableau de Kanera", "Tableau de bord d’accueil Kanera", "Capture rapide", "Capturer", "Créez une carte Kanera à partir d’un texte ou d’un lien"],
+  "de": ["Kanera — Die gesamte Arbeit deines Teams an einem Ort.", "Kanera-Startübersicht auf einem Smartphone", "Kanera-Board-Ansicht", "Kanera-Startübersicht", "Schnellerfassung", "Erfassen", "Erstelle eine Kanera-Karte aus Text oder einem Link"],
+  "ja": ["Kanera — チームのすべての仕事をひとつの場所に。", "スマートフォンのKaneraホーム画面", "Kaneraのボード表示", "Kaneraホーム画面", "クイックキャプチャ", "キャプチャ", "テキストやリンクからKaneraのカードを作成"],
+  "nl": ["Kanera — Al het werk van je team op één plek.", "Kanera-startdashboard op een telefoon", "Kanera-bordweergave", "Kanera-startdashboard", "Snel vastleggen", "Vastleggen", "Maak een Kanera-kaart van tekst of een link"],
+  "nb": ["Kanera — Alt arbeidet til teamet ditt på ett sted.", "Kanera-startside på en telefon", "Kanera-tavlevisning", "Kanera-startside", "Hurtigregistrering", "Registrer", "Opprett et Kanera-kort fra tekst eller en lenke"],
+  "zh-CN": ["Kanera — 团队的所有工作，尽在一处。", "手机上的 Kanera 首页", "Kanera 看板视图", "Kanera 首页", "快速记录", "记录", "从文本或链接创建 Kanera 卡片"],
+  "zh-TW": ["Kanera — 團隊的所有工作，盡在一處。", "手機上的 Kanera 首頁", "Kanera 看板檢視", "Kanera 首頁", "快速記錄", "記錄", "從文字或連結建立 Kanera 卡片"]
+}

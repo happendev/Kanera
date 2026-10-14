@@ -11,7 +11,7 @@
   @if (canEditRole() && canCreateCards()) {
   <!-- Always mounted rather than revealed on hover: a hover-only create button is invisible on
        touch, and it is the affordance that makes a grouped column worth pointing at. -->
-  <button type="button" class="gc-add-btn" [disabled]="!canEdit()" (click)="addRequested.emit(group().key)" [attr.aria-label]="'Add card to ' + group().label" [kTooltip]="'Add card to ' + group().label">
+  <button type="button" class="gc-add-btn" [disabled]="!canEdit()" (click)="addRequested.emit(group().key)" [attr.aria-label]="addCardLabel()" [kTooltip]="addCardLabel()">
     <i class="ti ti-plus"></i>
   </button>
   }

@@ -1,6 +1,6 @@
 <div class="settings-section">
-  <h3 class="settings-section-title"><i class="ti ti-chart-pie"></i><span>Usage</span></h3>
-  <p class="settings-section-help">
+  <h3 class="settings-section-title"><i class="ti ti-chart-pie"></i><span i18n="Settings section heading: storage usage">Usage</span></h3>
+  <p class="settings-section-help" i18n>
     Storage is shared across the whole organisation. Files uploaded to this organisation's boards count here, even when a guest uploads them.
   </p>
 
@@ -12,9 +12,9 @@
       <span class="storage-usage-used">{{ formatBytes(usage.usedBytes) }}</span>
       <span class="storage-usage-of">
         @if (usage.limited && usage.quotaBytes !== null) {
-        of {{ formatBytes(usage.quotaBytes) }} used
+        <ng-container i18n="Follows the used size, e.g. '1.2 GB' + 'of 5.0 GB used'">of {{ formatBytes(usage.quotaBytes) // i18n(ph="quota") }} used</ng-container>
         } @else {
-        used · no storage limit on this deployment
+        <ng-container i18n="Follows the used size, e.g. '1.2 GB' + 'used · no storage limit…'">used · no storage limit on this deployment</ng-container>
         }
       </span>
       @if (usagePercent() !== null) {
@@ -22,7 +22,7 @@
       }
     </div>
     @if (usagePercent() !== null) {
-    <div class="storage-usage-meter" [class.warning]="nearLimit()" role="meter" aria-label="Storage usage" [attr.aria-valuenow]="usagePercent()" aria-valuemin="0" aria-valuemax="100">
+    <div class="storage-usage-meter" [class.warning]="nearLimit()" role="meter" aria-label="Storage usage" i18n-aria-label [attr.aria-valuenow]="usagePercent()" aria-valuemin="0" aria-valuemax="100">
       <span [style.width.%]="usagePercent()"></span>
     </div>
     }
@@ -30,47 +30,46 @@
     <p class="account-plan-note account-plan-note--warning storage-near-limit">
       <i class="ti ti-alert-triangle"></i>
       <span>
-        Your organisation is close to its storage limit. When it's full, nobody can upload files until space is freed. Remove files you no longer need below
         @if (settings.isHosted() && settings.planTier() === 'free') {
-        or <a routerLink="/settings/account-plan">upgrade to Pro</a> for more storage.
+        <ng-container i18n>Your organisation is close to its storage limit. When it's full, nobody can upload files until space is freed. Remove files you no longer need below or <a routerLink="/settings/account-plan">upgrade to Pro</a> for more storage.</ng-container>
         } @else {
-        or contact <a href="mailto:support@kanera.app">support&#64;kanera.app</a> for more storage.
+        <ng-container i18n>Your organisation is close to its storage limit. When it's full, nobody can upload files until space is freed. Remove files you no longer need below or contact <a href="mailto:support@kanera.app">support&#64;kanera.app</a> for more storage.</ng-container>
         }
       </span>
     </p>
     }
   </div>
 
-  <div class="storage-breakdown" aria-label="Storage by type">
+  <div class="storage-breakdown" aria-label="Storage by type" i18n-aria-label>
     @for (category of categories(); track category.key) {
     <div class="storage-breakdown-row">
       <i [class]="'ti ti-' + category.icon"></i>
       <span class="storage-breakdown-label">{{ category.label }}</span>
-      <span class="storage-breakdown-count">{{ category.count }} {{ category.count === 1 ? 'file' : 'files' }}</span>
+      <span class="storage-breakdown-count" i18n>{ category.count, plural, =1 {1 file} other {{{ category.count }} files} }</span>
       <span class="storage-breakdown-bytes">{{ formatBytes(category.bytes) }}</span>
       <span class="storage-bar" aria-hidden="true"><span [style.width.%]="category.share"></span></span>
     </div>
     }
   </div>
-  <p class="settings-section-help storage-personal-help">
+  <p class="settings-section-help storage-personal-help" i18n>
     Personal notes and scratchpads count toward the total, but only their owners can see or remove those files.
   </p>
   } @else {
-  <p class="settings-section-help"><i class="ti ti-loader-2 kanera-spin"></i> Loading storage usage…</p>
+  <p class="settings-section-help"><i class="ti ti-loader-2 kanera-spin"></i> <ng-container i18n>Loading storage usage…</ng-container></p>
   }
 </div>
 
 @if (workspaces().length > 0) {
 <div class="settings-section">
-  <h3 class="settings-section-title"><i class="ti ti-layout-grid"></i><span>By workspace</span></h3>
-  <p class="settings-section-help">Card and shared-note files grouped by where they live. Choose one to review its files.</p>
+  <h3 class="settings-section-title"><i class="ti ti-layout-grid"></i><span i18n="Settings section heading: storage grouped by workspace">By workspace</span></h3>
+  <p class="settings-section-help" i18n>Card and shared-note files grouped by where they live. Choose one to review its files.</p>
   <div class="storage-workspaces">
     @for (workspace of workspaces(); track workspace.workspaceId) {
     <button type="button" class="storage-workspace-row" (click)="showWorkspace(workspace.workspaceId)" [class.active]="workspaceId() === workspace.workspaceId">
       <i [class]="workspace.kind === 'board' ? 'ti ti-layout-kanban' : 'ti ti-layout-grid'"></i>
       <span class="storage-workspace-name">{{ workspace.name }}</span>
       <span class="storage-bar" aria-hidden="true"><span [style.width.%]="workspace.share"></span></span>
-      <span class="storage-workspace-meta">{{ workspace.count }} {{ workspace.count === 1 ? 'file' : 'files' }} · {{ formatBytes(workspace.bytes) }}</span>
+      <span class="storage-workspace-meta"><ng-container i18n>{ workspace.count, plural, =1 {1 file} other {{{ workspace.count }} files} }</ng-container> · {{ formatBytes(workspace.bytes) }}</span>
     </button>
     }
   </div>
@@ -78,27 +77,27 @@
 }
 
 <div class="settings-section" id="storage-cleanup">
-  <h3 class="settings-section-title"><i class="ti ti-trash"></i><span>Clean up files</span></h3>
-  <p class="settings-section-help">
+  <h3 class="settings-section-title"><i class="ti ti-trash"></i><span i18n="Settings section heading">Clean up files</span></h3>
+  <p class="settings-section-help" i18n>
     Find large or old files, including ones on archived cards that nobody sees anymore. Deleting a file removes it from its card or note, wherever it is shown, and frees the space straight away.
   </p>
 
   <div class="storage-filters">
-    <k-segmented [options]="kindOptions" [value]="kind()" [showLabels]="true" size="sm" ariaLabel="File type" (valueChange)="kind.set($event)" />
-    <k-segmented [options]="sortOptions" [value]="sort()" [showLabels]="true" size="sm" ariaLabel="Sort files" (valueChange)="sort.set($event)" />
-    <select class="storage-filter-select" aria-label="Minimum file size" (input)="minBytes.set(+$any($event.target).value)">
+    <k-segmented [options]="kindOptions" [value]="kind()" [showLabels]="true" size="sm" ariaLabel="File type" i18n-ariaLabel (valueChange)="kind.set($event)" />
+    <k-segmented [options]="sortOptions" [value]="sort()" [showLabels]="true" size="sm" ariaLabel="Sort files" i18n-ariaLabel (valueChange)="sort.set($event)" />
+    <select class="storage-filter-select" aria-label="Minimum file size" i18n-aria-label (input)="minBytes.set(+$any($event.target).value)">
       @for (option of sizeFilters; track option.value) {
       <option [value]="option.value" [selected]="option.value === minBytes()">{{ option.label }}</option>
       }
     </select>
-    <select class="storage-filter-select" aria-label="File age" (input)="olderThanDays.set(+$any($event.target).value)">
+    <select class="storage-filter-select" aria-label="File age" i18n-aria-label (input)="olderThanDays.set(+$any($event.target).value)">
       @for (option of ageFilters; track option.value) {
       <option [value]="option.value" [selected]="option.value === olderThanDays()">{{ option.label }}</option>
       }
     </select>
     @if (workspaces().length > 1) {
-    <select class="storage-filter-select" aria-label="Workspace" (input)="workspaceId.set($any($event.target).value)">
-      <option value="" [selected]="!workspaceId()">All workspaces</option>
+    <select class="storage-filter-select" aria-label="Workspace" i18n-aria-label="Filter label" (input)="workspaceId.set($any($event.target).value)">
+      <option value="" [selected]="!workspaceId()" i18n="Workspace filter option">All workspaces</option>
       @for (workspace of workspaces(); track workspace.workspaceId) {
       <option [value]="workspace.workspaceId" [selected]="workspace.workspaceId === workspaceId()">{{ workspace.name }}</option>
       }
@@ -106,35 +105,35 @@
     }
     <label class="storage-filter-check">
       <input type="checkbox" [checked]="archivedOnly()" (change)="archivedOnly.set($any($event.target).checked)" />
-      <span>Archived only</span>
+      <span i18n="Filter checkbox: show only files on archived cards or notes">Archived only</span>
     </label>
   </div>
 
   <div class="storage-files-toolbar">
     <label class="storage-filter-check">
-      <input type="checkbox" [checked]="allOnPageSelected()" [disabled]="files().length === 0" (change)="toggleAll($any($event.target).checked)" aria-label="Select all shown files" />
+      <input type="checkbox" [checked]="allOnPageSelected()" [disabled]="files().length === 0" (change)="toggleAll($any($event.target).checked)" aria-label="Select all shown files" i18n-aria-label />
       <span>
         @if (filesLoading() && files().length === 0) {
-        Loading files…
+        <ng-container i18n>Loading files…</ng-container>
         } @else {
-        {{ filesTotal() }} {{ filesTotal() === 1 ? 'file' : 'files' }} · {{ formatBytes(filesTotalBytes()) }}
+        <ng-container i18n>{ filesTotal(), plural, =1 {1 file} other {{{ filesTotal() }} files} }</ng-container> · {{ formatBytes(filesTotalBytes()) }}
         }
       </span>
     </label>
     @if (filtersActive()) {
-    <button type="button" class="ghost sm" (click)="resetFilters()"><i class="ti ti-filter-off"></i> Clear filters</button>
+    <button type="button" class="ghost sm" (click)="resetFilters()"><i class="ti ti-filter-off"></i> <ng-container i18n="Button">Clear filters</ng-container></button>
     }
     <button type="button" class="sm destructive storage-delete-button" (click)="deleteSelected()" [disabled]="selectedCount() === 0 || deleting()">
       @if (deleting()) {
-      <i class="ti ti-loader-2 kanera-spin"></i> Deleting…
+      <i class="ti ti-loader-2 kanera-spin"></i> <ng-container i18n="Button state">Deleting…</ng-container>
       } @else {
       <i class="ti ti-trash"></i>
-      Delete @if (selectedCount() > 0) { {{ selectedCount() }} · {{ formatBytes(selectedBytes()) }} }
+      @if (selectedCount() > 0) { <ng-container i18n="Button: delete the selected files, with count and total size">Delete {{ selectedCount() // i18n(ph="count") }} · {{ formatBytes(selectedBytes()) // i18n(ph="size") }}</ng-container> } @else { <ng-container i18n="Button: delete the selected files">Delete</ng-container> }
       }
     </button>
   </div>
   @if (selectionFull()) {
-  <p class="settings-section-help">You can delete up to {{ maxFiles }} files at a time.</p>
+  <p class="settings-section-help" i18n>You can delete up to {{ maxFiles // i18n(ph="count") }} files at a time.</p>
   }
 
   @if (filesError()) {
@@ -143,10 +142,10 @@
 
   <!-- Rows stack their metadata under the file name rather than scrolling sideways: the location and
        uploader are what an admin reads before deleting, so they must stay visible on a phone. -->
-  <ul class="storage-files" aria-label="Files" [class.loading]="filesLoading()" [attr.aria-busy]="filesLoading()">
+  <ul class="storage-files" aria-label="Files" i18n-aria-label [class.loading]="filesLoading()" [attr.aria-busy]="filesLoading()">
     @for (file of files(); track file.kind + file.id) {
     <li class="storage-file" [class.selected]="isSelected(file)">
-      <input type="checkbox" class="storage-file-check" [checked]="isSelected(file)" [disabled]="!isSelected(file) && selectionFull()" (change)="toggle(file, $any($event.target).checked)" [attr.aria-label]="'Select ' + file.fileName" />
+      <input type="checkbox" class="storage-file-check" [checked]="isSelected(file)" [disabled]="!isSelected(file) && selectionFull()" (change)="toggle(file, $any($event.target).checked)" [attr.aria-label]="selectFileLabel(file.fileName)" />
       <i [class]="'ti ti-' + fileIcon(file.mimeType) + ' storage-file-icon'"></i>
       <div class="storage-file-body">
         <span class="storage-file-name" [title]="file.fileName">{{ file.fileName }}</span>
@@ -157,7 +156,7 @@
           </a>
           <span>{{ locationLabel(file) }}</span>
           <span>{{ uploadedLabel(file) }}</span>
-          @if (file.archived) { <span class="source-badge warning">Archived</span> }
+          @if (file.archived) { <span class="source-badge warning" i18n="Badge: the file's card or note is archived">Archived</span> }
         </span>
       </div>
       <span class="storage-file-size">{{ formatBytes(file.byteSize) }}</span>
@@ -166,7 +165,7 @@
     @if (!filesLoading() && !filesError()) {
     <li class="storage-files-empty">
       <i class="ti ti-mood-empty"></i>
-      {{ filtersActive() ? 'No files match these filters.' : 'No files yet.' }}
+      @if (filtersActive()) { <ng-container i18n>No files match these filters.</ng-container> } @else { <ng-container i18n>No files yet.</ng-container> }
     </li>
     }
     }
@@ -175,7 +174,7 @@
   @if (hasMore()) {
   <div class="button-row">
     <button type="button" class="ghost sm" (click)="loadMore()" [disabled]="filesLoading()">
-      {{ filesLoading() ? 'Loading…' : 'Show more' }}
+      @if (filesLoading()) { <ng-container i18n="Button state">Loading…</ng-container> } @else { <ng-container i18n="Button: load more files">Show more</ng-container> }
     </button>
   </div>
   }
@@ -183,48 +182,48 @@
 
 @if (settings.isSelfHosted()) {
 <div class="settings-section">
-  <h3 class="settings-section-title"><i class="ti ti-database"></i><span>Storage backend</span></h3>
-  <p class="settings-section-help">
+  <h3 class="settings-section-title"><i class="ti ti-database"></i><span i18n="Settings section heading">Storage backend</span></h3>
+  <p class="settings-section-help" i18n>
     Where uploaded files are stored. Default is local disk; switch to S3-compatible object storage for production.
   </p>
   <div class="storage-switch" [class.disabled]="!settings.isClientAdmin() || settings.storageBusy() || settings.storageFromEnv()">
     <button type="button" class="storage-option" [class.active]="settings.storageKind() === 'local'" (click)="settings.storageKind.set('local')" [disabled]="!settings.isClientAdmin() || settings.storageBusy() || settings.storageFromEnv()">
       <i class="ti ti-server"></i>
-      Local disk
+      <ng-container i18n="Storage backend option">Local disk</ng-container>
     </button>
     <button type="button" class="storage-option" [class.active]="settings.storageKind() === 's3'" (click)="settings.storageKind.set('s3')" [disabled]="!settings.isClientAdmin() || settings.storageBusy() || settings.storageFromEnv()">
       <i class="ti ti-cloud"></i>
-      S3-compatible
+      <ng-container i18n="Storage backend option">S3-compatible</ng-container>
     </button>
   </div>
 
   @if (settings.storageKind() === 's3') {
   <div class="settings-form">
     <label class="settings-field">
-      <span>Region</span>
+      <span i18n="S3 storage field label">Region</span>
       <input [value]="settings.s3Region()" (input)="settings.s3Region.set($any($event.target).value)" name="s3Region" placeholder="us-east-1" [disabled]="!settings.isClientAdmin() || settings.storageBusy() || settings.storageFromEnv()" />
     </label>
     <label class="settings-field">
-      <span>Bucket</span>
+      <span i18n="S3 storage field label">Bucket</span>
       <input [value]="settings.s3Bucket()" (input)="settings.s3Bucket.set($any($event.target).value)" name="s3Bucket" placeholder="my-bucket" [disabled]="!settings.isClientAdmin() || settings.storageBusy() || settings.storageFromEnv()" />
     </label>
     <label class="settings-field">
-      <span>Endpoint (optional)</span>
+      <span i18n="S3 storage field label">Endpoint (optional)</span>
       <input [value]="settings.s3Endpoint()" (input)="settings.s3Endpoint.set($any($event.target).value)" name="s3Endpoint" placeholder="https://s3.example.com"
         [disabled]="!settings.isClientAdmin() || settings.storageBusy() || settings.storageFromEnv()" />
     </label>
     <label class="settings-field">
-      <span>Access key ID</span>
-      <input [value]="settings.s3AccessKeyId()" (input)="settings.s3AccessKeyId.set($any($event.target).value)" name="s3AccessKeyId" autocomplete="off" [placeholder]="settings.s3AccessKeyIsSaved() ? 'Saved, leave blank to keep' : ''"
+      <span i18n="S3 storage field label">Access key ID</span>
+      <input [value]="settings.s3AccessKeyId()" (input)="settings.s3AccessKeyId.set($any($event.target).value)" name="s3AccessKeyId" autocomplete="off" [placeholder]="settings.s3AccessKeyIsSaved() ? savedKeyPlaceholder : ''"
         [disabled]="!settings.isClientAdmin() || settings.storageBusy() || settings.storageFromEnv()" />
     </label>
     <label class="settings-field">
-      <span>Secret access key</span>
+      <span i18n="S3 storage field label">Secret access key</span>
       <input type="password" [value]="settings.s3SecretAccessKey()" (input)="settings.s3SecretAccessKey.set($any($event.target).value)" name="s3SecretAccessKey" autocomplete="off"
-        [placeholder]="settings.s3SecretIsSaved() ? '•••••••• (saved, leave blank to keep)' : ''" [disabled]="!settings.isClientAdmin() || settings.storageBusy() || settings.storageFromEnv()" />
+        [placeholder]="settings.s3SecretIsSaved() ? savedSecretPlaceholder : ''" [disabled]="!settings.isClientAdmin() || settings.storageBusy() || settings.storageFromEnv()" />
     </label>
     <label class="settings-field">
-      <span>Public URL prefix (optional)</span>
+      <span i18n="S3 storage field label">Public URL prefix (optional)</span>
       <input [value]="settings.s3PublicUrlPrefix()" (input)="settings.s3PublicUrlPrefix.set($any($event.target).value)" name="s3PublicUrlPrefix" placeholder="https://cdn.example.com"
         [disabled]="!settings.isClientAdmin() || settings.storageBusy() || settings.storageFromEnv()" />
     </label>
@@ -238,22 +237,22 @@
 
   <div class="button-row">
     <button class="sm" type="button" (click)="settings.saveStorage()" [disabled]="!settings.isClientAdmin() || settings.storageBusy() || settings.storageFromEnv()">
-      {{ settings.storageSaving() ? "Saving..." : "Save storage settings" }}
+      @if (settings.storageSaving()) { <ng-container i18n="Button state">Saving...</ng-container> } @else { <ng-container i18n="Button">Save storage settings</ng-container> }
     </button>
     @if (settings.storageKind() === 's3') {
     <button class="ghost sm" type="button" (click)="settings.testStorage()" [disabled]="!settings.isClientAdmin() || settings.storageBusy()">
       @if (settings.storageTesting()) {
       <i class="ti ti-loader-2 kanera-spin"></i>
-      Testing storage...
+      <ng-container i18n="Button state">Testing storage...</ng-container>
       } @else {
       <i class="ti ti-cloud-check"></i>
-      Test S3 storage
+      <ng-container i18n="Button">Test S3 storage</ng-container>
       }
     </button>
     }
   </div>
   @if (settings.storageKind() === 's3') {
-  <p class="settings-section-help storage-test-help">Uploads a 1KB test file with the current S3 form values, then deletes it immediately.</p>
+  <p class="settings-section-help storage-test-help" i18n>Uploads a 1KB test file with the current S3 form values, then deletes it immediately.</p>
   }
 </div>
 }

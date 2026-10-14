@@ -48,6 +48,9 @@ export const STORAGE_KEYS = {
   // Which account the two keys above were last painted for. Without it, signing in as someone who
   // has never chosen an appearance leaves the previous user's theme on screen.
   APPEARANCE_OWNER: "kanera-appearance-owner",
+  // Interface language last shown on this device. The account's choice is the source of truth; this
+  // copy only lets the next load pick the right translations before /me answers (and before sign-in).
+  LOCALE: "kanera-locale",
   VIEW_PREFIX: "kanera.view",
 } as const;
 

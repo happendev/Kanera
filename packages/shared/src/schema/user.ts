@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { ACCENTS, THEMES } from "../appearance.js";
+import { LOCALES } from "../locales.js";
 import { citext } from "./_citext.js";
 import { valueIn } from "./_value-check.js";
 import { clients } from "./client.js";
@@ -39,6 +40,11 @@ export const users = pgTable(
     // and signing in on a fresh machine does not overwrite what was chosen elsewhere.
     theme: text("theme", { enum: THEMES }),
     accent: text("accent", { enum: ACCENTS }),
+    // Interface language, account-scoped so it follows the person across devices and so server-side
+    // mail and push (which have no browser to ask) reach them in it. Signup records the language the
+    // browser was showing; null is a legacy account that never chose, which the web app resolves from
+    // the browser and mail renders in SOURCE_LOCALE.
+    locale: text("locale", { enum: LOCALES }),
     lastOnlineAt: timestamp("last_online_at", { withTimezone: true }),
     // Set by a platform admin to soft-delete the user. Hides them from tenant listings and blocks auth;
     // the row is retained so historical author/audit references stay valid. Recoverable until purged.
@@ -56,6 +62,7 @@ export const users = pgTable(
     // NULL passes a CHECK, which is what keeps "not chosen" representable alongside the closed set.
     check("users_theme_ck", valueIn(t.theme, THEMES)),
     check("users_accent_ck", valueIn(t.accent, ACCENTS)),
+    check("users_locale_ck", valueIn(t.locale, LOCALES)),
   ],
 );
 

@@ -72,10 +72,10 @@ export class InvitePage implements OnInit {
       this.auth.setSession(session.accessToken, session.user);
       await this.router.navigateByUrl(authenticatedLandingPath(session.user), { replaceUrl: true });
     } catch (error) {
-      if (error instanceof ApiError && error.status === 409) this.errorMessage.set("You already belong to this organisation.");
+      if (error instanceof ApiError && error.status === 409) this.errorMessage.set($localize`You already belong to this organisation.`);
       else if (error instanceof ApiError && (error.body as { code?: string } | null)?.code === "SEAT_LIMIT_REACHED") {
-        this.errorMessage.set("This organisation has no available seats. Ask an admin to purchase more, then try again.");
-      } else this.errorMessage.set("Could not accept the invitation.");
+        this.errorMessage.set($localize`This organisation has no available seats. Ask an admin to purchase more, then try again.`);
+      } else this.errorMessage.set($localize`Could not accept the invitation.`);
     } finally {
       this.sockets.resumeAfterOrganisationSwitch();
       this.busy.set(false);

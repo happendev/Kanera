@@ -27,22 +27,149 @@ export interface ActivityChangeSummaryInput {
 }
 
 /**
+ * The words of an activity summary, so the web app (`$localize`) and the API (per-recipient
+ * catalogs for push) can each supply their language.
+ *
+ * Every entry is a *predicate* that reads after the actor's name, which the drawer renders separately
+ * in bold ("Priya · moved this card to [Doing]"); `value`, when present, is shown after it as a chip.
+ * Translations keep that shape: a phrase that follows the actor, in the language's natural form.
+ * Names passed in are user content: insert them, never translate them.
+ */
+export interface ActivitySummaryMessages {
+  reminder: string;
+  checklistItemOverdue: string;
+  cardOverdue: string;
+  commented: string;
+  editedComment: string;
+  removedComment: string;
+  copiedCardFrom: string;
+  anotherBoard: string;
+  createdCard: string;
+  deletedCard: string;
+  movedCardTo: string;
+  anotherList: string;
+  markedComplete: string;
+  markedIncomplete: string;
+  attached: (fileName: string) => string;
+  attachedFile: string;
+  removedAttachment: string;
+  assignedSelf: string;
+  assigned: (names: string) => string;
+  unassigned: (names: string) => string;
+  changedAssignees: string;
+  addedLabels: (names: string) => string;
+  removedLabels: (names: string) => string;
+  updatedLabels: string;
+  renamedTo: (title: string) => string;
+  editedDescription: string;
+  updatedDueDate: string;
+  removedDueDate: string;
+  updatedCard: string;
+  clearedField: (fieldName: string) => string;
+  /** Fallback field name when the payload has none. */
+  field: string;
+  setFieldTo: (fieldName: string) => string;
+  setCover: string;
+  removedCover: string;
+  addedChecklist: string;
+  deletedChecklist: string;
+  completedSubChecklist: string;
+  /** Chip for a sub-checklist: "{title} on {item}", or "on {item}" when untitled. */
+  subChecklistOn: (title: string | null, parentItem: string) => string;
+  completedChecklist: string;
+  renamedChecklistTo: string;
+  editedChecklistItem: string;
+  updatedChecklistItemDescription: string;
+  clearedChecklistItemDescription: string;
+  changedChecklistItemAssignee: (from: string, to: string) => string;
+  assignedChecklistItem: (name: string) => string;
+  unassignedChecklistItem: string;
+  completedChecklistItem: string;
+  uncompletedChecklistItem: string;
+  addedChecklistItem: string;
+  deletedChecklistItem: string;
+  /** An action this build has no words for; `action` is a humanised internal name. */
+  otherAction: (action: string) => string;
+  /** Joins names: "Ana, Ben and Chen" in each language's own style. */
+  list: (names: string[]) => string;
+}
+
+/** The source (UK English) wording. */
+export const ACTIVITY_SUMMARY_SOURCE_MESSAGES: ActivitySummaryMessages = {
+  reminder: "reminder",
+  checklistItemOverdue: "checklist item is overdue",
+  cardOverdue: "card is overdue",
+  commented: "commented",
+  editedComment: "edited a comment",
+  removedComment: "removed a comment",
+  copiedCardFrom: "copied this card from",
+  anotherBoard: "another board",
+  createdCard: "created this card",
+  deletedCard: "deleted this card",
+  movedCardTo: "moved this card to",
+  anotherList: "another list",
+  markedComplete: "marked this card complete",
+  markedIncomplete: "marked this card incomplete",
+  attached: (fileName) => `attached ${fileName}`,
+  attachedFile: "attached a file",
+  removedAttachment: "removed an attachment",
+  assignedSelf: "assigned themself",
+  assigned: (names) => `assigned ${names}`,
+  unassigned: (names) => `unassigned ${names}`,
+  changedAssignees: "changed assignees",
+  addedLabels: (names) => `added label ${names}`,
+  removedLabels: (names) => `removed label ${names}`,
+  updatedLabels: "updated labels",
+  renamedTo: (title) => `renamed to "${title}"`,
+  editedDescription: "edited the description",
+  updatedDueDate: "updated the due date",
+  removedDueDate: "removed the due date",
+  updatedCard: "updated this card",
+  clearedField: (fieldName) => `cleared ${fieldName}`,
+  field: "field",
+  setFieldTo: (fieldName) => `set ${fieldName} to`,
+  setCover: "set the cover image",
+  removedCover: "removed the cover image",
+  addedChecklist: "added checklist",
+  deletedChecklist: "deleted checklist",
+  completedSubChecklist: "completed sub-checklist",
+  subChecklistOn: (title, parentItem) => (title ? `${title} on ${parentItem}` : `on ${parentItem}`),
+  completedChecklist: "completed checklist",
+  renamedChecklistTo: "renamed checklist to",
+  editedChecklistItem: "edited checklist item",
+  updatedChecklistItemDescription: "updated a checklist item description",
+  clearedChecklistItemDescription: "cleared a checklist item description",
+  changedChecklistItemAssignee: (from, to) => `changed assignee from ${from} to ${to}`,
+  assignedChecklistItem: (name) => `assigned ${name} to checklist item`,
+  unassignedChecklistItem: "unassigned checklist item",
+  completedChecklistItem: "completed checklist item",
+  uncompletedChecklistItem: "marked checklist item incomplete",
+  addedChecklistItem: "added checklist item",
+  deletedChecklistItem: "deleted checklist item",
+  otherAction: (action) => action,
+  list: (names) => names.join(", "),
+};
+
+/**
  * Shared by the notification drawer and the watched-activity push builder so one activity reads
  * the same way wherever it surfaces. Keep it pure — the drawer memoises the result per row rather
  * than calling it from a template, because it is a long switch on a hot change-detection path.
  */
-export function summariseActivityChange(input: ActivityChangeSummaryInput): ActivityChangeSummary {
+export function summariseActivityChange(
+  input: ActivityChangeSummaryInput,
+  m: ActivitySummaryMessages = ACTIVITY_SUMMARY_SOURCE_MESSAGES,
+): ActivityChangeSummary {
   // Checklist-item overdue rows carry no activity, so this must precede the
   // generic overdue branch below (which would otherwise read as "card is overdue").
   // Reminders are the viewer's own alarm and carry no activity either.
   if (input.reason === "reminder") {
-    return { icon: "ti ti-alarm", text: "reminder" };
+    return { icon: "ti ti-alarm", text: m.reminder };
   }
   if (input.reason === "checklist_item_overdue") {
-    return { icon: "ti ti-calendar-exclamation", text: "checklist item is overdue" };
+    return { icon: "ti ti-calendar-exclamation", text: m.checklistItemOverdue };
   }
   if (input.reason === "overdue" || !input.activity) {
-    return { icon: "ti ti-calendar-exclamation", text: "card is overdue" };
+    return { icon: "ti ti-calendar-exclamation", text: m.cardOverdue };
   }
   const activity = input.activity;
   const payload = (activity.payload ?? {}) as Record<string, unknown>;
@@ -50,120 +177,122 @@ export function summariseActivityChange(input: ActivityChangeSummaryInput): Acti
     case "comment":
       return {
         icon: "ti ti-message-circle-2",
-        text: activity.action === "created" ? "commented" : activity.action === "updated" ? "edited a comment" : "removed a comment",
+        text: activity.action === "created" ? m.commented : activity.action === "updated" ? m.editedComment : m.removedComment,
       };
     case "card": {
       switch (activity.action) {
         case "created": {
           const copiedFrom = shortName(payload["duplicatedFromBoardName"]) ?? shortName(payload["duplicatedFromBoardId"]);
-          if (copiedFrom) return { icon: "ti ti-copy", text: "copied this card from", value: copiedFrom };
-          if (typeof payload["duplicatedFromId"] === "string") return { icon: "ti ti-copy", text: "copied this card from", value: "another board" };
-          return { icon: "ti ti-plus", text: "created this card" };
+          if (copiedFrom) return { icon: "ti ti-copy", text: m.copiedCardFrom, value: copiedFrom };
+          if (typeof payload["duplicatedFromId"] === "string") return { icon: "ti ti-copy", text: m.copiedCardFrom, value: m.anotherBoard };
+          return { icon: "ti ti-plus", text: m.createdCard };
         }
         case "deleted":
-          return { icon: "ti ti-trash", text: "deleted this card" };
+          return { icon: "ti ti-trash", text: m.deletedCard };
         case "moved":
-          return { icon: "ti ti-arrows-right-left", text: "moved this card to", value: input.listName ?? "another list" };
+          return { icon: "ti ti-arrows-right-left", text: m.movedCardTo, value: input.listName ?? m.anotherList };
         case "completed":
-          return { icon: "ti ti-circle-check", text: "marked this card complete" };
+          return { icon: "ti ti-circle-check", text: m.markedComplete };
         case "uncompleted":
-          return { icon: "ti ti-circle", text: "marked this card incomplete" };
+          return { icon: "ti ti-circle", text: m.markedIncomplete };
         case "completion:set":
           return {
             icon: payload["toValue"] === true ? "ti ti-circle-check" : "ti ti-circle",
-            text: payload["toValue"] === true ? "marked this card complete" : "marked this card incomplete",
+            text: payload["toValue"] === true ? m.markedComplete : m.markedIncomplete,
           };
-        case "attachment_added":
-          return { icon: "ti ti-paperclip", text: `attached ${shortName(payload["fileName"]) ?? "a file"}` };
+        case "attachment_added": {
+          const fileName = shortName(payload["fileName"]);
+          return { icon: "ti ti-paperclip", text: fileName ? m.attached(fileName) : m.attachedFile };
+        }
         case "attachment_removed":
-          return { icon: "ti ti-paperclip", text: `removed an attachment` };
+          return { icon: "ti ti-paperclip", text: m.removedAttachment };
         case "assignees:set": {
           const added = (payload["addedAssigneeNames"] as string[]) ?? [];
           const removed = (payload["removedAssigneeNames"] as string[]) ?? [];
           const parts: string[] = [];
-          if (added.length) parts.push(addedSelf(payload, activity, input.actorName) ? "assigned themself" : `assigned ${added.join(", ")}`);
-          if (removed.length) parts.push(`unassigned ${removed.join(", ")}`);
-          return { icon: "ti ti-user", text: parts.join(" · ") || "changed assignees" };
+          if (added.length) parts.push(addedSelf(payload, activity, input.actorName) ? m.assignedSelf : m.assigned(m.list(added)));
+          if (removed.length) parts.push(m.unassigned(m.list(removed)));
+          return { icon: "ti ti-user", text: parts.join(" · ") || m.changedAssignees };
         }
         case "labels:set": {
           const added = (payload["addedLabelNames"] as string[]) ?? [];
           const removed = (payload["removedLabelNames"] as string[]) ?? [];
           const parts: string[] = [];
-          if (added.length) parts.push(`added label ${added.join(", ")}`);
-          if (removed.length) parts.push(`removed label ${removed.join(", ")}`);
-          return { icon: "ti ti-tag", text: parts.join(" · ") || "updated labels" };
+          if (added.length) parts.push(m.addedLabels(m.list(added)));
+          if (removed.length) parts.push(m.removedLabels(m.list(removed)));
+          return { icon: "ti ti-tag", text: parts.join(" · ") || m.updatedLabels };
         }
         case "updated": {
           const title = payload["title"];
           const description = payload["description"];
-          if (typeof title === "string") return { icon: "ti ti-pencil", text: `renamed to "${title}"` };
-          if (description !== undefined) return { icon: "ti ti-pencil", text: "edited the description" };
-          if (payload["dueDateLocalDate"] !== undefined) return { icon: "ti ti-calendar", text: payload["dueDateLocalDate"] ? "updated the due date" : "removed the due date" };
-          return { icon: "ti ti-pencil", text: "updated this card" };
+          if (typeof title === "string") return { icon: "ti ti-pencil", text: m.renamedTo(title) };
+          if (description !== undefined) return { icon: "ti ti-pencil", text: m.editedDescription };
+          if (payload["dueDateLocalDate"] !== undefined) return { icon: "ti ti-calendar", text: payload["dueDateLocalDate"] ? m.updatedDueDate : m.removedDueDate };
+          return { icon: "ti ti-pencil", text: m.updatedCard };
         }
         case "customFieldValue:set": {
-          const name = (payload["fieldName"] as string) ?? "field";
+          const name = (payload["fieldName"] as string) ?? m.field;
           const raw = payload["toValue"];
-          if (raw == null || raw === "") return { icon: "ti ti-forms", text: `cleared ${name}` };
+          if (raw == null || raw === "") return { icon: "ti ti-forms", text: m.clearedField(name) };
           let to = "";
           if (typeof raw === "string") to = raw;
           else if (typeof raw === "number" || typeof raw === "boolean") to = String(raw);
           else if (raw != null) to = JSON.stringify(raw);
-          return { icon: "ti ti-forms", text: `set ${name} to`, value: shortName(to) ?? undefined };
+          return { icon: "ti ti-forms", text: m.setFieldTo(name), value: shortName(to) ?? undefined };
         }
         case "cover_set":
-          return { icon: "ti ti-photo", text: "set the cover image" };
+          return { icon: "ti ti-photo", text: m.setCover };
         case "cover_removed":
-          return { icon: "ti ti-photo-off", text: "removed the cover image" };
+          return { icon: "ti ti-photo-off", text: m.removedCover };
         case "checklist:created":
-          return { icon: "ti ti-list-check", text: "added checklist", value: shortName(payload["title"]) ?? undefined };
+          return { icon: "ti ti-list-check", text: m.addedChecklist, value: shortName(payload["title"]) ?? undefined };
         case "checklist:deleted":
-          return { icon: "ti ti-trash", text: "deleted checklist", value: shortName(payload["title"]) ?? undefined };
+          return { icon: "ti ti-trash", text: m.deletedChecklist, value: shortName(payload["title"]) ?? undefined };
         case "checklist:completed": {
           const title = shortName(payload["title"]);
           const parentItemText = shortName(payload["parentItemText"]);
           if (parentItemText) {
             return {
               icon: "ti ti-circle-check",
-              text: "completed sub-checklist",
-              value: title ? `${title} on ${parentItemText}` : `on ${parentItemText}`,
+              text: m.completedSubChecklist,
+              value: m.subChecklistOn(title, parentItemText),
             };
           }
-          return { icon: "ti ti-circle-check", text: "completed checklist", value: title ?? undefined };
+          return { icon: "ti ti-circle-check", text: m.completedChecklist, value: title ?? undefined };
         }
         case "checklist:renamed":
-          return { icon: "ti ti-pencil", text: "renamed checklist to", value: shortName(payload["toValue"]) ?? undefined };
+          return { icon: "ti ti-pencil", text: m.renamedChecklistTo, value: shortName(payload["toValue"]) ?? undefined };
         case "checklistItem:updated":
-          return { icon: "ti ti-pencil", text: "edited checklist item", value: shortName(payload["toValue"]) ?? undefined };
+          return { icon: "ti ti-pencil", text: m.editedChecklistItem, value: shortName(payload["toValue"]) ?? undefined };
         case "checklistItem:description:set":
-          return { icon: "ti ti-align-left", text: payload["toValue"] ? "updated a checklist item description" : "cleared a checklist item description", value: shortName(payload["itemText"]) ?? undefined };
+          return { icon: "ti ti-align-left", text: payload["toValue"] ? m.updatedChecklistItemDescription : m.clearedChecklistItemDescription, value: shortName(payload["itemText"]) ?? undefined };
         case "checklistItem:assignee:set": {
           const assigneeName = typeof payload["assigneeName"] === "string" ? payload["assigneeName"] : null;
           const previousAssigneeName = typeof payload["previousAssigneeName"] === "string" ? payload["previousAssigneeName"] : null;
           return {
             icon: "ti ti-user-check",
             text: assigneeName && previousAssigneeName
-              ? `changed assignee from ${previousAssigneeName} to ${assigneeName}`
-              : assigneeName ? `assigned ${assigneeName} to checklist item` : "unassigned checklist item",
+              ? m.changedChecklistItemAssignee(previousAssigneeName, assigneeName)
+              : assigneeName ? m.assignedChecklistItem(assigneeName) : m.unassignedChecklistItem,
             value: shortName(payload["itemText"]) ?? undefined,
           };
         }
         case "checklistItem:completion":
           return {
             icon: payload["toValue"] === true ? "ti ti-checkbox" : "ti ti-square",
-            text: payload["toValue"] === true ? "completed checklist item" : "marked checklist item incomplete",
+            text: payload["toValue"] === true ? m.completedChecklistItem : m.uncompletedChecklistItem,
             value: shortName(payload["text"]) ?? undefined,
           };
         case "checklistItem:created":
-          return { icon: "ti ti-list-check", text: "added checklist item", value: shortName(payload["text"]) ?? undefined };
+          return { icon: "ti ti-list-check", text: m.addedChecklistItem, value: shortName(payload["text"]) ?? undefined };
         case "checklistItem:deleted":
-          return { icon: "ti ti-trash", text: "deleted checklist item", value: shortName(payload["text"]) ?? undefined };
+          return { icon: "ti ti-trash", text: m.deletedChecklistItem, value: shortName(payload["text"]) ?? undefined };
         default:
-          return { icon: "ti ti-history", text: humanizeAction(activity.action) };
+          return { icon: "ti ti-history", text: m.otherAction(humanizeAction(activity.action)) };
       }
     }
     default:
-      return { icon: "ti ti-history", text: humanizeAction(activity.action) };
+      return { icon: "ti ti-history", text: m.otherAction(humanizeAction(activity.action)) };
   }
 }
 

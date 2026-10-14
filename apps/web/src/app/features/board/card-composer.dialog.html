@@ -9,17 +9,17 @@
   (dragleave)="onDragLeave($event)"
   (drop)="onDrop($event)"
 >
-  <form class="cmp-dialog" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-label="New card" [attr.aria-busy]="busy()" (click)="$event.stopPropagation()" (submit)="submit($event)">
+  <form class="cmp-dialog" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-label="New card" i18n-aria-label="Dialog title" [attr.aria-busy]="busy()" (click)="$event.stopPropagation()" (submit)="submit($event)">
     @if (dragActive()) {
     <div class="cmp-drop" aria-hidden="true">
       <i class="ti ti-paperclip"></i>
-      <span>Drop files to attach</span>
+      <span i18n>Drop files to attach</span>
     </div>
     }
 
     <header class="cmp-head">
       <div class="cmp-head-text">
-        <h3 class="cmp-title">New card</h3>
+        <h3 class="cmp-title" i18n="Dialog title">New card</h3>
         @if (selectedList(); as list) {
         <p class="cmp-sub">
           <i [class]="'ti ti-' + (list.icon || 'list')" [style.color]="list.color ? 'var(--color-' + list.color + ')' : null"></i>
@@ -27,7 +27,7 @@
         </p>
         }
       </div>
-      <button type="button" class="cmp-icon-btn" (click)="requestDismiss()" aria-label="Close" [disabled]="busy()">
+      <button type="button" class="cmp-icon-btn" (click)="requestDismiss()" aria-label="Close" i18n-aria-label [disabled]="busy()">
         <i class="ti ti-x"></i>
       </button>
     </header>
@@ -44,6 +44,7 @@
         rows="1"
         maxlength="500"
         placeholder="What needs doing?"
+        i18n-placeholder="Placeholder for the new card title"
         [value]="draft().title"
         [disabled]="busy()"
         (input)="setTitle($any($event.target).value)"
@@ -65,6 +66,7 @@
           [editable]="!busy()"
           [mentionMembers]="members()"
           placeholder="Add a description… (optional)"
+          i18n-placeholder
           (contentChange)="setDescription($event)"
           (filesForHost)="stagePastedAttachments($event)"
         />
@@ -79,7 +81,7 @@
           <i class="ti" [class]="'ti ' + iconFor(item.file)"></i>
           <span class="cmp-file-name">{{ item.file.name }}</span>
           <span class="cmp-file-size">{{ formatBytes(item.file.size) }}</span>
-          <button type="button" class="cmp-icon-btn cmp-file-remove" [attr.aria-label]="'Remove ' + item.file.name" [disabled]="busy()" (click)="removePendingAttachment(item.key)">
+          <button type="button" class="cmp-icon-btn cmp-file-remove" [attr.aria-label]="removeFileLabel(item.file.name)" [disabled]="busy()" (click)="removePendingAttachment(item.key)">
             <i class="ti ti-x"></i>
           </button>
         </li>
@@ -102,11 +104,11 @@
             <span>{{ board.label }}</span>
             } @else {
             <i class="ti ti-layout-kanban"></i>
-            <span class="cmp-chip-empty">Choose a board</span>
+            <span class="cmp-chip-empty" i18n>Choose a board</span>
             }
           </button>
           @if (isPickerOpen('board')) {
-          <k-anchored-picker title="Board" [groups]="boardGroups()" [selectedId]="boardId()" searchPlaceholder="Search boards…" emptyLabel="No boards you can add cards to" (picked)="selectBoard($event)" (closed)="closePicker()" />
+          <k-anchored-picker title="Board" i18n-title="Picker heading" [groups]="boardGroups()" [selectedId]="boardId()" searchPlaceholder="Search boards…" i18n-searchPlaceholder emptyLabel="No boards you can add cards to" i18n-emptyLabel (picked)="selectBoard($event)" (closed)="closePicker()" />
           }
         </span>
         }
@@ -118,11 +120,11 @@
             <span>{{ list.name }}</span>
             } @else {
             <i class="ti ti-list"></i>
-            <span class="cmp-chip-empty">Choose a list</span>
+            <span class="cmp-chip-empty" i18n>Choose a list</span>
             }
           </button>
           @if (isPickerOpen('list')) {
-          <k-anchored-picker title="List" [groups]="listGroups()" [selectedId]="draft().listId" searchPlaceholder="Search lists…" emptyLabel="This workspace has no lists" (picked)="selectList($event)" (closed)="closePicker()" />
+          <k-anchored-picker title="List" i18n-title="Picker heading" [groups]="listGroups()" [selectedId]="draft().listId" searchPlaceholder="Search lists…" i18n-searchPlaceholder emptyLabel="This workspace has no lists" i18n-emptyLabel (picked)="selectList($event)" (closed)="closePicker()" />
           }
         </span>
 
@@ -134,10 +136,14 @@
               <k-avatar [url]="member.avatarUrl" [name]="member.displayName" [size]="18" [userId]="member.userId" [workspaceId]="workspaceId()" />
               }
             </span>
-            <span>{{ selectedAssignees().length === 1 ? selectedAssignees()[0].displayName : selectedAssignees().length + ' assignees' }}</span>
+            @if (selectedAssignees().length === 1) {
+            <span>{{ selectedAssignees()[0].displayName }}</span>
+            } @else {
+            <span i18n>{ selectedAssignees().length, plural, other {{{ selectedAssignees().length }} assignees} }</span>
+            }
             } @else {
             <i class="ti ti-user-plus"></i>
-            <span class="cmp-chip-empty">Assignees</span>
+            <span class="cmp-chip-empty" i18n="Chip: choose who the card is assigned to">Assignees</span>
             }
           </button>
           @if (isPickerOpen('assignees')) {
@@ -146,7 +152,7 @@
         </span>
 
         <span class="cmp-prop">
-          <button type="button" class="cmp-chip" [class.is-open]="isPickerOpen('labels')" [disabled]="busy() || !labels().length" [attr.aria-label]="selectedLabels().length ? 'Labels: ' + selectedLabelNames() : 'Labels'" (click)="togglePicker('labels')">
+          <button type="button" class="cmp-chip" [class.is-open]="isPickerOpen('labels')" [disabled]="busy() || !labels().length" [attr.aria-label]="labelsAriaLabel()" (click)="togglePicker('labels')">
             @if (selectedLabels(); as selected) {
             @if (selected.length) {
             <span class="cmp-label-swatches" aria-hidden="true">
@@ -154,10 +160,14 @@
               <span class="cmp-label-swatch" [style.background]="label.color ? 'var(--color-' + label.color + ')' : 'var(--border-strong)'"></span>
               }
             </span>
-            <span>{{ selected.length === 1 ? selected[0].name : selected.length + ' labels' }}</span>
+            @if (selected.length === 1) {
+            <span>{{ selected[0].name }}</span>
+            } @else {
+            <span i18n>{ selected.length, plural, other {{{ selected.length }} labels} }</span>
+            }
             } @else {
             <i class="ti ti-tag"></i>
-            <span class="cmp-chip-empty">Labels</span>
+            <span class="cmp-chip-empty" i18n="Chip: choose the card's labels">Labels</span>
             }
             }
           </button>
@@ -172,7 +182,7 @@
             @if (dueDateLabel(); as label) {
             <span>{{ label }}</span>
             } @else {
-            <span class="cmp-chip-empty">Due date</span>
+            <span class="cmp-chip-empty" i18n="Chip: choose the card's due date">Due date</span>
             }
           </button>
           @if (isPickerOpen('due')) {
@@ -186,9 +196,9 @@
           <button type="button" class="cmp-chip" [class.is-set]="pendingAttachments().length" [disabled]="busy()" (click)="fileInput.click()">
             <i class="ti ti-paperclip"></i>
             @if (pendingAttachments().length; as count) {
-            <span>{{ count }} file{{ count === 1 ? '' : 's' }}</span>
+            <span i18n>{ count, plural, one {{{ count }} file} other {{{ count }} files} }</span>
             } @else {
-            <span class="cmp-chip-empty">Attach</span>
+            <span class="cmp-chip-empty" i18n="Chip: attach files to the new card">Attach</span>
             }
           </button>
           <input #fileInput type="file" multiple hidden [accept]="attachmentAccept" (change)="onFilesChosen($event)" />
@@ -199,18 +209,18 @@
           <button type="button" class="cmp-chip" [class.is-open]="isPickerOpen('checklists')" [disabled]="busy()" (click)="togglePicker('checklists')">
             <i class="ti ti-checklist"></i>
             @if (selectedChecklistTemplates().length; as count) {
-            <span>{{ count }} checklist{{ count === 1 ? '' : 's' }}</span>
+            <span i18n>{ count, plural, one {{{ count }} checklist} other {{{ count }} checklists} }</span>
             } @else {
-            <span class="cmp-chip-empty">Checklists</span>
+            <span class="cmp-chip-empty" i18n="Chip: add checklists from templates">Checklists</span>
             }
           </button>
           @if (isPickerOpen('checklists')) {
           <div class="cmp-panel" kAnchoredPanel [apPlacement]="{ width: 288, maxHeight: 320 }" (apDismissed)="closePicker()">
             <div class="cmp-panel-head">
-              <span>Checklist templates</span>
-              <button type="button" class="cmp-icon-btn" aria-label="Close" (click)="closePicker()"><i class="ti ti-x"></i></button>
+              <span i18n="Picker heading">Checklist templates</span>
+              <button type="button" class="cmp-icon-btn" aria-label="Close" i18n-aria-label (click)="closePicker()"><i class="ti ti-x"></i></button>
             </div>
-            <k-picker-list [groups]="checklistTemplateGroups()" [selectedIds]="draft().checklistTemplateIds" searchPlaceholder="Search templates…" emptyLabel="No checklist templates" (pick)="toggleChecklistTemplate($event)" />
+            <k-picker-list [groups]="checklistTemplateGroups()" [selectedIds]="draft().checklistTemplateIds" searchPlaceholder="Search templates…" i18n-searchPlaceholder emptyLabel="No checklist templates" i18n-emptyLabel (pick)="toggleChecklistTemplate($event)" />
           </div>
           }
         </span>
@@ -248,14 +258,14 @@
             }
           </button>
           @if (isPickerOpen('cf', field.id)) {
-          <k-member-picker [members]="members()" [selectedIds]="userIdsFor(field.id)" [currentUserId]="currentUserId()" [workspaceId]="workspaceId()" [allowClear]="true" clearLabel="Clear" (toggle)="toggleFieldUser(field, $event)" (clear)="clearField(field)" (close)="closePicker()" />
+          <k-member-picker [members]="members()" [selectedIds]="userIdsFor(field.id)" [currentUserId]="currentUserId()" [workspaceId]="workspaceId()" [allowClear]="true" clearLabel="Clear" i18n-clearLabel="Button: clear the selected people" (toggle)="toggleFieldUser(field, $event)" (clear)="clearField(field)" (close)="closePicker()" />
           }
           }
           @case ('date') {
           <button type="button" class="cmp-chip" [class.is-open]="isPickerOpen('cf', field.id)" [disabled]="busy()" (click)="toggleCfPicker(field.id)">
             <i [class]="'ti ti-' + (field.icon || 'calendar')"></i>
             @if (valueFor(field.id).valueDate; as value) {
-            <span>{{ value }}</span>
+            <span>{{ formatFieldDate(value) }}</span>
             } @else {
             <span class="cmp-chip-empty">{{ field.name }}</span>
             }
@@ -296,18 +306,20 @@
     </div>
 
     <footer class="cmp-actions">
-      <label class="cmp-another" kTooltip="Keep this dialog open and reuse its column, labels and assignees for the next card">
+      <label class="cmp-another" kTooltip="Keep this dialog open and reuse its column, labels and assignees for the next card" i18n-kTooltip>
         <input type="checkbox" [checked]="createAnother()" [disabled]="busy()" (change)="createAnother.set($any($event.target).checked)" />
-        <span>Create another</span>
+        <span i18n="Checkbox: keep the dialog open to create another card">Create another</span>
       </label>
       <span class="cmp-actions-spacer"></span>
-      <button type="button" class="cmp-cancel" (click)="cancel()" [disabled]="busy()">Cancel</button>
+      <button type="button" class="cmp-cancel" (click)="cancel()" [disabled]="busy()" i18n>Cancel</button>
       <button type="submit" class="cmp-submit" [disabled]="!canSubmit()">
         @if (busy()) { <i class="ti ti-loader-2 kanera-spin" aria-hidden="true"></i> }
         @if (uploadProgress(); as progress) {
-        Uploading {{ progress.current }} of {{ progress.total }}…
+        <ng-container i18n>Uploading {{ progress.current // i18n(ph="current") }} of {{ progress.total // i18n(ph="total") }}…</ng-container>
+        } @else if (busy()) {
+        <ng-container i18n="Button while the card is being created">Creating…</ng-container>
         } @else {
-        {{ busy() ? "Creating…" : "Create card" }}
+        <ng-container i18n="Button">Create card</ng-container>
         }
       </button>
     </footer>

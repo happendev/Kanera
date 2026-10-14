@@ -12,6 +12,7 @@ import {
   workspaceMembers,
   workspaces,
   userNotificationWorkspaceRules,
+  users,
   type DailyDigestEmailQueueData,
 } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
@@ -48,6 +49,26 @@ void test("daily digest queues due items at the user's local 8am and skips obser
   assert.deepEqual(data.overdue.map((item) => item.title), ["Overdue"]);
   assert.equal(data.dueToday[0]!.boardName, "Launch");
   assert.equal(data.dueToday[0]!.cardUrl, `http://web.test/o/${f.dueToday.organisationKey}/c/${f.dueToday.key}`);
+});
+
+// Digests are batched, but each one is labelled in its own recipient's language and date order.
+void test("each digest is dated in its recipient's language", async () => {
+  const f = await seed();
+  await db.update(users).set({ locale: "en-US" }).where(eq(users.id, f.laterUser.id));
+
+  assert.equal(await runDailyDigestSweep(deps(), new Date("2026-05-26T07:15:00Z")), 1);
+  assert.equal(await runDailyDigestSweep(deps(), new Date("2026-05-26T12:15:00Z")), 1);
+
+  const rows = await db.select().from(emailQueue).where(eq(emailQueue.type, "daily_digest"));
+  const byEmail = new Map(rows.map((row) => [row.toEmail, row.data as DailyDigestEmailQueueData & { locale?: string }]));
+  // No stored language: the source language (UK English, day first).
+  const member = byEmail.get("member@example.com")!;
+  assert.equal(member.locale, "en-GB");
+  assert.equal(member.localDateLabel, "26 May 2026");
+  assert.equal(member.overdue[0]!.dueLabel, "Due 25 May");
+  const later = byEmail.get("later@example.com")!;
+  assert.equal(later.locale, "en-US");
+  assert.equal(later.localDateLabel, "May 26, 2026");
 });
 
 void test("daily digest excludes every item covered by a paused workspace rule", async () => {

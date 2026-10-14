@@ -13,9 +13,9 @@ import type { AutosaveState } from "./autosave-tracker";
   template: `
     <span class="chip" [attr.data-state]="state()" role="status" aria-live="polite">
       @switch (state()) {
-        @case ('saving') { <i class="ti ti-loader-2 spin" aria-hidden="true"></i><span>Saving…</span> }
-        @case ('saved') { <i class="ti ti-check" aria-hidden="true"></i><span>Saved</span> }
-        @case ('error') { <i class="ti ti-alert-circle" aria-hidden="true"></i><span>Not saved</span> }
+        @case ('saving') { <i class="ti ti-loader-2 spin" aria-hidden="true"></i><span i18n="Autosave status">Saving…</span> }
+        @case ('saved') { <i class="ti ti-check" aria-hidden="true"></i><span i18n="Autosave status">Saved</span> }
+        @case ('error') { <i class="ti ti-alert-circle" aria-hidden="true"></i><span i18n="Autosave status after a failed save">Not saved</span> }
       }
     </span>
   `,

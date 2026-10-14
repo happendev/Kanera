@@ -20,6 +20,7 @@ import {
   storageConfigNeedsEncryption,
 } from "../../lib/secrets.js";
 import { mergeSmtpPassword, redactSmtpConfig, smtpConfigFromEnv, testSmtpConfig } from "../../lib/smtp.js";
+import { requestLocale } from "../../lib/i18n/request-locale.js";
 import { createStorageForConfig, getConfiguredS3StorageConfig, getStorageForClient } from "../../lib/storage/index.js";
 import { orgLogoStorageKey, storageProbeKey } from "../../lib/storage/keys.js";
 import { getFreePlanLimits } from "../../lib/tier-limits.js";
@@ -437,13 +438,13 @@ export async function clientRoutes(app: FastifyInstance) {
     }
     const envConfig = smtpConfigFromEnv();
     if (envConfig) {
-      await testSmtpConfig(envConfig, body.to);
+      await testSmtpConfig(envConfig, body.to, requestLocale(req));
       return { ok: true };
     }
     if (!body.smtpConfig) throw badRequest("smtpConfig required");
     const current = await loadClient(req.auth.cid);
     const config = mergeSmtpPassword(body.smtpConfig, current.smtpConfig ?? smtpConfigFromEnv());
-    await testSmtpConfig(config, body.to);
+    await testSmtpConfig(config, body.to, requestLocale(req));
     return { ok: true };
   });
 

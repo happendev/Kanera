@@ -46,6 +46,9 @@ export class AgentConnectCardComponent implements OnInit {
     return url ? buildAgentSetupSnippet(this.snippetClient(), url) : null;
   });
   readonly docsUrl = `${KANERA_DOCS_URL}/ai-mcp-oauth`;
+  readonly copiedLabel = $localize`:Tooltip after copying to the clipboard:Copied`;
+  readonly copyUrlLabel = $localize`:Tooltip:Copy MCP address`;
+  readonly copySnippetLabel = $localize`:Tooltip:Copy setup snippet`;
 
   private resetTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -53,6 +56,10 @@ export class AgentConnectCardComponent implements OnInit {
     this.destroyRef.onDestroy(() => {
       if (this.resetTimer) clearTimeout(this.resetTimer);
     });
+  }
+
+  copySnippetAriaLabel(client: string): string {
+    return $localize`:Button label; the agent client name (e.g. Cursor) is inserted:Copy ${client}:client: setup`;
   }
 
   async ngOnInit() {

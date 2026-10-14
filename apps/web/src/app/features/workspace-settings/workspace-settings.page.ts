@@ -18,6 +18,8 @@ import { ToastService } from "../../shared/toast.service";
 import { KANERA_DOCS_URL } from "../../shared/docs-link.component";
 import type { CardLabelPresentation } from "../board/card-labels.component";
 import { formatDateTime, formatRelativeTime } from "../../shared/date-format";
+import { icu } from "../../core/i18n/icu";
+import { appLocale } from "../../core/i18n/locale";
 import { AuthService } from "../../core/auth/auth.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { AppTitleService } from "../../core/title/app-title.service";
@@ -186,18 +188,18 @@ const workspaceSettingsTabs = ["general", "boards", "lists", "fields", "template
 const standaloneExcludedTabs = new Set<WorkspaceSettingsTab>(["boards", "members"]);
 const proSettingsTabs = new Set<WorkspaceSettingsTab>(["guests", "integrations", "api"]);
 const workspaceSettingsTabLabels: Record<WorkspaceSettingsTab, string> = {
-  general: "General",
-  boards: "Boards",
-  lists: "Lists",
-  fields: "Custom Fields",
-  templates: "Checklists",
-  automations: "Automations",
-  labels: "Card Labels",
-  members: "Members",
-  guests: "Guests",
-  integrations: "Integrations",
-  api: "API",
-  import: "Import",
+  general: $localize`:Workspace settings tab:General`,
+  boards: $localize`:Workspace settings tab:Boards`,
+  lists: $localize`:Workspace settings tab:Lists`,
+  fields: $localize`:Workspace settings tab:Custom Fields`,
+  templates: $localize`:Workspace settings tab:Checklists`,
+  automations: $localize`:Workspace settings tab:Automations`,
+  labels: $localize`:Workspace settings tab:Card Labels`,
+  members: $localize`:Workspace settings tab:Members`,
+  guests: $localize`:Workspace settings tab:Guests`,
+  integrations: $localize`:Workspace settings tab:Integrations`,
+  api: $localize`:Workspace settings tab:API`,
+  import: $localize`:Workspace settings tab:Import`,
 };
 /** Tabler names, without the `ti-` prefix. Account settings labels its tabs the same way. */
 const workspaceSettingsTabIcons: Record<WorkspaceSettingsTab, string> = {
@@ -223,11 +225,11 @@ type PopulateDateSource = "fixed" | "current";
 type AutomationDueDatePreset = "0" | "1" | "2" | "7" | "custom";
 const automationTextDateFormats = ["date", "month", "month_long_short_year", "month_long_year", "datetime"] as const satisfies readonly PopulateTextDateFormat[];
 const automationDueDatePresets = [
-  { value: "0", label: "Today" },
-  { value: "1", label: "Tomorrow" },
-  { value: "2", label: "In 2 days" },
-  { value: "7", label: "In 1 week" },
-  { value: "custom", label: "Custom..." },
+  { value: "0", label: $localize`:Automation due date option:Today` },
+  { value: "1", label: $localize`:Automation due date option:Tomorrow` },
+  { value: "2", label: $localize`:Automation due date option:In 2 days` },
+  { value: "7", label: $localize`:Automation due date option:In 1 week` },
+  { value: "custom", label: $localize`:Automation due date option — enter a number of days:Custom...` },
 ] as const satisfies readonly { value: AutomationDueDatePreset; label: string }[];
 const automationDueDatePresetOffsets = new Set<number>(automationDueDatePresets.filter((option) => option.value !== "custom").map((option) => Number(option.value)));
 
@@ -264,7 +266,12 @@ type AutomationRecipeBody = {
   applyOnMove?: boolean;
   actions: AutomationActionBody[];
 };
-const automationRecipeGroups = ["Intake", "In progress", "Wrap-up"] as const;
+const automationRecipeGroups = ["intake", "progress", "wrap-up"] as const;
+const automationRecipeGroupLabels: Record<(typeof automationRecipeGroups)[number], string> = {
+  intake: $localize`:Group heading in the example automations menu:Intake`,
+  progress: $localize`:Group heading in the example automations menu:In progress`,
+  "wrap-up": $localize`:Group heading in the example automations menu:Wrap-up`,
+};
 type AutomationRecipeGroup = (typeof automationRecipeGroups)[number];
 type AutomationRecipe = {
   id: string;
@@ -307,12 +314,6 @@ const matchRecipeTemplate = (templates: WireChecklistTemplate[], hints: readonly
 const matchRecipeField = (fields: WireCustomField[], type: CustomFieldTypeName, hints: readonly string[]) =>
   matchNamed(fields.filter((field) => field.type === type), hints, (field) => field.name);
 
-/** "a", "a and b", "a, b and c" — recipe sentences run to three clauses at most. */
-function joinRecipeClauses(clauses: string[]): string {
-  if (clauses.length < 2) return clauses[0] ?? "";
-  return `${clauses.slice(0, -1).join(", ")} and ${clauses[clauses.length - 1]}`;
-}
-
 // Vocabulary a workspace is likely to use for each workflow stage. Substrings, so "escalat" covers
 // both "Escalated" and "Escalation", and "progress" covers "In Progress" and "Progress".
 const REVIEW_LIST_HINTS = ["review", "qa", "approval", "testing", "check"];
@@ -327,32 +328,32 @@ const ACTIVE_LABEL_HINTS = ["active", "in progress", "wip", "working", "started"
 const OVERDUE_LABEL_HINTS = ["overdue", "late", "urgent", "at risk", "risk", "escalat"];
 const ESCALATION_LABEL_HINTS = ["escalat", "blocked", "urgent", "critical", "issue"];
 
+// Each recipe's resolved sentence is one translatable message per combination of optional actions
+// (never clauses joined in code), so a translator can reorder the whole sentence.
 const automationRecipeCatalogue: readonly AutomationRecipe[] = [
   {
     id: "triage-new-cards",
-    group: "Intake",
+    group: "intake",
     icon: "ti-inbox",
-    title: "Triage new cards",
-    detail: "When a card is created in your first list, label it for triage and apply your intake checklist.",
-    requirement: "Needs a triage or support label, or an intake checklist template.",
+    title: $localize`:Example automation title:Triage new cards`,
+    detail: $localize`:Example automation description:When a card is created in your first list, label it for triage and apply your intake checklist.`,
+    requirement: $localize`:What an example automation needs before it can be used:Needs a triage or support label, or an intake checklist template.`,
     resolve: ({ lists, labels, templates }) => {
       const intake = lists[0];
       if (!intake) return null;
       const label = matchRecipeLabel(labels, TRIAGE_LABEL_HINTS);
       const template = matchRecipeTemplate(templates, TRIAGE_TEMPLATE_HINTS);
       const actions: AutomationActionBody[] = [];
-      const clauses: string[] = [];
-      if (label) {
-        actions.push({ type: "add_labels", config: { labelIds: [label.id] } });
-        clauses.push(`add the ${label.name} label`);
-      }
-      if (template) {
-        actions.push({ type: "apply_checklists", config: { templateIds: [template.id] } });
-        clauses.push(`apply the ${template.title} checklist`);
-      }
+      if (label) actions.push({ type: "add_labels", config: { labelIds: [label.id] } });
+      if (template) actions.push({ type: "apply_checklists", config: { templateIds: [template.id] } });
       if (!actions.length) return null;
+      const detail = label && template
+        ? $localize`:Example automation description:When a card is created in ${intake.name}:list:, add the ${label.name}:label: label and apply the ${template.title}:checklist: checklist.`
+        : label
+          ? $localize`:Example automation description:When a card is created in ${intake.name}:list:, add the ${label.name}:label: label.`
+          : $localize`:Example automation description:When a card is created in ${intake.name}:list:, apply the ${template!.title}:checklist: checklist.`;
       return {
-        detail: `When a card is created in ${intake.name}, ${joinRecipeClauses(clauses)}.`,
+        detail,
         // Created only: a card moved back into intake has already been triaged once, and re-applying
         // the checklist would reset the items someone has ticked.
         body: { triggerType: "card_enters_list", triggerListId: intake.id, applyOnCreate: true, applyOnMove: false, actions },
@@ -361,16 +362,16 @@ const automationRecipeCatalogue: readonly AutomationRecipe[] = [
   },
   {
     id: "due-on-intake",
-    group: "Intake",
+    group: "intake",
     icon: "ti-calendar-plus",
-    title: "Give new work a deadline",
-    detail: "When a card lands in your first list, set its due date to tomorrow.",
-    requirement: "Add a list first.",
+    title: $localize`:Example automation title:Give new work a deadline`,
+    detail: $localize`:Example automation description:When a card lands in your first list, set its due date to tomorrow.`,
+    requirement: $localize`:What an example automation needs before it can be used:Add a list first.`,
     resolve: ({ lists }) => {
       const intake = lists[0];
       if (!intake) return null;
       return {
-        detail: `When a card lands in ${intake.name}, set its due date to tomorrow.`,
+        detail: $localize`:Example automation description:When a card lands in ${intake.name}:list:, set its due date to tomorrow.`,
         body: {
           triggerType: "card_enters_list",
           triggerListId: intake.id,
@@ -383,86 +384,80 @@ const automationRecipeCatalogue: readonly AutomationRecipe[] = [
   },
   {
     id: "start-review",
-    group: "In progress",
+    group: "progress",
     icon: "ti-checkup-list",
-    title: "Start review consistently",
-    detail: "When a card enters your review list, apply the review checklist and flag it as needing review.",
-    requirement: "Needs a review or QA list, plus a matching checklist template or label.",
+    title: $localize`:Example automation title:Start review consistently`,
+    detail: $localize`:Example automation description:When a card enters your review list, apply the review checklist and flag it as needing review.`,
+    requirement: $localize`:What an example automation needs before it can be used:Needs a review or QA list, plus a matching checklist template or label.`,
     resolve: ({ lists, labels, templates }) => {
       const review = matchRecipeList(lists, REVIEW_LIST_HINTS);
       if (!review) return null;
       const template = matchRecipeTemplate(templates, REVIEW_TEMPLATE_HINTS);
       const label = matchRecipeLabel(labels, REVIEW_LABEL_HINTS);
       const actions: AutomationActionBody[] = [];
-      const clauses: string[] = [];
-      if (template) {
-        actions.push({ type: "apply_checklists", config: { templateIds: [template.id] } });
-        clauses.push(`apply the ${template.title} checklist`);
-      }
-      if (label) {
-        actions.push({ type: "add_labels", config: { labelIds: [label.id] } });
-        clauses.push(`add the ${label.name} label`);
-      }
+      if (template) actions.push({ type: "apply_checklists", config: { templateIds: [template.id] } });
+      if (label) actions.push({ type: "add_labels", config: { labelIds: [label.id] } });
       if (!actions.length) return null;
+      const detail = template && label
+        ? $localize`:Example automation description:When a card enters ${review.name}:list:, apply the ${template.title}:checklist: checklist and add the ${label.name}:label: label.`
+        : template
+          ? $localize`:Example automation description:When a card enters ${review.name}:list:, apply the ${template.title}:checklist: checklist.`
+          : $localize`:Example automation description:When a card enters ${review.name}:list:, add the ${label!.name}:label: label.`;
       return {
-        detail: `When a card enters ${review.name}, ${joinRecipeClauses(clauses)}.`,
+        detail,
         body: { triggerType: "card_enters_list", triggerListId: review.id, applyOnCreate: true, applyOnMove: true, actions },
       };
     },
   },
   {
     id: "advance-checklist-work",
-    group: "In progress",
+    group: "progress",
     icon: "ti-checkbox",
-    title: "Advance checklist-driven work",
-    detail: "When every checklist item on a card is ticked, move it on and drop the review label.",
-    requirement: "Add a second list to move finished work into.",
+    title: $localize`:Example automation title:Advance checklist-driven work`,
+    detail: $localize`:Example automation description:When every checklist item on a card is ticked, move it on and drop the review label.`,
+    requirement: $localize`:What an example automation needs before it can be used:Add a second list to move finished work into.`,
     resolve: ({ lists, labels }) => {
       if (lists.length < 2) return null;
       const target = matchRecipeList(lists, READY_LIST_HINTS) ?? lists[lists.length - 1];
       if (!target) return null;
       const label = matchRecipeLabel(labels, REVIEW_LABEL_HINTS);
       const actions: AutomationActionBody[] = [{ type: "move_to_list", config: { listId: target.id, placement: "top" } }];
-      const clauses = [`move it to the top of ${target.name}`];
-      if (label) {
-        actions.push({ type: "remove_labels", config: { labelIds: [label.id] } });
-        clauses.push(`remove the ${label.name} label`);
-      }
+      if (label) actions.push({ type: "remove_labels", config: { labelIds: [label.id] } });
       return {
-        detail: `When every checklist item on a card is ticked, ${joinRecipeClauses(clauses)}.`,
+        detail: label
+          ? $localize`:Example automation description:When every checklist item on a card is ticked, move it to the top of ${target.name}:list: and remove the ${label.name}:label: label.`
+          : $localize`:Example automation description:When every checklist item on a card is ticked, move it to the top of ${target.name}:list:.`,
         body: { triggerType: "all_checklist_items_complete", actions },
       };
     },
   },
   {
     id: "surface-overdue",
-    group: "In progress",
+    group: "progress",
     icon: "ti-alarm",
-    title: "Surface overdue work",
-    detail: "When a card's due date arrives, float it to the top of its list so nobody has to go looking.",
-    requirement: "Add a list first.",
+    title: $localize`:Example automation title:Surface overdue work`,
+    detail: $localize`:Example automation description:When a card's due date arrives, float it to the top of its list so nobody has to go looking.`,
+    requirement: $localize`:What an example automation needs before it can be used:Add a list first.`,
     resolve: ({ lists, labels }) => {
       if (!lists.length) return null;
       const label = matchRecipeLabel(labels, OVERDUE_LABEL_HINTS);
       const actions: AutomationActionBody[] = [{ type: "move_to_top", config: {} }];
-      const clauses = ["move it to the top of its list"];
-      if (label) {
-        actions.push({ type: "add_labels", config: { labelIds: [label.id] } });
-        clauses.push(`add the ${label.name} label`);
-      }
+      if (label) actions.push({ type: "add_labels", config: { labelIds: [label.id] } });
       return {
-        detail: `When a card's due date arrives, ${joinRecipeClauses(clauses)}.`,
+        detail: label
+          ? $localize`:Example automation description:When a card's due date arrives, move it to the top of its list and add the ${label.name}:label: label.`
+          : $localize`:Example automation description:When a card's due date arrives, move it to the top of its list.`,
         body: { triggerType: "due_date_arrives", actions },
       };
     },
   },
   {
     id: "escalate-consistently",
-    group: "In progress",
+    group: "progress",
     icon: "ti-flag",
-    title: "Escalate consistently",
-    detail: "When an escalation label is added, pull the card to the top of its list and stamp when it happened.",
-    requirement: "Needs a label like Escalated, Blocked or Urgent.",
+    title: $localize`:Example automation title:Escalate consistently`,
+    detail: $localize`:Example automation description:When an escalation label is added, pull the card to the top of its list and stamp when it happened.`,
+    requirement: $localize`:What an example automation needs before it can be used:Needs a label like Escalated, Blocked or Urgent.`,
     resolve: ({ labels, fields }) => {
       const label = matchRecipeLabel(labels, ESCALATION_LABEL_HINTS);
       if (!label) return null;
@@ -470,24 +465,24 @@ const automationRecipeCatalogue: readonly AutomationRecipe[] = [
       // date field would be stamped with a date that means nothing.
       const sinceField = matchRecipeField(fields, "date", ["escalat", "blocked since", "flagged", "raised"]);
       const actions: AutomationActionBody[] = [{ type: "move_to_top", config: {} }];
-      const clauses = ["move the card to the top of its list"];
       if (sinceField) {
         actions.push({ type: "populate_custom_field", config: { fieldId: sinceField.id, onlyIfEmpty: true, value: { kind: "date", source: "current" } } });
-        clauses.push(`set ${sinceField.name} to today`);
       }
       return {
-        detail: `When the ${label.name} label is added, ${joinRecipeClauses(clauses)}.`,
+        detail: sinceField
+          ? $localize`:Example automation description:When the ${label.name}:label: label is added, move the card to the top of its list and set ${sinceField.name}:field: to today.`
+          : $localize`:Example automation description:When the ${label.name}:label: label is added, move the card to the top of its list.`,
         body: { triggerType: "card_label_set", triggerLabelId: label.id, actions },
       };
     },
   },
   {
     id: "finish-cleanly",
-    group: "Wrap-up",
+    group: "wrap-up",
     icon: "ti-circle-check",
-    title: "Finish work cleanly",
-    detail: "When a card reaches your done list, mark it complete and clear the deadline it no longer needs.",
-    requirement: "Add a second list to act as the done list.",
+    title: $localize`:Example automation title:Finish work cleanly`,
+    detail: $localize`:Example automation description:When a card reaches your done list, mark it complete and clear the deadline it no longer needs.`,
+    requirement: $localize`:What an example automation needs before it can be used:Add a second list to act as the done list.`,
     resolve: ({ lists, labels }) => {
       if (lists.length < 2) return null;
       const done = matchRecipeList(lists, DONE_LIST_HINTS) ?? lists[lists.length - 1];
@@ -497,38 +492,34 @@ const automationRecipeCatalogue: readonly AutomationRecipe[] = [
         { type: "set_completion", config: { completed: true } },
         { type: "clear_due_date", config: {} },
       ];
-      const clauses = ["mark it complete", "clear its due date"];
-      if (label) {
-        actions.push({ type: "remove_labels", config: { labelIds: [label.id] } });
-        clauses.push(`remove the ${label.name} label`);
-      }
+      if (label) actions.push({ type: "remove_labels", config: { labelIds: [label.id] } });
       return {
-        detail: `When a card enters ${done.name}, ${joinRecipeClauses(clauses)}.`,
+        detail: label
+          ? $localize`:Example automation description:When a card enters ${done.name}:list:, mark it complete, clear its due date and remove the ${label.name}:label: label.`
+          : $localize`:Example automation description:When a card enters ${done.name}:list:, mark it complete and clear its due date.`,
         body: { triggerType: "card_enters_list", triggerListId: done.id, applyOnCreate: true, applyOnMove: true, actions },
       };
     },
   },
   {
     id: "reopen-on-return",
-    group: "Wrap-up",
+    group: "wrap-up",
     icon: "ti-rotate-2",
-    title: "Reopen work that moves back",
-    detail: "When a completed card returns to your in-progress list, mark it incomplete again.",
+    title: $localize`:Example automation title:Reopen work that moves back`,
+    detail: $localize`:Example automation description:When a completed card returns to your in-progress list, mark it incomplete again.`,
     // No positional fallback: a middle list has no structural meaning, and marking cards incomplete
     // in the wrong one is a destructive guess.
-    requirement: "Needs a list named for work in progress.",
+    requirement: $localize`:What an example automation needs before it can be used:Needs a list named for work in progress.`,
     resolve: ({ lists, labels }) => {
       const progress = matchRecipeList(lists, PROGRESS_LIST_HINTS);
       if (!progress) return null;
       const label = matchRecipeLabel(labels, ACTIVE_LABEL_HINTS);
       const actions: AutomationActionBody[] = [{ type: "set_completion", config: { completed: false } }];
-      const clauses = ["mark it incomplete"];
-      if (label) {
-        actions.push({ type: "add_labels", config: { labelIds: [label.id] } });
-        clauses.push(`add the ${label.name} label`);
-      }
+      if (label) actions.push({ type: "add_labels", config: { labelIds: [label.id] } });
       return {
-        detail: `When a card moves back into ${progress.name}, ${joinRecipeClauses(clauses)}.`,
+        detail: label
+          ? $localize`:Example automation description:When a card moves back into ${progress.name}:list:, mark it incomplete and add the ${label.name}:label: label.`
+          : $localize`:Example automation description:When a card moves back into ${progress.name}:list:, mark it incomplete.`,
         body: {
           triggerType: "card_enters_list",
           triggerListId: progress.id,
@@ -542,40 +533,38 @@ const automationRecipeCatalogue: readonly AutomationRecipe[] = [
   },
   {
     id: "cleanup-completed",
-    group: "Wrap-up",
+    group: "wrap-up",
     icon: "ti-eraser",
-    title: "Clean up completed work",
-    detail: "When a card is marked complete, clear its due date so it stops showing as due.",
-    requirement: "Add a list first.",
+    title: $localize`:Example automation title:Clean up completed work`,
+    detail: $localize`:Example automation description:When a card is marked complete, clear its due date so it stops showing as due.`,
+    requirement: $localize`:What an example automation needs before it can be used:Add a list first.`,
     resolve: ({ lists, labels }) => {
       if (!lists.length) return null;
       const label = matchRecipeLabel(labels, ACTIVE_LABEL_HINTS);
       const actions: AutomationActionBody[] = [{ type: "clear_due_date", config: {} }];
-      const clauses = ["clear its due date"];
-      if (label) {
-        actions.push({ type: "remove_labels", config: { labelIds: [label.id] } });
-        clauses.push(`remove the ${label.name} label`);
-      }
+      if (label) actions.push({ type: "remove_labels", config: { labelIds: [label.id] } });
       return {
-        detail: `When a card is marked complete, ${joinRecipeClauses(clauses)}.`,
+        detail: label
+          ? $localize`:Example automation description:When a card is marked complete, clear its due date and remove the ${label.name}:label: label.`
+          : $localize`:Example automation description:When a card is marked complete, clear its due date.`,
         body: { triggerType: "card_marked_complete", actions },
       };
     },
   },
   {
     id: "carry-estimate-into-actuals",
-    group: "Wrap-up",
+    group: "wrap-up",
     icon: "ti-arrow-bar-to-right",
-    title: "Carry an estimate into actuals",
-    detail: "When a card is finished, copy its estimate into the actuals field so the two can be compared.",
-    requirement: "Needs two number fields, one for the estimate and one for actuals.",
+    title: $localize`:Example automation title:Carry an estimate into actuals`,
+    detail: $localize`:Example automation description:When a card is finished, copy its estimate into the actuals field so the two can be compared.`,
+    requirement: $localize`:What an example automation needs before it can be used:Needs two number fields, one for the estimate and one for actuals.`,
     resolve: ({ lists, fields }) => {
       const done = matchRecipeList(lists, DONE_LIST_HINTS) ?? (lists.length > 1 ? lists[lists.length - 1] : undefined);
       const estimate = matchRecipeField(fields, "number", ["estimate", "estimated", "planned", "budget"]);
       const actual = matchRecipeField(fields, "number", ["actual", "spent", "logged", "real"]);
       if (!done || !estimate || !actual) return null;
       return {
-        detail: `When a card enters ${done.name}, copy ${estimate.name} into ${actual.name} if it is still empty.`,
+        detail: $localize`:Example automation description:When a card enters ${done.name}:list:, copy ${estimate.name}:sourceField: into ${actual.name}:targetField: if it is still empty.`,
         body: {
           triggerType: "card_enters_list",
           triggerListId: done.id,
@@ -588,18 +577,18 @@ const automationRecipeCatalogue: readonly AutomationRecipe[] = [
   },
   {
     id: "stamp-completion-month",
-    group: "Wrap-up",
+    group: "wrap-up",
     icon: "ti-calendar-stats",
-    title: "Stamp the month work finished",
-    detail: "When a card is marked complete, record the month in your reporting field.",
+    title: $localize`:Example automation title:Stamp the month work finished`,
+    detail: $localize`:Example automation description:When a card is marked complete, record the month in your reporting field.`,
     // Only a field that names a month: a text field grabbed by position gets stamped with a value
     // that means nothing to whoever reads the column later.
-    requirement: "Needs a text field named for a month or period.",
+    requirement: $localize`:What an example automation needs before it can be used:Needs a text field named for a month or period.`,
     resolve: ({ fields }) => {
       const field = matchRecipeField(fields, "text", ["month", "period", "billing"]);
       if (!field) return null;
       return {
-        detail: `When a card is marked complete, fill ${field.name} with the current month.`,
+        detail: $localize`:Example automation description:When a card is marked complete, fill ${field.name}:field: with the current month.`,
         body: {
           triggerType: "card_marked_complete",
           // onlyIfEmpty: a card can be completed, reopened and completed again; the month the work
@@ -632,16 +621,16 @@ function extractErrorMessage(error: unknown): string {
       ?.map((issue) => {
         const field = issue.path?.join(".");
         if (field === "url" && issue.message?.toLowerCase().includes("url")) {
-          return "Please enter a valid webhook URL.";
+          return $localize`Please enter a valid webhook URL.`;
         }
         if (issue.message) return issue.message;
-        return field ? `Please check ${field}.` : null;
+        return field ? $localize`:Validation error; the name of the invalid field follows:Please check ${field}:field:.` : null;
       })
       .filter(Boolean);
     if (issueMessages?.length) return issueMessages.join("; ");
-    return body?.message ?? "Something went wrong. Please try again.";
+    return body?.message ?? $localize`Something went wrong. Please try again.`;
   }
-  return error instanceof Error ? error.message : "Something went wrong. Please try again.";
+  return error instanceof Error ? error.message : $localize`Something went wrong. Please try again.`;
 }
 
 // Adding this guest would cross the host org's free guest-board cap but its purchased seat pool is full
@@ -727,8 +716,14 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly completedCardsActiveDaysDraft = signal(DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS);
   readonly inactiveCardsDaysDraft = signal(DEFAULT_INACTIVE_CARDS_DAYS);
   readonly isStandalone = computed(() => this.workspace()?.kind === "board");
-  readonly entityLabel = computed(() => this.isStandalone() ? "board" : "workspace");
-  readonly entityLabelTitle = computed(() => this.isStandalone() ? "Board" : "Workspace");
+  /** "board" for a standalone board, else "workspace". An ICU select key in templates, never shown as text. */
+  readonly entityKind = computed(() => this.isStandalone() ? "board" : "workspace");
+  readonly pageTitle = computed(() => {
+    const name = this.workspace()?.name;
+    if (name) return $localize`:Settings page heading; a workspace or board name precedes:${name}:name: Settings`;
+    return this.isStandalone() ? $localize`Board Settings` : $localize`Workspace Settings`;
+  });
+  readonly tabStripLabel = computed(() => this.isStandalone() ? $localize`Board settings sections` : $localize`Workspace settings sections`);
   readonly lists = signal<List[]>([]);
   readonly fields = signal<WireCustomField[]>([]);
   readonly templates = signal<WireChecklistTemplate[]>([]);
@@ -795,7 +790,9 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly automationCommentTemplateVariables = automationCommentTemplateVariables;
   readonly automationActionLimit = AUTOMATION_ACTION_LIMIT;
   readonly automationLimit = AUTOMATION_LIMIT;
-  readonly automationLimitHint = computed(() => `${this.entityLabelTitle()}s can have up to ${AUTOMATION_LIMIT} automations. Contact support if you need more.`);
+  readonly automationLimitHint = computed(() => this.isStandalone()
+    ? $localize`Boards can have up to ${AUTOMATION_LIMIT}:limit: automations. Contact support if you need more.`
+    : $localize`Workspaces can have up to ${AUTOMATION_LIMIT}:limit: automations. Contact support if you need more.`);
   readonly automationLimitReached = computed(() => this.automations().length >= AUTOMATION_LIMIT);
   readonly automationTextDateFormats = automationTextDateFormats;
   readonly automationDueDatePresets = automationDueDatePresets;
@@ -807,6 +804,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }));
   readonly enabledAutomationCount = computed(() => this.automations().filter((automation) => automation.enabled).length);
   readonly automationRecipeGroups = automationRecipeGroups;
+  readonly automationRecipeGroupLabels = automationRecipeGroupLabels;
   /**
    * Example automations, resolved against this workspace's lists, labels, templates and fields.
    *
@@ -839,8 +837,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
   private readonly automationActionSaveQueues = new Map<string, Promise<void>>();
   readonly automationMembers = computed(() =>
     [...this.members()].sort((a, b) =>
-      a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }) ||
-      a.email.localeCompare(b.email, undefined, { sensitivity: "base" }),
+      a.displayName.localeCompare(b.displayName, appLocale(), { sensitivity: "base" }) ||
+      a.email.localeCompare(b.email, appLocale(), { sensitivity: "base" }),
     ),
   );
   readonly dueDateSlots: readonly DueDateSlot[] = CARD_DUE_DATE_SLOTS;
@@ -878,8 +876,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
     return this.orgUsers()
       .filter((u) => !memberIds.has(u.id))
       .sort((a, b) =>
-        a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }) ||
-        a.email.localeCompare(b.email, undefined, { sensitivity: "base" }),
+        a.displayName.localeCompare(b.displayName, appLocale(), { sensitivity: "base" }) ||
+        a.email.localeCompare(b.email, appLocale(), { sensitivity: "base" }),
       );
   });
   readonly filteredMembers = computed(() => {
@@ -888,18 +886,18 @@ export class WorkspaceSettingsPage implements OnDestroy {
       (m) => m.displayName.toLowerCase().includes(q) || m.email.toLowerCase().includes(q),
     ) : this.members();
     return [...matches].sort((a, b) =>
-      a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }) ||
-      a.email.localeCompare(b.email, undefined, { sensitivity: "base" }),
+      a.displayName.localeCompare(b.displayName, appLocale(), { sensitivity: "base" }) ||
+      a.email.localeCompare(b.email, appLocale(), { sensitivity: "base" }),
     );
   });
   readonly sortedAcceptedGuests = computed(() => [...this.acceptedGuests()].sort((a, b) =>
-    a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }) ||
-    a.email.localeCompare(b.email, undefined, { sensitivity: "base" }) ||
-    a.boardName.localeCompare(b.boardName, undefined, { sensitivity: "base" }),
+    a.displayName.localeCompare(b.displayName, appLocale(), { sensitivity: "base" }) ||
+    a.email.localeCompare(b.email, appLocale(), { sensitivity: "base" }) ||
+    a.boardName.localeCompare(b.boardName, appLocale(), { sensitivity: "base" }),
   ));
   readonly sortedPendingGuestInvites = computed(() => [...this.pendingGuestInvites()].sort((a, b) =>
-    a.email.localeCompare(b.email, undefined, { sensitivity: "base" }) ||
-    a.boardName.localeCompare(b.boardName, undefined, { sensitivity: "base" }),
+    a.email.localeCompare(b.email, appLocale(), { sensitivity: "base" }) ||
+    a.boardName.localeCompare(b.boardName, appLocale(), { sensitivity: "base" }),
   ));
   readonly currentUserId = computed(() => this.auth.user()?.id ?? "");
   readonly ownerClientId = computed(() => this.auth.user()?.clientId ?? null);
@@ -935,17 +933,17 @@ export class WorkspaceSettingsPage implements OnDestroy {
   });
   readonly enabledAutomationLimitHint = computed(() => {
     const max = this.auth.maxEnabledAutomations();
-    return max === null ? null : `Your plan allows ${max} enabled automation${max === 1 ? "" : "s"} at a time.`;
+    return max === null ? null : icu($localize`:Plan limit hint:{max, plural, one {Your plan allows # enabled automation at a time.} other {Your plan allows # enabled automations at a time.}}`, { max });
   });
   readonly enabledAutomationAllowance = this.auth.maxEnabledAutomations;
   readonly automationExecutionLimitHint = computed(() => {
     const max = this.auth.maxAutomationExecutionsPerMonth();
-    return max === null ? null : `Your plan includes ${max} automation executions per month.`;
+    return max === null ? null : icu($localize`:Plan limit hint:{max, plural, one {Your plan includes # automation execution per month.} other {Your plan includes # automation executions per month.}}`, { max });
   });
   readonly automationExecutionAllowance = this.auth.maxAutomationExecutionsPerMonth;
   readonly automationExecutionsRemaining = signal<number | null>(null);
   readonly automationExecutionAllowanceExhausted = computed(() => this.automationExecutionsRemaining() === 0);
-  readonly planUpgradeHint = "Upgrade your plan to unlock this.";
+  readonly planUpgradeHint = $localize`Upgrade your plan to unlock this.`;
   readonly workspaceEntityNameMaxLength = WORKSPACE_ENTITY_NAME_MAX_LENGTH;
   readonly labelNameMaxLength = CARD_LABEL_NAME_MAX_LENGTH;
   readonly apiKeyNameMaxLength = API_KEY_NAME_MAX_LENGTH;
@@ -974,7 +972,11 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly customFieldValidation = computed(() => {
     const name = this.newField().trim();
     if (!name) return this.customFieldError();
-    if (this.hasDuplicateFieldName(name)) return `Custom field names must be unique within this ${this.entityLabel()}.`;
+    if (this.hasDuplicateFieldName(name)) {
+      return this.isStandalone()
+        ? $localize`Custom field names must be unique within this board.`
+        : $localize`Custom field names must be unique within this workspace.`;
+    }
     return this.customFieldError();
   });
 
@@ -1009,7 +1011,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     });
 
     effect(() => {
-      this.appTitle.set(this.workspace()?.name ?? "Workspace", "Settings");
+      this.appTitle.set(this.workspace()?.name ?? $localize`:Fallback page title:Workspace`, $localize`:Page title suffix:Settings`);
     });
 
     effect(() => {
@@ -1565,7 +1567,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
       if (this.workspaceId() === workspaceId) {
         this.completedCardsActiveDaysDraft.set(workspace.completedCardsActiveDays);
         this.inactiveCardsDaysDraft.set(workspace.inactiveCardsDays);
-        this.generalSettingsError.set(`${this.entityLabelTitle()} defaults could not be updated.`);
+        this.generalSettingsError.set(this.isStandalone() ? $localize`Board defaults could not be updated.` : $localize`Workspace defaults could not be updated.`);
       }
     } finally {
       this.generalSettingsSaving.set(false);
@@ -1599,9 +1601,9 @@ export class WorkspaceSettingsPage implements OnDestroy {
       if (!enabled) {
         const { count } = await this.api.get<{ count: number }>(`/workspaces/${this.workspaceId()}/mirror-status`);
         if (count > 0 && !await this.confirm.open({
-          title: "Disable board linking?",
-          message: `${count} board link${count === 1 ? "" : "s"} will be deleted. This cannot be undone.`,
-          confirmLabel: "Disable and delete links",
+          title: $localize`Disable board linking?`,
+          message: icu($localize`:Confirm dialog:{count, plural, one {# board link will be deleted. This cannot be undone.} other {# board links will be deleted. This cannot be undone.}}`, { count }),
+          confirmLabel: $localize`:Confirm button:Disable and delete links`,
           danger: true,
         })) {
           restorePrevious();
@@ -1611,7 +1613,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
       await this.patchWorkspace({ boardLinkingEnabled: enabled });
     } catch {
       restorePrevious();
-      this.boardLinkingError.set("Board linking could not be updated.");
+      this.boardLinkingError.set($localize`Board linking could not be updated.`);
     } finally {
       this.boardLinkingSaving.set(false);
     }
@@ -1640,7 +1642,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
       await this.patchWorkspace({ notesEnabled: enabled });
     } catch {
       restorePrevious();
-      this.notesError.set("Notes could not be updated.");
+      this.notesError.set($localize`Notes could not be updated.`);
     } finally {
       this.notesSaving.set(false);
     }
@@ -1673,9 +1675,10 @@ export class WorkspaceSettingsPage implements OnDestroy {
       // Deleting a list hard-deletes its cards, so the toast still names the count; the check is the
       // same GET the old confirm dialog made, just without a modal in front of it.
       const { cardCount } = await this.api.get<DeletionImpactResponse>(`/lists/${id}/deletion-impact`);
-      const cardLabel = cardCount === 1 ? "card" : "cards";
       this.deferDelete({
-        message: cardCount > 0 ? `List "${list.name}" and ${cardCount} ${cardLabel} deleted.` : `List "${list.name}" deleted.`,
+        message: cardCount > 0
+          ? icu($localize`:Undo toast:{count, plural, one {List "{list}" and # card deleted.} other {List "{list}" and # cards deleted.}}`, { count: cardCount, list: list.name })
+          : $localize`:Undo toast:List "${list.name}:list:" deleted.`,
         icon: "trash",
         hide: () => this.lists.update((items) => items.filter((l) => l.id !== id)),
         restore: () => this.lists.update((items) => this.insertBack(items, list, (l) => l.position)),
@@ -1702,7 +1705,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
           await options.request();
         } catch (error) {
           options.restore();
-          this.toasts.info(`Couldn't delete: ${extractErrorMessage(error)}`, "alert-triangle");
+          this.toasts.info($localize`:Toast; the reason follows:Couldn't delete: ${extractErrorMessage(error)}:reason:`, "alert-triangle");
         }
       },
     });
@@ -1764,7 +1767,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
       this.newFieldAllowMultiple.set(false);
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
-        this.customFieldError.set("Custom field names must be unique within a workspace.");
+        this.customFieldError.set($localize`Custom field names must be unique within a workspace.`);
         return;
       }
       throw error;
@@ -1791,7 +1794,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
       this.fields.update((items) => items.map((f) => (f.id === id ? field : f)));
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
-        this.customFieldError.set("Custom field names must be unique within a workspace.");
+        this.customFieldError.set($localize`Custom field names must be unique within a workspace.`);
       } else {
         throw error;
       }
@@ -1886,7 +1889,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     const field = this.fields().find((f) => f.id === id);
     if (!field) return;
     this.deferDelete({
-      message: `Custom field "${field.name}" deleted.`,
+      message: $localize`:Undo toast:Custom field "${field.name}:field:" deleted.`,
       icon: "trash",
       hide: () => this.fields.update((items) => items.filter((f) => f.id !== id)),
       restore: () => this.fields.update((items) => this.insertBack(items, field, (f) => f.position)),
@@ -1974,7 +1977,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     if (!template) return;
     const index = this.templates().indexOf(template);
     this.deferDelete({
-      message: `Template "${template.title}" deleted.`,
+      message: $localize`:Undo toast:Template "${template.title}:template:" deleted.`,
       icon: "trash",
       hide: () => this.templates.update((ts) => ts.filter((t) => t.id !== id)),
       restore: () => this.templates.update((ts) => [...ts.slice(0, index), template, ...ts.slice(index)]),
@@ -2247,32 +2250,47 @@ export class WorkspaceSettingsPage implements OnDestroy {
 
   /**
    * The rule's title, and now the only place the trigger is stated — the collapsed summary beneath
-   * it lists actions only. Composed from the same event/target pieces the editor uses so the two can
-   * never drift, and for `card_enters_list` the event half folds in the create/move scope, which is
-   * why the sentence says more than the trigger type alone.
+   * it lists actions only. It uses the same target label as `automationTriggerTargetLabel`, and for
+   * `card_enters_list` it folds in the create/move scope, which is why the sentence says more than
+   * the trigger type alone.
    */
   automationTriggerLabel(automation: WireAutomation): string {
-    const event = this.automationTriggerEventLabel(automation);
     const target = this.automationTriggerTargetLabel(automation);
-    return target ? `${event} ${target}` : event;
+    if (target === null) return this.automationTriggerEventLabel(automation);
+    // One message per trigger so a translator can place the target anywhere in the sentence.
+    switch (automation.triggerType) {
+      case "card_leaves_list": return $localize`:Automation title; a list name follows:Card leaves ${target}:list:`;
+      case "due_date_approaching": {
+        const days = automation.triggerDaysBefore ?? 1;
+        return icu($localize`:Automation title:{days, plural, one {Due date approaches # day before} other {Due date approaches # days before}}`, { days });
+      }
+      case "card_assigned_to_user": return $localize`:Automation title; member names follow:Card assigned to ${target}:members:`;
+      case "card_label_set": return $localize`:Automation title; a label name follows:Label set to ${target}:label:`;
+      case "custom_field_value_changed": return $localize`:Automation title; "field = value" follows:Custom field changes to ${target}:condition:`;
+      default: break;
+    }
+    if (automation.applyOnCreate && automation.applyOnMove) return $localize`:Automation title; a list name follows:Card created or moved into ${target}:list:`;
+    if (automation.applyOnCreate) return $localize`:Automation title; a list name follows:Card created in ${target}:list:`;
+    if (automation.applyOnMove) return $localize`:Automation title; a list name follows:Card moved into ${target}:list:`;
+    return $localize`:Automation title; a list name follows:Card enters ${target}:list:`;
   }
 
   automationTriggerEventLabel(automation: WireAutomation): string {
-    if (automation.triggerType === "card_leaves_list") return "Card leaves";
-    if (automation.triggerType === "due_date_arrives") return "Due date arrives";
-    if (automation.triggerType === "due_date_approaching") return "Due date approaches";
-    if (automation.triggerType === "card_becomes_inactive") return "Card becomes inactive";
-    if (automation.triggerType === "all_checklist_items_complete") return "All checklist items complete";
-    if (automation.triggerType === "card_assigned_to_user") return "Card assigned to";
-    if (automation.triggerType === "card_marked_complete") return "Card marked complete";
-    if (automation.triggerType === "card_label_set") return "Label set to";
-    if (automation.triggerType === "custom_field_value_changed") return "Custom field changes to";
-    if (automation.applyOnCreate && automation.applyOnMove) return "Card created or moved into";
-    if (automation.applyOnCreate) return "Card created in";
-    if (automation.applyOnMove) return "Card moved into";
+    if (automation.triggerType === "card_leaves_list") return $localize`:Automation trigger, followed by a list name:Card leaves`;
+    if (automation.triggerType === "due_date_arrives") return $localize`:Automation trigger:Due date arrives`;
+    if (automation.triggerType === "due_date_approaching") return $localize`:Automation trigger:Due date approaches`;
+    if (automation.triggerType === "card_becomes_inactive") return $localize`:Automation trigger:Card becomes inactive`;
+    if (automation.triggerType === "all_checklist_items_complete") return $localize`:Automation trigger:All checklist items complete`;
+    if (automation.triggerType === "card_assigned_to_user") return $localize`:Automation trigger, followed by member names:Card assigned to`;
+    if (automation.triggerType === "card_marked_complete") return $localize`:Automation trigger:Card marked complete`;
+    if (automation.triggerType === "card_label_set") return $localize`:Automation trigger, followed by a label name:Label set to`;
+    if (automation.triggerType === "custom_field_value_changed") return $localize`:Automation trigger, followed by field = value:Custom field changes to`;
+    if (automation.applyOnCreate && automation.applyOnMove) return $localize`:Automation trigger, followed by a list name:Card created or moved into`;
+    if (automation.applyOnCreate) return $localize`:Automation trigger, followed by a list name:Card created in`;
+    if (automation.applyOnMove) return $localize`:Automation trigger, followed by a list name:Card moved into`;
     // Neither scope. Stay neutral in the sentence rather than mangling it — automationHasNoEntryType()
     // raises this as a warning in the card meta, where health signals live.
-    return "Card enters";
+    return $localize`:Automation trigger, followed by a list name:Card enters`;
   }
 
   /**
@@ -2554,9 +2572,13 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   addAutomationHint(): string {
-    if (this.lists().length === 0) return `Add a list to this ${this.entityLabel()} before creating an automation.`;
+    if (this.lists().length === 0) {
+      return this.isStandalone()
+        ? $localize`Add a list to this board before creating an automation.`
+        : $localize`Add a list to this workspace before creating an automation.`;
+    }
     if (this.automationLimitReached()) return this.automationLimitHint();
-    return "New automation";
+    return $localize`:Tooltip on the New automation button:New automation`;
   }
 
   async toggleAutomationEnabled(automation: WireAutomation) {
@@ -2683,8 +2705,10 @@ export class WorkspaceSettingsPage implements OnDestroy {
    */
   automationApplyToggleHint(automation: WireAutomation, field: "applyOnCreate" | "applyOnMove"): string | null {
     if (!this.canToggleAutomationApply(automation, field)) return null;
-    const label = field === "applyOnCreate" ? "cards created in this list" : "cards moved into this list";
-    return automation[field] ? `Stop running for ${label}` : `Also run for ${label}`;
+    if (field === "applyOnCreate") {
+      return automation[field] ? $localize`Stop running for cards created in this list` : $localize`Also run for cards created in this list`;
+    }
+    return automation[field] ? $localize`Stop running for cards moved into this list` : $localize`Also run for cards moved into this list`;
   }
 
   addAutomationAction(id: string) {
@@ -2959,7 +2983,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
         }
       } catch {
         if (this.workspaceId() === workspaceId) {
-          this.toasts.info("Couldn't save automation actions. Your changes are still here; edit the rule to retry.", "alert-triangle");
+          this.toasts.info($localize`Couldn't save automation actions. Your changes are still here; edit the rule to retry.`, "alert-triangle");
         }
       }
     };
@@ -3010,28 +3034,28 @@ export class WorkspaceSettingsPage implements OnDestroy {
   /** What the admin still has to pick before an action row can be saved. */
   automationActionIssue(action: AutomationActionBody): string | null {
     if (this.isAutomationActionComplete(action)) return null;
-    if (action.type === "add_labels" || action.type === "remove_labels") return "Pick at least one label to save this action.";
-    if (action.type === "add_assignees" || action.type === "remove_assignees") return "Pick at least one member to save this action.";
-    if (action.type === "apply_checklists") return "Pick at least one checklist template to save this action.";
-    if (action.type === "move_to_list") return "Pick a destination list to save this action.";
-    if (action.type === "post_comment") return "Write the comment to save this action.";
+    if (action.type === "add_labels" || action.type === "remove_labels") return $localize`Pick at least one label to save this action.`;
+    if (action.type === "add_assignees" || action.type === "remove_assignees") return $localize`Pick at least one member to save this action.`;
+    if (action.type === "apply_checklists") return $localize`Pick at least one checklist template to save this action.`;
+    if (action.type === "move_to_list") return $localize`Pick a destination list to save this action.`;
+    if (action.type === "post_comment") return $localize`Write the comment to save this action.`;
     if (action.type === "call_webhook") {
-      if (!action.config.endpointId) return "Pick a webhook endpoint to save this action.";
-      return "This webhook endpoint no longer exists. Pick another one.";
+      if (!action.config.endpointId) return $localize`Pick a webhook endpoint to save this action.`;
+      return $localize`This webhook endpoint no longer exists. Pick another one.`;
     }
     if (action.type === "populate_custom_field") {
-      if (!action.config.fieldId) return "Pick a custom field to save this action.";
+      if (!action.config.fieldId) return $localize`Pick a custom field to save this action.`;
       const field = this.automationSetCustomField(action);
-      if (!field) return "This custom field no longer exists. Pick another one.";
+      if (!field) return $localize`This custom field no longer exists. Pick another one.`;
       const value = action.config.value;
-      if (value.kind === "field") return "Pick a source field of the same type to save this action.";
-      if (value.kind === "text") return "Enter the text to write to save this action.";
-      if (value.kind === "date" && value.source === "fixed") return "Pick a date to save this action.";
-      if (value.kind === "select") return field.allowMultiple ? "Pick at least one option to save this action." : "Pick exactly one option to save this action.";
-      if (value.kind === "user") return field.allowMultiple ? "Pick at least one member to save this action." : "Pick exactly one member to save this action.";
-      return "Finish configuring this action to save it.";
+      if (value.kind === "field") return $localize`Pick a source field of the same type to save this action.`;
+      if (value.kind === "text") return $localize`Enter the text to write to save this action.`;
+      if (value.kind === "date" && value.source === "fixed") return $localize`Pick a date to save this action.`;
+      if (value.kind === "select") return field.allowMultiple ? $localize`Pick at least one option to save this action.` : $localize`Pick exactly one option to save this action.`;
+      if (value.kind === "user") return field.allowMultiple ? $localize`Pick at least one member to save this action.` : $localize`Pick exactly one member to save this action.`;
+      return $localize`Finish configuring this action to save it.`;
     }
-    return "Finish configuring this action to save it.";
+    return $localize`Finish configuring this action to save it.`;
   }
 
   /** Count of draft rows the server has not accepted, for the "n unsaved" marker in the rule head. */
@@ -3059,8 +3083,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
 
   automationLastRunLabel(automation: WireAutomation): string {
     const stats = automation.runStats;
-    if (!stats?.lastRunAt) return automation.enabled ? "Not run yet" : "Never run";
-    return `Ran ${formatRelativeTime(stats.lastRunAt)}`;
+    if (!stats?.lastRunAt) return automation.enabled ? $localize`:Automation run status:Not run yet` : $localize`:Automation run status:Never run`;
+    return $localize`:Automation run status; the time is relative, e.g. 5 minutes ago:Ran ${formatRelativeTime(stats.lastRunAt)}:when:`;
   }
 
   /**
@@ -3116,7 +3140,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     const automation = this.automations().find((item) => item.id === id);
     if (!automation) return;
     this.deferDelete({
-      message: "Automation deleted.",
+      message: $localize`:Undo toast:Automation deleted.`,
       icon: "trash",
       hide: () => this.automations.update((items) => items.filter((item) => item.id !== id)),
       restore: () => this.automations.update((items) => this.sortAutomations([...items, automation])),
@@ -3141,7 +3165,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     if (!label) return;
     const index = this.labels().indexOf(label);
     this.deferDelete({
-      message: `Label "${label.name}" deleted.`,
+      message: $localize`:Undo toast:Label "${label.name}:label:" deleted.`,
       icon: "trash",
       hide: () => this.labels.update((items) => items.filter((l) => l.id !== id)),
       restore: () => this.labels.update((items) => [...items.slice(0, index), label, ...items.slice(index)]),
@@ -3223,7 +3247,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     const workspaceId = this.workspaceId();
     const index = this.members().indexOf(member);
     this.deferDelete({
-      message: `${member.displayName} removed from the workspace.`,
+      message: $localize`:Undo toast:${member.displayName}:person: removed from the workspace.`,
       icon: "user-minus",
       hide: () => this.members.update((rows) => rows.filter((r) => r.userId !== userId)),
       restore: () => this.members.update((rows) => [...rows.slice(0, index), member, ...rows.slice(index)]),
@@ -3241,7 +3265,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     const email = this.guestEmail().trim();
     if (!boardId || !email || this.guestBusy()) return;
     if (this.duplicatePendingGuestInvite()) {
-      this.guestError.set("There is already a pending invite for this email and board.");
+      this.guestError.set($localize`There is already a pending invite for this email and board.`);
       return;
     }
     this.guestBusy.set(true);
@@ -3257,9 +3281,9 @@ export class WorkspaceSettingsPage implements OnDestroy {
         // Paid guest seats come from the org's pre-purchased pool. Explain that before the mutation,
         // because the next request will allocate the seat immediately for existing external users.
         const confirmed = await this.confirm.open({
-          title: "Use a paid seat for this guest?",
-          message: "A guest's first board is free. Adding their second board uses one of your purchased seats; further boards reuse that seat. Your bill will not change right now, and the seat becomes available again when their access returns to one board.",
-          confirmLabel: "Use seat",
+          title: $localize`Use a paid seat for this guest?`,
+          message: $localize`A guest's first board is free. Adding their second board uses one of your purchased seats; further boards reuse that seat. Your bill will not change right now, and the seat becomes available again when their access returns to one board.`,
+          confirmLabel: $localize`:Confirm button:Use seat`,
           danger: false,
         });
         if (!confirmed) return;
@@ -3324,7 +3348,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
       // Block-until-buy: a full seat pool means the admin must purchase more seats first. Point them at
       // the plan page rather than the generic error so the next step is obvious.
       if (isSeatLimitReached(error)) {
-        this.guestError.set("Adding this guest needs a seat, but all purchased seats are in use. Buy more seats on the Account Plan page, then try again.");
+        this.guestError.set($localize`Adding this guest needs a seat, but all purchased seats are in use. Buy more seats on the Account Plan page, then try again.`);
         return;
       }
       this.guestError.set(extractErrorMessage(error));
@@ -3346,7 +3370,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     const index = this.acceptedGuests().indexOf(guest);
     this.guestError.set(null);
     this.deferDelete({
-      message: `${guest.displayName} removed from "${guest.boardName}".`,
+      message: $localize`:Undo toast:${guest.displayName}:person: removed from "${guest.boardName}:board:".`,
       icon: "user-minus",
       hide: () => this.acceptedGuests.update((rows) => rows.filter((row) => !(row.boardId === boardId && row.userId === userId))),
       restore: () => this.acceptedGuests.update((rows) => [...rows.slice(0, index), guest, ...rows.slice(index)]),
@@ -3387,8 +3411,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
     const invite = this.pendingGuestInvites().find((row) => row.id === invitationId);
     if (!invite) return;
     if (!await this.confirm.open({
-      title: `Revoke invite for ${invite.email}?`,
-      message: `This invitation to ${this.pendingInviteBoardLabel(invite)} will stop working.`,
+      title: $localize`:Confirm dialog title:Revoke invite for ${invite.email}:email:?`,
+      message: $localize`:Confirm dialog; the board name(s) follow:This invitation to ${this.pendingInviteBoardLabel(invite)}:boards: will stop working.`,
     })) return;
     this.guestRemovingId.set(invitationId);
     this.guestError.set(null);
@@ -3430,11 +3454,13 @@ export class WorkspaceSettingsPage implements OnDestroy {
     // Deleting a workspace is a workspace-admin (or org-admin) action.
     if (!this.canManageApi()) return;
     if (!await this.confirm.open({
-      title: `Delete ${this.entityLabel()} "${ws.name}"?`,
+      title: this.isStandalone()
+        ? $localize`:Confirm dialog title:Delete board "${ws.name}:board:"?`
+        : $localize`:Confirm dialog title:Delete workspace "${ws.name}:workspace:"?`,
       message: this.isStandalone()
-        ? "This will permanently delete this board, its lists, cards, attachments and settings."
-        : "This will permanently delete all boards, lists, attachments and cards inside it.",
-      confirmLabel: this.isStandalone() ? "Delete board" : "Delete workspace",
+        ? $localize`This will permanently delete this board, its lists, cards, attachments and settings.`
+        : $localize`This will permanently delete all boards, lists, attachments and cards inside it.`,
+      confirmLabel: this.isStandalone() ? $localize`:Confirm button:Delete board` : $localize`:Confirm button:Delete workspace`,
       confirmationText: ws.name,
     })) return;
     await this.api.delete(`/workspaces/${this.workspaceId()}`, { confirmationName: ws.name });
@@ -3480,8 +3506,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
     const group = this.boardGroups().find((g) => g.id === id);
     if (!group) return;
     if (!await this.confirm.open({
-      title: `Delete "${group.title}"?`,
-      message: "Boards in this group will move to Ungrouped.",
+      title: $localize`:Confirm dialog title:Delete "${group.title}:group:"?`,
+      message: $localize`Boards in this group will move to Ungrouped.`,
     })) return;
     await this.api.delete(`/board-groups/${id}`);
   }
@@ -3556,12 +3582,11 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.deletionPreviewKey.set(`board:${id}`);
     try {
       const confirmed = await this.confirm.openAfterLoading({
-        title: `Delete "${board.name}"?`,
-        loadingMessage: "Checking how many cards will be deleted...",
+        title: $localize`:Confirm dialog title:Delete "${board.name}:board:"?`,
+        loadingMessage: $localize`Checking how many cards will be deleted...`,
       }, async () => {
         const { cardCount } = await this.api.get<DeletionImpactResponse>(`/boards/${id}/deletion-impact`);
-        const cardLabel = cardCount === 1 ? "card" : "cards";
-        return `${cardCount} ${cardLabel} will also be permanently deleted. Are you sure?`;
+        return icu($localize`:Confirm dialog:{count, plural, one {# card will also be permanently deleted. Are you sure?} other {# cards will also be permanently deleted. Are you sure?}}`, { count: cardCount });
       });
       if (!confirmed) return;
       await this.api.delete(`/boards/${id}`);
@@ -3618,7 +3643,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   async deleteApiKey(id: string) {
     const key = this.apiKeys().find((item) => item.id === id);
     if (!key) return;
-    if (!await this.confirm.open({ title: `Delete "${key.name}"?`, message: "Systems using this key will lose access immediately." })) return;
+    if (!await this.confirm.open({ title: $localize`:Confirm dialog title:Delete "${key.name}:apiKey:"?`, message: $localize`Systems using this key will lose access immediately.` })) return;
     this.apiKeyError.set(null);
     try {
       await this.api.delete(`/workspaces/${this.workspaceId()}/api-keys/${id}`);
@@ -3680,14 +3705,14 @@ export class WorkspaceSettingsPage implements OnDestroy {
   async deleteAgentConnection(clientId: string) {
     const connection = this.agentConnections().find((item) => item.clientId === clientId);
     if (!connection) return;
-    if (!await this.confirm.open({ title: `Delete "${connection.name}"?`, message: "This agent's OAuth tokens will stop working immediately." })) return;
+    if (!await this.confirm.open({ title: $localize`:Confirm dialog title:Delete "${connection.name}:agent:"?`, message: $localize`This agent's OAuth tokens will stop working immediately.` })) return;
     await this.api.delete(`/workspaces/${this.workspaceId()}/agent-connections/${clientId}`);
     this.agentConnections.update((items) => items.filter((item) => item.clientId !== clientId));
   }
 
   formatApiKeyLastUsed(value: string | Date | null | undefined): string {
-    if (!value) return "Never";
-    return formatDateTime(value, "short") || "Never";
+    if (!value) return $localize`:Last used — never:Never`;
+    return formatDateTime(value, "short") || $localize`:Last used — never:Never`;
   }
 
   formatWebhookLastSuccessful(value: string | Date | null | undefined): string {
@@ -3710,7 +3735,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
       new URL(url);
       this.webhookError.set(null);
     } catch {
-      this.webhookError.set("Please enter a valid webhook URL.");
+      this.webhookError.set($localize`Please enter a valid webhook URL.`);
     }
   }
 
@@ -3733,7 +3758,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
     try {
       new URL(url);
     } catch {
-      this.webhookError.set("Please enter a valid webhook URL.");
+      this.webhookError.set($localize`Please enter a valid webhook URL.`);
       return;
     }
     this.webhookError.set(null);
@@ -3769,7 +3794,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   async deleteWebhook(id: string) {
     const hook = this.webhooks().find((item) => item.id === id);
     if (!hook) return;
-    if (!await this.confirm.open({ title: `Delete webhook "${hook.name}"?`, message: "Queued deliveries for this endpoint will be removed." })) return;
+    if (!await this.confirm.open({ title: $localize`:Confirm dialog title:Delete webhook "${hook.name}:webhook:"?`, message: $localize`Queued deliveries for this endpoint will be removed.` })) return;
     this.webhookError.set(null);
     try {
       await this.api.delete(`/workspaces/${this.workspaceId()}/webhooks/${id}`);

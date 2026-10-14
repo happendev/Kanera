@@ -6,6 +6,7 @@ import { isDarkTheme, type Theme } from "../core/theme/theme.service";
 import { visibleSignedMediaUrl } from "../core/media/signed-media-url";
 import { PresenceService } from "../core/realtime/presence.service";
 import { TooltipDirective } from "./tooltip.directive";
+import { appLocale } from "../core/i18n/locale";
 import { UserProfileCardService, type UserProfileAction } from "./user-profile/user-profile-card.service";
 
 /** Number of `--avatar-color-N-*` slots defined in styles.scss. */
@@ -97,7 +98,7 @@ function watchRelativeTimeTicker(): () => void {
       }
     </span>
     @if (online()) {
-      <span class="presence-dot" aria-label="Online"></span>
+      <span class="presence-dot" aria-label="Online" i18n-aria-label="Presence indicator: the person is online now"></span>
     }
   `,
   styles: [`
@@ -170,7 +171,7 @@ function watchRelativeTimeTicker(): () => void {
     "[attr.tabindex]": "profileEnabled() ? 0 : null",
     "[attr.aria-haspopup]": "profileEnabled() ? 'dialog' : null",
     "[attr.aria-expanded]": "profileEnabled() ? profileOpen() : null",
-    "[attr.aria-label]": "profileEnabled() ? 'View profile of ' + name() : null",
+    "[attr.aria-label]": "profileEnabled() ? profileAriaLabel() : null",
     "(click)": "onProfileClick($event)",
     "(keydown.enter)": "onProfileClick($event)",
     "(keydown.space)": "onProfileClick($event)",
@@ -240,7 +241,9 @@ export class AvatarComponent {
     if (!name) return "";
     if (!this.shouldCheckPresence() || this.online()) return name;
     const lastOnline = formatLastOnline(this.tooltipLastOnlineAt(), relativeTimeNow());
-    return lastOnline ? `${name} · Last online ${lastOnline}` : name;
+    return lastOnline
+      ? $localize`:Avatar tooltip; the time is relative, e.g. "5 minutes ago":${name}:name: · Last online ${lastOnline}:lastOnline:`
+      : name;
   });
   private readonly tooltipLastOnlineAt = computed(() => this.liveLastOnlineAt() ?? this.lastOnlineAt() ?? null);
   private readonly liveLastOnlineAt = computed(() => {
@@ -249,6 +252,7 @@ export class AvatarComponent {
   });
   private readonly shouldCheckPresence = computed(() => Boolean(this.showPresence() && this.userId() && this.workspaceId()));
 
+  protected readonly profileAriaLabel = computed(() => $localize`:Accessible label for an avatar that opens a profile card:View profile of ${this.name()}:name:`);
   protected readonly profileEnabled = computed(() => this.profile() && Boolean(this.userId()));
   protected readonly profileOpen = computed(() => {
     if (!this.profileEnabled()) return false;
@@ -284,7 +288,7 @@ export function formatLastOnline(value: string | Date | null | undefined, now: n
 
   const seconds = Math.round((timestamp - now) / 1000);
   const absSeconds = Math.abs(seconds);
-  if (absSeconds < 60) return "less than a minute ago";
+  if (absSeconds < 60) return $localize`:Relative time for under a minute, read after "Last online":less than a minute ago`;
   const units: { unit: Intl.RelativeTimeFormatUnit; seconds: number }[] = [
     { unit: "year", seconds: 31_536_000 },
     { unit: "month", seconds: 2_592_000 },
@@ -292,7 +296,7 @@ export function formatLastOnline(value: string | Date | null | undefined, now: n
     { unit: "hour", seconds: 3_600 },
     { unit: "minute", seconds: 60 },
   ];
-  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  const formatter = new Intl.RelativeTimeFormat(appLocale(), { numeric: "auto" });
   for (const { unit, seconds: unitSeconds } of units) {
     if (absSeconds >= unitSeconds) return formatter.format(Math.round(seconds / unitSeconds), unit);
   }

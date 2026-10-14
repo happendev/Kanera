@@ -5,6 +5,8 @@ import { AnalyticsService } from "../core/analytics/analytics.service";
 import type { PlanLimitAnalyticsProperties, PremiumFeature, UpgradeSource } from "../core/analytics/analytics-events";
 import { ApiClient } from "../core/api/api.client";
 import { AuthService } from "../core/auth/auth.service";
+import { icu } from "../core/i18n/icu";
+import { appLocale } from "../core/i18n/locale";
 import { UpgradePromptDialogComponent, type UpgradePromptContent } from "./upgrade-prompt-dialog.component";
 
 export type UpgradePromptReason = "member" | "board" | "automation" | "automationRule" | "guest" | "api" | "integration";
@@ -19,8 +21,9 @@ export interface UpgradePromptOptions {
   currentUsage?: number;
 }
 
+// Prices are always USD (that is what Stripe bills); only the number formatting follows the viewer.
 function money(cents: number): string {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: cents % 100 === 0 ? 0 : 2 }).format(cents / 100);
+  return new Intl.NumberFormat(appLocale(), { style: "currency", currency: "USD", maximumFractionDigits: cents % 100 === 0 ? 0 : 2 }).format(cents / 100);
 }
 
 @Injectable({ providedIn: "root" })
@@ -45,10 +48,13 @@ export class UpgradePromptService {
     const annualCents = billing?.proPricing?.annualCents;
     const monthlyEquivalent = annualCents === undefined ? null : Math.round((annualCents * seats) / 12);
     const cost = !canReviewPlan
-      ? "Ask your organisation owner to review Pro and your team's exact price."
+      ? $localize`:Upgrade dialog price row for a non-admin; Pro is the plan name:Ask your organisation owner to review Pro and your team's exact price.`
       : monthlyEquivalent === null
-      ? "See the Account Plan page for your exact team price."
-      : `${money(monthlyEquivalent)}/month for ${seats} ${seats === 1 ? "person" : "people"} on annual billing (${money(annualCents! * seats)} billed yearly).`;
+      ? $localize`:Upgrade dialog price row when pricing is unavailable:See the Account Plan page for your exact team price.`
+      : icu(
+        $localize`:Upgrade dialog price row; monthly and yearly are formatted prices:{seats, plural, one {{monthly}/month for # person on annual billing ({yearly} billed yearly).} other {{monthly}/month for # people on annual billing ({yearly} billed yearly).}}`,
+        { seats, monthly: money(monthlyEquivalent), yearly: money(annualCents! * seats) },
+      );
     const content = { ...this.content(options, seats, monthlyEquivalent, cost), canReviewPlan };
     const limitContext = this.limitContext(options, billing, analyticsContext);
     const premiumFeature = this.premiumFeature(options.reason);
@@ -132,68 +138,72 @@ export class UpgradePromptService {
 
   private content(options: UpgradePromptOptions, seats: number, monthlyEquivalent: number | null, cost: string): Omit<UpgradePromptContent, "canReviewPlan"> {
     const teamHeadline = monthlyEquivalent === null
-      ? `Bring your full ${seats}-person team into Kanera with Pro.`
-      : `Your full ${seats}-person team costs ${money(monthlyEquivalent)}/month on annual billing.`;
+      ? icu($localize`:Upgrade dialog headline; Pro is the plan name:{seats, plural, other {Bring your full #-person team into Kanera with Pro.}}`, { seats })
+      : icu(
+        $localize`:Upgrade dialog headline; price is a formatted monthly price:{seats, plural, other {Your full #-person team costs {price}/month on annual billing.}}`,
+        { seats, price: money(monthlyEquivalent) },
+      );
+    const others = Math.max(0, seats - 1);
     switch (options.reason) {
       case "member":
         return {
           headline: teamHeadline,
-          attemptedAction: "Invite another editor",
-          valueReceived: `${Math.max(0, seats - 1)} people already share your organisation's boards, fields, and workflow.`,
+          attemptedAction: $localize`:Upgrade dialog label for the blocked action:Invite another editor`,
+          valueReceived: icu($localize`:Upgrade dialog:{others, plural, one {# person already shares your organisation's boards, fields, and workflow.} other {# people already share your organisation's boards, fields, and workflow.}}`, { others }),
           cost,
-          freeConsequence: `Your team stays at ${Math.max(0, seats - 1)} active people and this invitation cannot add another editor.`,
+          freeConsequence: icu($localize`:Upgrade dialog:{others, plural, one {Your team stays at # active person and this invitation cannot add another editor.} other {Your team stays at # active people and this invitation cannot add another editor.}}`, { others }),
         };
       case "board": {
         const boardCount = options.boardCount ?? 0;
         return {
-          headline: "Move from a pilot to running all your projects in Kanera.",
-          attemptedAction: "Create another board",
-          valueReceived: `Your team already runs ${boardCount} active project${boardCount === 1 ? "" : "s"} in one shared workflow.`,
+          headline: $localize`:Upgrade dialog headline:Move from a pilot to running all your projects in Kanera.`,
+          attemptedAction: $localize`:Upgrade dialog label for the blocked action:Create another board`,
+          valueReceived: icu($localize`:Upgrade dialog:{boardCount, plural, one {Your team already runs # active project in one shared workflow.} other {Your team already runs # active projects in one shared workflow.}}`, { boardCount }),
           cost,
-          freeConsequence: "Your current boards stay available, but this new board will not be created.",
+          freeConsequence: $localize`:Upgrade dialog:Your current boards stay available, but this new board will not be created.`,
         };
       }
       case "automation": {
         const allowance = options.automationAllowance ?? 100;
         return {
-          headline: `Kanera automated ${allowance} actions for your team this month.`,
-          attemptedAction: "Run another automation",
-          valueReceived: `${allowance} repetitive actions were handled automatically this month.`,
+          headline: icu($localize`:Upgrade dialog headline:{allowance, plural, one {Kanera automated # action for your team this month.} other {Kanera automated # actions for your team this month.}}`, { allowance }),
+          attemptedAction: $localize`:Upgrade dialog label for the blocked action:Run another automation`,
+          valueReceived: icu($localize`:Upgrade dialog:{allowance, plural, one {# repetitive action was handled automatically this month.} other {# repetitive actions were handled automatically this month.}}`, { allowance }),
           cost,
-          freeConsequence: "Enabled automations stay configured, but further automation actions wait until next month's allowance resets.",
+          freeConsequence: $localize`:Upgrade dialog:Enabled automations stay configured, but further automation actions wait until next month's allowance resets.`,
         };
       }
       case "automationRule":
         return {
-          headline: "Run every workflow your team needs with Pro.",
-          attemptedAction: "Enable another automation",
-          valueReceived: "Your active automations already take repeatable work off your team's plate.",
+          headline: $localize`:Upgrade dialog headline; Pro is the plan name:Run every workflow your team needs with Pro.`,
+          attemptedAction: $localize`:Upgrade dialog label for the blocked action:Enable another automation`,
+          valueReceived: $localize`:Upgrade dialog:Your active automations already take repeatable work off your team's plate.`,
           cost,
-          freeConsequence: "Existing enabled automations keep running within the monthly allowance, but this additional one stays paused.",
+          freeConsequence: $localize`:Upgrade dialog:Existing enabled automations keep running within the monthly allowance, but this additional one stays paused.`,
         };
       case "guest":
         return {
-          headline: "Collaborate with this client across projects with Pro.",
-          attemptedAction: "Add a multi-board guest",
-          valueReceived: "The client relationship and project work already live in Kanera.",
+          headline: $localize`:Upgrade dialog headline; Pro is the plan name:Collaborate with this client across projects with Pro.`,
+          attemptedAction: $localize`:Upgrade dialog label for the blocked action:Add a multi-board guest`,
+          valueReceived: $localize`:Upgrade dialog:The client relationship and project work already live in Kanera.`,
           cost,
-          freeConsequence: "The guest keeps their existing access, but cannot be added across more projects.",
+          freeConsequence: $localize`:Upgrade dialog:The guest keeps their existing access, but cannot be added across more projects.`,
         };
       case "api":
         return {
-          headline: "Run integrations and unattended AI agents with Pro.",
-          attemptedAction: "Create a workspace API key or unattended agent",
-          valueReceived: "Your boards and workflows are ready to become the source for connected systems and agents.",
+          headline: $localize`:Upgrade dialog headline; Pro is the plan name:Run integrations and unattended AI agents with Pro.`,
+          attemptedAction: $localize`:Upgrade dialog label for the blocked action:Create a workspace API key or unattended agent`,
+          valueReceived: $localize`:Upgrade dialog:Your boards and workflows are ready to become the source for connected systems and agents.`,
           cost,
-          freeConsequence: "Your own AI agents and personal API keys keep working within fair-use limits, but workspace API keys, webhooks, and unattended agents remain unavailable.",
+          freeConsequence: $localize`:Upgrade dialog:Your own AI agents and personal API keys keep working within fair-use limits, but workspace API keys, webhooks, and unattended agents remain unavailable.`,
         };
       case "integration":
         return {
-          headline: "Bring Kanera updates into the chat where your team already works.",
-          attemptedAction: "Connect a chat destination",
-          valueReceived: "Your workspace already has the card activity your team needs to follow.",
+          headline: $localize`:Upgrade dialog headline:Bring Kanera updates into the chat where your team already works.`,
+          attemptedAction: $localize`:Upgrade dialog label for the blocked action:Connect a chat destination`,
+          valueReceived: $localize`:Upgrade dialog:Your workspace already has the card activity your team needs to follow.`,
           cost,
-          freeConsequence: "Work stays available in Kanera, but updates will not post to Slack, Discord, Telegram, or Zulip.",
+          freeConsequence: $localize`:Upgrade dialog:Work stays available in Kanera, but updates will not post to Slack, Discord, Telegram, or Zulip.`,
         };
     }
   }

@@ -8,9 +8,10 @@
   type="button"
   class="scratch-btn"
   [class.active]="open()"
-  [kTooltip]="open() ? 'Close scratchpad' : 'Scratchpad'"
+  [kTooltip]="open() ? closeScratchpadLabel : scratchpadLabel"
   [attr.aria-expanded]="open()"
   aria-label="Scratchpad"
+  i18n-aria-label="Button label: toggle the scratchpad"
   (click)="toggle()"
 >
   <i class="ti ti-notes"></i>
@@ -26,6 +27,7 @@
   class="panel"
   [attr.role]="isPage() ? 'main' : 'complementary'"
   aria-label="Scratchpad"
+  i18n-aria-label="Landmark label for the scratchpad panel"
   [style.height.px]="sheetHeightPx()"
 >
   @if (!isSheetForm() && !isPage()) {
@@ -37,6 +39,7 @@
     tabindex="0"
     aria-orientation="vertical"
     aria-label="Resize scratchpad"
+    i18n-aria-label="Label for the scratchpad resize handle"
     [attr.aria-valuemin]="minWidth"
     [attr.aria-valuemax]="maxWidth"
     [attr.aria-valuenow]="scratchpad.width()"
@@ -62,6 +65,7 @@
       tabindex="0"
       aria-orientation="horizontal"
       aria-label="Resize scratchpad"
+      i18n-aria-label="Label for the scratchpad resize handle"
       [attr.aria-valuemin]="minSheetHeight"
       [attr.aria-valuenow]="scratchpad.sheetHeight()"
       (pointerdown)="onSheetResizePointerDown($event)"
@@ -96,7 +100,9 @@
               type="text"
               maxlength="200"
               placeholder="Page name"
+              i18n-placeholder="Placeholder for renaming a scratchpad page"
               aria-label="Page name"
+              i18n-aria-label="Label for renaming a scratchpad page"
               [value]="note.title"
               (input)="onRenameInput(note.id, $any($event.target).value)"
               (keydown)="onRenameKeydown($event)"
@@ -110,6 +116,7 @@
               [attr.aria-expanded]="pageList() !== null"
               aria-controls="scratchpad-page-list"
               kTooltip="Switch page"
+              i18n-kTooltip="Tooltip: open the scratchpad page list"
               (click)="togglePageList($event)"
               (dblclick)="startRename(note.id, $event)"
             >
@@ -118,10 +125,10 @@
             </button>
             }
           @if (notes().length > 1) {
-          <span class="title-count" [kTooltip]="notes().length + ' pages'">{{ notes().length }}</span>
+          <span class="title-count" [kTooltip]="pageCountLabel(notes().length)">{{ notes().length }}</span>
           }
         } @else {
-        <h2 class="page-trigger-label is-static">Scratchpad</h2>
+        <h2 class="page-trigger-label is-static" i18n="Scratchpad panel heading">Scratchpad</h2>
         }
       </div>
 
@@ -133,16 +140,17 @@
           scratchpad must never do.
         -->
         @if (saveState() === 'error') {
-        <span class="save-error" role="status" aria-live="polite" kTooltip="Your latest changes have not been saved. Check your connection.">
-          <i class="ti ti-alert-triangle" aria-hidden="true"></i><span>Not saved</span>
+        <span class="save-error" role="status" aria-live="polite" kTooltip="Your latest changes have not been saved. Check your connection." i18n-kTooltip="Tooltip on the scratchpad save error">
+          <i class="ti ti-alert-triangle" aria-hidden="true"></i><span i18n="Scratchpad save status: the latest changes failed to save">Not saved</span>
         </span>
         }
         <button
           type="button"
           class="icon-btn"
           [disabled]="atCapacity()"
-          [kTooltip]="atCapacity() ? 'A scratchpad holds up to ' + maxNotes + ' pages' : 'New page'"
+          [kTooltip]="atCapacity() ? capacityLabel : newPageLabel"
           aria-label="New page"
+          i18n-aria-label="Button label: add a scratchpad page"
           (click)="addNote()"
         >
           <i class="ti ti-plus"></i>
@@ -152,15 +160,17 @@
           type="button"
           class="icon-btn"
           aria-label="Scratchpad options"
+          i18n-aria-label="Button label: open the scratchpad options menu"
           aria-haspopup="menu"
           [attr.aria-expanded]="panelMenu() !== null"
           kTooltip="Options"
+          i18n-kTooltip="Tooltip: open the scratchpad options menu"
           (click)="togglePanelMenu($event)"
         >
           <i class="ti ti-dots"></i>
         </button>
         @if (!isPage()) {
-        <button type="button" class="icon-btn" kTooltip="Close" aria-label="Close scratchpad" (click)="close()">
+        <button type="button" class="icon-btn" kTooltip="Close" i18n-kTooltip="Tooltip: close the scratchpad" aria-label="Close scratchpad" i18n-aria-label (click)="close()">
           <i class="ti ti-x"></i>
         </button>
         }
@@ -176,6 +186,7 @@
     class="page-list"
     [attr.role]="showPageSearch() ? 'dialog' : 'menu'"
     aria-label="Scratchpad pages"
+    i18n-aria-label="Label for the scratchpad page list"
     kMenu
     [kMenuAutofocus]="!showPageSearch()"
     kAnchoredPanel
@@ -186,11 +197,12 @@
     @if (showPageSearch()) {
     <label class="page-list-search-wrap">
       <i class="ti ti-search" aria-hidden="true"></i>
-      <span class="sr-only">Search pages</span>
+      <span class="sr-only" i18n="Label for the scratchpad page search field">Search pages</span>
       <input
         class="page-list-search"
         type="search"
         placeholder="Search pages…"
+        i18n-placeholder="Placeholder for the scratchpad page search field"
         [value]="pageQuery()"
         (input)="pageQuery.set($any($event.target).value)"
         (keydown)="onPageSearchKeydown($event)"
@@ -198,7 +210,7 @@
     </label>
     }
     @if (!showPageSearch()) {
-    <div class="k-menu-heading">Pages</div>
+    <div class="k-menu-heading" i18n="Heading of the scratchpad page list">Pages</div>
     }
     <div class="page-list-rows">
       @for (note of filteredPages(); track note.id) {
@@ -216,12 +228,12 @@
         <span class="page-list-when" [kTooltip]="metaLine(note)">{{ stampLine(note) }}</span>
       </button>
       } @empty {
-      <p class="page-list-empty">No pages found</p>
+      <p class="page-list-empty" i18n="Empty state of the scratchpad page search">No pages found</p>
       }
     </div>
     <div class="k-menu-separator" role="separator"></div>
     <button type="button" class="k-menu-item" role="menuitem" [disabled]="atCapacity()" (click)="closePageList(); addNote()">
-      <i class="ti ti-plus"></i><span>New page</span>
+      <i class="ti ti-plus"></i><span i18n="Menu item: add a scratchpad page">New page</span>
     </button>
   </div>
   }
@@ -229,13 +241,13 @@
   <!-- The `…` menu: the current page's actions first, then the panel's. Rendered outside the header so
        kAnchoredPanel positions it against the button's rect with the app's standard dismissal. -->
   @if (panelMenu(); as open) {
-  <div class="panel-menu" role="menu" aria-label="Scratchpad options" kMenu kAnchoredPanel [apAnchor]="open.anchor" [apPlacement]="panelMenuPlacement" (apDismissed)="closePanelMenu()">
+  <div class="panel-menu" role="menu" aria-label="Scratchpad options" i18n-aria-label="Label for the scratchpad options menu" kMenu kAnchoredPanel [apAnchor]="open.anchor" [apPlacement]="panelMenuPlacement" (apDismissed)="closePanelMenu()">
     @if (open.note; as note) {
     <button type="button" class="k-menu-item" role="menuitem" (click)="startRename(note.id, $event)">
-      <i class="ti ti-pencil"></i><span>Rename page</span>
+      <i class="ti ti-pencil"></i><span i18n="Menu item: rename the scratchpad page">Rename page</span>
     </button>
     <button type="button" class="k-menu-item danger" role="menuitem" (click)="removeNote(note, $event)">
-      <i class="ti ti-trash"></i><span>Delete page</span>
+      <i class="ti ti-trash"></i><span i18n="Menu item: delete the scratchpad page">Delete page</span>
     </button>
     <div class="k-menu-separator" role="separator"></div>
     }
@@ -245,11 +257,11 @@
     -->
     @if (!isPage()) {
     <button type="button" class="k-menu-item" role="menuitem" (click)="popOut()">
-      <i class="ti ti-external-link"></i><span>Open in a new tab</span>
+      <i class="ti ti-external-link"></i><span i18n="Menu item: pop the scratchpad out into its own browser tab">Open in a new tab</span>
     </button>
     } @else {
     <button type="button" class="k-menu-item" role="menuitem" (click)="dockBack()">
-      <i class="ti ti-layout-sidebar-right-expand"></i><span>Dock back in the app</span>
+      <i class="ti ti-layout-sidebar-right-expand"></i><span i18n="Menu item: return the popped-out scratchpad to the app">Dock back in the app</span>
     </button>
     }
   </div>
@@ -263,12 +275,12 @@
   >
     @if (showInitialLoading()) {
     <div class="panel-state k-loading">
-      <i class="ti ti-loader-2 kanera-spin" aria-label="Loading scratchpad"></i>
+      <i class="ti ti-loader-2 kanera-spin" aria-label="Loading scratchpad" i18n-aria-label="Loading indicator label"></i>
     </div>
     } @else if (loadError()) {
     <div class="panel-state">
-      <k-empty-state plain icon="alert-circle" title="Couldn’t load Scratchpad" [text]="loadError()">
-        <button type="button" class="ghost state-retry-btn" (click)="scratchpad.refresh()">Try again</button>
+      <k-empty-state plain icon="alert-circle" title="Couldn’t load Scratchpad" i18n-title="Error state title" [text]="loadError()">
+        <button type="button" class="ghost state-retry-btn" (click)="scratchpad.refresh()" i18n="Button: retry loading the scratchpad">Try again</button>
       </k-empty-state>
     </div>
     } @else if (showEmptyState()) {
@@ -278,8 +290,8 @@
       placeholder will repeat once a page exists.
     -->
     <button type="button" class="panel-blank" (click)="addNote()">
-      <span class="panel-blank-placeholder">Start typing. Paste a screenshot, drop a file, or write a list…</span>
-      <span class="panel-blank-hint">A private page only you can see. It saves as you type.</span>
+      <span class="panel-blank-placeholder" i18n="Placeholder in an empty scratchpad">Start typing. Paste a screenshot, drop a file, or write a list…</span>
+      <span class="panel-blank-hint" i18n="Hint in an empty scratchpad">A private page only you can see. It saves as you type.</span>
     </button>
     } @else if (activeNote(); as note) {
     <!--
@@ -303,6 +315,7 @@
       [mentionMembers]="[]"
       [autofocus]="false"
       placeholder="Start typing. Paste a screenshot, drop a file, or write a list…"
+      i18n-placeholder="Placeholder in an empty scratchpad"
       (contentChange)="onContentChange($event)"
     />
     }

@@ -5,6 +5,7 @@
   },
   "include": [
     "src/test-setup.ts",
+    "src/localize.d.ts",
     "src/**/*.spec.ts",
     "src/**/*.test.ts"
   ]

@@ -38,6 +38,33 @@ async function writeDescription(detail: Locator, text: string) {
   await expect(editor).toHaveCount(0);
 }
 
+test("copy card link opens the same card on desktop and phone", async ({ page, signIn, apiAs, uniqueName }) => {
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await signIn(page, "amelia");
+  await openBoard(page, "Platform Delivery");
+  const api = await apiAs("amelia");
+  const card = await createCardViaApi(page, api, uniqueName("E2E copied card link"));
+  const expectedUrl = `${webOrigin}/o/${card.organisationKey}/c/${card.key}`;
+
+  try {
+    await expectCardTileMounted(page, card.title);
+    await openCard(page, card.title);
+    for (const [label, width] of [["desktop", 1280], ["phone", 390]] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      const detail = page.getByRole("dialog", { name: `Card detail: ${card.title}` });
+      await detail.getByRole("button", { name: "Copy card link", exact: true }).click();
+      await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(expectedUrl);
+      await page.screenshot({ path: test.info().outputPath(`copy-card-link-${label}.png`) });
+      const copiedUrl = await page.evaluate(() => navigator.clipboard.readText());
+      await page.goto(copiedUrl);
+      await expect(detail).toBeVisible();
+      await expect(page).toHaveURL(expectedUrl);
+    }
+  } finally {
+    expect((await api.patch(`/api/cards/${card.id}/archive`, { data: { archived: true } })).ok()).toBe(true);
+  }
+});
+
 test("a card link shows on both cards live, and linked items open the other card in-app", async ({ page, signIn, pageAs, apiAs, uniqueName }) => {
   await signIn(page, "amelia");
   await openBoard(page, "Platform Delivery");

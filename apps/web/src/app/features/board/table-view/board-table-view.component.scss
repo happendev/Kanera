@@ -1259,6 +1259,13 @@
   font-variant-numeric: tabular-nums;
 }
 
+// Grid only: the stacked phone layout gives the key its own room as an inline prefix in full.
+@media (min-width: 641px) {
+  .tv-view.is-compact-title .tv-card-key {
+    display: none;
+  }
+}
+
 .tv-title-trigger:focus-visible,
 .tv-cell-trigger:focus-visible {
   outline: 2px solid var(--accent);
@@ -1675,7 +1682,26 @@ k-card-labels.tv-labels {
   }
 }
 
+// The toolbar wraps on its own, earlier breakpoint: it runs out of room for a fixed-width search
+// beside the controls well before the grid does.
 @media (max-width: 768px) {
+  .tv-toolbar {
+    flex-wrap: wrap;
+    padding-inline: 8px;
+  }
+
+  .tv-search {
+    flex: 1;
+    width: auto;
+  }
+}
+
+// Dense-table choice: the grid scrolls sideways under its frozen Title column from tablet width up,
+// and only phones stack each row into a card. A tablet has room for a title plus several columns, and
+// stacking there turned one screen of rows into a tall column of cards that lost the headers, sorting
+// and side-by-side comparison the table exists for. The Title column also caps its default width
+// against the scrollport (`widthForColumn`) so the frozen column cannot eat a narrow sheet.
+@media (max-width: 640px) {
   // The stacked layout drops the sheet rings and runs the rows full-bleed, so there is no indent left
   // for the bands to align to. Zeroing the token retires the padding and the edge guard in one place.
   //
@@ -1692,16 +1718,6 @@ k-card-labels.tv-labels {
 
   .tv-view {
     --tv-gutter-w: 44px !important;
-  }
-
-  .tv-toolbar {
-    flex-wrap: wrap;
-    padding-inline: 8px;
-  }
-
-  .tv-search {
-    flex: 1;
-    width: auto;
   }
 
   .tv-scroll {

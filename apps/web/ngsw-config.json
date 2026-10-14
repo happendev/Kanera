@@ -11,8 +11,17 @@
           "/index.html",
           "/*.css",
           "/*.js",
+          "!/messages.*.js",
           "/assets/logo/**"
         ]
+      }
+    },
+    {
+      "name": "translations",
+      "installMode": "lazy",
+      "updateMode": "prefetch",
+      "resources": {
+        "files": ["/messages.*.js"]
       }
     },
     {

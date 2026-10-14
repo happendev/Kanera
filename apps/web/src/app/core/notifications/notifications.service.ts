@@ -11,8 +11,8 @@ import { localDateKey, viewerTimeZone } from "../../shared/day-key.util";
 
 const PAGE_SIZE = 25;
 const READ_NOTIFICATION_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 10,080 minutes
-const OFFLINE_LOAD_ERROR = "You're offline. Reconnect to refresh notifications.";
-const GENERIC_LOAD_ERROR = "Couldn't refresh notifications. Try again in a moment.";
+const OFFLINE_LOAD_ERROR = $localize`:Notifications load error while offline:You're offline. Reconnect to refresh notifications.`;
+const GENERIC_LOAD_ERROR = $localize`:Notifications load error:Couldn't refresh notifications. Try again in a moment.`;
 const ACTIVE_CARD_VIEW_TTL_MS = 15_000;
 const ACTIVE_CARD_VIEW_HEARTBEAT_MS = 5_000;
 const GROUP_COUNT_REFRESH_DEBOUNCE_MS = 150;

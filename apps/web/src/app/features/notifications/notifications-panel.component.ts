@@ -4,6 +4,7 @@ import type { ElementRef} from "@angular/core";
 import { ChangeDetectionStrategy, Component, DestroyRef, HostListener, computed, effect, inject, signal, viewChild, input } from "@angular/core";
 import { Router } from "@angular/router";
 import { summariseActivityChange } from "@kanera/shared/activity-summary";
+import { ACTIVITY_SUMMARY_MESSAGES } from "../../core/i18n/activity-summary.messages";
 import { cardPath } from "@kanera/shared/card-links";
 import type { WireBoardMemberUser, WireCardSummary } from "@kanera/shared/events";
 import type { Board, BoardRole, CardLabel, CustomField, List } from "@kanera/shared/schema";
@@ -28,6 +29,7 @@ import { BoardState } from "../board/board-state";
 import { DescriptionViewerComponent } from "../board/description-viewer.component";
 import { buildFeedEntries, type ActivityChangeSummary, type NotificationCluster, type NotificationFeedEntry } from "./notification-clusters";
 import { dayGroupLabel, formatFeedTime } from "../../shared/date-format";
+import { icu } from "../../core/i18n/icu";
 
 interface NotificationGroupView {
   key: string;
@@ -44,6 +46,8 @@ interface NotificationGroupView {
 }
 
 const SEARCH_DEBOUNCE_MS = 200;
+
+const UNKNOWN_USER = $localize`:Fallback name for a person who no longer exists:Unknown user`;
 
 @Component({
   selector: "k-notifications-panel",
@@ -170,7 +174,7 @@ export class NotificationsPanelComponent {
   readonly hasUnresolvedUnreadMismatch = computed(() =>
     !this.includeRead() && !this.hasActiveFilters() && this.unreadCount() > 0 && this.displayedItems().length === 0,
   );
-  readonly offlineTitle = "You're offline - changes are paused";
+  readonly offlineTitle = $localize`:Tooltip on a disabled control while offline:You're offline - changes are paused`;
 
   constructor() {
     this.notifications.initialise();
@@ -248,7 +252,7 @@ export class NotificationsPanelComponent {
     if (this.groupBy() === "board") {
       return {
         ...base,
-        label: first.boardName ?? first.workspaceName ?? "Workspace",
+        label: first.boardName ?? first.workspaceName ?? $localize`:Notification group heading when the board and workspace are unknown:Workspace`,
         icon: `ti ti-${first.boardId ? first.boardIcon || "layout-kanban" : first.workspaceIcon || "building"}`,
         iconColor: first.boardIconColor,
       };
@@ -263,10 +267,12 @@ export class NotificationsPanelComponent {
       // Agent groups are labelled "<person> via <agent>" so the owner's own actions and their
       // agent's actions never collapse into one group.
       label: isUser
-        ? first.actorName ?? "Unknown user"
+        ? first.actorName ?? UNKNOWN_USER
         : isAgent
-          ? `${first.actorName ?? "Unknown user"} via ${activity.agentName ?? "AI agent"}`
-          : activity?.actorKind === "apiKey" ? first.actorName ?? "API key" : activity?.actorKind === "support" ? "Kanera support" : "Kanera",
+          ? $localize`:Notification group heading - a person acting through an AI agent:${first.actorName ?? UNKNOWN_USER}:person: via ${activity.agentName ?? $localize`:Fallback name for an AI agent:AI agent`}:agent:`
+          : activity?.actorKind === "apiKey"
+            ? first.actorName ?? $localize`:Fallback actor name for a change made with an API key:API key`
+            : activity?.actorKind === "support" ? $localize`:Actor name for changes made by Kanera staff:Kanera support` : "Kanera",
       icon: isAgent ? "ti ti-sparkles" : activity?.actorKind === "apiKey" ? "ti ti-api" : activity?.actorKind === "support" ? "ti ti-lifebuoy" : "ti ti-settings-automation",
       avatarUrl: isUser ? first.actorAvatarUrl : null,
       actorId: isUser ? activity.actorId : null,
@@ -331,11 +337,17 @@ export class NotificationsPanelComponent {
   readonly readFilterOptions = computed<SegmentedOption<NotificationFeedMode>[]>(() => {
     const agentUnread = this.agentCounts().unread;
     return [
-      { id: "unread", label: "Unread" },
+      { id: "unread", label: $localize`:Notification filter tab:Unread` },
       ...(this.notifications.hasAgentNotifications()
-        ? [{ id: "agent" as const, label: agentUnread > 0 ? `Agent (${agentUnread > 99 ? "99+" : agentUnread})` : "Agent", tooltip: "What your AI agents did" }]
+        ? [{
+          id: "agent" as const,
+          label: agentUnread > 0
+            ? $localize`:Notification filter tab with its unread count:Agent (${agentUnread > 99 ? "99+" : agentUnread}:count:)`
+            : $localize`:Notification filter tab - what your AI agents did:Agent`,
+          tooltip: $localize`:Tooltip on the Agent notification tab:What your AI agents did`,
+        }]
         : []),
-      { id: "all", label: "All" },
+      { id: "all", label: $localize`:Notification filter tab:All` },
     ];
   });
 
@@ -583,6 +595,60 @@ export class NotificationsPanelComponent {
     this.boardState.hydrate(payload);
   }
 
+  // ── Labels ─────────────────────────────────────────────────────────────────
+  // Bound attributes in the template that mix text with values, kept here as whole messages.
+
+  readonly markReadLabel = $localize`:Button label - mark a notification as read:Mark as read`;
+  readonly markUnreadLabel = $localize`:Button label - mark a notification as unread:Mark as unread`;
+  readonly markAllReadLabel = $localize`:Tooltip on the Mark all read button:Mark all read`;
+  readonly aiAgentLabel = $localize`:Fallback name for an AI agent:AI agent`;
+  readonly untitledCardLabel = $localize`:Fallback title for a card without one:Untitled card`;
+
+  readonly bellLabel = computed(() => {
+    const count = this.unreadCount();
+    return count > 0
+      ? icu($localize`:Label on the notifications bell:Notifications ({count} unread)`, { count })
+      : $localize`:Label on the notifications bell:Notifications`;
+  });
+
+  readonly filteredEmptyText = computed(() => {
+    const count = this.unreadCount();
+    return count > 0
+      ? icu($localize`:Empty state when filters hide every notification:{count, plural, one {# unread notification is hidden by an active filter.} other {# unread notifications are hidden by an active filter.}}`, { count })
+      : $localize`:Empty state when filters hide every notification:Try clearing the board or user filter to see more.`;
+  });
+
+  openNotificationLabel(n: NotificationRow): string {
+    return n.cardId
+      ? icu($localize`:Label on a notification link that opens its card:Open card {title}`, { title: n.cardTitle ?? $localize`:Fallback in "Open card ...":notification` })
+      : this.openBoardLabel(n.boardName);
+  }
+
+  openBoardLabel(boardName: string | null | undefined): string {
+    return icu($localize`:Label on a link that opens a board:Open board {board}`, { board: boardName ?? "" });
+  }
+
+  openClusterLabel(cluster: NotificationCluster): string {
+    return icu($localize`:Label on a group of notifications about one card:Open card {title} ({count, plural, one {# update} other {# updates}})`, {
+      title: cluster.head.cardTitle ?? $localize`:Fallback in "Open card ...":notification`,
+      count: cluster.entries.length,
+    });
+  }
+
+  markClusterReadLabel(cluster: NotificationCluster): string {
+    return icu($localize`:Button label on a group of notifications about one card:{count, plural, one {Mark # update as read} other {Mark all # updates as read}}`, { count: cluster.entries.length });
+  }
+
+  groupCountLabel(count: number): string {
+    return icu($localize`:Count badge on a notification group:{count, plural, one {# notification} other {# notifications}}`, { count });
+  }
+
+  agentTooltip(agentName: string | null | undefined, actorName: string | null | undefined): string {
+    return agentName
+      ? icu($localize`:Tooltip on "via agent" in a notification:Done by {agent} on behalf of {person}`, { agent: agentName, person: actorName ?? "" })
+      : icu($localize`:Tooltip on "via agent" in a notification:Done by an AI agent on behalf of {person}`, { person: actorName ?? "" });
+  }
+
   relativeTime(value: string | Date): string {
     return formatFeedTime(value);
   }
@@ -591,11 +657,11 @@ export class NotificationsPanelComponent {
   changeSummary(n: NotificationRow): ActivityChangeSummary {
     if (n.reason === "board_member_left") {
       const impact = (n.activity?.payload as { seatImpact?: string } | null)?.seatImpact;
-      return { icon: "ti ti-logout", text: "left this board", value: impact === "guest_capacity_freed"
-        ? "A paid guest seat is now available" : impact === "guest_capacity_retained"
-          ? "Paid guest capacity remains in use" : undefined };
+      return { icon: "ti ti-logout", text: $localize`:Notification line after a person's name:left this board`, value: impact === "guest_capacity_freed"
+        ? $localize`:Detail on a board-member-left notification:A paid guest seat is now available` : impact === "guest_capacity_retained"
+          ? $localize`:Detail on a board-member-left notification:Paid guest capacity remains in use` : undefined };
     }
-    return summariseActivityChange(n);
+    return summariseActivityChange(n, ACTIVITY_SUMMARY_MESSAGES);
   }
 
   private markdownAltText(value: string): string {

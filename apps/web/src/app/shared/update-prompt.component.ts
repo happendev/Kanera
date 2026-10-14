@@ -8,8 +8,8 @@ import { ToastComponent } from "./toast.component";
   imports: [ToastComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <k-toast [show]="updates.updateAvailable()" icon="refresh" message="Update available">
-      <button type="button" class="sm" (click)="updates.applyUpdate()">Refresh</button>
+    <k-toast [show]="updates.updateAvailable()" icon="refresh" message="Update available" i18n-message="Toast when a new app version is ready">
+      <button type="button" class="sm" (click)="updates.applyUpdate()" i18n="Button: reload the page to apply the app update">Refresh</button>
     </k-toast>
   `,
 })

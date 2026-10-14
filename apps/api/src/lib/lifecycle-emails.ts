@@ -13,7 +13,6 @@ import {
   workspaceAnalyticsMilestones,
   workspaces,
   type LifecycleEmailKind,
-  type LifecycleEmailQueueData,
   type LifecycleEmailQueueType,
   type LifecycleNextStep,
 } from "@kanera/shared/schema";
@@ -22,6 +21,8 @@ import type { FastifyBaseLogger } from "fastify";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { db } from "../db.js";
 import { env } from "../env.js";
+import type { LifecycleEmailParams } from "./email-templates/index.js";
+import { recipientLocale } from "./i18n/request-locale.js";
 import type { Mailer } from "./mailer.js";
 import { startSweepScheduler } from "./sweep-scheduler.js";
 
@@ -91,7 +92,8 @@ async function sendKind(mailer: Mailer, kind: LifecycleEmailKind, candidates: Ca
     if (claimed.length === 0) continue;
 
     for (const recipient of await lifecycleRecipients(candidate.clientId)) {
-      const data: LifecycleEmailQueueData = {
+      const data: LifecycleEmailParams = {
+        locale: recipientLocale(recipient.locale),
         displayName: recipient.displayName,
         orgName: candidate.orgName,
         ctaUrl: `${env.WEB_ORIGIN}${candidate.ctaPath}`,
@@ -113,9 +115,9 @@ async function sendKind(mailer: Mailer, kind: LifecycleEmailKind, candidates: Ca
  * A user who turned off email entirely, or turned off lifecycle email, is skipped. Users with no
  * settings row get the defaults (both on).
  */
-async function lifecycleRecipients(clientId: string): Promise<Array<{ userId: string; email: string; displayName: string }>> {
+async function lifecycleRecipients(clientId: string): Promise<Array<{ userId: string; email: string; displayName: string; locale: string | null }>> {
   return db
-    .select({ userId: users.id, email: users.email, displayName: users.displayName })
+    .select({ userId: users.id, email: users.email, displayName: users.displayName, locale: users.locale })
     .from(clientMembers)
     .innerJoin(users, eq(users.id, clientMembers.userId))
     .leftJoin(notificationSettings, eq(notificationSettings.userId, users.id))

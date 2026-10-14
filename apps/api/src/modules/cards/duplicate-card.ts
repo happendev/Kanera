@@ -38,6 +38,7 @@ import { unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
 import { EMPTY_LINK_FANOUT, emitInternalLinksChanged, replaceInternalLinksForSource, type LinkFanout } from "../../lib/internal-links.js";
 import { replaceCardMentions } from "../../lib/mentions.js";
 import type { StorageProvider } from "../../lib/storage/index.js";
+import { cardAttachmentUrlMap, rewriteCopiedMediaUrls } from "../../lib/copied-media-urls.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { attachmentCoverStorageKey, attachmentThumbnailStorageKey, cardAttachmentStorageKey } from "../../lib/storage/keys.js";
 import { emitToBoard } from "../../realtime/emit.js";
@@ -635,6 +636,8 @@ export async function duplicateCardInto({
   const newCardId = randomUUID();
   const { copiedAttachments, dstStorage } = await copyAttachmentsForDuplicate(sourceAttachments, srcCtx, dstCtx, newCardId);
 
+  const mediaUrls = cardAttachmentUrlMap(copiedAttachments);
+
   let result: { newCard: typeof cards.$inferSelect; attachmentRows: (typeof cardAttachments.$inferSelect)[]; activity: ActivityEvent };
   let linkFanout: LinkFanout = EMPTY_LINK_FANOUT;
   try {
@@ -648,7 +651,7 @@ export async function duplicateCardInto({
           listId: targetListId,
           boardId: targetBoardId,
           title: source.title,
-          description: source.description,
+          description: rewriteCopiedMediaUrls(source.description, mediaUrls),
           dueDateLocalDate: source.dueDateLocalDate,
           dueDateSlot: source.dueDateSlot,
           dueDateTimezone: source.dueDateTimezone,
@@ -737,7 +740,7 @@ export async function duplicateCardInto({
               id: newItemId,
               checklistId: checklist!.id,
               text: item.text,
-              description: item.description,
+              description: rewriteCopiedMediaUrls(item.description, mediaUrls),
               position: item.position,
               assigneeId: item.assigneeId && eligibleAssignmentSet.has(item.assigneeId) ? item.assigneeId : null,
               completedAt: resetChecklistItemCompletion ? null : item.completedAt ? new Date(item.completedAt as unknown as string) : null,
@@ -779,7 +782,7 @@ export async function duplicateCardInto({
             authorKind: canKeepOriginalUser ? "user" as const : "system" as const,
             apiKeyId: null,
             apiKeyName: canKeepOriginalUser ? null : originalName,
-            body: comment.body,
+            body: rewriteCopiedMediaUrls(comment.body, mediaUrls),
             editedAt: comment.editedAt,
             createdAt: comment.createdAt,
           };

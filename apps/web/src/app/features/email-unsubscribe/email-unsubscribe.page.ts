@@ -27,7 +27,7 @@ export class EmailUnsubscribePage {
     event.preventDefault();
     const token = this.token();
     if (!token) {
-      this.error.set("This unsubscribe link is missing its token. Use the link from the email.");
+      this.error.set($localize`This unsubscribe link is missing its token. Use the link from the email.`);
       return;
     }
     this.busy.set(true);
@@ -35,12 +35,12 @@ export class EmailUnsubscribePage {
     try {
       const res = await this.publicAuth.post("/email/unsubscribe", { token });
       if (!res.ok) {
-        this.error.set("This unsubscribe link is invalid. You can turn these emails off under Settings, then Notifications.");
+        this.error.set($localize`This unsubscribe link is invalid. You can turn these emails off under Settings, then Notifications.`);
         return;
       }
       this.done.set(true);
     } catch {
-      this.error.set("We couldn't reach Kanera. Check your connection and try again.");
+      this.error.set($localize`We couldn't reach Kanera. Check your connection and try again.`);
     } finally {
       this.busy.set(false);
     }

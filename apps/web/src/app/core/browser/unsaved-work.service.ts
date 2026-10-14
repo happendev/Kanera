@@ -1,7 +1,7 @@
 import { Injectable, inject, type OnDestroy } from "@angular/core";
 import type { CanDeactivateFn } from "@angular/router";
 
-const UNSAVED_WORK_MESSAGE = "You have unsaved work. Are you sure you want to leave?";
+const UNSAVED_WORK_MESSAGE = $localize`You have unsaved work. Are you sure you want to leave?`;
 
 /**
  * Tracks editors whose current value has not been published yet. Browser unloads need the native

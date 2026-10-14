@@ -38,3 +38,8 @@ e2e/artifacts/
 # Python bytecode (scripts/scan-image-updates.py)
 __pycache__/
 *.pyc
+
+# Per-language email previews are for local review only (pnpm email:preview -- --locale=xx).
+apps/api/src/lib/email-templates/preview/*/
+# Lock directories held briefly by `node apps/web/scripts/i18n.mjs merge`.
+apps/web/src/locale/.lock-*

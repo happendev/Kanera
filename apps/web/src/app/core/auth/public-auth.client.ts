@@ -1,5 +1,6 @@
 import { Injectable } from "@angular/core";
 import { environment } from "../../../environments/environment";
+import { appLocale } from "../i18n/locale";
 
 /**
  * Transport for endpoints used before an authenticated ApiClient session exists. Keeping this
@@ -8,7 +9,10 @@ import { environment } from "../../../environments/environment";
 @Injectable({ providedIn: "root" })
 export class PublicAuthClient {
   request(path: string, init: RequestInit = {}): Promise<Response> {
-    return fetch(`${environment.apiUrl}${path}`, { ...init, credentials: "include" });
+    // Signed-out flows (signup codes, password resets) are written in the language on screen.
+    const headers = new Headers(init.headers);
+    headers.set("Accept-Language", appLocale());
+    return fetch(`${environment.apiUrl}${path}`, { ...init, headers, credentials: "include" });
   }
 
   get(path: string): Promise<Response> {

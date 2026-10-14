@@ -1,3 +1,4 @@
+import { SOURCE_LOCALE } from "@kanera/shared/locales";
 import { randomBytes } from "node:crypto";
 import { dto } from "@kanera/shared";
 import { adminInvites, adminRefreshTokens, adminUsers } from "@kanera/shared/schema";
@@ -11,6 +12,10 @@ import { writeAdminAudit } from "./audit.js";
 import { resetMfa } from "../auth/mfa.js";
 import { requireSuperadmin } from "./helpers.js";
 import { hashOpaqueToken } from "../lib/tokens.js";
+
+// Admin invites go to Kanera staff, who use the English-only admin console; the invitee has no
+// account (and so no language) yet.
+const ADMIN_INVITE_LOCALE = SOURCE_LOCALE;
 
 const INVITE_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -94,7 +99,7 @@ export async function adminManagementRoutes(app: FastifyInstance) {
       await writeAdminAudit(tx, { adminUserId: req.adminAuth.sub, action: "admin.invite.create", targetType: "admin_user", details: { inviteId: row!.id, email: body.email, role: body.role } });
       return row!;
     });
-    await app.mailer.sendAdminInvite(invite.email, invite.displayName, `${env.ADMIN_WEB_ORIGIN}/accept-invite?token=${encodeURIComponent(raw)}`);
+    await app.mailer.sendAdminInvite(invite.email, invite.displayName, `${env.ADMIN_WEB_ORIGIN}/accept-invite?token=${encodeURIComponent(raw)}`, ADMIN_INVITE_LOCALE);
     return reply.status(201).send({ ok: true, id: invite.id });
   });
 
@@ -105,7 +110,7 @@ export async function adminManagementRoutes(app: FastifyInstance) {
       .where(and(eq(adminInvites.id, id), isNull(adminInvites.acceptedAt), isNull(adminInvites.revokedAt))).returning();
     if (!invite) throw notFound("pending invitation not found");
     await writeAdminAudit(db, { adminUserId: req.adminAuth.sub, action: "admin.invite.resend", targetType: "admin_user", details: { inviteId: id, email: invite.email } });
-    await app.mailer.sendAdminInvite(invite.email, invite.displayName, `${env.ADMIN_WEB_ORIGIN}/accept-invite?token=${encodeURIComponent(raw)}`);
+    await app.mailer.sendAdminInvite(invite.email, invite.displayName, `${env.ADMIN_WEB_ORIGIN}/accept-invite?token=${encodeURIComponent(raw)}`, ADMIN_INVITE_LOCALE);
     return { ok: true };
   });
 

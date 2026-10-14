@@ -70,10 +70,10 @@ export type TokenMultiSelectOption = {
 export class TokenMultiSelectDropdownComponent {
   readonly options = input.required<TokenMultiSelectOption[]>();
   readonly selectedIds = input<string[]>([]);
-  readonly placeholder = input("Choose");
+  readonly placeholder = input($localize`:Picker placeholder:Choose`);
   readonly icon = input("ti-tag");
-  readonly searchPlaceholder = input("Search...");
-  readonly emptyMessage = input("Nothing to choose from");
+  readonly searchPlaceholder = input($localize`:Picker search placeholder:Search...`);
+  readonly emptyMessage = input($localize`Nothing to choose from`);
   readonly ariaLabel = input<string | null>(null);
   /** null = unbounded. 1 turns the control into a single-select. */
   readonly max = input<number | null>(null);

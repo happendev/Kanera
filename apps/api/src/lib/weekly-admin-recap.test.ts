@@ -11,6 +11,7 @@ void test("mondayUtc returns the reporting week's Monday boundary", () => {
 
 void test("weekly recap renders last-week metrics and upcoming renewal groups", () => {
   const html = weeklyAdminRecapEmail({
+    locale: "en-GB",
     periodStart: "2026-05-25",
     lastWeekLabel: "18 May 2026–24 May 2026",
     thisWeekLabel: "25 May 2026–31 May 2026",

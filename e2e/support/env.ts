@@ -20,5 +20,7 @@ export const contextDefaults = {
   baseURL: webOrigin,
   viewport: { width: 1440, height: 900 },
   timezoneId: "UTC",
-  locale: "en-US",
+  // The source language, so selectors read the copy as written (UK English) with no translation in
+  // between. The app picks its language from the browser for accounts that never chose one.
+  locale: "en-GB",
 } satisfies BrowserContextOptions;

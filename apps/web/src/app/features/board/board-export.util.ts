@@ -1,6 +1,7 @@
 import type { BoardExportArchive } from "@kanera/shared/dto";
 import type { Cell } from "write-excel-file/browser";
 import { sanitizeExportFileName, timestampForFileName } from "./table-view/export.util";
+import { icu } from "../../core/i18n/icu";
 import { formatDateTime } from "../../shared/date-format";
 
 type WorkbookCell = string | number | boolean | null;
@@ -47,28 +48,33 @@ export function boardArchiveToReportRows(archive: BoardExportArchive): WorkbookC
   }
 
   const activeFields = archive.customFields.filter((field) => !field.archivedAt);
+  // Column headings in the viewer's language. The cell values stay machine-readable (ISO dates,
+  // the due slot's API value) so a spreadsheet can sort and filter them.
   const headers = [
-    "List",
-    "Key",
-    "Title",
-    "Description",
-    "Assignees",
-    "Labels",
-    "Due date",
-    "Due slot",
-    "Completed at",
-    "Archived at",
-    "Created at",
-    "Updated at",
-    "Comments",
-    "Checklist",
-    "Attachments",
-    "Attachment URLs",
+    $localize`:Board export spreadsheet column, the list the card is in:List`,
+    $localize`:Board export spreadsheet column, the card's short key, such as DEV-12:Key`,
+    $localize`:Board export spreadsheet column, card title:Title`,
+    $localize`:Board export spreadsheet column, card description:Description`,
+    $localize`:Board export spreadsheet column, people assigned to the card:Assignees`,
+    $localize`:Board export spreadsheet column, card labels:Labels`,
+    $localize`:Board export spreadsheet column, card due date:Due date`,
+    $localize`:Board export spreadsheet column, time of day the card is due:Due slot`,
+    $localize`:Board export spreadsheet column, when the card was completed:Completed at`,
+    $localize`:Board export spreadsheet column, when the card was archived:Archived at`,
+    $localize`:Board export spreadsheet column, when the card was created:Created at`,
+    $localize`:Board export spreadsheet column, when the card was last changed:Updated at`,
+    $localize`:Board export spreadsheet column, number of comments:Comments`,
+    $localize`:Board export spreadsheet column, checklist items done out of total:Checklist`,
+    $localize`:Board export spreadsheet column, number of attachments:Attachments`,
+    $localize`:Board export spreadsheet column, links to the card's attachments:Attachment URLs`,
     ...activeFields.map((field) => field.name),
   ];
   const rows: WorkbookCell[][] = [
-    [`Kanera board export: ${archive.board.name}`],
-    [`Exported ${formatDate(archive.exportedAt)}`, `${archive.cards.length} cards`],
+    [$localize`:Board export spreadsheet title:Kanera board export: ${archive.board.name}:board:`],
+    [
+      $localize`:Board export spreadsheet; the export time follows:Exported ${formatDate(archive.exportedAt)}:time:`,
+      icu($localize`:Board export spreadsheet:{count, plural, one {# card} other {# cards}}`, { count: archive.cards.length }),
+    ],
     [],
     headers,
   ];

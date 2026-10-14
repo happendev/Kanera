@@ -14,6 +14,8 @@ import { STORAGE_DELETE_MAX_FILES } from "@kanera/shared/dto/storage-limits";
 import { cardPath } from "@kanera/shared/card-links";
 import { ApiClient, ApiError } from "../../../core/api/api.client";
 import { ConfirmService } from "../../../shared/confirm.service";
+import { appLocale } from "../../../core/i18n/locale";
+import { icu } from "../../../core/i18n/icu";
 import { formatDate } from "../../../shared/date-format";
 import { SegmentedComponent, type SegmentedOption } from "../../../shared/segmented.component";
 import { ToastService } from "../../../shared/toast.service";
@@ -23,32 +25,33 @@ const PAGE_SIZE = 50;
 const MB = 1024 * 1024;
 
 const CATEGORY_LABELS: Record<StorageCategoryKey, { label: string; icon: string }> = {
-  cards: { label: "Card attachments", icon: "layout-kanban" },
-  notes: { label: "Shared notes", icon: "notes" },
-  personal: { label: "Personal notes and scratchpads", icon: "lock" },
+  cards: { label: $localize`:Storage category:Card attachments`, icon: "layout-kanban" },
+  notes: { label: $localize`:Storage category:Shared notes`, icon: "notes" },
+  personal: { label: $localize`:Storage category:Personal notes and scratchpads`, icon: "lock" },
 };
 
 const SIZE_FILTERS = [
-  { value: 0, label: "Any size" },
-  { value: 1 * MB, label: "Over 1 MB" },
-  { value: 5 * MB, label: "Over 5 MB" },
-  { value: 25 * MB, label: "Over 25 MB" },
-  { value: 100 * MB, label: "Over 100 MB" },
+  { value: 0, label: $localize`:File size filter option:Any size` },
+  { value: 1 * MB, label: $localize`:File size filter option:Over 1 MB` },
+  { value: 5 * MB, label: $localize`:File size filter option:Over 5 MB` },
+  { value: 25 * MB, label: $localize`:File size filter option:Over 25 MB` },
+  { value: 100 * MB, label: $localize`:File size filter option:Over 100 MB` },
 ] as const;
 
 const AGE_FILTERS = [
-  { value: 0, label: "Any age" },
-  { value: 30, label: "Older than 30 days" },
-  { value: 90, label: "Older than 90 days" },
-  { value: 180, label: "Older than 6 months" },
-  { value: 365, label: "Older than a year" },
+  { value: 0, label: $localize`:File age filter option:Any age` },
+  { value: 30, label: $localize`:File age filter option:Older than 30 days` },
+  { value: 90, label: $localize`:File age filter option:Older than 90 days` },
+  { value: 180, label: $localize`:File age filter option:Older than 6 months` },
+  { value: 365, label: $localize`:File age filter option:Older than a year` },
 ] as const;
 
 function formatBytes(value: number): string {
-  if (value < 1024) return `${value} B`;
-  if (value < MB) return `${(value / 1024).toFixed(1)} KB`;
-  if (value < 1024 * MB) return `${(value / MB).toFixed(1)} MB`;
-  return `${(value / 1024 / MB).toFixed(1)} GB`;
+  const oneDecimal = (n: number) => new Intl.NumberFormat(appLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(n);
+  if (value < 1024) return $localize`:File size in bytes:${new Intl.NumberFormat(appLocale()).format(value)}:size: B`;
+  if (value < MB) return $localize`:File size in kilobytes:${oneDecimal(value / 1024)}:size: KB`;
+  if (value < 1024 * MB) return $localize`:File size in megabytes:${oneDecimal(value / MB)}:size: MB`;
+  return $localize`:File size in gigabytes:${oneDecimal(value / 1024 / MB)}:size: GB`;
 }
 
 function fileIcon(mimeType: string): string {
@@ -78,6 +81,8 @@ const fileKey = (file: Pick<StorageFileRow, "kind" | "id">): FileKey => `${file.
 })
 export class AccountSettingsStoragePage implements OnInit {
   protected readonly settings = inject(AccountSettingsPage);
+  protected readonly savedKeyPlaceholder = $localize`:Placeholder for a saved S3 access key:Saved, leave blank to keep`;
+  protected readonly savedSecretPlaceholder = $localize`:Placeholder for a saved S3 secret:•••••••• (saved, leave blank to keep)`;
   private readonly api = inject(ApiClient);
   private readonly confirm = inject(ConfirmService);
   private readonly toasts = inject(ToastService);
@@ -88,13 +93,13 @@ export class AccountSettingsStoragePage implements OnInit {
   protected readonly fileIcon = fileIcon;
   protected readonly maxFiles = STORAGE_DELETE_MAX_FILES;
   protected readonly kindOptions: readonly SegmentedOption<"all" | StorageFileKind>[] = [
-    { id: "all", icon: "files", label: "All" },
-    { id: "card", icon: "layout-kanban", label: "Cards" },
-    { id: "note", icon: "notes", label: "Notes" },
+    { id: "all", icon: "files", label: $localize`:File type filter option — all files:All` },
+    { id: "card", icon: "layout-kanban", label: $localize`:File type filter option — files on cards:Cards` },
+    { id: "note", icon: "notes", label: $localize`:File type filter option — files on notes:Notes` },
   ];
   protected readonly sortOptions: readonly SegmentedOption<StorageFileSort>[] = [
-    { id: "largest", icon: "sort-descending-numbers", label: "Largest" },
-    { id: "oldest", icon: "calendar-time", label: "Oldest" },
+    { id: "largest", icon: "sort-descending-numbers", label: $localize`:Sort option — largest files first:Largest` },
+    { id: "oldest", icon: "calendar-time", label: $localize`:Sort option — oldest files first:Oldest` },
   ];
 
   readonly overview = signal<StorageOverviewResponse | null>(null);
@@ -212,6 +217,10 @@ export class AccountSettingsStoragePage implements OnInit {
     document.getElementById("storage-cleanup")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  protected selectFileLabel(fileName: string): string {
+    return $localize`:Checkbox label:Select ${fileName}:fileName:`;
+  }
+
   protected locationLabel(file: StorageFileRow): string {
     // A standalone board lives in a hidden workspace; people know it by the board's name alone.
     if (file.workspaceKind === "board" || !file.boardName) return file.boardName ?? file.workspaceName;
@@ -219,8 +228,8 @@ export class AccountSettingsStoragePage implements OnInit {
   }
 
   protected itemLabel(file: StorageFileRow): string {
-    if (file.kind === "card") return file.cardKey ? `${file.cardKey} ${file.cardTitle ?? ""}`.trim() : (file.cardTitle ?? "Card");
-    return file.noteTitle?.trim() || "Untitled note";
+    if (file.kind === "card") return file.cardKey ? `${file.cardKey} ${file.cardTitle ?? ""}`.trim() : (file.cardTitle ?? $localize`:Fallback name for a card without a title:Card`);
+    return file.noteTitle?.trim() || $localize`Untitled note`;
   }
 
   /** Router commands for the file's card or note, so the admin can check it before deleting. */
@@ -244,11 +253,11 @@ export class AccountSettingsStoragePage implements OnInit {
     const files = [...this.selected().values()];
     if (files.length === 0) return;
     const ok = await this.confirm.open({
-      title: files.length === 1 ? "Delete this file?" : `Delete ${files.length} files?`,
+      title: icu($localize`:Confirm title:{count, plural, =1 {Delete this file?} other {Delete # files?}}`, { count: files.length }),
       message: files.length === 1
-        ? `This permanently frees ${formatBytes(this.selectedBytes())}. The file is removed from its card or note, including anywhere it is shown inline, and cannot be recovered.`
-        : `This permanently frees ${formatBytes(this.selectedBytes())}. The files are removed from their cards and notes, including anywhere they are shown inline, and cannot be recovered.`,
-      confirmLabel: "Delete",
+        ? $localize`This permanently frees ${formatBytes(this.selectedBytes())}:size:. The file is removed from its card or note, including anywhere it is shown inline, and cannot be recovered.`
+        : $localize`This permanently frees ${formatBytes(this.selectedBytes())}:size:. The files are removed from their cards and notes, including anywhere they are shown inline, and cannot be recovered.`,
+      confirmLabel: $localize`:Confirm button — delete files:Delete`,
       danger: true,
     });
     if (!ok) return;
@@ -257,13 +266,14 @@ export class AccountSettingsStoragePage implements OnInit {
       const result = await this.api.post<DeleteStorageFilesResponse>("/clients/me/storage/files/delete", {
         files: files.map((file) => ({ kind: file.kind, id: file.id })),
       });
-      this.toasts.success(result.deletedCount === 1
-        ? `Deleted 1 file, freeing ${formatBytes(result.freedBytes)}`
-        : `Deleted ${result.deletedCount} files, freeing ${formatBytes(result.freedBytes)}`);
+      this.toasts.success(icu(
+        $localize`:Toast after deleting files:{count, plural, =1 {Deleted 1 file, freeing {size}} other {Deleted # files, freeing {size}}}`,
+        { count: result.deletedCount, size: formatBytes(result.freedBytes) },
+      ));
       this.selected.set(new Map());
       await Promise.all([this.loadOverview(), this.loadFiles(this.currentQuery(), 0)]);
     } catch (err) {
-      this.toasts.error(err instanceof ApiError ? err.message : "Could not delete the files");
+      this.toasts.error(err instanceof ApiError ? err.message : $localize`Could not delete the files`);
     } finally {
       this.deleting.set(false);
     }
@@ -285,7 +295,7 @@ export class AccountSettingsStoragePage implements OnInit {
       this.overview.set(await this.api.get<StorageOverviewResponse>("/clients/me/storage"));
       this.overviewError.set(null);
     } catch (err) {
-      this.overviewError.set(err instanceof ApiError ? err.message : "Could not load storage usage");
+      this.overviewError.set(err instanceof ApiError ? err.message : $localize`Could not load storage usage`);
     }
   }
 
@@ -308,7 +318,7 @@ export class AccountSettingsStoragePage implements OnInit {
       this.filesError.set(null);
     } catch (err) {
       if (request !== this.filesRequest) return;
-      this.filesError.set(err instanceof ApiError ? err.message : "Could not load files");
+      this.filesError.set(err instanceof ApiError ? err.message : $localize`Could not load files`);
     } finally {
       if (request === this.filesRequest) this.filesLoading.set(false);
     }

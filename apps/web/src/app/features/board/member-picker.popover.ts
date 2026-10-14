@@ -8,9 +8,13 @@ import {
   signal,
 } from "@angular/core";
 import type { WireBoardMemberUser } from "@kanera/shared/events";
+import { appLocale } from "../../core/i18n/locale";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
+
+// Stands in for the viewer's own name in member lists, and is searchable as such.
+const ME_LABEL = $localize`:The viewer, in a list of people:Me`;
 
 @Component({
   selector: "k-member-picker",
@@ -21,18 +25,19 @@ import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
   template: `
     <div class="mp-panel">
       <div class="mp-head">
-        <span class="mp-title">Assigned Members</span>
+        <span class="mp-title" i18n="Member picker heading">Assigned Members</span>
       </div>
       <input
         class="mp-search"
         type="text"
         placeholder="Search members…"
+        i18n-placeholder
         [value]="query()"
         (input)="query.set($any($event.target).value)"
       />
       <div class="mp-list">
         @if (filtered().length === 0) {
-          <p class="mp-empty">No matching members</p>
+          <p class="mp-empty" i18n>No matching members</p>
         }
         @for (m of filtered(); track m.userId) {
           <button
@@ -44,7 +49,7 @@ import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
             <span class="mp-avatar">
               <k-avatar [url]="m.avatarUrl" [name]="m.displayName" [size]="24" [userId]="m.userId" [workspaceId]="workspaceId()" [showPresence]="true" [lastOnlineAt]="m.lastOnlineAt" />
             </span>
-            <span class="mp-name">{{ m.userId === currentUserId() ? 'Me' : m.displayName }}</span>
+            <span class="mp-name">{{ m.userId === currentUserId() ? meLabel : m.displayName }}</span>
             @if (selectedIds().includes(m.userId)) {
               <i class="ti ti-check mp-check"></i>
             }
@@ -194,7 +199,8 @@ export class MemberPickerPopover {
   readonly currentUserId = input<string | null | undefined>(null);
   readonly workspaceId = input<string | null>(null);
   readonly allowClear = input(false);
-  readonly clearLabel = input("Clear selection");
+  readonly clearLabel = input($localize`:Button that removes every selected member:Clear selection`);
+  readonly meLabel = ME_LABEL;
   readonly toggle = output<string>();
   readonly clear = output<void>();
   readonly close = output<void>();
@@ -213,16 +219,16 @@ export class MemberPickerPopover {
     const meId = this.currentUserId();
     const pinned = new Set(this.pinnedIds());
     const sorted = this.members().filter((member) => member.role !== "observer").sort((a, b) => {
-      if (this.alphabetical()) return a.displayName.localeCompare(b.displayName);
+      if (this.alphabetical()) return a.displayName.localeCompare(b.displayName, appLocale());
       const aPinned = pinned.has(a.userId);
       const bPinned = pinned.has(b.userId);
       if (aPinned !== bPinned) return aPinned ? -1 : 1;
       if (a.userId === meId) return -1;
       if (b.userId === meId) return 1;
-      return a.displayName.localeCompare(b.displayName);
+      return a.displayName.localeCompare(b.displayName, appLocale());
     });
     if (!q) return sorted;
-    return sorted.filter((m) => m.displayName.toLowerCase().includes(q) || (m.userId === meId && "me".includes(q)));
+    return sorted.filter((m) => m.displayName.toLowerCase().includes(q) || (m.userId === meId && ME_LABEL.toLowerCase().includes(q)));
   });
 
   initialFor(name: string): string {

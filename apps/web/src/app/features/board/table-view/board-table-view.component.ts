@@ -102,11 +102,18 @@ import {
   type ColumnWidths,
 } from "./view-preference";
 import { byPosition } from "../../../shared/position-sort";
+import { appLocale } from "../../../core/i18n/locale";
+import { formatDate } from "../../../shared/date-format";
+import { icu } from "../../../core/i18n/icu";
 
 const TITLE_COLUMN_ID = "title";
 const ACTIONS_COLUMN_WIDTH = 38;
 /** Mirrors `--tv-run-inset`: the strip the full-width bands pay as inline padding on both sides. */
 const TABLE_RUN_INSET = 10;
+/** Most of a narrow sheet the frozen Title column takes by default; see `titleWidthCap`. */
+const TITLE_MAX_SHEET_SHARE = 0.42;
+/** Title track width below which the grid drops the card-key prefix; see `compactTitle`. */
+const COMPACT_TITLE_WIDTH = 300;
 /** Breathing room after an auto-fit, so the widest value does not sit flush against the divider. */
 const AUTO_FIT_SLACK = 4;
 /** Regions where a background pan would steal a gesture that already means something else. */
@@ -224,8 +231,11 @@ export class BoardTableViewComponent implements OnDestroy {
   private readonly cardStore: TableCardStore =
     inject(TABLE_CARD_STORE, { optional: true }) ?? boardStateCardStore(this.state, this.api);
 
+  /** Bound tooltip and aria text the template switches between; see TABLE_TEXT. */
+  protected readonly text = TABLE_TEXT;
+
   readonly boardId = input.required<string>();
-  readonly boardName = input("Board");
+  readonly boardName = input($localize`:Fallback board name before the board has loaded:Board`);
   readonly workspaceId = input<string | null>(null);
   readonly cards = input.required<AnyCard[]>();
   readonly lists = input.required<AnyList[]>();
@@ -263,7 +273,7 @@ export class BoardTableViewComponent implements OnDestroy {
   readonly filterCustomFields = input<AnyCustomField[]>([]);
   readonly completedFrom = input("");
   readonly completedTo = input("");
-  readonly completedLabel = input("Choose date range");
+  readonly completedLabel = input($localize`:Completed-date filter button when no range is chosen:Choose date range`);
   readonly archived = input(false);
   readonly searchQuery = input("");
 
@@ -513,7 +523,7 @@ export class BoardTableViewComponent implements OnDestroy {
    * as padding and the fixed actions column, both of which sit in the same grid. When the columns
    * already exceed that, there is no slack and the sheet keeps its natural width and scrolls.
    */
-  readonly gridTemplate = computed(() => {
+  private readonly columnTrackWidths = computed(() => {
     const ids = [TITLE_COLUMN_ID, ...this.visibleColumns()];
     const available = this.scrollportWidth() - TABLE_RUN_INSET * 2 - ACTIONS_COLUMN_WIDTH;
     const widths = distributeColumnSlack({
@@ -528,8 +538,21 @@ export class BoardTableViewComponent implements OnDestroy {
         Math.ceil(this.measuredContentWidths()[id] ?? 0) + AUTO_FIT_SLACK,
       ),
     });
-    return gridTemplateFrom(ids, (id) => widths[id] ?? this.widthForColumn(id), [ACTIONS_COLUMN_WIDTH]);
+    return { ids, widthFor: (id: string) => widths[id] ?? this.widthForColumn(id) };
   });
+
+  readonly gridTemplate = computed(() => {
+    const { ids, widthFor } = this.columnTrackWidths();
+    return gridTemplateFrom(ids, widthFor, [ACTIONS_COLUMN_WIDTH]);
+  });
+
+  /**
+   * A Title column this narrow (a capped tablet sheet, or one dragged in by hand) cannot spare the
+   * card key its ~11ch: with the touch-visible open button beside it, the key left a word or two of
+   * title. The key yields there for this view only; the viewer's key preference is untouched, and
+   * the stacked phone layout still shows it in full on its own line.
+   */
+  readonly compactTitle = computed(() => this.columnTrackWidths().widthFor(TITLE_COLUMN_ID) < COMPACT_TITLE_WIDTH);
 
   readonly groupingContext = computed(() => ({
     lists: this.lists(),
@@ -568,7 +591,7 @@ export class BoardTableViewComponent implements OnDestroy {
   private qualifiedListLabel(listId: string, label: string): string {
     const workspaceId = this.listById().get(listId)?.workspaceId;
     const workspace = workspaceId ? this.workspaceNameById().get(workspaceId) : undefined;
-    return workspace ? `${workspace} · ${label}` : label;
+    return workspace ? qualifiedName(workspace, label) : label;
   }
 
   /**
@@ -609,7 +632,7 @@ export class BoardTableViewComponent implements OnDestroy {
     if (!orphans.length) return groups;
     return [...groups, {
       key: "__ungrouped__",
-      label: "Ungrouped",
+      label: $localize`:Group heading for cards in an archived or missing list:Ungrouped`,
       icon: "circle-dashed",
       color: null,
       acceptsDrop: false,
@@ -656,9 +679,11 @@ export class BoardTableViewComponent implements OnDestroy {
   });
 
   readonly exportScopeLabel = computed(() => {
-    if (!this.bulkSelectedCardIds().size) return `${this.exportRows().length} cards in this view`;
     const count = this.exportRows().length;
-    return `${count} selected card${count === 1 ? "" : "s"}`;
+    if (!this.bulkSelectedCardIds().size) {
+      return icu($localize`:Export menu note - how many cards will be exported:{count, plural, one {# card in this view} other {# cards in this view}}`, { count });
+    }
+    return icu($localize`:Export menu note - how many selected cards will be exported:{count, plural, one {# selected card} other {# selected cards}}`, { count });
   });
 
   readonly footerCount = computed(() => this.rows().length);
@@ -762,18 +787,18 @@ export class BoardTableViewComponent implements OnDestroy {
   // Anything groupable except the axis already in use: breaking a group down by its own dimension
   // puts every card of that group in one bucket, which is the group over again.
   readonly splitByOptions = computed<GroupByOption[]>(() => [
-    { value: "none", label: "No breakdown", icon: "minus" },
+    { value: "none", label: NO_BREAKDOWN, icon: "minus" },
     ...this.groupByOptions().filter((option) => option.value !== "none" && option.value !== this.effectiveGroupBy()),
   ]);
 
   readonly groupByLabel = computed(() =>
-    this.groupByOptions().find((option) => option.value === this.effectiveGroupBy())?.label ?? "List",
+    this.groupByOptions().find((option) => option.value === this.effectiveGroupBy())?.label ?? GROUP_BY_OPTIONS[0]!.label,
   );
   readonly splitByLabel = computed(() =>
-    this.splitByOptions().find((option) => option.value === this.aggregateSplitBy())?.label ?? "No breakdown",
+    this.splitByOptions().find((option) => option.value === this.aggregateSplitBy())?.label ?? NO_BREAKDOWN,
   );
   readonly sortByLabel = computed(() =>
-    SORT_BY_OPTIONS.find((option) => option.value === this.effectiveSortBy())?.label ?? "Manual",
+    SORT_BY_OPTIONS.find((option) => option.value === this.effectiveSortBy())?.label ?? $localize`:Sort order label - cards in their hand-arranged order:Manual`,
   );
 
   /**
@@ -785,10 +810,12 @@ export class BoardTableViewComponent implements OnDestroy {
    * here is the one the footer summaries cross-tab against.
    */
   readonly groupTriggerLabel = computed(() => {
-    if (!this.hostGroupBy()) return `Group: ${this.groupByLabel()}`;
-    return this.splitActive() ? `Breakdown: ${this.splitByLabel()}` : "Breakdown";
+    if (!this.hostGroupBy()) return $localize`:Toolbar button showing the current grouping:Group: ${this.groupByLabel()}:grouping:`;
+    return this.splitActive()
+      ? $localize`:Toolbar button showing the dimension totals are broken down by:Breakdown: ${this.splitByLabel()}:dimension:`
+      : $localize`:Toolbar button that breaks totals down by a second dimension:Breakdown`;
   });
-  readonly sortTriggerLabel = computed(() => `Sort: ${this.sortByLabel()}`);
+  readonly sortTriggerLabel = computed(() => $localize`:Toolbar button showing the current sort order:Sort: ${this.sortByLabel()}:sortOrder:`);
 
   /**
    * Group / Sort / Columns away from this sheet's defaults, driving the one canonical accent
@@ -928,7 +955,7 @@ export class BoardTableViewComponent implements OnDestroy {
   }
 
   columnLabel(id: string): string {
-    if (id === "status") return "Status";
+    if (id === "status") return $localize`:Table column header - the list (status) the card is in:Status`;
     if (!id.startsWith("cf:")) return builtinColumnLabel(id);
     const field = this.customFieldById().get(id.slice(3));
     if (!field) return id;
@@ -936,12 +963,12 @@ export class BoardTableViewComponent implements OnDestroy {
     // every workspace. On a cross-workspace sheet the bare name would leave two different fields
     // with one heading, so each carries the workspace it belongs to.
     if (!this.crossWorkspace()) return field.name;
-    return `${this.workspaceNameById().get(field.workspaceId) ?? "Workspace"} · ${field.name}`;
+    return qualifiedName(this.workspaceNameById().get(field.workspaceId) ?? $localize`:Stand-in when a workspace name is unknown:Workspace`, field.name);
   }
 
   /** Keeps the compact rank column readable while its picker/export name remains unambiguous. */
   columnHeaderLabel(id: string): string {
-    return id === "priority" ? "Up next" : this.columnLabel(id);
+    return id === "priority" ? $localize`:Compact table column header - the card's rank in the Up next queue:Up next` : this.columnLabel(id);
   }
 
   columnIcon(id: string): string {
@@ -1267,14 +1294,14 @@ export class BoardTableViewComponent implements OnDestroy {
       case "text": return value.valueText || "—";
       case "number": return value.valueNumber ?? "—";
       case "url": return value.valueUrl || "—";
-      case "date": return value.valueDate || "—";
-      case "checkbox": return value.valueCheckbox ? "Checked" : "Unchecked";
+      case "date": return value.valueDate ? formatDate(value.valueDate, "medium") || value.valueDate : "—";
+      case "checkbox": return value.valueCheckbox ? $localize`:Checkbox field value - ticked:Checked` : $localize`:Checkbox field value - not ticked:Unchecked`;
       case "select": {
         const options = this.optionLabelsByField().get(field.id);
-        return (value.valueOptionIds ?? []).map((id) => options?.get(id) ?? "Unknown").join(", ") || "—";
+        return (value.valueOptionIds ?? []).map((id) => options?.get(id) ?? UNKNOWN_VALUE).join(", ") || "—";
       }
       case "user":
-        return (value.valueUserIds ?? []).map((id) => this.memberById().get(id)?.displayName ?? "Unknown").join(", ") || "—";
+        return (value.valueUserIds ?? []).map((id) => this.memberById().get(id)?.displayName ?? UNKNOWN_VALUE).join(", ") || "—";
     }
   }
 
@@ -1304,7 +1331,7 @@ export class BoardTableViewComponent implements OnDestroy {
     this.editDraft.set(value);
     this.editError.set(null);
     this.editFailed.set(false);
-    this.editLabel.set(`${this.columnLabel(col)} · ${card.title}`);
+    this.editLabel.set(qualifiedName(this.columnLabel(col), card.title));
     this.editingCell.set({ cardId: card.id, col, groupKey });
   }
 
@@ -1329,20 +1356,22 @@ export class BoardTableViewComponent implements OnDestroy {
     this.editFailed.set(false);
     const card = this.cards().find((item) => item.id === cell.cardId);
     if (!card || !this.canEditColumn(card, cell.col) || this.rowIsLocked(card.id)) {
-      this.editError.set("This cell is no longer editable. Your draft is kept; discard it to continue.");
+      this.editError.set($localize`:Inline table edit error:This cell is no longer editable. Your draft is kept; discard it to continue.`);
       return Promise.resolve(false);
     }
     const field = this.customFieldForColumn(cell.col);
     const normalized = cell.col === TITLE_COLUMN_ID || field?.type === "url" || field?.type === "number" ? draft.trim() : draft;
     let error: string | null = null;
     if (cell.col === TITLE_COLUMN_ID && (!normalized || normalized.length > CARD_TITLE_MAX_LENGTH)) {
-      error = normalized ? "Use 500 characters or fewer for the title." : "Enter a title.";
+      error = normalized
+        ? $localize`:Validation message for a card title:Use 500 characters or fewer for the title.`
+        : $localize`:Validation message for an empty card title:Enter a title.`;
     } else if (field?.type === "number" && normalized && !Number.isFinite(Number(normalized))) {
-      error = "Enter a valid number.";
+      error = $localize`:Validation message for a number field:Enter a valid number.`;
     } else if (field?.type === "url" && normalized && (normalized.length > CUSTOM_FIELD_URL_MAX_LENGTH || !URL.canParse(normalized))) {
-      error = "Enter a complete URL (for example, https://example.com), up to 2,000 characters.";
+      error = $localize`:Validation message for a URL field:Enter a complete URL (for example, https://example.com), up to 2,000 characters.`;
     } else if (field?.type === "text" && normalized.length > CUSTOM_FIELD_TEXT_MAX_LENGTH) {
-      error = "Use 20,000 characters or fewer.";
+      error = $localize`:Validation message for a text field:Use 20,000 characters or fewer.`;
     }
     this.editError.set(error);
     if (error) return Promise.resolve(false);
@@ -1367,7 +1396,7 @@ export class BoardTableViewComponent implements OnDestroy {
         // Keep the editor and its draft intact. Realtime updates still flow into the card projection,
         // while this local draft can be corrected, retried or explicitly discarded.
         this.editFailed.set(true);
-        this.editError.set("Couldn’t save this edit. Your draft is kept. Try again.");
+        this.editError.set($localize`:Inline table edit error:Couldn’t save this edit. Your draft is kept. Try again.`);
         return false;
       } finally {
         this.savingEdit.set(false);
@@ -1646,7 +1675,7 @@ export class BoardTableViewComponent implements OnDestroy {
   }
 
   listName(card: AnyCard): string {
-    return this.listById().get(card.listId)?.name ?? "Unknown list";
+    return this.listById().get(card.listId)?.name ?? $localize`:Stand-in when a card's list is unavailable:Unknown list`;
   }
 
   listColor(card: AnyCard): string | null {
@@ -1973,8 +2002,8 @@ export class BoardTableViewComponent implements OnDestroy {
     // advice would describe controls this embedded table deliberately does not offer.
     if (this.hostCardGroups() !== null) return null;
     if (this.dragEnabled() || !this.canEdit()) return null;
-    if (this.effectiveGroupBy() !== "list") return "Drag to reorder works when grouped by status";
-    return "Drag to reorder works with manual sort";
+    if (this.effectiveGroupBy() !== "list") return $localize`:Hint why drag handles are hidden:Drag to reorder works when grouped by status`;
+    return $localize`:Hint why drag handles are hidden:Drag to reorder works with manual sort`;
   });
 
   closeMenusForDrag(): void {
@@ -2315,7 +2344,7 @@ export class BoardTableViewComponent implements OnDestroy {
     }
     if (withTotal) {
       const values = this.summaryValues(cards, columns);
-      if (Object.keys(values).length) rows.push({ key: `${keyPrefix}:total`, label: "Total", values });
+      if (Object.keys(values).length) rows.push({ key: `${keyPrefix}:total`, label: TABLE_TEXT.total, values });
     }
     return rows;
   }
@@ -2387,7 +2416,21 @@ export class BoardTableViewComponent implements OnDestroy {
       created: 120,
       updated: 120,
     };
-    return this.clampColumn(id, this.columnWidths()[id] ?? defaults[id] ?? 180);
+    const pinned = this.columnWidths()[id];
+    if (pinned !== undefined) return this.clampColumn(id, pinned);
+    const base = defaults[id] ?? 180;
+    return this.clampColumn(id, id === TITLE_COLUMN_ID ? Math.min(base, this.titleWidthCap()) : base);
+  }
+
+  /**
+   * Title is the frozen column, so on a narrow sheet (a tablet, or a pane beside the sidebar) its
+   * 400px default would cover most of the scrollport and leave only a sliver for the columns
+   * scrolling beside it. The default gives way to a share of the sheet instead; a width the viewer set
+   * by hand is left alone, so a drag always takes. No cap before the first measurement.
+   */
+  private titleWidthCap(): number {
+    const sheet = this.scrollportWidth() - TABLE_RUN_INSET * 2 - ACTIONS_COLUMN_WIDTH;
+    return sheet > 0 ? Math.round(sheet * TITLE_MAX_SHEET_SHARE) : Number.POSITIVE_INFINITY;
   }
 
   private exportCell(card: AnyCard, column: string): string {
@@ -2410,6 +2453,8 @@ export class BoardTableViewComponent implements OnDestroy {
       default: {
         const field = this.customFieldForColumn(column);
         if (!field) return "";
+        // Dates stay YYYY-MM-DD in the file so a spreadsheet parses them in any locale.
+        if (field.type === "date") return this.valueFor(card.id, field.id)?.valueDate ?? "";
         const value = this.displayValue(card, field);
         return value === "—" ? "" : value;
       }
@@ -2524,7 +2569,8 @@ export class BoardTableViewComponent implements OnDestroy {
   }
 }
 
-/** Absolute local timestamp for CSV, where a relative "3d ago" would rot the moment it is saved. */
+/** Absolute local timestamp for CSV, where a relative "3d ago" would rot the moment it is saved.
+ *  A fixed machine format (not the interface language), so spreadsheets parse it in any locale. */
 function isoTimestamp(value: Date | string | null | undefined): string {
   if (!value) return "";
   const date = value instanceof Date ? value : new Date(value);
@@ -2538,7 +2584,51 @@ function isoTimestamp(value: Date | string | null | undefined): string {
  *
  *  The formatter is hoisted because this is called once per aggregate cell per change-detection
  *  pass, and constructing an Intl.NumberFormat is far more expensive than the formatting itself. */
-const AGGREGATE_FORMAT = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+const AGGREGATE_FORMAT = new Intl.NumberFormat(appLocale(), { maximumFractionDigits: 2 });
+
+/**
+ * Text the template binds rather than writes inline: the half of a ternary, or a sentence around a
+ * name. A static attribute is marked in the template with `i18n-<attr>` instead.
+ */
+const TABLE_TEXT = {
+  total: $localize`:Summary row label - the total of a group:Total`,
+  title: $localize`:Table column header - card title:Title`,
+  saving: $localize`:Status while an inline table edit is saving:Saving…`,
+  clearBreakdown: $localize`:Button that removes the summary breakdown:Clear breakdown`,
+  resetGrouping: $localize`:Button that restores the default grouping:Reset grouping`,
+  expandAllGroups: $localize`:Button that expands every group in the table:Expand all groups`,
+  collapseAllGroups: $localize`:Button that collapses every group in the table:Collapse all groups`,
+  expandAll: $localize`:Tooltip - expand every group:Expand all`,
+  collapseAll: $localize`:Tooltip - collapse every group:Collapse all`,
+  clearSelection: $localize`:Checkbox that clears the row selection:Clear selection`,
+  selectAllTasks: $localize`:Checkbox that selects every row in the table:Select all tasks`,
+  selectAll: $localize`:Tooltip - select every row:Select all`,
+  selectGroup: $localize`:Tooltip - select every row in this group:Select group`,
+  deselectGroup: $localize`:Tooltip - deselect every row in this group:Deselect group`,
+  selectNamed: (name: string) => $localize`:Checkbox label - select a group or card by its name:Select ${name}:name:`,
+  deselectNamed: (name: string) => $localize`:Checkbox label - deselect a group by its name:Deselect ${name}:name:`,
+  expandNamed: (name: string) => $localize`:Button label - expand a group by its name:Expand ${name}:name:`,
+  collapseNamed: (name: string) => $localize`:Button label - collapse a group by its name:Collapse ${name}:name:`,
+  addCard: $localize`:Tooltip - add a card to this Up next group:Add card`,
+  noAddableCards: $localize`:Tooltip - no cards can be added to this Up next group:No assigned cards can be added`,
+  upNextRank: (rank: number) => $localize`:The card's position in the Up next queue:Up next #${rank}:rank:`,
+  openNamed: (name: string) => $localize`:Tooltip - open the named board:Open ${name}:name:`,
+  newTaskIn: (list: string) => $localize`:Placeholder for a new task's title in a list:New task in ${list}:list:`,
+  addTaskTo: (list: string) => $localize`:Button label - add a task to a list:Add task to ${list}:list:`,
+  summarise: (field: string) => $localize`:Tooltip - choose a total or average for a number column:Summarise ${field}:field:`,
+  metric: {
+    sum: $localize`:Footer label - the column shows a sum:SUM`,
+    avg: $localize`:Footer label - the column shows an average:AVG`,
+  } satisfies Record<AggregateMetric, string>,
+};
+
+const NO_BREAKDOWN = $localize`:Breakdown option - totals are not split by a second dimension:No breakdown`;
+const UNKNOWN_VALUE = $localize`:Stand-in for a deleted option or a former member in a cell:Unknown`;
+
+/** "Workspace · Field" / "Column · Card title": a name qualified by what it belongs to. */
+function qualifiedName(context: string, name: string): string {
+  return $localize`:A name qualified by what it belongs to, e.g. a workspace and one of its fields:${context}:context: · ${name}:name:`;
+}
 
 function formatAggregate(value: number): string {
   return AGGREGATE_FORMAT.format(value);

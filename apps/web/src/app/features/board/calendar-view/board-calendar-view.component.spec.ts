@@ -8,6 +8,7 @@ import { ApiClient } from "../../../core/api/api.client";
 import { TABLE_CARD_STORE, type TableCardStore } from "../table-view/table-card-store";
 import { BoardMenuCoordinator } from "../board-menu-coordinator.service";
 import { BoardCalendarViewComponent, calendarLayoutForWidth } from "./board-calendar-view.component";
+import { slotTimeLabel } from "../due-date.util";
 
 function card(overrides: Partial<WireCardSummary> = {}): WireCardSummary {
   return {
@@ -322,7 +323,7 @@ describe("BoardCalendarViewComponent", () => {
 
     const cards = Array.from(fixture.nativeElement.querySelectorAll(".cal-card")) as HTMLElement[];
     expect(cards.find((el) => el.textContent?.includes("All day card"))?.querySelector(".cal-time")).toBeNull();
-    expect(cards.find((el) => el.textContent?.includes("Morning card"))?.querySelector(".cal-time")?.textContent?.trim()).toBe("09:00");
+    expect(cards.find((el) => el.textContent?.includes("Morning card"))?.querySelector(".cal-time")?.textContent?.trim()).toBe(slotTimeLabel("morning"));
   });
 
   it("leads with the title, then the key inside the shared context row", async () => {

@@ -14,6 +14,8 @@ import { IconPickerComponent } from "../../shared/icon-picker.component";
 import { ImportNavigationGuardService } from "./import-navigation-guard.service";
 import { findMatchingImportMember } from "./import-member-mapping.util";
 import { viewerTimeZone } from "../../shared/day-key.util";
+import { appLocale } from "../../core/i18n/locale";
+import { icu } from "../../core/i18n/icu";
 
 type MemberRow = WorkspaceMember & { email: string; displayName: string; avatarUrl: string | null };
 type Step = "upload" | "columns" | "lists" | "labels" | "fields" | "members" | "options" | "result";
@@ -30,66 +32,82 @@ type TrelloAuthConfig = { enabled: boolean; apiKey?: string };
 
 const DEFAULT_STEPS: Step[] = ["upload", "lists", "labels", "fields", "members", "options", "result"];
 const CSV_STEPS: Step[] = ["upload", "columns", "lists", "labels", "fields", "members", "options", "result"];
+const columnName = (index: number) => $localize`:Fallback name for an unnamed CSV column:Column ${index + 1}:number:`;
 const cappedName = (value: string, maxLength: number) => value.trim().slice(0, maxLength);
+// Names for the detected CSV delimiter, shown as "Detected UTF-8 · comma delimiter."
+const DELIMITER_NAMES: Record<string, string> = {
+  ",": $localize`:CSV delimiter name, shown in "{name} delimiter":comma`,
+  ";": $localize`:CSV delimiter name, shown in "{name} delimiter":semicolon`,
+  "\t": $localize`:CSV delimiter name, shown in "{name} delimiter":tab`,
+  "|": $localize`:CSV delimiter name, shown in "{name} delimiter":pipe`,
+};
+// Same wording as the column-target <option>s in the template.
+const CSV_TARGET_LABELS: Record<(typeof CSV_SINGLE_TARGETS)[number], string> = {
+  title: $localize`:CSV column target option:Title`,
+  description: $localize`:CSV column target option:Description`,
+  list: $localize`:CSV column target option:List / status`,
+  dueDate: $localize`:CSV column target option:Due date`,
+  completed: $localize`:CSV column target option:Completed`,
+  archived: $localize`:CSV column target option:Archived`,
+  createdAt: $localize`:CSV column target option:Created at`,
+  cardId: $localize`:CSV column target option:Card ID / group`,
+};
 const STEP_COPY: Record<Step, { title: string; description: string }> = {
   upload: {
-    title: "Upload Export",
-    description: "Choose a JSON export so Kanera can inspect the board before anything is created.",
+    title: $localize`:Import wizard step title:Upload Export`,
+    description: $localize`Choose a JSON export so Kanera can inspect the board before anything is created.`,
   },
   columns: {
-    title: "Map Columns",
-    description: "Tell Kanera what each CSV column means. Title is required; everything else is optional.",
+    title: $localize`:Import wizard step title:Map Columns`,
+    description: $localize`Tell Kanera what each CSV column means. Title is required; everything else is optional.`,
   },
   lists: {
-    title: "Mapping Lists",
-    description: "Lists are shared across every board in this workspace. Create new lists, reuse matching workspace lists, or skip lists and their cards.",
+    title: $localize`:Import wizard step title:Mapping Lists`,
+    description: $localize`Lists are shared across every board in this workspace. Create new lists, reuse matching workspace lists, or skip lists and their cards.`,
   },
   labels: {
-    title: "Mapping Labels",
-    description: "Choose whether source labels become new workspace labels, reuse existing labels, or are left off imported cards.",
+    title: $localize`:Import wizard step title:Mapping Labels`,
+    description: $localize`Choose whether source labels become new workspace labels, reuse existing labels, or are left off imported cards.`,
   },
   fields: {
-    title: "Mapping Custom Fields",
-    description: "Custom fields are workspace-wide in Kanera, so mapped fields must use a compatible type before values can be imported.",
+    title: $localize`:Import wizard step title:Mapping Custom Fields`,
+    description: $localize`Custom fields are workspace-wide in Kanera, so mapped fields must use a compatible type before values can be imported.`,
   },
   members: {
-    title: "Mapping Members",
-    description: "Assign source members to workspace members. Unmapped members are imported as unassigned cards and attributed comments.",
+    title: $localize`:Import wizard step title:Mapping Members`,
+    description: $localize`Assign source members to workspace members. Unmapped members are imported as unassigned cards and attributed comments.`,
   },
   options: {
-    title: "Review Options",
-    description: "Name the new board and choose optional source data.",
+    title: $localize`:Import wizard step title:Review Options`,
+    description: $localize`Name the new board and choose optional source data.`,
   },
   result: {
-    title: "Import Complete",
-    description: "The Trello board has been imported into a new Kanera board.",
+    title: $localize`:Import wizard step title:Import Complete`,
+    description: $localize`The Trello board has been imported into a new Kanera board.`,
   },
 };
 
-const SOURCE_COPY: Record<ImportSource, { title: string; hint: string; upload: string; fileError: string; importComplete: string; preservedAttachments: string }> = {
+const SOURCE_COPY: Record<ImportSource, { title: string; hint: string; upload: string; fileError: string; importComplete: string }> = {
   trello: {
-    title: "Trello import",
-    hint: "Import a Trello JSON export into a new Kanera board.",
-    upload: "Choose a Trello JSON export",
-    fileError: "Choose a Trello JSON export first.",
-    importComplete: "The Trello board has been imported into a new Kanera board.",
-    preservedAttachments: "attachment links will be preserved",
+    title: $localize`:Import panel heading:Trello import`,
+    hint: $localize`Import a Trello JSON export into a new Kanera board.`,
+    upload: $localize`Choose a Trello JSON export`,
+    fileError: $localize`Choose a Trello JSON export first.`,
+    importComplete: $localize`The Trello board has been imported into a new Kanera board.`,
   },
   kanera: {
-    title: "Kanera board import",
-    hint: "Import a Kanera board JSON export into a new board in this workspace.",
-    upload: "Choose a Kanera board JSON export",
-    fileError: "Choose a Kanera board JSON export first.",
-    importComplete: "The Kanera board has been imported into a new board.",
-    preservedAttachments: "attachments will be copied when possible",
+    title: $localize`:Import panel heading:Kanera board import`,
+    hint: $localize`Import a Kanera board JSON export into a new board in this workspace.`,
+    upload: $localize`Choose a Kanera board JSON export`,
+    fileError: $localize`Choose a Kanera board JSON export first.`,
+    importComplete: $localize`The Kanera board has been imported into a new board.`,
   },
   csv: {
-    title: "CSV import",
-    hint: "Import cards from a CSV file into a new Kanera board.",
-    upload: "Choose a CSV file",
-    fileError: "Choose a CSV file first.",
-    importComplete: "The CSV rows have been imported into a new Kanera board.",
-    preservedAttachments: "attachments are not imported from CSV",
+    title: $localize`:Import panel heading:CSV import`,
+    hint: $localize`Import cards from a CSV file into a new Kanera board.`,
+    upload: $localize`Choose a CSV file`,
+    fileError: $localize`Choose a CSV file first.`,
+    importComplete: $localize`The CSV rows have been imported into a new Kanera board.`,
   },
 };
 
@@ -140,6 +158,10 @@ export class TrelloImportPage implements OnDestroy {
   readonly trelloToken = signal<string | null>(null);
   readonly attachmentProgress = signal<ImportAttachmentProgress | null>(null);
   readonly csvPreview = signal<CsvImportPreview | null>(null);
+  readonly csvDelimiterName = computed(() => {
+    const delimiter = this.csvPreview()?.delimiter ?? "";
+    return DELIMITER_NAMES[delimiter] ?? `"${delimiter}"`;
+  });
   readonly csvMapping = signal<CsvColumnMapping | null>(null);
   readonly csvIssues = signal<CsvImportIssues | null>(null);
   private readonly analyzedMembers = signal<MemberRow[]>([]);
@@ -156,27 +178,52 @@ export class TrelloImportPage implements OnDestroy {
     return {
       ...copy,
       hint: this.source() === "csv"
-        ? "Import cards from a CSV file into this board. Existing cards and board settings remain."
-        : `Import a ${sourceName} board JSON export into this board. Existing cards and board settings remain.`,
-      importComplete: this.source() === "csv" ? "The CSV rows have been imported into this board." : `The ${sourceName} board has been imported into this board.`,
+        ? $localize`Import cards from a CSV file into this board. Existing cards and board settings remain.`
+        : $localize`Import a ${sourceName}:source: board JSON export into this board. Existing cards and board settings remain.`,
+      importComplete: this.source() === "csv" ? $localize`The CSV rows have been imported into this board.` : $localize`The ${sourceName}:source: board has been imported into this board.`,
     };
   });
+  /** The attachment line of the review summary; Trello and Kanera exports lead with the count. */
+  readonly attachmentSummary = computed(() => {
+    const manifest = this.manifest();
+    const count = manifest ? manifest.counts.linkAttachments + manifest.counts.uploadedAttachments : 0;
+    switch (this.source()) {
+      case "csv": return $localize`attachments are not imported from CSV`;
+      case "kanera": return icu($localize`:Import summary line:{count, plural, other {# attachments will be copied when possible}}`, { count });
+      default: return icu($localize`:Import summary line:{count, plural, other {# attachment links will be preserved}}`, { count });
+    }
+  });
+  readonly copy = {
+    chooseBoardList: $localize`:Select placeholder:Choose a board list`,
+    chooseWorkspaceList: $localize`:Select placeholder:Choose a workspace list`,
+    chooseBoardLabel: $localize`:Select placeholder:Choose a board label`,
+    chooseWorkspaceLabel: $localize`:Select placeholder:Choose a workspace label`,
+    chooseBoardField: $localize`:Select placeholder:Choose a board field`,
+    chooseWorkspaceField: $localize`:Select placeholder:Choose a workspace field`,
+    unnamedLabel: $localize`:Shown for a source label without a name:Unnamed label`,
+    noSourceColor: $localize`:Shown for a source label without a colour:No source color`,
+    noUsername: $localize`:Shown for a source member without a username:No username`,
+  };
+  private readonly megabytes = new Intl.NumberFormat(appLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  fileSizeMb(bytes: number): string {
+    return this.megabytes.format(bytes / 1024 / 1024);
+  }
   readonly stepIndex = computed(() => this.steps().indexOf(this.step()));
-  readonly stepTitle = computed(() => `Step ${this.stepIndex() + 1} - ${STEP_COPY[this.step()].title}`);
+  readonly stepTitle = computed(() => $localize`:Import wizard heading, e.g. "Step 2 - Mapping Lists":Step ${this.stepIndex() + 1}:number: - ${STEP_COPY[this.step()].title}:title:`);
   readonly stepDescription = computed(() => {
     if (this.step() === "result") return this.sourceCopy().importComplete;
     if (!this.standalone()) {
-      if (this.step() === "upload" && this.source() === "csv") return "Choose a CSV file so Kanera can inspect its columns before anything is created.";
+      if (this.step() === "upload" && this.source() === "csv") return $localize`Choose a CSV file so Kanera can inspect its columns before anything is created.`;
       return STEP_COPY[this.step()].description;
     }
     switch (this.step()) {
-      case "upload": return this.source() === "csv" ? "Choose a CSV file so Kanera can inspect it before adding anything to this board." : "Choose a JSON export so Kanera can inspect it before adding anything to this board.";
-      case "columns": return "Tell Kanera what each CSV column means before mapping workspace data.";
-      case "lists": return "Create new board lists, reuse matching lists, or skip lists and their cards.";
-      case "labels": return "Choose whether source labels become new board labels, reuse existing labels, or are left off imported cards.";
-      case "fields": return "Create or reuse compatible custom fields before their values are imported into this board.";
-      case "members": return "Assign source members to people with access to this board. Unmapped cards stay unassigned.";
-      case "options": return "Review optional source data before adding cards to this board.";
+      case "upload": return this.source() === "csv" ? $localize`Choose a CSV file so Kanera can inspect it before adding anything to this board.` : $localize`Choose a JSON export so Kanera can inspect it before adding anything to this board.`;
+      case "columns": return $localize`Tell Kanera what each CSV column means before mapping workspace data.`;
+      case "lists": return $localize`Create new board lists, reuse matching lists, or skip lists and their cards.`;
+      case "labels": return $localize`Choose whether source labels become new board labels, reuse existing labels, or are left off imported cards.`;
+      case "fields": return $localize`Create or reuse compatible custom fields before their values are imported into this board.`;
+      case "members": return $localize`Assign source members to people with access to this board. Unmapped cards stay unassigned.`;
+      case "options": return $localize`Review optional source data before adding cards to this board.`;
       case "result": return this.sourceCopy().importComplete;
     }
   });
@@ -202,29 +249,29 @@ export class TrelloImportPage implements OnDestroy {
     const progress = this.attachmentProgress();
     return progress && progress.total > 0 ? Math.round((progress.processed / progress.total) * 100) : 0;
   });
-  readonly attachmentProgressTitle = computed(() => this.attachmentProgress()?.phase === "finalizing" ? "Finalizing imported cards" : "Copying Trello uploaded files");
+  readonly attachmentProgressTitle = computed(() => this.attachmentProgress()?.phase === "finalizing" ? $localize`:Import progress heading:Finalizing imported cards` : $localize`:Import progress heading:Copying Trello uploaded files`);
   readonly csvColumnNames = computed(() => {
     const preview = this.csvPreview();
     const mapping = this.csvMapping();
     if (!preview || !mapping) return [];
-    return preview.columns.map((column) => mapping.hasHeaderRow ? preview.firstRows[0]?.[column.index]?.trim() || `Column ${column.index + 1}` : `Column ${column.index + 1}`);
+    return preview.columns.map((column) => mapping.hasHeaderRow ? preview.firstRows[0]?.[column.index]?.trim() || columnName(column.index) : columnName(column.index));
   });
   readonly csvAmbiguousDates = computed(() => (this.csvIssues()?.ambiguousDateColumns.length ?? 0) > 0);
   readonly csvMappingErrors = computed(() => {
     const mapping = this.csvMapping();
-    if (!mapping) return ["Choose how the CSV columns should be imported."];
+    if (!mapping) return [$localize`Choose how the CSV columns should be imported.`];
     const entries = Object.values(mapping.columns);
     const errors: string[] = [];
-    if (entries.filter((entry) => entry.target === "title").length !== 1) errors.push("Choose exactly one Title column.");
+    if (entries.filter((entry) => entry.target === "title").length !== 1) errors.push($localize`Choose exactly one Title column.`);
     for (const target of CSV_SINGLE_TARGETS) {
-      if (target !== "title" && entries.filter((entry) => entry.target === target).length > 1) errors.push(`Only one ${target} column can be mapped.`);
+      if (target !== "title" && entries.filter((entry) => entry.target === target).length > 1) errors.push($localize`:CSV mapping error; target is a column target name such as "Due date":Only one ${CSV_TARGET_LABELS[target]}:target: column can be mapped.`);
     }
     const names = new Set<string>();
     for (const entry of entries) {
       if (entry.target !== "customField") continue;
       const name = entry.name.trim().toLocaleLowerCase();
-      if (!name) errors.push("Every custom field needs a name.");
-      else if (names.has(name)) errors.push(`Custom field names must be unique: ${entry.name}.`);
+      if (!name) errors.push($localize`Every custom field needs a name.`);
+      else if (names.has(name)) errors.push($localize`Custom field names must be unique: ${entry.name}:name:.`);
       names.add(name);
     }
     return errors;
@@ -287,7 +334,10 @@ export class TrelloImportPage implements OnDestroy {
           ...response.preview.suggestedMapping,
           timezone: viewerTimeZone(),
           dateOrder: response.issues.ambiguousDateColumns.length
-            ? navigator.language.toLocaleLowerCase().startsWith("en-us") ? "mdy" : "dmy"
+            // Only a starting guess for ambiguous dates (the user confirms it on this step). The
+            // interface language is the viewer's explicit choice between US and UK English and
+            // falls back to the browser language, so it is the better signal for how they write dates.
+            ? appLocale() === "en-US" ? "mdy" : "dmy"
             : "auto",
         });
         this.step.set("columns");
@@ -367,7 +417,7 @@ export class TrelloImportPage implements OnDestroy {
     if (!mapping) return;
     const current = mapping.columns[String(index)];
     const next: CsvColumnTarget = target === "customField"
-      ? current?.target === "customField" ? current : { target, name: cappedName(this.csvColumnNames()[index] ?? `Column ${index + 1}`, WORKSPACE_ENTITY_NAME_MAX_LENGTH), type: "text" }
+      ? current?.target === "customField" ? current : { target, name: cappedName(this.csvColumnNames()[index] ?? columnName(index), WORKSPACE_ENTITY_NAME_MAX_LENGTH), type: "text" }
       : { target };
     this.csvMapping.set({ ...mapping, columns: { ...mapping.columns, [String(index)]: next } });
   }
@@ -444,12 +494,12 @@ export class TrelloImportPage implements OnDestroy {
     const manifest = this.manifest();
     if (!importId || !manifest) return;
     if (!this.standalone() && !this.boardName().trim()) {
-      this.error.set("Enter a board name before importing.");
+      this.error.set($localize`Enter a board name before importing.`);
       return;
     }
     const incompatible = this.incompatibleFieldMaps();
     if (incompatible.length) {
-      this.error.set("Mapped custom fields must use compatible field types.");
+      this.error.set($localize`Mapped custom fields must use compatible field types.`);
       this.step.set("fields");
       return;
     }
@@ -491,7 +541,7 @@ export class TrelloImportPage implements OnDestroy {
   async connectTrello() {
     const apiKey = this.trelloAuthConfig().apiKey;
     if (!apiKey) {
-      this.error.set("Trello attachment copying is not configured for this Kanera deployment.");
+      this.error.set($localize`Trello attachment copying is not configured for this Kanera deployment.`);
       return;
     }
     this.error.set(null);
@@ -499,7 +549,7 @@ export class TrelloImportPage implements OnDestroy {
       const token = await this.openTrelloAuthorize(apiKey);
       this.trelloToken.set(token);
     } catch (error) {
-      this.error.set(error instanceof Error ? error.message : "Trello authorization failed.");
+      this.error.set(error instanceof Error ? error.message : $localize`Trello authorization failed.`);
     }
   }
 
@@ -522,7 +572,7 @@ export class TrelloImportPage implements OnDestroy {
       return [label.id, {
         action: target ? "map" : "create",
         targetLabelId: target?.id,
-        name: cappedName(label.name || "Imported label", CARD_LABEL_NAME_MAX_LENGTH),
+        name: cappedName(label.name || $localize`:Default name for an imported label without a name:Imported label`, CARD_LABEL_NAME_MAX_LENGTH),
         color: label.suggestedToken,
       } satisfies LabelMapping];
     })));
@@ -549,8 +599,9 @@ export class TrelloImportPage implements OnDestroy {
       this.fileName.set(null);
       return;
     }
+    // The upload panel already names the chosen file; the header chip appears only once
+    // analysis succeeds, so choosing a file doesn't shift the panel down on narrow screens.
     this.selectedFile.set(file);
-    this.fileName.set(file.name);
   }
 
   private eventHasFiles(event: DragEvent): boolean {
@@ -581,7 +632,7 @@ export class TrelloImportPage implements OnDestroy {
         // The shared commit DTO still carries board identity for standard-workspace imports. In
         // standalone mode the server deliberately ignores it, but a blank source name must still
         // produce a valid compatibility payload because there is no hidden name field to repair.
-        name: cappedName(this.boardName(), WORKSPACE_ENTITY_NAME_MAX_LENGTH) || "Imported board",
+        name: cappedName(this.boardName(), WORKSPACE_ENTITY_NAME_MAX_LENGTH) || $localize`:Default name for an imported board:Imported board`,
         icon: this.boardIcon(),
         iconColor: this.boardIconColor(),
       },
@@ -609,7 +660,7 @@ export class TrelloImportPage implements OnDestroy {
     url.searchParams.set("callback_method", "fragment");
     url.searchParams.set("return_url", `${window.location.origin}/trello-auth-callback?requestId=${encodeURIComponent(requestId)}`);
     const popup = window.open(url.toString(), "kanera-trello-auth", "width=620,height=720");
-    if (!popup) return Promise.reject(new Error("Allow popups to connect Trello."));
+    if (!popup) return Promise.reject(new Error($localize`Allow popups to connect Trello.`));
 
     return new Promise((resolve, reject) => {
       const startedAt = Date.now();
@@ -631,13 +682,13 @@ export class TrelloImportPage implements OnDestroy {
       const timer = window.setInterval(() => {
         if (popup.closed) {
           cleanup();
-          reject(new Error("Trello authorization was cancelled."));
+          reject(new Error($localize`Trello authorization was cancelled.`));
           return;
         }
         if (Date.now() - startedAt > 5 * 60_000) {
           cleanup();
           popup.close();
-          reject(new Error("Trello authorization timed out."));
+          reject(new Error($localize`Trello authorization timed out.`));
         }
       }, 250);
       window.addEventListener("message", onMessage);
@@ -693,7 +744,7 @@ export class TrelloImportPage implements OnDestroy {
       return true;
     }
     if (status.status === "failed") {
-      this.error.set(status.error ?? "Import failed. Try again.");
+      this.error.set(status.error ?? $localize`Import failed. Try again.`);
       this.busy.set(false);
       this.slowImport.set(false);
       this.importNavigationGuard.setImportRunning(false);
@@ -705,13 +756,13 @@ export class TrelloImportPage implements OnDestroy {
   private describeError(error: unknown): string {
     if (error instanceof ApiError) {
       if (error.status === 413) {
-        if (this.source() === "csv") return "That CSV file is over the 20MB import limit.";
-        return `That ${this.source() === "kanera" ? "Kanera board" : "Trello"} export is over the 50MB import limit.`;
+        if (this.source() === "csv") return $localize`That CSV file is over the 20MB import limit.`;
+        return this.source() === "kanera" ? $localize`That Kanera board export is over the 50MB import limit.` : $localize`That Trello export is over the 50MB import limit.`;
       }
       const body = error.body as { message?: string } | undefined;
-      return body?.message ?? `Import failed with status ${error.status}.`;
+      return body?.message ?? $localize`Import failed with status ${error.status}:status:.`;
     }
-    return error instanceof Error ? error.message : "Import failed. Try again.";
+    return error instanceof Error ? error.message : $localize`Import failed. Try again.`;
   }
 }
 

@@ -10,6 +10,7 @@ import {
   type PriorityReorder,
 } from "../../shared/priority-queue/priority-queue.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
+import { icu } from "../../core/i18n/icu";
 
 export type { PriorityAnchor, PriorityReorder };
 /**
@@ -74,6 +75,19 @@ export class UpNextPanelComponent {
   readonly addGroups = computed<PickerGroup[]>(() =>
     priorityAddGroups(this.addableCards(), { showCardKeys: this.showCardKeys() })
   );
+
+  readonly addTooltip = computed(() => {
+    if (this.atCapacity()) {
+      return icu($localize`:Tooltip on a disabled add button when the Up next queue is full:Full at {count, plural, one {# card} other {# cards}}`, { count: this.maxEntries() });
+    }
+    return this.addableCards().length === 0
+      ? $localize`:Tooltip on a disabled add button:Every card shown is already in Up next or cannot be added`
+      : $localize`:Tooltip, add a card to Up next:Add card`;
+  });
+
+  targetTooltip(name: string): string {
+    return $localize`:Tooltip naming whose Up next queue is shown:Up next for ${name}:person:`;
+  }
 
   /** The header "+" picker. The inline "Add card" under the last row is the queue's own. */
   readonly headAddOpen = signal(false);

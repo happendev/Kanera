@@ -22,13 +22,11 @@ import { allowsDailyDigestEmail, getNotificationSettingsForUsers, getNotificatio
 import { startSweepScheduler } from "./sweep-scheduler.js";
 import { absoluteCardUrl } from "./wire-card.js";
 import { localParts } from "./due-date.js";
-import { dateTimeFormatter, EMAIL_DATE_LOCALE } from "./date-time-formatter.js";
+import { formatDate, formatLocalDate } from "./i18n/format.js";
+import { serverMessages } from "./i18n/messages/index.js";
+import { recipientLocale } from "./i18n/request-locale.js";
 import { enqueueMyDayMcpEvents } from "./mcp-events.js";
-
-// A digest can contain thousands of items. Reuse bounded ICU formatter caches across them,
-// while formatting each date afresh so timezone and day-boundary behavior stays unchanged.
-const digestDateFormatter = dateTimeFormatter({ month: "long", day: "numeric", year: "numeric" }, EMAIL_DATE_LOCALE);
-const digestShortDateFormatter = dateTimeFormatter({ month: "short", day: "numeric" }, EMAIL_DATE_LOCALE);
+import type { Locale } from "@kanera/shared/locales";
 const DIGEST_HOUR = 8;
 const SWEEP_INTERVAL_MS = 60_000; // 60 seconds
 /**
@@ -45,6 +43,8 @@ interface DigestRow {
   email: string;
   displayName: string;
   timezone: string;
+  /** Stored `users.locale`; every label in the digest is written in it. */
+  locale: string | null;
   cardId: string;
   cardKey: string;
   organisationKey: string;
@@ -79,6 +79,7 @@ export async function runDailyDigestSweep(deps: DailyDigestDeps, now = new Date(
       email: users.email,
       displayName: users.displayName,
       timezone: users.timezone,
+      locale: users.locale,
       cardId: cards.id,
       cardKey: cards.key,
       organisationKey: cards.organisationKey,
@@ -119,6 +120,7 @@ export async function runDailyDigestSweep(deps: DailyDigestDeps, now = new Date(
       email: users.email,
       displayName: users.displayName,
       timezone: users.timezone,
+      locale: users.locale,
       cardId: cards.id,
       cardKey: cards.key,
       organisationKey: cards.organisationKey,
@@ -191,17 +193,15 @@ export async function runDailyDigestSweep(deps: DailyDigestDeps, now = new Date(
 
   // One batch query for every recipient rather than one per digest: the sweep already holds the
   // whole recipient set, and a queue read per user would scale with the organisation.
-  const prioritiesByUser = await loadDigestPriorities(
-    deps.db,
-    [...new Set(emailEnabledRows.map((row) => row.userId))],
-    deps.webOrigin,
-    now,
-  );
+  // Locale is per recipient, never per batch: each digest is labelled in its reader's language.
+  const localeByUser = new Map(emailEnabledRows.map((row) => [row.userId, recipientLocale(row.locale)]));
+  const prioritiesByUser = await loadDigestPriorities(deps.db, localeByUser, deps.webOrigin, now);
 
   let enqueued = 0;
   for (const digest of buildDigests(emailEnabledRows, deps.webOrigin, now)) {
     if (await alreadyQueued(deps.db, digest.email, digest.localDate)) continue;
     const row = await mailer.sendDailyDigest(digest.email, "editor", {
+      locale: digest.locale,
       displayName: digest.displayName,
       localDate: digest.localDate,
       localDateLabel: digest.localDateLabel,
@@ -267,10 +267,11 @@ export function delayToNextHour(now = new Date()): number {
  */
 async function loadDigestPriorities(
   db: Db,
-  userIds: string[],
+  localeByUser: Map<string, Locale>,
   webOrigin: string,
   now: Date,
 ): Promise<Map<string, DailyDigestPriorityItem[]>> {
+  const userIds = [...localeByUser.keys()];
   if (userIds.length === 0) return new Map();
   const rows = await db
     .select({
@@ -305,6 +306,7 @@ async function loadDigestPriorities(
     const rank = items.length + 1;
     if (rank > MAX_DIGEST_PRIORITIES) continue;
     const dueLocal = localParts(now, row.dueDateTimezone || "UTC");
+    const locale = localeByUser.get(row.targetUserId)!;
     items.push({
       rank,
       title: row.cardTitle,
@@ -312,9 +314,7 @@ async function loadDigestPriorities(
       cardUrl: cardUrl(webOrigin, row.organisationKey, row.cardKey),
       dueLabel: !row.dueDateLocalDate
         ? null
-        : row.dueDateLocalDate === dueLocal.date
-          ? "Today"
-          : `Due ${shortDateLabel(row.dueDateLocalDate, row.dueDateTimezone || "UTC")}`,
+        : itemDueLabel(locale, row.dueDateLocalDate, dueLocal.date),
     });
     byUser.set(row.targetUserId, items);
   }
@@ -327,6 +327,7 @@ function buildDigests(rows: DigestCandidate[], webOrigin: string, now: Date) {
     email: string;
     displayName: string;
     timezone: string;
+    locale: Locale;
     localDate: string;
     localDateLabel: string;
     dueToday: DigestItem[];
@@ -336,13 +337,15 @@ function buildDigests(rows: DigestCandidate[], webOrigin: string, now: Date) {
   for (const row of rows) {
     const recipientLocal = localParts(now, row.timezone);
     const dueLocal = localParts(now, row.dueDateTimezone || "UTC");
+    const locale = recipientLocale(row.locale);
     const digest = byUser.get(row.userId) ?? {
       userId: row.userId,
       email: row.email,
       displayName: row.displayName,
       timezone: row.timezone,
+      locale,
       localDate: recipientLocal.date,
-      localDateLabel: localDateLabel(now, row.timezone),
+      localDateLabel: localDateLabel(locale, now, row.timezone),
       dueToday: [],
       overdue: [],
     };
@@ -356,7 +359,7 @@ function buildDigests(rows: DigestCandidate[], webOrigin: string, now: Date) {
       boardName: row.boardName,
       context: row.kind === "checklistItem" ? row.cardTitle : null,
       cardUrl: cardUrl(webOrigin, row.organisationKey, row.cardKey),
-      dueLabel: row.dueDateLocalDate === dueLocal.date ? "Today" : `Due ${shortDateLabel(row.dueDateLocalDate, row.dueDateTimezone || "UTC")}`,
+      dueLabel: itemDueLabel(locale, row.dueDateLocalDate, dueLocal.date),
     };
     if (isDueDateOverdue(row, now)) digest.overdue.push(item);
     else if (row.dueDateLocalDate === dueLocal.date) digest.dueToday.push(item);
@@ -386,12 +389,22 @@ async function alreadyQueued(db: Db, toEmail: string, localDate: string): Promis
   return Boolean(existing);
 }
 
-function localDateLabel(now: Date, timezone: string): string {
-  return digestDateFormatter(timezone || "UTC").format(now);
+// A digest can contain thousands of items; ./i18n/format.ts reuses bounded ICU formatter caches
+// across them while each date is formatted afresh, so timezone and day-boundary behaviour holds.
+function localDateLabel(locale: Locale, now: Date, timezone: string): string {
+  const options = { month: "long", day: "numeric", year: "numeric" } as const;
+  try {
+    return formatDate(locale, now, { ...options, timeZone: timezone || "UTC" });
+  } catch {
+    return formatDate(locale, now, { ...options, timeZone: "UTC" });
+  }
 }
 
-function shortDateLabel(localDate: string, timezone: string): string {
-  return digestShortDateFormatter(timezone || "UTC").format(new Date(`${localDate}T12:00:00Z`));
+/** "Today", or "Due 24 May" in the recipient's language. */
+function itemDueLabel(locale: Locale, dueDate: string, todayInDueZone: string): string {
+  const m = serverMessages(locale).email.dailyDigest;
+  if (dueDate === todayInDueZone) return m.itemToday;
+  return m.itemDue({ date: formatLocalDate(locale, dueDate, { month: "short", day: "numeric" }) });
 }
 
 function cardUrl(webOrigin: string, organisationKey: string, cardKey: string): string {

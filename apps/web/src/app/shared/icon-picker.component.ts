@@ -46,18 +46,19 @@ const POPULAR_ICONS = [
             <input
               #searchInput
               placeholder="Search icons…"
+              i18n-placeholder
               [value]="search()"
               (input)="search.set($any($event.target).value)"
             />
           </div>
           @if (!search()) {
             <div class="ip-section-label">
-              <span>Popular</span>
+              <span i18n="Icon picker section heading: commonly used icons">Popular</span>
               <span class="ip-section-hint">
                 @if (totalCount() > 0) {
-                  search to browse all {{ totalCount() | number }} icons
+                  <ng-container i18n="Icon picker hint">search to browse all {{ totalCount() | number // i18n(ph="count") }} icons</ng-container>
                 } @else {
-                  loading icon list
+                  <ng-container i18n="Icon picker hint while the icon list downloads">loading icon list</ng-container>
                 }
               </span>
             </div>
@@ -75,7 +76,7 @@ const POPULAR_ICONS = [
               </button>
             }
             @if (displayed().length === 0) {
-              <div class="ip-empty">No icons found</div>
+              <div class="ip-empty" i18n="Icon picker empty search result">No icons found</div>
             }
           </div>
         </div>
@@ -237,7 +238,7 @@ export class IconPickerComponent {
   private iconLoadPromise: Promise<void> | null = null;
 
   readonly totalCount = computed(() => this.icons().length);
-  readonly title = computed(() => this.disabledTitle() ?? `Icon: ${this.value()}`);
+  readonly title = computed(() => this.disabledTitle() ?? $localize`:Icon picker tooltip; the placeholder is the icon's technical name:Icon: ${this.value()}:icon:`);
 
   readonly displayed = computed(() => {
     const q = this.search().toLowerCase().trim();

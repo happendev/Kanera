@@ -1,9 +1,11 @@
 import { Injectable, signal, computed } from "@angular/core";
 import type { Entitlements } from "@kanera/shared/dto";
 import type { Accent, Theme } from "@kanera/shared/appearance";
+import type { Locale } from "@kanera/shared/locales";
 import { environment } from "../../../environments/environment";
 import { STORAGE_KEYS } from "../browser/browser-contracts";
 import { viewerTimeZone } from "../../shared/day-key.util";
+import { appLocale, applyLocale } from "../i18n/locale";
 
 export type OrgRole = "owner" | "admin" | "member";
 export type KaneraEnvironment = "development" | "test" | "staging" | "production";
@@ -32,6 +34,8 @@ export interface AuthUser {
   // cache or the OS preference stands — see ThemeService.hydrate().
   theme?: Theme | null;
   accent?: Accent | null;
+  // Account-scoped interface language. Null on legacy accounts that never chose; see syncLocale().
+  locale?: Locale | null;
   storageUsage?: {
     usedBytes: number;
     quotaBytes: number | null;
@@ -132,7 +136,9 @@ export class AuthService {
    * replacing the browser-wide fetch function used concurrently by other component specs.
    */
   protected request(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    return globalThis.fetch(input, init);
+    const headers = new Headers(init?.headers);
+    headers.set("Accept-Language", appLocale());
+    return globalThis.fetch(input, { ...init, headers });
   }
 
   getAccessToken(): string | null {
@@ -163,6 +169,7 @@ export class AuthService {
     this.accessToken = accessToken;
     this._user.set(user);
     void this.syncTimezone(user);
+    void this.syncLocale(user);
   }
 
   // Install a support-session token minted from the management portal
@@ -412,6 +419,31 @@ export class AuthService {
 
   isLogoutSyncEvent(event: StorageEvent): boolean {
     return event.key === STORAGE_KEYS.LOGOUT_SYNC && event.newValue !== null;
+  }
+
+  /**
+   * The account's language wins over this device's copy, so choosing a language on one device
+   * carries to the next one at sign-in. An account that has never chosen records the language this
+   * device resolved from the browser, because mail and push have no browser to ask.
+   */
+  private async syncLocale(user: AuthUser): Promise<void> {
+    if (user.locale) {
+      applyLocale(user.locale);
+      return;
+    }
+    const locale = appLocale();
+    const revision = this.sessionRevision;
+    try {
+      const res = await this.request(`${environment.apiUrl}/auth/me`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.accessToken}` },
+        credentials: "include",
+        body: JSON.stringify({ locale }),
+      });
+      if (res?.ok && revision === this.sessionRevision) this.updateUser((current) => ({ ...current, locale }));
+    } catch {
+      // Best-effort, like the timezone sync: the account simply stays unset until the next session.
+    }
   }
 
   private async syncTimezone(user: AuthUser): Promise<void> {

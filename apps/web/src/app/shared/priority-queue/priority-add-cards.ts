@@ -80,7 +80,7 @@ export function priorityAddGroups(
     // genuinely shared and two boards' sections must stay apart.
     const group = lists.get(card.listId) ?? {
       id: `${card.boardId}:${card.listId}`,
-      label: card.listName || "No list",
+      label: card.listName || $localize`:Picker section for cards whose list is unknown:No list`,
       icon: card.listIcon || "list",
       color: card.listColor,
       parent: {

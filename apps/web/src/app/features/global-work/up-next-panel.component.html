@@ -1,10 +1,10 @@
 <header class="panel-head">
   <i class="ti ti-list-numbers"></i>
-  <h3>Up next</h3>
+  <h3 i18n="Name of the personal priority queue panel">Up next</h3>
   <!-- No "N of 50" readout: the cap only matters when it is hit, and the capacity note below
        says so then. The toggle button in the page chrome already carries the count. -->
   @if (targetName(); as name) {
-    <span class="panel-target" [kTooltip]="'Up next for ' + name">{{ name }}</span>
+    <span class="panel-target" [kTooltip]="targetTooltip(name)">{{ name }}</span>
   }
   @if (canReorder()) {
     <span class="panel-head-add-anchor">
@@ -12,12 +12,9 @@
         type="button"
         class="panel-head-tool"
         aria-label="Add card to Up next"
+        i18n-aria-label
         [disabled]="atCapacity() || addableCards().length === 0"
-        [kTooltip]="atCapacity()
-          ? 'Full at ' + maxEntries() + ' cards'
-          : addableCards().length === 0
-            ? 'Every card shown is already in Up next or cannot be added'
-            : 'Add card'"
+        [kTooltip]="addTooltip()"
         (click)="headAddOpen.set(!headAddOpen())"
       >
         <i class="ti ti-plus"></i>
@@ -25,18 +22,21 @@
       @if (headAddOpen()) {
         <k-anchored-picker
           title="Add to Up next"
+          i18n-title
           [groups]="addGroups()"
           [width]="420"
           [align]="'end'"
           searchPlaceholder="Search cards…"
+          i18n-searchPlaceholder
           emptyLabel="No cards can be added"
+          i18n-emptyLabel
           (picked)="onHeadAddPicked($event)"
           (closed)="headAddOpen.set(false)"
         />
       }
     </span>
   }
-  <button type="button" class="panel-close" aria-label="Close Up next" kTooltip="Close" (click)="closed.emit()">
+  <button type="button" class="panel-close" aria-label="Close Up next" i18n-aria-label kTooltip="Close" i18n-kTooltip="Tooltip: close the panel" (click)="closed.emit()">
     <i class="ti ti-x"></i>
   </button>
 </header>

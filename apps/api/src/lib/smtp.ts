@@ -1,3 +1,4 @@
+import type { Locale } from "@kanera/shared/locales";
 import type { SmtpConfig } from "@kanera/shared/schema";
 import crypto from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -5,6 +6,8 @@ import net from "node:net";
 import tls from "node:tls";
 import { env } from "../env.js";
 import { smtpTestEmail } from "./email-templates/index.js";
+import { formatDate } from "./i18n/format.js";
+import { serverMessages } from "./i18n/messages/index.js";
 
 const REDACTED = "***";
 const DIGICERT_GLOBAL_ROOT_CA = readFileSync(
@@ -42,7 +45,8 @@ export function mergeSmtpPassword(incoming: SmtpConfig, existing: SmtpConfig | n
   };
 }
 
-export async function testSmtpConfig(config: SmtpConfig, to: string): Promise<void> {
+/** `locale` is the requesting admin's on-screen language. */
+export async function testSmtpConfig(config: SmtpConfig, to: string, locale: Locale): Promise<void> {
   const client = new SmtpProbe(config);
   try {
     await client.connect();
@@ -57,23 +61,24 @@ export async function testSmtpConfig(config: SmtpConfig, to: string): Promise<vo
       const auth = Buffer.from(`\u0000${config.username}\u0000${config.password}`).toString("base64");
       await client.command(`AUTH PLAIN ${auth}`, [235]);
     }
-    await client.sendMail(to, buildTestMessage(config, to));
+    await client.sendMail(to, buildTestMessage(config, to, locale));
     await client.command("QUIT", [221]).catch(() => undefined);
   } finally {
     client.close();
   }
 }
 
-function buildTestMessage(config: SmtpConfig, to: string): string {
+function buildTestMessage(config: SmtpConfig, to: string, locale: Locale): string {
   const from = formatAddress(config.fromEmail, config.fromName);
   // Send the same HTML layout used by real notifications so the test verifies
   // logo, colours, and button rendering in the recipient's actual mail client.
   const html = smtpTestEmail({
+    locale,
     recipientEmail: to,
     appUrl: env.WEB_ORIGIN,
-    sentAtLabel: new Date().toUTCString(),
+    sentAtLabel: formatDate(locale, new Date(), { dateStyle: "full", timeStyle: "long", timeZone: "UTC" }),
   });
-  return buildMimeMessage({ from, to, subject: "Kanera SMTP test", html });
+  return buildMimeMessage({ from, to, subject: serverMessages(locale).email.smtpTest.subject, html });
 }
 
 function encodeBase64Body(content: Buffer | string): string {

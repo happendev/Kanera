@@ -1,5 +1,6 @@
 import { NgTemplateOutlet } from "@angular/common";
 import { ChangeDetectionStrategy, Component, computed, input, output } from "@angular/core";
+import { appLocale } from "../core/i18n/locale";
 
 export type StatTileTone = "neutral" | "danger" | "success";
 
@@ -75,7 +76,7 @@ export class StatTileComponent {
    * cannot usefully show both a persistent pill and a hover affordance in the same slot.
    */
   readonly delta = input<number | null>(null);
-  readonly deltaSuffix = input("vs last week");
+  readonly deltaSuffix = input($localize`:Stat tile comparison period, after a change such as "+3":vs last week`);
 
   readonly activated = output<void>();
 
@@ -91,7 +92,7 @@ export class StatTileComponent {
   readonly deltaLabel = computed(() => {
     const delta = this.delta();
     if (delta === null) return null;
-    const sign = delta > 0 ? "+" : "";
-    return `${sign}${delta} ${this.deltaSuffix()}`;
+    const signed = new Intl.NumberFormat(appLocale(), { signDisplay: "exceptZero" }).format(delta);
+    return $localize`:Stat tile change, e.g. "+3 vs last week":${signed}:delta: ${this.deltaSuffix()}:comparison:`;
   });
 }

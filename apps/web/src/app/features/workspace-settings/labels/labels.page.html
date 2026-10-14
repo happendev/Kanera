@@ -1,8 +1,8 @@
-<k-docs-link class="spaced" path="card-labels" label="Learn more about card labels" />
+<k-docs-link class="spaced" path="card-labels" label="Learn more about card labels" i18n-label />
       <form class="board-form single-line-capture" (submit)="settings.addLabel($event)">
         <k-color-picker [value]="settings.newLabelColor()" (valueChange)="settings.newLabelColor.set($event)" />
-        <input name="label" placeholder="Label name" [value]="settings.newLabel()" (input)="settings.newLabel.set($any($event.target).value)" [maxLength]="settings.labelNameMaxLength" required class="grow" />
-        <button class="sm compact-add-button" type="submit" aria-label="Add label" kTooltip="Add label"><i class="ti ti-plus"></i><span class="mobile-hide">Add label</span></button>
+        <input name="label" placeholder="Label name" i18n-placeholder [value]="settings.newLabel()" (input)="settings.newLabel.set($any($event.target).value)" [maxLength]="settings.labelNameMaxLength" required class="grow" />
+        <button class="sm compact-add-button" type="submit" aria-label="Add label" i18n-aria-label kTooltip="Add label" i18n-kTooltip><i class="ti ti-plus"></i><span class="mobile-hide" i18n="Button">Add label</span></button>
       </form>
       <div class="boards" cdkDropList [cdkDropListData]="settings.labels()" (cdkDropListDropped)="settings.dropLabel($event)">
         @for (label of settings.labels(); track label.id) {
@@ -13,18 +13,18 @@
           <input class="inline-name-input grow" [value]="settings.editingLabelName()" (input)="settings.editingLabelName.set($any($event.target).value)" [maxLength]="settings.labelNameMaxLength" (blur)="settings.saveLabelName(label.id)" (keydown.enter)="settings.saveLabelName(label.id)"
             (keydown.escape)="settings.cancelEditLabel()" autofocus />
           } @else {
-          <span (click)="settings.startEditLabel(label)" kTooltip="Click to rename" class="grow" style="cursor:pointer">{{ label.name }}</span>
+          <span (click)="settings.startEditLabel(label)" kTooltip="Click to rename" i18n-kTooltip class="grow" style="cursor:pointer">{{ label.name }}</span>
           }
           <div class="row-actions">
             <k-color-picker [value]="$any(label.color)" (valueChange)="settings.updateLabelColor(label.id, $event)" />
-            <button class="ghost icon danger" (click)="settings.archiveLabel(label.id)" aria-label="Delete label" kTooltip="Delete label">
+            <button class="ghost icon danger" (click)="settings.archiveLabel(label.id)" aria-label="Delete label" i18n-aria-label kTooltip="Delete label" i18n-kTooltip>
               <i class="ti ti-trash"></i>
             </button>
           </div>
         </div>
         }
         @if (settings.labels().length === 0) {
-        <k-empty-state size="sm" icon="tag" title="No labels yet" text="Labels colour-code cards and are shared by every board here." />
+        <k-empty-state size="sm" icon="tag" title="No labels yet" i18n-title text="Labels colour-code cards and are shared by every board here." i18n-text />
         }
 
 </div>

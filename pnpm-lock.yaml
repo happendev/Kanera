@@ -91,7 +91,7 @@ importers:
     devDependencies:
       '@angular/build':
         specifier: ^22.1.6
-        version: 22.1.6(@angular/compiler-cli@22.1.4(@angular/compiler@22.1.4)(typescript@6.0.3))(@angular/compiler@22.1.4)(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2))(@angular/platform-browser@22.1.4(@angular/common@22.1.4(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2))(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2)))(@angular/service-worker@22.1.4(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2))(@types/node@24.13.3)(chokidar@5.0.0)(istanbul-lib-instrument@6.0.3(supports-color@8.1.1))(jiti@2.7.0)(postcss@8.5.26)(rollup@4.62.4)(supports-color@8.1.1)(tslib@2.8.1)(tsx@4.23.12)(typescript@6.0.3)(vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(sass@1.101.0)(tsx@4.23.12)(yaml@2.9.1)))(yaml@2.9.1)
+        version: 22.1.6(b34eaabc6a9a6f9680ac98038dfa9f2f)
       '@angular/cli':
         specifier: ^22.1.6
         version: 22.1.6(@types/node@24.13.3)(chokidar@5.0.0)(supports-color@8.1.1)
@@ -319,6 +319,9 @@ importers:
       '@angular/forms':
         specifier: ^22.1.4
         version: 22.1.4(@angular/common@22.1.4(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2))(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2))(@angular/platform-browser@22.1.4(@angular/common@22.1.4(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2))(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2)))(rxjs@7.8.2)
+      '@angular/localize':
+        specifier: ^22.1.4
+        version: 22.1.4(@angular/compiler-cli@22.1.4(@angular/compiler@22.1.4)(typescript@6.0.3))(@angular/compiler@22.1.4)
       '@angular/platform-browser':
         specifier: ^22.1.4
         version: 22.1.4(@angular/common@22.1.4(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2))(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2))
@@ -424,7 +427,7 @@ importers:
     devDependencies:
       '@angular/build':
         specifier: ^22.1.6
-        version: 22.1.6(@angular/compiler-cli@22.1.4(@angular/compiler@22.1.4)(typescript@6.0.3))(@angular/compiler@22.1.4)(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2))(@angular/platform-browser@22.1.4(@angular/common@22.1.4(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2))(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2)))(@angular/service-worker@22.1.4(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2))(@types/node@24.13.3)(chokidar@5.0.0)(istanbul-lib-instrument@6.0.3(supports-color@8.1.1))(jiti@2.7.0)(postcss@8.5.26)(rollup@4.62.4)(supports-color@8.1.1)(tslib@2.8.1)(tsx@4.23.12)(typescript@6.0.3)(vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(sass@1.101.0)(tsx@4.23.12)(yaml@2.9.1)))(yaml@2.9.1)
+        version: 22.1.6(8681f986e88b148c57c3489f06cb434c)
       '@angular/cli':
         specifier: ^22.1.6
         version: 22.1.6(@types/node@24.13.3)(chokidar@5.0.0)(supports-color@8.1.1)
@@ -675,6 +678,22 @@ packages:
       '@angular/core': 22.1.4
       '@angular/platform-browser': 22.1.4
       rxjs: ^6.5.3 || ^7.4.0
+
+  '@angular/localize@22.1.4':
+    resolution: {integrity: sha512-U9Kq6b/JuSQBEmkpwlspbPHb5/Z2ZOEOBbgeZWOytmAud2FIYR9kW6mcyXbYNRbB4Jnv3GzNrP8avbCMG984PQ==}
+    engines: {node: ^22.22.3 || ^24.15.0 || >=26.0.0}
+    hasBin: true
+    peerDependencies:
+      '@angular/compiler': 22.1.4
+      '@angular/compiler-cli': 22.1.4
+
+  '@angular/localize@22.2.2':
+    resolution: {integrity: sha512-pHahnD4xcv5Znsg/JY6eRtG6FEhe1E2pSqaoxeGfDoMZOp2GZq0+7zhzHE6oq2eXqQcSMIlUAWFXMH/KByNqDw==}
+    engines: {node: ^22.22.3 || ^24.15.0 || >=26.0.0}
+    hasBin: true
+    peerDependencies:
+      '@angular/compiler': 22.2.2
+      '@angular/compiler-cli': 22.2.2
 
   '@angular/platform-browser@22.1.4':
     resolution: {integrity: sha512-zhEWnRShG6GjnEvCVROD68XfnrV6+HJ9bPjwZx4LsAz7spX823Nhiml8Uqpvijsa1w7UdWLU7nK/magr9IEMOQ==}
@@ -5638,7 +5657,7 @@ snapshots:
       eslint: 10.9.1(jiti@2.7.0)(supports-color@8.1.1)
       typescript: 5.9.3
 
-  '@angular/build@22.1.6(@angular/compiler-cli@22.1.4(@angular/compiler@22.1.4)(typescript@6.0.3))(@angular/compiler@22.1.4)(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2))(@angular/platform-browser@22.1.4(@angular/common@22.1.4(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2))(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2)))(@angular/service-worker@22.1.4(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2))(@types/node@24.13.3)(chokidar@5.0.0)(istanbul-lib-instrument@6.0.3(supports-color@8.1.1))(jiti@2.7.0)(postcss@8.5.26)(rollup@4.62.4)(supports-color@8.1.1)(tslib@2.8.1)(tsx@4.23.12)(typescript@6.0.3)(vitest@4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(sass@1.101.0)(tsx@4.23.12)(yaml@2.9.1)))(yaml@2.9.1)':
+  '@angular/build@22.1.6(8681f986e88b148c57c3489f06cb434c)':
     dependencies:
       '@ampproject/remapping': 2.3.0
       '@angular-devkit/architect': 0.2201.6(chokidar@5.0.0)
@@ -5672,6 +5691,63 @@ snapshots:
       watchpack: 2.5.2
     optionalDependencies:
       '@angular/core': 22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2)
+      '@angular/localize': 22.1.4(@angular/compiler-cli@22.1.4(@angular/compiler@22.1.4)(typescript@6.0.3))(@angular/compiler@22.1.4)
+      '@angular/platform-browser': 22.1.4(@angular/common@22.1.4(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2))(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2))
+      '@angular/service-worker': 22.1.4(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2)
+      istanbul-lib-instrument: 6.0.3(supports-color@8.1.1)
+      lmdb: 3.5.6
+      postcss: 8.5.26
+      rollup: 4.62.4
+      vitest: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(sass@1.101.0)(tsx@4.23.12)(yaml@2.9.1))
+    transitivePeerDependencies:
+      - '@types/node'
+      - '@vitejs/devtools'
+      - chokidar
+      - jiti
+      - kerberos
+      - sass-embedded
+      - stylus
+      - sugarss
+      - supports-color
+      - terser
+      - tsx
+      - yaml
+
+  '@angular/build@22.1.6(b34eaabc6a9a6f9680ac98038dfa9f2f)':
+    dependencies:
+      '@ampproject/remapping': 2.3.0
+      '@angular-devkit/architect': 0.2201.6(chokidar@5.0.0)
+      '@angular/compiler': 22.1.4
+      '@angular/compiler-cli': 22.1.4(@angular/compiler@22.1.4)(typescript@6.0.3)
+      '@babel/core': 8.0.1
+      '@babel/helper-annotate-as-pure': 8.0.0
+      '@babel/helper-split-export-declaration': 7.24.7
+      '@inquirer/confirm': 6.1.1(@types/node@24.13.3)
+      '@vitejs/plugin-basic-ssl': 2.3.0(vite@8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(sass@1.101.0)(tsx@4.23.12)(yaml@2.9.1))
+      beasties: 0.4.3
+      browserslist: 4.28.7
+      esbuild: 0.28.1
+      https-proxy-agent: 9.1.0(supports-color@8.1.1)
+      jsonc-parser: 3.3.1
+      listr2: 11.0.0
+      magic-string: 1.0.0
+      mrmime: 2.0.1
+      oxc-parser: 0.142.0
+      parse5-html-rewriting-stream: 8.0.1
+      picomatch: 4.0.5
+      piscina: 5.3.0
+      rolldown: 1.2.0
+      sass: 1.101.0
+      semver: 7.8.5
+      source-map-support: 0.5.21
+      tinyglobby: 0.2.17
+      tslib: 2.8.1
+      typescript: 6.0.3
+      vite: 8.1.5(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.7.0)(sass@1.101.0)(tsx@4.23.12)(yaml@2.9.1)
+      watchpack: 2.5.2
+    optionalDependencies:
+      '@angular/core': 22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2)
+      '@angular/localize': 22.2.2(@angular/compiler-cli@22.1.4(@angular/compiler@22.1.4)(typescript@6.0.3))(@angular/compiler@22.1.4)
       '@angular/platform-browser': 22.1.4(@angular/common@22.1.4(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2))(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2))
       '@angular/service-worker': 22.1.4(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2)
       istanbul-lib-instrument: 6.0.3(supports-color@8.1.1)
@@ -5765,6 +5841,23 @@ snapshots:
       rxjs: 7.8.2
       tslib: 2.8.1
       zod: 4.5.1
+
+  '@angular/localize@22.1.4(@angular/compiler-cli@22.1.4(@angular/compiler@22.1.4)(typescript@6.0.3))(@angular/compiler@22.1.4)':
+    dependencies:
+      '@angular/compiler': 22.1.4
+      '@angular/compiler-cli': 22.1.4(@angular/compiler@22.1.4)(typescript@6.0.3)
+      '@babel/core': 8.0.1
+      tinyglobby: 0.2.17
+      yargs: 18.1.0
+
+  '@angular/localize@22.2.2(@angular/compiler-cli@22.1.4(@angular/compiler@22.1.4)(typescript@6.0.3))(@angular/compiler@22.1.4)':
+    dependencies:
+      '@angular/compiler': 22.1.4
+      '@angular/compiler-cli': 22.1.4(@angular/compiler@22.1.4)(typescript@6.0.3)
+      '@babel/core': 8.0.1
+      tinyglobby: 0.2.17
+      yargs: 18.1.0
+    optional: true
 
   '@angular/platform-browser@22.1.4(@angular/common@22.1.4(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2))(rxjs@7.8.2))(@angular/core@22.1.4(@angular/compiler@22.1.4)(rxjs@7.8.2)(zone.js@0.16.2))':
     dependencies:

@@ -15,15 +15,15 @@ export class AccountSettingsSecurityPage {
   protected readonly settings = inject(AccountSettingsPage);
 
   protected readonly mcpPolicyOptions: readonly SegmentedOption<ClientMcpPolicy>[] = [
-    { id: "off", icon: "plug-connected-x", label: "Off" },
-    { id: "read", icon: "eye", label: "Read only" },
-    { id: "write", icon: "pencil", label: "Read and write" },
+    { id: "off", icon: "plug-connected-x", label: $localize`:AI agent access option:Off` },
+    { id: "read", icon: "eye", label: $localize`:AI agent access option:Read only` },
+    { id: "write", icon: "pencil", label: $localize`:AI agent access option:Read and write` },
   ];
   protected readonly mcpPolicyHelp = computed(() => {
     switch (this.settings.mcpPolicyDraft()) {
-      case "off": return "Agents cannot see or change anything in this organisation. Existing connections stay listed, but their requests are refused.";
-      case "read": return "Agents can read boards, cards and notes but cannot change them, even for members who can.";
-      case "write": return "Agents act with the same permissions as the member who connected them.";
+      case "off": return $localize`Agents cannot see or change anything in this organisation. Existing connections stay listed, but their requests are refused.`;
+      case "read": return $localize`Agents can read boards, cards and notes but cannot change them, even for members who can.`;
+      case "write": return $localize`Agents act with the same permissions as the member who connected them.`;
     }
   });
 

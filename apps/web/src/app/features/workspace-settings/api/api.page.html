@@ -1,41 +1,41 @@
 <a class="api-docs-banner" [href]="settings.apiDocsUrl" target="_blank" rel="noopener noreferrer">
         <i class="ti ti-book-2"></i>
         <div class="api-docs-text">
-          <span>API Reference</span>
-          <p>Browse available endpoints, request and response schemas, and webhook event types.</p>
+          <span i18n>API Reference</span>
+          <p i18n>Browse available endpoints, request and response schemas, and webhook event types.</p>
         </div>
         <i class="ti ti-external-link api-docs-arrow"></i>
       </a>
       <div class="integration-section">
         <div class="integration-section-head">
           <i class="ti ti-key"></i>
-          <span>API keys</span>
+          <span i18n="Section heading">API keys</span>
         </div>
         @if (settings.serviceAgentsAllowed()) {
         <form class="integration-form" (submit)="settings.createApiKey($event)">
           <label class="integration-field">
-            <span>Name</span>
+            <span i18n="Field label">Name</span>
             <input name="apiKeyName" [maxLength]="settings.apiKeyNameMaxLength" [value]="settings.newApiKeyName()" (input)="settings.newApiKeyName.set($any($event.target).value); settings.apiKeyError.set(null)" required />
           </label>
           <label class="integration-field">
-            <span>Scope</span>
+            <span i18n="Field label: API key permission level">Scope</span>
             <select name="apiKeyScope" [value]="settings.newApiKeyScope()" (input)="settings.newApiKeyScope.set($any($event.target).value)">
-              <option value="read">Read</option>
-              <option value="write">Write</option>
-              <option value="admin">Admin</option>
+              <option value="read" i18n="API key scope">Read</option>
+              <option value="write" i18n="API key scope">Write</option>
+              <option value="admin" i18n="API key scope">Admin</option>
             </select>
           </label>
-          <button class="sm compact-add-button" type="submit" aria-label="Create API key" kTooltip="Create API key"><i class="ti ti-plus"></i><span class="mobile-hide">Create</span></button>
+          <button class="sm compact-add-button" type="submit" aria-label="Create API key" i18n-aria-label kTooltip="Create API key" i18n-kTooltip><i class="ti ti-plus"></i><span class="mobile-hide" i18n="Button: create an API key">Create</span></button>
         </form>
         } @else {
         <div class="upgrade-action-callout">
           <span class="upgrade-action-icon"><i class="ti ti-plug-connected"></i></span>
           <span class="upgrade-action-copy">
-            <strong>Run integrations and unattended agents</strong>
-            <span>Workspace API keys and unattended AI agents are available with Pro. You can still connect your own AI agent or create a personal API key on any plan.</span>
+            <strong i18n="Upgrade callout heading">Run integrations and unattended agents</strong>
+            <span i18n>Workspace API keys and unattended AI agents are available with Pro. You can still connect your own AI agent or create a personal API key on any plan.</span>
           </span>
           <button class="secondary sm upgrade-action-button" type="button" (click)="settings.openUpgradePrompt('api')">
-            View connections <i class="ti ti-arrow-right"></i>
+            <ng-container i18n="Upgrade button">View connections</ng-container> <i class="ti ti-arrow-right"></i>
           </button>
         </div>
         }
@@ -46,8 +46,8 @@
         <div class="secret-reveal">
           <i class="ti ti-lock"></i>
           <code>{{ settings.revealedApiKeySecret() }}</code>
-          <button class="ghost icon" (click)="settings.copyText(settings.revealedApiKeySecret())" aria-label="Copy API key" kTooltip="Copy API key"><i class="ti ti-copy"></i></button>
-          <button class="ghost icon" (click)="settings.revealedApiKeySecret.set(null)" aria-label="Hide API key" kTooltip="Hide API key"><i class="ti ti-eye-off"></i></button>
+          <button class="ghost icon" (click)="settings.copyText(settings.revealedApiKeySecret())" aria-label="Copy API key" i18n-aria-label kTooltip="Copy API key" i18n-kTooltip><i class="ti ti-copy"></i></button>
+          <button class="ghost icon" (click)="settings.revealedApiKeySecret.set(null)" aria-label="Hide API key" i18n-aria-label kTooltip="Hide API key" i18n-kTooltip><i class="ti ti-eye-off"></i></button>
         </div>
         }
         <div class="integration-list">
@@ -56,30 +56,30 @@
             <i class="ti ti-key integration-icon"></i>
             <div class="integration-primary">
               @if (settings.editingApiKeyId() === key.id) {
-              <input class="key-name-input" aria-label="API key name" [maxLength]="settings.apiKeyNameMaxLength" [value]="settings.editingApiKeyName()" (input)="settings.editingApiKeyName.set($any($event.target).value); settings.apiKeyError.set(null)" (keydown.enter)="$event.preventDefault(); settings.saveApiKeyName(key.id)" (keydown.escape)="settings.cancelEditApiKey()" />
+              <input class="key-name-input" aria-label="API key name" i18n-aria-label [maxLength]="settings.apiKeyNameMaxLength" [value]="settings.editingApiKeyName()" (input)="settings.editingApiKeyName.set($any($event.target).value); settings.apiKeyError.set(null)" (keydown.enter)="$event.preventDefault(); settings.saveApiKeyName(key.id)" (keydown.escape)="settings.cancelEditApiKey()" />
               } @else {
               <span>{{ key.name }}</span>
               }
               <code>{{ key.keyPrefix }}...</code>
-              <small>Created by {{ key.createdByName || key.createdByEmail }}</small>
+              <small i18n>Created by {{ key.createdByName || key.createdByEmail // i18n(ph="person") }}</small>
             </div>
-            <span class="field-type-badge">{{ key.scope }}</span>
+            <span class="field-type-badge" i18n="API key scope badge">{ key.scope, select, read {read} write {write} admin {admin} other {{{ key.scope }}} }</span>
             <span class="key-last-used">
-              <small>Last used</small>
+              <small i18n="When the key was last used">Last used</small>
               <span>{{ settings.formatApiKeyLastUsed(key.lastUsedAt) }}</span>
             </span>
             <div class="row-actions">
               @if (settings.editingApiKeyId() === key.id) {
-              <button class="ghost icon" (click)="settings.saveApiKeyName(key.id)" aria-label="Save key name" kTooltip="Save key name"><i class="ti ti-check"></i></button>
-              <button class="ghost icon" (click)="settings.cancelEditApiKey()" aria-label="Cancel key rename" kTooltip="Cancel"><i class="ti ti-x"></i></button>
+              <button class="ghost icon" (click)="settings.saveApiKeyName(key.id)" aria-label="Save key name" i18n-aria-label kTooltip="Save key name" i18n-kTooltip><i class="ti ti-check"></i></button>
+              <button class="ghost icon" (click)="settings.cancelEditApiKey()" aria-label="Cancel key rename" i18n-aria-label kTooltip="Cancel" i18n-kTooltip="Button"><i class="ti ti-x"></i></button>
               } @else {
-              <button class="ghost icon" (click)="settings.startEditApiKey(key)" aria-label="Rename key" kTooltip="Rename key"><i class="ti ti-pencil"></i></button>
-              <button class="ghost icon danger" (click)="settings.deleteApiKey(key.id)" aria-label="Delete key" kTooltip="Delete key"><i class="ti ti-trash"></i></button>
+              <button class="ghost icon" (click)="settings.startEditApiKey(key)" aria-label="Rename key" i18n-aria-label kTooltip="Rename key" i18n-kTooltip><i class="ti ti-pencil"></i></button>
+              <button class="ghost icon danger" (click)="settings.deleteApiKey(key.id)" aria-label="Delete key" i18n-aria-label kTooltip="Delete key" i18n-kTooltip><i class="ti ti-trash"></i></button>
               }
             </div>
           </div>
           } @empty {
-          <k-empty-state size="sm" icon="key-off" title="No API keys" />
+          <k-empty-state size="sm" icon="key-off" title="No API keys" i18n-title />
           }
         </div>
       </div>
@@ -87,27 +87,27 @@
       <div class="integration-section">
         <div class="integration-section-head">
           <i class="ti ti-webhook"></i>
-          <span>Custom webhooks</span>
+          <span i18n="Section heading">Custom webhooks</span>
         </div>
-        <k-docs-link path="webhooks" label="Learn more about webhooks" />
+        <k-docs-link path="webhooks" label="Learn more about webhooks" i18n-label />
         @if (settings.webhooksAllowed()) {
         <form class="integration-form webhook-form" (submit)="settings.createWebhook($event)">
           <label class="integration-field">
-            <span>Name</span>
+            <span i18n="Field label">Name</span>
             <input name="webhookName" [value]="settings.newWebhookName()" (input)="settings.newWebhookName.set($any($event.target).value); settings.webhookError.set(null)" required />
           </label>
           <label class="integration-field">
-            <span>URL</span>
+            <span i18n="Field label">URL</span>
             <input type="url" name="webhookUrl" placeholder="https://example.com/kanera" [value]="settings.newWebhookUrl()" (input)="settings.updateWebhookUrl($any($event.target).value)" required />
           </label>
           <label class="integration-field">
-            <span>Events</span>
-            <input name="webhookEvents" placeholder="Blank for all" [value]="settings.newWebhookEventTypes()" (input)="settings.newWebhookEventTypes.set($any($event.target).value); settings.webhookError.set(null)" />
+            <span i18n="Field label: webhook event types">Events</span>
+            <input name="webhookEvents" placeholder="Blank for all" i18n-placeholder="Leave empty to send all webhook events" [value]="settings.newWebhookEventTypes()" (input)="settings.newWebhookEventTypes.set($any($event.target).value); settings.webhookError.set(null)" />
           </label>
-          <button class="sm compact-add-button" type="submit" aria-label="Add webhook" kTooltip="Add webhook"><i class="ti ti-plus"></i><span class="mobile-hide">Add</span></button>
+          <button class="sm compact-add-button" type="submit" aria-label="Add webhook" i18n-aria-label kTooltip="Add webhook" i18n-kTooltip><i class="ti ti-plus"></i><span class="mobile-hide" i18n="Button: add a webhook">Add</span></button>
         </form>
         } @else {
-        <p class="plan-limit-hint"><i class="ti ti-lock"></i> Webhooks aren't available on your plan. {{ settings.planUpgradeHint }}</p>
+        <p class="plan-limit-hint"><i class="ti ti-lock"></i> <ng-container i18n>Webhooks aren't available on your plan.</ng-container> {{ settings.planUpgradeHint }}</p>
         }
         @if (settings.webhookError()) {
         <p class="form-error"><i class="ti ti-alert-circle"></i>{{ settings.webhookError() }}</p>
@@ -116,8 +116,8 @@
         <div class="secret-reveal">
           <i class="ti ti-lock"></i>
           <code>{{ settings.revealedWebhookSecret() }}</code>
-          <button class="ghost icon" (click)="settings.copyText(settings.revealedWebhookSecret())" aria-label="Copy webhook secret" kTooltip="Copy webhook secret"><i class="ti ti-copy"></i></button>
-          <button class="ghost icon" (click)="settings.revealedWebhookSecret.set(null)" aria-label="Hide webhook secret" kTooltip="Hide webhook secret"><i class="ti ti-eye-off"></i></button>
+          <button class="ghost icon" (click)="settings.copyText(settings.revealedWebhookSecret())" aria-label="Copy webhook secret" i18n-aria-label kTooltip="Copy webhook secret" i18n-kTooltip><i class="ti ti-copy"></i></button>
+          <button class="ghost icon" (click)="settings.revealedWebhookSecret.set(null)" aria-label="Hide webhook secret" i18n-aria-label kTooltip="Hide webhook secret" i18n-kTooltip><i class="ti ti-eye-off"></i></button>
         </div>
         }
         <div class="integration-list">
@@ -128,76 +128,76 @@
               <span>{{ hook.name }}</span>
               <code>{{ hook.url }}</code>
             </div>
-            <span class="integration-events">{{ hook.eventTypes.length ? hook.eventTypes.join(", ") : "All events" }}</span>
-            <span class="status-pill" [class.is-paused]="!hook.enabled">{{ hook.enabled ? "Enabled" : "Paused" }}</span>
+            <span class="integration-events">@if (hook.eventTypes.length) { {{ hook.eventTypes.join(", ") }} } @else { <ng-container i18n="Webhook sends every event type">All events</ng-container> }</span>
+            <span class="status-pill" [class.is-paused]="!hook.enabled">@if (hook.enabled) { <ng-container i18n="Webhook status">Enabled</ng-container> } @else { <ng-container i18n="Webhook status">Paused</ng-container> }</span>
             <span class="webhook-last-success">
-              <small>Last success</small>
+              <small i18n="Time of the last successful delivery">Last success</small>
               <span>{{ settings.formatWebhookLastSuccessful(hook.lastSuccessfulAt) }}</span>
             </span>
             <div class="row-actions">
-              <button class="ghost icon" (click)="settings.toggleWebhook(hook)" [disabled]="!hook.enabled && !settings.webhooksAllowed()" [attr.aria-label]="hook.enabled ? 'Pause webhook' : 'Enable webhook'" [kTooltip]="hook.enabled ? 'Pause webhook' : 'Enable webhook'">
+              <button class="ghost icon" (click)="settings.toggleWebhook(hook)" [disabled]="!hook.enabled && !settings.webhooksAllowed()" [attr.aria-label]="hook.enabled ? pauseWebhookLabel : enableWebhookLabel" [kTooltip]="hook.enabled ? pauseWebhookLabel : enableWebhookLabel">
                 <i class="ti" [class.ti-player-pause]="hook.enabled" [class.ti-player-play]="!hook.enabled"></i>
               </button>
-              <button class="ghost icon" (click)="settings.loadWebhookDeliveries(hook.id)" aria-label="Load deliveries" kTooltip="Load deliveries"><i class="ti ti-history"></i></button>
-              <button class="ghost icon" (click)="settings.regenerateWebhookSecret(hook.id)" aria-label="Regenerate secret" kTooltip="Regenerate secret"><i class="ti ti-refresh"></i></button>
-              <button class="ghost icon danger" (click)="settings.deleteWebhook(hook.id)" aria-label="Delete webhook" kTooltip="Delete webhook"><i class="ti ti-trash"></i></button>
+              <button class="ghost icon" (click)="settings.loadWebhookDeliveries(hook.id)" aria-label="Load deliveries" i18n-aria-label kTooltip="Load deliveries" i18n-kTooltip><i class="ti ti-history"></i></button>
+              <button class="ghost icon" (click)="settings.regenerateWebhookSecret(hook.id)" aria-label="Regenerate secret" i18n-aria-label kTooltip="Regenerate secret" i18n-kTooltip><i class="ti ti-refresh"></i></button>
+              <button class="ghost icon danger" (click)="settings.deleteWebhook(hook.id)" aria-label="Delete webhook" i18n-aria-label kTooltip="Delete webhook" i18n-kTooltip><i class="ti ti-trash"></i></button>
             </div>
           </div>
           @for (delivery of settings.webhookDeliveriesFor(hook.id); track delivery.id) {
           <div class="delivery-row">
             <span>{{ delivery.eventType }}</span>
-            <span class="status-pill" [class.is-paused]="delivery.status !== 'success'">{{ delivery.status }}</span>
-            <span>{{ delivery.responseStatus ?? delivery.lastError ?? (delivery.status === "delivering" ? "Delivering" : "Queued") }}</span>
+            <span class="status-pill" [class.is-paused]="delivery.status !== 'success'" i18n="Webhook delivery status">{ delivery.status, select, queued {queued} delivering {delivering} success {success} failed {failed} other {{{ delivery.status }}} }</span>
+            <span>{{ delivery.responseStatus ?? delivery.lastError ?? (delivery.status === "delivering" ? deliveringLabel : queuedLabel) }}</span>
             @if (settings.webhooksAllowed() && hook.enabled && delivery.status === "failed") {
-            <button class="ghost icon" (click)="settings.retryWebhookDelivery(hook.id, delivery.id)" aria-label="Retry delivery" kTooltip="Retry delivery"><i class="ti ti-refresh"></i></button>
+            <button class="ghost icon" (click)="settings.retryWebhookDelivery(hook.id, delivery.id)" aria-label="Retry delivery" i18n-aria-label kTooltip="Retry delivery" i18n-kTooltip><i class="ti ti-refresh"></i></button>
             }
           </div>
           }
           } @empty {
-          <k-empty-state size="sm" icon="webhook-off" title="No custom webhooks yet" />
+          <k-empty-state size="sm" icon="webhook-off" title="No custom webhooks yet" i18n-title />
           }
         </div>
       </div>
 
       <div class="integration-section">
-        <div class="integration-section-head"><i class="ti ti-sparkles"></i><span>Unattended AI agents</span></div>
-        <p class="settings-section-help">Create an OAuth client for CI, cron, or a server-side custom agent. The secret is shown once.</p>
-        <k-docs-link path="ai-mcp-reference" label="Learn more about AI agent connections" />
+        <div class="integration-section-head"><i class="ti ti-sparkles"></i><span i18n="Section heading">Unattended AI agents</span></div>
+        <p class="settings-section-help" i18n>Create an OAuth client for CI, cron, or a server-side custom agent. The secret is shown once.</p>
+        <k-docs-link path="ai-mcp-reference" label="Learn more about AI agent connections" i18n-label />
         @if (settings.serviceAgentsAllowed()) {
         <form class="integration-form" (submit)="settings.createAgentConnection($event)">
-          <label class="integration-field"><span>Name</span><input [value]="settings.newAgentConnectionName()" (input)="settings.newAgentConnectionName.set($any($event.target).value); settings.agentConnectionError.set(null)" required /></label>
-          <label class="integration-field"><span>Maximum scope</span><select [value]="settings.newAgentConnectionScope()" (input)="settings.newAgentConnectionScope.set($any($event.target).value)"><option value="read">Read</option><option value="write">Write</option><option value="admin">Admin</option></select></label>
-          <button class="sm compact-add-button" type="submit" aria-label="Create agent connection" kTooltip="Create agent connection"><i class="ti ti-plus"></i><span class="mobile-hide">Create</span></button>
+          <label class="integration-field"><span i18n="Field label">Name</span><input [value]="settings.newAgentConnectionName()" (input)="settings.newAgentConnectionName.set($any($event.target).value); settings.agentConnectionError.set(null)" required /></label>
+          <label class="integration-field"><span i18n="Field label: highest permission level">Maximum scope</span><select [value]="settings.newAgentConnectionScope()" (input)="settings.newAgentConnectionScope.set($any($event.target).value)"><option value="read" i18n="API key scope">Read</option><option value="write" i18n="API key scope">Write</option><option value="admin" i18n="API key scope">Admin</option></select></label>
+          <button class="sm compact-add-button" type="submit" aria-label="Create agent connection" i18n-aria-label kTooltip="Create agent connection" i18n-kTooltip><i class="ti ti-plus"></i><span class="mobile-hide" i18n="Button: create an agent connection">Create</span></button>
         </form>
         }
         @if (settings.agentConnectionError()) { <p class="form-error"><i class="ti ti-alert-circle"></i>{{ settings.agentConnectionError() }}</p> }
         @if (settings.revealedAgentCredential(); as credential) {
-        <div class="secret-reveal"><i class="ti ti-lock"></i><code>client_id={{ credential.clientId }} client_secret={{ credential.clientSecret }} token_url={{ credential.tokenEndpoint }}</code><button class="ghost icon" (click)="settings.copyText('client_id=' + credential.clientId + '\nclient_secret=' + credential.clientSecret + '\ntoken_url=' + credential.tokenEndpoint)" aria-label="Copy agent credentials" kTooltip="Copy agent credentials"><i class="ti ti-copy"></i></button><button class="ghost icon" (click)="settings.revealedAgentCredential.set(null)" aria-label="Hide agent credentials" kTooltip="Hide agent credentials"><i class="ti ti-eye-off"></i></button></div>
+        <div class="secret-reveal"><i class="ti ti-lock"></i><code>client_id={{ credential.clientId }} client_secret={{ credential.clientSecret }} token_url={{ credential.tokenEndpoint }}</code><button class="ghost icon" (click)="settings.copyText('client_id=' + credential.clientId + '\nclient_secret=' + credential.clientSecret + '\ntoken_url=' + credential.tokenEndpoint)" aria-label="Copy agent credentials" i18n-aria-label kTooltip="Copy agent credentials" i18n-kTooltip><i class="ti ti-copy"></i></button><button class="ghost icon" (click)="settings.revealedAgentCredential.set(null)" aria-label="Hide agent credentials" i18n-aria-label kTooltip="Hide agent credentials" i18n-kTooltip><i class="ti ti-eye-off"></i></button></div>
         }
         <div class="integration-list">
           @for (connection of settings.agentConnections(); track connection.clientId) {
-          <div class="integration-row key-row"><i class="ti ti-sparkles integration-icon"></i><div class="integration-primary"><span>{{ connection.name }}</span><code>{{ connection.clientId }}</code></div><span class="field-type-badge">{{ connection.maxScope }}</span><span class="key-last-used"><small>Last used</small><span>{{ settings.formatApiKeyLastUsed(connection.lastUsedAt) }}</span></span><div class="row-actions"><button class="ghost icon danger" (click)="settings.deleteAgentConnection(connection.clientId)" aria-label="Delete agent connection" kTooltip="Delete agent connection"><i class="ti ti-trash"></i></button></div></div>
-          } @empty { <k-empty-state size="sm" icon="sparkles" title="No unattended agents" /> }
+          <div class="integration-row key-row"><i class="ti ti-sparkles integration-icon"></i><div class="integration-primary"><span>{{ connection.name }}</span><code>{{ connection.clientId }}</code></div><span class="field-type-badge" i18n="API key scope badge">{ connection.maxScope, select, read {read} write {write} admin {admin} other {{{ connection.maxScope }}} }</span><span class="key-last-used"><small i18n="When the key was last used">Last used</small><span>{{ settings.formatApiKeyLastUsed(connection.lastUsedAt) }}</span></span><div class="row-actions"><button class="ghost icon danger" (click)="settings.deleteAgentConnection(connection.clientId)" aria-label="Delete agent connection" i18n-aria-label kTooltip="Delete agent connection" i18n-kTooltip><i class="ti ti-trash"></i></button></div></div>
+          } @empty { <k-empty-state size="sm" icon="sparkles" title="No unattended agents" i18n-title /> }
         </div>
       </div>
 
       <div class="integration-section">
         <div class="integration-section-head">
           <i class="ti ti-api"></i>
-          <span>Integration IDs</span>
+          <span i18n="Section heading">Integration IDs</span>
         </div>
         <div class="integration-list id-list">
           <div class="id-row workspace-id-row">
             <i [class]="settings.isStandalone() ? 'ti ti-settings integration-icon' : 'ti ti-building integration-icon'"></i>
             <div class="integration-primary">
-              <span>{{ settings.isStandalone() ? 'Board configuration' : 'Workspace' }}</span>
+              <span>@if (settings.isStandalone()) { <ng-container i18n>Board configuration</ng-container> } @else { <ng-container i18n="Row label for the workspace ID">Workspace</ng-container> }</span>
               <code>{{ settings.workspaceId() }}</code>
             </div>
-            <button class="ghost icon" (click)="settings.copyText(settings.workspaceId())" [attr.aria-label]="settings.isStandalone() ? 'Copy board configuration ID' : 'Copy workspace ID'" [kTooltip]="settings.isStandalone() ? 'Copy board configuration ID' : 'Copy workspace ID'"><i class="ti ti-copy"></i></button>
+            <button class="ghost icon" (click)="settings.copyText(settings.workspaceId())" [attr.aria-label]="copyWorkspaceIdLabel()" [kTooltip]="copyWorkspaceIdLabel()"><i class="ti ti-copy"></i></button>
           </div>
           <div class="id-table-head">
-            <span>Board</span>
-            <span>ID</span>
+            <span i18n="Column heading">Board</span>
+            <span i18n="Column heading: identifier">ID</span>
             <span></span>
           </div>
           @for (board of settings.boardList(); track board.id) {
@@ -207,10 +207,10 @@
               <span>{{ board.name }}</span>
             </div>
             <code>{{ board.id }}</code>
-            <button class="ghost icon" (click)="settings.copyText(board.id)" [attr.aria-label]="'Copy ' + board.name + ' board ID'" kTooltip="Copy board ID"><i class="ti ti-copy"></i></button>
+            <button class="ghost icon" (click)="settings.copyText(board.id)" [attr.aria-label]="copyBoardIdLabel(board.name)" kTooltip="Copy board ID" i18n-kTooltip><i class="ti ti-copy"></i></button>
           </div>
           } @empty {
-          <k-empty-state size="sm" icon="layout-kanban" title="No boards yet" />
+          <k-empty-state size="sm" icon="layout-kanban" title="No boards yet" i18n-title />
           }
         </div>
 

@@ -1,14 +1,14 @@
 @if (canAddToPriority()) {
 <!-- Sits left of the actions dots when both render, so the two hover affordances never overlap. -->
 <div class="card-priority-add-wrap" [class.beside-actions]="canEditRole() && showActions()">
-  <button type="button" class="card-priority-add" (click)="onAddToPriority($event)" aria-label="Add to Up next" kTooltip="Add to Up next">
+  <button type="button" class="card-priority-add" (click)="onAddToPriority($event)" aria-label="Add to Up next" i18n-aria-label kTooltip="Add to Up next" i18n-kTooltip>
     <i class="ti ti-playlist-add"></i>
   </button>
 </div>
 }
 @if (canEditRole() && showActions()) {
 <div class="card-actions-wrap">
-  <button type="button" class="card-actions-btn" [class.is-active]="actionsMenuOpen()" [disabled]="!canEdit()" (click)="toggleActionsMenu($event)" aria-label="Card actions" kTooltip="Card actions">
+  <button type="button" class="card-actions-btn" [class.is-active]="actionsMenuOpen()" [disabled]="!canEdit()" (click)="toggleActionsMenu($event)" aria-label="Card actions" i18n-aria-label kTooltip="Card actions" i18n-kTooltip>
     <i class="ti ti-dots"></i>
   </button>
   @if (actionsMenuOpen()) {
@@ -34,7 +34,7 @@
     }
     @if (boardSummary(); as board) {
     @if (allowBoardNavigation()) {
-    <span class="card-board-badge is-clickable" role="button" tabindex="0" (click)="openBoard($event)" (keydown.enter)="openBoard($event)" (keydown.space)="openBoard($event)" [attr.aria-label]="'Go to board ' + board.name">
+    <span class="card-board-badge is-clickable" role="button" tabindex="0" (click)="openBoard($event)" (keydown.enter)="openBoard($event)" (keydown.space)="openBoard($event)" [attr.aria-label]="goToBoardLabel(board.name)">
       <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
       <span class="card-board-name">{{ board.name }}</span>
     </span>
@@ -61,8 +61,8 @@
     <span class="card-key">{{ card().key }}</span>
     }
     @if (priorityRank(); as rank) {
-    <span class="card-priority-indicator" [kTooltip]="'Up next #' + rank" [attr.aria-label]="'Up next #' + rank">
-      <span class="card-priority-label">Up next</span>
+    <span class="card-priority-indicator" [kTooltip]="upNextRankLabel(rank)" [attr.aria-label]="upNextRankLabel(rank)">
+      <span class="card-priority-label" i18n="Label beside the card's position in the viewer's Up next queue">Up next</span>
       <span class="card-priority-rank" [style.--rank-heat]="rankHeat(rank)">{{ rank }}</span>
     </span>
     }
@@ -73,7 +73,7 @@
   @if (!coverUrl()) {
   @if (boardSummary(); as board) {
   @if (allowBoardNavigation()) {
-  <span class="card-board-badge is-clickable" role="button" tabindex="0" (click)="openBoard($event)" (keydown.enter)="openBoard($event)" (keydown.space)="openBoard($event)" [attr.aria-label]="'Go to board ' + board.name">
+  <span class="card-board-badge is-clickable" role="button" tabindex="0" (click)="openBoard($event)" (keydown.enter)="openBoard($event)" (keydown.space)="openBoard($event)" [attr.aria-label]="goToBoardLabel(board.name)">
     <i [class]="'ti ti-' + (board.icon || 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
     <span class="card-board-name">{{ board.name }}</span>
   </span>
@@ -88,7 +88,7 @@
   <k-card-labels [labels]="labels()" />
   <div class="card-body">
     @if (card().completedAt) {
-    <i class="ti ti-circle-check card-complete-icon" kTooltip="Completed"></i>
+    <i class="ti ti-circle-check card-complete-icon" kTooltip="Completed" i18n-kTooltip="Tooltip: the card is completed"></i>
     }
     @if (hasUnreadNotifications()) {
     <span class="card-unread-dot" [kTooltip]="unreadMarkLabel()" [attr.aria-label]="unreadMarkLabel()"></span>
@@ -118,7 +118,7 @@
       <div class="card-indicators">
         @if (showCardWatchIndicator()) {
         <span class="card-watcher-wrap">
-          <span class="card-indicator card-watch-indicator" role="button" tabindex="0" [attr.aria-expanded]="watcherPopoverOpen()" aria-label="Card watchers" kTooltip="Card watchers" (click)="toggleWatcherPopover($event)"
+          <span class="card-indicator card-watch-indicator" role="button" tabindex="0" [attr.aria-expanded]="watcherPopoverOpen()" aria-label="Card watchers" i18n-aria-label kTooltip="Card watchers" i18n-kTooltip (click)="toggleWatcherPopover($event)"
             (keydown.enter)="toggleWatcherPopover($event)" (keydown.space)="toggleWatcherPopover($event)">
             <i class="ti ti-eye-check"></i>
           </span>
@@ -133,24 +133,24 @@
         </span>
         }
         @if (hasDescription()) {
-        <span class="card-indicator" kTooltip="Has description"><i class="ti ti-align-left"></i></span>
+        <span class="card-indicator" kTooltip="Has description" i18n-kTooltip><i class="ti ti-align-left"></i></span>
         }
         @if (checklistTotalCount()) {
         <span class="card-indicator card-checklist-toggle" role="button" tabindex="0" [class.card-watch-indicator]="checklistComplete()" [class.is-expanded]="checklistExpanded()" [attr.aria-expanded]="checklistExpanded()"
-          [kTooltip]="(checklistExpanded() ? 'Collapse checklist: ' : 'Expand checklist: ') + checklistDoneCount() + ' of ' + checklistTotalCount() + ' items complete'" (click)="toggleChecklistExpanded($event)" (keydown.enter)="toggleChecklistExpanded($event)"
+          [kTooltip]="checklistToggleLabel()" (click)="toggleChecklistExpanded($event)" (keydown.enter)="toggleChecklistExpanded($event)"
           (keydown.space)="toggleChecklistExpanded($event)">
           <i class="ti ti-checklist"></i>
           <span class="card-indicator-count">{{ checklistDoneCount() }}/{{ checklistTotalCount() }}</span>
         </span>
         }
         @if (commentCount()) {
-        <span class="card-indicator" [kTooltip]="commentCount() + ' comment' + (commentCount() === 1 ? '' : 's')">
+        <span class="card-indicator" [kTooltip]="commentCountLabel()">
           <i class="ti ti-message-circle"></i>
           <span class="card-indicator-count">{{ commentCount() }}</span>
         </span>
         }
         @if (attachmentCount()) {
-        <span class="card-indicator" kTooltip="Has attachments"><i class="ti ti-paperclip"></i></span>
+        <span class="card-indicator" kTooltip="Has attachments" i18n-kTooltip><i class="ti ti-paperclip"></i></span>
         }
 
       </div>
@@ -175,14 +175,14 @@
         }
         @case ('url') {
         @if (urlFor(field.id); as url) {
-        <a class="cf-url-link" [href]="url" target="_blank" rel="noopener noreferrer" kTooltip="Open link" (click)="$event.stopPropagation()">
+        <a class="cf-url-link" [href]="url" target="_blank" rel="noopener noreferrer" kTooltip="Open link" i18n-kTooltip (click)="$event.stopPropagation()">
           <i class="ti ti-external-link"></i>
         </a>
         }
         }
         @default {
         <span class="cf-sep">&middot;</span>
-        <span class="cf-value">{{ valueFor(field.id) }}</span>
+        <span class="cf-value">{{ badgeValueFor(field) }}</span>
         }
         }
       </span>
@@ -197,14 +197,14 @@
       </span>
       }
       @if (assigneeOverflow()) {
-      <span class="assignee-avatar assignee-overflow" [kTooltip]="'+' + assigneeOverflow() + ' more'">+{{ assigneeOverflow() }}</span>
+      <span class="assignee-avatar assignee-overflow" [kTooltip]="assigneeOverflowLabel()">+{{ assigneeOverflow() }}</span>
       }
     </div>
     }
   </div>
   }
   @if (checklistTotalCount()) {
-  <div class="checklist-progress-bar" [kTooltip]="checklistDoneCount() + ' of ' + checklistTotalCount() + ' checklist items complete'">
+  <div class="checklist-progress-bar" [kTooltip]="checklistProgressLabel()">
     <div class="checklist-progress-fill" [style.width.%]="checklistDoneCount() / checklistTotalCount() * 100"></div>
   </div>
   }
@@ -215,7 +215,7 @@
   @if (detailLoading() && !checklists().length) {
   <div class="card-checklist-loading">
     <i class="ti ti-loader-2"></i>
-    <span>Loading...</span>
+    <span i18n>Loading...</span>
   </div>
   } @else {
   @for (checklist of checklists(); track checklist.id) {
@@ -228,11 +228,11 @@
       @for (item of checklist.items; track item.id) {
       <div class="card-checklist-item">
         <button type="button" class="card-checklist-check" [class.checked]="item.completedAt" [disabled]="!canEdit()" (click)="toggleChecklistItem(checklist.id, item, $event)"
-          [attr.aria-label]="item.completedAt ? 'Mark incomplete' : 'Mark complete'">
+          [attr.aria-label]="item.completedAt ? markIncompleteLabel : markCompleteLabel">
           <i class="ti" [class.ti-checkbox]="item.completedAt" [class.ti-square]="!item.completedAt"></i>
         </button>
         <button type="button" class="card-checklist-item-text" [class.is-done]="item.completedAt" [disabled]="!canEdit()" (click)="toggleChecklistItem(checklist.id, item, $event)"
-          [attr.aria-label]="item.completedAt ? 'Mark incomplete' : 'Mark complete'">
+          [attr.aria-label]="item.completedAt ? markIncompleteLabel : markCompleteLabel">
           {{ item.text }}
         </button>
       </div>

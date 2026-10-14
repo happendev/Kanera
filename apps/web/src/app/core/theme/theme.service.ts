@@ -45,12 +45,12 @@ const THEME_COOL_ACCENT: Record<Theme, CoolAccent> = {
 // settings swatches preview the colour the user will actually get rather than a hardcoded hex.
 // Order is the display order; filtering out the unused cool option preserves it.
 const ACCENT_OPTIONS: readonly { value: Accent; label: string; token: string }[] = [
-  { value: "default", label: "Default", token: "--accent-default" },
-  { value: "blue", label: "Blue", token: "--accent-blue" },
-  { value: "green", label: "Green", token: "--accent-green" },
-  { value: "violet", label: "Violet", token: "--accent-violet" },
-  { value: "pink", label: "Pink", token: "--accent-pink" },
-  { value: "graphite", label: "Graphite", token: "--accent-graphite" },
+  { value: "default", label: $localize`:Accent colour option — the theme's own accent:Default`, token: "--accent-default" },
+  { value: "blue", label: $localize`:Accent colour option name:Blue`, token: "--accent-blue" },
+  { value: "green", label: $localize`:Accent colour option name:Green`, token: "--accent-green" },
+  { value: "violet", label: $localize`:Accent colour option name:Violet`, token: "--accent-violet" },
+  { value: "pink", label: $localize`:Accent colour option name:Pink`, token: "--accent-pink" },
+  { value: "graphite", label: $localize`:Accent colour option name:Graphite`, token: "--accent-graphite" },
 ];
 
 function isCoolAccent(accent: Accent): accent is CoolAccent {

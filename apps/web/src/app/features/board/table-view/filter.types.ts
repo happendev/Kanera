@@ -72,24 +72,24 @@ export function operatorUsesIds(op: CfFilterOperator): boolean {
   return op === "isAnyOf" || op === "isNoneOf";
 }
 
-const CONTAINS = { op: "contains", label: "contains" } as const;
-const EQUALS = { op: "equals", label: "is" } as const;
+const CONTAINS = { op: "contains", label: $localize`:Filter operator for text fields:contains` } as const;
+const EQUALS = { op: "equals", label: $localize`:Filter operator for text fields - exact match:is` } as const;
 const EQ = { op: "eq", label: "=" } as const;
 const NEQ = { op: "neq", label: "≠" } as const;
 const GT = { op: "gt", label: ">" } as const;
 const GTE = { op: "gte", label: "≥" } as const;
 const LT = { op: "lt", label: "<" } as const;
 const LTE = { op: "lte", label: "≤" } as const;
-const ON = { op: "on", label: "on" } as const;
-const BEFORE = { op: "before", label: "before" } as const;
-const AFTER = { op: "after", label: "after" } as const;
-const BETWEEN = { op: "between", label: "between" } as const;
-const CHECKED = { op: "checked", label: "is checked" } as const;
-const UNCHECKED = { op: "unchecked", label: "is unchecked" } as const;
-const IS_ANY_OF = { op: "isAnyOf", label: "is any of" } as const;
-const IS_NONE_OF = { op: "isNoneOf", label: "is none of" } as const;
-const IS_EMPTY = { op: "isEmpty", label: "is empty" } as const;
-const IS_NOT_EMPTY = { op: "isNotEmpty", label: "is not empty" } as const;
+const ON = { op: "on", label: $localize`:Filter operator for date fields - on the given day:on` } as const;
+const BEFORE = { op: "before", label: $localize`:Filter operator for date fields:before` } as const;
+const AFTER = { op: "after", label: $localize`:Filter operator for date fields:after` } as const;
+const BETWEEN = { op: "between", label: $localize`:Filter operator for date fields - within a range:between` } as const;
+const CHECKED = { op: "checked", label: $localize`:Filter operator for checkbox fields:is checked` } as const;
+const UNCHECKED = { op: "unchecked", label: $localize`:Filter operator for checkbox fields:is unchecked` } as const;
+const IS_ANY_OF = { op: "isAnyOf", label: $localize`:Filter operator for choice and person fields:is any of` } as const;
+const IS_NONE_OF = { op: "isNoneOf", label: $localize`:Filter operator for choice and person fields:is none of` } as const;
+const IS_EMPTY = { op: "isEmpty", label: $localize`:Filter operator - the field has no value:is empty` } as const;
+const IS_NOT_EMPTY = { op: "isNotEmpty", label: $localize`:Filter operator - the field has a value:is not empty` } as const;
 
 /** Operator options offered per field type; drives the builder UI's operator dropdown. */
 export const OPERATORS_BY_TYPE: Record<CustomFieldType, readonly { op: CfFilterOperator; label: string }[]> = {

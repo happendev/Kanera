@@ -787,3 +787,39 @@ void test("cross-org guest uploads count against the host board owner's org, not
     env.HOSTED_FREE_STORAGE_QUOTA_BYTES = previousFreeQuota;
   }
 });
+
+void test("duplicating a card points copied inline images at the copy's files", async () => {
+  const { app, accessToken, card } = await setupCard();
+  const auth = { authorization: `Bearer ${accessToken}` };
+
+  const upload = await app.inject({
+    method: "POST",
+    url: `/cards/${card.id}/attachments?source=description`,
+    headers: auth,
+    payload: await pngForm("inline.png", 32, 32),
+  });
+  assert.equal(upload.statusCode, 201);
+  const sourceAttachment = upload.json<{ id: string }>();
+  const [sourceRow] = await db.select().from(cardAttachments).where(eq(cardAttachments.id, sourceAttachment.id));
+  assert.ok(sourceRow);
+  await db.update(cards).set({ description: `Before ![inline](${sourceRow.url}) after` }).where(eq(cards.id, card.id));
+
+  const duplicated = await app.inject({ method: "POST", url: `/cards/${card.id}/duplicate`, headers: auth, payload: {} });
+  assert.equal(duplicated.statusCode, 201);
+  const duplicate = duplicated.json<{ id: string }>();
+
+  const [copyRow] = await db.select().from(cardAttachments).where(eq(cardAttachments.cardId, duplicate.id));
+  assert.ok(copyRow);
+  assert.notEqual(copyRow.url, sourceRow.url);
+  const [copyCard] = await db.select({ description: cards.description }).from(cards).where(eq(cards.id, duplicate.id));
+  assert.equal(copyCard?.description, `Before ![inline](${copyRow.url}) after`);
+
+  // Removing the original's attachment must leave the copy's inline image intact.
+  const removed = await app.inject({ method: "DELETE", url: `/cards/${card.id}/attachments/${sourceAttachment.id}`, headers: auth });
+  assert.equal(removed.statusCode, 204);
+  const listed = await app.inject({ method: "GET", url: `/cards/${duplicate.id}/attachments`, headers: auth });
+  assert.equal(listed.statusCode, 200);
+  const [copyAttachment] = listed.json<Array<{ url: string }>>();
+  assert.ok(copyAttachment);
+  assert.equal((await app.inject({ method: "GET", url: mediaPath(copyAttachment.url) })).statusCode, 200);
+});

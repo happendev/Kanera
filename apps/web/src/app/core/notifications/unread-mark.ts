@@ -1,3 +1,5 @@
+import { icu } from "../i18n/icu";
+
 /**
  * Shared vocabulary for the per-card unread mark, so a card wears the same badge wherever you meet
  * it — board tile, table row, or any future view.
@@ -10,5 +12,5 @@
 
 /** Accessible name and tooltip for the mark, since the dot itself carries no number. */
 export function unreadMarkLabel(count: number): string {
-  return `${count} unread notification${count === 1 ? "" : "s"}`;
+  return icu($localize`:Label on a card's unread dot:{count, plural, one {# unread notification} other {# unread notifications}}`, { count });
 }

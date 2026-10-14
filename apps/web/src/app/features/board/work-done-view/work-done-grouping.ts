@@ -1,6 +1,8 @@
 import type { WorkDoneEvent, WorkDoneEventType } from "@kanera/shared/dto";
 import { dayFullLabel, dayGroupLabel } from "../../../shared/date-format";
 import { localDateKey } from "../../../shared/day-key.util";
+import { appLocale } from "../../../core/i18n/locale";
+import { icu } from "../../../core/i18n/icu";
 import type {
   CardDayDigest,
   WorkDoneActor,
@@ -11,6 +13,8 @@ import type {
 
 /** Max list names shown in a move path before the middle collapses to an ellipsis. */
 export const MOVE_PATH_MAX = 4;
+
+const NO_WORK_RECORDED = $localize`:Copied work done summary when nothing happened:No work recorded.`;
 
 /** Resolved list metadata, keyed by list id, used to render move paths. */
 export type ListLookup = ReadonlyMap<string, { name: string; icon: string | null; color: string | null }>;
@@ -27,7 +31,9 @@ function actorNameFor(event: WorkDoneEvent): string {
   if (event.type === "checklistItemCompleted") return event.completedByName;
   // Agent output is never presented as the person's own effort: the row and the contributor
   // stack both read "Ada via Claude", and (with actorUserId null) it groups apart from Ada.
-  return event.agentName ? `${event.actorName} via ${event.agentName}` : event.actorName;
+  return event.agentName
+    ? $localize`:A person working through an AI agent, e.g. "Ada via Claude":${event.actorName}:person: via ${event.agentName}:agent:`
+    : event.actorName;
 }
 
 function actorAvatarFor(event: WorkDoneEvent): string | null {
@@ -55,10 +61,10 @@ export function iconForType(type: WorkDoneEventType): string {
 /** Short verb describing an event type. */
 export function verbForType(type: WorkDoneEventType): string {
   switch (type) {
-    case "created": return "Created";
-    case "moved": return "Moved";
-    case "completed": return "Completed";
-    case "checklistItemCompleted": return "Checked off";
+    case "created": return $localize`:Work done row verb - the card was created:Created`;
+    case "moved": return $localize`:Work done row verb - the card was moved between lists:Moved`;
+    case "completed": return $localize`:Work done row verb - the card was completed:Completed`;
+    case "checklistItemCompleted": return $localize`:Work done row verb - checklist items were ticked off:Checked off`;
   }
 }
 
@@ -89,7 +95,7 @@ function collectActors(events: readonly WorkDoneEvent[]): WorkDoneActor[] {
     }
     byKey.set(key, { userId, name, avatarUrl: actorAvatarFor(event), agentName: actorAgentNameFor(event), eventCount: 1 });
   }
-  return [...byKey.values()].sort((a, b) => b.eventCount - a.eventCount || a.name.localeCompare(b.name));
+  return [...byKey.values()].sort((a, b) => b.eventCount - a.eventCount || a.name.localeCompare(b.name, appLocale()));
 }
 
 /**
@@ -236,7 +242,7 @@ export function countsByDay(days: readonly WorkDoneDay[], metric: WorkDoneEventT
  * started, then checklist detail.
  */
 export function buildStandupText(day: WorkDoneDay, boardNames?: ReadonlyMap<string, string>): string {
-  const lines: string[] = [`Work done — ${day.fullLabel}`];
+  const lines: string[] = [$localize`:Heading of a copied work done summary for one day:Work done — ${day.fullLabel}:date:`];
 
   const label = (digest: CardDayDigest) => {
     const board = boardNames?.get(digest.boardId);
@@ -260,15 +266,15 @@ export function buildStandupText(day: WorkDoneDay, boardNames?: ReadonlyMap<stri
   const created = day.digests.filter((digest) => !digest.completed && digest.created && digest.listPath.length <= 1);
   const checklist = day.digests.filter((digest) => digest.checklistTicks.length > 0);
 
-  section("Completed", completed);
-  section("Moved", moved, (digest) => digest.listPath.map((step) => step.text).join(" → "));
-  section("Created", created);
-  section("Checklist", checklist, (digest) =>
+  section($localize`:Section heading in a copied work done summary:Completed`, completed);
+  section($localize`:Section heading in a copied work done summary:Moved`, moved, (digest) => digest.listPath.map((step) => step.text).join(" → "));
+  section($localize`:Section heading in a copied work done summary:Created`, created);
+  section($localize`:Section heading in a copied work done summary:Checklist`, checklist, (digest) =>
     digest.checklistTicks.length === 1
       ? digest.checklistTicks[0]!.text
-      : `${digest.checklistTicks.length} items`);
+      : icu($localize`:Number of checklist items ticked on a card:{count, plural, one {# item} other {# items}}`, { count: digest.checklistTicks.length }));
 
-  if (lines.length === 1) lines.push("", "No work recorded.");
+  if (lines.length === 1) lines.push("", NO_WORK_RECORDED);
   return lines.join("\n");
 }
 
@@ -277,6 +283,6 @@ export function buildRangeStandupText(
   days: readonly WorkDoneDay[],
   boardNames?: ReadonlyMap<string, string>,
 ): string {
-  if (days.length === 0) return "No work recorded.";
+  if (days.length === 0) return NO_WORK_RECORDED;
   return days.map((day) => buildStandupText(day, boardNames)).join("\n\n");
 }

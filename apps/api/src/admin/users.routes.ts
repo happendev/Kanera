@@ -10,6 +10,7 @@ import { countOwners } from "../lib/org-owners.js";
 import { repointActiveOrganisation } from "../lib/client-membership.js";
 import { pinOrgAdminToClientBoards, unpinOrgAdminFromClientBoards } from "../lib/board-membership.js";
 import { newOpaqueToken } from "../lib/tokens.js";
+import { recipientLocale } from "../lib/i18n/request-locale.js";
 import { writeAdminAudit } from "./audit.js";
 import { resetMfa } from "../auth/mfa.js";
 import { requireSuperadmin, iso } from "./helpers.js";
@@ -379,7 +380,9 @@ export async function adminUserRoutes(app: FastifyInstance) {
 
     const resetUrl = `${env.WEB_ORIGIN}/reset-password?token=${token.raw}`;
     try {
-      await app.mailer.sendPasswordReset(target.email, target.displayName, resetUrl);
+      // The account's own language; there is no customer request to ask, only the staff member's.
+      const [stored] = await db.select({ locale: users.locale }).from(users).where(eq(users.id, userId)).limit(1);
+      await app.mailer.sendPasswordReset(target.email, target.displayName, resetUrl, recipientLocale(stored?.locale));
     } catch (err) {
       // The token is already issued and audited; a mail failure should not 500 the admin action.
       req.log.error({ err, userId }, "failed to send admin-triggered password reset email");

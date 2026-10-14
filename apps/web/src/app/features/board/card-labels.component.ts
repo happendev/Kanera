@@ -25,9 +25,9 @@ const LABEL_TRANSITION_FALLBACK_MS = 220;
         [style.--label-color]="label.color ? 'var(--color-' + label.color + ')' : 'var(--border-strong)'"
         [attr.role]="interactive() ? 'button' : null"
         [attr.tabindex]="interactive() ? 0 : null"
-        [attr.aria-label]="interactive() ? (compressed ? 'Expand labels: ' : 'Collapse labels: ') + label.name : null"
+        [attr.aria-label]="interactive() ? (compressed ? expandLabel(label.name) : collapseLabel(label.name)) : null"
         [attr.aria-pressed]="interactive() ? compressed : null"
-        [kTooltip]="interactive() ? (compressed ? label.name : 'Collapse labels') : label.name"
+        [kTooltip]="interactive() ? (compressed ? label.name : collapseTooltip) : label.name"
         (click)="toggleLabelDisplay($event)"
         (keydown.enter)="toggleLabelDisplay($event)"
         (keydown.space)="toggleLabelDisplay($event)">
@@ -35,7 +35,7 @@ const LABEL_TRANSITION_FALLBACK_MS = 220;
       </span>
       }
       @if (showOverflow() && hiddenLabels().length) {
-      <span class="label-chip is-overflow" [attr.aria-label]="'More labels: ' + hiddenLabelNames()" [kTooltip]="hiddenLabelNames()">
+      <span class="label-chip is-overflow" [attr.aria-label]="moreLabels()" [kTooltip]="hiddenLabelNames()">
         +{{ hiddenLabels().length }}
       </span>
       }
@@ -67,6 +67,16 @@ export class CardLabelsComponent {
   });
   readonly hiddenLabels = computed(() => this.labels().slice(this.visibleLabels().length));
   readonly hiddenLabelNames = computed(() => this.hiddenLabels().map((label) => label.name).join(", "));
+  readonly moreLabels = computed(() => $localize`:Aria label on the +N chip; the hidden label names follow:More labels: ${this.hiddenLabelNames()}:labels:`);
+  readonly collapseTooltip = $localize`:Tooltip on a label chip that collapses all labels to colour bars:Collapse labels`;
+
+  expandLabel(name: string) {
+    return $localize`:Aria label on a collapsed label chip; the label name follows:Expand labels: ${name}:label:`;
+  }
+
+  collapseLabel(name: string) {
+    return $localize`:Aria label on an expanded label chip; the label name follows:Collapse labels: ${name}:label:`;
+  }
 
   toggleLabelDisplay(event: Event) {
     if (!this.interactive()) return;

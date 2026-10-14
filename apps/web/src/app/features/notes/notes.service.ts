@@ -239,7 +239,7 @@ export class NotesState {
     return lock ?? {
       noteId: note.id,
       editingUserId: note.editingUserId,
-      editingUserName: "Someone",
+      editingUserName: $localize`:Fallback name for an unknown person editing a note:Someone`,
       editingUserAvatarUrl: null,
       editingExpiresAt: expiresAt,
     };
@@ -286,7 +286,7 @@ export class NotesState {
 
   private assertOnline() {
     if (!this.online()) {
-      throw new Error("You're offline - changes are paused");
+      throw new Error($localize`:Error shown when a change is attempted offline:You're offline - changes are paused`);
     }
   }
 

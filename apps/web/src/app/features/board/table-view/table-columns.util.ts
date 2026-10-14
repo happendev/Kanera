@@ -5,16 +5,16 @@ export const ROW_INTERACTION_STOP_SELECTOR =
 
 export function builtinColumnLabel(id: string): string {
   switch (id) {
-    case "title": return "Title";
-    case "priority": return "Up next order";
-    case "status": return "List";
-    case "board": return "Board";
-    case "assignees": return "Assignees";
-    case "due": return "Due date";
-    case "labels": return "Labels";
-    case "checklist": return "Checklist";
-    case "updated": return "Updated";
-    case "created": return "Created";
+    case "title": return $localize`:Table column header - card title:Title`;
+    case "priority": return $localize`:Table column header - the card's rank in the viewer's Up next queue:Up next order`;
+    case "status": return $localize`:Table column header - the list the card is in:List`;
+    case "board": return $localize`:Table column header - the board the card is on:Board`;
+    case "assignees": return $localize`:Table column header:Assignees`;
+    case "due": return $localize`:Table column header:Due date`;
+    case "labels": return $localize`:Table column header:Labels`;
+    case "checklist": return $localize`:Table column header - checklist progress:Checklist`;
+    case "updated": return $localize`:Table column header - when the card was last updated:Updated`;
+    case "created": return $localize`:Table column header - when the card was created:Created`;
     default: return id;
   }
 }

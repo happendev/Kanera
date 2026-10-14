@@ -1,3 +1,4 @@
+import { LOCALES } from "../locales.js";
 import { z } from "zod";
 import { PERSONAL_API_KEY_SCOPES, WORKSPACE_API_KEY_SCOPES } from "../schema/workspace-api-key.js";
 import { CHAT_DESTINATION_EVENT_TYPES } from "../schema/webhook-endpoint.js";
@@ -70,6 +71,7 @@ export type AgentDirectoryQuery = z.infer<typeof agentDirectoryQuery>;
 
 export const chatDestinationEventType = z.enum(CHAT_DESTINATION_EVENT_TYPES);
 const chatDestinationCommon = {
+  locale: z.enum(LOCALES).optional(),
   name: z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH),
   eventTypes: z.array(chatDestinationEventType).min(1),
   priorityFieldId: z.uuid().nullable().default(null),
@@ -93,6 +95,7 @@ export const createChatDestinationBody = z.discriminatedUnion("provider", [
 export type CreateChatDestinationBody = z.infer<typeof createChatDestinationBody>;
 
 export const updateChatDestinationBody = z.object({
+  locale: z.enum(LOCALES).optional(),
   name: z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH).optional(),
   eventTypes: z.array(chatDestinationEventType).min(1).optional(),
   priorityFieldId: z.uuid().nullable().optional(),

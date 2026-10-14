@@ -59,15 +59,15 @@ const POPULAR_EMOJI_SHORTCODES = [
   "muscle",
 ];
 const EMOJI_CATEGORIES = [
-  { key: "common", label: "Common", icon: "⭐" },
-  { key: "people", label: "Smileys & People", icon: "😀", groups: ["", "people & body"] },
-  { key: "nature", label: "Animals & Nature", icon: "🐶", groups: ["animals & nature"] },
-  { key: "food", label: "Food & Drink", icon: "🍔", groups: ["food & drink"] },
-  { key: "places", label: "Travel & Places", icon: "✈️", groups: ["travel & places"] },
-  { key: "activities", label: "Activities", icon: "⚽", groups: ["activities"] },
-  { key: "objects", label: "Objects", icon: "💡", groups: ["objects"] },
-  { key: "symbols", label: "Symbols", icon: "❤️", groups: ["symbols"] },
-  { key: "flags", label: "Flags", icon: "🏳️", groups: ["flags"] },
+  { key: "common", label: $localize`:Emoji picker category - frequently used emoji:Common`, icon: "⭐" },
+  { key: "people", label: $localize`:Emoji picker category:Smileys & People`, icon: "😀", groups: ["", "people & body"] },
+  { key: "nature", label: $localize`:Emoji picker category:Animals & Nature`, icon: "🐶", groups: ["animals & nature"] },
+  { key: "food", label: $localize`:Emoji picker category:Food & Drink`, icon: "🍔", groups: ["food & drink"] },
+  { key: "places", label: $localize`:Emoji picker category:Travel & Places`, icon: "✈️", groups: ["travel & places"] },
+  { key: "activities", label: $localize`:Emoji picker category:Activities`, icon: "⚽", groups: ["activities"] },
+  { key: "objects", label: $localize`:Emoji picker category:Objects`, icon: "💡", groups: ["objects"] },
+  { key: "symbols", label: $localize`:Emoji picker category:Symbols`, icon: "❤️", groups: ["symbols"] },
+  { key: "flags", label: $localize`:Emoji picker category:Flags`, icon: "🏳️", groups: ["flags"] },
 ] as const;
 const EMOJI_RESULTS_LIMIT = 36;
 const RECENT_EMOJIS_KEY = "kanera-recent-emojis";
@@ -364,7 +364,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
 
       @if (uploader.uploading()) {
         <div class="de-uploading">
-          <i class="ti ti-loader-2"></i> Uploading…
+          <i class="ti ti-loader-2"></i>&ngsp;<ng-container i18n="Status while a file uploads">Uploading…</ng-container>
         </div>
       }
       @if (uploader.error(); as err) {
@@ -390,7 +390,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
               <span class="de-mention-name">{{ member.displayName }}</span>
             </button>
           } @empty {
-            <div class="de-mention-empty">No matching users</div>
+            <div class="de-mention-empty" i18n>No matching users</div>
           }
         </div>
       }
@@ -409,13 +409,14 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
                 <input
                   type="search"
                   placeholder="Search emoji"
+                  i18n-placeholder
                   [value]="emojiQuery()"
                   (input)="setEmojiQuery($any($event.target).value)"
                   (keydown)="onEmojiSearchKeydown($event)"
                   autofocus
                 />
               </div>
-              <button type="button" class="de-emoji-close" (click)="dismissEmojiPicker()" kTooltip="Close emoji picker">
+              <button type="button" class="de-emoji-close" (click)="dismissEmojiPicker()" kTooltip="Close emoji picker" i18n-kTooltip>
                 <i class="ti ti-x"></i>
               </button>
             </div>
@@ -447,7 +448,7 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
                 <span class="de-emoji-char">{{ emoji.emoji }}</span>
               </button>
             } @empty {
-              <div class="de-emoji-empty">No matching emoji</div>
+              <div class="de-emoji-empty" i18n>No matching emoji</div>
             }
           </div>
         </div>
@@ -463,18 +464,18 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
 
       @if (compact()) {
         <div class="de-compact-footer">
-          <button type="button" class="de-tool" (click)="openEmojiPickerFromButton($event)" kTooltip="Insert emoji">
+          <button type="button" class="de-tool" (click)="openEmojiPickerFromButton($event)" kTooltip="Insert emoji" i18n-kTooltip>
             <i class="ti ti-mood-smile"></i>
           </button>
           @if (allowAttachments()) {
-            <button type="button" class="de-tool" (click)="filePicker.click()" kTooltip="Attach file" [disabled]="uploader.uploading()">
+            <button type="button" class="de-tool" (click)="filePicker.click()" kTooltip="Attach file" i18n-kTooltip [disabled]="uploader.uploading()">
               <i class="ti ti-paperclip"></i>
             </button>
           }
           @if (showActions()) {
             <div class="de-compact-spacer"></div>
             @if (showCancel()) {
-              <button type="button" class="ghost sm" (click)="cancel.emit()" [disabled]="saving()">Cancel</button>
+              <button type="button" class="ghost sm" (click)="cancel.emit()" [disabled]="saving()" i18n>Cancel</button>
             }
             <button type="button" class="primary sm" (click)="onSave()" [disabled]="saving() || uploader.uploading()">
               @if (saving()) {
@@ -488,11 +489,11 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       } @else if (showActions()) {
         <div class="de-actions">
           @if (showCancel()) {
-            <button type="button" class="ghost sm" (click)="cancel.emit()" [disabled]="saving()">Cancel</button>
+            <button type="button" class="ghost sm" (click)="cancel.emit()" [disabled]="saving()" i18n>Cancel</button>
           }
           <button type="button" class="primary sm" (click)="onSave()" [disabled]="saving() || uploader.uploading()">
             @if (saving()) {
-              <i class="ti ti-loader-2 kanera-spin"></i> Saving…
+              <i class="ti ti-loader-2 kanera-spin"></i>&ngsp;<ng-container i18n="Button label while saving">Saving…</ng-container>
             } @else {
               {{ submitLabel() }}
             }
@@ -1002,8 +1003,8 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   readonly editable = input<boolean>(true);
   readonly mentionMembers = input<WireBoardMemberUser[]>([]);
   readonly compact = input<boolean>(false);
-  readonly placeholder = input<string>("Write a description in markdown…");
-  readonly submitLabel = input<string>("Save");
+  readonly placeholder = input<string>($localize`:Editor placeholder:Write a description in markdown…`);
+  readonly submitLabel = input<string>($localize`:Button - save the edited text:Save`);
   readonly showCancel = input<boolean>(true);
   /**
    * Off when the host owns the submit affordance — the card composer, where saving the description
@@ -1191,7 +1192,7 @@ export class DescriptionEditorComponent implements AfterViewInit, OnDestroy {
   insertMention(member: WireBoardMemberUser, event?: Event) {
     event?.preventDefault();
     if (!this.editor || !this.mentionRange) return;
-    const label = member.displayName.replace(/[[\]\n\r]/g, " ").trim() || "User";
+    const label = member.displayName.replace(/[[\]\n\r]/g, " ").trim() || $localize`:Stand-in for a person with no display name in a mention:User`;
     this.editor
       .chain()
       .focus()

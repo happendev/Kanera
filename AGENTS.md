@@ -23,6 +23,8 @@ you do:
   access to specific boards.
 - A user belongs to exactly one organisation (`clients` row) and email is globally unique.
 - Onboarding runs when `me.hasWorkspace === false`.
+- Every user-facing string is translated (en-US, en-GB source, es, pt-BR, fr, de, ja, nl, nb, zh-CN, zh-TW). The account's
+  `users.locale` decides the language of the web app, emails and push.
 - `KANERA_DEPLOYMENT_MODE=hosted` turns on billing, plans and tier limits; self-hosted has none. Check
   which mode a change applies to.
 
@@ -69,8 +71,12 @@ pnpm test:cli
 pnpm test:sdk
 pnpm test:e2e
 pnpm email:preview
+pnpm i18n:extract              # after changing web UI text; then translate (apps/web/src/locale/README.md)
 ```
 
+- `pnpm lint` also runs `pnpm i18n:check`: changed web copy fails lint until every language has
+  it. Server copy (emails, push, API errors) lives in `apps/api/src/lib/i18n/`, typed so a missing
+  translation fails `tsc`.
 - `pnpm lint` includes knip, so unused exports, files and dependencies fail lint. Remove them; don't
   silence knip. Finish with zero errors and minimal warnings.
 - Never pass `*.itest.ts` to `pnpm test:api`; it starts no Postgres. Integration tests use their own
