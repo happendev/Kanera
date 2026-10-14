@@ -34,6 +34,7 @@ import { emitLaneRebalanced, positionForLaneInsert, rebalanceBoardLane } from ".
 import { assertCanUploadAttachment } from "../entitlements.js";
 import { deleteExternalLinks, findExternalLink, findExternalLinks, listExternalLinksByProvider, upsertExternalLink } from "../external-links.js";
 import { withSignedMedia } from "../media-keys.js";
+import { cardAttachmentUrlMap, rewriteCopiedMediaUrls } from "../copied-media-urls.js";
 import { replaceCardMentions } from "../mentions.js";
 import { clearNotificationsForCards, emitDeletedNotifications, type DeletedNotificationRef } from "../notifications.js";
 import { emitToBoard } from "../../realtime/emit.js";
@@ -67,6 +68,34 @@ const TARGET_MIRROR_ARCHIVE_LINK_TYPE = "cardTargetMirrorArchive";
 
 function providerFor(mirror: BoardMirror): string {
   return `mirror:${mirror.id}`;
+}
+
+/**
+ * Source-to-target URL map for this card's mirrored attachments. The destination owns copies of the
+ * source files, so mirrored Markdown (description, comments, checklist item details) must point at
+ * those copies, or its images break when the source attachment goes away. A source attachment
+ * without a copy yet keeps its URL until convergeAttachments creates one and re-syncs the text.
+ */
+async function mirroredMediaUrls(mirror: BoardMirror, sourceCardId: string, targetCardId: string): Promise<Map<string, string>> {
+  const [sourceRows, targetRows] = await Promise.all([
+    db.select({ id: cardAttachments.id, url: cardAttachments.url, thumbnailUrl: cardAttachments.thumbnailUrl, coverImageUrl: cardAttachments.coverImageUrl }).from(cardAttachments).where(eq(cardAttachments.cardId, sourceCardId)),
+    db.select({ id: cardAttachments.id, url: cardAttachments.url, thumbnailUrl: cardAttachments.thumbnailUrl, coverImageUrl: cardAttachments.coverImageUrl }).from(cardAttachments).where(eq(cardAttachments.cardId, targetCardId)),
+  ]);
+  if (sourceRows.length === 0 || targetRows.length === 0) return new Map();
+  const links = await findExternalLinks({
+    workspaceId: mirror.targetWorkspaceId,
+    provider: providerFor(mirror),
+    externalTypes: ["cardAttachment"],
+    externalIds: sourceRows.map((row) => row.id),
+    entityIds: targetRows.map((row) => row.id),
+  });
+  const sourceById = new Map(sourceRows.map((row) => [row.id, row]));
+  const targetById = new Map(targetRows.map((row) => [row.id, row]));
+  return cardAttachmentUrlMap(links.flatMap((link) => {
+    const src = sourceById.get(link.externalId);
+    const copy = targetById.get(link.entityId);
+    return link.entityType === "cardAttachment" && src && copy ? [{ src, copy }] : [];
+  }));
 }
 
 function groupBy<T>(values: T[], keyFor: (value: T) => string): Map<string, T[]> {
@@ -341,9 +370,10 @@ async function convergeCore(mirror: BoardMirror, sourceCardId: string, source: t
   // link—not its current list—keeps content syncing, and later source updates must not pull it back.
   // Never move during an archive change: an archived card stays put and reappears where it was on
   // unarchive, matching the native archive/unarchive routes.
+  const description = rewriteCopiedMediaUrls(source.description, await mirroredMediaUrls(mirror, sourceCardId, target.id));
   const shouldMove = Boolean(targetIsInMappedList && mapping && !mapping.archivedAt && mapping.targetListId !== target.listId && !target.archivedAt && !archiving);
   const cardChanged = source.title !== target.title
-    || source.description !== target.description
+    || description !== target.description
     || source.completedAt?.getTime() !== target.completedAt?.getTime()
     || archiving
     || unarchiving
@@ -435,7 +465,7 @@ async function convergeCore(mirror: BoardMirror, sourceCardId: string, source: t
     const [updated] = cardChanged
       ? await tx.update(cards).set({
         title: source.title,
-        description: source.description,
+        description,
         // Due date is an initial snapshot, not a managed mirror facet. Destination users can change
         // it after creation without a later source edit overwriting their planning decision.
         completedAt: source.completedAt,
@@ -444,7 +474,7 @@ async function convergeCore(mirror: BoardMirror, sourceCardId: string, source: t
         updatedAt: new Date(),
       }).where(eq(cards.id, target.id)).returning()
       : [target];
-    if (source.description !== target.description) await replaceCardMentions({ tx, boardId: mirror.targetBoardId, cardId: target.id, source: "description", markdown: source.description });
+    if (description !== target.description) await replaceCardMentions({ tx, boardId: mirror.targetBoardId, cardId: target.id, source: "description", markdown: description });
     // A mirrored completion completes the destination card too, so its reminders go like a native one's.
     const clearedReminders = source.completedAt && !target.completedAt ? await clearRemindersOnCompletedCards(tx, [target.id]) : [];
     return { updated: updated!, rebalance, archiveComment, lifecycleActivity, deletedNotifications, clearedReminders };
@@ -573,6 +603,7 @@ async function convergeComments(mirror: BoardMirror, sourceCardId: string, targe
   })).filter((link) => link.entityType === "comment");
   const linkBySource = new Map(links.map((link) => [link.externalId, link]));
   const sourceIds = new Set(sourceRows.map((row) => row.comment.id));
+  const mediaUrls = await mirroredMediaUrls(mirror, sourceCardId, targetCardId);
   for (const link of links) {
     if (sourceIds.has(link.externalId)) continue;
     await db.delete(comments).where(and(eq(comments.id, link.entityId), eq(comments.cardId, targetCardId)));
@@ -582,30 +613,31 @@ async function convergeComments(mirror: BoardMirror, sourceCardId: string, targe
   }
   for (const row of sourceRows) {
     const linked = linkBySource.get(row.comment.id);
+    const body = rewriteCopiedMediaUrls(row.comment.body, mediaUrls);
     let targetComment: typeof comments.$inferSelect;
     let createdNow = !linked;
     if (linked) {
       const [existing] = await db.select().from(comments).where(and(eq(comments.id, linked.entityId), eq(comments.cardId, targetCardId))).limit(1);
       if (existing) {
-        const unchanged = existing.body === row.comment.body
+        const unchanged = existing.body === body
           && existing.editedAt?.getTime() === row.comment.editedAt?.getTime()
           && existing.authorKind === "system"
           && existing.apiKeyId === null
           && existing.apiKeyName === row.authorName;
         if (unchanged) continue;
-        const [updated] = await db.update(comments).set({ body: row.comment.body, editedAt: row.comment.editedAt, authorKind: "system", apiKeyId: null, apiKeyName: row.authorName }).where(eq(comments.id, existing.id)).returning();
+        const [updated] = await db.update(comments).set({ body, editedAt: row.comment.editedAt, authorKind: "system", apiKeyId: null, apiKeyName: row.authorName }).where(eq(comments.id, existing.id)).returning();
         targetComment = updated!;
       } else {
         // A target user may delete a mirrored entity. Drop the stale link and recreate from source
         // rather than letting that missing target permanently suppress future convergence.
         await deleteExternalLinks({ workspaceId: mirror.targetWorkspaceId, provider, externalType: "comment", externalId: row.comment.id });
-        const [created] = await db.insert(comments).values({ cardId: targetCardId, authorId: mirror.createdById, authorKind: "system", apiKeyName: row.authorName, body: row.comment.body, editedAt: row.comment.editedAt, createdAt: row.comment.createdAt }).returning();
+        const [created] = await db.insert(comments).values({ cardId: targetCardId, authorId: mirror.createdById, authorKind: "system", apiKeyName: row.authorName, body, editedAt: row.comment.editedAt, createdAt: row.comment.createdAt }).returning();
         targetComment = created!;
         createdNow = true;
         await upsertExternalLink({ workspaceId: mirror.targetWorkspaceId, provider, externalType: "comment", externalId: row.comment.id, entityType: "comment", entityId: targetComment.id });
       }
     } else {
-      const [created] = await db.insert(comments).values({ cardId: targetCardId, authorId: mirror.createdById, authorKind: "system", apiKeyName: row.authorName, body: row.comment.body, editedAt: row.comment.editedAt, createdAt: row.comment.createdAt }).returning();
+      const [created] = await db.insert(comments).values({ cardId: targetCardId, authorId: mirror.createdById, authorKind: "system", apiKeyName: row.authorName, body, editedAt: row.comment.editedAt, createdAt: row.comment.createdAt }).returning();
       targetComment = created!;
       await upsertExternalLink({ workspaceId: mirror.targetWorkspaceId, provider, externalType: "comment", externalId: row.comment.id, entityType: "comment", entityId: targetComment.id });
     }
@@ -630,6 +662,7 @@ async function convergeChecklists(mirror: BoardMirror, sourceCardId: string, tar
     db.select().from(cards).where(eq(cards.id, targetCardId)).limit(1).then((rows) => rows[0]),
   ]);
   if (!targetCard) return;
+  const mediaUrls = await mirroredMediaUrls(mirror, sourceCardId, targetCardId);
   const sourceChecklistIds = source.map((checklist) => checklist.id);
   const sourceItemIds = source.flatMap((checklist) => checklist.items.map((item) => item.id));
   const targetChecklistIds = target.map((checklist) => checklist.id);
@@ -730,7 +763,7 @@ async function convergeChecklists(mirror: BoardMirror, sourceCardId: string, tar
             id: targetId,
             checklistId,
             text: sourceItem.text,
-            description: sourceItem.description,
+            description: rewriteCopiedMediaUrls(sourceItem.description, mediaUrls),
             position: sourceItem.position,
             // Planning state becomes target-owned after the initial snapshot. New source items are
             // therefore structural/content copies only and always arrive ready to plan.
@@ -744,12 +777,13 @@ async function convergeChecklists(mirror: BoardMirror, sourceCardId: string, tar
           createdItemIds.add(targetId);
           changed = true;
         } else {
-          const contentChanged = existing.text !== sourceItem.text || existing.description !== sourceItem.description;
+          const description = rewriteCopiedMediaUrls(sourceItem.description, mediaUrls);
+          const contentChanged = existing.text !== sourceItem.text || existing.description !== description;
           const checklistChanged = existing.checklistId !== checklistId;
           const positionChanged = existing.position !== sourceItem.position;
           if (contentChanged || checklistChanged || positionChanged) {
             await tx.update(cardChecklistItems).set({
-              ...(contentChanged && { text: sourceItem.text, description: sourceItem.description }),
+              ...(contentChanged && { text: sourceItem.text, description }),
               ...(checklistChanged && { checklistId }),
               ...(positionChanged && { position: sourceItem.position }),
               updatedAt: new Date(),
@@ -958,6 +992,7 @@ async function convergeAttachments(mirror: BoardMirror, sourceCardId: string, ta
   }
 
   const sourceStorage = await getStorageForClient(sourceWorkspace.clientId);
+  let copiedAny = false;
   for (const source of sourceRows) {
     if (linkBySource.has(source.id)) continue;
     await assertCanUploadAttachment(db, actor.cid, source.byteSize);
@@ -987,6 +1022,7 @@ async function convergeAttachments(mirror: BoardMirror, sourceCardId: string, ta
         await upsertExternalLink({ workspaceId: mirror.targetWorkspaceId, provider, externalType: "cardAttachment", externalId: source.id, entityType: "cardAttachment", entityId: rows[0]!.id }, tx);
         return rows;
       });
+      copiedAny = true;
       await emitToBoard(mirror.targetBoardId, SERVER_EVENTS.CARD_ATTACHMENT_CREATED, {
         boardId: mirror.targetBoardId,
         cardId: targetCardId,
@@ -1000,6 +1036,12 @@ async function convergeAttachments(mirror: BoardMirror, sourceCardId: string, ta
       ]);
       throw error;
     }
+  }
+  // Core and comments converge before attachments (comment attachments need their comment's
+  // identity), so text that embeds a just-copied file still points at the source's. Re-run the
+  // text facets now that the copy exists; each is idempotent and only writes what changed.
+  if (copiedAny) {
+    for (const facet of ["core", "comments", "checklists"] as const) await convergeFacet(mirror, sourceCardId, facet);
   }
 }
 

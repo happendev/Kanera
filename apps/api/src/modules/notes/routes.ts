@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { dto } from "@kanera/shared";
 import type { ColorToken } from "@kanera/shared/colors";
 import { NOTE_ATTACHMENT_SOURCES, type NoteAttachmentRow, type NoteAttachmentSource } from "@kanera/shared/dto";
@@ -11,7 +12,8 @@ import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { readAttachmentUpload } from "../../lib/read-attachment-upload.js";
 import { AppError, badRequest, conflict, forbidden, notFound } from "../../lib/errors.js";
 import { assertCanUploadAttachment, getUploadEntitlements, isStorageFull, storageQuotaExceededError } from "../../lib/entitlements.js";
-import { signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, unsignedMediaUrl } from "../../lib/media-keys.js";
+import { parseMediaReference, signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, unsignedMediaUrl } from "../../lib/media-keys.js";
+import { rewriteCopiedMediaUrls } from "../../lib/copied-media-urls.js";
 import { between, positionAtIndex } from "../../lib/position.js";
 import { getStorageForClient } from "../../lib/storage/index.js";
 import { noteAttachmentStorageKey } from "../../lib/storage/keys.js";
@@ -19,6 +21,7 @@ import { stripAttachmentReferences } from "../../lib/strip-attachment-refs.js";
 import { emitToBoard, emitToUser, emitToWorkspace } from "../../realtime/emit.js";
 import { EMPTY_LINK_FANOUT, emitInternalLinksChanged, linkNeighbours, loadBacklinksForNote, mergeLinkFanout, type LinkFanout, repairInternalLinksAroundNote, replaceInternalLinksForSource } from "../../lib/internal-links.js";
 import { putAttachmentFile } from "../../lib/attachment-upload.js";
+import { collectNoteTreeFiles, deleteNoteFiles } from "../../lib/attachment-cleanup.js";
 
 const LOCK_TTL_MS = 90_000; // 90 seconds
 const MAX_NOTE_TREE_DEPTH = 3;
@@ -403,6 +406,7 @@ async function insertNote(input: {
   content?: string;
   icon: string | null;
   color: ColorToken | null;
+  id?: string;
 }, tx: DbLike = db): Promise<Note> {
   const base: SiblingKey = {
     workspaceId: input.workspaceId,
@@ -421,6 +425,7 @@ async function insertNote(input: {
   const [note] = await tx
     .insert(notes)
     .values({
+      ...(input.id && { id: input.id }),
       workspaceId: input.workspaceId,
       boardId: input.boardId,
       parentNoteId: input.parentNoteId,
@@ -667,7 +672,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
     const { id } = req.params as { id: string };
     const body = dto.duplicateNoteBody.parse(req.body ?? {});
     const source = await loadOrFail(id);
-    await authoriseWrite(req, source);
+    const { clientId: ownerClientId } = await authoriseWrite(req, source);
 
     const parentNoteId = body.parentNoteId === undefined ? source.parentNoteId : body.parentNoteId;
     const parent = await resolveParent(
@@ -681,11 +686,35 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
       throw conflict("notes can only be nested 3 levels deep");
     }
 
-    // Duplicate one document, not its descendants or binary attachments. Embedded/internal links in
-    // the copied Markdown are rebuilt for the new source so backlinks remain accurate.
+    // Duplicate one document, not its descendants. Its attachments are copied so the duplicate owns
+    // its files: deleting either note, or one of its attachments, must not break the other's images.
+    // Copies follow the upload rules: charged to the host org, stored under the duplicator's tenant.
+    const sourceAttachments = await db.select().from(noteAttachments).where(eq(noteAttachments.noteId, id));
+    const copyBytes = sourceAttachments.reduce((sum, row) => sum + row.byteSize, 0);
+    if (copyBytes > 0) await assertCanUploadAttachment(db, ownerClientId, copyBytes);
+    const newNoteId = randomUUID();
+    const dstStorage = await getStorageForClient(req.auth.cid);
+    const copiedFiles: Array<{ src: typeof noteAttachments.$inferSelect; fileKey: string; url: string }> = [];
+    try {
+      for (const row of sourceAttachments) {
+        const srcStorage = await getStorageForClient(parseMediaReference(row.url)?.clientId ?? row.clientId);
+        const ext = row.fileKey.includes(".") ? row.fileKey.slice(row.fileKey.lastIndexOf(".") + 1) : "";
+        const fileKey = noteAttachmentStorageKey(newNoteId, ext);
+        await dstStorage.put(fileKey, await srcStorage.get(row.fileKey), row.mimeType);
+        copiedFiles.push({ src: row, fileKey, url: unsignedMediaUrl(req.auth.cid, fileKey)! });
+      }
+    } catch (err) {
+      await Promise.allSettled(copiedFiles.map((file) => dstStorage.delete(file.fileKey)));
+      throw err;
+    }
+    const mediaUrls = new Map(copiedFiles.map((file) => [file.src.url, file.url]));
+
+    // Embedded/internal links in the copied Markdown are rebuilt for the new source so backlinks
+    // remain accurate.
     let linkFanout: LinkFanout = EMPTY_LINK_FANOUT;
     const duplicate = await db.transaction(async (tx) => {
       const inserted = await insertNote({
+        id: newNoteId,
         workspaceId: source.workspaceId,
         boardId: source.boardId,
         parentNoteId,
@@ -693,10 +722,23 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
         ownerId: source.ownerId,
         lastEditedById: req.auth.sub,
         title: body.title ?? duplicateTitle(source.title),
-        content: source.content,
+        content: rewriteCopiedMediaUrls(source.content, mediaUrls),
         icon: source.icon,
         color: source.color,
       }, tx);
+      if (copiedFiles.length > 0) {
+        await tx.insert(noteAttachments).values(copiedFiles.map((file) => ({
+          noteId: inserted.id,
+          clientId: ownerClientId,
+          uploadedById: req.auth.sub,
+          fileName: file.src.fileName,
+          mimeType: file.src.mimeType,
+          byteSize: file.src.byteSize,
+          fileKey: file.fileKey,
+          url: file.url,
+          source: file.src.source,
+        })));
+      }
       linkFanout = await replaceInternalLinksForSource({
         tx,
         claims: req.auth,
@@ -706,6 +748,9 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
         markdown: inserted.content,
       });
       return inserted;
+    }).catch(async (err: unknown) => {
+      await Promise.allSettled(copiedFiles.map((file) => dstStorage.delete(file.fileKey)));
+      throw err;
     });
     const responseNote = await shapeNote(duplicate, req.auth.cid);
     emitNoteEvent(duplicate, "note:created", {
@@ -891,6 +936,8 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
       const { id } = req.params as { id: string };
       const note = await loadOrFail(id);
       await authoriseWrite(req, note);
+      // Child pages and attachment rows cascade with the note, so read the file keys first.
+      const files = await collectNoteTreeFiles(id);
       const linkFanout = await db.transaction(async (tx): Promise<LinkFanout> => {
         const removed = await tx.delete(internalLinks).where(or(
           and(eq(internalLinks.sourceType, "note"), eq(internalLinks.sourceId, id)),
@@ -907,6 +954,7 @@ export async function noteRoutes(app: FastifyInstance, options: NoteRoutesOption
           noteIds: ends.filter((end) => end.type === "note").map((end) => end.id),
         };
       });
+      await deleteNoteFiles(files);
       emitNoteEvent(note, "note:deleted", { noteId: id });
       await emitInternalLinksChanged(linkFanout);
       return reply.status(204).send();

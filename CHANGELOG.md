@@ -18,6 +18,9 @@ All notable changes to Kanera are documented here.
 
 ### Fixed
 
+- Deleting a note, board or workspace now removes the files attached to its notes from storage instead of leaving them behind. Files a duplicated note still shows are kept.
+- Duplicated cards, duplicated notes and mirrored cards now own their images: inline images in the copy's description, note body, comments and checklist item details point at the copy's own files, so they keep working after the original's attachment or note is deleted. Duplicating a note now copies its attachments too.
+
 - Copy card link now includes the organisation key, so links copied from card detail open the correct card.
 
 - The import wizard now fits narrow screens, and the CSV import names its detected delimiter.

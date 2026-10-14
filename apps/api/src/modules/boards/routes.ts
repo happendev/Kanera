@@ -23,7 +23,7 @@ import { decodeCompletedCardsCursor, encodeCompletedCardsCursor } from "../../li
 import { parseCompletedDateParam } from "../../lib/completed-card-visibility.js";
 import { assertWorkDoneWindow, loadWorkDone, loadWorkDoneSummary, type LoadWorkDoneOptions } from "../../lib/work-done.js";
 import { loadWorkspaceCustomFields } from "../../lib/custom-fields.js";
-import { deleteAttachmentFiles } from "../../lib/attachment-cleanup.js";
+import { collectBoardNoteFiles, deleteAttachmentFiles, deleteNoteFiles } from "../../lib/attachment-cleanup.js";
 import { seedBoardMembersFromWorkspace } from "../../lib/board-membership.js";
 import { enrichNotifications } from "../../lib/notifications.js";
 import { ensureGuestBoardCapacity, prunePaidGuestSeatIfBelowLimit } from "../../lib/paid-guest-seats.js";
@@ -842,6 +842,8 @@ export async function boardRoutes(app: FastifyInstance) {
       ));
     const storage = await getStorageForClient(req.auth.cid);
     await deleteAttachmentFiles(storage, boardCards.map((c) => c.id));
+    // Board notes cascade with the board; capture their file keys now and delete the bytes after.
+    const noteFiles = await collectBoardNoteFiles(id);
 
     for (const mirror of removedMirrors) {
       await deleteExternalLinks({ workspaceId: mirror.targetWorkspaceId, provider: `mirror:${mirror.id}` });
@@ -857,6 +859,7 @@ export async function boardRoutes(app: FastifyInstance) {
       await clearNotificationsForScope(tx, { boardId: id });
       await tx.delete(boards).where(eq(boards.id, id));
     });
+    await deleteNoteFiles(noteFiles);
     // Freeing the guest's pooled seat reduces the *used* count but not the purchased seat_limit (the
     // bill is unchanged): reducing capacity is a separate explicit admin action. The freed seat is now
     // available for the admin to assign to someone else.
