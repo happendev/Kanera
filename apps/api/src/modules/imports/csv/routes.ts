@@ -1,3 +1,4 @@
+import { requestLocale } from "../../../lib/i18n/request-locale.js";
 import { dto } from "@kanera/shared";
 import type { CsvColumnMapping } from "@kanera/shared/dto";
 import { CSV_PREVIEW_ROWS, MAX_CSV_IMPORT_BYTES } from "@kanera/shared/dto";
@@ -128,6 +129,7 @@ export async function csvImportRoutes(app: FastifyInstance): Promise<void> {
       });
       const storage = await getStorageForClient(req.auth.cid);
       const result = await db.transaction((tx) => runKaneraBoardImport(tx, {
+          locale: requestLocale(req),
         source: derived.archive,
         body,
         workspaceId: row.workspaceId,

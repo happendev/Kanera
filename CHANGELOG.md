@@ -4,6 +4,10 @@ All notable changes to Kanera are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Kanera speaks your language:** the whole app, including onboarding, boards, cards, notifications, settings, emails and push notifications, is now available in English (US), English (UK), Spanish, Brazilian Portuguese, French, German, Japanese, Dutch, Norwegian Bokmål, Simplified Chinese and Traditional Chinese. Choose a language under Profile settings → Language (or from the sign-in page). It is saved to your account, so every device and every email follows it.
+
 ### Changed
 
 - Plain text attachments (.txt, .log) now open in the preview viewer like images, PDFs and Markdown instead of downloading.
@@ -14,9 +18,13 @@ All notable changes to Kanera are documented here.
 - **More efficient realtime and background processing:** notifications and emails arrive sooner under load, with less repeated work and fewer processing pauses across automations, push delivery, webhooks, daily digests and cleanup.
 - Hosted subscription payment analytics are recorded against the organisation creator, so PostHog's first-touch acquisition properties attribute revenue.
 - Cards with unread activity now stand out on busy boards: alongside the bold title and dot, the tile gets a faint accent tint and an accent ring.
-- Emails now show dates day-first with the month named (for example "12 Oct 2026") instead of US month-first order, so they read unambiguously everywhere.
+- Emails now show dates in the recipient's language and its date order, with the month named (for example "12 Oct 2026" in UK English), instead of US month-first order for everyone.
 
 ### Fixed
+
+- Clarified translated card deselection, upcoming deadlines, assignment activity and copied email addresses; corrected Japanese relative time and the French purple colour label.
+
+- Shared chat destinations now have a message language setting. Validation details, import warnings, note draft recovery messages and installed-app descriptions and shortcuts now follow the selected language.
 
 - Deleting a note, board or workspace now removes the files attached to its notes from storage instead of leaving them behind. Files a duplicated note still shows are kept.
 - Duplicated cards, duplicated notes and mirrored cards now own their images: inline images in the copy's description, note body, comments and checklist item details point at the copy's own files, so they keep working after the original's attachment or note is deleted. Duplicating a note now copies its attachments too.

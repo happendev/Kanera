@@ -1,17 +1,17 @@
 <div class="settings-info-note">
         <i class="ti ti-info-circle"></i>
-        <span>Guests are people outside this organisation who have access to selected boards only. Their first board is free; access to a second board uses one purchased seat, and further boards reuse that seat.</span>
+        <span i18n>Guests are people outside this organisation who have access to selected boards only. Their first board is free; access to a second board uses one purchased seat, and further boards reuse that seat.</span>
       </div>
-      <k-docs-link class="spaced" path="guests" label="Learn more about guests" />
+      <k-docs-link class="spaced" path="guests" label="Learn more about guests" i18n-label />
       @if (!settings.guestsAllowed()) {
       <div class="upgrade-action-callout">
         <span class="upgrade-action-icon"><i class="ti ti-users-group"></i></span>
         <span class="upgrade-action-copy">
-          <strong>Work with clients across projects</strong>
-          <span>Multi-board guest collaboration is available with Pro.</span>
+          <strong i18n="Upgrade callout heading">Work with clients across projects</strong>
+          <span i18n>Multi-board guest collaboration is available with Pro.</span>
         </span>
         <button class="secondary sm upgrade-action-button" type="button" (click)="settings.openUpgradePrompt('guest')">
-          Add guest <i class="ti ti-arrow-right"></i>
+          <ng-container i18n="Upgrade button">Add guest</ng-container> <i class="ti ti-arrow-right"></i>
         </button>
       </div>
       } @else {
@@ -21,17 +21,17 @@
           <option [value]="board.id" [selected]="board.id === settings.guestBoardId()">{{ board.name }}</option>
           }
         </select>
-        <input type="email" placeholder="external@example.com" [value]="settings.guestEmail()" (input)="settings.guestEmail.set($any($event.target).value)" [disabled]="settings.guestBusy()" required />
+        <input type="email" placeholder="external@example.com" i18n-placeholder="Example email address for a guest" [value]="settings.guestEmail()" (input)="settings.guestEmail.set($any($event.target).value)" [disabled]="settings.guestBusy()" required />
         <select [value]="settings.guestRole()" (input)="settings.guestRole.set($any($event.target).value)" [disabled]="settings.guestBusy()">
-          <option value="editor">Editor</option>
-          <option value="observer">Observer</option>
+          <option value="editor" i18n="Board role">Editor</option>
+          <option value="observer" i18n="Board role">Observer</option>
         </select>
-        <label class="guest-assigned-toggle"><input type="checkbox" [checked]="settings.guestAssignedItemsOnly()" (input)="settings.guestAssignedItemsOnly.set($any($event.target).checked)" [disabled]="settings.guestBusy()" /> <span>Assigned items only</span></label>
+        <label class="guest-assigned-toggle"><input type="checkbox" [checked]="settings.guestAssignedItemsOnly()" (input)="settings.guestAssignedItemsOnly.set($any($event.target).checked)" [disabled]="settings.guestBusy()" /> <span i18n="Checkbox: the guest only sees cards assigned to them">Assigned items only</span></label>
         <button class="sm" type="submit" [disabled]="settings.guestBusy() || !settings.guestBoardId() || !settings.guestEmail().trim() || settings.duplicatePendingGuestInvite()">
           @if (settings.guestBusy()) {
-          <i class="ti ti-loader-2 spin"></i> Adding
+          <i class="ti ti-loader-2 spin"></i> <ng-container i18n="Button while busy">Adding</ng-container>
           } @else {
-          <i class="ti ti-user-plus"></i> Add guest access
+          <i class="ti ti-user-plus"></i> <ng-container i18n="Button">Add guest access</ng-container>
           }
         </button>
       </form>
@@ -39,20 +39,20 @@
       @if (settings.guestError()) {
       <p class="form-error"><i class="ti ti-alert-circle"></i>{{ settings.guestError() }}</p>
       } @else if (settings.duplicatePendingGuestInvite()) {
-      <p class="form-error"><i class="ti ti-alert-circle"></i>This pending invite already includes that board.</p>
+      <p class="form-error"><i class="ti ti-alert-circle"></i><ng-container i18n>This pending invite already includes that board.</ng-container></p>
       }
       @if (settings.createdGuestInviteUrl()) {
       <div class="guest-invite-link">
         <i class="ti ti-link"></i>
         <div class="guest-invite-link-body">
-          <span class="guest-invite-link-label">Share this link with the person you wish to invite.</span>
+          <span class="guest-invite-link-label" i18n>Share this link with the person you wish to invite.</span>
           <span class="guest-invite-link-url">{{ settings.createdGuestInviteUrl() }}</span>
         </div>
-        <button class="ghost sm" (click)="settings.copyGuestInviteUrl(settings.createdGuestInviteUrl())" aria-label="Copy guest invite link">
+        <button class="ghost sm" (click)="settings.copyGuestInviteUrl(settings.createdGuestInviteUrl())" aria-label="Copy guest invite link" i18n-aria-label>
           @if (settings.guestInviteCopied()) {
-          <i class="ti ti-check text-success"></i> Copied
+          <i class="ti ti-check text-success"></i> <ng-container i18n="Button state after copying">Copied</ng-container>
           } @else {
-          <i class="ti ti-copy"></i> Copy
+          <i class="ti ti-copy"></i> <ng-container i18n="Button: copy to clipboard">Copy</ng-container>
           }
         </button>
       </div>
@@ -61,14 +61,14 @@
       <div class="guest-section">
         <div class="guest-section-head">
           <i class="ti ti-users-group"></i>
-          <span>External board guests</span>
+          <span i18n="Section heading">External board guests</span>
         </div>
         <div class="guest-list accepted-guest-list">
           <div class="guest-list-head">
-            <span>Guest</span>
-            <span>Board</span>
-            <span>Role</span>
-            <span>Card access</span>
+            <span i18n="Column heading">Guest</span>
+            <span i18n="Column heading">Board</span>
+            <span i18n="Column heading">Role</span>
+            <span i18n="Column heading">Card access</span>
             <span></span>
           </div>
           @for (guest of settings.sortedAcceptedGuests(); track guest.boardId + ':' + guest.userId) {
@@ -79,26 +79,26 @@
                 <span class="org-user-name-line">
                   <span class="org-user-name">{{ guest.displayName }}</span>
                   @if (guest.paidGuestSeat) {
-                  <span class="guest-seat-badge">Paid seat</span>
+                  <span class="guest-seat-badge" i18n="Badge: the guest uses a purchased seat">Paid seat</span>
                   }
                 </span>
                 <span class="org-user-email">{{ guest.email }}</span>
               </div>
             </div>
-            <span class="guest-board-name" data-label="Board">{{ guest.boardName }}</span>
-            <span class="guest-role" data-label="Role">{{ guest.role }}</span>
-            <div class="guest-access-cell" data-label="Card access">
+            <span class="guest-board-name" data-label="Board" i18n-data-label="Column heading">{{ guest.boardName }}</span>
+            <span class="guest-role" data-label="Role" i18n-data-label="Column heading" i18n="Board role, lower case">{ guest.role, select, editor {editor} observer {observer} other {{{ guest.role }}} }</span>
+            <div class="guest-access-cell" data-label="Card access" i18n-data-label="Column heading">
               <select class="guest-access-select" [value]="guest.assignedItemsOnly ? 'assigned' : 'all'" (input)="settings.updateGuestAssignedItemsOnly(guest, $any($event.target).value === 'assigned')" [disabled]="settings.guestAccessUpdatingId() === guest.boardId + ':' + guest.userId">
-                <option value="all" [selected]="!guest.assignedItemsOnly">All cards</option>
-                <option value="assigned" [selected]="guest.assignedItemsOnly">Assigned only</option>
+                <option value="all" [selected]="!guest.assignedItemsOnly" i18n="Guest card access">All cards</option>
+                <option value="assigned" [selected]="guest.assignedItemsOnly" i18n="Guest card access: only cards assigned to them">Assigned only</option>
               </select>
             </div>
-            <button class="ghost icon danger" [disabled]="settings.guestRemovingId() === guest.boardId + ':' + guest.userId" (click)="settings.removeGuest(guest.boardId, guest.userId)" aria-label="Remove guest" kTooltip="Remove guest">
+            <button class="ghost icon danger" [disabled]="settings.guestRemovingId() === guest.boardId + ':' + guest.userId" (click)="settings.removeGuest(guest.boardId, guest.userId)" aria-label="Remove guest" i18n-aria-label kTooltip="Remove guest" i18n-kTooltip>
               <i [class]="settings.guestRemovingId() === guest.boardId + ':' + guest.userId ? 'ti ti-loader-2 spin' : 'ti ti-trash'"></i>
             </button>
           </div>
           } @empty {
-          <k-empty-state size="sm" icon="users" title="No external board guests" text="Guests are people from other organisations invited to specific boards." />
+          <k-empty-state size="sm" icon="users" title="No external board guests" i18n-title text="Guests are people from other organisations invited to specific boards." i18n-text />
           }
         </div>
       </div>
@@ -106,52 +106,52 @@
       <div class="guest-section">
         <div class="guest-section-head">
           <i class="ti ti-link"></i>
-          <span>Pending board invitations</span>
+          <span i18n="Section heading">Pending board invitations</span>
         </div>
         <div class="guest-list">
           <div class="guest-list-head">
-            <span>Email</span>
-            <span>Board</span>
-            <span>Role</span>
+            <span i18n="Column heading">Email</span>
+            <span i18n="Column heading">Board</span>
+            <span i18n="Column heading">Role</span>
             <span></span>
           </div>
           @for (invite of settings.sortedPendingGuestInvites(); track invite.id) {
           <div class="guest-row">
             <div class="org-user-name-wrap">
               <span class="org-user-name">{{ invite.email }}</span>
-              <span class="org-user-email">Pending invitation</span>
+              <span class="org-user-email" i18n>Pending invitation</span>
             </div>
-            <span class="guest-board-name" data-label="Boards">{{ settings.pendingInviteBoardLabel(invite) }}</span>
-            <span class="guest-role" data-label="Role">{{ invite.role }}{{ invite.assignedItemsOnly ? ' · assigned only' : '' }}</span>
+            <span class="guest-board-name" data-label="Boards" i18n-data-label="Column heading">{{ settings.pendingInviteBoardLabel(invite) }}</span>
+            <span class="guest-role" data-label="Role" i18n-data-label="Column heading">@if (invite.assignedItemsOnly) { <ng-container i18n="Board role, lower case, and the guest only sees cards assigned to them">{ invite.role, select, editor {editor · assigned only} observer {observer · assigned only} other {{{ invite.role }} · assigned only} }</ng-container> } @else { <ng-container i18n="Board role, lower case">{ invite.role, select, editor {editor} observer {observer} other {{{ invite.role }}} }</ng-container> }</span>
             <div class="row-actions">
               @if (invite.url) {
-              <button class="ghost icon" (click)="settings.copyText(invite.url)" aria-label="Copy invite link" kTooltip="Copy invite link"><i class="ti ti-copy"></i></button>
+              <button class="ghost icon" (click)="settings.copyText(invite.url)" aria-label="Copy invite link" i18n-aria-label kTooltip="Copy invite link" i18n-kTooltip><i class="ti ti-copy"></i></button>
               }
-              <button class="ghost icon danger" [disabled]="settings.guestRemovingId() === invite.id" (click)="settings.revokeGuestInvite(invite.id)" aria-label="Revoke invite" kTooltip="Revoke invite">
+              <button class="ghost icon danger" [disabled]="settings.guestRemovingId() === invite.id" (click)="settings.revokeGuestInvite(invite.id)" aria-label="Revoke invite" i18n-aria-label kTooltip="Revoke invite" i18n-kTooltip>
                 <i [class]="settings.guestRemovingId() === invite.id ? 'ti ti-loader-2 spin' : 'ti ti-trash'"></i>
               </button>
             </div>
           </div>
           } @empty {
-          <k-empty-state size="sm" icon="mail-off" title="No pending board invitations" />
+          <k-empty-state size="sm" icon="mail-off" title="No pending board invitations" i18n-title />
           }
         </div>
       </div>
 
       <div class="role-ref-panel">
         <div class="role-ref-col">
-          <p class="role-ref-col-label">Guest roles</p>
+          <p class="role-ref-col-label" i18n>Guest roles</p>
           <div class="role-ref-row">
-            <span class="role-ref-name">Editor</span>
-            <span class="role-ref-desc">Create, edit, move, and delete cards and comments on boards they have access to.</span>
+            <span class="role-ref-name" i18n="Board role">Editor</span>
+            <span class="role-ref-desc" i18n>Create, edit, move, and delete cards and comments on boards they have access to.</span>
           </div>
           <div class="role-ref-row">
-            <span class="role-ref-name">Observer</span>
-            <span class="role-ref-desc">Read-only. Can view accessible boards and cards but cannot make changes.</span>
+            <span class="role-ref-name" i18n="Board role">Observer</span>
+            <span class="role-ref-desc" i18n>Read-only. Can view accessible boards and cards but cannot make changes.</span>
           </div>
           <div class="role-ref-row">
-            <span class="role-ref-name">Assigned only</span>
-            <span class="role-ref-desc">Restricts the guest to cards assigned to them directly or through a checklist item. Other cards on the board are hidden.</span>
+            <span class="role-ref-name" i18n="Board access option: only cards assigned to the person">Assigned only</span>
+            <span class="role-ref-desc" i18n>Restricts the guest to cards assigned to them directly or through a checklist item. Other cards on the board are hidden.</span>
           </div>
         </div>
       </div>

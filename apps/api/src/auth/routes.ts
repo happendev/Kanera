@@ -1,4 +1,5 @@
 import { dto } from "@kanera/shared";
+import type { Locale } from "@kanera/shared/locales";
 import {
   boardMembers,
   boards,
@@ -26,6 +27,7 @@ import { assertOrgMemberLimit, assertSeatPoolAvailable } from "../lib/tier-limit
 import { storageKeyFromMediaUrl, unsignedMediaUrl, withSignedMedia } from "../lib/media-keys.js";
 import { applyRateLimitHeaders, FixedWindowRateLimiter, type RateLimitPolicy } from "../lib/rate-limit.js";
 import { sendHostedBillingEmail } from "../lib/billing-emails.js";
+import { accountLocale, requestLocale } from "../lib/i18n/request-locale.js";
 import { sendInternalSignupNotification } from "../lib/internal-notification-emails.js";
 import { getConfiguredS3StorageConfig, getStorageForClient } from "../lib/storage/index.js";
 import { avatarStorageKey } from "../lib/storage/keys.js";
@@ -268,6 +270,8 @@ export async function authRoutes(app: FastifyInstance) {
     email: string;
     purpose: "signup" | "email_change";
     userId: string | null;
+    /** The reader's language: the signup form's at signup, the account's for an email change. */
+    locale: Locale;
     log: FastifyRequest["log"];
   }) {
     const { code, hash } = newVerificationCode();
@@ -292,7 +296,7 @@ export async function authRoutes(app: FastifyInstance) {
       });
     });
     try {
-      await app.mailer.sendEmailVerificationCode(params.email, code, EMAIL_VERIFICATION_EXPIRY_MINUTES);
+      await app.mailer.sendEmailVerificationCode(params.email, code, EMAIL_VERIFICATION_EXPIRY_MINUTES, params.locale);
     } catch (err) {
       params.log.error({ err, purpose: params.purpose }, "failed to send verification code email");
     }
@@ -385,7 +389,8 @@ export async function authRoutes(app: FastifyInstance) {
     // Verification can be disabled before SMTP is ready. Keep the endpoint benign for new
     // addresses, while preserving the invite-aware existing-account route above.
     if (!env.EMAIL_VERIFICATION_ENABLED) return { ok: true };
-    await issueVerificationCode({ email: body.email, purpose: "signup", userId: null, log: req.log });
+    // No account exists yet: write in the language the signup form is showing.
+    await issueVerificationCode({ email: body.email, purpose: "signup", userId: null, locale: body.locale ?? requestLocale(req), log: req.log });
     return { ok: true };
   });
 
@@ -541,6 +546,7 @@ export async function authRoutes(app: FastifyInstance) {
             passwordHash,
             displayName: body.displayName,
             timezone: normalizeTimezone(undefined),
+            locale: body.locale ?? null,
           })
           .returning();
 
@@ -688,7 +694,7 @@ export async function authRoutes(app: FastifyInstance) {
 
       // A new hosted owner gets the trial-start message below, which now includes the account-ready
       // context and trial next steps. Avoid sending a second generic welcome email in the same minute.
-      if (!startsHostedTrial) await app.mailer.sendWelcome(result.user.email, result.user.displayName);
+      if (!startsHostedTrial) await app.mailer.sendWelcome(result.user.email, result.user.displayName, accountLocale(result.user.locale, req));
       await sendInternalSignupNotification(
         result.acceptedInvite
           ? { type: "invite_accepted", displayName: result.user.displayName, email: result.user.email, orgName: result.orgName }
@@ -989,6 +995,7 @@ export async function authRoutes(app: FastifyInstance) {
     if (body.showScratchpad !== undefined) updates.showScratchpad = body.showScratchpad;
     if (body.theme !== undefined) updates.theme = body.theme;
     if (body.accent !== undefined) updates.accent = body.accent;
+    if (body.locale !== undefined) updates.locale = body.locale;
     if (Object.keys(updates).length > 0) {
       await db
         .update(users)
@@ -1013,7 +1020,7 @@ export async function authRoutes(app: FastifyInstance) {
     async (req) => {
       const body = dto.requestEmailChangeBody.parse(req.body);
       if (!env.EMAIL_VERIFICATION_ENABLED) return { ok: true };
-      const [me] = await db.select({ email: users.email }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
+      const [me] = await db.select({ email: users.email, locale: users.locale }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
       if (!me) throw unauthorized();
       // citext makes the stored email case-insensitive; compare the same way here.
       if (me.email.toLowerCase() === body.email.toLowerCase()) throw badRequest("that is already your email address");
@@ -1023,7 +1030,7 @@ export async function authRoutes(app: FastifyInstance) {
         .where(and(eq(users.email, body.email), ne(users.id, req.auth.sub)))
         .limit(1);
       if (existing) throw conflict("email already registered");
-      await issueVerificationCode({ email: body.email, purpose: "email_change", userId: req.auth.sub, log: req.log });
+      await issueVerificationCode({ email: body.email, purpose: "email_change", userId: req.auth.sub, locale: accountLocale(me.locale, req), log: req.log });
       return { ok: true };
     },
   );
@@ -1150,7 +1157,7 @@ export async function authRoutes(app: FastifyInstance) {
     applyRateLimitHeaders(reply, result);
     if (!result.allowed) throw tooManyRequests();
     const [user] = await db
-      .select({ id: users.id, email: users.email, displayName: users.displayName })
+      .select({ id: users.id, email: users.email, displayName: users.displayName, locale: users.locale })
       .from(users)
       .where(eq(users.email, body.email))
       .limit(1);
@@ -1169,7 +1176,7 @@ export async function authRoutes(app: FastifyInstance) {
       req.log.info({ userId: user.id }, "password reset link generated");
 
       try {
-        await app.mailer.sendPasswordReset(user.email, user.displayName, resetUrl);
+        await app.mailer.sendPasswordReset(user.email, user.displayName, resetUrl, accountLocale(user.locale, req));
       } catch (err) {
         req.log.error({ err, userId: user.id }, "failed to process password reset email");
       }

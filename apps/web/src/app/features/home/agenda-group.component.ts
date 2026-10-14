@@ -24,7 +24,7 @@ const COLLAPSED_LIMIT = 8;
         <span class="agenda-count" [class.is-danger]="bucket() === 'overdue'">{{ count() }}</span>
         @if (truncated()) {
           <!-- The server capped the merged list, so the rest genuinely is not here to expand. -->
-          <a class="agenda-see-all" routerLink="/my-cards">See all <i class="ti ti-arrow-narrow-right"></i></a>
+          <a class="agenda-see-all" routerLink="/my-cards"><ng-container i18n="Link to the full list">See all</ng-container> <i class="ti ti-arrow-narrow-right"></i></a>
         }
       </header>
       <div class="agenda-rows">
@@ -33,9 +33,7 @@ const COLLAPSED_LIMIT = 8;
         }
       </div>
       @if (hiddenCount() > 0) {
-        <button type="button" class="agenda-more" (click)="expanded.set(true)">
-          Show {{ hiddenCount() }} more
-        </button>
+        <button type="button" class="agenda-more" (click)="expanded.set(true)" i18n="Button: reveal the collapsed agenda rows">Show {{ hiddenCount() // i18n(ph="count") }} more</button>
       }
     </section>
   `,

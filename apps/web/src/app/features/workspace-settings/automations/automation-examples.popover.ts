@@ -21,8 +21,8 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
   template: `
     <div class="ap-panel">
       <div class="ap-head">
-        <span class="ap-title">Example automations</span>
-        <button type="button" class="ap-icon-button" aria-label="Close" (click)="closed.emit()">
+        <span class="ap-title" i18n="Panel heading">Example automations</span>
+        <button type="button" class="ap-icon-button" aria-label="Close" i18n-aria-label (click)="closed.emit()">
           <i class="ti ti-x"></i>
         </button>
       </div>
@@ -30,7 +30,7 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
       <div class="ae-body">
         @for (group of groups(); track group.name) {
           <section class="ae-group">
-            <h4 class="ae-group-name">{{ group.name }}</h4>
+            <h4 class="ae-group-name">{{ settings.automationRecipeGroupLabels[group.name] }}</h4>
             @for (recipe of group.recipes; track recipe.id) {
               <!-- aria-disabled rather than disabled: the global button reset sets
                    pointer-events:none on :disabled, which would also swallow the click that a
@@ -60,7 +60,7 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
         }
       </div>
 
-      <p class="ae-foot">Examples are created switched off, so you can adjust one before it runs.</p>
+      <p class="ae-foot" i18n>Examples are created switched off, so you can adjust one before it runs.</p>
     </div>
   `,
   styles: [

@@ -1,31 +1,34 @@
+import type { Locale } from "@kanera/shared/locales";
 import { button, divider, emailLayout, fallbackLink, heading, paragraph } from "./layout.js";
 import { escapeHtml } from "../html-escape.js";
+import { serverMessages } from "../i18n/messages/index.js";
 
 export interface WelcomeEmailParams {
+  locale: Locale;
   displayName: string;
   loginUrl: string;
 }
 
-export function welcomeEmail({ displayName, loginUrl }: WelcomeEmailParams): string {
+export function welcomeEmail({ locale, displayName, loginUrl }: WelcomeEmailParams): string {
+  const m = serverMessages(locale).email.welcome;
   const firstName = displayName.split(" ")[0] ?? displayName;
 
   return emailLayout({
-    subject: "Welcome to Kanera",
-    preheader: `Hey ${firstName}, your Kanera account is ready.`,
+    locale,
+    subject: m.subject,
+    preheader: m.preheader({ firstName }),
     body: `
-      ${heading("Welcome to Kanera")}
-      ${paragraph(`Hey ${firstName}, your account has been created and you're ready to go.`)}
+      ${heading(m.heading)}
+      ${paragraph(m.intro({ firstName }))}
       ${divider()}
-      ${paragraph("A few good first steps:", "24px 0 10px 0")}
+      ${paragraph(m.firstSteps, "24px 0 10px 0")}
 
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
-        ${step("1", "Create your first workspace")}
-        ${step("2", "Set up boards for your projects")}
-        ${step("3", "Invite your team members")}
+        ${m.steps.map((label, index) => step(String(index + 1), label)).join("\n        ")}
       </table>
 
-      ${button({ href: loginUrl, label: "Get Started" })}
-      ${fallbackLink(loginUrl)}
+      ${button({ href: loginUrl, label: m.button })}
+      ${fallbackLink(loginUrl, locale)}
     `,
   });
 }

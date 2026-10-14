@@ -1,3 +1,5 @@
+import { LOCALES, LOCALE_NATIVE_NAMES, type Locale } from "@kanera/shared/locales";
+import { appLocale } from "../../../core/i18n/locale";
 import { EmptyStateComponent } from "../../../shared/empty-state.component";
 import type { OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, signal } from "@angular/core";
@@ -15,6 +17,7 @@ import { formatDateTime } from "../../../shared/date-format";
 type ChatProvider = "slack" | "discord" | "telegram" | "zulip";
 type ChatEvent = "card_created" | "status_changed" | "priority_changed" | "title_changed" | "description_changed" | "comment_created";
 interface ChatDestinationRow {
+  locale: Locale;
   id: string;
   workspaceId: string;
   provider: ChatProvider;
@@ -40,9 +43,9 @@ function extractErrorMessage(error: unknown): string {
     const body = error.body as { message?: string; issues?: { message?: string }[] } | undefined;
     return body?.issues?.map((issue) => issue.message).filter(Boolean).join("; ")
       || body?.message
-      || "Something went wrong. Please try again.";
+      || $localize`Something went wrong. Please try again.`;
   }
-  return error instanceof Error ? error.message : "Something went wrong. Please try again.";
+  return error instanceof Error ? error.message : $localize`Something went wrong. Please try again.`;
 }
 
 @Component({
@@ -59,6 +62,10 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
   private readonly confirm = inject(ConfirmService);
   private readonly toasts = inject(ToastService);
 
+  protected readonly pauseDestinationLabel = $localize`Pause destination`;
+  protected readonly enableDestinationLabel = $localize`Enable destination`;
+  protected readonly pauseLabel = $localize`:Button — pause the chat destination:Pause`;
+  protected readonly enableLabel = $localize`:Button — resume the chat destination:Enable`;
   readonly providers = [
     { value: "slack" as const, label: "Slack", icon: "brand-slack" },
     { value: "discord" as const, label: "Discord", icon: "brand-discord" },
@@ -66,12 +73,12 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
     { value: "zulip" as const, label: "Zulip", icon: "brand-zulip" },
   ];
   readonly eventOptions: { value: ChatEvent; label: string; description: string }[] = [
-    { value: "card_created", label: "Card created", description: "New work is added" },
-    { value: "status_changed", label: "Status changed", description: "A card moves between lists" },
-    { value: "priority_changed", label: "Priority changed", description: "The mapped field changes" },
-    { value: "title_changed", label: "Title changed", description: "A card is renamed" },
-    { value: "description_changed", label: "Description changed", description: "Card details are updated" },
-    { value: "comment_created", label: "Comment created", description: "A teammate adds a comment" },
+    { value: "card_created", label: $localize`:Chat destination event:Card created`, description: $localize`:Chat destination event help:New work is added` },
+    { value: "status_changed", label: $localize`:Chat destination event:Status changed`, description: $localize`:Chat destination event help:A card moves between lists` },
+    { value: "priority_changed", label: $localize`:Chat destination event:Priority changed`, description: $localize`:Chat destination event help:The mapped field changes` },
+    { value: "title_changed", label: $localize`:Chat destination event:Title changed`, description: $localize`:Chat destination event help:A card is renamed` },
+    { value: "description_changed", label: $localize`:Chat destination event:Description changed`, description: $localize`:Chat destination event help:Card details are updated` },
+    { value: "comment_created", label: $localize`:Chat destination event:Comment created`, description: $localize`:Chat destination event help:A teammate adds a comment` },
   ];
 
   readonly priorityMappingMissing = (destination: ChatDestinationRow): boolean =>
@@ -82,6 +89,9 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
   readonly busyId = signal<string | null>(null);
   readonly error = signal<string | null>(null);
   readonly provider = signal<ChatProvider>("slack");
+  readonly localeOptions = LOCALES.map((value) => ({ value, label: LOCALE_NATIVE_NAMES[value] }));
+  readonly locale = signal<Locale>(appLocale());
+  readonly editingLocale = signal<Locale>(appLocale());
   readonly name = signal("");
   readonly webhookUrl = signal("");
   readonly botToken = signal("");
@@ -107,7 +117,8 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
     const row = id ? this.destinations().find((destination) => destination.id === id) : undefined;
     if (!row) return false;
     const events = [...this.editingEvents()].sort();
-    return this.editingName().trim() !== row.name
+    return this.editingLocale() !== row.locale
+      || this.editingName().trim() !== row.name
       || events.join() !== [...row.eventTypes].sort().join()
       || (this.editingPriorityFieldId() || null) !== row.priorityFieldId;
   });
@@ -141,7 +152,7 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
   }
 
   eventLabel(event: string): string {
-    return this.eventOptions.find((option) => option.value === event)?.label ?? (event === "chat:test" ? "Test" : event);
+    return this.eventOptions.find((option) => option.value === event)?.label ?? (event === "chat:test" ? $localize`:Chat destination event — a test message:Test` : event);
   }
 
   setEvent(event: ChatEvent, checked: boolean, editing = false): void {
@@ -165,7 +176,7 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
     const name = this.name().trim();
     if (!name || this.selectedEvents().size === 0) return;
     if (this.selectedEvents().has("priority_changed") && !this.priorityFieldId()) {
-      this.error.set("Choose a Priority custom field.");
+      this.error.set($localize`Choose a Priority custom field.`);
       return;
     }
     const provider = this.provider();
@@ -181,6 +192,7 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
     try {
       const created = await this.api.post<ChatDestinationRow>(`/workspaces/${this.settings.workspaceId()}/chat-destinations`, {
         provider,
+        locale: this.locale(),
         name,
         eventTypes: [...this.selectedEvents()],
         priorityFieldId: this.priorityFieldId() || null,
@@ -195,7 +207,7 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
       this.threadId.set("");
       this.priorityFieldId.set("");
       this.selectedEvents.set(new Set(DEFAULT_EVENTS));
-      this.toasts.success(`${this.providerLabel(provider)} destination created.`);
+      this.toasts.success($localize`:Toast; the chat product name precedes:${this.providerLabel(provider)}:provider: destination created.`);
     } catch (error) {
       this.error.set(extractErrorMessage(error));
     } finally {
@@ -206,6 +218,7 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
   startEdit(destination: ChatDestinationRow): void {
     this.editingId.set(destination.id);
     this.editingName.set(destination.name);
+    this.editingLocale.set(destination.locale);
     this.editingEvents.set(new Set(destination.eventTypes));
     this.editingPriorityFieldId.set(destination.priorityFieldId ?? "");
     this.editAutosave.reset();
@@ -223,15 +236,15 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
     const row = id ? this.destinations().find((destination) => destination.id === id) : undefined;
     if (!row || !this.editDirty()) return;
     if (!this.editingName().trim()) {
-      this.error.set("Give the destination a name.");
+      this.error.set($localize`Give the destination a name.`);
       return;
     }
     if (this.editingEvents().size === 0) {
-      this.error.set("Choose at least one event to post.");
+      this.error.set($localize`Choose at least one event to post.`);
       return;
     }
     if (this.editingEvents().has("priority_changed") && !this.editingPriorityFieldId()) {
-      this.error.set("Choose a Priority custom field.");
+      this.error.set($localize`Choose a Priority custom field.`);
       return;
     }
     // A concurrent PATCH (a fast second click) reuses busyId; let it finish and the caller's
@@ -240,6 +253,7 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
     this.editAutosave.markSaving();
     const saved = await this.patch(row.id, {
       name: this.editingName().trim(),
+      locale: this.editingLocale(),
       eventTypes: [...this.editingEvents()],
       priorityFieldId: this.editingPriorityFieldId() || null,
     });
@@ -279,7 +293,7 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
       this.reconnectBotToken.set("");
       this.reconnectChatId.set("");
       this.reconnectThreadId.set("");
-      this.toasts.success("Connection replaced.");
+      this.toasts.success($localize`Connection replaced.`);
     }
   }
 
@@ -292,8 +306,8 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
     this.clearMessages();
     try {
       const delivery = await this.api.post<TestDeliveryResponse>(`/workspaces/${this.settings.workspaceId()}/chat-destinations/${destination.id}/test`, {});
-      if (delivery.status === "success") this.toasts.success(`Test delivered to ${destination.name}.`);
-      else this.error.set(delivery.lastError ?? "The test delivery failed.");
+      if (delivery.status === "success") this.toasts.success($localize`:Toast:Test delivered to ${destination.name}:destination:.`);
+      else this.error.set(delivery.lastError ?? $localize`The test delivery failed.`);
     } catch (error) {
       this.error.set(extractErrorMessage(error));
     } finally {
@@ -303,8 +317,8 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
 
   async remove(destination: ChatDestinationRow): Promise<void> {
     if (!await this.confirm.open({
-      title: `Delete ${destination.name}?`,
-      message: "This destination will stop receiving workspace updates.",
+      title: $localize`:Confirm dialog title:Delete ${destination.name}:destination:?`,
+      message: $localize`This destination will stop receiving workspace updates.`,
     })) return;
     this.busyId.set(destination.id);
     this.clearMessages();
@@ -319,8 +333,8 @@ export class WorkspaceSettingsIntegrationsPage implements OnInit {
   }
 
   formatDate(value: string | Date | null): string {
-    if (!value) return "Never";
-    return formatDateTime(value, "short") || "Never";
+    if (!value) return $localize`:Last success — never:Never`;
+    return formatDateTime(value, "short") || $localize`:Last success — never:Never`;
   }
 
   private async load(): Promise<void> {

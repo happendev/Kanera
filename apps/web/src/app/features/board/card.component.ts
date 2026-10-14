@@ -5,6 +5,8 @@ import type { Card, CardCustomFieldValue } from "@kanera/shared/schema";
 import type { AnyCustomField, AnyList } from "./board-state";
 import { ApiClient } from "../../core/api/api.client";
 import { hasCoarsePointer } from "../../core/browser/input-modality";
+import { icu } from "../../core/i18n/icu";
+import { appLocale } from "../../core/i18n/locale";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { unreadMarkLabel } from "../../core/notifications/unread-mark";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
@@ -20,7 +22,7 @@ import { priorityRankHeat } from "../../shared/priority-rank";
 import { CardLabelsComponent, type CardLabelPresentation } from "./card-labels.component";
 import { openCardDetailInNewTab } from "./card-navigation.util";
 import { formatDueDate, isDueSoon, isOverdue } from "./due-date.util";
-import { formatDateTime } from "../../shared/date-format";
+import { formatDate, formatDateTime } from "../../shared/date-format";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
 
 type AnyCard = Card | WireCard | WireCardSummary;
@@ -128,9 +130,11 @@ export class CardComponent {
   readonly reminderLabel = computed(() => {
     const reminder = this.notifications.reminderFor(this.card().id);
     if (!reminder || reminder.firedAt) return null;
-    return `Reminder: ${formatDateTime(reminder.remindAt, "weekday")}`;
+    return $localize`:Tooltip on the card's reminder icon; the reminder time follows:Reminder: ${formatDateTime(reminder.remindAt, "weekday")}:time:`;
   });
   readonly showCardWatchIndicator = computed(() => this.isWatchingCard() && !this.notifications.isWatchingBoard(this.card().boardId));
+  readonly markCompleteLabel = $localize`:Aria label on a checklist item checkbox:Mark complete`;
+  readonly markIncompleteLabel = $localize`:Aria label on a checklist item checkbox:Mark incomplete`;
   readonly actionsMenuOpen = signal(false);
   readonly actionsMenuPoint = signal<{ x: number; y: number } | null>(null);
   readonly watcherPopoverOpen = signal(false);
@@ -156,10 +160,10 @@ export class CardComponent {
     const runs = this.liveAgentRuns();
     if (runs.length === 0) return null;
     const [first] = runs;
-    const suffix = runs.length > 1 ? ` (+${runs.length - 1} more)` : "";
+    const values = { agent: first!.agentName, task: first!.title, more: runs.length - 1 };
     return first!.status === "blocked"
-      ? `${first!.agentName} is waiting on you: ${first!.title}${suffix}`
-      : `${first!.agentName} is working: ${first!.title}${suffix}`;
+      ? icu($localize`:Tooltip on a card an agent is blocked on; {more} counts further agent runs:{more, plural, =0 {{agent} is waiting on you: {task}} other {{agent} is waiting on you: {task} (+# more)}}`, values)
+      : icu($localize`:Tooltip on a card an agent is working on; {more} counts further agent runs:{more, plural, =0 {{agent} is working: {task}} other {{agent} is working: {task} (+# more)}}`, values);
   });
   readonly agentRunBlocked = computed(() => this.liveAgentRuns().some((run) => run.status === "blocked"));
 
@@ -168,7 +172,10 @@ export class CardComponent {
     if (card.completedAt || card.archivedAt) return null;
     const inactiveCardsDays = this.state.inactiveCardsDays();
     if (isCardInactive(card.updatedAt, Date.now(), inactiveCardsDays)) {
-      return { label: `No activity for ${inactiveCardsDays}+ days`, icon: "zzz" };
+      return {
+        label: icu($localize`:Tooltip on an inactive card:{days, plural, one {No activity for #+ day} other {No activity for #+ days}}`, { days: inactiveCardsDays }),
+        icon: "zzz",
+      };
     }
     return null;
   });
@@ -454,6 +461,46 @@ export class CardComponent {
     const options = "options" in field ? field.options : [];
     const ids = this.customFieldValuesByField().get(field.id)?.valueOptionIds ?? [];
     return ids.map((id) => options.find((o) => o.id === id)).filter((o): o is WireCustomFieldOption => Boolean(o));
+  }
+
+  /** The card-front text for a text, number or date field, in the viewer's language. */
+  badgeValueFor(field: AnyCustomField): string {
+    const value = this.valueFor(field.id);
+    if (field.type === "date") return formatDate(value, "short") || value;
+    if (field.type === "number" && value !== "" && Number.isFinite(Number(value))) {
+      return new Intl.NumberFormat(appLocale(), { maximumFractionDigits: 20 }).format(Number(value));
+    }
+    return value;
+  }
+
+  goToBoardLabel(name: string): string {
+    return $localize`:Aria label on a card's board badge:Go to board ${name}:board:`;
+  }
+
+  upNextRankLabel(rank: number): string {
+    return $localize`:Tooltip on a card's position in the viewer's Up next queue:Up next #${rank}:rank:`;
+  }
+
+  checklistToggleLabel(): string {
+    const values = { done: this.checklistDoneCount(), total: this.checklistTotalCount() };
+    return this.checklistExpanded()
+      ? icu($localize`:Tooltip on the checklist indicator of an expanded card:{total, plural, one {Collapse checklist: {done} of # item complete} other {Collapse checklist: {done} of # items complete}}`, values)
+      : icu($localize`:Tooltip on the checklist indicator of a collapsed card:{total, plural, one {Expand checklist: {done} of # item complete} other {Expand checklist: {done} of # items complete}}`, values);
+  }
+
+  checklistProgressLabel(): string {
+    return icu(
+      $localize`:Tooltip on a card's checklist progress bar:{total, plural, one {{done} of # checklist item complete} other {{done} of # checklist items complete}}`,
+      { done: this.checklistDoneCount(), total: this.checklistTotalCount() },
+    );
+  }
+
+  commentCountLabel(): string {
+    return icu($localize`:Tooltip on a card's comment count:{count, plural, one {# comment} other {# comments}}`, { count: this.commentCount() });
+  }
+
+  assigneeOverflowLabel(): string {
+    return icu($localize`:Tooltip on the +N assignee avatar:{count, plural, other {+# more}}`, { count: this.assigneeOverflow() });
   }
 
   userCountFor(fieldId: string): number {

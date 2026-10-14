@@ -29,8 +29,9 @@ export type DeletePushSubscriptionBody = z.infer<typeof deletePushSubscriptionBo
 
 export const pushTestBody = z.object({
   kind: z.string().trim().min(1).max(64).default("test"),
-  title: z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH).default("Kanera test notification"),
-  body: z.string().trim().min(1).max(240).default("Push notifications are configured correctly."),
+  // Omitted by the web app: the API fills them in the requester's language.
+  title: z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH).optional(),
+  body: z.string().trim().min(1).max(240).optional(),
   url: z.string().trim().min(1).max(2048).default("/"),
   tag: z.string().trim().min(1).max(GENERAL_NAME_MAX_LENGTH).optional(),
 });

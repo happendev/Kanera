@@ -19,6 +19,10 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
 export class WorkspaceSettingsListsPage {
   protected readonly settings = inject(WorkspaceSettingsPage);
 
+  protected renameLabel(name: string): string {
+    return $localize`:Button aria-label:Rename ${name}:list:`;
+  }
+
   constructor() {
     this.settings.selectedTab.set("lists");
   }

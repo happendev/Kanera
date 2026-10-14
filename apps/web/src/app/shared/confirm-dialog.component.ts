@@ -19,12 +19,12 @@ import { Subject } from "rxjs";
         }
         @if (confirmationText(); as expected) {
           <label class="confirmation-field">
-            <span>To confirm, type <strong>{{ expected }}</strong></span>
+            <span i18n="Confirm dialog; the placeholder is text the person must type to enable the button">To confirm, type <strong>{{ expected // i18n(ph="text") }}</strong></span>
             <input autofocus autocomplete="off" [value]="enteredText()" (input)="enteredText.set($any($event.target).value)" />
           </label>
         }
         <div class="actions">
-          <button type="button" class="ghost sm" (click)="cancel()">Cancel</button>
+          <button type="button" class="ghost sm" (click)="cancel()" i18n="Confirm dialog button">Cancel</button>
           @if (!loading()) {
             <button type="button" [class]="'sm' + (danger() ? ' danger' : '')" [disabled]="confirmationText() !== null && enteredText() !== confirmationText()" (click)="confirm()">{{ confirmLabel() }}</button>
           }
@@ -106,7 +106,7 @@ import { Subject } from "rxjs";
 export class ConfirmDialogComponent {
   readonly title = input.required<string>();
   readonly message = input("");
-  readonly confirmLabel = input("Delete");
+  readonly confirmLabel = input($localize`:Confirm dialog default confirm button:Delete`);
   readonly danger = input(true);
   readonly loading = input(false);
   readonly confirmationText = input<string | null>(null);

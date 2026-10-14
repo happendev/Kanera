@@ -1,6 +1,10 @@
+import type { Locale } from "@kanera/shared/locales";
 import { escapeHtml } from "../html-escape.js";
+import { serverMessages } from "../i18n/messages/index.js";
 
 export interface LayoutOptions {
+  /** The recipient's language: sets `<html lang>` and the footer wording. */
+  locale: Locale;
   subject: string;
   preheader: string;
   body: string;
@@ -29,13 +33,14 @@ const EMAIL_LINK = BRAND;
 const EMAIL_BUTTON_TEXT = "#ffffff";
 const LOGO_URL = "https://www.kanera.app/assets/logo/jpg/logo%20light%20long.jpg";
 
-export function emailLayout({ subject, preheader, body, unsubscribeUrl }: LayoutOptions): string {
+export function emailLayout({ locale, subject, preheader, body, unsubscribeUrl }: LayoutOptions): string {
+  const m = serverMessages(locale).layout;
   const footerReason = unsubscribeUrl
-    ? `You're receiving this onboarding and account tip because you own a Kanera organisation.<br>
-                  <a href="${escapeAttr(unsubscribeUrl)}" target="_blank" class="email-link" style="color:${EMAIL_FOOTER_TEXT};text-decoration:underline;">Unsubscribe from these emails</a><br>`
-    : "You're receiving this because you have a Kanera account.<br>";
+    ? `${escapeHtml(m.footerLifecycle)}<br>
+                  <a href="${escapeAttr(unsubscribeUrl)}" target="_blank" class="email-link" style="color:${EMAIL_FOOTER_TEXT};text-decoration:underline;">${escapeHtml(m.unsubscribe)}</a><br>`
+    : `${escapeHtml(m.footerAccount)}<br>`;
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${escapeAttr(locale)}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -114,12 +119,12 @@ export function button({ href, label }: { href: string; label: string }): string
     </table>`;
 }
 
-export function codeDisplay(code: string): string {
+export function codeDisplay(code: string, locale: Locale): string {
   return `
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:28px 0 0 0;">
       <tr>
         <td align="center" bgcolor="${EMAIL_PANEL}" style="padding:24px 16px;background-color:${EMAIL_PANEL};border:1px solid ${EMAIL_PANEL_BORDER};border-radius:20px;" class="email-panel">
-          <div style="font-family:${FONT_STACK};font-size:12px;font-weight:700;line-height:18px;letter-spacing:0.12em;text-transform:uppercase;color:${EMAIL_MUTED_TEXT};mso-line-height-rule:exactly;">One-time code</div>
+          <div style="font-family:${FONT_STACK};font-size:12px;font-weight:700;line-height:18px;letter-spacing:0.12em;text-transform:uppercase;color:${EMAIL_MUTED_TEXT};mso-line-height-rule:exactly;">${escapeHtml(serverMessages(locale).layout.oneTimeCode)}</div>
           <div style="margin-top:12px;font-family:${FONT_STACK};font-size:34px;font-weight:800;letter-spacing:8px;line-height:40px;color:${BRAND};mso-line-height-rule:exactly;" class="email-heading">${escapeHtml(code)}</div>
         </td>
       </tr>
@@ -153,8 +158,8 @@ function link({ href, label }: { href: string; label: string }): string {
   return `<a href="${escapeAttr(href)}" target="_blank" class="email-link" style="color:${EMAIL_LINK};font-weight:600;text-decoration:underline;word-break:break-word;">${escapeHtml(label)}</a>`;
 }
 
-export function fallbackLink(url: string): string {
-  return mutedHtml(`If the button above does not work, copy and paste this link into your browser:<br>${link({ href: url, label: url })}`, "26px 0 0 0");
+export function fallbackLink(url: string, locale: Locale): string {
+  return mutedHtml(`${escapeHtml(serverMessages(locale).layout.fallbackLink)}<br>${link({ href: url, label: url })}`, "26px 0 0 0");
 }
 
 export function strong(text: string): string {
@@ -191,6 +196,28 @@ export function quoteBlock(text: string): string {
         </td>
       </tr>
     </table>`;
+}
+
+// Private-use code points cannot appear in catalog text, so they safely mark where markup goes.
+const SLOT_START = "\uE000";
+const SLOT_END = "\uE001";
+const SLOT_PATTERN = /\uE000([^\uE000\uE001]*)\uE001/g;
+
+/**
+ * Renders a catalog sentence that has markup inside it (a bold board name, a mailto link) without
+ * putting HTML in the catalog: the message is called with placeholder tokens for the `html` slots,
+ * the resulting plain text is escaped, then each token is replaced by its (already safe) markup.
+ *
+ *   richHtml((s) => m.intro({ name: s.name, count }), { name: strong(displayName) })
+ */
+export function richHtml<K extends string>(render: (slots: Record<K, string>) => string, html: Record<K, string>): string {
+  const tokens = Object.fromEntries(Object.keys(html).map((key) => [key, `${SLOT_START}${key}${SLOT_END}`])) as Record<K, string>;
+  return escapeHtml(render(tokens)).replace(SLOT_PATTERN, (match, key: string) => (Object.hasOwn(html, key) ? html[key as K] : match));
+}
+
+/** Bold text without the heading colour, as expiry notices use it. */
+export function plainStrong(value: string): string {
+  return `<strong>${escapeHtml(value)}</strong>`;
 }
 
 // Attribute values escape the same four characters as text nodes.

@@ -1,5 +1,6 @@
 import { addDays, localDateKey, parseDateKey } from "../day-key.util";
 import { formatDate } from "../date-format";
+import { icu } from "../../core/i18n/icu";
 
 export interface ProfileActivityCell {
   date: string;
@@ -56,7 +57,10 @@ export function buildProfileActivityGrid(
         date,
         count,
         level: count === 0 ? 0 : (Math.min(4, Math.ceil((count / Math.max(peak, 1)) * 4)) as 1 | 2 | 3 | 4),
-        label: `${count === 0 ? "No" : count} ${count === 1 ? "completion" : "completions"} · ${formatDate(day, "weekday")}`,
+        label: icu(
+          $localize`:Activity grid day tooltip, e.g. "3 completions · Wed, 22 Jul":{count, plural, =0 {No completions · {day}} one {# completion · {day}} other {# completions · {day}}}`,
+          { count, day: formatDate(day, "weekday") },
+        ),
       });
     }
     grid.push(cells);

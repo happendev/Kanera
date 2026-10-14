@@ -1,3 +1,4 @@
+import type { Locale } from "@kanera/shared/locales";
 import {
   automations,
   boardInvitations,
@@ -21,7 +22,10 @@ import { and, asc, eq, inArray, isNull, notExists, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { db, type Tx } from "../db.js";
 import { env, type Env } from "../env.js";
-import { EMAIL_DATE_LOCALE } from "./date-time-formatter.js";
+import type { BillingEmailParams } from "./email-templates/index.js";
+import { formatDate } from "./i18n/format.js";
+import { serverMessages } from "./i18n/messages/index.js";
+import { recipientLocale } from "./i18n/request-locale.js";
 import { canAddPaidSeat, isPaidTier } from "./entitlements.js";
 import type { Mailer } from "./mailer.js";
 import { getFreePlanLimits } from "./tier-limits.js";
@@ -61,7 +65,8 @@ export type BillingEmailContext = {
   daysRemaining?: number | null;
   trialEndsAt?: Date | null;
   impact?: BillingImpactSummary | null;
-  billingSummary?: string | null;
+  /** An extra summary line, written per recipient in their language. */
+  billingSummary?: ((locale: Locale) => string) | null;
   billingInterval?: "monthly" | "annual" | null;
   purchasedSeatCount?: number | null;
   previousPurchasedSeatCount?: number | null;
@@ -107,7 +112,7 @@ export async function sendHostedSeatCapacityEmail(
     activeSeatCount: context.seatLimit,
     purchasedSeatCount: context.seatLimit,
     previousPurchasedSeatCount: context.previousSeatLimit,
-    billingSummary: increased ? "The new capacity is available now and can be assigned to a member or guest." : null,
+    billingSummary: increased ? (locale) => serverMessages(locale).email.billing.seatPurchase.capacityAvailable : null,
     dedupeKey: context.dedupeKey,
     impact: null,
   }, options);
@@ -130,7 +135,7 @@ export async function sendHostedBillingEmail(
   if (!client) return 0;
 
   const recipients = await database
-    .select({ email: users.email, displayName: users.displayName })
+    .select({ email: users.email, displayName: users.displayName, locale: users.locale })
     .from(clientMembers)
     .innerJoin(users, eq(users.id, clientMembers.userId))
     .where(and(
@@ -143,20 +148,18 @@ export async function sendHostedBillingEmail(
   if (recipients.length === 0) return 0;
 
   const impact = context.impact === undefined ? await previewDowngradeImpact(context.clientId, database, config) : context.impact;
-  const paramsBase: Omit<BillingEmailQueueData, "displayName"> = {
+  // Everything except wording and dates is shared; those follow each recipient's language below.
+  const paramsBase: Omit<BillingEmailQueueData, "displayName" | "trialEndsAtLabel" | "periodEndLabel" | "billingSummary"> = {
     clientId: context.clientId,
     dedupeKey: context.dedupeKey ?? null,
     orgName: client.name,
     settingsUrl: `${config.WEB_ORIGIN}/settings/account-plan`,
-    trialEndsAtLabel: context.trialEndsAt ? formatDate(context.trialEndsAt) : null,
     daysRemaining: context.daysRemaining ?? null,
     impact: impact ?? null,
     limits: getFreePlanLimits(config),
-    billingSummary: context.billingSummary ?? null,
     billingInterval: context.billingInterval ?? null,
     purchasedSeatCount: context.purchasedSeatCount ?? null,
     previousPurchasedSeatCount: context.previousPurchasedSeatCount ?? null,
-    periodEndLabel: context.periodEnd ? formatDate(context.periodEnd) : null,
     seatKind: context.seatKind ?? null,
     billedUserEmail: context.billedUserEmail ?? null,
     billedUserName: context.billedUserName ?? null,
@@ -169,7 +172,15 @@ export async function sendHostedBillingEmail(
     if (context.dedupeKey && await hasBillingEmail(recipient.email, context.kind, context.clientId, context.dedupeKey, database)) {
       continue;
     }
-    const params = { ...paramsBase, displayName: recipient.displayName };
+    const locale = recipientLocale(recipient.locale);
+    const params: BillingEmailParams = {
+      ...paramsBase,
+      locale,
+      displayName: recipient.displayName,
+      trialEndsAtLabel: context.trialEndsAt ? billingDate(locale, context.trialEndsAt) : null,
+      periodEndLabel: context.periodEnd ? billingDate(locale, context.periodEnd) : null,
+      billingSummary: context.billingSummary?.(locale) ?? null,
+    };
     await sendByKind(mailer, context.kind, recipient.email, params);
     sent += 1;
   }
@@ -274,7 +285,7 @@ export async function impactFromPlanActions(clientId: string, database: Tx = db)
   return impact;
 }
 
-function sendByKind(mailer: Mailer, kind: BillingEmailKind, to: string, params: BillingEmailQueueData) {
+function sendByKind(mailer: Mailer, kind: BillingEmailKind, to: string, params: BillingEmailParams) {
   switch (kind) {
     case "pro_trial_started":
       return mailer.sendProTrialStarted(to, params);
@@ -333,8 +344,8 @@ function emptyImpact(): BillingImpactSummary {
   };
 }
 
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat(EMAIL_DATE_LOCALE, { dateStyle: "medium" }).format(date);
+function billingDate(locale: Locale, date: Date): string {
+  return formatDate(locale, date, { dateStyle: "medium" });
 }
 
 /**

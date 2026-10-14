@@ -16,6 +16,8 @@ declare global {
   }
 }
 
+const INCOMPLETE_MESSAGE = $localize`:Error when submitting before the anti-bot security check is done:Complete the security check to continue.`;
+
 /** Per-page challenge state; only the external script is shared between auth pages. */
 export class TurnstileChallenge {
   readonly siteKey = signal<string | null>(null);
@@ -43,7 +45,7 @@ export class TurnstileChallenge {
 
   ensureSolved(): boolean {
     if (!this.siteKey() || this.token()) return true;
-    this.error.set("Complete the security check to continue.");
+    this.error.set(INCOMPLETE_MESSAGE);
     return false;
   }
 
@@ -64,7 +66,7 @@ export class TurnstileChallenge {
     script.defer = true;
     script.dataset["kaneraTurnstile"] = "true";
     script.addEventListener("load", () => this.render(), { once: true });
-    script.addEventListener("error", () => this.error.set("Security check could not load. Try refreshing the page."), { once: true });
+    script.addEventListener("error", () => this.error.set($localize`:Error when the anti-bot security check cannot load:Security check could not load. Try refreshing the page.`), { once: true });
     document.head.appendChild(script);
   }
 
@@ -76,12 +78,12 @@ export class TurnstileChallenge {
       callback: (token) => {
         this.token.set(token);
         this.onSolved?.();
-        if (this.error() === "Complete the security check to continue.") this.error.set(null);
+        if (this.error() === INCOMPLETE_MESSAGE) this.error.set(null);
       },
       "expired-callback": () => this.token.set(null),
       "error-callback": () => {
         this.token.set(null);
-        this.error.set("Security check failed. Try again.");
+        this.error.set($localize`:Error when the anti-bot security check fails:Security check failed. Try again.`);
       },
     });
   }

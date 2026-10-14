@@ -177,6 +177,10 @@ export class BoardGroupColumnComponent implements OnDestroy {
 
   // ─── Card presentation (mirrors k-list; the tile takes the same inputs either way) ──────────
 
+  addCardLabel(): string {
+    return $localize`:Button on a grouped column; the group name (a person, label or value) follows:Add card to ${this.group().label}:group:`;
+  }
+
   labelsForCard(cardId: string): CardLabelPresentation[] {
     return this.labelsByCard().get(cardId) ?? EMPTY_LABELS;
   }

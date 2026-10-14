@@ -21,6 +21,7 @@
         <input
           type="text"
           placeholder="Search tasks…"
+          i18n-placeholder
           [value]="searchQuery()"
           (input)="searchQueryChange.emit($any($event.target).value)"
         />
@@ -64,13 +65,15 @@
         [class.is-set]="columnsIsSet()"
         [class.has-clear]="columnsIsSet()"
         kTooltip="Show or hide columns"
+        i18n-kTooltip
         aria-label="Show or hide columns"
+        i18n-aria-label
         (click)="toggleColumnsMenu($event)"
       >
-        <i class="ti ti-columns-3"></i><span class="tv-toolbar-label">Columns</span>
+        <i class="ti ti-columns-3"></i><span class="tv-toolbar-label" i18n="Toolbar button that opens the column picker">Columns</span>
       </button>
       @if (columnsIsSet()) {
-        <button type="button" class="tv-toolbar-clear" kTooltip="Restore default columns" aria-label="Restore default columns" (click)="clearColumns()">
+        <button type="button" class="tv-toolbar-clear" kTooltip="Restore default columns" i18n-kTooltip aria-label="Restore default columns" i18n-aria-label (click)="clearColumns()">
           <i class="ti ti-x"></i>
         </button>
       }
@@ -81,7 +84,7 @@
           [apPlacement]="{ align: 'end', width: 310, maxHeight: 520 }"
           (apDismissed)="columnsOpen.set(false)"
         >
-          <div class="k-menu-heading tv-panel-title">Show / hide</div>
+          <div class="k-menu-heading tv-panel-title" i18n="Column picker heading">Show / hide</div>
           <div class="tv-columns-list">
             @for (column of pickableColumns(); track column.id) {
               <button type="button" class="k-menu-item tv-menu-row" (click)="toggleColumn(column.id)">
@@ -124,7 +127,7 @@
         <span class="tv-toolbar-label">{{ groupTriggerLabel() }}</span>
       </button>
       @if (groupIsSet()) {
-        @let clearGroupLabel = hostGroupBy() ? "Clear breakdown" : "Reset grouping";
+        @let clearGroupLabel = hostGroupBy() ? text.clearBreakdown : text.resetGrouping;
         <button type="button" class="tv-toolbar-clear" [kTooltip]="clearGroupLabel" [attr.aria-label]="clearGroupLabel" (click)="clearGroup()">
           <i class="ti ti-x"></i>
         </button>
@@ -132,7 +135,7 @@
       @if (groupOpen()) {
         <div kMenu class="ap-panel tv-group-menu" kAnchoredPanel [apPlacement]="{ align: 'start', width: 250, maxHeight: 480 }" (apDismissed)="groupOpen.set(false)">
           @if (!hostGroupBy()) {
-            <div class="k-menu-heading tv-panel-title">Group by</div>
+            <div class="k-menu-heading tv-panel-title" i18n="Menu heading for grouping options">Group by</div>
             @for (option of groupByOptions(); track option.value) {
               <button type="button" class="k-menu-item tv-menu-row" [class.is-selected]="groupBy() === option.value" (click)="setGroupBy(option.value)">
                 <i [class]="'ti ti-' + option.icon"></i>
@@ -143,9 +146,9 @@
           }
           <!-- The second dimension is a property of the summaries, not of the rows, so it lives beside
                the grouping it cross-tabs against rather than behind a separate toolbar button. -->
-          <div class="k-menu-heading tv-panel-title" [class.tv-panel-title-split]="!hostGroupBy()">Break summaries down by</div>
+          <div class="k-menu-heading tv-panel-title" [class.tv-panel-title-split]="!hostGroupBy()" i18n="Menu heading for the summary breakdown options">Break summaries down by</div>
           @if (!hasSummaries()) {
-            <p class="tv-panel-hint">Choose Sum or Average in the footer of a visible number column to enable breakdowns.</p>
+            <p class="tv-panel-hint" i18n>Choose Sum or Average in the footer of a visible number column to enable breakdowns.</p>
           } @else {
           @for (option of availableSplitByOptions(); track option.value) {
             <button type="button" class="k-menu-item tv-menu-row" [class.is-selected]="aggregateSplitBy() === option.value" (click)="setSplitBy(option.value)">
@@ -175,7 +178,7 @@
           <i class="ti ti-arrows-sort"></i><span class="tv-toolbar-label">{{ sortTriggerLabel() }}</span>
         </button>
         @if (sortIsSet()) {
-          <button type="button" class="tv-toolbar-clear" kTooltip="Reset sort" aria-label="Reset sort" (click)="clearSort()">
+          <button type="button" class="tv-toolbar-clear" kTooltip="Reset sort" i18n-kTooltip aria-label="Reset sort" i18n-aria-label (click)="clearSort()">
             <i class="ti ti-x"></i>
           </button>
         }
@@ -196,8 +199,8 @@
       <button
         type="button"
         class="tv-toolbar-btn tv-icon-btn"
-        [attr.aria-label]="allGroupsCollapsed() ? 'Expand all groups' : 'Collapse all groups'"
-        [kTooltip]="allGroupsCollapsed() ? 'Expand all' : 'Collapse all'"
+        [attr.aria-label]="allGroupsCollapsed() ? text.expandAllGroups : text.collapseAllGroups"
+        [kTooltip]="allGroupsCollapsed() ? text.expandAll : text.collapseAll"
         (click)="toggleAllGroups()"
       >
         <i class="ti" [class.ti-arrows-minimize]="!allGroupsCollapsed()" [class.ti-arrows-maximize]="allGroupsCollapsed()"></i>
@@ -212,7 +215,9 @@
         class="tv-toolbar-btn tv-icon-btn"
         [class.is-open]="moreOpen()"
         kTooltip="More table actions"
+        i18n-kTooltip
         aria-label="More table actions"
+        i18n-aria-label
         [attr.aria-haspopup]="'menu'"
         [attr.aria-expanded]="moreOpen()"
         (click)="toggleMenu('more')"
@@ -220,17 +225,17 @@
         <i class="ti ti-dots"></i>
       </button>
       @if (moreOpen()) {
-        <div kMenu class="ap-panel tv-small-menu" role="menu" aria-label="More table actions" kAnchoredPanel [apPlacement]="{ align: 'end', width: 230, minHeight: 90 }" (apDismissed)="moreOpen.set(false)">
+        <div kMenu class="ap-panel tv-small-menu" role="menu" aria-label="More table actions" i18n-aria-label kAnchoredPanel [apPlacement]="{ align: 'end', width: 230, minHeight: 90 }" (apDismissed)="moreOpen.set(false)">
           <button type="button" class="k-menu-item tv-menu-row" role="menuitem" (click)="resetTable()">
-            <i class="ti ti-refresh"></i><span>Reset table layout</span>
+            <i class="ti ti-refresh"></i><span i18n>Reset table layout</span>
           </button>
           @if (canEditRole()) {
-            <p class="tv-panel-hint tv-export-scope">Export {{ exportScopeLabel() }}</p>
+            <p class="tv-panel-hint tv-export-scope" i18n="Export menu note, e.g. Export 12 cards in this view">Export {{ exportScopeLabel() // i18n(ph="cards") }}</p>
             <button type="button" class="k-menu-item tv-menu-row" role="menuitem" (click)="exportExcel()">
-              <i class="ti ti-file-spreadsheet"></i><span>Excel workbook</span>
+              <i class="ti ti-file-spreadsheet"></i><span i18n="Export format menu item">Excel workbook</span>
             </button>
             <button type="button" class="k-menu-item tv-menu-row" role="menuitem" (click)="exportCsv()">
-              <i class="ti ti-file-type-csv"></i><span>CSV (this grid)</span>
+              <i class="ti ti-file-type-csv"></i><span i18n="Export format menu item">CSV (this grid)</span>
             </button>
             <button type="button" class="k-menu-item tv-menu-row" role="menuitem" (click)="exportJson()">
               <i class="ti ti-file-code"></i><span>JSON</span>
@@ -245,13 +250,13 @@
     <div class="tv-edit-feedback" [class.is-error]="!!editError()">
       <span [id]="editFeedbackId" role="status">
         <strong>{{ editLabel() }}</strong>
-        {{ savingEdit() ? 'Saving…' : editError() }}
+        {{ savingEdit() ? text.saving : editError() }}
       </span>
       @if (!savingEdit()) {
         @if (editFailed()) {
-          <button type="button" class="sm" (click)="retryEdit($event)">Retry</button>
+          <button type="button" class="sm" (click)="retryEdit($event)" i18n="Button - retry saving an inline edit">Retry</button>
         }
-        <button type="button" class="secondary sm" (click)="discardEdit($event)">Discard edit</button>
+        <button type="button" class="secondary sm" (click)="discardEdit($event)" i18n>Discard edit</button>
       }
     </div>
   }
@@ -303,14 +308,14 @@
                 [checked]="allRowsSelected()"
                 [indeterminate]="someRowsSelected()"
                 [disabled]="!canEdit() || !rows().length"
-                [attr.aria-label]="allRowsSelected() || someRowsSelected() ? 'Clear selection' : 'Select all tasks'"
-                [kTooltip]="allRowsSelected() || someRowsSelected() ? 'Clear selection' : 'Select all'"
+                [attr.aria-label]="allRowsSelected() || someRowsSelected() ? text.clearSelection : text.selectAllTasks"
+                [kTooltip]="allRowsSelected() || someRowsSelected() ? text.clearSelection : text.selectAll"
                 (click)="toggleSelectAll($event)"
               />
             </span>
           }
-          <i class="ti ti-forms"></i><span>Title</span>
-          <span class="tv-col-resize" kTooltip="Drag to resize · double-click to fit" (pointerdown)="startColumnResize('title', $event)" (dblclick)="autoFitColumn('title', $event)"></span>
+          <i class="ti ti-forms"></i><span i18n="Table column header - card title">Title</span>
+          <span class="tv-col-resize" kTooltip="Drag to resize · double-click to fit" i18n-kTooltip="Tooltip on a column's resize handle" (pointerdown)="startColumnResize('title', $event)" (dblclick)="autoFitColumn('title', $event)"></span>
         </div>
         @for (col of visibleColumns(); track col) {
           <div
@@ -326,13 +331,13 @@
           >
             <!-- Drag is handle-scoped so a pointerdown on the resize strip still resizes: both
                  gestures start on pointerdown and would otherwise fire together. -->
-            <span class="tv-col-drag-handle" cdkDragHandle kTooltip="Reorder column" aria-hidden="true"><i class="ti ti-grip-vertical"></i></span>
+            <span class="tv-col-drag-handle" cdkDragHandle kTooltip="Reorder column" i18n-kTooltip aria-hidden="true"><i class="ti ti-grip-vertical"></i></span>
             <i [class]="'ti ti-' + columnIcon(col)"></i><span>{{ columnHeaderLabel(col) }}</span>
-            <span class="tv-col-resize" kTooltip="Drag to resize · double-click to fit" (pointerdown)="startColumnResize(col, $event)" (dblclick)="autoFitColumn(col, $event)"></span>
+            <span class="tv-col-resize" kTooltip="Drag to resize · double-click to fit" i18n-kTooltip="Tooltip on a column's resize handle" (pointerdown)="startColumnResize(col, $event)" (dblclick)="autoFitColumn(col, $event)"></span>
           </div>
         }
         <div class="tv-th tv-actions-head">
-          <button type="button" aria-label="Choose columns" kTooltip="Choose columns" (click)="toggleColumnsMenu($event)">
+          <button type="button" aria-label="Choose columns" i18n-aria-label kTooltip="Choose columns" i18n-kTooltip (click)="toggleColumnsMenu($event)">
             <i class="ti ti-plus"></i>
           </button>
         </div>
@@ -341,7 +346,7 @@
       @if (loading()) {
         <div class="k-loading is-inline" role="status" aria-live="polite">
           <i class="ti ti-loader-2" aria-hidden="true"></i>
-          <span>Loading cards…</span>
+          <span i18n>Loading cards…</span>
         </div>
         @for (_ of [1, 2, 3, 4, 5, 6, 7, 8]; track $index) {
           <div class="tv-row-grid tv-skeleton-row">
@@ -371,8 +376,8 @@
                     [checked]="groupAllRowsSelected(group)"
                     [indeterminate]="groupSomeRowsSelected(group)"
                     [disabled]="!canEdit() || !group.cardIds.length"
-                    [attr.aria-label]="(groupAllRowsSelected(group) ? 'Deselect ' : 'Select ') + group.name"
-                    [kTooltip]="groupAllRowsSelected(group) ? 'Deselect group' : 'Select group'"
+                    [attr.aria-label]="groupAllRowsSelected(group) ? text.deselectNamed(group.name) : text.selectNamed(group.name)"
+                    [kTooltip]="groupAllRowsSelected(group) ? text.deselectGroup : text.selectGroup"
                     (click)="toggleGroupSelection(group, $event)"
                   />
                 </span>
@@ -384,7 +389,7 @@
                 type="button"
                 class="tv-run-head-inner"
                 [attr.aria-expanded]="!group.collapsed"
-                [attr.aria-label]="(group.collapsed ? 'Expand ' : 'Collapse ') + group.name"
+                [attr.aria-label]="group.collapsed ? text.expandNamed(group.name) : text.collapseNamed(group.name)"
                 (click)="toggleGroupCollapsed(group.key)"
               >
                 <i class="ti tv-run-caret" [class.ti-chevron-down]="!group.collapsed" [class.ti-chevron-right]="group.collapsed"></i>
@@ -407,8 +412,9 @@
                     type="button"
                     class="tv-host-add-btn"
                     aria-label="Add card to Up next"
+                    i18n-aria-label
                     [disabled]="!(hostAddGroupsByGroup().get(group.key)?.length)"
-                    [kTooltip]="hostAddGroupsByGroup().get(group.key)?.length ? 'Add card' : 'No assigned cards can be added'"
+                    [kTooltip]="hostAddGroupsByGroup().get(group.key)?.length ? text.addCard : text.noAddableCards"
                     (click)="toggleHostAdd(group.key, $event)"
                   >
                     <i class="ti ti-plus"></i>
@@ -416,11 +422,14 @@
                   @if (hostAddOpenGroupKey() === group.key) {
                     <k-anchored-picker
                       title="Add to Up next"
+                      i18n-title
                       [groups]="hostAddGroupsByGroup().get(group.key) ?? []"
                       [width]="420"
                       [align]="'end'"
                       searchPlaceholder="Search cards…"
+                      i18n-searchPlaceholder
                       emptyLabel="No cards can be added"
+                      i18n-emptyLabel
                       (picked)="onHostAddPicked(group.key, $event)"
                       (closed)="hostAddOpenGroupKey.set(null)"
                     />
@@ -463,10 +472,10 @@
             @let rowEditable = canEditCard(card);
             <div class="tv-cell tv-title-cell" data-col="title">
               @if (bulkSelectedCardIds().has(card.id) && bulkSelectedCardIds().size > 1) {
-                <strong class="tv-drag-count">{{ bulkSelectedCardIds().size }} cards</strong>
+                <strong class="tv-drag-count" i18n="Badge on a row being dragged with other selected cards">{ bulkSelectedCardIds().size, plural, =1 {1 card} other {{{ bulkSelectedCardIds().size }} cards} }</strong>
               }
               @if (rowDragEnabled(group, card)) {
-                <span class="tv-drag-handle tv-row-stop" cdkDragHandle kTooltip="Drag to move" aria-hidden="true">
+                <span class="tv-drag-handle tv-row-stop" cdkDragHandle kTooltip="Drag to move" i18n-kTooltip aria-hidden="true">
                   <i class="ti ti-grip-vertical"></i>
                 </span>
               }
@@ -481,21 +490,21 @@
                     type="checkbox"
                     class="tv-row-checkbox"
                     [checked]="bulkSelectedCardIds().has(card.id)"
-                    [attr.aria-label]="'Select ' + card.title"
+                    [attr.aria-label]="text.selectNamed(card.title)"
                     (click)="toggleRowSelection(card, $event)"
                   />
                 </span>
               }
-              <span class="tv-cell-label">Title</span>
+              <span class="tv-cell-label" i18n="Table column header - card title">Title</span>
               @if (isEditing(card.id, 'title', group.key)) {
-                <ng-container [ngTemplateOutlet]="cellEditor" [ngTemplateOutletContext]="{ label: 'Title', kind: 'text' }" />
+                <ng-container [ngTemplateOutlet]="cellEditor" [ngTemplateOutletContext]="{ label: text.title, kind: 'text' }" />
               } @else {
                 <button type="button" class="tv-title-trigger" [disabled]="!rowEditable" (click)="onTitleClick(card, $event)" (auxclick)="onTitleAuxClick(card, $event)">
                   <!-- Shown only when complete, unlike the former display's always-present circle toggle: a
                        permanent control here would cost every title another 20px of indent, and this
                        view already reserves a gutter for the bulk-select checkbox. Toggling stays in
                        the row actions menu. -->
-                  @if (card.completedAt) { <i class="ti ti-circle-check tv-completed-icon" kTooltip="Completed"></i> }
+                  @if (card.completedAt) { <i class="ti ti-circle-check tv-completed-icon" kTooltip="Completed" i18n-kTooltip="Tooltip on the tick shown beside a completed card's title"></i> }
                   <!-- Inline before the key, the same slot and shape as on the board tile. It indents
                        the title on marked rows only, which the completed tick beside it already does —
                        reserving the width on every row would tax the column people actually read. -->
@@ -504,7 +513,7 @@
                   }
                   <span class="tv-title">@if (showCardKeys()) { <span class="tv-card-key">{{ card.key }}</span> }<span class="tv-title-text">{{ card.title }}</span></span>
                 </button>
-                <button type="button" class="tv-open-btn tv-title-open tv-row-stop" aria-label="Open card" kTooltip="Open card" (click)="$event.stopPropagation(); cardOpened.emit(card.id)">
+                <button type="button" class="tv-open-btn tv-title-open tv-row-stop" aria-label="Open card" i18n-aria-label kTooltip="Open card" i18n-kTooltip (click)="$event.stopPropagation(); cardOpened.emit(card.id)">
                   <i class="ti ti-arrows-maximize"></i>
                 </button>
               }
@@ -519,7 +528,7 @@
                       @if (priorityRankFor(group.key, card.id); as rank) {
                         <!-- Same heat-mapped pill as the board tile; only its placement changes from
                              an inline title adornment to a stable, independently toggleable column. -->
-                        <span class="tv-priority-rank" [style.--rank-heat]="rankHeat(rank)" [kTooltip]="'Up next #' + rank" [attr.aria-label]="'Up next #' + rank">{{ rank }}</span>
+                        <span class="tv-priority-rank" [style.--rank-heat]="rankHeat(rank)" [kTooltip]="text.upNextRank(rank)" [attr.aria-label]="text.upNextRank(rank)">{{ rank }}</span>
                       } @else { <span class="tv-muted">—</span> }
                     </span>
                   }
@@ -539,6 +548,7 @@
                     @if (pickerIsOpen(card.id, col)) {
                       <k-anchored-picker
                         title="Change status"
+                        i18n-title="Picker title - move the card to another list"
                         [groups]="statusGroupsFor(card)"
                         [selectedId]="card.listId"
                         (picked)="setListForCard(card, $event)"
@@ -555,7 +565,7 @@
                       <!-- Icon plus plain text, not a `tv-chip`: the chip is tinted from
                            `--tv-status-color`, which a list-grouped run sets on the whole block, so a
                            board pill would silently take the status's colour. -->
-                      <button type="button" class="tv-cell-trigger tv-source-link tv-row-stop" [kTooltip]="'Open ' + board.name" (click)="$event.stopPropagation(); boardOpened.emit(board.id)">
+                      <button type="button" class="tv-cell-trigger tv-source-link tv-row-stop" [kTooltip]="text.openNamed(board.name)" (click)="$event.stopPropagation(); boardOpened.emit(board.id)">
                         <i [class]="'ti ti-' + (board.icon ?? 'layout-kanban')" [style.color]="board.iconColor ? 'var(--color-' + board.iconColor + ')' : null"></i>
                         <span>{{ board.name }}</span>
                       </button>
@@ -666,7 +676,7 @@
                         @case ('checkbox') {
                           <button type="button" class="tv-cell-trigger tv-checkbox-value" [class.checked]="valueFor(card.id, field.id)?.valueCheckbox === true" [disabled]="!canEditColumn(card, col)" (click)="setCheckboxField(card, field, $event)">
                             <i class="ti" [class.ti-checkbox]="valueFor(card.id, field.id)?.valueCheckbox === true" [class.ti-square]="valueFor(card.id, field.id)?.valueCheckbox !== true"></i>
-                            <span>Yes</span>
+                            <span i18n="Checkbox field cell - the box is ticked">Yes</span>
                           </button>
                         }
                         @case ('select') {
@@ -721,7 +731,7 @@
 
             <div class="tv-cell tv-actions-cell tv-row-stop">
               @if (rowEditable) {
-                <button type="button" class="tv-actions-btn" [class.is-active]="activeActionsCardId() === card.id" aria-label="Card actions" kTooltip="Card actions" (click)="toggleActionsMenu(card, $event)">
+                <button type="button" class="tv-actions-btn" [class.is-active]="activeActionsCardId() === card.id" aria-label="Card actions" i18n-aria-label kTooltip="Card actions" i18n-kTooltip (click)="toggleActionsMenu(card, $event)">
                   <i class="ti ti-dots"></i>
                 </button>
                 @if (activeActionsCardId() === card.id) {
@@ -754,7 +764,7 @@
                sheet still ends in the action that extends it. Kept when the group is collapsed,
                which turns "collapse all" into a summary table of the whole board. -->
           @for (summary of group.summaries; track summary.key) {
-            <div class="tv-sum-row tv-row-grid" [class.is-total]="summary.label === 'Total'">
+            <div class="tv-sum-row tv-row-grid" [class.is-total]="summary.label === text.total">
               <div class="tv-sum-label">{{ summary.label }}</div>
               @for (col of visibleColumns(); track col) {
                 <!-- A column this row has no number for stays blank; interpolation renders the
@@ -774,7 +784,7 @@
                   <input
                     type="text"
                     autofocus
-                    [placeholder]="'New task in ' + group.name"
+                    [placeholder]="text.newTaskIn(group.name)"
                     [value]="runTaskTitle()"
                     [disabled]="creatingTask()"
                     (input)="runTaskTitle.set($any($event.target).value)"
@@ -782,8 +792,8 @@
                   />
                 </form>
               } @else {
-                <button type="button" class="tv-run-add" [attr.aria-label]="'Add task to ' + group.name" (click)="startRunCompose(group.listId, $event)">
-                  <i class="ti ti-plus"></i><span>New task</span>
+                <button type="button" class="tv-run-add" [attr.aria-label]="text.addTaskTo(group.name)" (click)="startRunCompose(group.listId, $event)">
+                  <i class="ti ti-plus"></i><span i18n="Button - add a task to this list">New task</span>
                 </button>
               }
             </div>
@@ -792,7 +802,7 @@
         } @empty {
           <div class="tv-empty">
             <i class="ti ti-table-off"></i>
-            <span>No tasks match this view.</span>
+            <span i18n>No tasks match this view.</span>
           </div>
         }
         </div>
@@ -811,7 +821,7 @@
                   <input
                     type="text"
                     autofocus
-                    [placeholder]="'New task in ' + list.name"
+                    [placeholder]="text.newTaskIn(list.name)"
                     [value]="runTaskTitle()"
                     [disabled]="creatingTask()"
                     (input)="runTaskTitle.set($any($event.target).value)"
@@ -819,8 +829,8 @@
                   />
                 </form>
               } @else {
-                <button type="button" class="tv-run-add" [attr.aria-label]="'Add task to ' + list.name" (click)="startRunCompose(list.id, $event)">
-                  <i class="ti ti-plus"></i><span>New task</span>
+                <button type="button" class="tv-run-add" [attr.aria-label]="text.addTaskTo(list.name)" (click)="startRunCompose(list.id, $event)">
+                  <i class="ti ti-plus"></i><span i18n="Button - add a task to this list">New task</span>
                 </button>
               }
             </div>
@@ -842,7 +852,7 @@
       }
 
       <div class="tv-footer tv-row-grid">
-        <div class="tv-footer-count">COUNT {{ footerCount() }}</div>
+        <div class="tv-footer-count" i18n="Table footer - number of cards in the view">COUNT {{ footerCount() // i18n(ph="count") }}</div>
         @for (col of visibleColumns(); track col) {
           <div class="tv-footer-cell">
             @if (customFieldForColumn(col); as field) {
@@ -851,24 +861,24 @@
                   type="button"
                   class="tv-aggregate-btn"
                   [class.is-active]="!!aggregateFor(field.id)"
-                  [kTooltip]="'Summarise ' + field.name"
+                  [kTooltip]="text.summarise(field.name)"
                   (click)="aggregateOpenFieldId.set(aggregateOpenFieldId() === field.id ? null : field.id)"
                 >
                   <!-- Chevron first: the row is right-aligned, so the value keeps the column's edge
                        whether or not the chevron is showing. -->
                   <i class="ti ti-chevron-down"></i>
                   @if (aggregateFor(field.id); as metric) {
-                    <span class="tv-aggregate-label">{{ metric.toUpperCase() }}</span><strong>{{ aggregateValue(field.id) }}</strong>
-                  } @else { <span>Calculate</span> }
+                    <span class="tv-aggregate-label">{{ text.metric[metric] }}</span><strong>{{ aggregateValue(field.id) }}</strong>
+                  } @else { <span i18n="Footer button - choose a sum or average for this column">Calculate</span> }
                 </button>
                 @if (aggregateOpenFieldId() === field.id) {
                   <!-- maxHeight matches the three rows this menu actually renders. Left at the 420px
                        default the placement helper reserves height the panel never uses, so the
                        bottom-pinned flip above the footer lands ~300px away from its trigger. -->
                   <div kMenu class="ap-panel tv-aggregate-menu" kAnchoredPanel [apPlacement]="{ side: 'top', align: 'end', width: 150, minHeight: 100, maxHeight: 118 }" (apDismissed)="aggregateOpenFieldId.set(null)">
-                    <button type="button" class="k-menu-item tv-menu-row" (click)="setAggregate(field.id, null)">None</button>
-                    <button type="button" class="k-menu-item tv-menu-row" (click)="setAggregate(field.id, 'sum')">Sum</button>
-                    <button type="button" class="k-menu-item tv-menu-row" (click)="setAggregate(field.id, 'avg')">Average</button>
+                    <button type="button" class="k-menu-item tv-menu-row" (click)="setAggregate(field.id, null)" i18n="Aggregate menu option - show no total">None</button>
+                    <button type="button" class="k-menu-item tv-menu-row" (click)="setAggregate(field.id, 'sum')" i18n="Aggregate menu option - total of the column">Sum</button>
+                    <button type="button" class="k-menu-item tv-menu-row" (click)="setAggregate(field.id, 'avg')" i18n="Aggregate menu option - average of the column">Average</button>
                   </div>
                 }
               }

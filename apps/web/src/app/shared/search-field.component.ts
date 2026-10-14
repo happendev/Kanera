@@ -32,7 +32,7 @@ import { ChangeDetectionStrategy, Component, input, output } from "@angular/core
         (input)="valueChange.emit($any($event.target).value)"
       />
       @if (value() && !disabled()) {
-        <button class="sf-clear" type="button" aria-label="Clear search" (click)="valueChange.emit('')">
+        <button class="sf-clear" type="button" aria-label="Clear search" i18n-aria-label (click)="valueChange.emit('')">
           <i class="ti ti-x" aria-hidden="true"></i>
         </button>
       }
@@ -146,7 +146,7 @@ import { ChangeDetectionStrategy, Component, input, output } from "@angular/core
 })
 export class SearchFieldComponent {
   readonly value = input("");
-  readonly placeholder = input("Search");
+  readonly placeholder = input($localize`:Default search field placeholder:Search`);
   readonly disabled = input(false);
   /** Defaults to the placeholder, which is the label in every current caller. */
   readonly ariaLabel = input<string | null>(null);

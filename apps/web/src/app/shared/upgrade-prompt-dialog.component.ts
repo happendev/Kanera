@@ -18,29 +18,29 @@ export interface UpgradePromptContent {
   template: `
     <div class="backdrop" (click)="dismissed.emit()">
       <section class="dialog" (click)="$event.stopPropagation()" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-modal="true" [attr.aria-label]="content().headline">
-        <button class="close" type="button" aria-label="Close" (click)="dismissed.emit()"><i class="ti ti-x"></i></button>
+        <button class="close" type="button" aria-label="Close" i18n-aria-label (click)="dismissed.emit()"><i class="ti ti-x"></i></button>
         <span class="context-label">{{ content().attemptedAction }}</span>
         <h2>{{ content().headline }}</h2>
 
         <div class="detail value-detail">
           <i class="ti ti-circle-check"></i>
-          <div><span>Value already received</span><strong>{{ content().valueReceived }}</strong></div>
+          <div><span i18n="Upgrade dialog row heading">Value already received</span><strong>{{ content().valueReceived }}</strong></div>
         </div>
         <div class="detail">
           <i class="ti ti-credit-card"></i>
-          <div><span>Your team price</span><strong>{{ content().cost }}</strong></div>
+          <div><span i18n="Upgrade dialog row heading">Your team price</span><strong>{{ content().cost }}</strong></div>
         </div>
         <div class="detail free-detail">
           <i class="ti ti-lock"></i>
-          <div><span>If you stay on Free</span><strong>{{ content().freeConsequence }}</strong></div>
+          <div><span i18n="Upgrade dialog row heading; Free is the plan name">If you stay on Free</span><strong>{{ content().freeConsequence }}</strong></div>
         </div>
 
         <div class="actions">
           @if (content().canReviewPlan) {
-            <button class="ghost sm" type="button" (click)="dismissed.emit()">Stay on Free</button>
-            <button class="sm" type="button" (click)="reviewPlan.emit()">Review Pro and pricing</button>
+            <button class="ghost sm" type="button" (click)="dismissed.emit()" i18n="Upgrade dialog button; Free is the plan name">Stay on Free</button>
+            <button class="sm" type="button" (click)="reviewPlan.emit()" i18n="Upgrade dialog button; Pro is the plan name">Review Pro and pricing</button>
           } @else {
-            <button class="sm" type="button" (click)="dismissed.emit()">Got it</button>
+            <button class="sm" type="button" (click)="dismissed.emit()" i18n="Button: acknowledge and close the dialog">Got it</button>
           }
         </div>
       </section>

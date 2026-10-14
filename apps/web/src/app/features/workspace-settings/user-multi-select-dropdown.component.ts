@@ -22,7 +22,9 @@ export type UserMultiSelectOption = {
       [label]="selectedLabel()"
       [searchThreshold]="0"
       searchPlaceholder="Search users..."
+      i18n-searchPlaceholder
       emptyLabel="No matching users"
+      i18n-emptyLabel
       (pick)="toggleUser($event)"
     >
       @if (selectedUsers().length) {
@@ -56,7 +58,7 @@ export type UserMultiSelectOption = {
 export class UserMultiSelectDropdownComponent {
   readonly users = input.required<UserMultiSelectOption[]>();
   readonly selectedIds = input<string[]>([]);
-  readonly placeholder = input("Choose users");
+  readonly placeholder = input($localize`Choose users`);
   readonly workspaceId = input<string | null>(null);
   readonly allowEmpty = input(false);
   /**

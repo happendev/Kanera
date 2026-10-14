@@ -28,25 +28,27 @@ interface ShortcutGroup {
     <div class="ks-backdrop" (click)="closed.emit()" aria-hidden="true"></div>
     <div class="ks-sheet" role="dialog" aria-modal="true" aria-labelledby="ks-title" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" (keydown.escape)="$event.preventDefault(); closed.emit()">
       <header class="ks-header">
-        <h2 id="ks-title">Keyboard shortcuts</h2>
+        <h2 id="ks-title" i18n="Dialog heading">Keyboard shortcuts</h2>
         <label class="ks-search">
           <i class="ti ti-search" aria-hidden="true"></i>
           <input
             type="search"
             placeholder="Search shortcuts"
+            i18n-placeholder
             aria-label="Search keyboard shortcuts"
+            i18n-aria-label
             aria-controls="ks-results"
             [value]="query()"
             (input)="query.set($any($event.target).value)"
             cdkFocusInitial
           />
           @if (query()) {
-            <button type="button" class="ks-search-clear" (click)="query.set('')" aria-label="Clear search">
+            <button type="button" class="ks-search-clear" (click)="query.set('')" aria-label="Clear search" i18n-aria-label>
               <i class="ti ti-x" aria-hidden="true"></i>
             </button>
           }
         </label>
-        <button type="button" class="ghost icon ks-close" (click)="closed.emit()" aria-label="Close">
+        <button type="button" class="ghost icon ks-close" (click)="closed.emit()" aria-label="Close" i18n-aria-label>
           <i class="ti ti-x"></i>
         </button>
       </header>
@@ -61,7 +63,7 @@ interface ShortcutGroup {
                     <span class="ks-label">{{ row.label }}</span>
                     <span class="ks-keys">
                       @for (press of row.keys; track $index) {
-                        @if (!$first) { <span class="ks-then">then</span> }
+                        @if (!$first) { <span class="ks-then" i18n="Between the key presses of a shortcut sequence, e.g. G then H">then</span> }
                         @for (key of press; track $index) {
                           <kbd class="k-kbd">{{ key }}</kbd>
                         }
@@ -75,14 +77,14 @@ interface ShortcutGroup {
         } @else {
           <div class="ks-empty" role="status">
             <i class="ti ti-search-off" aria-hidden="true"></i>
-            <p>No shortcuts match “{{ query().trim() }}”</p>
-            <button type="button" class="secondary" (click)="query.set('')">Clear search</button>
+            <p i18n="Empty search result; the placeholder is the search text">No shortcuts match “{{ query().trim() // i18n(ph="query") }}”</p>
+            <button type="button" class="secondary" (click)="query.set('')" i18n="Button">Clear search</button>
           </div>
         }
       </div>
       <span class="ks-result-count" aria-live="polite">
         @if (query().trim()) {
-          {{ resultCount() }} {{ resultCount() === 1 ? 'shortcut' : 'shortcuts' }} found
+          <ng-container i18n="Screen reader announcement of search results">{ resultCount(), plural, =1 {1 shortcut found} other {{{ resultCount() }} shortcuts found} }</ng-container>
         }
       </span>
     </div>

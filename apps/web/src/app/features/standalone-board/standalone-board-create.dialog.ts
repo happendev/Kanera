@@ -3,10 +3,18 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@a
 import type { Board, Workspace } from "@kanera/shared/schema";
 import type { WorkspaceTemplateId } from "@kanera/shared/workspace-templates";
 import { DEFAULT_WORKSPACE_TEMPLATE, WORKSPACE_TEMPLATES } from "@kanera/shared/workspace-templates";
-import { ApiClient, ApiError } from "../../core/api/api.client";
+import { localizeWorkspaceTemplate } from "@kanera/shared/workspace-template-localize";
 import { standaloneBoardCreatePayload } from "@kanera/shared/workspace-template-payload";
+import { ApiClient, ApiError } from "../../core/api/api.client";
+import { translateTemplateText } from "../../core/i18n/workspace-template.messages";
 
 type CreatedStandaloneBoard = Workspace & { initialBoard: Board };
+
+// The board is created in the viewer's language: lists, fields, labels and starter content all come
+// from the localized template, so what the preview shows is what gets created.
+const LOCALIZED_TEMPLATES = WORKSPACE_TEMPLATES.map((template) => localizeWorkspaceTemplate(template, translateTemplateText));
+const CREATE_FAILED = $localize`:Error when creating a standalone board fails:Could not create the board.`;
+const DEFAULT_TEMPLATE = LOCALIZED_TEMPLATES.find((template) => template.id === DEFAULT_WORKSPACE_TEMPLATE.id)!;
 
 @Component({
   selector: "k-standalone-board-create-dialog",
@@ -16,21 +24,21 @@ type CreatedStandaloneBoard = Workspace & { initialBoard: Board };
     <section class="create-board-dialog" aria-labelledby="create-board-title">
       <header>
         <div>
-          <h2 id="create-board-title">New standalone board</h2>
-          <p>Its workflow and settings stay independent from every workspace.</p>
+          <h2 id="create-board-title" i18n="Dialog title">New standalone board</h2>
+          <p i18n>Its workflow and settings stay independent from every workspace.</p>
         </div>
-        <button type="button" class="ghost icon" (click)="close()" aria-label="Close">
+        <button type="button" class="ghost icon" (click)="close()" aria-label="Close" i18n-aria-label="Button: close the dialog">
           <i class="ti ti-x"></i>
         </button>
       </header>
 
       <label>
-        <span>Board name</span>
-        <input autofocus [value]="name()" (input)="name.set($any($event.target).value)" maxlength="35" placeholder="e.g. Product launch" />
+        <span i18n="Form field label">Board name</span>
+        <input autofocus [value]="name()" (input)="name.set($any($event.target).value)" maxlength="35" placeholder="e.g. Product launch" i18n-placeholder="Example board name" />
       </label>
 
       <label>
-        <span>Starting template</span>
+        <span i18n="Form field label: the template a new board starts from">Starting template</span>
         <select [value]="templateId()" (input)="templateId.set($any($event.target).value)">
           @for (template of templates; track template.id) {
           <option [value]="template.id" [selected]="template.id === templateId()">{{ template.name }}</option>
@@ -51,9 +59,9 @@ type CreatedStandaloneBoard = Workspace & { initialBoard: Board };
       }
 
       <footer>
-        <button type="button" class="ghost" (click)="close()">Cancel</button>
+        <button type="button" class="ghost" (click)="close()" i18n="Button: close the dialog without creating">Cancel</button>
         <button type="button" (click)="create()" [disabled]="busy() || !name().trim()">
-          @if (busy()) { Creating… } @else { Create board }
+          @if (busy()) { <ng-container i18n="Button label while the board is being created">Creating…</ng-container> } @else { <ng-container i18n="Button">Create board</ng-container> }
         </button>
       </footer>
     </section>
@@ -79,11 +87,11 @@ export class StandaloneBoardCreateDialogComponent {
   private readonly api = inject(ApiClient);
   private readonly dialogRef = inject<DialogRef<string | undefined>>(DialogRef);
 
-  readonly templates = WORKSPACE_TEMPLATES;
+  readonly templates = LOCALIZED_TEMPLATES;
   readonly name = signal("");
-  readonly templateId = signal<WorkspaceTemplateId>(DEFAULT_WORKSPACE_TEMPLATE.id);
+  readonly templateId = signal<WorkspaceTemplateId>(DEFAULT_TEMPLATE.id);
   readonly selectedTemplate = computed(() =>
-    this.templates.find((template) => template.id === this.templateId()) ?? DEFAULT_WORKSPACE_TEMPLATE,
+    this.templates.find((template) => template.id === this.templateId()) ?? DEFAULT_TEMPLATE,
   );
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
@@ -105,8 +113,8 @@ export class StandaloneBoardCreateDialogComponent {
       this.dialogRef.close(created.initialBoard.id);
     } catch (error) {
       this.error.set(error instanceof ApiError
-        ? ((error.body as { message?: string } | undefined)?.message ?? "Could not create the board.")
-        : "Could not create the board.");
+        ? ((error.body as { message?: string } | undefined)?.message ?? CREATE_FAILED)
+        : CREATE_FAILED);
     } finally {
       this.busy.set(false);
     }

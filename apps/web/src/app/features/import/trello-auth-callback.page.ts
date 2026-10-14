@@ -49,8 +49,8 @@ import type { OnInit } from "@angular/core";
 export class TrelloAuthCallbackPage implements OnInit {
   private readonly document = inject(DOCUMENT);
 
-  title = "Connecting Trello";
-  message = "You can return to Kanera in a moment.";
+  title = $localize`:Heading while connecting a Trello account:Connecting Trello`;
+  message = $localize`You can return to Kanera in a moment.`;
 
   ngOnInit(): void {
     const view = this.document.defaultView;
@@ -58,8 +58,8 @@ export class TrelloAuthCallbackPage implements OnInit {
     const requestId = new URLSearchParams(this.document.location.search).get("requestId");
     const opener = view?.opener as Window | null | undefined;
     if (!view || !token || !opener) {
-      this.title = "Trello connection incomplete";
-      this.message = "Close this window and try connecting Trello again.";
+      this.title = $localize`:Heading when connecting a Trello account failed:Trello connection incomplete`;
+      this.message = $localize`Close this window and try connecting Trello again.`;
       return;
     }
 

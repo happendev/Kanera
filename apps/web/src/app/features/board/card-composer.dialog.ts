@@ -5,6 +5,8 @@ import { ALLOWED_ATTACHMENT_MIME, ALLOWED_ATTACHMENT_EXTENSIONS, getAllowedAttac
 import type { WireBoardMemberUser, WireCard, WireCardSummary, WireChecklistTemplate, WireCustomFieldOption } from "@kanera/shared/events";
 import type { Card } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
+import { icu } from "../../core/i18n/icu";
+import { appLocale } from "../../core/i18n/locale";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { NotificationsService } from "../../core/notifications/notifications.service";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
@@ -13,6 +15,7 @@ import { AnchoredPickerPopover } from "../../shared/anchored-picker.popover";
 import { AutofocusDirective } from "../../shared/autofocus.directive";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { DraftBannerComponent } from "../../shared/draft-banner.component";
+import { formatDate } from "../../shared/date-format";
 import { hasMarkdownContent } from "../../shared/markdown-content";
 import type { PickerGroup } from "../../shared/picker-list.component";
 import { PickerListComponent } from "../../shared/picker-list.component";
@@ -295,6 +298,9 @@ export class CardComposerDialogComponent implements OnInit {
     return this.labels().filter((label) => ids.has(label.id));
   });
   readonly selectedLabelNames = computed(() => this.selectedLabels().map((label) => label.name).join(", "));
+  readonly labelsAriaLabel = computed(() => this.selectedLabels().length
+    ? $localize`:Aria label on the labels chip; the chosen label names follow:Labels: ${this.selectedLabelNames()}:labels:`
+    : $localize`:Aria label on the labels chip when none are chosen:Labels`);
   /** Three swatches communicate a multi-label selection without letting the chip grow unbounded. */
   readonly selectedLabelPreview = computed(() => this.selectedLabels().slice(0, 3));
 
@@ -498,9 +504,18 @@ export class CardComposerDialogComponent implements OnInit {
   }
 
   formatBytes(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    if (bytes < 1024) return $localize`:File size in bytes:${formatNumber(bytes, 0)}:size: B`;
+    if (bytes < 1024 * 1024) return $localize`:File size in kilobytes:${formatNumber(bytes / 1024, 1)}:size: KB`;
+    return $localize`:File size in megabytes:${formatNumber(bytes / 1024 / 1024, 1)}:size: MB`;
+  }
+
+  removeFileLabel(name: string): string {
+    return $localize`:Aria label on the button that removes a staged file:Remove ${name}:fileName:`;
+  }
+
+  /** A date custom field value is a YYYY-MM-DD calendar day. */
+  formatFieldDate(value: string): string {
+    return formatDate(value, "medium") || value;
   }
 
   onFilesChosen(event: Event): void {
@@ -564,7 +579,9 @@ export class CardComposerDialogComponent implements OnInit {
     // upload — see DescriptionEditorUploader.validationError.
     const allowed = incoming.filter((file) => getAllowedAttachmentExtension(file.type, file.name) !== null);
     const skipped = incoming.length - allowed.length;
-    this.attachmentError.set(skipped > 0 ? `${skipped} file${skipped === 1 ? "" : "s"} skipped — unsupported type.` : null);
+    this.attachmentError.set(skipped > 0
+      ? icu($localize`:Error after staging files:{count, plural, one {# file skipped — unsupported type.} other {# files skipped — unsupported type.}}`, { count: skipped })
+      : null);
     if (allowed.length === 0) return;
     this.pendingAttachments.update((pending) => [
       ...pending,
@@ -686,7 +703,7 @@ export class CardComposerDialogComponent implements OnInit {
     const draft = this.draft();
     const listId = draft.listId || this.lists()[0]?.id;
     if (!listId) {
-      this.error.set("This board's workspace has no lists yet.");
+      this.error.set($localize`This board's workspace has no lists yet.`);
       return;
     }
 
@@ -710,7 +727,12 @@ export class CardComposerDialogComponent implements OnInit {
 
       const failures = await this.applyProperties(card.id, draft);
       if (failures.length > 0) {
-        this.error.set(`Card created, but ${failures.join(", ")} could not be applied. Open the card to fix ${failures.length === 1 ? "it" : "them"}.`);
+        // Each failure is a phrase ("labels", "the due date") naming what could not be applied.
+        const failed = new Intl.ListFormat(appLocale(), { style: "short", type: "unit" }).format(failures);
+        this.error.set(icu(
+          $localize`:Error after creating a card; {failed} lists what could not be applied:{count, plural, one {Card created, but {failed} could not be applied. Open the card to fix it.} other {Card created, but {failed} could not be applied. Open the card to fix them.}}`,
+          { count: failures.length, failed },
+        ));
         this.busy.set(false);
         return;
       }
@@ -743,7 +765,7 @@ export class CardComposerDialogComponent implements OnInit {
       }
       this.dismissed.emit();
     } catch {
-      this.error.set("We couldn’t create the card. Please try again.");
+      this.error.set($localize`We couldn’t create the card. Please try again.`);
       this.busy.set(false);
     }
   }
@@ -760,20 +782,20 @@ export class CardComposerDialogComponent implements OnInit {
     };
 
     if (draft.labelIds.length) {
-      await step("labels", () => this.api.put(`/cards/${cardId}/labels`, { labelIds: draft.labelIds }));
+      await step($localize`:Part of "Card created, but … could not be applied":labels`, () => this.api.put(`/cards/${cardId}/labels`, { labelIds: draft.labelIds }));
     }
     if (draft.dueDateLocalDate) {
-      await step("the due date", () => this.api.patch(`/cards/${cardId}`, {
+      await step($localize`:Part of "Card created, but … could not be applied":the due date`, () => this.api.patch(`/cards/${cardId}`, {
         dueDateLocalDate: draft.dueDateLocalDate,
         dueDateSlot: draft.dueDateSlot,
       }));
     }
     for (const [fieldId, value] of Object.entries(draft.customFields)) {
-      const name = this.customFields().find((field) => field.id === fieldId)?.name ?? "a custom field";
+      const name = this.customFields().find((field) => field.id === fieldId)?.name ?? $localize`:Part of "Card created, but … could not be applied":a custom field`;
       await step(name, () => this.api.put(`/cards/${cardId}/custom-fields/${fieldId}`, value));
     }
     if (draft.checklistTemplateIds.length) {
-      await step("checklists", () => this.api.post(`/cards/${cardId}/checklist-templates/apply`, {
+      await step($localize`:Part of "Card created, but … could not be applied":checklists`, () => this.api.post(`/cards/${cardId}/checklist-templates/apply`, {
         templateIds: draft.checklistTemplateIds,
       }));
     }
@@ -781,15 +803,21 @@ export class CardComposerDialogComponent implements OnInit {
     // same "created, but…" path as every other property the create body could not carry.
     const failedUploads = await this.uploadPendingAttachments(cardId);
     if (failedUploads.length > 0) {
-      failures.push(failedUploads.length === 1 ? `the attachment ${failedUploads[0]}` : `${failedUploads.length} attachments`);
+      failures.push(failedUploads.length === 1
+        ? $localize`:Part of "Card created, but … could not be applied":the attachment ${failedUploads[0]}:fileName:`
+        : icu($localize`:Part of "Card created, but … could not be applied":{count, plural, other {# attachments}}`, { count: failedUploads.length }));
     }
     // Completion is applied last: a card seeded from a "Completed" column should only flip once its
     // content is in place, so watchers do not receive a completion notification for an empty card.
     if (draft.completed) {
-      await step("completion", () => this.api.patch(`/cards/${cardId}/completion`, { completed: true }));
+      await step($localize`:Part of "Card created, but … could not be applied":completion`, () => this.api.patch(`/cards/${cardId}/completion`, { completed: true }));
     }
     return failures;
   }
+}
+
+function formatNumber(value: number, fractionDigits: number): string {
+  return new Intl.NumberFormat(appLocale(), { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits }).format(value);
 }
 
 function mergeIds(current: string[], extra: string[]): string[] {

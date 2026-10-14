@@ -16,6 +16,7 @@ import { MediaDownloadService } from "../../core/media/media-download.service";
 import type { AttachmentPreviewType } from "../../shared/attachment-preview";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { DescriptionViewerComponent } from "./description-viewer.component";
+import { appLocale } from "../../core/i18n/locale";
 import { formatDate } from "../../shared/date-format";
 
 const MARKDOWN_PREVIEW_MAX_BYTES = 2 * 1024 * 1024;
@@ -38,6 +39,11 @@ export type ImageLightboxData = ImageLightboxItem & {
   initialIndex?: number;
 };
 
+// Zoom level as a whole percentage in the viewer's number format ("150%", "150 %").
+const ZOOM_FORMAT = new Intl.NumberFormat(appLocale(), { style: "percent", maximumFractionDigits: 0 });
+
+class PreviewTooLargeError extends Error {}
+
 @Component({
   selector: "k-image-lightbox",
   standalone: true,
@@ -51,7 +57,9 @@ export type ImageLightboxData = ImageLightboxItem & {
         class="lb-nav-btn lb-nav-prev"
         (click)="showPrevious(); $event.stopPropagation()"
         aria-label="Previous attachment"
+        i18n-aria-label
         kTooltip="Previous attachment"
+        i18n-kTooltip
       >
         <i class="ti ti-chevron-left"></i>
       </button>
@@ -60,7 +68,9 @@ export type ImageLightboxData = ImageLightboxItem & {
         class="lb-nav-btn lb-nav-next"
         (click)="showNext(); $event.stopPropagation()"
         aria-label="Next attachment"
+        i18n-aria-label
         kTooltip="Next attachment"
+        i18n-kTooltip
       >
         <i class="ti ti-chevron-right"></i>
       </button>
@@ -91,7 +101,7 @@ export type ImageLightboxData = ImageLightboxItem & {
         } @else if (isAudio()) {
         <div class="lb-file-card lb-audio-card" (click)="$event.stopPropagation()">
           <i class="ti ti-file-music lb-file-icon"></i>
-          <span class="lb-file-card-name">{{ activeImage().fileName || 'Audio attachment' }}</span>
+          <span class="lb-file-card-name">{{ activeImage().fileName || audioFallbackName }}</span>
           <audio [src]="activeImage().src" controls autoplay preload="metadata"></audio>
         </div>
         } @else if (isPdf()) {
@@ -99,32 +109,32 @@ export type ImageLightboxData = ImageLightboxItem & {
           <iframe
             class="lb-pdf"
             [src]="src"
-            [title]="'PDF preview: ' + (activeImage().fileName || 'attachment.pdf')"
+            [title]="pdfTitle()"
             (click)="$event.stopPropagation()"
           ></iframe>
           } @else {
           <div class="lb-file-card" (click)="$event.stopPropagation()">
             <i class="ti ti-file-type-pdf lb-file-icon"></i>
-            <span class="lb-file-card-name">{{ activeImage().fileName || 'PDF attachment' }}</span>
+            <span class="lb-file-card-name">{{ activeImage().fileName || pdfFallbackName }}</span>
             @if (pdfLoading()) {
-            <span class="lb-file-hint">Loading preview…</span>
+            <span class="lb-file-hint" i18n>Loading preview…</span>
             } @else {
-            <span class="lb-file-hint">Preview unavailable. Download the PDF to view it.</span>
+            <span class="lb-file-hint" i18n>Preview unavailable. Download the PDF to view it.</span>
             }
           </div>
           }
         } @else if (isMarkdown()) {
           <article class="lb-markdown" (click)="$event.stopPropagation()">
             @if (markdown(); as value) {
-            <k-description-viewer [value]="value" emptyLabel="This Markdown file is empty." emptyIcon="markdown" [showCopy]="true" />
+            <k-description-viewer [value]="value" emptyLabel="This Markdown file is empty." i18n-emptyLabel emptyIcon="markdown" [showCopy]="true" />
             } @else {
             <div class="lb-file-card lb-markdown-state">
               <i class="ti ti-markdown lb-file-icon"></i>
-              <span class="lb-file-card-name">{{ activeImage().fileName || 'Markdown attachment' }}</span>
+              <span class="lb-file-card-name">{{ activeImage().fileName || markdownFallbackName }}</span>
               @if (markdownLoading()) {
-              <span class="lb-file-hint">Rendering preview…</span>
+              <span class="lb-file-hint" i18n>Rendering preview…</span>
               } @else {
-              <span class="lb-file-hint">{{ markdownError() || 'This Markdown file is empty.' }}</span>
+              <span class="lb-file-hint">{{ markdownError() || markdownEmptyLabel }}</span>
               }
             </div>
             }
@@ -136,11 +146,11 @@ export type ImageLightboxData = ImageLightboxItem & {
             } @else {
             <div class="lb-file-card lb-markdown-state">
               <i class="ti ti-file-text lb-file-icon"></i>
-              <span class="lb-file-card-name">{{ activeImage().fileName || 'Text attachment' }}</span>
+              <span class="lb-file-card-name">{{ activeImage().fileName || textFallbackName }}</span>
               @if (markdownLoading()) {
-              <span class="lb-file-hint">Loading preview…</span>
+              <span class="lb-file-hint" i18n>Loading preview…</span>
               } @else {
-              <span class="lb-file-hint">{{ markdownError() || 'This text file is empty.' }}</span>
+              <span class="lb-file-hint">{{ markdownError() || textEmptyLabel }}</span>
               }
             </div>
             }
@@ -163,24 +173,24 @@ export type ImageLightboxData = ImageLightboxItem & {
 
       <div class="lb-controls" (click)="$event.stopPropagation()">
         @if (hasMultiple()) {
-        <button type="button" class="lb-ctrl-btn" (click)="showPrevious()" aria-label="Previous attachment">
+        <button type="button" class="lb-ctrl-btn" (click)="showPrevious()" aria-label="Previous attachment" i18n-aria-label>
           <i class="ti ti-chevron-left"></i>
         </button>
         }
         @if (isImage()) {
-        <button type="button" class="lb-ctrl-btn" (click)="zoomOut()" [disabled]="scale() <= minScale" aria-label="Zoom out">
+        <button type="button" class="lb-ctrl-btn" (click)="zoomOut()" [disabled]="scale() <= minScale" aria-label="Zoom out" i18n-aria-label>
           <i class="ti ti-zoom-out"></i>
         </button>
         <span class="lb-zoom-pct">{{ zoomLabel() }}</span>
-        <button type="button" class="lb-ctrl-btn" (click)="zoomIn()" [disabled]="scale() >= maxScale" aria-label="Zoom in">
+        <button type="button" class="lb-ctrl-btn" (click)="zoomIn()" [disabled]="scale() >= maxScale" aria-label="Zoom in" i18n-aria-label>
           <i class="ti ti-zoom-in"></i>
         </button>
-        <button type="button" class="lb-ctrl-btn" (click)="resetZoom()" aria-label="Reset zoom" kTooltip="Reset zoom (0)">
+        <button type="button" class="lb-ctrl-btn" (click)="resetZoom()" aria-label="Reset zoom" i18n-aria-label kTooltip="Reset zoom (0)" i18n-kTooltip="Tooltip; (0) is the keyboard shortcut">
           <i class="ti ti-arrows-maximize"></i>
         </button>
         }
         @if (hasMultiple()) {
-        <button type="button" class="lb-ctrl-btn" (click)="showNext()" aria-label="Next attachment">
+        <button type="button" class="lb-ctrl-btn" (click)="showNext()" aria-label="Next attachment" i18n-aria-label>
           <i class="ti ti-chevron-right"></i>
         </button>
         }
@@ -192,8 +202,8 @@ export type ImageLightboxData = ImageLightboxItem & {
           type="button"
           class="lb-ctrl-btn"
           (click)="copyText($event)"
-          [attr.aria-label]="textCopied() ? 'Copied text' : 'Copy text'"
-          [kTooltip]="textCopied() ? 'Copied' : 'Copy text'"
+          [attr.aria-label]="textCopied() ? copiedTextLabel : copyTextLabel"
+          [kTooltip]="textCopied() ? copiedLabel : copyTextLabel"
         >
           <i class="ti" [class.ti-copy]="!textCopied()" [class.ti-copy-check]="textCopied()"></i>
         </button>
@@ -203,11 +213,13 @@ export type ImageLightboxData = ImageLightboxItem & {
           class="lb-ctrl-btn"
           (click)="downloadActiveImage(); $event.stopPropagation()"
           aria-label="Download"
+          i18n-aria-label="Button: download the attachment"
           kTooltip="Download"
+          i18n-kTooltip="Button: download the attachment"
         >
           <i class="ti ti-download"></i>
         </button>
-        <button type="button" class="lb-ctrl-btn" (click)="close()" aria-label="Close">
+        <button type="button" class="lb-ctrl-btn" (click)="close()" aria-label="Close" i18n-aria-label="Button: close the preview">
           <i class="ti ti-x"></i>
         </button>
       </div>
@@ -221,7 +233,7 @@ export type ImageLightboxData = ImageLightboxItem & {
         <span class="lb-footer-sep">·</span>
         }
         @if (activeImage().createdAt; as createdAt) {
-        <span class="lb-footer-date">Added {{ formatDate(createdAt) }}</span>
+        <span class="lb-footer-date" i18n="Attachment upload date, e.g. Added 4 Mar 2026">Added {{ formatDate(createdAt) // i18n(ph="date") }}</span>
         }
       </div>
       }
@@ -595,8 +607,18 @@ export class ImageLightboxComponent implements OnDestroy {
   private textCopiedTimer: number | null = null;
   readonly markdownLoading = signal(false);
   readonly markdownError = signal<string | null>(null);
-  readonly positionLabel = computed(() => `${this.currentIndex() + 1} / ${this.images.length}`);
-  readonly zoomLabel = computed(() => Math.round(this.scale() * 100) + "%");
+  readonly positionLabel = computed(() => $localize`:Position in the attachment gallery, e.g. 2 / 5:${this.currentIndex() + 1}:position: / ${this.images.length}:total:`);
+  readonly zoomLabel = computed(() => ZOOM_FORMAT.format(this.scale()));
+  readonly audioFallbackName = $localize`:Stand-in name for an unnamed file:Audio attachment`;
+  readonly pdfFallbackName = $localize`:Stand-in name for an unnamed file:PDF attachment`;
+  readonly markdownFallbackName = $localize`:Stand-in name for an unnamed file:Markdown attachment`;
+  readonly textFallbackName = $localize`:Stand-in name for an unnamed file:Text attachment`;
+  readonly markdownEmptyLabel = $localize`This Markdown file is empty.`;
+  readonly textEmptyLabel = $localize`This text file is empty.`;
+  readonly copyTextLabel = $localize`:Button - copy the file contents as text:Copy text`;
+  readonly copiedTextLabel = $localize`:Button state after copying the file contents:Copied text`;
+  readonly copiedLabel = $localize`:Tooltip after copying:Copied`;
+  readonly pdfTitle = computed(() => $localize`:Accessible title of the embedded PDF viewer:PDF preview: ${this.activeImage().fileName || "attachment.pdf"}:fileName:`);
   readonly imageTransform = computed(() =>
     `translate(${this.panX()}px, ${this.panY()}px) scale(${this.scale()})`,
   );
@@ -783,14 +805,14 @@ export class ImageLightboxComponent implements OnDestroy {
   }
 
   private async loadMarkdownPreview(src: string, controller: AbortController) {
-    const label = this.isText() ? "text file" : "Markdown file";
+    const isText = this.isText();
     this.markdownLoading.set(true);
     try {
       const response = await fetch(src, { signal: controller.signal });
       if (!response.ok) throw new Error(`Markdown preview failed with status ${response.status}`);
       const source = await response.blob();
       if (source.size > MARKDOWN_PREVIEW_MAX_BYTES) {
-        throw new Error(`This ${label} is too large to preview. Download it to view the full file.`);
+        throw new PreviewTooLargeError();
       }
       const value = await source.text();
       if (controller.signal.aborted || this.markdownAbortController !== controller) return;
@@ -798,9 +820,15 @@ export class ImageLightboxComponent implements OnDestroy {
     } catch (error) {
       if (controller.signal.aborted || this.markdownAbortController !== controller) return;
       this.markdown.set(null);
-      this.markdownError.set(error instanceof Error && error.message.startsWith(`This ${label}`)
-        ? error.message
-        : `Preview unavailable. Download the ${label} to view it.`);
+      if (error instanceof PreviewTooLargeError) {
+        this.markdownError.set(isText
+          ? $localize`This text file is too large to preview. Download it to view the full file.`
+          : $localize`This Markdown file is too large to preview. Download it to view the full file.`);
+      } else {
+        this.markdownError.set(isText
+          ? $localize`Preview unavailable. Download the text file to view it.`
+          : $localize`Preview unavailable. Download the Markdown file to view it.`);
+      }
     } finally {
       if (this.markdownAbortController === controller) this.markdownLoading.set(false);
     }

@@ -1,6 +1,7 @@
 import type { AutomationActionBody, CustomFieldTypeName, DueDateSlot } from "@kanera/shared/dto";
 import type { WireAutomation, WireCardLabel, WireChecklistTemplate, WireCustomField } from "@kanera/shared/events";
 import type { List } from "@kanera/shared/schema";
+import { icu } from "../../../core/i18n/icu";
 import type { CardLabelPresentation } from "../../board/card-labels.component";
 
 type PopulateCustomFieldAction = Extract<AutomationActionBody, { type: "populate_custom_field" }>;
@@ -36,17 +37,17 @@ export interface AutomationLookups {
 
 /** Placeholders the post_comment template accepts; shown as hints in the editor. */
 export const automationCommentTemplateVariables = [
-  { token: "{{card.title}}", label: "Card title" },
-  { token: "{{card.key}}", label: "Card key" },
-  { token: "{{card.url}}", label: "Card link" },
-  { token: "{{card.dueDate}}", label: "Due date" },
-  { token: "{{list.name}}", label: "List" },
-  { token: "{{board.name}}", label: "Board" },
-  { token: "{{workspace.name}}", label: "Workspace" },
+  { token: "{{card.title}}", label: $localize`:Comment template placeholder:Card title` },
+  { token: "{{card.key}}", label: $localize`:Comment template placeholder:Card key` },
+  { token: "{{card.url}}", label: $localize`:Comment template placeholder:Card link` },
+  { token: "{{card.dueDate}}", label: $localize`:Comment template placeholder:Due date` },
+  { token: "{{list.name}}", label: $localize`:Comment template placeholder — the list name:List` },
+  { token: "{{board.name}}", label: $localize`:Comment template placeholder — the board name:Board` },
+  { token: "{{workspace.name}}", label: $localize`:Comment template placeholder — the workspace name:Workspace` },
 ] as const;
 
 function automationWebhookName(id: string, lookups: AutomationLookups): string {
-  return lookups.webhooks.find((hook) => hook.id === id)?.name ?? "Deleted webhook";
+  return lookups.webhooks.find((hook) => hook.id === id)?.name ?? $localize`Deleted webhook`;
 }
 
 /** First line of the comment template, shortened, for collapsed summaries. */
@@ -103,9 +104,10 @@ export function automationDueSlotValue(action: AutomationActionBody): DueDateSlo
 }
 
 export function automationDueSlotLabel(slot: DueDateSlot): string {
-  if (slot === "anyTime") return "Any time";
-  if (slot === "endOfWorkDay") return "End of workday";
-  return slot.charAt(0).toUpperCase() + slot.slice(1);
+  if (slot === "anyTime") return $localize`:Due date time of day:Any time`;
+  if (slot === "endOfWorkDay") return $localize`:Due date time of day:End of workday`;
+  if (slot === "morning") return $localize`:Due date time of day:Morning`;
+  return $localize`:Due date time of day:Afternoon`;
 }
 
 export function automationCompletionValue(action: AutomationActionBody): string {
@@ -121,12 +123,13 @@ export function automationPopulateTextValue(action: AutomationActionBody): strin
 }
 
 export function automationPopulateTextDateFormatLabel(format: PopulateTextDateFormat): string {
-  if (format === "date") return "YYYY-MM-DD";
-  if (format === "month") return "YYYY-MM";
-  if (format === "month_long_short_year") return "MMMM yy";
-  if (format === "month_long_year") return "MMMM yyyy";
-  if (format === "datetime") return "YYYY-MM-DD HH:mm";
-  return "YYYY-MM-DD";
+  // Display labels for the formats: a translator may localise the pattern letters (JJJJ-MM in German),
+  // but the value written to the card is decided by the server, not by this label.
+  if (format === "month") return $localize`:Date format option (year-month), e.g. 2026-10:YYYY-MM`;
+  if (format === "month_long_short_year") return $localize`:Date format option (month name and 2-digit year), e.g. October 26:MMMM yy`;
+  if (format === "month_long_year") return $localize`:Date format option (month name and year), e.g. October 2026:MMMM yyyy`;
+  if (format === "datetime") return $localize`:Date format option (date and time), e.g. 2026-10-14 09.30:YYYY-MM-DD HH:mm`;
+  return $localize`:Date format option (year-month-day), e.g. 2026-10-14:YYYY-MM-DD`;
 }
 
 export function isAutomationLabelAction(action: AutomationActionBody): boolean {
@@ -154,24 +157,24 @@ export function automationActionIconClass(action: AutomationActionBody): string 
 // ─── Name resolution ──────────────────────────────────────────────────────────
 
 export function automationLabelName(id: string, lookups: AutomationLookups): string {
-  return lookups.labels.find((label) => label.id === id)?.name ?? "Label";
+  return lookups.labels.find((label) => label.id === id)?.name ?? $localize`:Stand-in for an unknown card label:Label`;
 }
 
 /** Distinct from `automationLabelName`: a trigger naming a deleted label must say so, not read as configured. */
 export function automationTriggerLabelName(id: string, lookups: AutomationLookups): string {
-  return lookups.labels.find((label) => label.id === id)?.name ?? "Deleted label";
+  return lookups.labels.find((label) => label.id === id)?.name ?? $localize`Deleted label`;
 }
 
 export function automationMemberName(id: string, lookups: AutomationLookups): string {
-  return lookups.members.find((member) => member.userId === id)?.displayName ?? "Member";
+  return lookups.members.find((member) => member.userId === id)?.displayName ?? $localize`:Stand-in for an unknown member:Member`;
 }
 
 export function automationTemplateName(id: string, lookups: AutomationLookups): string {
-  return lookups.templates.find((template) => template.id === id)?.title ?? "Checklist";
+  return lookups.templates.find((template) => template.id === id)?.title ?? $localize`:Stand-in for an unknown checklist template:Checklist`;
 }
 
 export function automationCustomFieldName(id: string, lookups: AutomationLookups): string {
-  return lookups.fields.find((field) => field.id === id)?.name ?? "Custom field";
+  return lookups.fields.find((field) => field.id === id)?.name ?? $localize`:Stand-in for an unknown custom field:Custom field`;
 }
 
 export function automationTriggerLabelMissing(automation: WireAutomation, lookups: AutomationLookups): boolean {
@@ -191,7 +194,7 @@ export function automationSetCustomField(action: AutomationActionBody, lookups: 
 export function automationActionLabelChips(action: AutomationActionBody, lookups: AutomationLookups): CardLabelPresentation[] {
   return automationActionLabelIds(action).map((id) => {
     const label = lookups.labels.find((candidate) => candidate.id === id);
-    return { id, name: label?.name ?? "Deleted label", color: label?.color ?? null };
+    return { id, name: label?.name ?? $localize`Deleted label`, color: label?.color ?? null };
   });
 }
 
@@ -205,13 +208,21 @@ function truncatedNames(names: string[], emptyLabel: string): string {
 }
 
 function automationDueDateSummary(offsetDays: number, slot: DueDateSlot): string {
+  const days = Math.abs(offsetDays);
   const dayLabel =
-    offsetDays === 0 ? "today"
-      : offsetDays === 1 ? "tomorrow"
-        : offsetDays === 7 ? "in 1 week"
-          : offsetDays > 0 ? `in ${offsetDays} days`
-            : `${Math.abs(offsetDays)} ${Math.abs(offsetDays) === 1 ? "day" : "days"} ago`;
-  return slot === "anyTime" ? dayLabel : `${dayLabel}, ${automationDueSlotLabel(slot)}`;
+    offsetDays === 0 ? $localize`:Automation due date, relative to the run:today`
+      : offsetDays === 1 ? $localize`:Automation due date, relative to the run:tomorrow`
+        : offsetDays === 7 ? $localize`:Automation due date, relative to the run:in 1 week`
+          : offsetDays > 0 ? icu($localize`:Automation due date, relative to the run:{days, plural, one {in # day} other {in # days}}`, { days })
+            : icu($localize`:Automation due date, relative to the run:{days, plural, one {# day ago} other {# days ago}}`, { days });
+  return slot === "anyTime" ? dayLabel : $localize`:Automation due date then the time of day, e.g. tomorrow, Morning:${dayLabel}:day:, ${automationDueSlotLabel(slot)}:timeOfDay:`;
+}
+
+/** "top" / "bottom", as the placement reads inside a sentence. */
+function automationMovePlacementLabel(action: AutomationActionBody): string {
+  return automationMovePlacementValue(action) === "top"
+    ? $localize`:Position in a list, inside a sentence (Move to Done, at the top):top`
+    : $localize`:Position in a list, inside a sentence (Move to Done, at the bottom):bottom`;
 }
 
 /**
@@ -224,53 +235,70 @@ export function automationTriggerTargetLabel(automation: WireAutomation, lookups
   if (automation.triggerType === "due_date_arrives") return null;
   if (automation.triggerType === "due_date_approaching") {
     const days = automation.triggerDaysBefore ?? 1;
-    return `${days} ${days === 1 ? "day" : "days"} before`;
+    return icu($localize`:Automation trigger target:{days, plural, one {# day before} other {# days before}}`, { days });
   }
   if (automation.triggerType === "card_becomes_inactive") return null;
   if (automation.triggerType === "all_checklist_items_complete") return null;
   if (automation.triggerType === "card_marked_complete") return null;
   if (automation.triggerType === "card_label_set") {
-    return automation.triggerLabelId ? automationTriggerLabelName(automation.triggerLabelId, lookups) : "a label";
+    return automation.triggerLabelId ? automationTriggerLabelName(automation.triggerLabelId, lookups) : $localize`:Unconfigured automation trigger target:a label`;
   }
   if (automation.triggerType === "card_assigned_to_user") {
-    return truncatedNames(automationTriggerUserIds(automation).map((id) => automationMemberName(id, lookups)), "selected users");
+    return truncatedNames(automationTriggerUserIds(automation).map((id) => automationMemberName(id, lookups)), $localize`:Unconfigured automation trigger target:selected users`);
   }
   if (automation.triggerType === "custom_field_value_changed") {
     const field = lookups.fields.find((item) => item.id === automation.triggerCustomFieldId);
     const value = automation.triggerCustomFieldValue;
-    if (!field || !value) return "a selected value";
+    if (!field || !value) return $localize`:Unconfigured automation trigger target:a selected value`;
     const rendered = value.kind === "text" ? value.text
       : value.kind === "number" ? String(value.number)
-      : value.kind === "checkbox" ? (value.checked ? "Checked" : "Unchecked")
+      : value.kind === "checkbox" ? (value.checked ? $localize`:Checkbox custom field value:Checked` : $localize`:Checkbox custom field value:Unchecked`)
       : value.kind === "date" ? value.date
       : value.kind === "url" ? value.url
-      : value.kind === "select" ? field.options.find((option) => option.id === value.optionId)?.label ?? "Deleted option"
+      : value.kind === "select" ? field.options.find((option) => option.id === value.optionId)?.label ?? $localize`Deleted option`
       : automationMemberName(value.userId, lookups);
     return `${field.name} = ${rendered}`;
   }
-  return lookups.lists.find((item) => item.id === automation.triggerListId)?.name ?? "a list";
+  return lookups.lists.find((item) => item.id === automation.triggerListId)?.name ?? $localize`:Unconfigured automation trigger target:a list`;
 }
 
 export function automationPopulateValueLabel(action: AutomationActionBody, lookups: AutomationLookups): string {
   if (action.type !== "populate_custom_field") return "";
   const value = action.config.value;
-  if (value.kind === "text") return value.text || "Text";
+  if (value.kind === "text") return value.text || $localize`:Stand-in for empty text to write into a field:Text`;
   if (value.kind === "number") return String(value.number);
   if (value.kind === "text_current_date") return automationPopulateTextDateFormatLabel(value.format);
-  if (value.kind === "date") return value.source === "current" ? "Current date" : value.date;
-  if (value.kind === "checkbox") return value.checked ? "Checked" : "Unchecked";
+  if (value.kind === "date") return value.source === "current" ? $localize`:Value written by an automation — the date it runs:Current date` : value.date;
+  if (value.kind === "checkbox") return value.checked ? $localize`:Checkbox custom field value:Checked` : $localize`:Checkbox custom field value:Unchecked`;
   if (value.kind === "select") {
     const field = automationSetCustomField(action, lookups);
     return truncatedNames(
-      value.optionIds.map((id) => field?.options.find((option) => option.id === id)?.label ?? "Option"),
-      "Choose option",
+      value.optionIds.map((id) => field?.options.find((option) => option.id === id)?.label ?? $localize`:Stand-in for an unknown select option:Option`),
+      $localize`Choose option`,
     );
   }
   if (value.kind === "user") {
-    return truncatedNames(value.userIds.map((id) => automationMemberName(id, lookups)), "Choose members");
+    return truncatedNames(value.userIds.map((id) => automationMemberName(id, lookups)), $localize`Choose members`);
   }
-  if (value.kind === "field") return value.sourceFieldId ? automationCustomFieldName(value.sourceFieldId, lookups) : "Choose field";
+  if (value.kind === "field") return value.sourceFieldId ? automationCustomFieldName(value.sourceFieldId, lookups) : $localize`:Select placeholder — custom field:Choose field`;
   return "";
+}
+
+/**
+ * Splits a translated summary message into segments. Each `{name}` in `values` becomes a strong
+ * segment carrying that value; every other ICU argument (counts) is evaluated as usual. Values go
+ * through markers rather than straight into the text, so a "{" or "#" in a user's list or field name
+ * stays literal and the template can still emphasise exactly the configured values.
+ */
+function summarySegments(message: string, values: Record<string, string>, counts: Record<string, number> = {}): AutomationSummarySegment[] {
+  const names = Object.keys(values);
+  const markers = Object.fromEntries(names.map((name, i) => [name, `\u0000${i}\u0000`]));
+  const segments: AutomationSummarySegment[] = [];
+  icu(message, { ...counts, ...markers }).split("\u0000").forEach((part, i) => {
+    if (i % 2 === 1) segments.push({ text: values[names[Number(part)]!] ?? "", strong: true });
+    else if (part) segments.push({ text: part, strong: false });
+  });
+  return segments;
 }
 
 /**
@@ -280,83 +308,96 @@ export function automationPopulateValueLabel(action: AutomationActionBody, looku
  * verb/value table needed two strong grey levels to read as columns and never got them, so a
  * sentence with one weight step replaces a layout with none.
  *
+ * Each sentence is one translatable message with `{value}` arguments (see `summarySegments`), so a
+ * translator can move the emphasised values wherever their grammar needs them.
+ *
  * Label actions end on a trailing space and let k-card-labels finish the sentence — a label's
  * colour *is* the value, so no text stands in for it.
  */
 export function automationActionSummarySegments(action: AutomationActionBody, lookups: AutomationLookups): AutomationSummarySegment[] {
-  const plain = (text: string): AutomationSummarySegment => ({ text, strong: false });
-  const value = (text: string): AutomationSummarySegment => ({ text, strong: true });
-
   if (action.type === "add_labels" || action.type === "remove_labels") {
-    const verb = action.type === "add_labels" ? "Add" : "Remove";
     const count = action.config.labelIds.length;
-    if (count === 0) return [plain(`${verb} label `), value("(choose labels)")];
-    return [plain(`${verb} ${count === 1 ? "label" : "labels"} `)];
+    if (count === 0) {
+      return action.type === "add_labels"
+        ? summarySegments($localize`:Automation action summary, not yet configured:Add label {choose}`, { choose: $localize`:Prompt inside an automation summary:(choose labels)` })
+        : summarySegments($localize`:Automation action summary, not yet configured:Remove label {choose}`, { choose: $localize`:Prompt inside an automation summary:(choose labels)` });
+    }
+    // The label chips follow this text and finish the sentence.
+    const verb = action.type === "add_labels"
+      ? icu($localize`:Automation action summary; coloured label chips follow:{count, plural, one {Add label} other {Add labels}}`, { count })
+      : icu($localize`:Automation action summary; coloured label chips follow:{count, plural, one {Remove label} other {Remove labels}}`, { count });
+    return [{ text: `${verb} `, strong: false }];
   }
   if (action.type === "add_assignees" || action.type === "remove_assignees") {
-    const verb = action.type === "add_assignees" ? "Assign" : "Unassign";
-    if (action.config.userIds.length === 0) return [plain(`${verb} `), value("(choose members)")];
-    return [plain(`${verb} `), value(automationActionTargetLabel(action, lookups) ?? "")];
+    const configured = action.config.userIds.length > 0;
+    const members = configured ? automationActionTargetLabel(action, lookups) ?? "" : $localize`:Prompt inside an automation summary:(choose members)`;
+    return action.type === "add_assignees"
+      ? summarySegments($localize`:Automation action summary:Assign {members}`, { members })
+      : summarySegments($localize`:Automation action summary:Unassign {members}`, { members });
   }
   if (action.type === "apply_checklists") {
-    if (action.config.templateIds.length === 0) return [plain("Apply "), value("(choose checklists)")];
     const count = action.config.templateIds.length;
-    return [plain(`Apply ${count === 1 ? "checklist" : "checklists"} `), value(automationActionTargetLabel(action, lookups) ?? "")];
+    if (count === 0) return summarySegments($localize`:Automation action summary, not yet configured:Apply {choose}`, { choose: $localize`:Prompt inside an automation summary:(choose checklists)` });
+    return summarySegments(
+      $localize`:Automation action summary:{count, plural, one {Apply checklist {checklists}} other {Apply checklists {checklists}}}`,
+      { checklists: automationActionTargetLabel(action, lookups) ?? "" },
+      { count },
+    );
   }
   if (action.type === "move_to_list") {
-    if (!action.config.listId) return [plain("Move to "), value("(choose list)")];
-    const listName = lookups.lists.find((list) => list.id === action.config.listId)?.name ?? "list";
-    return [plain("Move to "), value(listName), plain(", at the "), value(automationMovePlacementValue(action))];
+    if (!action.config.listId) return summarySegments($localize`:Automation action summary, not yet configured:Move to {choose}`, { choose: $localize`:Prompt inside an automation summary:(choose list)` });
+    const listName = lookups.lists.find((list) => list.id === action.config.listId)?.name ?? $localize`:Stand-in for an unknown list:list`;
+    return summarySegments($localize`:Automation action summary, e.g. Move to Done, at the bottom:Move to {list}, at the {placement}`, { list: listName, placement: automationMovePlacementLabel(action) });
   }
-  if (action.type === "move_to_top") return [plain("Move to the top of its list")];
-  if (action.type === "move_to_bottom") return [plain("Move to the bottom of its list")];
+  if (action.type === "move_to_top") return [{ text: $localize`:Automation action summary:Move to the top of its list`, strong: false }];
+  if (action.type === "move_to_bottom") return [{ text: $localize`:Automation action summary:Move to the bottom of its list`, strong: false }];
   if (action.type === "set_due_date") {
-    return [plain("Set due date "), value(automationDueDateSummary(action.config.offsetDays, action.config.slot))];
+    return summarySegments($localize`:Automation action summary, e.g. Set due date tomorrow:Set due date {when}`, { when: automationDueDateSummary(action.config.offsetDays, action.config.slot) });
   }
-  if (action.type === "clear_due_date") return [plain("Clear the due date")];
+  if (action.type === "clear_due_date") return [{ text: $localize`:Automation action summary:Clear the due date`, strong: false }];
   if (action.type === "populate_custom_field") {
-    if (!action.config.fieldId) return [plain("Set "), value("(choose custom field)")];
-    return [
-      plain("Set "),
-      value(automationCustomFieldName(action.config.fieldId, lookups)),
-      plain(" to "),
-      value(automationPopulateValueLabel(action, lookups)),
-    ];
+    if (!action.config.fieldId) return summarySegments($localize`:Automation action summary, not yet configured:Set {choose}`, { choose: $localize`:Prompt inside an automation summary:(choose custom field)` });
+    return summarySegments($localize`:Automation action summary, e.g. Set Billing Month to YYYY-MM:Set {field} to {value}`, {
+      field: automationCustomFieldName(action.config.fieldId, lookups),
+      value: automationPopulateValueLabel(action, lookups),
+    });
   }
   if (action.type === "post_comment") {
     const preview = automationCommentPreview(action.config.template);
-    return preview ? [plain("Post comment "), value(`“${preview}”`)] : [plain("Post comment "), value("(write the comment)")];
+    return summarySegments($localize`:Automation action summary; the comment follows:Post comment {comment}`, {
+      comment: preview ? `“${preview}”` : $localize`:Prompt inside an automation summary:(write the comment)`,
+    });
   }
   if (action.type === "call_webhook") {
-    if (!action.config.endpointId) return [plain("Call webhook "), value("(choose endpoint)")];
-    return [plain("Call webhook "), value(automationWebhookName(action.config.endpointId, lookups))];
+    const endpoint = action.config.endpointId ? automationWebhookName(action.config.endpointId, lookups) : $localize`:Prompt inside an automation summary:(choose endpoint)`;
+    return summarySegments($localize`:Automation action summary; the webhook name follows:Call webhook {endpoint}`, { endpoint });
   }
-  return [plain(action.config.completed ? "Mark complete" : "Mark incomplete")];
+  return [{ text: action.config.completed ? $localize`:Automation action summary:Mark complete` : $localize`:Automation action summary:Mark incomplete`, strong: false }];
 }
 
 /** The value shown on an action's own control. Unlike the summary, unset reads as a prompt. */
 export function automationActionTargetLabel(action: AutomationActionBody, lookups: AutomationLookups): string | null {
   if (action.type === "add_labels" || action.type === "remove_labels") {
-    return action.config.labelIds[0] ? automationLabelName(action.config.labelIds[0], lookups) : "Choose label";
+    return action.config.labelIds[0] ? automationLabelName(action.config.labelIds[0], lookups) : $localize`Choose label`;
   }
   if (action.type === "add_assignees" || action.type === "remove_assignees") {
-    return truncatedNames(action.config.userIds.map((id) => automationMemberName(id, lookups)), "Choose members");
+    return truncatedNames(action.config.userIds.map((id) => automationMemberName(id, lookups)), $localize`Choose members`);
   }
   if (action.type === "apply_checklists") {
-    return truncatedNames(action.config.templateIds.map((id) => automationTemplateName(id, lookups)), "Choose checklists");
+    return truncatedNames(action.config.templateIds.map((id) => automationTemplateName(id, lookups)), $localize`Choose checklists`);
   }
   if (action.type === "move_to_list") {
-    if (!action.config.listId) return "Choose list";
-    const listName = lookups.lists.find((list) => list.id === action.config.listId)?.name ?? "list";
-    return `${listName} · ${automationMovePlacementValue(action)}`;
+    if (!action.config.listId) return $localize`:Select placeholder:Choose list`;
+    const listName = lookups.lists.find((list) => list.id === action.config.listId)?.name ?? $localize`:Stand-in for an unknown list:list`;
+    return `${listName} · ${automationMovePlacementLabel(action)}`;
   }
   if (action.type === "set_due_date") return automationDueDateSummary(action.config.offsetDays, action.config.slot);
   if (action.type === "populate_custom_field") {
-    if (!action.config.fieldId) return "Choose custom field";
+    if (!action.config.fieldId) return $localize`Choose custom field`;
     return `${automationCustomFieldName(action.config.fieldId, lookups)} · ${automationPopulateValueLabel(action, lookups)}`;
   }
-  if (action.type === "post_comment") return automationCommentPreview(action.config.template) || "Write the comment";
-  if (action.type === "call_webhook") return action.config.endpointId ? automationWebhookName(action.config.endpointId, lookups) : "Choose endpoint";
+  if (action.type === "post_comment") return automationCommentPreview(action.config.template) || $localize`Write the comment`;
+  if (action.type === "call_webhook") return action.config.endpointId ? automationWebhookName(action.config.endpointId, lookups) : $localize`:Select placeholder — webhook endpoint:Choose endpoint`;
   return null;
 }
 
@@ -368,33 +409,33 @@ export function automationActionLabelColor(action: AutomationActionBody, lookups
 }
 
 export function automationActionSummary(action: AutomationActionBody, lookups: AutomationLookups): string {
-  if (action.type === "add_labels") return action.config.labelIds[0] ? `Add label ${automationLabelName(action.config.labelIds[0], lookups)}` : "Add label (choose label)";
-  if (action.type === "remove_labels") return action.config.labelIds[0] ? `Remove label ${automationLabelName(action.config.labelIds[0], lookups)}` : "Remove label (choose label)";
-  if (action.type === "add_assignees") return action.config.userIds.length ? `Assign ${automationActionTargetLabel(action, lookups)}` : "Assign (choose members)";
-  if (action.type === "remove_assignees") return action.config.userIds.length ? `Unassign ${automationActionTargetLabel(action, lookups)}` : "Unassign (choose members)";
-  if (action.type === "apply_checklists") return action.config.templateIds.length ? `Apply checklist ${automationActionTargetLabel(action, lookups)}` : "Apply checklist (choose checklists)";
+  if (action.type === "add_labels") return action.config.labelIds[0] ? $localize`:Automation action summary:Add label ${automationLabelName(action.config.labelIds[0], lookups)}:label:` : $localize`:Automation action summary, not yet configured:Add label (choose label)`;
+  if (action.type === "remove_labels") return action.config.labelIds[0] ? $localize`:Automation action summary:Remove label ${automationLabelName(action.config.labelIds[0], lookups)}:label:` : $localize`:Automation action summary, not yet configured:Remove label (choose label)`;
+  if (action.type === "add_assignees") return action.config.userIds.length ? $localize`:Automation action summary:Assign ${automationActionTargetLabel(action, lookups)}:members:` : $localize`:Automation action summary, not yet configured:Assign (choose members)`;
+  if (action.type === "remove_assignees") return action.config.userIds.length ? $localize`:Automation action summary:Unassign ${automationActionTargetLabel(action, lookups)}:members:` : $localize`:Automation action summary, not yet configured:Unassign (choose members)`;
+  if (action.type === "apply_checklists") return action.config.templateIds.length ? $localize`:Automation action summary:Apply checklist ${automationActionTargetLabel(action, lookups)}:checklists:` : $localize`:Automation action summary, not yet configured:Apply checklist (choose checklists)`;
   if (action.type === "move_to_list") {
-    if (!action.config.listId) return "Move to list (choose list)";
-    const listName = lookups.lists.find((list) => list.id === action.config.listId)?.name ?? "list";
-    return `Move to ${listName} ${automationMovePlacementValue(action)}`;
+    if (!action.config.listId) return $localize`:Automation action summary, not yet configured:Move to list (choose list)`;
+    const listName = lookups.lists.find((list) => list.id === action.config.listId)?.name ?? $localize`:Stand-in for an unknown list:list`;
+    return $localize`:Automation action summary, e.g. Move to Done bottom:Move to ${listName}:list: ${automationMovePlacementLabel(action)}:placement:`;
   }
-  if (action.type === "move_to_top") return "Move to top";
-  if (action.type === "move_to_bottom") return "Move to bottom";
-  if (action.type === "set_due_date") return `Set due date ${automationDueDateSummary(action.config.offsetDays, action.config.slot)}`;
-  if (action.type === "clear_due_date") return "Clear due date";
+  if (action.type === "move_to_top") return $localize`:Automation action summary:Move to top`;
+  if (action.type === "move_to_bottom") return $localize`:Automation action summary:Move to bottom`;
+  if (action.type === "set_due_date") return $localize`:Automation action summary, e.g. Set due date tomorrow:Set due date ${automationDueDateSummary(action.config.offsetDays, action.config.slot)}:when:`;
+  if (action.type === "clear_due_date") return $localize`:Automation action summary:Clear due date`;
   if (action.type === "populate_custom_field") {
     return action.config.fieldId
-      ? `Set ${automationCustomFieldName(action.config.fieldId, lookups)} to ${automationPopulateValueLabel(action, lookups)}`
-      : "Set custom field (choose field)";
+      ? $localize`:Automation action summary:Set ${automationCustomFieldName(action.config.fieldId, lookups)}:field: to ${automationPopulateValueLabel(action, lookups)}:value:`
+      : $localize`:Automation action summary, not yet configured:Set custom field (choose field)`;
   }
   if (action.type === "post_comment") {
     const preview = automationCommentPreview(action.config.template);
-    return preview ? `Post comment “${preview}”` : "Post comment (write the comment)";
+    return preview ? $localize`:Automation action summary:Post comment “${preview}:comment:”` : $localize`:Automation action summary, not yet configured:Post comment (write the comment)`;
   }
   if (action.type === "call_webhook") {
-    return action.config.endpointId ? `Call webhook ${automationWebhookName(action.config.endpointId, lookups)}` : "Call webhook (choose endpoint)";
+    return action.config.endpointId ? $localize`:Automation action summary:Call webhook ${automationWebhookName(action.config.endpointId, lookups)}:endpoint:` : $localize`:Automation action summary, not yet configured:Call webhook (choose endpoint)`;
   }
-  return action.config.completed ? "Mark complete" : "Mark incomplete";
+  return action.config.completed ? $localize`:Automation action summary:Mark complete` : $localize`:Automation action summary:Mark incomplete`;
 }
 
 /**

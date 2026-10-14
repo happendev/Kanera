@@ -16,8 +16,12 @@ import {
   type SourceWorkspaceRef,
 } from "./table-view.types";
 import type { CardCustomFieldValue } from "@kanera/shared/schema";
+import { appLocale } from "../../../core/i18n/locale";
+import { formatDate } from "../../../shared/date-format";
 import { localDateKey } from "../../../shared/day-key.util";
 import { byPosition } from "../../../shared/position-sort";
+
+const UNKNOWN_PERSON = $localize`:Stand-in name for a person who is no longer a member:Unknown`;
 
 export interface GroupingContext {
   lists: AnyList[];
@@ -98,7 +102,7 @@ function groupByNoGrouping(cards: AnyCard[], sortMode: SortBy): CardGroup[] {
   return [
     {
       key: "all",
-      label: "All cards",
+      label: $localize`:Group heading when cards are not grouped:All cards`,
       icon: null,
       color: null,
       acceptsDrop: false,
@@ -178,11 +182,11 @@ function groupByUserField(cards: AnyCard[], field: AnyCustomField, ctx: Grouping
     ? [...new Set([...ctx.members.map((member) => member.userId), ...byUser.keys()])]
     : [...byUser.keys()];
   const orderedUserIds = candidateUserIds.sort((a, b) =>
-    (memberById.get(a)?.displayName ?? "").localeCompare(memberById.get(b)?.displayName ?? ""),
+    (memberById.get(a)?.displayName ?? "").localeCompare(memberById.get(b)?.displayName ?? "", appLocale()),
   );
   const groups = orderedUserIds.map((userId) => {
     const member = memberById.get(userId);
-    const group = customFieldGroup(field, userId, member?.displayName ?? "Unknown", byUser.get(userId) ?? [], sortMode);
+    const group = customFieldGroup(field, userId, member?.displayName ?? UNKNOWN_PERSON, byUser.get(userId) ?? [], sortMode);
     return { ...group, icon: null, avatarUrl: member?.avatarUrl ?? null };
   });
   appendEmptyCustomFieldGroup(groups, field, empty, sortMode, ctx);
@@ -200,8 +204,9 @@ function groupByDateField(cards: AnyCard[], field: AnyCustomField, ctx: Grouping
   }
 
   const groups = [...byValue.keys()]
+    // Keys are YYYY-MM-DD, so a plain lexical sort is chronological; only the label is localised.
     .sort((a, b) => a.localeCompare(b))
-    .map((value) => customFieldGroup(field, value, value, byValue.get(value) ?? [], sortMode));
+    .map((value) => customFieldGroup(field, value, formatDate(value, "medium") || value, byValue.get(value) ?? [], sortMode));
   appendEmptyCustomFieldGroup(groups, field, empty, sortMode, ctx);
   return groups;
 }
@@ -217,7 +222,7 @@ function groupByTextField(cards: AnyCard[], field: AnyCustomField, ctx: Grouping
   }
 
   const groups = [...byValue.keys()]
-    .sort((a, b) => a.localeCompare(b))
+    .sort((a, b) => a.localeCompare(b, appLocale()))
     .map((value) => customFieldGroup(field, value, value, byValue.get(value) ?? [], sortMode));
   appendEmptyCustomFieldGroup(groups, field, empty, sortMode, ctx);
   return groups;
@@ -253,8 +258,8 @@ function groupByCheckboxField(cards: AnyCard[], field: AnyCustomField, ctx: Grou
   }
 
   const groups: CardGroup[] = [];
-  if (yes.length || ctx.includeEmptyGroups) groups.push(customFieldGroup(field, "true", "Yes", yes, sortMode, "checkbox"));
-  if (no.length || ctx.includeEmptyGroups) groups.push(customFieldGroup(field, "false", "No", no, sortMode, "square"));
+  if (yes.length || ctx.includeEmptyGroups) groups.push(customFieldGroup(field, "true", $localize`:Group heading for a checkbox field that is ticked:Yes`, yes, sortMode, "checkbox"));
+  if (no.length || ctx.includeEmptyGroups) groups.push(customFieldGroup(field, "false", $localize`:Group heading for a checkbox field that is not ticked:No`, no, sortMode, "square"));
   appendEmptyCustomFieldGroup(groups, field, empty, sortMode, ctx);
   return groups;
 }
@@ -286,7 +291,7 @@ function appendEmptyCustomFieldGroup(
   ctx: GroupingContext,
 ) {
   if (!cards.length && !ctx.includeEmptyGroups) return;
-  groups.push(customFieldGroup(field, NULL_GROUP_KEY, `No ${field.name}`, cards, sortMode, "forms-off"));
+  groups.push(customFieldGroup(field, NULL_GROUP_KEY, $localize`:Group heading for cards with no value in a custom field:No ${field.name}:fieldName:`, cards, sortMode, "forms-off"));
 }
 
 function appendGroupCard(map: Map<string, AnyCard[]>, key: string, card: AnyCard) {
@@ -397,7 +402,11 @@ function groupBySource(
   if (unknown.length) {
     groups.push({
       key: `${mode}:${NULL_GROUP_KEY}`,
-      label: mode === "board" ? "Unknown board" : mode === "workspace" ? "Unknown workspace" : "Unknown organisation",
+      label: mode === "board"
+        ? $localize`:Group heading for cards whose board is unavailable:Unknown board`
+        : mode === "workspace"
+          ? $localize`:Group heading for cards whose workspace is unavailable:Unknown workspace`
+          : $localize`:Group heading for cards whose organisation is unavailable:Unknown organisation`,
       icon: "help-circle",
       color: "gray",
       acceptsDrop: false,
@@ -431,7 +440,7 @@ function groupByAssignee(cards: AnyCard[], ctx: GroupingContext, sortMode: SortB
   const orderedMembers = [...ctx.members].sort((a, b) => {
     if (a.userId === ctx.currentUserId) return -1;
     if (b.userId === ctx.currentUserId) return 1;
-    return (a.displayName ?? "").localeCompare(b.displayName ?? "");
+    return (a.displayName ?? "").localeCompare(b.displayName ?? "", appLocale());
   });
 
   for (const member of orderedMembers) {
@@ -439,7 +448,7 @@ function groupByAssignee(cards: AnyCard[], ctx: GroupingContext, sortMode: SortB
     seen.add(member.userId);
     groups.push({
       key: `assignee:${member.userId}`,
-      label: member.userId === ctx.currentUserId ? "Me" : member.displayName,
+      label: member.userId === ctx.currentUserId ? $localize`:Assignee group heading for the viewer's own cards:Me` : member.displayName,
       icon: null,
       color: null,
       avatarUrl: member.avatarUrl,
@@ -455,7 +464,7 @@ function groupByAssignee(cards: AnyCard[], ctx: GroupingContext, sortMode: SortB
     const member = memberById.get(userId);
     groups.push({
       key: `assignee:${userId}`,
-      label: member?.displayName ?? "Unknown",
+      label: member?.displayName ?? UNKNOWN_PERSON,
       icon: null,
       color: null,
       avatarUrl: member?.avatarUrl ?? null,
@@ -468,7 +477,7 @@ function groupByAssignee(cards: AnyCard[], ctx: GroupingContext, sortMode: SortB
   if (unassigned.length > 0 || ctx.includeEmptyGroups) {
     groups.push({
       key: `assignee:${NULL_GROUP_KEY}`,
-      label: "Unassigned",
+      label: $localize`:Group heading for cards with no assignee:Unassigned`,
       icon: "user-off",
       color: "gray",
       acceptsDrop: false,
@@ -514,7 +523,7 @@ function groupByLabel(cards: AnyCard[], ctx: GroupingContext, sortMode: SortBy):
   if (unlabeled.length > 0 || ctx.includeEmptyGroups) {
     groups.push({
       key: `label:${NULL_GROUP_KEY}`,
-      label: "No label",
+      label: $localize`:Group heading for cards with no label:No label`,
       icon: "tag-off",
       color: "gray",
       acceptsDrop: false,
@@ -563,7 +572,7 @@ function groupByCompletion(cards: AnyCard[], ctx: GroupingContext, sortMode: Sor
   if (open.length > 0 || ctx.includeEmptyGroups) {
     groups.push({
       key: "completion:open",
-      label: "Open",
+      label: $localize`:card state|Group heading for cards not yet completed:Open`,
       icon: "circle",
       color: null,
       acceptsDrop: false,
@@ -574,7 +583,7 @@ function groupByCompletion(cards: AnyCard[], ctx: GroupingContext, sortMode: Sor
   if (done.length > 0 || ctx.includeEmptyGroups) {
     groups.push({
       key: "completion:done",
-      label: "Completed",
+      label: $localize`:Group heading for completed cards:Completed`,
       icon: "circle-check",
       color: "green",
       acceptsDrop: false,
@@ -596,9 +605,9 @@ export function sortGroupCards(cards: AnyCard[], mode: SortBy): AnyCard[] {
     case "position":
       return arr.sort(byPosition);
     case "title-asc":
-      return arr.sort((a, b) => a.title.localeCompare(b.title));
+      return arr.sort((a, b) => a.title.localeCompare(b.title, appLocale()));
     case "title-desc":
-      return arr.sort((a, b) => b.title.localeCompare(a.title));
+      return arr.sort((a, b) => b.title.localeCompare(a.title, appLocale()));
     case "due-asc":
       return arr.sort(byNullableString((c) => c.dueDateLocalDate, "asc"));
     case "due-desc":

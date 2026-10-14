@@ -10,15 +10,15 @@
         <span class="lane-name" [kTooltip]="lane.target.email">
           {{ lane.target.displayName }}
           @if (lane.target.self) {
-            <small>you</small>
+            <small i18n="Marker after the viewer's own name">you</small>
           }
         </span>
-        <span class="lane-count" [kTooltip]="lane.queue.totalCount + ' cards in Up next'">{{ lane.queue.totalCount }}</span>
+        <span class="lane-count" [kTooltip]="laneCountTooltip(lane.queue.totalCount)">{{ lane.queue.totalCount }}</span>
         <button
           type="button"
           class="lane-head-tool lane-head-hide"
-          [attr.aria-label]="'Hide Up next for ' + lane.target.displayName"
-          [kTooltip]="'Hide Up next for ' + lane.target.displayName"
+          [attr.aria-label]="hideLaneLabel(lane.target.displayName)"
+          [kTooltip]="hideLaneLabel(lane.target.displayName)"
           (click)="laneHidden.emit(lane.target.userId)"
         >
           <i class="ti ti-eye-off"></i>
@@ -29,24 +29,21 @@
               type="button"
               class="lane-head-tool lane-head-add"
               aria-label="Add card to Up next"
+              i18n-aria-label
               [disabled]="lane.atCapacity || lane.addableCards.length === 0"
-              [kTooltip]="lane.atCapacity
-                ? 'Full at ' + maxEntries() + ' cards'
-                : lane.addableCards.length === 0
-                  ? 'No assigned cards can be added'
-                  : 'Add card'"
+              [kTooltip]="headAddTooltip(lane.atCapacity, lane.addableCards.length)"
               (click)="toggleAdd(lane.target.userId, 'head')"
             >
               <i class="ti ti-plus"></i>
             </button>
             @if (isAddOpen(lane.target.userId, "head")) {
               <k-anchored-picker
-                title="Add to Up next"
+                title="Add to Up next" i18n-title
                 [groups]="lane.addGroups"
                 [width]="420"
                 [align]="'end'"
-                searchPlaceholder="Search cards…"
-                emptyLabel="No cards can be added"
+                searchPlaceholder="Search cards…" i18n-searchPlaceholder
+                emptyLabel="No cards can be added" i18n-emptyLabel
                 (picked)="onAddPicked(lane.target.userId, $event)"
                 (closed)="addOpenAt.set(null)"
               />
@@ -111,17 +108,19 @@
               </button>
               @if (isDraggable(lane, row.entry)) {
                 <span class="row-tools">
-                  <button type="button" [disabled]="$first" aria-label="Move up" kTooltip="Move up" (click)="moveBy(lane, row.entry, -1)">
+                  <button type="button" [disabled]="$first" aria-label="Move up" i18n-aria-label="Button: move the card up the queue" kTooltip="Move up" i18n-kTooltip="Button: move the card up the queue" (click)="moveBy(lane, row.entry, -1)">
                     <i class="ti ti-chevron-up"></i>
                   </button>
-                  <button type="button" [disabled]="$last" aria-label="Move down" kTooltip="Move down" (click)="moveBy(lane, row.entry, 1)">
+                  <button type="button" [disabled]="$last" aria-label="Move down" i18n-aria-label="Button: move the card down the queue" kTooltip="Move down" i18n-kTooltip="Button: move the card down the queue" (click)="moveBy(lane, row.entry, 1)">
                     <i class="ti ti-chevron-down"></i>
                   </button>
                   <button
                     type="button"
                     class="row-remove"
                     aria-label="Remove from Up next"
+                    i18n-aria-label
                     kTooltip="Remove from Up next"
+                    i18n-kTooltip
                     (click)="removed.emit({ targetUserId: lane.target.userId, priorityId: row.entry.id })"
                   >
                     <i class="ti ti-x"></i>
@@ -133,40 +132,42 @@
                    because the rank must keep its number. -->
               <span class="row-locked">
                 <i class="ti ti-lock"></i>
-                <span>A card you don’t have access to</span>
+                <span i18n="Placeholder for a queued card the viewer cannot see">A card you don’t have access to</span>
               </span>
             }
           </div>
         } @empty {
           <div class="lane-empty">
             <i [class]="searchQuery().trim() ? 'ti ti-search' : 'ti ti-list-numbers'"></i>
-            <span>{{ searchQuery().trim() ? "No cards match this search" : "Nothing in Up next yet" }}</span>
+            @if (searchQuery().trim()) {
+              <span i18n>No cards match this search</span>
+            } @else {
+              <span i18n>Nothing in Up next yet</span>
+            }
           </div>
         }
         @if (lane.canReorder) {
           <div class="lane-add-anchor">
             @if (lane.atCapacity) {
-              <p class="lane-note"><i class="ti ti-alert-circle"></i>Full at {{ maxEntries() }} cards</p>
+              <p class="lane-note"><i class="ti ti-alert-circle"></i><ng-container i18n="Note when the Up next queue is full">{ maxEntries(), plural, one {Full at {{ maxEntries() }} card} other {Full at {{ maxEntries() }} cards} }</ng-container></p>
             } @else {
               <button
                 type="button"
                 class="lane-add"
                 [disabled]="lane.addableCards.length === 0"
-                [kTooltip]="lane.addableCards.length === 0
-                  ? 'No assigned cards can be added'
-                  : 'Add an assigned card to Up next'"
+                [kTooltip]="lane.addableCards.length === 0 ? noAddableTooltip : addAssignedTooltip"
                 (click)="toggleAdd(lane.target.userId, 'list')"
               >
                 <i class="ti ti-plus"></i>
-                <span>Add card</span>
+                <span i18n="Button: add a card to Up next">Add card</span>
               </button>
               @if (isAddOpen(lane.target.userId, "list")) {
                 <k-anchored-picker
-                  title="Add to Up next"
+                  title="Add to Up next" i18n-title
                   [groups]="lane.addGroups"
                   [width]="420"
-                  searchPlaceholder="Search cards…"
-                  emptyLabel="No cards can be added"
+                  searchPlaceholder="Search cards…" i18n-searchPlaceholder
+                  emptyLabel="No cards can be added" i18n-emptyLabel
                   (picked)="onAddPicked(lane.target.userId, $event)"
                   (closed)="addOpenAt.set(null)"
                 />
@@ -179,8 +180,8 @@
   } @empty {
     <div class="lanes-empty">
       <i class="ti ti-list-numbers"></i>
-      <strong>No one’s Up next to show</strong>
-      <span>Up next appears here for you and every teammate you’re allowed to view.</span>
+      <strong i18n>No one’s Up next to show</strong>
+      <span i18n>Up next appears here for you and every teammate you’re allowed to view.</span>
     </div>
   }
 </div>

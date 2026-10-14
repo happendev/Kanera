@@ -1,16 +1,9 @@
 /**
- * Locale for dates in emails. Users have no stored locale and an email has no browser to ask, so
- * emails use day-first dates with a named month ("12 Oct 2026"), which no reader misreads; US
- * month-first order confuses most of the world. Replace with a per-user locale if one is added.
- */
-export const EMAIL_DATE_LOCALE = "en-GB";
-
-/**
  * Reuse ICU formatters across rows and requests, never the date-dependent formatted output.
  *
- * The locale is required: display callers pass the reader's locale (or an explicit fallback), and
- * internal calculations use `wallClockParts` below instead of relying on any locale's `.format()`
- * output shape.
+ * The locale is required: display callers pass the reader's locale (mail and push use the
+ * recipient's, via ./i18n/format.ts), and internal calculations use `wallClockParts` below instead of
+ * relying on any locale's `.format()` output shape.
  */
 export function dateTimeFormatter(options: Intl.DateTimeFormatOptions, locale: string) {
   const formatters = new Map<string, Intl.DateTimeFormat>();

@@ -4,10 +4,18 @@
  *
  * Run from the repo root:
  *   pnpm email:preview
+ *
+ * To review a translation, render one language into preview/<locale>/ (not committed; only the
+ * source-language previews are):
+ *   EMAIL_PREVIEW_LOCALE=de pnpm email:preview
+ *   pnpm email:preview -- --locale=de
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isLocale, LOCALES, SOURCE_LOCALE, type Locale } from "@kanera/shared/locales";
+import { formatDate, formatLocalDate } from "../lib/i18n/format.js";
+import { serverMessages } from "../lib/i18n/messages/index.js";
 
 import { boardInviteEmail } from "../lib/email-templates/board-invite.js";
 import { adminInviteEmail } from "../lib/email-templates/admin-invite.js";
@@ -53,33 +61,51 @@ import {
 } from "../lib/email-templates/lifecycle.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const outDir = resolve(scriptDir, "../lib/email-templates/preview");
+const requested = process.argv.find((arg) => arg.startsWith("--locale="))?.slice("--locale=".length) ?? process.env.EMAIL_PREVIEW_LOCALE ?? SOURCE_LOCALE;
+if (!isLocale(requested)) {
+  console.error(`Unknown locale "${requested}". Expected one of: ${LOCALES.join(", ")}`);
+  process.exit(1);
+}
+const locale: Locale = requested;
+const outDir = resolve(scriptDir, "../lib/email-templates/preview", locale === SOURCE_LOCALE ? "." : locale);
 mkdirSync(outDir, { recursive: true });
+
+// Sample dates go through the same formatters and catalog wording as real mail, so each language's
+// previews show its own date order and month names.
+const m = serverMessages(locale);
+const shortDate = (iso: string) => formatLocalDate(locale, iso, { month: "short", day: "numeric", year: "numeric" });
+const digestDue = (iso: string) => m.email.dailyDigest.itemDue({ date: formatLocalDate(locale, iso, { month: "short", day: "numeric" }) });
+const today = m.email.dailyDigest.itemToday;
+const billingDate = (iso: string) => formatDate(locale, new Date(`${iso}T12:00:00Z`), { dateStyle: "medium", timeZone: "UTC" });
+const recapDate = (iso: string) => formatDate(locale, new Date(`${iso}T00:00:00Z`), { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+const recapRange = (start: string, end: string) => m.email.weeklyAdminRecap.dateRange({ start: recapDate(start), end: recapDate(end) });
 
 const templates = [
   {
     name: "weekly-admin-recap",
     html: weeklyAdminRecapEmail({
+      locale,
       periodStart: "2026-05-25",
-      lastWeekLabel: "18 May 2026–24 May 2026",
-      thisWeekLabel: "25 May 2026–31 May 2026",
+      lastWeekLabel: recapRange("2026-05-18", "2026-05-24"),
+      thisWeekLabel: recapRange("2026-05-25", "2026-05-31"),
       lastWeek: { newAccounts: 14, newOrganisations: 9, invitesAccepted: 7, boardsCreated: 32, subscriptionsStarted: 4, seatsPurchased: 18 },
       snapshot: { activeAccounts: 284, activeOrganisations: 91, activeBoards: 617, paidOrganisations: 38, trialOrganisations: 12, purchasedSeats: 146 },
       upcoming: {
-        renewals: [{ dateLabel: "27 May 2026", organisationCount: 2, seatCount: 8, organisations: ["Northstar Studio", "Happen Software"] }],
-        trialEnds: [{ dateLabel: "29 May 2026", organisationCount: 1, seatCount: 4, organisations: ["Bluebird Labs"] }],
-        cancellations: [{ dateLabel: "31 May 2026", organisationCount: 1, seatCount: 3, organisations: ["Acme Design"] }],
+        renewals: [{ dateLabel: recapDate("2026-05-27"), organisationCount: 2, seatCount: 8, organisations: ["Northstar Studio", "Happen Software"] }],
+        trialEnds: [{ dateLabel: recapDate("2026-05-29"), organisationCount: 1, seatCount: 4, organisations: ["Bluebird Labs"] }],
+        cancellations: [{ dateLabel: recapDate("2026-05-31"), organisationCount: 1, seatCount: 3, organisations: ["Acme Design"] }],
       },
       adminUrl: "http://localhost:4300",
     }),
   },
   {
     name: "admin-invite",
-    html: adminInviteEmail({ displayName: "Amelia Hart", inviteUrl: "http://localhost:4300/accept-invite?token=example", expiresInHours: 24 }),
+    html: adminInviteEmail({ locale, displayName: "Amelia Hart", inviteUrl: "http://localhost:4300/accept-invite?token=example", expiresInHours: 24 }),
   },
   {
     name: "welcome",
     html: welcomeEmail({
+      locale,
       displayName: "Amelia Hart",
       loginUrl: "http://localhost:4200/login",
     }),
@@ -87,6 +113,7 @@ const templates = [
   {
     name: "password-reset",
     html: passwordResetEmail({
+      locale,
       displayName: "Amelia Hart",
       resetUrl: "http://localhost:4200/reset-password?token=example-token-abc123",
       expiresInMinutes: 60,
@@ -95,6 +122,7 @@ const templates = [
   {
     name: "verification-code",
     html: verificationCodeEmail({
+      locale,
       code: "123456",
       expiresInMinutes: 15,
     }),
@@ -102,22 +130,23 @@ const templates = [
   {
     name: "daily-digest",
     html: dailyDigestEmail({
+      locale,
       displayName: "Amelia Hart",
       localDate: "2026-05-26",
-      localDateLabel: "May 26, 2026",
+      localDateLabel: formatLocalDate(locale, "2026-05-26", { month: "long", day: "numeric", year: "numeric" }),
       dueToday: [
         {
           title: "Send client handoff notes",
           boardName: "Client Launch",
           cardUrl: "http://localhost:4200/o/0123456789ABCDEF/c/CLIENT-12",
-          dueLabel: "Today",
+          dueLabel: today,
         },
         {
           title: "Export final assets",
           boardName: "Client Launch",
           context: "Send client handoff notes",
           cardUrl: "http://localhost:4200/o/0123456789ABCDEF/c/CLIENT-12",
-          dueLabel: "Today",
+          dueLabel: today,
         },
       ],
       overdue: [
@@ -125,20 +154,20 @@ const templates = [
           title: "Confirm production checklist",
           boardName: "Website Refresh",
           cardUrl: "http://localhost:4200/o/0123456789ABCDEF/c/WEB-42",
-          dueLabel: "Due May 24",
+          dueLabel: digestDue("2026-05-24"),
         },
         {
           title: "Sign off accessibility pass",
           boardName: "Website Refresh",
           context: "Confirm production checklist",
           cardUrl: "http://localhost:4200/o/0123456789ABCDEF/c/WEB-42",
-          dueLabel: "Due May 23",
+          dueLabel: digestDue("2026-05-23"),
         },
         {
           title: "Review launch copy",
           boardName: "Marketing",
           cardUrl: "http://localhost:4200/o/0123456789ABCDEF/c/MKT-7",
-          dueLabel: "Due May 22",
+          dueLabel: digestDue("2026-05-22"),
         },
       ],
       priorities: [
@@ -147,14 +176,14 @@ const templates = [
           title: "Confirm production checklist",
           boardName: "Website Refresh",
           cardUrl: "http://localhost:4200/o/0123456789ABCDEF/c/WEB-42",
-          dueLabel: "Due May 24",
+          dueLabel: digestDue("2026-05-24"),
         },
         {
           rank: 2,
           title: "Send client handoff notes",
           boardName: "Client Launch",
           cardUrl: "http://localhost:4200/o/0123456789ABCDEF/c/CLIENT-12",
-          dueLabel: "Today",
+          dueLabel: today,
         },
         {
           rank: 3,
@@ -168,6 +197,7 @@ const templates = [
   {
     name: "card-assigned",
     html: cardAssignedEmail({
+      locale,
       displayName: "Amelia Hart",
       actorName: "Jordan Lee",
       cardTitle: "Confirm production checklist",
@@ -178,6 +208,7 @@ const templates = [
   {
     name: "card-comment-added",
     html: cardCommentAddedEmail({
+      locale,
       displayName: "Amelia Hart",
       actorName: "Jordan Lee",
       cardTitle: "Confirm production checklist",
@@ -189,6 +220,7 @@ const templates = [
   {
     name: "comment-mentioned",
     html: commentMentionedEmail({
+      locale,
       displayName: "Amelia Hart",
       actorName: "Jordan Lee",
       cardTitle: "Confirm production checklist",
@@ -200,28 +232,31 @@ const templates = [
   {
     name: "card-due-date-changed",
     html: cardDueDateChangedEmail({
+      locale,
       displayName: "Amelia Hart",
       actorName: "Jordan Lee",
       cardTitle: "Confirm production checklist",
       boardName: "Website Refresh",
       cardUrl: "http://localhost:4200/o/0123456789ABCDEF/c/WEB-42",
-      previousDueLabel: "May 24, 2026",
-      nextDueLabel: "May 27, 2026, end of workday",
+      previousDueLabel: shortDate("2026-05-24"),
+      nextDueLabel: m.common.dueDateWithSlot({ date: shortDate("2026-05-27"), slot: m.common.dueSlots.endOfWorkDay }),
     }),
   },
   {
     name: "card-overdue",
     html: cardOverdueEmail({
+      locale,
       displayName: "Amelia Hart",
       cardTitle: "Confirm production checklist",
       boardName: "Website Refresh",
       cardUrl: "http://localhost:4200/o/0123456789ABCDEF/c/WEB-42",
-      dueLabel: "May 24, 2026",
+      dueLabel: shortDate("2026-05-24"),
     }),
   },
   {
     name: "card-reminder",
     html: cardReminderEmail({
+      locale,
       displayName: "Amelia Hart",
       cardTitle: "Confirm production checklist",
       boardName: "Website Refresh",
@@ -231,6 +266,7 @@ const templates = [
   {
     name: "storage-warning",
     html: storageWarningEmail({
+      locale,
       displayName: "Amelia Hart",
       orgName: "Northstar Studio",
       usedLabel: "208.4 MB",
@@ -243,17 +279,19 @@ const templates = [
   {
     name: "checklist-item-overdue",
     html: checklistItemOverdueEmail({
+      locale,
       displayName: "Amelia Hart",
       itemText: "Confirm DNS cutover window",
       cardTitle: "Confirm production checklist",
       boardName: "Website Refresh",
       cardUrl: "http://localhost:4200/o/0123456789ABCDEF/c/WEB-42",
-      dueLabel: "May 24, 2026",
+      dueLabel: shortDate("2026-05-24"),
     }),
   },
   {
     name: "invite-accepted",
     html: inviteAcceptedEmail({
+      locale,
       context: "org",
       displayName: "Amelia Hart",
       acceptedByName: "Morgan Price",
@@ -266,6 +304,7 @@ const templates = [
   {
     name: "board-invite-accepted",
     html: inviteAcceptedEmail({
+      locale,
       context: "board",
       displayName: "Amelia Hart",
       acceptedByName: "Morgan Price",
@@ -279,6 +318,7 @@ const templates = [
   {
     name: "board-invite",
     html: boardInviteEmail({
+      locale,
       boards: [
         { boardName: "Client Launch", role: "editor" },
         { boardName: "Website Refresh", role: "observer" },
@@ -291,6 +331,7 @@ const templates = [
   {
     name: "board-access-granted",
     html: boardAccessGrantedEmail({
+      locale,
       displayName: "Morgan Price",
       boardName: "Client Launch",
       orgName: "Northstar Studio",
@@ -302,19 +343,21 @@ const templates = [
   {
     name: "smtp-test",
     html: smtpTestEmail({
+      locale,
       recipientEmail: "amelia@example.com",
       appUrl: "http://localhost:4200",
-      sentAtLabel: "Wed, 28 May 2026 09:30:00 GMT",
+      sentAtLabel: formatDate(locale, new Date("2026-05-28T09:30:00Z"), { dateStyle: "full", timeStyle: "long", timeZone: "UTC" }),
     }),
   },
   {
     name: "pro-trial-started",
     html: proTrialStartedEmail({
+      locale,
       clientId: "client-example",
       displayName: "Amelia Hart",
       orgName: "Northstar Studio",
       settingsUrl: "http://localhost:4200/settings/account-plan",
-      trialEndsAtLabel: "Jun 25, 2026",
+      trialEndsAtLabel: billingDate("2026-06-25"),
       impact: null,
       limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 3, maxAutomationExecutionsPerMonth: 100 },
     }),
@@ -322,12 +365,13 @@ const templates = [
   {
     name: "pro-trial-warning",
     html: proTrialWarningEmail({
+      locale,
       clientId: "client-example",
       displayName: "Amelia Hart",
       orgName: "Northstar Studio",
       settingsUrl: "http://localhost:4200/settings/account-plan",
       daysRemaining: 10,
-      trialEndsAtLabel: "Jun 25, 2026",
+      trialEndsAtLabel: billingDate("2026-06-25"),
       usage: { boards: 6, cards: 184, members: 5 },
       impact: { boardsArchived: 5, usersSuspended: 1, automationsDisabled: 3, webhooksDisabled: 2, apiKeysRevoked: 1, guestMembersRemoved: 4, guestInvitesRevoked: 1 },
       limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 3, maxAutomationExecutionsPerMonth: 100 },
@@ -336,6 +380,7 @@ const templates = [
   {
     name: "downgraded-to-free",
     html: downgradedToFreeEmail({
+      locale,
       clientId: "client-example",
       displayName: "Amelia Hart",
       orgName: "Northstar Studio",
@@ -347,13 +392,14 @@ const templates = [
   {
     name: "upgraded-to-pro",
     html: upgradedToProEmail({
+      locale,
       clientId: "client-example",
       displayName: "Amelia Hart",
       orgName: "Northstar Studio",
       settingsUrl: "http://localhost:4200/settings/account-plan",
       billingInterval: "annual",
       purchasedSeatCount: 8,
-      periodEndLabel: "Jun 25, 2027",
+      periodEndLabel: billingDate("2027-06-25"),
       impact: { boardsArchived: 2, usersSuspended: 1, automationsDisabled: 1, webhooksDisabled: 1, apiKeysRevoked: 1, guestMembersRemoved: 1, guestInvitesRevoked: 1 },
       limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 3, maxAutomationExecutionsPerMonth: 100 },
     }),
@@ -361,38 +407,42 @@ const templates = [
   {
     name: "welcome-to-pro",
     html: welcomeToProEmail({
+      locale,
       clientId: "client-example",
       displayName: "Amelia Hart",
       orgName: "Northstar Studio",
       settingsUrl: "http://localhost:4200/settings/account-plan",
       billingInterval: "annual",
       purchasedSeatCount: 8,
-      periodEndLabel: "Jun 25, 2027",
+      periodEndLabel: billingDate("2027-06-25"),
       limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 3, maxAutomationExecutionsPerMonth: 100 },
     }),
   },
   {
     name: "billing-changed",
     html: billingChangedEmail({
+      locale,
       clientId: "client-example",
       displayName: "Amelia Hart",
       orgName: "Northstar Studio",
       settingsUrl: "http://localhost:4200/settings/account-plan",
       billingInterval: "monthly",
       purchasedSeatCount: 9,
-      periodEndLabel: "Jul 25, 2026",
+      periodEndLabel: billingDate("2026-07-25"),
     }),
   },
   {
     name: "billing-renewed",
     html: billingRenewedEmail({
+      locale,
       clientId: "client-example", displayName: "Amelia Hart", orgName: "Northstar Studio", settingsUrl: "http://localhost:4200/settings/account-plan",
-      billingInterval: "annual", purchasedSeatCount: 8, periodEndLabel: "Jun 25, 2027",
+      billingInterval: "annual", purchasedSeatCount: 8, periodEndLabel: billingDate("2027-06-25"),
     }),
   },
   {
     name: "billing-payment-failed",
     html: billingPaymentFailedEmail({
+      locale,
       clientId: "client-example", displayName: "Amelia Hart", orgName: "Northstar Studio", settingsUrl: "http://localhost:4200/settings/account-plan",
       billingInterval: "monthly", purchasedSeatCount: 8,
     }),
@@ -400,25 +450,28 @@ const templates = [
   {
     name: "billing-payment-recovered",
     html: billingPaymentRecoveredEmail({
+      locale,
       clientId: "client-example", displayName: "Amelia Hart", orgName: "Northstar Studio", settingsUrl: "http://localhost:4200/settings/account-plan",
-      billingInterval: "monthly", purchasedSeatCount: 8, periodEndLabel: "Jul 25, 2026",
+      billingInterval: "monthly", purchasedSeatCount: 8, periodEndLabel: billingDate("2026-07-25"),
     }),
   },
   {
     name: "seat-billed",
     html: seatBilledEmail({
+      locale,
       clientId: "client-example",
       displayName: "Amelia Hart",
       orgName: "Northstar Studio",
       settingsUrl: "http://localhost:4200/settings/account-plan",
       previousPurchasedSeatCount: 9,
       purchasedSeatCount: 10,
-      billingSummary: "The new capacity is available now and can be assigned to a member or guest.",
+      billingSummary: m.email.billing.seatPurchase.capacityAvailable,
     }),
   },
   {
     name: "seat-capacity-reduced",
     html: seatCapacityReducedEmail({
+      locale,
       clientId: "client-example", displayName: "Amelia Hart", orgName: "Northstar Studio", settingsUrl: "http://localhost:4200/settings/account-plan",
       previousPurchasedSeatCount: 10, purchasedSeatCount: 8,
     }),
@@ -426,8 +479,9 @@ const templates = [
   {
     name: "pro-cancellation-scheduled",
     html: proCancellationScheduledEmail({
+      locale,
       clientId: "client-example", displayName: "Amelia Hart", orgName: "Northstar Studio", settingsUrl: "http://localhost:4200/settings/account-plan",
-      daysRemaining: 14, periodEndLabel: "Jul 9, 2026",
+      daysRemaining: 14, periodEndLabel: billingDate("2026-07-09"),
       impact: { boardsArchived: 3, usersSuspended: 2, automationsDisabled: 2, webhooksDisabled: 1, apiKeysRevoked: 1, guestMembersRemoved: 1, guestInvitesRevoked: 1 },
       limits: { maxBoards: 3, maxOrgMembers: 4, maxEnabledAutomations: 3, maxAutomationExecutionsPerMonth: 100 },
     }),
@@ -435,13 +489,15 @@ const templates = [
   {
     name: "pro-cancellation-reversed",
     html: proCancellationReversedEmail({
+      locale,
       clientId: "client-example", displayName: "Amelia Hart", orgName: "Northstar Studio", settingsUrl: "http://localhost:4200/settings/account-plan",
-      billingInterval: "annual", purchasedSeatCount: 8, periodEndLabel: "Jul 9, 2027",
+      billingInterval: "annual", purchasedSeatCount: 8, periodEndLabel: billingDate("2027-07-09"),
     }),
   },
   {
     name: "pro-cancelled",
     html: proCancelledEmail({
+      locale,
       clientId: "client-example",
       displayName: "Amelia Hart",
       orgName: "Northstar Studio",
@@ -453,33 +509,34 @@ const templates = [
   {
     name: "import-completed",
     html: importCompletedEmail({
+      locale,
       displayName: "Amelia Hart", source: "trello", boardName: "Client Launch", boardUrl: "http://localhost:4200/b/board-client-launch",
       lists: 5, cards: 142, checklistItems: 318, comments: 96, attachmentsImported: 41, attachmentsSkipped: 2, warningCount: 1,
     }),
   },
   {
     name: "lifecycle-no-board",
-    html: lifecycleNoBoardEmail({ displayName: "Amelia Hart", orgName: "Northstar Studio", unsubscribeUrl: "http://localhost:4200/email/unsubscribe?token=example", ctaUrl: "http://localhost:4200/" }),
+    html: lifecycleNoBoardEmail({ locale, displayName: "Amelia Hart", orgName: "Northstar Studio", unsubscribeUrl: "http://localhost:4200/email/unsubscribe?token=example", ctaUrl: "http://localhost:4200/" }),
   },
   {
     name: "lifecycle-invite-team",
-    html: lifecycleInviteTeamEmail({ displayName: "Amelia Hart", orgName: "Northstar Studio", unsubscribeUrl: "http://localhost:4200/email/unsubscribe?token=example", ctaUrl: "http://localhost:4200/settings/users" }),
+    html: lifecycleInviteTeamEmail({ locale, displayName: "Amelia Hart", orgName: "Northstar Studio", unsubscribeUrl: "http://localhost:4200/email/unsubscribe?token=example", ctaUrl: "http://localhost:4200/settings/users" }),
   },
   {
     name: "lifecycle-early-success-automations",
-    html: lifecycleEarlySuccessEmail({ displayName: "Amelia Hart", orgName: "Northstar Studio", unsubscribeUrl: "http://localhost:4200/email/unsubscribe?token=example", ctaUrl: "http://localhost:4200/w/workspace-example/settings/automations", nextStep: "automations" }),
+    html: lifecycleEarlySuccessEmail({ locale, displayName: "Amelia Hart", orgName: "Northstar Studio", unsubscribeUrl: "http://localhost:4200/email/unsubscribe?token=example", ctaUrl: "http://localhost:4200/w/workspace-example/settings/automations", nextStep: "automations" }),
   },
   {
     name: "lifecycle-early-success-my-cards",
-    html: lifecycleEarlySuccessEmail({ displayName: "Amelia Hart", orgName: "Northstar Studio", unsubscribeUrl: "http://localhost:4200/email/unsubscribe?token=example", ctaUrl: "http://localhost:4200/my-cards", nextStep: "my_cards" }),
+    html: lifecycleEarlySuccessEmail({ locale, displayName: "Amelia Hart", orgName: "Northstar Studio", unsubscribeUrl: "http://localhost:4200/email/unsubscribe?token=example", ctaUrl: "http://localhost:4200/my-cards", nextStep: "my_cards" }),
   },
   {
     name: "lifecycle-inactive",
-    html: lifecycleInactiveEmail({ displayName: "Amelia Hart", orgName: "Northstar Studio", unsubscribeUrl: "http://localhost:4200/email/unsubscribe?token=example", ctaUrl: "http://localhost:4200/", feedbackEmail: "support@kanera.app" }),
+    html: lifecycleInactiveEmail({ locale, displayName: "Amelia Hart", orgName: "Northstar Studio", unsubscribeUrl: "http://localhost:4200/email/unsubscribe?token=example", ctaUrl: "http://localhost:4200/", feedbackEmail: "support@kanera.app" }),
   },
   {
     name: "lifecycle-active-checkin",
-    html: lifecycleActiveCheckinEmail({ displayName: "Amelia Hart", orgName: "Northstar Studio", unsubscribeUrl: "http://localhost:4200/email/unsubscribe?token=example", ctaUrl: "http://localhost:4200/team-cards", onFreePlan: true, feedbackEmail: "support@kanera.app" }),
+    html: lifecycleActiveCheckinEmail({ locale, displayName: "Amelia Hart", orgName: "Northstar Studio", unsubscribeUrl: "http://localhost:4200/email/unsubscribe?token=example", ctaUrl: "http://localhost:4200/team-cards", onFreePlan: true, feedbackEmail: "support@kanera.app" }),
   },
 ];
 
@@ -489,7 +546,7 @@ for (const { name, html } of templates) {
   console.log(`  ✓ ${name}.html`);
 }
 
-console.log(`\nWrote ${templates.length} preview(s) to ${outDir}`);
+console.log(`\nWrote ${templates.length} ${locale} preview(s) to ${outDir}`);
 
 function cleanPreviewHtml(html: string): string {
   return html.replace(/[ \t]+$/gm, "");

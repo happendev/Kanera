@@ -9,11 +9,42 @@ export type DueDateSlotSelection = DueDateSlot;
 
 const SLOT_TIME = DUE_DATE_SLOT_TIMES;
 
+/**
+ * A slot's cut-off as a wall-clock label in the interface language ("09:00", "9:00 AM", "9:00"),
+ * derived from the shared cut-offs so the picker cannot advertise a time the overdue check does not
+ * use. Empty for `anyTime`, which shows no time.
+ */
+export function slotTimeLabel(slot: DueDateSlot): string {
+  if (!dueDateSlotTimeLabel(slot)) return "";
+  const { hour, minute } = SLOT_TIME[slot];
+  return formatTime(new Date(2000, 0, 1, hour, minute));
+}
+
 export const DUE_DATE_SLOT_OPTIONS: { value: DueDateSlot; label: string; shortLabel: string; timeLabel: string }[] = [
-  { value: "anyTime", label: "No slot", shortLabel: "No slot", timeLabel: dueDateSlotTimeLabel("anyTime") },
-  { value: "morning", label: "Morning", shortLabel: "Morning", timeLabel: dueDateSlotTimeLabel("morning") },
-  { value: "afternoon", label: "Afternoon", shortLabel: "Afternoon", timeLabel: dueDateSlotTimeLabel("afternoon") },
-  { value: "endOfWorkDay", label: "End of work day", shortLabel: "EOD", timeLabel: dueDateSlotTimeLabel("endOfWorkDay") },
+  {
+    value: "anyTime",
+    label: $localize`:Due date slot option; the card is due on the day with no particular time:No slot`,
+    shortLabel: $localize`:Due date slot option; the card is due on the day with no particular time:No slot`,
+    timeLabel: slotTimeLabel("anyTime"),
+  },
+  {
+    value: "morning",
+    label: $localize`:Due date slot option (time of day):Morning`,
+    shortLabel: $localize`:Due date slot option (time of day):Morning`,
+    timeLabel: slotTimeLabel("morning"),
+  },
+  {
+    value: "afternoon",
+    label: $localize`:Due date slot option (time of day):Afternoon`,
+    shortLabel: $localize`:Due date slot option (time of day):Afternoon`,
+    timeLabel: slotTimeLabel("afternoon"),
+  },
+  {
+    value: "endOfWorkDay",
+    label: $localize`:Due date slot option (time of day):End of work day`,
+    shortLabel: $localize`:Very short abbreviation of "End of work day" for compact chips:EOD`,
+    timeLabel: slotTimeLabel("endOfWorkDay"),
+  },
 ];
 
 const PARTS_FORMAT_OPTIONS = {
@@ -44,6 +75,7 @@ function partsFormatterFor(timezone: string): Intl.DateTimeFormat {
   if (cached) return cached;
   let formatter: Intl.DateTimeFormat;
   try {
+    // Machine format: "en-CA" gives stable numeric parts to parse, whatever the interface language.
     formatter = new Intl.DateTimeFormat("en-CA", { timeZone: key, ...PARTS_FORMAT_OPTIONS });
   } catch {
     // An unknown or malformed zone must not be retried on every call, so the UTC fallback is cached

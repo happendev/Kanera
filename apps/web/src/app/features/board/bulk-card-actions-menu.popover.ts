@@ -3,6 +3,8 @@ import { ChangeDetectionStrategy, Component, computed, ElementRef, inject, input
 import type { WireBoardMemberUser, WireCard, WireCardSummary, WireList } from "@kanera/shared/events";
 import type { Card, CardLabel, List } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
+import { icu } from "../../core/i18n/icu";
+import { appLocale } from "../../core/i18n/locale";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { BoardPickerPopover, type BoardPickerPick } from "./board-picker.popover";
 import { BoardState } from "./board-state";
@@ -28,25 +30,25 @@ const BULK_MENU_WIDTH = 232;
   template: `
     <div class="bcam-panel" (click)="$event.stopPropagation()">
       <div class="bcam-head">
-        <span>{{ selectedCount() }} selected</span>
+        <span i18n>{ selectedCount(), plural, other {{{ selectedCount() }} selected} }</span>
         @if (selectedBoardCount() > 1) {
-          <small>{{ selectedBoardCount() }} boards</small>
+          <small i18n>{ selectedBoardCount(), plural, one {{{ selectedBoardCount() }} board} other {{{ selectedBoardCount() }} boards} }</small>
         }
       </div>
 
       <button type="button" class="bcam-item" (click)="setCompletion($event, true)" [disabled]="saving()">
         <i class="ti ti-circle-check"></i>
-        <span>Mark complete</span>
+        <span i18n="Bulk card menu item">Mark complete</span>
       </button>
       <button type="button" class="bcam-item" (click)="setCompletion($event, false)" [disabled]="saving()">
         <i class="ti ti-circle"></i>
-        <span>Mark incomplete</span>
+        <span i18n="Bulk card menu item">Mark incomplete</span>
       </button>
 
       <div class="bcam-sub">
         <button #dateTrigger type="button" class="bcam-item" [class.is-active]="dateOpen()" (click)="toggleSub($event, 'date')">
           <i class="ti ti-calendar-event"></i>
-          <span>Set due date...</span>
+          <span i18n="Bulk card menu item">Set due date...</span>
           <i class="ti ti-chevron-right bcam-chev"></i>
         </button>
         @if (dateOpen()) {
@@ -62,14 +64,14 @@ const BULK_MENU_WIDTH = 232;
       </div>
 
       <div class="bcam-sub">
-        <button #labelsTrigger type="button" class="bcam-item" [class.is-active]="labelsOpen()" (click)="toggleSub($event, 'labels')" [disabled]="!workspaceActionsEnabled()" [title]="workspaceActionsEnabled() ? '' : 'Select cards from one workspace'">
+        <button #labelsTrigger type="button" class="bcam-item" [class.is-active]="labelsOpen()" (click)="toggleSub($event, 'labels')" [disabled]="!workspaceActionsEnabled()" [title]="workspaceActionsEnabled() ? '' : oneWorkspaceHint">
           <i class="ti ti-tag"></i>
-          <span>Labels</span>
+          <span i18n="Bulk card menu item: edit labels">Labels</span>
           <i class="ti ti-chevron-right bcam-chev"></i>
         </button>
         @if (labelsOpen()) {
           <div class="bcam-picker cqe-section" kAnchoredPanel [apAnchor]="labelsTrigger" [apPlacement]="submenuPlacement" (apDismissed)="labelsOpen.set(false)">
-            <span class="cqe-label">Labels</span>
+            <span class="cqe-label" i18n="Card labels section label">Labels</span>
             <div class="cqe-list">
             @for (label of sortedLabels(); track label.id) {
               <button type="button" class="cqe-row" [class.is-selected]="labelState(label.id) !== 'none'" (click)="toggleLabel(label.id)" [disabled]="saving()">
@@ -82,7 +84,7 @@ const BULK_MENU_WIDTH = 232;
                 }
               </button>
             } @empty {
-              <p class="cqe-empty">No labels</p>
+              <p class="cqe-empty" i18n>No labels</p>
             }
             </div>
           </div>
@@ -92,17 +94,17 @@ const BULK_MENU_WIDTH = 232;
       <div class="bcam-sub">
         <button #membersTrigger type="button" class="bcam-item" [class.is-active]="membersOpen()" (click)="toggleSub($event, 'members')">
           <i class="ti ti-users"></i>
-          <span>Assignees</span>
+          <span i18n="Bulk card menu item: edit assignees">Assignees</span>
           <i class="ti ti-chevron-right bcam-chev"></i>
         </button>
         @if (membersOpen()) {
           <div class="bcam-picker cqe-section" kAnchoredPanel [apAnchor]="membersTrigger" [apPlacement]="submenuPlacement" (apDismissed)="membersOpen.set(false)">
-            <span class="cqe-label">Members</span>
+            <span class="cqe-label" i18n="Card members section label">Members</span>
             <div class="cqe-list">
             @for (member of assignableMembers(); track member.userId) {
               <button type="button" class="cqe-row" [class.is-selected]="assigneeState(member.userId) !== 'none'" (click)="toggleAssignee(member.userId)" [disabled]="saving()">
                 <k-avatar [url]="member.avatarUrl" [name]="member.displayName" [size]="22" [userId]="member.userId" />
-                <span>{{ member.userId === currentUserId() ? 'Me' : member.displayName }}</span>
+                <span>{{ member.userId === currentUserId() ? meLabel : member.displayName }}</span>
                 @if (assigneeState(member.userId) === 'all') {
                   <i class="ti ti-check"></i>
                 } @else if (assigneeState(member.userId) === 'mixed') {
@@ -110,7 +112,7 @@ const BULK_MENU_WIDTH = 232;
                 }
               </button>
             } @empty {
-              <p class="cqe-empty">No members</p>
+              <p class="cqe-empty" i18n>No members</p>
             }
             </div>
           </div>
@@ -118,9 +120,9 @@ const BULK_MENU_WIDTH = 232;
       </div>
 
       <div class="bcam-sub">
-        <button #listsTrigger type="button" class="bcam-item" [class.is-active]="listsOpen()" (click)="toggleSub($event, 'lists')" [disabled]="!workspaceActionsEnabled()" [title]="workspaceActionsEnabled() ? '' : 'Select cards from one workspace'">
+        <button #listsTrigger type="button" class="bcam-item" [class.is-active]="listsOpen()" (click)="toggleSub($event, 'lists')" [disabled]="!workspaceActionsEnabled()" [title]="workspaceActionsEnabled() ? '' : oneWorkspaceHint">
           <i class="ti ti-arrows-transfer-down"></i>
-          <span>Move to list</span>
+          <span i18n="Bulk card menu item">Move to list</span>
           <i class="ti ti-chevron-right bcam-chev"></i>
         </button>
         @if (listsOpen()) {
@@ -135,20 +137,20 @@ const BULK_MENU_WIDTH = 232;
         }
       </div>
 
-      <button type="button" class="bcam-item" (click)="openCustomFields($event)" [disabled]="saving() || !workspaceActionsEnabled()" [title]="workspaceActionsEnabled() ? '' : 'Select cards from one workspace'">
+      <button type="button" class="bcam-item" (click)="openCustomFields($event)" [disabled]="saving() || !workspaceActionsEnabled()" [title]="workspaceActionsEnabled() ? '' : oneWorkspaceHint">
         <i class="ti ti-forms"></i>
-        <span>Custom fields...</span>
+        <span i18n="Bulk card menu item">Custom fields...</span>
       </button>
 
       <button type="button" class="bcam-item" (click)="duplicate($event)" [disabled]="saving()">
         <i class="ti ti-copy"></i>
-        <span>Duplicate cards</span>
+        <span i18n="Bulk card menu item">Duplicate cards</span>
       </button>
 
       <div class="bcam-sub">
         <button type="button" class="bcam-item" [class.is-active]="copyBoardOpen()" (click)="toggleSub($event, 'copyBoard')" [disabled]="saving()">
           <i class="ti ti-copy-plus"></i>
-          <span>Copy to board...</span>
+          <span i18n="Bulk card menu item">Copy to board...</span>
           <i class="ti ti-chevron-right bcam-chev"></i>
         </button>
         @if (copyBoardOpen()) {
@@ -161,6 +163,7 @@ const BULK_MENU_WIDTH = 232;
             [sourceListId]="copyBoardSourceListId()"
             [sourceLists]="lists()"
             title="Copy to board"
+            i18n-title
             (pick)="copyToBoard($event)"
             (close)="copyBoardOpen.set(false)"
           />
@@ -170,14 +173,14 @@ const BULK_MENU_WIDTH = 232;
       <div class="bcam-sep"></div>
       @if (confirmArchive()) {
         <div class="bcam-confirm">
-          <span>Archive selected?</span>
-          <button type="button" class="bcam-confirm-yes" (click)="archive($event)" [disabled]="saving()">Archive</button>
-          <button type="button" class="bcam-confirm-cancel" (click)="hideArchiveConfirmation($event)">Cancel</button>
+          <span i18n="Confirmation before archiving the selected cards">Archive selected?</span>
+          <button type="button" class="bcam-confirm-yes" (click)="archive($event)" [disabled]="saving()" i18n="Button: confirm archiving the cards">Archive</button>
+          <button type="button" class="bcam-confirm-cancel" (click)="hideArchiveConfirmation($event)" i18n>Cancel</button>
         </div>
       } @else {
         <button type="button" class="bcam-item bcam-danger" (click)="showArchiveConfirmation($event)" [disabled]="saving()">
           <i class="ti ti-archive"></i>
-          <span>Archive cards</span>
+          <span i18n="Bulk card menu item">Archive cards</span>
         </button>
       }
     </div>
@@ -469,6 +472,8 @@ export class BulkCardActionsMenuPopover {
   readonly copyBoardOpen = signal(false);
   readonly confirmArchive = signal(false);
   readonly saving = signal(false);
+  readonly meLabel = $localize`:The viewer, in a list of people:Me`;
+  readonly oneWorkspaceHint = $localize`:Tooltip on a disabled bulk action:Select cards from one workspace`;
   readonly submenuPlacement: AnchoredPanelPlacement = {
     side: "right",
     align: "start",
@@ -492,7 +497,7 @@ export class BulkCardActionsMenuPopover {
     return this.members().filter((member) => member.role !== "observer").sort((a, b) => {
       if (a.userId === meId) return -1;
       if (b.userId === meId) return 1;
-      return a.displayName.localeCompare(b.displayName);
+      return a.displayName.localeCompare(b.displayName, appLocale());
     });
   });
 
@@ -553,7 +558,9 @@ export class BulkCardActionsMenuPopover {
   async setCompletion(event: MouseEvent, completed: boolean) {
     event.preventDefault();
     event.stopPropagation();
-    await this.run(completed ? "marked complete" : "reopened", completed ? "circle-check" : "circle", async () => {
+    await this.run(completed
+      ? (count) => icu($localize`:Toast after a bulk action:{count, plural, one {# card marked complete.} other {# cards marked complete.}}`, { count })
+      : (count) => icu($localize`:Toast after a bulk action:{count, plural, one {# card reopened.} other {# cards reopened.}}`, { count }), completed ? "circle-check" : "circle", async () => {
       for (const [boardId, cardIds] of this.cardIdBatchesByBoard()) {
         const result = await this.api.patch<{ cards: WireCard[] }>(`/boards/${boardId}/cards/bulk/completion`, { cardIds, completed });
         for (const card of result.cards ?? []) this.state.updateCard(card);
@@ -562,7 +569,9 @@ export class BulkCardActionsMenuPopover {
   }
 
   async setDueDate(value: string, slot: DueDateSlotSelection) {
-    await this.run(value ? "due dates updated" : "due dates cleared", "calendar-event", async () => {
+    await this.run(value
+      ? (count) => icu($localize`:Toast after a bulk action:{count, plural, one {# card due dates updated.} other {# cards due dates updated.}}`, { count })
+      : (count) => icu($localize`:Toast after a bulk action:{count, plural, one {# card due dates cleared.} other {# cards due dates cleared.}}`, { count }), "calendar-event", async () => {
       const dueDateLocalDate = value || null;
       for (const [boardId, cardIds] of this.cardIdBatchesByBoard()) {
         const result = await this.api.patch<{ cards: WireCard[] }>(`/boards/${boardId}/cards/bulk/due-date`, {
@@ -578,7 +587,7 @@ export class BulkCardActionsMenuPopover {
   async toggleLabel(labelId: string) {
     if (!this.workspaceActionsEnabled()) return;
     const mode = this.labelState(labelId) === "all" ? "remove" : "add";
-    await this.run("labels updated", "tag", async () => {
+    await this.run((count) => icu($localize`:Toast after a bulk action:{count, plural, one {# card labels updated.} other {# cards labels updated.}}`, { count }), "tag", async () => {
       for (const cardId of this.cardIds()) {
         const current = this.state.labelIdsForCard(cardId);
         const next = mode === "add" ? Array.from(new Set([...current, labelId])) : current.filter((id) => id !== labelId);
@@ -592,7 +601,7 @@ export class BulkCardActionsMenuPopover {
 
   async toggleAssignee(userId: string) {
     const mode = this.assigneeState(userId) === "all" ? "remove" : "add";
-    await this.run("assignees updated", "users", async () => {
+    await this.run((count) => icu($localize`:Toast after a bulk action:{count, plural, one {# card assignees updated.} other {# cards assignees updated.}}`, { count }), "users", async () => {
       for (const cardId of this.cardIds()) {
         const current = this.state.assigneeIdsForCard(cardId);
         const next = mode === "add" ? Array.from(new Set([...current, userId])) : current.filter((id) => id !== userId);
@@ -606,7 +615,10 @@ export class BulkCardActionsMenuPopover {
 
   async moveToList(listId: string) {
     if (!this.workspaceActionsEnabled()) return;
-    await this.run(`moved to ${this.lists().find((list) => list.id === listId)?.name ?? "the selected list"}`, "arrows-transfer-down", async () => {
+    const list = this.lists().find((candidate) => candidate.id === listId)?.name;
+    await this.run(list
+      ? (count) => icu($localize`:Toast after a bulk move; the list name follows:{count, plural, one {# card moved to {list}.} other {# cards moved to {list}.}}`, { count, list })
+      : (count) => icu($localize`:Toast after a bulk move:{count, plural, one {# card moved to the selected list.} other {# cards moved to the selected list.}}`, { count }), "arrows-transfer-down", async () => {
       for (const [boardId, cardIds] of this.cardIdBatchesByBoard()) {
         const result = await this.api.post<{ cards: WireCard[] }>(`/boards/${boardId}/cards/bulk/move`, { cardIds, listId });
         for (const card of result.cards ?? []) this.state.moveCard(card.id, card.listId, card.position);
@@ -626,7 +638,7 @@ export class BulkCardActionsMenuPopover {
   async duplicate(event: MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
-    await this.run("duplicated", "copy", async () => {
+    await this.run((count) => icu($localize`:Toast after a bulk action:{count, plural, one {# card duplicated.} other {# cards duplicated.}}`, { count }), "copy", async () => {
       for (const [boardId, cardIds] of this.cardIdBatchesByBoard()) {
         const result = await this.api.post<{ cards: WireCard[] }>(`/boards/${boardId}/cards/bulk/duplicate`, { cardIds });
         for (const card of result.cards ?? []) this.state.addCard(card);
@@ -636,7 +648,7 @@ export class BulkCardActionsMenuPopover {
 
   async copyToBoard(target: BoardPickerPick) {
     this.copyBoardOpen.set(false);
-    await this.run("copied to the selected board", "copy-plus", async () => {
+    await this.run((count) => icu($localize`:Toast after a bulk action:{count, plural, one {# card copied to the selected board.} other {# cards copied to the selected board.}}`, { count }), "copy-plus", async () => {
       for (const [boardId, cardIds] of this.cardIdBatchesByBoard()) {
         await this.api.post<{ cards: WireCard[] }>(`/boards/${boardId}/cards/bulk/duplicate`, {
           cardIds,
@@ -659,10 +671,10 @@ export class BulkCardActionsMenuPopover {
         for (const card of result.cards ?? []) this.state.updateCard(card);
       }
     };
-    await this.run("archived", "archive", () => setArchived(true), true, () => setArchived(false));
+    await this.run((count) => icu($localize`:Toast after a bulk action:{count, plural, one {# card archived.} other {# cards archived.}}`, { count }), "archive", () => setArchived(true), true, () => setArchived(false));
   }
 
-  private async run(action: string, icon: string, fn: () => Promise<void>, closeAfter = true, undo?: () => Promise<void>) {
+  private async run(message: (count: number) => string, icon: string, fn: () => Promise<void>, closeAfter = true, undo?: () => Promise<void>) {
     if (this.saving()) return;
     this.saving.set(true);
     const count = this.cardIds().length;
@@ -670,9 +682,9 @@ export class BulkCardActionsMenuPopover {
       await fn();
       // Emit once after every board batch succeeds, never from realtime echoes.
       if (count > 0) {
-        const message = `${count} card${count === 1 ? "" : "s"} ${action}.`;
-        if (undo) this.toasts.undoable({ message, icon, undo });
-        else this.toasts.success(message, icon);
+        const text = message(count);
+        if (undo) this.toasts.undoable({ message: text, icon, undo });
+        else this.toasts.success(text, icon);
       }
       if (closeAfter) {
         this.done.emit();

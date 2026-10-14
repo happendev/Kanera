@@ -12,6 +12,7 @@ test("development email subjects are prefixed once", () => {
 
 test("daily digests are skipped for observers and empty payloads", () => {
   const params = {
+    locale: "en-GB" as const,
     displayName: "Ada",
     localDate: "2026-05-26",
     localDateLabel: "May 26, 2026",
@@ -186,6 +187,7 @@ test("hosted billing email types render", () => {
 
 test("seat purchase email confirms the new total without repeating Stripe status", () => {
   const html = seatBilledEmail({
+    locale: "en-GB",
     clientId: "client-1",
     displayName: "Dylan",
     orgName: "Happen Software",
@@ -206,6 +208,7 @@ test("seat purchase email confirms the new total without repeating Stripe status
 
 test("billing lifecycle emails use forecast, applied, and restored impact language", () => {
   const base = {
+    locale: "en-GB" as const,
     clientId: "client-1",
     displayName: "Dylan",
     orgName: "Happen Software",
@@ -232,6 +235,7 @@ test("billing lifecycle emails use forecast, applied, and restored impact langua
 
 test("subscription emails present customer-facing billing details instead of Stripe status text", () => {
   const html = billingChangedEmail({
+    locale: "en-GB",
     clientId: "client-1",
     displayName: "Dylan",
     orgName: "Happen Software",
@@ -251,7 +255,8 @@ test("subscription emails present customer-facing billing details instead of Str
 
 function assertRenderedEmail(html: string, subject: string): void {
   assert.match(html, /^<!DOCTYPE html>/);
-  assert.match(html, /<html lang="en">/);
+  // Rows queued before localisation carry no locale and render in the source language.
+  assert.match(html, /<html lang="en-GB">/);
   assert.match(html, new RegExp(`<title>${escapeRegExp(subject)}</title>`));
   assert.match(html, /<meta name="color-scheme" content="light">/);
   assert.match(html, /<meta name="supported-color-schemes" content="light">/);
@@ -262,3 +267,24 @@ function assertRenderedEmail(html: string, subject: string): void {
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+
+void test("a queued row renders in the locale it was queued with", () => {
+  const row: EmailQueue = {
+    id: "email-locale",
+    toEmail: "member@example.com",
+    status: EMAIL_QUEUE_STATUS.queued,
+    processingLeaseExpiresAt: null,
+    retries: 0,
+    nextAttemptAt: new Date(),
+    lastError: null,
+    sentAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    subject: "Your Kanera reminder",
+    type: "card_reminder",
+    data: { locale: "en-US", displayName: "Ada", cardTitle: "Ship", boardName: "Launch", cardUrl: "https://kanera.test/c/PROJ-1" },
+  };
+  assert.match(renderEmail(row), /<html lang="en-US">/);
+  // An unknown stored value (a language since removed, say) falls back to the source language.
+  assert.match(renderEmail({ ...row, data: { ...row.data, locale: "xx" as never } }), /<html lang="en-GB">/);
+});

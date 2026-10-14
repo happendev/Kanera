@@ -54,6 +54,8 @@ import { StandaloneBoardCreateDialogComponent } from "../standalone-board/standa
 import { CreateOrganisationDialogComponent, JoinOrganisationDialogComponent, type CreateOrganisationResult } from "./organisation-action.dialog";
 import { byPosition } from "../../shared/position-sort";
 import { applyPositions, withPosition } from "../../shared/positions";
+import { icu } from "../../core/i18n/icu";
+import { appLocale } from "../../core/i18n/locale";
 
 function sortBoards<T extends { position: string }>(boards: T[]): T[] {
   return [...boards].sort(byPosition);
@@ -209,15 +211,15 @@ export class AppShellComponent implements OnInit, OnDestroy {
       }
       const containers: GuestContainer[] = [
         ...entry.standard.map((workspace): GuestContainer => ({ kind: "workspace", id: workspace.workspace.id, name: workspace.workspace.name, workspace })),
-        ...[...byGroup].map(([id, boards]): GuestContainer => ({ kind: "standaloneGroup", id, name: metadata.get(id)!.title, boards: boards.sort((a, b) => Number(a.board.position) - Number(b.board.position) || a.board.name.localeCompare(b.board.name)) })),
-      ].sort((a, b) => a.name.localeCompare(b.name));
-      const org: GuestOrganisation = { clientId, clientName: entry.clientName, containers, ungroupedStandaloneBoards: ungroupedStandaloneBoards.sort((a, b) => Number(a.board.position) - Number(b.board.position) || a.board.name.localeCompare(b.board.name)) };
+        ...[...byGroup].map(([id, boards]): GuestContainer => ({ kind: "standaloneGroup", id, name: metadata.get(id)!.title, boards: boards.sort((a, b) => Number(a.board.position) - Number(b.board.position) || a.board.name.localeCompare(b.board.name, appLocale())) })),
+      ].sort((a, b) => a.name.localeCompare(b.name, appLocale()));
+      const org: GuestOrganisation = { clientId, clientName: entry.clientName, containers, ungroupedStandaloneBoards: ungroupedStandaloneBoards.sort((a, b) => Number(a.board.position) - Number(b.board.position) || a.board.name.localeCompare(b.board.name, appLocale())) };
       // A guest with a single board in an organisation gains nothing from the workspace/group
       // headings in between; show that board directly under the organisation instead.
       const boards = this.guestCollapsedBoards(org);
       return boards.length === 1 ? { ...org, containers: [], ungroupedStandaloneBoards: boards } : org;
     }).filter((org) => org.containers.length > 0 || org.ungroupedStandaloneBoards.length > 0)
-      .sort((a, b) => a.clientName.localeCompare(b.clientName));
+      .sort((a, b) => a.clientName.localeCompare(b.clientName, appLocale()));
   });
   readonly usingOfflineShell = signal(false);
   readonly user = this.auth.user;
@@ -263,11 +265,46 @@ export class AppShellComponent implements OnInit, OnDestroy {
   installKanera(): void {
     this.closeUserMenu();
     void this.pwaInstall.prompt().catch(() => {
-      this.toast.error("Could not open the install prompt. Open the account menu for installation steps.");
+      this.toast.error($localize`Could not open the install prompt. Open the account menu for installation steps.`);
     });
   }
 
-  readonly scratchpadTooltip = computed(() => `${this.scratchpad.open() ? "Close scratchpad" : "Scratchpad"} · .`);
+  readonly scratchpadTooltip = computed(() => `${this.scratchpad.open() ? $localize`:Tooltip — close the scratchpad panel:Close scratchpad` : $localize`:Tooltip — the scratchpad panel button:Scratchpad`} · .`);
+  readonly text = {
+    home: $localize`:Sidebar link to the home page:Home`,
+    myCards: $localize`:Sidebar link to the My Cards page:My Cards`,
+    teamCards: $localize`:Sidebar link to the Team Cards page:Team Cards`,
+    portfolio: $localize`:Sidebar link to the Portfolio page:Portfolio`,
+    expandSidebar: $localize`:Button — expand the sidebar:Expand sidebar`,
+    collapseSidebar: $localize`:Button — collapse the sidebar:Collapse sidebar`,
+    me: $localize`:Fallback name for the signed-in user's avatar:Me`,
+    logo: $localize`:Alt text for an organisation logo without a name:Logo`,
+    accountMenu: $localize`:Button — open the account menu:Account menu`,
+  };
+  // "Up next" is the personal priority queue; U is its keyboard shortcut.
+  readonly upNextLabel = computed(() => {
+    const total = this.myPriorities.totalCount();
+    const overdue = this.myPriorities.overdueCount();
+    if (total === 0) return $localize`:Button — the Up next panel:Up next`;
+    return overdue > 0
+      ? icu($localize`:Accessible name of the Up next button:Up next ({total, plural, other {# cards}}, {overdue, plural, other {# overdue}})`, { total, overdue })
+      : icu($localize`:Accessible name of the Up next button:Up next ({total, plural, other {# cards}})`, { total });
+  });
+  readonly upNextTooltip = computed(() => {
+    const overdue = this.myPriorities.overdueCount();
+    return overdue > 0
+      ? icu($localize`:Tooltip of the Up next button; U is its keyboard shortcut:Up next · {overdue, plural, other {# overdue}} · U`, { overdue })
+      : $localize`:Tooltip of the Up next button; U is its keyboard shortcut:Up next · U`;
+  });
+  readonly notificationsLabel = computed(() => {
+    const unread = this.notifications.unreadCount();
+    return unread > 0
+      ? icu($localize`:Accessible name of the notifications button:Notifications ({unread, plural, other {# unread}})`, { unread })
+      : $localize`:Accessible name of the notifications button:Notifications`;
+  });
+  boardSettingsLabel(boardName: string): string {
+    return $localize`:Accessible name of a board's settings link:${boardName}:board: settings`;
+  }
   readonly userMenuTooltip = computed(() => {
     const user = this.user();
     return user ? `${user.displayName} · ${user.email}` : "";
@@ -297,15 +334,15 @@ export class AppShellComponent implements OnInit, OnDestroy {
     if (!this.workspaceCreateAttempted() || !this.boardLimitReached()) return null;
     const max = this.auth.maxBoards();
     return max === null
-      ? "Your plan's board limit has been reached."
-      : `Your plan allows ${max} board${max === 1 ? "" : "s"}. Upgrade to add another workspace.`;
+      ? $localize`Your plan's board limit has been reached.`
+      : icu($localize`{max, plural, =1 {Your plan allows 1 board. Upgrade to add another workspace.} other {Your plan allows {max} boards. Upgrade to add another workspace.}}`, { max });
   });
   readonly standaloneBoardCreateLimitMessage = computed(() => {
     if (!this.standaloneBoardCreateAttempted() || !this.boardLimitReached()) return null;
     const max = this.auth.maxBoards();
     return max === null
-      ? "Your plan's board limit has been reached."
-      : `Your plan allows ${max} board${max === 1 ? "" : "s"}. Upgrade to add another board.`;
+      ? $localize`Your plan's board limit has been reached.`
+      : icu($localize`{max, plural, =1 {Your plan allows 1 board. Upgrade to add another board.} other {Your plan allows {max} boards. Upgrade to add another board.}}`, { max });
   });
   readonly hasNavBoards = computed(() => this.groups().length > 0 || this.guestGroups().length > 0);
   readonly searchShortcutLabel = signal<string | null>(this.readSearchShortcutLabel());
@@ -639,7 +676,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     if (this.switchingOrganisationId()) return;
     this.closeUserMenu();
     const ref = this.dialog.open<CreateOrganisationResult>(CreateOrganisationDialogComponent, {
-      ariaLabel: "Create organisation",
+      ariaLabel: $localize`:Dialog name:Create organisation`,
       width: "min(440px, calc(100vw - 32px))",
       maxWidth: "100vw",
       data: { hosted: this.user()?.deploymentMode === "hosted" },
@@ -654,7 +691,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   joinOrganisation(): void {
     this.closeUserMenu();
     const ref = this.dialog.open<string>(JoinOrganisationDialogComponent, {
-      ariaLabel: "Join organisation",
+      ariaLabel: $localize`:Dialog name:Join organisation`,
       width: "min(440px, calc(100vw - 32px))",
       maxWidth: "100vw",
     });
@@ -707,25 +744,25 @@ export class AppShellComponent implements OnInit, OnDestroy {
    */
   private registerGlobalShortcuts(): void {
     const go = (url: string) => () => void this.router.navigateByUrl(url);
-    this.shortcuts.registerAll("Everywhere", [
-      { keys: "mod+k", label: "Search everything", run: () => this.search.open() },
-      { keys: "?", label: "Keyboard shortcuts", run: () => this.shortcutsOpen.set(true) },
+    this.shortcuts.registerAll($localize`:Keyboard shortcuts sheet section — shortcuts that work on every page:Everywhere`, [
+      { keys: "mod+k", label: $localize`:Keyboard shortcut description:Search everything`, run: () => this.search.open() },
+      { keys: "?", label: $localize`:Keyboard shortcut description — open the shortcuts sheet:Keyboard shortcuts`, run: () => this.shortcutsOpen.set(true) },
       // The four sidebar utility buttons, in their on-screen order, each on one letter. ⌘⇧. stays as
       // the scratchpad's original chord for anyone who learned it.
-      { keys: "mod+shift+.", label: "Open or close scratchpad", when: () => this.showScratchpad(), run: () => this.scratchpad.toggle() },
-      { keys: ".", label: "Open or close scratchpad", when: () => this.showScratchpad(), run: () => this.scratchpad.toggle() },
-      { keys: "u", label: "Open or close Up next", run: () => this.togglePanel("priorities") },
-      { keys: "n", label: "Open or close notifications", run: () => this.togglePanel("notifications") },
-      { keys: "shift+n", label: "Mark all notifications as read", when: () => this.canMarkAllRead(), run: () => void this.notifications.markAllRead() },
-      { keys: "h", label: "Help & docs", run: () => window.open(this.docsUrl, "_blank", "noopener") },
-      { keys: "[", label: "Collapse or expand sidebar", run: () => this.toggleSidebar() },
+      { keys: "mod+shift+.", label: $localize`:Keyboard shortcut description:Open or close scratchpad`, when: () => this.showScratchpad(), run: () => this.scratchpad.toggle() },
+      { keys: ".", label: $localize`:Keyboard shortcut description:Open or close scratchpad`, when: () => this.showScratchpad(), run: () => this.scratchpad.toggle() },
+      { keys: "u", label: $localize`:Keyboard shortcut description; "Up next" is the personal priority queue:Open or close Up next`, run: () => this.togglePanel("priorities") },
+      { keys: "n", label: $localize`:Keyboard shortcut description:Open or close notifications`, run: () => this.togglePanel("notifications") },
+      { keys: "shift+n", label: $localize`:Keyboard shortcut description:Mark all notifications as read`, when: () => this.canMarkAllRead(), run: () => void this.notifications.markAllRead() },
+      { keys: "h", label: $localize`:Keyboard shortcut description — open the documentation:Help & docs`, run: () => window.open(this.docsUrl, "_blank", "noopener") },
+      { keys: "[", label: $localize`:Keyboard shortcut description:Collapse or expand sidebar`, run: () => this.toggleSidebar() },
     ], this.destroyRef);
-    this.shortcuts.registerAll("Go to", [
-      { keys: "g h", label: "Home", run: go("/") },
-      { keys: "g m", label: "My cards", run: go("/my-cards") },
-      { keys: "g t", label: "Team cards", run: go("/team-cards") },
-      { keys: "g p", label: "Portfolio", when: () => this.showPortfolio(), run: go("/portfolio") },
-      { keys: "g s", label: "Settings", run: go("/settings") },
+    this.shortcuts.registerAll($localize`:Keyboard shortcuts sheet section — navigation shortcuts:Go to`, [
+      { keys: "g h", label: $localize`:Keyboard shortcut description — go to the home page:Home`, run: go("/") },
+      { keys: "g m", label: $localize`:Keyboard shortcut description — go to the My Cards page:My cards`, run: go("/my-cards") },
+      { keys: "g t", label: $localize`:Keyboard shortcut description — go to the Team Cards page:Team cards`, run: go("/team-cards") },
+      { keys: "g p", label: $localize`:Keyboard shortcut description — go to the Portfolio page:Portfolio`, when: () => this.showPortfolio(), run: go("/portfolio") },
+      { keys: "g s", label: $localize`:Keyboard shortcut description — go to account settings:Settings`, run: go("/settings") },
     ], this.destroyRef);
   }
 
@@ -739,54 +776,54 @@ export class AppShellComponent implements OnInit, OnDestroy {
     this.palette.registerAll([
       {
         id: "new-card",
-        label: "Create a new card",
+        label: $localize`:Command palette action:Create a new card`,
         detail: () => {
           const target = this.paletteNewCardTarget();
-          if (!target || target.here) return "Add work to this board";
+          if (!target || target.here) return $localize`:Command palette action detail:Add work to this board`;
           const board = [...this.groups(), ...this.guestGroups()].flatMap((group) => group.boards).find((b) => b.id === target.boardId);
-          return board ? `Add work to ${board.name}` : "Add work to your most recent board";
+          return board ? $localize`:Command palette action detail:Add work to ${board.name}:board:` : $localize`:Command palette action detail:Add work to your most recent board`;
         },
         icon: "square-rounded-plus",
-        keywords: ["add", "task"],
+        keywords: ["add", "task", $localize`:Extra search words for the "Create a new card" command palette action, space-separated:add task`],
         keys: () => (this.paletteNewCardTarget()?.here ? "c" : undefined),
         when: () => this.paletteNewCardTarget() !== null,
         run: () => this.paletteNewCard(),
       },
       {
         id: "scratchpad",
-        label: "Open scratchpad",
-        detail: "Your personal notes, on every page",
+        label: $localize`:Command palette action:Open scratchpad`,
+        detail: $localize`:Command palette action detail:Your personal notes, on every page`,
         icon: "note",
-        keywords: ["toggle", "notes"],
+        keywords: ["toggle", "notes", $localize`:Extra search words for the scratchpad command palette actions, space-separated:toggle notes`],
         keys: ".",
         when: () => this.showScratchpad() && !this.scratchpad.open(),
         run: () => this.scratchpad.toggle(),
       },
       {
         id: "scratchpad-close",
-        label: "Close scratchpad",
-        detail: "Hide your personal notes",
+        label: $localize`:Command palette action:Close scratchpad`,
+        detail: $localize`:Command palette action detail:Hide your personal notes`,
         icon: "note-off",
-        keywords: ["toggle", "notes"],
+        keywords: ["toggle", "notes", $localize`:Extra search words for the scratchpad command palette actions, space-separated:toggle notes`],
         keys: ".",
         when: () => this.showScratchpad() && this.scratchpad.open(),
         run: () => this.scratchpad.toggle(),
       },
       {
         id: "notifications",
-        label: "Open notifications",
-        detail: "Mentions, assignments and watched activity",
+        label: $localize`:Command palette action:Open notifications`,
+        detail: $localize`:Command palette action detail:Mentions, assignments and watched activity`,
         icon: "bell",
-        keywords: ["inbox", "alerts"],
+        keywords: ["inbox", "alerts", $localize`:Extra search words for the "Open notifications" command palette action, space-separated:inbox alerts`],
         keys: "n",
         run: () => this.togglePanel("notifications"),
       },
       {
         id: "mark-all-read",
-        label: "Mark all notifications as read",
-        detail: "Clear every unread notification",
+        label: $localize`:Command palette action:Mark all notifications as read`,
+        detail: $localize`:Command palette action detail:Clear every unread notification`,
         icon: "checks",
-        keywords: ["inbox", "clear"],
+        keywords: ["inbox", "clear", $localize`:Extra search words for the "Mark all notifications as read" command palette action, space-separated:inbox clear`],
         keys: "shift+n",
         // Offline the write would silently queue nowhere, so the verb disappears rather than lying.
         when: () => this.canMarkAllRead(),
@@ -794,19 +831,19 @@ export class AppShellComponent implements OnInit, OnDestroy {
       },
       {
         id: "up-next",
-        label: "Open Up next",
-        detail: "Your prioritised cards",
+        label: $localize`:Command palette action; "Up next" is the personal priority queue:Open Up next`,
+        detail: $localize`:Command palette action detail:Your prioritised cards`,
         icon: "list-numbers",
-        keywords: ["priorities", "toggle"],
+        keywords: ["priorities", "toggle", $localize`:Extra search words for the "Open Up next" command palette action, space-separated:priorities toggle`],
         keys: "u",
         run: () => this.togglePanel("priorities"),
       },
       {
         id: "shortcuts",
-        label: "Keyboard shortcuts",
-        detail: "Every key the app listens for",
+        label: $localize`:Command palette action — open the shortcuts sheet:Keyboard shortcuts`,
+        detail: $localize`:Command palette action detail:Every key the app listens for`,
         icon: "keyboard",
-        keywords: ["help", "keys"],
+        keywords: ["help", "keys", $localize`:Extra search words for the "Keyboard shortcuts" command palette action, space-separated:help keys`],
         keys: "?",
         when: () => !this.touchOnly(),
         run: () => this.shortcutsOpen.set(true),
@@ -913,7 +950,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
       },
       "standaloneBoardGroup:upserted": ({ group }) => {
         this.standaloneBoardGroups.update((groups) => [...groups.filter((item) => item.id !== group.id), group]
-          .sort((a, b) => a.title.localeCompare(b.title)));
+          .sort((a, b) => a.title.localeCompare(b.title, appLocale())));
       },
       "standaloneBoardGroup:deleted": ({ groupId }) => {
         this.standaloneBoardGroups.update((groups) => groups.filter((group) => group.id !== groupId));
@@ -1311,7 +1348,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
         })) };
       }));
     } catch {
-      this.boardReorderError.set("Could not save the board order. Please try again.");
+      this.boardReorderError.set($localize`Could not save the board order. Please try again.`);
     } finally {
       this.pendingBoardOrder.set(null);
       this.boardReorderPending.set(false);
@@ -1407,10 +1444,10 @@ export class AppShellComponent implements OnInit, OnDestroy {
       .map((group) => ({
         id: group.id,
         title: group.title,
-        boards: this.withPendingBoardOrder((byGroupId.get(group.id) ?? []).sort((a, b) => Number(a.board.position) - Number(b.board.position) || a.board.name.localeCompare(b.board.name)), (item) => item.board),
+        boards: this.withPendingBoardOrder((byGroupId.get(group.id) ?? []).sort((a, b) => Number(a.board.position) - Number(b.board.position) || a.board.name.localeCompare(b.board.name, appLocale())), (item) => item.board),
       }))
       .filter((group) => group.boards.length > 0)
-      .sort((a, b) => a.title.localeCompare(b.title));
+      .sort((a, b) => a.title.localeCompare(b.title, appLocale()));
   }
 
   standaloneNavigationUngrouped(groups: Array<HomeGroup | GuestHomeGroup>): StandaloneBoardNavItem[] {
@@ -1418,7 +1455,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     return this.withPendingBoardOrder(groups.flatMap((homeGroup) => this.filteredBoards(homeGroup)
       .filter((board) => !board.standaloneGroupId || !knownIds.has(board.standaloneGroupId))
       .map((board) => ({ board, homeGroup })))
-      .sort((a, b) => Number(a.board.position) - Number(b.board.position) || a.board.name.localeCompare(b.board.name)), (item) => item.board);
+      .sort((a, b) => Number(a.board.position) - Number(b.board.position) || a.board.name.localeCompare(b.board.name, appLocale())), (item) => item.board);
   }
 
   guestCollapsedBoards(org: GuestOrganisation): StandaloneBoardNavItem[] {
@@ -1447,7 +1484,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   }
 
   planDisabledLabel(board: Pick<Board, "name">): string {
-    return `${board.name} is safely stored but disabled on Kanera Free. An organisation admin can upgrade to restore access.`;
+    return $localize`${board.name}:board: is safely stored but disabled on Kanera Free. An organisation admin can upgrade to restore access.`;
   }
 
   onBoardLinkClick(event: MouseEvent, board: ShellBoard): void {
@@ -1465,8 +1502,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   boardAttentionLabel(board: Pick<Board, "id" | "name">): string {
     const count = this.boardAttentionCount(board.id);
     if (count === 0) return board.name;
-    const itemLabel = count === 1 ? "card" : "cards";
-    return `${board.name}, ${count} unread ${itemLabel} needing attention`;
+    return icu($localize`:Accessible name of a sidebar board link with unread activity:{count, plural, =1 {{board}, 1 unread card needing attention} other {{board}, {count} unread cards needing attention}}`, { count, board: board.name });
   }
 
   boardAttentionBadge(boardId: string): string {
@@ -1558,7 +1594,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
     }
     this.standaloneBoardCreateAttempted.set(false);
     const ref = this.dialog.open<string>(StandaloneBoardCreateDialogComponent, {
-      ariaLabel: "Create standalone board",
+      ariaLabel: $localize`:Dialog name:Create standalone board`,
       width: "min(440px, calc(100vw - 32px))",
       maxWidth: "100vw",
     });

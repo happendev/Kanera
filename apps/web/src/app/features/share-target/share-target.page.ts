@@ -39,6 +39,8 @@ function isSharePayload(value: unknown): value is SharePayload {
   styleUrls: ["../../shared/page-styles.scss", "./share-target.page.scss"],
 })
 export class ShareTargetPage implements OnInit {
+  readonly sharedEyebrow = $localize`:Page eyebrow when content was shared into the app from another app:Shared to Kanera`;
+  readonly quickCaptureEyebrow = $localize`:Page eyebrow when creating a card without shared content:Quick capture`;
   readonly title = input<string | null>(null);
   readonly text = input<string | null>(null);
   readonly url = input<string | null>(null);
@@ -111,7 +113,7 @@ export class ShareTargetPage implements OnInit {
         await this.loadLists(initialBoard.id, preference?.boardId === initialBoard.id ? preference.listId : undefined);
       }
     } catch {
-      this.error.set("Could not load your boards. Check your connection and try again.");
+      this.error.set($localize`Could not load your boards. Check your connection and try again.`);
     } finally {
       this.loading.set(false);
     }
@@ -153,20 +155,20 @@ export class ShareTargetPage implements OnInit {
   async pasteFromClipboard() {
     this.captureNotice.set(null);
     if (typeof navigator === "undefined" || !navigator.clipboard?.readText) {
-      this.captureNotice.set("Clipboard access is not available here. Paste into the description field instead.");
+      this.captureNotice.set($localize`Clipboard access is not available here. Paste into the description field instead.`);
       return;
     }
     this.pasteBusy.set(true);
     try {
       const text = (await navigator.clipboard.readText()).trim();
       if (!text) {
-        this.captureNotice.set("Your clipboard is empty.");
+        this.captureNotice.set($localize`Your clipboard is empty.`);
         return;
       }
       this.applySharedPayload({ title: "", text, url: "" });
-      this.captureNotice.set("Clipboard content added.");
+      this.captureNotice.set($localize`Clipboard content added.`);
     } catch {
-      this.captureNotice.set("Kanera could not read the clipboard. Paste into the description field instead.");
+      this.captureNotice.set($localize`Kanera could not read the clipboard. Paste into the description field instead.`);
     } finally {
       this.pasteBusy.set(false);
     }
@@ -195,8 +197,8 @@ export class ShareTargetPage implements OnInit {
       });
     } catch (error) {
       this.error.set(error instanceof ApiError && error.status === 0
-        ? "You're offline - save this card when Kanera is back online."
-        : "Could not create the card. Try a different destination or try again.");
+        ? $localize`You're offline - save this card when Kanera is back online.`
+        : $localize`Could not create the card. Try a different destination or try again.`);
     } finally {
       this.saving.set(false);
     }
@@ -225,7 +227,7 @@ export class ShareTargetPage implements OnInit {
     } catch {
       if (this.selectedBoardId() === boardId) {
         this.selectedListId.set("");
-        this.error.set("Could not load lists for this board. Your access may have changed.");
+        this.error.set($localize`Could not load lists for this board. Your access may have changed.`);
       }
     } finally {
       this.destinationLoading.set(false);
@@ -238,7 +240,7 @@ export class ShareTargetPage implements OnInit {
     const explicitUrl = this.clean(payload.url);
     const detectedUrl = explicitUrl || this.firstWebUrl(text);
     const firstTextLine = text.split(/\r?\n/).map((line) => line.trim()).find((line) => line && line !== detectedUrl);
-    const derivedTitle = title || firstTextLine || this.urlTitle(detectedUrl) || "New card";
+    const derivedTitle = title || firstTextLine || this.urlTitle(detectedUrl) || $localize`:Default title for a captured card:New card`;
     const descriptionParts = [text];
     if (detectedUrl && !text.includes(detectedUrl)) descriptionParts.push(detectedUrl);
 
@@ -261,7 +263,7 @@ export class ShareTargetPage implements OnInit {
       const payloadUrl = new URL(`${SHARE_PAYLOAD_PATH}${key}`, location.origin).toString();
       const response = await cache.match(payloadUrl);
       if (!response) {
-        this.captureNotice.set("The shared content was no longer available. Paste it below to continue.");
+        this.captureNotice.set($localize`The shared content was no longer available. Paste it below to continue.`);
         return queryPayload;
       }
       await cache.delete(payloadUrl);
@@ -270,7 +272,7 @@ export class ShareTargetPage implements OnInit {
     } catch {
       // The manual paste path below remains usable when private storage has been cleared or denied.
     }
-    this.captureNotice.set("Kanera could not recover the shared content. Paste it below to continue.");
+    this.captureNotice.set($localize`Kanera could not recover the shared content. Paste it below to continue.`);
     return queryPayload;
   }
 

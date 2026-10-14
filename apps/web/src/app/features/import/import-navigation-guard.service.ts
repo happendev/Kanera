@@ -14,9 +14,9 @@ export class ImportNavigationGuardService {
   async confirmNavigation(): Promise<boolean> {
     if (!this.runningImport()) return true;
     return this.confirm.open({
-      title: "Leave this import?",
-      message: "The import is still running. Leaving this page may cancel it before Trello attachments finish copying.",
-      confirmLabel: "Leave import",
+      title: $localize`:Confirm dialog title:Leave this import?`,
+      message: $localize`The import is still running. Leaving this page may cancel it before Trello attachments finish copying.`,
+      confirmLabel: $localize`:Button — leave the page while an import runs:Leave import`,
       danger: true,
     });
   }

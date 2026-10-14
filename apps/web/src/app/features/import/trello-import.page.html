@@ -10,7 +10,7 @@
     }
   </div>
 
-  <div class="import-stepper" aria-label="Import steps">
+  <div class="import-stepper" aria-label="Import steps" i18n-aria-label>
     @for (item of steps(); track item; let index = $index) {
     <span class="step-pill" [class.is-active]="step() === item" [class.is-done]="stepIndex() > index" [attr.aria-current]="step() === item ? 'step' : null">
       @if (stepIndex() > index) { <i class="ti ti-check"></i> } @else { <span>{{ index + 1 }}</span> }
@@ -32,50 +32,50 @@
     (dragleave)="onUploadDragLeave($event)" (drop)="onUploadDrop($event)">
     <label class="attach-upload sm" [class.disabled]="busy()">
       <i class="ti ti-upload"></i>
-      {{ selectedFile() ? 'Change export' : 'Add export' }}
+      @if (selectedFile()) { <ng-container i18n="Button: choose a different import file">Change export</ng-container> } @else { <ng-container i18n="Button: choose an import file">Add export</ng-container> }
       <input type="file" hidden [attr.accept]="source() === 'csv' ? '.csv,text/csv,text/plain' : '.json,application/json'" [disabled]="busy()" (change)="onFileSelected($event)" />
     </label>
     <div class="upload-file-meta">
       @if (selectedFile()) {
       <span class="upload-file-name" [title]="selectedFile()!.name"><i class="ti" [class.ti-file-type-csv]="source() === 'csv'" [class.ti-file-type-json]="source() !== 'csv'"></i><span>{{ selectedFile()!.name }}</span></span>
-      <span>{{ (selectedFile()!.size / 1024 / 1024).toFixed(1) }} MB</span>
+      <span i18n="File size in megabytes">{{ fileSizeMb(selectedFile()!.size) // i18n(ph="size") }} MB</span>
       } @else {
       <span>{{ sourceCopy().upload }}</span>
       }
     </div>
     <button type="submit" class="sm" [disabled]="busy()">
       @if (busy()) { <i class="ti ti-loader-2 spin"></i> } @else { <i class="ti ti-scan"></i> }
-      Analyze
+      <ng-container i18n="Button: analyse the uploaded import file">Analyze</ng-container>
     </button>
     <div class="attach-drop-hint" aria-hidden="true">
       <i class="ti ti-drag-drop"></i>
-      Drop {{ source() === 'csv' ? 'CSV file' : 'JSON export' }} here
+      @if (source() === 'csv') { <ng-container i18n>Drop CSV file here</ng-container> } @else { <ng-container i18n>Drop JSON export here</ng-container> }
     </div>
   </form>
   } @else if (step() === 'columns' && csvPreview(); as preview) {
   @if (csvMapping(); as mapping) {
   <div class="csv-options">
-    <label class="check-row"><input type="checkbox" [checked]="mapping.hasHeaderRow" (change)="setCsvOption({ hasHeaderRow: $any($event.target).checked })" /> First row is a header</label>
-    <label><span>Multi-value separator</span>
+    <label class="check-row"><input type="checkbox" [checked]="mapping.hasHeaderRow" (change)="setCsvOption({ hasHeaderRow: $any($event.target).checked })" /> <ng-container i18n="Checkbox label: CSV option">First row is a header</ng-container></label>
+    <label><span i18n="CSV option label">Multi-value separator</span>
       <select [value]="mapping.multiValueDelimiter" (input)="setCsvOption({ multiValueDelimiter: $any($event.target).value })">
-        <option value="," [selected]="mapping.multiValueDelimiter === ','">Comma</option>
-        <option value=";" [selected]="mapping.multiValueDelimiter === ';'">Semicolon</option>
-        <option value="|" [selected]="mapping.multiValueDelimiter === '|'">Pipe</option>
-        <option value="newline" [selected]="mapping.multiValueDelimiter === 'newline'">New line</option>
+        <option value="," [selected]="mapping.multiValueDelimiter === ','" i18n="CSV separator option">Comma</option>
+        <option value=";" [selected]="mapping.multiValueDelimiter === ';'" i18n="CSV separator option">Semicolon</option>
+        <option value="|" [selected]="mapping.multiValueDelimiter === '|'" i18n="CSV separator option, the vertical bar character">Pipe</option>
+        <option value="newline" [selected]="mapping.multiValueDelimiter === 'newline'" i18n="CSV separator option">New line</option>
       </select>
     </label>
-    <label><span>Day/month order</span>
+    <label><span i18n="CSV option label: order of day and month in dates">Day/month order</span>
       <select [value]="mapping.dateOrder" (input)="setCsvOption({ dateOrder: $any($event.target).value })">
-        <option value="auto" [selected]="mapping.dateOrder === 'auto'">Detect automatically</option>
-        <option value="dmy" [selected]="mapping.dateOrder === 'dmy'">Day / month / year</option>
-        <option value="mdy" [selected]="mapping.dateOrder === 'mdy'">Month / day / year</option>
+        <option value="auto" [selected]="mapping.dateOrder === 'auto'" i18n="CSV date order option">Detect automatically</option>
+        <option value="dmy" [selected]="mapping.dateOrder === 'dmy'" i18n="CSV date order option">Day / month / year</option>
+        <option value="mdy" [selected]="mapping.dateOrder === 'mdy'" i18n="CSV date order option">Month / day / year</option>
       </select>
     </label>
-    <span class="csv-timezone">Detected {{ preview.encoding }} · {{ csvDelimiterName() }} delimiter.</span>
-    <span class="csv-timezone">Due dates use your timezone ({{ mapping.timezone }}).</span>
+    <span class="csv-timezone" i18n="CSV analysis, e.g. Detected UTF-8 · comma delimiter.">Detected {{ preview.encoding // i18n(ph="encoding") }} · {{ csvDelimiterName() // i18n(ph="delimiter") }} delimiter.</span>
+    <span class="csv-timezone" i18n>Due dates use your timezone ({{ mapping.timezone // i18n(ph="timezone") }}).</span>
   </div>
   @if (csvAmbiguousDates()) {
-  <p class="import-warning"><i class="ti ti-alert-triangle"></i>Some dates are ambiguous. Confirm whether the day or month comes first.</p>
+  <p class="import-warning"><i class="ti ti-alert-triangle"></i><ng-container i18n>Some dates are ambiguous. Confirm whether the day or month comes first.</ng-container></p>
   }
   <div class="csv-columns">
     @for (column of preview.columns; track column.index) {
@@ -87,37 +87,37 @@
         </div>
       </div>
       <select [value]="mapping.columns[column.index].target" (input)="setCsvColumnTarget(column.index, $any($event.target).value)">
-        <optgroup label="Card">
-          <option value="title" [selected]="mapping.columns[column.index].target === 'title'">Title</option>
-          <option value="description" [selected]="mapping.columns[column.index].target === 'description'">Description</option>
-          <option value="list" [selected]="mapping.columns[column.index].target === 'list'">List / status</option>
-          <option value="dueDate" [selected]="mapping.columns[column.index].target === 'dueDate'">Due date</option>
-          <option value="completed" [selected]="mapping.columns[column.index].target === 'completed'">Completed</option>
-          <option value="archived" [selected]="mapping.columns[column.index].target === 'archived'">Archived</option>
-          <option value="createdAt" [selected]="mapping.columns[column.index].target === 'createdAt'">Created at</option>
-          <option value="cardId" [selected]="mapping.columns[column.index].target === 'cardId'">Card ID / group</option>
+        <optgroup label="Card" i18n-label="CSV column target group">
+          <option value="title" [selected]="mapping.columns[column.index].target === 'title'" i18n="CSV column target option">Title</option>
+          <option value="description" [selected]="mapping.columns[column.index].target === 'description'" i18n="CSV column target option">Description</option>
+          <option value="list" [selected]="mapping.columns[column.index].target === 'list'" i18n="CSV column target option">List / status</option>
+          <option value="dueDate" [selected]="mapping.columns[column.index].target === 'dueDate'" i18n="CSV column target option">Due date</option>
+          <option value="completed" [selected]="mapping.columns[column.index].target === 'completed'" i18n="CSV column target option">Completed</option>
+          <option value="archived" [selected]="mapping.columns[column.index].target === 'archived'" i18n="CSV column target option">Archived</option>
+          <option value="createdAt" [selected]="mapping.columns[column.index].target === 'createdAt'" i18n="CSV column target option">Created at</option>
+          <option value="cardId" [selected]="mapping.columns[column.index].target === 'cardId'" i18n="CSV column target option">Card ID / group</option>
         </optgroup>
-        <optgroup label="Multiple values">
-          <option value="labels" [selected]="mapping.columns[column.index].target === 'labels'">Labels</option>
-          <option value="assignees" [selected]="mapping.columns[column.index].target === 'assignees'">Assignees</option>
-          <option value="comment" [selected]="mapping.columns[column.index].target === 'comment'">Comment</option>
-          <option value="checklistItem" [selected]="mapping.columns[column.index].target === 'checklistItem'">Checklist item</option>
+        <optgroup label="Multiple values" i18n-label="CSV column target group">
+          <option value="labels" [selected]="mapping.columns[column.index].target === 'labels'" i18n="CSV column target option">Labels</option>
+          <option value="assignees" [selected]="mapping.columns[column.index].target === 'assignees'" i18n="CSV column target option">Assignees</option>
+          <option value="comment" [selected]="mapping.columns[column.index].target === 'comment'" i18n="CSV column target option">Comment</option>
+          <option value="checklistItem" [selected]="mapping.columns[column.index].target === 'checklistItem'" i18n="CSV column target option">Checklist item</option>
         </optgroup>
-        <optgroup label="Other">
-          <option value="customField" [selected]="mapping.columns[column.index].target === 'customField'">Custom field</option>
-          <option value="ignore" [selected]="mapping.columns[column.index].target === 'ignore'">Ignore</option>
+        <optgroup label="Other" i18n-label="CSV column target group">
+          <option value="customField" [selected]="mapping.columns[column.index].target === 'customField'" i18n="CSV column target option">Custom field</option>
+          <option value="ignore" [selected]="mapping.columns[column.index].target === 'ignore'" i18n="CSV column target option: do not import this column">Ignore</option>
         </optgroup>
       </select>
       @if (mapping.columns[column.index].target === 'customField') {
       <div class="mapping-controls csv-field-controls">
-        <input [value]="$any(mapping.columns[column.index]).name" (input)="updateCsvCustomField(column.index, { name: $any($event.target).value })" [maxLength]="workspaceEntityNameMaxLength" aria-label="Custom field name" />
-        <select [value]="$any(mapping.columns[column.index]).type" (input)="updateCsvCustomField(column.index, { type: $any($event.target).value })" aria-label="Custom field type">
-          <option value="text" [selected]="$any(mapping.columns[column.index]).type === 'text'">Text</option>
-          <option value="number" [selected]="$any(mapping.columns[column.index]).type === 'number'">Number</option>
-          <option value="checkbox" [selected]="$any(mapping.columns[column.index]).type === 'checkbox'">Checkbox</option>
-          <option value="select" [selected]="$any(mapping.columns[column.index]).type === 'select'">Select</option>
-          <option value="date" [selected]="$any(mapping.columns[column.index]).type === 'date'">Date</option>
-          <option value="url" [selected]="$any(mapping.columns[column.index]).type === 'url'">URL</option>
+        <input [value]="$any(mapping.columns[column.index]).name" (input)="updateCsvCustomField(column.index, { name: $any($event.target).value })" [maxLength]="workspaceEntityNameMaxLength" aria-label="Custom field name" i18n-aria-label />
+        <select [value]="$any(mapping.columns[column.index]).type" (input)="updateCsvCustomField(column.index, { type: $any($event.target).value })" aria-label="Custom field type" i18n-aria-label>
+          <option value="text" [selected]="$any(mapping.columns[column.index]).type === 'text'" i18n="Custom field type">Text</option>
+          <option value="number" [selected]="$any(mapping.columns[column.index]).type === 'number'" i18n="Custom field type">Number</option>
+          <option value="checkbox" [selected]="$any(mapping.columns[column.index]).type === 'checkbox'" i18n="Custom field type">Checkbox</option>
+          <option value="select" [selected]="$any(mapping.columns[column.index]).type === 'select'" i18n="Custom field type: pick from options">Select</option>
+          <option value="date" [selected]="$any(mapping.columns[column.index]).type === 'date'" i18n="Custom field type">Date</option>
+          <option value="url" [selected]="$any(mapping.columns[column.index]).type === 'url'" i18n="Custom field type: web address">URL</option>
         </select>
       </div>
       }
@@ -131,8 +131,8 @@
   </div>
   }
   <div class="wizard-actions">
-    <button type="button" class="ghost sm" (click)="previous()" [disabled]="busy()"><i class="ti ti-arrow-left"></i>Back</button>
-    <button type="button" class="sm" (click)="next()" [disabled]="busy() || csvMappingErrors().length > 0">Next<i class="ti ti-arrow-right"></i></button>
+    <button type="button" class="ghost sm" (click)="previous()" [disabled]="busy()"><i class="ti ti-arrow-left"></i><ng-container i18n="Button: previous wizard step">Back</ng-container></button>
+    <button type="button" class="sm" (click)="next()" [disabled]="busy() || csvMappingErrors().length > 0"><ng-container i18n="Button: next wizard step">Next</ng-container><i class="ti ti-arrow-right"></i></button>
   </div>
   }
   } @else if (manifest(); as manifest) {
@@ -142,12 +142,12 @@
     <div class="mapping-row">
       <div class="mapping-main">
         <strong>{{ list.name }}</strong>
-        <span>{{ list.cardCount }} card{{ list.cardCount === 1 ? '' : 's' }}@if (list.closed) { <span> · archived in source</span> }</span>
+        <span><ng-container i18n="Number of cards in an imported list">{ list.cardCount, plural, =1 {{{ list.cardCount }} card} other {{{ list.cardCount }} cards} }</ng-container>@if (list.closed) { <span i18n="Suffix after a list's card count"> · archived in source</span> }</span>
       </div>
       <div class="segmented">
-        <button type="button" [class.is-selected]="listMappings()[list.id].action === 'create'" (click)="setListAction(list.id, 'create')">Create</button>
-        <button type="button" [class.is-selected]="listMappings()[list.id].action === 'map'" (click)="setListAction(list.id, 'map')">Map</button>
-        <button type="button" [class.is-selected]="listMappings()[list.id].action === 'skip'" (click)="setListAction(list.id, 'skip')">Skip</button>
+        <button type="button" [class.is-selected]="listMappings()[list.id].action === 'create'" (click)="setListAction(list.id, 'create')" i18n="Import mapping choice: create a new item">Create</button>
+        <button type="button" [class.is-selected]="listMappings()[list.id].action === 'map'" (click)="setListAction(list.id, 'map')" i18n="Import mapping choice: map to an existing item">Map</button>
+        <button type="button" [class.is-selected]="listMappings()[list.id].action === 'skip'" (click)="setListAction(list.id, 'skip')" i18n="Import mapping choice: do not import">Skip</button>
       </div>
       @if (listMappings()[list.id].action === 'create') {
       <div class="mapping-controls">
@@ -157,7 +157,7 @@
       </div>
       } @else if (listMappings()[list.id].action === 'map') {
       <select [value]="listMappings()[list.id].targetListId ?? ''" (change)="updateList(list.id, { targetListId: $any($event.target).value })">
-        <option value="" disabled [selected]="!listMappings()[list.id].targetListId">Choose a {{ standalone() ? 'board' : 'workspace' }} list</option>
+        <option value="" disabled [selected]="!listMappings()[list.id].targetListId">{{ standalone() ? copy.chooseBoardList : copy.chooseWorkspaceList }}</option>
         @for (target of lists(); track target.id) {
         <option [value]="target.id" [selected]="target.id === listMappings()[list.id].targetListId">{{ target.name }}</option>
         }
@@ -170,11 +170,11 @@
   <div class="mapping-list">
     @for (label of manifest.labels; track label.id) {
     <div class="mapping-row">
-      <div class="mapping-main"><strong>{{ label.name || "Unnamed label" }}</strong><span>{{ label.trelloColor || "No source color" }}</span></div>
+      <div class="mapping-main"><strong>{{ label.name || copy.unnamedLabel }}</strong><span>{{ label.trelloColor || copy.noSourceColor }}</span></div>
       <div class="segmented">
-        <button type="button" [class.is-selected]="labelMappings()[label.id].action === 'create'" (click)="setLabelAction(label.id, 'create')">Create</button>
-        <button type="button" [class.is-selected]="labelMappings()[label.id].action === 'map'" (click)="setLabelAction(label.id, 'map')">Map</button>
-        <button type="button" [class.is-selected]="labelMappings()[label.id].action === 'skip'" (click)="setLabelAction(label.id, 'skip')">Skip</button>
+        <button type="button" [class.is-selected]="labelMappings()[label.id].action === 'create'" (click)="setLabelAction(label.id, 'create')" i18n="Import mapping choice: create a new item">Create</button>
+        <button type="button" [class.is-selected]="labelMappings()[label.id].action === 'map'" (click)="setLabelAction(label.id, 'map')" i18n="Import mapping choice: map to an existing item">Map</button>
+        <button type="button" [class.is-selected]="labelMappings()[label.id].action === 'skip'" (click)="setLabelAction(label.id, 'skip')" i18n="Import mapping choice: do not import">Skip</button>
       </div>
       @if (labelMappings()[label.id].action === 'create') {
       <div class="mapping-controls">
@@ -183,7 +183,7 @@
       </div>
       } @else if (labelMappings()[label.id].action === 'map') {
       <select [value]="labelMappings()[label.id].targetLabelId ?? ''" (change)="updateLabel(label.id, { targetLabelId: $any($event.target).value })">
-        <option value="" disabled [selected]="!labelMappings()[label.id].targetLabelId">Choose a {{ standalone() ? 'board' : 'workspace' }} label</option>
+        <option value="" disabled [selected]="!labelMappings()[label.id].targetLabelId">{{ standalone() ? copy.chooseBoardLabel : copy.chooseWorkspaceLabel }}</option>
         @for (target of labels(); track target.id) {
         <option [value]="target.id" [selected]="target.id === labelMappings()[label.id].targetLabelId">{{ target.name }}</option>
         }
@@ -198,9 +198,9 @@
     <div class="mapping-row">
       <div class="mapping-main"><strong>{{ field.name }}</strong><span>{{ field.trelloType }} → {{ field.suggestedType }}</span></div>
       <div class="segmented">
-        <button type="button" [class.is-selected]="fieldMappings()[field.id].action === 'create'" (click)="setFieldAction(field.id, 'create')">Create</button>
-        <button type="button" [class.is-selected]="fieldMappings()[field.id].action === 'map'" (click)="setFieldAction(field.id, 'map')">Map</button>
-        <button type="button" [class.is-selected]="fieldMappings()[field.id].action === 'skip'" (click)="setFieldAction(field.id, 'skip')">Skip</button>
+        <button type="button" [class.is-selected]="fieldMappings()[field.id].action === 'create'" (click)="setFieldAction(field.id, 'create')" i18n="Import mapping choice: create a new item">Create</button>
+        <button type="button" [class.is-selected]="fieldMappings()[field.id].action === 'map'" (click)="setFieldAction(field.id, 'map')" i18n="Import mapping choice: map to an existing item">Map</button>
+        <button type="button" [class.is-selected]="fieldMappings()[field.id].action === 'skip'" (click)="setFieldAction(field.id, 'skip')" i18n="Import mapping choice: do not import">Skip</button>
       </div>
       @if (fieldMappings()[field.id].action === 'create') {
       <div class="mapping-controls">
@@ -208,13 +208,13 @@
         <input [value]="fieldMappings()[field.id].name" (input)="updateField(field.id, { name: $any($event.target).value })" [maxLength]="workspaceEntityNameMaxLength" />
         @if (source() !== 'csv') {
         <select [value]="fieldMappings()[field.id].type" (input)="updateField(field.id, { type: $any($event.target).value })">
-          <option value="text">Text</option><option value="number">Number</option><option value="checkbox">Checkbox</option><option value="select">Select</option><option value="date">Date</option>
+          <option value="text" i18n="Custom field type">Text</option><option value="number" i18n="Custom field type">Number</option><option value="checkbox" i18n="Custom field type">Checkbox</option><option value="select" i18n="Custom field type: pick from options">Select</option><option value="date" i18n="Custom field type">Date</option>
         </select>
         }
       </div>
       } @else if (fieldMappings()[field.id].action === 'map') {
       <select [value]="fieldMappings()[field.id].targetFieldId ?? ''" (change)="updateField(field.id, { targetFieldId: $any($event.target).value })">
-        <option value="" disabled [selected]="!fieldMappings()[field.id].targetFieldId">Choose a {{ standalone() ? 'board' : 'workspace' }} field</option>
+        <option value="" disabled [selected]="!fieldMappings()[field.id].targetFieldId">{{ standalone() ? copy.chooseBoardField : copy.chooseWorkspaceField }}</option>
         @for (target of fields(); track target.id) {
         <option [value]="target.id" [selected]="target.id === fieldMappings()[field.id].targetFieldId">{{ target.name }} ({{ target.type }})</option>
         }
@@ -223,16 +223,16 @@
     </div>
     }
     @if (incompatibleFieldMaps().length) {
-    <p class="import-warning"><i class="ti ti-alert-triangle"></i>Some mapped fields use a different type and need another target.</p>
+    <p class="import-warning"><i class="ti ti-alert-triangle"></i><ng-container i18n>Some mapped fields use a different type and need another target.</ng-container></p>
     }
   </div>
   } @else if (step() === 'members') {
   <div class="mapping-list">
     @for (member of manifest.members; track member.id) {
     <div class="mapping-row member-row">
-      <div class="mapping-main"><strong>{{ member.fullName }}</strong><span>{{ member.username || "No username" }}</span></div>
+      <div class="mapping-main"><strong>{{ member.fullName }}</strong><span>{{ member.username || copy.noUsername }}</span></div>
       <select [value]="memberMappings()[member.id] ?? ''" (input)="updateMember(member.id, $any($event.target).value)">
-        <option value="" [selected]="!memberMappings()[member.id]">Unassigned</option>
+        <option value="" [selected]="!memberMappings()[member.id]" i18n="Member mapping option: no Kanera member">Unassigned</option>
         @for (target of members(); track target.userId) { <option [value]="target.userId" [selected]="target.userId === memberMappings()[member.id]">{{ target.displayName }} · {{ target.email }}</option> }
       </select>
     </div>
@@ -241,52 +241,54 @@
   } @else if (step() === 'options') {
   <div class="options-grid">
     @if (!standalone()) {
-    <label class="field-row"><span>Board name</span><input [value]="boardName()" (input)="boardName.set($any($event.target).value)" [maxLength]="workspaceEntityNameMaxLength" /></label>
+    <label class="field-row"><span i18n="Form field label">Board name</span><input [value]="boardName()" (input)="boardName.set($any($event.target).value)" [maxLength]="workspaceEntityNameMaxLength" /></label>
     <div class="style-row"><k-icon-picker [value]="boardIcon()" (valueChange)="boardIcon.set($event)" /><k-color-picker [value]="boardIconColor()" (valueChange)="boardIconColor.set($event)" /></div>
     } @else {
-    <p class="settings-section-hint">Cards are added to this board. Its name, icon, color, permissions, and existing cards are unchanged.</p>
+    <p class="settings-section-hint" i18n>Cards are added to this board. Its name, icon, color, permissions, and existing cards are unchanged.</p>
     }
-    <label class="check-row"><input type="checkbox" [checked]="importComments()" (change)="importComments.set($any($event.target).checked)" /> Import comments</label>
-    <label class="check-row"><input type="checkbox" [checked]="importCustomFields()" (change)="importCustomFields.set($any($event.target).checked)" /> Import custom field values</label>
-    <label class="check-row"><input type="checkbox" [checked]="includeArchived()" (change)="includeArchived.set($any($event.target).checked)" /> Include archived cards</label>
+    <label class="check-row"><input type="checkbox" [checked]="importComments()" (change)="importComments.set($any($event.target).checked)" /> <ng-container i18n="Import option checkbox">Import comments</ng-container></label>
+    <label class="check-row"><input type="checkbox" [checked]="importCustomFields()" (change)="importCustomFields.set($any($event.target).checked)" /> <ng-container i18n="Import option checkbox">Import custom field values</ng-container></label>
+    <label class="check-row"><input type="checkbox" [checked]="includeArchived()" (change)="includeArchived.set($any($event.target).checked)" /> <ng-container i18n="Import option checkbox">Include archived cards</ng-container></label>
     @if (source() === 'trello' && hasTrelloUploadedAttachments()) {
     <div class="trello-connect-row">
       <div>
-        <strong>Trello attachments</strong>
+        <strong i18n="Import option heading">Trello attachments</strong>
         @if (trelloAttachmentCopyEnabled()) {
-        <span>Uploaded files will be copied into Kanera.</span>
+        <span i18n>Uploaded files will be copied into Kanera.</span>
         } @else if (canConnectTrello()) {
-        <span>Connect Trello to copy uploaded files. Links will still be preserved.</span>
+        <span i18n>Connect Trello to copy uploaded files. Links will still be preserved.</span>
         } @else {
-        <span>Kanera cannot copy uploaded Trello files for this import. Attachment links will still be preserved.</span>
+        <span i18n>Kanera cannot copy uploaded Trello files for this import. Attachment links will still be preserved.</span>
         }
       </div>
       @if (canConnectTrello()) {
       <button type="button" class="ghost sm" (click)="connectTrello()">
-        @if (trelloAttachmentCopyEnabled()) { <i class="ti ti-circle-check"></i>Connected } @else { <i class="ti ti-brand-trello"></i>Connect Trello }
+        @if (trelloAttachmentCopyEnabled()) { <i class="ti ti-circle-check"></i><ng-container i18n="Status: Trello account connected">Connected</ng-container> } @else { <i class="ti ti-brand-trello"></i><ng-container i18n="Button: connect a Trello account">Connect Trello</ng-container> }
       </button>
       }
     </div>
     }
     <div class="summary-box">
-      <span>{{ manifest.counts.cards - skippedCardCount() }} card{{ manifest.counts.cards - skippedCardCount() === 1 ? '' : 's' }} will be imported</span>
-      <span>{{ skippedCardCount() }} card{{ skippedCardCount() === 1 ? '' : 's' }} skipped by list mapping</span>
+      <span i18n="Import summary line">{ manifest.counts.cards - skippedCardCount(), plural, =1 {{{ manifest.counts.cards - skippedCardCount() }} card will be imported} other {{{ manifest.counts.cards - skippedCardCount() }} cards will be imported} }</span>
+      <span i18n="Import summary line">{ skippedCardCount(), plural, =1 {{{ skippedCardCount() }} card skipped by list mapping} other {{{ skippedCardCount() }} cards skipped by list mapping} }</span>
       @if (source() === 'csv' && csvIssues(); as issues) {
-      <span>{{ issues.rowsWithoutTitle }} card{{ issues.rowsWithoutTitle === 1 ? '' : 's' }} skipped: no title</span>
-      <span>{{ issues.unparseableDates }} dates could not be read</span>
-      <span>{{ issues.unparseableNumbers }} numbers could not be read</span>
-      <span>{{ sourceCopy().preservedAttachments }}</span>
-      } @else {
-      <span>{{ manifest.counts.linkAttachments + manifest.counts.uploadedAttachments }} {{ sourceCopy().preservedAttachments }}</span>
+      <span i18n="Import summary line">{ issues.rowsWithoutTitle, plural, =1 {{{ issues.rowsWithoutTitle }} card skipped: no title} other {{{ issues.rowsWithoutTitle }} cards skipped: no title} }</span>
+      <span i18n="Import summary line">{ issues.unparseableDates, plural, other {{{ issues.unparseableDates }} dates could not be read} }</span>
+      <span i18n="Import summary line">{ issues.unparseableNumbers, plural, other {{{ issues.unparseableNumbers }} numbers could not be read} }</span>
       }
+      <span>{{ attachmentSummary() }}</span>
     </div>
   </div>
   } @else if (step() === 'result' && result(); as result) {
   <div class="result-panel">
     <i class="ti ti-circle-check"></i>
-    <h3>Import complete</h3>
-    <p>{{ result.cards.created }} card{{ result.cards.created === 1 ? '' : 's' }} imported into {{ standalone() ? 'this board' : 'a new board' }}.</p>
-    <a class="sm" [routerLink]="['/b', result.createdBoardId]"><i class="ti ti-arrow-right"></i>Go to board</a>
+    <h3 i18n="Heading after an import finishes">Import complete</h3>
+    @if (standalone()) {
+    <p i18n>{ result.cards.created, plural, =1 {{{ result.cards.created }} card imported into this board.} other {{{ result.cards.created }} cards imported into this board.} }</p>
+    } @else {
+    <p i18n>{ result.cards.created, plural, =1 {{{ result.cards.created }} card imported into a new board.} other {{{ result.cards.created }} cards imported into a new board.} }</p>
+    }
+    <a class="sm" [routerLink]="['/b', result.createdBoardId]"><i class="ti ti-arrow-right"></i><ng-container i18n="Link: open the imported board">Go to board</ng-container></a>
     @if (result.warnings.length) {
     <div class="summary-box">
       @for (warning of result.warnings; track warning) { <span>{{ warning }}</span> }
@@ -304,25 +306,25 @@
     </div>
     <div class="import-progress-track"><span [style.width.%]="attachmentProgressPct()"></span></div>
     <div class="import-progress-meta">
-      <span><span class="import-progress-number">{{ progress.imported }}</span> copied</span>
-      <span><span class="import-progress-number">{{ progress.skipped }}</span> skipped</span>
+      <span i18n="Import progress: number of files copied"><span class="import-progress-number">{{ progress.imported // i18n(ph="count") }}</span> copied</span>
+      <span i18n="Import progress: number of files skipped"><span class="import-progress-number">{{ progress.skipped // i18n(ph="count") }}</span> skipped</span>
     </div>
   </div>
   }
   <div class="wizard-actions">
     @if (step() === 'options' && slowImport()) {
-    <span class="import-patience">Please be patient, the import is running...</span>
+    <span class="import-patience" i18n>Please be patient, the import is running...</span>
     }
-    <button type="button" class="ghost sm" (click)="previous()" [disabled]="busy()"><i class="ti ti-arrow-left"></i>Back</button>
+    <button type="button" class="ghost sm" (click)="previous()" [disabled]="busy()"><i class="ti ti-arrow-left"></i><ng-container i18n="Button: previous wizard step">Back</ng-container></button>
     @if (step() === 'options') {
     <div class="import-action">
       <button type="button" class="sm" (click)="commit()" [disabled]="busy()">
         @if (busy()) { <i class="ti ti-loader-2 spin"></i> } @else { <i class="ti ti-package-import"></i> }
-        Import
+        <ng-container i18n="Button: start the import">Import</ng-container>
       </button>
     </div>
     } @else {
-    <button type="button" class="sm" (click)="next()" [disabled]="busy()">Next<i class="ti ti-arrow-right"></i></button>
+    <button type="button" class="sm" (click)="next()" [disabled]="busy()"><ng-container i18n="Button: next wizard step">Next</ng-container><i class="ti ti-arrow-right"></i></button>
     }
   </div>
   }

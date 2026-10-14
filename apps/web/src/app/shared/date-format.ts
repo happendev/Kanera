@@ -7,7 +7,9 @@
  * or `new Intl.DateTimeFormat(...)` in a component.
  *
  * Conventions:
- * - Browser locale, so day/month order and 12/24-hour clock follow the viewer's own settings.
+ * - The interface language (`appLocale()`), so day/month order, month names and the 12/24-hour clock
+ *   follow the language the viewer chose: "4 Mar" in UK English, "Mar 4" in US English, "4 mars" in
+ *   French, "3月4日" in Japanese.
  * - Times are always `hour: "numeric", minute: "2-digit"` ("14:32" / "2:32 PM").
  * - "short" styles drop the year when it is the current year; every other style spells it out.
  * - A YYYY-MM-DD string is a local calendar day (anchored at noon, see `parseDateKey`), not UTC.
@@ -18,6 +20,7 @@
  * change-detection pass (see the measurements in `due-date.util.ts`).
  */
 
+import { appLocale } from "../core/i18n/locale";
 import { addDays, localDateKey, parseDateKey } from "./day-key.util";
 
 export type DateStyle =
@@ -79,7 +82,7 @@ function formatterFor(key: string, options: Intl.DateTimeFormatOptions, timeZone
   if (cached) return cached;
   let formatter: Intl.DateTimeFormat;
   try {
-    formatter = new Intl.DateTimeFormat(undefined, timeZone ? { ...options, timeZone } : options);
+    formatter = new Intl.DateTimeFormat(appLocale(), timeZone ? { ...options, timeZone } : options);
   } catch {
     // A profile can carry a zone this browser does not know. Rendering in the browser zone beats
     // hiding the timestamp, and caching under the requested key stops the throw repeating per row.
@@ -134,7 +137,7 @@ export function formatTime(value: DateInput, opts: FormatOptions = {}): string {
  */
 export function timeZoneOffsetMinutes(timeZone: string, at: Date = new Date()): number | null {
   try {
-    new Intl.DateTimeFormat(undefined, { timeZone });
+    new Intl.DateTimeFormat(appLocale(), { timeZone });
   } catch {
     return null;
   }
@@ -157,25 +160,27 @@ export function formatDateTime(value: DateInput, style: DateTimeStyle = "short",
     const sameDay = formatDate(date, "medium", opts) === formatDate(now, "medium", opts);
     return sameDay ? formatTime(date, opts) : formatDate(date, "short", opts);
   }
-  return `${formatDate(date, style, opts)}, ${formatTime(date, opts)}`;
+  // One formatter for both halves, so each language joins date and time its own way
+  // ("4 Mar, 14:32", "Mar 4, 2:32 PM", "3月4日 14:32").
+  const withYear = needsYear(style, date, opts);
+  const dateOptions = withYear ? WITH_YEAR[style as DateStyle]! : DATE_OPTIONS[style as DateStyle];
+  return formatterFor(`dt:${style}${withYear ? "+y" : ""}`, { ...dateOptions, ...TIME_OPTIONS }, opts.timeZone).format(date);
 }
 
 /**
- * "4 – 9 Mar", "28 Feb – 4 Mar", or "28 Dec 2025 – 4 Jan 2026": the shortest label that still
+ * "4–9 Mar", "28 Feb – 4 Mar", or "28 Dec 2025 – 4 Jan 2026": the shortest label that still
  * reads unambiguously. Used by the calendar, work-done, and completed-cards range controls.
  */
 export function formatDateRange(from: DateInput, to: DateInput, opts: FormatOptions = {}): string {
   const start = toDate(from);
   const end = toDate(to);
   if (!start || !end) return formatDate(start ?? end, "medium", opts);
-  const startMedium = formatDate(start, "medium", opts);
-  const endMedium = formatDate(end, "medium", opts);
-  if (startMedium === endMedium) return formatDate(start, "short", opts);
-  if (start.getFullYear() !== end.getFullYear()) return `${startMedium} – ${endMedium}`;
-  const startLabel = start.getMonth() === end.getMonth()
-    ? formatterFor("day", { day: "numeric" }, opts.timeZone).format(start)
-    : formatDate(start, "short", { ...opts, now: start });
-  return `${startLabel} – ${formatDate(end, "short", opts)}`;
+  if (formatDate(start, "medium", opts) === formatDate(end, "medium", opts)) return formatDate(start, "short", opts);
+  // formatRange collapses the shared month and year in each language's own order ("4–9 Mar",
+  // "Mar 4–9", "3月4日～9日"). The year shows when the range spans years or is not this year.
+  const thisYear = yearIn(opts.now ?? new Date(), opts.timeZone);
+  const withYear = yearIn(start, opts.timeZone) !== thisYear || yearIn(end, opts.timeZone) !== thisYear;
+  return formatterFor(withYear ? "medium" : "short", withYear ? DATE_OPTIONS.medium : DATE_OPTIONS.short, opts.timeZone).formatRange(start, end);
 }
 
 /**
@@ -189,15 +194,17 @@ export function formatRelativeTime(value: DateInput, opts: FormatOptions = {}): 
   if (!date) return "";
   const now = (opts.now ?? new Date()).getTime();
   const mins = Math.max(0, Math.round((now - date.getTime()) / 60_000));
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
+  // Hand-written rather than Intl.RelativeTimeFormat: its "narrow" style is inconsistent across
+  // languages (French renders "-5 min"), and these labels sit in narrow columns.
+  if (mins < 1) return $localize`:Relative time under a minute:just now`;
+  if (mins < 60) return $localize`:Compact relative time in minutes:${mins}:count:m ago`;
   const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return $localize`:Compact relative time in hours:${hours}:count:h ago`;
   const days = Math.round(hours / 24);
-  if (days < 30) return `${days}d ago`;
+  if (days < 30) return $localize`:Compact relative time in days:${days}:count:d ago`;
   const months = Math.round(days / 30);
-  if (months < 12) return `${months}mo ago`;
-  return `${Math.round(months / 12)}y ago`;
+  if (months < 12) return $localize`:Compact relative time in months:${months}:count:mo ago`;
+  return $localize`:Compact relative time in years:${Math.round(months / 12)}:count:y ago`;
 }
 
 /**
@@ -219,12 +226,22 @@ export function formatFeedTime(value: DateInput, opts: FormatOptions = {}): stri
  * "Today" / "Yesterday" / "Mon, 4 Mar" for a YYYY-MM-DD day key, relative to `now`.
  */
 export function dayGroupLabel(key: string, now: Date = new Date()): string {
-  if (key === localDateKey(now)) return "Today";
-  if (key === localDateKey(addDays(now, -1))) return "Yesterday";
+  if (key === localDateKey(now)) return $localize`:Day group heading:Today`;
+  if (key === localDateKey(addDays(now, -1))) return $localize`:Day group heading:Yesterday`;
   return formatDate(key, "weekday", { now });
 }
 
 /** Full-sentence day label for a YYYY-MM-DD day key, e.g. "Sunday, 26 July 2026". */
 export function dayFullLabel(key: string): string {
   return formatDate(key, "long");
+}
+
+/**
+ * Short weekday names in the interface language, Monday first ("Mon"…"Sun", "lun."…"dim.", "月"…"日").
+ * Calendar grids always start on Monday (see week-start.ts), whatever the language's own first day.
+ */
+export function weekdayLabels(): string[] {
+  const format = formatterFor("weekdayShort", { weekday: "short" }, null);
+  // 1 Jan 2024 was a Monday.
+  return Array.from({ length: 7 }, (_, i) => format.format(new Date(2024, 0, 1 + i)));
 }

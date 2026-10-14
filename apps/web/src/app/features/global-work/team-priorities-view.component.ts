@@ -9,6 +9,7 @@ import type { PickerGroup } from "../../shared/picker-list.component";
 import { priorityRankHeat } from "../../shared/priority-rank";
 import { priorityAddGroups } from "../../shared/priority-queue/priority-add-cards";
 import { TooltipDirective } from "../../shared/tooltip.directive";
+import { icu } from "../../core/i18n/icu";
 import { CARD_DRAG_START_DELAY } from "../board/card-drag-scroll";
 import { CardActionsMenuPopover } from "../board/card-actions-menu.popover";
 import { CardDragCoordinator } from "../board/card-drag-coordinator.service";
@@ -148,6 +149,24 @@ export class TeamPrioritiesViewComponent {
       };
     });
   });
+
+  readonly noAddableTooltip = $localize`:Tooltip on a disabled add button:No assigned cards can be added`;
+  readonly addAssignedTooltip = $localize`:Tooltip, add a card to a teammate's Up next:Add an assigned card to Up next`;
+
+  laneCountTooltip(count: number): string {
+    return icu($localize`:Tooltip on a teammate's Up next count:{count, plural, one {# card in Up next} other {# cards in Up next}}`, { count });
+  }
+
+  hideLaneLabel(name: string): string {
+    return $localize`:Button, hide a teammate's Up next lane:Hide Up next for ${name}:person:`;
+  }
+
+  headAddTooltip(atCapacity: boolean, addableCount: number): string {
+    if (atCapacity) {
+      return icu($localize`:Tooltip on a disabled add button when the Up next queue is full:Full at {count, plural, one {# card} other {# cards}}`, { count: this.maxEntries() });
+    }
+    return addableCount === 0 ? this.noAddableTooltip : $localize`:Tooltip, add a card to Up next:Add card`;
+  }
 
   toggleAdd(targetUserId: string, at: "head" | "list"): void {
     this.addOpenAt.update((current) =>

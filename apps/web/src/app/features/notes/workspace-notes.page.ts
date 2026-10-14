@@ -13,10 +13,10 @@ import { NotesViewComponent } from "./notes-view.component";
   imports: [EmptyStateComponent, NotesViewComponent, PageHeaderComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <k-page-header icon="notebook" iconColor="var(--accent)" title="Notes" />
+    <k-page-header icon="notebook" iconColor="var(--accent)" title="Notes" i18n-title="Page title" />
     <div class="wn-body">
       @if (notesEnabled() === false) {
-        <k-empty-state icon="notebook-off" title="Notes are turned off" text="A workspace admin has turned off Notes for this workspace." />
+        <k-empty-state icon="notebook-off" title="Notes are turned off" i18n-title="Empty state title" text="A workspace admin has turned off Notes for this workspace." i18n-text="Empty state text" />
       } @else {
         <k-notes-view [workspaceId]="workspaceId()" [boardId]="null" [contextName]="workspaceName()" [noteId]="noteId()" [canEditTeamRole]="true" />
       }

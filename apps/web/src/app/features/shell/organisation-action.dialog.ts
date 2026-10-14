@@ -6,6 +6,8 @@ import type { AuthUser } from "../../core/auth/auth.service";
 export type CreateOrganisationDialogData = { hosted: boolean };
 export type CreateOrganisationResult = { accessToken: string; user: AuthUser };
 
+const CREATE_FAILED = $localize`Could not create the organisation.`;
+
 const DIALOG_STYLES = `
   :host { display: block; width: min(440px, calc(100vw - 32px)); }
   .organisation-dialog { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 20px 50px rgb(0 0 0 / 18%); padding: 20px; }
@@ -26,24 +28,24 @@ const DIALOG_STYLES = `
     <section class="organisation-dialog" aria-labelledby="create-organisation-title">
       <header>
         <div>
-          <h2 id="create-organisation-title">Create organisation</h2>
+          <h2 id="create-organisation-title" i18n="Dialog heading">Create organisation</h2>
           <p>
             @if (data.hosted) {
-              This organisation will have its own plan and billing.
+              <ng-container i18n>This organisation will have its own plan and billing.</ng-container>
             } @else {
-              Create another independent organisation.
+              <ng-container i18n>Create another independent organisation.</ng-container>
             }
           </p>
         </div>
-        <button type="button" class="ghost icon" (click)="close()" aria-label="Close">
+        <button type="button" class="ghost icon" (click)="close()" aria-label="Close" i18n-aria-label="Button: close the dialog">
           <i class="ti ti-x"></i>
         </button>
       </header>
 
       <form (submit)="create(); $event.preventDefault()">
         <label>
-          <span>Organisation name</span>
-          <input autofocus [value]="name()" (input)="name.set($any($event.target).value)" maxlength="120" placeholder="e.g. Acme Studio" />
+          <span i18n="Form field label">Organisation name</span>
+          <input autofocus [value]="name()" (input)="name.set($any($event.target).value)" maxlength="120" placeholder="e.g. Acme Studio" i18n-placeholder="Example organisation name" />
         </label>
 
         @if (error()) {
@@ -51,9 +53,9 @@ const DIALOG_STYLES = `
         }
 
         <footer>
-          <button type="button" class="ghost" (click)="close()">Cancel</button>
+          <button type="button" class="ghost" (click)="close()" i18n="Button: dismiss the dialog">Cancel</button>
           <button type="submit" [disabled]="busy() || !name().trim()">
-            @if (busy()) { Creating… } @else { Create organisation }
+            @if (busy()) { <ng-container i18n="Button while the organisation is being created">Creating…</ng-container> } @else { <ng-container i18n="Button: submit the create organisation form">Create organisation</ng-container> }
           </button>
         </footer>
       </form>
@@ -83,8 +85,8 @@ export class CreateOrganisationDialogComponent {
       this.dialogRef.close(session);
     } catch (error) {
       this.error.set(error instanceof ApiError
-        ? ((error.body as { message?: string } | undefined)?.message ?? "Could not create the organisation.")
-        : "Could not create the organisation.");
+        ? ((error.body as { message?: string } | undefined)?.message ?? CREATE_FAILED)
+        : CREATE_FAILED);
     } finally {
       this.busy.set(false);
     }
@@ -99,23 +101,23 @@ export class CreateOrganisationDialogComponent {
     <section class="organisation-dialog" aria-labelledby="join-organisation-title">
       <header>
         <div>
-          <h2 id="join-organisation-title">Join organisation</h2>
-          <p>Enter an organisation invitation link or its invite token.</p>
+          <h2 id="join-organisation-title" i18n="Dialog heading">Join organisation</h2>
+          <p i18n>Enter an organisation invitation link or its invite token.</p>
         </div>
-        <button type="button" class="ghost icon" (click)="close()" aria-label="Close">
+        <button type="button" class="ghost icon" (click)="close()" aria-label="Close" i18n-aria-label="Button: close the dialog">
           <i class="ti ti-x"></i>
         </button>
       </header>
 
       <form (submit)="join(); $event.preventDefault()">
         <label>
-          <span>Invitation link or token</span>
-          <input autofocus [value]="invite()" (input)="invite.set($any($event.target).value)" autocomplete="off" placeholder="Paste invitation link or token" />
+          <span i18n="Form field label">Invitation link or token</span>
+          <input autofocus [value]="invite()" (input)="invite.set($any($event.target).value)" autocomplete="off" placeholder="Paste invitation link or token" i18n-placeholder />
         </label>
 
         <footer>
-          <button type="button" class="ghost" (click)="close()">Cancel</button>
-          <button type="submit" [disabled]="!invite().trim()">Continue</button>
+          <button type="button" class="ghost" (click)="close()" i18n="Button: dismiss the dialog">Cancel</button>
+          <button type="submit" [disabled]="!invite().trim()" i18n="Button: submit the invitation">Continue</button>
         </footer>
       </form>
     </section>

@@ -4,7 +4,9 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { db } from "../db.js";
 import { env, type Env } from "../env.js";
-import { formatStorageBytes, hasPaidPlanEntitlement, quotaForBillingStatus } from "./entitlements.js";
+import { hasPaidPlanEntitlement, quotaForBillingStatus } from "./entitlements.js";
+import { formatBytes } from "./i18n/format.js";
+import { recipientLocale } from "./i18n/request-locale.js";
 import type { Mailer } from "./mailer.js";
 import { startSweepScheduler } from "./sweep-scheduler.js";
 
@@ -108,7 +110,7 @@ export async function runStorageWarningSweep(mailer: Mailer, log?: FastifyBaseLo
 
 async function sendStorageWarningEmails(mailer: Mailer, row: UsageRow, quotaBytes: number, percentUsed: number, config: StorageWarningEnv): Promise<number> {
   const recipients = await db
-    .select({ email: users.email, displayName: users.displayName })
+    .select({ email: users.email, displayName: users.displayName, locale: users.locale })
     .from(clientMembers)
     .innerJoin(users, eq(users.id, clientMembers.userId))
     .where(and(
@@ -120,18 +122,19 @@ async function sendStorageWarningEmails(mailer: Mailer, row: UsageRow, quotaByte
     ));
   // Only a Free org gains storage by upgrading; a custom quota override is a negotiated allowance,
   // so the email does not promise the standard paid amount on top of it.
-  const upgradeQuotaLabel = !hasPaidPlanEntitlement(row.plan, row.billingStatus) && row.storageQuotaBytes === null
-    ? formatStorageBytes(config.HOSTED_PAID_STORAGE_QUOTA_BYTES)
-    : null;
+  const offerUpgrade = !hasPaidPlanEntitlement(row.plan, row.billingStatus) && row.storageQuotaBytes === null;
   for (const recipient of recipients) {
+    // Sizes are formatted per recipient: decimal separators follow each admin's language.
+    const locale = recipientLocale(recipient.locale);
     await mailer.sendStorageWarning(recipient.email, {
+      locale,
       displayName: recipient.displayName,
       orgName: row.name,
-      usedLabel: formatStorageBytes(row.usedBytes),
-      quotaLabel: formatStorageBytes(quotaBytes),
+      usedLabel: formatBytes(locale, row.usedBytes),
+      quotaLabel: formatBytes(locale, quotaBytes),
       percentUsed,
       storageUrl: `${config.WEB_ORIGIN}/settings/storage`,
-      upgradeQuotaLabel,
+      upgradeQuotaLabel: offerUpgrade ? formatBytes(locale, config.HOSTED_PAID_STORAGE_QUOTA_BYTES) : null,
     });
   }
   return recipients.length;

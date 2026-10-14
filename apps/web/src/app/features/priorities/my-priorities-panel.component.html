@@ -6,9 +6,10 @@
   class="queue-btn"
   [class.has-queue]="totalCount() > 0"
   [class.has-changes]="changedSinceSeen()"
-  [attr.aria-label]="'Up next' + (totalCount() > 0 ? ' (' + totalCount() + ' cards)' : '')"
+  [attr.aria-label]="triggerLabel()"
   [attr.aria-expanded]="open()"
   kTooltip="Up next"
+  i18n-kTooltip="Name of the personal priority queue drawer"
   (click)="toggle()"
 >
   <i class="ti ti-list-numbers"></i>
@@ -20,16 +21,16 @@
 
 @if (open()) {
 <div class="drawer-backdrop" [class.closing]="closing()" (click)="close()" aria-hidden="true"></div>
-<aside class="drawer" [class.closing]="closing()" role="dialog" aria-modal="true" aria-label="Up next" cdkTrapFocus [cdkTrapFocusAutoCapture]="true">
+<aside class="drawer" [class.closing]="closing()" role="dialog" aria-modal="true" aria-label="Up next" i18n-aria-label="Name of the personal priority queue drawer" cdkTrapFocus [cdkTrapFocusAutoCapture]="true">
   <header class="drawer-header">
     <div class="drawer-title">
       <i class="ti ti-list-numbers"></i>
-      <h2>Up next</h2>
+      <h2 i18n="Name of the personal priority queue drawer">Up next</h2>
       @if (totalCount() > 0) {
         <span class="title-count">{{ totalCount() }}</span>
       }
     </div>
-    <button type="button" class="ghost icon close-btn" aria-label="Close Up next" cdkFocusInitial (click)="close()">
+    <button type="button" class="ghost icon close-btn" aria-label="Close Up next" i18n-aria-label cdkFocusInitial (click)="close()">
       <i class="ti ti-x"></i>
     </button>
   </header>
@@ -53,14 +54,14 @@
       <i class="ti ti-clock-exclamation"></i>
       <span>
         @if (pressure.overdue) {
-          <strong class="is-overdue">{{ pressure.overdue }}</strong> overdue
+          <ng-container i18n="Count of overdue cards in the Up next queue"><strong class="is-overdue">{{ pressure.overdue // i18n(ph="count") }}</strong> overdue</ng-container>
         }
         @if (pressure.overdue && pressure.dueSoon) {
           <span class="pressure-sep">·</span>
         }
         @if (pressure.dueSoon) {
           <!-- Say what "soon" means: the row chips use a rolling 24-hour window, not "today". -->
-          <strong class="is-due-soon" kTooltip="Due in the next 24 hours">{{ pressure.dueSoon }}</strong> due soon
+          <ng-container i18n="Count of cards due in the next 24 hours in the Up next queue"><strong class="is-due-soon" kTooltip="Due in the next 24 hours" i18n-kTooltip>{{ pressure.dueSoon // i18n(ph="count") }}</strong> due soon</ng-container>
         }
       </span>
     </p>
@@ -70,12 +71,12 @@
     @if (!online()) {
       <!-- Never a cached order. A stale sequence reads as an instruction, and the reader has no way
            to tell it is last week's — so offline shows nothing rather than something wrong. -->
-      <k-empty-state class="drawer-empty" plain icon="wifi-off" title="Up next unavailable" text="You’re offline. Up next is hidden until you reconnect, so you never follow a stale order." />
+      <k-empty-state class="drawer-empty" plain icon="wifi-off" title="Up next unavailable" i18n-title text="You’re offline. Up next is hidden until you reconnect, so you never follow a stale order." i18n-text />
     } @else if (showInitialLoading()) {
-      <div class="k-loading drawer-empty"><i class="ti ti-loader-2 kanera-spin" aria-label="Loading Up next"></i></div>
+      <div class="k-loading drawer-empty"><i class="ti ti-loader-2 kanera-spin" aria-label="Loading Up next" i18n-aria-label></i></div>
     } @else if (loadError(); as message) {
-      <k-empty-state class="drawer-empty" plain icon="alert-circle" title="Couldn’t load Up next" [text]="message">
-        <button type="button" class="ghost empty-all-btn" (click)="retry()">Try again</button>
+      <k-empty-state class="drawer-empty" plain icon="alert-circle" title="Couldn’t load Up next" i18n-title [text]="message">
+        <button type="button" class="ghost empty-all-btn" (click)="retry()" i18n="Button: retry loading">Try again</button>
       </k-empty-state>
     } @else if (showRows()) {
       <!-- A drop-list id of its own: the drawer can be open over the My Cards dock, and CDK resolves
@@ -99,15 +100,15 @@
     } @else if (addCandidatesLoading()) {
       <!-- The queue can finish before its larger, paged candidate pool. Do not briefly claim there
            is no assigned work while production is still answering those requests. -->
-      <div class="k-loading drawer-empty"><i class="ti ti-loader-2 kanera-spin" aria-label="Loading cards for Up next"></i></div>
+      <div class="k-loading drawer-empty"><i class="ti ti-loader-2 kanera-spin" aria-label="Loading cards for Up next" i18n-aria-label></i></div>
     } @else if (addCandidatesLoadError(); as message) {
-      <k-empty-state class="drawer-empty" plain icon="alert-circle" title="Couldn’t load cards" [text]="message">
-        <button type="button" class="ghost empty-all-btn" (click)="retryCandidates()">Try again</button>
+      <k-empty-state class="drawer-empty" plain icon="alert-circle" title="Couldn’t load cards" i18n-title [text]="message">
+        <button type="button" class="ghost empty-all-btn" (click)="retryCandidates()" i18n="Button: retry loading">Try again</button>
       </k-empty-state>
     } @else if (showEmptyWithWork()) {
       <!-- Assigned work but nothing sequenced: the one empty state worth teaching, since the queue
            is only useful once something is in it. -->
-      <k-empty-state class="drawer-empty" plain icon="list-numbers" title="Nothing in Up next yet" text="Your personal queue for assigned cards. The first card is what you plan to work on next. Pick the cards you want to do first, in the order you want to do them.">
+      <k-empty-state class="drawer-empty" plain icon="list-numbers" title="Nothing in Up next yet" i18n-title text="Your personal queue for assigned cards. The first card is what you plan to work on next. Pick the cards you want to do first, in the order you want to do them." i18n-text>
         <div class="state-actions">
           <!-- In this state the shared queue renders nothing but its "Add card" footer, which is exactly
                the affordance this state exists to offer. -->
@@ -125,8 +126,8 @@
         </div>
       </k-empty-state>
     } @else {
-      <k-empty-state class="drawer-empty" plain icon="list-numbers" title="Nothing in Up next" text="Your personal queue for assigned cards. The first card is what you plan to work on next.">
-        <a class="empty-all-btn" routerLink="/my-cards" (click)="close()">Open My Cards</a>
+      <k-empty-state class="drawer-empty" plain icon="list-numbers" title="Nothing in Up next" i18n-title text="Your personal queue for assigned cards. The first card is what you plan to work on next." i18n-text>
+        <a class="empty-all-btn" routerLink="/my-cards" (click)="close()" i18n>Open My Cards</a>
       </k-empty-state>
     }
   </div>

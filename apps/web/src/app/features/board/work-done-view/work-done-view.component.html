@@ -7,6 +7,7 @@
         [value]="$any(preset())"
         [showLabels]="true"
         ariaLabel="Period"
+        i18n-ariaLabel="Label for the work done period presets"
         (valueChange)="applyPreset($any($event))"
       />
 
@@ -16,7 +17,9 @@
           class="wd-icon-btn"
           [disabled]="!canGoPrev()"
           aria-label="Previous period"
+          i18n-aria-label
           kTooltip="Previous period"
+          i18n-kTooltip
           (click)="shiftRange(-1)"
         >
           <i class="ti ti-chevron-left"></i>
@@ -29,6 +32,7 @@
             [class.is-open]="rangePickerOpen()"
             [attr.aria-expanded]="rangePickerOpen()"
             aria-label="Pick a period"
+            i18n-aria-label
             (click)="$event.stopPropagation(); rangePickerOpen.set(!rangePickerOpen())"
           >
             <i class="ti ti-calendar-event"></i>
@@ -50,7 +54,9 @@
           class="wd-icon-btn"
           [disabled]="!canGoNext()"
           aria-label="Next period"
+          i18n-aria-label
           kTooltip="Next period"
+          i18n-kTooltip
           (click)="shiftRange(1)"
         >
           <i class="ti ti-chevron-right"></i>
@@ -67,7 +73,9 @@
         type="button"
         class="wd-icon-btn"
         aria-label="Copy period as text"
+        i18n-aria-label
         kTooltip="Copy period as text"
+        i18n-kTooltip
         (click)="copyRange()"
       >
         <i class="ti ti-clipboard-text"></i>
@@ -89,10 +97,10 @@
 
   @if (error()) {
   <div class="wd-empty">
-    <k-empty-state class="wd-empty-panel" icon="alert-circle" [title]="error()!" text="Try changing the period or refreshing the page." />
+    <k-empty-state class="wd-empty-panel" icon="alert-circle" [title]="error()!" text="Try changing the period or refreshing the page." i18n-text />
   </div>
   } @else if (loading()) {
-  <div class="wd-stream wd-skeleton-stream" aria-label="Loading work done">
+  <div class="wd-stream wd-skeleton-stream" aria-label="Loading work done" i18n-aria-label>
     @for (row of skeletonRows; track row) {
     <div class="wd-skeleton-row">
       <div class="wd-skeleton wd-skeleton-icon"></div>

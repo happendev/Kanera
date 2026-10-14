@@ -1,4 +1,4 @@
-<div #panelEl class="up-panel" role="dialog" tabindex="-1" [attr.aria-label]="displayName() + ' profile'" [attr.aria-busy]="loading()">
+<div #panelEl class="up-panel" role="dialog" tabindex="-1" [attr.aria-label]="dialogLabel()" [attr.aria-busy]="loading()">
   <header class="up-head">
     <div class="up-avatar">
       <k-avatar
@@ -16,7 +16,7 @@
       <div class="up-name-row">
         <h2 class="up-name">{{ displayName() }}</h2>
         @if (isSelf()) {
-        <span class="up-you">You</span>
+        <span class="up-you" i18n="Badge on your own profile card">You</span>
         }
       </div>
       <div class="up-status-row">
@@ -30,8 +30,8 @@
       </div>
       @if (profile()?.user?.email; as email) {
       <div class="up-contact">
-        <a class="up-email" [href]="'mailto:' + email" [kTooltip]="'Email ' + displayName()">{{ email }}</a>
-        <button type="button" class="up-icon-btn" (click)="copyEmail(email)" aria-label="Copy email address" kTooltip="Copy email">
+        <a class="up-email" [href]="'mailto:' + email" [kTooltip]="emailTooltip()">{{ email }}</a>
+        <button type="button" class="up-icon-btn" (click)="copyEmail(email)" aria-label="Copy email address" i18n-aria-label kTooltip="Copy email" i18n-kTooltip="Tooltip: copy the email address">
           <i class="ti ti-copy"></i>
         </button>
       </div>
@@ -41,7 +41,7 @@
       </div>
       }
     </div>
-    <button type="button" class="up-icon-btn up-close" (click)="close(true)" aria-label="Close profile">
+    <button type="button" class="up-icon-btn up-close" (click)="close(true)" aria-label="Close profile" i18n-aria-label>
       <i class="ti ti-x"></i>
     </button>
   </header>
@@ -49,7 +49,7 @@
   @if (localTime(); as clock) {
   <div class="up-clock" [kTooltip]="clock.zone">
     <i class="ti ti-clock"></i>
-    <span><strong>{{ clock.time }}</strong> local time</span>
+    <span i18n="Profile card: the person's current local time"><strong>{{ clock.time // i18n(ph="time") }}</strong> local time</span>
     @if (clock.difference) {
     <span class="up-muted">· {{ clock.difference }}</span>
     }
@@ -59,18 +59,18 @@
   @if (failed()) {
   <div class="up-error">
     <i class="ti ti-cloud-off"></i>
-    <span>Couldn't load this profile.</span>
-    <button type="button" class="up-text-btn" (click)="load(true)">Try again</button>
+    <span i18n>Couldn't load this profile.</span>
+    <button type="button" class="up-text-btn" (click)="load(true)" i18n="Button: retry loading">Try again</button>
   </div>
   } @else {
-  <section class="up-stats" aria-label="Work summary">
+  <section class="up-stats" aria-label="Work summary" i18n-aria-label>
     <div class="up-stat">
       @if (profile(); as p) {
       <strong>{{ p.stats.openCards }}</strong>
       } @else {
       <span class="up-skeleton up-skeleton-value"></span>
       }
-      <span>Open cards</span>
+      <span i18n="Profile stat: cards not yet completed">Open cards</span>
     </div>
     <div class="up-stat" [class.is-alert]="(profile()?.stats?.overdueCards ?? 0) > 0">
       @if (profile(); as p) {
@@ -78,7 +78,7 @@
       } @else {
       <span class="up-skeleton up-skeleton-value"></span>
       }
-      <span>Overdue</span>
+      <span i18n="Profile stat: cards past their due date">Overdue</span>
     </div>
     <div class="up-stat">
       @if (profile(); as p) {
@@ -86,17 +86,17 @@
       } @else {
       <span class="up-skeleton up-skeleton-value"></span>
       }
-      <span>Done · {{ profile()?.stats?.completedDays ?? 30 }}d</span>
+      <span i18n="Profile stat: cards completed in the last N days; d abbreviates days">Done · {{ profile()?.stats?.completedDays ?? 30 // i18n(ph="days") }}d</span>
     </div>
   </section>
 
-  <section class="up-section up-activity" aria-label="Completed cards">
+  <section class="up-section up-activity" aria-label="Completed cards" i18n-aria-label>
     <div class="up-section-head">
-      <h3>Completed</h3>
+      <h3 i18n="Profile card section heading: completed cards">Completed</h3>
       @if (profile(); as p) {
-      <span class="up-muted">{{ p.activity.total === 0 ? 'No cards' : p.activity.total + (p.activity.total === 1 ? ' card' : ' cards') }} in {{ weeks() }} weeks</span>
+      <span class="up-muted">{{ completedSummary(p.activity.total) }}</span>
       }
-      <i class="ti ti-info-circle up-hint" [kTooltip]="'Cards ' + (isSelf() ? 'you' : displayName()) + ' completed on boards you can open, counted as on Work done'"></i>
+      <i class="ti ti-info-circle up-hint" [kTooltip]="completedHint()"></i>
     </div>
     <div class="up-grid" [class.is-loading]="!grid()" [style.--up-weeks]="grid()?.weeks?.length ?? skeletonWeeks.length">
       <div class="up-grid-days" aria-hidden="true">
@@ -112,7 +112,7 @@
           <span>{{ month }}</span>
           }
         </div>
-        <div class="up-grid-weeks" role="img" [attr.aria-label]="(profile()?.activity?.total ?? 0) + ' cards completed over ' + g.activeDays + ' days in the last ' + weeks() + ' weeks'">
+        <div class="up-grid-weeks" role="img" [attr.aria-label]="gridLabel(g.activeDays)">
           @for (week of g.weeks; track week[0].date) {
           <div class="up-week">
             @for (cell of week; track cell.date) {
@@ -140,23 +140,23 @@
       </div>
     </div>
     <div class="up-legend" aria-hidden="true">
-      <span>Less</span>
+      <span i18n="Activity heatmap legend: low end of the scale">Less</span>
       @for (level of legendLevels; track level) {
       <i class="up-cell" [attr.data-level]="level"></i>
       }
-      <span>More</span>
+      <span i18n="Activity heatmap legend: high end of the scale">More</span>
     </div>
   </section>
 
   @if (loading() && !profile()) {
   <section class="up-section">
-    <div class="up-section-head"><h3>Recently worked on</h3></div>
+    <div class="up-section-head"><h3 i18n="Profile card section heading">Recently worked on</h3></div>
     <div class="up-skeleton up-skeleton-row"></div>
     <div class="up-skeleton up-skeleton-row"></div>
   </section>
   } @else if (recentCards().length) {
-  <section class="up-section" aria-label="Recently worked on">
-    <div class="up-section-head"><h3>Recently worked on</h3></div>
+  <section class="up-section" aria-label="Recently worked on" i18n-aria-label>
+    <div class="up-section-head"><h3 i18n="Profile card section heading">Recently worked on</h3></div>
     <ul class="up-cards">
       @for (card of recentCards(); track card.id) {
       <li>
@@ -200,12 +200,16 @@
   <footer class="up-actions">
     <a class="up-action" [routerLink]="cardsLink().path" [queryParams]="cardsLink().query" (click)="close()">
       <i class="ti ti-cards"></i>
-      {{ isSelf() ? 'My cards' : 'View cards' }}
+      @if (isSelf()) {
+      <ng-container i18n="Profile card link to your own cards">My cards</ng-container>
+      } @else {
+      <ng-container i18n="Profile card link to this person's cards">View cards</ng-container>
+      }
     </a>
     @if (isSelf()) {
     <a class="up-action" routerLink="/settings/profile" (click)="close()">
       <i class="ti ti-user-edit"></i>
-      Edit profile
+      <ng-container i18n="Link">Edit profile</ng-container>
     </a>
     }
     @for (action of actions(); track action.id) {

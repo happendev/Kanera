@@ -35,16 +35,7 @@
   <!-- Samsung Internet may reject installation when a manifest declares a POST share target.
        Select the otherwise identical variant before the browser discovers the manifest; Chrome
        keeps its POST target so shared text never has to travel in a URL. Both use the same app id. -->
-  <script>
-    (function () {
-      var manifest = document.createElement('link');
-      manifest.rel = 'manifest';
-      manifest.href = /Android/.test(navigator.userAgent) && /SamsungBrowser\//.test(navigator.userAgent)
-        ? '/assets/favicon/manifest-samsung.json'
-        : '/assets/favicon/manifest.json';
-      document.head.appendChild(manifest);
-    })();
-  </script>
+  <script src="/manifest.js"></script>
   <noscript><link rel="manifest" href="/assets/favicon/manifest.json" /></noscript>
 
   <meta name="msapplication-config" content="/assets/favicon/browserconfig.xml" />

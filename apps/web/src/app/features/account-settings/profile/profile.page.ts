@@ -11,10 +11,11 @@ import { mfaQrDataUrl } from "../../../shared/mfa-qr";
 import { ToastService } from "../../../shared/toast.service";
 import { AccountSettingsPage } from "../account-settings.page";
 
+import { LanguageMenuComponent } from "../../../shared/language-menu.component";
 @Component({
   selector: "k-account-settings-profile",
   standalone: true,
-  imports: [AutosaveStatusComponent, AvatarComponent, DocsLinkComponent, FormField],
+  imports: [AutosaveStatusComponent, AvatarComponent, DocsLinkComponent, FormField, LanguageMenuComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./profile.page.html",
   styleUrl: "./profile.page.scss",
@@ -53,16 +54,16 @@ export class AccountSettingsProfilePage implements OnDestroy, OnInit {
     confirmPassword: "",
   });
   protected readonly passwordForm = form(this.passwordModel, (password) => {
-    required(password.currentPassword, { message: "Current password is required." });
-    required(password.newPassword, { message: "New password is required." });
-    minLength(password.newPassword, 8, { message: "New password must be at least 8 characters." });
-    required(password.confirmPassword, { message: "Confirm new password is required." });
-    minLength(password.confirmPassword, 8, { message: "Confirm new password must be at least 8 characters." });
+    required(password.currentPassword, { message: $localize`Current password is required.` });
+    required(password.newPassword, { message: $localize`New password is required.` });
+    minLength(password.newPassword, 8, { message: $localize`New password must be at least 8 characters.` });
+    required(password.confirmPassword, { message: $localize`Confirm new password is required.` });
+    minLength(password.confirmPassword, 8, { message: $localize`Confirm new password must be at least 8 characters.` });
     validate(password.confirmPassword, (context) => {
       const confirmation = context.value();
       const nextPassword = context.valueOf(password.newPassword);
       if (!confirmation || !nextPassword || confirmation === nextPassword) return undefined;
-      return { kind: "passwordMismatch", message: "New password and confirmation do not match." };
+      return { kind: "passwordMismatch", message: $localize`New password and confirmation do not match.` };
     });
 
     // Submitting propagates from the root to each field. Expressing the lock as form logic keeps
@@ -74,6 +75,8 @@ export class AccountSettingsProfilePage implements OnDestroy, OnInit {
   protected readonly showCurrentPassword = signal(false);
   protected readonly showNewPassword = signal(false);
   protected readonly showConfirmPassword = signal(false);
+  protected readonly showPasswordLabel = $localize`:Button — reveal the typed password:Show password`;
+  protected readonly hidePasswordLabel = $localize`:Button — mask the typed password:Hide password`;
 
   private canvas: HTMLCanvasElement | null = null;
   private avatarImage: HTMLImageElement | null = null;
@@ -89,7 +92,7 @@ export class AccountSettingsProfilePage implements OnDestroy, OnInit {
   }
 
   protected async startMfa() {
-    if (!this.mfaPassword()) { this.mfaError.set("Enter your current password to set up an authenticator."); return; }
+    if (!this.mfaPassword()) { this.mfaError.set($localize`Enter your current password to set up an authenticator.`); return; }
     await this.runMfa(async () => {
       const setup = await this.api.post<{ secret: string; otpauthUri: string }>("/auth/mfa/enroll", { currentPassword: this.mfaPassword() });
       this.mfaSecret.set(setup.secret);
@@ -98,7 +101,7 @@ export class AccountSettingsProfilePage implements OnDestroy, OnInit {
   }
 
   protected async confirmMfa() {
-    if (!/^\d{6}$/.test(this.mfaCode().trim())) { this.mfaError.set("Enter the six-digit code from your authenticator app."); return; }
+    if (!/^\d{6}$/.test(this.mfaCode().trim())) { this.mfaError.set($localize`Enter the six-digit code from your authenticator app.`); return; }
     await this.runMfa(async () => {
       const result = await this.api.post<{ recoveryCodes: string[] }>("/auth/mfa/enroll/confirm", { code: this.mfaCode() });
       this.mfaEnabled.set(true); this.mfaRecoveryCodes.set(result.recoveryCodes); this.mfaSecret.set(""); this.mfaQrUrl.set(""); this.mfaCode.set("");
@@ -106,14 +109,14 @@ export class AccountSettingsProfilePage implements OnDestroy, OnInit {
   }
 
   protected async regenerateMfaCodes() {
-    if (!this.mfaPassword()) { this.mfaError.set("Enter your current password."); return; }
-    if (!this.mfaCode().trim()) { this.mfaError.set("Enter an authenticator or recovery code."); return; }
+    if (!this.mfaPassword()) { this.mfaError.set($localize`Enter your current password.`); return; }
+    if (!this.mfaCode().trim()) { this.mfaError.set($localize`Enter an authenticator or recovery code.`); return; }
     await this.runMfa(async () => { const result = await this.api.post<{ recoveryCodes: string[] }>("/auth/mfa/recovery-codes", { currentPassword: this.mfaPassword(), code: this.mfaCode() }); this.mfaRecoveryCodes.set(result.recoveryCodes); });
   }
 
   protected async disableMfa() {
-    if (!this.mfaPassword()) { this.mfaError.set("Enter your current password."); return; }
-    if (!this.mfaCode().trim()) { this.mfaError.set("Enter an authenticator or recovery code."); return; }
+    if (!this.mfaPassword()) { this.mfaError.set($localize`Enter your current password.`); return; }
+    if (!this.mfaCode().trim()) { this.mfaError.set($localize`Enter an authenticator or recovery code.`); return; }
     await this.runMfa(async () => { await this.api.delete("/auth/mfa", { currentPassword: this.mfaPassword(), code: this.mfaCode() }); this.mfaEnabled.set(false); this.mfaRecoveryCodes.set([]); this.mfaCode.set(""); });
   }
 
@@ -132,7 +135,7 @@ export class AccountSettingsProfilePage implements OnDestroy, OnInit {
           newPassword: password.newPassword,
         });
         passwordForm().reset({ currentPassword: "", newPassword: "", confirmPassword: "" });
-        this.toasts.success("Password changed. You'll be signed out on the next refresh.", "lock-check");
+        this.toasts.success($localize`Password changed. You'll be signed out on the next refresh.`, "lock-check");
         return undefined;
       } catch (error) {
         return {
@@ -158,11 +161,11 @@ export class AccountSettingsProfilePage implements OnDestroy, OnInit {
 
     this.avatarError.set(null);
     if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
-      this.avatarError.set("Use a PNG, JPEG, or WEBP image.");
+      this.avatarError.set($localize`Use a PNG, JPEG, or WEBP image.`);
       return;
     }
     if (file.size > 6 * 1024 * 1024) {
-      this.avatarError.set("Choose an image 6MB or smaller before cropping.");
+      this.avatarError.set($localize`Choose an image 6MB or smaller before cropping.`);
       return;
     }
 
@@ -223,8 +226,8 @@ export class AccountSettingsProfilePage implements OnDestroy, OnInit {
     this.avatarUploading.set(true);
     try {
       const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.75));
-      if (!blob) throw new Error("Could not prepare image.");
-      if (blob.size > 2 * 1024 * 1024) throw new Error("Cropped avatar must be 2MB or smaller.");
+      if (!blob) throw new Error($localize`Could not prepare image.`);
+      if (blob.size > 2 * 1024 * 1024) throw new Error($localize`Cropped avatar must be 2MB or smaller.`);
       const form = new FormData();
       form.append("file", blob, this.avatarCropFileName());
       const updated = await this.api.request<{ avatarUrl: string | null }>("/auth/me/avatar", { method: "POST", body: form });
@@ -294,23 +297,23 @@ export class AccountSettingsProfilePage implements OnDestroy, OnInit {
 function extractErrorMessage(err: unknown): string {
   if (err instanceof ApiError) {
     const message = (err.body as { message?: unknown } | null)?.message;
-    if (message === "invalid verification code") return "That verification code is incorrect. Try again.";
-    if (message === "invalid password") return "Your current password is incorrect.";
-    if (message === "validation failed") return "Check the highlighted details and try again.";
+    if (message === "invalid verification code") return $localize`That verification code is incorrect. Try again.`;
+    if (message === "invalid password") return $localize`Your current password is incorrect.`;
+    if (message === "validation failed") return $localize`Check the highlighted details and try again.`;
     if (typeof message === "string" && message.trim()) return message;
-    return "Unable to update two-factor authentication. Try again.";
+    return $localize`Unable to update two-factor authentication. Try again.`;
   }
   if (err instanceof Error) return err.message;
-  return "Something went wrong.";
+  return $localize`Something went wrong.`;
 }
 
 function passwordErrorMessage(error: unknown): string {
-  if (error instanceof ApiError && error.status === 401) return "Your current password is incorrect.";
+  if (error instanceof ApiError && error.status === 401) return $localize`Your current password is incorrect.`;
   if (error instanceof ApiError) {
     const message = (error.body as { message?: unknown } | null)?.message;
     if (typeof message === "string" && message.trim()) return message;
-    return "Unable to change your password. Try again.";
+    return $localize`Unable to change your password. Try again.`;
   }
   if (error instanceof Error) return error.message;
-  return "Unable to change your password. Try again.";
+  return $localize`Unable to change your password. Try again.`;
 }

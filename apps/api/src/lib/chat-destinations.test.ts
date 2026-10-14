@@ -9,6 +9,7 @@ function endpoint(provider: "slack" | "discord" | "telegram" | "zulip", encrypte
     workspaceId: crypto.randomUUID(),
     createdById: crypto.randomUUID(),
     provider,
+    locale: "en-GB",
     name: "Team updates",
     url: null,
     encryptedSecret: null,
@@ -95,4 +96,21 @@ void test("Discord embed titles are cut to the provider's 256-character limit", 
     embeds: { title: string }[];
   };
   assert.equal(exact.embeds[0]!.title, "y".repeat(256));
+});
+
+// Pure renderer regression: external provider markup and retries cannot be exercised safely by
+// sending browser tests to real chat accounts. User text must survive placeholder interpolation.
+void test("chat retries use the queued language and preserve user text across providers", () => {
+  for (const provider of ["slack", "discord", "telegram", "zulip"] as const) {
+    const config = provider === "telegram"
+      ? { botToken: "123:secret", chatId: "42", threadId: null }
+      : { webhookUrl: provider === "slack" ? "https://hooks.slack.com/services/T/B/secret" : provider === "discord" ? "https://discord.com/api/webhooks/123/secret" : "https://example.com/hook" };
+    const target = { ...endpoint(provider, encryptChatDestinationConfig(provider, config)), locale: "ja" as const };
+    const translated = { ...payload, locale: "es" as const, type: "title_changed" as const, toValue: "Keep {from} <name>" };
+    const body = requestBody(buildChatRequest(target, translated).init);
+    assert.match(body, /cambió el nombre de una tarjeta a Keep \{from\}/);
+    assert.doesNotMatch(body, /renamed a card/);
+    const legacy = requestBody(buildChatRequest(target, payload).init);
+    assert.match(legacy, /commented on a card/);
+  }
 });

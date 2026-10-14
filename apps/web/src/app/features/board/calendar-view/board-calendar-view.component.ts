@@ -23,6 +23,7 @@ import { DUE_DATE_SLOT_OPTIONS, dueDateSlotFor, isOverdue, type DueDateSlot } fr
 import { formatDate, formatDateRange } from "../../../shared/date-format";
 import { boardStateCardStore, TABLE_CARD_STORE, type TableCardStore } from "../table-view/table-card-store";
 import { localDateKey, parseDateKey, startOfLocalDay } from "../../../shared/day-key.util";
+import { icu } from "../../../core/i18n/icu";
 
 type AnyCard = Card | WireCard | WireCardSummary;
 type AnyList = List | WireList;
@@ -144,8 +145,8 @@ export class BoardCalendarViewComponent {
   readonly mode = signal<"month" | "week">("month");
   /** Labelled: "Month" and "Week" are short, and the two calendar glyphs are near-identical. */
   readonly modeOptions: SegmentedOption<"month" | "week">[] = [
-    { id: "month", icon: "calendar-month", label: "Month" },
-    { id: "week", icon: "calendar-week", label: "Week" },
+    { id: "month", icon: "calendar-month", label: $localize`:Calendar view mode - show a whole month:Month` },
+    { id: "week", icon: "calendar-week", label: $localize`:Calendar view mode - show one week:Week` },
   ];
   readonly anchorDate = signal(startOfLocalDay(new Date()));
   readonly activeActionsCardId = signal<string | null>(null);
@@ -424,7 +425,7 @@ export class BoardCalendarViewComponent {
       this.cardStore?.updateCard(updated);
     } catch (error) {
       this.cardStore?.updateCard(card);
-      this.toasts.error("Could not change the due date");
+      this.toasts.error($localize`:Toast when dragging a card to another day fails:Could not change the due date`);
       throw error;
     } finally {
       this.markRescheduling(card.id, false);
@@ -496,7 +497,10 @@ export class BoardCalendarViewComponent {
   dayAccessibleLabel(day: CalendarDay): string {
     const date = formatDate(parseDateKey(day.key), "long");
     if (!day.cards.length) return date;
-    return `${date}, ${day.cards.length} ${day.cards.length === 1 ? "card" : "cards"} due`;
+    return icu(
+      $localize`:Accessible name for a calendar day with cards due, e.g. "Tuesday, 6 October 2026, 2 cards due":{count, plural, one {{date}, # card due} other {{date}, # cards due}}`,
+      { count: day.cards.length, date },
+    );
   }
 
   /**
@@ -522,6 +526,27 @@ export class BoardCalendarViewComponent {
 
   assigneeOverflow(cardId: string): number {
     return Math.max(0, this.assigneesForCard(cardId).length - 2);
+  }
+
+  checklistTooltip(card: AnyCard): string {
+    const { checklistDoneCount: done = 0, checklistTotalCount: total = 0 } = this.summary(card);
+    return $localize`:Tooltip on a calendar tile's checklist count:${done}:done: of ${total}:total: complete`;
+  }
+
+  checklistProgressTooltip(card: AnyCard): string {
+    const { checklistDoneCount: done = 0, checklistTotalCount: total = 0 } = this.summary(card);
+    return $localize`:Tooltip on a calendar tile's checklist progress bar:${done}:done: of ${total}:total: checklist items complete`;
+  }
+
+  attachmentsTooltip(card: AnyCard): string {
+    return icu(
+      $localize`:Tooltip on a calendar tile's attachment count:{count, plural, one {# attachment} other {# attachments}}`,
+      { count: this.summary(card).attachmentCount ?? 0 },
+    );
+  }
+
+  moreAssigneesTooltip(more: number): string {
+    return $localize`:Tooltip - how many more assignees are hidden:+${more}:count: more`;
   }
 
   hasMetaContent(card: AnyCard): boolean {

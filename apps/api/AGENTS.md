@@ -77,6 +77,7 @@ Value domains:
 
 ## Email templates
 
-After changing anything in `src/lib/email-templates/`, run `pnpm email:preview` and commit the
-regenerated HTML in `preview/`. Register new templates in the `templates` array of
-`src/scripts/generate-email-previews.ts`.
+Copy lives in the typed catalogs in `src/lib/i18n/messages/` (see its README), never in the
+template; every send resolves the recipient's locale. After changing anything in
+`src/lib/email-templates/`, run `pnpm email:preview` and commit the regenerated HTML in `preview/`.
+Register new templates in the `templates` array of `src/scripts/generate-email-previews.ts`.

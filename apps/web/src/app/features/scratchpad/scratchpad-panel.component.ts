@@ -16,6 +16,7 @@ import type { WireScratchpadNote } from "@kanera/shared/events";
 import type { AnchoredPanelPlacement } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { ToastService } from "../../shared/toast.service";
+import { icu } from "../../core/i18n/icu";
 import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { MenuDirective } from "../../shared/menu.directive";
 import { LogoComponent } from "../../shared/logo.component";
@@ -117,6 +118,17 @@ export class ScratchpadPanelComponent implements OnDestroy {
   protected readonly loadError = this.scratchpad.loadError;
   protected readonly atCapacity = this.scratchpad.atCapacity;
   protected readonly maxNotes = MAX_SCRATCHPAD_NOTES;
+  protected readonly closeScratchpadLabel = $localize`:Tooltip on the scratchpad button while it is open:Close scratchpad`;
+  protected readonly scratchpadLabel = $localize`:Tooltip on the scratchpad button:Scratchpad`;
+  protected readonly newPageLabel = $localize`:Tooltip - add a scratchpad page:New page`;
+  protected readonly capacityLabel = icu(
+    $localize`:Tooltip on the disabled new-page button:A scratchpad holds up to {count, plural, one {# page} other {# pages}}`,
+    { count: MAX_SCRATCHPAD_NOTES },
+  );
+
+  protected pageCountLabel(count: number): string {
+    return icu($localize`:Tooltip on the scratchpad page count:{count, plural, one {# page} other {# pages}}`, { count });
+  }
 
   protected readonly isSheet = mediaQuerySignal(SHEET_QUERY);
   /** The bottom-sheet shape: narrow viewport *and* docked. A popped-out tab is a page at any width. */
@@ -456,10 +468,10 @@ export class ScratchpadPanelComponent implements OnDestroy {
   protected async removeNote(note: WireScratchpadNote, event?: Event): Promise<void> {
     event?.stopPropagation();
     this.closePanelMenu();
-    const label = note.title.trim() || "Untitled";
+    const label = this.tabLabel(note);
     // Undo instead of confirm: the page disappears at once and the DELETE waits for the toast.
     const { restore, commit } = this.scratchpad.hideNote(note.id);
-    this.toasts.undoable({ message: `Page "${label}" deleted.`, icon: "trash", undo: restore, commit });
+    this.toasts.undoable({ message: $localize`:Undo toast after deleting a scratchpad page:Page "${label}:title:" deleted.`, icon: "trash", undo: restore, commit });
   }
 
   /** Reorder from the panel menu (Move page up / down): reachable by pointer, touch and keyboard alike. */
@@ -552,13 +564,13 @@ export class ScratchpadPanelComponent implements OnDestroy {
   protected readonly sheetHeightPx = computed(() => (this.isSheetForm() ? this.scratchpad.sheetHeight() : null));
 
   protected tabLabel(note: WireScratchpadNote): string {
-    return note.title.trim() || "Untitled";
+    return note.title.trim() || $localize`:Fallback name for a scratchpad page without a title:Untitled`;
   }
 
   /** `Created 3 Mar · Updated 10:42` — the page list row's tooltip: created-at is worth having, not
    * worth a column. */
   protected metaLine(note: WireScratchpadNote): string {
-    return `Created ${this.formatStamp(note.createdAt)} · Updated ${this.formatStamp(note.updatedAt)}`;
+    return $localize`:Tooltip on a scratchpad page in the page list:Created ${this.formatStamp(note.createdAt)}:created: · Updated ${this.formatStamp(note.updatedAt)}:updated:`;
   }
 
   /** Just the time or date, for the page list where an "Updated" prefix on every row is noise. */

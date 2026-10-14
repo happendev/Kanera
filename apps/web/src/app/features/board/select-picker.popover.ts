@@ -25,20 +25,21 @@ import { byPosition } from "../../shared/position-sort";
       <div class="lp-head">
         <span class="lp-title">{{ title() }}</span>
         @if (allowMultiple()) {
-          <span class="lp-hint">Multiple</span>
+          <span class="lp-hint" i18n="Hint beside an option picker heading: several options can be chosen">Multiple</span>
         }
       </div>
       <input
         class="lp-search"
         type="text"
         placeholder="Search options…"
+        i18n-placeholder
         [value]="query()"
         (input)="query.set($any($event.target).value)"
         autofocus
       />
       <div class="lp-list">
         @if (filtered().length === 0) {
-          <p class="lp-empty">No matching options</p>
+          <p class="lp-empty" i18n>No matching options</p>
         }
         @for (option of filtered(); track option.id) {
           <button
@@ -59,7 +60,7 @@ import { byPosition } from "../../shared/position-sort";
         }
       </div>
       @if (selectedIds().length) {
-        <button type="button" class="lp-clear" (click)="clear.emit()">Clear</button>
+        <button type="button" class="lp-clear" (click)="clear.emit()" i18n="Button: clear the selected options">Clear</button>
       }
     </div>
   `,
@@ -182,7 +183,7 @@ export class SelectPickerPopover {
   readonly options = input.required<WireCustomFieldOption[]>();
   readonly selectedIds = input<string[]>([]);
   readonly allowMultiple = input(false);
-  readonly title = input("Options");
+  readonly title = input($localize`:Default heading of a custom field option picker:Options`);
   readonly toggle = output<string>();
   readonly clear = output<void>();
   readonly close = output<void>();

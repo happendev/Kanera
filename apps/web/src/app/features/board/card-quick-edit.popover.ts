@@ -15,6 +15,7 @@ import {
 } from "@angular/core";
 import type { WireCard } from "@kanera/shared/events";
 import { ApiClient } from "../../core/api/api.client";
+import { appLocale } from "../../core/i18n/locale";
 import { AuthService } from "../../core/auth/auth.service";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { BoardState } from "./board-state";
@@ -33,11 +34,11 @@ import { byPosition } from "../../shared/position-sort";
   template: `
     <div class="cqe-panel">
       <div class="cqe-head">
-        <span>Quick edit</span>
+        <span i18n="Card quick edit panel heading">Quick edit</span>
       </div>
 
       <label class="cqe-field">
-        <span class="cqe-label">Title</span>
+        <span class="cqe-label" i18n="Card title field label">Title</span>
         <textarea
           #titleInput
           class="cqe-title-input"
@@ -50,15 +51,15 @@ import { byPosition } from "../../shared/position-sort";
       </label>
 
       <div class="cqe-section">
-        <span class="cqe-label">Members</span>
+        <span class="cqe-label" i18n="Card members section label">Members</span>
         <div class="cqe-list">
           @if (sortedMembers().length === 0) {
-            <p class="cqe-empty">No members</p>
+            <p class="cqe-empty" i18n>No members</p>
           }
           @for (member of sortedMembers(); track member.userId) {
             <button type="button" class="cqe-row" [class.is-selected]="assigneeIds().includes(member.userId)" (click)="$event.preventDefault(); $event.stopPropagation(); toggleAssignee(member.userId)">
               <k-avatar [url]="member.avatarUrl" [name]="member.displayName" [size]="22" [userId]="member.userId" />
-              <span>{{ member.userId === currentUserId() ? 'Me' : member.displayName }}</span>
+              <span>{{ member.userId === currentUserId() ? meLabel : member.displayName }}</span>
               @if (assigneeIds().includes(member.userId)) {
                 <i class="ti ti-check"></i>
               }
@@ -68,10 +69,10 @@ import { byPosition } from "../../shared/position-sort";
       </div>
 
       <div class="cqe-section">
-        <span class="cqe-label">Labels</span>
+        <span class="cqe-label" i18n="Card labels section label">Labels</span>
         <div class="cqe-list">
           @if (sortedLabels().length === 0) {
-            <p class="cqe-empty">No labels</p>
+            <p class="cqe-empty" i18n>No labels</p>
           }
           @for (label of sortedLabels(); track label.id) {
             <button type="button" class="cqe-row" [class.is-selected]="labelIds().includes(label.id)" (click)="$event.preventDefault(); $event.stopPropagation(); toggleLabel(label.id)">
@@ -86,7 +87,7 @@ import { byPosition } from "../../shared/position-sort";
       </div>
 
       <div class="cqe-section cqe-due-wrap">
-        <span class="cqe-label">Due date</span>
+        <span class="cqe-label" i18n="Card due date section label">Due date</span>
         <button type="button" class="cqe-due-btn" [class.is-active]="datePickerOpen()" (click)="$event.preventDefault(); toggleDatePicker($event)">
           <i class="ti ti-calendar-event"></i>
           <span>{{ dueDateText() }}</span>
@@ -269,6 +270,7 @@ export class CardQuickEditPopover implements OnInit, AfterViewInit {
   readonly dueDateTimezone = input<string | null>(null);
   readonly close = output<void>();
 
+  readonly meLabel = $localize`:The viewer, in a list of people:Me`;
   readonly draftTitle = signal("");
   readonly datePickerOpen = signal(false);
   readonly currentUserId = computed(() => this.auth.user()?.id ?? null);
@@ -280,7 +282,7 @@ export class CardQuickEditPopover implements OnInit, AfterViewInit {
     return (this.state?.assignableMembers() ?? []).filter((member) => member.role !== "observer").sort((a, b) => {
       if (a.userId === meId) return -1;
       if (b.userId === meId) return 1;
-      return a.displayName.localeCompare(b.displayName);
+      return a.displayName.localeCompare(b.displayName, appLocale());
     });
   });
 
@@ -378,7 +380,7 @@ export class CardQuickEditPopover implements OnInit, AfterViewInit {
   dueDateText(): string {
     return this.dueDateLocalDate()
       ? formatDueDate(this.dueDateLocalDate(), this.dueDateSlotValue(), this.dueDateTimezone())
-      : "No due date";
+      : $localize`No due date`;
   }
 
   private resizeTitleInput(input = this.titleInput?.nativeElement) {

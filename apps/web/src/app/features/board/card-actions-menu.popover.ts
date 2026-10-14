@@ -32,14 +32,14 @@ import type { DueDateSlotSelection } from "./due-date.util";
     <div kMenu class="cam-panel">
       <button type="button" class="k-menu-item cam-item" (click)="openInNewTab($event)">
         <i class="ti ti-external-link"></i>
-        <span>Open in new tab</span>
+        <span i18n>Open in new tab</span>
       </button>
 
 
       <div class="cam-sub">
         <button type="button" class="k-menu-item cam-item" [class.is-active]="quickEditOpen()" (click)="toggleQuickEdit($event)">
           <i class="ti ti-pencil"></i>
-          <span>Quick edit…</span>
+          <span i18n="Card menu item">Quick edit…</span>
           <i class="ti ti-chevron-right cam-chev"></i>
         </button>
         @if (quickEditOpen()) {
@@ -58,12 +58,20 @@ import type { DueDateSlotSelection } from "./due-date.util";
            it. -->
       <button type="button" class="k-menu-item cam-item" (click)="toggleCompletion($event)" [disabled]="savingCompletion()">
         <i [class]="completedAt() ? 'ti ti-circle' : 'ti ti-circle-check'"></i>
-        <span>{{ completedAt() ? 'Mark incomplete' : 'Mark complete' }}</span>
+        @if (completedAt()) {
+        <span i18n="Card menu item">Mark incomplete</span>
+        } @else {
+        <span i18n="Card menu item">Mark complete</span>
+        }
       </button>
       @if (showCardWatchAction()) {
       <button type="button" class="k-menu-item cam-item" (click)="toggleWatch($event)" [disabled]="savingWatch()">
         <i [class]="isWatchingCard() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
-        <span>{{ isWatchingCard() ? 'Stop watching' : 'Watch card' }}</span>
+        @if (isWatchingCard()) {
+        <span i18n="Card menu item">Stop watching</span>
+        } @else {
+        <span i18n="Card menu item">Watch card</span>
+        }
       </button>
       }
       <!-- A reminder on an archived card would fire silently, so the menu does not offer one. -->
@@ -71,7 +79,11 @@ import type { DueDateSlotSelection } from "./due-date.util";
       <div class="cam-sub">
         <button type="button" class="k-menu-item cam-item" [class.is-active]="reminderOpen()" (click)="toggleReminder($event)">
           <i class="ti ti-alarm"></i>
-          <span>{{ hasPendingReminder() ? 'Change reminder…' : 'Remind me…' }}</span>
+          @if (hasPendingReminder()) {
+          <span i18n="Card menu item">Change reminder…</span>
+          } @else {
+          <span i18n="Card menu item">Remind me…</span>
+          }
           <i class="ti ti-chevron-right cam-chev"></i>
         </button>
         @if (reminderOpen()) {
@@ -87,7 +99,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
       @if (allowDuplicate()) {
       <button type="button" class="k-menu-item cam-item" (click)="duplicate($event)" [disabled]="duplicating()">
         <i class="ti ti-copy"></i>
-        <span>Duplicate card</span>
+        <span i18n="Card menu item">Duplicate card</span>
       </button>
       }
       @if (workspaceId()) {
@@ -95,7 +107,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
         <div class="cam-sub">
           <button type="button" class="k-menu-item cam-item" [class.is-active]="copyOpen()" (click)="toggleCopy($event)">
             <i class="ti ti-copy-plus"></i>
-            <span>Copy to board…</span>
+            <span i18n="Card menu item">Copy to board…</span>
             <i class="ti ti-chevron-right cam-chev"></i>
           </button>
           @if (copyOpen()) {
@@ -107,6 +119,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
               [sourceListId]="sourceListId()"
               [sourceLists]="sourceLists()"
               title="Copy to board"
+              i18n-title
               (pick)="onCopyPick($event)"
               (close)="copyOpen.set(false)"
             />
@@ -117,7 +130,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
         <div class="cam-sub">
           <button type="button" class="k-menu-item cam-item" [class.is-active]="moveOpen()" (click)="toggleMove($event)">
             <i class="ti ti-arrow-right"></i>
-            <span>Move to board…</span>
+            <span i18n="Card menu item">Move to board…</span>
             <i class="ti ti-chevron-right cam-chev"></i>
           </button>
           @if (moveOpen()) {
@@ -125,6 +138,7 @@ import type { DueDateSlotSelection } from "./due-date.util";
               [sourceBoardId]="boardId()"
               [excludeBoardId]="boardId()"
               title="Move to board"
+              i18n-title
               (pick)="onMovePick($event)"
               (close)="moveOpen.set(false)"
             />
@@ -134,30 +148,30 @@ import type { DueDateSlotSelection } from "./due-date.util";
       }
       <button type="button" class="k-menu-item cam-item" (click)="copyCardLink($event)">
         <i class="ti ti-link"></i>
-        <span>Copy card link</span>
+        <span i18n="Card menu item">Copy card link</span>
       </button>
       @if (cardKey()) {
       <button type="button" class="k-menu-item cam-item" (click)="copyCardKey($event)">
         <i class="ti ti-hash"></i>
-        <span>Copy key</span>
+        <span i18n="Card menu item: copy the card's short key, such as DEV-12">Copy key</span>
       </button>
       }
       <div class="cam-sep"></div>
       @if (archivedAt()) {
         <button type="button" class="k-menu-item cam-item" (click)="setArchived($event, false)" [disabled]="archiving()">
           <i class="ti ti-archive-off"></i>
-          <span>Unarchive card</span>
+          <span i18n="Card menu item">Unarchive card</span>
         </button>
       } @else if (confirmingDelete()) {
         <div class="cam-confirm">
-          <span class="cam-confirm-label">Archive this card?</span>
-          <button type="button" class="cam-confirm-yes" (click)="setArchived($event, true)" [disabled]="archiving()">Archive</button>
-          <button type="button" class="cam-confirm-cancel" (click)="$event.preventDefault(); $event.stopPropagation(); confirmingDelete.set(false)">Cancel</button>
+          <span class="cam-confirm-label" i18n>Archive this card?</span>
+          <button type="button" class="cam-confirm-yes" (click)="setArchived($event, true)" [disabled]="archiving()" i18n="Button: confirm archiving the card">Archive</button>
+          <button type="button" class="cam-confirm-cancel" (click)="$event.preventDefault(); $event.stopPropagation(); confirmingDelete.set(false)" i18n>Cancel</button>
         </div>
       } @else {
         <button type="button" class="k-menu-item cam-item danger" (click)="$event.preventDefault(); $event.stopPropagation(); confirmingDelete.set(true)">
           <i class="ti ti-archive"></i>
-          <span>Archive card</span>
+          <span i18n="Card menu item">Archive card</span>
         </button>
       }
     </div>
@@ -377,7 +391,7 @@ export class CardActionsMenuPopover {
     this.duplicating.set(true);
     try {
       await this.api.post(`/cards/${this.cardId()}/duplicate`, {});
-      this.toasts.success("Card duplicated.", "copy");
+      this.toasts.success($localize`Card duplicated.`, "copy");
       this.close.emit();
     } finally {
       this.duplicating.set(false);
@@ -416,14 +430,14 @@ export class CardActionsMenuPopover {
   async onCopyPick(target: BoardPickerPick) {
     this.copyOpen.set(false);
     await this.api.post(`/cards/${this.cardId()}/duplicate`, { boardId: target.boardId, listId: target.listId });
-      this.toasts.success("Card copied to the selected board.", "copy-plus");
+      this.toasts.success($localize`Card copied to the selected board.`, "copy-plus");
     this.close.emit();
   }
 
   async onMovePick(target: BoardPickerPick) {
     this.moveOpen.set(false);
     await this.api.post(`/cards/${this.cardId()}/move-to-board`, { boardId: target.boardId });
-    this.toasts.success("Card moved to the selected board.", "arrow-right");
+    this.toasts.success($localize`Card moved to the selected board.`, "arrow-right");
     this.moved.emit();
     this.close.emit();
   }
@@ -442,7 +456,7 @@ export class CardActionsMenuPopover {
       if (archived) {
         const cardId = this.cardId();
         this.toasts.undoable({
-          message: "Card archived.",
+          message: $localize`Card archived.`,
           icon: "archive",
           undo: async () => {
             const restored = await this.api.patch<WireCard>(`/cards/${cardId}/archive`, { archived: false });
@@ -450,7 +464,7 @@ export class CardActionsMenuPopover {
           },
         });
       } else {
-        this.toasts.success("Card restored.", "archive-off");
+        this.toasts.success($localize`Card restored.`, "archive-off");
       }
     } finally {
       this.archiving.set(false);

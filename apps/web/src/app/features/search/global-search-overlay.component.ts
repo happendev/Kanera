@@ -33,7 +33,7 @@ type FlatResult =
   template: `
     @if (search.isOpen()) {
       <div class="backdrop" (click)="search.close()">
-        <div class="panel" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-label="Search" (click)="$event.stopPropagation()">
+        <div class="panel" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-label="Search" i18n-aria-label="Name of the global search dialog" (click)="$event.stopPropagation()">
           <div class="search-row">
             <i class="ti ti-search"></i>
             <input
@@ -41,11 +41,13 @@ type FlatResult =
               type="text"
               class="search-input"
               placeholder="Search or type a command…"
+              i18n-placeholder
               autocomplete="off"
               spellcheck="false"
               role="combobox"
               aria-autocomplete="list"
               aria-label="Search"
+              i18n-aria-label="Name of the global search input"
               aria-controls="global-search-results"
               [attr.aria-expanded]="hasQuery()"
               [attr.aria-activedescendant]="highlightedResultId()"
@@ -60,9 +62,9 @@ type FlatResult =
           </div>
 
           @if (showResults()) {
-            <div id="global-search-results" class="results" role="listbox" aria-label="Search results">
+            <div id="global-search-results" class="results" role="listbox" aria-label="Search results" i18n-aria-label>
               @if (commands().length) {
-                <div class="group-label"><i class="ti ti-bolt"></i> Quick actions</div>
+                <div class="group-label"><i class="ti ti-bolt"></i> <ng-container i18n="Search result group heading">Quick actions</ng-container></div>
                 @for (command of commands(); track command.id; let i = $index) {
                   <button
                     [id]="resultId(i)"
@@ -83,7 +85,7 @@ type FlatResult =
                       <span class="command-keys" aria-hidden="true">
                         @for (step of keys; track $index; let last = $last) {
                           @for (key of step; track $index) { <kbd class="k-kbd">{{ key }}</kbd> }
-                          @if (!last) { <span class="then">then</span> }
+                          @if (!last) { <span class="then" i18n="Between the steps of a two-step keyboard shortcut, e.g. G then H">then</span> }
                         }
                       </span>
                     }
@@ -94,12 +96,12 @@ type FlatResult =
               @if (flat().length === 0 && !search.loading() && hasQuery()) {
                 <div class="empty" role="status" aria-live="polite">
                   <i class="ti ti-mood-empty"></i>
-                  <span>No results for "{{ search.query() }}"</span>
+                  <span i18n="Search empty state">No results for "{{ search.query() // i18n(ph="query") }}"</span>
                 </div>
               }
 
               @if (cards().length) {
-                <div class="group-label"><i class="ti ti-layout-kanban"></i> Cards</div>
+                <div class="group-label"><i class="ti ti-layout-kanban"></i> <ng-container i18n="Search result group heading">Cards</ng-container></div>
                 @for (c of cards(); track c.id; let i = $index) {
                   <button
                     [id]="resultId(cardsOffset() + i)"
@@ -126,7 +128,7 @@ type FlatResult =
               }
 
               @if (notes().length) {
-                <div class="group-label"><i class="ti ti-notebook"></i> Notes</div>
+                <div class="group-label"><i class="ti ti-notebook"></i> <ng-container i18n="Search result group heading">Notes</ng-container></div>
                 @for (n of notes(); track n.id; let i = $index) {
                   <button
                     [id]="resultId(notesOffset() + i)"
@@ -156,7 +158,7 @@ type FlatResult =
               }
 
               @if (comments().length) {
-                <div class="group-label"><i class="ti ti-message"></i> Comments</div>
+                <div class="group-label"><i class="ti ti-message"></i> <ng-container i18n="Search result group heading">Comments</ng-container></div>
                 @for (c of comments(); track c.id; let i = $index) {
                   <button
                     [id]="resultId(commentsOffset() + i)"
@@ -182,7 +184,7 @@ type FlatResult =
               }
 
               @if (attachments().length) {
-                <div class="group-label"><i class="ti ti-paperclip"></i> Attachments</div>
+                <div class="group-label"><i class="ti ti-paperclip"></i> <ng-container i18n="Search result group heading">Attachments</ng-container></div>
                 @for (a of attachments(); track a.id; let i = $index) {
                   <button
                     [id]="resultId(attachmentsOffset() + i)"
@@ -458,12 +460,12 @@ export class GlobalSearchOverlayComponent {
     const query = this.search.query().trim();
     const dark = this.theme.isDark();
     const navigation: PaletteAction[] = [
-      { id: "theme", label: `Switch to ${dark ? "light" : "dark"} mode`, detail: "Change the interface theme", icon: dark ? "sun" : "moon", keywords: ["theme", "toggle", "appearance", "dark", "light"], run: () => this.theme.toggle() },
-      { id: "home", label: "Go to Home", detail: "Workspace overview", icon: "home", keys: "g h", run: () => void this.router.navigate(["/"]) },
-      { id: "my-cards", label: "Go to My Cards", detail: "Your work across boards", icon: "user-check", keys: "g m", run: () => void this.router.navigate(["/my-cards"]) },
-      { id: "team-cards", label: "Go to Team Cards", detail: "Team work across boards", icon: "users", keys: "g t", run: () => void this.router.navigate(["/team-cards"]) },
-      { id: "portfolio", label: "Go to Portfolio", detail: "Card counts and progress", icon: "chart-dots-3", keys: "g p", when: () => this.auth.user()?.portfolioEnabled !== false, run: () => void this.router.navigate(["/portfolio"]) },
-      { id: "settings", label: "Open Settings", detail: "Workspace and account preferences", icon: "settings", keys: "g s", run: () => void this.router.navigate(["/settings"]) },
+      { id: "theme", label: dark ? $localize`:Command palette action:Switch to light mode` : $localize`:Command palette action:Switch to dark mode`, detail: $localize`:Command palette action description:Change the interface theme`, icon: dark ? "sun" : "moon", keywords: ["theme", "toggle", "appearance", "dark", "light"], run: () => this.theme.toggle() },
+      { id: "home", label: $localize`:Command palette action:Go to Home`, detail: $localize`:Command palette action description:Workspace overview`, icon: "home", keys: "g h", run: () => void this.router.navigate(["/"]) },
+      { id: "my-cards", label: $localize`:Command palette action:Go to My Cards`, detail: $localize`:Command palette action description:Your work across boards`, icon: "user-check", keys: "g m", run: () => void this.router.navigate(["/my-cards"]) },
+      { id: "team-cards", label: $localize`:Command palette action:Go to Team Cards`, detail: $localize`:Command palette action description:Team work across boards`, icon: "users", keys: "g t", run: () => void this.router.navigate(["/team-cards"]) },
+      { id: "portfolio", label: $localize`:Command palette action:Go to Portfolio`, detail: $localize`:Command palette action description:Card counts and progress`, icon: "chart-dots-3", keys: "g p", when: () => this.auth.user()?.portfolioEnabled !== false, run: () => void this.router.navigate(["/portfolio"]) },
+      { id: "settings", label: $localize`:Command palette action:Open Settings`, detail: $localize`:Command palette action description:Workspace and account preferences`, icon: "settings", keys: "g s", run: () => void this.router.navigate(["/settings"]) },
     ];
     return [...this.palette.actions(), ...navigation]
       .filter((action) => (action.when?.() ?? true) && actionMatchesQuery(action, query))

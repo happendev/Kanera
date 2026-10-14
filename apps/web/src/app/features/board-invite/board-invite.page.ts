@@ -86,7 +86,14 @@ export class BoardInvitePage implements OnInit {
   }
 
   roleLabel(role: string): string {
-    return role.charAt(0).toUpperCase() + role.slice(1);
+    switch (role) {
+      case "editor": return $localize`:Board role:Editor`;
+      case "observer": return $localize`:Board role:Observer`;
+      case "admin": return $localize`:Board role:Admin`;
+      case "member": return $localize`:Board role:Member`;
+      // An unknown role from a newer API still reads sensibly while the client catches up.
+      default: return role.charAt(0).toUpperCase() + role.slice(1);
+    }
   }
 
   boardSummary(invite: InviteDetails): string {

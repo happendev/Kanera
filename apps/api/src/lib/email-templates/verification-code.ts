@@ -1,21 +1,28 @@
-import { codeDisplay, divider, emailLayout, heading, mutedHtml, paragraph } from "./layout.js";
+import type { Locale } from "@kanera/shared/locales";
+import { serverMessages } from "../i18n/messages/index.js";
+import { codeDisplay, divider, emailLayout, heading, mutedHtml, paragraph, plainStrong, richHtml } from "./layout.js";
 
 export interface VerificationCodeEmailParams {
+  /** At signup no account exists yet, so this is the language the signup form was shown in. */
+  locale: Locale;
   code: string;
   expiresInMinutes: number;
 }
 
 // Sent during signup and email changes. No display name: at signup-request time
 // no account exists yet, so the copy stays generic.
-export function verificationCodeEmail({ code, expiresInMinutes }: VerificationCodeEmailParams): string {
+export function verificationCodeEmail({ locale, code, expiresInMinutes }: VerificationCodeEmailParams): string {
+  const messages = serverMessages(locale);
+  const m = messages.email.verificationCode;
   return emailLayout({
-    subject: "Verify your email for Kanera",
-    preheader: `Your Kanera verification code is ${code}.`,
+    locale,
+    subject: m.subject,
+    preheader: m.preheader({ code }),
     body: `
-      ${heading("Verify your email")}
-      ${paragraph("Enter this code to confirm your email address and continue:")}
-      ${codeDisplay(code)}
-      ${mutedHtml(`This code expires in <strong>${expiresInMinutes} minutes</strong>. If you didn't request it, you can safely ignore this email.`)}
+      ${heading(m.heading)}
+      ${paragraph(m.instruction)}
+      ${codeDisplay(code, locale)}
+      ${mutedHtml(richHtml((s) => m.expiry(s), { duration: plainStrong(messages.common.minutes({ count: expiresInMinutes })) }))}
       ${divider("24px 0 0 0")}
     `,
   });

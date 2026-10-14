@@ -66,7 +66,7 @@ let nextControlsId = 0;
             [disabled]="disabled()"
             [attr.aria-expanded]="open()"
             [attr.aria-controls]="controlsId"
-            [attr.aria-label]="open() ? 'Hide filters and sorting' : 'Show filters and sorting'"
+            [attr.aria-label]="open() ? hideControlsLabel : showControlsLabel"
             (click)="toggle($event)"
           >
             <i class="ti ti-adjustments-horizontal" aria-hidden="true"></i>
@@ -85,6 +85,8 @@ export class PageToolbarComponent implements OnDestroy {
    * its default — not just the Filter popover.
    */
   readonly compactActive = input(false);
+  protected readonly hideControlsLabel = $localize`:Accessible label for the phone toolbar toggle:Hide filters and sorting`;
+  protected readonly showControlsLabel = $localize`:Accessible label for the phone toolbar toggle:Show filters and sorting`;
   readonly disabled = input(false);
   /** False when a view projects no responsive controls, avoiding an empty drawer trigger. */
   readonly showCompact = input(true);

@@ -16,6 +16,9 @@ import { formatRelativeTime, formatTime, timeZoneOffsetMinutes } from "../date-f
 import { viewerTimeZone } from "../day-key.util";
 import { ToastService } from "../toast.service";
 import { TooltipDirective } from "../tooltip.directive";
+import { WEEKDAY_LABELS } from "../week-start";
+import { appLocale } from "../../core/i18n/locale";
+import { icu } from "../../core/i18n/icu";
 import { buildProfileActivityGrid } from "./profile-activity-grid";
 import { UserProfileCardService, type UserProfileAction, type UserProfileRequest } from "./user-profile-card.service";
 
@@ -26,19 +29,19 @@ import { UserProfileCardService, type UserProfileAction, type UserProfileRequest
 const SKELETON_WEEKS = 18;
 
 const ROLE_LABELS: Record<UserProfileRole, string> = {
-  owner: "Owner",
-  admin: "Admin",
-  workspaceAdmin: "Workspace admin",
-  member: "Member",
-  guest: "Guest",
+  owner: $localize`:Role badge on a profile card:Owner`,
+  admin: $localize`:Role badge on a profile card:Admin`,
+  workspaceAdmin: $localize`:Role badge on a profile card:Workspace admin`,
+  member: $localize`:Role badge on a profile card:Member`,
+  guest: $localize`:Role badge on a profile card:Guest`,
 };
 
 const ROLE_HINTS: Record<UserProfileRole, string> = {
-  owner: "Owns this organisation",
-  admin: "Organisation admin: manages every workspace and board",
-  workspaceAdmin: "Manages this workspace and its boards",
-  member: "Organisation member",
-  guest: "Guest from outside this organisation, with access to specific boards only",
+  owner: $localize`:Tooltip on a profile card role badge:Owns this organisation`,
+  admin: $localize`:Tooltip on a profile card role badge:Organisation admin: manages every workspace and board`,
+  workspaceAdmin: $localize`:Tooltip on a profile card role badge:Manages this workspace and its boards`,
+  member: $localize`:Tooltip on a profile card role badge:Organisation member`,
+  guest: $localize`:Tooltip on a profile card role badge:Guest from outside this organisation, with access to specific boards only`,
 };
 
 /** "6h behind you", "2h 30m ahead of you"; null when the clocks agree or a zone is unknown. */
@@ -49,8 +52,14 @@ function zoneDifferenceLabel(theirZone: string, viewerZone: string, at: Date): s
   const delta = Math.abs(theirs - mine);
   const hours = Math.floor(delta / 60);
   const minutes = delta % 60;
-  const amount = [hours ? `${hours}h` : "", minutes ? `${minutes}m` : ""].filter(Boolean).join(" ");
-  return theirs > mine ? `${amount} ahead of you` : `${amount} behind you`;
+  const locale = appLocale();
+  const amount = [
+    hours ? new Intl.NumberFormat(locale, { style: "unit", unit: "hour", unitDisplay: "narrow" }).format(hours) : "",
+    minutes ? new Intl.NumberFormat(locale, { style: "unit", unit: "minute", unitDisplay: "narrow" }).format(minutes) : "",
+  ].filter(Boolean).join(" ");
+  return theirs > mine
+    ? $localize`:Time zone difference on a profile card, e.g. "6h ahead of you":${amount}:difference: ahead of you`
+    : $localize`:Time zone difference on a profile card, e.g. "6h behind you":${amount}:difference: behind you`;
 }
 
 /**
@@ -99,7 +108,8 @@ export class UserProfilePopoverComponent implements OnInit, AfterViewInit {
   private lastAnchorRect: AnchorRect | null = null;
 
   readonly skeletonWeeks = Array.from({ length: SKELETON_WEEKS }, (_, index) => index);
-  readonly weekdayLabels = ["Mon", "", "Wed", "", "Fri", "", ""];
+  // Alternate rows only, as GitHub's grid does: seven labels in 12px rows overprint.
+  readonly weekdayLabels = WEEKDAY_LABELS.map((label, index) => index % 2 === 0 && index < 6 ? label : "");
   readonly legendLevels = [0, 1, 2, 3, 4] as const;
   readonly showCardKeys = this.cardKeys.showCardKeys;
 
@@ -176,12 +186,14 @@ export class UserProfilePopoverComponent implements OnInit, AfterViewInit {
     this.isSelf() || this.presence.isOnline(this.presenceWorkspaceId(), this.request().userId)
   );
   readonly presenceLabel = computed(() => {
-    if (this.online()) return "Online";
+    if (this.online()) return $localize`:Presence status:Online`;
     const lastSeen = this.presence.lastOnlineAt(this.presenceWorkspaceId(), this.request().userId)
       ?? this.profile()?.user.lastOnlineAt
       ?? this.request().lastOnlineAt;
     const relative = formatLastOnline(lastSeen, this.now());
-    return relative ? `Last seen ${relative}` : "Offline";
+    return relative
+      ? $localize`:Presence status; the time is relative, e.g. "3 minutes ago":Last seen ${relative}:lastSeen:`
+      : $localize`:Presence status:Offline`;
   });
 
   readonly localTime = computed(() => {
@@ -212,7 +224,27 @@ export class UserProfilePopoverComponent implements OnInit, AfterViewInit {
     const shared = this.profile()?.sharedBoards;
     return shared ? Math.max(0, shared.total - shared.boards.length) : 0;
   });
-  readonly boardsHeading = computed(() => this.isSelf() ? "Your boards" : "Boards you share");
+  readonly dialogLabel = computed(() => $localize`:Accessible name of a person's profile card:${this.displayName()}:name: profile`);
+  readonly emailTooltip = computed(() => $localize`:Tooltip on a mailto link:Email ${this.displayName()}:name:`);
+  readonly completedHint = computed(() => this.isSelf()
+    ? $localize`:Tooltip on your own profile's completed-cards grid; Work done is a board view:Cards you completed on boards you can open, counted as on Work done`
+    : $localize`:Tooltip on a profile's completed-cards grid; Work done is a board view:Cards ${this.displayName()}:name: completed on boards you can open, counted as on Work done`);
+
+  completedSummary(total: number): string {
+    return icu(
+      $localize`:Profile card completed-cards count:{total, plural, =0 {No cards} one {# card} other {# cards}} in {weeks, plural, one {# week} other {# weeks}}`,
+      { total, weeks: this.weeks() },
+    );
+  }
+
+  gridLabel(activeDays: number): string {
+    return icu(
+      $localize`:Accessible description of the completed-cards grid:{total, plural, one {# card completed} other {# cards completed}} over {activeDays, plural, one {# day} other {# days}} in the last {weeks, plural, one {# week} other {# weeks}}`,
+      { total: this.profile()?.activity?.total ?? 0, activeDays, weeks: this.weeks() },
+    );
+  }
+
+  readonly boardsHeading = computed(() => this.isSelf() ? $localize`:Profile card section heading:Your boards` : $localize`:Profile card section heading:Boards you share`);
 
   readonly cardsLink = computed(() => this.isSelf()
     ? { path: "/my-cards", query: null }
@@ -257,9 +289,9 @@ export class UserProfilePopoverComponent implements OnInit, AfterViewInit {
   async copyEmail(email: string): Promise<void> {
     try {
       await copyToClipboard(email);
-      this.toast.success("Email copied", "copy");
+      this.toast.success($localize`:Toast:Email copied`, "copy");
     } catch {
-      this.toast.error("Couldn't copy the email address.");
+      this.toast.error($localize`:Toast:Couldn't copy the email address.`);
     }
   }
 

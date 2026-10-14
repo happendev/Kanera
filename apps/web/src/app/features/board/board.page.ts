@@ -11,6 +11,8 @@ import type { Board, BoardRole, BoardSeparator, Card, CardCustomFieldValue, Card
 import { AnalyticsService } from "../../core/analytics/analytics.service";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
+import { icu } from "../../core/i18n/icu";
+import { appLocale } from "../../core/i18n/locale";
 import { downloadTextFile } from "../../core/browser/download";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { NotificationsService } from "../../core/notifications/notifications.service";
@@ -88,6 +90,16 @@ const EMPTY_LANE_CARDS: AnyCard[] = [];
 const GROW_NEAR_RIGHT_EDGE_PX = 800;
 const PRELOAD_NEAR_RIGHT_EDGE_PX = 1600;
 const LIST_GROWTH_IDLE_TIMEOUT_MS = 200;
+
+/** View names, shared by the view switch and the keyboard shortcut sheet. */
+const VIEW_LABELS = {
+  board: $localize`:View switch label:Board view`,
+  table: $localize`:View switch label:Table view`,
+  calendar: $localize`:View switch label:Calendar view`,
+  history: $localize`:View switch label; the view lists completed work:Work done`,
+} as const;
+/** Page title and header while the board's own name is still loading. */
+const BOARD_FALLBACK_TITLE = $localize`:Page title while a board loads:Board`;
 
 /** The "no value" bucket of any grouping — Unassigned, No label, No <field>. */
 function isNullGroup(group: CardGroup): boolean {
@@ -185,11 +197,11 @@ export class BoardPage implements OnDestroy {
   readonly viewOptions = computed<SegmentedOption<ViewMode>[]>(() => {
     const disabled = this.state.board() === null;
     return [
-      { id: "board", icon: "layout-kanban", label: "Board view", shortLabel: "Board", disabled },
-      { id: "table", icon: "table", label: "Table view", shortLabel: "Table", disabled },
-      { id: "calendar", icon: "calendar-week", label: "Calendar view", shortLabel: "Calendar", disabled },
-      { id: "history", icon: "history", label: "Work done", disabled },
-      ...(this.state.notesEnabled() ? [{ id: "notes" as const, icon: "notebook", label: "Board Notes", shortLabel: "Notes", disabled }] : []),
+      { id: "board", icon: "layout-kanban", label: VIEW_LABELS.board, shortLabel: $localize`:Short view switch label for the kanban view:Board`, disabled },
+      { id: "table", icon: "table", label: VIEW_LABELS.table, shortLabel: $localize`:Short view switch label:Table`, disabled },
+      { id: "calendar", icon: "calendar-week", label: VIEW_LABELS.calendar, shortLabel: $localize`:Short view switch label:Calendar`, disabled },
+      { id: "history", icon: "history", label: VIEW_LABELS.history, disabled },
+      ...(this.state.notesEnabled() ? [{ id: "notes" as const, icon: "notebook", label: $localize`:View switch label:Board Notes`, shortLabel: $localize`:Short view switch label:Notes`, disabled }] : []),
     ];
   });
 
@@ -277,10 +289,10 @@ export class BoardPage implements OnDestroy {
   readonly completedRangeLabel = computed(() => {
     const from = this.completedFrom();
     const to = this.completedTo();
-    if (from && to) return `${formatCompletedRangeDate(from)} – ${formatCompletedRangeDate(to)}`;
-    if (from) return `From ${formatCompletedRangeDate(from)}`;
-    if (to) return `Until ${formatCompletedRangeDate(to)}`;
-    return "Choose date range";
+    if (from && to) return $localize`:Completed date range:${formatCompletedRangeDate(from)}:from: – ${formatCompletedRangeDate(to)}:to:`;
+    if (from) return $localize`:Completed date range with only a start:From ${formatCompletedRangeDate(from)}:date:`;
+    if (to) return $localize`:Completed date range with only an end:Until ${formatCompletedRangeDate(to)}:date:`;
+    return $localize`:Completed filter with no range chosen:Choose date range`;
   });
   readonly completedPanelOpen = signal(false);
   readonly bulkSelectedCardIds = signal<Set<string>>(new Set());
@@ -339,22 +351,24 @@ export class BoardPage implements OnDestroy {
   readonly mirrorCreateMode = computed<"outbound" | "inbound">(() => this.mirrorInboundCount() > 0 ? "inbound" : "outbound");
   readonly mirrorCreateBlocked = computed(() => !this.boardSyncAvailable() || (this.mirrorCreateMode() === "inbound" && !this.state.viewerIsWorkspaceAdmin()));
   readonly mirrorCreateLabel = computed(() => !this.boardSyncAvailable()
-    ? "Board syncing requires Pro"
+    ? $localize`:Disabled board menu item; Pro is a plan name:Board syncing requires Pro`
     : this.mirrorCreateMode() === "inbound"
-      ? this.mirrorCreateBlocked() ? "Only target administrators can add another source" : "Mirror another board into this board…"
-      : "Mirror this board…");
+      ? this.mirrorCreateBlocked()
+        ? $localize`:Disabled board menu item:Only target administrators can add another source`
+        : $localize`:Board menu item:Mirror another board into this board…`
+      : $localize`:Board menu item:Mirror this board…`);
   readonly boardLinkingEnabled = this.state.boardLinkingEnabled;
   readonly manageMirrorsLabel = computed(() => {
     const count = this.mirrorCount();
-    if (count === 0) return "No board mirrors yet";
-    return `Manage ${count} board mirror${count === 1 ? "" : "s"}`;
+    if (count === 0) return $localize`:Disabled board menu item:No board mirrors yet`;
+    return icu($localize`:Board menu item:{count, plural, one {Manage # board mirror} other {Manage # board mirrors}}`, { count });
   });
   readonly currentUserId = computed(() => this.auth.user()?.id ?? null);
   readonly workspaceAccentColor = computed(() => this.workspaceService.accentColorForBoard(this.boardId()));
-  readonly offlineTooltip = computed(() => this.state.canEdit() || this.state.online() ? null : "You're offline - changes are paused");
+  readonly offlineTooltip = computed(() => this.state.canEdit() || this.state.online() ? null : $localize`You're offline - changes are paused`);
   readonly offlineCopyLabel = computed(() => {
     const cachedAt = this.offlineBoardCachedAt();
-    return cachedAt ? `Offline copy from ${formatRelativeTime(cachedAt)}` : "";
+    return cachedAt ? $localize`:Toast; a relative time such as "5 minutes ago" follows:Offline copy from ${formatRelativeTime(cachedAt)}:time:` : "";
   });
   readonly offlineCopyPromptDelayMs = OFFLINE_COPY_PROMPT_DELAY_MS;
 
@@ -387,7 +401,7 @@ export class BoardPage implements OnDestroy {
     return [...this.state.members()].sort((a, b) => {
       if (a.userId === meId) return -1;
       if (b.userId === meId) return 1;
-      return a.displayName.localeCompare(b.displayName);
+      return a.displayName.localeCompare(b.displayName, appLocale());
     });
   });
 
@@ -407,7 +421,7 @@ export class BoardPage implements OnDestroy {
   readonly assignableMembers = computed(() => this.sortedBoardMembers());
   readonly membersButtonLabel = computed(() => {
     const count = this.sortedBoardMembers().length;
-    return count === 1 ? "1 board member" : `${count} board members`;
+    return icu($localize`:Aria label on the board members button:{count, plural, one {# board member} other {# board members}}`, { count });
   });
 
   readonly filteredCardIds = computed<Set<string> | null>(() => {
@@ -519,7 +533,18 @@ export class BoardPage implements OnDestroy {
       listCounts,
     };
   });
-  readonly inactiveCardsTooltip = computed(() => `Show cards inactive for ${this.state.inactiveCardsDays()} days`);
+  readonly boardFallbackTitle = BOARD_FALLBACK_TITLE;
+  readonly viewOnlyHint = $localize`:Tooltip on the disabled New card button:You have view-only access to this board`;
+  readonly newCardTooltip = $localize`:Tooltip on the New card button; C is its keyboard shortcut:New card · C`;
+  readonly boardWatchersLabel = $localize`:Button that opens the list of board watchers:Board watchers`;
+  readonly watchBoardLabel = $localize`:Button that starts watching the board:Watch board`;
+  readonly noListsAdminText = $localize`Lists are the columns cards move through, and every board in this workspace shares them. Add your first list to start capturing work.`;
+  readonly noListsMemberText = $localize`Lists are the columns cards move through. A workspace admin needs to add some before cards can be created here.`;
+  readonly columnsTooltip = computed(() => $localize`:Tooltip on the kanban grouping button; the grouping name follows:Columns: ${this.kanbanGroupByLabel()}:grouping:`);
+  readonly inactiveCardsTooltip = computed(() => icu(
+    $localize`:Tooltip on the Inactive count in the board overview:{days, plural, one {Show cards inactive for # day} other {Show cards inactive for # days}}`,
+    { days: this.state.inactiveCardsDays() },
+  ));
 
   toggleOverview(): void {
     this.overviewOpen.update((open) => !open);
@@ -569,7 +594,7 @@ export class BoardPage implements OnDestroy {
   });
 
   readonly kanbanGroupByLabel = computed(() =>
-    this.kanbanGroupByOptions().find((option) => option.value === this.effectiveKanbanGroupBy())?.label ?? "List"
+    this.kanbanGroupByOptions().find((option) => option.value === this.effectiveKanbanGroupBy())?.label ?? $localize`:Kanban column grouping with one column per list:List`
   );
 
   readonly kanbanGroupByIcon = computed(() =>
@@ -692,7 +717,7 @@ export class BoardPage implements OnDestroy {
     return [...members].sort((a, b) => {
       const roleDelta = roleRank[a.role] - roleRank[b.role];
       if (roleDelta !== 0) return roleDelta;
-      return a.displayName.localeCompare(b.displayName);
+      return a.displayName.localeCompare(b.displayName, appLocale());
     });
   }
 
@@ -930,13 +955,19 @@ export class BoardPage implements OnDestroy {
     // it, so the sheet shows them only on a board. Guarded on a loaded board so nothing fires on the
     // skeleton.
     const ready = () => this.state.board() !== null;
-    const views: [string, ViewMode, string][] = [["1", "board", "Board view"], ["2", "table", "Table view"], ["3", "calendar", "Calendar view"], ["4", "history", "Work done"], ["5", "notes", "Board notes"]];
-    this.shortcuts.registerAll("Board", [
-      { keys: "c", label: "New card", when: () => ready() && this.state.canEdit() && this.effectiveView() !== "notes" && !this.showArchived(), run: () => this.openComposer() },
-      { keys: "/", label: "Search cards", when: () => ready() && this.viewHasQueryBar(), run: () => this.focusCardSearch() },
+    const views: [string, ViewMode, string][] = [
+      ["1", "board", VIEW_LABELS.board],
+      ["2", "table", VIEW_LABELS.table],
+      ["3", "calendar", VIEW_LABELS.calendar],
+      ["4", "history", VIEW_LABELS.history],
+      ["5", "notes", $localize`:Keyboard shortcut that switches to the notes view:Board notes`],
+    ];
+    this.shortcuts.registerAll($localize`:Keyboard shortcut group heading:Board`, [
+      { keys: "c", label: $localize`:Keyboard shortcut:New card`, when: () => ready() && this.state.canEdit() && this.effectiveView() !== "notes" && !this.showArchived(), run: () => this.openComposer() },
+      { keys: "/", label: $localize`:Keyboard shortcut:Search cards`, when: () => ready() && this.viewHasQueryBar(), run: () => this.focusCardSearch() },
       ...views.map(([key, mode, label]) => ({ keys: key, label, when: () => ready() && (mode !== "notes" || this.state.notesEnabled()), run: () => this.setView(mode) })),
-      { keys: "w", label: "Board watchers", when: ready, run: () => this.toggleBoardWatcherPopover() },
-      { keys: "shift+d", label: "Toggle compact cards", when: () => ready() && this.effectiveView() === "board", run: () => this.toggleCompactCards() },
+      { keys: "w", label: $localize`:Keyboard shortcut:Board watchers`, when: ready, run: () => this.toggleBoardWatcherPopover() },
+      { keys: "shift+d", label: $localize`:Keyboard shortcut:Toggle compact cards`, when: () => ready() && this.effectiveView() === "board", run: () => this.toggleCompactCards() },
     ], this.destroyRef);
     document.addEventListener("click", this.handleDocumentClick);
     document.addEventListener("keydown", this.handleDocumentKeydown);
@@ -975,7 +1006,7 @@ export class BoardPage implements OnDestroy {
     });
 
     effect(() => {
-      const boardTitle = this.state.board()?.name ?? "Board";
+      const boardTitle = this.state.board()?.name ?? BOARD_FALLBACK_TITLE;
       const cardTitle = this.openCard()?.title;
       if (cardTitle) this.appTitle.set(cardTitle, boardTitle);
       else this.appTitle.set(boardTitle);
@@ -1878,7 +1909,7 @@ export class BoardPage implements OnDestroy {
       const rows = boardArchiveToReportRows(archive);
       const { default: writeXlsxFile } = await import("write-excel-file/browser");
       await writeXlsxFile(styledBoardReportRows(rows), {
-        sheet: "Cards",
+        sheet: $localize`:Board export spreadsheet sheet name:Cards`,
         columns: boardReportColumnWidths(rows),
         stickyRowsCount: 4,
       }).toFile(boardArchiveFileName(archive, "xlsx"));
@@ -2205,7 +2236,9 @@ export class BoardPage implements OnDestroy {
         throw error;
       }
     }
-    if (cards.length > 1) this.toasts.success(`${cards.length} cards moved.`, "arrows-transfer-down");
+    if (cards.length > 1) {
+      this.toasts.success(icu($localize`:Toast after dragging several cards:{count, plural, other {# cards moved.}}`, { count: cards.length }), "arrows-transfer-down");
+    }
   }
 
   private prepareDroppedCard(p: CardDropPayload): () => Promise<void> {

@@ -1,6 +1,7 @@
 import type { DialogRef } from "@angular/cdk/dialog";
 import { Dialog } from "@angular/cdk/dialog";
 import { Injectable, inject } from "@angular/core";
+import { icu } from "../../core/i18n/icu";
 import { ImageLightboxComponent, type ImageLightboxData } from "./image-lightbox.component";
 
 @Injectable({ providedIn: "root" })
@@ -19,9 +20,7 @@ export class ImageLightboxService {
       : data;
 
     const ref = this.dialog.open(ImageLightboxComponent, {
-      ariaLabel: initialImage?.fileName
-        ? `${this.previewKind(initialImage.mediaType)} preview: ${initialImage.fileName}`
-        : `${this.previewKind(initialImage?.mediaType)} preview`,
+      ariaLabel: this.ariaLabel(initialImage?.mediaType, initialImage?.fileName),
       backdropClass: "lb-cdk-backdrop",
       panelClass: "lb-cdk-panel",
       width: "100vw",
@@ -37,11 +36,17 @@ export class ImageLightboxService {
     });
   }
 
-  private previewKind(mediaType: ImageLightboxData["mediaType"]): string {
-    if (mediaType === "video") return "Video";
-    if (mediaType === "audio") return "Audio";
-    if (mediaType === "pdf") return "PDF";
-    if (mediaType === "markdown") return "Markdown";
-    return "Image";
+  private ariaLabel(mediaType: ImageLightboxData["mediaType"], fileName: string | null | undefined): string {
+    // One select per media type so each language can inflect "preview" with its own word order.
+    const kind = mediaType === "video" || mediaType === "audio" || mediaType === "pdf" || mediaType === "markdown" ? mediaType : "image";
+    return fileName
+      ? icu(
+          $localize`:Dialog label for a file preview; fileName is the attachment name:{kind, select, video {Video preview: {fileName}} audio {Audio preview: {fileName}} pdf {PDF preview: {fileName}} markdown {Markdown preview: {fileName}} other {Image preview: {fileName}}}`,
+          { kind, fileName },
+        )
+      : icu(
+          $localize`:Dialog label for a file preview:{kind, select, video {Video preview} audio {Audio preview} pdf {PDF preview} markdown {Markdown preview} other {Image preview}}`,
+          { kind },
+        );
   }
 }

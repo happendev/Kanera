@@ -107,7 +107,7 @@ export class ToastService implements OnDestroy {
       message: options.message,
       icon: options.icon,
       variant: "success",
-      action: { label: options.undoLabel ?? "Undo", run: () => this.undo(id, options.undo) },
+      action: { label: options.undoLabel ?? $localize`:Toast button that reverses the action just taken:Undo`, run: () => this.undo(id, options.undo) },
     }, UNDO_WINDOW_MS);
     if (options.commit) this.commits.set(id, options.commit);
     return id;
@@ -160,7 +160,7 @@ export class ToastService implements OnDestroy {
     try {
       await undo();
     } catch {
-      this.error("Couldn't undo that. Refresh to see the current state.", "alert-triangle");
+      this.error($localize`:Toast when an undo fails:Couldn't undo that. Refresh to see the current state.`, "alert-triangle");
     }
   }
 

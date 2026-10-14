@@ -1,5 +1,6 @@
 import { marked } from "marked";
 import { stripEmptyTaskItems } from "../../shared/markdown-content";
+import { icu } from "../../core/i18n/icu";
 
 export type DescriptionDiffSide = "removed" | "added";
 
@@ -195,12 +196,14 @@ function renderInline(tokens: MarkdownToken[] | undefined, fallback = ""): strin
       case "link": {
         const label = renderInline(token.tokens, token.text ?? "").trim();
         const href = token.href ?? "";
-        const target = label === href ? href : `${label || "Link"} <${href}>`;
+        const target = label === href ? href : `${label || $localize`:Stand-in text for a link with no label, in a description change preview:Link`} <${href}>`;
         return token.title ? `${target} "${token.title}"` : target;
       }
       case "image": {
         const alt = token.text?.trim();
-        const image = alt ? `Image: ${alt}` : "Image";
+        const image = alt
+          ? $localize`:Description change preview for an image; alt is its alt text:Image: ${alt}:alt:`
+          : $localize`:Description change preview for an image with no alt text:Image`;
         const target = `${image} <${token.href ?? ""}>`;
         return token.title ? `${target} "${token.title}"` : target;
       }
@@ -301,7 +304,7 @@ function contextLine(value: string): DescriptionDiffUnifiedLine {
 }
 
 function gapLine(count: number): DescriptionDiffUnifiedLine {
-  const label = count === 1 ? "1 unchanged line" : `${count} unchanged lines`;
+  const label = icu($localize`:Collapsed run of lines in a description change preview:{count, plural, =1 {1 unchanged line} other {# unchanged lines}}`, { count });
   return { kind: "gap", chunks: [{ text: label, changed: false }], placeholder: false };
 }
 

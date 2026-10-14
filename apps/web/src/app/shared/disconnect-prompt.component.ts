@@ -15,7 +15,7 @@ export class DisconnectPromptComponent {
   readonly sockets = inject(SocketService);
   readonly icon = computed(() => this.sockets.accessRefreshing() ? "user-shield" : "wifi-off");
   readonly message = computed(() => {
-    if (this.sockets.accessRefreshing()) return "Updating permissions...";
-    return this.sockets.reconnecting() ? "You're offline - reconnecting..." : "Disconnected - retrying...";
+    if (this.sockets.accessRefreshing()) return $localize`:Connection banner:Updating permissions...`;
+    return this.sockets.reconnecting() ? $localize`:Connection banner:You're offline - reconnecting...` : $localize`:Connection banner:Disconnected - retrying...`;
   });
 }

@@ -9,6 +9,9 @@
       "root": "",
       "sourceRoot": "src",
       "prefix": "k",
+      "i18n": {
+        "sourceLocale": "en-GB"
+      },
       "architect": {
         "build": {
           "builder": "@angular/build:application",
@@ -16,6 +19,7 @@
             "outputPath": "dist/web",
             "index": "src/index.html",
             "browser": "src/main.ts",
+            "polyfills": ["@angular/localize/init"],
             "deployUrl": "/",
             "tsConfig": "tsconfig.app.json",
             "assets": [
@@ -55,7 +59,8 @@
                   "maximumError": "1250kb"
                 }
               ],
-              "outputHashing": "all"
+              "outputHashing": "all",
+              "namedChunks": true
             },
             "push-https": {
               "serviceWorker": "ngsw-config.json",
@@ -105,6 +110,15 @@
             }
           },
           "defaultConfiguration": "development"
+        },
+        "extract-i18n": {
+          "builder": "@angular/build:extract-i18n",
+          "options": {
+            "buildTarget": "web:build:development",
+            "format": "json",
+            "outputPath": "src/locale",
+            "outFile": "messages.json"
+          }
         },
         "test": {
           "builder": "@angular/build:unit-test",

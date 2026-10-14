@@ -19,7 +19,7 @@ export type SeatPaymentResult =
 export class SeatPaymentService {
   async open(options: SeatPaymentOptions): Promise<SeatPaymentResult> {
     const stripe = await loadStripe(options.publishableKey);
-    if (!stripe) return { status: "error", message: "We couldn't load the secure payment check. Please try again." };
+    if (!stripe) return { status: "error", message: $localize`:Payment error when the payment provider fails to load:We couldn't load the secure payment check. Please try again.` };
 
     // The proration invoice's PaymentIntent is created with the subscription's default payment method
     // attached but NOT yet confirmed, so it sits in `requires_confirmation` — there is no next action to
@@ -34,7 +34,7 @@ export class SeatPaymentService {
     });
     if (error) {
       if (error.type === "validation_error") return { status: "cancelled" };
-      return { status: "error", message: error.message ?? "Payment could not be completed." };
+      return { status: "error", message: error.message ?? $localize`:Payment error fallback:Payment could not be completed.` };
     }
     if (paymentIntent?.status === "succeeded") return { status: "succeeded" };
     return { status: "pending" };

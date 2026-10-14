@@ -17,6 +17,12 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
 export class WorkspaceSettingsMembersPage {
   protected readonly settings = inject(WorkspaceSettingsPage);
 
+  protected readonly inheritedRoleHint = $localize`Inherited from organisation role`;
+
+  protected noMatchText(query: string): string {
+    return $localize`:Empty search result:Nothing matches “${query}:query:”.`;
+  }
+
   constructor() {
     this.settings.selectedTab.set("members");
   }

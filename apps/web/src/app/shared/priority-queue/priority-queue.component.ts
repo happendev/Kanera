@@ -229,6 +229,11 @@ export class PriorityQueueComponent {
   });
 
   /** How many ranked cards a truncated surface is not showing. */
+  protected readonly markCompleteLabel = $localize`:Button that marks the card complete:Mark complete`;
+  protected readonly markIncompleteLabel = $localize`:Button that marks the card not complete:Mark incomplete`;
+  protected readonly allAddedTooltip = $localize`:Tooltip on a disabled add button; Up next is the personal priority queue:Every card you can add is already in Up next`;
+  protected readonly addCardTooltip = $localize`:Tooltip; Up next is the personal priority queue:Add a card to Up next`;
+
   readonly hiddenByLimit = computed(() => Math.max(0, this.totalCount() - this.rows().length));
 
   readonly addGroups = computed<PickerGroup[]>(() =>

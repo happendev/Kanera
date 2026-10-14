@@ -1,4 +1,5 @@
 import { summariseActivityChange } from "@kanera/shared/activity-summary";
+import type { Locale } from "@kanera/shared/locales";
 import type { NotificationRow } from "@kanera/shared/dto";
 import { NOTIFICATION_REASON, users } from "@kanera/shared/schema";
 import { inArray } from "drizzle-orm";
@@ -16,6 +17,8 @@ import {
 } from "./notification-settings.js";
 import { enqueuePersonalNotification, enqueuePush } from "./push-queue.js";
 import { agentActorName } from "./agent-actor-name.js";
+import { serverMessages } from "./i18n/messages/index.js";
+import { recipientLocale } from "./i18n/request-locale.js";
 import { absoluteCardUrl } from "./wire-card.js";
 
 /**
@@ -24,17 +27,21 @@ import { absoluteCardUrl } from "./wire-card.js";
  * A drawer entry states card context in its block header and the action on a separate line. A push
  * banner has only a title and a body, so the card takes the title and the summarised action line
  * becomes the body. The summariser is the same one the drawer uses, so an event reads identically
- * in both places.
+ * in both places, in the recipient's language.
  */
-export function watchedActivityPushPayload(row: NotificationRow, webOrigin: string) {
-  const summary = summariseActivityChange(row);
+export function watchedActivityPushPayload(row: NotificationRow, webOrigin: string, locale: Locale) {
+  const messages = serverMessages(locale);
+  const summary = summariseActivityChange(row, messages.activity);
   const detail = summary.value ? `${summary.text} ${summary.value}` : summary.text;
-  const actorName = row.actorName ?? "Someone";
+  const actorName = row.actorName ?? messages.common.someone;
   return {
     kind: "card_watched_activity",
     title: row.cardTitle ?? row.boardName ?? "Kanera",
     // Matches the drawer's "via <agent>" chip, so an owner can tell their agent's work from their own.
-    body: `${row.activity?.actorKind === "agent" ? agentActorName(actorName, row.activity.agentName) : actorName} ${detail}`,
+    body: messages.push.watchedActivity.body({
+      actor: row.activity?.actorKind === "agent" ? agentActorName(actorName, row.activity.agentName, locale) : actorName,
+      action: detail,
+    }),
     url: absoluteCardUrl(row.organisationKey!, row.cardKey!, webOrigin),
     // One tray entry per card. A watcher on a busy card should see the latest change, not a stack
     // of one notification per event - the delivery layer sets renotify whenever a tag is present,
@@ -83,10 +90,9 @@ export async function enqueueWatchedActivityOutbound(
   // Personal channels enqueue under the recipient's own organisation, while web push follows the
   // event's organisation - the same split the assignee pipeline makes, so a cross-organisation
   // guest's ntfy/Gotify/webhook rows stay billed and scoped to their own client.
-  const recipientClientIds = new Map(
-    (await tx.select({ id: users.id, clientId: users.clientId }).from(users).where(inArray(users.id, optedIn)))
-      .map((row) => [row.id, row.clientId] as const),
-  );
+  const recipientRows = await tx.select({ id: users.id, clientId: users.clientId, locale: users.locale }).from(users).where(inArray(users.id, optedIn));
+  const recipientClientIds = new Map(recipientRows.map((row) => [row.id, row.clientId] as const));
+  const recipientLocales = new Map(recipientRows.map((row) => [row.id, recipientLocale(row.locale)] as const));
   const optedInIds = new Set(optedIn);
 
   let clientPushEnabled: boolean | undefined;
@@ -99,7 +105,7 @@ export async function enqueueWatchedActivityOutbound(
     // unroutable card key must not abort outbound delivery for the remaining recipients.
     let payload: ReturnType<typeof watchedActivityPushPayload>;
     try {
-      payload = watchedActivityPushPayload(row, env.WEB_ORIGIN);
+      payload = watchedActivityPushPayload(row, env.WEB_ORIGIN, recipientLocales.get(row.userId) ?? recipientLocale(null));
     } catch {
       continue;
     }
@@ -158,10 +164,9 @@ export async function enqueueOverdueWatcherOutbound(
 
   const workspaceIds = Array.from(new Set(eligible.map((row) => row.workspaceId)));
   const rules = await getNotificationWorkspaceRulesForUsers(tx, Array.from(optedIn), workspaceIds);
-  const recipientClientIds = new Map(
-    (await tx.select({ id: users.id, clientId: users.clientId }).from(users).where(inArray(users.id, Array.from(optedIn))))
-      .map((row) => [row.id, row.clientId] as const),
-  );
+  const recipientRows = await tx.select({ id: users.id, clientId: users.clientId, locale: users.locale }).from(users).where(inArray(users.id, Array.from(optedIn)));
+  const recipientClientIds = new Map(recipientRows.map((row) => [row.id, row.clientId] as const));
+  const recipientLocales = new Map(recipientRows.map((row) => [row.id, recipientLocale(row.locale)] as const));
 
   const clientPushEnabled = new Map<string, boolean>();
   let enqueued = 0;
@@ -169,10 +174,11 @@ export async function enqueueOverdueWatcherOutbound(
     if (!optedIn.has(row.userId)) continue;
     const preference = settings.get(row.userId)!;
     const scope: NotificationWorkspaceRuleScope = { rule: rules.get(row.userId)?.get(row.workspaceId) };
+    const messages = serverMessages(recipientLocales.get(row.userId) ?? recipientLocale(null));
     const payload = {
       kind: "card_overdue",
-      title: "Card overdue",
-      body: `${row.cardTitle ?? "A card"} is overdue`,
+      title: messages.push.cardOverdue.title,
+      body: messages.push.cardOverdue.body({ card: row.cardTitle ?? messages.common.aCard }),
       url: absoluteCardUrl(row.organisationKey!, row.cardKey!),
       // Same tag the assignee path uses, so someone who both watches and is assigned still sees a
       // single overdue entry per card rather than two.

@@ -1,23 +1,23 @@
-<k-docs-link class="spaced" path="custom-fields" label="Learn more about custom fields" />
+<k-docs-link class="spaced" path="custom-fields" label="Learn more about custom fields" i18n-label />
       <form class="board-form single-line-capture" (submit)="settings.addField($event)">
         <k-icon-picker [value]="settings.newFieldIcon()" (valueChange)="settings.newFieldIcon.set($event)" />
-        <input name="field" placeholder="Field name" [value]="settings.newField()" (input)="settings.updateNewField($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" required />
+        <input name="field" placeholder="Field name" i18n-placeholder [value]="settings.newField()" (input)="settings.updateNewField($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" required />
         <select name="type" [value]="settings.newFieldType()" (input)="settings.newFieldType.set($any($event.target).value)" style="flex: 0 0 110px; height: 36px; padding: 0 8px;">
-          <option value="text">Text</option>
-          <option value="number">Number</option>
-          <option value="checkbox">Checkbox</option>
-          <option value="select">Select</option>
-          <option value="date">Date</option>
-          <option value="url">URL</option>
-          <option value="user">User</option>
+          <option value="text" i18n="Custom field type">Text</option>
+          <option value="number" i18n="Custom field type">Number</option>
+          <option value="checkbox" i18n="Custom field type">Checkbox</option>
+          <option value="select" i18n="Custom field type: pick from a list of options">Select</option>
+          <option value="date" i18n="Custom field type">Date</option>
+          <option value="url" i18n="Custom field type">URL</option>
+          <option value="user" i18n="Custom field type: a workspace member">User</option>
         </select>
         @if (settings.newFieldType() === 'select' || settings.newFieldType() === 'user') {
-        <label class="cf-multi-toggle" kTooltip="Allow more than one value">
+        <label class="cf-multi-toggle" kTooltip="Allow more than one value" i18n-kTooltip>
           <input type="checkbox" [checked]="settings.newFieldAllowMultiple()" (change)="settings.newFieldAllowMultiple.set($any($event.target).checked)" />
-          Multiple
+          <ng-container i18n="Checkbox: field allows multiple values">Multiple</ng-container>
         </label>
         }
-        <button class="sm compact-add-button" type="submit" [disabled]="!!settings.customFieldValidation()" aria-label="Add field" kTooltip="Add field"><i class="ti ti-plus"></i><span class="mobile-hide">Add field</span></button>
+        <button class="sm compact-add-button" type="submit" [disabled]="!!settings.customFieldValidation()" aria-label="Add field" i18n-aria-label kTooltip="Add field" i18n-kTooltip><i class="ti ti-plus"></i><span class="mobile-hide" i18n="Button">Add field</span></button>
       </form>
       @if (settings.customFieldValidation()) {
       <p class="empty-hint">{{ settings.customFieldValidation() }}</p>
@@ -32,25 +32,25 @@
             <input class="inline-name-input grow" [value]="settings.editingFieldName()" (input)="settings.editingFieldName.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" (blur)="settings.saveFieldName(field.id)" (keydown.enter)="settings.saveFieldName(field.id)"
               (keydown.escape)="settings.cancelEditField()" autofocus />
             } @else {
-            <span (click)="settings.startEditField(field)" kTooltip="Click to rename" class="grow" style="cursor:pointer">{{ field.name }}</span>
+            <span (click)="settings.startEditField(field)" kTooltip="Click to rename" i18n-kTooltip class="grow" style="cursor:pointer">{{ field.name }}</span>
             }
-            <span class="field-type-badge">{{ field.type }}</span>
+            <span class="field-type-badge">{{ fieldTypeLabel(field.type) }}</span>
             @if ((field.type === 'select' || field.type === 'user') && field.allowMultiple) {
-            <span class="field-type-badge">multi</span>
+            <span class="field-type-badge" i18n="Badge: field allows multiple values">multi</span>
             }
             <div class="row-actions">
               @if (field.type === 'select' || field.type === 'user') {
               <button class="ghost icon" (click)="settings.toggleFieldAllowMultiple(field.id, field.allowMultiple)"
-                [kTooltip]="field.allowMultiple ? 'Multiple values allowed - click for single' : 'Single value - click to allow multiple'"
-                [attr.aria-label]="field.allowMultiple ? 'Switch to single value' : 'Allow multiple values'">
+                [kTooltip]="field.allowMultiple ? multipleOnHint : multipleOffHint"
+                [attr.aria-label]="field.allowMultiple ? multipleOnLabel : multipleOffLabel">
                 <i class="ti" [class.ti-checkbox]="field.allowMultiple" [class.ti-square]="!field.allowMultiple"></i>
               </button>
               }
-              <button class="ghost icon" (click)="settings.toggleFieldShowOnCard(field.id, field.showOnCard)" [kTooltip]="field.showOnCard ? 'Showing on card - click to hide' : 'Hidden from card - click to show'"
-                [attr.aria-label]="field.showOnCard ? 'Hide from card' : 'Show on card'">
+              <button class="ghost icon" (click)="settings.toggleFieldShowOnCard(field.id, field.showOnCard)" [kTooltip]="field.showOnCard ? showOnCardHint : hiddenFromCardHint"
+                [attr.aria-label]="field.showOnCard ? hideFromCardLabel : showOnCardLabel">
                 <i class="ti" [class.ti-eye]="field.showOnCard" [class.ti-eye-off]="!field.showOnCard" [style.color]="field.showOnCard ? 'var(--accent)' : 'var(--text-muted)'"></i>
               </button>
-              <button class="ghost icon danger" (click)="settings.archiveField(field.id)" aria-label="Delete field" kTooltip="Delete field">
+              <button class="ghost icon danger" (click)="settings.archiveField(field.id)" aria-label="Delete field" i18n-aria-label kTooltip="Delete field" i18n-kTooltip>
                 <i class="ti ti-trash"></i>
               </button>
             </div>
@@ -65,7 +65,7 @@
                 <input class="cf-option-input" [value]="option.label"
                   (blur)="settings.renameOption(field.id, option.id, $any($event.target).value)"
                   (keydown.enter)="settings.renameOption(field.id, option.id, $any($event.target).value); $any($event.target).blur()" />
-                <button class="ghost icon" (click)="settings.deleteOption(field.id, option.id)" aria-label="Delete option" kTooltip="Delete option">
+                <button class="ghost icon" (click)="settings.deleteOption(field.id, option.id)" aria-label="Delete option" i18n-aria-label kTooltip="Delete option" i18n-kTooltip>
                   <i class="ti ti-x"></i>
                 </button>
               </div>
@@ -73,10 +73,10 @@
             </div>
             <div class="cf-option-add">
               <k-color-picker [value]="settings.optionDraftColor(field.id)" (valueChange)="settings.setNewOptionColor(field.id, $event)" />
-              <input class="cf-option-input" placeholder="Add option" [value]="settings.optionDraft(field.id)"
+              <input class="cf-option-input" placeholder="Add option" i18n-placeholder [value]="settings.optionDraft(field.id)"
                 (input)="settings.setNewOptionLabel(field.id, $any($event.target).value)"
                 (keydown.enter)="settings.addOption(field.id)" />
-              <button class="ghost icon" (click)="settings.addOption(field.id)" aria-label="Add option" kTooltip="Add option">
+              <button class="ghost icon" (click)="settings.addOption(field.id)" aria-label="Add option" i18n-aria-label kTooltip="Add option" i18n-kTooltip>
                 <i class="ti ti-plus"></i>
               </button>
             </div>
@@ -85,6 +85,6 @@
         </div>
         }
         @if (settings.fields().length === 0) {
-        <k-empty-state size="sm" icon="forms" title="No custom fields yet" text="Fields add structured data to every card in this workspace." />
+        <k-empty-state size="sm" icon="forms" title="No custom fields yet" i18n-title text="Fields add structured data to every card in this workspace." i18n-text />
         }
       </div>

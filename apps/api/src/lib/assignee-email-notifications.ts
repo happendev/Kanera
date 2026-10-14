@@ -2,7 +2,10 @@ import { requestContext } from "@fastify/request-context";
 import { boards, cardAssignees, cardChecklistItems, cardChecklists, cards, users, workspaces, type CardDueDateSlot, type PushQueueReason } from "@kanera/shared/schema";
 import { eq, inArray } from "drizzle-orm";
 import type { Db, Tx } from "../db.js";
-import { EMAIL_DATE_LOCALE } from "./date-time-formatter.js";
+import type { Locale } from "@kanera/shared/locales";
+import { formatLocalDate } from "./i18n/format.js";
+import { serverMessages } from "./i18n/messages/index.js";
+import { recipientLocale } from "./i18n/request-locale.js";
 import type { Mailer } from "./mailer.js";
 import { allowsNotificationEmail, allowsNotificationPush, allowsPersonalNotificationChannel, getNotificationSettingsForUsers, getNotificationWorkspaceRulesForUsers, isClientPushEnabled, type EffectiveNotificationSettings, type EffectiveNotificationWorkspaceRule, type NotificationPreferenceType, type NotificationWorkspaceRuleScope } from "./notification-settings.js";
 import { enqueuePersonalNotification, enqueuePush } from "./push-queue.js";
@@ -57,21 +60,26 @@ export async function enqueueCardAssignedEmails(params: {
   await Promise.all(recipients.map(async (recipient) => {
     const preference = settings.get(recipient.id)!;
     if (allowsNotificationEmail(preference, "cardAssigned", deliveryScope(rules, recipient.id, ctx))) {
+      const locale = recipientLocale(recipient.locale);
       await params.mailer.sendCardAssigned(recipient.email, {
+        locale,
         displayName: recipient.displayName,
-        actorName,
+        actorName: actorName(locale),
         cardTitle: ctx.cardTitle,
         boardName: ctx.boardName,
         cardUrl: cardUrlValue,
       });
     }
   }));
-  await enqueuePushForRecipients(params.tx, recipients, settings, rules, ctx, "cardAssigned", "assigned", {
-    kind: "card_assigned",
-    title: "Card assigned",
-    body: `${actorName} assigned you to ${ctx.cardTitle}`,
-    url: cardUrlValue,
-    tag: `card:${ctx.cardId}:assigned`,
+  await enqueuePushForRecipients(params.tx, recipients, settings, rules, ctx, "cardAssigned", "assigned", (locale) => {
+    const m = serverMessages(locale).push.cardAssigned;
+    return {
+      kind: "card_assigned",
+      title: m.title,
+      body: m.body({ actor: actorName(locale), card: ctx.cardTitle }),
+      url: cardUrlValue,
+      tag: `card:${ctx.cardId}:assigned`,
+    };
   });
   return recipients.filter((recipient) => allowsNotificationEmail(settings.get(recipient.id)!, "cardAssigned", deliveryScope(rules, recipient.id, ctx))).length;
 }
@@ -105,21 +113,26 @@ export async function enqueueCommentAddedEmails(params: {
   await Promise.all(recipients.map(async (recipient) => {
     const preference = settings.get(recipient.id)!;
     if (!allowsNotificationEmail(preference, "cardCommentAdded", deliveryScope(rules, recipient.id, ctx))) return;
+    const locale = recipientLocale(recipient.locale);
     await params.mailer.sendCardCommentAdded(recipient.email, {
+      locale,
       displayName: recipient.displayName,
-      actorName,
+      actorName: actorName(locale),
       cardTitle: ctx.cardTitle,
       boardName: ctx.boardName,
       cardUrl: cardUrlValue,
-      commentExcerpt,
+      commentExcerpt: excerptOrFallback(commentExcerpt, locale),
     });
   }));
-  await enqueuePushForRecipients(params.tx, recipients, settings, rules, ctx, "cardCommentAdded", "comment", {
-    kind: "card_comment_added",
-    title: "New comment",
-    body: `${actorName} commented in ${ctx.boardName} / ${ctx.cardTitle}: ${commentExcerpt}`,
-    url: cardUrlValue,
-    tag: `card:${ctx.cardId}:comment`,
+  await enqueuePushForRecipients(params.tx, recipients, settings, rules, ctx, "cardCommentAdded", "comment", (locale) => {
+    const m = serverMessages(locale).push.commentAdded;
+    return {
+      kind: "card_comment_added",
+      title: m.title,
+      body: m.body({ actor: actorName(locale), board: ctx.boardName, card: ctx.cardTitle, excerpt: excerptOrFallback(commentExcerpt, locale) }),
+      url: cardUrlValue,
+      tag: `card:${ctx.cardId}:comment`,
+    };
   });
   return recipients.filter((recipient) => allowsNotificationEmail(settings.get(recipient.id)!, "cardCommentAdded", deliveryScope(rules, recipient.id, ctx))).length;
 }
@@ -147,21 +160,26 @@ export async function enqueueCommentMentionedNotifications(params: {
   await Promise.all(recipients.map(async (recipient) => {
     const preference = settings.get(recipient.id)!;
     if (!allowsNotificationEmail(preference, "commentMentioned", deliveryScope(rules, recipient.id, ctx))) return;
+    const locale = recipientLocale(recipient.locale);
     await params.mailer.sendCommentMentioned(recipient.email, {
+      locale,
       displayName: recipient.displayName,
-      actorName,
+      actorName: actorName(locale),
       cardTitle: ctx.cardTitle,
       boardName: ctx.boardName,
       cardUrl: cardUrlValue,
-      commentExcerpt,
+      commentExcerpt: excerptOrFallback(commentExcerpt, locale),
     });
   }));
-  await enqueuePushForRecipients(params.tx, recipients, settings, rules, ctx, "commentMentioned", "mentioned", {
-    kind: "comment_mentioned",
-    title: "Mentioned in a comment",
-    body: `${actorName} mentioned you in ${ctx.boardName} / ${ctx.cardTitle}: ${commentExcerpt}`,
-    url: cardUrlValue,
-    tag: `card:${ctx.cardId}:mentioned`,
+  await enqueuePushForRecipients(params.tx, recipients, settings, rules, ctx, "commentMentioned", "mentioned", (locale) => {
+    const m = serverMessages(locale).push.mentioned;
+    return {
+      kind: "comment_mentioned",
+      title: m.title,
+      body: m.body({ actor: actorName(locale), board: ctx.boardName, card: ctx.cardTitle, excerpt: excerptOrFallback(commentExcerpt, locale) }),
+      url: cardUrlValue,
+      tag: `card:${ctx.cardId}:mentioned`,
+    };
   });
   return recipients.filter((recipient) => allowsNotificationEmail(settings.get(recipient.id)!, "commentMentioned", deliveryScope(rules, recipient.id, ctx))).length;
 }
@@ -188,28 +206,31 @@ export async function enqueueDueDateChangedEmails(params: {
   if (!ctx || !actorName) return 0;
   const settings = await getNotificationSettingsForUsers(params.tx, recipients.map((recipient) => recipient.id));
   const rules = await getNotificationWorkspaceRulesForUsers(params.tx, recipients.map((recipient) => recipient.id), [ctx.workspaceId]);
-  const previousDueLabel = dueLabel(params.previousDue);
-  const nextDueLabel = dueLabel(params.nextDue);
   const cardUrlValue = cardUrl(params.webOrigin, ctx.organisationKey, ctx.cardKey);
   await Promise.all(recipients.map(async (recipient) => {
     const preference = settings.get(recipient.id)!;
     if (!allowsNotificationEmail(preference, "cardDueDateChanged", deliveryScope(rules, recipient.id, ctx))) return;
+    const locale = recipientLocale(recipient.locale);
     await params.mailer.sendCardDueDateChanged(recipient.email, {
+      locale,
       displayName: recipient.displayName,
-      actorName,
+      actorName: actorName(locale),
       cardTitle: ctx.cardTitle,
       boardName: ctx.boardName,
       cardUrl: cardUrlValue,
-      previousDueLabel,
-      nextDueLabel,
+      previousDueLabel: dueLabel(params.previousDue, locale),
+      nextDueLabel: dueLabel(params.nextDue, locale),
     });
   }));
-  await enqueuePushForRecipients(params.tx, recipients, settings, rules, ctx, "cardDueDateChanged", "dueDateChanged", {
-    kind: "card_due_date_changed",
-    title: "Due date changed",
-    body: `${actorName} changed the due date on ${ctx.cardTitle}`,
-    url: cardUrlValue,
-    tag: `card:${ctx.cardId}:due-date`,
+  await enqueuePushForRecipients(params.tx, recipients, settings, rules, ctx, "cardDueDateChanged", "dueDateChanged", (locale) => {
+    const m = serverMessages(locale).push.dueDateChanged;
+    return {
+      kind: "card_due_date_changed",
+      title: m.title,
+      body: m.body({ actor: actorName(locale), card: ctx.cardTitle }),
+      url: cardUrlValue,
+      tag: `card:${ctx.cardId}:due-date`,
+    };
   });
   return recipients.filter((recipient) => allowsNotificationEmail(settings.get(recipient.id)!, "cardDueDateChanged", deliveryScope(rules, recipient.id, ctx))).length;
 }
@@ -257,12 +278,14 @@ export async function enqueueOverdueAssigneeEmails(params: {
     if (!ctx || !recipient) return;
     const preference = settings.get(recipient.id)!;
     if (allowsNotificationEmail(preference, "cardOverdue", deliveryScope(rules, recipient.id, ctx))) {
+      const locale = recipientLocale(recipient.locale);
       await params.mailer.sendCardOverdue(recipient.email, {
+        locale,
         displayName: recipient.displayName,
         cardTitle: ctx.cardTitle,
         boardName: ctx.boardName,
         cardUrl: cardUrl(params.webOrigin, ctx.organisationKey, ctx.cardKey),
-        dueLabel: dueLabel(ctx),
+        dueLabel: dueLabel(ctx, locale),
       });
       enqueued += 1;
     }
@@ -272,10 +295,11 @@ export async function enqueueOverdueAssigneeEmails(params: {
     const ctx = ctxByCardId.get(cardId);
     const recipient = recipientById.get(userId);
     if (!ctx || !recipient) return;
+    const m = serverMessages(recipientLocale(recipient.locale)).push.cardOverdue;
     const payload = {
       kind: "card_overdue",
-      title: "Card overdue",
-      body: `${ctx.cardTitle} is overdue`,
+      title: m.title,
+      body: m.body({ card: ctx.cardTitle }),
       url: cardUrl(params.webOrigin, ctx.organisationKey, ctx.cardKey),
       tag: `card:${ctx.cardId}:overdue`,
     };
@@ -344,13 +368,15 @@ export async function enqueueOverdueChecklistItemAssigneeEmails(params: {
     if (!ctx || !recipient) return;
     // Reuses the existing "Card overdue" preference per product decision.
     if (allowsNotificationEmail(settings.get(recipient.id)!, "cardOverdue", deliveryScope(rules, recipient.id, ctx))) {
+      const locale = recipientLocale(recipient.locale);
       await params.mailer.sendChecklistItemOverdue(recipient.email, {
+        locale,
         displayName: recipient.displayName,
         itemText: ctx.itemText,
         cardTitle: ctx.cardTitle,
         boardName: ctx.boardName,
         cardUrl: cardUrl(params.webOrigin, ctx.organisationKey, ctx.cardKey),
-        dueLabel: dueLabel(ctx),
+        dueLabel: dueLabel(ctx, locale),
       });
       enqueued += 1;
     }
@@ -360,10 +386,11 @@ export async function enqueueOverdueChecklistItemAssigneeEmails(params: {
     const ctx = ctxByItemId.get(itemId);
     const recipient = recipientById.get(userId);
     if (!ctx || !recipient) return;
+    const m = serverMessages(recipientLocale(recipient.locale)).push.checklistItemOverdue;
     const payload = {
       kind: "checklist_item_overdue",
-      title: "Checklist item overdue",
-      body: `${ctx.itemText} is overdue on ${ctx.cardTitle}`,
+      title: m.title,
+      body: m.body({ item: ctx.itemText, card: ctx.cardTitle }),
       url: cardUrl(params.webOrigin, ctx.organisationKey, ctx.cardKey),
       tag: `checklistItem:${ctx.itemId}:overdue`,
     };
@@ -431,8 +458,10 @@ export async function enqueueCardReminderOutbound(params: {
     const preference = settings.get(recipient.id)!;
     const scope = deliveryScope(rules, recipient.id, ctx);
     const url = cardUrl(params.webOrigin, ctx.organisationKey, ctx.cardKey);
+    const locale = recipientLocale(recipient.locale);
     if (allowsNotificationEmail(preference, "cardReminder", scope)) {
       await params.mailer.sendCardReminder(recipient.email, {
+        locale,
         displayName: recipient.displayName,
         cardTitle: ctx.cardTitle,
         boardName: ctx.boardName,
@@ -441,7 +470,7 @@ export async function enqueueCardReminderOutbound(params: {
     }
     const payload = {
       kind: "card_reminder",
-      title: "Reminder",
+      title: serverMessages(locale).push.reminder.title,
       body: ctx.cardTitle,
       url,
       // Per reminder, not per card: a rescheduled reminder must not be collapsed into the last one.
@@ -458,15 +487,18 @@ export async function enqueueCardReminderOutbound(params: {
   }
 }
 
+type PushPayload = Parameters<typeof enqueuePush>[1]["payload"];
+
 async function enqueuePushForRecipients(
   tx: Tx,
-  recipients: { id: string; clientId: string }[],
+  recipients: { id: string; clientId: string; locale: string | null }[],
   settings: Map<string, EffectiveNotificationSettings>,
   rules: WorkspaceRulesByUser,
   ctx: { workspaceId: string; boardId: string; clientId: string },
   type: NotificationPreferenceType,
   reason: PushQueueReason,
-  payload: Parameters<typeof enqueuePush>[1]["payload"],
+  /** Built per recipient, so each one reads the notification in their own language. */
+  buildPayload: (locale: Locale) => PushPayload,
 ): Promise<number> {
   if (recipients.length === 0) return 0;
   let enqueued = 0;
@@ -475,6 +507,7 @@ async function enqueuePushForRecipients(
     const preference = settings.get(recipient.id);
     if (!preference) continue;
     const scope = deliveryScope(rules, recipient.id, ctx);
+    const payload = buildPayload(recipientLocale(recipient.locale));
     await enqueuePersonalChannelsForRecipient(tx, recipient, preference, type, reason, payload, scope);
     if (!allowsNotificationPush(preference, type, scope)) continue;
     if (clientEnabled === undefined) {
@@ -500,7 +533,7 @@ async function enqueuePersonalChannelsForRecipient(
   settings: EffectiveNotificationSettings,
   type: NotificationPreferenceType,
   reason: PushQueueReason,
-  payload: Parameters<typeof enqueuePush>[1]["payload"],
+  payload: PushPayload,
   scope: NotificationWorkspaceRuleScope,
 ): Promise<number> {
   let enqueued = 0;
@@ -547,19 +580,26 @@ async function loadUser(tx: Tx, userId: string) {
   return row ?? null;
 }
 
-async function resolveActorName(tx: Tx, actorId: string): Promise<string | null> {
+/** The actor's display name in a given recipient's language (only agent attribution has words). */
+type ActorName = (locale: Locale) => string;
+
+async function resolveActorName(tx: Tx, actorId: string): Promise<ActorName | null> {
   const authKind = requestContext.get("authKind");
   if (authKind === "apiKey") {
     // API keys borrow the creator user id for tenancy, but human-facing outbound
     // notifications should name the integration that actually made the change.
-    return requestContext.get("apiKeyName") ?? "API key";
+    const apiKeyName = requestContext.get("apiKeyName") ?? "API key";
+    return () => apiKeyName;
   }
   const actor = await loadUser(tx, actorId);
   if (!actor) return null;
   // An agent acts as its owner, so the person is the actor; naming the agent too matches the
   // in-app "via <agent>" chip and tells the owner this was delegated work, not their own.
-  if (authKind === "agent") return agentActorName(actor.displayName, requestContext.get("agentName"));
-  return actor.displayName;
+  if (authKind === "agent") {
+    const agentName = requestContext.get("agentName");
+    return (locale) => agentActorName(actor.displayName, agentName, locale);
+  }
+  return () => actor.displayName;
 }
 
 function actorSuppressionId(actorId: string): string | null {
@@ -573,39 +613,32 @@ async function loadRecipients(tx: Tx, userIds: string[], actorId: string | null)
   const uniqueUserIds = Array.from(new Set(userIds)).filter((userId) => userId !== actorId);
   if (uniqueUserIds.length === 0) return [];
   return tx
-    .select({ id: users.id, clientId: users.clientId, email: users.email, displayName: users.displayName })
+    .select({ id: users.id, clientId: users.clientId, email: users.email, displayName: users.displayName, locale: users.locale })
     .from(users)
     .where(inArray(users.id, uniqueUserIds));
 }
 
-function dueLabel(input: DueLabelInput): string | null {
+/** A card or item due date in the recipient's language: "27 May 2026, end of workday". */
+function dueLabel(input: DueLabelInput, locale: Locale): string | null {
   if (!input.dueDateLocalDate) return null;
-  const date = shortDateLabel(input.dueDateLocalDate, input.dueDateTimezone || "UTC");
-  const slot = slotLabel(input.dueDateSlot);
-  return slot ? `${date}, ${slot}` : date;
+  const common = serverMessages(locale).common;
+  const date = formatLocalDate(locale, input.dueDateLocalDate, { month: "short", day: "numeric", year: "numeric" });
+  const slot = slotLabel(input.dueDateSlot, common.dueSlots);
+  return slot ? common.dueDateWithSlot({ date, slot }) : date;
 }
 
-function slotLabel(slot: CardDueDateSlot | null): string | null {
+function slotLabel(slot: CardDueDateSlot | null, labels: { morning: string; afternoon: string; endOfWorkDay: string }): string | null {
   switch (slot) {
     case "morning":
-      return "morning";
+      return labels.morning;
     case "afternoon":
-      return "afternoon";
+      return labels.afternoon;
     case "endOfWorkDay":
-      return "end of workday";
+      return labels.endOfWorkDay;
     case "anyTime":
     case null:
       return null;
   }
-}
-
-function shortDateLabel(localDate: string, timezone: string): string {
-  return new Intl.DateTimeFormat(EMAIL_DATE_LOCALE, {
-    timeZone: timezone || "UTC",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(`${localDate}T12:00:00Z`));
 }
 
 function commentEmailExcerpt(markdown: string): string {
@@ -615,8 +648,13 @@ function commentEmailExcerpt(markdown: string): string {
     .replace(/[`*_>#-]/g, "")
     .replace(/\s+/g, " ")
     .trim();
-  if (text.length <= 240) return text || "View the comment in Kanera.";
+  // Empty means nothing readable (an image-only comment); callers substitute per-language wording.
+  if (text.length <= 240) return text;
   return `${text.slice(0, 237).trimEnd()}...`;
+}
+
+function excerptOrFallback(excerpt: string, locale: Locale): string {
+  return excerpt || serverMessages(locale).common.emptyCommentExcerpt;
 }
 
 function cardUrl(webOrigin: string, organisationKey: string, cardKey: string): string {

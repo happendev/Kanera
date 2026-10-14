@@ -21,7 +21,7 @@ import type { UploadItem } from "./attachment-upload-queue.service";
           <div class="upl-name-row">
             <span class="upl-name" [title]="item.fileName">{{ item.fileName }}</span>
             @if (item.status === 'uploading') {
-            <span class="upl-pct">{{ item.progress }}%</span>
+            <span class="upl-pct" i18n="Upload progress percentage">{{ item.progress // i18n(ph="percent") }}%</span>
             }
           </div>
           @if (item.status === 'uploading') {
@@ -34,11 +34,11 @@ import type { UploadItem } from "./attachment-upload-queue.service";
         </div>
         @if (item.status === 'error') {
         @if (item.retryable) {
-        <button type="button" class="upl-btn" (click)="retry.emit(item.id)" title="Retry upload">
-          <i class="ti ti-refresh"></i> Retry
+        <button type="button" class="upl-btn" (click)="retry.emit(item.id)" title="Retry upload" i18n-title>
+          <i class="ti ti-refresh"></i> <ng-container i18n="Button: retry a failed upload">Retry</ng-container>
         </button>
         }
-        <button type="button" class="upl-btn icon" (click)="dismiss.emit(item.id)" title="Dismiss">
+        <button type="button" class="upl-btn icon" (click)="dismiss.emit(item.id)" title="Dismiss" i18n-title="Button: remove a failed upload from the list">
           <i class="ti ti-x"></i>
         </button>
         }

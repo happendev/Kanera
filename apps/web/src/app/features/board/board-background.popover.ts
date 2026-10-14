@@ -12,11 +12,24 @@ import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 
+// Names of the board background swatches.
 const GRADIENT_LABELS: Record<GradientToken, string> = {
-  sunrise: "Sunrise", ocean: "Ocean", forest: "Forest", dusk: "Dusk",
-  midnight: "Midnight", ember: "Ember", mint: "Mint", lavender: "Lavender",
-  peach: "Peach", graphite: "Graphite", obsidian: "Obsidian",
-  slate: "Slate", stone: "Stone", sand: "Sand", sage: "Sage", charcoal: "Charcoal",
+  sunrise: $localize`:Board background colour name:Sunrise`,
+  ocean: $localize`:Board background colour name:Ocean`,
+  forest: $localize`:Board background colour name:Forest`,
+  dusk: $localize`:Board background colour name:Dusk`,
+  midnight: $localize`:Board background colour name:Midnight`,
+  ember: $localize`:Board background colour name:Ember`,
+  mint: $localize`:Board background colour name:Mint`,
+  lavender: $localize`:Board background colour name:Lavender`,
+  peach: $localize`:Board background colour name:Peach`,
+  graphite: $localize`:Board background colour name:Graphite`,
+  obsidian: $localize`:Board background colour name:Obsidian`,
+  slate: $localize`:Board background colour name:Slate`,
+  stone: $localize`:Board background colour name:Stone`,
+  sand: $localize`:Board background colour name:Sand`,
+  sage: $localize`:Board background colour name:Sage`,
+  charcoal: $localize`:Board background colour name:Charcoal`,
 };
 
 @Component({
@@ -30,10 +43,10 @@ const GRADIENT_LABELS: Record<GradientToken, string> = {
       <div class="bg-head">
         <span class="bg-title">{{ title() }}</span>
         <button type="button" class="bg-clear" [disabled]="!value()" (click)="select(null)">
-          <i class="ti ti-ban"></i> Clear
+          <i class="ti ti-ban"></i> <ng-container i18n="Button: remove the board background">Clear</ng-container>
         </button>
       </div>
-      <div class="bg-group-title">Gradients</div>
+      <div class="bg-group-title" i18n="Heading for gradient board backgrounds">Gradients</div>
       <div class="bg-grid">
         @for (token of gradients; track token) {
           <button
@@ -52,7 +65,7 @@ const GRADIENT_LABELS: Record<GradientToken, string> = {
           </button>
         }
       </div>
-      <div class="bg-group-title">Solid</div>
+      <div class="bg-group-title" i18n="Heading for single-colour board backgrounds">Solid</div>
       <div class="bg-grid">
         @for (token of solids; track token) {
           <button
@@ -193,7 +206,7 @@ export class BoardBackgroundPopover {
    * per-device preference, so the picker only reports it through `selected` and the host persists it.
    */
   readonly boardId = input<string | null>(null);
-  readonly title = input("Board background");
+  readonly title = input($localize`:Background picker heading:Board background`);
   readonly value = input<GradientToken | null>(null);
   readonly anchor = input<HTMLElement | null>(null);
   readonly close = output<void>();

@@ -1,6 +1,7 @@
 import { Injectable, inject, signal } from "@angular/core";
 import type { PendingBoardInvitationSummary } from "@kanera/shared/dto";
 import { ApiClient, ApiError } from "../api/api.client";
+import { appLocale } from "../i18n/locale";
 import type { GuestHomeGroup, HomeResponse } from "../offline/offline-cache.service";
 
 export type GuestOrganisationSummary = {
@@ -48,15 +49,15 @@ export function describeAcceptInvitationError(error: unknown): { message: string
   if (error instanceof ApiError) {
     const body = error.body as { code?: string; message?: string } | undefined;
     if (body?.code === "SEAT_LIMIT_REACHED") {
-      return { message: "This organisation has no available seats. Ask an admin to purchase more seats, then try again.", invitationGone: false };
+      return { message: $localize`This organisation has no available seats. Ask an admin to purchase more seats, then try again.`, invitationGone: false };
     }
     const invitationGone = error.status === 404 || error.status === 409;
     if (invitationGone) {
-      return { message: body?.message ?? "This invitation is no longer available — it may have been revoked or already accepted.", invitationGone };
+      return { message: body?.message ?? $localize`This invitation is no longer available — it may have been revoked or already accepted.`, invitationGone };
     }
     if (body?.message) return { message: body.message, invitationGone: false };
   }
-  return { message: "Could not accept the invitation.", invitationGone: false };
+  return { message: $localize`Could not accept the invitation.`, invitationGone: false };
 }
 
 function guestOrganisations(groups: GuestHomeGroup[]): GuestOrganisationSummary[] {
@@ -70,5 +71,5 @@ function guestOrganisations(groups: GuestHomeGroup[]): GuestOrganisationSummary[
       firstBoardId: firstBoard.id,
     });
   }
-  return [...organisations.values()].sort((a, b) => a.orgName.localeCompare(b.orgName));
+  return [...organisations.values()].sort((a, b) => a.orgName.localeCompare(b.orgName, appLocale()));
 }

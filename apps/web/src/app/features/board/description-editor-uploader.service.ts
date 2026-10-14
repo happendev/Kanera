@@ -3,6 +3,7 @@ import { ALLOWED_ATTACHMENT_EXTENSIONS, ALLOWED_ATTACHMENT_MIME, getAllowedAttac
 import type { Editor } from "@tiptap/core";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
+import { appLocale } from "../../core/i18n/locale";
 import { fileTooLargeMessage, storageFullMessage } from "../../shared/storage-messages";
 
 const IMAGE_MIMES = new Set([
@@ -84,7 +85,7 @@ export class DescriptionEditorUploader {
       if (target.kind === "scratchpad" && !inserted) {
         await this.rollbackScratchpadUpload(target.id, uploaded.id);
         uploaded = null;
-        this.error.set("Couldn't insert the uploaded file");
+        this.error.set($localize`Couldn't insert the uploaded file`);
         return;
       }
       this.attachmentIds.push(uploaded.id);
@@ -92,7 +93,7 @@ export class DescriptionEditorUploader {
       if (target.kind === "scratchpad" && uploaded) {
         await this.rollbackScratchpadUpload(target.id, uploaded.id);
       }
-      this.error.set(err instanceof ApiError ? this.formatApiError(err) : "Upload failed");
+      this.error.set(err instanceof ApiError ? this.formatApiError(err) : $localize`Upload failed`);
     } finally {
       this.activeUploads.update((count) => count - 1);
     }
@@ -116,7 +117,7 @@ export class DescriptionEditorUploader {
     // the client can't reliably know — a free guest may legitimately upload large files to a paid
     // host board. So we only do the client-knowable file-type check here and let the server's
     // FILE_TOO_LARGE response (which carries the correct maxFileBytes) drive any size error.
-    if (!this.isAllowedFile(file)) return "Unsupported file type";
+    if (!this.isAllowedFile(file)) return $localize`Unsupported file type`;
     return null;
   }
 
@@ -127,7 +128,7 @@ export class DescriptionEditorUploader {
       return fileTooLargeMessage(this.maxAttachmentLabel(body?.maxFileBytes), this.auth.isOrgAdmin(), this.auth.isPlanLimited());
     }
     if (body?.message) return body.message;
-    return `Upload failed (${err.status})`;
+    return $localize`:Upload error with the HTTP status code:Upload failed (${err.status}:status:)`;
   }
 
   private maxAttachmentBytes(): number {
@@ -135,13 +136,17 @@ export class DescriptionEditorUploader {
   }
 
   private maxAttachmentLabel(value = this.maxAttachmentBytes()): string {
-    return Number.isFinite(value) ? this.formatBytes(value).replace(".0 ", " ") : "configured limit";
+    return Number.isFinite(value)
+      ? this.formatBytes(value)
+      : $localize`:Stands in for an unknown maximum file size, e.g. "Files can be up to the configured limit":configured limit`;
   }
 
   private formatBytes(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-    return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
+    // At most one decimal, dropped when it is zero ("10 MB", "1.5 MB"), in the viewer's number format.
+    const number = new Intl.NumberFormat(appLocale(), { maximumFractionDigits: 1 });
+    if (bytes < 1024) return `${number.format(bytes)} B`;
+    if (bytes < 1024 * 1024) return `${number.format(bytes / 1024)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${number.format(bytes / 1024 / 1024)} MB`;
+    return `${number.format(bytes / 1024 / 1024 / 1024)} GB`;
   }
 }

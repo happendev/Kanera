@@ -1,6 +1,9 @@
+import type { Locale } from "@kanera/shared/locales";
+import { serverMessages } from "../i18n/messages/index.js";
 import { cardSummary, emailLayout, heading, paragraph, quoteBlock } from "./layout.js";
 
 export interface CommentMentionedEmailParams {
+  locale: Locale;
   displayName: string;
   actorName: string;
   cardTitle: string;
@@ -9,14 +12,16 @@ export interface CommentMentionedEmailParams {
   commentExcerpt: string;
 }
 
-export function commentMentionedEmail({ displayName, actorName, cardTitle, boardName, cardUrl, commentExcerpt }: CommentMentionedEmailParams): string {
+export function commentMentionedEmail({ locale, displayName, actorName, cardTitle, boardName, cardUrl, commentExcerpt }: CommentMentionedEmailParams): string {
+  const m = serverMessages(locale).email.commentMentioned;
   const firstName = displayName.split(" ")[0] ?? displayName;
   return emailLayout({
-    subject: `Mentioned in a comment on ${cardTitle}`,
-    preheader: `${actorName} mentioned you in a comment on "${cardTitle}" in ${boardName}.`,
+    locale,
+    subject: m.subject({ card: cardTitle }),
+    preheader: m.preheader({ actor: actorName, card: cardTitle, board: boardName }),
     body: `
-      ${heading("You were mentioned in a comment")}
-      ${paragraph(`Hi ${firstName}, ${actorName} mentioned you in a comment on "${cardTitle}" in ${boardName}.`, "0 0 20px 0")}
+      ${heading(m.heading)}
+      ${paragraph(m.intro({ firstName, actor: actorName, card: cardTitle, board: boardName }), "0 0 20px 0")}
       ${quoteBlock(commentExcerpt)}
       ${cardSummary({ title: cardTitle, subtitle: boardName, href: cardUrl })}
     `,

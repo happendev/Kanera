@@ -12,7 +12,7 @@
       type="button"
       class="wd-day-toggle"
       [attr.aria-expanded]="!collapsed()"
-      [attr.aria-label]="(collapsed() ? 'Expand ' : 'Collapse ') + day().fullLabel"
+      [attr.aria-label]="toggleLabel()"
       (click)="toggled.emit(day().dateKey)"
     >
       <i class="wd-day-chevron ti" [class.ti-chevron-down]="!collapsed()" [class.ti-chevron-right]="collapsed()"></i>
@@ -42,7 +42,7 @@
       <!-- showTooltip=false: k-avatar renders its own name tooltip, which would stack on top of the
            richer one below. Exactly one tooltip per avatar. The wrapper carries the agent mark so
            agent-done work is visible in the stack, not only in the tooltip. -->
-      <span class="wd-day-actor" [class.is-agent]="actor.agentName" [kTooltip]="actor.name + ' · ' + actor.eventCount + (actor.eventCount === 1 ? ' event' : ' events')">
+      <span class="wd-day-actor" [class.is-agent]="actor.agentName" [kTooltip]="actorTooltip(actor)">
         <k-avatar
           [url]="actor.avatarUrl"
           [name]="actor.name"
@@ -64,7 +64,9 @@
       type="button"
       class="wd-day-copy"
       aria-label="Copy this day as text"
+      i18n-aria-label
       kTooltip="Copy this day as text"
+      i18n-kTooltip
       (click)="copyRequested.emit(day())"
     >
       <i class="ti ti-clipboard-text"></i>
@@ -116,7 +118,7 @@
           -->
           <span class="wd-milestones">
             @if (digest.created && digest.leadType !== 'created') {
-            <span class="wd-chip wd-chip--created"><i class="ti ti-plus"></i>Created</span>
+            <span class="wd-chip wd-chip--created"><i class="ti ti-plus"></i><ng-container i18n="Work done milestone chip - the card was created that day">Created</ng-container></span>
             }
             @if (digest.listPath.length > 1) {
             <span class="wd-chip wd-chip--moved">
@@ -152,7 +154,7 @@
       -->
       <span class="wd-trailing">
         @for (actor of digest.actors; track actor.userId ?? actor.name) {
-        <span class="wd-actors" [class.is-agent]="actor.agentName" [kTooltip]="'Worked on by ' + actor.name">
+        <span class="wd-actors" [class.is-agent]="actor.agentName" [kTooltip]="workedOnBy(actor)">
           <k-avatar
             [url]="actor.avatarUrl"
             [name]="actor.name"

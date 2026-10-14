@@ -1,113 +1,105 @@
+import type { Locale } from "@kanera/shared/locales";
 import type { LifecycleEmailQueueData, LifecycleEmailQueueType } from "@kanera/shared/schema";
 import { escapeHtml } from "../html-escape.js";
-import { button, emailLayout, fallbackLink, heading, mutedHtml, paragraph, paragraphHtml, strong } from "./layout.js";
+import { serverMessages } from "../i18n/messages/index.js";
+import type { LeadLine } from "../i18n/messages/types.js";
+import { button, emailLayout, fallbackLink, heading, mutedHtml, paragraph, paragraphHtml, richHtml, strong, text } from "./layout.js";
 
-export type LifecycleEmailParams = LifecycleEmailQueueData;
+export type LifecycleEmailParams = LifecycleEmailQueueData & { locale: Locale };
 
 // Lifecycle copy follows the marketing lifecycle-communication plan: one purpose and one action per
 // email. Every input is a name, a link, or a structural flag; none of it is derived from board content.
 
 /** Shared by the queue row and the rendered <title> so the two cannot drift. */
 export function lifecycleEmailSubject(type: LifecycleEmailQueueType, params: LifecycleEmailParams): string {
+  const m = serverMessages(params.locale).email.lifecycle;
   switch (type) {
     case "lifecycle_no_board":
-      return "Start with one simple board";
+      return m.noBoard.subject;
     case "lifecycle_invite_team":
-      return "Kanera works best with your team";
+      return m.inviteTeam.subject;
     case "lifecycle_early_success":
-      return params.nextStep === "automations"
-        ? "Your next step in Kanera: automate a routine move"
-        : "Your next step in Kanera: see all your work in one place";
+      return params.nextStep === "automations" ? m.earlySuccess.subjectAutomations : m.earlySuccess.subjectMyCards;
     case "lifecycle_inactive":
-      return "Is Kanera working for you?";
+      return m.inactive.subject;
     case "lifecycle_active_checkin":
-      return "How is Kanera working for your team?";
+      return m.activeCheckin.subject;
   }
 }
 
 export function lifecycleNoBoardEmail(params: LifecycleEmailParams): string {
+  const m = serverMessages(params.locale).email.lifecycle.noBoard;
   return lifecycleLayout(params, {
     subject: lifecycleEmailSubject("lifecycle_no_board", params),
-    preheader: "A small first board is the quickest way to see whether Kanera fits.",
-    title: "Start with one simple board",
-    intro: `Hi ${firstName(params.displayName)}, ${params.orgName} is set up but doesn't have a board yet.`,
-    lines: [
-      "You don't need to plan your whole process first. Pick one piece of work your team is doing this week, and give it three lists: To do, Doing, and Done.",
-      "Add a few real cards and move them as the work moves. Once that feels natural, add more boards to the same workspace. They all share its lists and fields, so nothing needs setting up twice.",
-      "Already tracking work in Trello or a spreadsheet? Import it from your workspace settings instead of starting from scratch.",
-    ],
-    cta: "Create your first board",
+    preheader: m.preheader,
+    title: m.title,
+    intro: m.intro({ firstName: firstName(params.displayName), org: params.orgName }),
+    lines: m.lines,
+    cta: m.cta,
   });
 }
 
 export function lifecycleInviteTeamEmail(params: LifecycleEmailParams): string {
+  const m = serverMessages(params.locale).email.lifecycle.inviteTeam;
   return lifecycleLayout(params, {
     subject: lifecycleEmailSubject("lifecycle_invite_team", params),
-    preheader: "Invite the people you work with so assignments, comments and due dates reach them.",
-    title: "Bring in the people you work with",
-    intro: `Hi ${firstName(params.displayName)}, you've started a board in ${params.orgName}. Right now you're the only member.`,
-    lines: [
-      "Kanera pays off once the people doing the work are on the board too: you can assign cards to them, mention them in comments, and see who is doing what without asking.",
-      "Invite teammates as members of the whole organisation, or invite someone outside it as a guest on a single board.",
-    ],
-    cta: "Invite your team",
+    preheader: m.preheader,
+    title: m.title,
+    intro: m.intro({ firstName: firstName(params.displayName), org: params.orgName }),
+    lines: m.lines,
+    cta: m.cta,
   });
 }
 
 export function lifecycleEarlySuccessEmail(params: LifecycleEmailParams): string {
+  const m = serverMessages(params.locale).email.lifecycle.earlySuccess;
   const automations = params.nextStep === "automations";
   return lifecycleLayout(params, {
     subject: lifecycleEmailSubject("lifecycle_early_success", params),
-    preheader: automations
-      ? "Let Kanera handle the repetitive moves, so your boards stay up to date."
-      : "My Cards gathers everything assigned to you across boards.",
-    title: "Your boards are taking shape",
-    intro: `Hi ${firstName(params.displayName)}, ${params.orgName} now has real work moving through Kanera. Here's one thing worth trying next.`,
-    lines: automations
-      ? [
-        "Automations handle the routine moves for you. For example, they can mark a card complete when it reaches Done, or assign a reviewer when a card enters Review.",
-        "Start with one rule for a step your team repeats every day. You can switch it off at any time.",
-      ]
-      : [
-        "My Cards shows every card assigned to you across all your boards in one list, so you can plan your day without opening each board.",
-        "Add the cards you'll tackle first to Up next, and keep them in order as priorities change.",
-      ],
-    cta: automations ? "Set up an automation" : "Open My Cards",
+    preheader: automations ? m.preheaderAutomations : m.preheaderMyCards,
+    title: m.title,
+    intro: m.intro({ firstName: firstName(params.displayName), org: params.orgName }),
+    lines: automations ? m.linesAutomations : m.linesMyCards,
+    cta: automations ? m.ctaAutomations : m.ctaMyCards,
   });
 }
 
 export function lifecycleInactiveEmail(params: LifecycleEmailParams): string {
+  const m = serverMessages(params.locale).email.lifecycle.inactive;
+  const feedbackEmail = params.feedbackEmail;
   return lifecycleLayout(params, {
     subject: lifecycleEmailSubject("lifecycle_inactive", params),
-    preheader: "No one in your organisation has used Kanera for a couple of weeks. We'd like to know why.",
-    title: "Has something got in the way?",
-    intro: `Hi ${firstName(params.displayName)}, no one in ${params.orgName} has used Kanera for a couple of weeks. Here are some common reasons and what can help:`,
+    preheader: m.preheader,
+    title: m.title,
+    intro: m.intro({ firstName: firstName(params.displayName), org: params.orgName }),
     linesHtml: [
-      `${strong("Setup took too long.")} Import an existing Trello board or spreadsheet from workspace settings instead of building from scratch.`,
-      `${strong("The timing isn't right.")} Your boards and cards are safe, and they'll be waiting when you're ready.`,
-      `${strong("Something didn't work the way you expected.")} ${params.feedbackEmail ? `Tell us at ${feedbackLink(params.feedbackEmail)}. Specific feedback is the most useful thing you can send us.` : "Tell us what it was. Specific feedback is the most useful thing you can send us."}`,
-      `${strong("It isn't the right tool.")} That's fine. You can export any board from its menu, or delete your organisation from organisation settings.`,
+      leadLine(m.setup),
+      leadLine(m.timing),
+      `${strong(m.somethingWrong.lead)} ${feedbackEmail
+        ? richHtml((s) => m.somethingWrong.withFeedback(s), { email: feedbackLink(feedbackEmail) })
+        : text(m.somethingWrong.withoutFeedback)}`,
+      leadLine(m.wrongTool),
     ],
-    cta: "Open Kanera",
+    cta: m.cta,
   });
 }
 
 export function lifecycleActiveCheckinEmail(params: LifecycleEmailParams): string {
+  const m = serverMessages(params.locale).email.lifecycle.activeCheckin;
+  const feedbackEmail = params.feedbackEmail;
   return lifecycleLayout(params, {
     subject: lifecycleEmailSubject("lifecycle_active_checkin", params),
-    preheader: "A quick check-in, one tip, and an easy way to tell us what to improve.",
-    title: "A quick check-in",
-    intro: `Hi ${firstName(params.displayName)}, your team in ${params.orgName} has been using Kanera together for a while now. Thank you.`,
+    preheader: m.preheader,
+    title: m.title,
+    intro: m.intro({ firstName: firstName(params.displayName), org: params.orgName }),
     linesHtml: [
-      `${strong("One tip:")} Team Cards shows what everyone is working on across all your boards, without opening each one.`,
-      params.onFreePlan
-        ? `${strong("When you need more room:")} Kanera Pro adds unlimited boards, members and automations, plus guest access, API access and webhooks. Compare plans in account settings.`
-        : `${strong("Growing the team?")} You can invite more members, or add a client or contractor as a guest on just the boards they need.`,
-      params.feedbackEmail
-        ? `${strong("What should we improve?")} Email ${feedbackLink(params.feedbackEmail)}. We read every message.`
+      leadLine(m.tip),
+      leadLine(params.onFreePlan ? m.freePlan : m.growing),
+      feedbackEmail
+        ? `${strong(m.feedback.lead)} ${richHtml((s) => m.feedback.body(s), { email: feedbackLink(feedbackEmail) })}`
         : null,
     ],
-    cta: "Open Kanera",
+    cta: m.cta,
   });
 }
 
@@ -116,7 +108,7 @@ function lifecycleLayout(params: LifecycleEmailParams, options: {
   preheader: string;
   title: string;
   intro: string;
-  lines?: string[];
+  lines?: readonly string[];
   /** Pre-escaped HTML lines; callers build them from escaped helpers only. */
   linesHtml?: Array<string | null>;
   cta: string;
@@ -129,10 +121,15 @@ function lifecycleLayout(params: LifecycleEmailParams, options: {
     ${lines}
     ${linesHtml}
     ${button({ href: params.ctaUrl, label: options.cta })}
-    ${fallbackLink(params.ctaUrl)}
-    ${mutedHtml("You can turn off onboarding and account tips under Settings, then Notifications.", "18px 0 0 0")}
+    ${fallbackLink(params.ctaUrl, params.locale)}
+    ${mutedHtml(text(serverMessages(params.locale).email.lifecycle.footerNote), "18px 0 0 0")}
   `;
-  return emailLayout({ subject: options.subject, preheader: options.preheader, body, unsubscribeUrl: params.unsubscribeUrl });
+  return emailLayout({ locale: params.locale, subject: options.subject, preheader: options.preheader, body, unsubscribeUrl: params.unsubscribeUrl });
+}
+
+/** A bold lead-in and the rest of the paragraph, both escaped. */
+function leadLine(line: LeadLine): string {
+  return `${strong(line.lead)} ${text(line.body)}`;
 }
 
 function feedbackLink(email: string): string {

@@ -11,12 +11,15 @@ import {
 import { ANCHORED_HOST_STYLES, type AnchoredPanelPlacement } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { TooltipDirective } from "../../shared/tooltip.directive";
-import { WEEKDAY_LABELS } from "../../shared/week-start";
-import { dueDateSlotTimeLabel } from "@kanera/shared/due-date-slots";
-import { DUE_DATE_SLOT_OPTIONS, type DueDateSlot, type DueDateSlotSelection } from "./due-date.util";
+import { DUE_DATE_SLOT_OPTIONS, slotTimeLabel as slotTimeLabelFor, type DueDateSlot, type DueDateSlotSelection } from "./due-date.util";
 import { formatDate } from "../../shared/date-format";
 import { localDateKey, parseDateInputValue, startOfLocalDay } from "../../shared/day-key.util";
+import { WEEKDAY_LABELS } from "../../shared/week-start";
 import { buildMonthGrid, monthStart, shiftMonth } from "../../shared/month-grid";
+
+// Weekday headers in the interface language; the grid always starts on Monday (see
+// shared/week-start.ts).
+const WEEKDAY_NAMES = WEEKDAY_LABELS;
 
 type CalendarDay = {
   date: Date;
@@ -37,11 +40,11 @@ type CalendarDay = {
   template: `
     <div class="dp-panel">
       <div class="dp-head">
-        <button type="button" class="dp-icon-btn" (click)="previousMonth()" aria-label="Previous month" kTooltip="Previous month">
+        <button type="button" class="dp-icon-btn" (click)="previousMonth()" aria-label="Previous month" i18n-aria-label kTooltip="Previous month" i18n-kTooltip>
           <i class="ti ti-chevron-left"></i>
         </button>
         <div class="dp-title" aria-live="polite">{{ monthLabel() }}</div>
-        <button type="button" class="dp-icon-btn" (click)="nextMonth()" aria-label="Next month" kTooltip="Next month">
+        <button type="button" class="dp-icon-btn" (click)="nextMonth()" aria-label="Next month" i18n-aria-label kTooltip="Next month" i18n-kTooltip>
           <i class="ti ti-chevron-right"></i>
         </button>
       </div>
@@ -58,7 +61,7 @@ type CalendarDay = {
       }
 
       @if (showSlots()) {
-      <div class="dp-slots" aria-label="Due date time slot">
+      <div class="dp-slots" aria-label="Due date time slot" i18n-aria-label>
         @for (option of slotOptions; track option.value) {
           <button
             type="button"
@@ -99,9 +102,9 @@ type CalendarDay = {
 
       <div class="dp-foot">
         @if (value()) {
-          <button type="button" class="dp-clear" (click)="clear.emit()">Clear</button>
+          <button type="button" class="dp-clear" (click)="clear.emit()" i18n="Button: remove the selected date">Clear</button>
         }
-        <button type="button" class="dp-apply" [disabled]="!draftValue() || !isSelectable(draftValue())" (click)="apply()">Apply</button>
+        <button type="button" class="dp-apply" [disabled]="!draftValue() || !isSelectable(draftValue())" (click)="apply()" i18n="Button: confirm the selected date">Apply</button>
       </div>
     </div>
   `,
@@ -412,16 +415,16 @@ export class DatePickerPopover implements OnInit {
   readonly clear = output<void>();
   readonly close = output<void>();
 
-  readonly weekdays = WEEKDAY_LABELS;
+  readonly weekdays = WEEKDAY_NAMES;
   readonly slotOptions = DUE_DATE_SLOT_OPTIONS;
   readonly shortcuts = (() => {
     const today = startOfLocalDay(new Date());
     const fmt = (d: Date) => formatDate(d, "short");
     const add = (days: number) => { const d = new Date(today); d.setDate(d.getDate() + days); return d; };
     return [
-      { label: "Today", days: 0, dateLabel: fmt(add(0)) },
-      { label: "Tomorrow", days: 1, dateLabel: fmt(add(1)) },
-      { label: "Next week", days: 7, dateLabel: fmt(add(7)) },
+      { label: $localize`:Date shortcut:Today`, days: 0, dateLabel: fmt(add(0)) },
+      { label: $localize`:Date shortcut:Tomorrow`, days: 1, dateLabel: fmt(add(1)) },
+      { label: $localize`:Date shortcut - one week from today:Next week`, days: 7, dateLabel: fmt(add(7)) },
     ];
   })();
   readonly visibleMonth = signal(this.initialVisibleMonth());
@@ -507,10 +510,10 @@ export class DatePickerPopover implements OnInit {
 
   slotDisplayLabel(slot: DueDateSlot): string {
     const labels: Record<DueDateSlot, string> = {
-      anyTime: "Anytime",
-      morning: "Morning",
-      afternoon: "Afternoon",
-      endOfWorkDay: "End of day",
+      anyTime: $localize`:Due date slot - no particular time of day:Anytime`,
+      morning: $localize`:Due date slot option (time of day):Morning`,
+      afternoon: $localize`:Due date slot option (time of day):Afternoon`,
+      endOfWorkDay: $localize`:Due date slot option (time of day), compact form:End of day`,
     };
     return labels[slot];
   }
@@ -518,7 +521,7 @@ export class DatePickerPopover implements OnInit {
   slotTimeLabel(slot: DueDateSlot): string {
     // Derived from the shared cut-offs so the picker cannot advertise a time the overdue
     // check does not actually use.
-    return dueDateSlotTimeLabel(slot);
+    return slotTimeLabelFor(slot);
   }
 
   private initialVisibleMonth(): Date {

@@ -1,20 +1,20 @@
 <div class="settings-section">
-  <h3 class="settings-section-title"><i class="ti ti-credit-card"></i><span>Account Plan</span></h3>
+  <h3 class="settings-section-title"><i class="ti ti-credit-card"></i><span i18n="Settings section heading">Account Plan</span></h3>
 
   @if (settings.planTier() === 'trial') {
   <div class="plan-trial-status">
     <div class="plan-trial-status-copy">
-      <span class="plan-trial-status-label">Pro trial</span>
-      <strong>You are trialling Pro, not subscribed to it</strong>
+      <span class="plan-trial-status-label" i18n="Plan name">Pro trial</span>
+      <strong i18n>You are trialling Pro, not subscribed to it</strong>
       <span>
         @if (settings.trialEndsAt()) {
-        Your trial ends {{ settings.trialEndsAt() | date: 'mediumDate' }}. Unless you upgrade, your organisation will move to Kanera Free.
+        <ng-container i18n>Your trial ends {{ trialEndLabel() // i18n(ph="date") }}. Unless you upgrade, your organisation will move to Kanera Free.</ng-container>
         } @else {
-        Unless you upgrade, your organisation will move to Kanera Free when the trial ends.
+        <ng-container i18n>Unless you upgrade, your organisation will move to Kanera Free when the trial ends.</ng-container>
         }
       </span>
     </div>
-    <span class="plan-trial-days">{{ settings.trialDaysLeft() }} day{{ settings.trialDaysLeft() === 1 ? '' : 's' }} left</span>
+    <span class="plan-trial-days" i18n="Trial days remaining">{ settings.trialDaysLeft(), plural, =1 {1 day left} other {{{ settings.trialDaysLeft() }} days left} }</span>
   </div>
   }
 
@@ -22,62 +22,62 @@
     <div class="plan-card" [class.plan-card--current]="settings.planTier() === 'free'">
       <div class="plan-card-head">
         <span class="plan-card-title">
-          <span class="plan-name">Kanera Free</span>
+          <span class="plan-name" i18n="Plan name">Kanera Free</span>
           @if (settings.planTier() === 'free') {
-          <span class="plan-current-label">Current plan</span>
+          <span class="plan-current-label" i18n="Badge on the plan the organisation is on">Current plan</span>
           }
         </span>
-        <span class="plan-price">$0</span>
+        <span class="plan-price">{{ freePrice }}</span>
       </div>
       <ul class="plan-feature-list">
-        <li><i class="ti ti-users"></i> {{ settings.freePlanMaxOrgMembers() }} members</li>
-        <li><i class="ti ti-briefcase"></i> Unlimited workspaces</li>
-        <li><i class="ti ti-layout-board"></i> {{ settings.freePlanMaxBoards() }} boards</li>
-        <li><i class="ti ti-settings-automation"></i> {{ settings.freePlanMaxEnabledAutomations() }} active automations</li>
-        <li><i class="ti ti-bolt"></i> {{ settings.freePlanMaxAutomationExecutionsPerMonth() }} automation executions per month</li>
-        <li><i class="ti ti-palette"></i> Custom fields, colors, and all views</li>
-        <li><i class="ti ti-database"></i> 250 MiB shared storage</li>
-        <li><i class="ti ti-sparkles"></i> Connect Claude, ChatGPT, Cursor, and other AI agents</li>
-        <li><i class="ti ti-code"></i> MCP and personal API keys with fair-use limits</li>
-        <li><i class="ti ti-lock"></i> No guests, webhooks, or unattended agents</li>
+        <li><i class="ti ti-users"></i> <ng-container i18n="Free plan limit">{ settings.freePlanMaxOrgMembers(), plural, =1 {1 member} other {{{ settings.freePlanMaxOrgMembers() }} members} }</ng-container></li>
+        <li><i class="ti ti-briefcase"></i> <ng-container i18n="Plan feature">Unlimited workspaces</ng-container></li>
+        <li><i class="ti ti-layout-board"></i> <ng-container i18n="Free plan limit">{ settings.freePlanMaxBoards(), plural, =1 {1 board} other {{{ settings.freePlanMaxBoards() }} boards} }</ng-container></li>
+        <li><i class="ti ti-settings-automation"></i> <ng-container i18n="Free plan limit">{ settings.freePlanMaxEnabledAutomations(), plural, =1 {1 active automation} other {{{ settings.freePlanMaxEnabledAutomations() }} active automations} }</ng-container></li>
+        <li><i class="ti ti-bolt"></i> <ng-container i18n="Free plan limit">{ settings.freePlanMaxAutomationExecutionsPerMonth(), plural, =1 {1 automation execution per month} other {{{ settings.freePlanMaxAutomationExecutionsPerMonth() }} automation executions per month} }</ng-container></li>
+        <li><i class="ti ti-palette"></i> <ng-container i18n="Plan feature">Custom fields, colors, and all views</ng-container></li>
+        <li><i class="ti ti-database"></i> <ng-container i18n="Plan feature">250 MiB shared storage</ng-container></li>
+        <li><i class="ti ti-sparkles"></i> <ng-container i18n="Plan feature">Connect Claude, ChatGPT, Cursor, and other AI agents</ng-container></li>
+        <li><i class="ti ti-code"></i> <ng-container i18n="Plan feature">MCP and personal API keys with fair-use limits</ng-container></li>
+        <li><i class="ti ti-lock"></i> <ng-container i18n="Plan feature">No guests, webhooks, or unattended agents</ng-container></li>
       </ul>
     </div>
     <div class="plan-card plan-card--pro" [class.plan-card--current]="settings.planTier() === 'paid'">
       <div class="plan-card-head">
         <span class="plan-card-title">
-          <span class="plan-name">Pro</span>
+          <span class="plan-name" i18n="Plan name">Pro</span>
           @if (settings.planTier() === 'paid') {
-          <span class="plan-current-label">Current plan</span>
+          <span class="plan-current-label" i18n="Badge on the plan the organisation is on">Current plan</span>
           } @else if (settings.planTier() === 'trial') {
-          <span class="plan-trial-label">Trial access</span>
+          <span class="plan-trial-label" i18n="Badge: the organisation has Pro through a trial">Trial access</span>
           }
         </span>
         <span class="plan-price">{{ settings.selectedProPriceLabel() }}</span>
       </div>
       <ul class="plan-feature-list">
-        <li><i class="ti ti-infinity"></i> Unlimited members, boards, automations, and executions</li>
-        <li><i class="ti ti-user-star"></i> Guest collaboration</li>
-        <li><i class="ti ti-database"></i> 200 GiB shared storage</li>
-        <li><i class="ti ti-sparkles"></i> Higher MCP and API limits</li>
-        <li><i class="ti ti-code"></i> Workspace API keys, webhooks, and unattended agents</li>
-        <li><i class="ti ti-headset"></i> Support</li>
+        <li><i class="ti ti-infinity"></i> <ng-container i18n="Plan feature">Unlimited members, boards, automations, and executions</ng-container></li>
+        <li><i class="ti ti-user-star"></i> <ng-container i18n="Plan feature">Guest collaboration</ng-container></li>
+        <li><i class="ti ti-database"></i> <ng-container i18n="Plan feature">200 GiB shared storage</ng-container></li>
+        <li><i class="ti ti-sparkles"></i> <ng-container i18n="Plan feature">Higher MCP and API limits</ng-container></li>
+        <li><i class="ti ti-code"></i> <ng-container i18n="Plan feature">Workspace API keys, webhooks, and unattended agents</ng-container></li>
+        <li><i class="ti ti-headset"></i> <ng-container i18n="Plan feature">Support</ng-container></li>
       </ul>
     </div>
   </div>
-  <p class="account-plan-note account-plan-note--muted">
+  <p class="account-plan-note account-plan-note--muted" i18n>
     For Kanera plan details, see
     <a href="https://www.kanera.app/pricing" target="_blank" rel="noopener">www.kanera.app/pricing</a>
   </p>
 
   @if (settings.planTier() === 'trial' || settings.planTier() === 'free') {
   <div class="billing-action-panel">
-    <div class="billing-interval" role="group" aria-label="Billing interval">
+    <div class="billing-interval" role="group" aria-label="Billing interval" i18n-aria-label>
       <button class="billing-interval-card" [class.billing-interval-card--selected]="settings.billingInterval() === 'monthly'" type="button" (click)="settings.billingInterval.set('monthly')"
         [attr.aria-pressed]="settings.billingInterval() === 'monthly'">
         <span class="billing-interval-main">
           <span class="billing-interval-dot" aria-hidden="true"></span>
           <span class="billing-interval-copy">
-            <span class="billing-interval-name">Monthly</span>
+            <span class="billing-interval-name" i18n="Billing interval option">Monthly</span>
             <span class="billing-interval-price">{{ settings.monthlyBillingLabel() }}</span>
           </span>
         </span>
@@ -87,7 +87,7 @@
         <span class="billing-interval-main">
           <span class="billing-interval-dot" aria-hidden="true"></span>
           <span class="billing-interval-copy">
-            <span class="billing-interval-name">Annual</span>
+            <span class="billing-interval-name" i18n="Billing interval option">Annual</span>
             <span class="billing-interval-price">{{ settings.annualBillingLabel() }}</span>
             @if (settings.annualSavingsLabel()) {
             <span class="billing-interval-savings">{{ settings.annualSavingsLabel() }}</span>
@@ -97,34 +97,35 @@
       </button>
     </div>
     <div class="seat-picker">
-      <span class="account-plan-label">Seats to purchase</span>
+      <span class="account-plan-label" i18n>Seats to purchase</span>
       <div class="seat-stepper">
-        <button type="button" (click)="settings.decDesiredSeats()" [disabled]="settings.desiredSeats() <= settings.usedSeats()" aria-label="Remove a seat"><i class="ti ti-minus"></i></button>
-        <input type="number" [attr.min]="settings.usedSeats()" inputmode="numeric" [value]="settings.desiredSeats()" (input)="settings.setDesiredSeatsFromInput($event)" aria-label="Seats to purchase" />
-        <button type="button" (click)="settings.incDesiredSeats()" aria-label="Add a seat"><i class="ti ti-plus"></i></button>
+        <button type="button" (click)="settings.decDesiredSeats()" [disabled]="settings.desiredSeats() <= settings.usedSeats()" aria-label="Remove a seat" i18n-aria-label><i class="ti ti-minus"></i></button>
+        <input type="number" [attr.min]="settings.usedSeats()" inputmode="numeric" [value]="settings.desiredSeats()" (input)="settings.setDesiredSeatsFromInput($event)" aria-label="Seats to purchase" i18n-aria-label />
+        <button type="button" (click)="settings.incDesiredSeats()" aria-label="Add a seat" i18n-aria-label><i class="ti ti-plus"></i></button>
       </div>
       <p class="account-plan-note account-plan-note--muted">
-        {{ settings.usedSeats() }} seat{{ settings.usedSeats() === 1 ? '' : 's' }} currently in use. You can add more later at any time.
+        <ng-container i18n>{ settings.usedSeats(), plural, =1 {1 seat currently in use.} other {{{ settings.usedSeats() }} seats currently in use.} }</ng-container>
+        <ng-container i18n>You can add more later at any time.</ng-container>
       </p>
     </div>
     <div class="price-summary">
       <span class="billing-paid-icon"><i class="ti ti-arrow-up-circle"></i></span>
       <div class="price-summary-copy">
-        <span class="price-summary-label">Checkout summary</span>
+        <span class="price-summary-label" i18n>Checkout summary</span>
         <strong>{{ settings.checkoutTotalLabel() }}</strong>
         @if (settings.billingInterval() === 'annual') {
         <span>{{ settings.checkoutSeatLabel() }}</span>
         <span>{{ settings.checkoutAnnualTotalLabel() }}</span>
         } @else {
-        <span>{{ settings.checkoutSeatLabel() }} at {{ settings.selectedProPriceLabel() }}</span>
-        <span>Monthly billing</span>
+        <span i18n="Seat count at a price, e.g. 3 seats at $8/user/mo">{{ settings.checkoutSeatLabel() // i18n(ph="seats") }} at {{ settings.selectedProPriceLabel() // i18n(ph="price") }}</span>
+        <span i18n>Monthly billing</span>
         }
         @if (settings.annualSavingsLabel() && settings.billingInterval() === 'annual') {
         <span class="price-summary-savings">{{ settings.annualSavingsLabel() }}</span>
         }
       </div>
       <button class="sm" type="button" (click)="settings.startUpgrade()" [disabled]="settings.upgradeBusy()">
-        <i class="ti ti-arrow-up-circle"></i> {{ settings.upgradeBusy() ? "Upgrading..." : "Upgrade to Pro" }}
+        <i class="ti ti-arrow-up-circle"></i> @if (settings.upgradeBusy()) { <ng-container i18n="Button state">Upgrading...</ng-container> } @else { <ng-container i18n="Button">Upgrade to Pro</ng-container> }
       </button>
     </div>
     @if (settings.upgradeError()) { <p class="form-error">{{ settings.upgradeError() }}</p> }
@@ -134,23 +135,23 @@
     <div class="billing-paid-copy">
       <span class="billing-paid-icon"><i class="ti ti-circle-check"></i></span>
       <div class="billing-paid-text">
-        <p class="billing-paid-title">You're on Pro</p>
-        <p class="billing-paid-note">Limits are unlocked for this organisation. You buy a pool of seats and assign them to members and guests; removing someone frees their seat without changing your bill.</p>
+        <p class="billing-paid-title" i18n>You're on Pro</p>
+        <p class="billing-paid-note" i18n>Limits are unlocked for this organisation. You buy a pool of seats and assign them to members and guests; removing someone frees their seat without changing your bill.</p>
       </div>
     </div>
     <!-- Pre-purchased seat pool: assigning members/guests draws from the purchased capacity; admins buy
          more or reduce capacity here. Increases are invoiced immediately; reductions credit the next cycle. -->
     <div class="seat-summary">
       <div class="account-plan-row">
-        <span class="account-plan-label">Seats</span>
-        <span class="seat-summary-count">{{ settings.usedSeats() }} of {{ settings.purchasedSeats() }} used</span>
+        <span class="account-plan-label" i18n="Label: number of seats">Seats</span>
+        <span class="seat-summary-count" i18n="Seats used out of purchased">{{ settings.usedSeats() // i18n(ph="used") }} of {{ settings.purchasedSeats() // i18n(ph="total") }} used</span>
       </div>
       <div class="seat-stepper">
-        <button type="button" (click)="settings.decDesiredSeats()" [disabled]="settings.seatBusy() || settings.desiredSeats() <= settings.usedSeats()" aria-label="Remove a seat"><i class="ti ti-minus"></i></button>
-        <input type="number" [attr.min]="settings.usedSeats()" inputmode="numeric" [value]="settings.desiredSeats()" (input)="settings.setDesiredSeatsFromInput($event)" [disabled]="settings.seatBusy()" aria-label="Purchased seats" />
-        <button type="button" (click)="settings.incDesiredSeats()" [disabled]="settings.seatBusy()" aria-label="Add a seat"><i class="ti ti-plus"></i></button>
+        <button type="button" (click)="settings.decDesiredSeats()" [disabled]="settings.seatBusy() || settings.desiredSeats() <= settings.usedSeats()" aria-label="Remove a seat" i18n-aria-label><i class="ti ti-minus"></i></button>
+        <input type="number" [attr.min]="settings.usedSeats()" inputmode="numeric" [value]="settings.desiredSeats()" (input)="settings.setDesiredSeatsFromInput($event)" [disabled]="settings.seatBusy()" aria-label="Purchased seats" i18n-aria-label />
+        <button type="button" (click)="settings.incDesiredSeats()" [disabled]="settings.seatBusy()" aria-label="Add a seat" i18n-aria-label><i class="ti ti-plus"></i></button>
         <button class="sm" type="button" (click)="settings.updateSeats(settings.desiredSeats())" [disabled]="settings.seatBusy() || settings.desiredSeats() === settings.purchasedSeats()">
-          {{ settings.seatBusy() ? "Saving..." : "Update seats" }}
+          @if (settings.seatBusy()) { <ng-container i18n="Button state">Saving...</ng-container> } @else { <ng-container i18n="Button">Update seats</ng-container> }
         </button>
       </div>
       @if (settings.seatError()) {
@@ -164,15 +165,15 @@
         <span>{{ notice.message }}</span>
         @if (notice.action === 'refresh_status') {
         <button class="ghost sm" type="button" (click)="settings.refreshSeatPaymentStatus()" [disabled]="settings.seatBusy()">
-          <i class="ti ti-refresh"></i> {{ settings.seatBusy() ? "Checking..." : "Refresh status" }}
+          <i class="ti ti-refresh"></i> @if (settings.seatBusy()) { <ng-container i18n="Button state">Checking...</ng-container> } @else { <ng-container i18n="Button">Refresh status</ng-container> }
         </button>
         } @else if (notice.action === 'refresh_capacity') {
         <button class="ghost sm" type="button" (click)="settings.refreshSeatCapacityStatus()" [disabled]="settings.seatBusy()">
-          <i class="ti ti-refresh"></i> {{ settings.seatBusy() ? "Checking..." : "Check status" }}
+          <i class="ti ti-refresh"></i> @if (settings.seatBusy()) { <ng-container i18n="Button state">Checking...</ng-container> } @else { <ng-container i18n="Button">Check status</ng-container> }
         </button>
         } @else if (notice.action === 'payment_method') {
         <button class="ghost sm" type="button" (click)="settings.manageBilling('payment_method')" [disabled]="settings.billingPortalBusy() !== null">
-          <i class="ti ti-credit-card"></i> {{ settings.billingPortalBusy() === 'payment_method' ? "Opening..." : "Update payment method" }}
+          <i class="ti ti-credit-card"></i> @if (settings.billingPortalBusy() === 'payment_method') { <ng-container i18n="Button state">Opening...</ng-container> } @else { <ng-container i18n="Button">Update payment method</ng-container> }
         </button>
         }
       </div>
@@ -180,10 +181,10 @@
     </div>
     <div class="billing-portal-actions">
       <button class="billing-portal-action" type="button" (click)="settings.manageBilling('invoices')" [disabled]="settings.billingPortalBusy() !== null">
-        <i class="ti ti-file-invoice"></i> {{ settings.billingPortalBusy() === 'invoices' ? "Opening..." : "Manage subscription & invoices" }}
+        <i class="ti ti-file-invoice"></i> @if (settings.billingPortalBusy() === 'invoices') { <ng-container i18n="Button state">Opening...</ng-container> } @else { <ng-container i18n="Button">Manage subscription &amp; invoices</ng-container> }
       </button>
       <button class="billing-portal-action" type="button" (click)="settings.manageBilling('payment_method')" [disabled]="settings.billingPortalBusy() !== null">
-        <i class="ti ti-credit-card"></i> {{ settings.billingPortalBusy() === 'payment_method' ? "Opening..." : "Payment method" }}
+        <i class="ti ti-credit-card"></i> @if (settings.billingPortalBusy() === 'payment_method') { <ng-container i18n="Button state">Opening...</ng-container> } @else { <ng-container i18n="Button">Payment method</ng-container> }
       </button>
     </div>
     @if (settings.cancelError()) { <p class="form-error">{{ settings.cancelError() }}</p> }
@@ -195,21 +196,21 @@
        with the plan rather than the personal profile. Shown to org admins on the plan settings tab. -->
   <div class="storage-usage-block">
     <div class="account-plan-row">
-      <span class="account-plan-label">Storage usage</span>
+      <span class="account-plan-label" i18n>Storage usage</span>
       <span class="account-plan-storage-usage">{{ settings.storageUsageLabel() }}</span>
     </div>
-    <div class="storage-usage-meter" role="meter" aria-label="Storage usage" [attr.aria-valuenow]="settings.storageUsagePercent()" aria-valuemin="0" aria-valuemax="100">
+    <div class="storage-usage-meter" role="meter" aria-label="Storage usage" i18n-aria-label [attr.aria-valuenow]="settings.storageUsagePercent()" aria-valuemin="0" aria-valuemax="100">
       <span [style.width.%]="settings.storageUsagePercent()"></span>
     </div>
     <p class="account-plan-note account-plan-note--muted">
-      {{ settings.storageRemainingLabel() }} — shared across your whole organisation. Files you upload to another organisation's board count against their storage, not yours.
-      <a routerLink="/settings/storage">Manage storage</a>
+      <ng-container i18n="Starts with the remaining storage, e.g. '3.8 GB remaining'">{{ settings.storageRemainingLabel() // i18n(ph="remaining") }} — shared across your whole organisation. Files you upload to another organisation's board count against their storage, not yours.</ng-container>
+      <a routerLink="/settings/storage" i18n="Link">Manage storage</a>
     </p>
     @if (settings.storageFull() && settings.planTier() === 'paid') {
     <p class="account-plan-note account-plan-note--warning">
       <i class="ti ti-alert-triangle"></i>
-      Your organisation has reached its storage limit. Contact
-      <a href="mailto:support@kanera.app">support&#64;kanera.app</a> for more storage.
+      <ng-container i18n>Your organisation has reached its storage limit. Contact
+      <a href="mailto:support@kanera.app">support&#64;kanera.app</a> for more storage.</ng-container>
     </p>
     }
   </div>

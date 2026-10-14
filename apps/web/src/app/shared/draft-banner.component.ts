@@ -11,11 +11,11 @@ import { TooltipDirective } from "./tooltip.directive";
       <i class="ti ti-notes"></i>
       <span>{{ message() }}</span>
       @if (mode() === 'saved' && showEdit()) {
-        <button type="button" class="ghost xs draft-banner-action" [disabled]="!editEnabled()" (click)="edit.emit()" aria-label="Edit saved draft" kTooltip="Edit draft">
+        <button type="button" class="ghost xs draft-banner-action" [disabled]="!editEnabled()" (click)="edit.emit()" aria-label="Edit saved draft" i18n-aria-label kTooltip="Edit draft" i18n-kTooltip="Tooltip on the button that resumes editing a draft">
           <i class="ti ti-pencil"></i>
         </button>
       }
-      <button type="button" class="ghost xs draft-banner-action" (click)="discard.emit()" [attr.aria-label]="discardLabel()" kTooltip="Discard draft">
+      <button type="button" class="ghost xs draft-banner-action" (click)="discard.emit()" [attr.aria-label]="discardLabel()" kTooltip="Discard draft" i18n-kTooltip="Tooltip on the button that deletes a draft">
         <i class="ti ti-x"></i>
       </button>
     </div>
@@ -73,10 +73,14 @@ export class DraftBannerComponent {
   readonly discard = output<void>();
 
   readonly message = computed(() => {
-    if (this.mode() === "recovered") return "Unsaved draft.";
-    return this.canEdit() ? "Unsaved draft - click to continue editing." : "Saved as draft. Reconnect to publish.";
+    if (this.mode() === "recovered") return $localize`:Draft banner for a draft recovered from this device:Unsaved draft.`;
+    return this.canEdit()
+      ? $localize`:Draft banner:Unsaved draft - click to continue editing.`
+      : $localize`:Draft banner while offline:Saved as draft. Reconnect to publish.`;
   });
 
   readonly editEnabled = computed(() => this.canStartEdit() ?? this.canEdit());
-  readonly discardLabel = computed(() => this.mode() === "recovered" ? "Discard recovered draft" : "Discard saved draft");
+  readonly discardLabel = computed(() => this.mode() === "recovered"
+    ? $localize`:Accessible label for the discard-draft button:Discard recovered draft`
+    : $localize`:Accessible label for the discard-draft button:Discard saved draft`);
 }

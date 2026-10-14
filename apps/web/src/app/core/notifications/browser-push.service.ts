@@ -1,10 +1,13 @@
 import { DestroyRef, Injectable, computed, inject, signal } from "@angular/core";
+import { icu } from "../i18n/icu";
 import type { PushNotificationsConfigResponse, PushSubscriptionBody, PushTestResponse } from "@kanera/shared/dto";
 import { environment } from "../../../environments/environment";
 import { ApiClient, ApiError } from "../api/api.client";
 import { APP_DOM_EVENTS } from "../browser/browser-contracts";
 
 const SERVICE_WORKER_WAIT_MS = 7_000; // 7 seconds
+
+const UNAVAILABLE = $localize`:Browser notification permission or push status - not available here:Unavailable`;
 
 @Injectable({ providedIn: "root" })
 export class BrowserPushService {
@@ -34,20 +37,20 @@ export class BrowserPushService {
   readonly permissionLabel = computed(() => {
     switch (this.permission()) {
       case "granted":
-        return "Allowed";
+        return $localize`:Browser notification permission state:Allowed`;
       case "denied":
-        return "Blocked";
+        return $localize`:Browser notification permission state:Blocked`;
       case "default":
-        return "Not asked yet";
+        return $localize`:Browser notification permission state:Not asked yet`;
       default:
-        return "Unavailable";
+        return UNAVAILABLE;
     }
   });
   readonly statusBadge = computed(() => {
-    if (this.subscribed()) return "Subscribed";
-    if (this.configured() && this.unsupportedReason() === null && this.permission() === "granted") return "Ready to subscribe";
-    if (this.configured() && this.unsupportedReason() === null && this.permission() === "default") return "Permission needed";
-    return "Unavailable";
+    if (this.subscribed()) return $localize`:Push notification status badge:Subscribed`;
+    if (this.configured() && this.unsupportedReason() === null && this.permission() === "granted") return $localize`:Push notification status badge:Ready to subscribe`;
+    if (this.configured() && this.unsupportedReason() === null && this.permission() === "default") return $localize`:Push notification status badge:Permission needed`;
+    return UNAVAILABLE;
   });
   readonly statusTone = computed<"success" | "warning" | "neutral">(() => {
     if (this.subscribed()) return "success";
@@ -55,14 +58,14 @@ export class BrowserPushService {
     return "neutral";
   });
   readonly statusMessage = computed(() => {
-    if (this.loading()) return "Checking whether this browser can receive push notifications.";
-    if (this.busy()) return "Updating this browser's push subscription.";
-    if (!this.configured()) return "Push notifications are not configured for this Kanera deployment yet.";
+    if (this.loading()) return $localize`:Push notification status:Checking whether this browser can receive push notifications.`;
+    if (this.busy()) return $localize`:Push notification status:Updating this browser's push subscription.`;
+    if (!this.configured()) return $localize`:Push notification status:Push notifications are not configured for this Kanera deployment yet.`;
     if (this.unsupportedReason()) return this.unsupportedReason()!;
-    if (this.permission() === "denied") return "Browser notifications are blocked for this site. Re-enable them in your browser settings.";
-    if (this.subscribed()) return "This browser is subscribed and ready to receive push notifications.";
-    if (this.permission() === "granted") return "Notifications are allowed in this browser. Turn on push to subscribe this device.";
-    return "Turn on push notifications to let this browser ask for permission.";
+    if (this.permission() === "denied") return $localize`:Push notification status:Browser notifications are blocked for this site. Re-enable them in your browser settings.`;
+    if (this.subscribed()) return $localize`:Push notification status:This browser is subscribed and ready to receive push notifications.`;
+    if (this.permission() === "granted") return $localize`:Push notification status:Notifications are allowed in this browser. Turn on push to subscribe this device.`;
+    return $localize`:Push notification status:Turn on push notifications to let this browser ask for permission.`;
   });
 
   constructor() {
@@ -128,7 +131,7 @@ export class BrowserPushService {
     this.testSuccess.set(null);
 
     if (!this.canRefresh()) {
-      if (!this.configured()) this.error.set("Push is not configured for this deployment.");
+      if (!this.configured()) this.error.set($localize`:Push notification error:Push is not configured for this deployment.`);
       else if (this.unsupportedReason()) this.error.set(this.unsupportedReason());
       return;
     }
@@ -141,7 +144,9 @@ export class BrowserPushService {
       }
       this.permission.set(permission);
       if (permission !== "granted") {
-        this.error.set(permission === "denied" ? "Browser notifications were blocked for this site." : "Notification permission was not granted.");
+        this.error.set(permission === "denied"
+          ? $localize`:Push notification error:Browser notifications were blocked for this site.`
+          : $localize`:Push notification error:Notification permission was not granted.`);
         return;
       }
 
@@ -211,7 +216,7 @@ export class BrowserPushService {
     this.testSuccess.set(null);
 
     if (!this.canSendTest()) {
-      this.testError.set("Subscribe this device before sending a test notification.");
+      this.testError.set($localize`:Push notification test error:Subscribe this device before sending a test notification.`);
       return;
     }
 
@@ -220,7 +225,7 @@ export class BrowserPushService {
       const result = await this.api.post<PushTestResponse>("/notifications/push/test", {});
       this.lastResult.set(result);
       if (result.attempted === 0) {
-        this.testError.set("No active push subscriptions were found for this account.");
+        this.testError.set($localize`:Push notification test error:No active push subscriptions were found for this account.`);
       } else if (result.delivered > 0) {
         this.testSuccess.set(describePushResult(result));
       } else {
@@ -266,29 +271,29 @@ export class BrowserPushService {
 
   private getCapabilityError(): string | null {
     if (typeof window === "undefined" || typeof navigator === "undefined") {
-      return "Browser push is unavailable in this environment.";
+      return $localize`:Push notification unsupported reason:Browser push is unavailable in this environment.`;
     }
     if (!window.isSecureContext && !isLocalHostname(window.location.hostname)) {
-      return "Push requires HTTPS or localhost.";
+      return $localize`:Push notification unsupported reason:Push requires HTTPS or localhost.`;
     }
     if (!("serviceWorker" in navigator)) {
-      return "This browser does not support service workers.";
+      return $localize`:Push notification unsupported reason:This browser does not support service workers.`;
     }
     if (typeof Notification === "undefined") {
-      return "This browser does not expose the Notifications API.";
+      return $localize`:Push notification unsupported reason:This browser does not expose the Notifications API.`;
     }
     if (!("PushManager" in window)) {
       return isAppleMobileBrowser()
-        ? "This Safari mode does not expose Web Push. Install Kanera to the home screen first."
-        : "This browser does not expose the Web Push API.";
+        ? $localize`:Push notification unsupported reason:This Safari mode does not expose Web Push. Install Kanera to the home screen first.`
+        : $localize`:Push notification unsupported reason:This browser does not expose the Web Push API.`;
     }
     return null;
   }
 
   private getWorkerPendingMessage(): string {
     return isAppleMobileBrowser()
-      ? "Background notifications are not ready in this browser mode. On iPhone or iPad, install Kanera to the home screen first."
-      : "Background notifications are still initialising. Try again in a few seconds.";
+      ? $localize`:Push notification error:Background notifications are not ready in this browser mode. On iPhone or iPad, install Kanera to the home screen first.`
+      : $localize`:Push notification error:Background notifications are still initialising. Try again in a few seconds.`;
   }
 
   private async getServiceWorkerRegistration(): Promise<ServiceWorkerRegistration | null> {
@@ -378,7 +383,7 @@ export class BrowserPushService {
     const p256dh = json.keys?.["p256dh"];
     const auth = json.keys?.["auth"];
     if (!json.endpoint || !p256dh || !auth) {
-      throw new Error("The browser returned an incomplete push subscription.");
+      throw new Error($localize`:Push notification error:The browser returned an incomplete push subscription.`);
     }
 
     const contentEncoding = getSupportedContentEncoding();
@@ -407,19 +412,19 @@ function decodeBase64Url(value: string): ArrayBuffer {
 }
 
 function describePushResult(result: PushTestResponse): string {
-  const parts = [`Attempted ${result.attempted}`];
-  if (result.delivered > 0) parts.push(`delivered ${result.delivered}`);
-  if (result.disabled > 0) parts.push(`disabled ${result.disabled} stale subscription${result.disabled === 1 ? "" : "s"}`);
-  if (result.failed > 0) parts.push(`failed ${result.failed}`);
-  return `${parts.join(", ")}.`;
+  // One message: each clause after "Attempted" only appears when its count is non-zero.
+  return icu(
+    $localize`:Result of sending a test push notification; counts of devices:Attempted {attempted}{delivered, select, 0 {} other {, delivered {delivered}}}{disabled, plural, =0 {} one {, disabled # stale subscription} other {, disabled # stale subscriptions}}{failed, select, 0 {} other {, failed {failed}}}.`,
+    { attempted: result.attempted, delivered: result.delivered, disabled: result.disabled, failed: result.failed },
+  );
 }
 
 function extractPushError(err: unknown): string {
   if (err instanceof ApiError) {
     const body = err.body as { message?: string } | undefined;
-    return body?.message ?? `Request failed (${err.status})`;
+    return body?.message ?? $localize`:Push notification error; status is an HTTP status code:Request failed (${err.status}:status:)`;
   }
-  return err instanceof Error ? err.message : "Something went wrong while updating browser push.";
+  return err instanceof Error ? err.message : $localize`:Push notification error:Something went wrong while updating browser push.`;
 }
 
 function getSupportedContentEncoding(): string | undefined {

@@ -6,7 +6,7 @@
     "icons:generate": "node scripts/generate-tabler-icons.mjs",
     "icons:css": "node scripts/generate-tabler-webfont-css.mjs",
     "emoji:generate": "node scripts/generate-emoji-catalog.mjs",
-    "assets:generate": "pnpm icons:generate && pnpm icons:css && pnpm emoji:generate",
+    "assets:generate": "node scripts/generate-pwa-manifests.mjs && pnpm icons:generate && pnpm icons:css && pnpm emoji:generate",
     "prestart": "node scripts/write-build-info.mjs && pnpm assets:generate",
     "prestart:https": "node scripts/write-build-info.mjs && pnpm assets:generate",
     "start": "ng serve --port 4200 --host 0.0.0.0 --proxy-config proxy.https.conf.json",
@@ -18,7 +18,10 @@
     "bundle:check": "pnpm build",
     "prelint": "node scripts/write-build-info.mjs && pnpm assets:generate",
     "test": "node scripts/test.mjs",
-    "lint": "tsc -p tsconfig.json --noEmit && eslint src"
+    "lint": "tsc -p tsconfig.json --noEmit && eslint src && node scripts/i18n.mjs check",
+    "i18n:extract": "node scripts/i18n.mjs extract",
+    "i18n:check": "node scripts/i18n.mjs check",
+    "templates:messages": "node scripts/generate-template-messages.mjs"
   },
   "dependencies": {
     "@angular/cdk": "^22.1.4",
@@ -26,6 +29,7 @@
     "@angular/compiler": "^22.1.4",
     "@angular/core": "^22.1.4",
     "@angular/forms": "^22.1.4",
+    "@angular/localize": "^22.1.4",
     "@angular/platform-browser": "^22.1.4",
     "@angular/router": "^22.1.4",
     "@angular/service-worker": "^22.1.4",

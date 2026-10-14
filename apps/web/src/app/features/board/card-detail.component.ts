@@ -78,7 +78,8 @@ import { SelectPickerPopover } from "./select-picker.popover";
 import { ReminderPopoverComponent } from "./reminder-popover.component";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
 import { BoardMirrorsService } from "../board-mirrors/board-mirrors.service";
-import { formatDateTime, formatFeedTime } from "../../shared/date-format";
+import { appLocale } from "../../core/i18n/locale";
+import { formatDate, formatDateTime, formatFeedTime } from "../../shared/date-format";
 import { clipboardAttachmentFiles, dragTargetElement, hasDraggedFiles, isEditablePasteTarget, isEditorDropTarget } from "../../shared/attachments/file-transfer";
 import { openAttachmentPreview, toLightboxAttachments } from "../../shared/attachments/attachment-lightbox";
 
@@ -101,6 +102,9 @@ export function checklistDragScrollStep(pointerY: number, top: number, bottom: n
   }
   return 0;
 }
+
+const BYTES_FORMAT = new Intl.NumberFormat(appLocale());
+const SIZE_FORMAT = new Intl.NumberFormat(appLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 @Component({
   selector: "k-card-detail",
@@ -177,6 +181,49 @@ export class CardDetailComponent {
   readonly sourceLists = this.state.visibleLists;
   readonly isWatchingCard = computed(() => this.notifications.isWatchingCard(this.card().id));
   readonly showCardWatchButton = computed(() => !this.notifications.isWatchingBoard(this.boardId()));
+  /** Text the template binds (tooltips and aria labels that switch with state or carry a name). */
+  readonly labels = {
+    cardDetail: (title: string) => $localize`:Dialog label; title is the card title:Card detail: ${title}:title:`,
+    markComplete: $localize`:Button - mark the card or checklist item done:Mark complete`,
+    markIncomplete: $localize`:Button - mark the card or checklist item not done:Mark incomplete`,
+    markItemComplete: $localize`:Button:Mark checklist item complete`,
+    markItemIncomplete: $localize`:Button:Mark checklist item incomplete`,
+    copyKey: (key: string) => $localize`:Tooltip; key is the card's short key, e.g. ENG-42:Copy key ${key}:key:`,
+    collapseToPanel: $localize`:Button - show the card as a side panel instead of a dialog:Collapse to side panel`,
+    expandToModal: $localize`:Button - show the card as a centred dialog instead of a side panel:Expand to modal`,
+    cardWatchers: $localize`:Button - show who watches this card:Card watchers`,
+    watchCard: $localize`:Button - follow notifications for this card:Watch card`,
+    goToBoard: (board: string) => $localize`:Button label:Go to board ${board}:board:`,
+    removeLabel: (label: string) => $localize`:Tooltip on an assigned label chip:Remove ${label}:label:`,
+    clickToEdit: $localize`:Tooltip on editable text:Click to edit`,
+    showFullDescription: $localize`:Tooltip on a clamped description:Show full description`,
+    showCompletedItems: $localize`:Tooltip:Show completed checklist items`,
+    hideCompletedItems: $localize`:Tooltip:Hide completed checklist items`,
+    expandChecklist: $localize`:Button:Expand checklist`,
+    collapseChecklist: $localize`:Button:Collapse checklist`,
+    editChecklistTitle: $localize`:Tooltip:Edit checklist title`,
+    changeDueDate: $localize`:Tooltip:Change due date`,
+    changeItemAssignee: (person: string) => $localize`:Button label; person is the current assignee:Change checklist item assignee from ${person}:person:`,
+    unassign: (person: string) => $localize`:Tooltip - remove this person from the checklist item:Unassign ${person}:person:`,
+    assignedTo: (person: string) => $localize`:Tooltip on a checklist item's assignee:Assigned to ${person}:person:`,
+    notesAndSubItems: $localize`:Tooltip - the checklist item has notes and a sub-checklist:Notes and sub-items`,
+    notes: $localize`:Tooltip - the checklist item has notes:Notes`,
+    subItems: $localize`:Tooltip - the checklist item has a sub-checklist:Sub-items`,
+    addNotesAndSubItems: $localize`:Tooltip:Add notes & sub-items`,
+    allTemplatesAdded: $localize`:Tooltip on a disabled button:All templates already added`,
+    addFromTemplateTooltip: $localize`:Tooltip:Add checklist from template`,
+    untitled: $localize`:Stand-in for a linked note or card with no title:Untitled`,
+    play: (fileName: string) => $localize`:Tooltip on a video or audio attachment:Play ${fileName}:fileName:`,
+    playVideo: (fileName: string) => $localize`:Button label:Play video ${fileName}:fileName:`,
+    playAudio: (fileName: string) => $localize`:Button label:Play audio ${fileName}:fileName:`,
+    preview: (fileName: string) => $localize`:Tooltip on a previewable attachment:Preview ${fileName}:fileName:`,
+    previewPdf: (fileName: string) => $localize`:Button label:Preview PDF ${fileName}:fileName:`,
+    previewMarkdown: (fileName: string) => $localize`:Button label:Preview Markdown ${fileName}:fileName:`,
+    previewText: (fileName: string) => $localize`:Button label:Preview text file ${fileName}:fileName:`,
+    removeCover: $localize`:Button - remove the card's cover image:Remove cover`,
+    setAsCover: $localize`:Button - use this image as the card's cover:Set as cover`,
+    checklistItemDetail: (text: string) => $localize`:Dialog label; text is the checklist item:Checklist item detail: ${text}:item:`,
+  };
   readonly watcherPopoverOpen = signal(false);
   readonly reminderPopoverOpen = signal(false);
   /** Only a reminder still to come lights the button; a fired one is history, shown in the popover. */
@@ -186,8 +233,8 @@ export class CardDetailComponent {
   });
   readonly reminderLabel = computed(() => {
     const reminder = this.pendingReminder();
-    if (!reminder) return "Remind me";
-    return `Reminder: ${formatDateTime(reminder.remindAt, "weekday")}`;
+    if (!reminder) return $localize`:Button - set a personal reminder for this card:Remind me`;
+    return $localize`:Tooltip on the reminder button; when is e.g. "Wed, 4 Mar, 09.00":Reminder: ${formatDateTime(reminder.remindAt, "weekday")}:when:`;
   });
   readonly panel = viewChild<ElementRef<HTMLElement>>("panel");
   readonly detailScroller = viewChild<ElementRef<HTMLElement>>("detailScroller");
@@ -317,12 +364,12 @@ export class CardDetailComponent {
   readonly liveAgentRuns = computed(() => this.state.liveAgentRunsForCard(this.card().id));
   agentRunStatusLabel(run: WireAgentRun): string {
     switch (run.status) {
-      case "running": return "Working";
-      case "blocked": return "Waiting on you";
-      case "succeeded": return "Finished";
-      case "failed": return "Failed";
-      case "cancelled": return "Cancelled";
-      case "stalled": return "Stalled (no heartbeat)";
+      case "running": return $localize`:AI agent run status:Working`;
+      case "blocked": return $localize`:AI agent run status - the agent needs input from a person:Waiting on you`;
+      case "succeeded": return $localize`:AI agent run status:Finished`;
+      case "failed": return $localize`:AI agent run status:Failed`;
+      case "cancelled": return $localize`:AI agent run status:Cancelled`;
+      case "stalled": return $localize`:AI agent run status - the agent stopped reporting progress:Stalled (no heartbeat)`;
     }
   }
   agentRunStatusIcon(run: WireAgentRun): string {
@@ -376,7 +423,7 @@ export class CardDetailComponent {
       isText: attachmentPreviewType(attachment.mimeType, attachment.fileName) === "text",
       thumbnailUrl: this.attachmentThumbUrl(attachment),
       iconClass: attachmentIconClass(attachment.mimeType, attachment.fileName),
-      subtitle: `${attachment.uploadedByName} • ${this.formatFeedTime(attachment.createdAt)} • ${this.formatBytes(attachment.byteSize)}`,
+      subtitle: $localize`:Attachment details line - uploader, upload time and file size:${attachment.uploadedByName}:person: • ${this.formatFeedTime(attachment.createdAt)}:time: • ${this.formatBytes(attachment.byteSize)}:size:`,
     },
   ])));
 
@@ -419,7 +466,7 @@ export class CardDetailComponent {
 
   linkedItemMeta(item: LinkedInternalSummary): string {
     if (item.kind === "card") return `${item.boardName} - ${item.listName}`;
-    return item.boardName || (item.scope === "personal" ? "Private note" : "Team note");
+    return item.boardName || (item.scope === "personal" ? $localize`:Linked item hint:Private note` : $localize`:Linked item hint:Team note`);
   }
 
   readonly coverUrl = computed((): string | null => {
@@ -571,7 +618,7 @@ export class CardDetailComponent {
     this.duplicating.set(true);
     try {
       await this.api.post(`/cards/${this.card().id}/duplicate`, {});
-      this.toasts.success("Card duplicated.", "copy");
+      this.toasts.success($localize`Card duplicated.`, "copy");
       this.actionsMenuOpen.set(false);
     } finally {
       this.duplicating.set(false);
@@ -596,7 +643,7 @@ export class CardDetailComponent {
     this.copyToBoardOpen.set(false);
     this.actionsMenuOpen.set(false);
     await this.api.post(`/cards/${this.card().id}/duplicate`, { boardId: target.boardId, listId: target.listId });
-      this.toasts.success("Card copied to the selected board.", "copy-plus");
+      this.toasts.success($localize`Card copied to the selected board.`, "copy-plus");
   }
 
   async moveToBoard(target: BoardPickerPick) {
@@ -604,7 +651,7 @@ export class CardDetailComponent {
     this.moveToBoardOpen.set(false);
     this.actionsMenuOpen.set(false);
     await this.api.post(`/cards/${this.card().id}/move-to-board`, { boardId: target.boardId });
-    this.toasts.success("Card moved to the selected board.", "arrow-right");
+    this.toasts.success($localize`Card moved to the selected board.`, "arrow-right");
     this.close.emit();
   }
 
@@ -794,15 +841,15 @@ export class CardDetailComponent {
     // the sheet shows them only then. Every action here is one the panel already exposes as a
     // button; the shortcut just skips the pointer travel.
     const editable = () => this.canEdit();
-    this.shortcuts.registerAll("Card", [
-      { keys: "e", label: "Edit title", when: editable, run: () => this.editTitle() },
-      { keys: "a", label: "Assign members", when: editable, run: () => this.memberPickerOpen.update((v) => !v) },
-      { keys: "l", label: "Edit labels", when: editable, run: () => this.labelPickerOpen.update((v) => !v) },
-      { keys: "d", label: "Set due date", when: editable, run: () => this.dueDatePickerOpen.update((v) => !v) },
-      { keys: "m", label: "Move to list", when: editable, run: () => this.openMoveToListFromKeyboard() },
-      { keys: "mod+enter", label: "Mark complete or incomplete", when: editable, run: () => void this.toggleCompletion() },
-      { keys: "s", label: "Watch or unwatch card", run: () => void this.toggleCardWatch() },
-      { keys: "mod+shift+c", label: "Copy card link", run: () => void this.copyCardLink() },
+    this.shortcuts.registerAll($localize`:Keyboard shortcut group heading:Card`, [
+      { keys: "e", label: $localize`:Keyboard shortcut description:Edit title`, when: editable, run: () => this.editTitle() },
+      { keys: "a", label: $localize`:Keyboard shortcut description:Assign members`, when: editable, run: () => this.memberPickerOpen.update((v) => !v) },
+      { keys: "l", label: $localize`:Keyboard shortcut description:Edit labels`, when: editable, run: () => this.labelPickerOpen.update((v) => !v) },
+      { keys: "d", label: $localize`:Keyboard shortcut description:Set due date`, when: editable, run: () => this.dueDatePickerOpen.update((v) => !v) },
+      { keys: "m", label: $localize`:Keyboard shortcut description:Move to list`, when: editable, run: () => this.openMoveToListFromKeyboard() },
+      { keys: "mod+enter", label: $localize`:Keyboard shortcut description:Mark complete or incomplete`, when: editable, run: () => void this.toggleCompletion() },
+      { keys: "s", label: $localize`:Keyboard shortcut description:Watch or unwatch card`, run: () => void this.toggleCardWatch() },
+      { keys: "mod+shift+c", label: $localize`:Keyboard shortcut description:Copy card link`, run: () => void this.copyCardLink() },
     ], this.destroyRef);
     effect((onCleanup) => {
       this.unsavedWork.setDirty(this.unsavedDraftSource, this.recoveredDescriptionDraft());
@@ -1289,7 +1336,7 @@ export class CardDetailComponent {
       // Don't wait for the card:links:changed echo: the author should see a new link immediately.
       this.refreshLinkedItems(card.id);
     } catch {
-      this.toasts.error("Couldn't save the description. Your draft is still available; try again.");
+      this.toasts.error($localize`Couldn't save the description. Your draft is still available; try again.`);
     } finally {
       this.savingDescription.set(false);
       this.descriptionEditor()?.setSaving(false);
@@ -1592,7 +1639,7 @@ export class CardDetailComponent {
   async deleteChecklist(checklist: WireCardChecklist) {
     // Empty checklists, including item-owned sub-checklists, have no child work to lose and can
     // be removed immediately. Keep the destructive confirmation when items would be removed.
-    if (checklist.items.length > 0 && !await this.confirm.open({ title: `Delete "${checklist.title}"?`, message: "Checklist items will be removed from this card.", danger: true })) return;
+    if (checklist.items.length > 0 && !await this.confirm.open({ title: $localize`:Confirm dialog title:Delete "${checklist.title}:checklist:"?`, message: $localize`Checklist items will be removed from this card.`, danger: true })) return;
     await this.api.delete(`/cards/${this.card().id}/checklists/${checklist.id}`);
   }
 
@@ -1776,8 +1823,8 @@ export class CardDetailComponent {
     if (!this.canEdit()) return;
     const hasItemDetail = Boolean(item.description?.trim()) || this.subChecklistsFor(item).length > 0;
     if (hasItemDetail && !await this.confirm.open({
-      title: `Delete "${item.text}"?`,
-      message: "Its description and nested checklists will also be deleted.",
+      title: $localize`:Confirm dialog title:Delete "${item.text}:item:"?`,
+      message: $localize`Its description and nested checklists will also be deleted.`,
       danger: true,
     })) return;
     await this.api.delete(`/cards/${this.card().id}/checklists/${checklistId}/items/${item.id}`);
@@ -2099,7 +2146,7 @@ export class CardDetailComponent {
     const actions = new Map<string, readonly UserProfileAction[]>();
     if (!this.canEdit()) return actions;
     for (const userId of this.assigneeIds()) {
-      actions.set(userId, [{ id: "unassign", label: "Unassign", icon: "user-minus", tone: "danger", run: () => this.toggleAssignee(userId) }]);
+      actions.set(userId, [{ id: "unassign", label: $localize`:Profile card action - remove this person from the card:Unassign`, icon: "user-minus", tone: "danger", run: () => this.toggleAssignee(userId) }]);
     }
     return actions;
   });
@@ -2311,7 +2358,7 @@ export class CardDetailComponent {
     // from the store and the local hide becomes redundant.
     setHidden(true);
     this.toasts.undoable({
-      message: `"${fileName}" deleted.`,
+      message: $localize`:Toast after deleting an attachment:"${fileName}:fileName:" deleted.`,
       icon: "trash",
       undo: () => setHidden(false),
       commit: async () => {
@@ -2319,16 +2366,22 @@ export class CardDetailComponent {
           await this.api.delete(`/cards/${cardId}/attachments/${attachmentId}`);
         } catch {
           setHidden(false);
-          this.toasts.info(`Couldn't delete "${fileName}".`, "alert-triangle");
+          this.toasts.info($localize`Couldn't delete "${fileName}:fileName:".`, "alert-triangle");
         }
       },
     });
   }
 
   formatBytes(n: number): string {
-    if (n < 1024) return `${n} B`;
-    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-    return `${(n / 1024 / 1024).toFixed(1)} MB`;
+    // One decimal for KB and MB ("1.5 MB", "1,5 MB"), in the viewer's number format.
+    if (n < 1024) return `${BYTES_FORMAT.format(n)} B`;
+    if (n < 1024 * 1024) return `${SIZE_FORMAT.format(n / 1024)} KB`;
+    return `${SIZE_FORMAT.format(n / 1024 / 1024)} MB`;
+  }
+
+  /** A date custom field holds a YYYY-MM-DD day; show it in the viewer's date format. */
+  formatFieldDate(value: string): string {
+    return formatDate(value, "medium") || value;
   }
 
   isImageMime(mime: string): boolean {
@@ -2367,7 +2420,7 @@ export class CardDetailComponent {
       // Archive commits immediately and Undo issues the reverse PATCH; see card-actions-menu.
       if (archived) {
         this.toasts.undoable({
-          message: "Card archived.",
+          message: $localize`Card archived.`,
           icon: "archive",
           undo: async () => {
             const restored = await this.api.patch<WireCard>(`/cards/${cardId}/archive`, { archived: false });
@@ -2375,7 +2428,7 @@ export class CardDetailComponent {
           },
         });
       } else {
-        this.toasts.success("Card restored.", "archive-off");
+        this.toasts.success($localize`Card restored.`, "archive-off");
       }
     } finally {
       this.archiving.set(false);

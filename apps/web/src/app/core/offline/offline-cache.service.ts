@@ -468,7 +468,7 @@ export class OfflineCacheService {
       if (this.failedWrites.size === 0) this.persistenceError.set(null);
     } catch (error) {
       this.failedWrites.add(`${store}:${key}`);
-      this.persistenceError.set("Offline copies could not be updated. Keep this tab open and free browser storage before going offline.");
+      this.persistenceError.set($localize`Offline copies could not be updated. Keep this tab open and free browser storage before going offline.`);
       throw error;
     }
   }

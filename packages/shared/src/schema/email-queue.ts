@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import type { Locale } from "../locales.js";
 import { valueIn } from "./_value-check.js";
 
 export const EMAIL_QUEUE_TYPES = [
@@ -381,7 +382,10 @@ export const emailQueue = pgTable(
     toEmail: text("to_email").notNull(),
     subject: text("subject").notNull(),
     type: text("type", { enum: EMAIL_QUEUE_TYPES }).notNull(),
-    data: jsonb("data").notNull().$type<EmailQueueData["data"]>(),
+    // Every row also records the recipient's language, resolved when it is queued, so the worker
+    // renders it without another lookup. Rows queued before localisation have none and render in
+    // SOURCE_LOCALE.
+    data: jsonb("data").notNull().$type<EmailQueueData["data"] & { locale?: Locale }>(),
     status: text("status", { enum: EMAIL_QUEUE_STATUSES }).notNull().default(EMAIL_QUEUE_STATUS.queued),
     retries: integer("retries").notNull().default(0),
     // Gate retries with exponential backoff: a failing SMTP target waits progressively

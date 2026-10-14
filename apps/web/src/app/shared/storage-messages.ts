@@ -3,14 +3,14 @@
 // uploaders (card detail, description editor, note editor) show identical, role-correct guidance.
 export function storageFullMessage(isOrgAdmin: boolean): string {
   return isOrgAdmin
-    ? "Your organisation's storage is full. Upgrade your plan to upload more files."
-    : "Your organisation's storage is full. Ask an organisation admin to upgrade for more storage.";
+    ? $localize`:Upload error shown to an organisation admin:Your organisation's storage is full. Upgrade your plan to upload more files.`
+    : $localize`:Upload error shown to an organisation member:Your organisation's storage is full. Ask an organisation admin to upgrade for more storage.`;
 }
 
 export function fileTooLargeMessage(maxLabel: string, isOrgAdmin: boolean, isPlanLimited: boolean): string {
-  const base = `File is too large (max ${maxLabel})`;
-  if (!isPlanLimited) return base;
+  // Whole sentences per case, so each language can place the size limit where it reads naturally.
+  if (!isPlanLimited) return $localize`:Upload error; the placeholder is a size such as "5 MB":File is too large (max ${maxLabel}:maxSize:)`;
   return isOrgAdmin
-    ? `${base}. Upgrade your plan for higher file limits.`
-    : `${base}. Ask an organisation admin to upgrade for higher file limits.`;
+    ? $localize`:Upload error shown to an organisation admin; the placeholder is a size such as "5 MB":File is too large (max ${maxLabel}:maxSize:). Upgrade your plan for higher file limits.`
+    : $localize`:Upload error shown to an organisation member; the placeholder is a size such as "5 MB":File is too large (max ${maxLabel}:maxSize:). Ask an organisation admin to upgrade for higher file limits.`;
 }

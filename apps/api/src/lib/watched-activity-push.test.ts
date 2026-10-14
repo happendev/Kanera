@@ -37,7 +37,7 @@ function row(overrides: Partial<NotificationRow> = {}): NotificationRow {
 }
 
 void test("a watched card move reads the same in a push as it does in the drawer", () => {
-  const payload = watchedActivityPushPayload(row(), WEB_ORIGIN);
+  const payload = watchedActivityPushPayload(row(), WEB_ORIGIN, "en-GB");
   assert.equal(payload.title, "Prepare release");
   assert.equal(payload.body, "Dylan moved this card to In Progress");
   assert.equal(payload.url, "https://app.kanera.test/o/0A1B2C3D4E5F6071/c/PROJ-12");
@@ -54,7 +54,7 @@ void test("a summary value is appended to the body", () => {
       actorKind: "user",
       actorId: "actor-1",
     },
-  } as Partial<NotificationRow>), WEB_ORIGIN);
+  } as Partial<NotificationRow>), WEB_ORIGIN, "en-GB");
   assert.equal(payload.body, "Dylan completed sub-checklist Final checks on Ship release");
 });
 
@@ -68,7 +68,7 @@ void test("self-assignment keeps the drawer's wording", () => {
       actorKind: "user",
       actorId: "actor-1",
     },
-  } as Partial<NotificationRow>), WEB_ORIGIN);
+  } as Partial<NotificationRow>), WEB_ORIGIN, "en-GB");
   assert.equal(payload.body, "Amelia Hart assigned themself");
 });
 
@@ -81,12 +81,12 @@ void test("an unknown action falls back to a humanised label rather than droppin
       actorKind: "user",
       actorId: "actor-1",
     },
-  } as Partial<NotificationRow>), WEB_ORIGIN);
+  } as Partial<NotificationRow>), WEB_ORIGIN, "en-GB");
   assert.equal(payload.body, "Dylan some new action");
 });
 
 void test("a missing actor and card title still produce a sendable notification", () => {
-  const payload = watchedActivityPushPayload(row({ actorName: null, cardTitle: null }), WEB_ORIGIN);
+  const payload = watchedActivityPushPayload(row({ actorName: null, cardTitle: null }), WEB_ORIGIN, "en-GB");
   assert.equal(payload.title, "Delivery");
   assert.equal(payload.body, "Someone moved this card to In Progress");
 });
@@ -101,6 +101,6 @@ void test("an agent's change names the agent after its owner, matching the drawe
       actorId: "actor-1",
       agentName: "Claude",
     },
-  } as Partial<NotificationRow>), WEB_ORIGIN);
+  } as Partial<NotificationRow>), WEB_ORIGIN, "en-GB");
   assert.equal(payload.body, "Dylan via Claude moved this card to In Progress");
 });

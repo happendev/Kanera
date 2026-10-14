@@ -1,6 +1,7 @@
 import type { OnDestroy, OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input, output, signal } from "@angular/core";
 import type { ServerToClientEvents, WireBoardMemberUser } from "@kanera/shared/events";
+import { appLocale } from "../../core/i18n/locale";
 import { UnsavedWorkService } from "../../core/browser/unsaved-work.service";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { ToastService } from "../../shared/toast.service";
@@ -32,11 +33,20 @@ const memberRoleRank: Record<string, number> = {
   observer: 2,
 };
 
+// Read-only role badges; values are API role names.
+const ROLE_LABELS: Record<string, string> = {
+  owner: $localize`:Role badge:Owner`,
+  admin: $localize`:Role badge:Admin`,
+  editor: $localize`:Board role — can edit:Editor`,
+  member: $localize`:Role badge:Member`,
+  observer: $localize`:Board role — can view but not edit:Observer`,
+};
+
 function sortMembers<T extends RenderedMemberRow>(members: readonly T[]): T[] {
   return [...members].sort((a, b) => {
     const aRank = "pinned" in a && a.pinned ? 0 : (memberRoleRank[a.role] ?? 99);
     const bRank = "pinned" in b && b.pinned ? 0 : (memberRoleRank[b.role] ?? 99);
-    return aRank - bRank || a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" });
+    return aRank - bRank || a.displayName.localeCompare(b.displayName, appLocale(), { sensitivity: "base" });
   });
 }
 
@@ -45,7 +55,7 @@ function errorMessage(error: unknown): string {
     const body = error.body as { message?: string } | undefined;
     return body?.message ?? error.message;
   }
-  return error instanceof Error ? error.message : "Something went wrong.";
+  return error instanceof Error ? error.message : $localize`Something went wrong.`;
 }
 
 @Component({
@@ -58,85 +68,85 @@ function errorMessage(error: unknown): string {
     <div class="bmp-panel">
       @if (canManage() && !loading() && candidates().length > 0) {
         <form class="bmp-add" (submit)="$event.preventDefault(); addMember()">
-          <select class="bmp-member-select" aria-label="Member to add" [value]="addUserId()" (input)="addUserId.set($any($event.target).value)" [disabled]="busy() || candidates().length === 0">
-            <option value="" [selected]="!addUserId()">Select {{ candidateScope() === "organisation" ? "an" : "a" }} {{ candidateScope() }} member…</option>
+          <select class="bmp-member-select" aria-label="Member to add" i18n-aria-label [value]="addUserId()" (input)="addUserId.set($any($event.target).value)" [disabled]="busy() || candidates().length === 0">
+            <option value="" [selected]="!addUserId()">{{ candidateScope() === "organisation" ? selectOrganisationMember : selectWorkspaceMember }}</option>
             @for (candidate of candidates(); track candidate.userId) {
               <option [value]="candidate.userId" [selected]="candidate.userId === addUserId()">{{ candidate.displayName }}</option>
             }
           </select>
-          <select aria-label="Role" [value]="addRole()" (input)="addRole.set($any($event.target).value)" [disabled]="busy()">
-            <option value="observer" [selected]="addRole() === 'observer'">Observer</option>
-            <option value="editor" [selected]="addRole() === 'editor'">Editor</option>
+          <select aria-label="Role" i18n-aria-label="Select: board role for the new member" [value]="addRole()" (input)="addRole.set($any($event.target).value)" [disabled]="busy()">
+            <option value="observer" [selected]="addRole() === 'observer'" i18n="Board role: can view but not edit">Observer</option>
+            <option value="editor" [selected]="addRole() === 'editor'" i18n="Board role: can edit">Editor</option>
           </select>
-          <button type="submit" [disabled]="busy() || !addUserId()" aria-label="Add member"><i class="ti ti-user-plus"></i></button>
+          <button type="submit" [disabled]="busy() || !addUserId()" aria-label="Add member" i18n-aria-label><i class="ti ti-user-plus"></i></button>
           <button class="bmp-access-toggle bmp-add-access" type="button" [class.is-active]="addAssignedItemsOnly()" [attr.aria-pressed]="addAssignedItemsOnly()" (click)="addAssignedItemsOnly.update(value => !value)" [disabled]="busy()" [title]="assignedItemsOnlyTooltip(addAssignedItemsOnly())">
             <i [class]="addAssignedItemsOnly() ? 'ti ti-lock' : 'ti ti-lock-open'"></i>
-            <span>Assigned items only</span>
+            <span i18n="Toggle: restrict a board member to cards assigned to them">Assigned items only</span>
           </button>
         </form>
       } @else if (canManage() && !loading() && candidates().length === 0 && !error()) {
         <div class="bmp-all-added">
           <i class="ti ti-user-check"></i>
-          <span>All {{ candidateScope() }} members are already on this board.</span>
+          <span>@if (candidateScope() === "organisation") { <ng-container i18n>All organisation members are already on this board.</ng-container> } @else { <ng-container i18n>All workspace members are already on this board.</ng-container> }</span>
         </div>
       }
       @if (error()) { <p class="bmp-error"><i class="ti ti-alert-circle"></i> {{ error() }}</p> }
-      @if (loading()) { <p class="bmp-empty"><i class="ti ti-loader-2 spin"></i> Loading members…</p> }
+      @if (loading()) { <p class="bmp-empty"><i class="ti ti-loader-2 spin"></i> <ng-container i18n>Loading members…</ng-container></p> }
       @else {
         <section class="bmp-section">
-          <div class="bmp-section-title">Members</div>
+          <div class="bmp-section-title" i18n="Section heading: board members">Members</div>
           @for (member of localMembers(); track member.userId) {
             <div class="bmp-row">
               <div class="bmp-identity">
                 <k-avatar [url]="member.avatarUrl" [name]="member.displayName" [size]="30" [userId]="member.userId" [workspaceId]="workspaceId()" [showPresence]="true" [lastOnlineAt]="member.lastOnlineAt ?? null" />
                 <div class="bmp-person">
                   <span class="bmp-name" [title]="member.displayName">{{ member.displayName }}</span>
-                  @if (member.userId === currentUserId()) { <span class="bmp-you">You</span> }
+                  @if (member.userId === currentUserId()) { <span class="bmp-you" i18n="Badge next to the current user's own name">You</span> }
                   @else if (isAccessRow(member) && member.email) { <span class="bmp-email" [title]="member.email">{{ member.email }}</span> }
                 </div>
               </div>
               <div class="bmp-actions">
                 @if (canManage() && isAccessRow(member)) {
-                  @if (member.pinned) { <span class="bmp-role bmp-role-admin">Admin</span> }
+                  @if (member.pinned) { <span class="bmp-role bmp-role-admin" i18n="Role badge">Admin</span> }
                   @else {
-                    <select class="bmp-role-select" [attr.aria-label]="'Role for ' + member.displayName" [value]="member.role" (input)="changeRole(member.userId, $any($event.target).value)" [disabled]="busy()">
-                      <option value="observer" [selected]="member.role === 'observer'">Observer</option>
-                      <option value="editor" [selected]="member.role === 'editor'">Editor</option>
+                    <select class="bmp-role-select" [attr.aria-label]="roleForLabel(member.displayName)" [value]="member.role" (input)="changeRole(member.userId, $any($event.target).value)" [disabled]="busy()">
+                      <option value="observer" [selected]="member.role === 'observer'" i18n="Board role: can view but not edit">Observer</option>
+                      <option value="editor" [selected]="member.role === 'editor'" i18n="Board role: can edit">Editor</option>
                     </select>
-                    <button class="bmp-access-toggle" type="button" [class.is-active]="member.assignedItemsOnly" [attr.aria-pressed]="member.assignedItemsOnly" (click)="changeRestriction(member, !member.assignedItemsOnly)" [disabled]="busy()" [attr.aria-label]="'Assigned items only for ' + member.displayName" [title]="assignedItemsOnlyTooltip(!!member.assignedItemsOnly)"><i [class]="member.assignedItemsOnly ? 'ti ti-lock' : 'ti ti-lock-open'"></i></button>
-                    <button class="bmp-remove" type="button" (click)="removeMember(member)" [disabled]="busy()" [attr.aria-label]="'Remove ' + member.displayName"><i class="ti ti-trash"></i></button>
+                    <button class="bmp-access-toggle" type="button" [class.is-active]="member.assignedItemsOnly" [attr.aria-pressed]="member.assignedItemsOnly" (click)="changeRestriction(member, !member.assignedItemsOnly)" [disabled]="busy()" [attr.aria-label]="assignedOnlyForLabel(member.displayName)" [title]="assignedItemsOnlyTooltip(!!member.assignedItemsOnly)"><i [class]="member.assignedItemsOnly ? 'ti ti-lock' : 'ti ti-lock-open'"></i></button>
+                    <button class="bmp-remove" type="button" (click)="removeMember(member)" [disabled]="busy()" [attr.aria-label]="removeLabel(member.displayName)"><i class="ti ti-trash"></i></button>
                   }
                 } @else {
                   <span class="bmp-role">{{ roleLabel(member.role) }}</span>
-                  @if (member.assignedItemsOnly) { <span class="bmp-access-readonly" kTooltip="This member can only see cards assigned directly or through a checklist item." tabindex="0" aria-label="Assigned items only"><i class="ti ti-lock"></i></span> }
+                  @if (member.assignedItemsOnly) { <span class="bmp-access-readonly" kTooltip="This member can only see cards assigned directly or through a checklist item." i18n-kTooltip tabindex="0" aria-label="Assigned items only" i18n-aria-label="Badge: member restricted to cards assigned to them"><i class="ti ti-lock"></i></span> }
                 }
               </div>
             </div>
-          } @empty { <p class="bmp-empty">No board members</p> }
+          } @empty { <p class="bmp-empty" i18n>No board members</p> }
         </section>
         @if (guests().length > 0) {
           <section class="bmp-section bmp-guests">
-            <div class="bmp-section-title">Guests</div>
+            <div class="bmp-section-title" i18n="Section heading: board members from other organisations">Guests</div>
             @for (guest of guests(); track guest.userId) {
               <div class="bmp-row">
                 <div class="bmp-identity">
                   <k-avatar [url]="guest.avatarUrl" [name]="guest.displayName" [size]="30" [userId]="guest.userId" [workspaceId]="workspaceId()" [showPresence]="true" [lastOnlineAt]="guest.lastOnlineAt ?? null" />
                   <div class="bmp-person">
                     <span class="bmp-name" [title]="guest.displayName">{{ guest.displayName }}</span>
-                    @if (guest.userId === currentUserId()) { <span class="bmp-you">You</span> }
+                    @if (guest.userId === currentUserId()) { <span class="bmp-you" i18n="Badge next to the current user's own name">You</span> }
                   </div>
                 </div>
                 <div class="bmp-actions">
                   @if (canManage() && isAccessRow(guest)) {
-                    <select class="bmp-role-select" [attr.aria-label]="'Role for ' + guest.displayName" [value]="guest.role" (input)="changeRole(guest.userId, $any($event.target).value)" [disabled]="busy()">
-                      <option value="observer" [selected]="guest.role === 'observer'">Observer</option>
-                      <option value="editor" [selected]="guest.role === 'editor'">Editor</option>
+                    <select class="bmp-role-select" [attr.aria-label]="roleForLabel(guest.displayName)" [value]="guest.role" (input)="changeRole(guest.userId, $any($event.target).value)" [disabled]="busy()">
+                      <option value="observer" [selected]="guest.role === 'observer'" i18n="Board role: can view but not edit">Observer</option>
+                      <option value="editor" [selected]="guest.role === 'editor'" i18n="Board role: can edit">Editor</option>
                     </select>
-                    <button class="bmp-access-toggle" type="button" [class.is-active]="guest.assignedItemsOnly" [attr.aria-pressed]="guest.assignedItemsOnly" (click)="changeRestriction(guest, !guest.assignedItemsOnly)" [disabled]="busy()" [attr.aria-label]="'Assigned items only for ' + guest.displayName" [title]="assignedItemsOnlyTooltip(!!guest.assignedItemsOnly)"><i [class]="guest.assignedItemsOnly ? 'ti ti-lock' : 'ti ti-lock-open'"></i></button>
-                    <button class="bmp-remove" type="button" (click)="removeMember(guest)" [disabled]="busy()" [attr.aria-label]="'Remove ' + guest.displayName"><i class="ti ti-trash"></i></button>
+                    <button class="bmp-access-toggle" type="button" [class.is-active]="guest.assignedItemsOnly" [attr.aria-pressed]="guest.assignedItemsOnly" (click)="changeRestriction(guest, !guest.assignedItemsOnly)" [disabled]="busy()" [attr.aria-label]="assignedOnlyForLabel(guest.displayName)" [title]="assignedItemsOnlyTooltip(!!guest.assignedItemsOnly)"><i [class]="guest.assignedItemsOnly ? 'ti ti-lock' : 'ti ti-lock-open'"></i></button>
+                    <button class="bmp-remove" type="button" (click)="removeMember(guest)" [disabled]="busy()" [attr.aria-label]="removeLabel(guest.displayName)"><i class="ti ti-trash"></i></button>
                   } @else {
                     <span class="bmp-role">{{ roleLabel(guest.role) }}</span>
-                    @if (guest.assignedItemsOnly) { <span class="bmp-access-readonly" kTooltip="This guest can only see cards assigned directly or through a checklist item." tabindex="0" aria-label="Assigned items only"><i class="ti ti-lock"></i></span> }
+                    @if (guest.assignedItemsOnly) { <span class="bmp-access-readonly" kTooltip="This guest can only see cards assigned directly or through a checklist item." i18n-kTooltip tabindex="0" aria-label="Assigned items only" i18n-aria-label="Badge: member restricted to cards assigned to them"><i class="ti ti-lock"></i></span> }
                   }
                 </div>
               </div>
@@ -147,7 +157,7 @@ function errorMessage(error: unknown): string {
           <div class="bmp-footer">
             <button class="bmp-leave" type="button" (click)="leaveMembership(member)" [disabled]="busy() || confirmingRemoval()">
               <i class="ti ti-logout" aria-hidden="true"></i>
-              <span>Leave board</span>
+              <span i18n="Button: leave this board">Leave board</span>
             </button>
           </div>
         }
@@ -216,8 +226,13 @@ export class BoardMembersMenu implements OnInit, OnDestroy {
   }
   ngOnDestroy() { this.socket?.off("board:member:added", this.onMemberUpsert); this.socket?.off("board:member:updated", this.onMemberUpsert); this.socket?.off("board:member:removed", this.onMemberRemoved); this.socket?.off("client:user:role-changed", this.onClientUserRoleChanged); this.leaveBoard?.() }
   isAccessRow(member: WireBoardMemberUser | BoardAccessMemberRow): member is BoardAccessMemberRow { return "pinned" in member; }
-  roleLabel(role: string) { return role.charAt(0).toUpperCase() + role.slice(1) }
-  assignedItemsOnlyTooltip(restricted: boolean) { return restricted ? "Restricted to assigned cards — click to allow access to every card on this board." : "Access to all cards — click to show only cards assigned directly or through a checklist item." }
+  roleLabel(role: string) { return ROLE_LABELS[role] ?? role.charAt(0).toUpperCase() + role.slice(1) }
+  readonly selectOrganisationMember = $localize`:Select placeholder:Select an organisation member…`;
+  readonly selectWorkspaceMember = $localize`:Select placeholder:Select a workspace member…`;
+  roleForLabel(name: string) { return $localize`:Accessible name of a member's role select:Role for ${name}:name:`; }
+  assignedOnlyForLabel(name: string) { return $localize`:Accessible name of the assigned-items-only toggle for a member:Assigned items only for ${name}:name:`; }
+  removeLabel(name: string) { return $localize`:Accessible name of a button removing a member from the board:Remove ${name}:name:`; }
+  assignedItemsOnlyTooltip(restricted: boolean) { return restricted ? $localize`Restricted to assigned cards — click to allow access to every card on this board.` : $localize`Access to all cards — click to show only cards assigned directly or through a checklist item.` }
   async addMember() { const userId = this.addUserId(); if (!userId || this.busy()) return; this.busy.set(true); this.error.set(null); try { await this.api.post(`/boards/${this.boardId()}/members`, { userId, role: this.addRole(), assignedItemsOnly: this.addAssignedItemsOnly() }); this.addUserId.set(""); this.addAssignedItemsOnly.set(false); await this.reload(false); const added = this.accessMembers().find((row) => row.userId === userId); if (added) this.memberAdded.emit({ userId: added.userId, displayName: added.displayName, avatarUrl: added.avatarUrl, lastOnlineAt: added.lastOnlineAt, role: added.role, source: "board", pinned: added.pinned, assignedItemsOnly: added.assignedItemsOnly, clientId: added.clientId, isOrganisationMember: added.isOrganisationMember }) } catch (e) { this.error.set(errorMessage(e)) } finally { this.busy.set(false) } }
   async changeRole(userId: string, role: BoardRole) { if (this.busy()) return; const previous = this.accessMembers(); this.accessMembers.update(rows => rows.map(row => row.userId === userId ? { ...row, role } : row)); this.busy.set(true); this.error.set(null); try { await this.api.patch(`/boards/${this.boardId()}/members/${userId}`, { role }) } catch (e) { this.accessMembers.set(previous); this.error.set(errorMessage(e)) } finally { this.busy.set(false) } }
   async changeRestriction(member: BoardAccessMemberRow, assignedItemsOnly: boolean) { if (this.busy()) return; const previous = this.accessMembers(); this.accessMembers.update(rows => rows.map(row => row.userId === member.userId ? { ...row, assignedItemsOnly } : row)); this.busy.set(true); this.error.set(null); try { await this.api.patch(`/boards/${this.boardId()}/members/${member.userId}`, { role: member.role, assignedItemsOnly }) } catch (e) { this.accessMembers.set(previous); this.error.set(errorMessage(e)) } finally { this.busy.set(false) } }
@@ -229,7 +244,7 @@ export class BoardMembersMenu implements OnInit, OnDestroy {
     if (!this.canLeave(member) || this.busy() || this.confirmingRemoval()) return;
     this.confirmingRemoval.set(true);
     try {
-      if (!await this.confirm.open({ title: "Leave this board?", confirmLabel: "Leave board", danger: true, message: "Your access, assignments, checklist assignments, watches, notifications, and Up Next entries will be removed. Admins will be notified. An admin must add or invite you to rejoin." })) return;
+      if (!await this.confirm.open({ title: $localize`:Confirm dialog title:Leave this board?`, confirmLabel: $localize`:Button — leave this board:Leave board`, danger: true, message: $localize`Your access, assignments, checklist assignments, watches, notifications, and Up Next entries will be removed. Admins will be notified. An admin must add or invite you to rejoin.` })) return;
       if (!this.unsavedWork.confirmNavigation()) return;
       this.busy.set(true);
       this.error.set(null);
@@ -258,7 +273,7 @@ export class BoardMembersMenu implements OnInit, OnDestroy {
       this.error.set(null);
       this.accessMembers.update(rows => rows.filter(row => row.userId !== member.userId));
       this.toasts.undoable({
-        message: `${member.displayName} removed from the board.`,
+        message: $localize`:Toast after removing a board member:${member.displayName}:name: removed from the board.`,
         icon: "user-minus",
         undo: restore,
         commit: async () => {
@@ -268,7 +283,7 @@ export class BoardMembersMenu implements OnInit, OnDestroy {
             if (!this.destroyed) this.memberRemoved.emit(member.userId);
           } catch (e) {
             restore();
-            this.toasts.info(`Couldn't remove ${member.displayName}: ${errorMessage(e)}`, "alert-triangle");
+            this.toasts.info($localize`:Toast when removing a board member fails:Couldn't remove ${member.displayName}:name:: ${errorMessage(e)}:error:`, "alert-triangle");
           }
         },
       });

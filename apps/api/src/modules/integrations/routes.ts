@@ -10,6 +10,8 @@ import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { hashOpaqueToken } from "../../lib/tokens.js";
 import { assertServiceAgentsAllowed, assertWebhooksAllowed } from "../../lib/tier-limits.js";
 import { deliverWebhookDelivery } from "../../lib/webhooks.js";
+import { requestLocale } from "../../lib/i18n/request-locale.js";
+import type { Locale } from "@kanera/shared/locales";
 import { chatDestinationConnectionSummary, encryptChatDestinationConfig, testChatPayload, validateChatDestinationConfig, type ChatDestinationConfig } from "../../lib/chat-destinations.js";
 import { newServiceClientId, newServiceClientSecret } from "../../oauth/routes.js";
 import { withSignedMedia } from "../../lib/media-keys.js";
@@ -85,7 +87,7 @@ function shapePersonalApiKey(row: typeof workspaceApiKeys.$inferSelect & { orgNa
   };
 }
 
-function shapeChatDestination(row: WebhookEndpointWithStats) {
+function shapeChatDestination(row: WebhookEndpointWithStats, viewerLocale: Locale) {
   const lastSuccessfulAt = row.lastSuccessfulAt
     ? row.lastSuccessfulAt instanceof Date ? row.lastSuccessfulAt : new Date(row.lastSuccessfulAt)
     : null;
@@ -97,7 +99,8 @@ function shapeChatDestination(row: WebhookEndpointWithStats) {
     eventTypes: row.eventTypes,
     priorityFieldId: row.priorityFieldId,
     enabled: row.enabled,
-    connectionSummary: chatDestinationConnectionSummary(row),
+    locale: row.locale,
+    connectionSummary: chatDestinationConnectionSummary(row, viewerLocale),
     lastSuccessfulAt: lastSuccessfulAt && !Number.isNaN(lastSuccessfulAt.getTime()) ? lastSuccessfulAt : null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -412,7 +415,7 @@ export async function integrationRoutes(app: FastifyInstance) {
       .where(and(eq(webhookEndpoints.workspaceId, workspaceId), inArray(webhookEndpoints.provider, ["slack", "discord", "telegram", "zulip"])))
       .groupBy(webhookEndpoints.id)
       .orderBy(desc(webhookEndpoints.createdAt));
-    return rows.map(shapeChatDestination);
+    return rows.map((row) => shapeChatDestination(row, requestLocale(req)));
   });
 
   app.post("/workspaces/:id/chat-destinations", async (req, reply) => {
@@ -426,6 +429,7 @@ export async function integrationRoutes(app: FastifyInstance) {
       workspaceId,
       createdById: req.auth.sub,
       provider: body.provider,
+      locale: body.locale ?? requestLocale(req),
       name: body.name,
       url: null,
       encryptedSecret: null,
@@ -441,7 +445,7 @@ export async function integrationRoutes(app: FastifyInstance) {
       premiumFeature: "integrations",
       supportSession: req.auth.authKind === "support",
     });
-    return reply.status(201).send(shapeChatDestination(row!));
+    return reply.status(201).send(shapeChatDestination(row!, requestLocale(req)));
   });
 
   app.patch("/workspaces/:workspaceId/chat-destinations/:endpointId", async (req) => {
@@ -470,13 +474,14 @@ export async function integrationRoutes(app: FastifyInstance) {
     }
     const [updated] = await db.update(webhookEndpoints).set({
       ...(body.name !== undefined && { name: body.name }),
+      ...(body.locale !== undefined && { locale: body.locale }),
       eventTypes,
       priorityFieldId,
       ...(body.enabled !== undefined && { enabled: body.enabled }),
       ...(encryptedConfig !== undefined && { encryptedConfig }),
       updatedAt: new Date(),
     }).where(eq(webhookEndpoints.id, current.id)).returning();
-    return shapeChatDestination(updated!);
+    return shapeChatDestination(updated!, requestLocale(req));
   });
 
   app.delete("/workspaces/:workspaceId/chat-destinations/:endpointId", async (req, reply) => {
@@ -519,7 +524,7 @@ export async function integrationRoutes(app: FastifyInstance) {
     ]);
     if (!endpoint || endpoint.provider === "generic") throw notFound("chat destination not found");
     if (!endpoint.enabled) throw badRequest("enable the destination before sending a test");
-    const payload = testChatPayload(workspaceId, workspace?.name ?? "Workspace");
+    const payload = testChatPayload(workspaceId, workspace?.name ?? "", endpoint.locale);
     const [delivery] = await db.insert(webhookDeliveries).values({
       endpointId,
       workspaceId,

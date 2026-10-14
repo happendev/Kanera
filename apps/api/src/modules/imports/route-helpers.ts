@@ -2,6 +2,7 @@ import { users } from "@kanera/shared/schema";
 import { eq } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import { db } from "../../db.js";
+import { accountLocale } from "../../lib/i18n/request-locale.js";
 import { env } from "../../env.js";
 import { userAcceptsEmail } from "../../lib/lifecycle-emails.js";
 import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milestones.js";
@@ -64,10 +65,11 @@ export async function sendImportCompletedEmail(req: FastifyRequest, result: Impo
   if (req.auth.authKind === "support") return;
   try {
     if (!await userAcceptsEmail(req.auth.sub)) return;
-    const [user] = await db.select({ email: users.email, displayName: users.displayName }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
+    const [user] = await db.select({ email: users.email, displayName: users.displayName, locale: users.locale }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
     if (!user) return;
     const { summary } = result;
     await req.server.mailer.sendImportCompleted(user.email, {
+      locale: accountLocale(user.locale, req),
       displayName: user.displayName,
       source,
       boardName: result.board.name,

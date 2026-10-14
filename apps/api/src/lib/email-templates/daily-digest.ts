@@ -1,3 +1,5 @@
+import type { Locale } from "@kanera/shared/locales";
+import { serverMessages } from "../i18n/messages/index.js";
 import { cardSummary, emailLayout, heading, paragraph, sectionLabel } from "./layout.js";
 
 export interface DailyDigestCardItem {
@@ -20,7 +22,9 @@ export interface DailyDigestPriorityItem {
   dueLabel?: string | null;
 }
 
+/** Dates and due labels are formatted in `locale` when the digest is queued. */
 export interface DailyDigestEmailParams {
+  locale: Locale;
   displayName: string;
   localDate: string;
   localDateLabel: string;
@@ -33,23 +37,25 @@ export interface DailyDigestEmailParams {
   priorities?: DailyDigestPriorityItem[];
 }
 
-export function dailyDigestEmail({ displayName, localDateLabel, dueToday, overdue, priorities = [] }: DailyDigestEmailParams): string {
+export function dailyDigestEmail({ locale, displayName, localDateLabel, dueToday, overdue, priorities = [] }: DailyDigestEmailParams): string {
+  const m = serverMessages(locale).email.dailyDigest;
   const firstName = displayName.split(" ")[0] ?? displayName;
   const itemCount = dueToday.length + overdue.length;
   const sections = [
-    renderSection("Due today", dueToday),
-    renderSection("Overdue", overdue),
+    renderSection(m.dueToday, dueToday),
+    renderSection(m.overdue, overdue),
     // Last, and skipped when empty: dates are the reason this email is sent at all, and the queue is
     // the answer to "and of those, what first" — which only reads once the dates are on the page.
-    renderPriorities(priorities),
+    renderPriorities(m.priorities, priorities),
   ].filter(Boolean).join("");
 
   return emailLayout({
-    subject: "Your Kanera due items",
-    preheader: `${itemCount} Kanera item${itemCount === 1 ? "" : "s"} need attention today.`,
+    locale,
+    subject: m.subject,
+    preheader: m.preheader({ count: itemCount }),
     body: `
-      ${heading("Today's due items")}
-      ${paragraph(`Hi ${firstName}, here's the short list for ${localDateLabel}.`)}
+      ${heading(m.heading)}
+      ${paragraph(m.intro({ firstName, date: localDateLabel }))}
       ${sections}
     `,
   });
@@ -67,10 +73,10 @@ function renderSection(label: string, items: DailyDigestCardItem[]): string {
   `;
 }
 
-function renderPriorities(items: DailyDigestPriorityItem[]): string {
+function renderPriorities(label: string, items: DailyDigestPriorityItem[]): string {
   if (items.length === 0) return "";
   return renderSection(
-    "Your top priorities",
+    label,
     // The rank is rendered into the title rather than as its own cell: email clients that drop the
     // table layout still keep "1." attached to the card it numbers.
     items.map((item) => ({

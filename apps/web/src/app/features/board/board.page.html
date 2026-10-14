@@ -8,7 +8,7 @@
 <k-page-header
   [icon]="state.board()?.icon || 'layout-kanban'"
   [iconColor]="boardIconColor()"
-  [title]="state.board()?.name ?? 'Board'"
+  [title]="state.board()?.name ?? boardFallbackTitle"
   [loading]="state.board() === null"
 >
   <!-- One projectable root per @if block, so each node reaches the slot its attribute names: an @if
@@ -43,10 +43,10 @@
        looking for. The label collapses to the icon only below the compact breakpoint. -->
   @if (state.board() !== null && state.canEditRole() && effectiveView() !== 'notes' && !showArchived()) {
   <!-- A disabled button swallows pointer events, so the reason it is disabled lives on the wrapper. -->
-  <span phActions class="menu-anchor" [kTooltip]="state.canEdit() ? '' : 'You have view-only access to this board'">
-    <button type="button" class="k-toolbar-btn k-toolbar-collapsible-label is-primary new-card-btn" [disabled]="!state.canEdit()" (click)="openComposer()" aria-label="New card" [kTooltip]="state.canEdit() ? 'New card · C' : ''">
+  <span phActions class="menu-anchor" [kTooltip]="state.canEdit() ? '' : viewOnlyHint">
+    <button type="button" class="k-toolbar-btn k-toolbar-collapsible-label is-primary new-card-btn" [disabled]="!state.canEdit()" (click)="openComposer()" aria-label="New card" i18n-aria-label="Button: create a card" [kTooltip]="state.canEdit() ? newCardTooltip : ''">
       <i class="ti ti-plus"></i>
-      <span>New card</span>
+      <span i18n="Button: create a card">New card</span>
     </button>
   </span>
   }
@@ -59,27 +59,27 @@
          directly beside the menu trigger. -->
     <span class="menu-anchor" #overviewAnchor>
       @if (!phoneHeader()) {
-      <button type="button" class="k-toolbar-icon-btn is-ghost board-overview-trigger" [class.is-open]="overviewOpen()" (click)="toggleOverview()" aria-label="Board overview" [attr.aria-expanded]="overviewOpen()" kTooltip="Board overview">
+      <button type="button" class="k-toolbar-icon-btn is-ghost board-overview-trigger" [class.is-open]="overviewOpen()" (click)="toggleOverview()" aria-label="Board overview" i18n-aria-label [attr.aria-expanded]="overviewOpen()" kTooltip="Board overview" i18n-kTooltip>
         <i class="ti ti-radar-2"></i>
       </button>
       }
       @if (overviewOpen()) {
-      <section class="board-overview" kAnchoredPanel [apAnchor]="overviewAnchor" [apPlacement]="overviewPlacement" (apDismissed)="overviewOpen.set(false)" aria-label="Board overview">
+      <section class="board-overview" kAnchoredPanel [apAnchor]="overviewAnchor" [apPlacement]="overviewPlacement" (apDismissed)="overviewOpen.set(false)" aria-label="Board overview" i18n-aria-label>
         @let overview = boardOverview();
         <div class="board-overview-head">
-          <div><strong>Board overview</strong><span>Card counts and upcoming work</span></div>
+          <div><strong i18n="Panel heading">Board overview</strong><span i18n>Card counts and upcoming work</span></div>
         </div>
         <div class="board-overview-metrics">
-          <button type="button" [class.is-active]="boardCardFilter() === null" (click)="setBoardCardFilter(null)" kTooltip="Show all active cards"><strong>{{ overview.active }}</strong><span>Active</span></button>
-          <button type="button" [class.needs-attention]="overview.overdue > 0" [class.is-active]="boardCardFilter() === 'overdue'" [disabled]="overview.overdue === 0" (click)="setBoardCardFilter('overdue')" kTooltip="Show overdue cards"><strong>{{ overview.overdue }}</strong><span>Overdue</span></button>
-          <button type="button" [class.is-active]="boardCardFilter() === 'unassigned'" [disabled]="overview.unassigned === 0" (click)="setBoardCardFilter('unassigned')" kTooltip="Show unassigned cards"><strong>{{ overview.unassigned }}</strong><span>Unassigned</span></button>
-          <button type="button" [class.is-active]="boardCardFilter() === 'inactive'" [disabled]="overview.inactive === 0" (click)="setBoardCardFilter('inactive')" [kTooltip]="inactiveCardsTooltip()"><strong>{{ overview.inactive }}</strong><span>Inactive</span></button>
+          <button type="button" [class.is-active]="boardCardFilter() === null" (click)="setBoardCardFilter(null)" kTooltip="Show all active cards" i18n-kTooltip><strong>{{ overview.active }}</strong><span i18n="Board overview count: cards not yet completed">Active</span></button>
+          <button type="button" [class.needs-attention]="overview.overdue > 0" [class.is-active]="boardCardFilter() === 'overdue'" [disabled]="overview.overdue === 0" (click)="setBoardCardFilter('overdue')" kTooltip="Show overdue cards" i18n-kTooltip><strong>{{ overview.overdue }}</strong><span i18n="Board overview count: cards past their due date">Overdue</span></button>
+          <button type="button" [class.is-active]="boardCardFilter() === 'unassigned'" [disabled]="overview.unassigned === 0" (click)="setBoardCardFilter('unassigned')" kTooltip="Show unassigned cards" i18n-kTooltip><strong>{{ overview.unassigned }}</strong><span i18n="Board overview count: cards with no assignee">Unassigned</span></button>
+          <button type="button" [class.is-active]="boardCardFilter() === 'inactive'" [disabled]="overview.inactive === 0" (click)="setBoardCardFilter('inactive')" [kTooltip]="inactiveCardsTooltip()"><strong>{{ overview.inactive }}</strong><span i18n="Board overview count: cards with no recent activity">Inactive</span></button>
         </div>
         @if (overview.dueSoon > 0) {
-        <div class="board-overview-callout"><i class="ti ti-calendar-due"></i>{{ overview.dueSoon }} due in the next 7 days</div>
+        <div class="board-overview-callout"><i class="ti ti-calendar-due"></i><ng-container i18n="Board overview: count of cards due within a week">{ overview.dueSoon, plural, other {{{ overview.dueSoon }} due in the next 7 days} }</ng-container></div>
         }
         @if (overview.listCounts.length) {
-        <div class="board-overview-section-title">Cards by list</div>
+        <div class="board-overview-section-title" i18n>Cards by list</div>
         <div class="board-overview-lists">
           @for (entry of overview.listCounts; track entry.id) {
           <div><span><i [class]="'ti ti-' + entry.icon"></i>{{ entry.name }}</span><strong>{{ entry.count }}</strong></div>
@@ -87,9 +87,9 @@
         </div>
         }
         <div class="board-overview-actions">
-          <button type="button" (click)="setView('history'); overviewOpen.set(false)"><i class="ti ti-history"></i> Work done</button>
+          <button type="button" (click)="setView('history'); overviewOpen.set(false)"><i class="ti ti-history"></i> <ng-container i18n="Button: open the Work done view">Work done</ng-container></button>
           @if (auth.user()?.portfolioEnabled !== false) {
-          <button type="button" (click)="openPortfolio()"><i class="ti ti-chart-dots-3"></i> Portfolio</button>
+          <button type="button" (click)="openPortfolio()"><i class="ti ti-chart-dots-3"></i> <ng-container i18n="Button: open the Portfolio page">Portfolio</ng-container></button>
           }
         </div>
       </section>
@@ -97,8 +97,8 @@
     </span>
     <span class="menu-anchor watcher-popover-wrap">
       @if (!phoneHeader()) {
-      <button type="button" class="k-toolbar-icon-btn is-ghost watch-btn" [class.is-watching]="isWatchingBoard()" [class.is-open]="watcherPopoverOpen()" (click)="toggleBoardWatcherPopover()" [attr.aria-label]="isWatchingBoard() ? 'Board watchers' : 'Watch board'"
-        [attr.aria-expanded]="watcherPopoverOpen()" kTooltip="Board watchers">
+      <button type="button" class="k-toolbar-icon-btn is-ghost watch-btn" [class.is-watching]="isWatchingBoard()" [class.is-open]="watcherPopoverOpen()" (click)="toggleBoardWatcherPopover()" [attr.aria-label]="isWatchingBoard() ? boardWatchersLabel : watchBoardLabel"
+        [attr.aria-expanded]="watcherPopoverOpen()" kTooltip="Board watchers" i18n-kTooltip>
         <i [class]="isWatchingBoard() ? 'ti ti-eye-check' : 'ti ti-eye'"></i>
       </button>
       }
@@ -111,41 +111,41 @@
          header with one identity cluster (overview, watchers, menu) and one primary action. -->
     @if (boardMenuAvailable()) {
     <span class="menu-anchor board-menu-wrap">
-      <button #boardMenuTrigger type="button" class="k-toolbar-icon-btn is-ghost board-menu-trigger" [class.is-open]="boardMenuOpen()" (click)="toggleBoardMenu()" aria-label="Board menu" [attr.aria-expanded]="boardMenuOpen()" [attr.aria-haspopup]="'menu'" kTooltip="Board menu">
+      <button #boardMenuTrigger type="button" class="k-toolbar-icon-btn is-ghost board-menu-trigger" [class.is-open]="boardMenuOpen()" (click)="toggleBoardMenu()" aria-label="Board menu" i18n-aria-label [attr.aria-expanded]="boardMenuOpen()" [attr.aria-haspopup]="'menu'" kTooltip="Board menu" i18n-kTooltip>
         <i [class]="exportLoading() ? 'ti ti-loader-2 spin' : 'ti ti-dots'"></i>
       </button>
       @if (boardMenuOpen()) {
-      <div kMenu class="board-export-menu board-menu" role="menu" aria-label="Board menu" kAnchoredPanel [apAnchor]="boardMenuTrigger" [apPlacement]="boardMenuPlacement" (apDismissed)="boardMenuOpen.set(false)">
+      <div kMenu class="board-export-menu board-menu" role="menu" aria-label="Board menu" i18n-aria-label kAnchoredPanel [apAnchor]="boardMenuTrigger" [apPlacement]="boardMenuPlacement" (apDismissed)="boardMenuOpen.set(false)">
         @if (phoneHeader()) {
         <button type="button" class="k-menu-item board-export-item" role="menuitem" (click)="openOverviewFromMenu()">
           <i class="ti ti-radar-2"></i>
-          <span>Board overview</span>
+          <span i18n="Board menu item">Board overview</span>
         </button>
         <button type="button" class="k-menu-item board-export-item" role="menuitem" (click)="openWatchersFromMenu()">
           <i [class]="isWatchingBoard() ? 'ti ti-eye-check' : 'ti ti-eye'"></i>
-          <span>{{ isWatchingBoard() ? 'Board watchers' : 'Watch board' }}</span>
+          <span>{{ isWatchingBoard() ? boardWatchersLabel : watchBoardLabel }}</span>
         </button>
         }
         @if (effectiveView() === 'board') {
-        <div class="k-menu-heading board-menu-heading">Display</div>
+        <div class="k-menu-heading board-menu-heading" i18n="Board menu heading">Display</div>
         <button type="button" class="k-menu-item board-export-item" role="menuitemcheckbox" [attr.aria-checked]="compactCards()" (click)="toggleCompactCards()">
           <i class="ti" [class.ti-checkbox]="compactCards()" [class.ti-square]="!compactCards()"></i>
-          <span>Compact cards</span>
+          <span i18n="Board menu checkbox">Compact cards</span>
         </button>
         }
         @if (state.canEdit()) {
         <button type="button" class="k-menu-item board-export-item" role="menuitem" (click)="openBackgroundFromMenu()">
           <i class="ti ti-palette"></i>
-          <span>Change background</span>
+          <span i18n="Board menu item">Change background</span>
         </button>
         }
         <!-- Table owns its own export control; hide the board-level action so the two do not duplicate
              each other. -->
         @if (state.canEditRole() && !viewOwnsChrome()) {
-        <div class="k-menu-heading board-menu-heading">Export</div>
+        <div class="k-menu-heading board-menu-heading" i18n="Board menu heading">Export</div>
         <button type="button" class="k-menu-item board-export-item" role="menuitem" [disabled]="!!exportLoading()" (click)="exportBoardExcel()">
           <i class="ti ti-file-spreadsheet"></i>
-          <span>Excel</span>
+          <span i18n="Board menu item: export as an Excel spreadsheet">Excel</span>
         </button>
         <button type="button" class="k-menu-item board-export-item" role="menuitem" [disabled]="!!exportLoading()" (click)="exportBoardJson()">
           <i class="ti ti-braces"></i>
@@ -153,7 +153,7 @@
         </button>
         }
         @if (mirrorMenuAvailable()) {
-        <div class="k-menu-heading board-menu-heading">Mirrors</div>
+        <div class="k-menu-heading board-menu-heading" i18n="Board menu heading: boards that sync cards with this one">Mirrors</div>
         <button type="button" class="k-menu-item board-export-item mirror-menu-trigger" role="menuitem" [disabled]="mirrorCreateBlocked()" (click)="openMirrorCreate()"><i [class]="mirrorCreateBlocked() ? 'ti ti-ban' : 'ti ti-circles-relation'"></i><span>{{ mirrorCreateLabel() }}</span></button>
         <button type="button" class="k-menu-item board-export-item" role="menuitem" [disabled]="mirrorCount() === 0" (click)="openMirrorsDialog()"><i class="ti ti-circles-relation"></i><span>{{ manageMirrorsLabel() }}</span></button>
         }
@@ -172,6 +172,7 @@
     [options]="viewOptions()"
     [value]="effectiveView()"
     ariaLabel="View mode"
+    i18n-ariaLabel
     [autoLabels]="true"
     (valueChange)="setView($event)"
   />
@@ -190,6 +191,7 @@
       [value]="searchInputValue()"
       [disabled]="state.board() === null"
       placeholder="Search cards"
+      i18n-placeholder
       (valueChange)="setSearchQuery($event)"
     />
     @if (effectiveView() === 'history') {
@@ -197,6 +199,7 @@
       [options]="workDoneLayoutOptions()"
       [value]="workDoneLayout()"
       ariaLabel="Work done layout"
+      i18n-ariaLabel
       (valueChange)="setWorkDoneLayout($event)"
     />
     }
@@ -211,18 +214,18 @@
       <!-- `is-set` is the app-wide "away from its default" treatment and `has-clear` its inline reset,
            the same pair the Table's own grouping trigger uses. List columns are the default, so only
            a real grouping engages them. -->
-      <button #groupByTrigger type="button" class="k-toolbar-btn k-toolbar-collapsible-label" [class.is-open]="groupByMenuOpen()" [class.is-set]="kanbanGrouped()" [class.has-clear]="kanbanGroupingResettable()" [disabled]="state.board() === null" (click)="toggleGroupByMenu()" [attr.aria-expanded]="groupByMenuOpen()" [kTooltip]="'Columns: ' + kanbanGroupByLabel()">
+      <button #groupByTrigger type="button" class="k-toolbar-btn k-toolbar-collapsible-label" [class.is-open]="groupByMenuOpen()" [class.is-set]="kanbanGrouped()" [class.has-clear]="kanbanGroupingResettable()" [disabled]="state.board() === null" (click)="toggleGroupByMenu()" [attr.aria-expanded]="groupByMenuOpen()" [kTooltip]="columnsTooltip()">
         <i [class]="'ti ti-' + kanbanGroupByIcon()"></i>
         <span>{{ kanbanGroupByLabel() }}</span>
       </button>
       @if (kanbanGroupingResettable()) {
-      <button type="button" class="k-toolbar-clear" kTooltip="Reset to list columns" aria-label="Reset to list columns" (click)="setKanbanGroupBy('list')">
+      <button type="button" class="k-toolbar-clear" kTooltip="Reset to list columns" i18n-kTooltip aria-label="Reset to list columns" i18n-aria-label (click)="setKanbanGroupBy('list')">
         <i class="ti ti-x"></i>
       </button>
       }
       @if (groupByMenuOpen()) {
       <div kMenu class="group-by-menu" kAnchoredPanel [apAnchor]="groupByTrigger" [apPlacement]="groupByMenuPlacement" (apDismissed)="groupByMenuOpen.set(false)">
-        <div class="k-menu-heading group-by-menu-heading">Columns</div>
+        <div class="k-menu-heading group-by-menu-heading" i18n="Menu heading: what the kanban columns are grouped by">Columns</div>
         <div class="group-by-menu-scroll">
           @for (option of kanbanGroupByOptions(); track option.value) {
           <button type="button" class="k-menu-item group-by-item" [class.is-selected]="option.value === effectiveKanbanGroupBy()" [attr.aria-pressed]="option.value === effectiveKanbanGroupBy()" (click)="setKanbanGroupBy(option.value)">
@@ -268,9 +271,9 @@
     />
 
     @if (effectiveView() !== 'history') {
-    <button type="button" class="k-toolbar-btn k-toolbar-collapsible-label" [disabled]="state.board() === null" (click)="openCompletedHistory()" kTooltip="Completed cards">
+    <button type="button" class="k-toolbar-btn k-toolbar-collapsible-label" [disabled]="state.board() === null" (click)="openCompletedHistory()" kTooltip="Completed cards" i18n-kTooltip>
       <i class="ti ti-circle-check"></i>
-      <span>Completed</span>
+      <span i18n="Toolbar button: open completed cards">Completed</span>
     </button>
     }
   </div>
@@ -279,9 +282,9 @@
   <span ptTail class="bulk-selection-bar">
     <button type="button" class="bulk-selection-trigger" (click)="openBulkMenu($event)" (contextmenu)="openBulkMenu($event)">
       <i class="ti ti-select"></i>
-      <span>{{ bulkSelectedCount() }} selected</span>
+      <span i18n>{ bulkSelectedCount(), plural, other {{{ bulkSelectedCount() }} selected} }</span>
     </button>
-    <button type="button" class="bulk-selection-clear" (click)="clearBulkSelection()" aria-label="Clear selected cards" kTooltip="Clear selection">
+    <button type="button" class="bulk-selection-clear" (click)="clearBulkSelection()" aria-label="Clear selected cards" i18n-aria-label kTooltip="Clear selection" i18n-kTooltip>
       <i class="ti ti-x"></i>
     </button>
   </span>
@@ -298,20 +301,20 @@
 <k-board-mirrors-dialog [boardId]="boardId()" [refreshVersion]="mirrorRefreshVersion()" (mirrorCountChange)="mirrorCount.set($event)" (dismissed)="mirrorsDialogOpen.set(false)" />
 }
 
-<k-toast [show]="!state.online() && !state.customFieldValuesComplete()" icon="cloud-off" message="Some custom fields are not cached. Their values and filters may be incomplete until you reconnect." />
+<k-toast [show]="!state.online() && !state.customFieldValuesComplete()" icon="cloud-off" message="Some custom fields are not cached. Their values and filters may be incomplete until you reconnect." i18n-message />
 <k-toast [show]="!!offlineBoardCachedAt()" [delayMs]="offlineCopyPromptDelayMs" icon="cloud-off" [message]="offlineCopyLabel()" />
 
 @if (showArchived() && effectiveView() !== 'history') {
 <div class="archive-retention-note">
   <i class="ti ti-info-circle"></i>
-  Archived cards are permanently deleted after 30 days.
+  <ng-container i18n>Archived cards are permanently deleted after 30 days.</ng-container>
 </div>
 }
 
 @if (state.viewerAssignedItemsOnly() && (effectiveView() === 'calendar' || effectiveView() === 'history')) {
 <div class="assigned-access-note">
   <i class="ti ti-lock"></i>
-  This view only includes cards assigned to you directly or through a checklist item.
+  <ng-container i18n>This view only includes cards assigned to you directly or through a checklist item.</ng-container>
 </div>
 }
 
@@ -325,7 +328,7 @@
 <!-- showSearch/showFilterBar off: the page toolbar above owns both for every view, so the table
      renders only what is genuinely table-specific (columns, collapse, breakdown, export). The
      filter inputs stay bound because a single selected list is also what "Add row" creates into. -->
-<k-board-table-view [boardId]="boardId()" [boardName]="state.board()?.name ?? 'Board'" [workspaceId]="state.board()?.workspaceId ?? null" [cards]="activeCards()" [lists]="state.visibleLists()" [customFields]="state.customFields()" [cardLabels]="state.cardLabels()" [members]="state.members()"
+<k-board-table-view [boardId]="boardId()" [boardName]="state.board()?.name ?? boardFallbackTitle" [workspaceId]="state.board()?.workspaceId ?? null" [cards]="activeCards()" [lists]="state.visibleLists()" [customFields]="state.customFields()" [cardLabels]="state.cardLabels()" [members]="state.members()"
   [labelsByCard]="state.labelsByCard()" [assigneesByCard]="state.assigneesByCard()" [customFieldValuesByCardAndField]="state.customFieldValuesByCardAndField()" [filteredCardIds]="filteredCardIds()" [priorityRanksByCard]="viewerPriorityRanks()" [selectedCardId]="openCardId()" [bulkSelectedCardIds]="bulkSelectedCardIds()"
   [canEdit]="state.canEdit() && !showArchived()" [canEditRole]="state.canEditRole() && !showArchived()" [currentUserId]="currentUserId()" [loading]="state.board() === null"
   [showSearch]="false" [showFilterBar]="false" [hostOwnsComposer]="true" (composeRequested)="openComposer({ listId: $event.listId })"
@@ -363,9 +366,9 @@
   } @else if (state.visibleLists().length === 0) {
   <!-- A board with no lists renders nothing at all, which reads as broken rather than new. Lists are
        workspace-scoped, so the fix lives in settings; admins get taken straight there. -->
-  <k-empty-state class="board-empty" icon="columns-3" title="This board has no lists yet" [text]="state.viewerIsWorkspaceAdmin() ? 'Lists are the columns cards move through, and every board in this workspace shares them. Add your first list to start capturing work.' : 'Lists are the columns cards move through. A workspace admin needs to add some before cards can be created here.'">
+  <k-empty-state class="board-empty" icon="columns-3" title="This board has no lists yet" i18n-title [text]="state.viewerIsWorkspaceAdmin() ? noListsAdminText : noListsMemberText">
     @if (state.viewerIsWorkspaceAdmin() && listsSettingsUrl(); as url) {
-    <a class="button" [routerLink]="url"><i class="ti ti-settings"></i> Set up lists</a>
+    <a class="button" [routerLink]="url"><i class="ti ti-settings"></i> <ng-container i18n>Set up lists</ng-container></a>
     }
   </k-empty-state>
   } @else {

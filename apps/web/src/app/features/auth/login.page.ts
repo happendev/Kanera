@@ -7,6 +7,9 @@ import { PublicAuthClient } from "../../core/auth/public-auth.client";
 import { MFA_ENROLLMENT_HANDOFF_KEY, parseAuthResponse } from "../../core/auth/auth-response";
 import { LogoComponent } from "../../shared/logo.component";
 import { mfaQrDataUrl } from "../../shared/mfa-qr";
+import { LocaleSwitcherComponent } from "./locale-switcher.component";
+
+const INVALID_CODE_MESSAGE = $localize`Invalid or expired verification code`;
 
 type KaneraEnvironment = "development" | "test" | "staging" | "production";
 
@@ -17,7 +20,7 @@ interface AuthConfigResponse {
 @Component({
   selector: "k-login",
   standalone: true,
-  imports: [RouterLink, LogoComponent, FormField],
+  imports: [RouterLink, LogoComponent, FormField, LocaleSwitcherComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./login.page.html",
   styleUrl: "./login.page.scss",
@@ -28,6 +31,8 @@ export class LoginPage implements OnInit {
   private readonly router = inject(Router);
 
   readonly showPassword = signal(false);
+  protected readonly showPasswordLabel = $localize`:Button — reveal the typed password:Show password`;
+  protected readonly hidePasswordLabel = $localize`:Button — mask the typed password:Hide password`;
   readonly challengeToken = signal("");
   readonly mfaEnrollment = signal(false);
   readonly mfaSecret = signal("");
@@ -38,8 +43,8 @@ export class LoginPage implements OnInit {
     validate(verification.code, ({ value }) => {
       const code = value().trim();
       const message = this.mfaEnrollment()
-        ? (/^\d{6}$/.test(code) ? null : "Enter the six-digit code from your authenticator app.")
-        : validateRequired(code, "Authenticator or recovery code");
+        ? (/^\d{6}$/.test(code) ? null : $localize`Enter the six-digit code from your authenticator app.`)
+        : (code ? null : $localize`Authenticator or recovery code is required.`);
       return validationError(message);
     });
     disabled(verification.code, { when: ({ state }) => state.submitting() });
@@ -48,7 +53,7 @@ export class LoginPage implements OnInit {
   readonly loginModel = signal({ email: "", password: "" });
   readonly loginForm = form(this.loginModel, (credentials) => {
     validate(credentials.email, ({ value }) => validationError(validateEmail(value().trim())));
-    validate(credentials.password, ({ value }) => validationError(validateRequired(value(), "Password")));
+    validate(credentials.password, ({ value }) => validationError(value() ? null : $localize`Password is required.`));
     disabled(credentials.email, { when: ({ state }) => state.submitting() });
     disabled(credentials.password, { when: ({ state }) => state.submitting() });
   });
@@ -99,7 +104,7 @@ export class LoginPage implements OnInit {
     try {
       await this.beginRequiredEnrollment(this.handedOverChallenge);
     } catch {
-      this.workflowError.set("Your organisation requires two-factor authentication. Sign in to set it up.");
+      this.workflowError.set($localize`Your organisation requires two-factor authentication. Sign in to set it up.`);
       this.challengeToken.set("");
       this.mfaEnrollment.set(false);
     } finally {
@@ -127,11 +132,11 @@ export class LoginPage implements OnInit {
           password: this.password(),
         });
       } catch {
-        return { kind: "network", message: "Unable to reach the server. Check your connection and try again." };
+        return { kind: "network", message: $localize`Unable to reach the server. Check your connection and try again.` };
       }
 
       if (!res.ok) {
-        return { kind: "credentials", message: "Invalid credentials" };
+        return { kind: "credentials", message: $localize`Invalid credentials` };
       }
       const raw = await res.json() as { status?: string; challengeToken?: string };
       if (raw.status === "mfa_required" && typeof raw.challengeToken === "string") {
@@ -162,7 +167,7 @@ export class LoginPage implements OnInit {
     this.workflowError.set(null);
     try {
       const res = await this.publicAuth.post("/auth/mfa/verify", { challengeToken: this.challengeToken(), code: this.mfaCode() });
-      if (!res.ok) { this.workflowError.set("Invalid or expired verification code"); return; }
+      if (!res.ok) { this.workflowError.set(INVALID_CODE_MESSAGE); return; }
       const json = parseAuthResponse(await res.json());
       this.auth.setSession(json.accessToken, json.user);
       await this.router.navigateByUrl(this.safeReturnUrl());
@@ -172,7 +177,7 @@ export class LoginPage implements OnInit {
   private async confirmRequiredMfa() {
     this.workflowBusy.set(true); this.workflowError.set(null);
     try { const result = await this.authPost<{ recoveryCodes: string[] }>("/auth/mfa/required/enroll/confirm", { challengeToken: this.challengeToken(), code: this.mfaCode() }); this.recoveryCodes.set(result.recoveryCodes); }
-    catch { this.workflowError.set("Invalid or expired verification code"); }
+    catch { this.workflowError.set(INVALID_CODE_MESSAGE); }
     finally { this.workflowBusy.set(false); }
   }
 
@@ -211,19 +216,19 @@ function isKaneraEnvironment(value: unknown): value is KaneraEnvironment {
 }
 
 function environmentBannerLabel(value: KaneraEnvironment): string | null {
-  if (value === "production") return null;
-  return value[0]!.toLocaleUpperCase() + value.slice(1);
+  switch (value) {
+    case "production": return null;
+    case "development": return $localize`:Banner naming a non-production deployment:Development`;
+    case "test": return $localize`:Banner naming a non-production deployment:Test`;
+    case "staging": return $localize`:Banner naming a non-production deployment:Staging`;
+  }
 }
 
 function validateEmail(email: string): string | null {
-  if (!email) return "Email is required.";
-  if (email.length > 254) return "Email must be 254 characters or fewer.";
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Enter a valid email address.";
+  if (!email) return $localize`Email is required.`;
+  if (email.length > 254) return $localize`Email must be 254 characters or fewer.`;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return $localize`Enter a valid email address.`;
   return null;
-}
-
-function validateRequired(value: string, label: string): string | null {
-  return value ? null : `${label} is required.`;
 }
 
 function validationError(message: string | null) {

@@ -31,11 +31,13 @@
             [class.is-open]="composerOpen()"
             [disabled]="!state.interactionReady() || editableBoards().length === 0"
             aria-label="New card"
+            i18n-aria-label="Button: create a card"
             kTooltip="New card"
+            i18n-kTooltip="Button: create a card"
             (click)="openComposer()"
           >
             <i class="ti ti-plus"></i>
-            <span>New card</span>
+            <span i18n="Button: create a card">New card</span>
           </button>
         }
         <div class="menu-anchor">
@@ -44,14 +46,14 @@
             class="k-toolbar-btn k-toolbar-collapsible-label"
             [class.is-open]="openMenu() === 'save'"
             [disabled]="!state.interactionReady()"
-            [kTooltip]="state.selectedView() ? 'Manage view' : 'Save view'"
+            [kTooltip]="state.selectedView() ? manageViewLabel : saveViewLabel"
             (click)="toggleMenu('save')"
           >
             <!-- Not a bare bookmark: this writes a view and the toolbar's picker reads one, and once
                  both drop to icon-only at narrow widths two identical bookmarks in two rows is not a
                  distinction anyone can make. -->
             <i [class]="state.selectedView() ? 'ti ti-bookmark-edit' : 'ti ti-bookmark-plus'"></i>
-            <span>{{ state.selectedView() ? "Manage view" : "Save view" }}</span>
+            <span>{{ state.selectedView() ? manageViewLabel : saveViewLabel }}</span>
           </button>
           @if (openMenu() === "save") {
             <k-save-view (closed)="closeMenu('save')" />
@@ -67,30 +69,32 @@
               class="k-toolbar-icon-btn is-ghost"
               [class.is-open]="openMenu() === 'display'"
               aria-label="Display menu"
+              i18n-aria-label
               [attr.aria-expanded]="openMenu() === 'display'"
               [attr.aria-haspopup]="'menu'"
               kTooltip="Display menu"
+              i18n-kTooltip
               (click)="toggleMenu('display')"
             >
               <i class="ti ti-dots"></i>
             </button>
             @if (openMenu() === "display") {
-              <div kMenu class="display-menu" role="menu" aria-label="Display menu" kAnchoredPanel [apAnchor]="displayMenuTrigger" [apPlacement]="displayMenuPlacement" (apDismissed)="closeMenu('display')">
-                <div class="k-menu-heading display-menu-heading">Display</div>
+              <div kMenu class="display-menu" role="menu" aria-label="Display menu" i18n-aria-label kAnchoredPanel [apAnchor]="displayMenuTrigger" [apPlacement]="displayMenuPlacement" (apDismissed)="closeMenu('display')">
+                <div class="k-menu-heading display-menu-heading" i18n="Menu heading: display settings">Display</div>
                 @if (effectiveDisplay() === "board") {
                   <button type="button" class="k-menu-item display-menu-item" role="menuitemcheckbox" [attr.aria-checked]="compactCards()" (click)="toggleCompactCards()">
                     <i class="ti" [class.ti-checkbox]="compactCards()" [class.ti-square]="!compactCards()"></i>
-                    <span>Compact cards</span>
+                    <span i18n="Menu item: show smaller cards">Compact cards</span>
                   </button>
                 }
                 <button type="button" class="k-menu-item display-menu-item" role="menuitem" (click)="openBackgroundFromMenu()">
                   <i class="ti ti-palette"></i>
-                  <span>Change background</span>
+                  <span i18n="Menu item">Change background</span>
                 </button>
               </div>
             }
             @if (showBackground()) {
-              <k-board-background title="Page background" [value]="background()" [anchor]="displayMenuTrigger" (selected)="selectBackground($event)" (close)="showBackground.set(false)" />
+              <k-board-background title="Page background" i18n-title [value]="background()" [anchor]="displayMenuTrigger" (selected)="selectBackground($event)" (close)="showBackground.set(false)" />
             }
           </div>
         }
@@ -106,6 +110,7 @@
         [options]="displayOptions()"
         [value]="effectiveDisplay()"
         ariaLabel="Display mode"
+        i18n-ariaLabel
         [autoLabels]="true"
         (valueChange)="selectDisplay($event)"
       />
@@ -134,6 +139,7 @@
             [value]="state.definition().filters.q"
             [disabled]="!state.interactionReady()"
             placeholder="Search cards"
+            i18n-placeholder
             (valueChange)="state.setSearch($event); queueQuery()"
           />
           @if (effectiveDisplay() === "history") {
@@ -142,6 +148,7 @@
               [options]="workDoneLayoutOptions()"
               [value]="workDoneLayout()"
               ariaLabel="Work done layout"
+              i18n-ariaLabel
               (valueChange)="setWorkDoneLayout($event)"
             />
           }
@@ -153,17 +160,18 @@
               [options]="priorityLayoutOptions"
               [value]="priorityLayout()"
               ariaLabel="Up next layout"
+              i18n-ariaLabel
               (valueChange)="setPriorityLayout($event)"
             />
-            <div class="priority-people" aria-label="People in Up next">
+            <div class="priority-people" aria-label="People in Up next" i18n-aria-label>
               @for (lane of priorityLanes(); track lane.target.userId) {
                 <button
                   type="button"
                   class="priority-person-toggle"
                   [class.is-hidden]="isPriorityLaneHidden(lane.target.userId)"
                   [attr.aria-pressed]="!isPriorityLaneHidden(lane.target.userId)"
-                  [attr.aria-label]="(isPriorityLaneHidden(lane.target.userId) ? 'Show Up next for ' : 'Hide Up next for ') + lane.target.displayName + ', ' + lane.queue.totalCount + ' cards'"
-                  [kTooltip]="(isPriorityLaneHidden(lane.target.userId) ? 'Show Up next for ' : 'Hide Up next for ') + lane.target.displayName + ' · ' + lane.queue.totalCount"
+                  [attr.aria-label]="priorityLaneToggleLabel(lane.target.displayName, lane.queue.totalCount, isPriorityLaneHidden(lane.target.userId))"
+                  [kTooltip]="priorityLaneToggleTooltip(lane.target.displayName, lane.queue.totalCount, isPriorityLaneHidden(lane.target.userId))"
                   (click)="togglePriorityLane(lane.target.userId)"
                 >
                   <k-avatar
@@ -190,7 +198,7 @@
               [class.is-set]="selectedTeamPerson()"
               [class.has-clear]="selectedTeamPerson() && state.interactionReady()"
               [disabled]="!state.interactionReady()"
-              [kTooltip]="'Teammate: ' + teamTrigger().label"
+              [kTooltip]="teammateTooltip()"
               (click)="toggleMenu('team')"
             >
               @if (teamTrigger().person; as person) {
@@ -206,7 +214,9 @@
                 type="button"
                 class="k-toolbar-clear"
                 kTooltip="Show all teammates"
+                i18n-kTooltip
                 aria-label="Show all teammates"
+                i18n-aria-label
                 (click)="selectTeamPerson('')"
               >
                 <i class="ti ti-x"></i>
@@ -215,10 +225,13 @@
             @if (openMenu() === "team") {
               <k-anchored-picker
                 title="Teammate"
+                i18n-title="Picker heading: choose a teammate"
                 [groups]="teamPeopleGroups()"
                 [selectedId]="selectedTeamPerson()"
                 searchPlaceholder="Search teammates…"
+                i18n-searchPlaceholder
                 emptyLabel="No teammates on these boards"
+                i18n-emptyLabel
                 (picked)="selectTeamPerson($event)"
                 (closed)="closeMenu('team')"
               />
@@ -238,7 +251,7 @@
             [class.is-set]="sourceValue()"
             [class.has-clear]="sourceValue() && state.interactionReady()"
             [disabled]="!state.interactionReady()"
-            [kTooltip]="'Boards: ' + scopeTrigger().label"
+            [kTooltip]="boardsTooltip()"
             (click)="toggleMenu('source')"
           >
             <i [class]="scopeTrigger().icon" [style.color]="scopeTrigger().color"></i>
@@ -250,7 +263,9 @@
               type="button"
               class="k-toolbar-clear"
               kTooltip="Show all boards"
+              i18n-kTooltip
               aria-label="Show all boards"
+              i18n-aria-label
               (click)="selectSource('')"
             >
               <i class="ti ti-x"></i>
@@ -259,11 +274,14 @@
           @if (openMenu() === "source") {
             <k-anchored-picker
               title="Boards"
+              i18n-title="Picker heading: choose which boards to show"
               [groups]="scopeGroups()"
               [selectedId]="sourceValue()"
               [width]="320"
               searchPlaceholder="Search boards…"
+              i18n-searchPlaceholder
               emptyLabel="No boards you can access"
+              i18n-emptyLabel
               (picked)="selectSource($event)"
               (closed)="closeMenu('source')"
             />
@@ -312,12 +330,16 @@
             [class.is-open]="upNextOpen()"
             [disabled]="!upNextAvailable()"
             [kTooltip]="upNextAvailable()
-              ? (upNextOpen() ? 'Close Up next' : 'Open Up next')
+              ? (upNextOpen() ? closeUpNextLabel : openUpNextLabel)
               : upNextUnavailableTooltip()"
             (click)="toggleUpNextPanel()"
           >
             <i class="ti ti-list-numbers"></i>
-            <span>Up next{{ upNextCount() ? " · " + upNextCount() : "" }}</span>
+            @if (upNextCount()) {
+              <span i18n="Up next button with the number of queued cards">Up next · {{ upNextCount() // i18n(ph="count") }}</span>
+            } @else {
+              <span i18n="Name of the personal priority queue">Up next</span>
+            }
             @if (upNextPulse()) {
               <!-- The queue changed since this person last had the panel open. -->
               <span class="up-next-pulse" aria-hidden="true"></span>
@@ -337,7 +359,7 @@
               [class.is-set]="state.portfolioDaysIsSet()"
               [class.has-clear]="state.portfolioDaysIsSet() && state.interactionReady()"
               [disabled]="!state.interactionReady()"
-              [kTooltip]="'Period: ' + periodLabel()"
+              [kTooltip]="periodTooltip()"
               (click)="toggleMenu('period')"
             >
               <i class="ti ti-calendar-stats"></i>
@@ -349,7 +371,9 @@
                 type="button"
                 class="k-toolbar-clear"
                 kTooltip="Reset reporting period"
+                i18n-kTooltip
                 aria-label="Reset reporting period"
+                i18n-aria-label
                 (click)="clearPortfolioDays()"
               >
                 <i class="ti ti-x"></i>
@@ -358,6 +382,7 @@
             @if (openMenu() === "period") {
               <k-anchored-picker
                 title="Reporting period"
+                i18n-title="Picker heading"
                 [groups]="periodGroups()"
                 [selectedId]="periodValue()"
                 [searchThreshold]="99"
@@ -381,7 +406,7 @@
               [class.is-open]="openMenu() === 'group'"
               [class.is-set]="state.groupByIsSet()"
               [class.has-clear]="state.groupByIsSet()"
-              [kTooltip]="'Group: ' + groupByLabel()"
+              [kTooltip]="groupTooltip()"
               (click)="toggleMenu('group')"
             >
               <i class="ti ti-layout-rows"></i>
@@ -393,7 +418,9 @@
                 type="button"
                 class="k-toolbar-clear"
                 kTooltip="Reset grouping"
+                i18n-kTooltip
                 aria-label="Reset grouping"
+                i18n-aria-label
                 (click)="clearGrouping()"
               >
                 <i class="ti ti-x"></i>
@@ -402,6 +429,7 @@
             @if (openMenu() === "group") {
               <k-anchored-picker
                 title="Group by"
+                i18n-title="Picker heading"
                 [groups]="groupByGroups()"
                 [selectedId]="state.definition().groupBy"
                 [align]="'end'"
@@ -420,7 +448,7 @@
               [class.is-set]="state.sortIsSet()"
               [class.has-clear]="state.sortIsSet() && state.interactionReady()"
               [disabled]="!state.interactionReady()"
-              [kTooltip]="'Sort: ' + sortLabel()"
+              [kTooltip]="sortTooltip()"
               (click)="toggleMenu('sort')"
             >
               <i class="ti ti-arrows-sort"></i>
@@ -432,7 +460,9 @@
                 type="button"
                 class="k-toolbar-clear"
                 kTooltip="Reset sort"
+                i18n-kTooltip
                 aria-label="Reset sort"
+                i18n-aria-label
                 (click)="clearSort()"
               >
                 <i class="ti ti-x"></i>
@@ -441,6 +471,7 @@
             @if (openMenu() === "sort") {
               <k-anchored-picker
                 title="Sort by"
+                i18n-title="Picker heading"
                 [groups]="sortGroups()"
                 [selectedId]="state.definition().sort"
                 [align]="'end'"
@@ -479,7 +510,9 @@
               type="button"
               class="k-toolbar-clear"
               kTooltip="Leave saved view"
+              i18n-kTooltip
               aria-label="Leave saved view"
+              i18n-aria-label
               (click)="selectView('')"
             >
               <i class="ti ti-x"></i>
@@ -488,11 +521,14 @@
           @if (openMenu() === "view") {
             <k-anchored-picker
               title="Saved views"
+              i18n-title="Picker heading"
               [groups]="savedViewGroups()"
               [selectedId]="state.selectedViewId() ?? ''"
               [align]="'end'"
               searchPlaceholder="Search views…"
+              i18n-searchPlaceholder
               emptyLabel="No saved views yet"
+              i18n-emptyLabel
               (picked)="selectView($event)"
               (closed)="closeMenu('view')"
             />
@@ -509,20 +545,20 @@
     <div class="offline-banner" role="status">
       <i class="ti ti-cloud-off"></i>
       <span>
-        Showing a saved copy from {{ cachedAt | date: "medium" }}. Reconnect to make changes.
-        @if (historyOfflineFallback()) { History will return after reconnecting. }
-        @if (prioritiesOfflineFallback()) { The Up next view will return after reconnecting. }
+        <ng-container i18n="Offline banner">Showing a saved copy from {{ offlineStamp(cachedAt) // i18n(ph="time") }}. Reconnect to make changes.</ng-container>
+        @if (historyOfflineFallback()) { <ng-container i18n="Offline banner">History will return after reconnecting.</ng-container> }
+        @if (prioritiesOfflineFallback()) { <ng-container i18n="Offline banner">The Up next view will return after reconnecting.</ng-container> }
       </span>
     </div>
   } @else if (!state.sockets.displayedOnline()) {
     <div class="offline-banner" role="status">
       <i class="ti ti-wifi-off"></i>
       <span>
-        Connection lost. Showing the last loaded view
-        <!-- The block opens and closes tight against its text: a space inside the braces survives
-             whitespace collapsing and lands between the time and the full stop. -->
-        @if (state.lastSyncedAt(); as syncedAt) {from {{ syncedAt | date: "shortTime" }}}. Changes
-        are paused.
+        @if (state.lastSyncedAt(); as syncedAt) {
+          <ng-container i18n="Offline banner">Connection lost. Showing the last loaded view from {{ syncedTime(syncedAt) // i18n(ph="time") }}. Changes are paused.</ng-container>
+        } @else {
+          <ng-container i18n="Offline banner">Connection lost. Showing the last loaded view. Changes are paused.</ng-container>
+        }
       </span>
     </div>
   }
@@ -532,11 +568,11 @@
   @if (state.loading() && state.response().cards.length === 0 && !state.portfolio()) {
     <div class="k-loading" role="status" aria-live="polite">
       <i class="ti ti-loader-2"></i>
-      <span>Loading your cards…</span>
+      <span i18n>Loading your cards…</span>
     </div>
   } @else if (state.error(); as error) {
     <k-empty-state class="error-state" icon="alert-circle" [title]="error">
-      <button type="button" class="secondary" (click)="state.refresh()">Try again</button>
+      <button type="button" class="secondary" (click)="state.refresh()" i18n="Button: retry loading">Try again</button>
     </k-empty-state>
   } @else {
     <!-- The display is the main track; the Up next queue docks beside it as a full-height sidebar
@@ -569,13 +605,13 @@
                 <tr>
                   <th>
                     <span class="entity-heading">
-                      Organisation, workspace and board
+                      <ng-container i18n="Portfolio table heading for the row names">Organisation, workspace and board</ng-container>
                       @if (portfolioGroupCount()) {
                         <button
                           type="button"
                           class="collapse-all"
                           (click)="togglePortfolioRowsCollapsed()"
-                          [title]="portfolioAllCollapsed() ? 'Expand all' : 'Collapse all'"
+                          [title]="portfolioAllCollapsed() ? expandAllLabel : collapseAllLabel"
                         >
                           <i class="ti" [class.ti-chevrons-down]="portfolioAllCollapsed()" [class.ti-chevrons-up]="!portfolioAllCollapsed()"></i>
                         </button>
@@ -598,7 +634,7 @@
                             class="row-toggle"
                             (click)="togglePortfolioRow(bucket, $event)"
                             [attr.aria-expanded]="!isPortfolioRowCollapsed(bucket)"
-                            [title]="isPortfolioRowCollapsed(bucket) ? 'Expand ' + bucket.label : 'Collapse ' + bucket.label"
+                            [title]="portfolioRowToggleTitle(bucket.label, isPortfolioRowCollapsed(bucket))"
                           >
                             <i class="ti" [class.ti-chevron-right]="isPortfolioRowCollapsed(bucket)" [class.ti-chevron-down]="!isPortfolioRowCollapsed(bucket)"></i>
                           </button>
@@ -636,7 +672,7 @@
       @if (drilldownLabel(); as label) {
         <div class="drilldown-banner">
           <span><i class="ti ti-chart-bar"></i>{{ label }}</span>
-          <button type="button" class="secondary" [disabled]="!state.interactionReady()" (click)="closeDrilldown()">Back to portfolio</button>
+          <button type="button" class="secondary" [disabled]="!state.interactionReady()" (click)="closeDrilldown()" i18n>Back to portfolio</button>
         </div>
       }
 
@@ -668,8 +704,8 @@
         @if (priorityLanes().length > 0 && visiblePriorityLanes().length === 0) {
           <section class="priority-all-hidden">
             <i class="ti ti-eye-off"></i>
-            <strong>Everyone is hidden</strong>
-            <span>Choose a profile above to show their Up next.</span>
+            <strong i18n="Up next view when every lane is hidden">Everyone is hidden</strong>
+            <span i18n>Choose a profile above to show their Up next.</span>
           </section>
         } @else if (priorityLayout() === "grid") {
           <k-team-priorities-view
@@ -694,7 +730,7 @@
           @if (priorityTableHiddenCount()) {
             <p class="priority-table-hidden-note">
               <i class="ti ti-lock"></i>
-              {{ priorityTableHiddenCount() }} ranked {{ priorityTableHiddenCount() === 1 ? "card is" : "cards are" }} hidden because you don’t have access.
+              <ng-container i18n="Note above the Up next table">{ priorityTableHiddenCount(), plural, one {{{ priorityTableHiddenCount() }} ranked card is hidden because you don’t have access.} other {{{ priorityTableHiddenCount() }} ranked cards are hidden because you don’t have access.} }</ng-container>
             </p>
           }
           <!--
@@ -706,6 +742,7 @@
             class="work-table-view priority-shared-table"
             boardId="global-work-team-priorities"
             boardName="Team Up next"
+            i18n-boardName="Name of the Team Cards Up next table, used in exports"
             [cards]="priorityTableCards()"
             [lists]="tableLists()"
             [customFields]="tableCustomFields()"
@@ -746,21 +783,21 @@
         }
       } @else {
         <section class="totals-strip">
-          <span><strong>{{ state.response().totals.cards }}</strong> {{ state.response().totals.cards === 1 ? "card" : "cards" }}</span>
-          <span [class.attention]="state.response().totals.overdue"><strong>{{ state.response().totals.overdue }}</strong> overdue</span>
-          <span><strong>{{ state.response().totals.dueSoon }}</strong> due next 7 days</span>
+          <span i18n="Totals strip">{ state.response().totals.cards, plural, one {<strong>{{ state.response().totals.cards }}</strong> card} other {<strong>{{ state.response().totals.cards }}</strong> cards} }</span>
+          <span [class.attention]="state.response().totals.overdue" i18n="Totals strip"><strong>{{ state.response().totals.overdue // i18n(ph="count") }}</strong> overdue</span>
+          <span i18n="Totals strip"><strong>{{ state.response().totals.dueSoon // i18n(ph="count") }}</strong> due next 7 days</span>
           @if (state.response().totals.completed) {
-            <span><strong>{{ state.response().totals.completed }}</strong> completed</span>
+            <span i18n="Totals strip"><strong>{{ state.response().totals.completed // i18n(ph="count") }}</strong> completed</span>
           }
           @if (state.response().totals.checklistItems) {
-            <span><strong>{{ state.response().totals.checklistItems }}</strong> {{ state.response().totals.checklistItems === 1 ? "checklist item" : "checklist items" }}</span>
+            <span i18n="Totals strip">{ state.response().totals.checklistItems, plural, one {<strong>{{ state.response().totals.checklistItems }}</strong> checklist item} other {<strong>{{ state.response().totals.checklistItems }}</strong> checklist items} }</span>
           }
         </section>
 
         @if (bulkSelectedCardIds().size) {
           <div class="bulk-selection-bar">
-            <span>{{ bulkSelectedCardIds().size }} selected</span>
-            <button type="button" class="btn btn-sm" (click)="clearBulkSelection()">Clear selection</button>
+            <span i18n="Count of selected cards">{ bulkSelectedCardIds().size, plural, other {{{ bulkSelectedCardIds().size }} selected} }</span>
+            <button type="button" class="btn btn-sm" (click)="clearBulkSelection()" i18n>Clear selection</button>
           </div>
         }
         @if (moveError(); as error) {
@@ -773,7 +810,7 @@
           @if (state.loadingMore() || state.canLoadMore()) {
             <div class="board-priority-note">
               <span class="spinner"></span>
-              <span><strong>Loading all matching cards…</strong> You can start dragging when the full list is ready.</span>
+              <span i18n><strong>Loading all matching cards…</strong> You can start dragging when the full list is ready.</span>
             </div>
           }
           <div class="global-board-sections">
@@ -798,7 +835,7 @@
                     <strong>{{ workspace.name }}</strong>
                     <small>{{ organisationsById().get(workspace.organisationId)?.name }}</small>
                   </span>
-                  <span class="section-toggle-meta">{{ listsForWorkspace(workspace.id).length }} {{ listsForWorkspace(workspace.id).length === 1 ? "list" : "lists" }}</span>
+                  <span class="section-toggle-meta" i18n="Number of lists in a workspace">{ listsForWorkspace(workspace.id).length, plural, one {{{ listsForWorkspace(workspace.id).length }} list} other {{{ listsForWorkspace(workspace.id).length }} lists} }</span>
                 </button>
                 }
                 @if (singleWorkspaceBoard() || !isWorkspaceCollapsed(workspace.id)) {
@@ -861,7 +898,7 @@
                 }
               </section>
             } @empty {
-              <k-empty-state class="work-empty-state" icon="layout-kanban" title="No cards found" text="Try changing your filters or choosing more boards." />
+              <k-empty-state class="work-empty-state" icon="layout-kanban" title="No cards found" i18n-title text="Try changing your filters or choosing more boards." i18n-text />
             }
           </div>
         } @else if (effectiveDisplay() === "calendar") {
@@ -879,7 +916,7 @@
             (cardOpened)="openCardById($event)"
           />
           @if (!datedCardCount()) {
-            <k-empty-state icon="calendar" title="No cards with a due date" text="The calendar only shows dated cards. Switch to the table or board view to see the rest." />
+            <k-empty-state icon="calendar" title="No cards with a due date" i18n-title text="The calendar only shows dated cards. Switch to the table or board view to see the rest." i18n-text />
           }
         } @else {
           <!--
@@ -955,14 +992,14 @@
               ></i>
               <i class="ti ti-checkbox"></i>
               <span class="section-toggle-title">
-                <strong>Assigned checklist items</strong>
-                <small class="section-hint">Grouped by when they are due, and listed separately from cards.</small>
+                <strong i18n="Section heading">Assigned checklist items</strong>
+                <small class="section-hint" i18n>Grouped by when they are due, and listed separately from cards.</small>
               </span>
               <span class="section-toggle-meta">
                 @if (overdueChecklistCount()) {
-                  <span class="checklist-overdue-pill">{{ overdueChecklistCount() }} overdue</span>
+                  <span class="checklist-overdue-pill" i18n="Count of overdue checklist items">{{ overdueChecklistCount() // i18n(ph="count") }} overdue</span>
                 }
-                <span>{{ state.response().checklistItems.length }} {{ state.response().checklistItems.length === 1 ? "item" : "items" }}</span>
+                <span i18n="Number of assigned checklist items">{ state.response().checklistItems.length, plural, one {{{ state.response().checklistItems.length }} item} other {{{ state.response().checklistItems.length }} items} }</span>
               </span>
             </button>
             @if (!checklistSectionCollapsed()) {
@@ -1022,7 +1059,11 @@
 
         @if (state.canLoadMore()) {
           <button type="button" class="load-more secondary" (click)="state.loadMore()" [disabled]="state.loadingMore()">
-            {{ state.loadingMore() ? "Loading…" : "Load more" }}
+            @if (state.loadingMore()) {
+              <ng-container i18n="Button while the next page loads">Loading…</ng-container>
+            } @else {
+              <ng-container i18n="Button: load the next page">Load more</ng-container>
+            }
           </button>
         }
       }

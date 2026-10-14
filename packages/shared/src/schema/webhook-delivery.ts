@@ -1,3 +1,4 @@
+import type { Locale } from "../locales.js";
 import { sql } from "drizzle-orm";
 import { check, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { valueIn } from "./_value-check.js";
@@ -19,6 +20,8 @@ export interface WebhookPayload {
 }
 
 export interface ChatDeliveryPayload {
+  /** Snapshot at queue time; retries retain the original language. Absent on legacy rows. */
+  locale?: Locale;
   kind: "chat";
   id: string;
   type: ChatDestinationEventType | "chat:test";

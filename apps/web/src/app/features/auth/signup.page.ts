@@ -7,9 +7,14 @@ import { AuthService } from "../../core/auth/auth.service";
 import { PublicAuthClient } from "../../core/auth/public-auth.client";
 import { TurnstileChallenge } from "../../core/auth/turnstile-challenge";
 import { isMfaEnrollmentRequired, MFA_ENROLLMENT_HANDOFF_KEY, parseAuthResponse } from "../../core/auth/auth-response";
+import { appLocale } from "../../core/i18n/locale";
 import { LogoComponent } from "../../shared/logo.component";
+import { LocaleSwitcherComponent } from "./locale-switcher.component";
 import { ThemeService, type Theme } from "../../core/theme/theme.service";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
+
+// Pre-filled for a brand-new organisation; the person can rename it here or later in settings.
+const DEFAULT_ORG_NAME = $localize`:Default name for a new organisation:Private`;
 
 interface InviteSummaryResponse {
   orgName: string;
@@ -51,7 +56,7 @@ function signupAcquisition() {
 @Component({
   selector: "k-signup",
   standalone: true,
-  imports: [RouterLink, LogoComponent, FormField],
+  imports: [RouterLink, LogoComponent, FormField, LocaleSwitcherComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./signup.page.html",
   styleUrl: "./signup.page.scss",
@@ -67,7 +72,7 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
   readonly inviteToken = signal<string | null>(null);
   readonly boardInviteToken = signal<string | null>(null);
   readonly signupModel = signal({
-    orgName: "Private",
+    orgName: DEFAULT_ORG_NAME,
     displayName: "",
     email: "",
     password: "",
@@ -75,14 +80,20 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
   });
   readonly signupForm = form(this.signupModel, (signup) => {
     validate(signup.orgName, ({ value }) => validationError(
-      this.inviteToken() || this.boardInviteToken() ? null : validateText(value().trim(), "Organisation name", 120),
+      this.inviteToken() || this.boardInviteToken() ? null : validateText(value().trim(), 120, {
+        required: $localize`Organisation name is required.`,
+        tooLong: (max) => $localize`Organisation name must be ${max}:max: characters or fewer.`,
+      }),
     ));
-    validate(signup.displayName, ({ value }) => validationError(validateText(value().trim(), "Your name", 120)));
+    validate(signup.displayName, ({ value }) => validationError(validateText(value().trim(), 120, {
+      required: $localize`Your name is required.`,
+      tooLong: (max) => $localize`Your name must be ${max}:max: characters or fewer.`,
+    })));
     validate(signup.email, ({ value }) => validationError(validateEmail(value().trim())));
     validate(signup.password, ({ value }) => validationError(validatePassword(value())));
     validate(signup.confirmPassword, (context) => {
-      const message = validatePassword(context.value(), "Confirm password")
-        ?? (context.value() === context.valueOf(signup.password) ? null : "Passwords do not match.");
+      const message = validatePassword(context.value(), "confirm")
+        ?? (context.value() === context.valueOf(signup.password) ? null : $localize`Passwords do not match.`);
       return validationError(message);
     });
     disabled(signup.orgName, { when: ({ state }) => state.submitting() });
@@ -94,7 +105,7 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
   readonly verificationModel = signal({ code: "" });
   readonly verificationForm = form(this.verificationModel, (verification) => {
     validate(verification.code, ({ value }) => validationError(
-      /^\d{6}$/.test(value().trim()) ? null : "Enter the 6-digit code from your email.",
+      /^\d{6}$/.test(value().trim()) ? null : $localize`Enter the 6-digit code from your email.`,
     ));
     disabled(verification.code, { when: ({ state }) => state.submitting() });
   });
@@ -110,6 +121,8 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
   ));
   readonly busy = computed(() => this.signupForm().submitting() || this.verificationForm().submitting());
   readonly showPassword = signal(false);
+  protected readonly showPasswordLabel = $localize`:Button — reveal the typed password:Show password`;
+  protected readonly hidePasswordLabel = $localize`:Button — mask the typed password:Hide password`;
   readonly showConfirmPassword = signal(false);
   readonly invite = signal<InviteSummaryResponse | null>(null);
   readonly boardInvite = signal<BoardInvitationLookupResponse | null>(null);
@@ -194,7 +207,7 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
       if (res.status === 404) {
         // Only an authoritative "this invitation does not exist / has expired" drops the token.
         this.boardInviteToken.set(null);
-        this.boardInviteNotice.set("We couldn’t load that board invitation — it may have been revoked or expired. You can still create a regular account below.");
+        this.boardInviteNotice.set($localize`We couldn’t load that board invitation — it may have been revoked or expired. You can still create a regular account below.`);
         return;
       }
       if (!res.ok) throw new Error("lookup failed");
@@ -207,7 +220,7 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
       // A transient failure (network blip, lookup rate limit, response-shape skew during a rolling
       // deploy) must NOT discard the token: signup still carries it, and the API enforces the
       // invited-email match with a clear error. Only the banner and prefill degrade.
-      this.boardInviteNotice.set("We couldn’t load the invitation details right now. Sign up with the invited email address and your board access will still be connected.");
+      this.boardInviteNotice.set($localize`We couldn’t load the invitation details right now. Sign up with the invited email address and your board access will still be connected.`);
     }
   }
 
@@ -286,6 +299,8 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
     this.workflowError.set(null);
     const res = await this.publicAuth.post("/auth/request-email-verification", {
       email,
+      // The language on screen, so the verification email is already in it.
+      locale: appLocale(),
       ...(this.turnstileToken() ? { turnstileToken: this.turnstileToken() } : {}),
       ...(this.inviteToken() ? { inviteToken: this.inviteToken() } : {}),
       ...(this.boardInviteToken() ? { boardInviteToken: this.boardInviteToken() } : {}),
@@ -293,7 +308,7 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
     if (!res.ok) {
       const body: unknown = await res.json().catch(() => null);
       if (await this.redirectExistingInviteAccount(body)) return false;
-      this.workflowError.set(errorMessage(body) ?? "Could not send verification code");
+      this.workflowError.set(errorMessage(body) ?? $localize`Could not send verification code`);
       this.turnstile.reset();
       return false;
     }
@@ -309,6 +324,8 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
       email: this.email().trim(),
       password: this.password(),
       displayName: this.displayName().trim(),
+      // The new account starts in the language the visitor signed up in (mail and push included).
+      locale: appLocale(),
       ...(code ? { code } : {}),
       ...(this.turnstileToken() ? { turnstileToken: this.turnstileToken() } : {}),
       ...(this.inviteToken() ? { inviteToken: this.inviteToken() } : {}),
@@ -326,9 +343,9 @@ export class SignupPage implements AfterViewInit, OnDestroy, OnInit {
         this.turnstile.reset();
         return;
       } else if (code === "SEAT_LIMIT_REACHED") {
-        this.workflowError.set("This organisation has no available seats. Ask an admin to purchase more seats before you can accept this invitation.");
+        this.workflowError.set($localize`This organisation has no available seats. Ask an admin to purchase more seats before you can accept this invitation.`);
       } else {
-        this.workflowError.set(errorMessage(body) ?? "Signup failed");
+        this.workflowError.set(errorMessage(body) ?? $localize`Signup failed`);
       }
       this.turnstile.reset();
       return;
@@ -451,27 +468,39 @@ function isKaneraEnvironment(value: unknown): value is KaneraEnvironment {
 }
 
 function environmentBannerLabel(value: KaneraEnvironment): string | null {
-  if (value === "production") return null;
-  return value[0]!.toLocaleUpperCase() + value.slice(1);
+  switch (value) {
+    case "production": return null;
+    case "development": return $localize`:Banner naming a non-production deployment:Development`;
+    case "test": return $localize`:Banner naming a non-production deployment:Test`;
+    case "staging": return $localize`:Banner naming a non-production deployment:Staging`;
+  }
 }
 
-function validateText(value: string, label: string, maxLength: number): string | null {
-  if (!value) return `${label} is required.`;
-  if (value.length > maxLength) return `${label} must be ${maxLength} characters or fewer.`;
+// Each field spells out its own messages, so every language can phrase "X is required" naturally
+// instead of splicing a field name into a shared sentence.
+function validateText(value: string, maxLength: number, messages: { required: string; tooLong: (max: number) => string }): string | null {
+  if (!value) return messages.required;
+  if (value.length > maxLength) return messages.tooLong(maxLength);
   return null;
 }
 
 function validateEmail(email: string): string | null {
-  if (!email) return "Email is required.";
-  if (email.length > 254) return "Email must be 254 characters or fewer.";
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Enter a valid email address.";
+  if (!email) return $localize`Email is required.`;
+  if (email.length > 254) return $localize`Email must be 254 characters or fewer.`;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return $localize`Enter a valid email address.`;
   return null;
 }
 
-function validatePassword(password: string, label = "Password"): string | null {
-  if (!password) return `${label} is required.`;
-  if (password.length < 8) return `${label} must be at least 8 characters.`;
-  if (password.length > 200) return `${label} must be 200 characters or fewer.`;
+function validatePassword(password: string, field: "password" | "confirm" = "password"): string | null {
+  if (field === "confirm") {
+    if (!password) return $localize`Confirm password is required.`;
+    if (password.length < 8) return $localize`Confirm password must be at least 8 characters.`;
+    if (password.length > 200) return $localize`Confirm password must be 200 characters or fewer.`;
+    return null;
+  }
+  if (!password) return $localize`Password is required.`;
+  if (password.length < 8) return $localize`Password must be at least 8 characters.`;
+  if (password.length > 200) return $localize`Password must be 200 characters or fewer.`;
   return null;
 }
 

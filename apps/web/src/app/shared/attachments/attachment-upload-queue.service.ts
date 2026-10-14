@@ -5,6 +5,9 @@ import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { attachmentIconClass } from "../attachment-icons";
 import { fileTooLargeMessage, storageFullMessage } from "../storage-messages";
+import { appLocale } from "../../core/i18n/locale";
+
+const UPLOAD_FAILED_MESSAGE = $localize`:Upload error when the server gave no reason:Upload failed`;
 
 /**
  * One in-flight (or failed) upload. Successful uploads are removed from the queue — the resulting
@@ -154,7 +157,7 @@ export class AttachmentUploadQueue implements OnDestroy {
   // upload large files to a paid host. The server's FILE_TOO_LARGE response (carrying maxFileBytes)
   // drives any size error via formatUploadError.
   private validationError_(file: File): string | null {
-    if (!getAllowedAttachmentExtension(file.type, file.name)) return "Unsupported file type";
+    if (!getAllowedAttachmentExtension(file.type, file.name)) return $localize`:Upload error:Unsupported file type`;
     return null;
   }
 
@@ -175,18 +178,18 @@ export class AttachmentUploadQueue implements OnDestroy {
         return fileTooLargeMessage(this.maxAttachmentLabel(body?.maxFileBytes), this.auth.isOrgAdmin(), this.auth.isPlanLimited());
       }
       if (body?.message) return body.message;
-      return "Upload failed";
+      return UPLOAD_FAILED_MESSAGE;
     }
-    return err instanceof Error && err.message ? err.message : "Upload failed";
+    return err instanceof Error && err.message ? err.message : UPLOAD_FAILED_MESSAGE;
   }
 
   private maxAttachmentLabel(value = this.auth.user()?.storageUsage?.maxFileBytes ?? Number.POSITIVE_INFINITY): string {
-    return Number.isFinite(value) ? this.formatBytes(value).replace(".0 ", " ") : "configured limit";
+    return Number.isFinite(value) ? this.formatBytes(value) : $localize`:Stand-in for an unknown maximum file size, read as "max configured limit":configured limit`;
   }
 
   private formatBytes(n: number): string {
-    if (n < 1024) return `${n} B`;
-    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-    return `${(n / 1024 / 1024).toFixed(1)} MB`;
+    const [value, unit] = n < 1024 ? [n, "byte"] : n < 1024 * 1024 ? [n / 1024, "kilobyte"] : [n / 1024 / 1024, "megabyte"];
+    // One decimal at most, dropped when whole: "5 MB", "2.5 MB".
+    return new Intl.NumberFormat(appLocale(), { style: "unit", unit, maximumFractionDigits: 1 }).format(value);
   }
 }

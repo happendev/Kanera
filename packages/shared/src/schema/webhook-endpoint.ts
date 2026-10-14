@@ -1,3 +1,4 @@
+import { LOCALES, SOURCE_LOCALE } from "../locales.js";
 import { sql } from "drizzle-orm";
 import { boolean, check, index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { valueIn } from "./_value-check.js";
@@ -35,6 +36,8 @@ export const webhookEndpoints = pgTable(
       .references(() => users.id, { onDelete: "restrict" }),
     provider: text("provider", { enum: WEBHOOK_ENDPOINT_PROVIDERS }).notNull().default("generic"),
     name: text("name").notNull(),
+    // A shared chat has one language, independent of whichever teammate triggers an event.
+    locale: text("locale", { enum: LOCALES }).notNull().default(SOURCE_LOCALE),
     url: text("url"),
     encryptedSecret: text("encrypted_secret"),
     encryptedConfig: text("encrypted_config"),
@@ -53,6 +56,7 @@ export const webhookEndpoints = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("webhook_endpoints_locale_ck", valueIn(t.locale, LOCALES)),
     check("webhook_endpoints_provider_ck", valueIn(t.provider, WEBHOOK_ENDPOINT_PROVIDERS)),
     check("webhook_endpoints_owner_ck", sql`${t.ownerApiKeyId} is null or ${t.ownerAgentGrantId} is null`),
     index("webhook_endpoints_owner_api_key_idx").on(t.ownerApiKeyId).where(sql`${t.ownerApiKeyId} is not null`),
