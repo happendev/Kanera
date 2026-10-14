@@ -2,13 +2,13 @@
   @if (!consent.choice() && !preferencesOpen()) {
     <section class="consent-banner" aria-labelledby="cookie-consent-title" aria-describedby="cookie-consent-description">
       <div class="consent-copy">
-        <h2 id="cookie-consent-title">Your privacy choices</h2>
-        <p id="cookie-consent-description">We use necessary storage to operate Kanera. With your permission, analytics cookies help us understand how visitors find Kanera, use key parts of the service, and progress through registration and subscription. Analytics stays off unless you accept it.</p>
+        <h2 id="cookie-consent-title" i18n="Cookie consent banner heading">Your privacy choices</h2>
+        <p id="cookie-consent-description" i18n>We use necessary storage to operate Kanera. With your permission, analytics cookies help us understand how visitors find Kanera, use key parts of the service, and progress through registration and subscription. Analytics stays off unless you accept it.</p>
       </div>
       <div class="consent-actions">
-        <button type="button" class="primary" (click)="save(true)">Accept analytics</button>
-        <button type="button" class="secondary" (click)="save(false)">Reject non-essential</button>
-        <button type="button" class="text" (click)="openPreferences()">Manage preferences</button>
+        <button type="button" class="primary" (click)="save(true)" i18n="Cookie consent button">Accept analytics</button>
+        <button type="button" class="secondary" (click)="save(false)" i18n="Cookie consent button: decline optional cookies">Reject non-essential</button>
+        <button type="button" class="text" (click)="openPreferences()" i18n="Cookie consent button">Manage preferences</button>
       </div>
     </section>
   }
@@ -19,25 +19,25 @@
       <div #dialog class="consent-dialog" role="dialog" cdkTrapFocus [cdkTrapFocusAutoCapture]="true" aria-modal="true" aria-labelledby="cookie-preferences-title" aria-describedby="cookie-preferences-description" (keydown)="onDialogKeydown($event)">
         <header>
           <div>
-            <h2 id="cookie-preferences-title">Cookie preferences</h2>
-            <p id="cookie-preferences-description">Choose whether hosted Kanera may use optional analytics on this device. You can change this choice at any time.</p>
+            <h2 id="cookie-preferences-title" i18n="Cookie preferences dialog heading">Cookie preferences</h2>
+            <p id="cookie-preferences-description" i18n>Choose whether hosted Kanera may use optional analytics on this device. You can change this choice at any time.</p>
           </div>
-          <button type="button" class="close" (click)="closePreferences()" aria-label="Close cookie preferences"><i class="ti ti-x"></i></button>
+          <button type="button" class="close" (click)="closePreferences()" aria-label="Close cookie preferences" i18n-aria-label><i class="ti ti-x"></i></button>
         </header>
 
         <div class="category locked">
-          <span><strong>Necessary</strong><small>Authentication, security, consent storage, preferences, and requested product features. Always on.</small></span>
-          <input type="checkbox" checked disabled aria-label="Necessary cookies, always on" />
+          <span><strong i18n="Cookie category name">Necessary</strong><small i18n>Authentication, security, consent storage, preferences, and requested product features. Always on.</small></span>
+          <input type="checkbox" checked disabled aria-label="Necessary cookies, always on" i18n-aria-label />
         </div>
         <label class="category">
-          <span><strong>Analytics cookies</strong><small>Help us understand how visitors find Kanera, use key parts of the service, and progress through registration and subscription.</small></span>
-          <input type="checkbox" [checked]="analytics()" (input)="analytics.set($any($event.target).checked)" aria-label="Allow analytics cookies" />
+          <span><strong i18n="Cookie category name">Analytics cookies</strong><small i18n>Help us understand how visitors find Kanera, use key parts of the service, and progress through registration and subscription.</small></span>
+          <input type="checkbox" [checked]="analytics()" (input)="analytics.set($any($event.target).checked)" aria-label="Allow analytics cookies" i18n-aria-label />
         </label>
 
-        <p class="policy">Separate server-side analytics include limited commercial lifecycle events sent by Kanera's backend, such as subscription starts, renewals, resumptions, cancellations, and plan or seat-band changes. These events exclude payment-method details and workspace content. See our <a href="https://www.kanera.app/privacy" target="_blank" rel="noopener noreferrer">privacy notice</a> for more information.</p>
+        <p class="policy" i18n>Separate server-side analytics include limited commercial lifecycle events sent by Kanera's backend, such as subscription starts, renewals, resumptions, cancellations, and plan or seat-band changes. These events exclude payment-method details and workspace content. See our <a href="https://www.kanera.app/privacy" target="_blank" rel="noopener noreferrer">privacy notice</a> for more information.</p>
         <div class="dialog-actions">
-          <button type="button" class="secondary" (click)="save(false)">Reject non-essential</button>
-          <button type="button" class="primary" (click)="save(analytics())">Save preferences</button>
+          <button type="button" class="secondary" (click)="save(false)" i18n="Cookie consent button: decline optional cookies">Reject non-essential</button>
+          <button type="button" class="primary" (click)="save(analytics())" i18n="Cookie preferences dialog button">Save preferences</button>
         </div>
       </div>
     </div>

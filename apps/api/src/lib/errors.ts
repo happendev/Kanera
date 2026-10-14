@@ -1,5 +1,8 @@
 import type { FastifyInstance, FastifyError } from "fastify";
 import { ZodError } from "zod";
+import { translateErrorMessage } from "./i18n/errors/translate.js";
+import { localizeIssues } from "./i18n/validation.js";
+import { requestLocale } from "./i18n/request-locale.js";
 import { sendOpsAlert, type AlertService } from "./ops-alerts.js";
 
 export class AppError extends Error {
@@ -31,14 +34,18 @@ export function registerErrorHandler(app: FastifyInstance, options: { service?: 
     // edge 404 (cf-cache HIT) for everyone, even after a valid retry exists.
     // `no-store` on every error response keeps negative results from being cached.
     reply.header("Cache-Control", "no-store");
+    // The web app shows `message` to people as is, so it is written in the request's language (the
+    // web client sends its interface language as Accept-Language). Only the message changes: `code`
+    // and details stay stable for clients that branch on them, and unknown messages pass through.
+    const localize = (message: string) => translateErrorMessage(message, requestLocale(req));
     if (err instanceof ZodError) {
-      return reply.status(400).send({ code: "VALIDATION", message: "validation failed", issues: err.issues });
+      return reply.status(400).send({ code: "VALIDATION", message: localize("validation failed"), issues: localizeIssues(err.issues, requestLocale(req)) });
     }
     if (err instanceof AppError) {
       // AppError is often a deliberate client-facing shape, but 5xx variants still
       // represent server failures and should be visible in dev terminals and server logs.
       if (err.statusCode >= 500) req.log.error({ err }, "server error");
-      return reply.status(err.statusCode).send({ code: err.code, message: err.message, ...(err.details ?? {}) });
+      return reply.status(err.statusCode).send({ code: err.code, message: localize(err.message), ...(err.details ?? {}) });
     }
     if (typeof err.statusCode === "number" && err.statusCode >= 400 && err.statusCode < 500) {
       // Fastify can reject malformed client requests before a route handler runs
@@ -46,7 +53,7 @@ export function registerErrorHandler(app: FastifyInstance, options: { service?: 
       // Preserve those as client errors so operational alerts stay focused on server faults.
       return reply.status(err.statusCode).send({
         code: err.code ?? "BAD_REQUEST",
-        message: err.message,
+        message: localize(err.message),
       });
     }
     req.log.error({ err }, "unhandled error");
@@ -59,6 +66,6 @@ export function registerErrorHandler(app: FastifyInstance, options: { service?: 
       statusCode: 500,
       error: err,
     }, { log: req.log });
-    return reply.status(500).send({ code: "INTERNAL", message: "internal error" });
+    return reply.status(500).send({ code: "INTERNAL", message: localize("internal error") });
   });
 }

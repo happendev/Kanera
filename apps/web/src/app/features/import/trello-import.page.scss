@@ -32,6 +32,7 @@
 
 .file-chip {
   display: inline-flex;
+  max-width: 100%;
   align-items: center;
   gap: 6px;
   border: 1px solid var(--border);
@@ -39,6 +40,15 @@
   padding: 6px 8px;
   font-size: 12px;
   color: var(--text-muted);
+
+  i { flex-shrink: 0; }
+
+  > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 .import-stepper {
@@ -270,6 +280,14 @@ input[type="text"],
   i {
     color: var(--text-muted);
     flex-shrink: 0;
+  }
+
+  /* One line, so choosing a long-named export doesn't push Analyze down. */
+  > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 
@@ -596,11 +614,14 @@ input[type="text"],
   }
 
   .upload-panel,
-  .mapping-controls,
   .trello-connect-row,
   .csv-options {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .options-grid {
+    grid-template-columns: 1fr;
   }
 
   .csv-column-row {

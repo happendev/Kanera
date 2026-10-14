@@ -13,6 +13,10 @@ import { AccountSettingsPage } from "../account-settings.page";
 })
 export class AccountSettingsIntegrationsPage {
   protected readonly settings = inject(AccountSettingsPage);
+  protected readonly savedUsernamePlaceholder = $localize`:Placeholder for a saved SMTP username:Saved, leave blank to keep`;
+  protected readonly savedPasswordPlaceholder = $localize`:Placeholder for a saved SMTP password:•••••••• (saved, leave blank to keep)`;
+  protected readonly showPasswordLabel = $localize`:Button — reveal the typed password:Show password`;
+  protected readonly hidePasswordLabel = $localize`:Button — mask the typed password:Hide password`;
   protected readonly smtpPanelPlacement = { width: 320, maxHeight: 360, minHeight: 190 } as const;
 
   constructor() {

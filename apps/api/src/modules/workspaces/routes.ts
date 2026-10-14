@@ -10,6 +10,8 @@ import { randomUUID } from "node:crypto";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { assertOrgRole, assertWorkspaceAccess, isOrgAdmin, orgRoleRanksAdmin } from "../../lib/access.js";
+import { recipientLocale, requestLocale } from "../../lib/i18n/request-locale.js";
+import { serverMessages } from "../../lib/i18n/messages/index.js";
 import { effectiveMcpPolicy } from "../../lib/mcp-policy.js";
 import { loadAccessibleBoards } from "../../lib/accessible-boards.js";
 import { loadAssignedChecklistItems } from "../../lib/assigned-checklist-items.js";
@@ -1165,6 +1167,7 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         avatarUrl: users.avatarUrl,
         lastOnlineAt: users.lastOnlineAt,
         clientId: users.clientId,
+        locale: users.locale,
         membershipClientId: clientMembers.clientId,
       })
       .from(users)
@@ -1225,10 +1228,13 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
           .where(eq(boardInvitationGrants.invitationId, pendingInvite.id))
           .orderBy(asc(boards.position)),
       ]);
+      // The invitee has no account yet, so the invite is written in the inviter's on-screen language.
+      const locale = requestLocale(req);
       await app.mailer.sendBoardInvite(body.email, {
+        locale,
         boards: grants,
         orgName: boardRow.clientName,
-        invitedByName: inviter[0]?.displayName ?? "A Kanera administrator",
+        invitedByName: inviter[0]?.displayName ?? serverMessages(locale).common.fallbackInviterName,
         acceptUrl: `${env.WEB_ORIGIN}/board-invite?token=${encodeURIComponent(token.raw)}`,
       });
       void capturePremiumFeatureUsed({
@@ -1291,11 +1297,13 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
         .limit(1);
       // Each newly granted board is actionable access in its own right, including when the
       // recipient is already a guest on another board in this organisation.
+      const recipientLanguage = recipientLocale(existingUser.locale);
       await app.mailer.sendBoardAccessGranted(body.email, {
+        locale: recipientLanguage,
         displayName: existingUser.displayName,
         boardName: boardRow.boardName,
         orgName: boardRow.clientName,
-        invitedByName: inviter?.displayName ?? "A Kanera administrator",
+        invitedByName: inviter?.displayName ?? serverMessages(recipientLanguage).common.fallbackInviterName,
         role: member!.role,
         boardUrl: `${env.WEB_ORIGIN}/b/${boardRow.id}`,
       });
@@ -1374,10 +1382,13 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       .from(users)
       .where(eq(users.id, req.auth.sub))
       .limit(1);
+    // The invitee has no account yet, so the invite is written in the inviter's on-screen language.
+    const locale = requestLocale(req);
     await app.mailer.sendBoardInvite(body.email, {
+      locale,
       boards: [{ boardName: boardRow.boardName, role: body.role }],
       orgName: boardRow.clientName,
-      invitedByName: inviter?.displayName ?? "A Kanera administrator",
+      invitedByName: inviter?.displayName ?? serverMessages(locale).common.fallbackInviterName,
       acceptUrl: `${env.WEB_ORIGIN}/board-invite?token=${encodeURIComponent(token.raw)}`,
     });
 

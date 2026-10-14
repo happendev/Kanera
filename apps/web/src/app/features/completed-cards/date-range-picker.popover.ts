@@ -5,6 +5,7 @@ import { WEEKDAY_LABELS } from "../../shared/week-start";
 import { ANCHORED_HOST_STYLES } from "../../shared/anchored-panel";
 import { AnchoredPanelDirective } from "../../shared/anchored-panel.directive";
 import { formatDate } from "../../shared/date-format";
+import { icu } from "../../core/i18n/icu";
 import { localDateKey, parseDateInputValue, startOfLocalDay } from "../../shared/day-key.util";
 import { buildMonthGrid, monthStart, shiftMonth } from "../../shared/month-grid";
 
@@ -24,6 +25,11 @@ type RangeShortcut = {
   days: number;
 };
 
+/** Shortcut button that selects the last N days. */
+function lastDaysLabel(days: number): string {
+  return icu($localize`:Date range shortcut button selecting the last N days:{days, plural, one {# day} other {# days}}`, { days });
+}
+
 function compareDateValue(a: string, b: string): number {
   return a.localeCompare(b);
 }
@@ -37,11 +43,11 @@ function compareDateValue(a: string, b: string): number {
   template: `
     <div class="drp-panel">
       <div class="drp-head">
-        <button type="button" class="drp-icon-btn" (click)="previousMonth()" aria-label="Previous month" kTooltip="Previous month">
+        <button type="button" class="drp-icon-btn" (click)="previousMonth()" aria-label="Previous month" i18n-aria-label kTooltip="Previous month" i18n-kTooltip>
           <i class="ti ti-chevron-left"></i>
         </button>
         <div class="drp-title" aria-live="polite">{{ monthLabel() }}</div>
-        <button type="button" class="drp-icon-btn" (click)="nextMonth()" aria-label="Next month" kTooltip="Next month">
+        <button type="button" class="drp-icon-btn" (click)="nextMonth()" aria-label="Next month" i18n-aria-label kTooltip="Next month" i18n-kTooltip>
           <i class="ti ti-chevron-right"></i>
         </button>
       </div>
@@ -86,11 +92,11 @@ function compareDateValue(a: string, b: string): number {
       @if (!instant() || draftFrom() || draftTo() || from() || to()) {
       <div class="drp-foot">
         @if (from() || to() || (instant() && (draftFrom() || draftTo()))) {
-        <button type="button" class="drp-clear" (click)="clear.emit()">Clear</button>
+        <button type="button" class="drp-clear" (click)="clear.emit()" i18n="Button: clear the date range">Clear</button>
         }
         @if (!instant()) {
         <!-- Instant mode auto-applies as soon as a full range is chosen, so no Apply button. -->
-        <button type="button" class="drp-apply" [disabled]="!draftFrom() && !draftTo()" (click)="apply()">Apply</button>
+        <button type="button" class="drp-apply" [disabled]="!draftFrom() && !draftTo()" (click)="apply()" i18n="Button: apply the date range">Apply</button>
         }
       </div>
       }
@@ -319,10 +325,10 @@ export class DateRangePickerPopover implements OnInit {
 
   readonly weekdays = WEEKDAY_LABELS;
   readonly shortcuts: RangeShortcut[] = [
-    { label: "7 days", days: 7 },
-    { label: "14 days", days: 14 },
-    { label: "30 days", days: 30 },
-    { label: "90 days", days: 90 },
+    { label: lastDaysLabel(7), days: 7 },
+    { label: lastDaysLabel(14), days: 14 },
+    { label: lastDaysLabel(30), days: 30 },
+    { label: lastDaysLabel(90), days: 90 },
   ];
   readonly visibleMonth = signal(this.initialVisibleMonth());
   readonly draftFrom = signal(this.from());
@@ -422,10 +428,10 @@ export class DateRangePickerPopover implements OnInit {
   }
 
   private rangeLabel(from: string, to: string): string {
-    if (from && to) return `${this.dateLabel(from)} - ${this.dateLabel(to)}`;
-    if (from) return `From ${this.dateLabel(from)}`;
-    if (to) return `Until ${this.dateLabel(to)}`;
-    return "Select a start date, then an end date";
+    if (from && to) return $localize`:Selected date range:${this.dateLabel(from)}:startDate: - ${this.dateLabel(to)}:endDate:`;
+    if (from) return $localize`:Date range with only a start date:From ${this.dateLabel(from)}:startDate:`;
+    if (to) return $localize`:Date range with only an end date:Until ${this.dateLabel(to)}:endDate:`;
+    return $localize`:Date range picker hint:Select a start date, then an end date`;
   }
 
   private dateLabel(value: string): string {

@@ -4,19 +4,34 @@ All notable changes to Kanera are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Kanera speaks your language:** the whole app, including onboarding, boards, cards, notifications, settings, emails and push notifications, is now available in English (US), English (UK), Spanish, Brazilian Portuguese, French, German, Japanese, Dutch, Norwegian Bokmål, Simplified Chinese and Traditional Chinese. Choose a language under Profile settings → Language (or from the sign-in page). It is saved to your account, so every device and every email follows it.
+
 ### Changed
 
 - Plain text attachments (.txt, .log) now open in the preview viewer like images, PDFs and Markdown instead of downloading.
 
+- Table view on tablets now stays a real table, with column headers and a pinned Title column you scroll sideways from, instead of stacking every row into a card. Only phones stack.
 - On phones and tablets the board header keeps New card and the board menu beside the title; Board overview and Watch move into the board menu.
 - **Faster boards and global views:** large boards open with less server work, while My Cards and Team Cards refresh around 65% faster with over 40% less API CPU in large-workload benchmarks.
 - **More efficient realtime and background processing:** notifications and emails arrive sooner under load, with less repeated work and fewer processing pauses across automations, push delivery, webhooks, daily digests and cleanup.
 - Hosted subscription payment analytics are recorded against the organisation creator, so PostHog's first-touch acquisition properties attribute revenue.
 - Cards with unread activity now stand out on busy boards: alongside the bold title and dot, the tile gets a faint accent tint and an accent ring.
-- Emails now show dates day-first with the month named (for example "12 Oct 2026") instead of US month-first order, so they read unambiguously everywhere.
+- Emails now show dates in the recipient's language and its date order, with the month named (for example "12 Oct 2026" in UK English), instead of US month-first order for everyone.
 
 ### Fixed
 
+- Clarified translated card deselection, upcoming deadlines, assignment activity and copied email addresses; corrected Japanese relative time and the French purple colour label.
+
+- Shared chat destinations now have a message language setting. Validation details, import warnings, note draft recovery messages and installed-app descriptions and shortcuts now follow the selected language.
+
+- Deleting a note, board or workspace now removes the files attached to its notes from storage instead of leaving them behind. Files a duplicated note still shows are kept.
+- Duplicated cards, duplicated notes and mirrored cards now own their images: inline images in the copy's description, note body, comments and checklist item details point at the copy's own files, so they keep working after the original's attachment or note is deleted. Duplicating a note now copies its attachments too.
+
+- Copy card link now includes the organisation key, so links copied from card detail open the correct card.
+
+- The import wizard now fits narrow screens, and the CSV import names its detected delimiter.
 - On phones, pickers and menus (assignees, labels, dates, boards and others) now open right beside the button you tapped instead of at the bottom of the screen, leaving a gap.
 - Tapping a push notification on Android now opens the card again, instead of leaving Kanera in the background.
 - Default avatars now pick colours that suit the active theme, so near-black ones no longer vanish on dark themes and pale ones on light themes.

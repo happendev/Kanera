@@ -13,10 +13,14 @@ import { AuthService } from "../core/auth/auth.service";
     <div class="support-banner" role="alert">
       <i class="ti ti-shield-lock"></i>
       <span class="support-banner__text">
-        Support session — acting as <strong>{{ session.orgName }}</strong>. Changes are attributed to this session.
+        <ng-container i18n="Banner during a staff support session; the placeholder is the customer organisation">Support session — acting as <strong>{{ session.orgName // i18n(ph="organisation") }}</strong>. Changes are attributed to this session.</ng-container>
       </span>
       <button type="button" class="support-banner__end" (click)="end()" [disabled]="ending()">
-        {{ ending() ? "Leaving…" : "Leave session" }}
+        @if (ending()) {
+          <ng-container i18n="Button while a support session ends">Leaving…</ng-container>
+        } @else {
+          <ng-container i18n="Button: end the support session">Leave session</ng-container>
+        }
       </button>
     </div>
     }

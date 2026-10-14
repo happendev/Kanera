@@ -1,7 +1,6 @@
 import { EmptyStateComponent } from "../../shared/empty-state.component";
 import type { OnInit } from "@angular/core";
 import { Dialog } from "@angular/cdk/dialog";
-import { DatePipe } from "@angular/common";
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
@@ -28,6 +27,8 @@ import { StandaloneBoardCreateDialogComponent } from "../standalone-board/standa
 import { AgendaGroupComponent } from "./agenda-group.component";
 import { UpcomingRemindersComponent } from "./upcoming-reminders.component";
 import { HomeState } from "./home.state";
+import { icu } from "../../core/i18n/icu";
+import { formatDate, formatTime } from "../../shared/date-format";
 
 /**
  * Trend window, and the narrow-viewport window.
@@ -73,7 +74,7 @@ const HERO_SCATTER: readonly ScatterItem[] = [
 @Component({
   selector: "k-home",
   standalone: true,
-  imports: [ActivityStripComponent, EmptyStateComponent, AgendaGroupComponent, AgentConnectCardComponent, DatePipe, PageHeaderComponent, PriorityQueueComponent, RouterLink, StatTileComponent, TooltipDirective, UpcomingRemindersComponent],
+  imports: [ActivityStripComponent, EmptyStateComponent, AgendaGroupComponent, AgentConnectCardComponent, PageHeaderComponent, PriorityQueueComponent, RouterLink, StatTileComponent, TooltipDirective, UpcomingRemindersComponent],
   // BoardMenuCoordinator owns the shared "labels compressed" preference that k-card-labels reads.
   // It is deliberately not root-provided (it holds document listeners), so every surface rendering
   // board chips provides it — same as GlobalWorkPage.
@@ -173,12 +174,22 @@ export class HomePage implements OnInit {
     }
   }
 
+  /** The page title: a time-of-day greeting with the viewer's name, as one message per greeting. */
   readonly greeting = computed(() => {
     const hour = new Date().getHours();
-    if (hour < 12) return "Good morning";
-    if (hour < 18) return "Good afternoon";
-    return "Good evening";
+    const name = this.displayName();
+    if (hour < 12) return icu($localize`:Home page greeting before noon:Good morning, {name}`, { name });
+    if (hour < 18) return icu($localize`:Home page greeting in the afternoon:Good afternoon, {name}`, { name });
+    return icu($localize`:Home page greeting in the evening:Good evening, {name}`, { name });
   });
+  /** "Wednesday, 4 March 2026" style, in the viewer's language. */
+  readonly todayLabel = computed(() => formatDate(this.today(), "long"));
+  readonly trialEndsLabel = computed(() => formatDate(this.trialEndsAt(), "medium"));
+
+  /** Wall-clock time for the offline banners. */
+  formatTime(value: Date | string | number | null | undefined): string {
+    return formatTime(value);
+  }
 
   readonly trialEndsAt = computed(() => {
     const iso = this.auth.entitlements()?.trialEndsAt ?? null;
@@ -196,14 +207,14 @@ export class HomePage implements OnInit {
   readonly proUsageDetail = computed(() => {
     const usage = this.proUsage();
     if (!usage) return "";
-    const quantity = (count: number, singular: string, plural = `${singular}s`) =>
-      `${count} ${count === 1 ? singular : plural}`;
     const parts = [
-      quantity(usage.memberCount, "user"),
-      quantity(usage.boardCount, "board"),
-      quantity(usage.automationCount, "automation"),
-      ...(usage.apiConnection ? ["API connection"] : []),
-      ...(usage.guestCount > 0 ? [quantity(usage.guestCount, "guest")] : []),
+      icu($localize`:Pro usage on the trial banner:{count, plural, one {# user} other {# users}}`, { count: usage.memberCount }),
+      icu($localize`:Pro usage on the trial banner:{count, plural, one {# board} other {# boards}}`, { count: usage.boardCount }),
+      icu($localize`:Pro usage on the trial banner:{count, plural, one {# automation} other {# automations}}`, { count: usage.automationCount }),
+      ...(usage.apiConnection ? [$localize`:Pro usage on the trial banner - the organisation has an API connection:API connection`] : []),
+      ...(usage.guestCount > 0
+        ? [icu($localize`:Pro usage on the trial banner:{count, plural, one {# guest} other {# guests}}`, { count: usage.guestCount })]
+        : []),
     ];
     return parts.join(" · ");
   });
@@ -217,10 +228,10 @@ export class HomePage implements OnInit {
       return {
         kind: "selfHosted",
         tone: "neutral",
-        statusLabel: "Self-hosted",
-        title: "Unlimited access is active",
-        description: "Your organisation's plan is managed by this Kanera deployment.",
-        actionLabel: "Account settings",
+        statusLabel: $localize`:Account status label:Self-hosted`,
+        title: $localize`:Account status banner title on a self-hosted deployment:Unlimited access is active`,
+        description: $localize`:Account status banner on a self-hosted deployment:Your organisation's plan is managed by this Kanera deployment.`,
+        actionLabel: $localize`:Link to account settings:Account settings`,
       };
     }
 
@@ -229,29 +240,35 @@ export class HomePage implements OnInit {
       return {
         kind: "trial",
         tone: "accent",
-        statusLabel: "Pro trial",
-        title: `Your Pro trial is active · ${days} day${days === 1 ? "" : "s"} left`,
-        description: "After the trial, your organisation moves to Kanera Free and over-limit boards remain safely stored.",
-        actionLabel: "Choose Pro",
+        statusLabel: $localize`:Account status label:Pro trial`,
+        title: icu($localize`:Account status banner title during a trial:Your Pro trial is active · {count, plural, one {# day} other {# days}} left`, { count: days }),
+        description: $localize`:Account status banner during a trial:After the trial, your organisation moves to Kanera Free and over-limit boards remain safely stored.`,
+        actionLabel: $localize`:Link to upgrade from the trial:Choose Pro`,
       };
     }
 
     if (entitlements.tier === "free") {
       const maxBoards = entitlements.maxBoards;
       const allowance = maxBoards === null
-        ? "Free plan limits are active."
-        : `You can keep ${maxBoards} board${maxBoards === 1 ? "" : "s"} active.`;
+        ? $localize`:Account status banner on the Free plan:Free plan limits are active.`
+        : icu($localize`:Account status banner on the Free plan:You can keep {count, plural, one {# board} other {# boards}} active.`, { count: maxBoards });
       const executionsRemaining = this.state.automationExecutionsRemaining();
       const automationAllowance = user.role === "owner" && executionsRemaining !== null
-        ? ` ${executionsRemaining} automation execution${executionsRemaining === 1 ? "" : "s"} left this month.`
-        : "";
+        ? icu($localize`:Account status banner on the Free plan:{count, plural, one {# automation execution} other {# automation executions}} left this month.`, { count: executionsRemaining })
+        : null;
+      // Separate sentences, joined with a space; each is translated whole.
+      const description = [
+        allowance,
+        automationAllowance,
+        $localize`:Account status banner on the Free plan:Disabled boards are safely stored and return when you upgrade.`,
+      ].filter(Boolean).join(" ");
       return {
         kind: "free",
         tone: "neutral",
-        statusLabel: "Free",
-        title: "Your organisation is on Kanera Free",
-        description: `${allowance}${automationAllowance} Disabled boards are safely stored and return when you upgrade.`,
-        actionLabel: "Upgrade to Pro",
+        statusLabel: $localize`:Account status label - the Free plan:Free`,
+        title: $localize`:Account status banner title on the Free plan:Your organisation is on Kanera Free`,
+        description,
+        actionLabel: $localize`:Link to upgrade to the Pro plan:Upgrade to Pro`,
       };
     }
 
@@ -259,20 +276,20 @@ export class HomePage implements OnInit {
       return {
         kind: "pastDue",
         tone: "danger",
-        statusLabel: "Payment issue",
-        title: "Pro access is still active, but payment needs attention",
-        description: "Review your billing details to avoid a future downgrade to Kanera Free.",
-        actionLabel: "Review billing",
+        statusLabel: $localize`:Account status label:Payment issue`,
+        title: $localize`:Account status banner title when a payment failed:Pro access is still active, but payment needs attention`,
+        description: $localize`:Account status banner when a payment failed:Review your billing details to avoid a future downgrade to Kanera Free.`,
+        actionLabel: $localize`:Link to billing settings:Review billing`,
       };
     }
 
     return {
       kind: "paid",
       tone: "success",
-      statusLabel: "Pro plan",
-      title: "Kanera Pro is active",
-      description: "Your organisation has full access to boards, guests, automations, webhooks, and the API.",
-      actionLabel: "Manage plan",
+      statusLabel: $localize`:Account status label:Pro plan`,
+      title: $localize`:Account status banner title on the Pro plan:Kanera Pro is active`,
+      description: $localize`:Account status banner on the Pro plan:Your organisation has full access to boards, guests, automations, webhooks, and the API.`,
+      actionLabel: $localize`:Link to plan settings:Manage plan`,
     };
   });
 
@@ -286,9 +303,10 @@ export class HomePage implements OnInit {
     const attempted = this.createAttempted();
     if (!attempted || !this.boardLimitReached()) return null;
     const max = this.auth.maxBoards();
-    if (max === null) return "Your plan's board limit has been reached.";
-    const noun = attempted === "workspace" ? "workspace" : "board";
-    return `Your plan allows ${max} board${max === 1 ? "" : "s"}. Upgrade to add another ${noun}.`;
+    if (max === null) return $localize`:Inline message when the plan's board cap is reached:Your plan's board limit has been reached.`;
+    return attempted === "workspace"
+      ? icu($localize`:Inline message when the plan's board cap is reached:Your plan allows {count, plural, one {# board} other {# boards}}. Upgrade to add another workspace.`, { count: max })
+      : icu($localize`:Inline message when the plan's board cap is reached:Your plan allows {count, plural, one {# board} other {# boards}}. Upgrade to add another board.`, { count: max });
   });
 
   /**
@@ -339,8 +357,10 @@ export class HomePage implements OnInit {
   readonly focusFilterLabel = computed(() => {
     const filter = this.focusFilter();
     if (!filter) return null;
-    if (filter === "upcoming") return "the next 7 days";
-    return filter === "overdue" ? "overdue work" : filter === "today" ? "today" : "tomorrow";
+    if (filter === "upcoming") return $localize`:Agenda filter chip - Showing ...:Showing the next 7 days`;
+    if (filter === "overdue") return $localize`:Agenda filter chip - Showing ...:Showing overdue work`;
+    if (filter === "today") return $localize`:Agenda filter chip - Showing ...:Showing today`;
+    return $localize`:Agenda filter chip - Showing ...:Showing tomorrow`;
   });
 
   /** Narrow viewports halve the trend window; see TREND_DAYS_NARROW. */
@@ -351,8 +371,9 @@ export class HomePage implements OnInit {
   /** Matches My Cards history: only completed cards count as completed work. */
   readonly trendSeries = computed<ActivityStripSeries[]>(() => [{
     key: "completed",
-    label: "Completed",
+    label: $localize`:Activity strip series - cards completed:Completed`,
     noun: "card",
+    countLabel: (count) => icu($localize`:Activity strip day tooltip count:{count, plural, one {# card} other {# cards}}`, { count }),
     tone: "success",
     counts: new Map(this.state.trend().byDay.map((day) => [
       day.date,
@@ -455,21 +476,21 @@ export class HomePage implements OnInit {
     this.priorityError.set(null);
     const { priorityId, ...anchor } = event;
     void this.myPriorities.movePriority(priorityId, anchor).catch(() => {
-      this.priorityError.set("We couldn’t reorder that card. Its previous position has been restored.");
+      this.priorityError.set($localize`:Error on the Up next list:We couldn’t reorder that card. Its previous position has been restored.`);
     });
   }
 
   onPriorityRemoved(event: { priorityId: string }): void {
     this.priorityError.set(null);
     void this.myPriorities.removePriority(event.priorityId).catch(() => {
-      this.priorityError.set("We couldn’t remove that card from Up next. It has been put back.");
+      this.priorityError.set($localize`:Error on the Up next list:We couldn’t remove that card from Up next. It has been put back.`);
     });
   }
 
   onPriorityCompleted(event: { cardId: string; completed: boolean }): void {
     this.priorityError.set(null);
     void this.myPriorities.setCardCompleted(event.cardId, event.completed).catch(() => {
-      this.priorityError.set("We couldn’t update that card. Nothing has changed.");
+      this.priorityError.set($localize`:Error on the Up next list:We couldn’t update that card. Nothing has changed.`);
     });
   }
 
@@ -497,7 +518,7 @@ export class HomePage implements OnInit {
     }
     this.createAttempted.set(null);
     const ref = this.dialog.open<string>(StandaloneBoardCreateDialogComponent, {
-      ariaLabel: "Create standalone board",
+      ariaLabel: $localize`:Dialog label:Create standalone board`,
       width: "min(440px, calc(100vw - 32px))",
       maxWidth: "100vw",
     });

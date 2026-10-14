@@ -67,11 +67,13 @@ export interface HomeAgendaGroup {
   count: number;
 }
 
+const LOAD_ERROR = $localize`:Home page load error:We couldn’t load your day. Check your connection and try again.`;
+
 const BUCKET_LABELS: Record<HomeDueBucket, string> = {
-  overdue: "Overdue",
-  today: "Today",
-  tomorrow: "Tomorrow",
-  laterThisWeek: "Later this week",
+  overdue: $localize`:Agenda group heading - cards past their due date:Overdue`,
+  today: $localize`:Agenda group heading:Today`,
+  tomorrow: $localize`:Agenda group heading:Tomorrow`,
+  laterThisWeek: $localize`:Agenda group heading:Later this week`,
 };
 
 /**
@@ -210,7 +212,7 @@ export class HomeState {
       // Only a hard error when there is nothing to show. With a cached snapshot the page stays
       // useful and the offline banner explains why the numbers may be stale.
       if (version === this.requestVersion && !this.cachedAt()) {
-        this.error.set("We couldn’t load your day. Check your connection and try again.");
+        this.error.set(LOAD_ERROR);
       }
     } finally {
       if (version === this.requestVersion) {
@@ -230,7 +232,7 @@ export class HomeState {
       await this.load(version);
     } catch {
       if (version === this.requestVersion && !this.cachedAt()) {
-        this.error.set("We couldn’t load your day. Check your connection and try again.");
+        this.error.set(LOAD_ERROR);
       }
     } finally {
       if (version === this.requestVersion) {

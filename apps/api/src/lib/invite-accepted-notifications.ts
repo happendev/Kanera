@@ -1,9 +1,11 @@
+import type { Locale } from "@kanera/shared/locales";
 import { clientMembers, users } from "@kanera/shared/schema";
 import { and, eq, inArray, isNull, ne } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db.js";
 import { env } from "../env.js";
 import type { InviteAcceptedEmailParams } from "./email-templates/index.js";
+import { recipientLocale } from "./i18n/request-locale.js";
 
 export async function notifyAdminsOrgInviteAccepted(
   app: FastifyInstance,
@@ -21,6 +23,7 @@ export async function notifyAdminsOrgInviteAccepted(
     acceptedUserId: params.acceptedUserId,
     buildData: (recipient) => ({
       context: "org",
+      locale: recipient.locale,
       displayName: recipient.displayName,
       acceptedByName: params.acceptedByName,
       acceptedByEmail: params.acceptedByEmail,
@@ -49,6 +52,7 @@ export async function notifyAdminsBoardInviteAccepted(
     acceptedUserId: params.acceptedUserId,
     buildData: (recipient) => ({
       context: "board",
+      locale: recipient.locale,
       displayName: recipient.displayName,
       acceptedByName: params.acceptedByName,
       acceptedByEmail: params.acceptedByEmail,
@@ -65,11 +69,11 @@ async function notifyClientAdmins(
   params: {
     clientId: string;
     acceptedUserId: string;
-    buildData: (recipient: { displayName: string }) => InviteAcceptedEmailParams;
+    buildData: (recipient: { displayName: string; locale: Locale }) => InviteAcceptedEmailParams;
   },
 ) {
   const recipients = await db
-    .select({ id: users.id, email: users.email, displayName: users.displayName })
+    .select({ id: users.id, email: users.email, displayName: users.displayName, locale: users.locale })
     .from(clientMembers)
     .innerJoin(users, eq(users.id, clientMembers.userId))
     .where(
@@ -84,6 +88,10 @@ async function notifyClientAdmins(
     );
 
   await Promise.all(
-    recipients.map((recipient) => app.mailer.sendInviteAccepted(recipient.email, params.buildData(recipient))),
+    // Each admin reads it in their own language.
+    recipients.map((recipient) => app.mailer.sendInviteAccepted(
+      recipient.email,
+      params.buildData({ displayName: recipient.displayName, locale: recipientLocale(recipient.locale) }),
+    )),
   );
 }

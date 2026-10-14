@@ -1,3 +1,6 @@
+import { SOURCE_LOCALE, type Locale } from "@kanera/shared/locales";
+import { importText } from "../../lib/i18n/messages/imports.js";
+import { formatBytes } from "../../lib/i18n/format.js";
 import { getAllowedAttachmentExtension } from "@kanera/shared/attachments";
 import type { CardAttachmentRow, CardFeedItem, CommentRow } from "@kanera/shared/dto";
 import type { CommitImportBody, ImportResultSummary } from "@kanera/shared/dto";
@@ -28,7 +31,7 @@ import { recordActivity } from "../../lib/activity.js";
 import { allocateCardKeys } from "../../lib/card-keys.js";
 import { badRequest } from "../../lib/errors.js";
 import { localDateParts } from "../../lib/local-date.js";
-import { formatStorageBytes, type UploadEntitlements } from "../../lib/entitlements.js";
+import type { UploadEntitlements } from "../../lib/entitlements.js";
 import { generateCoverImage, generateThumbnail, isProcessableImage } from "../../lib/image.js";
 import { unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
 import { between, positionAtIndex } from "../../lib/position.js";
@@ -80,6 +83,7 @@ export interface TrelloImportEvents {
 }
 
 interface ImportContext {
+  locale: Locale;
   tx: Tx;
   source: NormalizedTrelloBoard;
   body: CommitImportBody;
@@ -218,17 +222,17 @@ async function copyTrelloAttachments(ctx: ImportContext, cardIdByTrelloId: Map<s
   if (uploadedAttachments.length === 0) return { rows, coverUpdates };
 
   if (ctx.body.options.attachmentCopyMode === "skip") {
-    ctx.warnings.push(`${uploadedAttachments.length} Trello uploaded attachment${uploadedAttachments.length === 1 ? "" : "s"} skipped by import option.`);
+    ctx.warnings.push(importText(ctx.locale, "trelloSkipped", { count: uploadedAttachments.length }));
     return { rows, coverUpdates };
   }
   if (!ctx.storage || !ctx.trelloApiKey || !ctx.trelloToken) {
-    ctx.warnings.push(`${uploadedAttachments.length} Trello uploaded attachment${uploadedAttachments.length === 1 ? "" : "s"} could not be copied because Trello was not connected.`);
+    ctx.warnings.push(importText(ctx.locale, "trelloDisconnected", { count: uploadedAttachments.length }));
     return { rows, coverUpdates };
   }
 
   const entitlements = ctx.uploadEntitlements;
   if (!entitlements) {
-    ctx.warnings.push(`${uploadedAttachments.length} Trello uploaded attachment${uploadedAttachments.length === 1 ? "" : "s"} could not be copied because upload limits were unavailable.`);
+    ctx.warnings.push(importText(ctx.locale, "trelloLimits", { count: uploadedAttachments.length }));
     return { rows, coverUpdates };
   }
   const progress: TrelloAttachmentImportProgress = {
@@ -271,20 +275,20 @@ async function copyTrelloAttachments(ctx: ImportContext, cardIdByTrelloId: Map<s
     const mimeType = attachment.mimeType ?? "application/octet-stream";
     const ext = getAllowedAttachmentExtension(mimeType, attachment.name);
     const downloadUrl = trelloDownloadUrlFor(card.id, attachment);
-    if (!ext) outcome = { warning: `Skipped Trello attachment "${attachment.name}" because its file type is unsupported.`, reason: "unsupported file type" };
-    else if (!downloadUrl) outcome = { warning: `Skipped Trello attachment "${attachment.name}" because its URL was not a Trello download URL.`, reason: "not a Trello download URL" };
+    if (!ext) outcome = { warning: importText(ctx.locale, "unsupported", { name: attachment.name }), reason: importText(ctx.locale, "reasonType") };
+    else if (!downloadUrl) outcome = { warning: importText(ctx.locale, "badUrl", { name: attachment.name }), reason: importText(ctx.locale, "reasonUrl") };
     else {
       try {
         const response = await fetch(downloadUrl, { headers: { Authorization: trelloAuthorizationHeader(ctx.trelloApiKey!, ctx.trelloToken!) } });
         if (!response.ok) {
-          const reason = `Trello returned HTTP ${response.status}`;
-          outcome = { warning: `Could not copy Trello attachment "${attachment.name}" because ${reason}.`, reason };
+          const reason = importText(ctx.locale, "reasonHttp", { status: response.status });
+          outcome = { warning: importText(ctx.locale, "httpFailed", { name: attachment.name, reason }), reason };
         } else {
           const buffer = Buffer.from(await response.arrayBuffer());
           if (buffer.byteLength > entitlements.maxFileBytes) {
-            outcome = { warning: `Skipped Trello attachment "${attachment.name}" because it exceeds the ${formatStorageBytes(entitlements.maxFileBytes)} file limit.`, reason: "file size limit" };
+            outcome = { warning: importText(ctx.locale, "fileLimit", { name: attachment.name, size: formatBytes(ctx.locale, entitlements.maxFileBytes) }), reason: importText(ctx.locale, "reasonSize") };
           } else if (entitlements.limited && entitlements.quotaBytes !== null && entitlements.usedBytes + acceptedBytes + buffer.byteLength > entitlements.quotaBytes) {
-            outcome = { warning: `Skipped Trello attachment "${attachment.name}" because the organisation storage quota would be exceeded.`, reason: "organisation storage quota" };
+            outcome = { warning: importText(ctx.locale, "quota", { name: attachment.name }), reason: importText(ctx.locale, "reasonQuota") };
           } else {
             acceptedBytes += buffer.byteLength;
 
@@ -317,7 +321,7 @@ async function copyTrelloAttachments(ctx: ImportContext, cardIdByTrelloId: Map<s
           }
         }
       } catch {
-        outcome = { warning: `Could not copy Trello attachment "${attachment.name}" because the download failed.`, reason: "download failed" };
+        outcome = { warning: importText(ctx.locale, "downloadFailed", { name: attachment.name }), reason: importText(ctx.locale, "reasonDownload") };
       }
     }
     progress.processed += 1;
@@ -332,7 +336,7 @@ async function copyTrelloAttachments(ctx: ImportContext, cardIdByTrelloId: Map<s
     if (!("warning" in entry)) continue;
     failureReasons.set(entry.reason, (failureReasons.get(entry.reason) ?? 0) + 1);
   }
-  for (const [reason, count] of failureReasons) ctx.warnings.push(`${count} Trello uploaded attachment${count === 1 ? "" : "s"} skipped: ${reason}.`);
+  for (const [reason, count] of failureReasons) ctx.warnings.push(importText(ctx.locale, "trelloFailures", { count, reason }));
   for (const entry of prepared.filter((item): item is Extract<Prepared, { warning: string; reason: string }> => "warning" in item).slice(0, 10)) ctx.warnings.push(entry.warning);
   const inserted = await insertMany<Record<string, unknown>, typeof cardAttachments.$inferSelect>(ctx.tx, cardAttachments, uploads.map((upload) => ({
     cardId: upload.cardId,
@@ -557,7 +561,7 @@ async function mapCustomFields(ctx: ImportContext): Promise<{ map: Map<string, C
       const field = existingById.get(mapping.targetFieldId!);
       if (!field) throw badRequest("custom field mapping target not found");
       if (field.type !== sourceField.suggestedType) {
-        ctx.warnings.push(`Skipped values for "${sourceField.name}" because the mapped Kanera field type is ${field.type}.`);
+        ctx.warnings.push(importText(ctx.locale, "fieldType", { name: sourceField.name, type: field.type }));
       }
       map.set(sourceField.id, field);
       continue;
@@ -637,6 +641,7 @@ async function mapCustomFields(ctx: ImportContext): Promise<{ map: Map<string, C
 export async function runTrelloImport(
   tx: Tx,
   args: {
+    locale?: Locale;
     source: NormalizedTrelloBoard;
     body: CommitImportBody;
     workspaceId: string;
@@ -654,6 +659,7 @@ export async function runTrelloImport(
   const ctx: ImportContext = {
     tx,
     warnings: [],
+    locale: SOURCE_LOCALE,
     actorName: "Importer",
     actorAvatarUrl: null,
     storage: null,
@@ -738,7 +744,7 @@ export async function runTrelloImport(
     for (const memberId of new Set(card.memberIds)) {
       const userId = ctx.body.members[memberId];
       if (!userId) {
-        ctx.warnings.push(`Skipped an unmapped assignee on "${card.name}".`);
+        ctx.warnings.push(importText(ctx.locale, "assignee", { name: card.name }));
         continue;
       }
       // Distinct Trello members can map to one workspace user. Keep one row per composite key so
@@ -831,12 +837,12 @@ export async function runTrelloImport(
   }
 
   const skippedCards = ctx.source.cards.filter((card) => skippedListIds.has(card.listId)).length;
-  if (skippedCards > 0) ctx.warnings.push(`${skippedCards} card${skippedCards === 1 ? "" : "s"} skipped because their list was skipped.`);
+  if (skippedCards > 0) ctx.warnings.push(importText(ctx.locale, "listSkipped", { count: skippedCards }));
   const skippedClosedListCards = ctx.source.cards.filter((card) => closedListIds.has(card.listId) && listMapping.map.has(card.listId) && !ctx.body.options.includeArchived).length;
-  if (skippedClosedListCards > 0) ctx.warnings.push(`${skippedClosedListCards} card${skippedClosedListCards === 1 ? "" : "s"} skipped because their Trello list was archived.`);
+  if (skippedClosedListCards > 0) ctx.warnings.push(importText(ctx.locale, "listArchived", { count: skippedClosedListCards }));
   const skippedArchivedCards = ctx.source.cards.filter((card) => card.closed && listMapping.map.has(card.listId) && !closedListIds.has(card.listId) && !ctx.body.options.includeArchived).length;
-  if (skippedArchivedCards > 0) ctx.warnings.push(`${skippedArchivedCards} archived card${skippedArchivedCards === 1 ? "" : "s"} skipped by default.`);
-  if (preservedAttachmentLinks > 0) ctx.warnings.push(`${preservedAttachmentLinks} Trello attachment link${preservedAttachmentLinks === 1 ? " was" : "s were"} preserved on imported cards.`);
+  if (skippedArchivedCards > 0) ctx.warnings.push(importText(ctx.locale, "archived", { count: skippedArchivedCards }));
+  if (preservedAttachmentLinks > 0) ctx.warnings.push(importText(ctx.locale, "links", { count: preservedAttachmentLinks }));
 
   const summary: ImportResultSummary = {
     createdBoardId: board.id,

@@ -69,8 +69,8 @@ export function workDoneLayoutState(scope: WorkDonePreferenceScope): WorkDoneLay
   return {
     layout: computed(() => (narrow() ? "list" : preferred())),
     options: computed(() => [
-      { id: "list", icon: "list-details", label: "List layout" },
-      { id: "grid", icon: "layout-grid", label: "Grid layout", disabled: narrow() },
+      { id: "list", icon: "list-details", label: $localize`:Work done layout option - one column:List layout` },
+      { id: "grid", icon: "layout-grid", label: $localize`:Work done layout option - several columns:Grid layout`, disabled: narrow() },
     ]),
     setLayout(layout) {
       if (layout === "grid" && narrow()) return;

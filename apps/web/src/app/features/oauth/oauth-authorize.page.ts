@@ -25,40 +25,44 @@ interface DenialContext {
     <main class="consent-card">
       @if (denial(); as denied) {
         <i class="ti ti-circle-x consent-icon"></i>
-        <h1>Access not granted</h1>
-        <p>This client was not given access to your Kanera account.</p>
-        <p class="destination-label">If you return to the client, your browser will open:</p>
+        <h1 i18n>Access not granted</h1>
+        <p i18n>This client was not given access to your Kanera account.</p>
+        <p class="destination-label" i18n>If you return to the client, your browser will open:</p>
         <code class="destination">{{ denied.redirectOrigin }}</code>
         <div class="actions">
-          <button type="button" class="ghost" (click)="returnToClient()">Return to client</button>
-          <button type="button" (click)="stayInKanera()">Stay in Kanera</button>
+          <button type="button" class="ghost" (click)="returnToClient()" i18n="Button">Return to client</button>
+          <button type="button" (click)="stayInKanera()" i18n="Button">Stay in Kanera</button>
         </div>
       } @else {
         <i class="ti ti-plug-connected consent-icon"></i>
-        <h1>Connect {{ context()?.clientName || "AI agent" }}</h1>
+        @if (context()?.clientName; as clientName) {
+          <h1 i18n="Heading: connect an AI agent">Connect {{ clientName // i18n(ph="client") }}</h1>
+        } @else {
+          <h1 i18n="Heading: connect an AI agent whose name is unknown">Connect AI agent</h1>
+        }
         @if (loading()) {
-          <p>Checking this connection…</p>
+          <p i18n>Checking this connection…</p>
         } @else if (error(); as message) {
           <p class="error">{{ message }}</p>
         } @else {
-          <p>This agent will act as you in Kanera. It will be able to:</p>
+          <p i18n>This agent will act as you in Kanera. It will be able to:</p>
           <ul>
-            <li><i class="ti ti-eye"></i> Read boards, cards, notes, comments, and activity you can access</li>
+            <li><i class="ti ti-eye"></i> <span i18n="Permission granted to a connected agent">Read boards, cards, notes, comments, and activity you can access</span></li>
             @if (canWrite()) {
-              <li><i class="ti ti-edit"></i> Create and update board content wherever you are an editor</li>
-              <li><i class="ti ti-settings"></i> Create and administer workspaces wherever you are an administrator</li>
+              <li><i class="ti ti-edit"></i> <span i18n="Permission granted to a connected agent">Create and update board content wherever you are an editor</span></li>
+              <li><i class="ti ti-settings"></i> <span i18n="Permission granted to a connected agent">Create and administer workspaces wherever you are an administrator</span></li>
             }
-            <li><i class="ti ti-lock"></i> Stay limited to your current Kanera permissions</li>
+            <li><i class="ti ti-lock"></i> <span i18n="Permission granted to a connected client">Stay limited to your current Kanera permissions</span></li>
           </ul>
-          <p class="destination-label">After approval, the authorization result will be sent to:</p>
+          <p class="destination-label" i18n>After approval, the authorization result will be sent to:</p>
           <code class="destination">{{ context()?.redirectOrigin }}</code>
           @if (context()?.isLoopbackRedirect) {
-            <p class="muted">This callback returns to software running on this device.</p>
+            <p class="muted" i18n>This callback returns to software running on this device.</p>
           }
-          <p class="muted">Only continue if you started this connection. You can revoke it later from Settings → AI agents.</p>
+          <p class="muted" i18n>Only continue if you started this connection. You can revoke it later from Settings → AI agents.</p>
           <div class="actions">
-            <button type="button" class="ghost" (click)="cancel()" [disabled]="busy()">Cancel</button>
-            <button type="button" (click)="approve()" [disabled]="busy()">{{ busy() ? "Connecting…" : "Allow access" }}</button>
+            <button type="button" class="ghost" (click)="cancel()" [disabled]="busy()" i18n="Button">Cancel</button>
+            <button type="button" (click)="approve()" [disabled]="busy()">@if (busy()) { <ng-container i18n="Button state">Connecting…</ng-container> } @else { <ng-container i18n="Button">Allow access</ng-container> }</button>
           </div>
         }
       }
@@ -106,7 +110,7 @@ export class OauthAuthorizePage implements OnInit {
     try {
       this.context.set(await this.api.get<ConsentContext>(`/oauth/authorize/context?${this.params().toString()}`));
     } catch {
-      this.error.set("This connection request is invalid, expired, or no longer registered.");
+      this.error.set($localize`This connection request is invalid, expired, or no longer registered.`);
     } finally {
       this.loading.set(false);
     }
@@ -120,7 +124,7 @@ export class OauthAuthorizePage implements OnInit {
       const result = await this.api.post<{ redirectUrl: string }>("/oauth/authorize/consent", Object.fromEntries(this.params()));
       this.document.location.assign(result.redirectUrl);
     } catch {
-      this.error.set("Kanera could not authorize this agent. Check your plan and try again.");
+      this.error.set($localize`Kanera could not authorize this agent. Check your plan and try again.`);
       this.busy.set(false);
     }
   }
@@ -134,7 +138,7 @@ export class OauthAuthorizePage implements OnInit {
       // Keep the user on Kanera until they explicitly choose to open that third-party destination.
       this.denial.set(await this.api.post<DenialContext>("/oauth/authorize/deny", Object.fromEntries(this.params())));
     } catch {
-      this.error.set("Kanera could not cancel this connection request. You can safely close this page.");
+      this.error.set($localize`Kanera could not cancel this connection request. You can safely close this page.`);
     } finally {
       this.busy.set(false);
     }

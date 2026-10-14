@@ -3,6 +3,7 @@ import { TestBed } from "@angular/core/testing";
 import type { WireBoardMemberUser } from "@kanera/shared/events";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../core/api/api.client";
+import type { AttachmentPreviewType } from "../../shared/attachment-preview";
 import { avatarColorIndex } from "../../shared/avatar.component";
 import { DescriptionViewerComponent } from "./description-viewer.component";
 
@@ -623,7 +624,7 @@ describe("DescriptionViewerComponent mentions", () => {
     const { el, fixture } = await render(`[Walkthrough.mp4](${href})`);
     fixture.componentRef.setInput("handleAttachmentLinks", true);
     fixture.detectChanges();
-    const emitted: Array<{ src: string; fileName: string; mediaType: "image" | "video" | "audio" | "pdf" | "markdown"; mimeType: string }> = [];
+    const emitted: Array<{ src: string; fileName: string; mediaType: AttachmentPreviewType; mimeType: string }> = [];
     fixture.componentInstance.attachmentClick.subscribe((attachment) => emitted.push(attachment));
     vi.stubGlobal("fetch", vi.fn());
 

@@ -7,6 +7,7 @@ import { CardLabelsComponent, type CardLabelPresentation } from "../card-labels.
 import { iconForType, verbForType } from "./work-done-grouping";
 import type { CardDayDigest, WorkDoneActor, WorkDoneDay } from "./work-done.types";
 import { formatTime } from "../../../shared/date-format";
+import { icu } from "../../../core/i18n/icu";
 
 export type WorkDoneBoardSummary = { id: string; name: string; icon: string | null; iconColor: string | null };
 
@@ -17,14 +18,30 @@ const MAX_CHECKLIST_TOOLTIP_ITEMS = 6;
 
 /**
  * The per-type counts a day header shows, in reading order: what shipped first, then progress, then
- * what started. Singular and plural are spelled out because none of these pluralise by adding "s".
+ * what started. Each tooltip is a whole ICU plural message so every language can inflect it.
  */
-const COUNT_ORDER: { type: WorkDoneEventType; icon: string; one: string; many: string }[] = [
-  { type: "completed", icon: "circle-check", one: "card completed", many: "cards completed" },
-  { type: "checklistItemCompleted", icon: "checkbox", one: "checklist item ticked", many: "checklist items ticked" },
+const COUNT_ORDER: { type: WorkDoneEventType; icon: string; tooltip: string }[] = [
+  {
+    type: "completed",
+    icon: "circle-check",
+    tooltip: $localize`:Work done day tooltip:{count, plural, one {# card completed} other {# cards completed}}`,
+  },
+  {
+    type: "checklistItemCompleted",
+    icon: "checkbox",
+    tooltip: $localize`:Work done day tooltip:{count, plural, one {# checklist item ticked} other {# checklist items ticked}}`,
+  },
   // Counts coalesced move events rather than distinct cards, so "moves" is the honest noun.
-  { type: "moved", icon: "arrow-right", one: "move", many: "moves" },
-  { type: "created", icon: "plus", one: "card created", many: "cards created" },
+  {
+    type: "moved",
+    icon: "arrow-right",
+    tooltip: $localize`:Work done day tooltip - card moves between lists:{count, plural, one {# move} other {# moves}}`,
+  },
+  {
+    type: "created",
+    icon: "plus",
+    tooltip: $localize`:Work done day tooltip:{count, plural, one {# card created} other {# cards created}}`,
+  },
 ];
 
 /**
@@ -61,7 +78,7 @@ export class WorkDoneDayComponent {
   // card, and the header's job is to summarise the day's cards.
   readonly cardCountText = computed(() => {
     const count = new Set(this.day().digests.map((digest) => digest.cardId)).size;
-    return `${count} ${count === 1 ? "card" : "cards"}`;
+    return icu($localize`:Number of distinct cards worked on in a day:{count, plural, one {# card} other {# cards}}`, { count });
   });
 
   /**
@@ -77,7 +94,7 @@ export class WorkDoneDayComponent {
       type: entry.type,
       icon: entry.icon,
       value: counts[entry.type],
-      tooltip: `${counts[entry.type]} ${counts[entry.type] === 1 ? entry.one : entry.many}`,
+      tooltip: icu(entry.tooltip, { count: counts[entry.type] }),
     }));
   });
 
@@ -105,6 +122,24 @@ export class WorkDoneDayComponent {
   }
 
   /** First word of a display name; the full name stays in the row's tooltip. */
+  actorTooltip(actor: WorkDoneActor): string {
+    return icu(
+      $localize`:Tooltip on a contributor avatar, e.g. "Ada · 3 events":{count, plural, one {{name} · # event} other {{name} · # events}}`,
+      { count: actor.eventCount, name: actor.name },
+    );
+  }
+
+  workedOnBy(actor: WorkDoneActor): string {
+    return $localize`:Tooltip on the person who did the work in a row:Worked on by ${actor.name}:person:`;
+  }
+
+  toggleLabel(): string {
+    const date = this.day().fullLabel;
+    return this.collapsed()
+      ? $localize`:Button label - expand a day by its date:Expand ${date}:date:`
+      : $localize`:Button label - collapse a day by its date:Collapse ${date}:date:`;
+  }
+
   firstNameOf(actor: WorkDoneActor): string {
     return actor.name.split(" ")[0] ?? actor.name;
   }
@@ -113,7 +148,9 @@ export class WorkDoneDayComponent {
     const ticks = digest.checklistTicks;
     // A single tick is worth naming inline; past that the count is the useful summary and the detail
     // moves to the tooltip.
-    return ticks.length === 1 ? ticks[0]!.text : `${ticks.length} checklist items`;
+    return ticks.length === 1
+      ? ticks[0]!.text
+      : icu($localize`:Chip - number of checklist items ticked on a card:{count, plural, one {# checklist item} other {# checklist items}}`, { count: ticks.length });
   }
 
   /**
@@ -124,7 +161,7 @@ export class WorkDoneDayComponent {
     const ticks = digest.checklistTicks;
     const named = ticks.slice(0, MAX_CHECKLIST_TOOLTIP_ITEMS).map((tick) => tick.text);
     if (ticks.length > MAX_CHECKLIST_TOOLTIP_ITEMS) {
-      named.push(`+${ticks.length - MAX_CHECKLIST_TOOLTIP_ITEMS} more`);
+      named.push($localize`:How many more items are not named:+${ticks.length - MAX_CHECKLIST_TOOLTIP_ITEMS}:count: more`);
     }
     return named.join(" · ");
   }

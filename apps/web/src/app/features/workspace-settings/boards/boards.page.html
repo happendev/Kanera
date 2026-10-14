@@ -1,15 +1,15 @@
 <div class="board-settings-section">
         <div class="guest-section-head">
           <i class="ti ti-layout-kanban"></i>
-          <span>Boards</span>
+          <span i18n="Section heading">Boards</span>
         </div>
-        <k-docs-link path="boards" label="Learn more about boards" />
+        <k-docs-link path="boards" label="Learn more about boards" i18n-label />
         <form class="board-form" (submit)="settings.createBoard($event)">
-          <input name="board" placeholder="Board name" [value]="settings.newBoardName()" (input)="settings.newBoardName.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" required class="grow" />
-          <button class="sm compact-add-button" type="submit" aria-label="Add board" kTooltip="Add board"><i class="ti ti-plus"></i><span class="mobile-hide">Add board</span></button>
+          <input name="board" placeholder="Board name" i18n-placeholder [value]="settings.newBoardName()" (input)="settings.newBoardName.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" required class="grow" />
+          <button class="sm compact-add-button" type="submit" aria-label="Add board" i18n-aria-label kTooltip="Add board" i18n-kTooltip><i class="ti ti-plus"></i><span class="mobile-hide" i18n="Button">Add board</span></button>
         </form>
         @if (settings.boardLimitReached()) {
-        <p class="plan-limit-hint"><i class="ti ti-lock"></i> Your existing boards stay active on Free. Add another board to review the exact Pro price for your team.</p>
+        <p class="plan-limit-hint"><i class="ti ti-lock"></i> <ng-container i18n>Your existing boards stay active on Free. Add another board to review the exact Pro price for your team.</ng-container></p>
         }
         <div class="boards" cdkDropList [cdkDropListData]="settings.boardList()" (cdkDropListDropped)="settings.dropBoard($event)">
           @for (board of settings.boardList(); track board.id) {
@@ -20,12 +20,12 @@
             <input class="inline-name-input grow" [value]="settings.editingBoardName()" (input)="settings.editingBoardName.set($any($event.target).value)" [maxLength]="settings.workspaceEntityNameMaxLength" (blur)="settings.saveBoardName(board.id)" (keydown.enter)="settings.saveBoardName(board.id)"
               (keydown.escape)="settings.cancelEditBoard()" autofocus />
             } @else {
-            <span (click)="settings.startEditBoard(board)" kTooltip="Click to rename" class="grow" style="cursor:pointer">{{ board.name }}</span>
+            <span (click)="settings.startEditBoard(board)" kTooltip="Click to rename" i18n-kTooltip class="grow" style="cursor:pointer">{{ board.name }}</span>
             }
             <div class="row-actions">
               @if (settings.boardGroups().length > 0) {
-              <select class="board-group-select" [value]="board.groupId ?? ''" (change)="settings.updateBoardGroup(board.id, $any($event.target).value || null)" kTooltip="Board group" aria-label="Board group">
-                <option value="" [selected]="!board.groupId">Ungrouped</option>
+              <select class="board-group-select" [value]="board.groupId ?? ''" (change)="settings.updateBoardGroup(board.id, $any($event.target).value || null)" kTooltip="Board group" i18n-kTooltip aria-label="Board group" i18n-aria-label>
+                <option value="" [selected]="!board.groupId" i18n="The board is in no group">Ungrouped</option>
                 @for (group of settings.boardGroups(); track group.id) {
                 <option [value]="group.id" [selected]="board.groupId === group.id">{{ group.title }}</option>
                 }
@@ -34,38 +34,38 @@
               <k-icon-picker [value]="board.icon || 'layout-kanban'" (valueChange)="settings.updateBoardIcon(board.id, $event)" />
               <k-color-picker [value]="$any(board.iconColor)" (valueChange)="settings.updateBoardColor(board.id, $event)" />
               @if (settings.canManageBoardAccess()) {
-              <button class="ghost icon" [class.active]="settings.managingBoardAccessId() === board.id" (click)="settings.openBoardAccess(board.id)" aria-label="Manage access" kTooltip="Manage access">
+              <button class="ghost icon" [class.active]="settings.managingBoardAccessId() === board.id" (click)="settings.openBoardAccess(board.id)" aria-label="Manage access" i18n-aria-label kTooltip="Manage access" i18n-kTooltip>
                 <i class="ti ti-users"></i>
               </button>
               @if (settings.managingBoardAccessId() === board.id) {
               <k-board-members-menu [boardId]="board.id" [workspaceId]="settings.workspaceId()" [ownerClientId]="settings.ownerClientId()" [currentUserId]="settings.currentUserId()" [canManage]="settings.canManageBoardAccess()" [members]="[]" (dismissed)="settings.closeBoardAccess(board.id)" />
               }
               }
-              <button class="ghost icon danger" (click)="settings.deleteBoard(board.id)" [disabled]="!!settings.deletionPreviewKey()" aria-label="Delete board" kTooltip="Delete board">
+              <button class="ghost icon danger" (click)="settings.deleteBoard(board.id)" [disabled]="!!settings.deletionPreviewKey()" aria-label="Delete board" i18n-aria-label kTooltip="Delete board" i18n-kTooltip>
                 <i [class]="settings.deletionPreviewKey() === 'board:' + board.id ? 'ti ti-loader-2 spin' : 'ti ti-trash'"></i>
               </button>
             </div>
           </div>
           }
           @if (settings.boardList().length === 0) {
-          <k-empty-state size="sm" icon="layout-kanban" title="No boards yet" text="Create a board above. It will share this workspace’s lists, fields and labels." />
+          <k-empty-state size="sm" icon="layout-kanban" title="No boards yet" i18n-title text="Create a board above. It will share this workspace’s lists, fields and labels." i18n-text />
           }
         </div>
 
         <div class="role-ref-panel">
           <div class="role-ref-col">
-            <p class="role-ref-col-label">Board roles</p>
+            <p class="role-ref-col-label" i18n>Board roles</p>
             <div class="role-ref-row">
-              <span class="role-ref-name">Editor</span>
-              <span class="role-ref-desc">Create, edit, move, and delete cards and comments on this board.</span>
+              <span class="role-ref-name" i18n="Board role">Editor</span>
+              <span class="role-ref-desc" i18n>Create, edit, move, and delete cards and comments on this board.</span>
             </div>
             <div class="role-ref-row">
-              <span class="role-ref-name">Observer</span>
-              <span class="role-ref-desc">Read-only. Can view this board and its cards but cannot make changes.</span>
+              <span class="role-ref-name" i18n="Board role">Observer</span>
+              <span class="role-ref-desc" i18n>Read-only. Can view this board and its cards but cannot make changes.</span>
             </div>
             <div class="role-ref-row">
-              <span class="role-ref-name">Assigned only</span>
-              <span class="role-ref-desc">Restricts the person to cards assigned to them directly or through a checklist item. Other cards on the board are hidden.</span>
+              <span class="role-ref-name" i18n="Board access option: only cards assigned to the person">Assigned only</span>
+              <span class="role-ref-desc" i18n>Restricts the person to cards assigned to them directly or through a checklist item. Other cards on the board are hidden.</span>
             </div>
           </div>
         </div>
@@ -75,13 +75,13 @@
 <div class="board-settings-section">
         <div class="guest-section-head">
           <i class="ti ti-folders"></i>
-          <span>Groups</span>
+          <span i18n="Section heading: board groups">Groups</span>
         </div>
-        <p class="settings-section-hint">Use groups to organize the sidebar. Boards without a group stay listed directly under Boards.</p>
-        <k-docs-link path="boards" fragment="group-boards" label="Learn more about board groups" />
+        <p class="settings-section-hint" i18n>Use groups to organize the sidebar. Boards without a group stay listed directly under Boards.</p>
+        <k-docs-link path="boards" fragment="group-boards" label="Learn more about board groups" i18n-label />
         <form class="board-form" (submit)="settings.createBoardGroup($event)">
-          <input name="boardGroup" placeholder="Group title" [value]="settings.newBoardGroupTitle()" (input)="settings.newBoardGroupTitle.set($any($event.target).value)" required class="grow" />
-          <button class="sm compact-add-button" type="submit" aria-label="Add group" kTooltip="Add group"><i class="ti ti-plus"></i><span class="mobile-hide">Add group</span></button>
+          <input name="boardGroup" placeholder="Group title" i18n-placeholder [value]="settings.newBoardGroupTitle()" (input)="settings.newBoardGroupTitle.set($any($event.target).value)" required class="grow" />
+          <button class="sm compact-add-button" type="submit" aria-label="Add group" i18n-aria-label kTooltip="Add group" i18n-kTooltip><i class="ti ti-plus"></i><span class="mobile-hide" i18n="Button">Add group</span></button>
         </form>
         <div class="boards board-groups" cdkDropList [cdkDropListData]="settings.boardGroups()" (cdkDropListDropped)="settings.dropBoardGroup($event)">
           @for (group of settings.boardGroups(); track group.id) {
@@ -91,17 +91,17 @@
             <input class="inline-name-input grow" [value]="settings.editingBoardGroupTitle()" (input)="settings.editingBoardGroupTitle.set($any($event.target).value)" (blur)="settings.saveBoardGroupTitle(group.id)" (keydown.enter)="settings.saveBoardGroupTitle(group.id)"
               (keydown.escape)="settings.cancelEditBoardGroup()" autofocus />
             } @else {
-            <span (click)="settings.startEditBoardGroup(group)" kTooltip="Click to rename" class="grow" style="cursor:pointer">{{ group.title }}</span>
+            <span (click)="settings.startEditBoardGroup(group)" kTooltip="Click to rename" i18n-kTooltip class="grow" style="cursor:pointer">{{ group.title }}</span>
             }
             <div class="row-actions">
-              <button class="ghost icon danger" (click)="settings.deleteBoardGroup(group.id)" aria-label="Delete group" kTooltip="Delete group">
+              <button class="ghost icon danger" (click)="settings.deleteBoardGroup(group.id)" aria-label="Delete group" i18n-aria-label kTooltip="Delete group" i18n-kTooltip>
                 <i class="ti ti-trash"></i>
               </button>
             </div>
           </div>
           }
           @if (settings.boardGroups().length === 0) {
-          <k-empty-state size="sm" icon="folders" title="No groups yet" text="Groups collect related boards under one heading in the sidebar." />
+          <k-empty-state size="sm" icon="folders" title="No groups yet" i18n-title text="Groups collect related boards under one heading in the sidebar." i18n-text />
           }
         </div>
       </div>

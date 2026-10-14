@@ -5,6 +5,7 @@ import { RouterLink } from "@angular/router";
 import { PublicAuthClient } from "../../core/auth/public-auth.client";
 import { TurnstileChallenge } from "../../core/auth/turnstile-challenge";
 import { LogoComponent } from "../../shared/logo.component";
+import { LocaleSwitcherComponent } from "./locale-switcher.component";
 
 interface AuthConfigResponse {
   turnstileSiteKey: string | null;
@@ -13,7 +14,7 @@ interface AuthConfigResponse {
 @Component({
   selector: "k-forgot-password",
   standalone: true,
-  imports: [RouterLink, LogoComponent, FormField],
+  imports: [RouterLink, LogoComponent, FormField, LocaleSwitcherComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: "./forgot-password.page.html",
   styleUrl: "./login.page.scss",
@@ -62,14 +63,14 @@ export class ForgotPasswordPage implements OnInit, AfterViewInit {
         });
         if (!res.ok) {
           this.turnstile.reset();
-          return { kind: "server", message: "We could not create a reset link. Check the email and try again." };
+          return { kind: "server", message: $localize`We could not create a reset link. Check the email and try again.` };
         }
         this.sent.set(true);
         this.turnstile.reset();
         return undefined;
       } catch {
         this.turnstile.reset();
-        return { kind: "server", message: "We could not create a reset link. Check your connection and try again." };
+        return { kind: "server", message: $localize`We could not create a reset link. Check your connection and try again.` };
       }
     });
   }
@@ -88,9 +89,9 @@ function parseAuthConfigResponse(value: unknown): AuthConfigResponse {
 }
 
 function validateEmail(email: string): string | null {
-  if (!email) return "Email is required.";
-  if (email.length > 254) return "Email must be 254 characters or fewer.";
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Enter a valid email address.";
+  if (!email) return $localize`Email is required.`;
+  if (email.length > 254) return $localize`Email must be 254 characters or fewer.`;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return $localize`Enter a valid email address.`;
   return null;
 }
 

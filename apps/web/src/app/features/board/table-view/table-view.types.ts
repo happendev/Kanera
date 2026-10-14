@@ -130,12 +130,12 @@ export const BUILTIN_COLUMN_IDS = [
 
 
 export const GROUP_BY_OPTIONS: { value: BuiltinGroupBy; label: string; icon: string }[] = [
-  { value: "list", label: "List", icon: "layout-list" },
-  { value: "assignee", label: "Assignee", icon: "user" },
-  { value: "label", label: "Label", icon: "tag" },
-  { value: "dueDate", label: "Due date", icon: "calendar-event" },
-  { value: "completion", label: "Completion", icon: "circle-check" },
-  { value: "none", label: "No grouping", icon: "minus" },
+  { value: "list", label: $localize`:Group-by option - group cards by list:List`, icon: "layout-list" },
+  { value: "assignee", label: $localize`:Group-by option - group cards by assignee:Assignee`, icon: "user" },
+  { value: "label", label: $localize`:Group-by option - group cards by label:Label`, icon: "tag" },
+  { value: "dueDate", label: $localize`:Group-by option - group cards by due date:Due date`, icon: "calendar-event" },
+  { value: "completion", label: $localize`:Group-by option - group cards by completed or not:Completion`, icon: "circle-check" },
+  { value: "none", label: $localize`:Group-by option - show cards ungrouped:No grouping`, icon: "minus" },
 ];
 
 /**
@@ -143,30 +143,30 @@ export const GROUP_BY_OPTIONS: { value: BuiltinGroupBy; label: string; icon: str
  * menu reads as a containment chain rather than an alphabetical pile.
  */
 export const CROSS_BOARD_GROUP_BY_OPTIONS: { value: BuiltinGroupBy; label: string; icon: string }[] = [
-  { value: "organisation", label: "Organisation", icon: "building" },
-  { value: "workspace", label: "Workspace", icon: "layout-grid" },
-  { value: "board", label: "Board", icon: "layout-kanban" },
+  { value: "organisation", label: $localize`:Group-by option - group cards by organisation:Organisation`, icon: "building" },
+  { value: "workspace", label: $localize`:Group-by option - group cards by workspace:Workspace`, icon: "layout-grid" },
+  { value: "board", label: $localize`:Group-by option - group cards by board:Board`, icon: "layout-kanban" },
 ];
 
 export const SORT_BY_OPTIONS: { value: SortBy; label: string }[] = [
-  { value: "position", label: "Manual (position)" },
-  { value: "title-asc", label: "Title A → Z" },
-  { value: "title-desc", label: "Title Z → A" },
-  { value: "due-asc", label: "Due date (soonest)" },
-  { value: "due-desc", label: "Due date (latest)" },
-  { value: "created-desc", label: "Created (newest)" },
-  { value: "created-asc", label: "Created (oldest)" },
-  { value: "updated-desc", label: "Updated (newest)" },
-  { value: "updated-asc", label: "Updated (oldest)" },
+  { value: "position", label: $localize`:Sort option - the order cards were arranged in by hand:Manual (position)` },
+  { value: "title-asc", label: $localize`:Sort option - by title alphabetically:Title A → Z` },
+  { value: "title-desc", label: $localize`:Sort option - by title reverse alphabetically:Title Z → A` },
+  { value: "due-asc", label: $localize`:Sort option:Due date (soonest)` },
+  { value: "due-desc", label: $localize`:Sort option:Due date (latest)` },
+  { value: "created-desc", label: $localize`:Sort option - by creation date, newest first:Created (newest)` },
+  { value: "created-asc", label: $localize`:Sort option - by creation date, oldest first:Created (oldest)` },
+  { value: "updated-desc", label: $localize`:Sort option - by last update, newest first:Updated (newest)` },
+  { value: "updated-asc", label: $localize`:Sort option - by last update, oldest first:Updated (oldest)` },
 ];
 
 export const DUE_BUCKET_ORDER: DueBucket[] = ["overdue", "today", "tomorrow", "thisWeek", "later", "noDate"];
 
 export const DUE_BUCKET_META: Record<DueBucket, { label: string; icon: string; color: string | null }> = {
-  overdue: { label: "Overdue", icon: "alert-circle", color: "red" },
-  today: { label: "Today", icon: "calendar-event", color: "orange" },
-  tomorrow: { label: "Tomorrow", icon: "calendar-plus", color: "amber" },
-  thisWeek: { label: "This week", icon: "calendar-week", color: "amber" },
-  later: { label: "Later", icon: "calendar", color: "blue" },
-  noDate: { label: "No due date", icon: "calendar-off", color: "gray" },
+  overdue: { label: $localize`:Due-date group heading - cards past their due date:Overdue`, icon: "alert-circle", color: "red" },
+  today: { label: $localize`:Due-date group heading - cards due today:Today`, icon: "calendar-event", color: "orange" },
+  tomorrow: { label: $localize`:Due-date group heading - cards due tomorrow:Tomorrow`, icon: "calendar-plus", color: "amber" },
+  thisWeek: { label: $localize`:Due-date group heading - cards due later this week:This week`, icon: "calendar-week", color: "amber" },
+  later: { label: $localize`:Due-date group heading - cards due after this week:Later`, icon: "calendar", color: "blue" },
+  noDate: { label: $localize`:Due-date group heading - cards with no due date:No due date`, icon: "calendar-off", color: "gray" },
 };

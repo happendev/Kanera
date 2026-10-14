@@ -157,13 +157,13 @@ import type { PickerGroup, PickerOption } from "../../../shared/picker-list.comp
 export class AutomationSelectDropdownComponent {
   readonly groups = input.required<PickerGroup[]>();
   readonly value = input("");
-  readonly title = input("Choose");
-  readonly placeholder = input("Choose an option");
+  readonly title = input($localize`:Picker heading:Choose`);
+  readonly placeholder = input($localize`Choose an option`);
   readonly placeholderIcon = input("selector");
-  readonly ariaLabel = input("Choose an option");
-  readonly searchPlaceholder = input("Search…");
+  readonly ariaLabel = input($localize`Choose an option`);
+  readonly searchPlaceholder = input($localize`:Picker search placeholder:Search…`);
   readonly searchThreshold = input(8);
-  readonly emptyLabel = input("Nothing to choose from");
+  readonly emptyLabel = input($localize`Nothing to choose from`);
   readonly panelWidth = input(340);
 
   readonly valueChange = output<string>();
@@ -181,7 +181,7 @@ export class AutomationSelectDropdownComponent {
 
   readonly triggerAriaLabel = computed(() => {
     const selection = this.selectedOption()?.label ?? this.placeholder();
-    return `${this.ariaLabel()}: ${selection}`;
+    return $localize`:Accessible name of a picker; the field name then its current value:${this.ariaLabel()}:field:: ${selection}:value:`;
   });
 
   protected optionColor(option: PickerOption | null): string {

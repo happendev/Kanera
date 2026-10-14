@@ -8,14 +8,14 @@
   @if (navigation() === "paged") {
   <div class="calendar-toolbar" (click)="$event.stopPropagation()">
     <div class="calendar-toolbar-left">
-      <button type="button" class="cal-toolbar-btn cal-icon-btn" (click)="previous()" aria-label="Previous" kTooltip="Previous">
+      <button type="button" class="cal-toolbar-btn cal-icon-btn" (click)="previous()" aria-label="Previous" i18n-aria-label="Button - go to the previous month or week" kTooltip="Previous" i18n-kTooltip="Button - go to the previous month or week">
         <i class="ti ti-chevron-left"></i>
       </button>
       <button type="button" class="cal-toolbar-btn" (click)="today()">
         <i class="ti ti-calendar-event"></i>
-        <span>Today</span>
+        <span i18n="Button - jump the calendar to today">Today</span>
       </button>
-      <button type="button" class="cal-toolbar-btn cal-icon-btn" (click)="next()" aria-label="Next" kTooltip="Next">
+      <button type="button" class="cal-toolbar-btn cal-icon-btn" (click)="next()" aria-label="Next" i18n-aria-label="Button - go to the next month or week" kTooltip="Next" i18n-kTooltip="Button - go to the next month or week">
         <i class="ti ti-chevron-right"></i>
       </button>
       <span class="cal-toolbar-title">{{ title() }}</span>
@@ -26,6 +26,7 @@
         [value]="mode()"
         [showLabels]="true"
         ariaLabel="Calendar range"
+        i18n-ariaLabel="Label for the month/week switch"
         (valueChange)="setMode($any($event))"
       />
     </div>
@@ -68,7 +69,7 @@
     <section class="calendar-month">
       <header class="calendar-month-header">
         <h3>{{ month.label }}</h3>
-        <small>{{ month.cardCount }} {{ month.cardCount === 1 ? "card" : "cards" }}</small>
+        <small i18n="Number of cards due in a calendar month">{ month.cardCount, plural, =1 {1 card} other {{{ month.cardCount }} cards} }</small>
       </header>
       <div class="cal-agenda">
         @for (day of agendaDays(month); track day.key) {
@@ -80,7 +81,7 @@
     } @else if (mode() === "month") {
     <!-- A month of day numbers with due dots, and the chosen day's cards listed underneath: the
          standard phone calendar shape, so the whole month is visible without scrolling sideways. -->
-    <section class="cal-mini-month" aria-label="Choose a day">
+    <section class="cal-mini-month" aria-label="Choose a day" i18n-aria-label>
       <div class="cal-mini-weekdays" aria-hidden="true">
         @for (label of weekdayLabels; track label) {
         <span>{{ label }}</span>
@@ -133,7 +134,7 @@
       <!-- Only the stacked view needs its own heading; the paged toolbar already names the range. -->
       <header class="calendar-month-header">
         <h3>{{ month.label }}</h3>
-        <small>{{ month.cardCount }} {{ month.cardCount === 1 ? "card" : "cards" }}</small>
+        <small i18n="Number of cards due in a calendar month">{ month.cardCount, plural, =1 {1 card} other {{{ month.cardCount }} cards} }</small>
       </header>
       }
 
@@ -203,11 +204,9 @@
             }
             @if (hiddenCardCount(day)) {
             <!-- A compact month cell keeps its row short; the rest of the day opens in place. -->
-            <button type="button" class="cal-more" (click)="toggleDayExpanded(day.key)">
-              +{{ hiddenCardCount(day) }} more
-            </button>
+            <button type="button" class="cal-more" (click)="toggleDayExpanded(day.key)" i18n="Button - show the cards hidden in a calendar day">+{{ hiddenCardCount(day) // i18n(ph="count") }} more</button>
             } @else if (isDayExpanded(day.key) && layout() === "compact") {
-            <button type="button" class="cal-more" (click)="toggleDayExpanded(day.key)">Show less</button>
+            <button type="button" class="cal-more" (click)="toggleDayExpanded(day.key)" i18n="Button - fold a calendar day's cards back">Show less</button>
             }
           </div>
         </section>
@@ -252,7 +251,7 @@
   @if (day.isToday) {
   <!-- A month is a wall of near-identical cells; the badge anchors the user to "now" without
        making them find the date. -->
-  <span class="calendar-today-badge">Today</span>
+  <span class="calendar-today-badge" i18n="Badge on the calendar cell for today">Today</span>
   }
   }
 </ng-template>
@@ -263,12 +262,12 @@
     <header>
       <span class="cal-agenda-date">{{ agendaDayLabel(day.key) }}</span>
       @if (day.isToday) {
-      <span class="calendar-today-badge">Today</span>
+      <span class="calendar-today-badge" i18n="Badge on the calendar cell for today">Today</span>
       }
       @if (day.cards.length) {
-      <small>{{ day.cards.length }} {{ day.cards.length === 1 ? "card" : "cards" }}</small>
+      <small i18n="Number of cards due on a calendar day">{ day.cards.length, plural, =1 {1 card} other {{{ day.cards.length }} cards} }</small>
       } @else {
-      <small>Nothing due</small>
+      <small i18n="A calendar day with no cards due">Nothing due</small>
       }
     </header>
     @if (day.cards.length) {
@@ -307,7 +306,7 @@
       <span class="cal-card-title">
         @if (card.completedAt) {
           <!-- Same green tick a completed k-card carries, so "done" reads the same everywhere. -->
-          <i class="ti ti-circle-check cal-complete-icon" kTooltip="Completed"></i>
+          <i class="ti ti-circle-check cal-complete-icon" kTooltip="Completed" i18n-kTooltip="Tooltip on the tick shown beside a completed card's title"></i>
         }
         {{ card.title }}
       </span>
@@ -329,20 +328,20 @@
       @if (hasMetaContent(card)) {
       <span class="cal-meta-row">
         @if (summary(card).hasDescription) {
-        <span class="cal-indicator" kTooltip="Has description"><i class="ti ti-align-left"></i></span>
+        <span class="cal-indicator" kTooltip="Has description" i18n-kTooltip="Tooltip - the card has a description"><i class="ti ti-align-left"></i></span>
         }
         @if (summary(card).checklistTotalCount) {
         <span
           class="cal-indicator cal-checklist"
           [class.is-complete]="summary(card).checklistDoneCount === summary(card).checklistTotalCount"
-          [kTooltip]="summary(card).checklistDoneCount + ' of ' + summary(card).checklistTotalCount + ' complete'"
+          [kTooltip]="checklistTooltip(card)"
         >
           <i class="ti ti-checkbox"></i>
           <span class="cal-indicator-count">{{ summary(card).checklistDoneCount }}/{{ summary(card).checklistTotalCount }}</span>
         </span>
         }
         @if (summary(card).attachmentCount) {
-        <span class="cal-indicator" [kTooltip]="summary(card).attachmentCount + ' attachment' + (summary(card).attachmentCount === 1 ? '' : 's')">
+        <span class="cal-indicator" [kTooltip]="attachmentsTooltip(card)">
           <i class="ti ti-paperclip"></i>
           <span class="cal-indicator-count">{{ summary(card).attachmentCount }}</span>
         </span>
@@ -359,14 +358,14 @@
       </span>
       }
       @if (assigneeOverflow(card.id); as more) {
-      <span class="cal-avatar cal-avatar-more" [kTooltip]="'+' + more + ' more'">+{{ more }}</span>
+      <span class="cal-avatar cal-avatar-more" [kTooltip]="moreAssigneesTooltip(more)">+{{ more }}</span>
       }
     </span>
     }
   </span>
 
   @if (summary(card).checklistTotalCount) {
-  <span class="cal-progress" [kTooltip]="summary(card).checklistDoneCount + ' of ' + summary(card).checklistTotalCount + ' checklist items complete'">
+  <span class="cal-progress" [kTooltip]="checklistProgressTooltip(card)">
     <span class="cal-progress-fill" [style.width.%]="(summary(card).checklistDoneCount ?? 0) / (summary(card).checklistTotalCount ?? 1) * 100"></span>
   </span>
   }

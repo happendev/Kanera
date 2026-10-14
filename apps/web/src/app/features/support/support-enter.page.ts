@@ -16,14 +16,15 @@ import { AuthService, type AuthUser } from "../../core/auth/auth.service";
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="support-enter">
-      <h1>Enter support session</h1>
-      <p>Paste the support-session token generated for you in the management portal. It acts as the target org's owner and expires on its own.</p>
+      <h1 i18n>Enter support session</h1>
+      <p i18n>Paste the support-session token generated for you in the management portal. It acts as the target org's owner and expires on its own.</p>
       <form (submit)="submit($event)">
         <textarea
           [value]="token()"
           (input)="token.set($any($event.target).value)"
           rows="5"
           placeholder="Support session token"
+          i18n-placeholder
           autocomplete="off"
           spellcheck="false"
         ></textarea>
@@ -31,7 +32,7 @@ import { AuthService, type AuthUser } from "../../core/auth/auth.service";
         <p class="support-enter__error">{{ message }}</p>
         }
         <button type="submit" [disabled]="busy() || !token().trim()">
-          {{ busy() ? "Entering…" : "Enter session" }}
+          @if (busy()) { <ng-container i18n="Button state">Entering…</ng-container> } @else { <ng-container i18n="Button">Enter session</ng-container> }
         </button>
       </form>
     </div>
@@ -109,7 +110,7 @@ export class SupportEnterPage implements OnInit {
     try {
       const sessionId = supportSessionIdFromToken(token);
       if (!sessionId) {
-        this.error.set("That token is not a support-session token.");
+        this.error.set($localize`That token is not a support-session token.`);
         return;
       }
 
@@ -117,11 +118,11 @@ export class SupportEnterPage implements OnInit {
       try {
         res = await fetch(`${environment.apiUrl}/me`, { headers: { Authorization: `Bearer ${token}` } });
       } catch {
-        this.error.set("Unable to reach the server.");
+        this.error.set($localize`Unable to reach the server.`);
         return;
       }
       if (!res.ok) {
-        this.error.set("The token is invalid or has expired.");
+        this.error.set($localize`The token is invalid or has expired.`);
         return;
       }
 

@@ -25,6 +25,10 @@ import { NoteEditorComponent } from "./note-editor.component";
 import { NotesTreeComponent, type NoteMoveRequest } from "./notes-tree.component";
 import { NotesState } from "./notes.service";
 import type { NoteScopeValue } from "./notes.types";
+import { appLocale } from "../../core/i18n/locale";
+
+// Also the title given to new notes, so it is written in the creator's language.
+const UNTITLED = $localize`:Fallback title for a note without one:Untitled`;
 
 /**
  * Shared two-pane Notes view used by both the board Notes view and the
@@ -50,7 +54,7 @@ import type { NoteScopeValue } from "./notes.types";
             [class.active]="activeTab() === 'personal'"
             (click)="setTab('personal')">
             <i class="ti ti-user"></i>
-            <span>My notes</span>
+            <span i18n="Notes tab: the viewer's private notes">My notes</span>
           </button>
           <button
             type="button"
@@ -60,7 +64,7 @@ import type { NoteScopeValue } from "./notes.types";
             [class.active]="activeTab() === 'team'"
             (click)="setTab('team')">
             <i class="ti ti-users"></i>
-            <span>Team</span>
+            <span i18n="Notes tab: notes shared with the team">Team</span>
           </button>
         </div>
         <div class="nv-tab-description">
@@ -69,7 +73,7 @@ import type { NoteScopeValue } from "./notes.types";
         <div class="nv-toolbar">
           <button class="nv-new-btn" type="button" (click)="createRoot()" [disabled]="!canEdit()" [kTooltip]="editRestrictionMessage()">
             <i class="ti ti-plus"></i>
-            <span>New note</span>
+            <span i18n="Button: create a note">New note</span>
           </button>
         </div>
         @if (editRestrictionMessage(); as message) {
@@ -82,7 +86,7 @@ import type { NoteScopeValue } from "./notes.types";
           @if (state.loading()) {
             <div class="nv-loading">
               <i class="ti ti-loader-2"></i>
-              <span>Loading…</span>
+              <span i18n="Loading indicator">Loading…</span>
             </div>
           } @else {
             <k-notes-tree
@@ -103,9 +107,13 @@ import type { NoteScopeValue } from "./notes.types";
           type="button"
           class="nv-sidebar-toggle"
           (click)="toggleSidebar()"
-          [attr.aria-label]="sidebarOpen() ? 'Close notes sidebar' : 'Open notes sidebar'">
+          [attr.aria-label]="sidebarOpen() ? closeSidebarLabel : openSidebarLabel">
           <i [class]="sidebarOpen() ? 'ti ti-x' : 'ti ti-notes'"></i>
-          <span>{{ sidebarOpen() ? "Close" : "Notes menu" }}</span>
+          @if (sidebarOpen()) {
+            <span i18n="Button: close the notes sidebar">Close</span>
+          } @else {
+            <span i18n="Button: open the notes sidebar on small screens">Notes menu</span>
+          }
         </button>
         <k-note-editor [note]="selectedNote()" [mentionMembers]="editorMentionMembers()" [canEdit]="canEdit()" />
       </section>
@@ -133,13 +141,19 @@ export class NotesViewComponent implements OnInit, OnChanges, OnDestroy {
 
   readonly activeTab = signal<NoteScopeValue>("personal");
   readonly sidebarOpen = signal(false);
+  protected readonly closeSidebarLabel = $localize`:Button label:Close notes sidebar`;
+  protected readonly openSidebarLabel = $localize`:Button label:Open notes sidebar`;
   readonly tabDescription = computed(() => {
-    if (this.activeTab() === "team") return "Notes shared with the team";
-    const context = this.boardId() ? "board" : "workspace";
+    if (this.activeTab() === "team") return $localize`:Description under the Team notes tab:Notes shared with the team`;
     const name = this.contextName().trim();
+    if (this.boardId()) {
+      return name
+        ? $localize`:Description under the My notes tab on a board:Your private notes for board ${name}:boardName:`
+        : $localize`:Description under the My notes tab on a board:Your private notes for this board`;
+    }
     return name
-      ? `Your private notes for ${context} ${name}`
-      : `Your private notes for this ${context}`;
+      ? $localize`:Description under the My notes tab on a workspace:Your private notes for workspace ${name}:workspaceName:`
+      : $localize`:Description under the My notes tab on a workspace:Your private notes for this workspace`;
   });
   readonly workspaceMentionMembers = signal<WireBoardMemberUser[]>([]);
   readonly currentUserId = computed(() => this.auth.user()?.id ?? null);
@@ -149,9 +163,9 @@ export class NotesViewComponent implements OnInit, OnChanges, OnDestroy {
     this.activeTab() === "personal" ? this.canEditPersonal() : this.canEditTeam(),
   );
   readonly editRestrictionMessage = computed(() => {
-    if (!this.state.online()) return "You're offline - changes are paused.";
+    if (!this.state.online()) return $localize`:Notice while offline:You're offline - changes are paused.`;
     if (this.activeTab() !== "team" || this.canEditTeamRole()) return null;
-    return "Team notes are read-only for board observers.";
+    return $localize`:Notice to board observers on the Team notes tab:Team notes are read-only for board observers.`;
   });
   readonly editorMentionMembers = computed(() => this.mentionMembers() ?? this.workspaceMentionMembers());
 
@@ -258,7 +272,7 @@ export class NotesViewComponent implements OnInit, OnChanges, OnDestroy {
       const note = await this.state.createNote({
         scope: this.activeTab(),
         parentNoteId: null,
-        title: "Untitled",
+        title: UNTITLED,
       });
       this.state.selectedId.set(note.id);
       this.rememberSelection(note.scope, note.id);
@@ -274,7 +288,7 @@ export class NotesViewComponent implements OnInit, OnChanges, OnDestroy {
       const note = await this.state.createNote({
         scope: this.activeTab(),
         parentNoteId: parentId,
-        title: "Untitled",
+        title: UNTITLED,
       });
       this.state.selectedId.set(note.id);
       this.rememberSelection(note.scope, note.id);
@@ -315,7 +329,7 @@ export class NotesViewComponent implements OnInit, OnChanges, OnDestroy {
   async deleteNote(id: string) {
     if (!this.canEdit()) return;
     const note = this.state.notes().find((n) => n.id === id);
-    const title = note?.title?.trim() || "Untitled";
+    const title = note?.title?.trim() || UNTITLED;
     const hasChildren = this.state.notes().some((n) => n.parentNoteId === id);
     // Undo instead of confirm: the note (and its sub-notes) leave the tree at once and the DELETE
     // waits for the toast. Undo restores the rows and the selection.
@@ -323,7 +337,9 @@ export class NotesViewComponent implements OnInit, OnChanges, OnDestroy {
     const { restore, commit } = this.state.hideNote(id);
     if (this.state.selectedId() === null) this.restoreSectionSelection(this.activeTab());
     this.toasts.undoable({
-      message: hasChildren ? `Note "${title}" and its sub-notes deleted.` : `Note "${title}" deleted.`,
+      message: hasChildren
+        ? $localize`:Undo toast after deleting a note with sub-notes:Note "${title}:title:" and its sub-notes deleted.`
+        : $localize`:Undo toast after deleting a note:Note "${title}:title:" deleted.`,
       icon: "trash",
       undo: () => {
         restore();
@@ -334,7 +350,7 @@ export class NotesViewComponent implements OnInit, OnChanges, OnDestroy {
           await commit();
         } catch (err) {
           console.error("Failed to delete note", err);
-          this.toasts.info(`Couldn't delete "${title}".`, "alert-triangle");
+          this.toasts.info($localize`:Toast when deleting a note failed:Couldn't delete "${title}:title:".`, "alert-triangle");
         }
       },
     });
@@ -406,11 +422,13 @@ export class NotesViewComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private duplicateTitle(title: string): string {
-    const base = title.trim() || "Untitled";
-    const suffix = " copy";
-    return base.length + suffix.length <= 200
-      ? `${base}${suffix}`
-      : `${base.slice(0, 200 - suffix.length).trimEnd()}${suffix}`;
+    const base = title.trim() || UNTITLED;
+    const copyOf = (text: string) => $localize`:Title of a duplicated note:${text}:title: copy`;
+    // Note titles are capped at 200 characters; trim the original rather than the translated suffix.
+    const full = copyOf(base);
+    if (full.length <= 200) return full;
+    const overflow = full.length - 200;
+    return copyOf(base.slice(0, base.length - overflow).trimEnd());
   }
 
   private wireTimestamp(value: string | Date): string {
@@ -427,6 +445,6 @@ export class NotesViewComponent implements OnInit, OnChanges, OnDestroy {
         role: row.role,
         source: "workspace" as const,
       }))
-      .sort((a, b) => a.displayName.localeCompare(b.displayName)));
+      .sort((a, b) => a.displayName.localeCompare(b.displayName, appLocale())));
   }
 }

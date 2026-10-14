@@ -6,7 +6,7 @@
   </h3>
   @if (canEditRole() && anyBulkAction()) {
   <div class="list-menu-wrap">
-    <button #listMenuBtn class="ghost icon list-menu-btn" [class.is-active]="menuOpen()" [disabled]="!canEdit()" (click)="toggleMenu()" aria-label="List options">
+    <button #listMenuBtn class="ghost icon list-menu-btn" [class.is-active]="menuOpen()" [disabled]="!canEdit()" (click)="toggleMenu()" aria-label="List options" i18n-aria-label>
       <i class="ti ti-dots"></i>
     </button>
     @if (menuOpen()) {
@@ -14,20 +14,20 @@
       @if (canCreateCards()) {
       <button class="menu-item ghost" (click)="onAddCardFromMenu()" [disabled]="cardDragging()">
         <i class="ti ti-plus"></i>
-        Add card
+        <ng-container i18n="List menu item">Add card</ng-container>
       </button>
       }
       @if (canManageSeparators()) {
       <button class="menu-item ghost" (click)="addSeparator(true)" [disabled]="cardDragging()">
         <i class="ti ti-separator"></i>
-        Add separator
+        <ng-container i18n="List menu item">Add separator</ng-container>
       </button>
       }
       @if (showBulkListActions() && otherLists().length) {
       <div class="menu-sub">
         <button #moveListBtn class="menu-item ghost" [class.is-active]="showMoveListPicker()" (click)="toggleMoveListPicker()">
           <i class="ti ti-arrows-transfer-down"></i>
-          Move all cards to…
+          <ng-container i18n="List menu item">Move all cards to…</ng-container>
           <i class="ti ti-chevron-right menu-chev"></i>
         </button>
         @if (showMoveListPicker()) {
@@ -45,17 +45,17 @@
       @if (showSelectAllCards()) {
       <button class="menu-item ghost" (click)="selectAllCards($event)" [disabled]="!displayedCards().length">
         <i class="ti ti-select-all"></i>
-        Select all cards
+        <ng-container i18n="List menu item">Select all cards</ng-container>
       </button>
       }
       @if (showBulkListActions()) {
       <button class="menu-item ghost" (click)="setAllCompleted(true)" [disabled]="savingCompletion()">
         <i class="ti ti-circle-check"></i>
-        Mark all complete
+        <ng-container i18n="List menu item">Mark all complete</ng-container>
       </button>
       <button class="menu-item ghost" (click)="setAllCompleted(false)" [disabled]="savingCompletion()">
         <i class="ti ti-circle"></i>
-        Mark all incomplete
+        <ng-container i18n="List menu item">Mark all incomplete</ng-container>
       </button>
       }
       @if (showBulkListActions()) {
@@ -63,7 +63,7 @@
       <!-- No inline confirm: the action fires at once and the toast offers Undo. -->
       <button class="menu-item ghost menu-item-danger" (click)="archiveCards()" [disabled]="clearing()">
         <i class="ti ti-archive"></i>
-        Archive all cards
+        <ng-container i18n="List menu item">Archive all cards</ng-container>
       </button>
       }
     </div>
@@ -91,7 +91,7 @@
       <div class="card-drag-preview" [class.has-cover]="dragCoverUrl" [class.is-completed]="item.card.completedAt"
         [style.--drag-cover-color]="coverColorForCard(item.card)">
         @if (isBulkSelectedCard(item.card.id) && bulkSelectedCardIds().size > 1) {
-        <strong class="bulk-drag-count">{{ bulkSelectedCardIds().size }} cards</strong>
+        <strong class="bulk-drag-count" i18n="Shown while dragging several selected cards">{ bulkSelectedCardIds().size, plural, one {{{ bulkSelectedCardIds().size }} card} other {{{ bulkSelectedCardIds().size }} cards} }</strong>
       }
 
         @if (dragCoverUrl) {
@@ -139,12 +139,12 @@
   @if (showInsertBetween() && !$last) {
   <div class="lane-insert" [class.is-disabled]="cardDragging()">
     <div class="lane-insert-actions">
-      <div class="lane-insert-group" role="group" aria-label="Insert here">
+      <div class="lane-insert-group" role="group" aria-label="Insert here" i18n-aria-label>
         @if (showInsertCard()) {
-        <button type="button" class="lane-insert-pill lane-insert-card" [disabled]="cardDragging()" (click)="startAddAfter(item, $event)" aria-label="Add card here">Add card</button>
+        <button type="button" class="lane-insert-pill lane-insert-card" [disabled]="cardDragging()" (click)="startAddAfter(item, $event)" aria-label="Add card here" i18n-aria-label i18n="Button between two cards: add a card at this position">Add card</button>
         }
         @if (showInsertSeparator()) {
-        <button type="button" class="lane-insert-pill lane-insert-separator" [disabled]="cardDragging()" (click)="addSeparatorAfter(item, $event)" aria-label="Add separator here">Add separator</button>
+        <button type="button" class="lane-insert-pill lane-insert-separator" [disabled]="cardDragging()" (click)="addSeparatorAfter(item, $event)" aria-label="Add separator here" i18n-aria-label i18n="Button between two cards: add a separator at this position">Add separator</button>
         }
       </div>
     </div>
@@ -162,13 +162,13 @@
 @if (canEditRole() && (canCreateCards() || canManageSeparators())) {
 <div class="list-add-actions">
   @if (canCreateCards()) {
-  <button class="add-card-btn add-card-primary ghost" [disabled]="cardDragging() || !canEdit()" [attr.aria-disabled]="!canEdit() ? 'true' : null" [kTooltip]="canEdit() ? '' : 'This board is view-only for you'" (click)="startAdd.emit({ listId: list().id, atTop: false })">
+  <button class="add-card-btn add-card-primary ghost" [disabled]="cardDragging() || !canEdit()" [attr.aria-disabled]="!canEdit() ? 'true' : null" [kTooltip]="canEdit() ? '' : viewOnlyHint" (click)="startAdd.emit({ listId: list().id, atTop: false })">
     <i class="ti ti-plus"></i>
-    Add card
+    <ng-container i18n="Button at the foot of a list">Add card</ng-container>
   </button>
   }
   @if (canManageSeparators()) {
-  <button class="add-card-btn add-separator-btn ghost icon" [disabled]="cardDragging() || !canEdit()" (click)="addSeparator(false)" aria-label="Add separator" kTooltip="Add separator">
+  <button class="add-card-btn add-separator-btn ghost icon" [disabled]="cardDragging() || !canEdit()" (click)="addSeparator(false)" aria-label="Add separator" i18n-aria-label kTooltip="Add separator" i18n-kTooltip>
     <i class="ti ti-separator"></i>
   </button>
   }

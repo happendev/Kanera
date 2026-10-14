@@ -1,24 +1,24 @@
 <div class="page">
   <main class="content settings-content account-settings-page">
     <section class="ws-card settings-card">
-      <k-page-header variant="page" class="settings-header" icon="settings" [iconBadge]="true" title="Settings" />
+      <k-page-header variant="page" class="settings-header" icon="settings" [iconBadge]="true" title="Settings" i18n-title="Page title" />
 
-      <nav class="settings-tabs account-settings-tabs" kTabStrip aria-label="Settings sections">
-        @if (isClientAdmin()) { <span class="settings-tab-group" id="settings-group-account">Your account</span> }
-        <a [class]="selectedTab() === 'profile' ? 'sm active' : 'ghost sm'" routerLink="profile"><i class="ti ti-user-circle"></i> Profile</a>
-        <a [class]="selectedTab() === 'notifications' ? 'sm active' : 'ghost sm'" routerLink="notifications"><i class="ti ti-bell"></i> Notifications</a>
-        <a [class]="selectedTab() === 'api-keys' ? 'sm active' : 'ghost sm'" routerLink="api-keys"><i class="ti ti-key"></i> API Keys @if (isHosted()) { <span class="pro-marker">Pro</span> }</a>
+      <nav class="settings-tabs account-settings-tabs" kTabStrip aria-label="Settings sections" i18n-aria-label>
+        @if (isClientAdmin()) { <span class="settings-tab-group" id="settings-group-account" i18n="Settings tab group heading">Your account</span> }
+        <a [class]="selectedTab() === 'profile' ? 'sm active' : 'ghost sm'" routerLink="profile"><i class="ti ti-user-circle"></i> <ng-container i18n="Settings tab">Profile</ng-container></a>
+        <a [class]="selectedTab() === 'notifications' ? 'sm active' : 'ghost sm'" routerLink="notifications"><i class="ti ti-bell"></i> <ng-container i18n="Settings tab">Notifications</ng-container></a>
+        <a [class]="selectedTab() === 'api-keys' ? 'sm active' : 'ghost sm'" routerLink="api-keys"><i class="ti ti-key"></i> <ng-container i18n="Settings tab">API Keys</ng-container> @if (isHosted()) { <span class="pro-marker" i18n="Plan name badge: feature requires the Pro plan">Pro</span> }</a>
         @if (isClientAdmin()) {
-        <span class="settings-tab-group settings-tab-group--org" id="settings-group-org">Organisation</span>
-        <a [class]="selectedTab() === 'org' ? 'sm active' : 'ghost sm'" routerLink="org"><i class="ti ti-building-skyscraper"></i> General</a>
-        <a [class]="selectedTab() === 'users' ? 'sm active' : 'ghost sm'" routerLink="users"><i class="ti ti-users"></i> Users</a>
-        <a [class]="selectedTab() === 'security' ? 'sm active' : 'ghost sm'" routerLink="security"><i class="ti ti-shield-lock"></i> Security</a>
+        <span class="settings-tab-group settings-tab-group--org" id="settings-group-org" i18n="Settings tab group heading">Organisation</span>
+        <a [class]="selectedTab() === 'org' ? 'sm active' : 'ghost sm'" routerLink="org"><i class="ti ti-building-skyscraper"></i> <ng-container i18n="Settings tab: general organisation settings">General</ng-container></a>
+        <a [class]="selectedTab() === 'users' ? 'sm active' : 'ghost sm'" routerLink="users"><i class="ti ti-users"></i> <ng-container i18n="Settings tab">Users</ng-container></a>
+        <a [class]="selectedTab() === 'security' ? 'sm active' : 'ghost sm'" routerLink="security"><i class="ti ti-shield-lock"></i> <ng-container i18n="Settings tab">Security</ng-container></a>
         @if (integrationsAvailable()) {
-        <a [class]="selectedTab() === 'integrations' ? 'sm active' : 'ghost sm'" routerLink="integrations"><i class="ti ti-plug-connected"></i> Integrations</a>
+        <a [class]="selectedTab() === 'integrations' ? 'sm active' : 'ghost sm'" routerLink="integrations"><i class="ti ti-plug-connected"></i> <ng-container i18n="Settings tab">Integrations</ng-container></a>
         }
-        <a [class]="selectedTab() === 'storage' ? 'sm active' : 'ghost sm'" routerLink="storage"><i class="ti ti-database"></i> Storage</a>
+        <a [class]="selectedTab() === 'storage' ? 'sm active' : 'ghost sm'" routerLink="storage"><i class="ti ti-database"></i> <ng-container i18n="Settings tab">Storage</ng-container></a>
         @if (isHosted()) {
-        <a [class]="selectedTab() === 'account-plan' ? 'sm active' : 'ghost sm'" routerLink="account-plan"><i class="ti ti-credit-card"></i> Account Plan</a>
+        <a [class]="selectedTab() === 'account-plan' ? 'sm active' : 'ghost sm'" routerLink="account-plan"><i class="ti ti-credit-card"></i> <ng-container i18n="Settings tab">Account Plan</ng-container></a>
         }
         }
       </nav>
@@ -38,11 +38,11 @@
       }
     </section>
 
-    <div class="settings-build-meta" aria-label="Build information">
+    <div class="settings-build-meta" aria-label="Build information" i18n-aria-label>
       @if (!isHosted()) {
-        <span>Version {{ buildVersion }}</span>
+        <span i18n="App build version">Version {{ buildVersion // i18n(ph="version") }}</span>
       }
-      <span>Built {{ buildBuiltAt }}</span>
+      <span i18n="When the app was built">Built {{ buildBuiltAt // i18n(ph="date") }}</span>
     </div>
   </main>
 </div>

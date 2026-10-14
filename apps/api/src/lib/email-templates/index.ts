@@ -1,4 +1,4 @@
-export { boardInviteEmail } from "./board-invite.js";
+export { boardInviteEmail, boardInviteEmailSubject } from "./board-invite.js";
 export { adminInviteEmail } from "./admin-invite.js";
 export type { AdminInviteEmailParams } from "./admin-invite.js";
 export type { BoardInviteEmailParams } from "./board-invite.js";
@@ -16,6 +16,7 @@ export {
   proTrialStartedEmail,
   proTrialWarningEmail,
   seatBilledEmail,
+  seatBilledEmailSubject,
   seatCapacityReducedEmail,
   upgradedToProEmail,
   welcomeToProEmail,

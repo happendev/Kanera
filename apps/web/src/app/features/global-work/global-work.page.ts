@@ -2,7 +2,6 @@ import { DragScrollDirective } from "../../shared/drag-scroll.directive";
 import { EmptyStateComponent } from "../../shared/empty-state.component";
 import { ToastService } from "../../shared/toast.service";
 import type { OnDestroy, OnInit } from "@angular/core";
-import { DatePipe } from "@angular/common";
 import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, input, signal, untracked } from "@angular/core";
 import { Router } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
@@ -82,7 +81,9 @@ import { TeamPrioritiesViewComponent, type TeamPriorityReorder } from "./team-pr
 import { UpNextPanelComponent, type UpNextAddableCard } from "./up-next-panel.component";
 import { boardPickerGroups, peoplePickerGroups, savedViewPickerGroups, scopePickerGroups } from "./work-pickers";
 import { createSortedLaneProjection, createLaneItemsProjection } from "../board/lane-projection";
-import { formatDate } from "../../shared/date-format";
+import { formatDate, formatDateTime, formatTime } from "../../shared/date-format";
+import { icu } from "../../core/i18n/icu";
+import { appLocale } from "../../core/i18n/locale";
 import { localDateKey } from "../../shared/day-key.util";
 import { byPosition } from "../../shared/position-sort";
 
@@ -123,14 +124,24 @@ type PortfolioRow = {
 };
 /** Number columns of the portfolio table, in render order, with the tone their heat tint uses. */
 const PORTFOLIO_COLUMNS: { key: PortfolioMetric; label: string; tone: "danger" | "success" | "neutral" }[] = [
-  { key: "active", label: "Active", tone: "neutral" },
-  { key: "overdue", label: "Overdue", tone: "danger" },
-  { key: "dueSoon", label: "Next 7 days", tone: "neutral" },
-  { key: "unassigned", label: "Unassigned", tone: "neutral" },
-  { key: "inactive", label: "Inactive 14d", tone: "neutral" },
-  { key: "completed", label: "Completed", tone: "success" },
-  { key: "overdueChecklistItems", label: "Checklist", tone: "danger" },
+  { key: "active", label: $localize`:Portfolio table column, cards not completed:Active`, tone: "neutral" },
+  { key: "overdue", label: $localize`:Portfolio table column, overdue cards:Overdue`, tone: "danger" },
+  { key: "dueSoon", label: $localize`:Portfolio table column, cards due in the next 7 days:Next 7 days`, tone: "neutral" },
+  { key: "unassigned", label: $localize`:Portfolio table column, cards with no assignee:Unassigned`, tone: "neutral" },
+  { key: "inactive", label: $localize`:Portfolio table column, cards untouched for 14 days (keep it short):Inactive 14d`, tone: "neutral" },
+  { key: "completed", label: $localize`:Portfolio table column, completed cards:Completed`, tone: "success" },
+  { key: "overdueChecklistItems", label: $localize`:Portfolio table column, overdue checklist items:Checklist`, tone: "danger" },
 ];
+
+/** "Acme · Guest" for an organisation the viewer only visits as a guest. */
+function organisationDisplayName(name: string, external: boolean): string {
+  return external ? $localize`:Organisation name when the viewer is a guest there:${name}:organisation: · Guest` : name;
+}
+
+/** "Last 30 days": the portfolio's reporting period. */
+function lastDaysLabel(days: number): string {
+  return icu($localize`:Portfolio reporting period:Last {days, plural, one {# day} other {# days}}`, { days });
+}
 /** Fallback window length until the first portfolio response lands; the server owns the real value. */
 const PORTFOLIO_ACTIVITY_DAYS = 60;
 
@@ -171,7 +182,6 @@ function priorityGroupKey(userId: string): string {
   selector: "k-global-work",
   standalone: true,
   imports: [EmptyStateComponent, 
-    DatePipe,
     ActivityStripComponent,
     AnchoredPanelDirective,
     AnchoredPickerPopover,
@@ -277,8 +287,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   }
   readonly priorityLayout = signal<PriorityLayout>(storedPriorityLayout());
   readonly priorityLayoutOptions: readonly SegmentedOption<PriorityLayout>[] = [
-    { id: "grid", icon: "layout-grid", label: "Grid view" },
-    { id: "table", icon: "table", label: "Table view" },
+    { id: "grid", icon: "layout-grid", label: $localize`:Up next layout option:Grid view` },
+    { id: "table", icon: "table", label: $localize`:Up next layout option:Table view` },
   ];
   /**
    * Every display that renders `k-board-table-view` full-height, which is what `.is-table-frame`
@@ -313,9 +323,9 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   private resolvedRouteCardId: string | null = null;
 
   readonly pageTitle = computed(() => ({
-    my: "My Cards",
-    team: "Team Cards",
-    portfolio: "Portfolio",
+    my: $localize`:Page title:My Cards`,
+    team: $localize`:Page title:Team Cards`,
+    portfolio: $localize`:Page title:Portfolio`,
   })[this.lens()]);
 
   /**
@@ -325,7 +335,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
    * portfolio metric drill-down keeps its own banner above the table, which also carries the way
    * back, so it deliberately does not also appear here.
    */
-  readonly headerSubtitle = "Across all boards";
+  readonly headerSubtitle = $localize`:Subtitle of My Cards, Team Cards and Portfolio:Across all boards`;
 
   /**
    * The display switch, in row 1 with every other page's view switch.
@@ -343,16 +353,19 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     const option = (id: WorkDisplayMode, icon: string, label: string, shortLabel?: string): SegmentedOption<WorkDisplayMode> =>
       ({ id, icon, label, shortLabel, disabled: busy && current !== id });
     if (this.lens() === "portfolio") {
-      return [option("summary", "chart-bar", "Summary view", "Summary"), option("table", "table", "Table view", "Table")];
+      return [
+        option("summary", "chart-bar", $localize`:Display option:Summary view`, $localize`:Short display option:Summary`),
+        option("table", "table", $localize`:Display option:Table view`, $localize`:Short display option:Table`),
+      ];
     }
     return [
-      option("board", "layout-kanban", "Board view", "Board"),
+      option("board", "layout-kanban", $localize`:Display option:Board view`, $localize`:Short display option:Board`),
       // Team only: everyone's Up next queues sit immediately beside the board view, since both are
       // lane-based ways of reading the same work. My Cards already has the docked single queue.
-      ...(this.lens() === "team" ? [option("priorities", "list-numbers", "Up next view", "Up next")] : []),
-      option("table", "table", "Table view", "Table"),
-      option("calendar", "calendar", "Calendar view", "Calendar"),
-      option("history", "history", "Work done"),
+      ...(this.lens() === "team" ? [option("priorities", "list-numbers", $localize`:Display option:Up next view`, $localize`:Short display option:Up next`)] : []),
+      option("table", "table", $localize`:Display option:Table view`, $localize`:Short display option:Table`),
+      option("calendar", "calendar", $localize`:Display option:Calendar view`, $localize`:Short display option:Calendar`),
+      option("history", "history", $localize`:Display option:Work done`),
     ];
   });
 
@@ -507,11 +520,11 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   private readonly filterGroupName = (workspaceId: string) => {
     if (!this.multiWorkspace()) return null;
     const workspace = this.workspacesById().get(workspaceId);
-    if (!workspace || !this.multiOrganisation()) return workspace?.name ?? "Workspace";
+    if (!workspace || !this.multiOrganisation()) return workspace?.name ?? $localize`:Fallback name for an unknown workspace:Workspace`;
     const organisation = this.organisationsById().get(workspace.organisationId);
     const organisationName = organisation
-      ? `${organisation.name}${organisation.external ? " · Guest" : ""}`
-      : "Organisation";
+      ? organisationDisplayName(organisation.name, organisation.external)
+      : $localize`:Fallback name for an unknown organisation:Organisation`;
     return `${organisationName} · ${workspace.name}`;
   };
 
@@ -547,7 +560,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       .sort((a, b) =>
         (organisationOrder.get(a.organisationId) ?? Number.MAX_SAFE_INTEGER)
         - (organisationOrder.get(b.organisationId) ?? Number.MAX_SAFE_INTEGER)
-        || a.displayName.localeCompare(b.displayName)
+        || a.displayName.localeCompare(b.displayName, appLocale())
       )
       .map((person) => ({
       userId: person.userId,
@@ -557,8 +570,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
         ? (() => {
             const organisation = this.organisationsById().get(person.organisationId);
             return organisation
-              ? `${organisation.name}${organisation.external ? " · Guest" : ""}`
-              : "Organisation";
+              ? organisationDisplayName(organisation.name, organisation.external)
+              : $localize`:Fallback name for an unknown organisation:Organisation`;
           })()
         : null,
       }));
@@ -603,10 +616,10 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly completedRangeLabel = computed(() => {
     const from = this.completedFromDate();
     const to = this.completedToDate();
-    if (from && to) return `${this.localDateLabel(from)} – ${this.localDateLabel(to)}`;
-    if (from) return `From ${this.localDateLabel(from)}`;
-    if (to) return `Until ${this.localDateLabel(to)}`;
-    return "Choose date range";
+    if (from && to) return $localize`:Completed date filter range:${this.localDateLabel(from)}:startDate: – ${this.localDateLabel(to)}:endDate:`;
+    if (from) return $localize`:Completed date filter with only a start date:From ${this.localDateLabel(from)}:startDate:`;
+    if (to) return $localize`:Completed date filter with only an end date:Until ${this.localDateLabel(to)}:endDate:`;
+    return $localize`:Completed date filter with no range set:Choose date range`;
   });
 
   /**
@@ -832,7 +845,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly tableSourceOrganisations = computed<SourceOrganisationRef[]>(() =>
     this.state.catalog().organisations.map((organisation) => ({
       id: organisation.id,
-      name: organisation.external ? `${organisation.name} · Guest` : organisation.name,
+      name: organisationDisplayName(organisation.name, organisation.external),
     }))
   );
 
@@ -883,27 +896,27 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   // list of names that repeat across workspaces.
   readonly scopeGroups = computed(() => scopePickerGroups(this.state.catalog()));
   readonly teamPeopleGroups = computed(() =>
-    peoplePickerGroups(this.teamPeople(), this.state.catalog(), { id: "", label: "All teammates" })
+    peoplePickerGroups(this.teamPeople(), this.state.catalog(), { id: "", label: $localize`:Teammate picker option:All teammates` })
   );
   readonly savedViewGroups = computed(() => savedViewPickerGroups(this.lensViews()));
 
   readonly groupByOptions: { id: WorkGroupBy; label: string; icon: string }[] = [
-    { id: "dueDate", label: "Due date", icon: "calendar-due" },
-    { id: "organisation", label: "Organisation", icon: "building" },
-    { id: "workspace", label: "Workspace", icon: "rocket" },
-    { id: "board", label: "Board", icon: "layout-kanban" },
-    { id: "assignee", label: "Assignee", icon: "user" },
-    { id: "list", label: "List", icon: "layout-list" },
-    { id: "completion", label: "Completion", icon: "circle-check" },
-    { id: "none", label: "No grouping", icon: "circle-off" },
+    { id: "dueDate", label: $localize`:Group by option:Due date`, icon: "calendar-due" },
+    { id: "organisation", label: $localize`:Group by option:Organisation`, icon: "building" },
+    { id: "workspace", label: $localize`:Group by option:Workspace`, icon: "rocket" },
+    { id: "board", label: $localize`:Group by option:Board`, icon: "layout-kanban" },
+    { id: "assignee", label: $localize`:Group by option:Assignee`, icon: "user" },
+    { id: "list", label: $localize`:Group by option:List`, icon: "layout-list" },
+    { id: "completion", label: $localize`:Group by option, whether the card is completed:Completion`, icon: "circle-check" },
+    { id: "none", label: $localize`:Group by option:No grouping`, icon: "circle-off" },
   ];
   readonly sortOptions: { id: WorkSort; label: string; icon: string }[] = [
-    { id: "dueAsc", label: "Due date, soonest first", icon: "sort-ascending" },
-    { id: "dueDesc", label: "Due date, latest first", icon: "sort-descending" },
-    { id: "titleAsc", label: "Title A–Z", icon: "sort-a-z" },
-    { id: "titleDesc", label: "Title Z–A", icon: "sort-z-a" },
-    { id: "updatedDesc", label: "Recently updated", icon: "history" },
-    { id: "createdDesc", label: "Recently created", icon: "plus" },
+    { id: "dueAsc", label: $localize`:Sort option:Due date, soonest first`, icon: "sort-ascending" },
+    { id: "dueDesc", label: $localize`:Sort option:Due date, latest first`, icon: "sort-descending" },
+    { id: "titleAsc", label: $localize`:Sort option, alphabetical by title:Title A–Z`, icon: "sort-a-z" },
+    { id: "titleDesc", label: $localize`:Sort option, reverse alphabetical by title:Title Z–A`, icon: "sort-z-a" },
+    { id: "updatedDesc", label: $localize`:Sort option:Recently updated`, icon: "history" },
+    { id: "createdDesc", label: $localize`:Sort option:Recently created`, icon: "plus" },
   ];
   readonly groupByGroups = computed(() => [{
     id: "groupBy",
@@ -918,11 +931,11 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     const scope = this.state.definition().scope;
     const value = this.sourceValue();
     if (!value) {
-      return { label: "All boards", icon: "ti ti-world", color: null as string | null };
+      return { label: $localize`:Scope picker option:All boards`, icon: "ti ti-world", color: null as string | null };
     }
     if (value.startsWith("o:")) {
       const organisation = this.organisationsById().get(scope.organisationIds[0] ?? "");
-      return { label: organisation?.name ?? "Organisation", icon: "ti ti-building", color: null as string | null };
+      return { label: organisation?.name ?? $localize`:Fallback name for an unknown organisation:Organisation`, icon: "ti ti-building", color: null as string | null };
     }
     if (value.startsWith("w:")) {
       const workspaceId = scope.workspaceIds[0] ?? "";
@@ -934,7 +947,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     }
     const boardId = scope.boardIds[0] ?? "";
     return {
-      label: this.boardsById().get(boardId)?.name ?? "Board",
+      label: this.boardsById().get(boardId)?.name ?? $localize`:Fallback name for an unknown board:Board`,
       icon: this.boardIconClass(boardId),
       color: this.boardIconColor(boardId),
     };
@@ -942,15 +955,51 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly teamTrigger = computed(() => {
     const userId = this.selectedTeamPerson();
     const person = userId ? this.peopleById().get(userId) : null;
-    return { label: person?.displayName ?? "All teammates", person };
+    return { label: person?.displayName ?? $localize`:Teammate picker option:All teammates`, person };
   });
-  readonly savedViewLabel = computed(() => this.state.selectedView()?.name ?? "No saved view");
+  readonly savedViewLabel = computed(() => this.state.selectedView()?.name ?? $localize`:Saved view picker option:No saved view`);
   readonly groupByLabel = computed(() =>
-    this.groupByOptions.find((option) => option.id === this.state.definition().groupBy)?.label ?? "None"
+    this.groupByOptions.find((option) => option.id === this.state.definition().groupBy)?.label ?? $localize`:Group by trigger when no grouping is chosen:None`
   );
   readonly sortLabel = computed(() =>
-    this.sortOptions.find((option) => option.id === this.state.definition().sort)?.label ?? "Sort"
+    this.sortOptions.find((option) => option.id === this.state.definition().sort)?.label ?? $localize`:Sort trigger when no sort is chosen:Sort`
   );
+  readonly teammateTooltip = computed(() => $localize`:Tooltip of the teammate picker:Teammate: ${this.teamTrigger().label}:person:`);
+  readonly boardsTooltip = computed(() => $localize`:Tooltip of the board scope picker:Boards: ${this.scopeTrigger().label}:scope:`);
+  readonly groupTooltip = computed(() => $localize`:Tooltip of the group by picker:Group: ${this.groupByLabel()}:grouping:`);
+  readonly sortTooltip = computed(() => $localize`:Tooltip of the sort picker:Sort: ${this.sortLabel()}:sort:`);
+  readonly manageViewLabel = $localize`:Button, manage the applied saved view:Manage view`;
+  readonly saveViewLabel = $localize`:Button, save the current filters as a view:Save view`;
+  readonly openUpNextLabel = $localize`:Tooltip, open the Up next panel:Open Up next`;
+  readonly closeUpNextLabel = $localize`:Tooltip, close the Up next panel:Close Up next`;
+  readonly expandAllLabel = $localize`:Button, expand every portfolio row:Expand all`;
+  readonly collapseAllLabel = $localize`:Button, collapse every portfolio row:Collapse all`;
+
+  portfolioRowToggleTitle(label: string, collapsed: boolean): string {
+    return collapsed
+      ? $localize`:Button, expand a portfolio row:Expand ${label}:name:`
+      : $localize`:Button, collapse a portfolio row:Collapse ${label}:name:`;
+  }
+
+  priorityLaneToggleLabel(name: string, count: number, hidden: boolean): string {
+    return hidden
+      ? icu($localize`:Button, show a teammate's Up next lane:Show Up next for {name}, {count, plural, one {# card} other {# cards}}`, { name, count })
+      : icu($localize`:Button, hide a teammate's Up next lane:Hide Up next for {name}, {count, plural, one {# card} other {# cards}}`, { name, count });
+  }
+
+  priorityLaneToggleTooltip(name: string, count: number, hidden: boolean): string {
+    return hidden
+      ? $localize`:Tooltip, show a teammate's Up next lane, with its card count:Show Up next for ${name}:person: · ${count}:count:`
+      : $localize`:Tooltip, hide a teammate's Up next lane, with its card count:Hide Up next for ${name}:person: · ${count}:count:`;
+  }
+
+  offlineStamp(value: string | number | Date): string {
+    return formatDateTime(value, "medium");
+  }
+
+  syncedTime(value: string | number | Date): string {
+    return formatTime(value);
+  }
   readonly creationTargetUserId = computed(() => {
     if (this.lens() === "my") return this.state.auth.user()?.id ?? null;
     if (this.lens() === "team") return this.selectedTeamPerson() || null;
@@ -972,13 +1021,13 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     const totals = this.state.portfolio()?.totals;
     if (!totals) return [];
     return [
-      { key: "active", label: "Active", icon: "player-play", tone: null, value: totals.cards - totals.completed },
-      { key: "overdue", label: "Overdue", icon: "alert-triangle", tone: "danger", value: totals.overdue },
-      { key: "dueSoon", label: "Due next 7 days", icon: "calendar-due", tone: null, value: totals.dueSoon },
-      { key: "unassigned", label: "Unassigned", icon: "user-question", tone: null, value: totals.unassigned },
-      { key: "inactive", label: "Inactive 14 days", icon: "clock-pause", tone: null, value: totals.inactive },
-      { key: "completed", label: "Completed", icon: "circle-check", tone: "success", value: totals.completed },
-      { key: "overdueChecklistItems", label: "Overdue checklist", icon: "list-check", tone: "danger", value: totals.overdueChecklistItems },
+      { key: "active", label: $localize`:Portfolio stat tile, cards not completed:Active`, icon: "player-play", tone: null, value: totals.cards - totals.completed },
+      { key: "overdue", label: $localize`:Portfolio stat tile, overdue cards:Overdue`, icon: "alert-triangle", tone: "danger", value: totals.overdue },
+      { key: "dueSoon", label: $localize`:Portfolio stat tile:Due next 7 days`, icon: "calendar-due", tone: null, value: totals.dueSoon },
+      { key: "unassigned", label: $localize`:Portfolio stat tile, cards with no assignee:Unassigned`, icon: "user-question", tone: null, value: totals.unassigned },
+      { key: "inactive", label: $localize`:Portfolio stat tile, cards untouched for 14 days:Inactive 14 days`, icon: "clock-pause", tone: null, value: totals.inactive },
+      { key: "completed", label: $localize`:Portfolio stat tile, completed cards:Completed`, icon: "circle-check", tone: "success", value: totals.completed },
+      { key: "overdueChecklistItems", label: $localize`:Portfolio stat tile, overdue checklist items:Overdue checklist`, icon: "list-check", tone: "danger", value: totals.overdueChecklistItems },
     ];
   });
 
@@ -998,8 +1047,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       result.push(this.rollupPortfolioRow(
         `organisation:${organisationId}`,
         "organisation",
-        organisationBuckets[0]?.organisationName ?? "Organisation",
-        "Organisation",
+        organisationBuckets[0]?.organisationName ?? $localize`:Fallback name for an unknown organisation:Organisation`,
+        $localize`:Portfolio row context, this row is an organisation:Organisation`,
         organisationId,
         null,
         organisationBuckets,
@@ -1021,8 +1070,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
             `workspace:${workspaceId}`,
             "workspace",
             standalone
-              ? workspaceBuckets[0]?.boardName ?? workspaceBuckets[0]?.workspaceName ?? "Board"
-              : workspaceBuckets[0]?.workspaceName ?? "Workspace",
+              ? workspaceBuckets[0]?.boardName ?? workspaceBuckets[0]?.workspaceName ?? $localize`:Fallback name for an unknown board:Board`
+              : workspaceBuckets[0]?.workspaceName ?? $localize`:Fallback name for an unknown workspace:Workspace`,
             workspaceBuckets[0]?.organisationName ?? "",
             organisationId,
             workspaceId,
@@ -1109,8 +1158,20 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly activitySeries = computed<ActivityStripSeries[]>(() => {
     const activity = this.state.portfolio()?.activity ?? [];
     return [
-      { key: "moved", label: "Card movement", noun: "move", tone: "accent" as const },
-      { key: "completed", label: "Completed", noun: "completion", tone: "success" as const },
+      {
+        key: "moved",
+        label: $localize`:Activity strip row, cards moved per day:Card movement`,
+        noun: "move",
+        countLabel: (count: number) => icu($localize`:Activity strip tooltip count:{count, plural, one {# move} other {# moves}}`, { count }),
+        tone: "accent" as const,
+      },
+      {
+        key: "completed",
+        label: $localize`:Activity strip row, cards completed per day:Completed`,
+        noun: "completion",
+        countLabel: (count: number) => icu($localize`:Activity strip tooltip count:{count, plural, one {# completion} other {# completions}}`, { count }),
+        tone: "success" as const,
+      },
     ].map((series) => ({
       ...series,
       counts: new Map(activity.map((day) => [day.date, day[series.key as "moved" | "completed"]])),
@@ -1303,13 +1364,14 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     id: "period",
     options: this.portfolioDayOptions.map((days) => ({
       id: String(days),
-      label: `Last ${days} days`,
+      label: lastDaysLabel(days),
       icon: "calendar-stats",
-      hint: days === 60 ? "Longest window we report on" : null,
+      hint: days === 60 ? $localize`:Hint beside the longest reporting period option:Longest window we report on` : null,
     })),
   }]);
   readonly periodValue = computed(() => String(this.state.definition().portfolioDays));
-  readonly periodLabel = computed(() => `Last ${this.state.definition().portfolioDays} days`);
+  readonly periodLabel = computed(() => lastDaysLabel(this.state.definition().portfolioDays));
+  readonly periodTooltip = computed(() => $localize`:Tooltip of the reporting period picker:Period: ${this.periodLabel()}:period:`);
 
   selectPortfolioDays(days: number): void {
     this.closeMenu("period");
@@ -1601,18 +1663,18 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   );
   readonly upNextUnavailableTooltip = computed(() => {
     if (this.effectiveDisplay() === "priorities") {
-      return "The Up next view already shows everyone";
+      return $localize`:Tooltip on the disabled Up next button:The Up next view already shows everyone`;
     }
     if (this.effectiveDisplay() === "history" || this.effectiveDisplay() === "summary") {
-      return "Up next is unavailable on this view";
+      return $localize`:Tooltip on the disabled Up next button:Up next is unavailable on this view`;
     }
     if (!this.state.focusedTargetUserId()) {
       return this.lens() === "team"
-        ? "Pick one teammate to curate their Up next, or switch to the Up next view to see everyone"
-        : "Up next is unavailable on this view";
+        ? $localize`:Tooltip on the disabled Up next button:Pick one teammate to curate their Up next, or switch to the Up next view to see everyone`
+        : $localize`:Tooltip on the disabled Up next button:Up next is unavailable on this view`;
     }
-    if (!this.state.interactionReady()) return "Loading Up next…";
-    return "You don’t have permission to view this teammate’s Up next";
+    if (!this.state.interactionReady()) return $localize`:Tooltip on the disabled Up next button:Loading Up next…`;
+    return $localize`:Tooltip on the disabled Up next button:You don’t have permission to view this teammate’s Up next`;
   });
   /**
    * Below the split point (global-work.page.scss, 900px) the panel is a bottom sheet over the page
@@ -1815,7 +1877,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     void this.state.addPriority(cardId, { beforeId: null }).catch(() => {
       // moveError, not priorityError: the gesture happened on the board, where this banner renders,
       // and the panel showing the queue may not even be open.
-      this.moveError.set("We couldn’t add that card to Up next. Nothing has changed.");
+      this.moveError.set($localize`We couldn’t add that card to Up next. Nothing has changed.`);
     });
   }
 
@@ -1827,7 +1889,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     this.priorityError.set(null);
     const { cardId, ...anchor } = event;
     void this.state.addPriority(cardId, anchor).catch(() => {
-      this.priorityError.set("We couldn’t add that card to Up next. Nothing has changed.");
+      this.priorityError.set($localize`We couldn’t add that card to Up next. Nothing has changed.`);
     });
   }
 
@@ -1842,14 +1904,14 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     this.priorityError.set(null);
     const { priorityId, ...anchor } = event;
     void this.state.movePriority(priorityId, anchor).catch(() => {
-      this.priorityError.set("We couldn’t reorder that Up next card. Its previous position has been restored.");
+      this.priorityError.set($localize`We couldn’t reorder that Up next card. Its previous position has been restored.`);
     });
   }
 
   onPriorityRemoved(event: { priorityId: string }): void {
     this.priorityError.set(null);
     void this.state.removePriority(event.priorityId).catch(() => {
-      this.priorityError.set("We couldn’t remove that card from Up next. It has been put back.");
+      this.priorityError.set($localize`We couldn’t remove that card from Up next. It has been put back.`);
     });
   }
 
@@ -1861,7 +1923,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   onPriorityCompleted(event: { cardId: string; completed: boolean }): void {
     this.priorityError.set(null);
     void this.myPriorities.setCardCompleted(event.cardId, event.completed).catch(() => {
-      this.priorityError.set("We couldn’t update that card. Nothing has changed.");
+      this.priorityError.set($localize`We couldn’t update that card. Nothing has changed.`);
     });
   }
 
@@ -1897,7 +1959,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     const people = this.peopleById();
     return this.visiblePriorityLanes().map((lane) => ({
       key: priorityGroupKey(lane.target.userId),
-      label: lane.target.self ? `${lane.target.displayName} · You` : lane.target.displayName,
+      label: lane.target.self ? $localize`:Table group heading for the viewer's own Up next:${lane.target.displayName}:person: · You` : lane.target.displayName,
       icon: null,
       color: null,
       avatarUrl: people.get(lane.target.userId)?.avatarUrl ?? null,
@@ -2007,7 +2069,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     this.priorityError.set(null);
     const { targetUserId, priorityId, ...anchor } = event;
     void this.state.moveTeamPriority(targetUserId, priorityId, anchor).catch(() => {
-      this.priorityError.set("We couldn’t reorder that Up next card. Its previous position has been restored.");
+      this.priorityError.set($localize`We couldn’t reorder that Up next card. Its previous position has been restored.`);
     });
   }
 
@@ -2056,14 +2118,14 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   onLaneRemoved(event: { targetUserId: string; priorityId: string }): void {
     this.priorityError.set(null);
     void this.state.removeTeamPriority(event.targetUserId, event.priorityId).catch(() => {
-      this.priorityError.set("We couldn’t remove that card from Up next. It has been put back.");
+      this.priorityError.set($localize`We couldn’t remove that card from Up next. It has been put back.`);
     });
   }
 
   onLaneAdded(event: { targetUserId: string; cardId: string }): void {
     this.priorityError.set(null);
     void this.state.addTeamPriority(event.targetUserId, event.cardId, { beforeId: null }).catch(() => {
-      this.priorityError.set("We couldn’t add that card to Up next. Nothing has changed.");
+      this.priorityError.set($localize`We couldn’t add that card to Up next. Nothing has changed.`);
     });
   }
 
@@ -2200,7 +2262,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     // Do not silently apply a bulk action to only the editable part of a selection.
     if (!this.state.interactionReady() || cards.length !== this.bulkSelectedCardIds().size
       || cards.some((card) => !this.roleEditableCardIds().has(card.id))) {
-      this.moveError.set("Select editable cards to use bulk actions.");
+      this.moveError.set($localize`Select editable cards to use bulk actions.`);
       return;
     }
     this.moveError.set(null);
@@ -2287,14 +2349,14 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     // Lists belong to a workspace, even when this view combines several boards.
     // Reject the whole gesture rather than silently moving only part of the selection.
     if (moving.some((candidate) => !canMove(candidate) || candidate.workspaceId !== workspaceId)) {
-      this.moveError.set("Select editable cards from one workspace to move them together.");
+      this.moveError.set($localize`Select editable cards from one workspace to move them together.`);
       return;
     }
     this.moveError.set(null);
     void this.state.moveCards(moving.map((card) => card.id), payload.toListId, anchor).then(() => {
-      if (moving.length > 1) this.toasts.success(`${moving.length} cards moved.`, "arrows-transfer-down");
+      if (moving.length > 1) this.toasts.success(icu($localize`:Toast after moving several cards:{count, plural, one {# card moved.} other {# cards moved.}}`, { count: moving.length }), "arrows-transfer-down");
     }).catch(() => {
-      this.moveError.set("We couldn’t finish moving the cards. Completed moves were kept; unsaved cards were restored.");
+      this.moveError.set($localize`We couldn’t finish moving the cards. Completed moves were kept; unsaved cards were restored.`);
     });
   }
 
@@ -2320,7 +2382,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       ...(payload.beforeItem !== undefined ? { beforeItem: payload.beforeItem } : {}),
       ...(payload.afterItem !== undefined ? { afterItem: payload.afterItem } : {}),
     }).catch(() => {
-      this.moveError.set("We couldn’t move that separator. Its previous position has been restored.");
+      this.moveError.set($localize`We couldn’t move that separator. Its previous position has been restored.`);
     });
   }
 
@@ -2457,7 +2519,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       completedTo: metric === "completed" ? now.toISOString() : null,
     });
     this.state.setDisplay("table");
-    this.drilldownLabel.set(`${source?.label ?? "All boards"} · ${this.metricLabel(metric)}`);
+    this.drilldownLabel.set(`${source?.label ?? $localize`:Scope picker option:All boards`} · ${this.metricLabel(metric)}`);
     this.applyQuery();
   }
 
@@ -2482,13 +2544,13 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
 
   metricLabel(metric: string): string {
     return ({
-      active: "Active",
-      overdue: "Overdue",
-      dueSoon: "Due next 7 days",
-      unassigned: "Unassigned",
-      inactive: "Inactive 14 days",
-      completed: `Completed (${this.state.definition().portfolioDays}d)`,
-      overdueChecklistItems: "Overdue checklist items",
+      active: $localize`:Portfolio drill-down, cards not completed:Active`,
+      overdue: $localize`:Portfolio drill-down, overdue cards:Overdue`,
+      dueSoon: $localize`:Portfolio drill-down:Due next 7 days`,
+      unassigned: $localize`:Portfolio drill-down, cards with no assignee:Unassigned`,
+      inactive: $localize`:Portfolio drill-down, cards untouched for 14 days:Inactive 14 days`,
+      completed: $localize`:Portfolio drill-down, cards completed in the last N days (d = days, keep it short):Completed (${this.state.definition().portfolioDays}:days:d)`,
+      overdueChecklistItems: $localize`:Portfolio drill-down:Overdue checklist items`,
     } as Record<string, string>)[metric] ?? metric;
   }
 
@@ -2543,11 +2605,11 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   }
 
   checklistDueText(item: WireChecklistAssignment): string {
-    return formatDueDate(item.dueDateLocalDate, item.dueDateSlot, item.dueDateTimezone) || "No due date";
+    return formatDueDate(item.dueDateLocalDate, item.dueDateSlot, item.dueDateTimezone) || $localize`:Checklist item with no due date:No due date`;
   }
 
   listNameById(listId: string): string {
-    return this.listsById().get(listId)?.name ?? "Unknown list";
+    return this.listsById().get(listId)?.name ?? $localize`:Fallback name for an unknown list:Unknown list`;
   }
 
   /**
@@ -2566,11 +2628,11 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     nextSeven.setDate(nextSeven.getDate() + 7);
     const weekEnd = localDateKey(nextSeven);
     const groups: ChecklistGroup[] = [
-      { id: "checklist:overdue", label: "Overdue", icon: "alert-circle", overdue: true, items: [] },
-      { id: "checklist:today", label: "Due today", icon: "calendar-event", overdue: false, items: [] },
-      { id: "checklist:upcoming", label: "Next 7 days", icon: "calendar-week", overdue: false, items: [] },
-      { id: "checklist:later", label: "Later", icon: "calendar", overdue: false, items: [] },
-      { id: "checklist:undated", label: "No due date", icon: "calendar-off", overdue: false, items: [] },
+      { id: "checklist:overdue", label: $localize`:Due date group heading:Overdue`, icon: "alert-circle", overdue: true, items: [] },
+      { id: "checklist:today", label: $localize`:Due date group heading:Due today`, icon: "calendar-event", overdue: false, items: [] },
+      { id: "checklist:upcoming", label: $localize`:Due date group heading:Next 7 days`, icon: "calendar-week", overdue: false, items: [] },
+      { id: "checklist:later", label: $localize`:Due date group heading:Later`, icon: "calendar", overdue: false, items: [] },
+      { id: "checklist:undated", label: $localize`:Due date group heading:No due date`, icon: "calendar-off", overdue: false, items: [] },
     ];
     for (const item of items) {
       const due = item.dueDateLocalDate;
@@ -2586,7 +2648,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     for (const group of groups) {
       group.items.sort((a, b) =>
         (a.dueDateLocalDate ?? "9999-12-31").localeCompare(b.dueDateLocalDate ?? "9999-12-31")
-        || a.text.localeCompare(b.text)
+        || a.text.localeCompare(b.text, appLocale())
       );
     }
     return groups.filter((group) => group.items.length > 0);
@@ -2597,7 +2659,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   );
 
   workspaceName(workspaceId: string): string {
-    return this.workspacesById().get(workspaceId)?.name ?? "Workspace";
+    return this.workspacesById().get(workspaceId)?.name ?? $localize`:Fallback name for an unknown workspace:Workspace`;
   }
 
   private rollupPortfolioRow(

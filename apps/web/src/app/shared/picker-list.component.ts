@@ -433,10 +433,10 @@ export interface PickerGroup {
 export class PickerListComponent {
   readonly groups = input<PickerGroup[]>([]);
   readonly selectedIds = input<string[]>([]);
-  readonly searchPlaceholder = input("Search…");
+  readonly searchPlaceholder = input($localize`:Picker search placeholder:Search…`);
   /** Show the search box once there are at least this many options; small lists skip it. */
   readonly searchThreshold = input(8);
-  readonly emptyLabel = input("Nothing to show");
+  readonly emptyLabel = input($localize`:Picker empty state:Nothing to show`);
 
   readonly pick = output<string>();
 

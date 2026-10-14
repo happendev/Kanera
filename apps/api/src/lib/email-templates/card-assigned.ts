@@ -1,6 +1,9 @@
+import type { Locale } from "@kanera/shared/locales";
+import { serverMessages } from "../i18n/messages/index.js";
 import { cardSummary, emailLayout, heading, paragraph } from "./layout.js";
 
 export interface CardAssignedEmailParams {
+  locale: Locale;
   displayName: string;
   actorName: string;
   cardTitle: string;
@@ -8,14 +11,16 @@ export interface CardAssignedEmailParams {
   cardUrl: string;
 }
 
-export function cardAssignedEmail({ displayName, actorName, cardTitle, boardName, cardUrl }: CardAssignedEmailParams): string {
+export function cardAssignedEmail({ locale, displayName, actorName, cardTitle, boardName, cardUrl }: CardAssignedEmailParams): string {
+  const m = serverMessages(locale).email.cardAssigned;
   const firstName = displayName.split(" ")[0] ?? displayName;
   return emailLayout({
-    subject: "You were assigned a Kanera card",
-    preheader: `${actorName} assigned you to "${cardTitle}".`,
+    locale,
+    subject: m.subject,
+    preheader: m.preheader({ actor: actorName, card: cardTitle }),
     body: `
-      ${heading("You were assigned a card")}
-      ${paragraph(`Hi ${firstName}, ${actorName} assigned you to a card on ${boardName}.`)}
+      ${heading(m.heading)}
+      ${paragraph(m.intro({ firstName, actor: actorName, board: boardName }))}
       ${cardSummary({ title: cardTitle, subtitle: boardName, href: cardUrl })}
     `,
   });

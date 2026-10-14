@@ -8,41 +8,41 @@
   <div class="auth-card">
     <div class="auth-header">
       <k-logo [height]="34" />
-      <p>Enter your credentials to continue</p>
+      <p i18n>Enter your credentials to continue</p>
     </div>
 
     <form (submit)="submit($event)">
       @if (!challengeToken()) {
       <div class="field">
-        <label for="email"><i class="ti ti-mail"></i> Email</label>
-        <input id="email" type="email" placeholder="you@example.com" [formField]="loginForm.email" autocomplete="email" />
+        <label for="email"><i class="ti ti-mail"></i> <ng-container i18n="Field label: email address">Email</ng-container></label>
+        <input id="email" type="email" placeholder="you@example.com" i18n-placeholder="Example email address" [formField]="loginForm.email" autocomplete="email" />
       </div>
       }
 
       @if (challengeToken()) {
       @if (mfaEnrollment() && !recoveryCodes().length) {
-      <p>Two-factor authentication is required by your organisation. Scan this code with your authenticator app.</p>
-      @if (mfaQrUrl()) { <img [src]="mfaQrUrl()" width="200" height="200" alt="Authenticator setup QR code" /> }
+      <p i18n>Two-factor authentication is required by your organisation. Scan this code with your authenticator app.</p>
+      @if (mfaQrUrl()) { <img [src]="mfaQrUrl()" width="200" height="200" alt="Authenticator setup QR code" i18n-alt /> }
       <code>{{ mfaSecret() }}</code>
       }
       @if (recoveryCodes().length) {
-      <p><strong>Save these one-time recovery codes now.</strong></p>
+      <p><strong i18n>Save these one-time recovery codes now.</strong></p>
       <pre>{{ recoveryCodes().join('\n') }}</pre>
       } @else {
       <div class="field">
-        <label for="mfa-code"><i class="ti ti-shield-lock"></i> Verification code</label>
-        <input id="mfa-code" inputmode="numeric" autocomplete="one-time-code" placeholder="Authenticator or recovery code" [formField]="mfaForm.code" autofocus />
+        <label for="mfa-code"><i class="ti ti-shield-lock"></i> <ng-container i18n="Field label">Verification code</ng-container></label>
+        <input id="mfa-code" inputmode="numeric" autocomplete="one-time-code" placeholder="Authenticator or recovery code" i18n-placeholder [formField]="mfaForm.code" autofocus />
       </div>
       }
       }
       @if (!challengeToken()) {
-      <a class="small-link" routerLink="/forgot-password">Forgot password?</a>
+      <a class="small-link" routerLink="/forgot-password" i18n>Forgot password?</a>
 
       <div class="field">
-        <label for="password"><i class="ti ti-lock"></i> Password</label>
+        <label for="password"><i class="ti ti-lock"></i> <ng-container i18n="Field label">Password</ng-container></label>
         <div class="input-wrap">
           <input id="password" [type]="showPassword() ? 'text' : 'password'" placeholder="••••••••" [formField]="loginForm.password" autocomplete="current-password" />
-          <button type="button" class="reveal-btn" (click)="showPassword.set(!showPassword())" [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'">
+          <button type="button" class="reveal-btn" (click)="showPassword.set(!showPassword())" [attr.aria-label]="showPassword() ? hidePasswordLabel : showPasswordLabel">
             <i [class]="showPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
           </button>
         </div>
@@ -60,12 +60,13 @@
         @if (busy()) {
         <i class="ti ti-loader-2 kanera-spin"></i>
         }
-        {{ recoveryCodes().length ? "I saved these codes" : challengeToken() ? (mfaEnrollment() ? "Enable and continue" : "Verify") : "Sign in" }}
+        @if (recoveryCodes().length) { <ng-container i18n="Button">I saved these codes</ng-container> } @else if (challengeToken()) { @if (mfaEnrollment()) { <ng-container i18n="Button">Enable and continue</ng-container> } @else { <ng-container i18n="Button: verify the code">Verify</ng-container> } } @else { <ng-container i18n="Button">Sign in</ng-container> }
       </button>
     </form>
 
     <div class="auth-footer">
-      Don't have an account? <a [href]="signupLink()">Create one</a>
+      <ng-container i18n>Don't have an account? <a [href]="signupLink()">Create one</a></ng-container>
     </div>
   </div>
+  <k-locale-switcher />
 </div>

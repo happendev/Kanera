@@ -27,6 +27,14 @@ The app is zoneless with `ChangeDetectionStrategy.OnPush` everywhere, so state l
   on every upstream change). If that effect writes back to state, it loops and freezes the tab. Key
   effects on primitive signals.
 
+## Translation
+
+All visible text is marked for Angular i18n (`i18n` attributes, `$localize`, `icu()` for plurals
+in TS); dates and numbers go through `shared/date-format.ts` / `appLocale()`. Follow
+[`src/locale/README.md`](src/locale/README.md) and use the terms in
+[`src/locale/GLOSSARY.md`](src/locale/GLOSSARY.md). Don't change English copy casually: a new id
+needs every language translated again before `pnpm lint` passes.
+
 ## Shared surfaces
 
 - `BoardState` is route-scoped and consumes workspace-level list events plus board-level card events.

@@ -8,26 +8,26 @@
   <div class="auth-card">
     <div class="auth-header">
       <k-logo [height]="34" />
-      <p>Get started. It only takes a minute.</p>
+      <p i18n>Get started. It only takes a minute.</p>
     </div>
 
     @if (publicSignupBlocked()) {
     <div class="closed-signup">
       <i class="ti ti-lock"></i>
-      <p>Signups are currently closed.</p>
-      <a routerLink="/login">Sign in</a>
+      <p i18n>Signups are currently closed.</p>
+      <a routerLink="/login" i18n="Link to the sign-in page">Sign in</a>
     </div>
     } @else if (step() === 'details') {
     <form (submit)="submit($event)">
       @if (boardInvite(); as boardInvitation) {
       <div class="invite-banner">
         <i class="ti ti-layout-kanban"></i>
-        <span>You've been invited to <strong>{{ boardSummary(boardInvitation) }}</strong> on <strong>{{ boardInvitation.clientName }}</strong></span>
+        <span i18n>You've been invited to <strong>{{ boardSummary(boardInvitation) // i18n(ph="boards") }}</strong> on <strong>{{ boardInvitation.clientName // i18n(ph="organisation") }}</strong></span>
       </div>
       } @else if (invite()) {
       <div class="invite-banner">
         <i class="ti ti-building"></i>
-        <span>You've been invited to join <strong>{{ invite()!.orgName }}</strong></span>
+        <span i18n>You've been invited to join <strong>{{ invite()!.orgName // i18n(ph="organisation") }}</strong></span>
       </div>
       }
 
@@ -40,65 +40,65 @@
 
       @if (!inviteToken() && !boardInviteToken()) {
       <div class="field">
-        <label for="cname"><i class="ti ti-building"></i> Organisation name</label>
-        <input id="cname" placeholder="Private" [formField]="signupForm.orgName" />
+        <label for="cname"><i class="ti ti-building"></i> <ng-container i18n="Field label">Organisation name</ng-container></label>
+        <input id="cname" placeholder="Private" i18n-placeholder="Default name for a new organisation" [formField]="signupForm.orgName" />
       </div>
       }
 
       <div class="field">
-        <label for="dn"><i class="ti ti-user"></i> Your name</label>
-        <input id="dn" placeholder="Jane Smith" [formField]="signupForm.displayName" autocomplete="name" />
+        <label for="dn"><i class="ti ti-user"></i> <ng-container i18n="Field label">Your name</ng-container></label>
+        <input id="dn" placeholder="Jane Smith" i18n-placeholder="Example person name" [formField]="signupForm.displayName" autocomplete="name" />
       </div>
 
       <div class="field">
-        <label for="email"><i class="ti ti-mail"></i> Email</label>
+        <label for="email"><i class="ti ti-mail"></i> <ng-container i18n="Field label: email address">Email</ng-container></label>
         @if (boardInvite()) {
         <input id="email" type="email" [value]="email()" autocomplete="email" readonly />
-        <p class="field-help">This invitation is tied to this email address.</p>
+        <p class="field-help" i18n>This invitation is tied to this email address.</p>
         } @else {
-        <input id="email" type="email" placeholder="you@example.com" [formField]="signupForm.email" autocomplete="email" />
+        <input id="email" type="email" placeholder="you@example.com" i18n-placeholder="Example email address" [formField]="signupForm.email" autocomplete="email" />
         }
       </div>
 
       <div class="field">
-        <label for="password"><i class="ti ti-lock"></i> Password</label>
+        <label for="password"><i class="ti ti-lock"></i> <ng-container i18n="Field label">Password</ng-container></label>
         <div class="input-wrap">
-          <input id="password" [type]="showPassword() ? 'text' : 'password'" placeholder="Min. 8 characters" [formField]="signupForm.password" autocomplete="new-password" />
-          <button type="button" class="reveal-btn" tabindex="-1" (click)="showPassword.set(!showPassword())" [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'">
+          <input id="password" [type]="showPassword() ? 'text' : 'password'" placeholder="Min. 8 characters" i18n-placeholder="Password field placeholder" [formField]="signupForm.password" autocomplete="new-password" />
+          <button type="button" class="reveal-btn" tabindex="-1" (click)="showPassword.set(!showPassword())" [attr.aria-label]="showPassword() ? hidePasswordLabel : showPasswordLabel">
             <i [class]="showPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
           </button>
         </div>
       </div>
 
       <div class="field">
-        <label for="confirm-password"><i class="ti ti-lock-check"></i> Confirm password</label>
+        <label for="confirm-password"><i class="ti ti-lock-check"></i> <ng-container i18n="Field label">Confirm password</ng-container></label>
         <div class="input-wrap">
-          <input id="confirm-password" [type]="showConfirmPassword() ? 'text' : 'password'" placeholder="Re-enter your password" [formField]="signupForm.confirmPassword" autocomplete="new-password" />
-          <button type="button" class="reveal-btn" tabindex="-1" (click)="showConfirmPassword.set(!showConfirmPassword())" [attr.aria-label]="showConfirmPassword() ? 'Hide password' : 'Show password'">
+          <input id="confirm-password" [type]="showConfirmPassword() ? 'text' : 'password'" placeholder="Re-enter your password" i18n-placeholder [formField]="signupForm.confirmPassword" autocomplete="new-password" />
+          <button type="button" class="reveal-btn" tabindex="-1" (click)="showConfirmPassword.set(!showConfirmPassword())" [attr.aria-label]="showConfirmPassword() ? hidePasswordLabel : showPasswordLabel">
             <i [class]="showConfirmPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
           </button>
         </div>
       </div>
 
       <div class="field">
-        <label><i class="ti ti-palette"></i> Appearance</label>
-        <p class="field-help">Choose the theme used on this device.</p>
-        <div class="theme-options" role="radiogroup" aria-label="Theme color">
+        <label><i class="ti ti-palette"></i> <ng-container i18n="Field label: theme picker">Appearance</ng-container></label>
+        <p class="field-help" i18n>Choose the theme used on this device.</p>
+        <div class="theme-options" role="radiogroup" aria-label="Theme color" i18n-aria-label>
           <button type="button" class="theme-option" [class.active]="theme.theme() === 'dark'" [attr.aria-checked]="theme.theme() === 'dark'" role="radio" (click)="setTheme('dark')">
             <i class="ti ti-moon"></i>
-            Dark
+            <ng-container i18n="Theme name">Dark</ng-container>
           </button>
           <button type="button" class="theme-option" [class.active]="theme.theme() === 'carbon'" [attr.aria-checked]="theme.theme() === 'carbon'" role="radio" (click)="setTheme('carbon')">
             <i class="ti ti-moon-stars"></i>
-            Carbon
+            <ng-container i18n="Theme name">Carbon</ng-container>
           </button>
           <button type="button" class="theme-option" [class.active]="theme.theme() === 'light'" [attr.aria-checked]="theme.theme() === 'light'" role="radio" (click)="setTheme('light')">
             <i class="ti ti-sun"></i>
-            Light
+            <ng-container i18n="Theme name">Light</ng-container>
           </button>
           <button type="button" class="theme-option" [class.active]="theme.theme() === 'paper'" [attr.aria-checked]="theme.theme() === 'paper'" role="radio" (click)="setTheme('paper')">
             <i class="ti ti-note"></i>
-            Paper
+            <ng-container i18n="Theme name">Paper</ng-container>
           </button>
         </div>
       </div>
@@ -117,7 +117,7 @@
       }
 
       @if (deploymentMode() === 'hosted') {
-      <p class="legal-consent">
+      <p class="legal-consent" i18n>
         By continuing, you agree to the
         <a href="https://www.kanera.app/terms" target="_blank" rel="noopener">Terms of Service</a>
         and acknowledge the
@@ -129,7 +129,7 @@
         @if (busy()) {
         <i class="ti ti-loader-2 kanera-spin"></i>
         }
-        Continue
+        <ng-container i18n="Button">Continue</ng-container>
       </button>
     </form>
     }
@@ -138,11 +138,11 @@
     <form (submit)="confirm($event)">
       <div class="verify-intro">
         <i class="ti ti-mail-check"></i>
-        <p>We sent a 6-digit code to <strong>{{ email() }}</strong>. Enter it below to continue.</p>
+        <p i18n>We sent a 6-digit code to <strong>{{ email() // i18n(ph="email") }}</strong>. Enter it below to continue.</p>
       </div>
 
       <div class="field">
-        <label for="code"><i class="ti ti-shield-lock"></i> Verification code</label>
+        <label for="code"><i class="ti ti-shield-lock"></i> <ng-container i18n="Field label">Verification code</ng-container></label>
         <input id="code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" [formField]="verificationForm.code" />
       </div>
 
@@ -163,25 +163,26 @@
         @if (busy()) {
         <i class="ti ti-loader-2 kanera-spin"></i>
         }
-        Next <i class="ti ti-arrow-right"></i>
+        <ng-container i18n="Button: go to the next step">Next</ng-container> <i class="ti ti-arrow-right"></i>
       </button>
 
       <div class="verify-actions">
-        <button type="button" class="ghost" (click)="back()" [disabled]="busy()"><i class="ti ti-arrow-left"></i> Back</button>
+        <button type="button" class="ghost" (click)="back()" [disabled]="busy()"><i class="ti ti-arrow-left"></i> <ng-container i18n="Button: go to the previous step">Back</ng-container></button>
         <button type="button" class="secondary" (click)="resend()" [disabled]="resendBusy() || resendCooldown() > 0">
           @if (resendBusy()) {
           <i class="ti ti-loader-2 kanera-spin"></i>
           } @else {
           <i class="ti ti-mail-forward"></i>
           }
-          {{ resendCooldown() > 0 ? "Resend in " + resendCooldown() + "s" : "Resend code" }}
+          @if (resendCooldown() > 0) { <ng-container i18n="Countdown before the code can be resent, in seconds">Resend in {{ resendCooldown() // i18n(ph="seconds") }}s</ng-container> } @else { <ng-container i18n="Button">Resend code</ng-container> }
         </button>
       </div>
     </form>
     }
 
     <div class="auth-footer">
-      Already have an account? <a [href]="signInLink()">Sign in</a>
+      <ng-container i18n>Already have an account? <a [href]="signInLink()">Sign in</a></ng-container>
     </div>
   </div>
+  <k-locale-switcher />
 </div>

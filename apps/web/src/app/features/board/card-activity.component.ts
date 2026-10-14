@@ -37,6 +37,8 @@ import { formatDueDate, type DueDateSlotSelection } from "./due-date.util";
 import { ImageLightboxService } from "./image-lightbox.service";
 import { ReactionPopoverComponent } from "./reaction-popover.component";
 import { formatFeedTime } from "../../shared/date-format";
+import { icu } from "../../core/i18n/icu";
+import { appLocale } from "../../core/i18n/locale";
 
 const CARD_FEED_PAGE_SIZE = 50;
 
@@ -74,6 +76,15 @@ type CardFeedView =
       hasDescriptionChanges: boolean;
       attachmentPreview: ActivityAttachmentPreview | null;
     };
+
+let listFormat: Intl.ListFormat | null = null;
+
+// Shared by several activity cases; functions so they read like the inline messages around them.
+const MARKED_COMPLETE = () => $localize`:Card activity after a person's name:marked this card complete`;
+const MARKED_INCOMPLETE = () => $localize`:Card activity after a person's name:marked this card incomplete`;
+const EMPTY_VALUE = () => $localize`:Stands in for a blank value in card activity, e.g. "Priority - empty → High":empty`;
+const YES = () => $localize`:Checkbox field value in card activity:Yes`;
+const NO = () => $localize`:Checkbox field value in card activity:No`;
 
 @Component({
   selector: "k-card-activity",
@@ -498,8 +509,8 @@ export class CardActivityComponent {
     // @mention user authors so they get notified; api/bot authors have no user
     // id to mention, so fall back to a bold name.
     const attribution = comment.authorKind === "user"
-      ? `@[${comment.authorName}](kanera-user:${comment.authorId}) wrote:`
-      : `**${comment.authorName} wrote:**`;
+      ? $localize`:Header of a quoted comment in a reply; person is a mention of the original author:${`@[${comment.authorName}](kanera-user:${comment.authorId})`}:person: wrote:`
+      : `**${$localize`:Header of a quoted comment in a reply:${comment.authorName}:person: wrote:`}**`;
     const quotedBody = comment.body
       .split("\n")
       .map((line) => `> ${line}`)
@@ -762,7 +773,7 @@ export class CardActivityComponent {
     // live detail attachment row carries the current signed media URL.
     const attachment = this.state.coverAttachmentById().get(attachmentId);
     const mimeType = attachment?.mimeType ?? (typeof payload["mimeType"] === "string" ? payload["mimeType"] : "");
-    const fileName = attachment?.fileName ?? (typeof payload["fileName"] === "string" ? payload["fileName"] : "attachment");
+    const fileName = attachment?.fileName ?? (typeof payload["fileName"] === "string" ? payload["fileName"] : $localize`:Stand-in name for an unnamed file:attachment`);
     if (mimeType.startsWith("image/")) {
       const src = visibleSignedMediaUrl(attachment?.url);
       if (!src) return null;
@@ -823,212 +834,318 @@ export class CardActivityComponent {
     }, event);
   }
 
+  // Each phrase follows the actor's name, which the template renders separately ("Priya" + " moved
+  // to [Doing]"), so the messages are written to read after a person's name. Values arrive as
+  // pre-escaped HTML spans; pass them through icu() values or named placeholders, never into the
+  // ICU text itself.
   activityText(event: ActivityFeedEvent): string {
     const p = event.payload as Record<string, unknown>;
+    const count = event.coalescedCount;
     switch (event.action) {
       case "created": {
         const sourceBoardName = this.activityPayloadText(p, "duplicatedFromBoardName");
-        if (sourceBoardName) return ` copied this card from ${this.v(sourceBoardName)}`;
-        if (typeof p["duplicatedFromBoardId"] === "string") return ` copied this card from ${this.v(p["duplicatedFromBoardId"])}`;
-        if (typeof p["duplicatedFromId"] === "string") return " copied this card from another board";
-        if (typeof p["importedFrom"] === "string") return " imported this card";
-        return " created this card";
+        const sourceBoardId = typeof p["duplicatedFromBoardId"] === "string" ? p["duplicatedFromBoardId"] : null;
+        const board = sourceBoardName ?? sourceBoardId;
+        if (board) return ` ${$localize`:Card activity after a person's name:copied this card from ${this.v(board)}:board:`}`;
+        if (typeof p["duplicatedFromId"] === "string") return ` ${$localize`:Card activity after a person's name:copied this card from another board`}`;
+        if (typeof p["importedFrom"] === "string") return ` ${$localize`:Card activity after a person's name:imported this card`}`;
+        return ` ${$localize`:Card activity after a person's name:created this card`}`;
       }
       case "updated": {
         const title = p["title"];
-        if (typeof title === "string") return ` renamed this card to ${this.v(title)}`;
+        if (typeof title === "string") return ` ${$localize`:Card activity after a person's name:renamed this card to ${this.v(title)}:title:`}`;
         if ("description" in p) {
-          return event.coalescedCount > 1
-            ? ` updated the description ${event.coalescedCount} times`
-            : " updated the description";
+          return ` ${icu($localize`:Card activity after a person's name; several edits merged into one row:{count, plural, =1 {updated the description} other {updated the description # times}}`, { count: Math.max(1, count) })}`;
         }
         if ("dueDateLocalDate" in p) {
           return p["dueDateLocalDate"]
-            ? ` set the due date to ${this.v(formatDueDate(p["dueDateLocalDate"] as string | null | undefined, p["dueDateSlot"] as DueDateSlotSelection | null | undefined, p["dueDateTimezone"] as string | null | undefined))}`
-            : " cleared the due date";
+            ? ` ${$localize`:Card activity after a person's name:set the due date to ${this.v(this.activityDueDate(p))}:date:`}`
+            : ` ${$localize`:Card activity after a person's name:cleared the due date`}`;
         }
-        return " updated this card";
+        return ` ${$localize`:Card activity after a person's name:updated this card`}`;
       }
       case "moved": {
         const lists = this.state.lists();
         const toName = lists.find((l) => l.id === p["toListId"])?.name ?? this.activityPayloadText(p, "toListName");
         const fromName = lists.find((l) => l.id === p["fromListId"])?.name ?? this.activityPayloadText(p, "fromListName");
-        if (toName && fromName) return ` moved from ${this.v(fromName)} ${this.arr()} ${this.v(toName)}`;
-        if (toName) return ` moved to ${this.v(toName)}`;
-        return " moved this card";
+        if (toName && fromName) {
+          return ` ${$localize`:Card activity after a person's name; arrow is an icon between the two list names:moved from ${this.v(fromName)}:fromList: ${this.arr()}:arrow: ${this.v(toName)}:toList:`}`;
+        }
+        if (toName) return ` ${$localize`:Card activity after a person's name:moved to ${this.v(toName)}:list:`}`;
+        return ` ${$localize`:Card activity after a person's name:moved this card`}`;
       }
       case "completed":
-        return " marked this card complete";
+        return ` ${MARKED_COMPLETE()}`;
       case "uncompleted":
-        return " marked this card incomplete";
+        return ` ${MARKED_INCOMPLETE()}`;
       case "completion:set":
-        if (event.coalescedCount > 1) {
+        if (count > 1) {
           return p["toValue"] === true
-            ? ` toggled this card complete ${event.coalescedCount} times; left it complete`
-            : ` toggled this card complete ${event.coalescedCount} times; left it incomplete`;
+            ? ` ${icu($localize`:Card activity after a person's name; several toggles merged into one row:{count, plural, other {toggled this card complete # times; left it complete}}`, { count })}`
+            : ` ${icu($localize`:Card activity after a person's name; several toggles merged into one row:{count, plural, other {toggled this card complete # times; left it incomplete}}`, { count })}`;
         }
-        return p["toValue"] === true ? " marked this card complete" : " marked this card incomplete";
+        return p["toValue"] === true ? ` ${MARKED_COMPLETE()}` : ` ${MARKED_INCOMPLETE()}`;
       case "overdue":
-        return `This card is marked as ${this.v("overdue", "overdue")}`;
+        return $localize`:Card activity shown without a person; overdue is a highlighted status word:This card is marked as ${this.v($localize`:Card status:overdue`, "overdue")}:overdue:`;
       case "deleted":
-        return " deleted this card";
+        return ` ${$localize`:Card activity after a person's name:deleted this card`}`;
       case "labels:set": {
         const addedNames = this.activityPayloadNames(p, "addedLabelNames");
-        if (addedNames.length > 0) return ` added label${addedNames.length === 1 ? "" : "s"} ${this.activityNameList(addedNames)}`;
+        if (addedNames.length > 0) {
+          return ` ${icu($localize`:Card activity after a person's name; labels is a list of label names:{count, plural, =1 {added label {labels}} other {added labels {labels}}}`, { count: addedNames.length, labels: this.activityNameList(addedNames) })}`;
+        }
 
         const removedNames = this.activityPayloadNames(p, "removedLabelNames");
-        if (removedNames.length > 0) return ` removed label${removedNames.length === 1 ? "" : "s"} ${this.activityNameList(removedNames)}`;
+        if (removedNames.length > 0) {
+          return ` ${icu($localize`:Card activity after a person's name; labels is a list of label names:{count, plural, =1 {removed label {labels}} other {removed labels {labels}}}`, { count: removedNames.length, labels: this.activityNameList(removedNames) })}`;
+        }
 
         const names = this.activityPayloadNames(p, "labelNames");
-        if (names.length === 0 && Array.isArray(p["labelIds"]) && p["labelIds"].length === 0) return " cleared all labels";
-        return " updated the labels";
+        if (names.length === 0 && Array.isArray(p["labelIds"]) && p["labelIds"].length === 0) return ` ${$localize`:Card activity after a person's name:cleared all labels`}`;
+        return ` ${$localize`:Card activity after a person's name:updated the labels`}`;
       }
       case "assignees:set": {
         const netNames = this.activityNetAssigneeNames(p);
         const addedNames = netNames.added.length ? netNames.added : this.activityPayloadNames(p, "addedAssigneeNames");
         const removedNames = netNames.removed.length ? netNames.removed : this.activityPayloadNames(p, "removedAssigneeNames");
-        const parts: string[] = [];
-        if (addedNames.length > 0) {
-          parts.push(this.activityAddedSelf(p, event)
-            ? "assigned themself"
-            : `assigned ${this.activityNameList(addedNames)}`);
+        const addedSelf = addedNames.length > 0 && this.activityAddedSelf(p, event);
+        const added = addedNames.length > 0 ? this.activityNameList(addedNames) : null;
+        const removed = removedNames.length > 0 ? this.activityNameList(removedNames) : null;
+        if (added && removed) {
+          return addedSelf
+            ? ` ${$localize`:Card activity after a person's name:assigned themself and unassigned ${removed}:removed:`}`
+            : ` ${$localize`:Card activity after a person's name:assigned ${added}:added: and unassigned ${removed}:removed:`}`;
         }
-        if (removedNames.length > 0) parts.push(`unassigned ${this.activityNameList(removedNames)}`);
-        if (parts.length > 0) return ` ${parts.join(" and ")}`;
+        if (added) {
+          return addedSelf
+            ? ` ${$localize`:Card activity after a person's name; they assigned the card to themselves:assigned themself`}`
+            : ` ${$localize`:Card activity after a person's name:assigned ${added}:people:`}`;
+        }
+        if (removed) return ` ${$localize`:Card activity after a person's name:unassigned ${removed}:people:`}`;
 
         const ids = p["assigneeIds"] as string[] | undefined;
-        return ids?.length ? " updated the assignees" : " removed all assignees";
+        return ids?.length
+          ? ` ${$localize`:Card activity after a person's name:updated the assignees`}`
+          : ` ${$localize`:Card activity after a person's name:removed all assignees`}`;
       }
       case "customFieldValue:set": {
-        const fieldName = this.activityFieldName(p);
+        const field = this.v(this.activityFieldName(p));
         const from = this.vField(p["fromValue"]);
-        const to = this.vField(p["toValue"]);
-        if (event.coalescedCount > 1) {
-          return ` changed ${this.v(fieldName)} ${event.coalescedCount} times: ${from ?? "empty"} ${this.arr()} ${to ?? "empty"}`;
+        const to = this.vField(p["toValue"]) ?? EMPTY_VALUE();
+        if (count > 1) {
+          return ` ${icu($localize`:Card activity after a person's name; arrow is an icon between the old and new values:{count, plural, other {changed {field} # times: {from} {arrow} {to}}}`, { count, field, from: from ?? EMPTY_VALUE(), arrow: this.arr(), to })}`;
         }
-        if (!from) return ` set ${this.v(fieldName)} to ${to ?? "empty"}`;
-        return ` changed ${this.v(fieldName)}: ${from} ${this.arr()} ${to ?? "empty"}`;
+        if (!from) return ` ${$localize`:Card activity after a person's name:set ${field}:field: to ${to}:value:`}`;
+        return ` ${$localize`:Card activity after a person's name; arrow is an icon between the old and new values:changed ${field}:field:: ${from}:from: ${this.arr()}:arrow: ${to}:to:`}`;
       }
       case "customFieldValue:cleared": {
-        const fieldName = this.activityFieldName(p);
+        const field = this.v(this.activityFieldName(p));
         const from = this.vField(p["fromValue"]);
         return from
-          ? ` cleared ${this.v(fieldName)} (was ${from})`
-          : ` cleared ${this.v(fieldName)}`;
+          ? ` ${$localize`:Card activity after a person's name; from is the previous value:cleared ${field}:field: (was ${from}:from:)`}`
+          : ` ${$localize`:Card activity after a person's name:cleared ${field}:field:`}`;
       }
-      case "checklist:created":
-        return this.activityPayloadText(p, "title")
-          ? ` added checklist ${this.v(this.activityPayloadText(p, "title")!)}`
-          : " added a checklist";
-      case "checklist:deleted":
-        return this.activityPayloadText(p, "title")
-          ? ` deleted checklist ${this.v(this.activityPayloadText(p, "title")!)}`
-          : " deleted a checklist";
+      case "checklist:created": {
+        const title = this.activityPayloadText(p, "title");
+        return title
+          ? ` ${$localize`:Card activity after a person's name:added checklist ${this.v(title)}:checklist:`}`
+          : ` ${$localize`:Card activity after a person's name:added a checklist`}`;
+      }
+      case "checklist:deleted": {
+        const title = this.activityPayloadText(p, "title");
+        return title
+          ? ` ${$localize`:Card activity after a person's name:deleted checklist ${this.v(title)}:checklist:`}`
+          : ` ${$localize`:Card activity after a person's name:deleted a checklist`}`;
+      }
       case "checklist:completed": {
         const title = this.activityPayloadText(p, "title");
         const parentItemText = this.activityPayloadText(p, "parentItemText");
         if (parentItemText) {
           return title
-            ? ` completed sub-checklist ${this.v(title)} on ${this.v(parentItemText)}`
-            : ` completed a sub-checklist on ${this.v(parentItemText)}`;
+            ? ` ${$localize`:Card activity after a person's name; item is the checklist item the sub-checklist belongs to:completed sub-checklist ${this.v(title)}:checklist: on ${this.v(parentItemText)}:item:`}`
+            : ` ${$localize`:Card activity after a person's name; item is the checklist item the sub-checklist belongs to:completed a sub-checklist on ${this.v(parentItemText)}:item:`}`;
         }
-        return title ? ` completed checklist ${this.v(title)}` : " completed a checklist";
+        return title
+          ? ` ${$localize`:Card activity after a person's name:completed checklist ${this.v(title)}:checklist:`}`
+          : ` ${$localize`:Card activity after a person's name:completed a checklist`}`;
       }
       case "checklist:renamed": {
-        const from = this.vField(p["fromValue"]);
-        const to = this.vField(p["toValue"]);
-        if (event.coalescedCount > 1) return ` renamed a checklist ${event.coalescedCount} times: ${from ?? "empty"} ${this.arr()} ${to ?? "empty"}`;
-        return ` renamed a checklist: ${from ?? "empty"} ${this.arr()} ${to ?? "empty"}`;
+        const from = this.vField(p["fromValue"]) ?? EMPTY_VALUE();
+        const to = this.vField(p["toValue"]) ?? EMPTY_VALUE();
+        if (count > 1) {
+          return ` ${icu($localize`:Card activity after a person's name; arrow is an icon between the old and new names:{count, plural, other {renamed a checklist # times: {from} {arrow} {to}}}`, { count, from, arrow: this.arr(), to })}`;
+        }
+        return ` ${$localize`:Card activity after a person's name; arrow is an icon between the old and new names:renamed a checklist: ${from}:from: ${this.arr()}:arrow: ${to}:to:`}`;
       }
-      case "checklistItem:created":
-        return this.activityPayloadText(p, "text")
-          ? ` added checklist item ${this.v(this.activityPayloadText(p, "text")!)}`
-          : " added a checklist item";
-      case "checklistItem:deleted":
-        return this.activityPayloadText(p, "text")
-          ? ` deleted checklist item ${this.v(this.activityPayloadText(p, "text")!)}`
-          : " deleted a checklist item";
+      case "checklistItem:created": {
+        const text = this.activityPayloadText(p, "text");
+        return text
+          ? ` ${$localize`:Card activity after a person's name:added checklist item ${this.v(text)}:item:`}`
+          : ` ${$localize`:Card activity after a person's name:added a checklist item`}`;
+      }
+      case "checklistItem:deleted": {
+        const text = this.activityPayloadText(p, "text");
+        return text
+          ? ` ${$localize`:Card activity after a person's name:deleted checklist item ${this.v(text)}:item:`}`
+          : ` ${$localize`:Card activity after a person's name:deleted a checklist item`}`;
+      }
       case "checklistItem:updated": {
-        const from = this.vField(p["fromValue"]);
-        const to = this.vField(p["toValue"]);
-        if (event.coalescedCount > 1) return ` edited a checklist item ${event.coalescedCount} times: ${from ?? "empty"} ${this.arr()} ${to ?? "empty"}`;
-        return ` edited a checklist item: ${from ?? "empty"} ${this.arr()} ${to ?? "empty"}`;
+        const from = this.vField(p["fromValue"]) ?? EMPTY_VALUE();
+        const to = this.vField(p["toValue"]) ?? EMPTY_VALUE();
+        if (count > 1) {
+          return ` ${icu($localize`:Card activity after a person's name; arrow is an icon between the old and new text:{count, plural, other {edited a checklist item # times: {from} {arrow} {to}}}`, { count, from, arrow: this.arr(), to })}`;
+        }
+        return ` ${$localize`:Card activity after a person's name; arrow is an icon between the old and new text:edited a checklist item: ${from}:from: ${this.arr()}:arrow: ${to}:to:`}`;
       }
       case "checklistItem:description:set": {
         const itemText = this.activityPayloadText(p, "itemText");
-        const suffix = itemText ? ` for ${this.v(itemText)}` : "";
-        return p["toValue"] ? ` updated the checklist item description${suffix}` : ` cleared the checklist item description${suffix}`;
+        const item = itemText ? this.v(itemText) : null;
+        if (p["toValue"]) {
+          return item
+            ? ` ${$localize`:Card activity after a person's name:updated the checklist item description for ${item}:item:`}`
+            : ` ${$localize`:Card activity after a person's name:updated the checklist item description`}`;
+        }
+        return item
+          ? ` ${$localize`:Card activity after a person's name:cleared the checklist item description for ${item}:item:`}`
+          : ` ${$localize`:Card activity after a person's name:cleared the checklist item description`}`;
       }
       case "checklistItem:assignee:set": {
         if (p["bulk"] === true) {
-          const count = typeof p["itemCount"] === "number" ? p["itemCount"] : 0;
-          const itemLabel = count === 1 ? "checklist item" : "checklist items";
+          const items = typeof p["itemCount"] === "number" ? p["itemCount"] : 0;
           const assigneeName = this.activityPayloadText(p, "assigneeName");
           const checklistTitle = this.activityPayloadText(p, "checklistTitle");
-          const checklistSuffix = checklistTitle ? ` in ${this.v(checklistTitle)}` : "";
-          return assigneeName
-            ? ` assigned ${this.v(assigneeName)} to ${count} ${itemLabel}${checklistSuffix}`
-            : ` unassigned ${count} ${itemLabel}${checklistSuffix}`;
+          const values = { count: items, person: assigneeName ? this.v(assigneeName) : null, checklist: checklistTitle ? this.v(checklistTitle) : null };
+          if (assigneeName) {
+            return checklistTitle
+              ? ` ${icu($localize`:Card activity after a person's name:{count, plural, =1 {assigned {person} to 1 checklist item in {checklist}} other {assigned {person} to # checklist items in {checklist}}}`, values)}`
+              : ` ${icu($localize`:Card activity after a person's name:{count, plural, =1 {assigned {person} to 1 checklist item} other {assigned {person} to # checklist items}}`, values)}`;
+          }
+          return checklistTitle
+            ? ` ${icu($localize`:Card activity after a person's name:{count, plural, =1 {unassigned 1 checklist item in {checklist}} other {unassigned # checklist items in {checklist}}}`, values)}`
+            : ` ${icu($localize`:Card activity after a person's name:{count, plural, =1 {unassigned 1 checklist item} other {unassigned # checklist items}}`, values)}`;
         }
         const itemText = this.activityPayloadText(p, "itemText");
         const assigneeName = this.activityPayloadText(p, "assigneeName");
         const previousAssigneeName = this.activityPayloadText(p, "previousAssigneeName");
-        const itemSuffix = itemText ? ` ${this.v(itemText)}` : "";
+        const item = itemText ? this.v(itemText) : null;
         if (assigneeName && previousAssigneeName) {
-          return ` changed checklist item${itemSuffix} assignee from ${this.v(previousAssigneeName)} to ${this.v(assigneeName)}`;
+          const previous = this.v(previousAssigneeName);
+          const next = this.v(assigneeName);
+          return item
+            ? ` ${$localize`:Card activity after a person's name:changed checklist item ${item}:item: assignee from ${previous}:previous: to ${next}:next:`}`
+            : ` ${$localize`:Card activity after a person's name:changed checklist item assignee from ${previous}:previous: to ${next}:next:`}`;
         }
-        if (assigneeName) return ` assigned ${this.v(assigneeName)} to checklist item${itemSuffix}`;
-        if (previousAssigneeName) return ` removed ${this.v(previousAssigneeName)} from checklist item${itemSuffix}`;
-        return ` updated checklist item assignee${itemSuffix}`;
+        if (assigneeName) {
+          const person = this.v(assigneeName);
+          return item
+            ? ` ${$localize`:Card activity after a person's name:assigned ${person}:person: to checklist item ${item}:item:`}`
+            : ` ${$localize`:Card activity after a person's name:assigned ${person}:person: to checklist item`}`;
+        }
+        if (previousAssigneeName) {
+          const person = this.v(previousAssigneeName);
+          return item
+            ? ` ${$localize`:Card activity after a person's name:removed ${person}:person: from checklist item ${item}:item:`}`
+            : ` ${$localize`:Card activity after a person's name:removed ${person}:person: from checklist item`}`;
+        }
+        return item
+          ? ` ${$localize`:Card activity after a person's name:updated checklist item assignee ${item}:item:`}`
+          : ` ${$localize`:Card activity after a person's name:updated checklist item assignee`}`;
       }
       case "checklistItem:dueDate:set": {
         if (p["bulk"] === true) {
-          const count = typeof p["itemCount"] === "number" ? p["itemCount"] : 0;
-          const itemLabel = count === 1 ? "checklist item" : "checklist items";
+          const items = typeof p["itemCount"] === "number" ? p["itemCount"] : 0;
           const checklistTitle = this.activityPayloadText(p, "checklistTitle");
-          const checklistSuffix = checklistTitle ? ` in ${this.v(checklistTitle)}` : "";
-          return p["dueDateLocalDate"]
-            ? ` set the due date on ${count} ${itemLabel}${checklistSuffix} to ${this.v(formatDueDate(p["dueDateLocalDate"] as string | null | undefined, p["dueDateSlot"] as DueDateSlotSelection | null | undefined, p["dueDateTimezone"] as string | null | undefined))}`
-            : ` cleared the due date on ${count} ${itemLabel}${checklistSuffix}`;
+          const values = {
+            count: items,
+            checklist: checklistTitle ? this.v(checklistTitle) : null,
+            date: p["dueDateLocalDate"] ? this.v(this.activityDueDate(p)) : null,
+          };
+          if (p["dueDateLocalDate"]) {
+            return checklistTitle
+              ? ` ${icu($localize`:Card activity after a person's name:{count, plural, =1 {set the due date on 1 checklist item in {checklist} to {date}} other {set the due date on # checklist items in {checklist} to {date}}}`, values)}`
+              : ` ${icu($localize`:Card activity after a person's name:{count, plural, =1 {set the due date on 1 checklist item to {date}} other {set the due date on # checklist items to {date}}}`, values)}`;
+          }
+          return checklistTitle
+            ? ` ${icu($localize`:Card activity after a person's name:{count, plural, =1 {cleared the due date on 1 checklist item in {checklist}} other {cleared the due date on # checklist items in {checklist}}}`, values)}`
+            : ` ${icu($localize`:Card activity after a person's name:{count, plural, =1 {cleared the due date on 1 checklist item} other {cleared the due date on # checklist items}}`, values)}`;
         }
         const itemText = this.activityPayloadText(p, "itemText");
-        const itemSuffix = itemText ? ` ${this.v(itemText)}` : "";
-        return p["dueDateLocalDate"]
-          ? ` set the due date on checklist item${itemSuffix} to ${this.v(formatDueDate(p["dueDateLocalDate"] as string | null | undefined, p["dueDateSlot"] as DueDateSlotSelection | null | undefined, p["dueDateTimezone"] as string | null | undefined))}`
-          : ` cleared the due date on checklist item${itemSuffix}`;
+        const item = itemText ? this.v(itemText) : null;
+        if (p["dueDateLocalDate"]) {
+          const date = this.v(this.activityDueDate(p));
+          return item
+            ? ` ${$localize`:Card activity after a person's name:set the due date on checklist item ${item}:item: to ${date}:date:`}`
+            : ` ${$localize`:Card activity after a person's name:set the due date on checklist item to ${date}:date:`}`;
+        }
+        return item
+          ? ` ${$localize`:Card activity after a person's name:cleared the due date on checklist item ${item}:item:`}`
+          : ` ${$localize`:Card activity after a person's name:cleared the due date on checklist item`}`;
       }
       case "checklistItem:completion": {
-        const text = typeof p["text"] === "string" ? ` ${this.v(p["text"])}` : "";
-        return p["toValue"] === true ? ` completed checklist item${text}` : ` marked checklist item incomplete${text}`;
+        const item = typeof p["text"] === "string" ? this.v(p["text"]) : null;
+        if (p["toValue"] === true) {
+          return item
+            ? ` ${$localize`:Card activity after a person's name:completed checklist item ${item}:item:`}`
+            : ` ${$localize`:Card activity after a person's name:completed checklist item`}`;
+        }
+        return item
+          ? ` ${$localize`:Card activity after a person's name:marked checklist item incomplete ${item}:item:`}`
+          : ` ${$localize`:Card activity after a person's name:marked checklist item incomplete`}`;
       }
       case "attachment_added": {
         const name = p["fileName"] as string | undefined;
-        return name ? ` attached ${this.v(name)}` : " added an attachment";
+        return name
+          ? ` ${$localize`:Card activity after a person's name:attached ${this.v(name)}:fileName:`}`
+          : ` ${$localize`:Card activity after a person's name:added an attachment`}`;
       }
       case "attachment_removed": {
         const name = p["fileName"] as string | undefined;
-        return name ? ` removed attachment ${this.v(name)}` : " removed an attachment";
+        return name
+          ? ` ${$localize`:Card activity after a person's name:removed attachment ${this.v(name)}:fileName:`}`
+          : ` ${$localize`:Card activity after a person's name:removed an attachment`}`;
       }
       case "cover_set":
-        return " set a cover image";
+        return ` ${$localize`:Card activity after a person's name:set a cover image`}`;
       case "cover_removed":
-        return " removed the cover image";
+        return ` ${$localize`:Card activity after a person's name:removed the cover image`}`;
       case "agentRun:ended": {
         const title = this.activityPayloadText(p, "title");
         const status = this.activityPayloadText(p, "status");
-        const verb = status === "succeeded" ? "finished" : status === "failed" ? "failed" : status === "cancelled" ? "cancelled" : status === "stalled" ? "stalled on" : "ended";
         // Stalls are recorded by the system (nobody acted), so name the agent explicitly.
         const agent = event.actorKind === "system" ? this.activityPayloadText(p, "agentName") : null;
-        const subject = agent ? ` marked ${this.v(agent)}'s run as ${verb === "stalled on" ? "stalled" : verb}` : ` ${verb}`;
+        const subject = agent
+          ? icu($localize`:Card activity after a system name; agent is an AI agent's name:{status, select, succeeded {marked {agent}'s run as finished} failed {marked {agent}'s run as failed} cancelled {marked {agent}'s run as cancelled} stalled {marked {agent}'s run as stalled} other {marked {agent}'s run as ended}}`, { status, agent: this.v(agent) })
+          : icu($localize`:Card activity after an AI agent's name; a run title may follow after a colon:{status, select, succeeded {finished} failed {failed} cancelled {cancelled} stalled {stalled on} other {ended}}`, { status });
         // The run's closing summary is the outcome a reader actually wants; the run row itself is
         // gone from card detail once it ends, so this is where that note lives.
         const summary = this.activityPayloadText(p, "summary");
-        const headline = title ? `${subject}: ${this.v(title)}` : subject;
-        return summary ? `${headline} — ${this.v(summary)}` : headline;
+        const headline = title ? $localize`:Agent run outcome followed by the run title:${subject}:outcome:: ${this.v(title)}:title:` : subject;
+        return ` ${summary ? $localize`:Agent run outcome followed by its closing summary:${headline}:outcome: — ${this.v(summary)}:summary:` : headline}`;
       }
       default:
+        // Unknown actions from a newer server: show the raw action and entity type rather than nothing.
         return ` ${event.action.replace(/_/g, " ")} ${event.entityType}`;
     }
+  }
+
+  readonly clickToEditLabel = $localize`:Tooltip on a saved comment draft:Click to edit`;
+
+  viaAgentLabel(agentName: string | null | undefined): string {
+    return agentName
+      ? $localize`:Marks a comment or change made by an AI agent, e.g. "via Claude":via ${agentName}:agent:`
+      : $localize`:Marks a comment or change made by an unnamed AI agent:via AI agent`;
+  }
+
+  writtenByAgentTooltip(agentName: string | null | undefined, personName: string): string {
+    return agentName
+      ? $localize`:Tooltip on a comment an AI agent wrote for a person:Written by ${agentName}:agent: on behalf of ${personName}:person:`
+      : $localize`:Tooltip on a comment an AI agent wrote for a person:Written by an AI agent on behalf of ${personName}:person:`;
+  }
+
+  doneByAgentTooltip(agentName: string | null | undefined, personName: string): string {
+    return agentName
+      ? $localize`:Tooltip on a change an AI agent made for a person:Done by ${agentName}:agent: on behalf of ${personName}:person:`
+      : $localize`:Tooltip on a change an AI agent made for a person:Done by an AI agent on behalf of ${personName}:person:`;
   }
 
   activityActorText(event: ActivityFeedEvent): string | null {
@@ -1241,8 +1358,8 @@ export class CardActivityComponent {
 
   private vField(value: unknown): string | null {
     if (value === null || value === undefined || value === "") return null;
-    if (typeof value === "boolean") return this.v(value ? "Yes" : "No");
-    if (value === "true" || value === "false") return this.v(value === "true" ? "Yes" : "No");
+    if (typeof value === "boolean") return this.v(value ? YES() : NO());
+    if (value === "true" || value === "false") return this.v(value === "true" ? YES() : NO());
     if (typeof value === "string" || typeof value === "number") {
       return this.v(String(value));
     }
@@ -1289,6 +1406,14 @@ export class CardActivityComponent {
     return addedNames.length === 1 && addedNames[0] === event.actorName;
   }
 
+  private activityDueDate(payload: Record<string, unknown>): string {
+    return formatDueDate(
+      payload["dueDateLocalDate"] as string | null | undefined,
+      payload["dueDateSlot"] as DueDateSlotSelection | null | undefined,
+      payload["dueDateTimezone"] as string | null | undefined,
+    );
+  }
+
   private activityPayloadText(payload: Record<string, unknown>, key: string): string | null {
     const value = payload[key];
     return typeof value === "string" && value.length > 0 ? value : null;
@@ -1299,13 +1424,16 @@ export class CardActivityComponent {
   }
 
   private activityNameList(names: string[]): string {
-    if (names.length === 1) return this.v(names[0]!);
-    if (names.length === 2) return `${this.v(names[0]!)} and ${this.v(names[1]!)}`;
-    return `${names.slice(0, -1).map((name) => this.v(name)).join(", ")}, and ${this.v(names[names.length - 1]!)}`;
+    // The language's own list joiners ("A, B and C", "A、B、C"), with each name wrapped as a value.
+    // Names are formatted as opaque tokens first so a comma or "and" inside a name stays intact.
+    listFormat ??= new Intl.ListFormat(appLocale(), { type: "conjunction" });
+    return listFormat.formatToParts(names)
+      .map((part) => part.type === "element" ? this.v(part.value) : this.esc(part.value))
+      .join("");
   }
 
   private activityFieldName(payload: Record<string, unknown>): string {
     const fieldName = payload["fieldName"];
-    return typeof fieldName === "string" && fieldName.length > 0 ? fieldName : "Custom field";
+    return typeof fieldName === "string" && fieldName.length > 0 ? fieldName : $localize`:Stand-in for an unnamed custom field:Custom field`;
   }
 }

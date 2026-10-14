@@ -1,7 +1,10 @@
+import type { Locale } from "@kanera/shared/locales";
 import type { StorageWarningEmailQueueData } from "@kanera/shared/schema";
-import { button, emailLayout, fallbackLink, heading, mutedHtml, paragraph } from "./layout.js";
+import { serverMessages } from "../i18n/messages/index.js";
+import { button, emailLayout, fallbackLink, heading, mutedHtml, paragraph, text } from "./layout.js";
 
-export type StorageWarningEmailParams = StorageWarningEmailQueueData;
+/** Size labels are already formatted in `locale`. */
+export type StorageWarningEmailParams = StorageWarningEmailQueueData & { locale: Locale };
 
 /**
  * Sent once to owners and admins when a hosted organisation nears its storage quota, before uploads
@@ -9,21 +12,20 @@ export type StorageWarningEmailParams = StorageWarningEmailQueueData;
  * option, and only for a Free organisation that would actually gain storage.
  */
 export function storageWarningEmail(params: StorageWarningEmailParams): string {
-  const subject = `${params.orgName} is running out of storage`;
-  const upgradeLine = params.upgradeQuotaLabel
-    ? `Upgrading to Kanera Pro raises the allowance to ${params.upgradeQuotaLabel}.`
-    : "If you need more room than your plan includes, reply to this email and we'll help.";
+  const m = serverMessages(params.locale).email.storageWarning;
+  const subject = m.subject({ org: params.orgName });
+  const upgradeLine = params.upgradeQuotaLabel ? m.upgrade({ quota: params.upgradeQuotaLabel }) : m.noUpgrade;
   const body = `
-    ${heading("You're close to your storage limit")}
-    ${paragraph(`Hi ${firstName(params.displayName)}, ${params.orgName} has used ${params.usedLabel} of its ${params.quotaLabel} storage allowance (${params.percentUsed}%).`, "0 0 14px 0")}
-    ${paragraph("When it's full, nobody in the organisation can upload attachments or paste images until space is freed.", "0 0 14px 0")}
-    ${paragraph("You can free space yourself under Settings → Organisation → Storage. Its Clean up files list shows your organisation's largest and oldest files, including ones on archived cards that nobody sees anymore, and lets you filter them by size, age and workspace, then delete up to 100 at a time.", "0 0 14px 0")}
+    ${heading(m.heading)}
+    ${paragraph(m.intro({ firstName: firstName(params.displayName), org: params.orgName, used: params.usedLabel, quota: params.quotaLabel, percent: params.percentUsed }), "0 0 14px 0")}
+    ${paragraph(m.whenFull, "0 0 14px 0")}
+    ${paragraph(m.howToFree, "0 0 14px 0")}
     ${paragraph(upgradeLine)}
-    ${button({ href: params.storageUrl, label: "Clean up storage" })}
-    ${fallbackLink(params.storageUrl)}
-    ${mutedHtml("You're receiving this because you're an owner or admin of this organisation. We send it once each time usage approaches the limit.", "18px 0 0 0")}
+    ${button({ href: params.storageUrl, label: m.button })}
+    ${fallbackLink(params.storageUrl, params.locale)}
+    ${mutedHtml(text(m.footer), "18px 0 0 0")}
   `;
-  return emailLayout({ subject, preheader: `${params.percentUsed}% of ${params.quotaLabel} used. Free up space before uploads stop.`, body });
+  return emailLayout({ locale: params.locale, subject, preheader: m.preheader({ percent: params.percentUsed, quota: params.quotaLabel }), body });
 }
 
 function firstName(displayName: string): string {

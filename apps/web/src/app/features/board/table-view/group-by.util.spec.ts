@@ -287,7 +287,7 @@ describe("groupCards", () => {
       ]),
     });
 
-    expect(groups.map((group) => group.label)).toEqual(["2026-06-01", "2026-06-10", "No Start"]);
+    expect(groups.map((group) => group.label)).toEqual(["1 Jun 2026", "10 Jun 2026", "No Start"]);
     expect(groups.map((group) => group.cards.map((c) => c.id))).toEqual([["b"], ["a"], ["c"]]);
   });
 

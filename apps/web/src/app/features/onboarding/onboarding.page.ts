@@ -8,10 +8,13 @@ import type { CustomFieldTypeName } from "@kanera/shared/dto";
 import { CARD_LABEL_NAME_MAX_LENGTH, WORKSPACE_ENTITY_NAME_MAX_LENGTH } from "@kanera/shared/dto/name-limits";
 import type { Board, Workspace } from "@kanera/shared/schema";
 import { DEFAULT_WORKSPACE_TEMPLATE, WORKSPACE_TEMPLATES } from "@kanera/shared/workspace-templates";
+import { localizeWorkspaceTemplate } from "@kanera/shared/workspace-template-localize";
 import type { WorkspaceTemplate, WorkspaceTemplateId } from "@kanera/shared/workspace-templates";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
 import { markOnboardingSkipped } from "../../core/auth/onboarding-skip";
+import { icu } from "../../core/i18n/icu";
+import { translateTemplateText } from "../../core/i18n/workspace-template.messages";
 import { SocketService } from "../../core/realtime/socket.service";
 import { ColorPickerComponent } from "../../shared/color-picker.component";
 import { IconPickerComponent } from "../../shared/icon-picker.component";
@@ -43,6 +46,15 @@ type OnboardingWorkspaceResponse = Workspace & { initialBoard?: Board };
 type OnboardingStandaloneBoardResponse = Workspace & { initialBoard: Board };
 type OnboardingHomeResponse = { groups: { boards: unknown[] }[] };
 type SetupKind = "choice" | "board" | "workspace";
+
+// Templates are shown and created in the viewer's language. Every name the template's starter cards
+// and automations refer to goes through the same translation, so the seed payload still resolves
+// against the (possibly edited) lists, labels and fields the person keeps.
+const LOCALIZED_TEMPLATES = WORKSPACE_TEMPLATES.map((template) => localizeWorkspaceTemplate(template, translateTemplateText));
+const DEFAULT_TEMPLATE = LOCALIZED_TEMPLATES.find((template) => template.id === DEFAULT_WORKSPACE_TEMPLATE.id)!;
+
+const DUPLICATE_FIELD_NAME = $localize`Custom field names must be unique within a workspace.`;
+const OFFLINE_ERROR = $localize`You're offline. Reconnect and try again.`;
 
 const normalizeCustomFieldName = (name: string) => name.trim().toLocaleLowerCase();
 const draftId = (prefix: string, index: number) => `${prefix}-${index + 1}`;
@@ -86,20 +98,20 @@ export class OnboardingPage implements OnInit {
     void this.refreshBoardHeadroom();
   }
 
-  readonly templates = WORKSPACE_TEMPLATES;
+  readonly templates = LOCALIZED_TEMPLATES;
   readonly step = signal<1 | 2 | 3 | 4 | 5 | 6>(1);
-  readonly selectedTemplateId = signal<WorkspaceTemplateId>(DEFAULT_WORKSPACE_TEMPLATE.id);
-  readonly boardTemplateId = signal<WorkspaceTemplateId>(DEFAULT_WORKSPACE_TEMPLATE.id);
-  readonly boardIcon = signal(DEFAULT_WORKSPACE_TEMPLATE.icon);
+  readonly selectedTemplateId = signal<WorkspaceTemplateId>(DEFAULT_TEMPLATE.id);
+  readonly boardTemplateId = signal<WorkspaceTemplateId>(DEFAULT_TEMPLATE.id);
+  readonly boardIcon = signal(DEFAULT_TEMPLATE.icon);
   readonly boardIconColor = signal<ColorToken | null>(null);
   readonly hasEditedBoardIcon = signal(false);
   readonly boardName = signal("");
-  readonly name = signal(DEFAULT_WORKSPACE_TEMPLATE.workspaceName);
-  readonly icon = signal(DEFAULT_WORKSPACE_TEMPLATE.icon);
+  readonly name = signal(DEFAULT_TEMPLATE.workspaceName);
+  readonly icon = signal(DEFAULT_TEMPLATE.icon);
   readonly hasEditedWorkspaceIdentity = signal(false);
-  readonly lists = signal<DraftItem[]>(draftListsFromTemplate(DEFAULT_WORKSPACE_TEMPLATE));
-  readonly fields = signal<DraftItem[]>(draftFieldsFromTemplate(DEFAULT_WORKSPACE_TEMPLATE));
-  readonly labels = signal<DraftLabel[]>(draftLabelsFromTemplate(DEFAULT_WORKSPACE_TEMPLATE));
+  readonly lists = signal<DraftItem[]>(draftListsFromTemplate(DEFAULT_TEMPLATE));
+  readonly fields = signal<DraftItem[]>(draftFieldsFromTemplate(DEFAULT_TEMPLATE));
+  readonly labels = signal<DraftLabel[]>(draftLabelsFromTemplate(DEFAULT_TEMPLATE));
   readonly boardCount = signal(0);
   readonly boardHeadroomLoaded = signal(false);
   readonly newList = signal("");
@@ -121,8 +133,10 @@ export class OnboardingPage implements OnInit {
   readonly canSkip = computed(() => !this.auth.user()?.hasWorkspace);
   readonly canReturnToSetupChoice = computed(() => !this.auth.user()?.hasWorkspace && this.mode() !== "workspace");
   readonly brandTitle = computed(() => {
-    if (this.setupKind() === "choice") return "Get started";
-    return this.setupKind() === "board" ? "Create a Board" : "Create a Workspace";
+    if (this.setupKind() === "choice") return $localize`:Onboarding page title:Get started`;
+    return this.setupKind() === "board"
+      ? $localize`:Onboarding page title:Create a Board`
+      : $localize`:Onboarding page title:Create a Workspace`;
   });
   readonly createsInitialBoard = computed(() => this.selectedTemplateId() !== "blank");
   readonly boardLimitReached = computed(() => {
@@ -132,8 +146,8 @@ export class OnboardingPage implements OnInit {
   readonly boardLimitMessage = computed(() => {
     const max = this.auth.maxBoards();
     return max === null
-      ? "Your plan's board limit has been reached. Upgrade to add more."
-      : `Your plan allows ${max} board${max === 1 ? "" : "s"}. Upgrade your plan to finish onboarding.`;
+      ? $localize`Your plan's board limit has been reached. Upgrade to add more.`
+      : icu($localize`:Shown when the plan's board limit blocks onboarding:{max, plural, one {Your plan allows # board.} other {Your plan allows # boards.}} Upgrade your plan to finish onboarding.`, { max });
   });
   readonly isBlankTemplate = computed(() => this.selectedTemplateId() === "blank");
   readonly canUseOnboarding = computed(() => this.boardHeadroomLoaded() && (!this.createsInitialBoard() || !this.boardLimitReached()));
@@ -144,7 +158,7 @@ export class OnboardingPage implements OnInit {
   readonly customFieldValidation = computed(() => {
     const name = this.newField().trim();
     if (!name) return null;
-    return this.hasDuplicateFieldName(name) ? "Custom field names must be unique within a workspace." : null;
+    return this.hasDuplicateFieldName(name) ? DUPLICATE_FIELD_NAME : null;
   });
 
   chooseSetupKind(kind: Exclude<SetupKind, "choice">) {
@@ -261,7 +275,7 @@ export class OnboardingPage implements OnInit {
     const current = this.fields().find((field) => field.id === fieldId);
     if (!current || current.name === name) return;
     if (this.fields().some((field) => field.id !== fieldId && normalizeCustomFieldName(field.name) === normalizeCustomFieldName(name))) {
-      this.error.set("Custom field names must be unique within a workspace.");
+      this.error.set(DUPLICATE_FIELD_NAME);
       return;
     }
     this.error.set(null);
@@ -433,7 +447,7 @@ export class OnboardingPage implements OnInit {
     }
     const name = this.boardName().trim();
     if (!name) {
-      this.error.set("Enter a board name before finishing setup.");
+      this.error.set($localize`Enter a board name before finishing setup.`);
       return;
     }
     const template = this.templateById(this.boardTemplateId());
@@ -471,7 +485,7 @@ export class OnboardingPage implements OnInit {
     }
     const name = this.name().trim();
     if (!name) {
-      this.error.set("Enter a workspace name before finishing setup.");
+      this.error.set($localize`Enter a workspace name before finishing setup.`);
       this.step.set(3);
       return;
     }
@@ -523,30 +537,30 @@ export class OnboardingPage implements OnInit {
 
   private describeError(error: unknown): string {
     if (error instanceof ApiError) {
-      if (error.status === 0) return "You're offline. Reconnect and try again.";
+      if (error.status === 0) return OFFLINE_ERROR;
       if (this.isPlanLimitError(error.body)) return this.boardLimitMessage();
       const message = this.messageFromBody(error.body);
       if (message) return message;
-      if (error.status === 401) return "Your session expired. Sign in again to finish setup.";
-      if (error.status === 403) return "Only organisation admins can finish workspace setup.";
-      return `Setup failed with status ${error.status}. Try again.`;
+      if (error.status === 401) return $localize`Your session expired. Sign in again to finish setup.`;
+      if (error.status === 403) return $localize`Only organisation admins can finish workspace setup.`;
+      return $localize`:An HTTP status code follows:Setup failed with status ${error.status}:status:. Try again.`;
     }
     if (error instanceof Error && error.message) return error.message;
-    return "Setup failed. Try again.";
+    return $localize`Setup failed. Try again.`;
   }
 
   private describeStandaloneBoardError(error: unknown): string {
     if (error instanceof ApiError) {
-      if (error.status === 0) return "You're offline. Reconnect and try again.";
+      if (error.status === 0) return OFFLINE_ERROR;
       if (this.isPlanLimitError(error.body)) return this.boardLimitMessage();
       const message = this.messageFromBody(error.body);
       if (message) return message;
-      if (error.status === 401) return "Your session expired. Sign in again to create the board.";
-      if (error.status === 403) return "Only organisation admins can create boards.";
-      return `Board creation failed with status ${error.status}. Try again.`;
+      if (error.status === 401) return $localize`Your session expired. Sign in again to create the board.`;
+      if (error.status === 403) return $localize`Only organisation admins can create boards.`;
+      return $localize`:An HTTP status code follows:Board creation failed with status ${error.status}:status:. Try again.`;
     }
     if (error instanceof Error && error.message) return error.message;
-    return "Could not create the board. Try again.";
+    return $localize`Could not create the board. Try again.`;
   }
 
   private messageFromBody(body: unknown): string | null {
@@ -585,7 +599,22 @@ export class OnboardingPage implements OnInit {
   }
 
   private templateById(templateId: WorkspaceTemplateId): WorkspaceTemplate {
-    return this.templates.find((template) => template.id === templateId) ?? DEFAULT_WORKSPACE_TEMPLATE;
+    return this.templates.find((template) => template.id === templateId) ?? DEFAULT_TEMPLATE;
+  }
+
+  /** Accessible name and tooltip for the delete button beside a list, custom field or label. */
+  deleteItemLabel(name: string): string {
+    return $localize`:Button label; the name of a list, custom field or label follows:Delete ${name}:name:`;
+  }
+
+  multipleValuesTooltip(allowMultiple: boolean | undefined): string {
+    return allowMultiple
+      ? $localize`Multiple values allowed - click for single`
+      : $localize`Single value - click to allow multiple`;
+  }
+
+  multipleValuesAriaLabel(allowMultiple: boolean | undefined): string {
+    return allowMultiple ? $localize`Switch to single value` : $localize`Allow multiple values`;
   }
 
   private nextDraftId(prefix: string): string {

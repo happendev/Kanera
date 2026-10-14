@@ -49,70 +49,70 @@ function settingsTabRoutes(tabs: readonly string[]): Routes {
 export const routes: Routes = [
   {
     path: "login",
-    title: "Login",
+    title: $localize`:Browser tab title — sign-in page:Login`,
     canActivate: [publicAuthGuard],
     loadComponent: () => import("./features/auth/login.page").then((m) => m.LoginPage),
   },
   {
     path: "signup",
-    title: "Sign Up",
+    title: $localize`:Browser tab title:Sign Up`,
     canActivate: [publicAuthGuard],
     loadComponent: () => import("./features/auth/signup.page").then((m) => m.SignupPage),
   },
   {
     path: "forgot-password",
-    title: "Forgot Password",
+    title: $localize`:Browser tab title:Forgot Password`,
     loadComponent: () => import("./features/auth/forgot-password.page").then((m) => m.ForgotPasswordPage),
   },
   {
     path: "reset-password",
-    title: "Reset Password",
+    title: $localize`:Browser tab title:Reset Password`,
     canActivate: [resetPasswordGuard],
     loadComponent: () => import("./features/auth/reset-password.page").then((m) => m.ResetPasswordPage),
   },
   {
     // Reached from lifecycle emails; deliberately unguarded so it works signed in or out.
     path: "email/unsubscribe",
-    title: "Unsubscribe",
+    title: $localize`:Browser tab title — email unsubscribe page:Unsubscribe`,
     loadComponent: () => import("./features/email-unsubscribe/email-unsubscribe.page").then((m) => m.EmailUnsubscribePage),
   },
   {
     path: "board-invite",
-    title: "Board Invitation",
+    title: $localize`:Browser tab title:Board Invitation`,
     loadComponent: () => import("./features/board-invite/board-invite.page").then((m) => m.BoardInvitePage),
   },
   {
     path: "invite",
-    title: "Organisation Invitation",
+    title: $localize`:Browser tab title:Organisation Invitation`,
     loadComponent: () => import("./features/invite/invite.page").then((m) => m.InvitePage),
   },
   {
     // Consumes a support-session token minted by the superadmin-gated API endpoint. Intentionally
     // unguarded so an operator can enter a session regardless of their own login state.
     path: "support/enter",
-    title: "Support Session",
+    title: $localize`:Browser tab title:Support Session`,
     loadComponent: () => import("./features/support/support-enter.page").then((m) => m.SupportEnterPage),
   },
   {
     path: "trello-auth-callback",
-    title: "Trello Connection",
+    title: $localize`:Browser tab title:Trello Connection`,
     loadComponent: () => import("./features/import/trello-auth-callback.page").then((m) => m.TrelloAuthCallbackPage),
   },
   {
     path: "oauth/authorize",
-    title: "Connect AI agent",
+    title: $localize`:Browser tab title:Connect AI agent`,
     canActivate: [authGuard],
     loadComponent: () => import("./features/oauth/oauth-authorize.page").then((m) => m.OauthAuthorizePage),
   },
   {
     path: "oauth/device",
-    title: "Connect a device",
+    title: $localize`:Browser tab title:Connect a device`,
     canActivate: [authGuard],
     loadComponent: () => import("./features/oauth/oauth-device.page").then((m) => m.OauthDevicePage),
   },
   {
     path: "onboarding",
-    title: "Onboarding",
+    title: $localize`:Browser tab title — onboarding:Onboarding`,
     canActivate: [authGuard, onboardingGuard],
     loadComponent: () => import("./features/onboarding/onboarding.page").then((m) => m.OnboardingPage),
   },
@@ -121,7 +121,7 @@ export const routes: Routes = [
     // `authGuard` alone, without `workspaceGuard` — a scratchpad is private to the user and has no
     // workspace to resolve, so gating it on one would only redirect this tab into onboarding.
     path: "scratchpad",
-    title: "Scratchpad",
+    title: $localize`:Browser tab title — scratchpad:Scratchpad`,
     canActivate: [authGuard],
     loadComponent: () => import("./features/scratchpad/scratchpad.page").then((m) => m.ScratchpadPage),
   },
@@ -132,26 +132,26 @@ export const routes: Routes = [
     children: [
       {
         path: "",
-        title: "Home",
+        title: $localize`:Browser tab title — home page:Home`,
         loadComponent: () => import("./features/home/home.page").then((m) => m.HomePage),
       },
       {
         matcher: collectionWithOptionalCard("my-cards"),
-        title: "My Cards",
+        title: $localize`:Browser tab title:My Cards`,
         data: { lens: "my", routePattern: "/my-cards", cardRoutePattern: "/my-cards/c/:cardId" },
         canDeactivate: [unsavedWorkCanDeactivateGuard],
         loadComponent: () => import("./features/global-work/global-work.page").then((m) => m.GlobalWorkPage),
       },
       {
         matcher: collectionWithOptionalCard("team-cards"),
-        title: "Team Cards",
+        title: $localize`:Browser tab title:Team Cards`,
         data: { lens: "team", routePattern: "/team-cards", cardRoutePattern: "/team-cards/c/:cardId" },
         canDeactivate: [unsavedWorkCanDeactivateGuard],
         loadComponent: () => import("./features/global-work/global-work.page").then((m) => m.GlobalWorkPage),
       },
       {
         matcher: collectionWithOptionalCard("portfolio"),
-        title: "Portfolio",
+        title: $localize`:Browser tab title — portfolio page:Portfolio`,
         data: { lens: "portfolio", routePattern: "/portfolio", cardRoutePattern: "/portfolio/c/:cardId" },
         canActivate: [portfolioGuard],
         canDeactivate: [unsavedWorkCanDeactivateGuard],
@@ -159,7 +159,7 @@ export const routes: Routes = [
       },
       {
         path: "w/:workspaceId/settings",
-        title: "Workspace Settings",
+        title: $localize`:Browser tab title:Workspace Settings`,
         canActivate: [workspaceSettingsGuard],
         canDeactivate: [importNavigationCanDeactivateGuard, unsavedWorkCanDeactivateGuard],
         loadComponent: () =>
@@ -172,7 +172,7 @@ export const routes: Routes = [
       },
       {
         path: "b/:boardId/settings",
-        title: "Board Settings",
+        title: $localize`:Browser tab title:Board Settings`,
         data: { standalone: true },
         canActivate: [standaloneBoardSettingsGuard],
         canDeactivate: [importNavigationCanDeactivateGuard, unsavedWorkCanDeactivateGuard],
@@ -189,7 +189,7 @@ export const routes: Routes = [
       },
       {
         path: "settings",
-        title: "Settings",
+        title: $localize`:Browser tab title — account settings:Settings`,
         // Settings autosave, so this only prompts for the few explicit-Save forms and drafts still awaiting a blur.
         canDeactivate: [unsavedWorkCanDeactivateGuard],
         loadComponent: () =>
@@ -210,25 +210,25 @@ export const routes: Routes = [
       },
       {
         path: "w/:workspaceId/notes",
-        title: "Notes",
+        title: $localize`:Browser tab title — notes page:Notes`,
         canDeactivate: [unsavedWorkCanDeactivateGuard],
         loadComponent: () =>
           import("./features/notes/workspace-notes.page").then((m) => m.WorkspaceNotesPage),
       },
       {
         path: "share-target",
-        title: "Create card",
+        title: $localize`:Browser tab title:Create card`,
         loadComponent: () =>
           import("./features/share-target/share-target.page").then((m) => m.ShareTargetPage),
       },
       {
         path: "o/:organisationKey/c/:cardKey",
-        title: "Card",
+        title: $localize`:Browser tab title — a card page:Card`,
         loadComponent: () => import("./features/board/card-key-redirect.page").then((m) => m.CardKeyRedirectPage),
       },
       {
         matcher: boardWithOptionalCard,
-        title: "Board",
+        title: $localize`:Browser tab title — a board page:Board`,
         data: { routePattern: "/b/:boardId", cardRoutePattern: "/b/:boardId/c/:cardId" },
         canDeactivate: [unsavedWorkCanDeactivateGuard],
         loadComponent: () => import("./features/board/board.page").then((m) => m.BoardPage),
@@ -240,7 +240,7 @@ export const routes: Routes = [
     // Say so instead of silently dropping the user on the home page as if the link had worked.
     path: "**",
     redirectTo: () => {
-      inject(ToastService).error("That link doesn't point to anything in Kanera.", "link-off");
+      inject(ToastService).error($localize`That link doesn't point to anything in Kanera.`, "link-off");
       return "";
     },
   },

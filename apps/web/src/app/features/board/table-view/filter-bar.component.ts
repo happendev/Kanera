@@ -23,6 +23,8 @@ import {
   operatorUsesIds,
 } from "./filter.types";
 import { hasActiveFilter } from "./filter.util";
+import { formatDate } from "../../../shared/date-format";
+import { icu } from "../../../core/i18n/icu";
 import type { AnyCustomField } from "./table-view.types";
 
 const CF_VALUE_DEBOUNCE_MS = 250;
@@ -63,11 +65,11 @@ export interface FilterBoard {
 type PanelView = "menu" | "labels" | "members" | "lists" | "boards" | "work-done-type" | "cf-list" | "cf-edit" | "completed";
 
 const WORK_DONE_TYPE_OPTIONS: { id: WorkDoneEventType | null; label: string; icon: string }[] = [
-  { id: null, label: "All activity", icon: "history" },
-  { id: "completed", label: "Completed", icon: "circle-check" },
-  { id: "moved", label: "Moved", icon: "arrow-right" },
-  { id: "created", label: "Created", icon: "plus" },
-  { id: "checklistItemCompleted", label: "Checklist items", icon: "checkbox" },
+  { id: null, label: $localize`:Activity type filter option - every kind of activity:All activity`, icon: "history" },
+  { id: "completed", label: $localize`:Activity type filter option - cards that were completed:Completed`, icon: "circle-check" },
+  { id: "moved", label: $localize`:Activity type filter option - cards that were moved between lists:Moved`, icon: "arrow-right" },
+  { id: "created", label: $localize`:Activity type filter option - cards that were created:Created`, icon: "plus" },
+  { id: "checklistItemCompleted", label: $localize`:Activity type filter option - checklist items that were ticked off:Checklist items`, icon: "checkbox" },
 ];
 
 /** A generic selectable row used by the label / member / list / board / id-set pickers. */
@@ -138,7 +140,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
         (click)="toggleOpen()"
       >
         <i class="ti ti-filter"></i>
-        @if (!compact()) { <span>Filter</span> }
+        @if (!compact()) { <span i18n="Button that opens the filter panel">Filter</span> }
         @if (activeCount() > 0) { <span class="fb-badge">{{ activeCount() }}</span> }
       </button>
       <!-- "Clear all" also lives at the foot of the panel, but that is two clicks and a scroll past
@@ -148,7 +150,9 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
           type="button"
           class="fb-btn-clear"
           kTooltip="Clear filters"
+          i18n-kTooltip
           aria-label="Clear filters"
+          i18n-aria-label
           (click)="clearAll.emit()"
         >
           <i class="ti ti-x"></i>
@@ -161,22 +165,22 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
             @case ('menu') {
               <div class="fb-menu">
                 @if (showActivity() || showPrioritySet()) {
-                  <div class="fb-section-label">Quick filters</div>
+                  <div class="fb-section-label" i18n="Filter panel section heading">Quick filters</div>
                 }
                 @if (showActivity()) {
                   <button type="button" class="fb-row" [class.active]="value().showUnreadOnly" (click)="toggleUnread()">
-                    <i class="ti ti-bell fb-row-icon"></i><span class="fb-row-name">Unread</span>
+                    <i class="ti ti-bell fb-row-icon"></i><span class="fb-row-name" i18n="Quick filter - cards with unread activity">Unread</span>
                     @if (value().showUnreadOnly) { <i class="ti ti-check fb-row-check"></i> }
                   </button>
                   <button type="button" class="fb-row" [class.active]="value().showOverdueOnly" (click)="toggleOverdue()">
-                    <i class="ti ti-alert-circle fb-row-icon"></i><span class="fb-row-name">Overdue</span>
+                    <i class="ti ti-alert-circle fb-row-icon"></i><span class="fb-row-name" i18n="Quick filter - cards past their due date">Overdue</span>
                     @if (value().showOverdueOnly) { <i class="ti ti-check fb-row-check"></i> }
                   </button>
                   <button type="button" class="fb-row" [class.active]="value().showInactiveOnly" (click)="toggleInactive()">
                     <i class="ti ti-clock-pause fb-row-icon"></i>
                     <span class="fb-row-text">
-                      <span class="fb-row-name">Inactive</span>
-                      <small>No activity for 14 days</small>
+                      <span class="fb-row-name" i18n="Quick filter - cards with no recent activity">Inactive</span>
+                      <small i18n>No activity for 14 days</small>
                     </span>
                     @if (value().showInactiveOnly) { <i class="ti ti-check fb-row-check"></i> }
                   </button>
@@ -185,8 +189,8 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                   <button type="button" class="fb-row" [class.active]="value().showPrioritySetOnly" (click)="togglePrioritySet()">
                     <i class="ti ti-list-numbers fb-row-icon"></i>
                     <span class="fb-row-text">
-                      <span class="fb-row-name">In Up next</span>
-                      <small>Only cards in your Up next</small>
+                      <span class="fb-row-name" i18n="Quick filter - cards in the viewer's Up next queue">In Up next</span>
+                      <small i18n>Only cards in your Up next</small>
                     </span>
                     @if (value().showPrioritySetOnly) { <i class="ti ti-check fb-row-check"></i> }
                   </button>
@@ -195,8 +199,8 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                   <button type="button" class="fb-row" [class.active]="value().showReminderSetOnly" (click)="toggleReminderSet()">
                     <i class="ti ti-alarm fb-row-icon"></i>
                     <span class="fb-row-text">
-                      <span class="fb-row-name">Reminder set</span>
-                      <small>Cards you set a reminder on</small>
+                      <span class="fb-row-name" i18n="Quick filter - cards the viewer set a reminder on">Reminder set</span>
+                      <small i18n>Cards you set a reminder on</small>
                     </span>
                     @if (value().showReminderSetOnly) { <i class="ti ti-check fb-row-check"></i> }
                   </button>
@@ -204,79 +208,83 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                 <!-- Section headings turn the previously flat menu into scannable groups: what a
                      card *is* (labels/people/place/fields) versus its lifecycle state. -->
                 @if (labels().length || (showMembers() && members().length) || (showBoards() && boards().length) || showWorkDoneType() || lists().length || customFields().length) {
-                  <div class="fb-section-label">{{ showWorkDoneType() ? 'Work done' : 'Card details' }}</div>
+                  @if (showWorkDoneType()) {
+                    <div class="fb-section-label" i18n="Filter panel section heading">Work done</div>
+                  } @else {
+                    <div class="fb-section-label" i18n="Filter panel section heading">Card details</div>
+                  }
                 }
                 @if (labels().length) {
                   <button type="button" class="fb-row" (click)="go('labels')">
-                    <i class="ti ti-tag fb-row-icon"></i><span class="fb-row-name">Labels</span>
+                    <i class="ti ti-tag fb-row-icon"></i><span class="fb-row-name" i18n="Filter dimension">Labels</span>
                     @if (labelSummary()) { <span class="fb-row-summary">{{ labelSummary() }}</span> }
                     <i class="ti ti-chevron-right fb-row-caret"></i>
                   </button>
                 }
                 @if (showMembers() && members().length) {
                   <button type="button" class="fb-row" (click)="go('members')">
-                    <i class="ti ti-user fb-row-icon"></i><span class="fb-row-name">Members</span>
+                    <i class="ti ti-user fb-row-icon"></i><span class="fb-row-name" i18n="Filter dimension">Members</span>
                     @if (memberSummary()) { <span class="fb-row-summary">{{ memberSummary() }}</span> }
                     <i class="ti ti-chevron-right fb-row-caret"></i>
                   </button>
                 }
                 @if (showBoards() && boards().length) {
                   <button type="button" class="fb-row" (click)="go('boards')">
-                    <i class="ti ti-clipboard-list fb-row-icon"></i><span class="fb-row-name">Boards</span>
+                    <i class="ti ti-clipboard-list fb-row-icon"></i><span class="fb-row-name" i18n="Filter dimension">Boards</span>
                     @if (boardSummary()) { <span class="fb-row-summary">{{ boardSummary() }}</span> }
                     <i class="ti ti-chevron-right fb-row-caret"></i>
                   </button>
                 }
                 @if (showWorkDoneType()) {
                   <button type="button" class="fb-row" [class.active]="workDoneEventType() !== null" (click)="go('work-done-type')">
-                    <i class="ti ti-activity fb-row-icon"></i><span class="fb-row-name">Activity type</span>
+                    <i class="ti ti-activity fb-row-icon"></i><span class="fb-row-name" i18n="Filter dimension - the kind of work-done activity">Activity type</span>
                     @if (workDoneEventTypeLabel()) { <span class="fb-row-summary">{{ workDoneEventTypeLabel() }}</span> }
                     <i class="ti ti-chevron-right fb-row-caret"></i>
                   </button>
                 }
                 @if (lists().length) {
                   <button type="button" class="fb-row" (click)="go('lists')">
-                    <i class="ti ti-layout-list fb-row-icon"></i><span class="fb-row-name">Lists</span>
+                    <i class="ti ti-layout-list fb-row-icon"></i><span class="fb-row-name" i18n="Filter dimension">Lists</span>
                     @if (listSummary()) { <span class="fb-row-summary">{{ listSummary() }}</span> }
                     <i class="ti ti-chevron-right fb-row-caret"></i>
                   </button>
                 }
                 @if (customFields().length) {
                   <button type="button" class="fb-row" (click)="go('cf-list')">
-                    <i class="ti ti-adjustments fb-row-icon"></i><span class="fb-row-name">Custom fields</span>
+                    <i class="ti ti-adjustments fb-row-icon"></i><span class="fb-row-name" i18n="Filter dimension">Custom fields</span>
                     @if (value().cfConditions.length) { <span class="fb-count">{{ value().cfConditions.length }}</span> }
                     <i class="ti ti-chevron-right fb-row-caret"></i>
                   </button>
                 }
                 @if (showCompleted() || showArchived() || showHideCompleted()) {
-                  <div class="fb-section-label">Card status</div>
+                  <div class="fb-section-label" i18n="Filter panel section heading">Card status</div>
                 }
                 @if (showHideCompleted()) {
                   <button type="button" class="fb-row" [class.active]="hideCompleted()" (click)="hideCompletedChange.emit(!hideCompleted())">
                     <i class="ti ti-eye-off fb-row-icon"></i>
                     <span class="fb-row-text">
-                      <span class="fb-row-name">Hide completed</span>
-                      <small>Recently completed cards show by default</small>
+                      <span class="fb-row-name" i18n="Filter option - hide completed cards">Hide completed</span>
+                      <small i18n>Recently completed cards show by default</small>
                     </span>
                     @if (hideCompleted()) { <i class="ti ti-check fb-row-check"></i> }
                   </button>
                 }
                 @if (showCompleted()) {
                   <button type="button" class="fb-row" [class.active]="completedActive()" (click)="go('completed')">
-                    <i class="ti ti-circle-check fb-row-icon"></i><span class="fb-row-name">Completed</span>
+                    <i class="ti ti-circle-check fb-row-icon"></i><span class="fb-row-name" i18n="Filter dimension - cards completed within a date range">Completed</span>
                     @if (completedActive()) { <span class="fb-row-summary">{{ completedLabel() }}</span> }
                     <i class="ti ti-chevron-right fb-row-caret"></i>
                   </button>
                 }
                 @if (showArchived()) {
                   <button type="button" class="fb-row" [class.active]="archived()" (click)="toggleArchived()">
-                    <i class="ti ti-archive fb-row-icon"></i><span class="fb-row-name">Archived</span>
+                    <i class="ti ti-archive fb-row-icon"></i><span class="fb-row-name" i18n="Filter option - show archived cards">Archived</span>
                     @if (archived()) { <i class="ti ti-check fb-row-check"></i> }
                   </button>
                 }
                 @if (anyActive()) {
                   <div class="fb-menu-foot">
-                    <button type="button" class="fb-clear" (click)="clearAll.emit()">Clear all</button>
+                    <button type="button" class="fb-clear" (click)="clearAll.emit()" i18n="Button - remove every filter">Clear all</button>
                   </div>
                 }
               </div>
@@ -284,8 +292,8 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
 
             @case ('cf-list') {
               <div class="fb-head">
-                <button type="button" class="fb-back" (click)="go('menu')" aria-label="Back"><i class="ti ti-chevron-left"></i></button>
-                <span class="fb-head-title">Custom fields</span>
+                <button type="button" class="fb-back" (click)="go('menu')" aria-label="Back" i18n-aria-label="Button - return to the previous filter panel"><i class="ti ti-chevron-left"></i></button>
+                <span class="fb-head-title" i18n="Filter panel heading">Custom fields</span>
               </div>
               @if (value().cfConditions.length) {
                 <div class="fb-list">
@@ -300,14 +308,14 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                             @if (fieldGroup(cond.fieldId); as group) { <small>{{ group }}</small> }
                           </span>
                         </button>
-                        <button type="button" class="fb-row-x" aria-label="Remove filter" (click)="removeCondition(i)"><i class="ti ti-x"></i></button>
+                        <button type="button" class="fb-row-x" aria-label="Remove filter" i18n-aria-label (click)="removeCondition(i)"><i class="ti ti-x"></i></button>
                       </div>
                     }
                   }
                 </div>
               }
-              <div class="fb-section-label">Add a field filter</div>
-              <input class="fb-search" type="text" placeholder="Search fields…" [value]="query()" (input)="query.set($any($event.target).value)" />
+              <div class="fb-section-label" i18n="Filter panel section heading">Add a field filter</div>
+              <input class="fb-search" type="text" placeholder="Search fields…" i18n-placeholder [value]="query()" (input)="query.set($any($event.target).value)" />
               <div class="fb-list">
                 @for (section of filteredFieldSections(); track section.key) {
                   @if (section.label) { <div class="fb-group">{{ section.label }}</div> }
@@ -318,7 +326,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                     </button>
                   }
                 } @empty {
-                  <p class="fb-empty">No matching fields</p>
+                  <p class="fb-empty" i18n>No matching fields</p>
                 }
               </div>
             }
@@ -327,9 +335,9 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
               @let cond = editingCondition();
               @let field = cond ? fieldById().get(cond.fieldId) : undefined;
               <div class="fb-head">
-                <button type="button" class="fb-back" (click)="go('cf-list')" aria-label="Back"><i class="ti ti-chevron-left"></i></button>
-                <span class="fb-head-title">{{ field?.name ?? 'Field' }}</span>
-                <button type="button" class="fb-remove" (click)="removeEditingCondition()" aria-label="Remove filter"><i class="ti ti-trash"></i></button>
+                <button type="button" class="fb-back" (click)="go('cf-list')" aria-label="Back" i18n-aria-label="Button - return to the previous filter panel"><i class="ti ti-chevron-left"></i></button>
+                <span class="fb-head-title">{{ field?.name ?? missingFieldTitle }}</span>
+                <button type="button" class="fb-remove" (click)="removeEditingCondition()" aria-label="Remove filter" i18n-aria-label><i class="ti ti-trash"></i></button>
               </div>
               @if (cond && field) {
                 <select class="fb-select" [value]="cond.op" (change)="changeOperator($any($event.target).value)">
@@ -351,10 +359,10 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                           @if (cfHasId(cond, row.id)) { <i class="ti ti-check fb-row-check"></i> }
                         </button>
                       }
-                      @if (cfIdRows(field).length === 0) { <p class="fb-empty">No options</p> }
+                      @if (cfIdRows(field).length === 0) { <p class="fb-empty" i18n="Empty state - a choice field has no options">No options</p> }
                     </div>
                   } @else if (field.type === 'number') {
-                    <input class="fb-value" type="number" placeholder="Value" [value]="cond.value ?? ''" (input)="patchCfDebounced({ value: $any($event.target).value })" />
+                    <input class="fb-value" type="number" placeholder="Value" i18n-placeholder="Placeholder for a filter's comparison value" [value]="cond.value ?? ''" (input)="patchCfDebounced({ value: $any($event.target).value })" />
                   } @else if (field.type === 'date') {
                     @if (cond.op === 'between') {
                       <div class="fb-date-range">
@@ -366,7 +374,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                       <input class="fb-value" type="date" [value]="cond.value ?? ''" (input)="patchCfDebounced({ value: $any($event.target).value })" />
                     }
                   } @else {
-                    <input class="fb-value" type="text" placeholder="Value" [value]="cond.value ?? ''" (input)="patchCfDebounced({ value: $any($event.target).value })" />
+                    <input class="fb-value" type="text" placeholder="Value" i18n-placeholder="Placeholder for a filter's comparison value" [value]="cond.value ?? ''" (input)="patchCfDebounced({ value: $any($event.target).value })" />
                   }
                 }
               }
@@ -374,8 +382,8 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
 
             @case ('completed') {
               <div class="fb-head">
-                <button type="button" class="fb-back" (click)="go('menu')" aria-label="Back"><i class="ti ti-chevron-left"></i></button>
-                <span class="fb-head-title">Completed</span>
+                <button type="button" class="fb-back" (click)="go('menu')" aria-label="Back" i18n-aria-label="Button - return to the previous filter panel"><i class="ti ti-chevron-left"></i></button>
+                <span class="fb-head-title" i18n="Filter panel heading - cards completed within a date range">Completed</span>
               </div>
               <!-- The shared calendar is embedded inline here (see the fb-drp style) so it lives
                    inside the panel with a Back button, rather than replacing the panel. -->
@@ -393,13 +401,13 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
 
             @case ('work-done-type') {
               <div class="fb-head">
-                <button type="button" class="fb-back" (click)="go('menu')" aria-label="Back"><i class="ti ti-chevron-left"></i></button>
-                <span class="fb-head-title">Activity type</span>
+                <button type="button" class="fb-back" (click)="go('menu')" aria-label="Back" i18n-aria-label="Button - return to the previous filter panel"><i class="ti ti-chevron-left"></i></button>
+                <span class="fb-head-title" i18n="Filter panel heading">Activity type</span>
                 @if (workDoneEventType() !== null) {
-                  <button type="button" class="fb-head-clear" (click)="selectWorkDoneEventType(null)">Clear</button>
+                  <button type="button" class="fb-head-clear" (click)="selectWorkDoneEventType(null)" i18n="Button - clear this filter">Clear</button>
                 }
               </div>
-              <div class="fb-list" role="radiogroup" aria-label="Activity type">
+              <div class="fb-list" role="radiogroup" aria-label="Activity type" i18n-aria-label="Filter panel heading">
                 @for (option of workDoneTypeOptions; track option.label) {
                   <button
                     type="button"
@@ -420,13 +428,13 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
             @default {
               <!-- labels / members / lists / boards: one searchable multi-select list -->
               <div class="fb-head">
-                <button type="button" class="fb-back" (click)="go('menu')" aria-label="Back"><i class="ti ti-chevron-left"></i></button>
+                <button type="button" class="fb-back" (click)="go('menu')" aria-label="Back" i18n-aria-label="Button - return to the previous filter panel"><i class="ti ti-chevron-left"></i></button>
                 <span class="fb-head-title">{{ dimensionTitle() }}</span>
                 @if (selectedIdsForView().length) {
-                  <button type="button" class="fb-head-clear" (click)="clearDimension()">Clear</button>
+                  <button type="button" class="fb-head-clear" (click)="clearDimension()" i18n="Button - clear this filter">Clear</button>
                 }
               </div>
-              <input class="fb-search" type="text" placeholder="Search…" [value]="query()" (input)="query.set($any($event.target).value)" />
+              <input class="fb-search" type="text" placeholder="Search…" i18n-placeholder [value]="query()" (input)="query.set($any($event.target).value)" />
               <div class="fb-list">
                 @for (section of filteredSections(); track section.key) {
                   @if (section.label) { <div class="fb-group">{{ section.label }}</div> }
@@ -444,7 +452,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                     </button>
                   }
                 } @empty {
-                  <p class="fb-empty">Nothing to show</p>
+                  <p class="fb-empty" i18n>Nothing to show</p>
                 }
               </div>
             }
@@ -819,6 +827,7 @@ export class FilterBarComponent implements OnDestroy {
    * default because the panel is tall and sits under a header that itself has 16px gutters.
    */
   // No fixed height cap: the panel grows to fit its rows and only scrolls once it would leave the viewport.
+  protected readonly missingFieldTitle = $localize`:Filter panel heading for a custom field that no longer exists:Field`;
   readonly panelPlacement: AnchoredPanelPlacement = { align: "start", width: 320, gap: 6, margin: 16, maxHeight: Number.POSITIVE_INFINITY };
 
   readonly value = input.required<FilterValue>();
@@ -900,8 +909,8 @@ export class FilterBarComponent implements OnDestroy {
    */
   readonly triggerLabel = computed(() => {
     const count = this.activeCount();
-    if (count === 0) return "Filter";
-    return count === 1 ? "Filter · 1 active" : `Filter · ${count} active`;
+    if (count === 0) return FILTER;
+    return icu($localize`:Filter button tooltip with the number of active filters:{count, plural, one {Filter · # active} other {Filter · # active}}`, { count });
   });
 
   readonly activeCount = computed(() => {
@@ -1062,10 +1071,10 @@ export class FilterBarComponent implements OnDestroy {
 
   readonly dimensionTitle = computed(() => {
     switch (this.view()) {
-      case "labels": return "Labels";
-      case "members": return "Members";
-      case "lists": return "Lists";
-      case "boards": return "Boards";
+      case "labels": return $localize`:Filter panel heading:Labels`;
+      case "members": return $localize`:Filter panel heading:Members`;
+      case "lists": return $localize`:Filter panel heading:Lists`;
+      case "boards": return $localize`:Filter panel heading:Boards`;
       default: return "";
     }
   });
@@ -1076,7 +1085,7 @@ export class FilterBarComponent implements OnDestroy {
       case "labels":
         return this.labels().map((l) => ({ id: l.id, label: l.name, color: l.color, group: l.group }));
       case "members":
-        return this.members().map((m) => ({ id: m.userId, label: m.userId === me ? "Me" : m.displayName, member: m, group: m.group }));
+        return this.members().map((m) => ({ id: m.userId, label: m.userId === me ? ME : m.displayName, member: m, group: m.group }));
       case "lists":
         return this.lists().map((l) => ({ id: l.id, label: l.name, icon: l.icon, group: l.group }));
       case "boards":
@@ -1170,7 +1179,7 @@ export class FilterBarComponent implements OnDestroy {
   cfIdRows(field: AnyCustomField): OptionRow[] {
     if (field.type === "user") {
       const me = this.currentUserId();
-      return this.members().map((m) => ({ id: m.userId, label: m.userId === me ? "Me" : m.displayName, member: m }));
+      return this.members().map((m) => ({ id: m.userId, label: m.userId === me ? ME : m.displayName, member: m }));
     }
     const options: WireCustomFieldOption[] = "options" in field ? field.options : [];
     return options.map((o) => ({ id: o.id, label: o.label, color: o.color }));
@@ -1255,7 +1264,7 @@ export class FilterBarComponent implements OnDestroy {
   // ---- Summaries --------------------------------------------------------------------------
 
   private memberName(id: string): string | undefined {
-    if (id === this.currentUserId()) return "Me";
+    if (id === this.currentUserId()) return ME;
     return this.membersById().get(id)?.displayName;
   }
 
@@ -1264,19 +1273,40 @@ export class FilterBarComponent implements OnDestroy {
     if (ids.length === 0) return "";
     const names = ids.map(nameOf).filter((n): n is string => !!n);
     if (names.length === 0) return `${ids.length}`;
-    return names.length === 1 ? names[0]! : `${names[0]} +${names.length - 1}`;
+    return firstPlusMore(names);
   }
 
   cfSummary(cond: CfFilterCondition, field: AnyCustomField): string {
     const opLabel = this.operatorsFor(field).find((o) => o.op === cond.op)?.label ?? cond.op;
-    if (operatorHasNoValue(cond.op)) return `${field.name} ${opLabel}`;
+    if (operatorHasNoValue(cond.op)) {
+      return $localize`:Active custom-field filter, e.g. "Approved is checked":${field.name}:field: ${opLabel}:operator:`;
+    }
     if (operatorUsesIds(cond.op)) {
       const rows = this.cfIdRows(field);
       const names = (cond.ids ?? []).map((id) => rows.find((r) => r.id === id)?.label).filter((n): n is string => !!n);
-      const summary = names.length === 0 ? "…" : names.length === 1 ? names[0]! : `${names[0]} +${names.length - 1}`;
-      return `${field.name} ${opLabel} ${summary}`;
+      const summary = names.length === 0 ? "…" : firstPlusMore(names);
+      return conditionSummary(field.name, opLabel, summary);
     }
-    if (cond.op === "between") return `${field.name} ${cond.value || "…"}–${cond.value2 || "…"}`;
-    return `${field.name} ${opLabel} ${cond.value || "…"}`;
+    // Dates are stored as YYYY-MM-DD; show them the way the rest of the UI writes a date.
+    const shown = (value: string | undefined) =>
+      !value ? "…" : field.type === "date" ? formatDate(value, "short") || value : value;
+    if (cond.op === "between") {
+      return $localize`:Active date-range filter, e.g. "Start 1 Mar–9 Mar":${field.name}:field: ${shown(cond.value)}:from:–${shown(cond.value2)}:to:`;
+    }
+    return conditionSummary(field.name, opLabel, shown(cond.value));
   }
+}
+
+const FILTER = $localize`:Button that opens the filter panel:Filter`;
+const ME = $localize`:The viewer themself in a list of people:Me`;
+
+/** "Bug", or "Bug +2" when more are selected. */
+function firstPlusMore(names: string[]): string {
+  if (names.length === 1) return names[0]!;
+  return $localize`:A first selected name and how many more, e.g. "Bug +2":${names[0]}:first: +${names.length - 1}:more:`;
+}
+
+/** "Hours > 4", "Client is any of Acme +1": a field, its operator and the operand. */
+function conditionSummary(field: string, operator: string, operand: string): string {
+  return $localize`:Active custom-field filter, e.g. "Client is any of Acme":${field}:field: ${operator}:operator: ${operand}:value:`;
 }

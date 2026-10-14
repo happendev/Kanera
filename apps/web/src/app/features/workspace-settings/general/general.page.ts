@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from "@angular/core";
+import { appLocale } from "../../../core/i18n/locale";
 import type { Board, StandaloneBoardGroup } from "@kanera/shared/schema";
 import { ApiClient, ApiError } from "../../../core/api/api.client";
 import { AnchoredPanelDirective } from "../../../shared/anchored-panel.directive";
@@ -31,6 +32,7 @@ export class WorkspaceSettingsGeneralPage {
   readonly standaloneGroupMenuOpen = signal(false);
   readonly standaloneGroupActiveIndex = signal(-1);
   readonly standaloneGroupPlacement = { width: 420, maxHeight: 220, minHeight: 120 } as const;
+  readonly nameLabel = computed(() => this.settings.isStandalone() ? $localize`Board name` : $localize`Workspace name`);
   readonly standaloneGroupChoices = computed(() => {
     const query = this.standaloneGroupTitle().trim();
     const normalizedQuery = query.toLocaleLowerCase();
@@ -62,7 +64,7 @@ export class WorkspaceSettingsGeneralPage {
     this.cardKeyPrefix.set(prefix);
     if (prefix === this.settings.workspace()?.cardKeyPrefix) return;
     if (!/^[A-Z][A-Z0-9]{1,9}$/.test(prefix)) {
-      this.cardKeyPrefixError.set("Use 2–10 letters or numbers, starting with a letter.");
+      this.cardKeyPrefixError.set($localize`Use 2–10 letters or numbers, starting with a letter.`);
       return;
     }
     this.cardKeyPrefixSaving.set(true);
@@ -80,11 +82,11 @@ export class WorkspaceSettingsGeneralPage {
   private cardKeyPrefixErrorMessage(error: unknown): string {
     if (error instanceof ApiError) {
       if (error.status === 409) {
-        return "That prefix is already reserved by another workspace in this organisation. Choose a different prefix.";
+        return $localize`That prefix is already reserved by another workspace in this organisation. Choose a different prefix.`;
       }
-      if (error.status === 0) return "You're offline. Reconnect and try again.";
+      if (error.status === 0) return $localize`You're offline. Reconnect and try again.`;
     }
-    return "Could not update the card key prefix. Try again.";
+    return $localize`Could not update the card key prefix. Try again.`;
   }
 
   private async loadStandaloneGrouping(boardId: string) {
@@ -94,12 +96,12 @@ export class WorkspaceSettingsGeneralPage {
         this.api.get<StandaloneBoardGroup[]>("/clients/me/standalone-board-groups"),
         this.api.get<Pick<Board, "standaloneGroupId">>(`/boards/${boardId}`),
       ]);
-      this.standaloneGroups.set([...groups].sort((a, b) => a.title.localeCompare(b.title)));
+      this.standaloneGroups.set([...groups].sort((a, b) => a.title.localeCompare(b.title, appLocale())));
       const title = groups.find((group) => group.id === board.standaloneGroupId)?.title ?? "";
       this.standaloneGroupTitle.set(title);
       this.standaloneGroupSavedTitle = title;
     } catch (error) {
-      this.standaloneGroupError.set(error instanceof Error ? error.message : "Could not load board group");
+      this.standaloneGroupError.set(error instanceof Error ? error.message : $localize`Could not load board group`);
     }
   }
 
@@ -120,7 +122,7 @@ export class WorkspaceSettingsGeneralPage {
       this.standaloneGroupSavedTitle = title;
     } catch (error) {
       this.standaloneGroupTitle.set(previous);
-      this.standaloneGroupError.set(error instanceof Error ? error.message : "Could not update board group");
+      this.standaloneGroupError.set(error instanceof Error ? error.message : $localize`Could not update board group`);
     } finally {
       this.standaloneGroupSaving.set(false);
     }

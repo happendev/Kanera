@@ -35,6 +35,7 @@ import { WorkDoneDayComponent, type WorkDoneBoardSummary } from "./work-done-day
 import { readWorkDonePreferences, updateWorkDonePreferences } from "./work-done-preferences";
 import type { CardDayDigest, WorkDoneDay, WorkDoneLayout, WorkDoneRangePreset } from "./work-done.types";
 import { formatDate, formatDateRange } from "../../../shared/date-format";
+import { icu } from "../../../core/i18n/icu";
 
 type WorkDoneList = {
   id: string;
@@ -75,20 +76,40 @@ const PRESET_DAYS: Record<Exclude<WorkDoneRangePreset, "custom">, number> = {
 
 /** Labelled, not icon-only: "7d" is already as short as an icon and far clearer than one. */
 const PRESET_OPTIONS: SegmentedOption<Exclude<WorkDoneRangePreset, "custom">>[] = [
-  { id: "today", label: "Today", tooltip: "Today only" },
-  { id: "7d", label: "7d", tooltip: "Last 7 days" },
-  { id: "14d", label: "14d", tooltip: "Last 14 days" },
-  { id: "30d", label: "30d", tooltip: "Last 30 days" },
+  { id: "today", label: $localize`:Work done period preset - today:Today`, tooltip: $localize`:Work done period preset tooltip:Today only` },
+  { id: "7d", label: $localize`:Work done period preset - abbreviation for 7 days:7d`, tooltip: $localize`:Work done period preset tooltip:Last 7 days` },
+  { id: "14d", label: $localize`:Work done period preset - abbreviation for 14 days:14d`, tooltip: $localize`:Work done period preset tooltip:Last 14 days` },
+  { id: "30d", label: $localize`:Work done period preset - abbreviation for 30 days:30d`, tooltip: $localize`:Work done period preset tooltip:Last 30 days` },
 ];
 
 const EVENT_TYPE_SERIES: Record<WorkDoneEventType, Omit<ActivityStripSeries, "counts">> = {
-  created: { key: "created", label: "Created", noun: "created card", tone: "accent" },
-  moved: { key: "moved", label: "Card movement", noun: "move", tone: "accent" },
-  completed: { key: "completed", label: "Completed", noun: "completion", tone: "success" },
+  // `noun` is the strip's English fallback only; `countLabel` is what renders.
+  created: {
+    key: "created",
+    label: $localize`:Activity strip series - cards created:Created`,
+    noun: "created card",
+    countLabel: (count) => icu($localize`:Activity strip day tooltip:{count, plural, one {# created card} other {# created cards}}`, { count }),
+    tone: "accent",
+  },
+  moved: {
+    key: "moved",
+    label: $localize`:Activity strip series - cards moved between lists:Card movement`,
+    noun: "move",
+    countLabel: (count) => icu($localize`:Activity strip day tooltip - card moves:{count, plural, one {# move} other {# moves}}`, { count }),
+    tone: "accent",
+  },
+  completed: {
+    key: "completed",
+    label: $localize`:Activity strip series - cards completed:Completed`,
+    noun: "completion",
+    countLabel: (count) => icu($localize`:Activity strip day tooltip:{count, plural, one {# completion} other {# completions}}`, { count }),
+    tone: "success",
+  },
   checklistItemCompleted: {
     key: "checklistItemCompleted",
-    label: "Checklist items",
+    label: $localize`:Activity strip series - checklist items ticked:Checklist items`,
     noun: "checklist completion",
+    countLabel: (count) => icu($localize`:Activity strip day tooltip:{count, plural, one {# checklist completion} other {# checklist completions}}`, { count }),
     tone: "success",
   },
 };
@@ -298,9 +319,13 @@ export class WorkDoneViewComponent {
   });
 
   readonly summaryParts = computed(() => {
-    const parts = [`${this.eventCount()} ${this.eventCount() === 1 ? "event" : "events"}`];
-    if (this.completedCount()) parts.push(`${this.completedCount()} completed`);
-    if (this.peopleCount() > 1) parts.push(`${this.peopleCount()} people`);
+    const parts = [icu($localize`:Work done summary - number of events:{count, plural, one {# event} other {# events}}`, { count: this.eventCount() })];
+    if (this.completedCount()) {
+      parts.push(icu($localize`:Work done summary - number of cards completed:{count, plural, one {# completed} other {# completed}}`, { count: this.completedCount() }));
+    }
+    if (this.peopleCount() > 1) {
+      parts.push(icu($localize`:Work done summary - number of people:{count, plural, one {# person} other {# people}}`, { count: this.peopleCount() }));
+    }
     return parts.join(" · ");
   });
 
@@ -308,8 +333,8 @@ export class WorkDoneViewComponent {
     const from = this.from();
     const to = this.to();
     if (from.getTime() === to.getTime()) {
-      if (to.getTime() === this.today.getTime()) return "Today";
-      if (to.getTime() === addDays(this.today, -1).getTime()) return "Yesterday";
+      if (to.getTime() === this.today.getTime()) return $localize`:Work done period label:Today`;
+      if (to.getTime() === addDays(this.today, -1).getTime()) return $localize`:Work done period label:Yesterday`;
       return formatDate(to, "long");
     }
     return formatDateRange(from, to);
@@ -337,16 +362,20 @@ export class WorkDoneViewComponent {
   );
 
   readonly emptyTitle = computed(() => {
-    if (this.hasActiveFilters()) return "No matching work done";
-    return this.from().getTime() === this.to().getTime()
-      ? `No work done ${this.rangeLabel().toLowerCase()}`
-      : "No work done in this period";
+    if (this.hasActiveFilters()) return $localize`:Work done empty state title:No matching work done`;
+    if (this.from().getTime() !== this.to().getTime()) return $localize`:Work done empty state title:No work done in this period`;
+    // One message per case rather than lower-casing the period label into a sentence: "today" is a
+    // word in the sentence, while a date keeps its own capitalisation in every language.
+    const day = this.to().getTime();
+    if (day === this.today.getTime()) return $localize`:Work done empty state title:No work done today`;
+    if (day === addDays(this.today, -1).getTime()) return $localize`:Work done empty state title:No work done yesterday`;
+    return $localize`:Work done empty state title for a past day:No work done ${formatDate(this.to(), "long")}:date:`;
   });
 
   readonly emptyDescription = computed(() => {
-    if (this.eventTypeFilter() !== null) return "Try another activity type, adjusting filters, or widening the period.";
-    if (this.hasActiveFilters()) return "Try adjusting search or filters, or widening the period.";
-    return "Cards created, moved, or marked complete, plus checklist items completed, will appear here.";
+    if (this.eventTypeFilter() !== null) return $localize`:Work done empty state hint:Try another activity type, adjusting filters, or widening the period.`;
+    if (this.hasActiveFilters()) return $localize`:Work done empty state hint:Try adjusting search or filters, or widening the period.`;
+    return $localize`:Work done empty state hint:Cards created, moved, or marked complete, plus checklist items completed, will appear here.`;
   });
 
   /**
@@ -356,8 +385,12 @@ export class WorkDoneViewComponent {
    */
   readonly stripHeading = computed(() => {
     const selected = this.eventTypeFilter();
-    const heading = selected === null ? "Activity" : `Activity · ${EVENT_TYPE_SERIES[selected].label}`;
-    return this.filterCfConditions().length ? `${heading} · before field filters` : heading;
+    const heading = selected === null
+      ? $localize`:Activity strip heading:Activity`
+      : $localize`:Activity strip heading for one activity type:Activity · ${EVENT_TYPE_SERIES[selected].label}:activityType:`;
+    return this.filterCfConditions().length
+      ? $localize`:Activity strip heading - the counts ignore custom-field filters:${heading}:heading: · before field filters`
+      : heading;
   });
 
   /** Movement and completion series for the strip, over the fixed strip window. */
@@ -468,9 +501,9 @@ export class WorkDoneViewComponent {
   private async copyText(text: string) {
     try {
       await navigator.clipboard.writeText(text);
-      this.toasts.success("Copied to clipboard.", "clipboard-check");
+      this.toasts.success($localize`:Toast after copying work done as text:Copied to clipboard.`, "clipboard-check");
     } catch {
-      this.error.set("Could not copy to the clipboard.");
+      this.error.set($localize`:Error when copying to the clipboard fails:Could not copy to the clipboard.`);
     }
   }
 
@@ -499,7 +532,7 @@ export class WorkDoneViewComponent {
       this.loadedRequestKey = requestKey;
     } catch {
       // A transient reconnect failure must not replace already-loaded history with an error page.
-      if (seq === this.loadSeq && !refreshing) this.error.set("Work history could not be loaded.");
+      if (seq === this.loadSeq && !refreshing) this.error.set($localize`:Error when the work done history fails to load:Work history could not be loaded.`);
     } finally {
       if (seq === this.loadSeq) this.loading.set(false);
     }

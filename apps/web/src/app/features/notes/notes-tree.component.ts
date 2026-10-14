@@ -28,7 +28,7 @@ export interface NoteMoveRequest {
         @if (roots().length === 0) {
           <div class="nt-empty">
             <i class="ti ti-notebook"></i>
-            <span>No notes yet</span>
+            <span i18n="Empty state in the notes tree">No notes yet</span>
           </div>
         }
         @for (node of roots(); track node.id) {
@@ -58,9 +58,8 @@ export interface NoteMoveRequest {
           [class.is-active]="dragOverId() === '__root__'"
           (dragover)="onRootDragOver($event)"
           (dragleave)="onDragLeave('__root__')"
-          (drop)="onRootDrop($event)">
-          Drop here to move to top level
-        </div>
+          (drop)="onRootDrop($event)"
+          i18n="Drop zone in the notes tree">Drop here to move to top level</div>
       </div>
     </div>
   `,

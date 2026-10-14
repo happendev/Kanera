@@ -28,7 +28,7 @@ const VISIBLE_LIMIT = 5;
     @if (reminders().length > 0) {
     <section class="reminders-section" aria-labelledby="home-reminders-heading">
       <h2 class="section-title" id="home-reminders-heading">
-        Reminders
+        <ng-container i18n="Section heading on the home page">Reminders</ng-container>
         <span class="reminders-count">{{ reminders().length }}</span>
       </h2>
       <div class="reminders-panel">
@@ -51,14 +51,18 @@ const VISIBLE_LIMIT = 5;
             <span class="reminder-when">{{ when(row.remindAt) }}</span>
           </button>
           <button type="button" class="reminder-clear" (click)="clear(row.cardId)" [disabled]="clearing() === row.cardId"
-            aria-label="Clear reminder" kTooltip="Clear reminder">
+            aria-label="Clear reminder" i18n-aria-label="Button: clear the card reminder" kTooltip="Clear reminder" i18n-kTooltip="Button: clear the card reminder">
             <i class="ti ti-x"></i>
           </button>
         </div>
         }
         @if (reminders().length > limit) {
         <button type="button" class="reminders-more" (click)="expanded.update((open) => !open)">
-          {{ expanded() ? 'Show fewer' : 'Show all ' + reminders().length }}
+          @if (expanded()) {
+          <ng-container i18n="Button: collapse the reminders list">Show fewer</ng-container>
+          } @else {
+          <ng-container i18n="Button: show every reminder">Show all {{ reminders().length // i18n(ph="count") }}</ng-container>
+          }
         </button>
         }
       </div>
@@ -278,8 +282,8 @@ export class UpcomingRemindersComponent {
   when(remindAt: string): string {
     const date = new Date(remindAt);
     const today = new Date();
-    if (date.toDateString() === today.toDateString()) return `Today, ${formatTime(date)}`;
-    if (date.toDateString() === addDays(today, 1).toDateString()) return `Tomorrow, ${formatTime(date)}`;
+    if (date.toDateString() === today.toDateString()) return $localize`:Reminder time later today:Today, ${formatTime(date)}:time:`;
+    if (date.toDateString() === addDays(today, 1).toDateString()) return $localize`:Reminder time tomorrow:Tomorrow, ${formatTime(date)}:time:`;
     return formatDateTime(date, "weekday");
   }
 
@@ -293,7 +297,7 @@ export class UpcomingRemindersComponent {
     try {
       await this.notifications.clearCardReminder(cardId);
     } catch {
-      this.toasts.error("Couldn't clear the reminder. Try again.");
+      this.toasts.error($localize`:Toast when clearing a reminder failed:Couldn't clear the reminder. Try again.`);
     } finally {
       this.clearing.set(null);
     }

@@ -17,37 +17,39 @@ interface DeviceContext {
     <main class="device-card">
       <i class="ti ti-device-desktop-code device-icon"></i>
       @if (completed(); as result) {
-        <h1>{{ result === "approved" ? "Device connected" : "Request denied" }}</h1>
-        <p>
-          {{ result === "approved"
-            ? "You can return to your terminal. The client will finish connecting automatically."
-            : "The device was not given access to your Kanera account." }}
-        </p>
+        @if (result === "approved") {
+          <h1 i18n>Device connected</h1>
+          <p i18n>You can return to your terminal. The client will finish connecting automatically.</p>
+        } @else {
+          <h1 i18n>Request denied</h1>
+          <p i18n>The device was not given access to your Kanera account.</p>
+        }
       } @else if (context(); as request) {
-        <h1>Connect {{ request.clientName }}</h1>
-        <p>Confirm that the code shown in your terminal matches:</p>
+        <h1 i18n="Heading: connect a CLI or device client">Connect {{ request.clientName // i18n(ph="client") }}</h1>
+        <p i18n>Confirm that the code shown in your terminal matches:</p>
         <div class="code">{{ request.userCode }}</div>
-        <p>This client will act as you in Kanera. It will be able to:</p>
+        <p i18n>This client will act as you in Kanera. It will be able to:</p>
         <ul>
-          <li><i class="ti ti-eye"></i> Read work you can access</li>
+          <li><i class="ti ti-eye"></i> <span i18n="Permission granted to a connected client">Read work you can access</span></li>
           @if (request.scopes.includes("kanera:write")) {
-            <li><i class="ti ti-edit"></i> Create and update work wherever you have permission</li>
+            <li><i class="ti ti-edit"></i> <span i18n="Permission granted to a connected client">Create and update work wherever you have permission</span></li>
           }
-          <li><i class="ti ti-lock"></i> Stay limited to your current Kanera permissions</li>
+          <li><i class="ti ti-lock"></i> <span i18n="Permission granted to a connected client">Stay limited to your current Kanera permissions</span></li>
         </ul>
-        <p class="muted">Only approve this request if you started it. You can revoke it later from Settings → AI agents.</p>
+        <p class="muted" i18n>Only approve this request if you started it. You can revoke it later from Settings → AI agents.</p>
         @if (error(); as message) { <p class="error">{{ message }}</p> }
         <div class="actions">
-          <button type="button" class="ghost" (click)="decide('deny')" [disabled]="busy()">Deny</button>
-          <button type="button" (click)="decide('approve')" [disabled]="busy()">{{ busy() ? "Connecting…" : "Allow access" }}</button>
+          <button type="button" class="ghost" (click)="decide('deny')" [disabled]="busy()" i18n="Button: refuse the connection request">Deny</button>
+          <button type="button" (click)="decide('approve')" [disabled]="busy()">@if (busy()) { <ng-container i18n="Button state">Connecting…</ng-container> } @else { <ng-container i18n="Button">Allow access</ng-container> }</button>
         </div>
       } @else {
-        <h1>Connect a device</h1>
-        <p>Enter the code shown by your CLI or headless client.</p>
+        <h1 i18n>Connect a device</h1>
+        <p i18n>Enter the code shown by your CLI or headless client.</p>
         <form (submit)="lookup($event)">
           <input
             type="text"
             aria-label="Device code"
+            i18n-aria-label
             autocomplete="one-time-code"
             autocapitalize="characters"
             placeholder="ABCD-2345"
@@ -55,7 +57,7 @@ interface DeviceContext {
             (input)="enteredCode.set($any($event.target).value)"
             [disabled]="loading()"
           />
-          <button type="submit" [disabled]="loading() || !enteredCode().trim()">{{ loading() ? "Checking…" : "Continue" }}</button>
+          <button type="submit" [disabled]="loading() || !enteredCode().trim()">@if (loading()) { <ng-container i18n="Button state">Checking…</ng-container> } @else { <ng-container i18n="Button">Continue</ng-container> }</button>
         </form>
         @if (error(); as message) { <p class="error">{{ message }}</p> }
       }
@@ -114,7 +116,7 @@ export class OauthDevicePage implements OnInit {
       this.completed.set(decision === "approve" ? "approved" : "denied");
       this.context.set(null);
     } catch {
-      this.error.set("This request is invalid, expired, or has already been completed.");
+      this.error.set($localize`This request is invalid, expired, or has already been completed.`);
       this.busy.set(false);
     }
   }
@@ -128,7 +130,7 @@ export class OauthDevicePage implements OnInit {
       const params = new URLSearchParams({ user_code: code });
       this.context.set(await this.api.get<DeviceContext>(`/oauth/device/context?${params.toString()}`));
     } catch {
-      this.error.set("That device code is invalid or expired. Check the code and try again.");
+      this.error.set($localize`That device code is invalid or expired. Check the code and try again.`);
     } finally {
       this.loading.set(false);
     }

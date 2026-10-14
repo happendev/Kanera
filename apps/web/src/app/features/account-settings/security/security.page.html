@@ -1,29 +1,27 @@
 <div class="settings-section">
-  <h3 class="settings-section-title"><i class="ti ti-shield-lock"></i><span>Two-factor authentication</span></h3>
-  <p class="settings-section-help">Require every organisation member to enroll an authenticator before their next fresh sign-in. Existing signed-in sessions remain active.</p>
+  <h3 class="settings-section-title"><i class="ti ti-shield-lock"></i><span i18n="Settings section heading">Two-factor authentication</span></h3>
+  <p class="settings-section-help" i18n>Require every organisation member to enroll an authenticator before their next fresh sign-in. Existing signed-in sessions remain active.</p>
   <label class="push-toggle-row">
     <input type="checkbox" [checked]="settings.requireMfaDraft()" (change)="settings.requireMfaDraft.set($any($event.target).checked)" [disabled]="!settings.isClientAdmin() || settings.requireMfaSaving()" />
-    <span class="push-toggle-copy"><span class="push-toggle-title">Require two-factor authentication for everyone</span></span>
+    <span class="push-toggle-copy"><span class="push-toggle-title" i18n>Require two-factor authentication for everyone</span></span>
   </label>
   @if (settings.requireMfaError()) { <p class="form-error">{{ settings.requireMfaError() }}</p> }
-  <div class="button-row"><button class="sm" type="button" (click)="settings.saveRequireMfa()" [disabled]="!settings.isClientAdmin() || settings.requireMfaSaving() || settings.requireMfaDraft() === settings.client()?.requireMfa">{{
-      settings.requireMfaSaving() ? "Saving..." : "Save security policy" }}</button></div>
+  <div class="button-row"><button class="sm" type="button" (click)="settings.saveRequireMfa()" [disabled]="!settings.isClientAdmin() || settings.requireMfaSaving() || settings.requireMfaDraft() === settings.client()?.requireMfa">@if (settings.requireMfaSaving()) { <ng-container i18n="Button state">Saving...</ng-container> } @else { <ng-container i18n="Button">Save security policy</ng-container> }</button></div>
 </div>
 
 @if (settings.isHosted()) {
 <div class="settings-section">
-  <h3 class="settings-section-title"><i class="ti ti-plug-connected"></i><span>AI agent access (MCP)</span></h3>
-  <p class="settings-section-help">Controls what AI agents connected through MCP, and personal API keys, can do with this organisation's boards. It also applies to board guests from other organisations. Workspace API keys are managed separately.</p>
+  <h3 class="settings-section-title"><i class="ti ti-plug-connected"></i><span i18n="Settings section heading">AI agent access (MCP)</span></h3>
+  <p class="settings-section-help" i18n>Controls what AI agents connected through MCP, and personal API keys, can do with this organisation's boards. It also applies to board guests from other organisations. Workspace API keys are managed separately.</p>
   <k-segmented
     [options]="mcpPolicyOptions"
     [value]="settings.mcpPolicyDraft()"
     [showLabels]="true"
-    ariaLabel="AI agent access"
+    ariaLabel="AI agent access" i18n-ariaLabel
     (valueChange)="settings.mcpPolicyDraft.set($event)"
   />
   <p class="settings-section-help">{{ mcpPolicyHelp() }}</p>
   @if (settings.mcpPolicyError()) { <p class="form-error">{{ settings.mcpPolicyError() }}</p> }
-  <div class="button-row"><button class="sm" type="button" (click)="settings.saveMcpPolicy()" [disabled]="!settings.isClientAdmin() || settings.mcpPolicySaving() || settings.mcpPolicyDraft() === settings.client()?.mcpPolicy">{{
-      settings.mcpPolicySaving() ? "Saving..." : "Save agent policy" }}</button></div>
+  <div class="button-row"><button class="sm" type="button" (click)="settings.saveMcpPolicy()" [disabled]="!settings.isClientAdmin() || settings.mcpPolicySaving() || settings.mcpPolicyDraft() === settings.client()?.mcpPolicy">@if (settings.mcpPolicySaving()) { <ng-container i18n="Button state">Saving...</ng-container> } @else { <ng-container i18n="Button">Save agent policy</ng-container> }</button></div>
 </div>
 }

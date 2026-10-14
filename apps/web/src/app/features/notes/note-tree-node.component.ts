@@ -48,7 +48,7 @@ export interface NodeDropEvent {
         type="button"
         class="nt-expand"
         (click)="toggleExpand.emit(node().id); $event.stopPropagation()"
-        [attr.aria-label]="isExpanded() ? 'Collapse' : 'Expand'">
+        [attr.aria-label]="isExpanded() ? collapseLabel : expandLabel">
         @if (node().children.length > 0) {
           <i [class]="isExpanded() ? 'ti ti-chevron-down' : 'ti ti-chevron-right'"></i>
         } @else {
@@ -58,27 +58,27 @@ export interface NodeDropEvent {
       <a class="nt-link" [href]="noteHref(node().id)" (click)="onLinkClick($event)" draggable="false">
         <i class="nt-icon ti ti-{{ node().icon || 'file-text' }}"
           [style.color]="node().color ? 'var(--color-' + node().color + ')' : 'var(--accent)'"></i>
-        <span class="nt-title">{{ node().title || 'Untitled' }}</span>
+        <span class="nt-title">{{ node().title || untitledLabel }}</span>
         @if (node().editingUserId && node().editingUserId !== currentUserId()) {
-          <i class="nt-lock ti ti-lock" kTooltip="Being edited"></i>
+          <i class="nt-lock ti ti-lock" kTooltip="Being edited" i18n-kTooltip="Tooltip on a lock icon: another person is editing this note"></i>
         }
       </a>
       <div class="nt-actions" [class.is-open]="actionsOpen()" (click)="$event.stopPropagation()">
-        <button #actionsTrigger class="nt-act" type="button" (click)="toggleActions()" [disabled]="!canEdit()" [kTooltip]="actionTitle('Note actions')" aria-label="Note actions" aria-haspopup="menu" [attr.aria-expanded]="actionsOpen()">
+        <button #actionsTrigger class="nt-act" type="button" (click)="toggleActions()" [disabled]="!canEdit()" [kTooltip]="actionTitle(noteActionsLabel)" aria-label="Note actions" i18n-aria-label aria-haspopup="menu" [attr.aria-expanded]="actionsOpen()">
           <i class="ti ti-dots"></i>
         </button>
         @if (actionsOpen()) {
         <div class="nt-actions-menu k-menu" kMenu kAnchoredPanel [apAnchor]="actionsTrigger" [apPlacement]="actionsMenuPlacement" (apDismissed)="actionsOpen.set(false)" role="menu">
           @if (canAddChild()) {
           <button type="button" class="k-menu-item" (click)="onNewChild(); actionsOpen.set(false)" role="menuitem">
-            <i class="ti ti-plus"></i><span>Add sub-note</span>
+            <i class="ti ti-plus"></i><span i18n="Menu item: create a child note">Add sub-note</span>
           </button>
           }
           <button type="button" class="k-menu-item" (click)="onDuplicate(); actionsOpen.set(false)" role="menuitem">
-            <i class="ti ti-copy"></i><span>Duplicate</span>
+            <i class="ti ti-copy"></i><span i18n="Menu item: duplicate the note">Duplicate</span>
           </button>
           <button class="k-menu-item danger" type="button" (click)="onDelete(); actionsOpen.set(false)" role="menuitem">
-            <i class="ti ti-trash"></i><span>Delete</span>
+            <i class="ti ti-trash"></i><span i18n="Menu item: delete the note">Delete</span>
           </button>
         </div>
         }
@@ -132,6 +132,11 @@ export class NoteTreeNodeComponent {
   readonly dragLeave = output<string>();
   readonly nodeDrop = output<NodeDropEvent>();
 
+  protected readonly collapseLabel = $localize`:Button label - collapse a note's children in the tree:Collapse`;
+  protected readonly expandLabel = $localize`:Button label - expand a note's children in the tree:Expand`;
+  protected readonly untitledLabel = $localize`:Fallback title for a note without one:Untitled`;
+  protected readonly noteActionsLabel = $localize`:Tooltip on the note actions menu button:Note actions`;
+
   readonly placement = signal<DropPlacement>("inside");
   readonly actionsOpen = signal(false);
   readonly actionsMenuPlacement: AnchoredPanelPlacement = {
@@ -173,7 +178,7 @@ export class NoteTreeNodeComponent {
   }
 
   actionTitle(label: string): string {
-    return this.canEdit() ? label : "You're offline - changes are paused";
+    return this.canEdit() ? label : $localize`:Tooltip on a disabled control while offline:You're offline - changes are paused`;
   }
 
   toggleActions() {

@@ -23,17 +23,17 @@ import { AvatarComponent } from "../../shared/avatar.component";
 
       <div class="wp-title">{{ title() }}</div>
       @if (loading()) {
-      <p class="wp-empty">Loading watchers...</p>
+      <p class="wp-empty" i18n>Loading watchers...</p>
       } @else if (error()) {
-      <p class="wp-empty">Could not load watchers</p>
+      <p class="wp-empty" i18n>Could not load watchers</p>
       } @else if (watchers().length === 0) {
-      <p class="wp-empty">No watchers</p>
+      <p class="wp-empty" i18n>No watchers</p>
       } @else {
       <div class="wp-list">
         @for (watcher of watchers(); track watcher.userId) {
         <div class="wp-row">
           <k-avatar [url]="watcher.avatarUrl" [name]="watcher.displayName" [size]="28" [userId]="watcher.userId" [workspaceId]="workspaceId()" [showPresence]="true" />
-          <span class="wp-name">{{ watcher.userId === currentUserId() ? 'Me' : watcher.displayName }}</span>
+          <span class="wp-name">{{ watcher.userId === currentUserId() ? meLabel : watcher.displayName }}</span>
         </div>
         }
       </div>
@@ -163,9 +163,10 @@ export class WatcherPopoverComponent implements OnInit {
       ? this.notifications.isWatchingBoard(id)
       : this.notifications.isWatchingCard(id);
   });
-  readonly title = computed(() => this.kind() === "board" ? "Board watchers" : "Card watchers");
-  readonly watchLabel = computed(() => this.kind() === "board" ? "Watch board" : "Watch card");
-  readonly stopLabel = computed(() => this.kind() === "board" ? "Stop watching board" : "Stop watching card");
+  readonly meLabel = $localize`:Stands in for the viewer's own name in a list of people:Me`;
+  readonly title = computed(() => this.kind() === "board" ? $localize`:Popover heading:Board watchers` : $localize`:Popover heading:Card watchers`);
+  readonly watchLabel = computed(() => this.kind() === "board" ? $localize`:Button - follow notifications for this board:Watch board` : $localize`:Button - follow notifications for this card:Watch card`);
+  readonly stopLabel = computed(() => this.kind() === "board" ? $localize`:Button:Stop watching board` : $localize`:Button:Stop watching card`);
 
   ngOnInit(): void {
     void this.load();

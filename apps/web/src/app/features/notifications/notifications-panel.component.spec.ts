@@ -681,7 +681,7 @@ describe("NotificationsPanelComponent", () => {
         action: "checklist:futureAction",
         payload: {},
       }),
-    })).text).toBe("checklist future action");
+    })).text).toBe("made a change (checklist future action)");
   });
 
   it("loads more when the sentinel intersects", async () => {

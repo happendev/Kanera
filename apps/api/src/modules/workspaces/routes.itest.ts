@@ -1218,7 +1218,8 @@ void test("workspace guest invitations reuse one pending invite per email and ac
   const firstInvite = await app.inject({
     method: "POST",
     url: `/workspaces/${workspace.id}/guests/invitations`,
-    headers: { authorization: `Bearer ${hostToken}` },
+    // The invitee has no account, so the email follows the inviter's on-screen language.
+    headers: { authorization: `Bearer ${hostToken}`, "accept-language": "en-US,en;q=0.8" },
     payload: { boardId: workspaceBoards[0]!.id, email: "bundled-guest@external.test", role: "observer" },
   });
   assert.equal(firstInvite.statusCode, 201, firstInvite.body);
@@ -1266,12 +1267,14 @@ void test("workspace guest invitations reuse one pending invite per email and ac
   assert.equal(inviteEmails.length, 2);
   assert.deepEqual(inviteEmails.map((row) => row.data), [
     {
+      locale: "en-US",
       boards: [{ boardName: "Board A", role: "observer" }],
       orgName: "Bundled Guest Host",
       invitedByName: "Host Owner",
       acceptUrl: `${env.WEB_ORIGIN}/board-invite?token=${encodeURIComponent(firstInviteBody.token!)}`,
     },
     {
+      locale: "en-GB",
       boards: [
         { boardName: "Board A", role: "observer" },
         { boardName: "Board B", role: "editor" },
@@ -1359,6 +1362,7 @@ void test("workspace guest management emails an existing external user for every
   assert.equal(accessEmails.length, 2);
   assert.deepEqual(accessEmails.map((row) => row.data), [
     {
+      locale: "en-GB",
       displayName: "Existing Guest",
       boardName: "First Guest Board",
       orgName: "Existing Guest Host",
@@ -1367,6 +1371,7 @@ void test("workspace guest management emails an existing external user for every
       boardUrl: `${env.WEB_ORIGIN}/b/${workspaceBoards[0]!.id}`,
     },
     {
+      locale: "en-GB",
       displayName: "Existing Guest",
       boardName: "Second Guest Board",
       orgName: "Existing Guest Host",

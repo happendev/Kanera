@@ -140,6 +140,8 @@ void test("invite signup notifies organisation owners and admins for all invited
       displayName: "Owner",
       email: "owner@example.com",
       password: "Abc12345",
+      // Each admin is written to in their own language, resolved per recipient, not per batch.
+      locale: "en-US",
     },
   });
   assert.equal(ownerSignup.statusCode, 200);
@@ -182,6 +184,8 @@ void test("invite signup notifies organisation owners and admins for all invited
 
   const rows = await db.select().from(emailQueue).where(eq(emailQueue.type, "invite_accepted")).orderBy(asc(emailQueue.createdAt));
   assert.equal(rows.length, 6);
+  // Admins who joined without choosing a language get the source language.
+  assert.ok(rows.filter((row) => row.toEmail !== "owner@example.com").every((row) => row.data.locale === "en-GB"));
   const originalOwnerRows = rows.filter((row) => row.toEmail === "owner@example.com");
   assert.equal(originalOwnerRows.length, 3);
   assert.deepEqual(
@@ -190,6 +194,7 @@ void test("invite signup notifies organisation owners and admins for all invited
       toEmail: "owner@example.com",
       data: {
         context: "org",
+        locale: "en-US",
         displayName: "Owner",
         acceptedByName: `Accepted ${role}`,
         acceptedByEmail: `accepted-${role}@example.com`,

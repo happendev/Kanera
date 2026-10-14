@@ -202,6 +202,7 @@ void test("card events enqueue a formatted chat snapshot alongside generic webho
     createdById: actor.id,
     provider: "slack",
     name: "Product chat",
+    locale: "es",
     encryptedConfig: encryptChatDestinationConfig("slack", { webhookUrl: "https://hooks.slack.com/services/T/B/secret" }),
     eventTypes: ["card_created"],
   }).returning();
@@ -223,6 +224,7 @@ void test("card events enqueue a formatted chat snapshot alongside generic webho
   assert.equal(chatDelivery?.eventType, "card_created");
   assert.equal("kind" in chatDelivery!.payload ? chatDelivery!.payload.kind : null, "chat");
   if ("kind" in chatDelivery!.payload) {
+    assert.equal(chatDelivery.payload.locale, "es");
     assert.equal(chatDelivery.payload.cardTitle, "Ship chat destinations");
     assert.equal(chatDelivery.payload.cardUrl, `${env.WEB_ORIGIN}/o/${card!.organisationKey}/c/${card!.key}`);
     assert.equal(chatDelivery.payload.boardName, "Roadmap");

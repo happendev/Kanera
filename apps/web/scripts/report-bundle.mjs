@@ -3,7 +3,8 @@
 // What each advisory budget measures:
 //   initialRaw / initialBrotli   the eager startup payload — main's static import closure plus
 //                                global styles. This is the number a first paint actually waits on.
-//   totalJavaScriptBrotli        every precached script. ngsw prefetches `/*.js` so the whole app is
+//   totalJavaScriptBrotli        every precached script (translations excepted: each device caches
+//                                only its own language). ngsw prefetches `/*.js` so the whole app is
 //                                installed for offline use, which means this is total app weight, not
 //                                startup weight, and lazy-loading cannot reduce it — only shipping
 //                                less code can.
@@ -74,8 +75,14 @@ const precachedJsFiles = [...appShellUrls]
   .map((url) => url.replace(/^\//, ""));
 const jsSizes = await sizesFor(precachedJsFiles);
 const serviceWorkerRuntimeFiles = new Set(["ngsw-worker.js", "safety-worker.js", "worker-basic.min.js"]);
+// Each viewer needs one language, so translations are a lazy group (ngsw-config.json): the one a
+// device loads is cached on first use and kept current on updates, instead of every install
+// downloading all of them.
+const translationUrls = new Set(
+  ngsw.assetGroups.find((group) => group.name === "translations")?.urls ?? [],
+);
 const uncachedScripts = jsFiles
-  .filter((file) => !serviceWorkerRuntimeFiles.has(file) && !appShellUrls.has(`/${file}`));
+  .filter((file) => !serviceWorkerRuntimeFiles.has(file) && !appShellUrls.has(`/${file}`) && !translationUrls.has(`/${file}`));
 const largestScript = jsFiles
   .map((file) => ({ file, raw: outputs[file]?.bytes ?? 0 }))
   .sort((a, b) => b.raw - a.raw)[0];

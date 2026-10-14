@@ -2,13 +2,20 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from "@an
 import { TooltipDirective } from "./tooltip.directive";
 import { addDays, localDateKey } from "./day-key.util";
 import { formatDate } from "./date-format";
+import { icu } from "../core/i18n/icu";
 
 /** One metric to plot. Counts are keyed by local YYYY-MM-DD day; missing days render as zero. */
 export interface ActivityStripSeries {
   key: string;
   label: string;
-  /** Singular noun for the per-day tooltip, e.g. "move" reads as "3 moves · Wed, 22 Jul". */
+  /**
+   * Singular English noun for the per-day tooltip, e.g. "move" reads as "3 moves · Wed, 22 Jul".
+   * Only used when `countLabel` is absent; an "s" suffix is not a plural in most languages, so
+   * callers should pass `countLabel` with an ICU plural instead.
+   */
   noun: string;
+  /** Count with its noun ("3 moves"), pluralised for the viewer's language. Preferred over `noun`. */
+  countLabel?: (count: number) => string;
   tone: "accent" | "success";
   counts: ReadonlyMap<string, number>;
 }
@@ -24,7 +31,14 @@ export interface ActivityStripCell {
 
 /** Human label for the rendered history window. Whole-week windows should read as weeks. */
 export function activityWindowLabel(days: number): string {
-  return days >= 28 && days % 7 === 0 ? `Past ${days / 7} weeks` : `Last ${days} days`;
+  return days >= 28 && days % 7 === 0
+    ? icu($localize`:Activity strip window, in whole weeks:{weeks, plural, one {Past # week} other {Past # weeks}}`, { weeks: days / 7 })
+    : icu($localize`:Activity strip window, in days:{days, plural, one {Last # day} other {Last # days}}`, { days });
+}
+
+/** "3 moves": the series' own pluralised label, or the English fallback built from `noun`. */
+function activityCountLabel(series: Pick<ActivityStripSeries, "noun" | "countLabel">, count: number): string {
+  return series.countLabel?.(count) ?? `${count} ${count === 1 ? series.noun : `${series.noun}s`}`;
 }
 
 /**
@@ -50,7 +64,7 @@ export function buildActivityStripCells(
       date,
       count,
       level: count === 0 ? 0 : (Math.min(4, Math.ceil((count / Math.max(peak, 1)) * 4)) as 1 | 2 | 3 | 4),
-      label: `${count} ${count === 1 ? series.noun : `${series.noun}s`} · ${formatDate(day, "weekday", { now: day })}`,
+      label: $localize`:Activity strip day tooltip, e.g. "3 moves · Wed, 22 Jul":${activityCountLabel(series, count)}:count: · ${formatDate(day, "weekday", { now: day })}:day:`,
       // Monday starts a new week: a stronger left edge keeps the eye from losing its place across
       // dozens of otherwise undifferentiated columns.
       weekStart: day.getDay() === 1,
@@ -81,11 +95,11 @@ export function buildActivityStripCells(
         <strong>{{ heading() }}</strong>
         <span>{{ windowLabel() }}</span>
         <div class="activity-legend">
-          <span>Less</span>
+          <span i18n="Activity heatmap legend: low end of the scale">Less</span>
           @for (level of legendLevels; track level) {
             <i class="activity-cell" [attr.data-level]="level"></i>
           }
-          <span>More</span>
+          <span i18n="Activity heatmap legend: high end of the scale">More</span>
         </div>
       </header>
       <div class="activity-strips">
@@ -98,7 +112,7 @@ export function buildActivityStripCells(
         @for (row of rows(); track row.key) {
           <div class="activity-row-label">
             <strong>{{ row.label }}</strong>
-            <span>{{ row.total }} {{ row.total === 1 ? row.noun : row.noun + "s" }}</span>
+            <span>{{ row.totalLabel }}</span>
           </div>
           <div class="activity-strip" [attr.data-tone]="row.tone">
             @for (cell of row.cells; track cell.date) {
@@ -132,7 +146,7 @@ export function buildActivityStripCells(
 export class ActivityStripComponent {
   readonly series = input.required<ActivityStripSeries[]>();
   readonly windowDays = input.required<number>();
-  readonly heading = input("Activity");
+  readonly heading = input($localize`:Activity strip default heading:Activity`);
   /** Most recent day in the window. Defaults to today. */
   readonly endDate = input<Date | null>(null);
   /** When true, columns become buttons that emit `daySelected`. */
@@ -160,7 +174,7 @@ export class ActivityStripComponent {
         cells,
         // Totalled over the rendered window, not the whole counts map, so the number always
         // describes what the strip beside it is showing.
-        total: cells.reduce((sum, cell) => sum + cell.count, 0),
+        totalLabel: activityCountLabel(series, cells.reduce((sum, cell) => sum + cell.count, 0)),
       };
     })
   );

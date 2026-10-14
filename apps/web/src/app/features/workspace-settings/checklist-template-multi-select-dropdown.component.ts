@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from "@angular/core";
 import type { WireChecklistTemplate } from "@kanera/shared/events";
+import { icu } from "../../core/i18n/icu";
 import { MultiSelectDropdownComponent } from "../../shared/multi-select-dropdown.component";
 import type { PickerGroup } from "../../shared/picker-list.component";
 
@@ -15,7 +16,9 @@ import type { PickerGroup } from "../../shared/picker-list.component";
       [label]="selectedLabel()"
       [searchThreshold]="0"
       searchPlaceholder="Search checklists..."
+      i18n-searchPlaceholder
       emptyLabel="No matching checklists"
+      i18n-emptyLabel
       (pick)="toggleTemplate($event)"
     >
       <i class="ti ti-list-check"></i>
@@ -31,7 +34,7 @@ import type { PickerGroup } from "../../shared/picker-list.component";
 export class ChecklistTemplateMultiSelectDropdownComponent {
   readonly templates = input.required<WireChecklistTemplate[]>();
   readonly selectedIds = input<string[]>([]);
-  readonly placeholder = input("Choose checklists");
+  readonly placeholder = input($localize`Choose checklists`);
   readonly selectedIdsChange = output<string[]>();
 
   readonly selectedTemplates = computed(() => {
@@ -53,7 +56,7 @@ export class ChecklistTemplateMultiSelectDropdownComponent {
       id: template.id,
       label: template.title,
       icon: "list-check",
-      trailing: `${template.items.length} ${template.items.length === 1 ? "item" : "items"}`,
+      trailing: icu($localize`:Checklist item count:{count, plural, one {# item} other {# items}}`, { count: template.items.length }),
     })),
   }]);
 

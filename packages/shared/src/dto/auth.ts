@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ACCENTS, THEMES } from "../appearance.js";
+import { LOCALES } from "../locales.js";
 import { CLIENT_ROLES } from "../schema/client-roles.js";
 import { CLIENT_BILLING_STATUSES, CLIENT_PLANS } from "../schema/client.js";
 import { GENERAL_NAME_MAX_LENGTH } from "./name-limits.js";
@@ -24,6 +25,8 @@ export const signupBody = z.object({
   displayName: z.string().min(1).max(GENERAL_NAME_MAX_LENGTH),
   inviteToken: z.string().min(1).optional(),
   boardInviteToken: z.string().min(1).optional(),
+  // The language the signup form was shown in, stored so the first emails already arrive in it.
+  locale: z.enum(LOCALES).optional(),
   // Acquisition values are allow-listed, bounded marketing categories used only for the
   // registration_completed event. They are never copied into account or organisation models.
   analyticsAttribution: z.object({
@@ -43,6 +46,8 @@ export type SignupBody = z.infer<typeof signupBody>;
 
 export const requestEmailVerificationBody = z.object({
   email: z.email().max(254),
+  // No account exists yet, so the code email is written in the language the form is showing.
+  locale: z.enum(LOCALES).optional(),
   turnstileToken: z.string().min(1).max(4096).optional(),
   inviteToken: z.string().min(1).optional(),
   boardInviteToken: z.string().min(1).optional(),
@@ -124,6 +129,8 @@ export const authResponse = z.object({
     // Null until the account has actually chosen one; the client then keeps its device/OS default.
     theme: z.enum(THEMES).nullable(),
     accent: z.enum(ACCENTS).nullable(),
+    // Null on legacy accounts that never chose; the client then follows the browser language.
+    locale: z.enum(LOCALES).nullable(),
     orgName: z.string(),
     logoUrl: z.string().nullable(),
     deploymentMode: deploymentModeSchema,
@@ -165,6 +172,7 @@ export const updateMeBody = z.object({
   showScratchpad: z.boolean().optional(),
   theme: z.enum(THEMES).optional(),
   accent: z.enum(ACCENTS).optional(),
+  locale: z.enum(LOCALES).optional(),
 });
 export type UpdateMeBody = z.infer<typeof updateMeBody>;
 

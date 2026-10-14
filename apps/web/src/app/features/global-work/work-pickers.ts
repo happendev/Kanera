@@ -5,6 +5,8 @@ import type {
   WorkCatalogPerson,
 } from "@kanera/shared/dto";
 import type { PickerGroup, PickerOption } from "../../shared/picker-list.component";
+import { icu } from "../../core/i18n/icu";
+import { appLocale } from "../../core/i18n/locale";
 
 /**
  * Picker row builders for the global work pages. The scope, board and people dropdowns all
@@ -19,7 +21,7 @@ import type { PickerGroup, PickerOption } from "../../shared/picker-list.compone
 const ALL_BOARDS_SCOPE = "";
 
 function organisationLabel(name: string, external: boolean): string {
-  return external ? `${name} · Guest` : name;
+  return external ? $localize`:Organisation name in a picker when the viewer is a guest there:${name}:organisation: · Guest` : name;
 }
 
 function boardOption(board: WorkCatalogBoard, id: string, depth: number): PickerOption {
@@ -41,9 +43,9 @@ export function scopePickerGroups(catalog: WorkCatalog): PickerGroup[] {
     id: "all",
     options: [{
       id: ALL_BOARDS_SCOPE,
-      label: "All boards",
+      label: $localize`:Scope picker option:All boards`,
       icon: "world",
-      hint: `${catalog.boards.length} ${catalog.boards.length === 1 ? "board" : "boards"} you can access`,
+      hint: icu($localize`:Scope picker hint under All boards:{count, plural, one {# board} other {# boards}} you can access`, { count: catalog.boards.length }),
     }],
   }];
 
@@ -52,7 +54,7 @@ export function scopePickerGroups(catalog: WorkCatalog): PickerGroup[] {
       .filter((workspace) => workspace.organisationId === organisation.id);
     const options: PickerOption[] = [{
       id: `o:${organisation.id}`,
-      label: "Everything in this organisation",
+      label: $localize`:Scope picker option:Everything in this organisation`,
       icon: "building",
     }];
 
@@ -162,7 +164,7 @@ export function peoplePickerGroups(
   });
 
   if (!multiOrganisation) {
-    groups.push({ id: "people", options: [...people].sort((a, b) => a.displayName.localeCompare(b.displayName)).map(personOption) });
+    groups.push({ id: "people", options: [...people].sort((a, b) => a.displayName.localeCompare(b.displayName, appLocale())).map(personOption) });
     return groups;
   }
 
@@ -170,11 +172,11 @@ export function peoplePickerGroups(
     const organisation = organisationsById.get(organisationId);
     groups.push({
       id: organisationId,
-      label: organisation ? organisationLabel(organisation.name, organisation.external) : "Other organisation",
+      label: organisation ? organisationLabel(organisation.name, organisation.external) : $localize`:People picker group for people from an unknown organisation:Other organisation`,
       icon: "building",
       options: people
         .filter((person) => person.organisationId === organisationId)
-        .sort((a, b) => a.displayName.localeCompare(b.displayName))
+        .sort((a, b) => a.displayName.localeCompare(b.displayName, appLocale()))
         .map(personOption),
     });
   }
@@ -187,12 +189,12 @@ export function savedViewPickerGroups(views: SavedWorkView[]): PickerGroup[] {
   const shared = views.filter((view) => !view.editable);
   const groups: PickerGroup[] = [{
     id: "none",
-    options: [{ id: "", label: "No saved view", icon: "circle-off" }],
+    options: [{ id: "", label: $localize`:Saved view picker option:No saved view`, icon: "circle-off" }],
   }];
   if (mine.length) {
     groups.push({
       id: "mine",
-      label: "Your views",
+      label: $localize`:Saved view picker group heading:Your views`,
       options: mine.map((view) => ({
         id: view.id,
         label: view.name,
@@ -203,7 +205,7 @@ export function savedViewPickerGroups(views: SavedWorkView[]): PickerGroup[] {
   if (shared.length) {
     groups.push({
       id: "shared",
-      label: "Shared with you",
+      label: $localize`:Saved view picker group heading:Shared with you`,
       options: shared.map((view) => ({
         id: view.id,
         label: view.name,

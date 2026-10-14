@@ -1,6 +1,6 @@
 @if (!embedded()) {
-<button type="button" class="bell-btn" (click)="toggle()" [class.has-unread]="unreadCount() > 0" [attr.aria-label]="'Notifications' + (unreadCount() > 0 ? ' (' + unreadCount() + ' unread)' : '')" [attr.aria-expanded]="open()"
-  kTooltip="Notifications">
+<button type="button" class="bell-btn" (click)="toggle()" [class.has-unread]="unreadCount() > 0" [attr.aria-label]="bellLabel()" [attr.aria-expanded]="open()"
+  kTooltip="Notifications" i18n-kTooltip="Tooltip on the notifications bell">
   <i [class]="unreadCount() > 0 ? 'ti ti-bell-ringing' : 'ti ti-bell'"></i>
   @if (unreadCount() > 0) {
   <span class="bell-badge">{{ unreadCount() > 99 ? '99+' : unreadCount() }}</span>
@@ -10,16 +10,16 @@
 
 @if (open()) {
 <div class="drawer-backdrop" [class.closing]="closing()" (click)="close()" aria-hidden="true"></div>
-<aside class="drawer" [class.closing]="closing()" role="dialog" aria-modal="true" aria-label="Notifications" cdkTrapFocus [cdkTrapFocusAutoCapture]="true">
+<aside class="drawer" [class.closing]="closing()" role="dialog" aria-modal="true" aria-label="Notifications" i18n-aria-label="Label for the notifications drawer" cdkTrapFocus [cdkTrapFocusAutoCapture]="true">
   <header class="drawer-header">
     <div class="drawer-title">
       <i [class]="unreadCount() > 0 ? 'ti ti-bell-ringing' : 'ti ti-bell'"></i>
-      <h2>Notifications</h2>
+      <h2 i18n="Notifications drawer heading">Notifications</h2>
       @if (unreadCount() > 0) {
       <span class="title-count">{{ unreadCount() }}</span>
       }
     </div>
-    <button type="button" class="ghost icon close-btn" cdkFocusInitial (click)="close()" aria-label="Close notifications">
+    <button type="button" class="ghost icon close-btn" cdkFocusInitial (click)="close()" aria-label="Close notifications" i18n-aria-label>
       <i class="ti ti-x"></i>
     </button>
   </header>
@@ -34,37 +34,38 @@
         [equalWidths]="true"
         size="sm"
         ariaLabel="Read state"
+        i18n-ariaLabel="Label for the Unread / Agent / All notification tabs"
         (valueChange)="setReadFilter($any($event))"
       />
       <div class="filter-selects">
-        <label class="filter-select-wrap" kTooltip="Group notifications">
+        <label class="filter-select-wrap" kTooltip="Group notifications" i18n-kTooltip="Tooltip on the notification grouping menu">
           <i class="ti ti-category"></i>
-          <select class="filter-select" [value]="groupBy()" aria-label="Group notifications" (change)="setGroupBy($any($event.target).value)">
-            <option value="day" [selected]="groupBy() === 'day'">Group by day</option>
-            <option value="board" [selected]="groupBy() === 'board'">Group by board</option>
-            <option value="user" [selected]="groupBy() === 'user'">Group by user</option>
-            <option value="organisation" [selected]="groupBy() === 'organisation'">Group by organisation</option>
+          <select class="filter-select" [value]="groupBy()" aria-label="Group notifications" i18n-aria-label="Label for the notification grouping menu" (change)="setGroupBy($any($event.target).value)">
+            <option value="day" [selected]="groupBy() === 'day'" i18n="Notification grouping option">Group by day</option>
+            <option value="board" [selected]="groupBy() === 'board'" i18n="Notification grouping option">Group by board</option>
+            <option value="user" [selected]="groupBy() === 'user'" i18n="Notification grouping option">Group by user</option>
+            <option value="organisation" [selected]="groupBy() === 'organisation'" i18n="Notification grouping option">Group by organisation</option>
           </select>
         </label>
-        <label class="filter-select-wrap" kTooltip="Filter by board">
+        <label class="filter-select-wrap" kTooltip="Filter by board" i18n-kTooltip="Tooltip on the notification board filter">
           <i class="ti ti-layout-kanban"></i>
-          <select class="filter-select" [class.is-active]="!!boardFilter()" [value]="boardFilter() ?? ''" aria-label="Filter notifications by board" (change)="setBoardFilter($any($event.target).value || null)">
+          <select class="filter-select" [class.is-active]="!!boardFilter()" [value]="boardFilter() ?? ''" aria-label="Filter notifications by board" i18n-aria-label (change)="setBoardFilter($any($event.target).value || null)">
             @if (selectedBoardFilterFallbackId(); as boardId) {
-            <option [value]="boardId" selected>Selected board</option>
+            <option [value]="boardId" selected i18n="Board filter option for a board no longer in the list">Selected board</option>
             }
-            <option value="" [selected]="!boardFilter()">All boards</option>
+            <option value="" [selected]="!boardFilter()" i18n="Board filter option">All boards</option>
             @for (b of availableBoards(); track b.boardId) {
             <option [value]="b.boardId" [selected]="boardFilter() === b.boardId">{{ b.boardName }}</option>
             }
           </select>
         </label>
-        <label class="filter-select-wrap" kTooltip="Filter by user">
+        <label class="filter-select-wrap" kTooltip="Filter by user" i18n-kTooltip="Tooltip on the notification user filter">
           <i class="ti ti-user"></i>
-          <select class="filter-select" [class.is-active]="!!userFilter()" [value]="userFilter() ?? ''" aria-label="Filter notifications by user" (change)="setUserFilter($any($event.target).value || null)">
+          <select class="filter-select" [class.is-active]="!!userFilter()" [value]="userFilter() ?? ''" aria-label="Filter notifications by user" i18n-aria-label (change)="setUserFilter($any($event.target).value || null)">
             @if (selectedUserFilterFallbackId(); as userId) {
-            <option [value]="userId" selected>Selected user</option>
+            <option [value]="userId" selected i18n="User filter option for a person no longer in the list">Selected user</option>
             }
-            <option value="" [selected]="!userFilter()">All users</option>
+            <option value="" [selected]="!userFilter()" i18n="User filter option">All users</option>
             @for (u of availableUsers(); track u.userId) {
             <option [value]="u.userId" [selected]="userFilter() === u.userId">{{ u.displayName }}</option>
             }
@@ -75,42 +76,44 @@
         class="notification-search"
         [value]="searchInputValue()"
         placeholder="Search cards, boards, lists…"
+        i18n-placeholder="Placeholder for the notification search"
         ariaLabel="Search notifications"
+        i18n-ariaLabel="Label for the notification search"
         (valueChange)="setSearchQuery($event)"
       />
     </div>
-    <button type="button" class="ghost mark-all-btn" (click)="markAllRead()" [disabled]="unreadCount() === 0 || !online()" [kTooltip]="online() ? 'Mark all read' : offlineTitle">
+    <button type="button" class="ghost mark-all-btn" (click)="markAllRead()" [disabled]="unreadCount() === 0 || !online()" [kTooltip]="online() ? markAllReadLabel : offlineTitle">
       <i class="ti ti-checks"></i>
-      Mark all read
+      <ng-container i18n="Button: mark every notification as read">Mark all read</ng-container>
     </button>
   </div>
 
   <div class="drawer-body" #drawerBody>
     @if (loading() && !hasAny() && !loadError()) {
-    <div class="k-loading drawer-empty"><i class="ti ti-loader-2 kanera-spin" aria-label="Loading notifications"></i></div>
+    <div class="k-loading drawer-empty"><i class="ti ti-loader-2 kanera-spin" aria-label="Loading notifications" i18n-aria-label="Loading indicator label"></i></div>
     } @else if (loadError() && !hasAny()) {
-    <k-empty-state class="drawer-empty" plain icon="wifi-off" title="Notifications unavailable" [text]="loadError()" />
+    <k-empty-state class="drawer-empty" plain icon="wifi-off" title="Notifications unavailable" i18n-title="Error state title" [text]="loadError()" />
     } @else if (!hasAny()) {
     @if (hasActiveFilters()) {
     <!-- A board/user filter is hiding notifications. Spell this out so the empty
          drawer isn't mistaken for "nothing here" when the bell badge shows unread. -->
-    <k-empty-state class="drawer-empty" plain icon="filter" title="No notifications match your filters"
-      [text]="unreadCount() > 0 ? unreadCount() + ' unread ' + (unreadCount() === 1 ? 'notification is' : 'notifications are') + ' hidden by an active filter.' : 'Try clearing the board or user filter to see more.'">
-      <button type="button" class="ghost empty-all-btn" (click)="clearFilters()">Clear filters</button>
+    <k-empty-state class="drawer-empty" plain icon="filter" title="No notifications match your filters" i18n-title="Empty state title"
+      [text]="filteredEmptyText()">
+      <button type="button" class="ghost empty-all-btn" (click)="clearFilters()" i18n="Button: clear the notification filters">Clear filters</button>
     </k-empty-state>
     } @else if (feedMode() === 'agent') {
-    <k-empty-state class="drawer-empty" plain icon="sparkles" title="No agent activity yet" text="When an AI agent connected to your account changes a card, comments, or starts a run, it'll show up here." />
+    <k-empty-state class="drawer-empty" plain icon="sparkles" title="No agent activity yet" i18n-title="Empty state title" text="When an AI agent connected to your account changes a card, comments, or starts a run, it'll show up here." i18n-text="Empty state text" />
     } @else if (includeRead()) {
-    <k-empty-state class="drawer-empty" plain icon="bell-z" title="No notifications yet" text="When someone assigns you to a card, mentions you, or updates a list you're watching — it'll show up here." />
+    <k-empty-state class="drawer-empty" plain icon="bell-z" title="No notifications yet" i18n-title="Empty state title" text="When someone assigns you to a card, mentions you, or updates a list you're watching — it'll show up here." i18n-text="Empty state text" />
     } @else if (hasUnresolvedUnreadMismatch()) {
-    <k-empty-state class="drawer-empty" plain icon="bell-exclamation" title="Refreshing unread notifications" text="Try reopening the drawer in a moment.">
+    <k-empty-state class="drawer-empty" plain icon="bell-exclamation" title="Refreshing unread notifications" i18n-title="Empty state title" text="Try reopening the drawer in a moment." i18n-text="Empty state text">
       <button type="button" class="ghost empty-all-btn" (click)="refreshNotifications()">
         <i class="ti ti-refresh"></i>
-        Refresh
+        <ng-container i18n="Button: reload notifications">Refresh</ng-container>
       </button>
     </k-empty-state>
     } @else {
-    <k-empty-state class="drawer-empty" plain tone="success" icon="checks" title="You're all caught up" />
+    <k-empty-state class="drawer-empty" plain tone="success" icon="checks" title="You're all caught up" i18n-title="Empty state title: no unread notifications" />
     }
     } @else {
     @for (group of displayedGroups(); track group.key) {
@@ -128,7 +131,7 @@
             <span>{{ group.label }}</span>
           </span>
           <span class="notif-group-controls">
-            <span class="notif-group-count" [attr.aria-label]="group.count + ' notifications'">{{ group.count }}</span>
+            <span class="notif-group-count" [attr.aria-label]="groupCountLabel(group.count)">{{ group.count }}</span>
             <i class="ti ti-chevron-down notif-group-chevron" aria-hidden="true"></i>
           </span>
         </button>
@@ -143,7 +146,7 @@
       <!-- --board-color feeds the .board-link chip's tint; there is no left strip on the card. -->
       <li class="notif-item" [class.is-read]="n.readAt" [style.--board-color]="n.boardIconColor ? 'var(--color-' + n.boardIconColor + ')' : null"
         (contextmenu)="openCardActions($event, n)">
-        <a class="notif-card-link" [href]="notificationUrl(n)" (click)="openNotification(n, $event)" [attr.aria-label]="n.cardId ? 'Open card ' + (n.cardTitle ?? 'notification') : 'Open board ' + n.boardName"></a>
+        <a class="notif-card-link" [href]="notificationUrl(n)" (click)="openNotification(n, $event)" [attr.aria-label]="openNotificationLabel(n)"></a>
         <div class="notif-actor" [class.notif-actor--overdue]="n.reason === 'overdue'" [class.notif-actor--reminder]="n.reason === 'reminder'">
           @if (n.reason === 'overdue') {
           <i class="ti ti-calendar-exclamation"></i>
@@ -168,7 +171,7 @@
                board card tile puts it, so the reference is in one predictable spot across surfaces. -->
           @if (showCardKeys() && n.cardKey) { <span class="notif-card-key">{{ n.cardKey }}</span> }
           <div class="notif-breadcrumb">
-            <button type="button" class="breadcrumb-row board-name board-link" (click)="openBoard($event, n)" (auxclick)="openBoardInNewTab($event, n)" [attr.aria-label]="'Open board ' + n.boardName">
+            <button type="button" class="breadcrumb-row board-name board-link" (click)="openBoard($event, n)" (auxclick)="openBoardInNewTab($event, n)" [attr.aria-label]="openBoardLabel(n.boardName)">
               <i [class]="'ti ti-' + (n.boardIcon || 'layout-kanban')" [style.color]="n.boardIconColor ? 'var(--color-' + n.boardIconColor + ')' : null"></i>
               <span>{{ n.boardName }}</span>
             </button>
@@ -182,19 +185,15 @@
             }
           </div>
           @if (n.reason === 'overdue') {
-          <div class="notif-overdue-badge">
-            Card is overdue
-          </div>
+          <div class="notif-overdue-badge" i18n="Notification badge">Card is overdue</div>
           } @else if (n.reason === 'reminder') {
-          <div class="notif-reminder-badge">
-            Your reminder
-          </div>
+          <div class="notif-reminder-badge" i18n="Notification badge: a reminder you set has fired">Your reminder</div>
           } @else {
           <div class="notif-action">
             <i [class]="changeSummary(n).icon"></i>
             <span class="actor-name">{{ n.actorName }}</span>
             @if (n.activity?.actorKind === 'agent') {
-            <span class="via-agent" [kTooltip]="'Done by ' + (n.activity.agentName ?? 'an AI agent') + ' on behalf of ' + n.actorName"><i class="ti ti-sparkles"></i>via {{ n.activity.agentName ?? 'AI agent' }}</span>
+            <span class="via-agent" [kTooltip]="agentTooltip(n.activity.agentName, n.actorName)"><i class="ti ti-sparkles"></i><ng-container i18n="After a person's name: the change was made by their AI agent">via {{ n.activity.agentName ?? aiAgentLabel // i18n(ph="agent") }}</ng-container></span>
             }
             <span class="action-text">{{ changeSummary(n).text }}</span>
             @if (changeSummary(n).value) {
@@ -231,11 +230,11 @@
         </div>
         <div class="notif-aside">
           <span class="notif-time">{{ relativeTime(n.createdAt) }}</span>
-          <button type="button" class="read-dot" [class.is-read]="n.readAt" (click)="toggleRead($event, n)" [attr.aria-label]="n.readAt ? 'Mark as unread' : 'Mark as read'" [disabled]="!online()"
-            [kTooltip]="online() ? (n.readAt ? 'Mark as unread' : 'Mark as read') : offlineTitle"></button>
+          <button type="button" class="read-dot" [class.is-read]="n.readAt" (click)="toggleRead($event, n)" [attr.aria-label]="n.readAt ? markUnreadLabel : markReadLabel" [disabled]="!online()"
+            [kTooltip]="online() ? (n.readAt ? markUnreadLabel : markReadLabel) : offlineTitle"></button>
         </div>
         @if (actionsMenuNotificationId() === n.id && n.cardId && n.boardId) {
-        <k-card-actions-menu [cardId]="n.cardId" [cardKey]="n.cardKey" [organisationKey]="n.organisationKey" [boardId]="n.boardId" [workspaceId]="n.workspaceId" [title]="n.cardTitle ?? 'Untitled card'" [dueDateLocalDate]="n.cardDueDateLocalDate" [dueDateSlot]="n.cardDueDateSlot"
+        <k-card-actions-menu [cardId]="n.cardId" [cardKey]="n.cardKey" [organisationKey]="n.organisationKey" [boardId]="n.boardId" [workspaceId]="n.workspaceId" [title]="n.cardTitle ?? untitledCardLabel" [dueDateLocalDate]="n.cardDueDateLocalDate" [dueDateSlot]="n.cardDueDateSlot"
           [dueDateTimezone]="n.cardDueDateTimezone" [completedAt]="n.cardCompletedAt" [archivedAt]="n.cardArchivedAt" [anchorPoint]="actionsMenuPoint()" [allowDuplicate]="false" [allowCopyToBoard]="false" [allowMoveToBoard]="false"
           (close)="closeActionsMenu()" />
         }
@@ -249,7 +248,7 @@
         [style.--board-color]="cluster.head.boardIconColor ? 'var(--color-' + cluster.head.boardIconColor + ')' : null"
         (contextmenu)="openCardActions($event, cluster.head)">
         <a class="notif-card-link" [href]="notificationUrl(cluster.head)" (click)="openCluster(cluster, $event)" (auxclick)="openClusterInNewTab($event, cluster)"
-          [attr.aria-label]="'Open card ' + (cluster.head.cardTitle ?? 'notification') + ' (' + cluster.entries.length + ' updates)'"></a>
+          [attr.aria-label]="openClusterLabel(cluster)"></a>
         <!-- No actor column on the header, unlike a plain row: every entry below already names and
              pictures its own actor, and a stack here both repeated that and pushed the block's text
              column ~20px right of every row it sits beside. -->
@@ -267,7 +266,7 @@
             }
             @if (showCardKeys() && cluster.head.cardKey) { <span class="notif-card-key">{{ cluster.head.cardKey }}</span> }
             <div class="notif-breadcrumb">
-              <button type="button" class="breadcrumb-row board-name board-link" (click)="openBoard($event, cluster.head)" (auxclick)="openBoardInNewTab($event, cluster.head)" [attr.aria-label]="'Open board ' + cluster.head.boardName">
+              <button type="button" class="breadcrumb-row board-name board-link" (click)="openBoard($event, cluster.head)" (auxclick)="openBoardInNewTab($event, cluster.head)" [attr.aria-label]="openBoardLabel(cluster.head.boardName)">
                 <i [class]="'ti ti-' + (cluster.head.boardIcon || 'layout-kanban')" [style.color]="cluster.head.boardIconColor ? 'var(--color-' + cluster.head.boardIconColor + ')' : null"></i>
                 <span>{{ cluster.head.boardName }}</span>
               </button>
@@ -289,8 +288,8 @@
             <!-- No count badge: the entries are all listed directly below, so a number over them
                  restates what the reader can already see. The read button's label still says how
                  many it will clear. -->
-            <button type="button" class="read-dot" (click)="markClusterRead($event, cluster)" [attr.aria-label]="'Mark all ' + cluster.entries.length + ' updates as read'" [disabled]="!online()"
-              [kTooltip]="online() ? 'Mark all ' + cluster.entries.length + ' updates as read' : offlineTitle"></button>
+            <button type="button" class="read-dot" (click)="markClusterRead($event, cluster)" [attr.aria-label]="markClusterReadLabel(cluster)" [disabled]="!online()"
+              [kTooltip]="online() ? markClusterReadLabel(cluster) : offlineTitle"></button>
           </div>
         </div>
         <ul class="notif-cluster-entries">
@@ -315,7 +314,7 @@
                 <i [class]="item.summary.icon"></i>
                 @if (item.notification.actorName) { <span class="actor-name">{{ item.notification.actorName }}</span> }
                 @if (item.notification.activity?.actorKind === 'agent') {
-                <span class="via-agent" [kTooltip]="'Done by ' + (item.notification.activity.agentName ?? 'an AI agent') + ' on behalf of ' + (item.notification.actorName ?? '')"><i class="ti ti-sparkles"></i>via {{ item.notification.activity.agentName ?? 'AI agent' }}</span>
+                <span class="via-agent" [kTooltip]="agentTooltip(item.notification.activity.agentName, item.notification.actorName)"><i class="ti ti-sparkles"></i><ng-container i18n="After a person's name: the change was made by their AI agent">via {{ item.notification.activity.agentName ?? aiAgentLabel // i18n(ph="agent") }}</ng-container></span>
                 }
                 <span class="action-text">{{ item.summary.text }}</span>
                 @if (item.summary.value) {
@@ -353,7 +352,7 @@
         </ul>
         @if (actionsMenuNotificationId() === cluster.head.id && cluster.head.cardId && cluster.head.boardId) {
         <k-card-actions-menu [cardId]="cluster.head.cardId" [cardKey]="cluster.head.cardKey" [organisationKey]="cluster.head.organisationKey" [boardId]="cluster.head.boardId" [workspaceId]="cluster.head.workspaceId"
-          [title]="cluster.head.cardTitle ?? 'Untitled card'" [dueDateLocalDate]="cluster.head.cardDueDateLocalDate" [dueDateSlot]="cluster.head.cardDueDateSlot" [dueDateTimezone]="cluster.head.cardDueDateTimezone"
+          [title]="cluster.head.cardTitle ?? untitledCardLabel" [dueDateLocalDate]="cluster.head.cardDueDateLocalDate" [dueDateSlot]="cluster.head.cardDueDateSlot" [dueDateTimezone]="cluster.head.cardDueDateTimezone"
           [completedAt]="cluster.head.cardCompletedAt" [archivedAt]="cluster.head.cardArchivedAt" [anchorPoint]="actionsMenuPoint()" [allowDuplicate]="false" [allowCopyToBoard]="false" [allowMoveToBoard]="false"
           (close)="closeActionsMenu()" />
         }

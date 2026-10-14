@@ -183,6 +183,19 @@ function normalizePlainText(value: string): string {
     .trim();
 }
 
+/** GitHub's own state words, shown on link cards. Unknown future states fall through untranslated. */
+function githubStateLabel(state: string): string {
+  switch (state) {
+    case "open": return $localize`:GitHub pull request or issue state:open`;
+    case "closed": return $localize`:GitHub pull request or issue state:closed`;
+    case "merged": return $localize`:GitHub pull request state:merged`;
+    case "draft": return $localize`:GitHub pull request or release state:draft`;
+    case "released": return $localize`:GitHub release state:released`;
+    case "prerelease": return $localize`:GitHub release state:prerelease`;
+    default: return state;
+  }
+}
+
 @Component({
   selector: "k-description-viewer",
   standalone: true,
@@ -198,7 +211,7 @@ function normalizePlainText(value: string): string {
     } @else {
       <div class="dv-shell" [class.dv-has-copy]="showCopy()">
         @if (showCopy()) {
-          <button type="button" class="dv-copy-btn" (click)="copyText($event)" [attr.aria-label]="copied() ? 'Copied text' : 'Copy text'" [kTooltip]="copied() ? 'Copied' : 'Copy text'">
+          <button type="button" class="dv-copy-btn" (click)="copyText($event)" [attr.aria-label]="copied() ? copiedTextLabel : copyTextLabel" [kTooltip]="copied() ? copiedLabel : copyTextLabel">
             <i class="ti" [class.ti-copy]="!copied()" [class.ti-copy-check]="copied()"></i>
           </button>
         }
@@ -641,7 +654,10 @@ export class DescriptionViewerComponent {
   readonly compact = input<boolean>(false);
   readonly workspaceId = input<string | null>(null);
   readonly mentionMembers = input<WireBoardMemberUser[]>([]);
-  readonly emptyLabel = input<string>("Add a description…");
+  readonly emptyLabel = input<string>($localize`:Placeholder shown where an empty card description would be:Add a description…`);
+  readonly copyTextLabel = $localize`:Button - copy the description as plain text:Copy text`;
+  readonly copiedTextLabel = $localize`:Button state after copying the description:Copied text`;
+  readonly copiedLabel = $localize`:Tooltip after copying:Copied`;
   readonly emptyIcon = input<string>("pencil");
   readonly handleImageClicks = input<boolean>(true);
   readonly handleAttachmentLinks = input<boolean>(false);
@@ -1060,8 +1076,8 @@ export class DescriptionViewerComponent {
   }
 
   private githubLabel(link: ResolvedGitHubLink): string {
-    if (link.kind === "pull") return `PR #${link.number}: ${link.title}`;
-    if (link.kind === "issue") return `Issue #${link.number}: ${link.title}`;
+    if (link.kind === "pull") return $localize`:GitHub pull request link label:PR #${link.number}:number:: ${link.title}:title:`;
+    if (link.kind === "issue") return $localize`:GitHub issue link label:Issue #${link.number}:number:: ${link.title}:title:`;
     if (link.kind === "release") return `${link.tagName}: ${link.title}`;
     if (link.kind === "commit") return `${link.shortSha}: ${link.title}`;
     return link.title;
@@ -1075,22 +1091,20 @@ export class DescriptionViewerComponent {
 
   private internalLinkHint(link: ResolvedInternalLink): string {
     if (link.kind === "card") return `${link.boardName} - ${link.listName}`;
-    if (link.kind === "note") return link.boardName ?? (link.scope === "personal" ? "Private note" : "Team note");
-    return "Board";
+    if (link.kind === "note") return link.boardName ?? (link.scope === "personal" ? $localize`:Link chip hint:Private note` : $localize`:Link chip hint:Team note`);
+    return $localize`:Link chip hint - the link points to a board:Board`;
   }
 
   private githubHint(link: ResolvedGitHubLink): string {
-    if (link.kind === "pull") return `${link.fullName} · ${link.state}`;
-    if (link.kind === "issue") return `${link.fullName} · ${link.state}`;
-    if (link.kind === "release") return `${link.fullName} · ${link.state}`;
+    if (link.kind === "pull" || link.kind === "issue" || link.kind === "release") return `${link.fullName} · ${githubStateLabel(link.state)}`;
     if (link.kind === "commit") return link.fullName;
-    return link.description || (link.private ? "Private repository" : "Repository");
+    return link.description || (link.private ? $localize`:GitHub link hint:Private repository` : $localize`:GitHub link hint:Repository`);
   }
 
   private githubTitle(link: ResolvedGitHubLink): string {
     if (link.kind === "repo") return link.description ? `${link.title} - ${link.description}` : link.title;
-    if (link.kind === "pull") return `${link.fullName} PR #${link.number}: ${link.title}`;
-    if (link.kind === "issue") return `${link.fullName} Issue #${link.number}: ${link.title}`;
+    if (link.kind === "pull") return $localize`:Tooltip for a GitHub pull request link; repo is owner/name:${link.fullName}:repo: PR #${link.number}:number:: ${link.title}:title:`;
+    if (link.kind === "issue") return $localize`:Tooltip for a GitHub issue link; repo is owner/name:${link.fullName}:repo: Issue #${link.number}:number:: ${link.title}:title:`;
     if (link.kind === "release") return `${link.fullName} ${link.tagName}: ${link.title}`;
     return `${link.fullName}@${link.shortSha}: ${link.title}`;
   }
@@ -1103,9 +1117,9 @@ export class DescriptionViewerComponent {
     if (changedFiles === null && additions === null && deletions === null) return "";
     return `
       <span class="github-link-card-stats">
-        <span class="github-link-card-stat-label">Changed files</span>
+        <span class="github-link-card-stat-label">${this.escapeHtml($localize`:GitHub pull request stat label:Changed files`)}</span>
         <span class="github-link-card-stat-value">${changedFiles === null ? "-" : this.escapeHtml(String(changedFiles))}</span>
-        <span class="github-link-card-stat-label">Line changes</span>
+        <span class="github-link-card-stat-label">${this.escapeHtml($localize`:GitHub pull request stat label; added and removed line counts follow:Line changes`)}</span>
         <span class="github-link-card-stat-value">
           <span class="github-link-additions">+${additions === null ? "0" : this.escapeHtml(String(additions))}</span>
           <span class="github-link-deletions">-${deletions === null ? "0" : this.escapeHtml(String(deletions))}</span>

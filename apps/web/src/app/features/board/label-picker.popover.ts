@@ -30,19 +30,20 @@ export interface LabelPickerLabel {
   template: `
     <div class="lp-panel">
       <div class="lp-head">
-        <span class="lp-title">Labels</span>
+        <span class="lp-title" i18n="Label picker heading">Labels</span>
       </div>
       <input
         class="lp-search"
         type="text"
         placeholder="Search labels…"
+        i18n-placeholder
         [value]="query()"
         (input)="query.set($any($event.target).value)"
         autofocus
       />
       <div class="lp-list">
         @if (filtered().length === 0) {
-          <p class="lp-empty">No matching labels</p>
+          <p class="lp-empty" i18n>No matching labels</p>
         }
         @for (label of filtered(); track label.id) {
           <button

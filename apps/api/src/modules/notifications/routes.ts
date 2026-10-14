@@ -6,6 +6,8 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../../db.js";
 import { env } from "../../env.js";
 import { assertBoardAccess, assertCardAccess } from "../../lib/access.js";
+import { requestLocale } from "../../lib/i18n/request-locale.js";
+import { serverMessages } from "../../lib/i18n/messages/index.js";
 import { loadAccessibleBoards } from "../../lib/accessible-boards.js";
 import { badRequest, notFound } from "../../lib/errors.js";
 import {
@@ -515,6 +517,8 @@ export async function notificationsRoutes(app: FastifyInstance) {
     const { channel } = req.params as { channel: string };
     const parsedChannel = dto.personalNotificationChannel.parse(channel);
     await assertPersonalNotificationChannelsAllowed(req.auth.cid);
+    // The person testing is the recipient, so the test reads in the language on their screen.
+    const m = serverMessages(requestLocale(req)).push.channelTest;
     const row = await enqueuePersonalNotification(db, {
       clientId: req.auth.cid,
       userId: req.auth.sub,
@@ -522,8 +526,8 @@ export async function notificationsRoutes(app: FastifyInstance) {
       channel: parsedChannel,
       payload: {
         kind: "test",
-        title: "Kanera test notification",
-        body: `Your ${parsedChannel} notification channel is working.`,
+        title: m.title,
+        body: m.body({ channel: parsedChannel }),
         url: `${env.WEB_ORIGIN}/account/settings/notifications`,
         tag: `test:${parsedChannel}`,
       },
@@ -560,11 +564,12 @@ export async function notificationsRoutes(app: FastifyInstance) {
 
   app.post("/notifications/push/test", async (req): Promise<PushTestResponse> => {
     const body = dto.pushTestBody.parse(req.body ?? {});
+    const m = serverMessages(requestLocale(req)).push.test;
     const row = await enqueuePushImmediate(db, {
       clientId: req.auth.cid,
       userId: req.auth.sub,
       reason: "test",
-      payload: body,
+      payload: { ...body, title: body.title ?? m.title, body: body.body ?? m.body },
     });
     const result = await deliverPushRow(db, row);
     const attempted = result.delivered + result.disabled + result.failed;

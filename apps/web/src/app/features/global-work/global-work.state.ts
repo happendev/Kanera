@@ -425,7 +425,7 @@ export class GlobalWorkState {
     } catch {
       await cachedPromise;
       if (version === this.requestVersion && !this.hasUsableData()) {
-        this.error.set("We couldn’t load this view. Check your connection and try again.");
+        this.error.set($localize`We couldn’t load this view. Check your connection and try again.`);
       }
     } finally {
       if (version === this.requestVersion) {
@@ -449,7 +449,7 @@ export class GlobalWorkState {
       await this.refreshAll(version);
     } catch {
       if (version === this.requestVersion && !this.hasUsableData()) {
-        this.error.set("We couldn’t refresh this view.");
+        this.error.set($localize`We couldn’t refresh this view.`);
       }
     } finally {
       if (version === this.requestVersion) {
@@ -497,7 +497,7 @@ export class GlobalWorkState {
       this.updateRooms();
       await this.persistCache();
     } catch {
-      if (version === this.requestVersion) this.error.set("We couldn’t apply those filters.");
+      if (version === this.requestVersion) this.error.set($localize`We couldn’t apply those filters.`);
     } finally {
       if (version === this.requestVersion) {
         this.loading.set(false);
@@ -658,7 +658,7 @@ export class GlobalWorkState {
       this.teamPriorityCandidates.set([]);
       void this.loadRemainingCards(this.requestVersion)
         .then(() => this.persistCache())
-        .catch(() => this.error.set("We couldn’t load every card. Try refreshing the page."));
+        .catch(() => this.error.set($localize`We couldn’t load every card. Try refreshing the page.`));
     } else {
       this.teamPriorityCandidates.set([]);
     }

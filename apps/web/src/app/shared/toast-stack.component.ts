@@ -15,7 +15,7 @@ import { ToastComponent } from "./toast.component";
         @if (toast.action; as action) {
           <button type="button" class="action" (click)="action.run()">{{ action.label }}</button>
         }
-        <button type="button" class="close" aria-label="Dismiss notification" (click)="toasts.dismiss(toast.id)">
+        <button type="button" class="close" aria-label="Dismiss notification" i18n-aria-label="Close button on a toast message" (click)="toasts.dismiss(toast.id)">
           <i class="ti ti-x" aria-hidden="true"></i>
         </button>
       </k-toast>

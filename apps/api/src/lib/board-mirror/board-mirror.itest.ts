@@ -695,3 +695,61 @@ void test("initial cross-workspace sync maps destination members, labels, and fi
   ))).length;
   assert.equal(eventCountAfterNoop, eventCountBeforeNoop, "a no-op reconcile emits no label, field, or checklist churn");
 });
+
+void test("mirrored descriptions and comments point inline images at the destination's copies", async () => {
+  const app = await buildIntegrationServer();
+  const { user, auth } = await signupOwner(app, { orgName: "Mirror Media Org", email: "mirror-media@example.com", displayName: "Owner" });
+  const workspace = (await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Delivery" } })).json<{ id: string }>();
+  const [sourceList] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).orderBy(lists.position).limit(1);
+  const [source, target] = await db.insert(boards).values([
+    { workspaceId: workspace.id, name: "Source", position: "1000.0000000000" },
+    { workspaceId: workspace.id, name: "Target", position: "2000.0000000000" },
+  ]).returning();
+  await db.insert(boardMembers).values([
+    { boardId: source!.id, userId: user.id, role: "editor" },
+    { boardId: target!.id, userId: user.id, role: "editor" },
+  ]);
+  const mirrorResponse = await app.inject({ method: "POST", url: `/boards/${source!.id}/mirrors`, headers: auth, payload: { targetBoardId: target!.id, lists: [{ sourceListId: sourceList!.id }] } });
+  assert.equal(mirrorResponse.statusCode, 201, mirrorResponse.body);
+  const mirror = mirrorResponse.json<{ id: string }>();
+  await processBoardMirrors();
+
+  const created = await app.inject({ method: "POST", url: `/boards/${source!.id}/lists/${sourceList!.id}/cards`, headers: auth, payload: { title: "Inline media" } });
+  assert.equal(created.statusCode, 201, created.body);
+  const sourceCard = created.json<{ id: string }>();
+  await processBoardMirrors();
+  const [cardLink] = await db.select().from(externalLinks).where(and(eq(externalLinks.provider, `mirror:${mirror.id}`), eq(externalLinks.externalType, "card"), eq(externalLinks.externalId, sourceCard.id)));
+  assert.ok(cardLink);
+
+  // Upload and embed in the same sync window: core and comments converge before attachments, so
+  // this exercises the re-sync once the destination copy exists.
+  const attachmentCreatedCount = (await db.select({ id: eventOutbox.id }).from(eventOutbox).where(and(eq(eventOutbox.boardId, source!.id), eq(eventOutbox.eventType, "card:attachment:created")))).length;
+  const form = new FormData();
+  form.append("file", new Blob([Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64")], { type: "image/png" }), "inline.png");
+  const upload = await app.inject({ method: "POST", url: `/cards/${sourceCard.id}/attachments?source=description`, headers: auth, payload: form });
+  assert.equal(upload.statusCode, 201, upload.body);
+  await waitForNewOutboxEvent(source!.id, "card:attachment:created", attachmentCreatedCount);
+  const [sourceAttachment] = await db.select().from(cardAttachments).where(eq(cardAttachments.cardId, sourceCard.id));
+  assert.ok(sourceAttachment);
+  const described = await app.inject({ method: "PATCH", url: `/cards/${sourceCard.id}`, headers: auth, payload: { description: `See ![inline](${sourceAttachment.url})` } });
+  assert.equal(described.statusCode, 200, described.body);
+  const commented = await app.inject({ method: "POST", url: `/cards/${sourceCard.id}/comments`, headers: auth, payload: { body: `Also ![inline](${sourceAttachment.url})` } });
+  assert.equal(commented.statusCode, 201, commented.body);
+  await processBoardMirrors();
+
+  const [targetAttachment] = await db.select().from(cardAttachments).where(eq(cardAttachments.cardId, cardLink.entityId));
+  assert.ok(targetAttachment);
+  assert.notEqual(targetAttachment.url, sourceAttachment.url);
+  const [targetCard] = await db.select().from(cards).where(eq(cards.id, cardLink.entityId));
+  assert.equal(targetCard?.description, `See ![inline](${targetAttachment.url})`);
+  const targetComments = await db.select().from(comments).where(eq(comments.cardId, cardLink.entityId));
+  assert.ok(targetComments.some((comment) => comment.body === `Also ![inline](${targetAttachment.url})`), "mirrored comment points at the copy");
+  assert.ok(!targetComments.some((comment) => comment.body.includes(sourceAttachment.url)));
+
+  // A later source edit keeps resolving to the copy without another attachment change.
+  const edited = await app.inject({ method: "PATCH", url: `/cards/${sourceCard.id}`, headers: auth, payload: { description: `Edited ![inline](${sourceAttachment.url})` } });
+  assert.equal(edited.statusCode, 200, edited.body);
+  await processBoardMirrors();
+  const [editedTarget] = await db.select().from(cards).where(eq(cards.id, cardLink.entityId));
+  assert.equal(editedTarget?.description, `Edited ![inline](${targetAttachment.url})`);
+});

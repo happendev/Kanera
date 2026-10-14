@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { appLocale } from "../core/i18n/locale";
 import { formatDate, formatDateRange, formatDateTime, formatFeedTime, formatRelativeTime, formatTime } from "./date-format";
 
-// Expectations are computed through Intl rather than hardcoded so the suite passes under any
-// browser locale; what is asserted is which fields each style shows, and when the year appears.
-const d = (opts: Intl.DateTimeFormatOptions, date: Date) => new Intl.DateTimeFormat(undefined, opts).format(date);
+// Expectations are computed through Intl in the interface language rather than hardcoded; what is
+// asserted is which fields each style shows, and when the year appears.
+const d = (opts: Intl.DateTimeFormatOptions, date: Date) => new Intl.DateTimeFormat(appLocale(), opts).format(date);
 
 describe("date-format", () => {
   const now = new Date(2026, 8, 6, 10, 0);
@@ -25,9 +26,9 @@ describe("date-format", () => {
     expect(formatDate("2026-03-04", "medium", { now })).toBe(d({ day: "numeric", month: "short", year: "numeric" }, new Date(2026, 2, 4)));
   });
 
-  it("joins date and time with a comma", () => {
-    expect(formatDateTime(thisYear, "short", { now })).toBe(`${formatDate(thisYear, "short", { now })}, ${formatTime(thisYear)}`);
-    expect(formatDateTime(lastYear, "medium", { now })).toBe(`${formatDate(lastYear, "medium", { now })}, ${formatTime(lastYear)}`);
+  it("formats date and time together in the interface language", () => {
+    expect(formatDateTime(thisYear, "short", { now })).toBe(d({ day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }, thisYear));
+    expect(formatDateTime(lastYear, "medium", { now })).toBe(d({ day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }, lastYear));
   });
 
   it("compact shows a time today and a date otherwise", () => {
@@ -60,11 +61,13 @@ describe("date-format", () => {
   });
 
   it("collapses ranges to the shortest unambiguous label", () => {
-    expect(formatDateRange(new Date(2026, 2, 4), new Date(2026, 2, 9), { now })).toBe(`4 – ${formatDate(new Date(2026, 2, 9), "short", { now })}`);
+    const range = (options: Intl.DateTimeFormatOptions, from: Date, to: Date) => new Intl.DateTimeFormat(appLocale(), options).formatRange(from, to);
+    expect(formatDateRange(new Date(2026, 2, 4), new Date(2026, 2, 9), { now }))
+      .toBe(range({ day: "numeric", month: "short" }, new Date(2026, 2, 4), new Date(2026, 2, 9)));
     expect(formatDateRange(new Date(2026, 1, 28), new Date(2026, 2, 4), { now }))
-      .toBe(`${d({ day: "numeric", month: "short" }, new Date(2026, 1, 28))} – ${formatDate(new Date(2026, 2, 4), "short", { now })}`);
+      .toBe(range({ day: "numeric", month: "short" }, new Date(2026, 1, 28), new Date(2026, 2, 4)));
     expect(formatDateRange(new Date(2025, 11, 28), new Date(2026, 0, 4), { now }))
-      .toBe(`${formatDate(new Date(2025, 11, 28), "medium")} – ${formatDate(new Date(2026, 0, 4), "medium")}`);
+      .toBe(range({ day: "numeric", month: "short", year: "numeric" }, new Date(2025, 11, 28), new Date(2026, 0, 4)));
     expect(formatDateRange(new Date(2026, 2, 4), new Date(2026, 2, 4), { now })).toBe(formatDate(new Date(2026, 2, 4), "short", { now }));
   });
 

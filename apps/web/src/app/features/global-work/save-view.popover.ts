@@ -34,21 +34,23 @@ import { GlobalWorkState } from "./global-work.state";
     <div class="ap-panel">
       @if (view() === "share") {
         <div class="ap-head">
-          <button type="button" class="ap-icon-button" aria-label="Back" (click)="view.set('main')">
+          <button type="button" class="ap-icon-button" aria-label="Back" i18n-aria-label="Button: back to the previous panel" (click)="view.set('main')">
             <i class="ti ti-chevron-left"></i>
           </button>
-          <span class="ap-title">Share with</span>
+          <span class="ap-title" i18n="Heading: pick people to share a saved view with">Share with</span>
         </div>
         <k-picker-list
           [groups]="shareGroups()"
           searchPlaceholder="Search colleagues…"
+          i18n-searchPlaceholder
           emptyLabel="Everyone already has access"
+          i18n-emptyLabel
           (pick)="addShare($event)"
         />
       } @else if (state.selectedView(); as selected) {
         <div class="ap-head">
           <span class="ap-title">{{ selected.name }}</span>
-          <button type="button" class="ap-icon-button" aria-label="Close" (click)="closed.emit()">
+          <button type="button" class="ap-icon-button" aria-label="Close" i18n-aria-label="Button: close the popover" (click)="closed.emit()">
             <i class="ti ti-x"></i>
           </button>
         </div>
@@ -56,8 +58,8 @@ import { GlobalWorkState } from "./global-work.state";
         <div class="sv-body">
           @if (selected.editable) {
             <div class="sv-field">
-              <span class="sv-label">Visibility</span>
-              <div class="sv-segmented" role="group" aria-label="Visibility">
+              <span class="sv-label" i18n="Field label: who can open a saved view">Visibility</span>
+              <div class="sv-segmented" role="group" aria-label="Visibility" i18n-aria-label="Field label: who can open a saved view">
                 @for (option of visibilityOptions; track option.value) {
                   <button
                     type="button"
@@ -74,7 +76,7 @@ import { GlobalWorkState } from "./global-work.state";
             </div>
 
             <div class="sv-field">
-              <span class="sv-label">Shared with specific people</span>
+              <span class="sv-label" i18n>Shared with specific people</span>
               @if (selected.sharedUserIds.length) {
                 <div class="sv-chips">
                   @for (userId of selected.sharedUserIds; track userId) {
@@ -88,7 +90,7 @@ import { GlobalWorkState } from "./global-work.state";
                         <k-avatar [url]="person.avatarUrl" [name]="person.displayName" [size]="18" [userId]="userId" />
                         {{ person.displayName }}
                       } @else {
-                        User no longer available
+                        <ng-container i18n="Stand-in for a deleted or inaccessible user">User no longer available</ng-container>
                       }
                       <i class="ti ti-x"></i>
                     </button>
@@ -102,14 +104,14 @@ import { GlobalWorkState } from "./global-work.state";
                 (click)="view.set('share')"
               >
                 <i class="ti ti-user-plus"></i>
-                Add a colleague
+                <ng-container i18n="Button: share the saved view with another person">Add a colleague</ng-container>
               </button>
             </div>
 
             <footer class="sv-actions">
               <button type="button" class="sv-delete" [disabled]="!state.interactionReady()" (click)="deleteView()">
                 <i class="ti ti-trash"></i>
-                Delete view
+                <ng-container i18n="Button: delete the saved view">Delete view</ng-container>
               </button>
               <button
                 type="button"
@@ -118,27 +120,24 @@ import { GlobalWorkState } from "./global-work.state";
                 (click)="saveCurrentView()"
               >
                 <i class="ti ti-device-floppy"></i>
-                Update view
+                <ng-container i18n="Button: overwrite the saved view with the current filters">Update view</ng-container>
               </button>
             </footer>
           } @else {
-            <p class="sv-help">
-              Shared by {{ selected.ownerName }}. Only the owner can change this view, and you’ll only
-              see boards you can access.
-            </p>
+            <p class="sv-help" i18n>Shared by {{ selected.ownerName // i18n(ph="owner") }}. Only the owner can change this view, and you’ll only see boards you can access.</p>
           }
         </div>
       } @else {
         <div class="ap-head">
-          <span class="ap-title">Save this view</span>
-          <button type="button" class="ap-icon-button" aria-label="Close" (click)="closed.emit()">
+          <span class="ap-title" i18n="Heading of the save view popover">Save this view</span>
+          <button type="button" class="ap-icon-button" aria-label="Close" i18n-aria-label="Button: close the popover" (click)="closed.emit()">
             <i class="ti ti-x"></i>
           </button>
         </div>
 
         <form class="sv-body" (submit)="saveNewView($event)">
           <div class="sv-field">
-            <span class="sv-label">View name</span>
+            <span class="sv-label" i18n="Field label: name of a saved view">View name</span>
             <input
               autofocus
               class="ap-input"
@@ -146,12 +145,13 @@ import { GlobalWorkState } from "./global-work.state";
               (input)="newViewName.set($any($event.target).value)"
               maxlength="120"
               placeholder="e.g. Launch risks"
+              i18n-placeholder="Example name for a saved view"
             />
           </div>
 
           <div class="sv-field">
-            <span class="sv-label">Visibility</span>
-            <div class="sv-segmented" role="group" aria-label="Visibility">
+            <span class="sv-label" i18n="Field label: who can open a saved view">Visibility</span>
+            <div class="sv-segmented" role="group" aria-label="Visibility" i18n-aria-label="Field label: who can open a saved view">
               @for (option of visibilityOptions; track option.value) {
                 <button
                   type="button"
@@ -167,14 +167,13 @@ import { GlobalWorkState } from "./global-work.state";
           </div>
 
           <footer class="sv-actions sv-actions-end">
-            <button type="button" class="sv-cancel" (click)="closed.emit()">Cancel</button>
+            <button type="button" class="sv-cancel" (click)="closed.emit()" i18n="Button: cancel saving the view">Cancel</button>
             <button
               type="submit"
               class="sv-save"
               [disabled]="!newViewName().trim() || state.saving() || !state.interactionReady()"
-            >
-              Save view
-            </button>
+              i18n="Button: save the current filters as a new view"
+            >Save view</button>
           </footer>
         </form>
       }
@@ -348,8 +347,8 @@ export class SaveViewPopover {
   readonly newViewVisibility = signal<WorkViewVisibility>("private");
 
   readonly visibilityOptions: { value: WorkViewVisibility; label: string; icon: string }[] = [
-    { value: "private", label: "Private", icon: "lock" },
-    { value: "organisation", label: "Everyone", icon: "building" },
+    { value: "private", label: $localize`:Saved view visibility option, only the owner and people it is shared with:Private`, icon: "lock" },
+    { value: "organisation", label: $localize`:Saved view visibility option, everyone in the organisation:Everyone`, icon: "building" },
   ];
 
   readonly shareCandidatesById = computed(() =>
@@ -376,8 +375,8 @@ export class SaveViewPopover {
 
   visibilityHelp(visibility: WorkViewVisibility): string {
     return visibility === "private"
-      ? "Only you and the people you share it with can open this view."
-      : "Everyone in your organisation can open this view. They can’t change it, and still only see boards they can access.";
+      ? $localize`Only you and the people you share it with can open this view.`
+      : $localize`Everyone in your organisation can open this view. They can’t change it, and still only see boards they can access.`;
   }
 
   setVisibility(visibility: WorkViewVisibility): void {

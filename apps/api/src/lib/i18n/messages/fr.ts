@@ -1,0 +1,624 @@
+import type { ActivitySummaryMessages } from "@kanera/shared/activity-summary";
+import type { ServerMessages } from "./types.js";
+
+/**
+ * French catalog (formal "vous"). Translated from en-GB.ts; see ../README.md and the glossary.
+ * French typography: a non-breaking space (U+00A0) precedes `:` `;` `!` `?` `%` and sits inside « ».
+ */
+
+// French treats 0 and 1 as singular ("0 carte", "1 carte", "2 cartes").
+const pluralRules = new Intl.PluralRules("fr");
+const isOne = (count: number) => pluralRules.select(count) === "one";
+const plural = (count: number, one: string, other: string) => `${count} ${isOne(count) ? one : other}`;
+
+let listFormat: Intl.ListFormat | null = null;
+
+const activity: ActivitySummaryMessages = {
+  reminder: "rappel",
+  checklistItemOverdue: "élément de checklist en retard",
+  cardOverdue: "carte en retard",
+  commented: "a commenté",
+  editedComment: "a modifié un commentaire",
+  removedComment: "a supprimé un commentaire",
+  copiedCardFrom: "a copié cette carte depuis",
+  anotherBoard: "un autre tableau",
+  createdCard: "a créé cette carte",
+  deletedCard: "a supprimé cette carte",
+  movedCardTo: "a déplacé cette carte vers",
+  anotherList: "une autre liste",
+  markedComplete: "a marqué cette carte comme terminée",
+  markedIncomplete: "a marqué cette carte comme non terminée",
+  attached: (fileName) => `a joint ${fileName}`,
+  attachedFile: "a joint un fichier",
+  removedAttachment: "a supprimé une pièce jointe",
+  assignedSelf: "s’est assigné la carte",
+  assigned: (names) => `a assigné ${names}`,
+  unassigned: (names) => `a désassigné ${names}`,
+  changedAssignees: "a modifié les responsables",
+  addedLabels: (names) => `a ajouté l’étiquette ${names}`,
+  removedLabels: (names) => `a retiré l’étiquette ${names}`,
+  updatedLabels: "a mis à jour les étiquettes",
+  renamedTo: (title) => `a renommé la carte en «\u00a0${title}\u00a0»`,
+  editedDescription: "a modifié la description",
+  updatedDueDate: "a mis à jour la date d’échéance",
+  removedDueDate: "a supprimé la date d’échéance",
+  updatedCard: "a mis à jour cette carte",
+  clearedField: (fieldName) => `a effacé ${fieldName}`,
+  field: "champ",
+  setFieldTo: (fieldName) => `a défini ${fieldName} sur`,
+  setCover: "a défini l’image de couverture",
+  removedCover: "a supprimé l’image de couverture",
+  addedChecklist: "a ajouté la checklist",
+  deletedChecklist: "a supprimé la checklist",
+  completedSubChecklist: "a terminé la sous-checklist",
+  subChecklistOn: (title, parentItem) => (title ? `${title} dans ${parentItem}` : `dans ${parentItem}`),
+  completedChecklist: "a terminé la checklist",
+  renamedChecklistTo: "a renommé la checklist en",
+  editedChecklistItem: "a modifié l’élément de checklist",
+  updatedChecklistItemDescription: "a mis à jour la description d’un élément de checklist",
+  clearedChecklistItemDescription: "a effacé la description d’un élément de checklist",
+  changedChecklistItemAssignee: (from, to) => `a remplacé le responsable ${from} par ${to}`,
+  assignedChecklistItem: (name) => `a assigné ${name} à l’élément de checklist`,
+  unassignedChecklistItem: "a désassigné l’élément de checklist",
+  completedChecklistItem: "a terminé l’élément de checklist",
+  uncompletedChecklistItem: "a marqué l’élément de checklist comme non terminé",
+  addedChecklistItem: "a ajouté l’élément de checklist",
+  deletedChecklistItem: "a supprimé l’élément de checklist",
+  otherAction: (action) => `a effectué une modification (${action})`,
+  list: (names) => {
+    listFormat ??= new Intl.ListFormat("fr", { style: "long", type: "conjunction" });
+    return listFormat.format(names);
+  },
+};
+
+const fr: ServerMessages = {
+  common: {
+    minutes: ({ count }) => plural(count, "minute", "minutes"),
+    hours: ({ count }) => plural(count, "heure", "heures"),
+    roles: { owner: "Propriétaire", admin: "Administrateur", member: "Membre", editor: "Éditeur", observer: "Observateur" },
+    fallbackInviterName: "Un administrateur Kanera",
+    someone: "Quelqu’un",
+    viaAgent: ({ owner, agent }) => `${owner} via ${agent}`,
+    aiAgent: "Agent IA",
+    aCard: "Une carte",
+    emptyCommentExcerpt: "Consultez le commentaire dans Kanera.",
+    dueSlots: { morning: "matin", afternoon: "après-midi", endOfWorkDay: "fin de journée" },
+    dueDateWithSlot: ({ date, slot }) => `${date}, ${slot}`,
+  },
+
+  layout: {
+    footerAccount: "Vous recevez cet e-mail car vous avez un compte Kanera.",
+    footerLifecycle: "Vous recevez ce conseil de prise en main car vous êtes propriétaire d’une organisation Kanera.",
+    unsubscribe: "Se désabonner de ces e-mails",
+    fallbackLink: "Si le bouton ci-dessus ne fonctionne pas, copiez et collez ce lien dans votre navigateur\u00a0:",
+    oneTimeCode: "Code à usage unique",
+  },
+
+  email: {
+    adminInvite: {
+      subject: "Invitation à administrer Kanera",
+      preheader: ({ firstName }) => `${firstName}, configurez votre compte superadministrateur Kanera.`,
+      heading: "Configurez votre compte administrateur",
+      intro: ({ firstName }) => `Bonjour ${firstName}, vous avez reçu une invitation pour devenir superadministrateur de Kanera. Utilisez le bouton ci-dessous pour choisir votre mot de passe.`,
+      button: "Configurer le compte",
+      expiry: ({ duration }) => `Ce lien à usage unique expire dans ${duration}. Si vous ne l’attendiez pas, vous pouvez ignorer cet e-mail.`,
+    },
+    welcome: {
+      subject: "Bienvenue sur Kanera",
+      preheader: ({ firstName }) => `Bonjour ${firstName}, votre compte Kanera est prêt.`,
+      heading: "Bienvenue sur Kanera",
+      intro: ({ firstName }) => `Bonjour ${firstName}, votre compte a été créé et tout est prêt.`,
+      firstSteps: "Quelques premières étapes utiles\u00a0:",
+      steps: ["Créez votre premier espace de travail", "Configurez des tableaux pour vos projets", "Invitez les membres de votre équipe"],
+      button: "Commencer",
+    },
+    passwordReset: {
+      subject: "Réinitialisez votre mot de passe Kanera",
+      preheader: ({ firstName }) => `Bonjour ${firstName}, nous avons reçu une demande de réinitialisation de votre mot de passe.`,
+      heading: "Réinitialisez votre mot de passe",
+      intro: ({ firstName }) => `Bonjour ${firstName}, nous avons reçu une demande de réinitialisation du mot de passe de votre compte Kanera. Cliquez sur le bouton ci-dessous pour choisir un nouveau mot de passe.`,
+      button: "Réinitialiser le mot de passe",
+      expiry: ({ duration }) => `Ce lien expirera dans ${duration}. Si vous n’avez pas demandé de réinitialisation, vous pouvez ignorer cet e-mail en toute sécurité\u00a0: votre mot de passe restera inchangé.`,
+    },
+    verificationCode: {
+      subject: "Vérifiez votre adresse e-mail pour Kanera",
+      preheader: ({ code }) => `Votre code de vérification Kanera est ${code}.`,
+      heading: "Vérifiez votre adresse e-mail",
+      instruction: "Saisissez ce code pour confirmer votre adresse e-mail et continuer\u00a0:",
+      expiry: ({ duration }) => `Ce code expire dans ${duration}. Si vous ne l’avez pas demandé, vous pouvez ignorer cet e-mail en toute sécurité.`,
+    },
+    dailyDigest: {
+      subject: "Vos échéances Kanera",
+      preheader: ({ count }) => isOne(count)
+        ? `${count} élément Kanera demande votre attention aujourd’hui.`
+        : `${count} éléments Kanera demandent votre attention aujourd’hui.`,
+      heading: "Échéances du jour",
+      intro: ({ firstName, date }) => `Bonjour ${firstName}, voici la liste du ${date}.`,
+      dueToday: "Échéance aujourd’hui",
+      overdue: "En retard",
+      priorities: "Vos priorités principales",
+      itemToday: "Aujourd’hui",
+      itemDue: ({ date }) => `Échéance le ${date}`,
+    },
+    weeklyAdminRecap: {
+      queueSubject: ({ period }) => `Récapitulatif hebdomadaire Kanera · ${period}`,
+      subject: "Votre récapitulatif hebdomadaire du système Kanera",
+      preheader: ({ newAccounts, boardsCreated, seatsRenewing }) =>
+        `Nouveaux comptes\u00a0: ${newAccounts}, tableaux créés\u00a0: ${boardsCreated}, sièges à renouveler cette semaine\u00a0: ${seatsRenewing}.`,
+      heading: "Récapitulatif hebdomadaire du système",
+      intro: ({ lastWeek, thisWeek }) => `L’essentiel de la période ${lastWeek}, puis ce qui est prévu pour ${thisWeek}.`,
+      lastWeek: "Semaine dernière",
+      currentState: "État actuel du système",
+      comingUp: "À venir cette semaine",
+      metrics: {
+        newAccounts: "Nouveaux comptes",
+        newOrganisations: "Nouvelles organisations",
+        invitesAccepted: "Invitations acceptées",
+        boardsCreated: "Tableaux créés",
+        subscriptionsStarted: "Abonnements démarrés",
+        seatsPurchased: "Sièges achetés",
+        activeAccounts: "Comptes actifs",
+        activeOrganisations: "Organisations actives",
+        activeBoards: "Tableaux actifs",
+        paidOrganisations: "Organisations payantes",
+        trials: "Essais",
+        purchasedSeats: "Sièges achetés",
+      },
+      renewals: "Renouvellements de sièges",
+      renewalsEmpty: "Aucun renouvellement de sièges n’est prévu.",
+      trialEnds: "Fins d’essai",
+      trialEndsEmpty: "Aucun essai ne doit se terminer.",
+      cancellations: "Résiliations programmées",
+      cancellationsEmpty: "Aucun abonnement ne doit se terminer.",
+      groupSummary: ({ seatCount, organisationCount }) =>
+        `${plural(seatCount, "siège", "sièges")} dans ${plural(organisationCount, "organisation", "organisations")}`,
+      moreOrganisations: ({ count }) => `+${count} de plus`,
+      dateRange: ({ start, end }) => `${start}–${end}`,
+      button: "Ouvrir la console d’administration",
+      footnote: "Les périodes de rapport et l’heure d’envoi sont en UTC. Les totaux excluent, le cas échéant, les comptes, organisations et tableaux supprimés de manière réversible.",
+    },
+    cardAssigned: {
+      subject: "Une carte Kanera vous a été assignée",
+      preheader: ({ actor, card }) => `${actor} vous a assigné la carte «\u00a0${card}\u00a0».`,
+      heading: "Une carte vous a été assignée",
+      intro: ({ firstName, actor, board }) => `Bonjour ${firstName}, ${actor} vous a assigné une carte dans ${board}.`,
+    },
+    cardCommentAdded: {
+      subject: ({ card }) => `Nouveau commentaire sur ${card}`,
+      preheader: ({ actor, card, board }) => `${actor} a commenté «\u00a0${card}\u00a0» dans ${board}.`,
+      heading: "Nouveau commentaire sur votre carte",
+      intro: ({ firstName, actor, card, board }) => `Bonjour ${firstName}, ${actor} a commenté «\u00a0${card}\u00a0» dans ${board}.`,
+    },
+    commentMentioned: {
+      subject: ({ card }) => `Mention dans un commentaire sur ${card}`,
+      preheader: ({ actor, card, board }) => `${actor} vous a mentionné dans un commentaire sur «\u00a0${card}\u00a0» dans ${board}.`,
+      heading: "Nouvelle mention dans un commentaire",
+      intro: ({ firstName, actor, card, board }) => `Bonjour ${firstName}, ${actor} vous a mentionné dans un commentaire sur «\u00a0${card}\u00a0» dans ${board}.`,
+    },
+    cardDueDateChanged: {
+      subject: "Date d’échéance modifiée sur votre carte Kanera",
+      preheader: ({ actor, card }) => `${actor} a modifié la date d’échéance de «\u00a0${card}\u00a0».`,
+      heading: "Date d’échéance modifiée",
+      intro: ({ firstName, actor }) => `Bonjour ${firstName}, ${actor} a mis à jour la date d’échéance d’une carte qui vous est assignée.`,
+      changed: ({ from, to }) => `Ancienne date\u00a0: ${from}. Nouvelle date\u00a0: ${to}.`,
+      set: ({ to }) => `Nouvelle date\u00a0: ${to}.`,
+      clearedFrom: ({ from }) => `Date supprimée (auparavant\u00a0: ${from}).`,
+      cleared: "La date d’échéance a été supprimée.",
+    },
+    cardOverdue: {
+      subject: "Une carte Kanera est en retard",
+      preheader: ({ card }) => `«\u00a0${card}\u00a0» est en retard.`,
+      heading: "Carte en retard",
+      intro: ({ firstName, due }) => `Bonjour ${firstName}, une carte qui vous est assignée est en retard${due ? ` (${due})` : ""}.`,
+    },
+    cardReminder: {
+      subject: "Votre rappel Kanera",
+      preheader: ({ card }) => `Vous avez demandé un rappel pour «\u00a0${card}\u00a0».`,
+      heading: "Rappel",
+      intro: ({ firstName }) => `Bonjour ${firstName}, vous avez demandé à Kanera de vous rappeler cette carte.`,
+    },
+    checklistItemOverdue: {
+      subject: "Un élément de checklist Kanera est en retard",
+      preheader: ({ item }) => `«\u00a0${item}\u00a0» est en retard.`,
+      heading: "Élément de checklist en retard",
+      intro: ({ firstName, item, due }) => `Bonjour ${firstName}, un élément de checklist qui vous est assigné est en retard${due ? ` (${due})` : ""}\u00a0: «\u00a0${item}\u00a0».`,
+    },
+    inviteAccepted: {
+      subject: "Une invitation Kanera a été acceptée",
+      org: {
+        preheader: ({ name, org }) => `${name} a rejoint ${org}.`,
+        heading: "Invitation acceptée",
+        intro: ({ firstName, name, org }) => `Bonjour ${firstName}, ${name} a accepté une invitation et a rejoint ${org}.`,
+        newMember: ({ name, email }) => `Nouveau membre\u00a0: ${name} (${email})`,
+        role: ({ role }) => `Rôle dans l’organisation\u00a0: ${role}`,
+        button: "Voir les membres",
+      },
+      board: {
+        preheader: ({ name, board }) => `${name} a rejoint ${board}.`,
+        heading: "Invitation au tableau acceptée",
+        intro: ({ firstName, name, board, org }) => `Bonjour ${firstName}, ${name} a accepté une invitation et a rejoint ${board} dans ${org}.`,
+        newGuest: ({ name, email }) => `Nouvel invité\u00a0: ${name} (${email})`,
+        role: ({ role }) => `Rôle sur le tableau\u00a0: ${role}`,
+        button: "Voir le tableau",
+      },
+    },
+    boardInvite: {
+      subject: ({ boardCount, boardName }) => `Invitation à rejoindre ${boardCount === 1 ? boardName : `${boardCount} tableaux`}`,
+      preheader: ({ inviter, boardCount, boardName, org }) =>
+        `${inviter} vous invite à rejoindre ${boardCount === 1 ? boardName : `${boardCount} tableaux`} sur ${org}.`,
+      heading: "Invitation à un tableau",
+      intro: ({ inviter, boardCount, org }) => `${inviter} vous invite à rejoindre ${boardCount === 1 ? "un tableau" : `${boardCount} tableaux`} sur ${org}.`,
+      grant: ({ board, role }) => `${board} (${role})`,
+      button: "Accepter l’invitation",
+    },
+    boardAccessGranted: {
+      subject: ({ board }) => `Vous avez désormais accès à ${board}`,
+      preheader: ({ inviter, board, org }) => `${inviter} vous a donné accès à ${board} sur ${org}.`,
+      heading: "Accès au tableau accordé",
+      intro: ({ name, inviter, board, org }) => `Bonjour ${name}, ${inviter} vous a donné accès au tableau ${board} sur ${org}.`,
+      role: ({ role }) => `Votre rôle sur le tableau\u00a0: ${role}.`,
+      button: "Ouvrir le tableau",
+    },
+    billing: {
+      trialStarted: {
+        subject: "Votre essai Kanera Pro a commencé",
+        preheader: ({ end }) => end
+          ? `Découvrez Kanera Pro jusqu’au ${end}. Aucun prélèvement automatique ne sera effectué.`
+          : "Découvrez Kanera Pro sans prélèvement automatique à la fin de votre essai.",
+        title: "Votre essai Pro a commencé",
+        intro: ({ firstName, org, end }) => `Bonjour ${firstName}, ${org} dispose désormais d’un accès complet à Kanera Pro${end ? ` jusqu’au ${end}` : " pendant votre essai"}.`,
+        lines: ({ org }) => [
+          "Aucun moyen de paiement n’est requis, et aucun prélèvement automatique ne sera effectué à la fin de l’essai.",
+          "Essayez les tableaux, membres, automatisations et exécutions illimités, ainsi que la collaboration avec des invités, l’accès API, les webhooks et des limites de stockage plus élevées.",
+          `Si vous ne passez pas à Pro, ${org} passera automatiquement à Kanera Free à la fin de l’essai.`,
+        ],
+        cta: "Consulter votre essai",
+      },
+      trialWarning: {
+        subject: ({ days }) => days === 1 ? "Votre essai Kanera Pro se termine demain" : `Votre essai Kanera Pro se termine dans ${days} jours`,
+        preheader: ({ org }) => `Découvrez ce qui changera lorsque ${org} passera à Kanera Free.`,
+        title: ({ days }) => days === 1 ? "Votre essai se termine demain" : `Votre essai se termine dans ${days} jours`,
+        intro: ({ firstName, org, end, days }) =>
+          `Bonjour ${firstName}, l’essai Pro de ${org} se termine${end ? ` le ${end}` : days === 1 ? " demain" : ` dans ${days} jours`}.`,
+        lines: [
+          "Aucun prélèvement automatique ne sera effectué. Si vous ne passez pas à Pro, l’organisation passera à Kanera Free à la fin de l’essai.",
+          "Tous les espaces de travail restent disponibles. Le résumé ci-dessous indique ce qui changera selon votre configuration actuelle.",
+        ],
+        cta: "Voir les changements et passer à Pro",
+      },
+      downgradedToFree: {
+        subject: ({ org }) => `${org} est désormais sur Kanera Free`,
+        preheader: "Votre essai Pro est terminé. Tous les espaces de travail restent disponibles avec Kanera Free.",
+        title: "Votre essai est terminé",
+        intro: ({ firstName, org }) => `Bonjour ${firstName}, ${org} est désormais sur Kanera Free.`,
+        lines: [
+          "Tous les espaces de travail restent disponibles. Kanera a uniquement ajusté les ressources ci-dessous pour respecter les limites de Free.",
+          "Si vous revenez à Pro, Kanera restaurera les ressources éligibles modifiées lors de ce passage à Free.",
+        ],
+        cta: "Voir les changements",
+      },
+      upgradedToPro: {
+        subject: "Kanera Pro est actif",
+        preheader: ({ org }) => `${org} dispose désormais d’un accès actif à Kanera Pro.`,
+        title: "Pro est activé",
+        intro: ({ firstName, org }) => `Bonjour ${firstName}, votre achat de Kanera Pro pour ${org} est confirmé.`,
+        line: "Les fonctionnalités et les limites de Pro sont disponibles dès maintenant.",
+        restoredLine: "Kanera a également restauré les ressources éligibles enregistrées lors du précédent passage à Free.",
+        cta: "Gérer Pro",
+      },
+      welcomeToPro: {
+        subject: "Bienvenue sur Kanera Pro",
+        preheader: ({ org }) => `Votre abonnement Pro pour ${org} est actif.`,
+        title: "Votre abonnement Pro est actif",
+        intro: ({ firstName, org }) => `Bonjour ${firstName}, l’essai Pro de ${org} a laissé place à un abonnement Pro payant.`,
+        lines: [
+          "Votre accès s’est poursuivi sans interruption, et aucune ressource de l’essai n’a été modifiée.",
+          "Vous pouvez continuer à utiliser les tableaux, membres, automatisations et exécutions illimités, ainsi que la collaboration avec des invités, l’accès API, les webhooks et des limites de stockage plus élevées.",
+        ],
+        cta: "Gérer l’abonnement",
+      },
+      changed: {
+        subject: "Votre abonnement Kanera Pro a été modifié",
+        preheader: ({ org }) => `Consultez les détails mis à jour de l’abonnement de ${org}.`,
+        title: "Abonnement modifié",
+        intro: ({ firstName, org }) => `Bonjour ${firstName}, l’abonnement Kanera Pro de ${org} a été modifié.`,
+        line: "Voici les détails actuels\u00a0:",
+        cta: "Gérer l’abonnement",
+      },
+      renewed: {
+        subject: "Votre abonnement Kanera Pro a été renouvelé",
+        preheader: ({ org }) => `Kanera Pro continue pour ${org}.`,
+        title: "Pro renouvelé",
+        intro: ({ firstName, org }) => `Bonjour ${firstName}, l’abonnement Kanera Pro de ${org} a bien été renouvelé.`,
+        line: "Aucune action n’est requise. Votre accès Pro se poursuit sans interruption.",
+        cta: "Voir la facturation",
+      },
+      paymentFailed: {
+        subject: "Action requise\u00a0: mettez à jour votre moyen de paiement Kanera",
+        preheader: ({ org }) => `Nous n’avons pas pu traiter le dernier paiement Pro de ${org}.`,
+        title: "Un paiement requiert votre attention",
+        intro: ({ firstName, org }) => `Bonjour ${firstName}, nous n’avons pas pu traiter le dernier paiement Kanera Pro de ${org}.`,
+        lines: [
+          "Pro reste disponible pendant les nouvelles tentatives de paiement, mais un paiement non régularisé pourrait interrompre l’accès par la suite.",
+          "Mettez à jour votre moyen de paiement pour que l’abonnement reste actif.",
+        ],
+        cta: "Mettre à jour le moyen de paiement",
+      },
+      paymentRecovered: {
+        subject: "Votre paiement Kanera Pro est confirmé",
+        preheader: ({ org }) => `La facturation de ${org} est de nouveau en règle.`,
+        title: "Paiement confirmé",
+        intro: ({ firstName, org }) => `Bonjour ${firstName}, le paiement Kanera Pro en attente pour ${org} a été confirmé.`,
+        line: "Aucune autre action n’est requise. L’accès Pro se poursuivra sans interruption.",
+        cta: "Voir la facturation",
+      },
+      seatPurchase: {
+        subject: "Votre achat de sièges Kanera est confirmé",
+        preheader: ({ org, count }) => count
+          ? `${org} dispose désormais de ${plural(count, "siège acheté", "sièges achetés")}.`
+          : `Votre achat de sièges pour ${org} est confirmé.`,
+        title: "Achat de sièges confirmé",
+        intro: ({ firstName, org }) => `Bonjour ${firstName}, votre achat de sièges pour ${org} est confirmé.`,
+        added: ({ added, from, to }) => isOne(added)
+          ? `${added} siège acheté a été ajouté, ce qui fait passer votre capacité de ${from} à ${to} sièges.`
+          : `${added} sièges achetés ont été ajoutés, ce qui fait passer votre capacité de ${from} à ${to} sièges.`,
+        total: ({ count }) => `Votre forfait Pro comprend désormais ${plural(count, "siège acheté", "sièges achetés")}.`,
+        capacityAvailable: "La nouvelle capacité est disponible dès maintenant et peut être attribuée à un membre ou à un invité.",
+        cta: "Gérer les sièges",
+      },
+      seatBilled: {
+        subject: "Un siège Kanera a été facturé",
+        seatKind: { member: "siège de membre", guest: "siège d’invité externe" },
+        preheader: ({ seatKind }) => `Un nouveau ${seatKind} a été facturé pour votre organisation.`,
+        title: "Siège facturé",
+        intro: ({ firstName, org, seatKind }) => `Bonjour ${firstName}, Kanera a facturé un nouveau ${seatKind} pour ${org}.`,
+        billedUser: ({ user }) => `Siège ajouté pour\u00a0: ${user}.`,
+        userWithEmail: ({ name, email }) => `${name} (${email})`,
+        activeSeats: ({ org, count }) => `${org} compte désormais ${plural(count, "siège facturé actif", "sièges facturés actifs")}.`,
+        cta: "Gérer la facturation",
+      },
+      seatCapacityReduced: {
+        subject: "Votre capacité de sièges Kanera a été réduite",
+        preheader: ({ org, count }) => count
+          ? `${org} dispose désormais de ${plural(count, "siège acheté", "sièges achetés")}.`
+          : `La capacité de sièges achetés de ${org} a été réduite.`,
+        title: "Capacité de sièges réduite",
+        intro: ({ firstName, org }) => `Bonjour ${firstName}, la capacité de sièges achetés de ${org} a été mise à jour.`,
+        reduced: ({ count, from }) => `Votre forfait Pro comprend désormais ${plural(count, "siège acheté", "sièges achetés")}, contre ${from} auparavant.`,
+        total: ({ count }) => `Votre forfait Pro comprend désormais ${plural(count, "siège acheté", "sièges achetés")}.`,
+        creditLine: "Tout crédit au prorata qui en résulte apparaîtra sur vos prochaines factures.",
+        cta: "Gérer les sièges",
+      },
+      cancellationScheduled: {
+        subject: ({ org }) => `Kanera Pro prendra fin pour ${org}`,
+        preheader: ({ end }) => end
+          ? `Pro reste actif jusqu’au ${end}. Découvrez ce qui changera ensuite.`
+          : "Pro reste actif jusqu’à la fin de la période de facturation en cours.",
+        title: "Résiliation de Pro programmée",
+        intro: ({ firstName, org, end }) =>
+          `Bonjour ${firstName}, Kanera Pro restera actif pour ${org}${end ? ` jusqu’au ${end}` : " jusqu’à la fin de la période de facturation en cours"}.`,
+        lines: ({ org }) => [
+          `${org} passera ensuite automatiquement à Kanera Free, et aucun renouvellement Pro ne sera plus facturé.`,
+          "Tous les espaces de travail resteront disponibles. Le résumé ci-dessous indique ce qui changera selon la configuration actuelle.",
+        ],
+        cta: "Vérifier ou conserver Pro",
+      },
+      cancellationReversed: {
+        subject: ({ org }) => `Kanera Pro continue pour ${org}`,
+        preheader: "La résiliation programmée a été annulée et Pro sera renouvelé normalement.",
+        title: "Pro continue",
+        intro: ({ firstName, org }) => `Bonjour ${firstName}, la résiliation programmée de Kanera Pro pour ${org} a été annulée.`,
+        line: "L’accès Pro se poursuivra sans interruption et l’abonnement sera renouvelé normalement.",
+        cta: "Gérer l’abonnement",
+      },
+      cancelled: {
+        subject: ({ org }) => `${org} est désormais sur Kanera Free`,
+        preheader: "L’abonnement Pro a pris fin. Découvrez ce qui a changé avec Kanera Free.",
+        title: "Votre abonnement Pro a pris fin",
+        intro: ({ firstName, org }) => `Bonjour ${firstName}, ${org} est désormais sur Kanera Free.`,
+        lines: [
+          "Tous les espaces de travail restent disponibles. Kanera a uniquement ajusté les ressources ci-dessous pour respecter les limites de Free.",
+          "Si vous revenez à Pro, Kanera restaurera les ressources éligibles modifiées à la fin de l’abonnement.",
+        ],
+        cta: "Voir les changements",
+      },
+      details: {
+        billing: "Facturation",
+        annual: "Annuelle",
+        monthly: "Mensuelle",
+        purchasedSeats: "Sièges achetés",
+        nextRenewal: "Prochain renouvellement",
+      },
+      impact: {
+        forecastTitle: "Ce qui changera avec Kanera Free",
+        restoredTitle: "Ce que Kanera a restauré",
+        appliedTitle: "Ce qui a changé",
+        forecastEmpty: "Rien dans votre configuration actuelle ne dépasse les limites de Kanera Free.",
+        appliedEmpty: "Aucune ressource n’a dû être modifiée pour respecter les limites de Kanera Free.",
+        freeLimits: ({ boards, members, automations, executions }) =>
+          `Kanera Free comprend des espaces de travail illimités, ${boards} tableaux, ${members} membres, ${automations} automatisations actives et ${executions} exécutions d’automatisation par mois.`,
+        forecast: {
+          board: (n) => plural(n, "tableau sera archivé", "tableaux seront archivés"),
+          user: (n) => plural(n, "membre sera suspendu", "membres seront suspendus"),
+          automation: (n) => plural(n, "automatisation sera désactivée", "automatisations seront désactivées"),
+          webhook: (n) => plural(n, "webhook sera désactivé", "webhooks seront désactivés"),
+          apiKey: (n) => plural(n, "clé API d’espace de travail sera révoquée", "clés API d’espace de travail seront révoquées"),
+          guest: (n) => plural(n, "invité sera retiré de vos tableaux", "invités seront retirés de vos tableaux"),
+          invite: (n) => plural(n, "invitation d’invité sera révoquée", "invitations d’invités seront révoquées"),
+        },
+        restored: {
+          board: (n) => plural(n, "tableau restauré", "tableaux restaurés"),
+          user: (n) => plural(n, "membre réactivé", "membres réactivés"),
+          automation: (n) => plural(n, "automatisation réactivée", "automatisations réactivées"),
+          webhook: (n) => plural(n, "webhook réactivé", "webhooks réactivés"),
+          apiKey: (n) => plural(n, "clé API restaurée", "clés API restaurées"),
+          guest: (n) => plural(n, "invité réintégré à vos tableaux", "invités réintégrés à vos tableaux"),
+          invite: (n) => plural(n, "invitation d’invité restaurée", "invitations d’invités restaurées"),
+        },
+        applied: {
+          board: (n) => plural(n, "tableau archivé", "tableaux archivés"),
+          user: (n) => plural(n, "membre suspendu", "membres suspendus"),
+          automation: (n) => plural(n, "automatisation désactivée", "automatisations désactivées"),
+          webhook: (n) => plural(n, "webhook désactivé", "webhooks désactivés"),
+          apiKey: (n) => plural(n, "clé API d’espace de travail révoquée", "clés API d’espace de travail révoquées"),
+          guest: (n) => plural(n, "invité retiré de vos tableaux", "invités retirés de vos tableaux"),
+          invite: (n) => plural(n, "invitation d’invité révoquée", "invitations d’invités révoquées"),
+        },
+      },
+      usage: ({ boards, cards, members }) => {
+        const built = `${plural(boards, "tableau", "tableaux")} contenant ${plural(cards, "carte", "cartes")}`;
+        return members > 1 ? `Jusqu’ici, votre équipe de ${members} personnes a créé ${built}.` : `Jusqu’ici, vous avez créé ${built}.`;
+      },
+    },
+    importCompleted: {
+      subject: "Votre import Kanera est terminé",
+      preheader: ({ cards, source }) => `${plural(cards, "carte transférée", "cartes transférées")} depuis ${source}.`,
+      heading: "Votre import est terminé",
+      intro: ({ firstName, source, board }) => `Bonjour ${firstName}, votre import depuis ${source} dans ${board} est terminé. Voici ce qui a été transféré\u00a0:`,
+      sources: { trello: "Trello", kanera: "un export de tableau Kanera", csv: "un fichier CSV" },
+      rows: { lists: "Listes", cards: "Cartes", checklistItems: "Éléments de checklist", comments: "Commentaires", attachments: "Pièces jointes" },
+      attachmentsSkipped: ({ count }) => isOne(count)
+        ? `${count} pièce jointe a été ignorée, généralement parce que le fichier était trop volumineux ou n’était plus disponible à la source.`
+        : `${count} pièces jointes ont été ignorées, généralement parce que les fichiers étaient trop volumineux ou n’étaient plus disponibles à la source.`,
+      warnings: ({ count }) =>
+        `L’import s’est terminé avec ${plural(count, "avertissement", "avertissements")}, indiqués sur l’écran d’import à la fin de l’opération. Certains détails n’ont peut-être pas été transférés exactement tels qu’ils étaient dans la source.`,
+      check: "Avant d’abandonner votre ancien outil, ouvrez le tableau et vérifiez que vos listes et vos cartes récentes sont correctes.",
+      button: "Ouvrir le tableau",
+      footer: "Vous recevez cet e-mail car vous avez lancé cet import.",
+    },
+    storageWarning: {
+      subject: ({ org }) => `${org} manque d’espace de stockage`,
+      preheader: ({ percent, quota }) => `${percent}\u00a0% de ${quota} utilisés. Libérez de l’espace avant que les envois ne soient bloqués.`,
+      heading: "Vous approchez de votre limite de stockage",
+      intro: ({ firstName, org, used, quota, percent }) =>
+        `Bonjour ${firstName}, ${org} a utilisé ${used} sur les ${quota} de stockage inclus (${percent}\u00a0%).`,
+      whenFull: "Une fois l’espace plein, personne dans l’organisation ne pourra ajouter de pièces jointes ni coller d’images tant que de l’espace n’aura pas été libéré.",
+      howToFree: "Vous pouvez libérer de l’espace vous-même dans Paramètres → Organisation → Stockage. La liste Nettoyer les fichiers affiche les fichiers les plus volumineux et les plus anciens de votre organisation, y compris ceux des cartes archivées que plus personne ne consulte, et vous permet de les filtrer par taille, ancienneté et espace de travail, puis d’en supprimer jusqu’à 100 à la fois.",
+      upgrade: ({ quota }) => `Passer à Kanera Pro porte la limite à ${quota}.`,
+      noUpgrade: "Si vous avez besoin de plus d’espace que n’en inclut votre forfait, répondez à cet e-mail et nous vous aiderons.",
+      button: "Libérer de l’espace",
+      footer: "Vous recevez cet e-mail car vous êtes propriétaire ou administrateur de cette organisation. Nous l’envoyons une seule fois chaque fois que l’utilisation approche de la limite.",
+    },
+    lifecycle: {
+      footerNote: "Vous pouvez désactiver les conseils de prise en main dans Paramètres, puis Notifications.",
+      noBoard: {
+        subject: "Commencez par un tableau simple",
+        preheader: "Un premier petit tableau est le moyen le plus rapide de voir si Kanera vous convient.",
+        title: "Commencez par un tableau simple",
+        intro: ({ firstName, org }) => `Bonjour ${firstName}, l’organisation ${org} est prête mais n’a pas encore de tableau.`,
+        lines: [
+          "Inutile de planifier tout votre processus à l’avance. Choisissez un travail que votre équipe mène cette semaine et créez trois listes\u00a0: À faire, En cours et Terminé.",
+          "Ajoutez quelques vraies cartes et déplacez-les au fil de l’avancement. Une fois à l’aise, ajoutez d’autres tableaux au même espace de travail. Ils partagent tous ses listes et ses champs, donc rien n’est à configurer deux fois.",
+          "Vous suivez déjà votre travail dans Trello ou un tableur\u00a0? Importez-le depuis les paramètres de votre espace de travail au lieu de repartir de zéro.",
+        ],
+        cta: "Créer votre premier tableau",
+      },
+      inviteTeam: {
+        subject: "Kanera fonctionne mieux en équipe",
+        preheader: "Invitez vos collaborateurs pour que les assignations, les commentaires et les dates d’échéance leur parviennent.",
+        title: "Faites venir vos collaborateurs",
+        intro: ({ firstName, org }) => `Bonjour ${firstName}, vous avez créé un tableau dans ${org}. Pour l’instant, personne d’autre n’en est membre.`,
+        lines: [
+          "Kanera prend tout son sens lorsque les personnes qui font le travail sont aussi sur le tableau\u00a0: vous pouvez leur assigner des cartes, les mentionner dans les commentaires et voir qui fait quoi sans avoir à demander.",
+          "Invitez vos collègues comme membres de toute l’organisation, ou invitez une personne externe comme invité sur un seul tableau.",
+        ],
+        cta: "Inviter votre équipe",
+      },
+      earlySuccess: {
+        subjectAutomations: "Prochaine étape dans Kanera\u00a0: automatisez un déplacement récurrent",
+        subjectMyCards: "Prochaine étape dans Kanera\u00a0: tout votre travail au même endroit",
+        preheaderAutomations: "Laissez Kanera gérer les déplacements répétitifs pour que vos tableaux restent à jour.",
+        preheaderMyCards: "Mes cartes rassemble tout ce qui vous est assigné, sur tous vos tableaux.",
+        title: "Vos tableaux prennent forme",
+        intro: ({ firstName, org }) => `Bonjour ${firstName}, du vrai travail avance désormais dans Kanera pour ${org}. Voici une chose à essayer ensuite.`,
+        linesAutomations: [
+          "Les automatisations gèrent les déplacements récurrents à votre place. Par exemple, elles peuvent marquer une carte comme terminée lorsqu’elle arrive dans Terminé, ou assigner un relecteur lorsqu’une carte entre dans Relecture.",
+          "Commencez par une règle pour une étape que votre équipe répète chaque jour. Vous pouvez la désactiver à tout moment.",
+        ],
+        linesMyCards: [
+          "Mes cartes affiche dans une seule liste toutes les cartes qui vous sont assignées sur l’ensemble de vos tableaux, pour planifier votre journée sans ouvrir chaque tableau.",
+          "Ajoutez à «\u00a0À suivre\u00a0» les cartes que vous traiterez en premier, et gardez-les dans l’ordre au gré de l’évolution des priorités.",
+        ],
+        ctaAutomations: "Configurer une automatisation",
+        ctaMyCards: "Ouvrir Mes cartes",
+      },
+      inactive: {
+        subject: "Kanera vous convient-il\u00a0?",
+        preheader: "Personne dans votre organisation n’a utilisé Kanera depuis quelques semaines. Nous aimerions savoir pourquoi.",
+        title: "Quelque chose vous a-t-il freiné\u00a0?",
+        intro: ({ firstName, org }) => `Bonjour ${firstName}, personne dans ${org} n’a utilisé Kanera depuis quelques semaines. Voici quelques raisons fréquentes et ce qui peut aider\u00a0:`,
+        setup: {
+          lead: "La configuration a pris trop de temps.",
+          body: "Importez un tableau Trello ou un tableur existant depuis les paramètres de l’espace de travail au lieu de tout construire de zéro.",
+        },
+        timing: {
+          lead: "Ce n’est pas le bon moment.",
+          body: "Vos tableaux et vos cartes sont en sécurité et vous attendront quand vous le souhaiterez.",
+        },
+        somethingWrong: {
+          lead: "Quelque chose n’a pas fonctionné comme prévu.",
+          withFeedback: ({ email }) => `Écrivez-nous à ${email}. Un retour précis est ce que vous pouvez nous envoyer de plus utile.`,
+          withoutFeedback: "Dites-nous ce que c’était. Un retour précis est ce que vous pouvez nous envoyer de plus utile.",
+        },
+        wrongTool: {
+          lead: "Ce n’est pas le bon outil.",
+          body: "Pas de souci. Vous pouvez exporter n’importe quel tableau depuis son menu, ou supprimer votre organisation depuis les paramètres de l’organisation.",
+        },
+        cta: "Ouvrir Kanera",
+      },
+      activeCheckin: {
+        subject: "Kanera convient-il à votre équipe\u00a0?",
+        preheader: "Un petit point, une astuce et un moyen simple de nous dire quoi améliorer.",
+        title: "Un petit point",
+        intro: ({ firstName, org }) => `Bonjour ${firstName}, votre équipe dans ${org} utilise Kanera depuis un moment déjà. Merci.`,
+        tip: {
+          lead: "Une astuce\u00a0:",
+          body: "Cartes de l’équipe montre sur quoi chacun travaille dans tous vos tableaux, sans avoir à les ouvrir un par un.",
+        },
+        freePlan: {
+          lead: "Quand vous avez besoin de plus\u00a0:",
+          body: "Kanera Pro ajoute les tableaux, membres et automatisations illimités, ainsi que l’accès invité, l’accès API et les webhooks. Comparez les forfaits dans les paramètres du compte.",
+        },
+        growing: {
+          lead: "Votre équipe s’agrandit\u00a0?",
+          body: "Vous pouvez inviter d’autres membres, ou ajouter un client ou un prestataire comme invité sur les seuls tableaux dont il a besoin.",
+        },
+        feedback: {
+          lead: "Que devrions-nous améliorer\u00a0?",
+          body: ({ email }) => `Écrivez à ${email}. Nous lisons chaque message.`,
+        },
+        cta: "Ouvrir Kanera",
+      },
+    },
+    smtpTest: {
+      subject: "Test SMTP Kanera",
+      preheader: "Vos paramètres SMTP permettent d’envoyer les e-mails Kanera.",
+      heading: "Vos paramètres SMTP fonctionnent",
+      intro: ({ email, sentAt }) =>
+        `Ceci est un e-mail de test de Kanera envoyé à ${email} le ${sentAt}. S’il est arrivé dans votre boîte de réception, le courrier sortant de votre organisation est correctement configuré.`,
+      renderingNote: "Le logo ci-dessus, le titre, la carte ci-dessous et le bouton doivent tous rester lisibles dans ce client de messagerie.",
+      renderingCheck: "Vérification de l’affichage",
+      sampleCardTitle: "Exemple de lien de carte",
+      sampleCardSubtitle: "Surface claire et métadonnées atténuées",
+      sampleQuote: "Les extraits de commentaires utilisent ce panneau de citation. L’accent bleu-vert doit rester visible sans gêner la lecture du texte.",
+      button: "Ouvrir Kanera",
+    },
+  },
+
+  push: {
+    cardAssigned: { title: "Carte assignée", body: ({ actor, card }) => `${actor} vous a assigné la carte ${card}` },
+    commentAdded: { title: "Nouveau commentaire", body: ({ actor, board, card, excerpt }) => `${actor} a commenté dans ${board} / ${card}\u00a0: ${excerpt}` },
+    mentioned: { title: "Mention dans un commentaire", body: ({ actor, board, card, excerpt }) => `${actor} vous a mentionné dans ${board} / ${card}\u00a0: ${excerpt}` },
+    dueDateChanged: { title: "Date d’échéance modifiée", body: ({ actor, card }) => `${actor} a modifié la date d’échéance de ${card}` },
+    cardOverdue: { title: "Carte en retard", body: ({ card }) => `${card} est en retard` },
+    checklistItemOverdue: { title: "Élément de checklist en retard", body: ({ item, card }) => `${item} est en retard (${card})` },
+    reminder: { title: "Rappel" },
+    watchedActivity: { body: ({ actor, action }) => `${actor} ${action}` },
+    test: { title: "Notification de test Kanera", body: "Les notifications push sont correctement configurées." },
+    channelTest: { title: "Notification de test Kanera", body: ({ channel }) => `Votre canal de notification ${channel} fonctionne.` },
+  },
+
+  activity,
+};
+
+export default fr;

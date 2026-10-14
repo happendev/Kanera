@@ -17,6 +17,12 @@ import { AccountSettingsPage } from "../account-settings.page";
 })
 export class AccountSettingsUsersPage {
   protected readonly settings = inject(AccountSettingsPage);
+  protected readonly copiedLabel = $localize`:Tooltip after copying:Copied`;
+  protected readonly copyInviteLinkLabel = $localize`Copy invite link`;
+
+  protected noMatchesText(query: string): string {
+    return $localize`:Empty search result:Nothing matches “${query}:query:”.`;
+  }
 
   constructor() {
     this.settings.selectedTab.set("users");

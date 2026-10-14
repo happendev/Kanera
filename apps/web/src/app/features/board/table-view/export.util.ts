@@ -15,8 +15,39 @@ import type {
   GroupBy,
 } from "./table-view.types";
 import { formatDateTime } from "../../../shared/date-format";
+import { icu } from "../../../core/i18n/icu";
 
-const CARD_DETAIL_LINK_HEADER = "Card detail link";
+// Workbook headings are written in the viewer's language. The row objects below are keyed by these
+// same header strings, so every lookup goes through the constants rather than literal English.
+const GROUP_HEADER = $localize`:Spreadsheet export column header - the group a card row belongs to:Group`;
+const KEY_HEADER = $localize`:Spreadsheet export column header - the card key, e.g. ENG-12:Key`;
+const TITLE_HEADER = $localize`:Spreadsheet export column header - card title:Title`;
+const CARD_DETAIL_LINK_HEADER = $localize`:Spreadsheet export column header - link to open the card:Card detail link`;
+// "Overall" is also the group value the Report sheet's formulas look up on the Summary sheet, so it
+// must be the same string in both places.
+const OVERALL_GROUP = $localize`:Spreadsheet export row label for totals across every group:Overall`;
+const SUMMARY_ROW = $localize`:Spreadsheet export row label for a group's aggregate values:Summary`;
+const TOTAL_ROW = $localize`:Spreadsheet export row label for a group's total:Total`;
+const SPLIT_HEADER = $localize`:Spreadsheet export column header - the second dimension aggregates are split by:Split`;
+const NO_BREAKDOWN = $localize`:Spreadsheet export note - the aggregates are not broken down by a second dimension:No breakdown`;
+// Metric names are written into the Summary sheet and matched by the Report sheet's SUMIFS criteria,
+// so the cell and the formula both use this table.
+const METRIC_LABEL: Record<AggregateMetric, string> = {
+  sum: $localize`:Spreadsheet export metric name - total of a number field:sum`,
+  avg: $localize`:Spreadsheet export metric name - average of a number field:avg`,
+};
+
+function cardCountLabel(count: number): string {
+  return icu($localize`:Spreadsheet export - number of cards in a group:{count, plural, one {# card} other {# cards}}`, { count });
+}
+
+function groupedByLabel(dimension: string): string {
+  return $localize`:Spreadsheet export note - the dimension cards are grouped by:Grouped by ${dimension}:dimension:`;
+}
+
+function breakDownByLabel(dimension: string): string {
+  return $localize`:Spreadsheet export note - the second dimension aggregates are split by:Break down by ${dimension}:dimension:`;
+}
 
 export interface BoardExportSummary {
   id: string;
@@ -190,11 +221,11 @@ export function buildBoardExportPayload(ctx: BoardExportContext): BoardExportPay
 export function buildWorkbookExport(payload: BoardExportPayload): WorkbookExport {
   const { headers } = buildWorkbookRows(payload);
   const cardsRows: WorkbookCell[][] = [
-    [`Kanera export: ${payload.metadata.boardName}`],
+    [$localize`:Spreadsheet export title:Kanera export: ${payload.metadata.boardName}:boardName:`],
     [
-      `Exported ${formatExportedAt(payload.metadata.exportedAt)}`,
-      `Grouped by ${payload.metadata.groupBy}`,
-      `Sorted by ${payload.metadata.sortBy}`,
+      $localize`:Spreadsheet export note - when the file was exported:Exported ${formatExportedAt(payload.metadata.exportedAt)}:dateTime:`,
+      groupedByLabel(payload.metadata.groupBy),
+      $localize`:Spreadsheet export note - the sort order used:Sorted by ${payload.metadata.sortBy}:sortOrder:`,
     ],
     [],
     headers,
@@ -206,7 +237,7 @@ export function buildWorkbookExport(payload: BoardExportPayload): WorkbookExport
   // carrying summary values can't be filtered, summed or referenced. They live on the Summary sheet.
   for (const group of payload.groups) {
     boldRows.push(cardsRows.length);
-    cardsRows.push([group.label, `${group.cardCount} card${group.cardCount === 1 ? "" : "s"}`]);
+    cardsRows.push([group.label, cardCountLabel(group.cardCount)]);
     for (const card of group.cards) {
       cardsRows.push(headers.map((header) => card[header] ?? null));
     }
@@ -214,7 +245,7 @@ export function buildWorkbookExport(payload: BoardExportPayload): WorkbookExport
 
   const sheets: WorkbookSheet[] = [
     {
-      name: "Cards",
+      name: $localize`:Spreadsheet sheet name - the list of exported cards:Cards`,
       rows: cardsRows,
       columnWidths: headers.map((header, index) => widthForColumn(header, index, cardsRows)),
       boldRows,
@@ -240,17 +271,21 @@ function buildSummarySheet(payload: BoardExportPayload): WorkbookSheet | null {
   const summary = [...payload.summary, ...payload.overallSummary];
   if (!summary.length) return null;
   const splitActive = summary.some((row) => row.split !== null);
-  const groupHeader = payload.metadata.groupBy || "Group";
-  const splitHeader = payload.metadata.aggregateSplitBy || "Split";
+  const groupHeader = payload.metadata.groupBy || GROUP_HEADER;
+  const splitHeader = payload.metadata.aggregateSplitBy || SPLIT_HEADER;
 
   const headers: string[] = [groupHeader];
   if (splitActive) headers.push(splitHeader);
-  headers.push("Field", "Metric", "Value");
-  if (splitActive) headers.push("Total");
+  headers.push(
+    $localize`:Spreadsheet export column header - the number field being aggregated:Field`,
+    $localize`:Spreadsheet export column header - sum or average:Metric`,
+    $localize`:Spreadsheet export column header - the aggregate value:Value`,
+  );
+  if (splitActive) headers.push(TOTAL_ROW);
 
   const rows: WorkbookCell[][] = [
-    [`Kanera summary: ${payload.metadata.boardName}`],
-    [`Grouped by ${payload.metadata.groupBy}`, splitActive ? `Break down by ${splitHeader}` : "No breakdown"],
+    [$localize`:Spreadsheet export title of the aggregate summary sheet:Kanera summary: ${payload.metadata.boardName}:boardName:`],
+    [groupedByLabel(payload.metadata.groupBy), splitActive ? breakDownByLabel(splitHeader) : NO_BREAKDOWN],
     [],
     headers,
   ];
@@ -259,13 +294,13 @@ function buildSummarySheet(payload: BoardExportPayload): WorkbookSheet | null {
   for (const row of summary) {
     const cells: WorkbookCell[] = [row.group];
     if (splitActive) cells.push(row.split ?? "");
-    cells.push(row.field, row.metric, row.value);
+    cells.push(row.field, METRIC_LABEL[row.metric], row.value);
     if (splitActive) cells.push(row.total);
     rows.push(cells);
   }
 
   return {
-    name: "Summary",
+    name: $localize`:Spreadsheet sheet name - aggregate values per group:Summary`,
     rows,
     columnWidths: headers.map((header, index) => widthForColumn(header, index, rows)),
     boldRows: [0, 1, headerRowNumber - 1],
@@ -276,16 +311,16 @@ function buildSummarySheet(payload: BoardExportPayload): WorkbookSheet | null {
 function buildReportSheet(payload: BoardExportPayload, summarySheet: WorkbookSheet): WorkbookSheet {
   const summary = payload.summary;
   const splitActive = summary.some((row) => row.split !== null);
-  const groupHeader = payload.metadata.groupBy || "Group";
-  const splitHeader = payload.metadata.aggregateSplitBy || "Split";
+  const groupHeader = payload.metadata.groupBy || GROUP_HEADER;
+  const splitHeader = payload.metadata.aggregateSplitBy || SPLIT_HEADER;
   const aggregateKeys = uniqueSummaryKeys(summary);
   const aggregateHeaders = aggregateKeys.map((key) => aggregateHeader(key));
-  const headers = [groupHeader, "Title", ...(splitActive ? [splitHeader] : []), ...aggregateHeaders];
+  const headers = [groupHeader, TITLE_HEADER, ...(splitActive ? [splitHeader] : []), ...aggregateHeaders];
   const rows: WorkbookCell[][] = [
-    [`Kanera report: ${payload.metadata.boardName}`],
+    [$localize`:Spreadsheet export title of the report sheet:Kanera report: ${payload.metadata.boardName}:boardName:`],
     [
-      `Grouped by ${payload.metadata.groupBy}`,
-      splitActive ? `Break down by ${payload.metadata.aggregateSplitBy}` : "No breakdown",
+      groupedByLabel(payload.metadata.groupBy),
+      splitActive ? breakDownByLabel(payload.metadata.aggregateSplitBy) : NO_BREAKDOWN,
     ],
     [],
     headers,
@@ -295,7 +330,7 @@ function buildReportSheet(payload: BoardExportPayload, summarySheet: WorkbookShe
     const groupRows = summary.filter((row) => row.group === group);
     const exportGroup = payload.groups.find((item) => item.label === group);
     for (const card of exportGroup?.cards ?? []) {
-      const row: WorkbookCell[] = [group, card["Title"] ?? ""];
+      const row: WorkbookCell[] = [group, card[TITLE_HEADER] ?? ""];
       if (splitActive) row.push(card[splitHeader] ?? "");
       row.push(...aggregateKeys.map((key) => card[key.field] ?? null));
       rows.push(row);
@@ -306,7 +341,7 @@ function buildReportSheet(payload: BoardExportPayload, summarySheet: WorkbookShe
     const breakdowns = splitActive ? unique(groupRows.map((row) => row.split ?? "")) : [""];
     for (const breakdown of breakdowns) {
       const rowNumber = rows.length + 1;
-      const row: WorkbookCell[] = [group, "Summary"];
+      const row: WorkbookCell[] = [group, SUMMARY_ROW];
       if (splitActive) row.push(breakdown);
       row.push(
         ...aggregateKeys.map((key) => ({
@@ -324,7 +359,7 @@ function buildReportSheet(payload: BoardExportPayload, summarySheet: WorkbookShe
     }
     rows.push([
       group,
-      "Total",
+      TOTAL_ROW,
       ...(splitActive ? [""] : []),
       ...aggregateKeys.map((key) => ({
         type: "Formula" as const,
@@ -345,7 +380,7 @@ function buildReportSheet(payload: BoardExportPayload, summarySheet: WorkbookShe
   }
 
   return {
-    name: "Report",
+    name: $localize`:Spreadsheet sheet name - per-group report with cards and totals:Report`,
     rows,
     columnWidths: headers.map((header, index) => widthForColumn(header, index, rows)),
     boldRows: [0, 1, 3],
@@ -364,10 +399,10 @@ function overallReportRows(
   const summary = payload.overallSummary;
   const breakdowns = splitActive ? unique(summary.map((row) => row.split ?? "")) : [""];
   const cardCount = dedupedExportCardCount(payload.groups);
-  rows.push(["Overall totals", `${cardCount} card${cardCount === 1 ? "" : "s"}`]);
+  rows.push([$localize`:Spreadsheet export heading for totals across every group:Overall totals`, cardCountLabel(cardCount)]);
   let rowNumber = startRowNumber + 1;
   for (const breakdown of breakdowns) {
-    const row: WorkbookCell[] = ["Overall", splitActive ? "Summary" : "Total"];
+    const row: WorkbookCell[] = [OVERALL_GROUP, splitActive ? SUMMARY_ROW : TOTAL_ROW];
     if (splitActive) row.push(breakdown);
     row.push(
       ...aggregateKeys.map((key) => ({
@@ -386,14 +421,14 @@ function overallReportRows(
   }
   if (splitActive) {
     rows.push([
-      "Overall",
-      "Total",
+      OVERALL_GROUP,
+      TOTAL_ROW,
       "",
       ...aggregateKeys.map((key) => ({
         type: "Formula" as const,
         value: totalFormula({
           summarySheet,
-          group: "Overall",
+          group: OVERALL_GROUP,
           splitActive,
           field: key.field,
           metric: key.metric,
@@ -406,9 +441,9 @@ function overallReportRows(
 
 export function buildWorkbookRows(payload: BoardExportPayload): WorkbookRows {
   const headers = [
-    "Group",
-    "Key",
-    "Title",
+    GROUP_HEADER,
+    KEY_HEADER,
+    TITLE_HEADER,
     ...payload.metadata.columns.map((column) => column.label),
     CARD_DETAIL_LINK_HEADER,
   ];
@@ -416,8 +451,8 @@ export function buildWorkbookRows(payload: BoardExportPayload): WorkbookRows {
   const rows: BoardExportCard[] = [];
   for (const group of payload.groups) {
     rows.push({
-      Group: group.label,
-      Title: `${group.cardCount} card${group.cardCount === 1 ? "" : "s"}`,
+      [GROUP_HEADER]: group.label,
+      [TITLE_HEADER]: cardCountLabel(group.cardCount),
     });
     rows.push(...group.cards);
   }
@@ -442,7 +477,9 @@ function unique(values: string[]): string[] {
 }
 
 function aggregateHeader(key: { field: string; metric: AggregateMetric }): string {
-  return key.metric === "sum" ? key.field : `${key.field} ${key.metric}`;
+  return key.metric === "sum"
+    ? key.field
+    : $localize`:Spreadsheet export column header - a number field followed by the metric name:${key.field}:field: ${METRIC_LABEL[key.metric]}:metric:`;
 }
 
 function summaryLookupFormula(input: {
@@ -459,7 +496,7 @@ function summaryLookupFormula(input: {
     `${quotedSheet(input.summarySheet.name)}!$A:$A,$A${input.rowNumber}`,
     ...(input.splitActive ? [`${quotedSheet(input.summarySheet.name)}!$B:$B,$C${input.rowNumber}`] : []),
     `${quotedSheet(input.summarySheet.name)}!$${fieldColumn}:$${fieldColumn},${excelString(input.field)}`,
-    `${quotedSheet(input.summarySheet.name)}!$${metricColumn}:$${metricColumn},${excelString(input.metric)}`,
+    `${quotedSheet(input.summarySheet.name)}!$${metricColumn}:$${metricColumn},${excelString(METRIC_LABEL[input.metric])}`,
   ];
   return `SUMIFS(${quotedSheet(input.summarySheet.name)}!$${valueColumn}:$${valueColumn},${criteria.join(",")})`;
 }
@@ -477,7 +514,7 @@ function totalFormula(input: {
   const criteria = [
     `${quotedSheet(input.summarySheet.name)}!$A:$A,${excelString(input.group)}`,
     `${quotedSheet(input.summarySheet.name)}!$${fieldColumn}:$${fieldColumn},${excelString(input.field)}`,
-    `${quotedSheet(input.summarySheet.name)}!$${metricColumn}:$${metricColumn},${excelString(input.metric)}`,
+    `${quotedSheet(input.summarySheet.name)}!$${metricColumn}:$${metricColumn},${excelString(METRIC_LABEL[input.metric])}`,
   ];
   // With breakdowns, Summary repeats the true group/overall total on every split bucket row.
   // Use MAXIFS to retrieve that repeated scalar instead of summing buckets or averaging sums.
@@ -593,9 +630,9 @@ export function boardExportSnapshotFromCards(
 
 function exportCardForGroup(group: CardGroup, card: AnyCard, ctx: BoardExportContext, index: ExportIndex): BoardExportCard {
   const row: BoardExportCard = {
-    Group: group.label,
-    Key: card.key,
-    Title: card.title,
+    [GROUP_HEADER]: group.label,
+    [KEY_HEADER]: card.key,
+    [TITLE_HEADER]: card.title,
   };
   for (const column of ctx.columns) {
     row[column.label] = valueForColumn(group.key, card, column.id, ctx, index);
@@ -642,7 +679,7 @@ function valueForColumn(
     // still asks for it by id in its own export, where a "Yes" column is worth having.
     case "description":
       return "hasDescription" in card
-        ? (card.hasDescription ? "Yes" : null)
+        ? (card.hasDescription ? $localize`:Spreadsheet cell - the card has a description:Yes` : null)
         : plainText((card as { description?: string | null }).description ?? null);
     default:
       if (columnId.startsWith("cf:")) return customFieldValue(card.id, columnId.slice(3), ctx, index);
@@ -722,12 +759,12 @@ function buildOverallSummaryRows(ctx: BoardExportContext, index: ExportIndex): A
         for (const bucket of buckets) {
           const value = metricOver(bucket.cards, fieldId, metric, ctx);
           if (value === null) continue;
-          rows.push({ group: "Overall", split: bucket.label, field: field.name, metric, total, value });
+          rows.push({ group: OVERALL_GROUP, split: bucket.label, field: field.name, metric, total, value });
         }
       } else {
         const value = metricOver(cards, fieldId, metric, ctx);
         if (value === null) continue;
-        rows.push({ group: "Overall", split: null, field: field.name, metric, total: null, value });
+        rows.push({ group: OVERALL_GROUP, split: null, field: field.name, metric, total: null, value });
       }
     }
   }
@@ -751,7 +788,7 @@ function dedupedExportCardCount(groups: BoardExportGroup[]): number {
     for (const card of group.cards) {
       const link = card[CARD_DETAIL_LINK_HEADER];
       if (typeof link === "string") ids.add(link);
-      else ids.add(`${group.label}\u0000${String(card["Title"] ?? "")}`);
+      else ids.add(`${group.label}\u0000${String(card[TITLE_HEADER] ?? "")}`);
     }
   }
   return ids.size;
@@ -815,6 +852,7 @@ function checklistSummary(card: AnyCard): string | null {
   return `${done}/${total}`;
 }
 
+// Created/updated cells stay ISO 8601 so spreadsheets can sort and parse them in any locale.
 function formatDateValue(value: string | Date | null | undefined): string | null {
   if (!value) return null;
   if (value instanceof Date) return value.toISOString();

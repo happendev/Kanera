@@ -1,6 +1,7 @@
 import { Injectable, computed, inject, signal } from "@angular/core";
 import type { List } from "@kanera/shared/schema";
 import { ApiClient } from "../api/api.client";
+import { appLocale } from "../i18n/locale";
 
 export interface BoardSummary {
   name: string;
@@ -43,7 +44,7 @@ export class WorkspaceService {
   readonly boards = computed(() =>
     [...this._boardSummaries().entries()]
       .map(([id, board]) => ({ id, ...board }))
-      .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)),
+      .sort((a, b) => a.name.localeCompare(b.name, appLocale()) || a.id.localeCompare(b.id)),
   );
   readonly notificationBoardOptions = computed(() =>
     this.boards().map((board) => ({
@@ -62,7 +63,7 @@ export class WorkspaceService {
     }
     return [...byId.values()]
       .map((member) => ({ userId: member.userId, displayName: member.displayName, avatarUrl: member.avatarUrl }))
-      .sort((a, b) => a.displayName.localeCompare(b.displayName) || a.userId.localeCompare(b.userId));
+      .sort((a, b) => a.displayName.localeCompare(b.displayName, appLocale()) || a.userId.localeCompare(b.userId));
   });
 
   setActiveAccentColor(color: string | null) {

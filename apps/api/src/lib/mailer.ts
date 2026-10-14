@@ -1,3 +1,4 @@
+import type { Locale } from "@kanera/shared/locales";
 import { EMAIL_QUEUE_STATUS, emailQueue, type BoardRole, type EmailQueue, type LifecycleEmailQueueType, type SmtpConfig } from "@kanera/shared/schema";
 import { and, eq, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
@@ -11,6 +12,7 @@ import {
   adminInviteEmail,
   boardAccessGrantedEmail,
   boardInviteEmail,
+  boardInviteEmailSubject,
   cardAssignedEmail,
   cardCommentAddedEmail,
   cardDueDateChangedEmail,
@@ -28,6 +30,7 @@ import {
   proTrialStartedEmail,
   proTrialWarningEmail,
   seatBilledEmail,
+  seatBilledEmailSubject,
   seatCapacityReducedEmail,
   storageWarningEmail,
   upgradedToProEmail,
@@ -42,7 +45,11 @@ import {
   lifecycleInactiveEmail,
   lifecycleInviteTeamEmail,
   lifecycleNoBoardEmail,
+  type AdminInviteEmailParams,
   type ImportCompletedEmailParams,
+  type PasswordResetEmailParams,
+  type VerificationCodeEmailParams,
+  type WelcomeEmailParams,
   type LifecycleEmailParams,
   type BillingEmailParams,
   type BoardAccessGrantedEmailParams,
@@ -59,13 +66,21 @@ import {
   type StorageWarningEmailParams,
   type WeeklyAdminRecapEmailParams,
 } from "./email-templates/index.js";
+import { serverMessages } from "./i18n/messages/index.js";
+import { recipientLocale } from "./i18n/request-locale.js";
 import { sendEmail, type SendEmailOptions } from "./smtp.js";
 
+/**
+ * Every send takes the recipient's language (`locale`, directly or in `params`), resolved by the
+ * caller: the recipient's stored `users.locale` via `recipientLocale`, or for someone with no account
+ * yet, the requester's language (see lib/i18n/README.md). It is stored on the queue row, so the
+ * subject and the body the worker renders later are in the same language.
+ */
 export interface Mailer {
-  sendAdminInvite(to: string, displayName: string, link: string): Promise<EmailQueue>;
-  sendWelcome(to: string, displayName: string): Promise<EmailQueue>;
-  sendPasswordReset(to: string, displayName: string, link: string): Promise<EmailQueue>;
-  sendEmailVerificationCode(to: string, code: string, expiresInMinutes: number): Promise<EmailQueue>;
+  sendAdminInvite(to: string, displayName: string, link: string, locale: Locale): Promise<EmailQueue>;
+  sendWelcome(to: string, displayName: string, locale: Locale): Promise<EmailQueue>;
+  sendPasswordReset(to: string, displayName: string, link: string, locale: Locale): Promise<EmailQueue>;
+  sendEmailVerificationCode(to: string, code: string, expiresInMinutes: number, locale: Locale): Promise<EmailQueue>;
   sendDailyDigest(to: string, memberRole: BoardRole, params: DailyDigestEmailParams): Promise<EmailQueue | null>;
   sendCardAssigned(to: string, params: CardAssignedEmailParams): Promise<EmailQueue>;
   sendCardCommentAdded(to: string, params: CardCommentAddedEmailParams): Promise<EmailQueue>;
@@ -144,20 +159,20 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
   }
 
   return {
-    async sendAdminInvite(to, displayName, link) {
-      return queueImmediateEmail(to, "You’re invited to administer Kanera", "admin_invite", { displayName, inviteUrl: link, expiresInHours: 24 });
+    async sendAdminInvite(to, displayName, link, locale) {
+      return queueImmediateEmail(to, mail(locale).adminInvite.subject, "admin_invite", { locale, displayName, inviteUrl: link, expiresInHours: 24 });
     },
-    async sendWelcome(to, displayName) {
+    async sendWelcome(to, displayName, locale) {
       const loginUrl = `${webOrigin}/login`;
-      return queueEmail(to, "Welcome to Kanera", "welcome", { displayName, loginUrl });
+      return queueEmail(to, mail(locale).welcome.subject, "welcome", { locale, displayName, loginUrl });
     },
 
-    async sendPasswordReset(to, displayName, link) {
-      return queueImmediateEmail(to, "Reset your Kanera password", "password_reset", { displayName, resetUrl: link, expiresInMinutes: PASSWORD_RESET_EXPIRY_MINUTES });
+    async sendPasswordReset(to, displayName, link, locale) {
+      return queueImmediateEmail(to, mail(locale).passwordReset.subject, "password_reset", { locale, displayName, resetUrl: link, expiresInMinutes: PASSWORD_RESET_EXPIRY_MINUTES });
     },
 
-    async sendEmailVerificationCode(to, code, expiresInMinutes) {
-      return queueImmediateEmail(to, "Verify your email for Kanera", "email_verification", { code, expiresInMinutes });
+    async sendEmailVerificationCode(to, code, expiresInMinutes, locale) {
+      return queueImmediateEmail(to, mail(locale).verificationCode.subject, "email_verification", { locale, code, expiresInMinutes });
     },
 
     async sendDailyDigest(to, memberRole, params) {
@@ -173,114 +188,111 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
         .limit(1);
       if (existing) return null;
 
-      return queueEmail(to, "Your Kanera due items", "daily_digest", params);
+      return queueEmail(to, mail(params.locale).dailyDigest.subject, "daily_digest", params);
     },
 
     async sendCardAssigned(to, params) {
-      return queueEmail(to, "You were assigned a Kanera card", "card_assigned", params);
+      return queueEmail(to, mail(params.locale).cardAssigned.subject, "card_assigned", params);
     },
 
     async sendCardCommentAdded(to, params) {
-      return queueEmail(to, `New comment on ${params.cardTitle}`, "card_comment_added", params);
+      return queueEmail(to, mail(params.locale).cardCommentAdded.subject({ card: params.cardTitle }), "card_comment_added", params);
     },
 
     async sendCommentMentioned(to, params) {
-      return queueEmail(to, `Mentioned in a comment on ${params.cardTitle}`, "comment_mentioned", params);
+      return queueEmail(to, mail(params.locale).commentMentioned.subject({ card: params.cardTitle }), "comment_mentioned", params);
     },
 
     async sendCardDueDateChanged(to, params) {
-      return queueEmail(to, "Due date changed on your Kanera card", "card_due_date_changed", params);
+      return queueEmail(to, mail(params.locale).cardDueDateChanged.subject, "card_due_date_changed", params);
     },
 
     async sendCardOverdue(to, params) {
-      return queueEmail(to, "A Kanera card is overdue", "card_overdue", params);
+      return queueEmail(to, mail(params.locale).cardOverdue.subject, "card_overdue", params);
     },
 
     async sendCardReminder(to, params) {
-      return queueEmail(to, "Your Kanera reminder", "card_reminder", params);
+      return queueEmail(to, mail(params.locale).cardReminder.subject, "card_reminder", params);
     },
 
     async sendChecklistItemOverdue(to, params) {
-      return queueEmail(to, "A Kanera checklist item is overdue", "checklist_item_overdue", params);
+      return queueEmail(to, mail(params.locale).checklistItemOverdue.subject, "checklist_item_overdue", params);
     },
 
     async sendInviteAccepted(to, params) {
-      return queueEmail(to, "A Kanera invite was accepted", "invite_accepted", params);
+      return queueEmail(to, mail(params.locale).inviteAccepted.subject, "invite_accepted", params);
     },
 
     async sendBoardInvite(to, params) {
-      const boardSummary = params.boards.length === 1 ? params.boards[0]!.boardName : `${params.boards.length} boards`;
-      return queueEmail(to, `You've been invited to ${boardSummary}`, "board_invite", params);
+      return queueEmail(to, boardInviteEmailSubject(params), "board_invite", params);
     },
 
     async sendBoardAccessGranted(to, params) {
-      return queueEmail(to, `You now have access to ${params.boardName}`, "board_access_granted", params);
+      return queueEmail(to, mail(params.locale).boardAccessGranted.subject({ board: params.boardName }), "board_access_granted", params);
     },
 
     async sendProTrialStarted(to, params) {
-      return queueEmail(to, "Your Kanera Pro trial has started", "pro_trial_started", params);
+      return queueEmail(to, billing(params).trialStarted.subject, "pro_trial_started", params);
     },
 
     async sendProTrialWarning(to, params) {
-      const days = params.daysRemaining ?? 0;
-      return queueEmail(to, days === 1 ? "Your Kanera Pro trial ends tomorrow" : `Your Kanera Pro trial ends in ${days} days`, "pro_trial_warning", params);
+      return queueEmail(to, billing(params).trialWarning.subject({ days: params.daysRemaining ?? 0 }), "pro_trial_warning", params);
     },
 
     async sendDowngradedToFree(to, params) {
-      return queueEmail(to, `${params.orgName} is now on Kanera Free`, "downgraded_to_free", params);
+      return queueEmail(to, billing(params).downgradedToFree.subject({ org: params.orgName }), "downgraded_to_free", params);
     },
 
     async sendUpgradedToPro(to, params) {
-      return queueEmail(to, "Kanera Pro is active", "upgraded_to_pro", params);
+      return queueEmail(to, billing(params).upgradedToPro.subject, "upgraded_to_pro", params);
     },
 
     async sendWelcomeToPro(to, params) {
-      return queueEmail(to, "Welcome to Kanera Pro", "welcome_to_pro", params);
+      return queueEmail(to, billing(params).welcomeToPro.subject, "welcome_to_pro", params);
     },
 
     async sendBillingChanged(to, params) {
-      return queueEmail(to, "Your Kanera Pro subscription was updated", "billing_changed", params);
+      return queueEmail(to, billing(params).changed.subject, "billing_changed", params);
     },
 
     async sendBillingRenewed(to, params) {
-      return queueEmail(to, "Your Kanera Pro subscription renewed", "billing_renewed", params);
+      return queueEmail(to, billing(params).renewed.subject, "billing_renewed", params);
     },
 
     async sendBillingPaymentFailed(to, params) {
-      return queueEmail(to, "Action needed: update your Kanera payment method", "billing_payment_failed", params);
+      return queueEmail(to, billing(params).paymentFailed.subject, "billing_payment_failed", params);
     },
 
     async sendBillingPaymentRecovered(to, params) {
-      return queueEmail(to, "Your Kanera Pro payment is confirmed", "billing_payment_recovered", params);
+      return queueEmail(to, billing(params).paymentRecovered.subject, "billing_payment_recovered", params);
     },
 
     async sendSeatBilled(to, params) {
-      const subject = params.seatKind ? "A Kanera seat was billed" : "Your Kanera seat purchase is confirmed";
-      return queueEmail(to, subject, "seat_billed", params);
+      return queueEmail(to, seatBilledEmailSubject(params), "seat_billed", params);
     },
 
     async sendSeatCapacityReduced(to, params) {
-      return queueEmail(to, "Your Kanera seat capacity was reduced", "seat_capacity_reduced", params);
+      return queueEmail(to, billing(params).seatCapacityReduced.subject, "seat_capacity_reduced", params);
     },
 
     async sendProCancellationScheduled(to, params) {
-      return queueEmail(to, `Kanera Pro will end for ${params.orgName}`, "pro_cancellation_scheduled", params);
+      return queueEmail(to, billing(params).cancellationScheduled.subject({ org: params.orgName }), "pro_cancellation_scheduled", params);
     },
 
     async sendProCancellationReversed(to, params) {
-      return queueEmail(to, `Kanera Pro will continue for ${params.orgName}`, "pro_cancellation_reversed", params);
+      return queueEmail(to, billing(params).cancellationReversed.subject({ org: params.orgName }), "pro_cancellation_reversed", params);
     },
 
     async sendProCancelled(to, params) {
-      return queueEmail(to, `${params.orgName} is now on Kanera Free`, "pro_cancelled", params);
+      return queueEmail(to, billing(params).cancelled.subject({ org: params.orgName }), "pro_cancelled", params);
     },
 
     async sendImportCompleted(to, params) {
-      return queueEmail(to, "Your Kanera import is complete", "import_completed", params);
+      return queueEmail(to, mail(params.locale).importCompleted.subject, "import_completed", params);
     },
 
     async sendStorageWarning(to, params) {
-      return queueEmail(to, `${params.orgName} is running out of storage`, "storage_warning", params);
+      return queueEmail(to, mail(params.locale).storageWarning.subject({ org: params.orgName }), "storage_warning", params);
     },
 
     async sendLifecycle(to, type, params) {
@@ -350,82 +362,93 @@ export function emailHeaders(row: EmailQueue): Record<string, string> | undefine
   };
 }
 
+function mail(locale: Locale) {
+  return serverMessages(locale).email;
+}
+
+function billing(params: { locale: Locale }) {
+  return serverMessages(params.locale).email.billing;
+}
+
 export function renderEmail(row: EmailQueue): string {
+  // Rows queued before localisation carry no locale; they render in the source language they were
+  // queued in (and their stored subject already is).
+  const data = { ...row.data, locale: recipientLocale(row.data.locale) };
   switch (row.type) {
     case "admin_invite":
-      return adminInviteEmail(row.data as { displayName: string; inviteUrl: string; expiresInHours: number });
+      return adminInviteEmail(data as AdminInviteEmailParams);
     case "welcome":
-      return welcomeEmail(row.data as { displayName: string; loginUrl: string });
+      return welcomeEmail(data as WelcomeEmailParams);
     case "password_reset":
-      return passwordResetEmail(row.data as { displayName: string; resetUrl: string; expiresInMinutes: number });
+      return passwordResetEmail(data as PasswordResetEmailParams);
     case "email_verification":
-      return verificationCodeEmail(row.data as { code: string; expiresInMinutes: number });
+      return verificationCodeEmail(data as VerificationCodeEmailParams);
     case "daily_digest":
-      return dailyDigestEmail(row.data as DailyDigestEmailParams);
+      return dailyDigestEmail(data as DailyDigestEmailParams);
     case "weekly_admin_recap":
-      return weeklyAdminRecapEmail(row.data as WeeklyAdminRecapEmailParams);
+      return weeklyAdminRecapEmail(data as WeeklyAdminRecapEmailParams);
     case "card_assigned":
-      return cardAssignedEmail(row.data as CardAssignedEmailParams);
+      return cardAssignedEmail(data as CardAssignedEmailParams);
     case "card_comment_added":
-      return cardCommentAddedEmail(row.data as CardCommentAddedEmailParams);
+      return cardCommentAddedEmail(data as CardCommentAddedEmailParams);
     case "comment_mentioned":
-      return commentMentionedEmail(row.data as CommentMentionedEmailParams);
+      return commentMentionedEmail(data as CommentMentionedEmailParams);
     case "card_due_date_changed":
-      return cardDueDateChangedEmail(row.data as CardDueDateChangedEmailParams);
+      return cardDueDateChangedEmail(data as CardDueDateChangedEmailParams);
     case "card_overdue":
-      return cardOverdueEmail(row.data as CardOverdueEmailParams);
+      return cardOverdueEmail(data as CardOverdueEmailParams);
     case "card_reminder":
-      return cardReminderEmail(row.data as CardReminderEmailParams);
+      return cardReminderEmail(data as CardReminderEmailParams);
     case "checklist_item_overdue":
-      return checklistItemOverdueEmail(row.data as ChecklistItemOverdueEmailParams);
+      return checklistItemOverdueEmail(data as ChecklistItemOverdueEmailParams);
     case "invite_accepted":
-      return inviteAcceptedEmail(row.data as InviteAcceptedEmailParams);
+      return inviteAcceptedEmail(data as InviteAcceptedEmailParams);
     case "board_invite":
-      return boardInviteEmail(row.data as BoardInviteEmailParams);
+      return boardInviteEmail(data as BoardInviteEmailParams);
     case "board_access_granted":
-      return boardAccessGrantedEmail(row.data as BoardAccessGrantedEmailParams);
+      return boardAccessGrantedEmail(data as BoardAccessGrantedEmailParams);
     case "pro_trial_started":
-      return proTrialStartedEmail(row.data as BillingEmailParams);
+      return proTrialStartedEmail(data as BillingEmailParams);
     case "pro_trial_warning":
-      return proTrialWarningEmail(row.data as BillingEmailParams);
+      return proTrialWarningEmail(data as BillingEmailParams);
     case "downgraded_to_free":
-      return downgradedToFreeEmail(row.data as BillingEmailParams);
+      return downgradedToFreeEmail(data as BillingEmailParams);
     case "upgraded_to_pro":
-      return upgradedToProEmail(row.data as BillingEmailParams);
+      return upgradedToProEmail(data as BillingEmailParams);
     case "welcome_to_pro":
-      return welcomeToProEmail(row.data as BillingEmailParams);
+      return welcomeToProEmail(data as BillingEmailParams);
     case "billing_changed":
-      return billingChangedEmail(row.data as BillingEmailParams);
+      return billingChangedEmail(data as BillingEmailParams);
     case "billing_renewed":
-      return billingRenewedEmail(row.data as BillingEmailParams);
+      return billingRenewedEmail(data as BillingEmailParams);
     case "billing_payment_failed":
-      return billingPaymentFailedEmail(row.data as BillingEmailParams);
+      return billingPaymentFailedEmail(data as BillingEmailParams);
     case "billing_payment_recovered":
-      return billingPaymentRecoveredEmail(row.data as BillingEmailParams);
+      return billingPaymentRecoveredEmail(data as BillingEmailParams);
     case "seat_billed":
-      return seatBilledEmail(row.data as BillingEmailParams);
+      return seatBilledEmail(data as BillingEmailParams);
     case "seat_capacity_reduced":
-      return seatCapacityReducedEmail(row.data as BillingEmailParams);
+      return seatCapacityReducedEmail(data as BillingEmailParams);
     case "pro_cancellation_scheduled":
-      return proCancellationScheduledEmail(row.data as BillingEmailParams);
+      return proCancellationScheduledEmail(data as BillingEmailParams);
     case "pro_cancellation_reversed":
-      return proCancellationReversedEmail(row.data as BillingEmailParams);
+      return proCancellationReversedEmail(data as BillingEmailParams);
     case "pro_cancelled":
-      return proCancelledEmail(row.data as BillingEmailParams);
+      return proCancelledEmail(data as BillingEmailParams);
     case "import_completed":
-      return importCompletedEmail(row.data as ImportCompletedEmailParams);
+      return importCompletedEmail(data as ImportCompletedEmailParams);
     case "storage_warning":
-      return storageWarningEmail(row.data as StorageWarningEmailParams);
+      return storageWarningEmail(data as StorageWarningEmailParams);
     case "lifecycle_no_board":
-      return lifecycleNoBoardEmail(row.data as LifecycleEmailParams);
+      return lifecycleNoBoardEmail(data as LifecycleEmailParams);
     case "lifecycle_invite_team":
-      return lifecycleInviteTeamEmail(row.data as LifecycleEmailParams);
+      return lifecycleInviteTeamEmail(data as LifecycleEmailParams);
     case "lifecycle_early_success":
-      return lifecycleEarlySuccessEmail(row.data as LifecycleEmailParams);
+      return lifecycleEarlySuccessEmail(data as LifecycleEmailParams);
     case "lifecycle_inactive":
-      return lifecycleInactiveEmail(row.data as LifecycleEmailParams);
+      return lifecycleInactiveEmail(data as LifecycleEmailParams);
     case "lifecycle_active_checkin":
-      return lifecycleActiveCheckinEmail(row.data as LifecycleEmailParams);
+      return lifecycleActiveCheckinEmail(data as LifecycleEmailParams);
   }
 }
 

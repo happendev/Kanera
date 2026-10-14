@@ -1,25 +1,25 @@
-<k-docs-link class="spaced" path="workspace-users" label="Learn more about workspace members" />
+<k-docs-link class="spaced" path="workspace-users" label="Learn more about workspace members" i18n-label />
 @if (settings.availableOrgUsers().length > 0) {
 <form class="board-form" (submit)="settings.addMember($event)">
   <select name="userId" [value]="settings.addMemberUserId()" (input)="settings.addMemberUserId.set($any($event.target).value)" required class="grow">
-    <option [value]="''" disabled [selected]="!settings.addMemberUserId()">Select a user…</option>
+    <option [value]="''" disabled [selected]="!settings.addMemberUserId()" i18n>Select a user…</option>
     @for (user of settings.availableOrgUsers(); track user.id) {
     <option [value]="user.id" [selected]="user.id === settings.addMemberUserId()">{{ user.displayName }} ({{ user.email }})</option>
     }
   </select>
   <select name="role" [value]="settings.addMemberRole()" (input)="settings.addMemberRole.set($any($event.target).value)" style="flex: 0 0 120px; height: 36px; padding: 0 8px;">
-    <option value="member">Member</option>
-    <option value="admin">Admin</option>
+    <option value="member" i18n="Workspace role">Member</option>
+    <option value="admin" i18n="Workspace role">Admin</option>
   </select>
-  <button class="sm compact-add-button" type="submit" [disabled]="!settings.addMemberUserId()" aria-label="Add member" kTooltip="Add member"><i class="ti ti-plus"></i><span class="mobile-hide">Add</span></button>
+  <button class="sm compact-add-button" type="submit" [disabled]="!settings.addMemberUserId()" aria-label="Add member" i18n-aria-label kTooltip="Add member" i18n-kTooltip><i class="ti ti-plus"></i><span class="mobile-hide" i18n="Button: add a member">Add</span></button>
 </form>
 }
 @if (settings.members().length > 0) {
-<k-search-field class="member-search" [value]="settings.memberSearch()" placeholder="Search members…" (valueChange)="settings.memberSearch.set($event)" />
+<k-search-field class="member-search" [value]="settings.memberSearch()" placeholder="Search members…" i18n-placeholder (valueChange)="settings.memberSearch.set($event)" />
 <div class="org-user-list">
   <div class="org-user-list-head">
-    <span>Member</span>
-    <span>Role</span>
+    <span i18n="Column heading">Member</span>
+    <span i18n="Column heading">Role</span>
     <span></span>
   </div>
   @for (member of settings.filteredMembers(); track member.userId) {
@@ -32,34 +32,34 @@
       </div>
     </div>
     <select class="org-role-select" [value]="member.role" (input)="settings.updateMemberRole(member.userId, $any($event.target).value)"
-      [disabled]="member.userId === settings.currentUserId() || settings.isInheritedWorkspaceAdmin(member)" [attr.title]="settings.isInheritedWorkspaceAdmin(member) ? 'Inherited from organisation role' : null">
-      <option value="member" [selected]="member.role === 'member'">Member</option>
-      <option value="admin" [selected]="member.role === 'admin'">Admin</option>
+      [disabled]="member.userId === settings.currentUserId() || settings.isInheritedWorkspaceAdmin(member)" [attr.title]="settings.isInheritedWorkspaceAdmin(member) ? inheritedRoleHint : null">
+      <option value="member" [selected]="member.role === 'member'" i18n="Workspace role">Member</option>
+      <option value="admin" [selected]="member.role === 'admin'" i18n="Workspace role">Admin</option>
     </select>
     <div class="org-user-actions-cell">
       @if (member.userId !== settings.currentUserId() && !settings.isInheritedWorkspaceAdmin(member)) {
-      <button class="ghost icon danger" (click)="settings.removeMember(member.userId)" aria-label="Remove" kTooltip="Remove from workspace">
+      <button class="ghost icon danger" (click)="settings.removeMember(member.userId)" aria-label="Remove" i18n-aria-label="Button: remove the member" kTooltip="Remove from workspace" i18n-kTooltip>
         <i class="ti ti-trash"></i>
       </button>
       }
     </div>
   </div>
   } @empty {
-  <k-empty-state size="sm" icon="search-off" title="No members match" [text]="'Nothing matches “' + settings.memberSearch() + '”.'" />
+  <k-empty-state size="sm" icon="search-off" title="No members match" i18n-title [text]="noMatchText(settings.memberSearch())" />
   }
 </div>
 } @else {
-<k-empty-state size="sm" icon="users" title="No members yet" text="Invite people to give them access to every board in this workspace." />
+<k-empty-state size="sm" icon="users" title="No members yet" i18n-title text="Invite people to give them access to every board in this workspace." i18n-text />
 }
 <div class="role-ref-panel">
   <div class="role-ref-col">
-    <p class="role-ref-col-label">{{ settings.entityLabelTitle() }} roles</p>
+    <p class="role-ref-col-label" i18n>{ settings.entityKind(), select, board {Board roles} other {Workspace roles} }</p>
     @if (settings.isStandalone()) {
-    <div class="role-ref-row"><span class="role-ref-name">Admin</span><span class="role-ref-desc">Full control of board settings, lists, fields, labels, members, and access.</span></div>
-    <div class="role-ref-row"><span class="role-ref-name">Member</span><span class="role-ref-desc">No board settings access. Board access is granted separately as editor or observer.</span></div>
+    <div class="role-ref-row"><span class="role-ref-name" i18n="Workspace role">Admin</span><span class="role-ref-desc" i18n>Full control of board settings, lists, fields, labels, members, and access.</span></div>
+    <div class="role-ref-row"><span class="role-ref-name" i18n="Workspace role">Member</span><span class="role-ref-desc" i18n>No board settings access. Board access is granted separately as editor or observer.</span></div>
     } @else {
-    <div class="role-ref-row"><span class="role-ref-name">Admin</span><span class="role-ref-desc">Full control: workspace settings, lists, fields, labels, members, and board access. Automatically has editor access to every board.</span></div>
-    <div class="role-ref-row"><span class="role-ref-name">Member</span><span class="role-ref-desc">No workspace settings access. Can only work on boards they are explicitly added to, as editor or observer.</span></div>
+    <div class="role-ref-row"><span class="role-ref-name" i18n="Workspace role">Admin</span><span class="role-ref-desc" i18n>Full control: workspace settings, lists, fields, labels, members, and board access. Automatically has editor access to every board.</span></div>
+    <div class="role-ref-row"><span class="role-ref-name" i18n="Workspace role">Member</span><span class="role-ref-desc" i18n>No workspace settings access. Can only work on boards they are explicitly added to, as editor or observer.</span></div>
     }
   </div>
 </div>

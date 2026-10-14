@@ -18,7 +18,7 @@ import { PickerListComponent, type PickerGroup } from "./picker-list.component";
     <div class="ap-panel">
       <div class="ap-head">
         <span class="ap-title">{{ title() }}</span>
-        <button type="button" class="ap-icon-button" aria-label="Close" (click)="closed.emit()">
+        <button type="button" class="ap-icon-button" aria-label="Close" i18n-aria-label (click)="closed.emit()">
           <i class="ti ti-x"></i>
         </button>
       </div>
@@ -37,12 +37,12 @@ import { PickerListComponent, type PickerGroup } from "./picker-list.component";
 export class AnchoredPickerPopover {
   private readonly panel = inject(AnchoredPanelDirective);
 
-  readonly title = input("Choose");
+  readonly title = input($localize`:Default picker heading:Choose`);
   readonly groups = input<PickerGroup[]>([]);
   readonly selectedId = input<string | null>(null);
-  readonly searchPlaceholder = input("Search…");
+  readonly searchPlaceholder = input($localize`:Picker search placeholder:Search…`);
   readonly searchThreshold = input(8);
-  readonly emptyLabel = input("Nothing to show");
+  readonly emptyLabel = input($localize`:Picker empty state:Nothing to show`);
   readonly align = input<"start" | "end">("start");
   readonly width = input(288);
 

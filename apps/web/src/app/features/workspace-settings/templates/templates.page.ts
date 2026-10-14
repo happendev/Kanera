@@ -16,6 +16,9 @@ import { WorkspaceSettingsPage } from "../workspace-settings.page";
 export class WorkspaceSettingsTemplatesPage {
   protected readonly settings = inject(WorkspaceSettingsPage);
 
+  protected readonly collapseLabel = $localize`Collapse template`;
+  protected readonly expandLabel = $localize`Expand template`;
+
   constructor() {
     this.settings.selectedTab.set("templates");
   }
