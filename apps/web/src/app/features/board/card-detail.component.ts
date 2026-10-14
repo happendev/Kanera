@@ -250,8 +250,8 @@ export class CardDetailComponent {
   }
 
   async copyCardLink() {
-    const tree = this.router.createUrlTree(["/c", this.card().key]);
-    const url = new URL(this.router.serializeUrl(tree), window.location.origin).toString();
+    const card = this.card();
+    const url = new URL(cardPath(card.organisationKey, card.key), window.location.origin).toString();
     await navigator.clipboard?.writeText(url).catch(() => undefined);
   }
 

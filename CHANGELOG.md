@@ -18,6 +18,8 @@ All notable changes to Kanera are documented here.
 
 ### Fixed
 
+- Copy card link now includes the organisation key, so links copied from card detail open the correct card.
+
 - The import wizard now fits narrow screens, and the CSV import names its detected delimiter.
 - On phones, pickers and menus (assignees, labels, dates, boards and others) now open right beside the button you tapped instead of at the bottom of the screen, leaving a gap.
 - Tapping a push notification on Android now opens the card again, instead of leaving Kanera in the background.
