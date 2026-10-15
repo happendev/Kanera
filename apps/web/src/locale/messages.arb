@@ -92,7 +92,7 @@
     "description": "Browser tab title — scratchpad",
     "x-files": [
       "src/app/app.routes.ts",
-      "src/app/features/account-settings/profile/profile.page.html",
+      "src/app/features/account-settings/preferences/preferences.page.html",
       "src/app/features/scratchpad/scratchpad-panel.component.html",
       "src/app/features/scratchpad/scratchpad-panel.component.ts",
       "src/app/features/scratchpad/scratchpad.page.ts",
@@ -669,6 +669,20 @@
     "x-files": [
       "src/app/core/i18n/activity-summary.messages.ts",
       "src/app/features/board/card-activity.component.ts"
+    ]
+  },
+  "1365259782988833104": "{days, plural, one {flagged this card as in progress for more than # day} other {flagged this card as in progress for more than # days}}",
+  "@1365259782988833104": {
+    "description": "Notification line after the system name Kanera - the card has been in progress past the workspace alert",
+    "x-files": [
+      "src/app/core/i18n/activity-summary.messages.ts"
+    ]
+  },
+  "3039500514488322938": "corrected the time in progress",
+  "@3039500514488322938": {
+    "description": "Activity line after a person's name - a workspace admin changed a card's tracked time in progress",
+    "x-files": [
+      "src/app/core/i18n/activity-summary.messages.ts"
     ]
   },
   "1973396115206364059": "added checklist",
@@ -2944,6 +2958,45 @@
       "src/app/core/notifications/browser-push.service.ts"
     ]
   },
+  "5607669932062416162": "Default",
+  "@5607669932062416162": {
+    "description": "Notification sound",
+    "x-files": [
+      "src/app/core/notifications/mention-sound.service.ts",
+      "src/app/core/theme/theme.service.ts"
+    ]
+  },
+  "8353780137905022126": "Ripple",
+  "@8353780137905022126": {
+    "description": "Notification sound",
+    "x-files": [
+      "src/app/core/notifications/mention-sound.service.ts"
+    ]
+  },
+  "3080880284619829721": "Bloom",
+  "@3080880284619829721": {
+    "description": "Notification sound",
+    "x-files": [
+      "src/app/core/notifications/mention-sound.service.ts"
+    ]
+  },
+  "6719323958344589552": "Pebble",
+  "@6719323958344589552": {
+    "description": "Notification sound",
+    "x-files": [
+      "src/app/core/notifications/mention-sound.service.ts"
+    ]
+  },
+  "6252070156626006029": "None",
+  "@6252070156626006029": {
+    "description": "Notification sound",
+    "x-files": [
+      "src/app/core/notifications/mention-sound.service.ts",
+      "src/app/features/account-settings/integrations/integrations.page.html",
+      "src/app/features/board/table-view/board-table-view.component.html",
+      "src/app/features/global-work/global-work.page.ts"
+    ]
+  },
   "8983228988273096319": "You're offline. Reconnect to refresh notifications.",
   "@8983228988273096319": {
     "description": "Notifications load error while offline",
@@ -2990,13 +3043,6 @@
     "description": "Error in the Up next panel's card picker",
     "x-files": [
       "src/app/core/priorities/my-priorities.service.ts"
-    ]
-  },
-  "5607669932062416162": "Default",
-  "@5607669932062416162": {
-    "description": "Accent colour option — the theme's own accent",
-    "x-files": [
-      "src/app/core/theme/theme.service.ts"
     ]
   },
   "4082253113407591781": "Blue",
@@ -3355,6 +3401,7 @@
     "description": "Button state",
     "x-files": [
       "src/app/features/account-settings/account-plan/account-plan.page.html",
+      "src/app/features/account-settings/account-security/account-security.page.html",
       "src/app/features/account-settings/integrations/integrations.page.html",
       "src/app/features/account-settings/org/org.page.html",
       "src/app/features/account-settings/profile/profile.page.html",
@@ -3445,6 +3492,254 @@
       "src/app/features/account-settings/account-plan/account-plan.page.html"
     ]
   },
+  "3892825090402620438": "Two-factor authentication",
+  "@3892825090402620438": {
+    "description": "Settings section heading",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html",
+      "src/app/features/account-settings/security/security.page.html"
+    ]
+  },
+  "2625858903721573648": "Protect fresh sign-ins with an authenticator app or a one-time recovery code.",
+  "@2625858903721573648": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "6523025057420027402": "Learn more about account security",
+  "@6523025057420027402": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "5340498030552368470": "Current password",
+  "@5340498030552368470": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "4379830886284362842": "Set up authenticator",
+  "@4379830886284362842": {
+    "description": "Button",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "3503989317694521185": "Scan the QR code, or enter {$START_TAG_CODE}{$SECRET}{$CLOSE_TAG_CODE} manually.",
+  "@3503989317694521185": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "4948440289765392916": "Authenticator setup QR code",
+  "@4948440289765392916": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html",
+      "src/app/features/auth/login.page.html"
+    ]
+  },
+  "9178182467454450952": "Confirm",
+  "@9178182467454450952": {
+    "description": "Button",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html",
+      "src/app/features/account-settings/profile/profile.page.html"
+    ]
+  },
+  "703309951700807906": "Two-factor authentication is enabled.",
+  "@703309951700807906": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "2531964555886899487": "Authenticator or recovery code",
+  "@2531964555886899487": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html",
+      "src/app/features/auth/login.page.html"
+    ]
+  },
+  "566903034361052049": "New recovery codes",
+  "@566903034361052049": {
+    "description": "Button",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "9187855490716817910": "Disable",
+  "@9187855490716817910": {
+    "description": "Button: turn off two-factor authentication",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "2060329913662056999": "Save these recovery codes now. They will not be shown again.",
+  "@2060329913662056999": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "6309828574111583895": "Change password",
+  "@6309828574111583895": {
+    "description": "Settings section heading",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "738695200650034928": "You'll be signed out from all other sessions after changing.",
+  "@738695200650034928": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "3588415639242079458": "New password",
+  "@3588415639242079458": {
+    "description": "Field label",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html",
+      "src/app/features/auth/reset-password.page.html"
+    ]
+  },
+  "8656126574213649581": "Confirm new password",
+  "@8656126574213649581": {
+    "description": "Field label",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "8544363588102773420": "Current password is required.",
+  "@8544363588102773420": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "143113787714930934": "New password is required.",
+  "@143113787714930934": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "1934494178293053019": "New password must be at least 8 characters.",
+  "@1934494178293053019": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "2482069944964160970": "Confirm new password is required.",
+  "@2482069944964160970": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "6932646825567072548": "Confirm new password must be at least 8 characters.",
+  "@6932646825567072548": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "7404895855168454876": "New password and confirmation do not match.",
+  "@7404895855168454876": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "5554528553553249088": "Show password",
+  "@5554528553553249088": {
+    "description": "Button — reveal the typed password",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts",
+      "src/app/features/account-settings/integrations/integrations.page.ts",
+      "src/app/features/auth/login.page.ts",
+      "src/app/features/auth/reset-password.page.ts",
+      "src/app/features/auth/signup.page.ts"
+    ]
+  },
+  "1446670643492611810": "Hide password",
+  "@1446670643492611810": {
+    "description": "Button — mask the typed password",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts",
+      "src/app/features/account-settings/integrations/integrations.page.ts",
+      "src/app/features/auth/login.page.ts",
+      "src/app/features/auth/reset-password.page.ts",
+      "src/app/features/auth/signup.page.ts"
+    ]
+  },
+  "1489758710743967189": "Enter your current password to set up an authenticator.",
+  "@1489758710743967189": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "7064024771356744938": "Enter the six-digit code from your authenticator app.",
+  "@7064024771356744938": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts",
+      "src/app/features/auth/login.page.ts"
+    ]
+  },
+  "9121424381282805046": "Enter your current password.",
+  "@9121424381282805046": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "8782487788877276260": "Enter an authenticator or recovery code.",
+  "@8782487788877276260": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "3265029579725173281": "Password changed. You'll be signed out on the next refresh.",
+  "@3265029579725173281": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "3550768065770727784": "That verification code is incorrect. Try again.",
+  "@3550768065770727784": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts",
+      "src/app/features/account-settings/profile/profile.page.ts"
+    ]
+  },
+  "7704379049286251361": "Your current password is incorrect.",
+  "@7704379049286251361": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts",
+      "src/app/features/account-settings/profile/profile.page.ts"
+    ]
+  },
+  "6638645340229753375": "Check the highlighted details and try again.",
+  "@6638645340229753375": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts",
+      "src/app/features/account-settings/profile/profile.page.ts"
+    ]
+  },
+  "978287517643138168": "Unable to update two-factor authentication. Try again.",
+  "@978287517643138168": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts",
+      "src/app/features/account-settings/profile/profile.page.ts"
+    ]
+  },
+  "460799937634193265": "Something went wrong.",
+  "@460799937634193265": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts",
+      "src/app/features/account-settings/account-settings.page.ts",
+      "src/app/features/account-settings/api-keys/api-keys.page.ts",
+      "src/app/features/account-settings/profile/profile.page.ts",
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "1515886979951192172": "Unable to change your password. Try again.",
+  "@1515886979951192172": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
   "5247417012054982935": "Settings sections",
   "@5247417012054982935": {
     "x-files": [
@@ -3460,6 +3755,21 @@
   },
   "4915431133669985304": "Profile",
   "@4915431133669985304": {
+    "description": "Settings tab",
+    "x-files": [
+      "src/app/features/account-settings/account-settings.page.html"
+    ]
+  },
+  "8878700331247603166": "Security",
+  "@8878700331247603166": {
+    "description": "Settings tab",
+    "x-files": [
+      "src/app/features/account-settings/account-settings.page.html",
+      "src/app/features/account-settings/integrations/integrations.page.html"
+    ]
+  },
+  "8951128623878467862": "Preferences",
+  "@8951128623878467862": {
     "description": "Settings tab",
     "x-files": [
       "src/app/features/account-settings/account-settings.page.html"
@@ -3507,14 +3817,6 @@
     "description": "Settings tab",
     "x-files": [
       "src/app/features/account-settings/account-settings.page.html"
-    ]
-  },
-  "8878700331247603166": "Security",
-  "@8878700331247603166": {
-    "description": "Settings tab",
-    "x-files": [
-      "src/app/features/account-settings/account-settings.page.html",
-      "src/app/features/account-settings/integrations/integrations.page.html"
     ]
   },
   "4944372417149760037": "Integrations",
@@ -4365,15 +4667,6 @@
       "src/app/features/account-settings/account-settings.page.ts"
     ]
   },
-  "460799937634193265": "Something went wrong.",
-  "@460799937634193265": {
-    "x-files": [
-      "src/app/features/account-settings/account-settings.page.ts",
-      "src/app/features/account-settings/api-keys/api-keys.page.ts",
-      "src/app/features/account-settings/profile/profile.page.ts",
-      "src/app/features/shared/board-members-menu.popover.ts"
-    ]
-  },
   "8208296259801383237": "AI agent connection",
   "@8208296259801383237": {
     "description": "Settings section heading",
@@ -4724,15 +5017,6 @@
       "src/app/features/account-settings/integrations/integrations.page.html"
     ]
   },
-  "6252070156626006029": "None",
-  "@6252070156626006029": {
-    "description": "SMTP security option: no encryption",
-    "x-files": [
-      "src/app/features/account-settings/integrations/integrations.page.html",
-      "src/app/features/board/table-view/board-table-view.component.html",
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
   "5248717555542428023": "Username",
   "@5248717555542428023": {
     "description": "SMTP field label",
@@ -4841,28 +5125,6 @@
       "src/app/features/account-settings/storage/storage.page.ts"
     ]
   },
-  "5554528553553249088": "Show password",
-  "@5554528553553249088": {
-    "description": "Button — reveal the typed password",
-    "x-files": [
-      "src/app/features/account-settings/integrations/integrations.page.ts",
-      "src/app/features/account-settings/profile/profile.page.ts",
-      "src/app/features/auth/login.page.ts",
-      "src/app/features/auth/reset-password.page.ts",
-      "src/app/features/auth/signup.page.ts"
-    ]
-  },
-  "1446670643492611810": "Hide password",
-  "@1446670643492611810": {
-    "description": "Button — mask the typed password",
-    "x-files": [
-      "src/app/features/account-settings/integrations/integrations.page.ts",
-      "src/app/features/account-settings/profile/profile.page.ts",
-      "src/app/features/auth/login.page.ts",
-      "src/app/features/auth/reset-password.page.ts",
-      "src/app/features/auth/signup.page.ts"
-    ]
-  },
   "342920577372913915": "Notification channels",
   "@342920577372913915": {
     "description": "Settings section heading",
@@ -4894,8 +5156,21 @@
       "src/app/features/account-settings/notifications/notifications.page.html"
     ]
   },
-  "4334126928771586432": "Play a sound for assignments and mentions",
-  "@4334126928771586432": {
+  "6538385770416771506": "Notification sound",
+  "@6538385770416771506": {
+    "x-files": [
+      "src/app/features/account-settings/notifications/notifications.page.html"
+    ]
+  },
+  "3014311116747455931": "For assignments and mentions in this browser.",
+  "@3014311116747455931": {
+    "x-files": [
+      "src/app/features/account-settings/notifications/notifications.page.html"
+    ]
+  },
+  "3865490984500059162": "Preview sound",
+  "@3865490984500059162": {
+    "description": "Button: preview notification sound",
     "x-files": [
       "src/app/features/account-settings/notifications/notifications.page.html"
     ]
@@ -5226,6 +5501,7 @@
       "src/app/features/account-settings/org/org.page.html",
       "src/app/features/account-settings/profile/profile.page.html",
       "src/app/features/board/card-activity.component.html",
+      "src/app/features/board/card-detail.component.html",
       "src/app/features/board/description-editor.component.ts",
       "src/app/features/notes/note-editor.component.ts"
     ]
@@ -5467,6 +5743,50 @@
       "src/app/shared/confirm-dialog.component.ts"
     ]
   },
+  "8423785748220550395": "Card keys",
+  "@8423785748220550395": {
+    "description": "Settings section heading",
+    "x-files": [
+      "src/app/features/account-settings/preferences/preferences.page.html",
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "9164994717035046527": "Learn more about card keys",
+  "@9164994717035046527": {
+    "x-files": [
+      "src/app/features/account-settings/preferences/preferences.page.html"
+    ]
+  },
+  "1836942362379485329": "Show card keys",
+  "@1836942362379485329": {
+    "x-files": [
+      "src/app/features/account-settings/preferences/preferences.page.html"
+    ]
+  },
+  "3413180784901374143": "Card keys are short references like KAN-123 that identify a card. Turn this off to hide them from view across the app.",
+  "@3413180784901374143": {
+    "x-files": [
+      "src/app/features/account-settings/preferences/preferences.page.html"
+    ]
+  },
+  "640179378990663901": "Learn more about the scratchpad",
+  "@640179378990663901": {
+    "x-files": [
+      "src/app/features/account-settings/preferences/preferences.page.html"
+    ]
+  },
+  "2227162364501282731": "Show scratchpad",
+  "@2227162364501282731": {
+    "x-files": [
+      "src/app/features/account-settings/preferences/preferences.page.html"
+    ]
+  },
+  "57119331648237355": "Keep the scratchpad button available in the app header. Turn this off if you do not use the scratchpad.",
+  "@57119331648237355": {
+    "x-files": [
+      "src/app/features/account-settings/preferences/preferences.page.html"
+    ]
+  },
   "4703848376604347254": "Profile picture",
   "@4703848376604347254": {
     "description": "Settings section heading",
@@ -5633,44 +5953,6 @@
       "src/app/features/account-settings/profile/profile.page.html"
     ]
   },
-  "8423785748220550395": "Card keys",
-  "@8423785748220550395": {
-    "description": "Settings section heading",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html",
-      "src/app/features/workspace-settings/general/general.page.html"
-    ]
-  },
-  "1836942362379485329": "Show card keys",
-  "@1836942362379485329": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "3413180784901374143": "Card keys are short references like KAN-123 that identify a card. Turn this off to hide them from view across the app.",
-  "@3413180784901374143": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "640179378990663901": "Learn more about the scratchpad",
-  "@640179378990663901": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "2227162364501282731": "Show scratchpad",
-  "@2227162364501282731": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "57119331648237355": "Keep the scratchpad button available in the app header. Turn this off if you do not use the scratchpad.",
-  "@57119331648237355": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
   "8440128775129354214": "Privacy",
   "@8440128775129354214": {
     "description": "Settings section heading",
@@ -5716,187 +5998,6 @@
       "src/app/features/account-settings/profile/profile.page.html"
     ]
   },
-  "9178182467454450952": "Confirm",
-  "@9178182467454450952": {
-    "description": "Button",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "3892825090402620438": "Two-factor authentication",
-  "@3892825090402620438": {
-    "description": "Settings section heading",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html",
-      "src/app/features/account-settings/security/security.page.html"
-    ]
-  },
-  "2625858903721573648": "Protect fresh sign-ins with an authenticator app or a one-time recovery code.",
-  "@2625858903721573648": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "6523025057420027402": "Learn more about account security",
-  "@6523025057420027402": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "5340498030552368470": "Current password",
-  "@5340498030552368470": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "4379830886284362842": "Set up authenticator",
-  "@4379830886284362842": {
-    "description": "Button",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "3503989317694521185": "Scan the QR code, or enter {$START_TAG_CODE}{$SECRET}{$CLOSE_TAG_CODE} manually.",
-  "@3503989317694521185": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "4948440289765392916": "Authenticator setup QR code",
-  "@4948440289765392916": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html",
-      "src/app/features/auth/login.page.html"
-    ]
-  },
-  "703309951700807906": "Two-factor authentication is enabled.",
-  "@703309951700807906": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "2531964555886899487": "Authenticator or recovery code",
-  "@2531964555886899487": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html",
-      "src/app/features/auth/login.page.html"
-    ]
-  },
-  "566903034361052049": "New recovery codes",
-  "@566903034361052049": {
-    "description": "Button",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "9187855490716817910": "Disable",
-  "@9187855490716817910": {
-    "description": "Button: turn off two-factor authentication",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "2060329913662056999": "Save these recovery codes now. They will not be shown again.",
-  "@2060329913662056999": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "6309828574111583895": "Change password",
-  "@6309828574111583895": {
-    "description": "Settings section heading",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "738695200650034928": "You'll be signed out from all other sessions after changing.",
-  "@738695200650034928": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "3588415639242079458": "New password",
-  "@3588415639242079458": {
-    "description": "Field label",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html",
-      "src/app/features/auth/reset-password.page.html"
-    ]
-  },
-  "8656126574213649581": "Confirm new password",
-  "@8656126574213649581": {
-    "description": "Field label",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "8544363588102773420": "Current password is required.",
-  "@8544363588102773420": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "143113787714930934": "New password is required.",
-  "@143113787714930934": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "1934494178293053019": "New password must be at least 8 characters.",
-  "@1934494178293053019": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "2482069944964160970": "Confirm new password is required.",
-  "@2482069944964160970": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "6932646825567072548": "Confirm new password must be at least 8 characters.",
-  "@6932646825567072548": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "7404895855168454876": "New password and confirmation do not match.",
-  "@7404895855168454876": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "1489758710743967189": "Enter your current password to set up an authenticator.",
-  "@1489758710743967189": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "7064024771356744938": "Enter the six-digit code from your authenticator app.",
-  "@7064024771356744938": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts",
-      "src/app/features/auth/login.page.ts"
-    ]
-  },
-  "9121424381282805046": "Enter your current password.",
-  "@9121424381282805046": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "8782487788877276260": "Enter an authenticator or recovery code.",
-  "@8782487788877276260": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "3265029579725173281": "Password changed. You'll be signed out on the next refresh.",
-  "@3265029579725173281": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
   "4719486649519277241": "Use a PNG, JPEG, or WEBP image.",
   "@4719486649519277241": {
     "x-files": [
@@ -5917,36 +6018,6 @@
   },
   "6352112932746199727": "Cropped avatar must be 2MB or smaller.",
   "@6352112932746199727": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "3550768065770727784": "That verification code is incorrect. Try again.",
-  "@3550768065770727784": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "7704379049286251361": "Your current password is incorrect.",
-  "@7704379049286251361": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "6638645340229753375": "Check the highlighted details and try again.",
-  "@6638645340229753375": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "978287517643138168": "Unable to update two-factor authentication. Try again.",
-  "@978287517643138168": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "1515886979951192172": "Unable to change your password. Try again.",
-  "@1515886979951192172": {
     "x-files": [
       "src/app/features/account-settings/profile/profile.page.ts"
     ]
@@ -8487,6 +8558,34 @@
       "src/app/features/board/table-view/filter-bar.component.ts"
     ]
   },
+  "1209068326542296680": "Show cards in progress",
+  "@1209068326542296680": {
+    "description": "Tooltip on the In progress count in the board overview",
+    "x-files": [
+      "src/app/features/board/board.page.html"
+    ]
+  },
+  "3307214558906712688": "In progress",
+  "@3307214558906712688": {
+    "description": "Board overview count: open cards whose time-in-progress clock is running",
+    "x-files": [
+      "src/app/features/board/board.page.html",
+      "src/app/features/board/card-detail.component.html",
+      "src/app/features/board/table-view/filter-bar.component.ts",
+      "src/app/features/global-work/global-work.page.ts",
+      "src/app/features/onboarding/onboarding.page.html",
+      "src/app/features/workspace-settings/lists/lists.page.html",
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "3544567310933991969": "Too long",
+  "@3544567310933991969": {
+    "description": "Board overview count: cards in progress past the workspace alert (keep it short)",
+    "x-files": [
+      "src/app/features/board/board.page.html",
+      "src/app/features/global-work/global-work.page.ts"
+    ]
+  },
   "6383359961972964021": "{VAR_PLURAL, plural, other {{INTERPOLATION} due in the next 7 days}}",
   "@6383359961972964021": {
     "description": "Board overview: count of cards due within a week",
@@ -8865,6 +8964,13 @@
   "6873687922772137213": "{days, plural, one {Show cards inactive for # day} other {Show cards inactive for # days}}",
   "@6873687922772137213": {
     "description": "Tooltip on the Inactive count in the board overview",
+    "x-files": [
+      "src/app/features/board/board.page.ts"
+    ]
+  },
+  "7800568564089895529": "{days, plural, one {Show cards in progress for more than # day} other {Show cards in progress for more than # days}}",
+  "@7800568564089895529": {
+    "description": "Tooltip on the Too long count in the board overview",
     "x-files": [
       "src/app/features/board/board.page.ts"
     ]
@@ -9835,6 +9941,13 @@
       "src/app/features/board/card-activity.component.ts"
     ]
   },
+  "2880617564047887221": "{days, plural, one {This card has been in progress for more than # day} other {This card has been in progress for more than # days}}",
+  "@2880617564047887221": {
+    "description": "Card activity shown without a person - the card passed the workspace's time in progress alert",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
   "1647605248194260052": "{count, plural, =1 {added label {labels}} other {added labels {labels}}}",
   "@1647605248194260052": {
     "description": "Card activity after a person's name; labels is a list of label names",
@@ -10244,6 +10357,13 @@
   "8679661691332520656": "set a cover image",
   "@8679661691332520656": {
     "description": "Card activity after a person's name",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
+  "2265561565226993600": "changed the time in progress from {$from} to {$to}",
+  "@2265561565226993600": {
+    "description": "Card activity after a person's name - a workspace admin corrected tracked time, e.g. from 96h 20m to 80h",
     "x-files": [
       "src/app/features/board/card-activity.component.ts"
     ]
@@ -10680,6 +10800,61 @@
   "5612709566632732179": "Detail",
   "@5612709566632732179": {
     "description": "Tab in card detail on small screens: fields, checklists and attachments",
+    "x-files": [
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
+  "1310445301409424297": "Not in progress",
+  "@1310445301409424297": {
+    "description": "Card detail caption: the card is not in an In progress list, so its clock is stopped",
+    "x-files": [
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
+  "3972877797169399055": "{$START_TAG_STRONG}{$INTERPOLATION}{$CLOSE_TAG_STRONG} tracked",
+  "@3972877797169399055": {
+    "description": "Card detail: the stopped total of tracked time in progress, e.g. 24h tracked",
+    "x-files": [
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
+  "6546660998358478406": "Correct time in progress",
+  "@6546660998358478406": {
+    "x-files": [
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
+  "8070396816726827304": "Hours",
+  "@8070396816726827304": {
+    "description": "Accessible name of the hours input when correcting time in progress",
+    "x-files": [
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
+  "8398233202919865612": "h",
+  "@8398233202919865612": {
+    "description": "Unit after the hours input when correcting time in progress",
+    "x-files": [
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
+  "5531237363767747080": "Minutes",
+  "@5531237363767747080": {
+    "description": "Accessible name of the minutes input when correcting time in progress",
+    "x-files": [
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
+  "8033953731717586115": "m",
+  "@8033953731717586115": {
+    "description": "Unit after the minutes input when correcting time in progress",
+    "x-files": [
+      "src/app/features/board/card-detail.component.html"
+    ]
+  },
+  "2859839511883635147": "The time in progress could not be saved. Try again.",
+  "@2859839511883635147": {
+    "description": "Error when saving a corrected time in progress fails",
     "x-files": [
       "src/app/features/board/card-detail.component.html"
     ]
@@ -12284,6 +12459,22 @@
       "src/app/features/board/label-picker.popover.ts"
     ]
   },
+  "7611855326498002481": "In progress list: each card shows its time in progress",
+  "@7611855326498002481": {
+    "description": "Tooltip on the marker beside an In progress list's name",
+    "x-files": [
+      "src/app/features/board/list.component.html",
+      "src/app/features/onboarding/onboarding.page.ts",
+      "src/app/features/workspace-settings/lists/lists.page.ts"
+    ]
+  },
+  "3037427182705835959": "In progress list",
+  "@3037427182705835959": {
+    "description": "Accessible name of the marker beside an In progress list's name",
+    "x-files": [
+      "src/app/features/board/list.component.html"
+    ]
+  },
   "5745843220163365478": "List options",
   "@5745843220163365478": {
     "x-files": [
@@ -12342,6 +12533,27 @@
     "description": "List menu item",
     "x-files": [
       "src/app/features/board/list.component.html"
+    ]
+  },
+  "5084584735133343227": "{$START_TAG_STRONG}In progress list.{$CLOSE_TAG_STRONG} Work here is actively happening, and each card shows its time in progress.",
+  "@5084584735133343227": {
+    "description": "One-time hint shown on an In progress list column",
+    "x-files": [
+      "src/app/features/board/list.component.html"
+    ]
+  },
+  "7486929973398157168": "Dismiss in-progress explanation",
+  "@7486929973398157168": {
+    "x-files": [
+      "src/app/features/board/list.component.html"
+    ]
+  },
+  "5601530442010506564": "Got it",
+  "@5601530442010506564": {
+    "description": "Tooltip on the button that dismisses the In progress list hint",
+    "x-files": [
+      "src/app/features/board/list.component.html",
+      "src/app/shared/upgrade-prompt-dialog.component.ts"
     ]
   },
   "6459456917267165399": "{VAR_PLURAL, plural, one {{INTERPOLATION} card} other {{INTERPOLATION} cards}}",
@@ -13278,6 +13490,13 @@
       "src/app/features/board/table-view/export.util.ts"
     ]
   },
+  "8126371520334003173": "Time in progress (hours)",
+  "@8126371520334003173": {
+    "description": "Spreadsheet export column header - tracked time in progress, in hours",
+    "x-files": [
+      "src/app/features/board/table-view/export.util.ts"
+    ]
+  },
   "1901706115505233423": "All activity",
   "@1901706115505233423": {
     "description": "Activity type filter option - every kind of activity",
@@ -13338,6 +13557,13 @@
   },
   "5990900349861391823": "No activity for 14 days",
   "@5990900349861391823": {
+    "x-files": [
+      "src/app/features/board/table-view/filter-bar.component.ts"
+    ]
+  },
+  "641821501156973901": "Open cards in In progress lists",
+  "@641821501156973901": {
+    "description": "Quick filter description",
     "x-files": [
       "src/app/features/board/table-view/filter-bar.component.ts"
     ]
@@ -13634,6 +13860,14 @@
       "src/app/features/board/table-view/table-columns.util.ts"
     ]
   },
+  "3911817769522706118": "Time in progress",
+  "@3911817769522706118": {
+    "description": "Table column header - tracked working time the card has spent in In progress lists",
+    "x-files": [
+      "src/app/features/board/table-view/table-columns.util.ts",
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
   "7239750919884229270": "Updated",
   "@7239750919884229270": {
     "description": "Table column header - when the card was last updated",
@@ -13738,6 +13972,20 @@
       "src/app/features/board/table-view/table-view.types.ts"
     ]
   },
+  "4929395780511979556": "In progress (longest)",
+  "@4929395780511979556": {
+    "description": "Sort option - cards in progress longest first",
+    "x-files": [
+      "src/app/features/board/table-view/table-view.types.ts"
+    ]
+  },
+  "7255643044963106653": "In progress (newest)",
+  "@7255643044963106653": {
+    "description": "Sort option - cards that most recently started progress first",
+    "x-files": [
+      "src/app/features/board/table-view/table-view.types.ts"
+    ]
+  },
   "5073473933031004097": "This week",
   "@5073473933031004097": {
     "description": "Due-date group heading - cards due later this week",
@@ -13751,6 +13999,104 @@
     "x-files": [
       "src/app/features/board/table-view/table-view.types.ts",
       "src/app/features/global-work/global-work.page.ts"
+    ]
+  },
+  "2397252975094332874": "<1m",
+  "@2397252975094332874": {
+    "description": "Time-in-progress chip - under one minute tracked",
+    "x-files": [
+      "src/app/features/board/time-in-progress.util.ts"
+    ]
+  },
+  "562741246556113481": "{$minutes}m",
+  "@562741246556113481": {
+    "description": "Time-in-progress chip - whole minutes tracked, e.g. 45m",
+    "x-files": [
+      "src/app/features/board/time-in-progress.util.ts"
+    ]
+  },
+  "2435990898832003719": "{$hours}h",
+  "@2435990898832003719": {
+    "description": "Time-in-progress chip - whole hours tracked, e.g. 96h",
+    "x-files": [
+      "src/app/features/board/time-in-progress.util.ts"
+    ]
+  },
+  "1850064052886031152": "0m",
+  "@1850064052886031152": {
+    "description": "Tracked duration of zero minutes",
+    "x-files": [
+      "src/app/features/board/time-in-progress.util.ts"
+    ]
+  },
+  "5299883628531145622": "{$hours}h {$minutes}m",
+  "@5299883628531145622": {
+    "description": "Tracked duration in hours and minutes, e.g. 96h 20m",
+    "x-files": [
+      "src/app/features/board/time-in-progress.util.ts"
+    ]
+  },
+  "7880273395855474994": "{count, plural, one {# minute} other {# minutes}}",
+  "@7880273395855474994": {
+    "description": "Tracked time in words",
+    "x-files": [
+      "src/app/features/board/time-in-progress.util.ts"
+    ]
+  },
+  "4434367879176668365": "{count, plural, one {# hour} other {# hours}}",
+  "@4434367879176668365": {
+    "description": "Tracked time in words",
+    "x-files": [
+      "src/app/features/board/time-in-progress.util.ts"
+    ]
+  },
+  "5064174445353626071": "less than a minute",
+  "@5064174445353626071": {
+    "description": "Tracked time in words",
+    "x-files": [
+      "src/app/features/board/time-in-progress.util.ts"
+    ]
+  },
+  "8767389797140577319": "{$hours} {$minutes}",
+  "@8767389797140577319": {
+    "description": "Tracked time in words, hours then minutes, e.g. 3 hours 20 minutes",
+    "x-files": [
+      "src/app/features/board/time-in-progress.util.ts"
+    ]
+  },
+  "7525315557219832608": "{count, plural, one {# day} other {# days}}",
+  "@7525315557219832608": {
+    "description": "Time a card has spent in progress, in words",
+    "x-files": [
+      "src/app/features/board/time-in-progress.util.ts"
+    ]
+  },
+  "6998559563810944833": "{count, plural, one {# week} other {# weeks}}",
+  "@6998559563810944833": {
+    "description": "Time a card has spent in progress, in words",
+    "x-files": [
+      "src/app/features/board/time-in-progress.util.ts"
+    ]
+  },
+  "2641132196803376197": "{$tracked} tracked in progress",
+  "@2641132196803376197": {
+    "description": "Tooltip on a stopped time-in-progress total, e.g. 96 hours tracked in progress",
+    "x-files": [
+      "src/app/features/board/time-in-progress.util.ts"
+    ]
+  },
+  "2482726385673320452": "In progress since {$date} ({$span}) · {$tracked} tracked",
+  "@2482726385673320452": {
+    "description": "Tooltip on a running time-in-progress chip",
+    "x-files": [
+      "src/app/features/board/time-in-progress.util.ts"
+    ]
+  },
+  "6111327500092975842": "{days, plural, one {In progress since {since} ({span}) · {tracked} tracked, past the #-day alert} other {In progress since {since} ({span}) · {tracked} tracked, past the #-day alert}}",
+  "@6111327500092975842": {
+    "description": "Tooltip on a running time-in-progress chip past the workspace alert",
+    "x-files": [
+      "src/app/features/board/time-in-progress.util.ts"
     ]
   },
   "1894214558916114808": "Loading watchers...",
@@ -14800,6 +15146,13 @@
       "src/app/features/global-work/global-work.page.ts"
     ]
   },
+  "9001969684983736782": "Longest in progress",
+  "@9001969684983736782": {
+    "description": "Sort option - cards in progress longest first",
+    "x-files": [
+      "src/app/features/global-work/global-work.page.ts"
+    ]
+  },
   "5488951133475226345": "All boards",
   "@5488951133475226345": {
     "description": "Scope picker option",
@@ -14915,6 +15268,13 @@
   "5125207159492328627": "Inactive 14 days",
   "@5125207159492328627": {
     "description": "Portfolio stat tile, cards untouched for 14 days",
+    "x-files": [
+      "src/app/features/global-work/global-work.page.ts"
+    ]
+  },
+  "921492057205148786": "In progress too long",
+  "@921492057205148786": {
+    "description": "Portfolio stat tile, cards in progress past their workspace's alert",
     "x-files": [
       "src/app/features/global-work/global-work.page.ts"
     ]
@@ -18365,8 +18725,8 @@
       "src/app/features/onboarding/onboarding.page.html"
     ]
   },
-  "1854315964255975779": "These lists are shared by every board in this workspace, keeping each client, department, project, or team on the same process.",
-  "@1854315964255975779": {
+  "8012699321729453550": "These lists are shared by every board in this workspace, keeping each client, department, project, or team on the same process. Mark the stages where work is actively happening as {$START_TAG_STRONG}In progress{$CLOSE_TAG_STRONG}, and each card in them shows its time in progress.",
+  "@8012699321729453550": {
     "x-files": [
       "src/app/features/onboarding/onboarding.page.html"
     ]
@@ -18653,6 +19013,28 @@
     "description": "Button label; the name of a list, custom field or label follows",
     "x-files": [
       "src/app/features/onboarding/onboarding.page.ts"
+    ]
+  },
+  "7570938428060893958": "Unmark {$name} as in progress",
+  "@7570938428060893958": {
+    "description": "Button label - stop treating this workflow stage as one where work is actively happening",
+    "x-files": [
+      "src/app/features/onboarding/onboarding.page.ts"
+    ]
+  },
+  "2652011738926321783": "Mark {$name} as in progress",
+  "@2652011738926321783": {
+    "description": "Button label - treat this workflow stage as one where work is actively happening",
+    "x-files": [
+      "src/app/features/onboarding/onboarding.page.ts"
+    ]
+  },
+  "9086004268039929328": "Mark as In progress",
+  "@9086004268039929328": {
+    "description": "Tooltip on an inactive In progress toggle",
+    "x-files": [
+      "src/app/features/onboarding/onboarding.page.ts",
+      "src/app/features/workspace-settings/lists/lists.page.ts"
     ]
   },
   "8917678524921030864": "Multiple values allowed - click for single",
@@ -21542,6 +21924,20 @@
       "src/app/features/workspace-settings/automations/automations.page.html"
     ]
   },
+  "2780699746797274359": "{VAR_PLURAL, plural, =1 {Runs once each time an open card has been in progress for more than 1 day. Leaving and re-entering In progress starts a new clock.} other {Runs once each time an open card has been in progress for more than {INTERPOLATION} days. Leaving and re-entering In progress starts a new clock.}}",
+  "@2780699746797274359": {
+    "description": "Help for the Card in progress too long automation trigger",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
+  "7623297915041736671": "Won't run: the time in progress alert is off in General settings.",
+  "@7623297915041736671": {
+    "description": "Help for the Card in progress too long automation trigger when the alert setting is 0",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.html"
+    ]
+  },
   "8131988016625209390": "Runs when the last unticked checklist item on a card is completed.",
   "@8131988016625209390": {
     "x-files": [
@@ -21710,6 +22106,21 @@
   },
   "2569641591702024301": "Runs after the workspace inactivity period",
   "@2569641591702024301": {
+    "description": "Help text under an automation event option",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.ts"
+    ]
+  },
+  "161971796185578225": "Card in progress too long",
+  "@161971796185578225": {
+    "description": "Automation event (trigger) option",
+    "x-files": [
+      "src/app/features/workspace-settings/automations/automations.page.ts",
+      "src/app/features/workspace-settings/workspace-settings.page.ts"
+    ]
+  },
+  "4223088368848016928": "Runs when time in progress passes the workspace alert",
+  "@4223088368848016928": {
     "description": "Help text under an automation event option",
     "x-files": [
       "src/app/features/workspace-settings/automations/automations.page.ts"
@@ -22328,6 +22739,40 @@
   "5177907248924087948": "Inactive cards",
   "@5177907248924087948": {
     "description": "Section heading",
+    "x-files": [
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "1442931951977908025": "Flag cards in progress for more than",
+  "@1442931951977908025": {
+    "description": "Followed by a number input and the word days",
+    "x-files": [
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "7044450057223032475": "Time in progress alert in days",
+  "@7044450057223032475": {
+    "x-files": [
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "4570820159524761638": "Their time in progress turns amber on boards, and \"Card in progress too long\" automations run. 0 turns this off.",
+  "@4570820159524761638": {
+    "description": "Help text under the time in progress alert setting",
+    "x-files": [
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "7345613250820835450": "Working hours time zone",
+  "@7345613250820835450": {
+    "description": "Label for the time zone whose working hours count toward time in progress",
+    "x-files": [
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "7465417154168936958": "Tracked time counts working hours only: 09:00–17:00, Monday to Friday, in this time zone. Nights and weekends in progress add nothing.",
+  "@7465417154168936958": {
+    "description": "Help text under the working hours time zone setting",
     "x-files": [
       "src/app/features/workspace-settings/general/general.page.html"
     ]
@@ -23021,6 +23466,13 @@
       "src/app/features/workspace-settings/lists/lists.page.html"
     ]
   },
+  "863389050962090151": "Mark the lists where work is actively happening as {$START_TAG_STRONG}In progress{$CLOSE_TAG_STRONG}. While a card is in one, it tracks time in progress: working hours (09:00–17:00, Monday to Friday) in the workspace time zone, shown on the card, in card details and in the table.",
+  "@863389050962090151": {
+    "description": "Info note in workspace list settings explaining In progress lists",
+    "x-files": [
+      "src/app/features/workspace-settings/lists/lists.page.html"
+    ]
+  },
   "7459973342282488413": "Learn more about lists",
   "@7459973342282488413": {
     "x-files": [
@@ -23054,6 +23506,20 @@
   "4511467603630713859": "Rename {$list}",
   "@4511467603630713859": {
     "description": "Button aria-label",
+    "x-files": [
+      "src/app/features/workspace-settings/lists/lists.page.ts"
+    ]
+  },
+  "4721525020647192618": "Unmark {$list} as in progress",
+  "@4721525020647192618": {
+    "description": "Button aria-label - stop treating this list as one where work is actively happening",
+    "x-files": [
+      "src/app/features/workspace-settings/lists/lists.page.ts"
+    ]
+  },
+  "1099211627002077397": "Mark {$list} as in progress",
+  "@1099211627002077397": {
+    "description": "Button aria-label - treat this list as one where work is actively happening",
     "x-files": [
       "src/app/features/workspace-settings/lists/lists.page.ts"
     ]
@@ -23248,13 +23714,6 @@
   },
   "7747459746598721996": "Intake",
   "@7747459746598721996": {
-    "description": "Group heading in the example automations menu",
-    "x-files": [
-      "src/app/features/workspace-settings/workspace-settings.page.ts"
-    ]
-  },
-  "3307214558906712688": "In progress",
-  "@3307214558906712688": {
     "description": "Group heading in the example automations menu",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
@@ -23526,8 +23985,8 @@
       "src/app/features/workspace-settings/workspace-settings.page.ts"
     ]
   },
-  "5582929088709124123": "Needs a list named for work in progress.",
-  "@5582929088709124123": {
+  "5124525400203183158": "Needs a list marked In progress.",
+  "@5124525400203183158": {
     "description": "What an example automation needs before it can be used",
     "x-files": [
       "src/app/features/workspace-settings/workspace-settings.page.ts"
@@ -24949,13 +25408,6 @@
   "2047227746757762648": "Review Pro and pricing",
   "@2047227746757762648": {
     "description": "Upgrade dialog button; Pro is the plan name",
-    "x-files": [
-      "src/app/shared/upgrade-prompt-dialog.component.ts"
-    ]
-  },
-  "5601530442010506564": "Got it",
-  "@5601530442010506564": {
-    "description": "Button: acknowledge and close the dialog",
     "x-files": [
       "src/app/shared/upgrade-prompt-dialog.component.ts"
     ]

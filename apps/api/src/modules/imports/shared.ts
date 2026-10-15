@@ -41,5 +41,7 @@ export async function insertMany<T extends Record<string, unknown>, R>(tx: Tx, t
  * one transaction and its summary is consumed by the same web origin that requested it.
  */
 export function toWireImportedCard(card: Card): WireCard {
-  return { ...card, url: cardPath(card.organisationKey, card.key) };
+  // `listEnteredAt` is the in-progress trigger's bookkeeping, not a client field.
+  const { listEnteredAt: _listEnteredAt, ...publicCard } = card;
+  return { ...publicCard, url: cardPath(card.organisationKey, card.key) };
 }

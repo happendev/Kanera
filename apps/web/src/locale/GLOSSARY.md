@@ -83,6 +83,8 @@ Everywhere:
 | Scratchpad | Scratchpad | Bloc de notas | Bloco de rascunho | Bloc-notes | Notizblock | スクラッチパッド | Kladblok | Kladd | 草稿本 | 草稿本 |
 | Work done | Work done | Trabajo realizado | Trabalho concluído | Travail accompli | Erledigte Arbeit | 完了した作業 | Voltooid werk | Utført arbeid | 已完成工作 | 已完成工作 |
 | board view / table view / calendar view | (same) | vista de tablero / de tabla / de calendario | visualização em quadro / tabela / calendário | vue tableau / table / calendrier | Board- / Tabellen- / Kalenderansicht | ボード / テーブル / カレンダー表示 | bordweergave / tabelweergave / kalenderweergave | tavlevisning / tabellvisning / kalendervisning | 看板视图 / 表格视图 / 日历视图 | 看板檢視 / 表格檢視 / 日曆檢視 |
+| In progress (list marking) / In progress list | In progress / In progress list | En curso / lista En curso | Em andamento / lista Em andamento | En cours / liste En cours | In Arbeit / In-Arbeit-Liste | 進行中 / 進行中リスト | In uitvoering / lijst In uitvoering | Pågår / Pågår-liste | 进行中 / 进行中列表 | 進行中 / 進行中列表 |
+| time in progress (tracked working time) | time in progress | tiempo en curso | tempo em andamento | temps en cours | Zeit in Arbeit | 進行中の時間 | tijd in uitvoering | tid i arbeid | 进行中时长 | 進行中時長 |
 | filter | filter | filtro | filtro | filtre | Filter | フィルター | filter | filter | 筛选 | 篩選 |
 | group by | group by | agrupar por | agrupar por | regrouper par | gruppieren nach | グループ化 | groeperen op | grupper etter | 分组依据 | 分組依據 |
 | sort | sort | ordenar | ordenar | trier | sortieren | 並べ替え | sorteren | sorter | 排序 | 排序 |

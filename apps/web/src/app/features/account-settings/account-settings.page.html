@@ -6,6 +6,8 @@
       <nav class="settings-tabs account-settings-tabs" kTabStrip aria-label="Settings sections" i18n-aria-label>
         @if (isClientAdmin()) { <span class="settings-tab-group" id="settings-group-account" i18n="Settings tab group heading">Your account</span> }
         <a [class]="selectedTab() === 'profile' ? 'sm active' : 'ghost sm'" routerLink="profile"><i class="ti ti-user-circle"></i> <ng-container i18n="Settings tab">Profile</ng-container></a>
+        <a [class]="selectedTab() === 'account-security' ? 'sm active' : 'ghost sm'" routerLink="account-security"><i class="ti ti-shield-lock"></i> <ng-container i18n="Settings tab">Security</ng-container></a>
+        <a [class]="selectedTab() === 'preferences' ? 'sm active' : 'ghost sm'" routerLink="preferences"><i class="ti ti-adjustments-horizontal"></i> <ng-container i18n="Settings tab">Preferences</ng-container></a>
         <a [class]="selectedTab() === 'notifications' ? 'sm active' : 'ghost sm'" routerLink="notifications"><i class="ti ti-bell"></i> <ng-container i18n="Settings tab">Notifications</ng-container></a>
         <a [class]="selectedTab() === 'api-keys' ? 'sm active' : 'ghost sm'" routerLink="api-keys"><i class="ti ti-key"></i> <ng-container i18n="Settings tab">API Keys</ng-container> @if (isHosted()) { <span class="pro-marker" i18n="Plan name badge: feature requires the Pro plan">Pro</span> }</a>
         @if (isClientAdmin()) {
@@ -25,6 +27,8 @@
 
       @let activeTab = selectedTab();
       @switch (activeTab) {
+        @case ('account-security') { <k-account-settings-account-security /> }
+        @case ('preferences') { <k-account-settings-preferences /> }
         @case ('profile') { <k-account-settings-profile /> }
         @case ('notifications') { <k-account-settings-notifications /> }
         @case ('api-keys') { <k-account-settings-api-keys /> }

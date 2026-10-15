@@ -1,4 +1,5 @@
 import { DestroyRef, Injectable, computed, effect, inject, signal } from "@angular/core";
+import { compactInProgressClock, resolveInProgressClock, type ReportedInProgressClock } from "../board/time-in-progress.util";
 import type {
   PortfolioSummary,
   SavedWorkView,
@@ -34,6 +35,8 @@ import {
 import { viewerTimeZone } from "../../shared/day-key.util";
 import { toggleId } from "../../shared/toggle-id";
 import { byPosition } from "../../shared/position-sort";
+
+type WorkRow = WorkQueryResponse["cards"][number];
 
 const EMPTY_CATALOG: WorkCatalog = {
   organisations: [],
@@ -84,6 +87,8 @@ function defaultDefinition(lens: WorkViewLens): WorkViewDefinition {
       completion: DEFAULT_COMPLETION,
       unassignedOnly: false,
       inactiveOnly: false,
+      inProgressOnly: false,
+      inProgressTooLongOnly: false,
       dueFrom: null,
       dueTo: null,
       overdueOnly: false,
@@ -175,7 +180,7 @@ export class GlobalWorkState {
   readonly reconciliationVersion = signal(0);
   readonly selectedViewId = signal<string | null>(null);
   readonly drilldownLabel = signal<string | null>(null);
-  readonly collapsedTableGroupKeys = signal<string[]>([]);
+  readonly collapsedTableGroupKeys = computed(() => this.definition().table.collapsedGroupKeys);
   readonly collapsedHistoryDayKeys = signal<string[]>([]);
   readonly collapsedChecklistGroupIds = signal<string[]>([]);
 
@@ -306,7 +311,6 @@ export class GlobalWorkState {
         definition: this.definition(),
         selectedViewId: this.selectedViewId(),
         drilldownLabel: this.drilldownLabel(),
-        collapsedTableGroupKeys: this.collapsedTableGroupKeys(),
         collapsedHistoryDayKeys: this.collapsedHistoryDayKeys(),
         collapsedChecklistGroupIds: this.collapsedChecklistGroupIds(),
         upNextPanelOpen: this.upNextPanelOpen(),
@@ -361,7 +365,6 @@ export class GlobalWorkState {
     this.lastSyncedAt.set(null);
     this.selectedViewId.set(preference?.selectedViewId ?? null);
     this.drilldownLabel.set(lens === "portfolio" ? preference?.drilldownLabel ?? null : null);
-    this.collapsedTableGroupKeys.set(preference?.definition.table.collapsedGroupKeys ?? []);
     this.collapsedHistoryDayKeys.set(preference?.collapsedHistoryDayKeys ?? []);
     this.collapsedChecklistGroupIds.set(preference?.collapsedChecklistGroupIds ?? []);
     // Open unless this person has explicitly closed it: the queue is the page's headline feature,
@@ -567,7 +570,6 @@ export class GlobalWorkState {
     }));
     // Table group keys are dimension-scoped; a board id and a list id must never accidentally fold
     // one another after the grouping axis changes.
-    this.collapsedTableGroupKeys.set([]);
     this.persistPreference();
   }
 
@@ -603,7 +605,6 @@ export class GlobalWorkState {
       sort: defaults.sort,
       table: defaults.table,
     }));
-    this.collapsedTableGroupKeys.set([]);
     this.persistPreference();
   }
 
@@ -617,7 +618,6 @@ export class GlobalWorkState {
       collapsedGroupKeys: [...new Set(table.collapsedGroupKeys)].slice(0, 500),
     };
     this.definition.update((definition) => ({ ...definition, table: normalized }));
-    this.collapsedTableGroupKeys.set(normalized.collapsedGroupKeys);
     this.persistPreference();
   }
 
@@ -690,7 +690,6 @@ export class GlobalWorkState {
 
   setCollapsedTableGroupKeys(keys: readonly string[]): void {
     const normalized = [...new Set(keys)].slice(0, 500);
-    this.collapsedTableGroupKeys.set(normalized);
     this.definition.update((definition) => ({
       ...definition,
       table: { ...definition.table, collapsedGroupKeys: normalized },
@@ -718,7 +717,6 @@ export class GlobalWorkState {
     this.selectedViewId.set(view.id);
     this.drilldownLabel.set(null);
     this.definition.set(view.definition);
-    this.collapsedTableGroupKeys.set(view.definition.table.collapsedGroupKeys);
     this.updateRooms();
     void this.queryFirstPage();
   }
@@ -728,7 +726,6 @@ export class GlobalWorkState {
     this.selectedViewId.set(null);
     this.drilldownLabel.set(null);
     this.definition.set(defaults);
-    this.collapsedTableGroupKeys.set(defaults.table.collapsedGroupKeys);
     this.updateRooms();
     void this.queryFirstPage();
   }
@@ -841,7 +838,7 @@ export class GlobalWorkState {
           ...response,
           cards: response.cards.map((card) => {
             const original = card.id === id ? originals.get(id) : undefined;
-            return original ? { ...card, listId: original.listId, position: original.position } : card;
+            return original ? { ...card, listId: original.listId, position: original.position, ...(compactInProgressClock(resolveInProgressClock(original, original)) as Partial<WorkRow>) } : card;
           }),
         }));
         throw error;
@@ -895,7 +892,7 @@ export class GlobalWorkState {
     }));
     const globalWorkUserId = this.focusedTargetUserId();
     return async () => {
-      const moved = await this.api.post<{ id: string; listId: string; position: string }>(
+      const moved = await this.api.post<{ id: string; listId: string; position: string } & ReportedInProgressClock>(
         `/cards/${cardId}/move`,
         {
           listId,
@@ -906,7 +903,14 @@ export class GlobalWorkState {
       this.response.update((response) => ({
         ...response,
         cards: response.cards.map((card) =>
-          card.id === moved.id ? { ...card, listId: moved.listId, position: moved.position } : card
+          card.id === moved.id
+            ? {
+                ...card,
+                listId: moved.listId,
+                position: moved.position,
+                ...(compactInProgressClock(resolveInProgressClock(card, moved)) as Partial<WorkRow>),
+              }
+            : card
         ),
       }));
     };
@@ -1263,7 +1267,6 @@ export class GlobalWorkState {
       definition: this.definition(),
       selectedViewId: this.selectedViewId(),
       drilldownLabel: this.drilldownLabel(),
-      collapsedTableGroupKeys: this.collapsedTableGroupKeys(),
       collapsedHistoryDayKeys: this.collapsedHistoryDayKeys(),
       collapsedChecklistGroupIds: this.collapsedChecklistGroupIds(),
       upNextPanelOpen: this.upNextPanelOpen(),
@@ -1584,10 +1587,13 @@ export class GlobalWorkState {
         this.patchVisibleCard(card);
         refreshCards();
       },
-      [SERVER_EVENTS.CARD_MOVED]: ({ cardId, toListId, position }) => {
+      [SERVER_EVENTS.CARD_MOVED]: ({ cardId, toListId, position, ...reported }) => {
         this.response.update((response) => ({
           ...response,
-          cards: response.cards.map((card) => card.id === cardId ? { ...card, listId: toListId, position, updatedAt: new Date() } : card),
+          // The event carries the persisted clock (read back after the trigger); take it as-is.
+          cards: response.cards.map((card) => card.id === cardId
+            ? { ...card, listId: toListId, position, updatedAt: new Date(), ...(compactInProgressClock(resolveInProgressClock(card, reported)) as Partial<WorkRow>) }
+            : card),
         }));
         refreshCards();
       },

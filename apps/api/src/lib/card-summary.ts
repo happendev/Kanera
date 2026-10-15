@@ -65,6 +65,8 @@ async function loadCardSummariesFromFilteredCards<Compact extends boolean>(
         c.completed_at,
         c.archived_at,
         c.cover_attachment_id,
+        c.in_progress_since,
+        c.in_progress_seconds,
         c.created_at,
         c.updated_at,
         (c.description is not null) as has_description
@@ -150,6 +152,8 @@ async function loadCardSummariesFromFilteredCards<Compact extends boolean>(
       fc.completed_at as "completedAt",
       fc.archived_at as "archivedAt",
       fc.cover_attachment_id as "coverAttachmentId",
+      fc.in_progress_since as "inProgressSince",
+      fc.in_progress_seconds as "inProgressSeconds",
       fc.created_at as "createdAt",
       fc.updated_at as "updatedAt",
       fc.has_description as "hasDescription",
@@ -236,7 +240,7 @@ export function toWireCardSummary<Value extends CompactCardCustomFieldValue>(
   _clientId: string,
   // When provided, only inline custom-field values for these field ids. The board-open
   // payload uses this to ship just the values rendered as card badges (showOnCard fields);
-  // the full set loads lazily for filters/List View. Pass null/undefined to inline all.
+  // the full set loads lazily for filters and the Table. Pass null/undefined to inline all.
   customFieldIds?: ReadonlySet<string> | null,
 ): Omit<WireCardSummary, "customFieldValues"> & { customFieldValues: Value[] } {
   // Board summaries feed compact card tiles, so prefer the 400px derivative. Card detail loads
@@ -265,6 +269,8 @@ export function toWireCardSummary<Value extends CompactCardCustomFieldValue>(
     completedAt: row.completedAt,
     archivedAt: row.archivedAt,
     coverAttachmentId: row.coverAttachmentId,
+    inProgressSince: row.inProgressSince,
+    inProgressSeconds: row.inProgressSeconds,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     hasDescription: row.hasDescription,

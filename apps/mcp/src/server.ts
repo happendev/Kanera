@@ -47,6 +47,8 @@ const workFilters = z.strictObject({
   completion: z.enum(WORK_COMPLETION_FILTERS).optional().describe("Default activeAndRecentlyCompleted; use active for open work only."),
   unassignedOnly: z.boolean().optional().describe("Return only cards with no assignees."),
   inactiveOnly: z.boolean().optional().describe("Cards idle past their workspace's inactive threshold (default 14 days)."),
+  inProgressOnly: z.boolean().optional().describe("Only open cards with a running time-in-progress stint (in a list flagged In progress)."),
+  inProgressTooLongOnly: z.boolean().optional().describe("Only open cards whose current in-progress stint has passed their workspace's inProgressAlertDays (never when that is 0)."),
   dueFrom: localDateInput.nullable().optional().describe("Inclusive due-date lower bound: YYYY-MM-DD or a phrase such as \"today\"."),
   dueTo: localDateInput.nullable().optional().describe("Inclusive due-date upper bound: YYYY-MM-DD or a phrase such as \"end of week\"."),
   overdueOnly: z.boolean().optional().describe("Return only overdue active cards."),
@@ -67,7 +69,7 @@ const sourceDirectorySchema = z.object({
     organisationId: uuid,
     organisationName: z.string(),
   })),
-  lists: z.array(z.looseObject({ id: uuid, workspaceId: uuid, name: z.string() })),
+  lists: z.array(z.looseObject({ id: uuid, workspaceId: uuid, name: z.string(), inProgress: z.boolean().optional() })),
   labels: z.array(z.looseObject({ id: uuid, workspaceId: uuid, name: z.string() })),
   people: z.array(z.looseObject({ id: uuid, displayName: z.string() })),
 });
@@ -490,7 +492,11 @@ type WorkspaceTemplateId = WorkspaceTemplate["id"];
 const workspaceTemplateId = z.enum(WORKSPACE_TEMPLATES.map((template) => template.id) as [WorkspaceTemplateId, ...WorkspaceTemplateId[]]);
 const iconSlug = z.string().trim().min(1).max(100).describe("Tabler icon slug such as \"rocket\"; omit for the default.");
 const seedName = z.string().trim().min(1).max(100).describe("Non-empty name, up to 100 characters.");
-const seedList = z.strictObject({ name: seedName, icon: iconSlug.optional() });
+const seedList = z.strictObject({
+  name: seedName,
+  icon: iconSlug.optional(),
+  inProgress: z.boolean().optional().describe("Mark lists where work is actively happening; cards entering one start a time-in-progress stint (inProgressSince); finished stints accumulate in inProgressSeconds."),
+});
 const seedCustomField = z.strictObject({
   name: seedName,
   icon: iconSlug.optional(),
@@ -599,6 +605,7 @@ function describeWorkspaceTemplate(template: WorkspaceTemplate) {
     workspaceName: template.workspaceName,
     initialBoardName: template.initialBoardName,
     lists: template.lists.map((list) => list.name),
+    inProgressLists: template.lists.filter((list) => list.inProgress).map((list) => list.name),
     customFields: template.customFields.map((field) => ({ name: field.name, type: field.type })),
     labels: template.labels.map((label) => label.name),
     checklistTemplateCount: template.checklistTemplates?.length ?? 0,
@@ -2156,7 +2163,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     if (a.preset && (a.from || a.to)) validationError("preset cannot be combined with from and to");
     return api.post("/api/v1/work/history/query", a);
   }, ctx, workHistoryOutputSchema);
-  registerKaneraTool(server, "work.query_cards", "Use this when listing current, completed, overdue, unassigned, or stale work across one or many Kanera projects. For another person, use lens=team and one assigneeIds value; do not enumerate boards manually. Results include source-name maps and canonical card links. Ordered by sort (default dueAsc: soonest due first, undated last), ties by card id.", {
+  registerKaneraTool(server, "work.query_cards", "Use this when listing current, in-progress, completed, overdue, unassigned, or stale work across one or many Kanera projects. For active work use filters.inProgressOnly with sort=inProgressAsc (longest running first). For another person, use lens=team and one assigneeIds value; do not enumerate boards manually. Results include source-name maps and canonical card links. Ordered by sort (default dueAsc: soonest due first, undated last), ties by card id.", {
     lens: z.enum(["my", "team"]).describe("Use my for the connected user's assignments; use team with filters.assigneeIds for another person."),
     scope: workScope,
     filters: workFilters,
@@ -2164,7 +2171,7 @@ function registerTools(server: McpServer, ctx: KaneraMcpContext) {
     cursor: z.string().min(1).max(500_000).optional(),
     limit: z.number().int().min(1).max(100).default(50),
   }, (a, api) => api.post("/api/v1/work/cards/query", a), ctx, workCardsOutputSchema);
-  registerKaneraTool(server, "work.portfolio_summary", "Get bounded organisation, workspace, and board rollups across accessible work, including active, overdue, due-soon, unassigned, completed, and overdue-checklist counts plus recent activity buckets. Boards in sidebar order; activity oldest day first.", {
+  registerKaneraTool(server, "work.portfolio_summary", "Get bounded organisation, workspace, and board rollups across accessible work, including active, overdue, due-soon, unassigned, inactive, in-progress, in-progress-too-long, completed, and overdue-checklist counts plus recent activity buckets. Boards in sidebar order; activity oldest day first.", {
     scope: workScope,
     filters: workFilters,
     days: z.number().int().min(1).max(60).default(30),

@@ -8,6 +8,10 @@
           }
         </span>
       </div>
+      <div class="settings-info-note">
+        <i class="ti ti-progress"></i>
+        <span i18n="Info note in workspace list settings explaining In progress lists">Mark the lists where work is actively happening as <strong>In progress</strong>. While a card is in one, it tracks time in progress: working hours (09:00–17:00, Monday to Friday) in the workspace time zone, shown on the card, in card details and in the table.</span>
+      </div>
       <k-docs-link class="spaced" path="lists" label="Learn more about lists" i18n-label />
       <form class="board-form single-line-capture" (submit)="settings.addList($event)">
         <k-icon-picker [value]="settings.newListIcon() ?? 'list'" (valueChange)="settings.newListIcon.set($event)" />
@@ -30,6 +34,18 @@
             </button>
             }
             <div class="row-actions">
+              <button
+                type="button"
+                class="list-progress-toggle"
+                [class.is-on]="list.inProgress"
+                [attr.aria-pressed]="list.inProgress"
+                [attr.aria-label]="inProgressToggleLabel(list)"
+                [kTooltip]="inProgressToggleTooltip(list)"
+                (click)="settings.updateListStyle(list.id, { inProgress: !list.inProgress })"
+              >
+                <i class="ti ti-progress"></i>
+                <span class="mobile-hide" i18n="Toggle on a workspace list - marks it as one where work is actively happening">In progress</span>
+              </button>
               <k-icon-picker [value]="list.icon ?? 'list'" (valueChange)="settings.updateListStyle(list.id, { icon: $event })" />
               <k-color-picker [value]="$any(list.color)" (valueChange)="settings.updateListStyle(list.id, { color: $event })" />
               <button class="ghost icon danger" (click)="settings.archiveList(list.id)" [disabled]="!!settings.deletionPreviewKey()" aria-label="Delete list" i18n-aria-label kTooltip="Delete list" i18n-kTooltip>

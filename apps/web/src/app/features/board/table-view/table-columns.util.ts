@@ -11,6 +11,7 @@ export function builtinColumnLabel(id: string): string {
     case "board": return $localize`:Table column header - the board the card is on:Board`;
     case "assignees": return $localize`:Table column header:Assignees`;
     case "due": return $localize`:Table column header:Due date`;
+    case "inProgress": return $localize`:Table column header - tracked working time the card has spent in In progress lists:Time in progress`;
     case "labels": return $localize`:Table column header:Labels`;
     case "checklist": return $localize`:Table column header - checklist progress:Checklist`;
     case "updated": return $localize`:Table column header - when the card was last updated:Updated`;
@@ -27,6 +28,7 @@ export function builtinColumnIcon(id: string): string {
     case "board": return "layout-kanban";
     case "assignees": return "users";
     case "due": return "calendar-event";
+    case "inProgress": return "progress";
     case "labels": return "tag";
     case "checklist": return "checkbox";
     case "updated": return "history";

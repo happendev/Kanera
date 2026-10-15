@@ -101,9 +101,9 @@
   top: var(--ap-top, 0);
   left: var(--ap-left, 0);
   z-index: var(--z-panel);
-  width: var(--ap-width, 340px);
+  width: var(--ap-width, 400px);
   max-width: var(--ap-max-width, calc(100vw - 24px));
-  max-height: var(--ap-max-height, 520px);
+  max-height: var(--ap-max-height, 900px);
   padding: 14px;
   overflow: auto;
   visibility: hidden;
@@ -140,7 +140,8 @@
 
 .board-overview-metrics {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  // Six counts in two rows of three, so every label reads in full.
+  grid-template-columns: repeat(3, 1fr);
   gap: 6px;
 
   // The global button reset pins every <button> to 36px with nowrap, which crushed the count and
@@ -186,6 +187,8 @@
   strong { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
   span { overflow: hidden; max-width: 100%; color: var(--text-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
   .needs-attention strong { color: var(--danger); }
+  // Work in progress past the alert: the amber of an alerted clock on the board, not overdue red.
+  .needs-follow-up strong { color: var(--color-amber); }
 }
 
 .board-overview-callout {

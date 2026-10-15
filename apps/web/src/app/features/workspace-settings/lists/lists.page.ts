@@ -23,6 +23,19 @@ export class WorkspaceSettingsListsPage {
     return $localize`:Button aria-label:Rename ${name}:list:`;
   }
 
+  protected inProgressToggleLabel(list: { name: string; inProgress: boolean }): string {
+    const name = list.name;
+    return list.inProgress
+      ? $localize`:Button aria-label - stop treating this list as one where work is actively happening:Unmark ${name}:list: as in progress`
+      : $localize`:Button aria-label - treat this list as one where work is actively happening:Mark ${name}:list: as in progress`;
+  }
+
+  protected inProgressToggleTooltip(list: { inProgress: boolean }): string {
+    return list.inProgress
+      ? $localize`:Tooltip on an active In progress toggle:In progress list: each card shows its time in progress`
+      : $localize`:Tooltip on an inactive In progress toggle:Mark as In progress`;
+  }
+
   constructor() {
     this.settings.selectedTab.set("lists");
   }

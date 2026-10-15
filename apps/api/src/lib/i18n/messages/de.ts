@@ -599,6 +599,8 @@ const de: ServerMessages = {
     setFieldTo: (fieldName) => `hat ${fieldName} gesetzt auf`,
     setCover: "hat das Titelbild festgelegt",
     removedCover: "hat das Titelbild entfernt",
+    correctedTimeInProgress: "hat die Zeit in Arbeit korrigiert",
+    flaggedInProgressTooLong: (days) => `hat diese Karte markiert: mehr als ${days} ${days === 1 ? "Tag" : "Tage"} in Arbeit`,
     addedChecklist: "hat Checkliste hinzugefügt:",
     deletedChecklist: "hat Checkliste gelöscht:",
     completedSubChecklist: "hat Unter-Checkliste abgeschlossen:",

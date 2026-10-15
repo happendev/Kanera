@@ -10,11 +10,12 @@ export function absoluteCardUrl(organisationKey: string, cardKey: string, webOri
 }
 
 /**
- * The card as clients see it: the per-client `clientToken` never leaves the server, inline media in
- * the description is signed for the reader's organisation, and the canonical URL is attached.
+ * The card as clients see it: the per-client `clientToken` and the in-progress trigger's
+ * `listEnteredAt` bookkeeping never leave the server, inline media in the description is signed for
+ * the reader's organisation, and the canonical URL is attached.
  */
 export function toWireCard(card: typeof cards.$inferSelect, clientId: string): WireCard {
-  const { clientToken: _clientToken, ...publicCard } = card;
+  const { clientToken: _clientToken, listEnteredAt: _listEnteredAt, ...publicCard } = card;
   return {
     ...publicCard,
     description: signEmbeddedMediaUrls(card.description, clientId),

@@ -238,6 +238,7 @@ export function automationTriggerTargetLabel(automation: WireAutomation, lookups
     return icu($localize`:Automation trigger target:{days, plural, one {# day before} other {# days before}}`, { days });
   }
   if (automation.triggerType === "card_becomes_inactive") return null;
+  if (automation.triggerType === "card_in_progress_too_long") return null;
   if (automation.triggerType === "all_checklist_items_complete") return null;
   if (automation.triggerType === "card_marked_complete") return null;
   if (automation.triggerType === "card_label_set") {

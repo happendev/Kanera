@@ -43,6 +43,7 @@ function workspace(overrides: Partial<Workspace & { role: string }> = {}): Works
     accentColor: null,
     completedCardsActiveDays: 35,
     inactiveCardsDays: 14,
+    inProgressAlertDays: 7, timeZone: "UTC",
     boardLinkingEnabled: true,
     notesEnabled: true,
     createdAt: new Date("2026-05-21T00:00:00.000Z"),
@@ -152,6 +153,7 @@ function workspaceList(overrides: Partial<List> = {}): List {
     name: "Inbox",
     icon: null,
     color: null,
+    inProgress: false,
     position: "1000.0000000000",
     archivedAt: null,
     createdAt: new Date("2026-05-21T00:00:00.000Z"),
@@ -468,6 +470,7 @@ describe("WorkspaceSettingsPage", () => {
     expect(api.patch).toHaveBeenCalledWith("/workspaces/workspace-1", {
       completedCardsActiveDays: 28,
       inactiveCardsDays: 20,
+    inProgressAlertDays: 7, timeZone: "UTC",
     });
   });
 
@@ -1306,6 +1309,31 @@ describe("WorkspaceSettingsPage", () => {
       assignedItemsOnly: false,
     });
     expect(component.acceptedGuests()[0]?.assignedItemsOnly).toBe(false);
+  });
+
+  it("keeps legacy editor coercions distinct from execution defaults", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    const legacyActions = [
+      { type: "add_labels", config: { labelId: "label-1" } },
+      { type: "remove_labels", config: undefined, labelId: "label-2" },
+      { type: "add_assignees", config: { userId: "user-1" } },
+      { type: "remove_assignees", config: { userIds: ["user-2", "", 123] } },
+      { type: "set_completion", config: {} },
+      { type: "set_completion", config: { completed: "false" } },
+      { type: "set_due_date", config: { offsetDays: "6", slot: "unknown" } },
+    ].map((action, index) => ({ ...automation().actions[0], ...action, id: `legacy-${index}` })) as WireAutomation["actions"];
+    component.automations.set([automation({ actions: legacyActions })]);
+
+    expect(component.automationDraftActions("automation-1")).toEqual([
+      { type: "add_labels", config: { labelIds: ["label-1"] } },
+      { type: "remove_labels", config: { labelIds: ["label-2"] } },
+      { type: "add_assignees", config: { userIds: ["user-1"] } },
+      { type: "remove_assignees", config: { userIds: ["user-2"] } },
+      { type: "set_completion", config: { completed: true } },
+      { type: "set_completion", config: { completed: false } },
+      { type: "set_due_date", config: { offsetDays: 6, slot: "anyTime" } },
+    ]);
   });
 
   it("keeps unfinished automation actions as unsaved drafts", async () => {

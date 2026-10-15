@@ -1,4 +1,6 @@
 import { CdkTrapFocus } from "@angular/cdk/a11y";
+import { formatTrackedDuration, hasTimeInProgress, timeInProgressChip, type ReportedInProgressClock, type TimeInProgressChip } from "./time-in-progress.util";
+import { MinuteClockService } from "../../shared/minute-clock.service";
 import { KeyboardShortcutsService } from "../../core/keyboard/keyboard-shortcuts.service";
 import { ToastService } from "../../shared/toast.service";
 import { PendingCustomFieldIds } from "../../shared/pending-custom-field-ids";
@@ -151,6 +153,7 @@ export class CardDetailComponent {
   private readonly offlineCache = inject(OfflineCacheService);
   private readonly sockets = inject(SocketService);
   private readonly state = inject(BoardState);
+  private readonly clock = inject(MinuteClockService);
   private readonly router = inject(Router);
   private readonly layout = inject(CardDetailLayoutService);
   private readonly confirm = inject(ConfirmService);
@@ -569,7 +572,52 @@ export class CardDetailComponent {
   readonly boardSummary = computed(() => this.workspaces.boardSummaryFor(this.boardId()));
 
   readonly currentList = computed(() => this.state.lists().find((l) => l.id === this.card().listId));
+  /**
+   * The card's tracked time in progress, shown above the description. Same reading as the tile, but
+   * in the two-unit form: the detail has room to say "3d 4h" where the tile can only say "3d".
+   */
+  readonly timeInProgress = computed<(TimeInProgressChip & { detail: string }) | null>(() => {
+    const card = this.card();
+    const now = this.clock.now();
+    // The alert setting is only read for a card that has time to show.
+    if (!hasTimeInProgress(card)) return null;
+    const chip = timeInProgressChip(card, now, this.state.inProgressAlertDays(), this.state.workspaceTimeZone())!;
+    return { ...chip, detail: formatTrackedDuration(chip.ms) };
+  });
   readonly otherLists = computed(() => this.state.visibleLists().filter((l) => l.id !== this.card().listId));
+
+  // Correcting tracked time is an audited workspace-admin action (see PUT /cards/:id/in-progress-time).
+  readonly canCorrectTimeInProgress = computed(() => this.canEdit() && this.state.viewerIsWorkspaceAdmin());
+  readonly editingTimeInProgress = signal(false);
+  readonly savingTimeInProgress = signal(false);
+  readonly timeInProgressError = signal(false);
+  readonly timeDraftHours = signal(0);
+  readonly timeDraftMinutes = signal(0);
+
+  startEditTimeInProgress(ms: number) {
+    const minutes = Math.floor(ms / 60_000);
+    this.timeDraftHours.set(Math.floor(minutes / 60));
+    this.timeDraftMinutes.set(minutes % 60);
+    this.timeInProgressError.set(false);
+    this.editingTimeInProgress.set(true);
+  }
+
+  async saveTimeInProgress() {
+    if (!this.canCorrectTimeInProgress() || this.savingTimeInProgress()) return;
+    const hours = Math.max(0, Math.min(100_000, Math.trunc(this.timeDraftHours() || 0)));
+    const minutes = Math.max(0, Math.min(59, Math.trunc(this.timeDraftMinutes() || 0)));
+    this.savingTimeInProgress.set(true);
+    this.timeInProgressError.set(false);
+    try {
+      const card = await this.api.put<WireCard>(`/cards/${this.card().id}/in-progress-time`, { seconds: hours * 3600 + minutes * 60 });
+      this.state.updateCard(card);
+      this.editingTimeInProgress.set(false);
+    } catch {
+      this.timeInProgressError.set(true);
+    } finally {
+      this.savingTimeInProgress.set(false);
+    }
+  }
 
   /** The list popover anchors to its trigger; from the keyboard, find that trigger in the panel. */
   openMoveToListFromKeyboard() {
@@ -595,7 +643,8 @@ export class CardDetailComponent {
     const card = this.card();
     const position = this.state.positionForCardDrop(card.id, listId, null, undefined);
     this.state.moveCard(card.id, listId, position);
-    await this.api.post(`/cards/${card.id}/move`, { listId, beforeCardId: null });
+    const moved = await this.api.post<{ id: string; listId: string; position: string } & ReportedInProgressClock>(`/cards/${card.id}/move`, { listId, beforeCardId: null });
+    this.state.moveCard(moved.id, moved.listId, moved.position, moved);
   }
 
   toggleActionsMenu() {

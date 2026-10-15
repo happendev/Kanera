@@ -2326,6 +2326,111 @@
 .move-list-wrap {
   position: relative;
   display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+// Tracked time in progress, the first thing in the detail column above the description. Same accent
+// chip as the tile while the clock runs; muted once it has stopped.
+.detail-time-in-progress {
+  display: inline-flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+  align-self: flex-start;
+  padding: 3px 10px 3px 8px;
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  border-radius: var(--radius-sm);
+
+  i {
+    font-size: 15px;
+  }
+
+  strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  // Open work past its workspace's in-progress alert: the amber of a due-soon date, not the red of
+  // overdue. It is a prompt to ask about the card, not a missed commitment.
+  &.is-alert {
+    color: var(--color-amber);
+    background: color-mix(in srgb, var(--color-amber) 12%, transparent);
+    border-color: color-mix(in srgb, var(--color-amber) 32%, transparent);
+  }
+
+  &.is-done {
+    color: var(--text-muted);
+    background: transparent;
+    border-style: dashed;
+    border-color: var(--border-strong);
+  }
+
+  .detail-time-sep {
+    color: var(--text-muted);
+  }
+}
+
+// The time chip plus, for workspace admins, its correction button.
+.detail-time-row {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  align-items: center;
+}
+
+.detail-time-edit {
+  width: 28px;
+  height: 28px;
+  color: var(--text-muted);
+}
+
+.detail-time-editor {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: var(--text-sm);
+
+  label {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    color: var(--text-muted);
+  }
+
+  input.detail-time-input {
+    width: 72px;
+    height: 32px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  button {
+    height: 32px;
+  }
+}
+
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  .detail-time-edit,
+  .detail-time-editor input.detail-time-input,
+  .detail-time-editor button {
+    min-width: 44px;
+    height: 44px;
+  }
+}
+
+.detail-time-error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--danger);
 }
 
 .move-list-btn {

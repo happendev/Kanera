@@ -17,6 +17,9 @@ export const STORAGE_KEYS = {
   COLLAPSED_CHECKLISTS: "kanera:collapsed-checklists",
   EDITOR_DRAFTS: "kanera:editor-drafts",
   HIDE_COMPLETED_CHECKLIST_ITEMS: "kanera:hide-completed-checklist-items",
+  // One explainer shown on in-progress list columns until dismissed; device-level like the chrome
+  // preferences around it, since it teaches a concept rather than recording a choice.
+  IN_PROGRESS_HINT_DISMISSED: "kanera:in-progress-hint-dismissed",
   OFFLINE_IDENTITY: "kanera:offline-identity",
   LOGOUT_SYNC: "kanera-auth-logout",
   NOTES_SELECTION_PREFIX: "kanera.notes.selection",
@@ -25,6 +28,7 @@ export const STORAGE_KEYS = {
   ONBOARDING_SKIPPED_PREFIX: "kanera.onboarding.skipped",
   FIRST_RUN_DISMISSED_PREFIX: "kanera.first-run.dismissed",
   NOTIFICATION_GROUP_BY: "kanera:notif-group-by",
+  NOTIFICATION_SOUND: "kanera:notification-sound",
   MENTION_SOUND_ENABLED: "kanera:mention-sound-enabled",
   NOTIFICATION_USER_FILTER: "kanera:notif-user-filter",
   PUSH_OPT_IN_PENDING: "kanera:push-opt-in-pending",

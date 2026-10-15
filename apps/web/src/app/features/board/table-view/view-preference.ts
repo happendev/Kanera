@@ -24,6 +24,7 @@ export interface StoredFilters {
   showUnreadOnly: boolean;
   showOverdueOnly: boolean;
   showInactiveOnly: boolean;
+  showInProgressOnly: boolean;
   showPrioritySetOnly: boolean;
   showReminderSetOnly: boolean;
 }
@@ -53,6 +54,7 @@ export function readFilters(scope: string): StoredFilters | null {
       showUnreadOnly: obj["showUnreadOnly"] === true,
       showOverdueOnly: obj["showOverdueOnly"] === true,
       showInactiveOnly: obj["showInactiveOnly"] === true,
+      showInProgressOnly: obj["showInProgressOnly"] === true,
       showPrioritySetOnly: obj["showPrioritySetOnly"] === true,
       showReminderSetOnly: obj["showReminderSetOnly"] === true,
     };
@@ -79,6 +81,7 @@ function hasAnyFilter(f: StoredFilters): boolean {
     f.showUnreadOnly ||
     f.showOverdueOnly ||
     f.showInactiveOnly ||
+    f.showInProgressOnly ||
     f.showPrioritySetOnly ||
     f.showReminderSetOnly
   );
@@ -131,12 +134,7 @@ export function writeCompletedFilter(scope: string, value: CompletedFilter | nul
 
 /** Which view was last open in this scope. */
 export function readViewMode(scope: string): ViewMode | null {
-  const stored = readString(viewPreferenceKey("mode", scope));
-  // The retired List view is answered with the Table, which superseded it. Read-time rather than a
-  // migration pass because the key is per board and there is no index of the boards a user has
-  // opened — anyone still holding "list" would otherwise be dropped back on the kanban every visit.
-  if (stored === "list") return "table";
-  return stored as ViewMode | null;
+  return readString(viewPreferenceKey("mode", scope)) as ViewMode | null;
 }
 
 export function writeViewMode(scope: string, mode: ViewMode): void {

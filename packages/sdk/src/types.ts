@@ -80,7 +80,8 @@ export type WorkspaceSeedAutomationTrigger =
   | { type: "all_checklist_items_complete" }
   | { type: "card_marked_complete" }
   | { type: "card_label_set"; labelName: string }
-  | { type: "card_becomes_inactive" };
+  | { type: "card_becomes_inactive" }
+  | { type: "card_in_progress_too_long" };
 
 export type WorkspaceSeedCustomFieldValue =
   | { kind: "text"; text: string }
@@ -117,8 +118,8 @@ export interface CreateWorkspaceInput {
   cardKeyPrefix?: string;
   icon?: string | null;
   initialBoard?: { name: string; icon?: string | null; iconColor?: ColorToken | null };
-  /** Ordered workflow lists. Empty or at least two entries. */
-  lists?: { name: string; icon?: string | null }[];
+  /** Ordered workflow lists. Empty or at least two entries. `inProgress` marks active-work lists. */
+  lists?: { name: string; icon?: string | null; inProgress?: boolean }[];
   /** Plain list names; an alternative to `lists`. */
   listNames?: string[];
   customFields?: {
@@ -161,6 +162,8 @@ export interface List {
   icon: string | null;
   color: ColorToken | null;
   position: string;
+  /** Cards in this list are actively being worked on; entering one starts `Card.inProgressSince`. */
+  inProgress: boolean;
   archivedAt: Timestamp | null;
 }
 
@@ -269,6 +272,18 @@ export interface Card {
   archivedAt: Timestamp | null;
   createdById: Uuid;
   coverAttachmentId: Uuid | null;
+  /**
+   * Start of the running in-progress stint: set while the card is open, not archived and in an In
+   * progress list; null otherwise. Leaving progress, completing or archiving banks the stint into
+   * `inProgressSeconds`.
+   */
+  inProgressSince: Timestamp | null;
+  /**
+   * Tracked seconds from finished in-progress stints. Only working time counts (09:00-17:00, Monday
+   * to Friday, in the workspace's `timeZone`); a running stint adds its working time since
+   * `inProgressSince`.
+   */
+  inProgressSeconds: number;
   createdAt: Timestamp;
   updatedAt: Timestamp;
   /** Canonical browser link to the card. */
@@ -567,6 +582,10 @@ export interface WorkFilters {
   completion?: "activeAndRecentlyCompleted" | "active" | "completed" | "all";
   unassignedOnly?: boolean;
   inactiveOnly?: boolean;
+  /** Only open cards in In progress lists (each carries `inProgressSince`). */
+  inProgressOnly?: boolean;
+  /** Open cards whose current in-progress stint has passed the workspace alert. */
+  inProgressTooLongOnly?: boolean;
   dueFrom?: LocalDate | null;
   dueTo?: LocalDate | null;
   overdueOnly?: boolean;
@@ -578,12 +597,14 @@ export interface WorkFilters {
 
 export type WorkSort =
   | "dueAsc" | "dueDesc" | "titleAsc" | "titleDesc"
-  | "createdAsc" | "createdDesc" | "updatedAsc" | "updatedDesc";
+  | "createdAsc" | "createdDesc" | "updatedAsc" | "updatedDesc"
+  /** By time-in-progress start: `inProgressAsc` is longest in progress first; others sort last. */
+  | "inProgressAsc" | "inProgressDesc";
 
 /** Name maps so a caller can render board/list/label/person names without extra lookups. */
 export interface WorkSources {
   boards: { id: Uuid; name: string; url: string; workspaceId: Uuid; workspaceName: string; organisationId: Uuid; organisationName: string }[];
-  lists: { id: Uuid; workspaceId: Uuid; name: string }[];
+  lists: { id: Uuid; workspaceId: Uuid; name: string; inProgress: boolean }[];
   labels: { id: Uuid; workspaceId: Uuid; name: string }[];
   people: { id: Uuid; displayName: string }[];
 }

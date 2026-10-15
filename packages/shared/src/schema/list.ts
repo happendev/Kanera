@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, index, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { COLOR_TOKENS } from "../lib/colors.js";
 import { valueIn } from "./_value-check.js";
 import { workspaces } from "./workspace.js";
@@ -14,6 +14,9 @@ export const lists = pgTable(
     name: text("name").notNull(),
     icon: text("icon").default("list"),
     color: text("color", { enum: COLOR_TOKENS }),
+    // Marks the workspace's "work is actively happening" lists. Cards entering one start their
+    // time-in-progress clock (`card.in_progress_since`, maintained by database triggers).
+    inProgress: boolean("in_progress").notNull().default(false),
     position: numeric("position", { precision: 20, scale: 10 }).notNull(),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
