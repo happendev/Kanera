@@ -21,6 +21,7 @@ function rule(overrides: Partial<EffectiveNotificationWorkspaceRule> = {}): Effe
       cardDueDateChanged: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
       cardOverdue: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
       cardReminder: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+      reactionAdded: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
     },
     ...overrides,
   };

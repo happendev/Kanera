@@ -99,6 +99,7 @@ export const nl: ErrorCatalog = {
   "cannot change an inherited board admin role": "kan een overgenomen bordbeheerdersrol niet wijzigen",
   "cannot change your own role": "kan je eigen rol niet veranderen",
   "cannot demote the last owner": "kan de laatste eigenaar niet degraderen",
+  "cannot react to your own attachment": "kan niet reageren op je eigen bijlage",
   "cannot react to your own comment": "kan niet reageren op je eigen commentaar",
   "cannot remove an inherited board admin": "kan een overgenomen bordbeheerder niet verwijderen",
   "cannot remove or downgrade the last workspace admin": "kan de laatste werkruimtebeheerder niet verwijderen of downgraden",

@@ -341,7 +341,8 @@ export class BoardSocketBridge {
           state.incrementAttachmentCount(attachment.cardId);
         }
         state.cardAttachments.update((as) =>
-          isNew ? [...as, attachment] : as.map((a) => (a.id === attachment.id ? attachment : a)),
+          // Upload payloads carry no reactions; keep the ones already loaded for a re-sent row.
+          isNew ? [...as, attachment] : as.map((a) => (a.id === attachment.id ? { ...attachment, reactions: attachment.reactions ?? a.reactions } : a)),
         );
         state.noteCardDetailRealtimeMutation(attachment.cardId);
       },
@@ -354,6 +355,42 @@ export class BoardSocketBridge {
         if (!state.tryMarkAttachmentDelete(attachmentId)) return;
         state.decrementAttachmentCount(cardId);
         state.cardAttachments.update((as) => as.filter((a) => a.id !== attachmentId));
+        state.noteCardDetailRealtimeMutation(cardId);
+      },
+      // Reactions ride on the detail attachment rows (not the feed) so the activity row, which
+      // reads live attachments for its preview, reflects them without a feed refetch.
+      [SERVER_EVENTS.CARD_ATTACHMENT_REACTION_ADDED]: ({ boardId: eventBoardId, cardId, attachmentId, type, user }) => {
+        if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
+        state.cardAttachments.update((as) => as.map((a) => {
+          if (a.id !== attachmentId) return a;
+          const reactions = [...(a.reactions ?? [])];
+          const idx = reactions.findIndex((r) => r.type === type);
+          if (idx === -1) {
+            reactions.push({ type, count: 1, userIds: [user.id], users: [user] });
+          } else if (!reactions[idx].userIds.includes(user.id)) {
+            const existing = reactions[idx];
+            reactions[idx] = { ...existing, count: existing.count + 1, userIds: [...existing.userIds, user.id], users: [...existing.users, user] };
+          } else {
+            return a;
+          }
+          return { ...a, reactions };
+        }));
+        state.noteCardDetailRealtimeMutation(cardId);
+      },
+      [SERVER_EVENTS.CARD_ATTACHMENT_REACTION_REMOVED]: ({ boardId: eventBoardId, cardId, attachmentId, type, userId }) => {
+        if (eventBoardId !== boardId || !acceptsCard(cardId)) return;
+        state.cardAttachments.update((as) => as.map((a) => {
+          if (a.id !== attachmentId || !a.reactions?.some((r) => r.type === type && r.userIds.includes(userId))) return a;
+          const reactions = a.reactions
+            .map((r) => r.type !== type ? r : {
+              ...r,
+              count: r.count - 1,
+              userIds: r.userIds.filter((id) => id !== userId),
+              users: r.users.filter((u) => u.id !== userId),
+            })
+            .filter((r) => r.count > 0);
+          return { ...a, reactions };
+        }));
         state.noteCardDetailRealtimeMutation(cardId);
       },
       [SERVER_EVENTS.CARD_CHECKLIST_CREATED]: ({ boardId: eventBoardId, cardId, checklist }) => {

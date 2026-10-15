@@ -23,6 +23,8 @@ const activity: ActivitySummaryMessages = {
   markedComplete: "marcó esta tarjeta como completada",
   markedIncomplete: "marcó esta tarjeta como no completada",
   attached: (fileName) => `adjuntó ${fileName}`,
+  reactedToComment: "le dio un pulgar arriba a tu comentario",
+  reactedToAttachment: (fileName) => `le dio un pulgar arriba a ${fileName}`,
   attachedFile: "adjuntó un archivo",
   removedAttachment: "eliminó un archivo adjunto",
   assignedSelf: "se asignó esta tarjeta",
@@ -179,6 +181,13 @@ const es: ServerMessages = {
       preheader: ({ actor, card, board }) => `${actor} comentó en «${card}» en ${board}.`,
       heading: "Nuevo comentario en tu tarjeta",
       intro: ({ firstName, actor, card, board }) => `Hola, ${firstName}: ${actor} comentó en «${card}» en ${board}.`,
+    },
+    reactionAdded: {
+      subject: ({ actor, card }) => `${actor} te dio un pulgar arriba en ${card}`,
+      preheader: ({ actor, card, board }) => `${actor} reaccionó a tu trabajo en «${card}» en ${board}.`,
+      heading: "Recibiste un pulgar arriba",
+      introComment: ({ firstName, actor, card, board }) => `Hola, ${firstName}: ${actor} le dio un pulgar arriba a tu comentario en «${card}» en ${board}.`,
+      introAttachment: ({ firstName, actor, file, card, board }) => `Hola, ${firstName}: ${actor} le dio un pulgar arriba a ${file} en «${card}» en ${board}.`,
     },
     commentMentioned: {
       subject: ({ card }) => `Te mencionaron en un comentario en ${card}`,
@@ -604,6 +613,7 @@ const es: ServerMessages = {
   push: {
     cardAssigned: { title: "Tarjeta asignada", body: ({ actor, card }) => `${actor} te asignó a ${card}` },
     commentAdded: { title: "Nuevo comentario", body: ({ actor, board, card, excerpt }) => `${actor} comentó en ${board} / ${card}: ${excerpt}` },
+    reacted: { title: "Pulgar arriba", comment: ({ actor, board, card }) => `A ${actor} le gustó tu comentario en ${board} / ${card}`, attachment: ({ actor, board, card, file }) => `A ${actor} le gustó ${file} en ${board} / ${card}` },
     mentioned: { title: "Te mencionaron en un comentario", body: ({ actor, board, card, excerpt }) => `${actor} te mencionó en ${board} / ${card}: ${excerpt}` },
     dueDateChanged: { title: "Fecha de vencimiento cambiada", body: ({ actor, card }) => `${actor} cambió la fecha de vencimiento de ${card}` },
     cardOverdue: { title: "Tarjeta vencida", body: ({ card }) => `${card} está vencida` },

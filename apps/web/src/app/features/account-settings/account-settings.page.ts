@@ -156,6 +156,7 @@ const NOTIFICATION_ROWS: { key: NotificationSettingType; label: string }[] = [
   { key: "cardDueDateChanged", label: $localize`:Notification type:Card due date changed` },
   { key: "cardOverdue", label: $localize`:Notification type:Card overdue` },
   { key: "cardReminder", label: $localize`:Notification type:Your card reminders` },
+  { key: "reactionAdded", label: $localize`:Notification type; someone gave your comment or uploaded file a thumbs-up:Thumbs-up on your comment or file` },
 ];
 
 interface NotificationBoardOption {
@@ -904,6 +905,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         cardDueDateChanged: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
         cardOverdue: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
         cardReminder: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+        reactionAdded: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
       },
     };
   }
@@ -950,14 +952,19 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
       )
       .map((channel) => channel.label);
     const channelSummary = channelLabels.length > 0 ? channelLabels.join(" + ") : $localize`:Workspace notification rule summary:No channels`;
-    const enabledTypeCount = NOTIFICATION_ROWS.filter((row) =>
+    // Count only types the account defaults deliver somewhere: a rule cannot switch on what is off
+    // above, so a type that is off by default (thumbs-up email) must not read as the rule's restriction.
+    const deliverableRows = NOTIFICATION_ROWS.filter((row) =>
+      availableChannels.some((channel) => this.workspaceTypeChannelGloballyAvailable(row.key, channel.key)),
+    );
+    const enabledTypeCount = deliverableRows.filter((row) =>
       availableChannels.some(
         (channel) => this.workspaceTypeChannelGloballyAvailable(row.key, channel.key) && rule.types[row.key][channel.key],
       ),
     ).length;
-    const typeSummary = enabledTypeCount === NOTIFICATION_ROWS.length
+    const typeSummary = enabledTypeCount === deliverableRows.length
       ? ""
-      : ` · ${$localize`:Notification types enabled out of the total, e.g. "3/6 types":${enabledTypeCount}:enabled:/${NOTIFICATION_ROWS.length}:total: types`}`;
+      : ` · ${$localize`:Notification types enabled out of the total, e.g. "3/6 types":${enabledTypeCount}:enabled:/${deliverableRows.length}:total: types`}`;
     if (group.workspaceKind === "board") return $localize`:Notification rule summary for a standalone board:${channelSummary}:channels:${typeSummary}:types: · This board`;
     return `${channelSummary}${typeSummary}`;
   }
@@ -1011,6 +1018,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
         cardDueDateChanged: { ...rule.types.cardDueDateChanged },
         cardOverdue: { ...rule.types.cardOverdue },
         cardReminder: { ...rule.types.cardReminder },
+        reactionAdded: { ...rule.types.reactionAdded },
       },
     };
   }

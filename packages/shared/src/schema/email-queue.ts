@@ -13,6 +13,7 @@ export const EMAIL_QUEUE_TYPES = [
   "card_assigned",
   "card_comment_added",
   "comment_mentioned",
+  "reaction_added",
   "card_due_date_changed",
   "card_overdue",
   "checklist_item_overdue",
@@ -172,6 +173,16 @@ export type CommentMentionedEmailQueueData = {
   boardName: string;
   cardUrl: string;
   commentExcerpt: string;
+};
+
+export type ReactionAddedEmailQueueData = {
+  displayName: string;
+  actorName: string;
+  cardTitle: string;
+  boardName: string;
+  cardUrl: string;
+  commentExcerpt: string | null;
+  fileName: string | null;
 };
 
 export type CardDueDateChangedEmailQueueData = {
@@ -346,6 +357,7 @@ export type EmailQueueData =
   | { type: "card_assigned"; data: CardAssignedEmailQueueData }
   | { type: "card_comment_added"; data: CardCommentAddedEmailQueueData }
   | { type: "comment_mentioned"; data: CommentMentionedEmailQueueData }
+  | { type: "reaction_added"; data: ReactionAddedEmailQueueData }
   | { type: "card_due_date_changed"; data: CardDueDateChangedEmailQueueData }
   | { type: "card_overdue"; data: CardOverdueEmailQueueData }
   | { type: "checklist_item_overdue"; data: ChecklistItemOverdueEmailQueueData }

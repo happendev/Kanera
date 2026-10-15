@@ -45,6 +45,8 @@ export interface ActivityInput {
   action: ActivityAction;
   payload?: Record<string, unknown>;
   actorKind?: "system";
+  /** False records an audit row that no feed shows, e.g. one that only carries a notification. */
+  feedVisible?: boolean;
 }
 
 export interface CoalescedActivityInput extends ActivityInput {
@@ -118,6 +120,7 @@ export async function recordActivity(tx: Tx, input: ActivityInput): Promise<Acti
     entityId: input.entityId,
     action: input.action,
     payload: input.payload ?? {},
+    feedVisible: input.feedVisible ?? true,
   }).returning();
 
   return activity!;

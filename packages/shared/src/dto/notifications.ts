@@ -11,6 +11,7 @@ export const NOTIFICATION_SETTING_TYPES = [
   "cardDueDateChanged",
   "cardOverdue",
   "cardReminder",
+  "reactionAdded",
 ] as const;
 export type NotificationSettingType = (typeof NOTIFICATION_SETTING_TYPES)[number];
 
@@ -29,6 +30,7 @@ export const notificationSettingsMatrix = z.object({
   cardDueDateChanged: notificationChannelSettings,
   cardOverdue: notificationChannelSettings,
   cardReminder: notificationChannelSettings,
+  reactionAdded: notificationChannelSettings,
 });
 
 export const notificationWorkspaceRule = z.object({
@@ -70,6 +72,7 @@ export const updateNotificationSettingsBody = z.object({
     cardDueDateChanged: notificationChannelSettings.partial().optional(),
     cardOverdue: notificationChannelSettings.partial().optional(),
     cardReminder: notificationChannelSettings.partial().optional(),
+    reactionAdded: notificationChannelSettings.partial().optional(),
   }).optional(),
 });
 export type UpdateNotificationSettingsBody = z.infer<typeof updateNotificationSettingsBody>;

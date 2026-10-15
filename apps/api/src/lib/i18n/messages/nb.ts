@@ -124,6 +124,13 @@ const nb: ServerMessages = {
       heading: "Ny kommentar på kortet ditt",
       intro: ({ firstName, actor, card, board }) => `Hei ${firstName}, ${actor} kommenterte på «${card}» i ${board}.`,
     },
+    reactionAdded: {
+      subject: ({ actor, card }) => `${actor} ga deg tommel opp på ${card}`,
+      preheader: ({ actor, card, board }) => `${actor} reagerte på arbeidet ditt på «${card}» i ${board}.`,
+      heading: "Du fikk en tommel opp",
+      introComment: ({ firstName, actor, card, board }) => `Hei ${firstName}, ${actor} ga kommentaren din på «${card}» i ${board} en tommel opp.`,
+      introAttachment: ({ firstName, actor, file, card, board }) => `Hei ${firstName}, ${actor} ga ${file} på «${card}» i ${board} en tommel opp.`,
+    },
     commentMentioned: {
       subject: ({ card }) => `Omtalt i en kommentar på ${card}`,
       preheader: ({ actor, card, board }) => `${actor} omtalte deg i en kommentar på «${card}» i ${board}.`,
@@ -542,6 +549,7 @@ const nb: ServerMessages = {
   push: {
     cardAssigned: { title: "Kort tilordnet", body: ({ actor, card }) => `${actor} tilordnet deg ${card}` },
     commentAdded: { title: "Ny kommentar", body: ({ actor, board, card, excerpt }) => `${actor} kommenterte i ${board} / ${card}: ${excerpt}` },
+    reacted: { title: "Tommel opp", comment: ({ actor, board, card }) => `${actor} likte kommentaren din i ${board} / ${card}`, attachment: ({ actor, board, card, file }) => `${actor} likte ${file} i ${board} / ${card}` },
     mentioned: { title: "Omtalt i en kommentar", body: ({ actor, board, card, excerpt }) => `${actor} omtalte deg i ${board} / ${card}: ${excerpt}` },
     dueDateChanged: { title: "Frist endret", body: ({ actor, card }) => `${actor} endret fristen for ${card}` },
     cardOverdue: { title: "Kort forfalt", body: ({ card }) => `${card} har forfalt` },
@@ -569,6 +577,8 @@ const nb: ServerMessages = {
   markedComplete: "merket dette kortet fullført",
   markedIncomplete: "merket dette kortet ufullstendig",
   attached: (fileName) => `vedlagt ${fileName}`,
+  reactedToComment: "ga kommentaren din en tommel opp",
+  reactedToAttachment: (fileName) => `ga ${fileName} en tommel opp`,
   attachedFile: "legger ved en fil",
   removedAttachment: "fjernet et vedlegg",
   assignedSelf: "tildelt dem selv",

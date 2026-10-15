@@ -121,6 +121,13 @@ const enGB: ServerMessages = {
       heading: "New comment on your card",
       intro: ({ firstName, actor, card, board }) => `Hi ${firstName}, ${actor} commented on "${card}" in ${board}.`,
     },
+    reactionAdded: {
+      subject: ({ actor, card }) => `${actor} gave you a thumbs-up on ${card}`,
+      preheader: ({ actor, card, board }) => `${actor} reacted to your work on "${card}" in ${board}.`,
+      heading: "You got a thumbs-up",
+      introComment: ({ firstName, actor, card, board }) => `Hi ${firstName}, ${actor} gave your comment on "${card}" in ${board} a thumbs-up.`,
+      introAttachment: ({ firstName, actor, file, card, board }) => `Hi ${firstName}, ${actor} gave ${file} on "${card}" in ${board} a thumbs-up.`,
+    },
     commentMentioned: {
       subject: ({ card }) => `Mentioned in a comment on ${card}`,
       preheader: ({ actor, card, board }) => `${actor} mentioned you in a comment on "${card}" in ${board}.`,
@@ -537,6 +544,7 @@ const enGB: ServerMessages = {
   push: {
     cardAssigned: { title: "Card assigned", body: ({ actor, card }) => `${actor} assigned you to ${card}` },
     commentAdded: { title: "New comment", body: ({ actor, board, card, excerpt }) => `${actor} commented in ${board} / ${card}: ${excerpt}` },
+    reacted: { title: "Thumbs-up", comment: ({ actor, board, card }) => `${actor} liked your comment in ${board} / ${card}`, attachment: ({ actor, board, card, file }) => `${actor} liked ${file} in ${board} / ${card}` },
     mentioned: { title: "Mentioned in a comment", body: ({ actor, board, card, excerpt }) => `${actor} mentioned you in ${board} / ${card}: ${excerpt}` },
     dueDateChanged: { title: "Due date changed", body: ({ actor, card }) => `${actor} changed the due date on ${card}` },
     cardOverdue: { title: "Card overdue", body: ({ card }) => `${card} is overdue` },

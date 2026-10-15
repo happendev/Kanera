@@ -14,6 +14,7 @@ import {
   boardSeparators,
   cardAssignees,
   cardAttachments,
+  cardAttachmentReactions,
   cardChecklistItems,
   cardChecklists,
   cardCustomFieldValues,
@@ -134,12 +135,17 @@ type SeedAttachment = {
   asset: AssetKey;
   uploadedBy: SeedUserKey;
   useAsCover?: boolean;
+  // Teammates who gave the upload a thumbs-up from its activity row.
+  reactions?: SeedUserKey[];
 };
 
 type SeedComment = {
   author: SeedUserKey;
   body: string;
   hoursAfterCreation: number;
+  // Index into the card's attachments: the comment opens with the quote the activity row's Comment
+  // button writes, linking the file and mentioning its uploader.
+  quotesAttachment?: number;
   mentions?: SeedUserKey[];
   unreadFor?: SeedUserKey[];
 };
@@ -257,6 +263,7 @@ export type SeedSummary = {
   comments: number;
   separators: number;
   attachments: number;
+  attachmentReactions: number;
   cardCovers: number;
   cardMoves: number;
   notes: number;
@@ -978,8 +985,9 @@ API reference: https://docs.kanera.app/api`,
             dueOffsetDays: 3,
             dueDateSlot: "endOfWorkDay",
             fieldValues: { Branch: "fix/orphaned-attachment-cleanup", "Billing Hours": 7.25, "Billing Month": seedMonthLabel(), Client: "Northstar" },
-            attachments: [{ asset: "orphanedAttachmentCleanup", uploadedBy: "omar", useAsCover: true }],
+            attachments: [{ asset: "orphanedAttachmentCleanup", uploadedBy: "omar", useAsCover: true, reactions: ["nina", "grace"] }],
             comments: [
+              { author: "nina", hoursAfterCreation: 4, quotesAttachment: 0, body: "The dry-run table is exactly what I hoped for. Could it also show the total size it would free?" },
               { author: "grace", hoursAfterCreation: 9, body: "Please keep the dry-run output. I want to wire it into our maintenance dashboard later." },
             ],
           },
@@ -1082,7 +1090,7 @@ API reference: https://docs.kanera.app/api`,
             dueOffsetDays: 5,
             dueDateSlot: "morning",
             fieldValues: { Branch: "feature/mobile-offline-skeleton", "Billing Hours": 6.5, "Billing Month": seedMonthLabel(), Client: "Orbiflow" },
-            attachments: [{ asset: "offlineCardSkeleton", uploadedBy: "ben", useAsCover: true }],
+            attachments: [{ asset: "offlineCardSkeleton", uploadedBy: "ben", useAsCover: true, reactions: ["nina", "zoe"] }],
             checklists: [
               {
                 title: "Skeleton coverage",
@@ -1094,6 +1102,7 @@ API reference: https://docs.kanera.app/api`,
               },
             ],
             comments: [
+              { author: "zoe", hoursAfterCreation: 6, quotesAttachment: 0, body: "Much calmer than before. Could the placeholders pick up the board accent instead of plain grey?" },
               { author: "nina", hoursAfterCreation: 16, body: "I still see a layout jump if the first attachment is a PDF rather than an image." },
             ],
           },
@@ -1187,7 +1196,7 @@ API reference: https://docs.kanera.app/api`,
             dueOffsetDays: 8,
             dueDateSlot: "afternoon",
             fieldValues: { Branch: "fix/android-chip-line-height", "Billing Hours": 3.5, "Billing Month": seedMonthLabel(), Client: "Orbiflow" },
-            attachments: [{ asset: "androidLabelClipping", uploadedBy: "zoe", useAsCover: true }],
+            attachments: [{ asset: "androidLabelClipping", uploadedBy: "zoe", useAsCover: true, reactions: ["ben"] }],
             comments: [
               { author: "zoe", hoursAfterCreation: 7, body: "This shows up in screenshots from two customers using Samsung Internet." },
             ],
@@ -4744,6 +4753,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
     comments: 0,
     separators: 0,
     attachments: 0,
+    attachmentReactions: 0,
     cardCovers: 0,
     cardMoves: 0,
     notes: 0,
@@ -5939,6 +5949,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
             }
 
             let coverAttachmentId: string | null = null;
+            const seededAttachments: Array<{ id: string; fileName: string; mimeType: string; url: string; uploadedBy: SeedUserKey }> = [];
             for (const [attachmentIndex, attachmentSeed] of (cardSeed.attachments ?? []).entries()) {
               if (!storage) throw new Error("Storage provider was not initialized.");
               const attachmentCreatedAt = addHours(cardCreatedAt, attachmentIndex + 2);
@@ -5976,6 +5987,53 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
                 },
               };
               await insertSeedActivity(tx, { ...attachmentActivity, createdAt: attachmentCreatedAt });
+              seededAttachments.push({ id: attachment.id, fileName: attachment.fileName, mimeType: attachment.mimeType, url: attachment.url, uploadedBy: attachmentSeed.uploadedBy });
+
+              // Same rules as the live route: workspace members only, never on your own upload.
+              const reactors = attachmentSeed.reactions ?? [];
+              const invalidReactors = reactors.filter((reactor) => reactor === attachmentSeed.uploadedBy || !workspaceRoleByUser.has(reactor));
+              if (invalidReactors.length > 0) {
+                throw new Error(`Attachment on '${cardSeed.title}' has reactions from the uploader or non-members: ${invalidReactors.join(", ")}`);
+              }
+              if (reactors.length > 0) {
+                await tx.insert(cardAttachmentReactions).values(reactors.map((reactor, reactorIndex) => ({
+                  attachmentId: attachment.id,
+                  userId: userIdByKey.get(reactor)!,
+                  reactionType: "thumbs_up" as const,
+                  createdAt: addHours(attachmentCreatedAt, reactorIndex + 1),
+                })));
+                summary.attachmentReactions += reactors.length;
+                // Each thumbs-up told the uploader, as the live route does: a hidden audit row carrying
+                // a "reacted" notification, read a few hours later like the seeded comment notifications.
+                for (const [reactorIndex, reactor] of reactors.entries()) {
+                  const reactedAt = addHours(attachmentCreatedAt, reactorIndex + 1);
+                  const [reactionActivity] = await tx.insert(activityEvents).values({
+                    boardId: board!.id,
+                    workspaceId: workspace!.id,
+                    actorId: userIdByKey.get(reactor)!,
+                    entityType: "card",
+                    entityId: card!.id,
+                    action: "reaction:added",
+                    payload: { cardId: card!.id, attachmentId: attachment.id, fileName: attachment.fileName, reactionType: "thumbs_up" },
+                    feedVisible: false,
+                    createdAt: reactedAt,
+                    updatedAt: reactedAt,
+                  }).returning();
+                  await tx.insert(notifications).values({
+                    clientId: client!.id,
+                    userId: userIdByKey.get(attachmentSeed.uploadedBy)!,
+                    activityId: reactionActivity!.id,
+                    cardId: card!.id,
+                    listId: listRow.id,
+                    boardId: board!.id,
+                    workspaceId: workspace!.id,
+                    reason: "reacted",
+                    readAt: addHours(reactedAt, 6),
+                    createdAt: reactedAt,
+                  }).onConflictDoNothing();
+                  summary.notifications += 1;
+                }
+              }
             }
 
             if (coverAttachmentId) {
@@ -5988,7 +6046,23 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
 
             for (const commentSeed of cardSeed.comments ?? []) {
               const commentCreatedAt = addHours(cardCreatedAt, commentSeed.hoursAfterCreation);
-              const body = seedCommentBody(commentSeed, userIdByKey);
+              let body = seedCommentBody(commentSeed, userIdByKey);
+              let quotedUploader: SeedUserKey | null = null;
+              if (commentSeed.quotesAttachment !== undefined) {
+                const quoted = seededAttachments[commentSeed.quotesAttachment];
+                if (!quoted) throw new Error(`Comment on '${cardSeed.title}' quotes missing attachment ${commentSeed.quotesAttachment}`);
+                const uploader = seedUserByKey.get(quoted.uploadedBy)!;
+                quotedUploader = quoted.uploadedBy === commentSeed.author ? null : quoted.uploadedBy;
+                const mention = `@[${uploader.displayName}](kanera-user:${userIdByKey.get(quoted.uploadedBy)!})`;
+                // Same shapes the activity row's Comment button writes: images quoted as the picture.
+                if (quoted.mimeType.startsWith("image/")) {
+                  const image = `![${quoted.fileName}](${quoted.url})`;
+                  body = quotedUploader ? `> ${mention} attached:\n>\n> ${image}\n\n${body}` : `> ${image}\n\n${body}`;
+                } else {
+                  const link = `[${quoted.fileName}](${quoted.url})`;
+                  body = `> ${quotedUploader ? `${link} from ${mention}` : link}\n\n${body}`;
+                }
+              }
               const [comment] = await tx
                 .insert(comments)
                 .values({
@@ -6001,19 +6075,20 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
               summary.comments += 1;
               latestCardTimestamp = commentCreatedAt > latestCardTimestamp ? commentCreatedAt : latestCardTimestamp;
 
-              if (commentSeed.mentions?.length) {
-                const invalidMentions = commentSeed.mentions.filter((mentioned) => !workspaceRoleByUser.has(mentioned));
+              const mentionedUsers = [...new Set([...(commentSeed.mentions ?? []), ...(quotedUploader ? [quotedUploader] : [])])];
+              if (mentionedUsers.length) {
+                const invalidMentions = mentionedUsers.filter((mentioned) => !workspaceRoleByUser.has(mentioned));
                 if (invalidMentions.length > 0) {
                   throw new Error(`Comment on '${cardSeed.title}' mentions users outside the workspace: ${invalidMentions.join(", ")}`);
                 }
-                await tx.insert(cardMentions).values(commentSeed.mentions.map((mentioned) => ({
+                await tx.insert(cardMentions).values(mentionedUsers.map((mentioned) => ({
                   cardId: card!.id,
                   commentId: comment!.id,
                   userId: userIdByKey.get(mentioned)!,
                   source: "comment" as const,
                   createdAt: commentCreatedAt,
                 }))).onConflictDoNothing();
-                summary.mentions += commentSeed.mentions.length;
+                summary.mentions += mentionedUsers.length;
               }
 
               const [commentActivity] = await tx.insert(activityEvents).values({
@@ -6033,7 +6108,7 @@ export async function seedDatabase(options: SeedDatabaseOptions = {}): Promise<S
               const notificationReasonByUser = new Map<SeedUserKey, "watching" | "assigned" | "mentioned">();
               for (const watcher of cardSeed.watchers ?? []) notificationReasonByUser.set(watcher, "watching");
               for (const assignee of cardSeed.assignees) notificationReasonByUser.set(assignee, "assigned");
-              for (const mentioned of commentSeed.mentions ?? []) notificationReasonByUser.set(mentioned, "mentioned");
+              for (const mentioned of mentionedUsers) notificationReasonByUser.set(mentioned, "mentioned");
               notificationReasonByUser.delete(commentSeed.author);
               if (notificationReasonByUser.size > 0) {
                 await tx.insert(notifications).values([...notificationReasonByUser].map(([recipient, reason]) => ({

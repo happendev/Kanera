@@ -198,6 +198,8 @@ export const ja: ErrorCatalog = {
     "自分のロールは変更できません。",
   "cannot demote the last owner":
     "最後のオーナーを降格することはできません。",
+  "cannot react to your own attachment":
+    "自分の添付ファイルにはリアクションできません。",
   "cannot react to your own comment":
     "自分のコメントにはリアクションできません。",
   "cannot remove an inherited board admin":

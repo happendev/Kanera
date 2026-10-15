@@ -198,6 +198,8 @@ export const fr: ErrorCatalog = {
     "Vous ne pouvez pas modifier votre propre rôle.",
   "cannot demote the last owner":
     "Impossible de rétrograder le dernier propriétaire.",
+  "cannot react to your own attachment":
+    "Vous ne pouvez pas réagir à votre propre pièce jointe.",
   "cannot react to your own comment":
     "Vous ne pouvez pas réagir à votre propre commentaire.",
   "cannot remove an inherited board admin":

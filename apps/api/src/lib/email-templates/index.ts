@@ -28,6 +28,8 @@ export { cardCommentAddedEmail } from "./card-comment-added.js";
 export type { CardCommentAddedEmailParams } from "./card-comment-added.js";
 export { commentMentionedEmail } from "./comment-mentioned.js";
 export type { CommentMentionedEmailParams } from "./comment-mentioned.js";
+export { reactionAddedEmail } from "./reaction-added.js";
+export type { ReactionAddedEmailParams } from "./reaction-added.js";
 export { cardDueDateChangedEmail } from "./card-due-date-changed.js";
 export type { CardDueDateChangedEmailParams } from "./card-due-date-changed.js";
 export { cardOverdueEmail } from "./card-overdue.js";

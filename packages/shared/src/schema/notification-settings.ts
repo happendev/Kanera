@@ -57,6 +57,12 @@ export const notificationSettings = pgTable("notification_settings", {
   cardReminderNtfy: boolean("card_reminder_ntfy").notNull().default(true),
   cardReminderGotify: boolean("card_reminder_gotify").notNull().default(true),
   cardReminderWebhook: boolean("card_reminder_webhook").notNull().default(true),
+  // A thumbs-up is low-stakes, so email is opt-in; push and personal channels follow the others.
+  reactionAddedEmail: boolean("reaction_added_email").notNull().default(false),
+  reactionAddedPush: boolean("reaction_added_push").notNull().default(true),
+  reactionAddedNtfy: boolean("reaction_added_ntfy").notNull().default(true),
+  reactionAddedGotify: boolean("reaction_added_gotify").notNull().default(true),
+  reactionAddedWebhook: boolean("reaction_added_webhook").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

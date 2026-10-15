@@ -99,6 +99,7 @@ export const zhCN: ErrorCatalog = {
   "cannot change an inherited board admin role": "无法更改继承的看板管理员角色",
   "cannot change your own role": "无法改变自己的角色",
   "cannot demote the last owner": "无法将最后一个所有者降级",
+  "cannot react to your own attachment": "无法对你自己的附件做出反应",
   "cannot react to your own comment": "无法对你自己的评论做出反应",
   "cannot remove an inherited board admin": "无法删除继承的看板管理员",
   "cannot remove or downgrade the last workspace admin": "无法删除或降级最后一个工作区管理员",

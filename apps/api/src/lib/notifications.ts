@@ -417,6 +417,15 @@ export async function syncDirectNotificationForActivity(params: {
   if (enriched) emitToUser(params.userId, "notification:updated", { notification: enriched });
 }
 
+/**
+ * The file a notification is about, so the drawer can preview it: an upload, or a thumbs-up on one
+ * (whose activity sits on the card with the file in its payload).
+ */
+function notificationAttachmentId(row: { activity_action: string | null; activity_payload: unknown }): string | null {
+  if (row.activity_action !== ACTIVITY_ACTION.ATTACHMENT_ADDED && row.activity_action !== ACTIVITY_ACTION.REACTION_ADDED) return null;
+  return (row.activity_payload as { attachmentId?: string } | null)?.attachmentId ?? null;
+}
+
 async function enrichNotification(tx: Tx, notificationId: string): Promise<NotificationRow | null> {
   const rows = await enrichNotifications(tx, [notificationId]);
   return rows[0] ?? null;
@@ -540,11 +549,7 @@ export async function enrichNotifications(
   // Attachments and comments are fetched in a follow-up pass so the join above
   // stays a single row per notification.
   const attachmentIds = baseRows
-    .map((r) => {
-      if (r.activity_action !== ACTIVITY_ACTION.ATTACHMENT_ADDED) return null;
-      const payload = r.activity_payload as { attachmentId?: string };
-      return payload?.attachmentId ?? null;
-    })
+    .map(notificationAttachmentId)
     .filter((v): v is string => Boolean(v));
   const attachmentMap = new Map<string, NotificationCardThumbnail>();
   if (attachmentIds.length > 0) {
@@ -574,9 +579,7 @@ export async function enrichNotifications(
   }
 
   return baseRows.map((r) => {
-    const attachmentId = r.activity_action === ACTIVITY_ACTION.ATTACHMENT_ADDED
-      ? ((r.activity_payload as { attachmentId?: string })?.attachmentId ?? null)
-      : null;
+    const attachmentId = notificationAttachmentId(r);
     const attachment = attachmentId ? attachmentMap.get(attachmentId) ?? null : null;
     const signedAttachment = attachment ? withSignedMedia(r.workspaceClientId, attachment) : null;
     const commentBody = r.activity_entityType === ACTIVITY_ENTITY_TYPE.COMMENT && r.activity_entityId
