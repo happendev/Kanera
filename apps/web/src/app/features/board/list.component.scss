@@ -179,6 +179,50 @@ k-card-labels.card-drag-preview-labels {
 
 // ─── Header ───────────────────────────────────────────────────────────────────
 
+// A one-time explainer under an in-progress list's header, in the same accent as the header marker
+// and the time chips it explains. Compact so it costs a column little height while shown.
+.list-in-progress-hint {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+  align-items: flex-start;
+  margin: 0 4px 8px;
+  padding: 6px 4px 6px 8px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: var(--radius);
+
+  > i {
+    flex: none;
+    margin-top: 1px;
+    color: var(--accent);
+    font-size: 13px;
+  }
+
+  strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  span {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+// Beats the global 32px `button.icon` so the dismiss stays inside the banner's line height.
+button.list-in-progress-hint-dismiss {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: -2px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .list-header {
   position: relative;
   display: flex;
@@ -207,6 +251,27 @@ h3 {
     line-height: 1;
     align-self: center;
     flex-shrink: 0;
+  }
+
+  // Marks lists that run the time-in-progress clock: small and accent-tinted, right after the name so
+  // it reads as a property of the list. It stays beside the name rather than at the trailing edge,
+  // which is where the absolutely positioned list menu button appears on hover.
+  .list-in-progress {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border-radius: 999px;
+
+    // Beats `h3.has-color i`, which would otherwise tint it with the list colour.
+    i.ti {
+      font-size: 13px;
+      color: inherit;
+    }
   }
 
   &.has-color {

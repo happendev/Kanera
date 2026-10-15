@@ -598,6 +598,8 @@ const nl: ServerMessages = {
   setFieldTo: (fieldName) => `stel ${fieldName} in op`,
   setCover: "stel de omslagafbeelding in",
   removedCover: "heb de omslagafbeelding verwijderd",
+  correctedTimeInProgress: "heeft de tijd in uitvoering gecorrigeerd",
+  flaggedInProgressTooLong: (days) => `heeft deze kaart gemarkeerd als meer dan ${days} ${days === 1 ? "dag" : "dagen"} in uitvoering`,
   addedChecklist: "checklist toegevoegd",
   deletedChecklist: "controlelijst verwijderd",
   completedSubChecklist: "ingevulde subchecklist",

@@ -23,6 +23,8 @@ import { CardLabelsComponent, type CardLabelPresentation } from "./card-labels.c
 import { openCardDetailInNewTab } from "./card-navigation.util";
 import { formatDueDate, isDueSoon, isOverdue } from "./due-date.util";
 import { formatDate, formatDateTime } from "../../shared/date-format";
+import { hasTimeInProgress, timeInProgressChip, type TimeInProgressChip } from "./time-in-progress.util";
+import { MinuteClockService } from "../../shared/minute-clock.service";
 import { WatcherPopoverComponent } from "./watcher-popover.component";
 
 type AnyCard = Card | WireCard | WireCardSummary;
@@ -59,6 +61,7 @@ export class CardComponent {
   private readonly workspaces = inject(WorkspaceService);
   private readonly menuCoordinator = inject(BoardMenuCoordinator);
   private readonly dragCoordinator = inject(CardDragCoordinator);
+  private readonly clock = inject(MinuteClockService);
   protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
 
   readonly card = input.required<AnyCard>();
@@ -178,6 +181,26 @@ export class CardComponent {
       };
     }
     return null;
+  });
+
+  /**
+   * Time in progress: the card's tracked total across every stint in its workspace's in-progress
+   * lists. It stays on the tile after the card leaves progress or is completed (muted, stopped), and
+   * ticks with the shared minute clock rather than a per-tile timer while it runs.
+   */
+  /** Title icon for open work with a running clock, beside the agent and inactivity marks. */
+  readonly inProgressMark = computed(() => {
+    const timer = this.timeInProgress();
+    return timer?.running ? { label: timer.label, alert: timer.alert } : null;
+  });
+
+  readonly timeInProgress = computed<TimeInProgressChip | null>(() => {
+    const card = this.card();
+    const now = this.clock.now();
+    // The alert setting is only read for a card that has time to show.
+    // Workspace settings are only read for a card that has time to show.
+    if (card.archivedAt || !hasTimeInProgress(card)) return null;
+    return timeInProgressChip(card, now, this.state.inProgressAlertDays(), this.state.workspaceTimeZone());
   });
 
   private detailLoadSeq = 0;

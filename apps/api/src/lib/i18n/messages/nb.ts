@@ -598,6 +598,8 @@ const nb: ServerMessages = {
   setFieldTo: (fieldName) => `sett ${fieldName} til`,
   setCover: "angi forsidebildet",
   removedCover: "fjernet forsidebildet",
+  correctedTimeInProgress: "korrigerte tiden i arbeid",
+  flaggedInProgressTooLong: (days) => `markerte dette kortet som i arbeid i mer enn ${days} ${days === 1 ? "dag" : "dager"}`,
   addedChecklist: "lagt til sjekkliste",
   deletedChecklist: "slettet sjekkliste",
   completedSubChecklist: "utfylt undersjekkliste",

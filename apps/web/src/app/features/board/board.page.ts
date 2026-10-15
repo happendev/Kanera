@@ -5,7 +5,8 @@ import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, e
 import { Router } from "@angular/router";
 import { cardPath } from "@kanera/shared/card-links";
 import type { CompactCardCustomFieldValue, CompactCardSummary, ServerToClientEvents, WireAgentRun, WireBoardMemberUser, WireCard, WireCardSummary, WireChecklistTemplate, WireSeparator } from "@kanera/shared/events";
-import { expandCardCustomFieldValue, expandCardSummary, SERVER_EVENTS } from "@kanera/shared/events";
+import { expandCardCustomFieldValue, expandCardSummary, inProgressClockOf, SERVER_EVENTS } from "@kanera/shared/events";
+import type { ReportedInProgressClock } from "./time-in-progress.util";
 import type { BoardExportArchive, WorkDoneEventType, WorkPrioritiesResponse } from "@kanera/shared/dto";
 import type { Board, BoardRole, BoardSeparator, Card, CardCustomFieldValue, CardLabel, CustomField, List } from "@kanera/shared/schema";
 import { AnalyticsService } from "../../core/analytics/analytics.service";
@@ -75,10 +76,11 @@ import { formatRelativeTime } from "../../shared/date-format";
 import { addDays, localDateKey } from "../../shared/day-key.util";
 import { applyAccentScope } from "../../shared/accent-scope";
 import { byPosition } from "../../shared/position-sort";
+import { isInProgressRunning, isInProgressTooLong } from "./time-in-progress.util";
 
 type AnyCard = Card | WireCard | WireCardSummary;
 
-type BoardCardFilter = "overdue" | "unassigned" | "inactive";
+type BoardCardFilter = "overdue" | "unassigned" | "inactive" | "inProgress" | "inProgressTooLong";
 const OFFLINE_COPY_PROMPT_DELAY_MS = 3000; // 3 seconds
 const SEARCH_DEBOUNCE_MS = 200;
 
@@ -266,6 +268,11 @@ export class BoardPage implements OnDestroy {
   private readonly workDoneLayoutState = workDoneLayoutState("board");
   readonly workDoneLayout = this.workDoneLayoutState.layout;
   readonly workDoneLayoutOptions = this.workDoneLayoutState.options;
+  /** Work done shows each card's tracked time, counted in its workspace's working hours. */
+  readonly workDoneTimeZones = computed(() => {
+    const workspaceId = this.state.board()?.workspaceId;
+    return workspaceId ? new Map([[workspaceId, this.state.workspaceTimeZone()]]) : null;
+  });
 
   setWorkDoneLayout(layout: WorkDoneLayout): void {
     this.workDoneLayoutState.setLayout(layout);
@@ -273,6 +280,7 @@ export class BoardPage implements OnDestroy {
   readonly showUnreadOnly = signal(false);
   readonly showOverdueOnly = signal(false);
   readonly showInactiveOnly = signal(false);
+  readonly showInProgressOnly = signal(false);
   /** Session-local drill-down selected from Board overview; composed with the normal filter bar. */
   readonly boardCardFilter = signal<BoardCardFilter | null>(null);
   /** Only cards in the viewer's own "Up next" queue (`viewerPriorityRanks`). */
@@ -380,6 +388,7 @@ export class BoardPage implements OnDestroy {
     showUnreadOnly: this.showUnreadOnly(),
     showOverdueOnly: this.showOverdueOnly(),
     showInactiveOnly: this.showInactiveOnly(),
+    showInProgressOnly: this.showInProgressOnly(),
     showPrioritySetOnly: this.showPrioritySetOnly(),
     showReminderSetOnly: this.showReminderSetOnly(),
   }));
@@ -435,12 +444,13 @@ export class BoardPage implements OnDestroy {
     const overdueOnly = this.showOverdueOnly();
     const inactiveOnly = this.showInactiveOnly();
     const cardFilter = this.boardCardFilter();
+    const inProgressOnly = this.showInProgressOnly();
     // Like overdue, ignored while viewing archived: archived cards are never in the live queue,
     // so applying it there would blank the archive rather than filter it.
     const prioritySetOnly = this.showPrioritySetOnly();
     const reminderSetOnly = this.showReminderSetOnly();
     const showArchived = this.showArchived();
-    if (!q && !labelIds.length && !memberIds.length && !listIds.length && !conditions.length && !unreadOnly && (!overdueOnly || showArchived) && (!inactiveOnly || showArchived) && (!prioritySetOnly || showArchived) && (!reminderSetOnly || showArchived) && (!cardFilter || showArchived)) return null;
+    if (!q && !labelIds.length && !memberIds.length && !listIds.length && !conditions.length && !unreadOnly && (!overdueOnly || showArchived) && (!inactiveOnly || showArchived) && (!inProgressOnly || showArchived) && (!prioritySetOnly || showArchived) && (!reminderSetOnly || showArchived) && (!cardFilter || showArchived)) return null;
     const fieldsById = conditions.length ? this.state.customFieldsById() : null;
     const cfValuesByCard = conditions.length ? this.state.customFieldValuesByCardAndField() : null;
     const listSet = new Set(listIds);
@@ -462,11 +472,15 @@ export class BoardPage implements OnDestroy {
         // Inactivity only applies to live work: completed cards do not
         // become actionable again merely because their final update is older than the workspace inactivity window.
         if (!showArchived && inactiveOnly && (card.completedAt || !isCardInactive(card.updatedAt, Date.now(), this.state.inactiveCardsDays()))) return false;
+        // Same rule as the work query's inProgressOnly: open work with a running stint.
+        if (!showArchived && inProgressOnly && (card.completedAt || !card.inProgressSince)) return false;
         if (!showArchived && cardFilter) {
           if (card.completedAt) return false;
           if (cardFilter === "overdue" && !isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone)) return false;
           if (cardFilter === "unassigned" && (this.state.assigneesByCard().get(card.id)?.length ?? 0) > 0) return false;
           if (cardFilter === "inactive" && !isCardInactive(card.updatedAt, Date.now(), this.state.inactiveCardsDays())) return false;
+          if (cardFilter === "inProgress" && !isInProgressRunning(card)) return false;
+          if (cardFilter === "inProgressTooLong" && !isInProgressTooLong(card, Date.now(), this.state.inProgressAlertDays())) return false;
         }
         // The queue drops completed cards (they take no rank), so this also hides the board's
         // recently-completed tiles — a done card no longer has a priority set, by definition.
@@ -500,7 +514,9 @@ export class BoardPage implements OnDestroy {
 
   readonly overviewOpen = signal(false);
   private readonly cardTimingClock = signal(Date.now());
-  readonly overviewPlacement: AnchoredPanelPlacement = { align: "end", gap: 6, width: 340, maxHeight: 520 };
+  // The height cap only guards very tall boards: the placement helper clamps to the viewport, so the
+  // panel scrolls only when it really does not fit.
+  readonly overviewPlacement: AnchoredPanelPlacement = { align: "end", gap: 6, width: 400, maxHeight: 900 };
   readonly boardOverview = computed(() => {
     const now = this.cardTimingClock();
     const cards = this.state.cards().filter((card) => !card.archivedAt);
@@ -513,6 +529,10 @@ export class BoardPage implements OnDestroy {
     }).length;
     const unassigned = incomplete.filter((card) => (this.state.assigneesByCard().get(card.id)?.length ?? 0) === 0).length;
     const inactive = incomplete.filter((card) => isCardInactive(card.updatedAt, now, this.state.inactiveCardsDays())).length;
+    // Open work with a running clock, and the part of it whose current stint is past the alert (the
+    // amber clocks on the board; never while the workspace alert is 0).
+    const inProgressCards = incomplete.filter((card) => isInProgressRunning(card));
+    const inProgressTooLong = inProgressCards.filter((card) => isInProgressTooLong(card, now, this.state.inProgressAlertDays())).length;
     // Counts support triage without inferring delivery status from card bookkeeping.
     const listCounts = this.state.visibleLists().map((list) => ({
       id: list.id,
@@ -527,6 +547,8 @@ export class BoardPage implements OnDestroy {
       dueSoon,
       unassigned,
       inactive,
+      inProgress: inProgressCards.length,
+      inProgressTooLong,
       listCounts,
     };
   });
@@ -541,6 +563,11 @@ export class BoardPage implements OnDestroy {
   readonly inactiveCardsTooltip = computed(() => icu(
     $localize`:Tooltip on the Inactive count in the board overview:{days, plural, one {Show cards inactive for # day} other {Show cards inactive for # days}}`,
     { days: this.state.inactiveCardsDays() },
+  ));
+
+  readonly inProgressTooLongTooltip = computed(() => icu(
+    $localize`:Tooltip on the Too long count in the board overview:{days, plural, one {Show cards in progress for more than # day} other {Show cards in progress for more than # days}}`,
+    { days: this.state.inProgressAlertDays() },
   ));
 
   toggleOverview(): void {
@@ -679,6 +706,7 @@ export class BoardPage implements OnDestroy {
     (this.effectiveView() !== "history" && this.showUnreadOnly()) ||
     this.showOverdueOnly() ||
     this.showInactiveOnly() ||
+    this.showInProgressOnly() ||
     this.boardCardFilter() !== null ||
     this.showPrioritySetOnly() ||
     this.showReminderSetOnly() ||
@@ -1171,6 +1199,7 @@ export class BoardPage implements OnDestroy {
       this.showUnreadOnly.set(saved?.showUnreadOnly ?? false);
       this.showOverdueOnly.set(saved?.showOverdueOnly ?? false);
       this.showInactiveOnly.set(saved?.showInactiveOnly ?? false);
+      this.showInProgressOnly.set(saved?.showInProgressOnly ?? false);
       this.boardCardFilter.set(null);
       this.showPrioritySetOnly.set(saved?.showPrioritySetOnly ?? false);
       this.showReminderSetOnly.set(saved?.showReminderSetOnly ?? false);
@@ -1407,6 +1436,7 @@ export class BoardPage implements OnDestroy {
         showUnreadOnly: this.showUnreadOnly(),
         showOverdueOnly: this.showOverdueOnly(),
         showInactiveOnly: this.showInactiveOnly(),
+        showInProgressOnly: this.showInProgressOnly(),
         showPrioritySetOnly: this.showPrioritySetOnly(),
         showReminderSetOnly: this.showReminderSetOnly(),
       };
@@ -1957,6 +1987,7 @@ export class BoardPage implements OnDestroy {
     if (next) {
       this.showOverdueOnly.set(false);
       this.showInactiveOnly.set(false);
+      this.showInProgressOnly.set(false);
       this.showPrioritySetOnly.set(false);
       this.showReminderSetOnly.set(false);
     }
@@ -2008,6 +2039,7 @@ export class BoardPage implements OnDestroy {
     this.showUnreadOnly.set(v.showUnreadOnly);
     this.showOverdueOnly.set(v.showOverdueOnly);
     this.showInactiveOnly.set(v.showInactiveOnly);
+    this.showInProgressOnly.set(v.showInProgressOnly);
     this.showPrioritySetOnly.set(v.showPrioritySetOnly);
     this.showReminderSetOnly.set(v.showReminderSetOnly);
   }
@@ -2040,6 +2072,7 @@ export class BoardPage implements OnDestroy {
     this.showUnreadOnly.set(false);
     this.showOverdueOnly.set(false);
     this.showInactiveOnly.set(false);
+    this.showInProgressOnly.set(false);
     this.boardCardFilter.set(null);
     this.showPrioritySetOnly.set(false);
     this.showReminderSetOnly.set(false);
@@ -2229,7 +2262,7 @@ export class BoardPage implements OnDestroy {
       } catch (error) {
         // Earlier writes are durable and later cards have not moved. Restore only
         // this card's position, preserving unrelated realtime updates.
-        this.state.moveCard(card.id, card.listId, card.position);
+        this.state.moveCard(card.id, card.listId, card.position, inProgressClockOf(card));
         throw error;
       }
     }
@@ -2250,12 +2283,12 @@ export class BoardPage implements OnDestroy {
     this.state.moveCard(p.cardId, p.toListId, optimisticPosition);
 
     return async () => {
-      const moved = await this.api.post<{ id: string; listId: string; position: string }>(`/cards/${p.cardId}/move`, {
+      const moved = await this.api.post<{ id: string; listId: string; position: string } & ReportedInProgressClock>(`/cards/${p.cardId}/move`, {
         listId: p.toListId,
         ...(p.beforeItem !== undefined ? { beforeItem: p.beforeItem } : p.beforeCardId !== undefined ? { beforeCardId: p.beforeCardId } : {}),
         ...(p.afterItem !== undefined ? { afterItem: p.afterItem } : p.afterCardId !== undefined ? { afterCardId: p.afterCardId } : {}),
       });
-      this.state.moveCard(moved.id, moved.listId, moved.position);
+      this.state.moveCard(moved.id, moved.listId, moved.position, moved);
     };
   }
 

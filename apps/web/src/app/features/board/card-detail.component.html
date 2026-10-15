@@ -319,6 +319,50 @@
     <!-- cdkScrollable registers this inner scroller with CDK drag-drop so the manual checklist
          auto-scroll (below) re-sorts the drag as rows scroll into view under a stationary pointer. -->
     <div #detailScroller cdkScrollable class="col-main" [class.tab-hidden]="activeTab() !== 'detail'">
+      <!-- Tracked time in progress, above the description for every viewer (the list control that
+           starts and stops it is not shown to read-only viewers). It stays after the card leaves
+           progress or is completed: muted and stopped, but still the card's total. -->
+      @if (timeInProgress(); as timer) {
+      <div class="detail-time-row">
+        <div class="detail-time-in-progress" [class.is-done]="!timer.running" [class.is-alert]="timer.alert" [kTooltip]="timer.label" [attr.aria-label]="timer.label" role="status">
+          <!-- Running and stopped must read differently at a glance: a stopped clock says so in words
+               and wears a pause icon and a dashed outline, rather than only a muted colour. -->
+          <i class="ti" [class.ti-progress]="timer.running" [class.ti-player-pause]="!timer.running"></i>
+          @if (timer.running) {
+          <span class="detail-time-caption" i18n="Card detail caption before the running tracked time in progress">In progress</span>
+          <strong>{{ timer.detail }}</strong>
+          } @else {
+          <span class="detail-time-caption" i18n="Card detail caption: the card is not in an In progress list, so its clock is stopped">Not in progress</span>
+          <span class="detail-time-sep" aria-hidden="true">·</span>
+          <span i18n="Card detail: the stopped total of tracked time in progress, e.g. 24h tracked"><strong>{{ timer.detail }}</strong> tracked</span>
+          }
+        </div>
+        <!-- Workspace admins can correct the tracked total; the change is logged in the card's activity. -->
+        @if (canCorrectTimeInProgress() && !editingTimeInProgress()) {
+        <button type="button" class="ghost icon detail-time-edit" (click)="startEditTimeInProgress(timer.ms)" aria-label="Correct time in progress" i18n-aria-label kTooltip="Correct time in progress" i18n-kTooltip>
+          <i class="ti ti-pencil"></i>
+        </button>
+        }
+      </div>
+      @if (editingTimeInProgress()) {
+      <form class="detail-time-editor" (submit)="$event.preventDefault(); saveTimeInProgress()">
+        <label>
+          <input class="detail-time-input" type="number" min="0" max="100000" step="1" inputmode="numeric" [value]="timeDraftHours()" (input)="timeDraftHours.set(+$any($event.target).value)" aria-label="Hours" i18n-aria-label="Accessible name of the hours input when correcting time in progress" />
+          <span i18n="Unit after the hours input when correcting time in progress">h</span>
+        </label>
+        <label>
+          <input class="detail-time-input" type="number" min="0" max="59" step="1" inputmode="numeric" [value]="timeDraftMinutes()" (input)="timeDraftMinutes.set(+$any($event.target).value)" aria-label="Minutes" i18n-aria-label="Accessible name of the minutes input when correcting time in progress" />
+          <span i18n="Unit after the minutes input when correcting time in progress">m</span>
+        </label>
+        <button type="submit" class="detail-time-save" [disabled]="savingTimeInProgress()" i18n="Button - save a corrected time in progress">Save</button>
+        <button type="button" class="ghost detail-time-cancel" (click)="editingTimeInProgress.set(false)" [disabled]="savingTimeInProgress()" i18n="Button - discard a time in progress correction">Cancel</button>
+        @if (timeInProgressError()) {
+        <p class="detail-time-error" role="alert" i18n="Error when saving a corrected time in progress fails">The time in progress could not be saved. Try again.</p>
+        }
+      </form>
+      }
+      }
+
       <!-- Description -->
       <section class="detail-section">
         @if (mirrorStatus(); as status) {

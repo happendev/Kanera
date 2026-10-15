@@ -686,6 +686,7 @@
           [catalogLabels]="historyLabels()"
           [catalogCustomFields]="state.catalog().customFields"
           [boardSummariesById]="boardsById()"
+          [timeZonesByWorkspace]="workspaceTimeZones()"
           [selectedCardId]="selectedCard()?.id ?? null"
           [searchQuery]="state.definition().filters.q"
           [filterLabelIds]="state.definition().filters.labelIds"

@@ -1,5 +1,6 @@
 import type { ActivitySummaryMessages } from "@kanera/shared/activity-summary";
 import { appLocale } from "./locale";
+import { icu } from "./icu";
 
 /**
  * The notification drawer's wording for `summariseActivityChange`. Each phrase follows the actor's
@@ -45,6 +46,8 @@ export const ACTIVITY_SUMMARY_MESSAGES: ActivitySummaryMessages = {
   setFieldTo: (fieldName) => $localize`:Notification line after a person's name; the new value follows:set ${fieldName}:fieldName: to`,
   setCover: $localize`:Notification line after a person's name:set the cover image`,
   removedCover: $localize`:Notification line after a person's name:removed the cover image`,
+  flaggedInProgressTooLong: (days) => icu($localize`:Notification line after the system name Kanera - the card has been in progress past the workspace alert:{days, plural, one {flagged this card as in progress for more than # day} other {flagged this card as in progress for more than # days}}`, { days }),
+  correctedTimeInProgress: $localize`:Activity line after a person's name - a workspace admin changed a card's tracked time in progress:corrected the time in progress`,
   addedChecklist: $localize`:Notification line after a person's name; the checklist name follows:added checklist`,
   deletedChecklist: $localize`:Notification line after a person's name; the checklist name follows:deleted checklist`,
   completedSubChecklist: $localize`:Notification line after a person's name; the checklist name follows:completed sub-checklist`,

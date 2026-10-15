@@ -53,6 +53,7 @@ const catalog: WorkCatalog = {
       accentColor: null,
       kind: "standard",
       viewerCanAccessWorkspace: true,
+      inProgressAlertDays: 7, timeZone: "UTC",
     },
     {
       id: "20000000-0000-4000-8000-000000000002",
@@ -62,6 +63,7 @@ const catalog: WorkCatalog = {
       accentColor: null,
       kind: "standard",
       viewerCanAccessWorkspace: false,
+      inProgressAlertDays: 7, timeZone: "UTC",
     },
   ],
   boards: [
@@ -215,6 +217,8 @@ const cachedDefinition: WorkViewDefinition = {
     completion: "active",
     unassignedOnly: false,
     inactiveOnly: false,
+    inProgressOnly: false,
+    inProgressTooLongOnly: false,
     dueFrom: null,
     dueTo: null,
     overdueOnly: false,
@@ -991,7 +995,7 @@ describe("GlobalWorkState", () => {
   it("keeps an empty cached Portfolio summary visible offline", async () => {
     const portfolio: PortfolioSummary = {
       days: 30,
-      totals: { cards: 0, overdue: 0, dueSoon: 0, completed: 0, overdueChecklistItems: 0, unassigned: 0, inactive: 0 },
+      totals: { cards: 0, overdue: 0, dueSoon: 0, completed: 0, overdueChecklistItems: 0, unassigned: 0, inactive: 0, inProgress: 0, inProgressTooLong: 0 },
       buckets: [],
       activityDays: 60,
       activity: [],
@@ -1160,6 +1164,8 @@ describe("GlobalWorkState", () => {
         completion: "active",
         unassignedOnly: false,
         inactiveOnly: false,
+        inProgressOnly: false,
+        inProgressTooLongOnly: false,
         dueFrom: null,
         dueTo: null,
         overdueOnly: false,

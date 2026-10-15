@@ -1,12 +1,13 @@
 import { dto } from "@kanera/shared";
-import { SERVER_EVENTS, type WireCard, type WireCardChecklist, type WireCardDetail } from "@kanera/shared/events";
+import { inProgressClockOf, SERVER_EVENTS, type WireCard, type WireCardChecklist, type WireCardDetail } from "@kanera/shared/events";
 import { ACTIVITY_ACTION, activityEvents, agentRuns, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cards, cardWatchers, customFields, lists, users, type ActivityEvent } from "@kanera/shared/schema";
+import { IN_PROGRESS_CLOCK_COLUMNS } from "../../lib/in-progress-clock.js";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { randomUUID } from "node:crypto";
 import { db, type Db, type Tx } from "../../db.js";
 import { env } from "../../env.js";
-import { assignedCardVisibility, assertBatchCardVisibility, assertBoardAccess, assertCardAccess } from "../../lib/access.js";
+import { assignedCardVisibility, assertBatchCardVisibility, assertBoardAccess, assertCardAccess, assertWorkspaceAccess } from "../../lib/access.js";
 import {
   emitActivityFeedItem,
   emitActivityFeedItemDeleted,
@@ -1424,6 +1425,7 @@ export async function cardRoutes(
         toListId: body.listId,
         position: move.card.position,
         prevPosition: move.previous.position,
+        ...inProgressClockOf(move.card),
       });
       await emitCardActivityFeedItem(boardId, move.card.id, move.activity);
       await emitAutomationEffects(move.automationEffects);
@@ -1511,6 +1513,59 @@ export async function cardRoutes(
     }
 
     return reply.status(201).send({ duplicated: created.length, cards: created, skippedCardIds });
+  });
+
+  // Workspace admins correct a card's tracked time in progress (a card that sat in an In progress
+  // list over a holiday, or work done before the list was flagged). The value is the total as of
+  // now. A running stint keeps its start when the correction covers it, so the alert and its
+  // automation keep reading the real stint; a total below what the running stint already tracked
+  // restarts the stint now instead. Only the clock columns are written, so the card trigger does not
+  // fire. The audit entry is feed-only: a correction is not news for assignees or watchers.
+  app.put("/cards/:id/in-progress-time", async (req) => {
+    const { id } = req.params as { id: string };
+    const body = dto.setInProgressTimeBody.parse(req.body);
+    const { card: current, ctx } = await loadEditableCard(req.auth, id);
+    await assertWorkspaceAccess(req.auth, ctx.workspaceId, "admin");
+    assertCardActive(current);
+
+    const { card, activity } = await db.transaction(async (tx) => {
+      const [clock] = await tx.execute<{ banked: number; running: number }>(sql`
+        select c.in_progress_seconds as banked,
+               in_progress_working_seconds(c.in_progress_since, now(), w.time_zone) as running
+        from card c
+        inner join workspace w on w.id = c.workspace_id
+        where c.id = ${id}
+        for update of c
+      `).then((result) => result.rows);
+      if (!clock) throw notFound();
+      const running = Number(clock.running);
+      const fromSeconds = Number(clock.banked) + running;
+      const keepsStint = body.seconds >= running;
+      const [updated] = await tx
+        .update(cards)
+        .set({
+          inProgressSeconds: keepsStint ? body.seconds - running : body.seconds,
+          ...(keepsStint ? {} : { inProgressSince: sql`case when ${cards.inProgressSince} is null then null else now() end` }),
+          updatedAt: new Date(),
+        })
+        .where(eq(cards.id, id))
+        .returning();
+      const recorded = await recordActivity(tx, {
+        boardId: current.boardId,
+        workspaceId: ctx.workspaceId,
+        actorId: req.auth.sub,
+        entityType: "card",
+        entityId: id,
+        action: ACTIVITY_ACTION.IN_PROGRESS_TIME_SET,
+        payload: { fromSeconds, toSeconds: body.seconds },
+      });
+      return { card: updated!, activity: recorded };
+    });
+
+    const wireCard = toWireCard(card, req.auth.cid);
+    await emitToBoard(current.boardId, SERVER_EVENTS.CARD_UPDATED, { boardId: current.boardId, card: wireCard });
+    await emitCardActivityFeedItem(current.boardId, id, activity, { notify: false });
+    return wireCard;
   });
 
   app.patch("/cards/:id", async (req) => {
@@ -1717,7 +1772,7 @@ export async function cardRoutes(
     const fromListId = current.listId;
     const prevPosition = current.position;
     const enteringNewList = fromListId !== body.listId;
-    const { position, finalPosition, finalListId, rebalancedPositions, laneRebalanced, activity, completedCard, completionActivity, automationEffects, noOp } = await db.transaction(async (tx) => {
+    const { position, finalPosition, finalListId, clock, finalClock, rebalancedPositions, laneRebalanced, activity, completedCard, completionActivity, automationEffects, noOp } = await db.transaction(async (tx) => {
       await tx.select({ id: lists.id }).from(lists).where(eq(lists.id, body.listId)).for("update").limit(1);
 
       // The mover needs access to the card's own board. Anchor cards are only
@@ -1766,6 +1821,8 @@ export async function cardRoutes(
           position,
           finalPosition: prevPosition,
           finalListId: fromListId,
+          clock: inProgressClockOf(current),
+          finalClock: inProgressClockOf(current),
           rebalancedPositions: null,
           laneRebalanced: null,
           activity: null,
@@ -1776,14 +1833,16 @@ export async function cardRoutes(
         };
       }
 
-      await tx
+      // The trigger owns the time-in-progress clock; read back what it wrote for this move's event.
+      const [written] = await tx
         .update(cards)
         .set({
           listId: body.listId,
           position,
           updatedAt: new Date(),
         })
-        .where(eq(cards.id, id));
+        .where(eq(cards.id, id))
+        .returning(IN_PROGRESS_CLOCK_COLUMNS);
 
       const rebalancedPositions = result.needsRebalance ? await rebalanceBoardLane(body.listId, current.boardId, tx) : null;
       if (rebalancedPositions) {
@@ -1814,11 +1873,15 @@ export async function cardRoutes(
           triggerActorId: req.auth.sub,
         })
         : { effects: [] };
-      const [finalCard] = await tx.select({ listId: cards.listId, position: cards.position }).from(cards).where(eq(cards.id, id)).limit(1);
+      const [finalCard] = await tx.select({ listId: cards.listId, position: cards.position, ...IN_PROGRESS_CLOCK_COLUMNS }).from(cards).where(eq(cards.id, id)).limit(1);
+      const clock = inProgressClockOf(written ?? current);
       return {
         position,
         finalPosition: finalCard?.position ?? position,
         finalListId: finalCard?.listId ?? body.listId,
+        clock,
+        // After automations, which may have moved the card again; that move emits its own event.
+        finalClock: finalCard ? inProgressClockOf(finalCard) : clock,
         rebalancedPositions,
         laneRebalanced,
         activity,
@@ -1829,7 +1892,7 @@ export async function cardRoutes(
       };
     });
 
-    if (noOp) return { id, listId: finalListId, position: finalPosition };
+    if (noOp) return { id, listId: finalListId, position: finalPosition, ...finalClock };
     if (laneRebalanced) await emitWorkspaceLaneRebalanced(body.listId, laneRebalanced);
 
     if (rebalancedPositions) {
@@ -1844,6 +1907,7 @@ export async function cardRoutes(
       toListId: body.listId,
       position,
       prevPosition,
+      ...clock,
     });
     if (activity) await emitCardActivityFeedItem(current.boardId, id, activity);
     if (completedCard && completionActivity) {
@@ -1857,7 +1921,7 @@ export async function cardRoutes(
       actorId: req.auth.sub,
       supportSession: req.auth.authKind === "support" || req.auth.authKind === "apiKey",
     });
-    return { id, listId: finalListId, position: finalPosition };
+    return { id, listId: finalListId, position: finalPosition, ...finalClock };
   });
 
   app.post("/cards/:id/duplicate", async (req, reply) => {

@@ -22,6 +22,7 @@ const GROUPS: WorkGroupBy[] = [
 ];
 const SORTS: WorkSort[] = [
   "dueAsc", "dueDesc", "titleAsc", "titleDesc", "createdAsc", "createdDesc", "updatedAsc", "updatedDesc",
+  "inProgressAsc", "inProgressDesc",
 ];
 const DISPLAYS: WorkDisplayMode[] = ["board", "table", "calendar", "priorities", "history", "summary"];
 const COMPLETIONS: WorkFilters["completion"][] = ["activeAndRecentlyCompleted", "active", "completed", "all"];
@@ -105,7 +106,8 @@ function storedAggregates(value: unknown): WorkTablePresentation["aggregates"] {
   const result: WorkTablePresentation["aggregates"] = {};
   for (const [fieldId, rawMetrics] of Object.entries(objectValue(value) ?? {})) {
     if (Object.keys(result).length >= 100) break;
-    if (!/^[0-9a-f-]{36}$/i.test(fieldId) || !Array.isArray(rawMetrics)) continue;
+    // A number field's id, or time in progress's column id (see IN_PROGRESS_COLUMN_ID).
+    if ((fieldId !== "inProgress" && !/^[0-9a-f-]{36}$/i.test(fieldId)) || !Array.isArray(rawMetrics)) continue;
     const metric: unknown = rawMetrics[0];
     if (metric === "sum" || metric === "avg") result[fieldId] = [metric];
   }
@@ -177,6 +179,8 @@ function storedDefinition(value: unknown): WorkViewDefinition | null {
       : DEFAULT_COMPLETION,
     unassignedOnly: filters["unassignedOnly"] === true,
     inactiveOnly: filters["inactiveOnly"] === true,
+    inProgressOnly: filters["inProgressOnly"] === true,
+    inProgressTooLongOnly: filters["inProgressTooLongOnly"] === true,
     dueFrom: nullableDate(filters["dueFrom"]),
     dueTo: nullableDate(filters["dueTo"]),
     overdueOnly: filters["overdueOnly"] === true,
@@ -331,7 +335,7 @@ export function sanitizeGlobalWorkDefinition(
     ? definition.display
     : lens === "portfolio" ? "summary" : lens === "team" ? "board" : "table";
   const builtinTableColumns = new Set([
-    "status", "board", "assignees", "due", "labels", "checklist", "description", "created", "updated",
+    "status", "board", "assignees", "due", "inProgress", "labels", "checklist", "description", "created", "updated",
   ]);
   const validTableColumn = (id: string) => {
     if (builtinTableColumns.has(id)) return true;
@@ -340,6 +344,7 @@ export function sanitizeGlobalWorkDefinition(
     return Boolean(field && !field.archivedAt);
   };
   const validAggregateField = (id: string) => {
+    if (id === "inProgress") return true;
     const field = fieldsById.get(id);
     return field?.type === "number" && !field.archivedAt;
   };

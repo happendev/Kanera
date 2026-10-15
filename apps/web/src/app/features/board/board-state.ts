@@ -1,4 +1,5 @@
 import { Injectable, computed, inject, signal } from "@angular/core";
+import { resolveInProgressClock, sameInProgressClock, type ReportedInProgressClock } from "./time-in-progress.util";
 import type {
   CardAttachmentRow,
   WireAgentRun,
@@ -20,7 +21,7 @@ import type { LinkedInternalSummary } from "@kanera/shared/dto";
 import type { OfflineBoardSnapshot } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { WorkspaceService } from "../../core/workspace/workspace.service";
-import { DEFAULT_INACTIVE_CARDS_DAYS } from "@kanera/shared/workspace-defaults";
+import { DEFAULT_IN_PROGRESS_ALERT_DAYS, DEFAULT_INACTIVE_CARDS_DAYS } from "@kanera/shared/workspace-defaults";
 import { createSortedLaneProjection } from "./lane-projection";
 import { byPosition } from "../../shared/position-sort";
 
@@ -63,6 +64,10 @@ export class BoardState {
   readonly workspaceClientId = signal<string | null>(null);
   readonly workspaceKind = signal<"standard" | "board" | null>(null);
   readonly inactiveCardsDays = signal(DEFAULT_INACTIVE_CARDS_DAYS);
+  /** Days in progress after which a card's clock is flagged; 0 turns the flag off. */
+  readonly inProgressAlertDays = signal(DEFAULT_IN_PROGRESS_ALERT_DAYS);
+  /** The workspace's IANA zone: time in progress counts its working hours (09:00-17:00 weekdays). */
+  readonly workspaceTimeZone = signal("UTC");
   readonly workspaceCardKeyPrefixes = signal<string[]>([]);
   readonly boardLinkingEnabled = signal(true);
   /** Workspace-level Notes switch; off hides the board's Notes view. */
@@ -513,6 +518,8 @@ export class BoardState {
     workspaceClientId?: string | null;
     workspaceKind?: "standard" | "board";
     workspaceInactiveCardsDays?: number;
+    workspaceInProgressAlertDays?: number;
+    workspaceTimeZone?: string;
     workspaceCardKeyPrefixes?: string[];
     boardLinkingEnabled?: boolean;
     notesEnabled?: boolean;
@@ -547,6 +554,8 @@ export class BoardState {
     this.workspaceClientId.set(payload.workspaceClientId ?? null);
     this.workspaceKind.set(payload.workspaceKind ?? null);
     this.inactiveCardsDays.set(payload.workspaceInactiveCardsDays ?? DEFAULT_INACTIVE_CARDS_DAYS);
+    this.inProgressAlertDays.set(payload.workspaceInProgressAlertDays ?? DEFAULT_IN_PROGRESS_ALERT_DAYS);
+    this.workspaceTimeZone.set(payload.workspaceTimeZone ?? "UTC");
     this.workspaceCardKeyPrefixes.set(payload.workspaceCardKeyPrefixes ?? []);
     this.boardLinkingEnabled.set(payload.boardLinkingEnabled !== false);
     this.notesEnabled.set(payload.notesEnabled !== false);
@@ -701,6 +710,8 @@ export class BoardState {
     this.workspaceClientId.set(null);
     this.workspaceKind.set(null);
     this.inactiveCardsDays.set(DEFAULT_INACTIVE_CARDS_DAYS);
+    this.inProgressAlertDays.set(DEFAULT_IN_PROGRESS_ALERT_DAYS);
+    this.workspaceTimeZone.set("UTC");
     this.workspaceCardKeyPrefixes.set([]);
     this.boardLinkingEnabled.set(true);
     this.notesEnabled.set(true);
@@ -789,19 +800,40 @@ export class BoardState {
     for (const cardId of changedCardIds) this.noteCardDetailRealtimeMutation(cardId);
   }
 
-  moveCard(cardId: string, listId: string, position: string) {
+  /**
+   * `clock` is the server's persisted time-in-progress clock (a move response, `card:moved`, or the
+   * card's own previous value when rolling back), taken as-is. Omitted only for optimistic moves:
+   * the card keeps its current clock until the authoritative value lands, which it does even when
+   * the echo matches the optimistic placement. The client never derives a clock, so every surface
+   * agrees with the trigger regardless of device clocks or delivery delay.
+   */
+  moveCard(cardId: string, listId: string, position: string, clock?: ReportedInProgressClock) {
     // Skip echoes of a move we already applied optimistically: rebuilding the cards array
     // changes its identity and re-fires every derived computed (visibleCardsByList, etc.)
-    // for no visible change. Only rebuild when the list or position actually differs.
+    // for no visible change. Only rebuild when the list, position or clock actually differs.
     const current = this.cardById(cardId);
-    if (!current || (current.listId === listId && current.position === position)) return;
+    if (!current) return;
+    const reported = clock && resolveInProgressClock(current, clock);
+    const samePlace = current.listId === listId && current.position === position;
+    if (samePlace && (!reported || sameInProgressClock(current, reported))) return;
+    if (samePlace) {
+      // Only the server's clock differs from the optimistic guess: settle it without a second
+      // move/activity publication.
+      this.cards.update((cs) => cs.map((c) => (c.id === cardId ? { ...c, ...reported } as AnyCard : c)));
+      this.bumpCardMutationSeq();
+      return;
+    }
     // Move and activity are one publication. The socket echo must not follow this with an
     // unconditional touch that republishes an already-applied optimistic move.
     const updatedAt = new Date();
     this.cards.update((cs) =>
-      cs.map((c) => (c.id === cardId ? { ...c, listId, position, updatedAt } : c)),
+      cs.map((c) => (c.id === cardId ? { ...c, listId, position, updatedAt, ...reported } as AnyCard : c)),
     );
     this.bumpCardMutationSeq();
+  }
+
+  isListInProgress(listId: string): boolean {
+    return this.lists().some((list) => list.id === listId && list.inProgress);
   }
 
   /**
@@ -1178,6 +1210,8 @@ export class BoardState {
       completedAt: card.completedAt,
       archivedAt: card.archivedAt,
       coverAttachmentId: card.coverAttachmentId,
+      inProgressSince: card.inProgressSince,
+      inProgressSeconds: card.inProgressSeconds,
       createdAt: card.createdAt,
       updatedAt: card.updatedAt,
       hasDescription: Boolean(card.description),
@@ -1237,6 +1271,8 @@ export class BoardState {
       workspaceClientId: this.workspaceClientId() ?? undefined,
       workspaceKind: this.workspaceKind() ?? undefined,
       workspaceInactiveCardsDays: this.inactiveCardsDays(),
+      workspaceInProgressAlertDays: this.inProgressAlertDays(),
+      workspaceTimeZone: this.workspaceTimeZone(),
       workspaceCardKeyPrefixes: this.workspaceCardKeyPrefixes(),
       boardLinkingEnabled: this.boardLinkingEnabled(),
       notesEnabled: this.notesEnabled(),
@@ -1274,6 +1310,8 @@ export class BoardState {
     this.workspaceClientId.set(snapshot.workspaceClientId ?? null);
     this.workspaceKind.set(snapshot.workspaceKind ?? null);
     this.inactiveCardsDays.set(snapshot.workspaceInactiveCardsDays ?? DEFAULT_INACTIVE_CARDS_DAYS);
+    this.inProgressAlertDays.set(snapshot.workspaceInProgressAlertDays ?? DEFAULT_IN_PROGRESS_ALERT_DAYS);
+    this.workspaceTimeZone.set(snapshot.workspaceTimeZone ?? "UTC");
     this.workspaceCardKeyPrefixes.set(snapshot.workspaceCardKeyPrefixes ?? []);
     this.boardLinkingEnabled.set(snapshot.boardLinkingEnabled !== false);
     this.notesEnabled.set(snapshot.notesEnabled !== false);

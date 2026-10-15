@@ -43,6 +43,7 @@ function workspace(overrides: Partial<Workspace & { role: string }> = {}): Works
     accentColor: null,
     completedCardsActiveDays: 35,
     inactiveCardsDays: 14,
+    inProgressAlertDays: 7, timeZone: "UTC",
     boardLinkingEnabled: true,
     notesEnabled: true,
     createdAt: new Date("2026-05-21T00:00:00.000Z"),
@@ -152,6 +153,7 @@ function workspaceList(overrides: Partial<List> = {}): List {
     name: "Inbox",
     icon: null,
     color: null,
+    inProgress: false,
     position: "1000.0000000000",
     archivedAt: null,
     createdAt: new Date("2026-05-21T00:00:00.000Z"),
@@ -468,6 +470,7 @@ describe("WorkspaceSettingsPage", () => {
     expect(api.patch).toHaveBeenCalledWith("/workspaces/workspace-1", {
       completedCardsActiveDays: 28,
       inactiveCardsDays: 20,
+    inProgressAlertDays: 7, timeZone: "UTC",
     });
   });
 

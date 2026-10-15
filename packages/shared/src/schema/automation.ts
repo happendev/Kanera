@@ -5,7 +5,7 @@ import { cards, type CardDueDateSlot } from "./card.js";
 import { lists } from "./list.js";
 import { workspaces } from "./workspace.js";
 
-export const AUTOMATION_TRIGGER_TYPES = ["card_enters_list", "card_leaves_list", "due_date_arrives", "due_date_approaching", "card_becomes_inactive", "all_checklist_items_complete", "card_assigned_to_user", "card_marked_complete", "card_label_set", "custom_field_value_changed"] as const;
+export const AUTOMATION_TRIGGER_TYPES = ["card_enters_list", "card_leaves_list", "due_date_arrives", "due_date_approaching", "card_becomes_inactive", "card_in_progress_too_long", "all_checklist_items_complete", "card_assigned_to_user", "card_marked_complete", "card_label_set", "custom_field_value_changed"] as const;
 export type AutomationTriggerType = (typeof AUTOMATION_TRIGGER_TYPES)[number];
 
 export type AutomationTriggerCustomFieldValue =
@@ -173,6 +173,27 @@ export const automationInactiveRuns = pgTable(
   ],
 );
 
+export const automationInProgressRuns = pgTable(
+  "automation_in_progress_run",
+  {
+    automationId: uuid("automation_id")
+      .notNull()
+      .references(() => automations.id, { onDelete: "cascade" }),
+    cardId: uuid("card_id")
+      .notNull()
+      .references(() => cards.id, { onDelete: "cascade" }),
+    // The event identity is the stint's boundary: in_progress_since + the workspace's
+    // inProgressAlertDays. A new stint (the card left and re-entered progress) or a changed setting is
+    // a new boundary, so the rule fires once per stint without a persisted "too long" flag.
+    alertAt: timestamp("alert_at", { withTimezone: true }).notNull(),
+    firedAt: timestamp("fired_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.automationId, t.cardId] }),
+    index("automation_in_progress_runs_card_id_idx").on(t.cardId),
+  ],
+);
+
 export const automationRunStats = pgTable("automation_run_stats", {
   automationId: uuid("automation_id")
     .primaryKey()
@@ -220,5 +241,6 @@ export type Automation = typeof automations.$inferSelect;
 export type AutomationAction = typeof automationActions.$inferSelect;
 export type AutomationDueDateRun = typeof automationDueDateRuns.$inferSelect;
 export type AutomationInactiveRun = typeof automationInactiveRuns.$inferSelect;
+export type AutomationInProgressRun = typeof automationInProgressRuns.$inferSelect;
 export type AutomationRunStats = typeof automationRunStats.$inferSelect;
 export type AutomationRun = typeof automationRuns.$inferSelect;

@@ -96,6 +96,32 @@
 </div>
 <div class="board-settings-section">
   <div class="guest-section-head">
+    <i class="ti ti-progress"></i>
+    <span i18n="Section heading - tracked working time cards spend in In progress lists">Time in progress</span>
+  </div>
+  <div class="board-form single-line-capture">
+    <label class="compact-number-field">
+      <span i18n="Followed by a number input and the word days">Flag cards in progress for more than</span>
+      <input type="number" min="0" max="365" step="1" aria-label="Time in progress alert in days" i18n-aria-label [value]="settings.inProgressAlertDaysDraft()" (input)="settings.updateInProgressAlertDays($any($event.target).value)" (blur)="settings.saveGeneralSettingsNow()"
+        [disabled]="settings.generalSettingsSaving()" />
+      <span i18n="Unit after a number input, e.g. Mark cards inactive after [30] days">days</span>
+    </label>
+  </div>
+  <p class="board-linking-help field-help" i18n="Help text under the time in progress alert setting">Their time in progress turns amber on boards, and "Card in progress too long" automations run. 0 turns this off.</p>
+  <div class="board-form single-line-capture">
+    <label class="compact-number-field time-zone-field">
+      <span i18n="Label for the time zone whose working hours count toward time in progress">Working hours time zone</span>
+      <select aria-label="Working hours time zone" i18n-aria-label [value]="settings.timeZoneDraft()" (input)="settings.updateTimeZone($any($event.target).value)" [disabled]="settings.generalSettingsSaving()">
+        @for (zone of settings.timeZoneOptions(); track zone) {
+        <option [value]="zone" [selected]="zone === settings.timeZoneDraft()">{{ zone }}</option>
+        }
+      </select>
+    </label>
+  </div>
+  <p class="board-linking-help field-help" i18n="Help text under the working hours time zone setting">Tracked time counts working hours only: 09:00–17:00, Monday to Friday, in this time zone. Nights and weekends in progress add nothing.</p>
+</div>
+<div class="board-settings-section">
+  <div class="guest-section-head">
     <i class="ti ti-circle-check"></i>
     <span i18n="Section heading">Completed cards</span>
   </div>

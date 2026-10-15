@@ -590,6 +590,8 @@ const zhTW: ServerMessages = {
   setFieldTo: (fieldName) => `將 ${fieldName} 設定為`,
   setCover: "設定封面圖片",
   removedCover: "刪除了封面圖片",
+  correctedTimeInProgress: "修正了進行中時長",
+  flaggedInProgressTooLong: (days) => `將此卡片標記為進行中超過 ${days} 天`,
   addedChecklist: "添加了清單",
   deletedChecklist: "已刪除清單",
   completedSubChecklist: "已完成的子清單",

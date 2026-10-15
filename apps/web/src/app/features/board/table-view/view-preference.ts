@@ -24,6 +24,7 @@ export interface StoredFilters {
   showUnreadOnly: boolean;
   showOverdueOnly: boolean;
   showInactiveOnly: boolean;
+  showInProgressOnly: boolean;
   showPrioritySetOnly: boolean;
   showReminderSetOnly: boolean;
 }
@@ -53,6 +54,7 @@ export function readFilters(scope: string): StoredFilters | null {
       showUnreadOnly: obj["showUnreadOnly"] === true,
       showOverdueOnly: obj["showOverdueOnly"] === true,
       showInactiveOnly: obj["showInactiveOnly"] === true,
+      showInProgressOnly: obj["showInProgressOnly"] === true,
       showPrioritySetOnly: obj["showPrioritySetOnly"] === true,
       showReminderSetOnly: obj["showReminderSetOnly"] === true,
     };
@@ -79,6 +81,7 @@ function hasAnyFilter(f: StoredFilters): boolean {
     f.showUnreadOnly ||
     f.showOverdueOnly ||
     f.showInactiveOnly ||
+    f.showInProgressOnly ||
     f.showPrioritySetOnly ||
     f.showReminderSetOnly
   );
