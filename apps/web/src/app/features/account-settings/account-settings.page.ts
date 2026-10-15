@@ -1,3 +1,5 @@
+import { AccountSettingsAccountSecurityPage } from "./account-security/account-security.page";
+import { AccountSettingsPreferencesPage } from "./preferences/preferences.page";
 import type { OnDestroy, OnInit } from "@angular/core";
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, input, signal, untracked, ViewEncapsulation } from "@angular/core";
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
@@ -42,7 +44,7 @@ import { formatDate, formatDateTime } from "../../shared/date-format";
 
 // Two groups: the signed-in person's own settings, then organisation settings for owners and admins.
 // "org" is the organisation's General tab; its path predates the split and is linked from emails.
-const ACCOUNT_TABS = ["profile", "notifications", "api-keys"] as const;
+const ACCOUNT_TABS = ["profile", "account-security", "preferences", "notifications", "api-keys"] as const;
 const ORG_TABS = ["org", "users", "security", "integrations", "storage", "account-plan"] as const;
 type Tab = (typeof ACCOUNT_TABS)[number] | (typeof ORG_TABS)[number];
 const ALL_TABS: readonly string[] = [...ACCOUNT_TABS, ...ORG_TABS];
@@ -227,7 +229,7 @@ function formatCents(value: number): string {
 @Component({
   selector: "k-account-settings",
   standalone: true,
-  imports: [PageHeaderComponent, RouterLink, TabStripDirective, AccountSettingsProfilePage, AccountSettingsNotificationsPage, AccountSettingsApiKeysPage, AccountSettingsUsersPage, AccountSettingsOrgPage, AccountSettingsSecurityPage, AccountSettingsIntegrationsPage, AccountSettingsStoragePage, AccountSettingsPlanPage],
+  imports: [AccountSettingsAccountSecurityPage, AccountSettingsPreferencesPage, PageHeaderComponent, RouterLink, TabStripDirective, AccountSettingsProfilePage, AccountSettingsNotificationsPage, AccountSettingsApiKeysPage, AccountSettingsUsersPage, AccountSettingsOrgPage, AccountSettingsSecurityPage, AccountSettingsIntegrationsPage, AccountSettingsStoragePage, AccountSettingsPlanPage],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: "./account-settings.page.html",

@@ -58,3 +58,5 @@ The automation move case in `correctness-scan.spec.ts` also checks comments befo
 Global Work performance follow-up: the deep-table realtime burst test now verifies one 201-card refresh request, exact retained card IDs, and desktop/phone rendering. Its new request-count assertion fails on the preceding 100-card refresh implementation (two continuation requests).
 
 - `i18n.spec.ts`: signed-out/account language reloads, including Simplified/Traditional Chinese, Dutch and Norwegian Bokmål at desktop/phone widths, persisted account preferences, dates and API errors; localized PWA metadata; shared chat language persistence independent of the viewer, localized connection summaries and validation details at desktop/phone widths; real Trello import warnings rendered in Spanish.
+
+- `account-settings-pages.spec.ts`: personal Security and Preferences remain accessible to members and owners through navigation and direct reloads; Profile excludes the moved sections; desktop and phone layouts stay within the viewport.

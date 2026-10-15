@@ -17,6 +17,7 @@ export type DocsPath =
   | "automations"
   | "board-syncing"
   | "boards"
+  | "cards"
   | "card-labels"
   | "chat-destinations"
   | "checklist-templates"

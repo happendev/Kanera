@@ -92,7 +92,7 @@
     "description": "Browser tab title — scratchpad",
     "x-files": [
       "src/app/app.routes.ts",
-      "src/app/features/account-settings/profile/profile.page.html",
+      "src/app/features/account-settings/preferences/preferences.page.html",
       "src/app/features/scratchpad/scratchpad-panel.component.html",
       "src/app/features/scratchpad/scratchpad-panel.component.ts",
       "src/app/features/scratchpad/scratchpad.page.ts",
@@ -3401,6 +3401,7 @@
     "description": "Button state",
     "x-files": [
       "src/app/features/account-settings/account-plan/account-plan.page.html",
+      "src/app/features/account-settings/account-security/account-security.page.html",
       "src/app/features/account-settings/integrations/integrations.page.html",
       "src/app/features/account-settings/org/org.page.html",
       "src/app/features/account-settings/profile/profile.page.html",
@@ -3491,6 +3492,254 @@
       "src/app/features/account-settings/account-plan/account-plan.page.html"
     ]
   },
+  "3892825090402620438": "Two-factor authentication",
+  "@3892825090402620438": {
+    "description": "Settings section heading",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html",
+      "src/app/features/account-settings/security/security.page.html"
+    ]
+  },
+  "2625858903721573648": "Protect fresh sign-ins with an authenticator app or a one-time recovery code.",
+  "@2625858903721573648": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "6523025057420027402": "Learn more about account security",
+  "@6523025057420027402": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "5340498030552368470": "Current password",
+  "@5340498030552368470": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "4379830886284362842": "Set up authenticator",
+  "@4379830886284362842": {
+    "description": "Button",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "3503989317694521185": "Scan the QR code, or enter {$START_TAG_CODE}{$SECRET}{$CLOSE_TAG_CODE} manually.",
+  "@3503989317694521185": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "4948440289765392916": "Authenticator setup QR code",
+  "@4948440289765392916": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html",
+      "src/app/features/auth/login.page.html"
+    ]
+  },
+  "9178182467454450952": "Confirm",
+  "@9178182467454450952": {
+    "description": "Button",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html",
+      "src/app/features/account-settings/profile/profile.page.html"
+    ]
+  },
+  "703309951700807906": "Two-factor authentication is enabled.",
+  "@703309951700807906": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "2531964555886899487": "Authenticator or recovery code",
+  "@2531964555886899487": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html",
+      "src/app/features/auth/login.page.html"
+    ]
+  },
+  "566903034361052049": "New recovery codes",
+  "@566903034361052049": {
+    "description": "Button",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "9187855490716817910": "Disable",
+  "@9187855490716817910": {
+    "description": "Button: turn off two-factor authentication",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "2060329913662056999": "Save these recovery codes now. They will not be shown again.",
+  "@2060329913662056999": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "6309828574111583895": "Change password",
+  "@6309828574111583895": {
+    "description": "Settings section heading",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "738695200650034928": "You'll be signed out from all other sessions after changing.",
+  "@738695200650034928": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "3588415639242079458": "New password",
+  "@3588415639242079458": {
+    "description": "Field label",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html",
+      "src/app/features/auth/reset-password.page.html"
+    ]
+  },
+  "8656126574213649581": "Confirm new password",
+  "@8656126574213649581": {
+    "description": "Field label",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.html"
+    ]
+  },
+  "8544363588102773420": "Current password is required.",
+  "@8544363588102773420": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "143113787714930934": "New password is required.",
+  "@143113787714930934": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "1934494178293053019": "New password must be at least 8 characters.",
+  "@1934494178293053019": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "2482069944964160970": "Confirm new password is required.",
+  "@2482069944964160970": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "6932646825567072548": "Confirm new password must be at least 8 characters.",
+  "@6932646825567072548": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "7404895855168454876": "New password and confirmation do not match.",
+  "@7404895855168454876": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "5554528553553249088": "Show password",
+  "@5554528553553249088": {
+    "description": "Button — reveal the typed password",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts",
+      "src/app/features/account-settings/integrations/integrations.page.ts",
+      "src/app/features/auth/login.page.ts",
+      "src/app/features/auth/reset-password.page.ts",
+      "src/app/features/auth/signup.page.ts"
+    ]
+  },
+  "1446670643492611810": "Hide password",
+  "@1446670643492611810": {
+    "description": "Button — mask the typed password",
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts",
+      "src/app/features/account-settings/integrations/integrations.page.ts",
+      "src/app/features/auth/login.page.ts",
+      "src/app/features/auth/reset-password.page.ts",
+      "src/app/features/auth/signup.page.ts"
+    ]
+  },
+  "1489758710743967189": "Enter your current password to set up an authenticator.",
+  "@1489758710743967189": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "7064024771356744938": "Enter the six-digit code from your authenticator app.",
+  "@7064024771356744938": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts",
+      "src/app/features/auth/login.page.ts"
+    ]
+  },
+  "9121424381282805046": "Enter your current password.",
+  "@9121424381282805046": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "8782487788877276260": "Enter an authenticator or recovery code.",
+  "@8782487788877276260": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "3265029579725173281": "Password changed. You'll be signed out on the next refresh.",
+  "@3265029579725173281": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
+  "3550768065770727784": "That verification code is incorrect. Try again.",
+  "@3550768065770727784": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts",
+      "src/app/features/account-settings/profile/profile.page.ts"
+    ]
+  },
+  "7704379049286251361": "Your current password is incorrect.",
+  "@7704379049286251361": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts",
+      "src/app/features/account-settings/profile/profile.page.ts"
+    ]
+  },
+  "6638645340229753375": "Check the highlighted details and try again.",
+  "@6638645340229753375": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts",
+      "src/app/features/account-settings/profile/profile.page.ts"
+    ]
+  },
+  "978287517643138168": "Unable to update two-factor authentication. Try again.",
+  "@978287517643138168": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts",
+      "src/app/features/account-settings/profile/profile.page.ts"
+    ]
+  },
+  "460799937634193265": "Something went wrong.",
+  "@460799937634193265": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts",
+      "src/app/features/account-settings/account-settings.page.ts",
+      "src/app/features/account-settings/api-keys/api-keys.page.ts",
+      "src/app/features/account-settings/profile/profile.page.ts",
+      "src/app/features/shared/board-members-menu.popover.ts"
+    ]
+  },
+  "1515886979951192172": "Unable to change your password. Try again.",
+  "@1515886979951192172": {
+    "x-files": [
+      "src/app/features/account-settings/account-security/account-security.page.ts"
+    ]
+  },
   "5247417012054982935": "Settings sections",
   "@5247417012054982935": {
     "x-files": [
@@ -3506,6 +3755,21 @@
   },
   "4915431133669985304": "Profile",
   "@4915431133669985304": {
+    "description": "Settings tab",
+    "x-files": [
+      "src/app/features/account-settings/account-settings.page.html"
+    ]
+  },
+  "8878700331247603166": "Security",
+  "@8878700331247603166": {
+    "description": "Settings tab",
+    "x-files": [
+      "src/app/features/account-settings/account-settings.page.html",
+      "src/app/features/account-settings/integrations/integrations.page.html"
+    ]
+  },
+  "8951128623878467862": "Preferences",
+  "@8951128623878467862": {
     "description": "Settings tab",
     "x-files": [
       "src/app/features/account-settings/account-settings.page.html"
@@ -3553,14 +3817,6 @@
     "description": "Settings tab",
     "x-files": [
       "src/app/features/account-settings/account-settings.page.html"
-    ]
-  },
-  "8878700331247603166": "Security",
-  "@8878700331247603166": {
-    "description": "Settings tab",
-    "x-files": [
-      "src/app/features/account-settings/account-settings.page.html",
-      "src/app/features/account-settings/integrations/integrations.page.html"
     ]
   },
   "4944372417149760037": "Integrations",
@@ -4411,15 +4667,6 @@
       "src/app/features/account-settings/account-settings.page.ts"
     ]
   },
-  "460799937634193265": "Something went wrong.",
-  "@460799937634193265": {
-    "x-files": [
-      "src/app/features/account-settings/account-settings.page.ts",
-      "src/app/features/account-settings/api-keys/api-keys.page.ts",
-      "src/app/features/account-settings/profile/profile.page.ts",
-      "src/app/features/shared/board-members-menu.popover.ts"
-    ]
-  },
   "8208296259801383237": "AI agent connection",
   "@8208296259801383237": {
     "description": "Settings section heading",
@@ -4876,28 +5123,6 @@
     "x-files": [
       "src/app/features/account-settings/integrations/integrations.page.ts",
       "src/app/features/account-settings/storage/storage.page.ts"
-    ]
-  },
-  "5554528553553249088": "Show password",
-  "@5554528553553249088": {
-    "description": "Button — reveal the typed password",
-    "x-files": [
-      "src/app/features/account-settings/integrations/integrations.page.ts",
-      "src/app/features/account-settings/profile/profile.page.ts",
-      "src/app/features/auth/login.page.ts",
-      "src/app/features/auth/reset-password.page.ts",
-      "src/app/features/auth/signup.page.ts"
-    ]
-  },
-  "1446670643492611810": "Hide password",
-  "@1446670643492611810": {
-    "description": "Button — mask the typed password",
-    "x-files": [
-      "src/app/features/account-settings/integrations/integrations.page.ts",
-      "src/app/features/account-settings/profile/profile.page.ts",
-      "src/app/features/auth/login.page.ts",
-      "src/app/features/auth/reset-password.page.ts",
-      "src/app/features/auth/signup.page.ts"
     ]
   },
   "342920577372913915": "Notification channels",
@@ -5518,6 +5743,50 @@
       "src/app/shared/confirm-dialog.component.ts"
     ]
   },
+  "8423785748220550395": "Card keys",
+  "@8423785748220550395": {
+    "description": "Settings section heading",
+    "x-files": [
+      "src/app/features/account-settings/preferences/preferences.page.html",
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "9164994717035046527": "Learn more about card keys",
+  "@9164994717035046527": {
+    "x-files": [
+      "src/app/features/account-settings/preferences/preferences.page.html"
+    ]
+  },
+  "1836942362379485329": "Show card keys",
+  "@1836942362379485329": {
+    "x-files": [
+      "src/app/features/account-settings/preferences/preferences.page.html"
+    ]
+  },
+  "3413180784901374143": "Card keys are short references like KAN-123 that identify a card. Turn this off to hide them from view across the app.",
+  "@3413180784901374143": {
+    "x-files": [
+      "src/app/features/account-settings/preferences/preferences.page.html"
+    ]
+  },
+  "640179378990663901": "Learn more about the scratchpad",
+  "@640179378990663901": {
+    "x-files": [
+      "src/app/features/account-settings/preferences/preferences.page.html"
+    ]
+  },
+  "2227162364501282731": "Show scratchpad",
+  "@2227162364501282731": {
+    "x-files": [
+      "src/app/features/account-settings/preferences/preferences.page.html"
+    ]
+  },
+  "57119331648237355": "Keep the scratchpad button available in the app header. Turn this off if you do not use the scratchpad.",
+  "@57119331648237355": {
+    "x-files": [
+      "src/app/features/account-settings/preferences/preferences.page.html"
+    ]
+  },
   "4703848376604347254": "Profile picture",
   "@4703848376604347254": {
     "description": "Settings section heading",
@@ -5684,44 +5953,6 @@
       "src/app/features/account-settings/profile/profile.page.html"
     ]
   },
-  "8423785748220550395": "Card keys",
-  "@8423785748220550395": {
-    "description": "Settings section heading",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html",
-      "src/app/features/workspace-settings/general/general.page.html"
-    ]
-  },
-  "1836942362379485329": "Show card keys",
-  "@1836942362379485329": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "3413180784901374143": "Card keys are short references like KAN-123 that identify a card. Turn this off to hide them from view across the app.",
-  "@3413180784901374143": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "640179378990663901": "Learn more about the scratchpad",
-  "@640179378990663901": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "2227162364501282731": "Show scratchpad",
-  "@2227162364501282731": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "57119331648237355": "Keep the scratchpad button available in the app header. Turn this off if you do not use the scratchpad.",
-  "@57119331648237355": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
   "8440128775129354214": "Privacy",
   "@8440128775129354214": {
     "description": "Settings section heading",
@@ -5767,187 +5998,6 @@
       "src/app/features/account-settings/profile/profile.page.html"
     ]
   },
-  "9178182467454450952": "Confirm",
-  "@9178182467454450952": {
-    "description": "Button",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "3892825090402620438": "Two-factor authentication",
-  "@3892825090402620438": {
-    "description": "Settings section heading",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html",
-      "src/app/features/account-settings/security/security.page.html"
-    ]
-  },
-  "2625858903721573648": "Protect fresh sign-ins with an authenticator app or a one-time recovery code.",
-  "@2625858903721573648": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "6523025057420027402": "Learn more about account security",
-  "@6523025057420027402": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "5340498030552368470": "Current password",
-  "@5340498030552368470": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "4379830886284362842": "Set up authenticator",
-  "@4379830886284362842": {
-    "description": "Button",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "3503989317694521185": "Scan the QR code, or enter {$START_TAG_CODE}{$SECRET}{$CLOSE_TAG_CODE} manually.",
-  "@3503989317694521185": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "4948440289765392916": "Authenticator setup QR code",
-  "@4948440289765392916": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html",
-      "src/app/features/auth/login.page.html"
-    ]
-  },
-  "703309951700807906": "Two-factor authentication is enabled.",
-  "@703309951700807906": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "2531964555886899487": "Authenticator or recovery code",
-  "@2531964555886899487": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html",
-      "src/app/features/auth/login.page.html"
-    ]
-  },
-  "566903034361052049": "New recovery codes",
-  "@566903034361052049": {
-    "description": "Button",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "9187855490716817910": "Disable",
-  "@9187855490716817910": {
-    "description": "Button: turn off two-factor authentication",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "2060329913662056999": "Save these recovery codes now. They will not be shown again.",
-  "@2060329913662056999": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "6309828574111583895": "Change password",
-  "@6309828574111583895": {
-    "description": "Settings section heading",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "738695200650034928": "You'll be signed out from all other sessions after changing.",
-  "@738695200650034928": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "3588415639242079458": "New password",
-  "@3588415639242079458": {
-    "description": "Field label",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html",
-      "src/app/features/auth/reset-password.page.html"
-    ]
-  },
-  "8656126574213649581": "Confirm new password",
-  "@8656126574213649581": {
-    "description": "Field label",
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.html"
-    ]
-  },
-  "8544363588102773420": "Current password is required.",
-  "@8544363588102773420": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "143113787714930934": "New password is required.",
-  "@143113787714930934": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "1934494178293053019": "New password must be at least 8 characters.",
-  "@1934494178293053019": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "2482069944964160970": "Confirm new password is required.",
-  "@2482069944964160970": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "6932646825567072548": "Confirm new password must be at least 8 characters.",
-  "@6932646825567072548": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "7404895855168454876": "New password and confirmation do not match.",
-  "@7404895855168454876": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "1489758710743967189": "Enter your current password to set up an authenticator.",
-  "@1489758710743967189": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "7064024771356744938": "Enter the six-digit code from your authenticator app.",
-  "@7064024771356744938": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts",
-      "src/app/features/auth/login.page.ts"
-    ]
-  },
-  "9121424381282805046": "Enter your current password.",
-  "@9121424381282805046": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "8782487788877276260": "Enter an authenticator or recovery code.",
-  "@8782487788877276260": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "3265029579725173281": "Password changed. You'll be signed out on the next refresh.",
-  "@3265029579725173281": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
   "4719486649519277241": "Use a PNG, JPEG, or WEBP image.",
   "@4719486649519277241": {
     "x-files": [
@@ -5968,36 +6018,6 @@
   },
   "6352112932746199727": "Cropped avatar must be 2MB or smaller.",
   "@6352112932746199727": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "3550768065770727784": "That verification code is incorrect. Try again.",
-  "@3550768065770727784": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "7704379049286251361": "Your current password is incorrect.",
-  "@7704379049286251361": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "6638645340229753375": "Check the highlighted details and try again.",
-  "@6638645340229753375": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "978287517643138168": "Unable to update two-factor authentication. Try again.",
-  "@978287517643138168": {
-    "x-files": [
-      "src/app/features/account-settings/profile/profile.page.ts"
-    ]
-  },
-  "1515886979951192172": "Unable to change your password. Try again.",
-  "@1515886979951192172": {
     "x-files": [
       "src/app/features/account-settings/profile/profile.page.ts"
     ]

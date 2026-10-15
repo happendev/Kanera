@@ -14,6 +14,8 @@ All notable changes to Kanera are documented here.
 
 ### Changed
 
+- Account settings now have a Security page for two-factor authentication and password changes, and a Preferences page for Card Keys and Scratchpad visibility, with links to both guides.
+
 - Plain text attachments (.txt, .log) now open in the preview viewer like images, PDFs and Markdown instead of downloading.
 
 - Table view on tablets now stays a real table, with column headers and a pinned Title column you scroll sideways from, instead of stacking every row into a card. Only phones stack.

@@ -1,0 +1,26 @@
+      <div class="settings-section">
+        <h3 class="settings-section-title"><i class="ti ti-hash"></i><span i18n="Settings section heading">Card keys</span></h3>
+        <k-docs-link path="cards" fragment="card-keys-and-links" label="Learn more about card keys" i18n-label />
+        <label class="push-toggle-row">
+          <input type="checkbox" [checked]="settings.user()?.showCardKeys ?? true" (change)="settings.setShowCardKeys($any($event.target).checked)" [disabled]="settings.cardKeysSaving()" />
+          <span class="push-toggle-copy">
+            <span class="push-toggle-title" i18n>Show card keys</span>
+            <span class="push-toggle-help" i18n>Card keys are short references like KAN-123 that identify a card. Turn this off to hide them from view across the app.</span>
+          </span>
+        </label>
+        @if (settings.cardKeysError()) { <p class="form-error">{{ settings.cardKeysError() }}</p> }
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title"><i class="ti ti-notes"></i><span i18n="Settings section heading">Scratchpad</span></h3>
+        <k-docs-link path="scratchpad" label="Learn more about the scratchpad" i18n-label />
+        <label class="push-toggle-row">
+          <input type="checkbox" [checked]="settings.user()?.showScratchpad ?? true" (change)="settings.setShowScratchpad($any($event.target).checked)" [disabled]="settings.scratchpadVisibilitySaving()" />
+          <span class="push-toggle-copy">
+            <span class="push-toggle-title" i18n>Show scratchpad</span>
+            <span class="push-toggle-help" i18n>Keep the scratchpad button available in the app header. Turn this off if you do not use the scratchpad.</span>
+          </span>
+        </label>
+        @if (settings.scratchpadVisibilityError()) { <p class="form-error">{{ settings.scratchpadVisibilityError() }}</p> }
+      </div>
+
