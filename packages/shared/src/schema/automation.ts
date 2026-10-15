@@ -1,21 +1,15 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, index, integer, jsonb, numeric, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { valueIn } from "./_value-check.js";
-import { cards, type CardDueDateSlot } from "./card.js";
+import type { AutomationActionBody, AutomationTriggerCustomFieldValueDto } from "../dto/automations.js";
+import { cards } from "./card.js";
 import { lists } from "./list.js";
 import { workspaces } from "./workspace.js";
 
 export const AUTOMATION_TRIGGER_TYPES = ["card_enters_list", "card_leaves_list", "due_date_arrives", "due_date_approaching", "card_becomes_inactive", "card_in_progress_too_long", "all_checklist_items_complete", "card_assigned_to_user", "card_marked_complete", "card_label_set", "custom_field_value_changed"] as const;
 export type AutomationTriggerType = (typeof AUTOMATION_TRIGGER_TYPES)[number];
 
-export type AutomationTriggerCustomFieldValue =
-  | { kind: "text"; text: string }
-  | { kind: "number"; number: number }
-  | { kind: "checkbox"; checked: boolean }
-  | { kind: "date"; date: string }
-  | { kind: "url"; url: string }
-  | { kind: "select"; optionId: string }
-  | { kind: "user"; userId: string };
+export type AutomationTriggerCustomFieldValue = AutomationTriggerCustomFieldValueDto;
 
 export const AUTOMATION_ACTION_TYPES = [
   "add_labels",
@@ -37,37 +31,14 @@ export const AUTOMATION_ACTION_TYPES = [
 ] as const;
 export type AutomationActionType = (typeof AUTOMATION_ACTION_TYPES)[number];
 
+type MoveActionConfig = Extract<AutomationActionBody, { type: "move_to_list" }>["config"];
+
+// Persisted rows predate the placement default, and empty configs remain valid historical data.
+// The request DTO owns the action vocabulary; execution and editor adapters retain their own
+// compatibility defaults rather than validating stored JSON as a new creation request.
 export type AutomationActionConfig =
-  | { labelIds: string[] }
-  | { userIds: string[] }
-  | { templateIds: string[] }
-  | { offsetDays: number; slot: CardDueDateSlot }
-  | { completed: boolean }
-  | { listId: string; placement?: "top" | "bottom" }
-  | {
-      fieldId: string;
-      onlyIfEmpty: boolean;
-      value:
-        | { kind: "text"; text: string }
-        | { kind: "text_current_date"; format: "date" | "month" | "month_long_short_year" | "month_long_year" | "datetime" }
-        | { kind: "number"; number: number }
-        | { kind: "date"; source: "fixed"; date: string }
-        | { kind: "date"; source: "current" }
-        | { kind: "checkbox"; checked: boolean }
-        | { kind: "select"; optionIds: string[] }
-        | { kind: "user"; userIds: string[] }
-        // Copy the current value of another custom field on the same card. The source
-        // field must be the same type as the target; the value is resolved per card at
-        // apply time, not stored here.
-        | { kind: "field"; sourceFieldId: string };
-    }
-  // post_comment: Markdown with `{{card.title}}`-style placeholders resolved per card at run time
-  // (see AUTOMATION_COMMENT_TEMPLATE_VARIABLES in the automations lib).
-  | { template: string }
-  // call_webhook: a `webhook_endpoint` row in the same workspace. Referencing the endpoint rather than
-  // a raw URL is deliberate: the endpoint already owns the signing secret, the SSRF-checked URL, the
-  // enabled flag, and the delivery log, so an automation never has to duplicate any of that.
-  | { endpointId: string }
+  | Exclude<AutomationActionBody, { type: "move_to_list" | "clear_due_date" | "move_to_top" | "move_to_bottom" }>["config"]
+  | (Omit<MoveActionConfig, "placement"> & Partial<Pick<MoveActionConfig, "placement">>)
   | Record<string, never>;
 
 export const automations = pgTable(

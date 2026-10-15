@@ -42,9 +42,12 @@ export class NotificationsService {
   private readonly sockets = inject(SocketService);
   private readonly mentionSound = inject(MentionSoundService);
 
-  readonly items = signal<NotificationRow[]>([]);
+  readonly items = computed(() => this.feedItems(this.feedMode()));
   readonly unreadCount = signal<number>(0);
-  readonly nextCursor = signal<string | null>(null);
+  readonly nextCursor = computed(() => {
+    const mode = this.feedMode();
+    return mode === "agent" ? this.agentNextCursor() : mode === "all" ? this.allNextCursor() : this.unreadNextCursor();
+  });
   readonly hasMore = computed(() => this.nextCursor() !== null);
   readonly loading = signal<boolean>(false);
   readonly loadError = signal<string | null>(null);
@@ -167,7 +170,6 @@ export class NotificationsService {
     }
     this.initialised.set(false);
     this.feedMode.set("unread");
-    this.items.set([]);
     this.unreadItems.set([]);
     this.allItems.set([]);
     this.agentItems.set([]);
@@ -177,7 +179,6 @@ export class NotificationsService {
     this.boardUnreadCounts.set({});
     this.organisationUnreadCounts.set({});
     this.cardUnreadCounts.set({});
-    this.nextCursor.set(null);
     this.unreadNextCursor.set(null);
     this.allNextCursor.set(null);
     this.loadError.set(null);
@@ -343,7 +344,6 @@ export class NotificationsService {
   async setFeedMode(mode: NotificationFeedMode): Promise<void> {
     if (this.feedMode() === mode) return;
     this.feedMode.set(mode);
-    this.syncActiveFeed();
     this.groupCounts.set({});
     await this.loadFirstPage();
   }
@@ -446,13 +446,6 @@ export class NotificationsService {
       this.unreadItems.set(items.filter((n) => !n.readAt));
       this.unreadNextCursor.set(nextCursor);
     }
-    if (this.feedMode() === mode) this.syncActiveFeed();
-  }
-
-  private syncActiveFeed(): void {
-    const mode = this.feedMode();
-    this.items.set(this.feedItems(mode));
-    this.nextCursor.set(mode === "agent" ? this.agentNextCursor() : mode === "all" ? this.allNextCursor() : this.unreadNextCursor());
   }
 
   private clearFeeds(): void {
@@ -464,7 +457,6 @@ export class NotificationsService {
     this.allNextCursor.set(null);
     this.agentNextCursor.set(null);
     this.groupCounts.set({});
-    this.syncActiveFeed();
   }
 
   async setBoardFilter(boardId: string | null): Promise<void> {
@@ -590,7 +582,6 @@ export class NotificationsService {
         this.incrementBoardUnreadCardCount(target.boardId, target.cardId);
         this.incrementCardUnreadCount(target.cardId);
       }
-      this.syncActiveFeed();
       this.unreadCount.update((c) => c + targets.length);
       this.adjustAgentUnread(targets.filter(isAgentNotification).length);
     }
@@ -610,7 +601,6 @@ export class NotificationsService {
     } catch {
       if (session !== this.sessionVersion) return;
       this.upsertNotificationInFeeds({ ...target, readAt: previousReadAt });
-      this.syncActiveFeed();
       this.unreadCount.update((c) => Math.max(0, c - 1));
       this.decrementBoardUnreadCardCount(target.boardId, target.cardId);
       this.decrementCardUnreadCount(target.cardId);
@@ -690,7 +680,6 @@ export class NotificationsService {
       this.allItems.update(markCardRead);
       this.agentItems.update(markCardRead);
       this.unreadItems.update((current) => current.filter((n) => n.cardId !== cardId));
-      this.syncActiveFeed();
       this.unreadCount.update((count) => Math.max(0, count - unreadDelta));
       this.decrementBoardUnreadCount(boardId);
       this.clearCardUnreadCount(cardId);
@@ -934,9 +923,6 @@ export class NotificationsService {
     const idSet = new Set(ids);
     const readAtDate = new Date(readAt);
     const affected = this.knownNotifications(ids).filter((n) => !n.readAt);
-    // Mutate only the canonical feeds and project into `items` via
-    // syncActiveFeed. Updating `items` separately let the rendered order drift
-    // from allItems, so the next sync would snap just-read rows to the top.
     // In-place map (no reorder); rows not in a feed reappear on the next fetch.
     const markRead = (current: NotificationRow[]) => current
       .map((n) => (idSet.has(n.id) && !n.readAt ? { ...n, readAt: readAtDate } : n))
@@ -944,7 +930,6 @@ export class NotificationsService {
     this.allItems.update(markRead);
     this.agentItems.update(markRead);
     this.unreadItems.update((current) => current.filter((n) => !idSet.has(n.id)));
-    this.syncActiveFeed();
     for (const row of affected) {
       this.decrementBoardUnreadCardCount(row.boardId, row.cardId);
       this.decrementCardUnreadCount(row.cardId);
@@ -967,7 +952,6 @@ export class NotificationsService {
       this.incrementBoardUnreadCardCount(row.boardId, row.cardId);
       this.incrementCardUnreadCount(row.cardId);
     }
-    this.syncActiveFeed();
     if (affected.length > 0) {
       this.unreadCount.update((c) => c + affected.length);
       this.adjustAgentUnread(affected.filter(isAgentNotification).length);
@@ -1038,12 +1022,10 @@ export class NotificationsService {
     const readNotification = { ...notification, readAt };
     if (this.includeRead() && this.isVisibleNotification(readNotification)) {
       this.upsertNotificationInFeeds(readNotification);
-      this.syncActiveFeed();
     } else {
       this.agentItems.update((current) => current.filter((n) => n.id !== notification.id));
       this.allItems.update((current) => current.filter((n) => n.id !== notification.id));
       this.unreadItems.update((current) => current.filter((n) => n.id !== notification.id));
-      this.syncActiveFeed();
     }
     this.requestActiveCardRead(notification.cardId, notification.boardId ?? activeBoardId);
     return true;
@@ -1187,7 +1169,6 @@ export class NotificationsService {
         this.receivedNotificationIds.add(notification.id);
         if (visible) {
           this.upsertNotificationInFeeds(notification);
-          this.syncActiveFeed();
         }
         if (!notification.readAt && !alreadyKnown) {
           // Badge counts are global app state, not panel-list state. A board or
@@ -1217,7 +1198,6 @@ export class NotificationsService {
           this.agentItems.update((current) => current.filter((n) => n.id !== notification.id));
           this.allItems.update((current) => current.filter((n) => n.id !== notification.id));
           this.unreadItems.update((current) => current.filter((n) => n.id !== notification.id));
-          this.syncActiveFeed();
           if (!notification.readAt) void this.refreshUnreadCount().catch(() => undefined);
           void this.refreshBoardUnreadCounts().catch(() => undefined);
           void this.refreshCardUnreadCounts().catch(() => undefined);
@@ -1238,7 +1218,6 @@ export class NotificationsService {
           inserted = true;
         }
         this.upsertNotificationInFeeds(previous ? { ...previous, ...notification } : notification);
-        this.syncActiveFeed();
         if (!notification.readAt) {
           void this.refreshUnreadCount().catch(() => undefined);
         }
@@ -1262,7 +1241,6 @@ export class NotificationsService {
         this.agentItems.update((current) => current.filter((notification) => !deletedIds.has(notification.id)));
         this.allItems.update((current) => current.filter((notification) => !deletedIds.has(notification.id)));
         this.unreadItems.update((current) => current.filter((notification) => !deletedIds.has(notification.id)));
-        this.syncActiveFeed();
         // A sibling tab may not have loaded the deleted rows, so the IDs alone
         // cannot safely produce count deltas. Re-read every badge aggregate.
         void this.refreshUnreadCount().catch(() => undefined);

@@ -19,9 +19,11 @@ Durable invariants. Code anywhere in the stack may rely on these, so comment at 
 you do:
 
 - Lists and custom fields are workspace-scoped, not board-scoped.
-- Workspace membership grants access to every board; `board_members` grants cross-organisation guest
-  access to specific boards.
-- A user belongs to exactly one organisation (`clients` row) and email is globally unique.
+- Ordinary users access board content through `board_members`, including cross-organisation guests.
+  Workspace and organisation admin authority materializes pinned board memberships; organisation
+  owners/admins also have an explicit access override. Workspace membership alone does not grant board access.
+- A user can belong to multiple organisations through `client_members`; email is globally unique.
+  `users.clientId` remains the original storage/media anchor, while `activeClientId` selects the default organisation.
 - Onboarding runs when `me.hasWorkspace === false`.
 - Every user-facing string is translated (en-US, en-GB source, es, pt-BR, fr, de, ja, nl, nb, zh-CN, zh-TW). The account's
   `users.locale` decides the language of the web app, emails and push.

@@ -1311,6 +1311,31 @@ describe("WorkspaceSettingsPage", () => {
     expect(component.acceptedGuests()[0]?.assignedItemsOnly).toBe(false);
   });
 
+  it("keeps legacy editor coercions distinct from execution defaults", async () => {
+    await render();
+    const component = fixture.componentInstance;
+    const legacyActions = [
+      { type: "add_labels", config: { labelId: "label-1" } },
+      { type: "remove_labels", config: undefined, labelId: "label-2" },
+      { type: "add_assignees", config: { userId: "user-1" } },
+      { type: "remove_assignees", config: { userIds: ["user-2", "", 123] } },
+      { type: "set_completion", config: {} },
+      { type: "set_completion", config: { completed: "false" } },
+      { type: "set_due_date", config: { offsetDays: "6", slot: "unknown" } },
+    ].map((action, index) => ({ ...automation().actions[0], ...action, id: `legacy-${index}` })) as WireAutomation["actions"];
+    component.automations.set([automation({ actions: legacyActions })]);
+
+    expect(component.automationDraftActions("automation-1")).toEqual([
+      { type: "add_labels", config: { labelIds: ["label-1"] } },
+      { type: "remove_labels", config: { labelIds: ["label-2"] } },
+      { type: "add_assignees", config: { userIds: ["user-1"] } },
+      { type: "remove_assignees", config: { userIds: ["user-2"] } },
+      { type: "set_completion", config: { completed: true } },
+      { type: "set_completion", config: { completed: false } },
+      { type: "set_due_date", config: { offsetDays: 6, slot: "anyTime" } },
+    ]);
+  });
+
   it("keeps unfinished automation actions as unsaved drafts", async () => {
     const { api } = await render();
     const component = fixture.componentInstance;

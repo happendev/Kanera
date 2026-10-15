@@ -1,3 +1,11 @@
+import {
+  DEFAULT_WORK_COMPLETION,
+  WORK_COMPLETION_FILTERS,
+  WORK_CUSTOM_FIELD_CONDITION_OPS,
+  WORK_DISPLAY_MODES,
+  WORK_GROUP_BY_VALUES,
+  WORK_SORT_VALUES,
+} from "@kanera/shared/work-vocabulary";
 import type {
   WorkCatalog,
   WorkCustomFieldCondition,
@@ -17,32 +25,12 @@ import { DUE_BUCKET_ORDER } from "../board/table-view/table-view.types";
 // choice, so the bump discards them and lets existing users pick up the new default; from here on a
 // deliberate "Hide completed" persists.
 const GLOBAL_WORK_PREFERENCE_VERSION = 2;
-const GROUPS: WorkGroupBy[] = [
-  "organisation", "workspace", "board", "assignee", "list", "dueDate", "completion", "none",
-];
-const SORTS: WorkSort[] = [
-  "dueAsc", "dueDesc", "titleAsc", "titleDesc", "createdAsc", "createdDesc", "updatedAsc", "updatedDesc",
-  "inProgressAsc", "inProgressDesc",
-];
-const DISPLAYS: WorkDisplayMode[] = ["board", "table", "calendar", "priorities", "history", "summary"];
-const COMPLETIONS: WorkFilters["completion"][] = ["activeAndRecentlyCompleted", "active", "completed", "all"];
-/**
- * Mirrors DEFAULT_WORK_COMPLETION in `@kanera/shared/dto`. The vocabulary is duplicated here — as
- * GROUPS/SORTS/DISPLAYS above are — because importing a *value* from the dto package would pull zod
- * into the web bundle. Typing against `WorkFilters["completion"]` keeps the two from drifting: a
- * rename in the shared enum fails to compile here.
- */
-export const DEFAULT_COMPLETION: WorkFilters["completion"] = "activeAndRecentlyCompleted";
-const CUSTOM_FIELD_OPERATORS: WorkCustomFieldCondition["op"][] = [
-  "contains", "equals", "eq", "neq", "gt", "gte", "lt", "lte", "on", "before", "after", "between",
-  "checked", "unchecked", "isAnyOf", "isNoneOf", "isEmpty", "isNotEmpty",
-];
+export { DEFAULT_WORK_COMPLETION as DEFAULT_COMPLETION } from "@kanera/shared/work-vocabulary";
 
 export type GlobalWorkPreference = {
   definition: WorkViewDefinition;
   selectedViewId: string | null;
   drilldownLabel: string | null;
-  collapsedTableGroupKeys?: string[];
   collapsedHistoryDayKeys?: string[];
   collapsedChecklistGroupIds?: string[];
   /**
@@ -89,7 +77,7 @@ function customFieldConditions(value: unknown): WorkCustomFieldCondition[] {
       typeof workspaceId !== "string"
       || typeof fieldId !== "string"
       || typeof op !== "string"
-      || !CUSTOM_FIELD_OPERATORS.includes(op as WorkCustomFieldCondition["op"])
+      || !WORK_CUSTOM_FIELD_CONDITION_OPS.includes(op as WorkCustomFieldCondition["op"])
     ) return [];
     return [{
       workspaceId,
@@ -160,11 +148,11 @@ function storedDefinition(value: unknown): WorkViewDefinition | null {
     || !filters
     || typeof scope["allAccessible"] !== "boolean"
     || typeof groupBy !== "string"
-    || !GROUPS.includes(groupBy as WorkGroupBy)
+    || !WORK_GROUP_BY_VALUES.includes(groupBy as WorkGroupBy)
     || typeof sort !== "string"
-    || !SORTS.includes(sort as WorkSort)
+    || !WORK_SORT_VALUES.includes(sort as WorkSort)
     || typeof display !== "string"
-    || !DISPLAYS.includes(display as WorkDisplayMode)
+    || !WORK_DISPLAY_MODES.includes(display as WorkDisplayMode)
   ) return null;
   const completion = filters["completion"];
   const portfolioDays = definition["portfolioDays"];
@@ -174,9 +162,9 @@ function storedDefinition(value: unknown): WorkViewDefinition | null {
     listIds: stringArray(filters["listIds"], 200),
     labelIds: stringArray(filters["labelIds"], 200),
     customFieldConditions: customFieldConditions(filters["customFieldConditions"]),
-    completion: COMPLETIONS.includes(completion as WorkFilters["completion"])
+    completion: WORK_COMPLETION_FILTERS.includes(completion as WorkFilters["completion"])
       ? completion as WorkFilters["completion"]
-      : DEFAULT_COMPLETION,
+      : DEFAULT_WORK_COMPLETION,
     unassignedOnly: filters["unassignedOnly"] === true,
     inactiveOnly: filters["inactiveOnly"] === true,
     inProgressOnly: filters["inProgressOnly"] === true,
@@ -240,7 +228,6 @@ export function readGlobalWorkPreference(
       drilldownLabel: typeof value["drilldownLabel"] === "string"
         ? value["drilldownLabel"].slice(0, 250)
         : null,
-      collapsedTableGroupKeys: stringArray(value["collapsedTableGroupKeys"]),
       collapsedHistoryDayKeys: stringArray(value["collapsedHistoryDayKeys"], 60),
       collapsedChecklistGroupIds: stringArray(value["collapsedChecklistGroupIds"], 5),
       ...(typeof value["upNextPanelOpen"] === "boolean"
@@ -274,7 +261,6 @@ export function writeGlobalWorkPreference(
       definition,
       selectedViewId: preference.selectedViewId,
       drilldownLabel: preference.drilldownLabel,
-      collapsedTableGroupKeys: preference.collapsedTableGroupKeys ?? [],
       collapsedHistoryDayKeys: preference.collapsedHistoryDayKeys ?? [],
       collapsedChecklistGroupIds: preference.collapsedChecklistGroupIds ?? [],
       // Tri-state, matching the read: only a real choice is stored, so "never chosen" keeps

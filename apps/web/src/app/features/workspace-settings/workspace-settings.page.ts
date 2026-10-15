@@ -2402,28 +2402,20 @@ export class WorkspaceSettingsPage implements OnDestroy {
       triggerDaysBefore: automation.triggerType === "due_date_approaching" ? automation.triggerDaysBefore : null,
       actions: automation.actions.map((action) => {
         const body = this.automationActionBody(action);
-        return { ...action, type: body.type, config: body.config as WireAutomationAction["config"] };
+        return { ...action, ...body };
       }),
     };
   }
 
   private automationActionBody(action: WireAutomationAction): AutomationActionBody {
     const config = this.automationActionConfig(action);
-    if (action.type === "add_labels") {
+    if (action.type === "add_labels" || action.type === "remove_labels") {
       const labelIds = this.stringList(config["labelIds"] ?? config["labelId"]);
-      return { type: "add_labels", config: { labelIds } };
+      return { type: action.type, config: { labelIds } };
     }
-    if (action.type === "remove_labels") {
-      const labelIds = this.stringList(config["labelIds"] ?? config["labelId"]);
-      return { type: "remove_labels", config: { labelIds } };
-    }
-    if (action.type === "add_assignees") {
+    if (action.type === "add_assignees" || action.type === "remove_assignees") {
       const userIds = this.stringList(config["userIds"] ?? config["userId"]);
-      return { type: "add_assignees", config: { userIds } };
-    }
-    if (action.type === "remove_assignees") {
-      const userIds = this.stringList(config["userIds"] ?? config["userId"]);
-      return { type: "remove_assignees", config: { userIds } };
+      return { type: action.type, config: { userIds } };
     }
     if (action.type === "apply_checklists") {
       const templateIds = this.stringList(config["templateIds"] ?? config["templateId"]);

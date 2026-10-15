@@ -45,8 +45,8 @@ import {
   duplicateCustomFieldValues,
   duplicateLabelIds,
   emitDuplicatedCardIntoBoard,
-  loadChecklistsForCard,
 } from "../../modules/cards/duplicate-card.js";
+import { loadChecklistsForCard } from "../checklist-rows.js";
 import { mirrorActor } from "./actor.js";
 import { emitMirrorMetadataToBoards } from "./events.js";
 import { toWireCard } from "../wire-card.js";

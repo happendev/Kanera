@@ -13,6 +13,7 @@ import { SERVER_EVENTS } from "@kanera/shared/events";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient, ApiError } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
+import { viewPreferenceKey } from "../../core/browser/browser-contracts";
 import { OfflineCacheService } from "../../core/offline/offline-cache.service";
 import { SocketService } from "../../core/realtime/socket.service";
 import { CardDragCoordinator } from "../board/card-drag-coordinator.service";
@@ -966,7 +967,12 @@ describe("GlobalWorkState", () => {
     writeGlobalWorkPreference(userId, "my", {
       selectedViewId: null,
       drilldownLabel: null,
-      definition: { ...cachedDefinition, groupBy: "assignee", sort: "titleDesc", table },
+      definition: {
+        ...cachedDefinition,
+        groupBy: "assignee",
+        sort: "titleDesc",
+        table: { ...table, collapsedGroupKeys: [...table.collapsedGroupKeys, "assignee:revoked-user"] },
+      },
     });
     const { state } = setup({
       apiFails: true,
@@ -985,6 +991,8 @@ describe("GlobalWorkState", () => {
 
     expect(state.definition()).toMatchObject({ groupBy: "assignee", sort: "titleDesc" });
     expect(state.definition().table).toEqual(table);
+    expect(state.collapsedTableGroupKeys()).toEqual(table.collapsedGroupKeys);
+    TestBed.tick();
     expect(readGlobalWorkPreference(userId, "my")?.definition).toMatchObject({
       groupBy: "assignee",
       sort: "titleDesc",
@@ -1291,7 +1299,14 @@ describe("GlobalWorkState", () => {
     const workspaceId = "20000000-0000-4000-8000-000000000001";
     const boardId = "30000000-0000-4000-8000-000000000001";
     const { state } = setup();
+    const storageKey = viewPreferenceKey("definition", `globalWork:${userId}:my`);
+    localStorage.setItem(storageKey, JSON.stringify({
+      version: 2,
+      definition: { ...cachedDefinition, groupBy: "board", table: undefined },
+      collapsedTableGroupKeys: [`board:${boardId}`],
+    }));
     await state.initialize("my");
+    expect(state.collapsedTableGroupKeys()).toEqual([`board:${boardId}`]);
 
     state.setGrouping("board");
     state.setDisplay("board");
@@ -1301,12 +1316,12 @@ describe("GlobalWorkState", () => {
     state.toggleChecklistGroupCollapsed("checklist:overdue");
     TestBed.tick();
 
+    expect(JSON.parse(localStorage.getItem(storageKey)!)).not.toHaveProperty("collapsedTableGroupKeys");
     expect(readGlobalWorkPreference(userId, "my")).toMatchObject({
       definition: {
         collapsedWorkspaceIds: [workspaceId],
         table: { collapsedGroupKeys: [`board:${boardId}`] },
       },
-      collapsedTableGroupKeys: [`board:${boardId}`],
       collapsedHistoryDayKeys: ["2026-07-24"],
       collapsedChecklistGroupIds: ["checklist:overdue"],
     });
@@ -1334,6 +1349,7 @@ describe("GlobalWorkState", () => {
     state.applySavedView(savedView);
     await vi.waitFor(() => expect(state.loading()).toBe(false));
     expect(state.definition().collapsedWorkspaceIds).toEqual([workspaceId]);
+    expect(state.collapsedTableGroupKeys()).toEqual([`board:${boardId}`]);
   });
 
   it("includes the complete table presentation when creating and applying a saved view", async () => {

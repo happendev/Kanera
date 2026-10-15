@@ -1,6 +1,6 @@
 import type { WireAutomation, WireAutomationRunStats, WireCard, WireCardChecklist, WireComment } from "@kanera/shared/events";
 import { inProgressClockOf, SERVER_EVENTS, type InProgressClock } from "@kanera/shared/events";
-import { ACTIVITY_ACTION, automationActions, automationDueDateRuns, automationInactiveRuns, automationInProgressRuns, automationRunStats, automationRuns, automations, boardMembers, boards, cardAssignees, cardCustomFieldValues, cardChecklistItems, cardChecklists, cardLabelAssignments, cardLabels, cards, comments, customFieldOptions, customFields, lists, users, webhookEndpoints, workspaceMembers, workspaces, type ActivityEvent, type Automation, type AutomationAction, type AutomationRunStats, type AutomationTriggerCustomFieldValue, type Card, type CardCustomFieldValue, type CardDueDateSlot, type CustomField, type AutomationTriggerType } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, automationActions, automationDueDateRuns, automationInactiveRuns, automationInProgressRuns, automationRunStats, automationRuns, automations, boardMembers, boards, cardAssignees, cardCustomFieldValues, cardChecklistItems, cardChecklists, cardLabelAssignments, cardLabels, cards, comments, customFieldOptions, customFields, lists, users, webhookEndpoints, workspaceMembers, workspaces, type ActivityEvent, type Automation, type AutomationAction, type AutomationRunStats, type AutomationTriggerCustomFieldValue, type Card, type CardCustomFieldValue, type CustomField, type AutomationTriggerType } from "@kanera/shared/schema";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { db, type Db, type Tx } from "../db.js";
@@ -24,6 +24,7 @@ import { startSweepScheduler } from "./sweep-scheduler.js";
 import { absoluteCardUrl } from "./wire-card.js";
 import { customFieldValueEquals, emptyValueColumns, type CustomFieldValueColumns } from "./custom-fields.js";
 import { clearRemindersOnCompletedCards, emitClearedCardReminders, type ClearedCardReminder } from "./card-follow.js";
+import { executableAutomationAction, type ExecutableAutomationAction } from "./automation-action.js";
 
 interface AutomationEffectMetadata {
   // Automation activity remains system-authored, but user-triggered automation
@@ -267,9 +268,9 @@ async function describeCustomFieldValue(tx: Tx, field: Pick<CustomField, "type">
   return value.valueText ?? value.valueNumber ?? value.valueDate ?? value.valueUrl ?? null;
 }
 
-function customFieldColumnsFromAutomationValue(ctx: AutomationRunContext, action: AutomationAction): CustomFieldValueColumns | null {
-  if (!("value" in action.config)) return null;
-  const value = action.config.value;
+type AutomationFieldValue = NonNullable<ExecutableAutomationAction<"populate_custom_field">["config"]["value"]>;
+
+function customFieldColumnsFromAutomationValue(ctx: AutomationRunContext, value: AutomationFieldValue): CustomFieldValueColumns | null {
   const cols = emptyValueColumns();
   if (value.kind === "text") {
     if (!value.text.trim()) return null;
@@ -359,9 +360,8 @@ async function customFieldColumnsFromSourceField(
   return cols;
 }
 
-function customFieldValueKindMatchesField(field: Pick<CustomField, "type">, action: AutomationAction): boolean {
-  if (!("value" in action.config)) return false;
-  const kind = action.config.value.kind;
+function customFieldValueKindMatchesField(field: Pick<CustomField, "type">, value: AutomationFieldValue): boolean {
+  const kind = value.kind;
   if (kind === "text" || kind === "text_current_date") return field.type === "text";
   if (kind === "number") return field.type === "number";
   if (kind === "date") return field.type === "date";
@@ -521,8 +521,8 @@ async function assignableUserIds(tx: Tx, boardId: string, workspaceId: string, u
   return ids.filter((id) => eligibleSet.has(id));
 }
 
-async function applyLabelsAction(tx: Tx, ctx: AutomationRunContext, action: AutomationAction): Promise<AutomationEffect | null> {
-  const labelIds = "labelIds" in action.config ? action.config.labelIds : [];
+async function applyLabelsAction(tx: Tx, ctx: AutomationRunContext, action: ExecutableAutomationAction<"add_labels" | "remove_labels">): Promise<AutomationEffect | null> {
+  const { labelIds } = action.config;
   const validLabels = await validWorkspaceLabels(tx, ctx.workspaceId, labelIds);
   if (validLabels.length === 0) return null;
   const validIds = validLabels.map((label) => label.id);
@@ -576,8 +576,8 @@ async function applyLabelsAction(tx: Tx, ctx: AutomationRunContext, action: Auto
   return { type: "labelsSet", boardId: ctx.boardId, cardId: ctx.card.id, labelIds: nextIds, activity, suppressNotificationUserId: ctx.triggerActorId };
 }
 
-async function applyAssigneesAction(tx: Tx, ctx: AutomationRunContext, action: AutomationAction): Promise<AutomationEffect | null> {
-  const userIds = "userIds" in action.config ? action.config.userIds : [];
+async function applyAssigneesAction(tx: Tx, ctx: AutomationRunContext, action: ExecutableAutomationAction<"add_assignees" | "remove_assignees">): Promise<AutomationEffect | null> {
+  const { userIds } = action.config;
   const validIds = await assignableUserIds(tx, ctx.boardId, ctx.workspaceId, userIds);
   if (validIds.length === 0) return null;
   const current = await tx.select({ userId: cardAssignees.userId }).from(cardAssignees).where(eq(cardAssignees.cardId, ctx.card.id));
@@ -620,8 +620,8 @@ async function applyAssigneesAction(tx: Tx, ctx: AutomationRunContext, action: A
   return { type: "assigneesSet", boardId: ctx.boardId, cardId: ctx.card.id, assigneeIds: nextIds, activity, suppressNotificationUserId: ctx.triggerActorId };
 }
 
-async function applyChecklistsAction(tx: Tx, ctx: AutomationRunContext, action: AutomationAction): Promise<AutomationEffect[]> {
-  const templateIds = "templateIds" in action.config ? action.config.templateIds : [];
+async function applyChecklistsAction(tx: Tx, ctx: AutomationRunContext, action: ExecutableAutomationAction<"apply_checklists">): Promise<AutomationEffect[]> {
+  const { templateIds } = action.config;
   if (templateIds.length === 0) return [];
   // Checklist application is ledgered per card/template, so repeated automation
   // runs do not recreate checklists the user has already received or deleted.
@@ -643,15 +643,15 @@ async function applyChecklistsAction(tx: Tx, ctx: AutomationRunContext, action: 
   }));
 }
 
-async function applyDueDateAction(tx: Tx, ctx: AutomationRunContext, action: AutomationAction): Promise<AutomationEffect | null> {
+async function applyDueDateAction(tx: Tx, ctx: AutomationRunContext, action: ExecutableAutomationAction<"set_due_date" | "clear_due_date">): Promise<AutomationEffect | null> {
   const previousDueDateLocalDate = ctx.card.dueDateLocalDate;
   const previousDueDateSlot = ctx.card.dueDateSlot;
   const timezone = ctx.card.dueDateTimezone || "UTC";
   const next = action.type === "clear_due_date"
     ? { dueDateLocalDate: null, dueDateSlot: null, dueDateTimezone: null }
     : {
-        dueDateLocalDate: addDays(ctx.fireDateLocalDate, "offsetDays" in action.config ? action.config.offsetDays : 0),
-        dueDateSlot: ("slot" in action.config ? action.config.slot : "anyTime") as CardDueDateSlot,
+        dueDateLocalDate: addDays(ctx.fireDateLocalDate, action.config.offsetDays),
+        dueDateSlot: action.config.slot,
         dueDateTimezone: timezone,
       };
   if (
@@ -678,8 +678,8 @@ async function applyDueDateAction(tx: Tx, ctx: AutomationRunContext, action: Aut
   return { type: "cardUpdated", boardId: ctx.boardId, card: toWireCard(card!, ctx.clientId), activity, suppressNotificationUserId: ctx.triggerActorId };
 }
 
-async function applyCompletionAction(tx: Tx, ctx: AutomationRunContext, action: AutomationAction): Promise<AutomationEffect | null> {
-  const completed = "completed" in action.config ? action.config.completed : false;
+async function applyCompletionAction(tx: Tx, ctx: AutomationRunContext, action: ExecutableAutomationAction<"set_completion">): Promise<AutomationEffect | null> {
+  const { completed } = action.config;
   if (Boolean(ctx.card.completedAt) === completed) return null;
   const completedAt = completed ? new Date() : null;
   const [card] = await tx.update(cards).set({ completedAt, updatedAt: new Date() }).where(eq(cards.id, ctx.card.id)).returning();
@@ -700,15 +700,15 @@ async function applyCompletionAction(tx: Tx, ctx: AutomationRunContext, action: 
   return { type: "cardUpdated", boardId: ctx.boardId, card: toWireCard(card!, ctx.clientId), activity, notify: completed, queueLifecycleChanged: true, clearedReminders, suppressNotificationUserId: ctx.triggerActorId };
 }
 
-async function applyMoveAction(tx: Tx, ctx: AutomationRunContext, action: AutomationAction): Promise<AutomationEffect | null> {
+async function applyMoveAction(tx: Tx, ctx: AutomationRunContext, action: ExecutableAutomationAction<"move_to_list" | "move_to_top" | "move_to_bottom">): Promise<AutomationEffect | null> {
   const listId = action.type === "move_to_top" || action.type === "move_to_bottom"
     ? ctx.card.listId
-    : "listId" in action.config ? action.config.listId : null;
+    : action.config.listId;
   const placement = action.type === "move_to_top"
     ? "top"
     : action.type === "move_to_bottom"
       ? "bottom"
-      : "placement" in action.config && action.config.placement === "top" ? "top" : "bottom";
+      : action.config.placement;
   if (!listId) return null;
   if (listId === ctx.card.listId && action.type === "move_to_list" && placement !== "top") return null;
   const [targetList] = await tx
@@ -764,8 +764,8 @@ async function applyMoveAction(tx: Tx, ctx: AutomationRunContext, action: Automa
   };
 }
 
-async function applyPopulateCustomFieldAction(tx: Tx, ctx: AutomationRunContext, action: AutomationAction): Promise<AutomationEffect | null> {
-  const fieldId = "fieldId" in action.config ? action.config.fieldId : null;
+async function applyPopulateCustomFieldAction(tx: Tx, ctx: AutomationRunContext, action: ExecutableAutomationAction<"populate_custom_field">): Promise<AutomationEffect | null> {
+  const { fieldId, value, onlyIfEmpty } = action.config;
   if (!fieldId) return null;
   const [field] = await tx
     .select()
@@ -773,25 +773,24 @@ async function applyPopulateCustomFieldAction(tx: Tx, ctx: AutomationRunContext,
     .where(and(eq(customFields.id, fieldId), eq(customFields.workspaceId, ctx.workspaceId), isNull(customFields.archivedAt)))
     .limit(1);
   if (!field) return null;
-  const value = "value" in action.config ? action.config.value : null;
+  // Preserve target lookup failures from old persisted configs even when their value is missing.
   if (!value) return null;
   // Literal/computed values must statically match the target field type. The "field"
   // (copy from another field) kind is instead validated against the source field loaded
   // below, so it is allowed through here.
-  if (value.kind !== "field" && !customFieldValueKindMatchesField(field, action)) return null;
+  if (value.kind !== "field" && !customFieldValueKindMatchesField(field, value)) return null;
 
   const [currentValue] = await tx
     .select()
     .from(cardCustomFieldValues)
     .where(and(eq(cardCustomFieldValues.cardId, ctx.card.id), eq(cardCustomFieldValues.fieldId, fieldId)))
     .limit(1);
-  const onlyIfEmpty = "onlyIfEmpty" in action.config ? action.config.onlyIfEmpty : true;
   if (onlyIfEmpty && hasCustomFieldValue(field, currentValue)) return null;
 
   const cols =
     value.kind === "field"
       ? await customFieldColumnsFromSourceField(tx, ctx, field, value.sourceFieldId)
-      : customFieldColumnsFromAutomationValue(ctx, action);
+      : customFieldColumnsFromAutomationValue(ctx, value);
   if (!cols) return null;
 
   // Automation configs are long-lived: select options can be archived and users can
@@ -910,8 +909,8 @@ function renderAutomationCommentTemplate(template: string, values: Record<(typeo
   );
 }
 
-async function applyPostCommentAction(tx: Tx, ctx: AutomationRunContext, action: AutomationAction): Promise<AutomationEffect | null> {
-  const template = "template" in action.config && typeof action.config.template === "string" ? action.config.template : "";
+async function applyPostCommentAction(tx: Tx, ctx: AutomationRunContext, action: ExecutableAutomationAction<"post_comment">): Promise<AutomationEffect | null> {
+  const { template } = action.config;
   if (!template.trim()) return null;
   const authorId = await automationCommentAuthorId(tx, ctx);
   // A workspace with no admins left cannot own the comment row; skip rather than fail the trigger.
@@ -946,8 +945,8 @@ async function applyPostCommentAction(tx: Tx, ctx: AutomationRunContext, action:
   return { type: "commentCreated", boardId: ctx.boardId, cardId: ctx.card.id, comment: wireComment, activity, suppressNotificationUserId: ctx.triggerActorId };
 }
 
-async function applyCallWebhookAction(tx: Tx, ctx: AutomationRunContext, action: AutomationAction): Promise<AutomationEffect | null> {
-  const endpointId = "endpointId" in action.config && typeof action.config.endpointId === "string" ? action.config.endpointId : "";
+async function applyCallWebhookAction(tx: Tx, ctx: AutomationRunContext, action: ExecutableAutomationAction<"call_webhook">): Promise<AutomationEffect | null> {
+  const { endpointId } = action.config;
   if (!endpointId) return null;
   const [endpoint] = await tx
     .select({ id: webhookEndpoints.id, enabled: webhookEndpoints.enabled })
@@ -973,8 +972,10 @@ async function applyCallWebhookAction(tx: Tx, ctx: AutomationRunContext, action:
 
 async function applyAutomationActions(tx: Tx, ctx: AutomationRunContext, actions: AutomationAction[]): Promise<AutomationEffects> {
   const effects: AutomationEffect[] = [];
-  for (const action of actions) {
+  for (const storedAction of actions) {
     try {
+      const action = executableAutomationAction(storedAction);
+      if (!action) continue;
       if (action.type === "apply_checklists") {
         effects.push(...await applyChecklistsAction(tx, ctx, action));
         continue;
@@ -1000,7 +1001,7 @@ async function applyAutomationActions(tx: Tx, ctx: AutomationRunContext, actions
       if (effect) effects.push(effect);
     } catch (err) {
       // Name the action in the run row; the caller unwraps so callers still see the real error.
-      throw err instanceof AutomationActionError ? err : new AutomationActionError(action.type, err);
+      throw err instanceof AutomationActionError ? err : new AutomationActionError(storedAction.type, err);
     }
   }
   return { effects };

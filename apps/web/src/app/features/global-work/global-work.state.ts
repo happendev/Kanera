@@ -180,7 +180,7 @@ export class GlobalWorkState {
   readonly reconciliationVersion = signal(0);
   readonly selectedViewId = signal<string | null>(null);
   readonly drilldownLabel = signal<string | null>(null);
-  readonly collapsedTableGroupKeys = signal<string[]>([]);
+  readonly collapsedTableGroupKeys = computed(() => this.definition().table.collapsedGroupKeys);
   readonly collapsedHistoryDayKeys = signal<string[]>([]);
   readonly collapsedChecklistGroupIds = signal<string[]>([]);
 
@@ -311,7 +311,6 @@ export class GlobalWorkState {
         definition: this.definition(),
         selectedViewId: this.selectedViewId(),
         drilldownLabel: this.drilldownLabel(),
-        collapsedTableGroupKeys: this.collapsedTableGroupKeys(),
         collapsedHistoryDayKeys: this.collapsedHistoryDayKeys(),
         collapsedChecklistGroupIds: this.collapsedChecklistGroupIds(),
         upNextPanelOpen: this.upNextPanelOpen(),
@@ -366,7 +365,6 @@ export class GlobalWorkState {
     this.lastSyncedAt.set(null);
     this.selectedViewId.set(preference?.selectedViewId ?? null);
     this.drilldownLabel.set(lens === "portfolio" ? preference?.drilldownLabel ?? null : null);
-    this.collapsedTableGroupKeys.set(preference?.definition.table.collapsedGroupKeys ?? []);
     this.collapsedHistoryDayKeys.set(preference?.collapsedHistoryDayKeys ?? []);
     this.collapsedChecklistGroupIds.set(preference?.collapsedChecklistGroupIds ?? []);
     // Open unless this person has explicitly closed it: the queue is the page's headline feature,
@@ -572,7 +570,6 @@ export class GlobalWorkState {
     }));
     // Table group keys are dimension-scoped; a board id and a list id must never accidentally fold
     // one another after the grouping axis changes.
-    this.collapsedTableGroupKeys.set([]);
     this.persistPreference();
   }
 
@@ -608,7 +605,6 @@ export class GlobalWorkState {
       sort: defaults.sort,
       table: defaults.table,
     }));
-    this.collapsedTableGroupKeys.set([]);
     this.persistPreference();
   }
 
@@ -622,7 +618,6 @@ export class GlobalWorkState {
       collapsedGroupKeys: [...new Set(table.collapsedGroupKeys)].slice(0, 500),
     };
     this.definition.update((definition) => ({ ...definition, table: normalized }));
-    this.collapsedTableGroupKeys.set(normalized.collapsedGroupKeys);
     this.persistPreference();
   }
 
@@ -695,7 +690,6 @@ export class GlobalWorkState {
 
   setCollapsedTableGroupKeys(keys: readonly string[]): void {
     const normalized = [...new Set(keys)].slice(0, 500);
-    this.collapsedTableGroupKeys.set(normalized);
     this.definition.update((definition) => ({
       ...definition,
       table: { ...definition.table, collapsedGroupKeys: normalized },
@@ -723,7 +717,6 @@ export class GlobalWorkState {
     this.selectedViewId.set(view.id);
     this.drilldownLabel.set(null);
     this.definition.set(view.definition);
-    this.collapsedTableGroupKeys.set(view.definition.table.collapsedGroupKeys);
     this.updateRooms();
     void this.queryFirstPage();
   }
@@ -733,7 +726,6 @@ export class GlobalWorkState {
     this.selectedViewId.set(null);
     this.drilldownLabel.set(null);
     this.definition.set(defaults);
-    this.collapsedTableGroupKeys.set(defaults.table.collapsedGroupKeys);
     this.updateRooms();
     void this.queryFirstPage();
   }
@@ -1275,7 +1267,6 @@ export class GlobalWorkState {
       definition: this.definition(),
       selectedViewId: this.selectedViewId(),
       drilldownLabel: this.drilldownLabel(),
-      collapsedTableGroupKeys: this.collapsedTableGroupKeys(),
       collapsedHistoryDayKeys: this.collapsedHistoryDayKeys(),
       collapsedChecklistGroupIds: this.collapsedChecklistGroupIds(),
       upNextPanelOpen: this.upNextPanelOpen(),

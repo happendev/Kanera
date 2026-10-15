@@ -27,6 +27,7 @@
     "./time-in-progress": "./src/lib/time-in-progress.ts",
     "./activity-summary": "./src/lib/activity-summary.ts",
     "./icons": "./src/tabler-icons.ts",
+    "./work-vocabulary": "./src/work-vocabulary.ts",
     "./workspace-defaults": "./src/lib/workspace-defaults.ts",
     "./workspace-templates": "./src/workspace-templates.ts",
     "./workspace-template-payload": "./src/workspace-template-payload.ts",

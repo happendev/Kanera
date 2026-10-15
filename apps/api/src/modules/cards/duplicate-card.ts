@@ -1,4 +1,4 @@
-import { SERVER_EVENTS, type WireCardChecklist } from "@kanera/shared/events";
+import { SERVER_EVENTS } from "@kanera/shared/events";
 import {
   ACTIVITY_ACTION,
   activityEvents,
@@ -45,6 +45,7 @@ import { attachmentCoverStorageKey, attachmentThumbnailStorageKey, cardAttachmen
 import { emitToBoard } from "../../realtime/emit.js";
 import { toWireCard } from "../../lib/wire-card.js";
 import { ensureBoardMembershipForUsers, shouldAutoWatchAuthoredCards } from "../../lib/card-assignment.js";
+import { loadChecklistsForCard } from "../../lib/checklist-rows.js";
 
 export interface DuplicateIdMap {
   comments: Map<string, string>;
@@ -88,30 +89,6 @@ async function ensureMirrorAssignmentEligibility(boardId: string, workspaceId: s
 
 async function emitCardActivityFeedItem(boardId: string, cardId: string, activity: ActivityEvent) {
   await emitActivityFeedItem(boardId, cardId, activity);
-}
-
-export async function loadChecklistsForCard(cardId: string, tx: Tx = db): Promise<WireCardChecklist[]> {
-  // A transaction handle uses one pg client; sequential queries avoid overlapping client.query.
-  const checklistRows = await tx.select().from(cardChecklists).where(eq(cardChecklists.cardId, cardId)).orderBy(asc(cardChecklists.position));
-  const itemRows = await tx
-      .select({
-        item: cardChecklistItems,
-        checklistId: cardChecklistItems.checklistId,
-      })
-      .from(cardChecklistItems)
-      .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
-      .where(eq(cardChecklists.cardId, cardId))
-      .orderBy(asc(cardChecklists.position), asc(cardChecklistItems.position));
-  const itemsByChecklist = new Map<string, typeof cardChecklistItems.$inferSelect[]>();
-  for (const row of itemRows) {
-    const items = itemsByChecklist.get(row.checklistId);
-    if (items) items.push(row.item);
-    else itemsByChecklist.set(row.checklistId, [row.item]);
-  }
-  return checklistRows.map((checklist) => ({
-    ...checklist,
-    items: itemsByChecklist.get(checklist.id) ?? [],
-  }));
 }
 
 export async function copyAttachmentBlobs(
