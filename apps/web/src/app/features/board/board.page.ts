@@ -170,9 +170,6 @@ export class BoardPage implements OnDestroy {
   });
   private readonly requestedView = computed<ViewMode>(() => {
     const fromUrl = this.view();
-    // A `?view=list` link from before the List view was retired resolves to the Table, which is the
-    // view that replaced it — the alternative is silently dropping the reader onto the kanban.
-    if (fromUrl === "list") return "table";
     if (fromUrl === "table" || fromUrl === "board" || fromUrl === "notes" || fromUrl === "calendar" || fromUrl === "history") return fromUrl;
     return this.rememberedView();
   });
@@ -1118,7 +1115,7 @@ export class BoardPage implements OnDestroy {
       this.cacheSaveTimer ??= setTimeout(() => untracked(() => this.flushPendingCacheSnapshot()), 250);
     });
 
-    // Filters, List/Table View columns, and export need every field's values, not just the
+    // Filters, Table columns, and export need every field's values, not just the
     // showOnCard ones inlined at board open, so load the full set the moment one is engaged.
     effect(() => {
       // Hidden (showOnCard=false) fields aren't inlined at board open, so load the full value set
@@ -1455,7 +1452,7 @@ export class BoardPage implements OnDestroy {
   private cfValuesInFlightForBoard: string | null = null;
 
   /**
-   * The board-open payload only inlines values for `showOnCard` fields. Filters, List/Table
+   * The board-open payload only inlines values for `showOnCard` fields. Filters, Table
    * columns, and export need every field's values, so load them on demand the first time a
    * consumer needs them. No-op when the payload was already complete or offline.
    */

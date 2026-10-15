@@ -691,9 +691,9 @@ function buildSummaryRows(ctx: BoardExportContext, index: ExportIndex): Aggregat
   const rows: AggregateSummaryRow[] = [];
   const splitActive = ctx.aggregateSplitBy !== "none";
   for (const group of ctx.groups) {
-    // When splitting, sub-partition this group's cards once (reusing the List View's grouping) so
+    // When splitting, sub-partition this group's cards once (reusing the Table's grouping) so
     // every numeric field shares the same buckets. A card with a multi-value split dimension lands
-    // in several buckets, matching how the List View repeats such cards across groups.
+    // in several buckets, matching how the Table repeats such cards across groups.
     const buckets = splitActive
       ? groupCards(group.cards, ctx.aggregateSplitBy, "position", {
           lists: ctx.lists,

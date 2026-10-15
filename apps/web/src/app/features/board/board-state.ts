@@ -93,7 +93,7 @@ export class BoardState {
   private readonly customFieldValueRevisions = new Map<string, number>();
   private customFieldValueRevisionSeq = 0;
   // The board-open payload only inlines custom-field values for `showOnCard` fields. This is
-  // false until the full set (for filters/List View/export) has been merged in via the
+  // false until the full set (for filters/Table/export) has been merged in via the
   // /boards/:id/custom-field-values endpoint. See BoardPage.ensureCustomFieldValuesLoaded.
   readonly customFieldValuesComplete = signal(true);
   // Boards whose full custom-field value set has been loaded (per-board, unlike the

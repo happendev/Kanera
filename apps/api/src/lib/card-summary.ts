@@ -236,7 +236,7 @@ export function toWireCardSummary<Value extends CompactCardCustomFieldValue>(
   _clientId: string,
   // When provided, only inline custom-field values for these field ids. The board-open
   // payload uses this to ship just the values rendered as card badges (showOnCard fields);
-  // the full set loads lazily for filters/List View. Pass null/undefined to inline all.
+  // the full set loads lazily for filters and the Table. Pass null/undefined to inline all.
   customFieldIds?: ReadonlySet<string> | null,
 ): Omit<WireCardSummary, "customFieldValues"> & { customFieldValues: Value[] } {
   // Board summaries feed compact card tiles, so prefer the 400px derivative. Card detail loads

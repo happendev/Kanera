@@ -192,7 +192,7 @@ async function boardPayload(
   }));
   // Card tiles only render custom-field badges for `showOnCard` fields, so the hot board-open
   // payload inlines just those values instead of every field value for every card. Filters,
-  // List View columns, and export need the full set, which the client lazily loads from
+  // Table columns, and export need the full set, which the client lazily loads from
   // /boards/:id/custom-field-values on demand. When every field is shown on cards there is
   // nothing extra to fetch, so the payload is already complete.
   const shownFieldIds = new Set(boardCustomFields.filter((field) => field.showOnCard).map((field) => field.id));
@@ -463,7 +463,7 @@ export async function boardRoutes(app: FastifyInstance) {
 
   // Full custom-field values for every card on the board. The board-open payload only inlines
   // values for `showOnCard` fields; the client loads the complete set here the first time it
-  // needs values for filters, List View columns, or export. Returned for all cards regardless
+  // needs values for filters, Table columns, or export. Returned for all cards regardless
   // of completed/archived visibility — extra entries are keyed by cardId and harmlessly ignored.
   app.get("/boards/:id/custom-field-values", async (req) => {
     const { id } = req.params as { id: string };
@@ -478,7 +478,7 @@ export async function boardRoutes(app: FastifyInstance) {
   });
 
   // Bulk editing only needs values for the selected cards. Keep this separate from the full-board
-  // endpoint so filters and List View can retain their board-complete caching semantics.
+  // endpoint so filters and the Table can retain their board-complete caching semantics.
   app.post("/boards/:id/custom-field-values/query", async (req) => {
     const { id } = req.params as { id: string };
     const { cardIds } = dto.selectedCardQueryBody.parse(req.body);
