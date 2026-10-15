@@ -5,6 +5,7 @@ import {
   boardMembers,
   boards,
   cardAssignees,
+  cardAttachmentReactions,
   cardAttachments,
   cardChecklistItems,
   cardChecklists,
@@ -592,9 +593,14 @@ export async function duplicateCardInto({
     targetAttributionUserIds(targetBoardId),
     sourceListNameMap(srcCtx.workspaceId),
   ]);
-  const sourceCommentReactions = sourceComments.length > 0
-    ? await db.select().from(commentReactions).where(inArray(commentReactions.commentId, sourceComments.map((comment) => comment.id)))
-    : [];
+  const [sourceCommentReactions, sourceAttachmentReactions] = await Promise.all([
+    sourceComments.length > 0
+      ? db.select().from(commentReactions).where(inArray(commentReactions.commentId, sourceComments.map((comment) => comment.id)))
+      : Promise.resolve([]),
+    sourceAttachments.length > 0
+      ? db.select().from(cardAttachmentReactions).where(inArray(cardAttachmentReactions.attachmentId, sourceAttachments.map((attachment) => attachment.id)))
+      : Promise.resolve([]),
+  ]);
   const [sourceBoard] = await db
     .select({ id: boards.id, name: boards.name })
     .from(boards)
@@ -848,6 +854,19 @@ export async function duplicateCardInto({
         insertedAttachments.push(row!);
         attachmentIdMap.set(src.id, row!.id);
         if (includeCover && source.coverAttachmentId === src.id) newCoverAttachmentId = row!.id;
+      }
+
+      // Copies are uploaded by whoever duplicates the card, so their own thumbs-up is dropped: nobody
+      // reacts to their own upload. Like comment reactions, only people who can see the target keep theirs.
+      const copiedAttachmentReactions = sourceAttachmentReactions
+        .map((reaction) => {
+          const attachmentId = attachmentIdMap.get(reaction.attachmentId);
+          if (!attachmentId || reaction.userId === actor.sub || !targetAttributionIds.has(reaction.userId)) return null;
+          return { attachmentId, userId: reaction.userId, reactionType: reaction.reactionType, createdAt: reaction.createdAt };
+        })
+        .filter((reaction): reaction is NonNullable<typeof reaction> => reaction !== null);
+      if (copiedAttachmentReactions.length > 0) {
+        await tx.insert(cardAttachmentReactions).values(copiedAttachmentReactions).onConflictDoNothing();
       }
 
       let finalCard = inserted!;

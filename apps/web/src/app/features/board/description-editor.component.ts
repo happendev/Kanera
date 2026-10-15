@@ -668,6 +668,12 @@ function isMarkdownTableWrapperFalsePositive(error: Error): boolean {
       display: block;
       margin: 8px 0;
     }
+    /* Matches the viewer: a quoted image is context, shown as a thumbnail. */
+    .de-host .ProseMirror blockquote img {
+      max-width: min(240px, 100%);
+      max-height: 160px;
+      margin: 4px 0;
+    }
     .de-host .ProseMirror a {
       color: var(--accent);
       text-decoration: underline;

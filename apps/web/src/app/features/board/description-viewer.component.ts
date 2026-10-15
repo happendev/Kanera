@@ -624,6 +624,14 @@ function githubStateLabel(state: string): string {
       margin: 8px 0;
     }
 
+    /* Quoted images (a screenshot quoted into a comment, or a quoted comment that had one) are context,
+       not the subject, so they shrink to a thumbnail. */
+    .dv-body blockquote img {
+      max-width: min(240px, 100%);
+      max-height: 160px;
+      margin: 4px 0;
+    }
+
     .dv-body .mention-chip-avatar img {
       width: 100%;
       height: 100%;

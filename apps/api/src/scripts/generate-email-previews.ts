@@ -44,6 +44,7 @@ import { cardReminderEmail } from "../lib/email-templates/card-reminder.js";
 import { storageWarningEmail } from "../lib/email-templates/storage-warning.js";
 import { checklistItemOverdueEmail } from "../lib/email-templates/card-checklist-item-overdue.js";
 import { commentMentionedEmail } from "../lib/email-templates/comment-mentioned.js";
+import { reactionAddedEmail } from "../lib/email-templates/reaction-added.js";
 import { dailyDigestEmail } from "../lib/email-templates/daily-digest.js";
 import { inviteAcceptedEmail } from "../lib/email-templates/invite-accepted.js";
 import { passwordResetEmail } from "../lib/email-templates/password-reset.js";
@@ -227,6 +228,19 @@ const templates = [
       boardName: "Website Refresh",
       cardUrl: "http://localhost:4200/o/0123456789ABCDEF/c/WEB-42",
       commentExcerpt: "Could you confirm this before we ship?",
+    }),
+  },
+  {
+    name: "reaction-added",
+    html: reactionAddedEmail({
+      locale,
+      displayName: "Amelia Hart",
+      actorName: "Jordan Lee",
+      cardTitle: "Confirm production checklist",
+      boardName: "Website Refresh",
+      cardUrl: "http://localhost:4200/o/0123456789ABCDEF/c/WEB-42",
+      commentExcerpt: null,
+      fileName: "checkout-redesign.png",
     }),
   },
   {

@@ -25,6 +25,8 @@ export const ACTIVITY_SUMMARY_MESSAGES: ActivitySummaryMessages = {
   markedIncomplete: $localize`:Notification line after a person's name:marked this card incomplete`,
   attached: (fileName) => $localize`:Notification line after a person's name:attached ${fileName}:fileName:`,
   attachedFile: $localize`:Notification line after a person's name:attached a file`,
+  reactedToComment: $localize`:Notification line after a person's name; only the comment's author sees it:gave your comment a thumbs-up`,
+  reactedToAttachment: (fileName) => $localize`:Notification line after a person's name; only the uploader sees it:gave ${fileName}:fileName: a thumbs-up`,
   removedAttachment: $localize`:Notification line after a person's name:removed an attachment`,
   assignedSelf: $localize`:Notification line after a person's name; they assigned the card to themselves:assigned themself`,
   assigned: (names) => $localize`:Notification line after a person's name:assigned ${names}:names:`,

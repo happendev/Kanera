@@ -563,6 +563,39 @@ button.xs {
   }
 }
 
+// Thumbs-up and "Comment" under an uploaded file. Unlike comment footers these stay visible rather
+// than appearing on hover: reacting to a shared screenshot is the point of the row.
+.activity-attachment-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+
+  .reaction-add {
+    opacity: 1;
+  }
+
+  button.xs i {
+    font-size: 13px;
+  }
+
+  // Touch gets 44px-tall targets without inflating the compact chips: an invisible hit area grows
+  // each button vertically, and the wider gap keeps neighbouring areas from overlapping.
+  @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+    gap: 10px;
+
+    button {
+      position: relative;
+
+      &::after {
+        content: "";
+        position: absolute;
+        inset: -12px -5px;
+      }
+    }
+  }
+}
+
 .activity-file-preview {
   margin-top: 6px;
   display: flex;

@@ -339,7 +339,7 @@ export interface CardReminderListItem extends CardReminder {
 export interface NotificationInboxItem {
   id: Uuid;
   createdAt: string;
-  reason: "assigned" | "watching" | "mentioned" | "overdue" | "checklist_item_overdue" | "board_member_left" | "reminder";
+  reason: "assigned" | "watching" | "mentioned" | "overdue" | "checklist_item_overdue" | "board_member_left" | "reminder" | "reacted";
   read: boolean;
   summary: string;
   action: string | null;

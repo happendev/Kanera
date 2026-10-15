@@ -99,6 +99,7 @@ export const nb: ErrorCatalog = {
   "cannot change an inherited board admin role": "Kan ikke endre en arvet administratorrolle for tavlen",
   "cannot change your own role": "Kan ikke endre din egen rolle",
   "cannot demote the last owner": "Kan ikke nedgradere den siste eieren",
+  "cannot react to your own attachment": "Kan ikke reagere på ditt eget vedlegg",
   "cannot react to your own comment": "Kan ikke reagere på din egen kommentar",
   "cannot remove an inherited board admin": "Kan ikke fjerne en arvet tavleadministrator",
   "cannot remove or downgrade the last workspace admin": "Kan ikke fjerne eller nedgradere den siste administratoren for arbeidsområdet",

@@ -198,6 +198,8 @@ export const de: ErrorCatalog = {
     "Du kannst deine eigene Rolle nicht ändern.",
   "cannot demote the last owner":
     "Der letzte Inhaber kann nicht herabgestuft werden.",
+  "cannot react to your own attachment":
+    "Du kannst nicht auf deinen eigenen Anhang reagieren.",
   "cannot react to your own comment":
     "Du kannst nicht auf deinen eigenen Kommentar reagieren.",
   "cannot remove an inherited board admin":

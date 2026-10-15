@@ -120,6 +120,13 @@ const zhCN: ServerMessages = {
       heading: "你的卡片上有新评论",
       intro: ({ firstName, actor, card, board }) => `你好 ${firstName}，${actor} 在 ${board} 中评论了“${card}”。`,
     },
+    reactionAdded: {
+      subject: ({ actor, card }) => `${actor} 在 ${card} 上给你竖起了大拇指`,
+      preheader: ({ actor, card, board }) => `${actor} 对你在 ${board} 中“${card}”上的内容做出了回应。`,
+      heading: "你收到了一个大拇指",
+      introComment: ({ firstName, actor, card, board }) => `你好，${firstName}，${actor} 给你在 ${board} 中“${card}”上的评论竖起了大拇指。`,
+      introAttachment: ({ firstName, actor, file, card, board }) => `你好，${firstName}，${actor} 给 ${board} 中“${card}”上的 ${file} 竖起了大拇指。`,
+    },
     commentMentioned: {
       subject: ({ card }) => `在 ${card} 的评论中提到`,
       preheader: ({ actor, card, board }) => `${actor} 在 ${board} 中对“${card}”的评论中提到了你。`,
@@ -535,6 +542,7 @@ const zhCN: ServerMessages = {
   push: {
     cardAssigned: { title: "已分配卡片", body: ({ actor, card }) => `${actor} 将你分配给 ${card}` },
     commentAdded: { title: "新评论", body: ({ actor, board, card, excerpt }) => `${actor}在${board}/${card}中评论：${excerpt}` },
+    reacted: { title: "竖起大拇指", comment: ({ actor, board, card }) => `${actor} 赞了你在 ${board}/${card} 中的评论`, attachment: ({ actor, board, card, file }) => `${actor} 赞了 ${board}/${card} 中的 ${file}` },
     mentioned: { title: "评论里提到过", body: ({ actor, board, card, excerpt }) => `${actor}在${board}/${card}中提到了你：${excerpt}` },
     dueDateChanged: { title: "截止日期已更改", body: ({ actor, card }) => `${actor} 更改了 ${card} 的截止日期` },
     cardOverdue: { title: "卡片逾期", body: ({ card }) => `${card} 已逾期` },
@@ -561,6 +569,8 @@ const zhCN: ServerMessages = {
   markedComplete: "将此卡片标记为完整",
   markedIncomplete: "将此卡片标记为不完整",
   attached: (fileName) => `附${fileName}`,
+  reactedToComment: "给你的评论竖起了大拇指",
+  reactedToAttachment: (fileName) => `给 ${fileName} 竖起了大拇指`,
   attachedFile: "附上一个文件",
   removedAttachment: "删除了一个附件",
   assignedSelf: "给自己分配",

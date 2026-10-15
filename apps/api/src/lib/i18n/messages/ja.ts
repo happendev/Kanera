@@ -119,6 +119,13 @@ const ja: ServerMessages = {
       heading: "あなたのカードに新しいコメント",
       intro: ({ firstName, actor, card, board }) => `${firstName}さん、${actor}さんが${board}の「${card}」にコメントしました。`,
     },
+    reactionAdded: {
+      subject: ({ actor, card }) => `${actor}さんが${card}でいいねしました`,
+      preheader: ({ actor, card, board }) => `${actor}さんが${board}の「${card}」であなたの投稿にリアクションしました。`,
+      heading: "いいねが届きました",
+      introComment: ({ firstName, actor, card, board }) => `${firstName}さん、${actor}さんが${board}の「${card}」のあなたのコメントにいいねしました。`,
+      introAttachment: ({ firstName, actor, file, card, board }) => `${firstName}さん、${actor}さんが${board}の「${card}」の${file}にいいねしました。`,
+    },
     commentMentioned: {
       subject: ({ card }) => `${card}のコメントでメンションされました`,
       preheader: ({ actor, card, board }) => `${actor}さんが${board}の「${card}」のコメントであなたをメンションしました。`,
@@ -535,6 +542,7 @@ const ja: ServerMessages = {
   push: {
     cardAssigned: { title: "カードの割り当て", body: ({ actor, card }) => `${actor}さんがあなたを${card}に割り当てました` },
     commentAdded: { title: "新しいコメント", body: ({ actor, board, card, excerpt }) => `${actor}さんが${board} / ${card}にコメントしました：${excerpt}` },
+    reacted: { title: "いいね", comment: ({ actor, board, card }) => `${actor}さんが${board} / ${card}のあなたのコメントにいいねしました`, attachment: ({ actor, board, card, file }) => `${actor}さんが${board} / ${card}の${file}にいいねしました` },
     mentioned: { title: "コメントでのメンション", body: ({ actor, board, card, excerpt }) => `${actor}さんが${board} / ${card}であなたをメンションしました：${excerpt}` },
     dueDateChanged: { title: "期限の変更", body: ({ actor, card }) => `${actor}さんが${card}の期限を変更しました` },
     cardOverdue: { title: "カードの期限切れ", body: ({ card }) => `${card}が期限切れです` },
@@ -563,6 +571,8 @@ const ja: ServerMessages = {
     markedComplete: "このカードを完了にしました",
     markedIncomplete: "このカードを未完了にしました",
     attached: (fileName) => `${fileName}を添付しました`,
+    reactedToComment: "あなたのコメントにいいねしました",
+    reactedToAttachment: (fileName) => `${fileName}にいいねしました`,
     attachedFile: "ファイルを添付しました",
     removedAttachment: "添付ファイルを削除しました",
     assignedSelf: "自分を割り当てました",

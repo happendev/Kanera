@@ -18,6 +18,7 @@ import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milest
 import { enqueueCommentAddedEmails, enqueueCommentMentionedNotifications } from "../../lib/assignee-email-notifications.js";
 import { touchCardActivity } from "../../lib/card-activity.js";
 import { fetchReactionsByComment } from "../../lib/comment-reactions.js";
+import { notifyReactionAdded, withdrawReactionNotification } from "../../lib/reaction-notifications.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls, unsignedMediaUrl, withSignedMedia } from "../../lib/media-keys.js";
 import { replaceCardMentions } from "../../lib/mentions.js";
@@ -802,6 +803,17 @@ export async function commentRoutes(app: FastifyInstance) {
           },
         });
       }
+      // Only people hear about a thumbs-up; agent, API-key and system comments have no reader to tell.
+      if (current.authorKind === "user") {
+        await notifyReactionAdded({
+          actorId: req.auth.sub,
+          card,
+          target: { kind: "comment", commentId, recipientId: current.authorId, body: current.body },
+          type: body.type,
+          mailer: app.mailer,
+          webOrigin: env.WEB_ORIGIN,
+        }).catch((err: unknown) => req.log.warn({ err, commentId }, "failed to notify comment reaction"));
+      }
     }
     return reply.status(204).send();
   });
@@ -837,6 +849,11 @@ export async function commentRoutes(app: FastifyInstance) {
         type,
         userId: req.auth.sub,
       });
+      await withdrawReactionNotification({
+        actorId: req.auth.sub,
+        cardId: card.id,
+        target: { kind: "comment", commentId, recipientId: current.authorId, body: current.body },
+      }).catch((err: unknown) => req.log.warn({ err, commentId }, "failed to withdraw comment reaction notification"));
     }
     return reply.status(204).send();
   });

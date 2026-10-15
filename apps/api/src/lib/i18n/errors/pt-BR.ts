@@ -198,6 +198,8 @@ export const ptBR: ErrorCatalog = {
     "Você não pode alterar sua própria função.",
   "cannot demote the last owner":
     "Não é possível rebaixar o último proprietário.",
+  "cannot react to your own attachment":
+    "Você não pode reagir ao seu próprio anexo.",
   "cannot react to your own comment":
     "Você não pode reagir ao seu próprio comentário.",
   "cannot remove an inherited board admin":

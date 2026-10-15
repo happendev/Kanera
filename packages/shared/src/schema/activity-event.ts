@@ -87,6 +87,9 @@ export const ACTIVITY_ACTIONS = [
   "mirror:enabled",
   "agentRun:started",
   "agentRun:ended",
+  // Thumbs-up on a comment (entity `comment`) or an attachment (entity `card`, payload.attachmentId).
+  // Recorded hidden from feeds: it exists to carry the author's "reacted" notification.
+  "reaction:added",
 ] as const;
 export type ActivityAction = (typeof ACTIVITY_ACTIONS)[number];
 export const ACTIVITY_ACTION = {
@@ -133,6 +136,7 @@ export const ACTIVITY_ACTION = {
   MIRROR_DISABLED: "mirror:disabled",
   MIRROR_ENABLED: "mirror:enabled",
   AGENT_RUN_STARTED: "agentRun:started",
+  REACTION_ADDED: "reaction:added",
   AGENT_RUN_ENDED: "agentRun:ended",
 } as const satisfies Record<string, ActivityAction>;
 

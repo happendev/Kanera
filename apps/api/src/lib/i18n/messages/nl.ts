@@ -124,6 +124,13 @@ const nl: ServerMessages = {
       heading: "Nieuwe opmerking op je kaart",
       intro: ({ firstName, actor, card, board }) => `Hallo ${firstName}, ${actor} heeft gereageerd op “${card}” in ${board}.`,
     },
+    reactionAdded: {
+      subject: ({ actor, card }) => `${actor} gaf je een duim omhoog op ${card}`,
+      preheader: ({ actor, card, board }) => `${actor} reageerde op je werk aan “${card}” in ${board}.`,
+      heading: "Je kreeg een duim omhoog",
+      introComment: ({ firstName, actor, card, board }) => `Hallo ${firstName}, ${actor} gaf je reactie op “${card}” in ${board} een duim omhoog.`,
+      introAttachment: ({ firstName, actor, file, card, board }) => `Hallo ${firstName}, ${actor} gaf ${file} op “${card}” in ${board} een duim omhoog.`,
+    },
     commentMentioned: {
       subject: ({ card }) => `Vermeld in een commentaar op ${card}.`,
       preheader: ({ actor, card, board }) => `${actor} heb je genoemd in een reactie op “${card}” in ${board}.`,
@@ -542,6 +549,7 @@ const nl: ServerMessages = {
   push: {
     cardAssigned: { title: "Kaart toegewezen", body: ({ actor, card }) => `${actor} heeft ${card} aan jou toegewezen` },
     commentAdded: { title: "Nieuwe reactie", body: ({ actor, board, card, excerpt }) => `${actor} heeft gereageerd in ${board} / ${card}: ${excerpt}` },
+    reacted: { title: "Duim omhoog", comment: ({ actor, board, card }) => `${actor} vond je reactie leuk in ${board} / ${card}`, attachment: ({ actor, board, card, file }) => `${actor} vond ${file} leuk in ${board} / ${card}` },
     mentioned: { title: "Vermeld in een reactie", body: ({ actor, board, card, excerpt }) => `${actor} heb je genoemd in ${board} / ${card}: ${excerpt}` },
     dueDateChanged: { title: "Uitgerekende datum gewijzigd", body: ({ actor, card }) => `${actor} heeft de vervaldatum gewijzigd van ${card}.` },
     cardOverdue: { title: "Kaart te laat", body: ({ card }) => `${card} is te laat` },
@@ -569,6 +577,8 @@ const nl: ServerMessages = {
   markedComplete: "markeerde deze kaart als voltooid",
   markedIncomplete: "markeerde deze kaart als onvolledig",
   attached: (fileName) => `bevestigd ${fileName}`,
+  reactedToComment: "gaf je reactie een duim omhoog",
+  reactedToAttachment: (fileName) => `gaf ${fileName} een duim omhoog`,
   attachedFile: "een bestand bijgevoegd",
   removedAttachment: "een bijlage verwijderd",
   assignedSelf: "zichzelf toegewezen",

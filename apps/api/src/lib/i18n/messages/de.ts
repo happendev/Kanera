@@ -124,6 +124,13 @@ const de: ServerMessages = {
       heading: "Neuer Kommentar zu deiner Karte",
       intro: ({ firstName, actor, card, board }) => `Hallo ${firstName}, ${actor} hat „${card}“ in ${board} kommentiert.`,
     },
+    reactionAdded: {
+      subject: ({ actor, card }) => `${actor} hat dir ein Daumen hoch zu ${card} gegeben`,
+      preheader: ({ actor, card, board }) => `${actor} hat auf deine Arbeit an „${card}“ in ${board} reagiert.`,
+      heading: "Du hast ein Daumen hoch bekommen",
+      introComment: ({ firstName, actor, card, board }) => `Hallo ${firstName}, ${actor} hat deinem Kommentar zu „${card}“ in ${board} ein Daumen hoch gegeben.`,
+      introAttachment: ({ firstName, actor, file, card, board }) => `Hallo ${firstName}, ${actor} hat ${file} zu „${card}“ in ${board} ein Daumen hoch gegeben.`,
+    },
     commentMentioned: {
       subject: ({ card }) => `In einem Kommentar zu ${card} erwähnt`,
       preheader: ({ actor, card, board }) => `${actor} hat dich in einem Kommentar zu „${card}“ in ${board} erwähnt.`,
@@ -542,6 +549,7 @@ const de: ServerMessages = {
   push: {
     cardAssigned: { title: "Karte zugewiesen", body: ({ actor, card }) => `${actor} hat dir ${card} zugewiesen` },
     commentAdded: { title: "Neuer Kommentar", body: ({ actor, board, card, excerpt }) => `${actor} hat in ${board} / ${card} kommentiert: ${excerpt}` },
+    reacted: { title: "Daumen hoch", comment: ({ actor, board, card }) => `${actor} gefällt dein Kommentar in ${board} / ${card}`, attachment: ({ actor, board, card, file }) => `${actor} gefällt ${file} in ${board} / ${card}` },
     mentioned: { title: "In einem Kommentar erwähnt", body: ({ actor, board, card, excerpt }) => `${actor} hat dich in ${board} / ${card} erwähnt: ${excerpt}` },
     dueDateChanged: { title: "Fälligkeitsdatum geändert", body: ({ actor, card }) => `${actor} hat das Fälligkeitsdatum von ${card} geändert` },
     cardOverdue: { title: "Karte überfällig", body: ({ card }) => `${card} ist überfällig` },
@@ -570,6 +578,8 @@ const de: ServerMessages = {
     markedComplete: "hat diese Karte als erledigt markiert",
     markedIncomplete: "hat diese Karte als nicht erledigt markiert",
     attached: (fileName) => `hat ${fileName} angehängt`,
+    reactedToComment: "hat deinem Kommentar ein Daumen hoch gegeben",
+    reactedToAttachment: (fileName) => `hat ${fileName} ein Daumen hoch gegeben`,
     attachedFile: "hat eine Datei angehängt",
     removedAttachment: "hat einen Anhang entfernt",
     assignedSelf: "hat sich selbst zugewiesen",

@@ -10,7 +10,7 @@ import { lists } from "./list.js";
 import { users } from "./user.js";
 import { workspaces } from "./workspace.js";
 
-export const NOTIFICATION_REASONS = ["assigned", "watching", "mentioned", "overdue", "checklist_item_overdue", "board_member_left", "reminder"] as const;
+export const NOTIFICATION_REASONS = ["assigned", "watching", "mentioned", "overdue", "checklist_item_overdue", "board_member_left", "reminder", "reacted"] as const;
 export type NotificationReason = (typeof NOTIFICATION_REASONS)[number];
 export const NOTIFICATION_REASON = {
   BOARD_MEMBER_LEFT: "board_member_left",
@@ -20,6 +20,7 @@ export const NOTIFICATION_REASON = {
   OVERDUE: "overdue",
   CHECKLIST_ITEM_OVERDUE: "checklist_item_overdue",
   REMINDER: "reminder",
+  REACTED: "reacted",
 } as const satisfies Record<string, NotificationReason>;
 
 export const notifications = pgTable(

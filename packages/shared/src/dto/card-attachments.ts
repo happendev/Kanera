@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ATTACHMENT_SOURCES as SOURCES } from "../schema/card-attachment.js";
 import type { AttachmentSource, CardAttachment } from "../schema/card-attachment.js";
+import type { CommentReactionSummary } from "./comment-reactions.js";
 
 export { ATTACHMENT_SOURCES } from "../schema/card-attachment.js";
 export type { AttachmentSource } from "../schema/card-attachment.js";
@@ -18,6 +19,9 @@ export type CardAttachmentRow = Pick<
   uploadedByAvatarUrl: string | null;
   source: AttachmentSource;
   commentId: string | null;
+  // Present on card detail reads, where the activity feed shows reactions under attachment rows.
+  // Other surfaces (uploads, exports, public lists) omit it rather than paying for the join.
+  reactions?: CommentReactionSummary[];
 };
 
 /**

@@ -222,6 +222,28 @@
         </div>
         }
         }
+        @if (preview.target; as target) {
+        @let attachmentThumbs = attachmentReaction(target, 'thumbs_up');
+        @let attachmentReactionsVisible = canViewReactions();
+        @if ((attachmentReactionsVisible && (attachmentThumbs || canReactToAttachmentRole(target))) || canEdit()) {
+        <div class="activity-attachment-actions">
+          @if (attachmentReactionsVisible && attachmentThumbs) {
+          <button type="button" class="reaction-chip" [class.is-active]="attachmentUserReacted(target, 'thumbs_up')" [class.is-readonly]="!canReactToAttachment(target)" [attr.aria-disabled]="!canReactToAttachment(target) ? 'true' : null"
+            (click)="toggleAttachmentReaction(target, 'thumbs_up')" (mouseenter)="openReactionPopover($event, attachmentThumbs)" (mouseleave)="closeReactionPopover()">
+            <i class="ti ti-thumb-up"></i>
+            <span class="reaction-count">{{ attachmentThumbs.count }}</span>
+          </button>
+          } @else if (attachmentReactionsVisible && canReactToAttachmentRole(target)) {
+          <button type="button" class="reaction-add xs" [disabled]="!canReactToAttachment(target)" (click)="toggleAttachmentReaction(target, 'thumbs_up')" kTooltip="React with thumbs up" i18n-kTooltip>
+            <i class="ti ti-thumb-up"></i>
+          </button>
+          }
+          @if (canEdit()) {
+          <button type="button" class="ghost xs" [disabled]="!canMutate()" (click)="startAttachmentComment(target)"><i class="ti ti-message-circle"></i>&ngsp;<ng-container i18n="verb|Button under an uploaded file in card activity: start a comment about it">Comment</ng-container></button>
+          }
+        </div>
+        }
+        }
         }
         @if (item.hasDescriptionChanges) {
         <button type="button" class="activity-diff-toggle" (click)="openDescriptionDiff(item.data.id)">
