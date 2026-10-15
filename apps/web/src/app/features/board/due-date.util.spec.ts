@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { appLocale } from "../../core/i18n/locale";
 import { dueDateInputValue, dueDateSlotFor, formatDueDate, isOverdue } from "./due-date.util";
 
 describe("due date helpers", () => {
@@ -39,15 +40,17 @@ describe("due date helpers", () => {
   });
 
   it("formats due times in the viewer timezone from the due date timezone", () => {
+    vi.setSystemTime(new Date("2026-01-21T12:00:00Z"));
     const expected = new Date("2026-01-21T14:00:00Z");
-    const date = expected.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-    const time = expected.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    const date = expected.toLocaleDateString(appLocale(), { month: "short", day: "numeric" });
+    const time = expected.toLocaleTimeString(appLocale(), { hour: "numeric", minute: "2-digit" });
     expect(formatDueDate("2026-01-21", "morning", "America/New_York")).toBe(`${date} · ${time}`);
   });
 
   it("does not show the internal anytime due time", () => {
+    vi.setSystemTime(new Date("2026-01-21T12:00:00Z"));
     expect(formatDueDate("2026-01-21", "anyTime", "UTC"))
-      .toBe(new Date(2026, 0, 21).toLocaleDateString(undefined, { month: "short", day: "numeric" }));
+      .toBe(new Date(2026, 0, 21).toLocaleDateString(appLocale(), { month: "short", day: "numeric" }));
   });
 
   it("returns empty values for unset due dates", () => {
