@@ -16,13 +16,13 @@ describe("MentionSoundService", () => {
 
     expect(service.enabled()).toBe(true);
 
-    service.setEnabled(false);
+    service.setSound("none");
     expect(service.enabled()).toBe(false);
-    expect(localStorage.getItem(STORAGE_KEYS.MENTION_SOUND_ENABLED)).toBe("0");
+    expect(localStorage.getItem(STORAGE_KEYS.NOTIFICATION_SOUND)).toBe("none");
 
-    service.setEnabled(true);
+    service.setSound("default");
     expect(service.enabled()).toBe(true);
-    expect(localStorage.getItem(STORAGE_KEYS.MENTION_SOUND_ENABLED)).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEYS.NOTIFICATION_SOUND)).toBe("default");
   });
 
   it("reads a disabled preference from storage", () => {
@@ -48,6 +48,29 @@ describe("MentionSoundService", () => {
     const service = TestBed.inject(MentionSoundService);
 
     expect(() => service.playMention()).not.toThrow();
+  });
+
+  // Browser E2E cannot deterministically hold the autoplay resume promise open.
+  // Muting while it is pending must suppress the queued notification too.
+  it("stays silent when muted while audio is resuming", async () => {
+    let resumeAudio!: () => void;
+    const resumed = new Promise<void>((resolve) => { resumeAudio = resolve; });
+    const createOscillator = vi.fn();
+    class SuspendedAudioContext {
+      readonly state: AudioContextState = "suspended";
+      readonly currentTime = 0;
+      resume = () => resumed;
+      createOscillator = createOscillator;
+    }
+    (window as unknown as { AudioContext: typeof SuspendedAudioContext }).AudioContext = SuspendedAudioContext;
+    const service = TestBed.inject(MentionSoundService);
+    service.playMention();
+    service.setSound("none");
+    resumeAudio();
+    await resumed;
+    expect(createOscillator).not.toHaveBeenCalled();
+    service.playMention();
+    expect(createOscillator).not.toHaveBeenCalled();
   });
 
   it("coalesces a burst into one chime and allows a later chime", async () => {

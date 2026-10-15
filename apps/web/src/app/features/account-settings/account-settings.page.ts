@@ -1410,8 +1410,8 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     }
   }
 
-  setMentionSoundEnabled(checked: boolean): void {
-    this.mentionSound.setEnabled(checked);
+  setNotificationSound(value: string): void {
+    this.mentionSound.setSound(value);
     this.notificationAutosave.markSaved();
     this.notificationSettingsError.set(null);
   }

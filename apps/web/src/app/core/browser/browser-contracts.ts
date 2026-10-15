@@ -28,6 +28,7 @@ export const STORAGE_KEYS = {
   ONBOARDING_SKIPPED_PREFIX: "kanera.onboarding.skipped",
   FIRST_RUN_DISMISSED_PREFIX: "kanera.first-run.dismissed",
   NOTIFICATION_GROUP_BY: "kanera:notif-group-by",
+  NOTIFICATION_SOUND: "kanera:notification-sound",
   MENTION_SOUND_ENABLED: "kanera:mention-sound-enabled",
   NOTIFICATION_USER_FILTER: "kanera:notif-user-filter",
   PUSH_OPT_IN_PENDING: "kanera:push-opt-in-pending",

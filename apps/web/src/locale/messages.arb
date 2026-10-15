@@ -2958,6 +2958,45 @@
       "src/app/core/notifications/browser-push.service.ts"
     ]
   },
+  "5607669932062416162": "Default",
+  "@5607669932062416162": {
+    "description": "Notification sound",
+    "x-files": [
+      "src/app/core/notifications/mention-sound.service.ts",
+      "src/app/core/theme/theme.service.ts"
+    ]
+  },
+  "8353780137905022126": "Ripple",
+  "@8353780137905022126": {
+    "description": "Notification sound",
+    "x-files": [
+      "src/app/core/notifications/mention-sound.service.ts"
+    ]
+  },
+  "3080880284619829721": "Bloom",
+  "@3080880284619829721": {
+    "description": "Notification sound",
+    "x-files": [
+      "src/app/core/notifications/mention-sound.service.ts"
+    ]
+  },
+  "6719323958344589552": "Pebble",
+  "@6719323958344589552": {
+    "description": "Notification sound",
+    "x-files": [
+      "src/app/core/notifications/mention-sound.service.ts"
+    ]
+  },
+  "6252070156626006029": "None",
+  "@6252070156626006029": {
+    "description": "Notification sound",
+    "x-files": [
+      "src/app/core/notifications/mention-sound.service.ts",
+      "src/app/features/account-settings/integrations/integrations.page.html",
+      "src/app/features/board/table-view/board-table-view.component.html",
+      "src/app/features/global-work/global-work.page.ts"
+    ]
+  },
   "8983228988273096319": "You're offline. Reconnect to refresh notifications.",
   "@8983228988273096319": {
     "description": "Notifications load error while offline",
@@ -3004,13 +3043,6 @@
     "description": "Error in the Up next panel's card picker",
     "x-files": [
       "src/app/core/priorities/my-priorities.service.ts"
-    ]
-  },
-  "5607669932062416162": "Default",
-  "@5607669932062416162": {
-    "description": "Accent colour option — the theme's own accent",
-    "x-files": [
-      "src/app/core/theme/theme.service.ts"
     ]
   },
   "4082253113407591781": "Blue",
@@ -4738,15 +4770,6 @@
       "src/app/features/account-settings/integrations/integrations.page.html"
     ]
   },
-  "6252070156626006029": "None",
-  "@6252070156626006029": {
-    "description": "SMTP security option: no encryption",
-    "x-files": [
-      "src/app/features/account-settings/integrations/integrations.page.html",
-      "src/app/features/board/table-view/board-table-view.component.html",
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
   "5248717555542428023": "Username",
   "@5248717555542428023": {
     "description": "SMTP field label",
@@ -4908,8 +4931,21 @@
       "src/app/features/account-settings/notifications/notifications.page.html"
     ]
   },
-  "4334126928771586432": "Play a sound for assignments and mentions",
-  "@4334126928771586432": {
+  "6538385770416771506": "Notification sound",
+  "@6538385770416771506": {
+    "x-files": [
+      "src/app/features/account-settings/notifications/notifications.page.html"
+    ]
+  },
+  "3014311116747455931": "For assignments and mentions in this browser.",
+  "@3014311116747455931": {
+    "x-files": [
+      "src/app/features/account-settings/notifications/notifications.page.html"
+    ]
+  },
+  "3865490984500059162": "Preview sound",
+  "@3865490984500059162": {
+    "description": "Button: preview notification sound",
     "x-files": [
       "src/app/features/account-settings/notifications/notifications.page.html"
     ]
