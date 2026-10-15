@@ -99,6 +99,13 @@ function writeActiveCardView(cardId: string, boardId = "board-1", updatedAt = Da
   }));
 }
 
+function seedFeed(service: NotificationsService, items: NotificationRow[], nextCursor: string | null = null): void {
+  const store = service as unknown as {
+    setFeed(mode: ReturnType<NotificationsService["feedMode"]>, items: NotificationRow[], nextCursor: string | null): void;
+  };
+  store.setFeed(service.feedMode(), items, nextCursor);
+}
+
 describe("NotificationsService", () => {
   let api: {
     get: ReturnType<typeof vi.fn>;
@@ -224,7 +231,7 @@ describe("NotificationsService", () => {
   it("does not roll a failed previous-session mutation back into a new session", async () => {
     const pending = deferred<void>();
     api.post.mockImplementationOnce(() => pending.promise.then(() => { throw new Error("connection lost"); }));
-    service.items.set([notification()]);
+    seedFeed(service, [notification()]);
     service.unreadCount.set(1);
     const read = service.markRead("notification-1");
     service.teardown();
@@ -261,7 +268,7 @@ describe("NotificationsService", () => {
   it("reloads an empty previously loaded inbox after a socket reconnect", async () => {
     service.initialise();
     await service.loadFirstPage();
-    service.items.set([]);
+    seedFeed(service, []);
     api.get.mockClear();
     socket.trigger("connect");
     await vi.waitFor(() => expect(api.get).toHaveBeenCalledWith("/notifications/unread?limit=25"));
@@ -283,7 +290,7 @@ describe("NotificationsService", () => {
   it("reconciles all badge families after an HTTP read succeeds without a socket echo", async () => {
     vi.useFakeTimers();
     try {
-      service.items.set([notification()]);
+      seedFeed(service, [notification()]);
       await service.markRead("notification-1");
       const get = api.get.getMockImplementation() as (path: string) => Promise<unknown>;
       api.get.mockImplementation((path: string) => path === "/notifications/unread-count" ? Promise.resolve({ count: 0 })
@@ -303,20 +310,23 @@ describe("NotificationsService", () => {
   it("keeps unread and all notification pages separate when switching tabs", async () => {
     api.get.mockImplementation((path: string) => {
       if (path === "/notifications/org-unread-counts") return Promise.resolve([]);
-      if (path === "/notifications/unread?limit=25") return Promise.resolve(page([notification({ id: "unread" })], null, 1));
-      if (path === "/notifications?limit=25&includeRead=true") return Promise.resolve(page([notification({ id: "read-only", readAt: new Date() })], null, 1));
+      if (path === "/notifications/unread?limit=25") return Promise.resolve(page([notification({ id: "unread" })], "unread-next", 1));
+      if (path === "/notifications?limit=25&includeRead=true") return Promise.resolve(page([notification({ id: "read-only", readAt: new Date() })], "all-next", 1));
       return Promise.resolve([]);
     });
 
     await service.loadFirstPage();
     expect(service.items().map((n) => n.id)).toEqual(["unread"]);
+    expect(service.nextCursor()).toBe("unread-next");
 
     await service.setIncludeRead(true);
     expect(service.items().map((n) => n.id)).toEqual(["read-only"]);
+    expect(service.nextCursor()).toBe("all-next");
 
     await service.setIncludeRead(false);
 
     expect(service.items().map((n) => n.id)).toEqual(["unread"]);
+    expect(service.nextCursor()).toBe("unread-next");
     expect(service.unreadCount()).toBe(1);
     expect(service.loadError()).toBeNull();
   });
@@ -362,7 +372,7 @@ describe("NotificationsService", () => {
 
   it("does not load more notifications while offline", async () => {
     online.set(false);
-    service.nextCursor.set("cursor-1");
+    seedFeed(service, [], "cursor-1");
     api.get.mockClear();
 
     await service.loadMore();
@@ -481,7 +491,7 @@ describe("NotificationsService", () => {
   });
 
   it("optimistically marks one notification read and rolls back on failure", async () => {
-    service.items.set([notification()]);
+    seedFeed(service, [notification()]);
     service.unreadCount.set(1);
     api.post.mockRejectedValueOnce(new Error("nope"));
 
@@ -500,7 +510,7 @@ describe("NotificationsService", () => {
       notification({ id: "notification-2" }),
       notification({ id: "notification-3" }),
     ];
-    service.items.set(rows);
+    seedFeed(service, rows);
     service.unreadCount.set(3);
     service.cardUnreadCounts.set({ "card-1": 3 });
     service.boardUnreadCounts.set({ "board-1": 1 });
@@ -516,7 +526,7 @@ describe("NotificationsService", () => {
     expect(service.boardUnreadCounts()["board-1"]).toBeUndefined();
 
     api.post.mockClear();
-    service.items.set(rows);
+    seedFeed(service, rows);
     service.unreadCount.set(3);
     service.cardUnreadCounts.set({ "card-1": 3 });
     service.boardUnreadCounts.set({ "board-1": 1 });
@@ -533,7 +543,8 @@ describe("NotificationsService", () => {
   });
 
   it("ignores ids that are unknown or already read", async () => {
-    service.items.set([notification({ readAt: new Date("2026-05-21T01:00:00.000Z") })]);
+    await service.setIncludeRead(true);
+    seedFeed(service, [notification({ readAt: new Date("2026-05-21T01:00:00.000Z") })]);
     service.unreadCount.set(0);
 
     await service.markManyRead(["notification-1", "missing"]);
@@ -544,7 +555,7 @@ describe("NotificationsService", () => {
 
   it("optimistically marks one notification unread and rolls back on failure", async () => {
     await service.setIncludeRead(true);
-    service.items.set([notification({ readAt: new Date("2026-05-21T01:00:00.000Z") })]);
+    seedFeed(service, [notification({ readAt: new Date("2026-05-21T01:00:00.000Z") })]);
     service.unreadCount.set(0);
     api.post.mockRejectedValueOnce(new Error("nope"));
 
@@ -557,7 +568,7 @@ describe("NotificationsService", () => {
   });
 
   it("optimistically marks all notifications read and reloads on failure", async () => {
-    service.items.set([notification(), notification({ id: "notification-2" })]);
+    seedFeed(service, [notification(), notification({ id: "notification-2" })]);
     service.unreadCount.set(2);
     api.post.mockRejectedValueOnce(new Error("nope"));
 
@@ -570,7 +581,7 @@ describe("NotificationsService", () => {
   });
 
   it("marks only one board's notifications read", async () => {
-    service.items.set([
+    seedFeed(service, [
       notification(),
       notification({ id: "notification-2", cardId: "card-2", boardId: "board-2" }),
     ]);
@@ -586,7 +597,7 @@ describe("NotificationsService", () => {
   });
 
   it("optimistically marks card notifications read and clears card counts", async () => {
-    service.items.set([
+    seedFeed(service, [
       notification(),
       notification({ id: "notification-2", cardId: "card-2", boardId: "board-1" }),
     ]);
@@ -604,7 +615,7 @@ describe("NotificationsService", () => {
   });
 
   it("refreshes notification state when marking card notifications read fails", async () => {
-    service.items.set([notification()]);
+    seedFeed(service, [notification()]);
     service.unreadCount.set(1);
     service.boardUnreadCounts.set({ "board-1": 1 });
     service.cardUnreadCounts.set({ "card-1": 1 });
@@ -620,7 +631,7 @@ describe("NotificationsService", () => {
 
   it("does not mutate read or watch state while offline", async () => {
     online.set(false);
-    service.items.set([notification()]);
+    seedFeed(service, [notification()]);
     service.unreadCount.set(1);
     service.cardUnreadCounts.set({ "card-1": 1 });
 
@@ -710,7 +721,7 @@ describe("NotificationsService", () => {
     service.initialise();
     await Promise.resolve();
     service.boardFilter.set("board-2");
-    service.items.set([]);
+    seedFeed(service, []);
     service.unreadCount.set(2);
     service.boardUnreadCounts.set({ "board-1": 1 });
     service.cardUnreadCounts.set({ "card-1": 2 });
@@ -733,7 +744,7 @@ describe("NotificationsService", () => {
     });
     service.initialise();
     await Promise.resolve();
-    service.items.set([]);
+    seedFeed(service, []);
     service.boardUnreadCounts.set({ "board-1": 1 });
 
     socket.trigger("notification:updated", {
@@ -765,7 +776,7 @@ describe("NotificationsService", () => {
     const cleanup = service.beginViewingCard("card-1", "board-1");
     await Promise.resolve();
     api.post.mockClear();
-    service.items.set([]);
+    seedFeed(service, []);
     service.unreadCount.set(3);
     service.boardUnreadCounts.set({ "board-1": 1 });
     service.cardUnreadCounts.set({ "card-1": 1 });
@@ -787,7 +798,7 @@ describe("NotificationsService", () => {
     await Promise.resolve();
     writeActiveCardView("card-1");
     api.post.mockClear();
-    service.items.set([]);
+    seedFeed(service, []);
     service.unreadCount.set(1);
     service.boardUnreadCounts.set({ "board-1": 1 });
     service.cardUnreadCounts.set({ "card-1": 1 });
@@ -807,7 +818,7 @@ describe("NotificationsService", () => {
     await Promise.resolve();
     writeActiveCardView("card-1", "board-1", Date.now(), "user-2");
     api.post.mockClear();
-    service.items.set([]);
+    seedFeed(service, []);
     service.unreadCount.set(0);
     service.boardUnreadCounts.set({});
     service.cardUnreadCounts.set({});
@@ -841,7 +852,7 @@ describe("NotificationsService", () => {
     await Promise.resolve();
     writeActiveCardView("card-1");
     api.post.mockClear();
-    service.items.set([]);
+    seedFeed(service, []);
     service.unreadCount.set(0);
     service.boardUnreadCounts.set({});
     service.cardUnreadCounts.set({});
@@ -860,7 +871,7 @@ describe("NotificationsService", () => {
     service.initialise();
     await Promise.resolve();
     writeActiveCardView("card-2");
-    service.items.set([]);
+    seedFeed(service, []);
     service.unreadCount.set(0);
     service.boardUnreadCounts.set({});
     service.cardUnreadCounts.set({});
@@ -895,7 +906,7 @@ describe("NotificationsService", () => {
     service.initialise();
     await Promise.resolve();
     writeActiveCardView("card-1", "board-1", Date.now() - 20_000);
-    service.items.set([]);
+    seedFeed(service, []);
     service.unreadCount.set(0);
     service.boardUnreadCounts.set({});
     service.cardUnreadCounts.set({});

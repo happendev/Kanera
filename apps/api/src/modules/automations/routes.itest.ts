@@ -37,6 +37,7 @@ import {
   webhookEndpoints,
   workspaceMembers,
   workspaces,
+  type AutomationActionConfig,
 } from "@kanera/shared/schema";
 import { and, asc, eq, inArray, ne } from "drizzle-orm";
 import assert from "node:assert/strict";
@@ -1479,6 +1480,42 @@ void test("set custom field automation skips when every configured option was ar
     .from(cardCustomFieldValues)
     .where(and(eq(cardCustomFieldValues.cardId, card.id), eq(cardCustomFieldValues.fieldId, field.id)));
   assert.equal(values.length, 0);
+});
+
+void test("a malformed persisted field target still rolls back ordered actions when its value is missing", async () => {
+  const fixture = await setupWorkspace("owner-automation-malformed-field@example.com");
+  const [card] = await db.insert(cards).values({
+    boardId: fixture.board.id, listId: fixture.list.id, title: "Atomic legacy action", position: "1000.0000000000", createdById: fixture.user.id,
+  }).returning();
+  const [automation] = await db.insert(automations).values({
+    workspaceId: fixture.workspace.id, enabled: true, position: "1000.0000000000", triggerType: "card_enters_list", triggerListId: fixture.list.id,
+  }).returning();
+  assert.ok(card);
+  assert.ok(automation);
+  await db.insert(automationActions).values([
+    { automationId: automation.id, type: "set_completion", config: { completed: true }, position: "1000.0000000000" },
+    {
+      automationId: automation.id,
+      type: "populate_custom_field",
+      config: { fieldId: "not-a-uuid", value: null } as unknown as AutomationActionConfig,
+      position: "2000.0000000000",
+    },
+    { automationId: automation.id, type: "post_comment", config: { template: "Must not run" }, position: "3000.0000000000" },
+  ]);
+
+  await assert.rejects(db.transaction((tx) => runListEntryAutomations(tx, {
+    cardId: card.id, listId: fixture.list.id, boardId: fixture.board.id, workspaceId: fixture.workspace.id, clientId: fixture.user.clientId, trigger: "create",
+  })), (error: unknown) => {
+    const failure = error as { cause?: { code?: string } };
+    assert.equal(failure.cause?.code, "22P02");
+    return true;
+  });
+  const [unchanged] = await db.select().from(cards).where(eq(cards.id, card.id));
+  assert.equal(unchanged?.completedAt, null);
+  assert.deepEqual(await db.select().from(comments).where(eq(comments.cardId, card.id)), []);
+  assert.deepEqual(await db.select().from(activityEvents).where(eq(activityEvents.entityId, card.id)), []);
+  const stats = await loadAutomationRunStats(automation.id);
+  assert.equal(stats?.failedRunCount, 1);
 });
 
 void test("set custom field automation no-ops after the target field is deleted", async () => {

@@ -1,4 +1,6 @@
 import { dto } from "@kanera/shared";
+import { inProgressClockOf, type InProgressClock } from "@kanera/shared/events";
+import { IN_PROGRESS_CLOCK_COLUMNS } from "../../lib/in-progress-clock.js";
 import type { DeletionImpactResponse } from "@kanera/shared/dto";
 import { cards, lists } from "@kanera/shared/schema";
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
@@ -20,8 +22,8 @@ import { emitToBoard, emitToWorkspace } from "../../realtime/emit.js";
 // as targeted indexed probes so large workspaces do not pay for a full list scan.
 const neighbourPositions = workspaceNeighbourPositions(lists, "List");
 
-function listUpdateActivityValue(name: string, icon: string | null, color: string | null) {
-  return { name, icon, color };
+function listUpdateActivityValue(name: string, icon: string | null, color: string | null, inProgress: boolean) {
+  return { name, icon, color, inProgress };
 }
 
 export async function listRoutes(app: FastifyInstance) {
@@ -45,6 +47,7 @@ export async function listRoutes(app: FastifyInstance) {
       name: body.name,
       icon: body.icon ?? null,
       color: body.color ?? null,
+      inProgress: body.inProgress ?? false,
       position,
     }).returning();
 
@@ -73,16 +76,19 @@ export async function listRoutes(app: FastifyInstance) {
         ...(body.name !== undefined && { name: body.name }),
         ...(body.icon !== undefined && { icon: body.icon }),
         ...(body.color !== undefined && { color: body.color }),
+        // Toggling this re-times every card in the list (list_backfill_in_progress trigger).
+        ...(body.inProgress !== undefined && { inProgress: body.inProgress }),
         updatedAt: new Date(),
       })
       .where(eq(lists.id, id))
       .returning();
 
-    const fromValue = listUpdateActivityValue(current.name, current.icon, current.color);
+    const fromValue = listUpdateActivityValue(current.name, current.icon, current.color, current.inProgress);
     const toValue = listUpdateActivityValue(
       body.name ?? current.name,
       body.icon !== undefined ? body.icon : current.icon,
       body.color !== undefined ? body.color : current.color,
+      body.inProgress ?? current.inProgress,
     );
     // List titles and appearance are easy to tweak repeatedly while setting up
     // a workspace, so keep one visible feed story per edit burst.
@@ -187,14 +193,15 @@ export async function listRoutes(app: FastifyInstance) {
       .orderBy(asc(cards.position))
       .limit(1);
 
-    const moves: { id: string; boardId: string; prevPosition: string; position: string; completedAt: Date | null }[] = [];
+    const moves: { id: string; boardId: string; prevPosition: string; position: string; completedAt: Date | null; clock: InProgressClock | null }[] = [];
     let nextPos: string | null = firstInTarget?.position ?? null;
     // Card positions are shared by the whole workspace list. Thread a single
     // insertion cursor so merging lists preserves cross-board priority instead
     // of minting overlapping per-board positions.
     for (const card of [...sourceCards].reverse()) {
       const { position } = between(null, nextPos);
-      moves.push({ id: card.id, boardId: card.boardId, prevPosition: card.position, position, completedAt: card.completedAt });
+      // The time-in-progress clock is filled from the trigger's result when the row is written below.
+      moves.push({ id: card.id, boardId: card.boardId, prevPosition: card.position, position, completedAt: card.completedAt, clock: null });
       nextPos = position;
     }
 
@@ -205,13 +212,15 @@ export async function listRoutes(app: FastifyInstance) {
     const automationEffects = await db.transaction(async (tx) => {
       const collected: AutomationEffects[] = [];
       for (const m of moves) {
-        await tx.update(cards)
+        const [written] = await tx.update(cards)
           .set({
             listId: body.targetListId,
             position: m.position,
             updatedAt: new Date(),
           })
-          .where(eq(cards.id, m.id));
+          .where(eq(cards.id, m.id))
+          .returning(IN_PROGRESS_CLOCK_COLUMNS);
+        m.clock = written ? inProgressClockOf(written) : null;
         collected.push(await runCardMoveAutomations(tx, {
           cardId: m.id,
           fromListId: id,
@@ -253,6 +262,7 @@ export async function listRoutes(app: FastifyInstance) {
           toListId: body.targetListId,
           position: m.position,
           prevPosition: m.prevPosition,
+          ...(m.clock ?? { inProgressSince: null, inProgressSeconds: 0 }),
         });
       }
     }

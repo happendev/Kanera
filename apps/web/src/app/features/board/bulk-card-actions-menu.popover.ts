@@ -1,6 +1,6 @@
 import { ToastService } from "../../shared/toast.service";
 import { ChangeDetectionStrategy, Component, computed, ElementRef, inject, input, output, signal } from "@angular/core";
-import type { WireBoardMemberUser, WireCard, WireCardSummary, WireList } from "@kanera/shared/events";
+import { inProgressClockOf, type WireBoardMemberUser, type WireCard, type WireCardSummary, type WireList } from "@kanera/shared/events";
 import type { Card, CardLabel, List } from "@kanera/shared/schema";
 import { ApiClient } from "../../core/api/api.client";
 import { icu } from "../../core/i18n/icu";
@@ -621,7 +621,7 @@ export class BulkCardActionsMenuPopover {
       : (count) => icu($localize`:Toast after a bulk move:{count, plural, one {# card moved to the selected list.} other {# cards moved to the selected list.}}`, { count }), "arrows-transfer-down", async () => {
       for (const [boardId, cardIds] of this.cardIdBatchesByBoard()) {
         const result = await this.api.post<{ cards: WireCard[] }>(`/boards/${boardId}/cards/bulk/move`, { cardIds, listId });
-        for (const card of result.cards ?? []) this.state.moveCard(card.id, card.listId, card.position);
+        for (const card of result.cards ?? []) this.state.moveCard(card.id, card.listId, card.position, inProgressClockOf(card));
       }
     });
   }

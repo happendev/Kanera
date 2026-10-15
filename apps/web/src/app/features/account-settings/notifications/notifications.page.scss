@@ -1,3 +1,31 @@
+.notification-sound-field {
+  display: grid;
+  gap: 6px;
+}
+
+.notification-sound-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  select {
+    min-width: 0;
+    flex: 1 1 150px;
+  }
+
+  button {
+    flex: none;
+    gap: 6px;
+  }
+}
+
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  .notification-sound-controls select,
+  .notification-sound-controls button {
+    min-height: 44px;
+  }
+}
+
 .notification-types-block {
   display: grid;
   gap: 12px;

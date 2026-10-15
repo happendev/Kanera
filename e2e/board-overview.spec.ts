@@ -15,14 +15,18 @@ test("board overview and portfolio show card counts without health verdicts or s
   const overview = page.getByRole("region", { name: "Board overview", exact: true });
   await expect(overview).toBeVisible();
   await expect(overview).not.toContainText(/On track|Needs attention|At risk|Automatic work-risk/);
-  for (const label of ["Active", "Overdue", "Unassigned", "Inactive"]) {
+  for (const label of ["Active", "Overdue", "Unassigned", "Inactive", "In progress", "Too long"]) {
     await expect(overview.getByRole("button", { name: new RegExp(label) })).toBeVisible();
   }
+  // The panel fits its content: no scrollbar on a desktop viewport.
+  expect(await overview.evaluate((element) => element.scrollHeight <= element.clientHeight)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("board-overview.png") });
   await overview.screenshot({ path: testInfo.outputPath("board-overview.jpg"), quality: 88 });
   await overview.getByRole("button", { name: /Portfolio/ }).click();
   await expect(page.getByRole("columnheader", { name: "Overdue", exact: true })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Work risk", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("columnheader", { name: "In progress", exact: true })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Too long", exact: true })).toBeVisible();
   await expect(page.locator(".portfolio-health")).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath("portfolio.png") });
   const surface = await page.locator(".work-page").boundingBox();

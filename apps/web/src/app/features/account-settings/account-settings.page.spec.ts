@@ -606,7 +606,7 @@ describe("AccountSettingsPage", () => {
   });
 
   it("shows the scratchpad by default and persists the personal visibility choice", async () => {
-    activeSettingsRoute = "profile";
+    activeSettingsRoute = "preferences";
     await createPage();
 
     const root = fixture.nativeElement as HTMLElement;
@@ -1563,7 +1563,7 @@ describe("AccountSettingsPage", () => {
   });
 
   it("validates and submits the Signal Forms password model", async () => {
-    activeSettingsRoute = "profile";
+    activeSettingsRoute = "account-security";
     await createPage();
     const root = fixture.nativeElement as HTMLElement;
     const passwordSection = Array.from(root.querySelectorAll<HTMLElement>(".settings-section"))
@@ -1624,7 +1624,7 @@ describe("AccountSettingsPage", () => {
     isOrgAdmin.set(false);
     fixture.detectChanges();
     expect(labels()).toEqual([]);
-    expect(tabs()).toEqual(["Profile", "Notifications", expect.stringContaining("API Keys")]);
+    expect(tabs()).toEqual(["Profile", "Security", "Preferences", "Notifications", expect.stringContaining("API Keys")]);
   });
 
   it("shows storage usage near the limit and deletes the selected files", async () => {

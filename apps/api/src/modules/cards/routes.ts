@@ -1,12 +1,13 @@
 import { dto } from "@kanera/shared";
-import { SERVER_EVENTS, type WireCard, type WireCardChecklist, type WireCardDetail } from "@kanera/shared/events";
+import { inProgressClockOf, SERVER_EVENTS, type WireCard, type WireCardChecklist, type WireCardDetail } from "@kanera/shared/events";
 import { ACTIVITY_ACTION, activityEvents, agentRuns, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cards, cardWatchers, customFields, lists, users, type ActivityEvent } from "@kanera/shared/schema";
+import { IN_PROGRESS_CLOCK_COLUMNS } from "../../lib/in-progress-clock.js";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { randomUUID } from "node:crypto";
-import { db, type Db, type Tx } from "../../db.js";
+import { db, type Db, type Tx, type TxOnly } from "../../db.js";
 import { env } from "../../env.js";
-import { assignedCardVisibility, assertBatchCardVisibility, assertBoardAccess, assertCardAccess } from "../../lib/access.js";
+import { assignedCardVisibility, assertBatchCardVisibility, assertBoardAccess, assertCardAccess, assertWorkspaceAccess } from "../../lib/access.js";
 import {
   emitActivityFeedItem,
   emitActivityFeedItemDeleted,
@@ -20,6 +21,7 @@ import { evaluateWorkspaceAnalyticsMilestones } from "../../lib/analytics-milest
 import { EMPTY_EFFECTS, emitAutomationEffects, runCardAssignedAutomations, runCardLabelSetAutomations, runCardMarkedCompleteAutomations, runCardMoveAutomations, runChecklistCompletionAutomations, runCustomFieldValueChangedAutomations, runListEntryAutomations, type AutomationEffects } from "../../lib/automations.js";
 import { invalidateQueuesForCards } from "../../lib/card-priority-invalidation.js";
 import { applyChecklistTemplates } from "../../lib/checklist-templates.js";
+import { loadChecklistsForCard, loadChecklistsForCards } from "../../lib/checklist-rows.js";
 import { emitLaneRebalanced, emitWorkspaceLaneRebalanced, positionForLaneInsert, rebalanceBoardLane } from "../../lib/board-lane.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { assertValidOptionIds, assertWorkspaceMemberIds, buildCustomFieldValueColumns, customFieldValueEquals, describeCustomFieldValue, emptyValueColumns, hasCustomFieldValue, type CustomFieldValueColumns } from "../../lib/custom-fields.js";
@@ -417,39 +419,152 @@ async function rebalanceChecklistItems(checklistId: string, tx: Tx = db) {
   return positions;
 }
 
-async function loadChecklistsForCards(cardIds: readonly string[], tx: Tx = db): Promise<Map<string, WireCardChecklist[]>> {
-  const [checklistRows, itemRows] = await Promise.all([
-    tx.select().from(cardChecklists).where(inArray(cardChecklists.cardId, cardIds)).orderBy(asc(cardChecklists.cardId), asc(cardChecklists.position)),
-    tx
-      .select({
-        item: cardChecklistItems,
-        checklistId: cardChecklistItems.checklistId,
-      })
-      .from(cardChecklistItems)
-      .innerJoin(cardChecklists, eq(cardChecklists.id, cardChecklistItems.checklistId))
-      .where(inArray(cardChecklists.cardId, cardIds))
-      .orderBy(asc(cardChecklists.cardId), asc(cardChecklists.position), asc(cardChecklistItems.position)),
-  ]);
-  const itemsByChecklist = new Map<string, typeof cardChecklistItems.$inferSelect[]>();
-  for (const row of itemRows) {
-    const items = itemsByChecklist.get(row.checklistId);
-    if (items) items.push(row.item);
-    else itemsByChecklist.set(row.checklistId, [row.item]);
-  }
-  const checklistsByCard = new Map<string, WireCardChecklist[]>();
-  for (const checklist of checklistRows) {
-    const checklists = checklistsByCard.get(checklist.cardId) ?? [];
-    checklists.push({ ...checklist, items: itemsByChecklist.get(checklist.id) ?? [] });
-    checklistsByCard.set(checklist.cardId, checklists);
-  }
-  return checklistsByCard;
-}
-
-async function loadChecklistsForCard(cardId: string, tx: Tx = db): Promise<WireCardChecklist[]> {
-  return (await loadChecklistsForCards([cardId], tx)).get(cardId) ?? [];
-}
-
 type BoardAccessContext = Awaited<ReturnType<typeof assertBoardAccess>>;
+
+type CardAssignmentContext = {
+  cardId: string;
+  boardId: string;
+  workspaceId: string;
+  clientId: string;
+  actorId: string;
+  previousIds: string[];
+  nextIds: string[];
+  bulk?: true;
+};
+
+type CardLabelsWrite = {
+  cardId: string;
+  boardId: string;
+  labelIds: string[];
+  activity: CoalescedActivityResult;
+  automationEffects: AutomationEffects;
+};
+
+async function applyCardLabels(
+  tx: TxOnly,
+  opts: CardAssignmentContext & { labelNames: string[]; labelNamesById: Record<string, string> },
+): Promise<CardLabelsWrite> {
+  const previousSet = new Set(opts.previousIds);
+  const nextSet = new Set(opts.nextIds);
+  const addedLabelIds = opts.nextIds.filter((labelId) => !previousSet.has(labelId));
+  const removedLabelIds = opts.previousIds.filter((labelId) => !nextSet.has(labelId));
+  const fromValue = sortedIds(opts.previousIds);
+  const toValue = sortedIds(opts.nextIds);
+  await tx.delete(cardLabelAssignments).where(eq(cardLabelAssignments.cardId, opts.cardId));
+  if (opts.nextIds.length > 0) await tx.insert(cardLabelAssignments).values(opts.nextIds.map((labelId) => ({ cardId: opts.cardId, labelId })));
+  const activity = await recordCoalescedActivity(tx, {
+    boardId: opts.boardId,
+    workspaceId: opts.workspaceId,
+    actorId: opts.actorId,
+    entityType: "card",
+    entityId: opts.cardId,
+    action: ACTIVITY_ACTION.LABELS_SET,
+    coalesceKey: "card:labels",
+    windowMs: CARD_LABEL_MISTAKE_WINDOW_MS,
+    fromValue,
+    toValue,
+    payload: {
+      labelIds: opts.nextIds,
+      labelNames: opts.labelNames,
+      addedLabelNames: addedLabelIds.map((labelId) => opts.labelNamesById[labelId]).filter((name): name is string => Boolean(name)),
+      removedLabelNames: removedLabelIds.map((labelId) => opts.labelNamesById[labelId]).filter((name): name is string => Boolean(name)),
+      labelNamesById: opts.labelNamesById,
+      fromValue,
+      toValue,
+      ...(opts.bulk ? { bulk: true } : {}),
+    },
+  });
+  // Only additions trigger rules; automation label effects intentionally do not cascade.
+  const automationEffects = await runCardLabelSetAutomations(tx, {
+    cardId: opts.cardId,
+    addedLabelIds,
+    boardId: opts.boardId,
+    workspaceId: opts.workspaceId,
+    clientId: opts.clientId,
+    triggerActorId: opts.actorId,
+  });
+  return { cardId: opts.cardId, boardId: opts.boardId, labelIds: opts.nextIds, activity, automationEffects };
+}
+
+async function emitCardLabels(rows: readonly CardLabelsWrite[]): Promise<void> {
+  for (const update of rows) {
+    await emitToBoard(update.boardId, SERVER_EVENTS.CARD_LABELS_SET, { boardId: update.boardId, cardId: update.cardId, labelIds: update.labelIds });
+    await emitCoalescedCardActivityFeedItem(update.boardId, update.cardId, update.activity);
+    await emitAutomationEffects(update.automationEffects);
+  }
+}
+
+type CardAssigneesWrite = {
+  cardId: string;
+  boardId: string;
+  assigneeIds: string[];
+  addedUserIds: string[];
+  activity: CoalescedActivityResult;
+  automationEffects: AutomationEffects;
+};
+
+async function applyCardAssignees(
+  tx: TxOnly,
+  opts: CardAssignmentContext & { assigneeNamesById: Record<string, string> },
+): Promise<CardAssigneesWrite> {
+  const previousSet = new Set(opts.previousIds);
+  const nextSet = new Set(opts.nextIds);
+  const addedUserIds = opts.nextIds.filter((userId) => !previousSet.has(userId));
+  const removedUserIds = opts.previousIds.filter((userId) => !nextSet.has(userId));
+  const fromValue = sortedIds(opts.previousIds);
+  const toValue = sortedIds(opts.nextIds);
+  await tx.delete(cardAssignees).where(eq(cardAssignees.cardId, opts.cardId));
+  if (opts.nextIds.length > 0) await tx.insert(cardAssignees).values(opts.nextIds.map((userId) => ({ cardId: opts.cardId, userId })));
+  const activity = await recordCoalescedActivity(tx, {
+    boardId: opts.boardId,
+    workspaceId: opts.workspaceId,
+    actorId: opts.actorId,
+    entityType: "card",
+    entityId: opts.cardId,
+    action: ACTIVITY_ACTION.ASSIGNEES_SET,
+    coalesceKey: "card:assignees",
+    windowMs: CARD_ASSIGNEE_MISTAKE_WINDOW_MS,
+    fromValue,
+    toValue,
+    payload: {
+      assigneeIds: opts.nextIds,
+      addedAssigneeNames: addedUserIds.map((userId) => opts.assigneeNamesById[userId]).filter((name): name is string => Boolean(name)),
+      removedAssigneeNames: removedUserIds.map((userId) => opts.assigneeNamesById[userId]).filter((name): name is string => Boolean(name)),
+      assigneeNamesById: opts.assigneeNamesById,
+      fromValue,
+      toValue,
+      ...(opts.bulk ? { bulk: true } : {}),
+    },
+  });
+  // Unchanged and removed assignees must not replay assignment-triggered actions.
+  const automationEffects = await runCardAssignedAutomations(tx, {
+    cardId: opts.cardId,
+    addedUserIds,
+    boardId: opts.boardId,
+    workspaceId: opts.workspaceId,
+    clientId: opts.clientId,
+    triggerActorId: opts.actorId,
+  });
+  return { cardId: opts.cardId, boardId: opts.boardId, assigneeIds: opts.nextIds, addedUserIds, activity, automationEffects };
+}
+
+async function emitCardAssignees(rows: readonly CardAssigneesWrite[], mailer: FastifyInstance["mailer"], actorId: string): Promise<void> {
+  for (const update of rows) {
+    await enqueueCardAssignedEmails({
+      tx: db,
+      mailer,
+      webOrigin: env.WEB_ORIGIN,
+      cardId: update.cardId,
+      actorId,
+      recipientUserIds: update.addedUserIds,
+    });
+    await emitToBoard(update.boardId, SERVER_EVENTS.CARD_ASSIGNEES_SET, { boardId: update.boardId, cardId: update.cardId, assigneeIds: update.assigneeIds });
+    await emitCoalescedCardActivityFeedItem(update.boardId, update.cardId, update.activity);
+    await emitAutomationEffects(update.automationEffects);
+  }
+  // Assignment changes alter live "Up next" visibility without touching queue rows.
+  await invalidateQueuesForCards(rows.map((update) => update.cardId));
+}
 
 type CardCompletionWrite = {
   card: typeof cards.$inferSelect;
@@ -1191,79 +1306,34 @@ export async function cardRoutes(
     const labelNames = body.labelIds.map((id) => labelNameById.get(id)).filter((name): name is string => Boolean(name));
 
     const updates = await db.transaction(async (tx) => {
-      const rows: {
-        cardId: string;
-        labelIds: string[];
-        activity: CoalescedActivityResult;
-        automationEffects: Awaited<ReturnType<typeof runCardLabelSetAutomations>>;
-      }[] = [];
+      const rows: CardLabelsWrite[] = [];
       for (const card of targetCards) {
         const previous = await tx
           .select({ labelId: cardLabelAssignments.labelId })
           .from(cardLabelAssignments)
           .where(eq(cardLabelAssignments.cardId, card.id));
         const previousIds = previous.map((row) => row.labelId);
-        const previousSet = new Set(previousIds);
         const nextIds = body.mode === "add"
           ? Array.from(new Set([...previousIds, ...body.labelIds]))
           : previousIds.filter((labelId) => !body.labelIds.includes(labelId));
         if (sortedIds(previousIds).join("\0") === sortedIds(nextIds).join("\0")) continue;
-        const addedLabelIds = nextIds.filter((labelId) => !previousSet.has(labelId));
-        await tx.delete(cardLabelAssignments).where(eq(cardLabelAssignments.cardId, card.id));
-        if (nextIds.length > 0) await tx.insert(cardLabelAssignments).values(nextIds.map((labelId) => ({ cardId: card.id, labelId })));
-        const addedLabelNames = nextIds
-          .filter((labelId) => !previousSet.has(labelId))
-          .map((labelId) => labelNameById.get(labelId))
-          .filter((name): name is string => Boolean(name));
-        const nextSet = new Set(nextIds);
-        const removedLabelNames = previousIds
-          .filter((labelId) => !nextSet.has(labelId))
-          .map((labelId) => labelNameById.get(labelId))
-          .filter((name): name is string => Boolean(name));
-        const previousSortedIds = sortedIds(previousIds);
-        const nextSortedIds = sortedIds(nextIds);
-        const activity = await recordCoalescedActivity(tx, {
+        rows.push(await applyCardLabels(tx, {
+          cardId: card.id,
           boardId,
           workspaceId: ctx.workspaceId,
+          clientId: ctx.clientId,
           actorId: req.auth.sub,
-          entityType: "card",
-          entityId: card.id,
-          action: ACTIVITY_ACTION.LABELS_SET,
-          coalesceKey: "card:labels",
-          windowMs: CARD_LABEL_MISTAKE_WINDOW_MS,
-          fromValue: previousSortedIds,
-          toValue: nextSortedIds,
-          payload: {
-            labelIds: nextIds,
-            labelNames,
-            addedLabelNames,
-            removedLabelNames,
-            labelNamesById,
-            fromValue: previousSortedIds,
-            toValue: nextSortedIds,
-            bulk: true,
-          },
-        });
-        const automationEffects = body.mode === "add"
-          ? await runCardLabelSetAutomations(tx, {
-            cardId: card.id,
-            addedLabelIds,
-            boardId,
-            workspaceId: ctx.workspaceId,
-            clientId: ctx.clientId,
-            triggerActorId: req.auth.sub,
-          })
-          : EMPTY_EFFECTS;
-        rows.push({ cardId: card.id, labelIds: nextIds, activity, automationEffects });
+          previousIds,
+          nextIds,
+          labelNames,
+          labelNamesById,
+          bulk: true,
+        }));
       }
       return rows;
     });
 
-    for (const update of updates) {
-      await emitToBoard(boardId, SERVER_EVENTS.CARD_LABELS_SET, { boardId, cardId: update.cardId, labelIds: update.labelIds });
-      await emitCoalescedCardActivityFeedItem(boardId, update.cardId, update.activity);
-      await emitAutomationEffects(update.automationEffects);
-    }
+    await emitCardLabels(updates);
     return { updated: updates.length, updatedCardIds: updates.map((update) => update.cardId), skippedCardIds };
   });
 
@@ -1280,83 +1350,36 @@ export async function cardRoutes(
       .select({ id: users.id, displayName: users.displayName })
       .from(users)
       .where(inArray(users.id, userIds));
-    const userNameById = new Map(changedUsers.map((user) => [user.id, user.displayName]));
     const assigneeNamesById = Object.fromEntries(changedUsers.map((user) => [user.id, user.displayName]));
 
     const updates = await db.transaction(async (tx) => {
-      const rows: {
-        cardId: string;
-        assigneeIds: string[];
-        addedUserIds: string[];
-        activity: CoalescedActivityResult;
-        automationEffects: Awaited<ReturnType<typeof runCardAssignedAutomations>>;
-      }[] = [];
+      const rows: CardAssigneesWrite[] = [];
       for (const card of targetCards) {
         const previous = await tx
           .select({ userId: cardAssignees.userId })
           .from(cardAssignees)
           .where(eq(cardAssignees.cardId, card.id));
         const previousIds = previous.map((row) => row.userId);
-        const previousSet = new Set(previousIds);
         const nextUserIds = body.mode === "add"
           ? Array.from(new Set([...previousIds, ...userIds]))
           : previousIds.filter((userId) => !userIds.includes(userId));
         if (sortedIds(previousIds).join("\0") === sortedIds(nextUserIds).join("\0")) continue;
-        const nextSet = new Set(nextUserIds);
-        const addedUserIds = nextUserIds.filter((userId) => !previousSet.has(userId));
-        const removedUserIds = previousIds.filter((userId) => !nextSet.has(userId));
-        await tx.delete(cardAssignees).where(eq(cardAssignees.cardId, card.id));
-        if (nextUserIds.length > 0) await tx.insert(cardAssignees).values(nextUserIds.map((userId) => ({ cardId: card.id, userId })));
-        const activity = await recordCoalescedActivity(tx, {
-          boardId,
-          workspaceId: ctx.workspaceId,
-          actorId: req.auth.sub,
-          entityType: "card",
-          entityId: card.id,
-          action: ACTIVITY_ACTION.ASSIGNEES_SET,
-          coalesceKey: "card:assignees",
-          windowMs: CARD_ASSIGNEE_MISTAKE_WINDOW_MS,
-          fromValue: sortedIds(previousIds),
-          toValue: sortedIds(nextUserIds),
-          payload: {
-            assigneeIds: nextUserIds,
-            addedAssigneeNames: addedUserIds.map((userId) => userNameById.get(userId)).filter((name): name is string => Boolean(name)),
-            removedAssigneeNames: removedUserIds.map((userId) => userNameById.get(userId)).filter((name): name is string => Boolean(name)),
-            assigneeNamesById,
-            fromValue: sortedIds(previousIds),
-            toValue: sortedIds(nextUserIds),
-            bulk: true,
-          },
-        });
-        const automationEffects = await runCardAssignedAutomations(tx, {
+        rows.push(await applyCardAssignees(tx, {
           cardId: card.id,
-          addedUserIds,
           boardId,
           workspaceId: ctx.workspaceId,
           clientId: ctx.clientId,
-          triggerActorId: req.auth.sub,
-        });
-        rows.push({ cardId: card.id, assigneeIds: nextUserIds, addedUserIds, activity, automationEffects });
+          actorId: req.auth.sub,
+          previousIds,
+          nextIds: nextUserIds,
+          assigneeNamesById,
+          bulk: true,
+        }));
       }
       return rows;
     });
 
-    for (const update of updates) {
-      await enqueueCardAssignedEmails({
-        tx: db,
-        mailer: app.mailer,
-        webOrigin: env.WEB_ORIGIN,
-        cardId: update.cardId,
-        actorId: req.auth.sub,
-        recipientUserIds: update.addedUserIds,
-      });
-      await emitToBoard(boardId, SERVER_EVENTS.CARD_ASSIGNEES_SET, { boardId, cardId: update.cardId, assigneeIds: update.assigneeIds });
-      await emitCoalescedCardActivityFeedItem(boardId, update.cardId, update.activity);
-      await emitAutomationEffects(update.automationEffects);
-    }
-    // Un-assigning drops a queued card out of the target's live "Up next" queue (and re-assigning
-    // restores it) without touching card_priorities rows, so open queues must be pinged here.
-    await invalidateQueuesForCards(updates.map((update) => update.cardId));
+    await emitCardAssignees(updates, app.mailer, req.auth.sub);
     return { updated: updates.length, updatedCardIds: updates.map((update) => update.cardId), skippedCardIds };
   });
 
@@ -1424,6 +1447,7 @@ export async function cardRoutes(
         toListId: body.listId,
         position: move.card.position,
         prevPosition: move.previous.position,
+        ...inProgressClockOf(move.card),
       });
       await emitCardActivityFeedItem(boardId, move.card.id, move.activity);
       await emitAutomationEffects(move.automationEffects);
@@ -1511,6 +1535,59 @@ export async function cardRoutes(
     }
 
     return reply.status(201).send({ duplicated: created.length, cards: created, skippedCardIds });
+  });
+
+  // Workspace admins correct a card's tracked time in progress (a card that sat in an In progress
+  // list over a holiday, or work done before the list was flagged). The value is the total as of
+  // now. A running stint keeps its start when the correction covers it, so the alert and its
+  // automation keep reading the real stint; a total below what the running stint already tracked
+  // restarts the stint now instead. Only the clock columns are written, so the card trigger does not
+  // fire. The audit entry is feed-only: a correction is not news for assignees or watchers.
+  app.put("/cards/:id/in-progress-time", async (req) => {
+    const { id } = req.params as { id: string };
+    const body = dto.setInProgressTimeBody.parse(req.body);
+    const { card: current, ctx } = await loadEditableCard(req.auth, id);
+    await assertWorkspaceAccess(req.auth, ctx.workspaceId, "admin");
+    assertCardActive(current);
+
+    const { card, activity } = await db.transaction(async (tx) => {
+      const [clock] = await tx.execute<{ banked: number; running: number }>(sql`
+        select c.in_progress_seconds as banked,
+               in_progress_working_seconds(c.in_progress_since, now(), w.time_zone) as running
+        from card c
+        inner join workspace w on w.id = c.workspace_id
+        where c.id = ${id}
+        for update of c
+      `).then((result) => result.rows);
+      if (!clock) throw notFound();
+      const running = Number(clock.running);
+      const fromSeconds = Number(clock.banked) + running;
+      const keepsStint = body.seconds >= running;
+      const [updated] = await tx
+        .update(cards)
+        .set({
+          inProgressSeconds: keepsStint ? body.seconds - running : body.seconds,
+          ...(keepsStint ? {} : { inProgressSince: sql`case when ${cards.inProgressSince} is null then null else now() end` }),
+          updatedAt: new Date(),
+        })
+        .where(eq(cards.id, id))
+        .returning();
+      const recorded = await recordActivity(tx, {
+        boardId: current.boardId,
+        workspaceId: ctx.workspaceId,
+        actorId: req.auth.sub,
+        entityType: "card",
+        entityId: id,
+        action: ACTIVITY_ACTION.IN_PROGRESS_TIME_SET,
+        payload: { fromSeconds, toSeconds: body.seconds },
+      });
+      return { card: updated!, activity: recorded };
+    });
+
+    const wireCard = toWireCard(card, req.auth.cid);
+    await emitToBoard(current.boardId, SERVER_EVENTS.CARD_UPDATED, { boardId: current.boardId, card: wireCard });
+    await emitCardActivityFeedItem(current.boardId, id, activity, { notify: false });
+    return wireCard;
   });
 
   app.patch("/cards/:id", async (req) => {
@@ -1717,7 +1794,7 @@ export async function cardRoutes(
     const fromListId = current.listId;
     const prevPosition = current.position;
     const enteringNewList = fromListId !== body.listId;
-    const { position, finalPosition, finalListId, rebalancedPositions, laneRebalanced, activity, completedCard, completionActivity, automationEffects, noOp } = await db.transaction(async (tx) => {
+    const { position, finalPosition, finalListId, clock, finalClock, rebalancedPositions, laneRebalanced, activity, completedCard, completionActivity, automationEffects, noOp } = await db.transaction(async (tx) => {
       await tx.select({ id: lists.id }).from(lists).where(eq(lists.id, body.listId)).for("update").limit(1);
 
       // The mover needs access to the card's own board. Anchor cards are only
@@ -1766,6 +1843,8 @@ export async function cardRoutes(
           position,
           finalPosition: prevPosition,
           finalListId: fromListId,
+          clock: inProgressClockOf(current),
+          finalClock: inProgressClockOf(current),
           rebalancedPositions: null,
           laneRebalanced: null,
           activity: null,
@@ -1776,14 +1855,16 @@ export async function cardRoutes(
         };
       }
 
-      await tx
+      // The trigger owns the time-in-progress clock; read back what it wrote for this move's event.
+      const [written] = await tx
         .update(cards)
         .set({
           listId: body.listId,
           position,
           updatedAt: new Date(),
         })
-        .where(eq(cards.id, id));
+        .where(eq(cards.id, id))
+        .returning(IN_PROGRESS_CLOCK_COLUMNS);
 
       const rebalancedPositions = result.needsRebalance ? await rebalanceBoardLane(body.listId, current.boardId, tx) : null;
       if (rebalancedPositions) {
@@ -1814,11 +1895,15 @@ export async function cardRoutes(
           triggerActorId: req.auth.sub,
         })
         : { effects: [] };
-      const [finalCard] = await tx.select({ listId: cards.listId, position: cards.position }).from(cards).where(eq(cards.id, id)).limit(1);
+      const [finalCard] = await tx.select({ listId: cards.listId, position: cards.position, ...IN_PROGRESS_CLOCK_COLUMNS }).from(cards).where(eq(cards.id, id)).limit(1);
+      const clock = inProgressClockOf(written ?? current);
       return {
         position,
         finalPosition: finalCard?.position ?? position,
         finalListId: finalCard?.listId ?? body.listId,
+        clock,
+        // After automations, which may have moved the card again; that move emits its own event.
+        finalClock: finalCard ? inProgressClockOf(finalCard) : clock,
         rebalancedPositions,
         laneRebalanced,
         activity,
@@ -1829,7 +1914,7 @@ export async function cardRoutes(
       };
     });
 
-    if (noOp) return { id, listId: finalListId, position: finalPosition };
+    if (noOp) return { id, listId: finalListId, position: finalPosition, ...finalClock };
     if (laneRebalanced) await emitWorkspaceLaneRebalanced(body.listId, laneRebalanced);
 
     if (rebalancedPositions) {
@@ -1844,6 +1929,7 @@ export async function cardRoutes(
       toListId: body.listId,
       position,
       prevPosition,
+      ...clock,
     });
     if (activity) await emitCardActivityFeedItem(current.boardId, id, activity);
     if (completedCard && completionActivity) {
@@ -1857,7 +1943,7 @@ export async function cardRoutes(
       actorId: req.auth.sub,
       supportSession: req.auth.authKind === "support" || req.auth.authKind === "apiKey",
     });
-    return { id, listId: finalListId, position: finalPosition };
+    return { id, listId: finalListId, position: finalPosition, ...finalClock };
   });
 
   app.post("/cards/:id/duplicate", async (req, reply) => {
@@ -3666,11 +3752,8 @@ export async function cardRoutes(
       .from(cardLabelAssignments)
       .where(eq(cardLabelAssignments.cardId, id));
     const previousLabelIds = currentAssignments.map((assignment) => assignment.labelId);
-    const previousLabelIdSet = new Set(previousLabelIds);
     const nextLabelIdSet = new Set(body.labelIds);
     let labelNames: string[] = [];
-    let addedLabelNames: string[] = [];
-    let removedLabelNames: string[] = [];
     let labelNamesById: Record<string, string> = {};
 
     if (body.labelIds.length > 0) {
@@ -3685,11 +3768,6 @@ export async function cardRoutes(
       labelNames = body.labelIds
         .map((labelId) => labelNameById.get(labelId))
         .filter((labelName): labelName is string => Boolean(labelName));
-
-      addedLabelNames = body.labelIds
-        .filter((labelId) => !previousLabelIdSet.has(labelId))
-        .map((labelId) => labelNameById.get(labelId))
-        .filter((labelName): labelName is string => Boolean(labelName));
     }
 
     if (previousLabelIds.length > 0) {
@@ -3699,66 +3777,33 @@ export async function cardRoutes(
           .select({ id: cardLabels.id, name: cardLabels.name })
           .from(cardLabels)
           .where(and(eq(cardLabels.workspaceId, ctx.workspaceId), inArray(cardLabels.id, removedLabelIds)));
-        const previousLabelNameById = new Map(previousLabels.map((label) => [label.id, label.name]));
         labelNamesById = {
           ...labelNamesById,
           ...Object.fromEntries(previousLabels.map((label) => [label.id, label.name])),
         };
-        removedLabelNames = removedLabelIds
-          .map((labelId) => previousLabelNameById.get(labelId))
-          .filter((labelName): labelName is string => Boolean(labelName));
       }
     }
 
-    const previousSortedLabelIds = sortedIds(previousLabelIds);
-    const nextSortedLabelIds = sortedIds(body.labelIds);
-    const addedLabelIds = body.labelIds.filter((labelId) => !previousLabelIdSet.has(labelId));
-    const { activity, automationEffects, finalLabelIds } = await db.transaction(async (tx) => {
-      await tx.delete(cardLabelAssignments).where(eq(cardLabelAssignments.cardId, id));
-      if (body.labelIds.length > 0) {
-        await tx.insert(cardLabelAssignments).values(body.labelIds.map((labelId) => ({ cardId: id, labelId })));
-      }
-      const activity = await recordCoalescedActivity(tx, {
-        boardId: card.boardId,
-        workspaceId: ctx.workspaceId,
-        actorId: req.auth.sub,
-        entityType: "card",
-        entityId: id,
-        action: ACTIVITY_ACTION.LABELS_SET,
-        coalesceKey: "card:labels",
-        windowMs: CARD_LABEL_MISTAKE_WINDOW_MS,
-        fromValue: previousSortedLabelIds,
-        toValue: nextSortedLabelIds,
-        payload: {
-          labelIds: body.labelIds,
-          labelNames,
-          addedLabelNames,
-          removedLabelNames,
-          labelNamesById,
-          fromValue: previousSortedLabelIds,
-          toValue: nextSortedLabelIds,
-        },
-      });
-      // Only newly added labels can fire label-set automations. Effects from
-      // automation label actions are emitted later and intentionally do not cascade.
-      const automationEffects = await runCardLabelSetAutomations(tx, {
+    const { update, finalLabelIds } = await db.transaction(async (tx) => {
+      const update = await applyCardLabels(tx, {
         cardId: id,
-        addedLabelIds,
         boardId: card.boardId,
         workspaceId: ctx.workspaceId,
         clientId: ctx.clientId,
-        triggerActorId: req.auth.sub,
+        actorId: req.auth.sub,
+        previousIds: previousLabelIds,
+        nextIds: body.labelIds,
+        labelNames,
+        labelNamesById,
       });
       const finalAssignments = await tx
         .select({ labelId: cardLabelAssignments.labelId })
         .from(cardLabelAssignments)
         .where(eq(cardLabelAssignments.cardId, id));
-      return { activity, automationEffects, finalLabelIds: finalAssignments.map((assignment) => assignment.labelId) };
+      return { update, finalLabelIds: finalAssignments.map((assignment) => assignment.labelId) };
     });
 
-    await emitToBoard(card.boardId, SERVER_EVENTS.CARD_LABELS_SET, { boardId: card.boardId, cardId: id, labelIds: body.labelIds });
-    await emitCoalescedCardActivityFeedItem(card.boardId, id, activity);
-    await emitAutomationEffects(automationEffects);
+    await emitCardLabels([update]);
     return { labelIds: finalLabelIds };
   });
 
@@ -3781,13 +3826,7 @@ export async function cardRoutes(
       .from(cardAssignees)
       .where(eq(cardAssignees.cardId, id));
     const previousUserIds = currentAssignments.map((assignment) => assignment.userId);
-    const previousUserIdSet = new Set(previousUserIds);
-    const nextUserIdSet = new Set(nextUserIds);
-    const addedUserIds = nextUserIds.filter((userId) => !previousUserIdSet.has(userId));
-    const removedUserIds = previousUserIds.filter((userId) => !nextUserIdSet.has(userId));
     const relevantUserIds = Array.from(new Set([...previousUserIds, ...nextUserIds]));
-    let addedAssigneeNames: string[] = [];
-    let removedAssigneeNames: string[] = [];
     let assigneeNamesById: Record<string, string> = {};
 
     if (relevantUserIds.length > 0) {
@@ -3795,74 +3834,28 @@ export async function cardRoutes(
         .select({ id: users.id, displayName: users.displayName })
         .from(users)
         .where(inArray(users.id, relevantUserIds));
-      const userNameById = new Map(changedUsers.map((user) => [user.id, user.displayName]));
       assigneeNamesById = Object.fromEntries(changedUsers.map((user) => [user.id, user.displayName]));
-      addedAssigneeNames = addedUserIds
-        .map((userId) => userNameById.get(userId))
-        .filter((displayName): displayName is string => Boolean(displayName));
-      removedAssigneeNames = removedUserIds
-        .map((userId) => userNameById.get(userId))
-        .filter((displayName): displayName is string => Boolean(displayName));
     }
 
-    const previousSortedUserIds = sortedIds(previousUserIds);
-    const nextSortedUserIds = sortedIds(nextUserIds);
-    const { activity, automationEffects, finalAssigneeIds } = await db.transaction(async (tx) => {
-      await tx.delete(cardAssignees).where(eq(cardAssignees.cardId, id));
-      if (nextUserIds.length > 0) {
-        await tx.insert(cardAssignees).values(nextUserIds.map((userId) => ({ cardId: id, userId })));
-      }
-
-      const activity = await recordCoalescedActivity(tx, {
-        boardId: card.boardId,
-        workspaceId: ctx.workspaceId,
-        actorId: req.auth.sub,
-        entityType: "card",
-        entityId: id,
-        action: ACTIVITY_ACTION.ASSIGNEES_SET,
-        coalesceKey: "card:assignees",
-        windowMs: CARD_ASSIGNEE_MISTAKE_WINDOW_MS,
-        fromValue: previousSortedUserIds,
-        toValue: nextSortedUserIds,
-        payload: {
-          assigneeIds: nextUserIds,
-          addedAssigneeNames,
-          removedAssigneeNames,
-          assigneeNamesById,
-          fromValue: previousSortedUserIds,
-          toValue: nextSortedUserIds,
-        },
-      });
-      // Assignment-triggered automations should only run for newly added users;
-      // unchanged or removed assignees must not replay actions.
-      const automationEffects = await runCardAssignedAutomations(tx, {
+    const update = await db.transaction(async (tx) => {
+      const update = await applyCardAssignees(tx, {
         cardId: id,
-        addedUserIds,
         boardId: card.boardId,
         workspaceId: ctx.workspaceId,
         clientId: ctx.clientId,
-        triggerActorId: req.auth.sub,
+        actorId: req.auth.sub,
+        previousIds: previousUserIds,
+        nextIds: nextUserIds,
+        assigneeNamesById,
       });
       const finalAssignments = await tx
         .select({ userId: cardAssignees.userId })
         .from(cardAssignees)
         .where(eq(cardAssignees.cardId, id));
-      return { activity, automationEffects, finalAssigneeIds: finalAssignments.map((assignment) => assignment.userId) };
+      // Single-card writes publish the final set; bulk writes replay the authored set before effects.
+      return { ...update, assigneeIds: finalAssignments.map((assignment) => assignment.userId) };
     });
-    await enqueueCardAssignedEmails({
-      tx: db,
-      mailer: app.mailer,
-      webOrigin: env.WEB_ORIGIN,
-      cardId: id,
-      actorId: req.auth.sub,
-      recipientUserIds: addedUserIds,
-    });
-    await emitToBoard(card.boardId, SERVER_EVENTS.CARD_ASSIGNEES_SET, { boardId: card.boardId, cardId: id, assigneeIds: finalAssigneeIds });
-    await emitCoalescedCardActivityFeedItem(card.boardId, id, activity);
-    await emitAutomationEffects(automationEffects);
-    // Un-assigning drops a queued card out of the target's live "Up next" queue (and re-assigning
-    // restores it) without touching card_priorities rows, so open queues must be pinged here.
-    await invalidateQueuesForCards([id]);
-    return { assigneeIds: finalAssigneeIds };
+    await emitCardAssignees([update], app.mailer, req.auth.sub);
+    return { assigneeIds: update.assigneeIds };
   });
 }

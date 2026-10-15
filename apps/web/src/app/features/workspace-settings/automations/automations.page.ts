@@ -30,6 +30,7 @@ const automationEventPickerGroups = [
       { id: "due_date_arrives", label: $localize`:Automation event (trigger) option:Due date arrives`, hint: $localize`:Help text under an automation event option:Runs on the card's due date`, icon: "calendar-event" },
       { id: "due_date_approaching", label: $localize`:Automation event (trigger) option:Due date is approaching`, hint: $localize`:Help text under an automation event option:Runs a chosen number of days before`, icon: "calendar-due" },
       { id: "card_becomes_inactive", label: $localize`:Automation event (trigger) option:Card becomes inactive`, hint: $localize`:Help text under an automation event option:Runs after the workspace inactivity period`, icon: "clock-pause" },
+      { id: "card_in_progress_too_long", label: $localize`:Automation event (trigger) option:Card in progress too long`, hint: $localize`:Help text under an automation event option:Runs when time in progress passes the workspace alert`, icon: "progress-alert" },
     ],
   },
   {

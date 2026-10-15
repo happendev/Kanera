@@ -592,6 +592,8 @@ const ja: ServerMessages = {
     setFieldTo: (fieldName) => `${fieldName}を次の値に設定しました：`,
     setCover: "カバー画像を設定しました",
     removedCover: "カバー画像を削除しました",
+    correctedTimeInProgress: "進行中の時間を修正しました",
+    flaggedInProgressTooLong: (days) => `がこのカードを${days}日以上進行中としてフラグを付けました`,
     addedChecklist: "チェックリストを追加しました：",
     deletedChecklist: "チェックリストを削除しました：",
     completedSubChecklist: "サブチェックリストを完了しました：",

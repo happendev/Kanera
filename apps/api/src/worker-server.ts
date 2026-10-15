@@ -15,6 +15,7 @@ import { startLifecycleEmailScheduler } from "./lib/lifecycle-emails.js";
 import { registerMetrics, registerNotificationQueueStatsProvider, timestampAgeSeconds } from "./lib/metrics.js";
 import mailerPlugin from "./lib/mailer-plugin.js";
 import { startOverdueNotificationScheduler } from "./lib/overdue-notifications.js";
+import { startInProgressAlertNotificationScheduler } from "./lib/in-progress-alerts.js";
 import { startOrganisationDeletionScheduler } from "./lib/organisation-delete.js";
 import { startPushQueueScheduler } from "./lib/push-queue.js";
 import { startRetentionCleanupScheduler } from "./lib/retention-cleanup.js";
@@ -83,6 +84,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   let stopRealtimeOutboxDispatcher: (() => Promise<void>) | null = null;
   let stopDirectRealtimeOutboxDispatcher: (() => Promise<void>) | null = null;
   let stopOverdueScheduler: (() => Promise<void>) | null = null;
+  let stopInProgressAlertScheduler: (() => Promise<void>) | null = null;
   let stopCardReminderScheduler: (() => Promise<void>) | null = null;
   let stopDueDateAutomationScheduler: (() => Promise<void>) | null = null;
   let stopDailyDigestScheduler: (() => Promise<void>) | null = null;
@@ -106,6 +108,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
   app.addHook("onClose", async () => stopDirectRealtimeOutboxDispatcher?.());
   app.addHook("onClose", async () => webhookDeliveryScheduler?.stop());
   app.addHook("onClose", async () => stopOverdueScheduler?.());
+  app.addHook("onClose", async () => stopInProgressAlertScheduler?.());
   app.addHook("onClose", async () => stopCardReminderScheduler?.());
   app.addHook("onClose", async () => stopDueDateAutomationScheduler?.());
   app.addHook("onClose", async () => stopDailyDigestScheduler?.());
@@ -146,6 +149,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
     stopBoardMirrorScheduler = startBoardMirrorScheduler({ log: app.log });
     stopDirectRealtimeOutboxDispatcher = startDirectRealtimeOutboxDispatcher({ log: app.log });
     stopOverdueScheduler = startOverdueNotificationScheduler(app.log);
+    stopInProgressAlertScheduler = startInProgressAlertNotificationScheduler(app.log);
     stopCardReminderScheduler = startCardReminderScheduler(app.log);
     stopAgentRunStallScheduler = startAgentRunStallScheduler(app.log);
     stopDueDateAutomationScheduler = startDueDateAutomationScheduler(app.log);

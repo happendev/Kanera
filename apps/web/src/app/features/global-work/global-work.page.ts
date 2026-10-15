@@ -98,7 +98,7 @@ type ChecklistGroup = {
 };
 /** Which toolbar/header popover is open. Only one at a time, so opening one dismisses the rest. */
 type WorkMenu = "save" | "display" | "source" | "team" | "view" | "group" | "sort" | "period";
-type PortfolioMetric = "active" | "overdue" | "dueSoon" | "unassigned" | "inactive" | "completed" | "overdueChecklistItems";
+type PortfolioMetric = "active" | "overdue" | "dueSoon" | "unassigned" | "inactive" | "inProgress" | "inProgressTooLong" | "completed" | "overdueChecklistItems";
 type PriorityLayout = "grid" | "table";
 type PortfolioRow = {
   id: string;
@@ -119,6 +119,8 @@ type PortfolioRow = {
   dueSoon: number;
   unassigned: number;
   inactive: number;
+  inProgress: number;
+  inProgressTooLong: number;
   completed: number;
   overdueChecklistItems: number;
 };
@@ -129,6 +131,8 @@ const PORTFOLIO_COLUMNS: { key: PortfolioMetric; label: string; tone: "danger" |
   { key: "dueSoon", label: $localize`:Portfolio table column, cards due in the next 7 days:Next 7 days`, tone: "neutral" },
   { key: "unassigned", label: $localize`:Portfolio table column, cards with no assignee:Unassigned`, tone: "neutral" },
   { key: "inactive", label: $localize`:Portfolio table column, cards untouched for 14 days (keep it short):Inactive 14d`, tone: "neutral" },
+  { key: "inProgress", label: $localize`:Portfolio table column, open cards whose time-in-progress clock is running:In progress`, tone: "neutral" },
+  { key: "inProgressTooLong", label: $localize`:Portfolio table column, cards in progress past the workspace alert (keep it short):Too long`, tone: "neutral" },
   { key: "completed", label: $localize`:Portfolio table column, completed cards:Completed`, tone: "success" },
   { key: "overdueChecklistItems", label: $localize`:Portfolio table column, overdue checklist items:Checklist`, tone: "danger" },
 ];
@@ -399,6 +403,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly workspacesById = computed(() =>
     new Map(this.state.catalog().workspaces.map((item) => [item.id, item]))
   );
+  /** Each workspace's time zone, for the Work done display's tracked-time chips. */
+  readonly workspaceTimeZones = computed(() => new Map(this.state.catalog().workspaces.map((workspace) => [workspace.id, workspace.timeZone])));
   readonly boardsById = computed(() =>
     new Map(this.state.catalog().boards.map((item) => [item.id, item]))
   );
@@ -601,6 +607,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       showUnreadOnly: filters.unreadOnly,
       showOverdueOnly: filters.overdueOnly,
       showInactiveOnly: filters.inactiveOnly,
+      showInProgressOnly: filters.inProgressOnly,
       // Like the board filter, this always means the signed-in viewer's own queue. A Team Cards
       // focus still scopes assignees, so selecting this there deliberately shows the intersection.
       showPrioritySetOnly: filters.prioritySetOnly,
@@ -840,6 +847,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       name: workspace.name,
       icon: workspace.icon,
       accentColor: workspace.accentColor,
+      inProgressAlertDays: workspace.inProgressAlertDays,
+      timeZone: workspace.timeZone,
     }))
   );
   readonly tableSourceOrganisations = computed<SourceOrganisationRef[]>(() =>
@@ -867,6 +876,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     createdDesc: "created-desc",
     updatedAsc: "updated-asc",
     updatedDesc: "updated-desc",
+    inProgressAsc: "in-progress-longest",
+    inProgressDesc: "in-progress-newest",
   } as const)[this.state.definition().sort]);
 
   readonly historyLists = computed(() =>
@@ -917,6 +928,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     { id: "titleDesc", label: $localize`:Sort option, reverse alphabetical by title:Title Z–A`, icon: "sort-z-a" },
     { id: "updatedDesc", label: $localize`:Sort option:Recently updated`, icon: "history" },
     { id: "createdDesc", label: $localize`:Sort option:Recently created`, icon: "plus" },
+    { id: "inProgressAsc", label: $localize`:Sort option - cards in progress longest first:Longest in progress`, icon: "progress" },
   ];
   readonly groupByGroups = computed(() => [{
     id: "groupBy",
@@ -1026,6 +1038,9 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       { key: "dueSoon", label: $localize`:Portfolio stat tile:Due next 7 days`, icon: "calendar-due", tone: null, value: totals.dueSoon },
       { key: "unassigned", label: $localize`:Portfolio stat tile, cards with no assignee:Unassigned`, icon: "user-question", tone: null, value: totals.unassigned },
       { key: "inactive", label: $localize`:Portfolio stat tile, cards untouched for 14 days:Inactive 14 days`, icon: "clock-pause", tone: null, value: totals.inactive },
+      // Older offline snapshots predate the in-progress counts; show none until the next refresh.
+      { key: "inProgress", label: $localize`:Portfolio stat tile, open cards whose time-in-progress clock is running:In progress`, icon: "progress", tone: null, value: totals.inProgress ?? 0 },
+      { key: "inProgressTooLong", label: $localize`:Portfolio stat tile, cards in progress past their workspace's alert:In progress too long`, icon: "progress-alert", tone: null, value: totals.inProgressTooLong ?? 0 },
       { key: "completed", label: $localize`:Portfolio stat tile, completed cards:Completed`, icon: "circle-check", tone: "success", value: totals.completed },
       { key: "overdueChecklistItems", label: $localize`:Portfolio stat tile, overdue checklist items:Overdue checklist`, icon: "list-check", tone: "danger", value: totals.overdueChecklistItems },
     ];
@@ -1100,6 +1115,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
             // Older offline Portfolio snapshots predate this metric; treat them as having no known
             // inactive work until the next online refresh replaces the cached response.
             inactive: bucket.inactive ?? 0,
+            inProgress: bucket.inProgress ?? 0,
+            inProgressTooLong: bucket.inProgressTooLong ?? 0,
             completed: bucket.completed,
             overdueChecklistItems: bucket.overdueChecklistItems,
           });
@@ -1296,6 +1313,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       || filters.customFieldConditions.length > 0
       || filters.unassignedOnly
       || filters.inactiveOnly
+      || filters.inProgressOnly
+      || filters.inProgressTooLongOnly
       || filters.overdueOnly
       || filters.overdueChecklistOnly
       || filters.unreadOnly
@@ -1536,6 +1555,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       unreadOnly: value.showUnreadOnly,
       overdueOnly: value.showOverdueOnly,
       inactiveOnly: value.showInactiveOnly,
+      inProgressOnly: value.showInProgressOnly,
       prioritySetOnly: value.showPrioritySetOnly,
       customFieldConditions,
       ...(this.lens() === "portfolio" ? { assigneeIds: value.memberIds } : {}),
@@ -1599,6 +1619,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       completion: DEFAULT_COMPLETION,
       overdueOnly: false,
       inactiveOnly: false,
+      inProgressOnly: false,
+      inProgressTooLongOnly: false,
       unreadOnly: false,
       prioritySetOnly: false,
       archived: false,
@@ -2512,6 +2534,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       overdueOnly: metric === "overdue",
       unassignedOnly: metric === "unassigned",
       inactiveOnly: metric === "inactive",
+      inProgressOnly: metric === "inProgress",
+      inProgressTooLongOnly: metric === "inProgressTooLong",
       overdueChecklistOnly: metric === "overdueChecklistItems",
       dueFrom: metric === "dueSoon" ? today : null,
       dueTo: metric === "dueSoon" ? localDateKey(nextSeven) : null,
@@ -2532,6 +2556,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       overdueOnly: false,
       unassignedOnly: false,
       inactiveOnly: false,
+      inProgressOnly: false,
+      inProgressTooLongOnly: false,
       overdueChecklistOnly: false,
       dueFrom: null,
       dueTo: null,
@@ -2549,6 +2575,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       dueSoon: $localize`:Portfolio drill-down:Due next 7 days`,
       unassigned: $localize`:Portfolio drill-down, cards with no assignee:Unassigned`,
       inactive: $localize`:Portfolio drill-down, cards untouched for 14 days:Inactive 14 days`,
+      inProgress: $localize`:Portfolio drill-down, open cards whose time-in-progress clock is running:In progress`,
+      inProgressTooLong: $localize`:Portfolio drill-down, cards in progress past their workspace's alert:In progress too long`,
       completed: $localize`:Portfolio drill-down, cards completed in the last N days (d = days, keep it short):Completed (${this.state.definition().portfolioDays}:days:d)`,
       overdueChecklistItems: $localize`:Portfolio drill-down:Overdue checklist items`,
     } as Record<string, string>)[metric] ?? metric;
@@ -2682,6 +2710,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       dueSoon: row.dueSoon + bucket.dueSoon,
       unassigned: row.unassigned + bucket.unassigned,
       inactive: row.inactive + (bucket.inactive ?? 0),
+      inProgress: row.inProgress + (bucket.inProgress ?? 0),
+      inProgressTooLong: row.inProgressTooLong + (bucket.inProgressTooLong ?? 0),
       completed: row.completed + bucket.completed,
       overdueChecklistItems: row.overdueChecklistItems + bucket.overdueChecklistItems,
     }), {
@@ -2700,6 +2730,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       dueSoon: 0,
       unassigned: 0,
       inactive: 0,
+      inProgress: 0,
+      inProgressTooLong: 0,
       completed: 0,
       overdueChecklistItems: 0,
     });

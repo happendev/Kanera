@@ -47,7 +47,8 @@ export type WorkspaceTemplateAutomationTrigger =
   | { type: "all_checklist_items_complete" }
   | { type: "card_marked_complete" }
   | { type: "card_label_set"; labelName: string }
-  | { type: "card_becomes_inactive" };
+  | { type: "card_becomes_inactive" }
+  | { type: "card_in_progress_too_long" };
 
 export type WorkspaceTemplateAutomationAction =
   | { type: "add_labels" | "remove_labels"; labelNames: string[] }
@@ -82,7 +83,11 @@ export type WorkspaceTemplate = {
   icon: string;
   workspaceName: string;
   initialBoardName: string;
-  lists: { name: string; icon: string }[];
+  /**
+   * `inProgress` marks the lists where someone is actively doing the work — not queues, waiting or
+   * review hand-offs. Those drive "working on" and the time-in-progress clock across the product.
+   */
+  lists: { name: string; icon: string; inProgress?: boolean }[];
   customFields: WorkspaceTemplateCustomField[];
   labels: WorkspaceTemplateLabel[];
   checklistTemplates?: WorkspaceTemplateChecklist[];
@@ -104,7 +109,7 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
       { name: "Backlog", icon: "list" },
       { name: "Bugs / Issues / Feedback", icon: "bug" },
       { name: "Awaiting Feedback", icon: "message-dots" },
-      { name: "In Progress", icon: "progress" },
+      { name: "In Progress", icon: "progress", inProgress: true },
       { name: "Ready for QA", icon: "checklist" },
       { name: "Complete", icon: "circle-check" },
     ],
@@ -191,7 +196,7 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
     lists: [
       { name: "Ideas", icon: "bulb" },
       { name: "Briefing", icon: "clipboard" },
-      { name: "Copy / Creative", icon: "pencil" },
+      { name: "Copy / Creative", icon: "pencil", inProgress: true },
       { name: "Review", icon: "eye" },
       { name: "Scheduled", icon: "calendar-event" },
       { name: "Live", icon: "broadcast" },
@@ -249,7 +254,7 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
     initialBoardName: "My Tasks",
     lists: [
       { name: "To Do", icon: "circle" },
-      { name: "Doing", icon: "progress" },
+      { name: "Doing", icon: "progress", inProgress: true },
       { name: "Waiting", icon: "clock-pause" },
       { name: "Done", icon: "circle-check" },
     ],
@@ -290,10 +295,10 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
     initialBoardName: "Roadmap",
     lists: [
       { name: "Ideas", icon: "bulb" },
-      { name: "Discovery", icon: "compass" },
+      { name: "Discovery", icon: "compass", inProgress: true },
       { name: "Spec Ready", icon: "file-check" },
-      { name: "Design", icon: "palette" },
-      { name: "Build", icon: "hammer" },
+      { name: "Design", icon: "palette", inProgress: true },
+      { name: "Build", icon: "hammer", inProgress: true },
       { name: "Validation", icon: "circle-check" },
       { name: "Shipped", icon: "rocket" },
     ],
@@ -345,9 +350,9 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
     initialBoardName: "Pipeline",
     lists: [
       { name: "Leads", icon: "user-plus" },
-      { name: "Qualified", icon: "user-check" },
+      { name: "Qualified", icon: "user-check", inProgress: true },
       { name: "Proposal", icon: "file-description" },
-      { name: "Negotiation", icon: "message-dollar" },
+      { name: "Negotiation", icon: "message-dollar", inProgress: true },
       { name: "Won", icon: "trophy" },
       { name: "Lost", icon: "circle-x" },
       { name: "Follow-up", icon: "refresh" },
@@ -418,9 +423,9 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
     lists: [
       { name: "Intake", icon: "inbox" },
       { name: "Triage", icon: "route" },
-      { name: "Assigned", icon: "user-check" },
+      { name: "Assigned", icon: "user-check", inProgress: true },
       { name: "Waiting", icon: "clock-pause" },
-      { name: "Escalated", icon: "urgent" },
+      { name: "Escalated", icon: "urgent", inProgress: true },
       { name: "Resolved", icon: "circle-check" },
       { name: "Closed", icon: "archive" },
     ],
@@ -489,7 +494,7 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
     lists: [
       { name: "Backlog", icon: "list" },
       { name: "Planned", icon: "calendar-event" },
-      { name: "In Progress", icon: "progress" },
+      { name: "In Progress", icon: "progress", inProgress: true },
       { name: "Blocked", icon: "alert-triangle" },
       { name: "Review", icon: "eye" },
       { name: "Done", icon: "circle-check" },
@@ -590,7 +595,7 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
       { name: "Ideas", icon: "bulb" },
       { name: "Planning", icon: "clipboard-list" },
       { name: "Booked", icon: "building-store" },
-      { name: "In Progress", icon: "progress" },
+      { name: "In Progress", icon: "progress", inProgress: true },
       { name: "Ready", icon: "checklist" },
       { name: "Event Day", icon: "calendar-event" },
       { name: "Complete", icon: "circle-check" },
@@ -690,8 +695,8 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
     lists: [
       { name: "Internal Prep", icon: "clipboard" },
       { name: "Kickoff", icon: "presentation" },
-      { name: "Setup", icon: "settings" },
-      { name: "Training", icon: "school" },
+      { name: "Setup", icon: "settings", inProgress: true },
+      { name: "Training", icon: "school", inProgress: true },
       { name: "Go Live", icon: "rocket" },
       { name: "Follow-up", icon: "message-circle" },
       { name: "Complete", icon: "circle-check" },
@@ -792,8 +797,8 @@ export const WORKSPACE_TEMPLATES: WorkspaceTemplate[] = [
     initialBoardName: "Candidates",
     lists: [
       { name: "Applied", icon: "inbox" },
-      { name: "Screening", icon: "phone" },
-      { name: "Interview", icon: "calendar-event" },
+      { name: "Screening", icon: "phone", inProgress: true },
+      { name: "Interview", icon: "calendar-event", inProgress: true },
       { name: "Decision", icon: "scale" },
       { name: "Offer", icon: "file-description" },
       { name: "Hired", icon: "user-check" },
@@ -882,6 +887,8 @@ export const DEFAULT_WORKSPACE_TEMPLATE = WORKSPACE_TEMPLATES[0]!;
 // Derived views of the default template, used by the API when it creates a workspace without an
 // explicit template and by the seed scripts.
 export const DEFAULT_WORKSPACE_LIST_NAMES = DEFAULT_WORKSPACE_TEMPLATE.lists.map((list) => list.name);
+/** The default workflow with its in-progress flags, for workspaces created without explicit lists. */
+export const DEFAULT_WORKSPACE_LISTS = DEFAULT_WORKSPACE_TEMPLATE.lists;
 
 export type DefaultWorkspaceLabel = {
   name: string;

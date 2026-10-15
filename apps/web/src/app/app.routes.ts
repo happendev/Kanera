@@ -197,6 +197,8 @@ export const routes: Routes = [
         children: [
           { path: "", pathMatch: "full", redirectTo: "profile" },
           { path: "profile", children: [] },
+          { path: "account-security", children: [] },
+          { path: "preferences", children: [] },
           { path: "notifications", children: [] },
           { path: "api-keys", children: [] },
           { path: "users", children: [] },

@@ -87,6 +87,11 @@ export const ACTIVITY_ACTIONS = [
   "mirror:enabled",
   "agentRun:started",
   "agentRun:ended",
+  // A workspace admin corrected a card's tracked time in progress (payload fromSeconds/toSeconds).
+  "inProgressTime:set",
+  // System: the card's current in-progress stint passed its workspace's alert (payload inProgressSince,
+  // alertDays). Recorded once per stint by the worker; it notifies assignees and watchers.
+  "inProgress:tooLong",
   // Thumbs-up on a comment (entity `comment`) or an attachment (entity `card`, payload.attachmentId).
   // Recorded hidden from feeds: it exists to carry the author's "reacted" notification.
   "reaction:added",
@@ -138,6 +143,8 @@ export const ACTIVITY_ACTION = {
   AGENT_RUN_STARTED: "agentRun:started",
   REACTION_ADDED: "reaction:added",
   AGENT_RUN_ENDED: "agentRun:ended",
+  IN_PROGRESS_TIME_SET: "inProgressTime:set",
+  IN_PROGRESS_TOO_LONG: "inProgress:tooLong",
 } as const satisfies Record<string, ActivityAction>;
 
 export const ACTIVITY_COALESCE_KEYS = [

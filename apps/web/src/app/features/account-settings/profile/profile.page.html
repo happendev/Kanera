@@ -111,31 +111,6 @@
         @if (settings.localeError()) { <p class="form-error">{{ settings.localeError() }}</p> }
       </div>
 
-      <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-hash"></i><span i18n="Settings section heading">Card keys</span></h3>
-        <label class="push-toggle-row">
-          <input type="checkbox" [checked]="settings.user()?.showCardKeys ?? true" (change)="settings.setShowCardKeys($any($event.target).checked)" [disabled]="settings.cardKeysSaving()" />
-          <span class="push-toggle-copy">
-            <span class="push-toggle-title" i18n>Show card keys</span>
-            <span class="push-toggle-help" i18n>Card keys are short references like KAN-123 that identify a card. Turn this off to hide them from view across the app.</span>
-          </span>
-        </label>
-        @if (settings.cardKeysError()) { <p class="form-error">{{ settings.cardKeysError() }}</p> }
-      </div>
-
-      <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-notes"></i><span i18n="Settings section heading">Scratchpad</span></h3>
-        <k-docs-link path="scratchpad" label="Learn more about the scratchpad" i18n-label />
-        <label class="push-toggle-row">
-          <input type="checkbox" [checked]="settings.user()?.showScratchpad ?? true" (change)="settings.setShowScratchpad($any($event.target).checked)" [disabled]="settings.scratchpadVisibilitySaving()" />
-          <span class="push-toggle-copy">
-            <span class="push-toggle-title" i18n>Show scratchpad</span>
-            <span class="push-toggle-help" i18n>Keep the scratchpad button available in the app header. Turn this off if you do not use the scratchpad.</span>
-          </span>
-        </label>
-        @if (settings.scratchpadVisibilityError()) { <p class="form-error">{{ settings.scratchpadVisibilityError() }}</p> }
-      </div>
-
       @if (consent.available()) {
       <div class="settings-section">
         <h3 class="settings-section-title"><i class="ti ti-cookie"></i><span i18n="Settings section heading">Privacy</span></h3>
@@ -179,62 +154,3 @@
         }
         @if (settings.emailError()) { <p class="form-error">{{ settings.emailError() }}</p> }
       </div>
-
-      <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-shield-lock"></i><span i18n="Settings section heading">Two-factor authentication</span></h3>
-        <p class="settings-section-help" i18n>Protect fresh sign-ins with an authenticator app or a one-time recovery code.</p>
-        <k-docs-link path="profile-security" label="Learn more about account security" i18n-label />
-        @if (!mfaEnabled() && !mfaSecret()) {
-          <div class="board-form"><input type="password" autocomplete="current-password" placeholder="Current password" i18n-placeholder [value]="mfaPassword()" (input)="mfaPassword.set($any($event.target).value)" /><button class="sm" type="button" (click)="startMfa()" [disabled]="mfaBusy()" i18n="Button">Set up authenticator</button></div>
-        } @else if (mfaSecret()) {
-          <p i18n>Scan the QR code, or enter <code>{{ mfaSecret() // i18n(ph="secret") }}</code> manually.</p>
-          @if (mfaQrUrl()) { <img [src]="mfaQrUrl()" width="200" height="200" alt="Authenticator setup QR code" i18n-alt /> }
-          <div class="board-form"><input autocomplete="one-time-code" inputmode="numeric" placeholder="123456" [value]="mfaCode()" (input)="mfaCode.set($any($event.target).value)" /><button class="sm" type="button" (click)="confirmMfa()" [disabled]="mfaBusy()" i18n="Button">Confirm</button></div>
-        } @else {
-          <p class="settings-section-help mfa-enabled"><i class="ti ti-shield-check"></i><ng-container i18n>Two-factor authentication is enabled.</ng-container></p>
-          <div class="settings-form"><input type="password" autocomplete="current-password" placeholder="Current password" i18n-placeholder [value]="mfaPassword()" (input)="mfaPassword.set($any($event.target).value)" /><input autocomplete="one-time-code" placeholder="Authenticator or recovery code" i18n-placeholder [value]="mfaCode()" (input)="mfaCode.set($any($event.target).value)" /><div class="logo-actions"><button class="sm" type="button" (click)="regenerateMfaCodes()" [disabled]="mfaBusy()" i18n="Button">New recovery codes</button><button class="ghost sm" type="button" (click)="disableMfa()" [disabled]="mfaBusy()" i18n="Button: turn off two-factor authentication">Disable</button></div></div>
-        }
-        @if (mfaRecoveryCodes().length) { <p><strong i18n>Save these recovery codes now. They will not be shown again.</strong></p><pre>{{ mfaRecoveryCodes().join('\n') }}</pre> }
-        @if (mfaError()) { <p class="form-error">{{ mfaError() }}</p> }
-      </div>
-
-      <div class="settings-section">
-        <h3 class="settings-section-title"><i class="ti ti-lock"></i><span i18n="Settings section heading">Change password</span></h3>
-        <p class="settings-section-help" i18n>You'll be signed out from all other sessions after changing.</p>
-        <form class="settings-form" (submit)="changePassword($event)">
-          <label class="settings-field">
-            <span i18n="Field label">Current password</span>
-            <div class="input-wrap">
-              <input [type]="showCurrentPassword() ? 'text' : 'password'" autocomplete="current-password" [formField]="passwordForm.currentPassword" />
-              <button type="button" class="reveal-btn" tabindex="-1" (click)="showCurrentPassword.set(!showCurrentPassword())" [attr.aria-label]="showCurrentPassword() ? hidePasswordLabel : showPasswordLabel">
-                <i [class]="showCurrentPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
-              </button>
-            </div>
-          </label>
-          <label class="settings-field">
-            <span i18n="Field label">New password</span>
-            <div class="input-wrap">
-              <input [type]="showNewPassword() ? 'text' : 'password'" autocomplete="new-password" [formField]="passwordForm.newPassword" />
-              <button type="button" class="reveal-btn" tabindex="-1" (click)="showNewPassword.set(!showNewPassword())" [attr.aria-label]="showNewPassword() ? hidePasswordLabel : showPasswordLabel">
-                <i [class]="showNewPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
-              </button>
-            </div>
-          </label>
-          <label class="settings-field">
-            <span i18n="Field label">Confirm new password</span>
-            <div class="input-wrap">
-              <input [type]="showConfirmPassword() ? 'text' : 'password'" autocomplete="new-password" [formField]="passwordForm.confirmPassword" />
-              <button type="button" class="reveal-btn" tabindex="-1" (click)="showConfirmPassword.set(!showConfirmPassword())" [attr.aria-label]="showConfirmPassword() ? hidePasswordLabel : showPasswordLabel">
-                <i [class]="showConfirmPassword() ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
-              </button>
-            </div>
-          </label>
-          @if (passwordForm().touched() && passwordForm().errorSummary()[0]; as error) { <p class="form-error">{{ error.message }}</p> }
-          <div>
-            <button class="sm" type="submit" [disabled]="passwordForm().submitting()">
-              @if (passwordForm().submitting()) { <ng-container i18n="Button state">Saving...</ng-container> } @else { <ng-container i18n="Button">Change password</ng-container> }
-            </button>
-          </div>
-        </form>
-
-</div>

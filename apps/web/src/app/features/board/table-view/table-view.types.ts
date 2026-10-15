@@ -36,7 +36,10 @@ export type SortBy =
   | "created-desc"
   | "created-asc"
   | "updated-desc"
-  | "updated-asc";
+  | "updated-asc"
+  /** Earliest time-in-progress start first; cards not in progress sort last. */
+  | "in-progress-longest"
+  | "in-progress-newest";
 
 export type AggregateMetric = "sum" | "avg";
 
@@ -87,6 +90,10 @@ export interface SourceWorkspaceRef {
   name: string;
   icon: string | null;
   accentColor: string | null;
+  /** The workspace's time-in-progress alert in days (0 = off); omitted, the board's own applies. */
+  inProgressAlertDays?: number;
+  /** The workspace's time zone, whose working hours time in progress counts; omitted, the board's. */
+  timeZone?: string;
 }
 
 export interface SourceOrganisationRef {
@@ -122,6 +129,7 @@ export const BUILTIN_COLUMN_IDS = [
   "board",
   "assignees",
   "due",
+  "inProgress",
   "labels",
   "checklist",
   "updated",
@@ -158,6 +166,8 @@ export const SORT_BY_OPTIONS: { value: SortBy; label: string }[] = [
   { value: "created-asc", label: $localize`:Sort option - by creation date, oldest first:Created (oldest)` },
   { value: "updated-desc", label: $localize`:Sort option - by last update, newest first:Updated (newest)` },
   { value: "updated-asc", label: $localize`:Sort option - by last update, oldest first:Updated (oldest)` },
+  { value: "in-progress-longest", label: $localize`:Sort option - cards in progress longest first:In progress (longest)` },
+  { value: "in-progress-newest", label: $localize`:Sort option - cards that most recently started progress first:In progress (newest)` },
 ];
 
 export const DUE_BUCKET_ORDER: DueBucket[] = ["overdue", "today", "tomorrow", "thisWeek", "later", "noDate"];

@@ -1,3 +1,4 @@
+import { DEFAULT_IN_PROGRESS_ALERT_DAYS } from "@kanera/shared/workspace-defaults";
 import { dto } from "@kanera/shared";
 import type {
   AgentWorkHistoryResponse,
@@ -52,6 +53,7 @@ import {
   or,
   sql,
   type SQL,
+  type SQLWrapper,
 } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { AuthClaims } from "../../auth/plugin.js";
@@ -242,6 +244,10 @@ function baseCardConditions(
     // drill-down returns exactly the cards counted by Board overview and Portfolio.
     conditions.push(sql`${columns.updatedAt} <= now() - make_interval(days => ${workspaces.inactiveCardsDays})`);
   }
+  // Open work in an In progress list. The start is trigger-maintained and non-null exactly while
+  // the card sits in one; a completed card there is finished work, not work in progress.
+  if (filters.inProgressOnly) conditions.push(isNotNull(columns.inProgressSince), isNull(columns.completedAt));
+  if (filters.inProgressTooLongOnly) conditions.push(isNull(columns.completedAt), inProgressTooLongSql(columns.inProgressSince));
   if (filters.completedFrom) conditions.push(gte(columns.completedAt, new Date(filters.completedFrom)));
   if (filters.completedTo) conditions.push(lte(columns.completedAt, new Date(filters.completedTo)));
   if (filters.dueFrom) conditions.push(gte(columns.dueDateLocalDate, filters.dueFrom));
@@ -344,12 +350,17 @@ function sortExpression(sort: WorkSort, columns = cardColumns): SQL {
     case "updatedAsc":
     case "updatedDesc":
       return sql`${columns.updatedAt}`;
+    case "inProgressAsc":
+    case "inProgressDesc":
+      return sql`${columns.inProgressSince}`;
   }
 }
 
 function orderExpressions(sort: WorkSort, columns = cardColumns): SQL[] {
   const expression = sortExpression(sort, columns);
-  const nullable = sort === "dueAsc" || sort === "dueDesc";
+  // Nullable keys sort their nulls last in both directions: undated cards after dated ones, and
+  // cards that are not in progress after the ones that are.
+  const nullable = sort === "dueAsc" || sort === "dueDesc" || sort === "inProgressAsc" || sort === "inProgressDesc";
   const direction = sort.endsWith("Asc") ? asc(expression) : desc(expression);
   return [
     ...(nullable ? [sql`${expression} is null`] : []),
@@ -371,7 +382,7 @@ async function loadCatalog(scopeBoards: AccessibleBoard[], viewerClientId: strin
   const workspaceIds = [...new Set(scopeBoards.map((board) => board.workspaceId))];
   const workspaceOrder = new Map(workspaceIds.map((workspaceId, index) => [workspaceId, index]));
   const boardIds = scopeBoards.map((board) => board.id);
-  const [listRows, labelRows, memberRows, fieldRows] = await Promise.all([
+  const [listRows, labelRows, memberRows, fieldRows, alertRows] = await Promise.all([
     workspaceIds.length
       ? db.select().from(lists).where(and(inArray(lists.workspaceId, workspaceIds), isNull(lists.archivedAt))).orderBy(asc(lists.position))
       : [],
@@ -394,7 +405,12 @@ async function loadCatalog(scopeBoards: AccessibleBoard[], viewerClientId: strin
     workspaceIds.length
       ? db.select().from(customFields).where(and(inArray(customFields.workspaceId, workspaceIds), isNull(customFields.archivedAt))).orderBy(asc(customFields.position))
       : [],
+    workspaceIds.length
+      ? db.select({ id: workspaces.id, inProgressAlertDays: workspaces.inProgressAlertDays, timeZone: workspaces.timeZone }).from(workspaces).where(inArray(workspaces.id, workspaceIds))
+      : [],
   ]);
+  const alertDaysByWorkspace = new Map(alertRows.map((row) => [row.id, row.inProgressAlertDays]));
+  const timeZoneByWorkspace = new Map(alertRows.map((row) => [row.id, row.timeZone]));
   // Attach all field options in one query; the former per-workspace loader multiplied this pair of
   // catalog reads by every workspace visible in Global Work.
   const wireFields = await attachFieldOptions(fieldRows);
@@ -415,6 +431,8 @@ async function loadCatalog(scopeBoards: AccessibleBoard[], viewerClientId: strin
       accentColor: board.workspaceAccentColor,
       kind: board.workspaceKind,
       viewerCanAccessWorkspace: board.canAccessWorkspace,
+      inProgressAlertDays: alertDaysByWorkspace.get(board.workspaceId) ?? DEFAULT_IN_PROGRESS_ALERT_DAYS,
+      timeZone: timeZoneByWorkspace.get(board.workspaceId) ?? "UTC",
     });
   }
 
@@ -462,6 +480,7 @@ async function loadCatalog(scopeBoards: AccessibleBoard[], viewerClientId: strin
       icon: list.icon,
       color: list.color,
       position: list.position,
+      inProgress: list.inProgress,
     })),
     labels: labelRows.sort(byWorkspaceAndPosition).map((label) => ({
       id: label.id,
@@ -785,6 +804,15 @@ async function workCards(auth: AuthClaims, allBoards: AccessibleBoard[], input: 
   };
 }
 
+/**
+ * A running in-progress stint past its workspace's alert (`inProgressAlertDays`, 0 = off): the same
+ * rule as the board's amber clock and the card_in_progress_too_long sweep. It reads the current
+ * stint's start, not the lifetime total. Needs the card's workspace row joined.
+ */
+function inProgressTooLongSql(inProgressSince: SQLWrapper) {
+  return sql`(${workspaces.inProgressAlertDays} > 0 and ${inProgressSince} <= now() - make_interval(days => ${workspaces.inProgressAlertDays}))`;
+}
+
 async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input: unknown): Promise<PortfolioSummary> {
   const query = dto.workPortfolioQueryBody.parse(input);
   const scopeBoards = applyWorkScope(allBoards, query.scope);
@@ -806,6 +834,8 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
         select 1 from card_assignee portfolio_assignee where portfolio_assignee.card_id = ${cards.id}
       ))::integer`,
       inactive: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${cards.updatedAt} <= now() - make_interval(days => ${workspaces.inactiveCardsDays}))::integer`,
+      inProgress: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${cards.inProgressSince} is not null)::integer`,
+      inProgressTooLong: sql<number>`count(*) filter (where ${cards.completedAt} is null and ${inProgressTooLongSql(cards.inProgressSince)})::integer`,
       completed: sql<number>`count(*) filter (where ${cards.completedAt} >= ${from})::integer`,
     })
     .from(cards)
@@ -859,6 +889,8 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
       dueSoon: row.dueSoon,
       unassigned: row.unassigned,
       inactive: row.inactive,
+      inProgress: row.inProgress,
+      inProgressTooLong: row.inProgressTooLong,
       completed: row.completed,
       overdueChecklistItems: overdueChecklistByBoard.get(row.boardId) ?? 0,
     }];
@@ -880,7 +912,9 @@ async function portfolio(authUserId: string, allBoards: AccessibleBoard[], input
     overdueChecklistItems: sum.overdueChecklistItems + bucket.overdueChecklistItems,
     unassigned: sum.unassigned + bucket.unassigned,
     inactive: sum.inactive + bucket.inactive,
-  }), { cards: 0, overdue: 0, dueSoon: 0, completed: 0, overdueChecklistItems: 0, unassigned: 0, inactive: 0 });
+    inProgress: sum.inProgress + bucket.inProgress,
+    inProgressTooLong: sum.inProgressTooLong + bucket.inProgressTooLong,
+  }), { cards: 0, overdue: 0, dueSoon: 0, completed: 0, overdueChecklistItems: 0, unassigned: 0, inactive: 0, inProgress: 0, inProgressTooLong: 0 });
 
   return { days: query.days, totals, buckets, activityDays: PORTFOLIO_ACTIVITY_DAYS, activity };
 }
@@ -1057,7 +1091,7 @@ function sanitizedDefinition(
         Object.entries(definition.table.columnWidths).filter(([id]) => id === "title" || validTableColumn(id)),
       ),
       aggregates: Object.fromEntries(
-        Object.entries(definition.table.aggregates).filter(([fieldId]) => numericFieldIds.has(fieldId)),
+        Object.entries(definition.table.aggregates).filter(([fieldId]) => fieldId === "inProgress" || numericFieldIds.has(fieldId)),
       ),
       aggregateSplitBy: validTableSplit ? tableSplit : "none",
       collapsedGroupKeys: definition.table.collapsedGroupKeys.filter((key) => validCollapsedTableGroupKeys.has(key)),
@@ -1230,7 +1264,7 @@ async function agentWorkSources(
   const labelIds = new Set(cardsInResult.flatMap((card) => card.labelIds ?? []));
   const peopleIds = new Set(cardsInResult.flatMap((card) => card.assigneeIds ?? []));
   const [listRows, labelRows, peopleRows] = await Promise.all([
-    listIds.size ? db.select({ id: lists.id, workspaceId: lists.workspaceId, name: lists.name }).from(lists).where(inArray(lists.id, [...listIds])) : [],
+    listIds.size ? db.select({ id: lists.id, workspaceId: lists.workspaceId, name: lists.name, inProgress: lists.inProgress }).from(lists).where(inArray(lists.id, [...listIds])) : [],
     labelIds.size ? db.select({ id: cardLabels.id, workspaceId: cardLabels.workspaceId, name: cardLabels.name, color: cardLabels.color }).from(cardLabels).where(inArray(cardLabels.id, [...labelIds])) : [],
     peopleIds.size ? db.select({ id: users.id, displayName: users.displayName }).from(users).where(inArray(users.id, [...peopleIds])) : [],
   ]);

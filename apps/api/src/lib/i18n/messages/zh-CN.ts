@@ -590,6 +590,8 @@ const zhCN: ServerMessages = {
   setFieldTo: (fieldName) => `将 ${fieldName} 设置为`,
   setCover: "设置封面图片",
   removedCover: "删除了封面图片",
+  correctedTimeInProgress: "修正了进行中时长",
+  flaggedInProgressTooLong: (days) => `将此卡片标记为进行中超过 ${days} 天`,
   addedChecklist: "添加了清单",
   deletedChecklist: "已删除清单",
   completedSubChecklist: "已完成的子清单",

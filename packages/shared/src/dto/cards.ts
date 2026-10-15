@@ -155,6 +155,15 @@ export const bulkSetCardCustomFieldBody = bulkCardSelectionBody.extend({
 });
 export type BulkSetCardCustomFieldBody = z.infer<typeof bulkSetCardCustomFieldBody>;
 
+/**
+ * A workspace admin's correction of a card's tracked time in progress: the total, in seconds, as of
+ * now. A running stint keeps running from the corrected total. Capped at 100,000 hours.
+ */
+export const setInProgressTimeBody = z.object({
+  seconds: z.number().int().min(0).max(360_000_000),
+});
+export type SetInProgressTimeBody = z.infer<typeof setInProgressTimeBody>;
+
 export const moveCardBody = z
   .object({
     listId: z.uuid(),

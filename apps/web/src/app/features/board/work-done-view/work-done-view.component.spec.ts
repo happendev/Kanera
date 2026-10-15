@@ -5,6 +5,7 @@ import type { GlobalWorkDoneQuery, WorkDoneEvent, WorkDoneResponse } from "@kane
 import type { WireCardSummary } from "@kanera/shared/events";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClient } from "../../../core/api/api.client";
+import { appLocale } from "../../../core/i18n/locale";
 import { localDateKey } from "../../../shared/day-key.util";
 import { BoardMenuCoordinator } from "../board-menu-coordinator.service";
 import { BoardState } from "../board-state";
@@ -349,7 +350,7 @@ describe("WorkDoneViewComponent", () => {
     const row = native.querySelectorAll(".wd-row")[0]!;
     // Newest card first, so card-2 — completed at 10:00 local — leads.
     expect(row.querySelector(".wd-time")?.textContent?.trim()).toBe(
-      new Date(completedEvent.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }),
+      new Date(completedEvent.at).toLocaleTimeString(appLocale(), { hour: "numeric", minute: "2-digit" }),
     );
     expect(row.querySelector(".wd-verb")?.textContent?.trim()).toBe("Completed");
     expect(row.querySelector(".wd-verb--completed")).not.toBeNull();

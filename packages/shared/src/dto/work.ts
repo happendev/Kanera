@@ -4,49 +4,20 @@ import type { ColorToken } from "../lib/colors.js";
 import { WORK_VIEW_LENSES, WORK_VIEW_VISIBILITIES } from "../schema/work-view.js";
 import { ianaTimeZone } from "./_time-zone.js";
 
-export const WORK_GROUP_BY_VALUES = [
-  "organisation",
-  "workspace",
-  "board",
-  "assignee",
-  "list",
-  "dueDate",
-  "completion",
-  "none",
-] as const;
-export const WORK_SORT_VALUES = [
-  "dueAsc",
-  "dueDesc",
-  "titleAsc",
-  "titleDesc",
-  "createdAsc",
-  "createdDesc",
-  "updatedAsc",
-  "updatedDesc",
-] as const;
-/**
- * `priorities` is the Team Cards lanes display: one "Up next" queue per readable teammate, side by
- * side, so a manager reads everyone's order without focusing each person in turn. It is the one
- * display backed by the priority endpoints rather than the card query — which is also why there is
- * still no priority `WORK_SORT_VALUES` entry: rank is a property of the (user, card) pair, so under
- * `team` one card has several ranks and there is no single `ORDER BY` at all. A single focused
- * person's queue stays a docked panel over the other displays, not a display of its own.
- */
-export const WORK_DISPLAY_MODES = ["board", "table", "calendar", "priorities", "history", "summary"] as const;
-/**
- * Completion filters for work queries.
- *
- * `activeAndRecentlyCompleted` is the product default and mirrors a board's active view: open cards
- * plus cards completed inside their workspace's `completedCardsActiveDays` window. Completing a card
- * must not make it disappear from the list you completed it in — that rule holds on boards and here.
- * `active` is the strict "hide completed" variant.
- */
-export const WORK_COMPLETION_FILTERS = ["activeAndRecentlyCompleted", "active", "completed", "all"] as const;
-export type WorkCompletionFilter = (typeof WORK_COMPLETION_FILTERS)[number];
-export const DEFAULT_WORK_COMPLETION: WorkCompletionFilter = "activeAndRecentlyCompleted";
-export type WorkGroupBy = (typeof WORK_GROUP_BY_VALUES)[number];
-export type WorkSort = (typeof WORK_SORT_VALUES)[number];
-export type WorkDisplayMode = (typeof WORK_DISPLAY_MODES)[number];
+import {
+  DEFAULT_WORK_COMPLETION,
+  WORK_COMPLETION_FILTERS,
+  WORK_CUSTOM_FIELD_CONDITION_OPS,
+  WORK_DISPLAY_MODES,
+  WORK_GROUP_BY_VALUES,
+  WORK_SORT_VALUES,
+} from "../work-vocabulary.js";
+export {
+  WORK_COMPLETION_FILTERS,
+  WORK_CUSTOM_FIELD_CONDITION_OPS,
+  WORK_SORT_VALUES,
+} from "../work-vocabulary.js";
+export type { WorkCompletionFilter, WorkDisplayMode, WorkGroupBy, WorkSort } from "../work-vocabulary.js";
 
 const tableDimensionSchema = z.union([
   z.enum(["organisation", "workspace", "board", "assignee", "list", "label", "dueDate", "completion", "none"]),
@@ -58,8 +29,10 @@ const tableColumnVisibilitySchema = z
 const tableColumnWidthsSchema = z
   .record(z.string().min(1).max(100), z.number().min(48).max(1200))
   .refine((value) => Object.keys(value).length <= 100, "Too many table column width entries");
+// Keyed by a number custom field's id, or by "inProgress" for tracked time in progress (the table
+// column id, which aggregates alongside number fields).
 const tableAggregatesSchema = z
-  .record(z.uuid(), z.array(z.enum(["sum", "avg"])).max(1))
+  .record(z.union([z.uuid(), z.literal("inProgress")]), z.array(z.enum(["sum", "avg"])).max(1))
   .refine((value) => Object.keys(value).length <= 100, "Too many table aggregate entries");
 
 /**
@@ -87,12 +60,6 @@ export const workScopeSchema = z.object({
 });
 export type WorkScope = z.infer<typeof workScopeSchema>;
 
-export const WORK_CUSTOM_FIELD_CONDITION_OPS = [
-  "contains", "equals", "eq", "neq", "gt", "gte", "lt", "lte",
-  "on", "before", "after", "between", "checked", "unchecked",
-  "isAnyOf", "isNoneOf", "isEmpty", "isNotEmpty",
-] as const;
-
 export const workCustomFieldConditionSchema = z.object({
   workspaceId: z.uuid(),
   fieldId: z.uuid(),
@@ -112,6 +79,12 @@ export const workFiltersSchema = z.object({
   completion: z.enum(WORK_COMPLETION_FILTERS).default(DEFAULT_WORK_COMPLETION),
   unassignedOnly: z.boolean().default(false),
   inactiveOnly: z.boolean().default(false),
+  // Open cards currently in an In progress list (each carries a time-in-progress start). Completed
+  // cards in such a list are finished work and excluded, like the board's live-work quick filters.
+  inProgressOnly: z.boolean().default(false),
+  // Open cards whose current in-progress stint has run past their workspace's inProgressAlertDays
+  // (never while that setting is 0): exactly the cards whose clock turns amber on the board.
+  inProgressTooLongOnly: z.boolean().default(false),
   dueFrom: z.iso.date().nullable().default(null),
   dueTo: z.iso.date().nullable().default(null),
   overdueOnly: z.boolean().default(false),
@@ -139,6 +112,8 @@ export const workViewDefinitionSchema = z.object({
     completion: DEFAULT_WORK_COMPLETION,
     unassignedOnly: false,
     inactiveOnly: false,
+    inProgressOnly: false,
+    inProgressTooLongOnly: false,
     dueFrom: null,
     dueTo: null,
     overdueOnly: false,
@@ -247,6 +222,10 @@ export type WorkCatalogWorkspace = {
   accentColor: string | null;
   kind: "standard" | "board";
   viewerCanAccessWorkspace: boolean;
+  /** Days in progress after which a card is flagged; 0 means the workspace turned the flag off. */
+  inProgressAlertDays: number;
+  /** Time in progress counts working hours (09:00-17:00, Monday to Friday) in this IANA zone. */
+  timeZone: string;
 };
 
 export type WorkCatalogBoard = {
@@ -266,6 +245,7 @@ export type WorkCatalogList = {
   icon: string | null;
   color: ColorToken | null;
   position: string;
+  inProgress: boolean;
 };
 
 export type WorkCatalogLabel = {
@@ -344,6 +324,10 @@ export type PortfolioBucket = {
   dueSoon: number;
   unassigned: number;
   inactive: number;
+  /** Open cards with a running time-in-progress clock. */
+  inProgress: number;
+  /** Of those, the cards whose current stint has passed the workspace's in-progress alert. */
+  inProgressTooLong: number;
   completed: number;
   overdueChecklistItems: number;
 };
@@ -361,7 +345,7 @@ export type PortfolioActivityDay = {
 
 export type PortfolioSummary = {
   days: number;
-  totals: Omit<WorkTotals, "checklistItems"> & { unassigned: number; inactive: number };
+  totals: Omit<WorkTotals, "checklistItems"> & { unassigned: number; inactive: number; inProgress: number; inProgressTooLong: number };
   buckets: PortfolioBucket[];
   /** Length of the heatmap window in days. Fixed, and independent of the `days` reporting period. */
   activityDays: number;

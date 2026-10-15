@@ -1,4 +1,4 @@
-import { Injectable, signal } from "@angular/core";
+import { computed, Injectable, signal } from "@angular/core";
 import { STORAGE_KEYS } from "../browser/browser-contracts";
 
 type BrowserAudioContext = AudioContext & {
@@ -6,11 +6,28 @@ type BrowserAudioContext = AudioContext & {
 };
 
 const CHIME_START_DELAY_SECONDS = 0.01;
-const CHIME_DURATION_SECONDS = 0.34;
+type NotificationSound = "default" | "ripple" | "bloom" | "pebble" | "none";
+
+// Original Kanera motifs: soft sine tones with rounded attacks and short tails.
+// Offsets, frequencies, durations and gains keep every motif below half a second.
+const MOTIFS = {
+  default: [[0, 880, 0.12, 0.09], [0.13, 1174.66, 0.18, 0.075]],
+  ripple: [[0, 659.25, 0.16, 0.065], [0.09, 783.99, 0.18, 0.05], [0.18, 987.77, 0.22, 0.04]],
+  bloom: [[0, 523.25, 0.28, 0.055], [0.04, 659.25, 0.28, 0.035], [0.12, 783.99, 0.28, 0.03]],
+  pebble: [[0, 698.46, 0.10, 0.065], [0.12, 523.25, 0.20, 0.055]],
+} as const;
 
 @Injectable({ providedIn: "root" })
 export class MentionSoundService {
-  readonly enabled = signal<boolean>(this.readEnabled());
+  readonly sound = signal<NotificationSound>(this.readSound());
+  readonly enabled = computed(() => this.sound() !== "none");
+  readonly options: ReadonlyArray<{ value: NotificationSound; label: string }> = [
+    { value: "default", label: $localize`:Notification sound:Default` },
+    { value: "ripple", label: $localize`:Notification sound:Ripple` },
+    { value: "bloom", label: $localize`:Notification sound:Bloom` },
+    { value: "pebble", label: $localize`:Notification sound:Pebble` },
+    { value: "none", label: $localize`:Notification sound:None` },
+  ];
 
   private audioContext: BrowserAudioContext | null = null;
   private gestureListenersAttached = false;
@@ -21,15 +38,15 @@ export class MentionSoundService {
     this.attachGestureUnlock();
   }
 
-  setEnabled(enabled: boolean): void {
-    this.enabled.set(enabled);
+  setSound(value: string): void {
+    if (!this.options.some((option) => option.value === value)) return;
+    this.sound.set(value as NotificationSound);
     try {
-      if (enabled) localStorage.removeItem(STORAGE_KEYS.MENTION_SOUND_ENABLED);
-      else localStorage.setItem(STORAGE_KEYS.MENTION_SOUND_ENABLED, "0");
+      localStorage.setItem(STORAGE_KEYS.NOTIFICATION_SOUND, value);
     } catch {
       // Storage can be unavailable in private or restricted browser contexts.
     }
-    if (enabled) this.attachGestureUnlock();
+    if (this.enabled()) this.attachGestureUnlock();
   }
 
   playMention(): void {
@@ -43,11 +60,14 @@ export class MentionSoundService {
     }
   }
 
-  private readEnabled(): boolean {
+  private readSound(): NotificationSound {
     try {
-      return localStorage.getItem(STORAGE_KEYS.MENTION_SOUND_ENABLED) !== "0";
+      const saved = localStorage.getItem(STORAGE_KEYS.NOTIFICATION_SOUND);
+      if (saved === "none" || saved === "default" || saved === "ripple" || saved === "bloom" || saved === "pebble") return saved;
+      // Preserve existing opt-outs when upgrading from the old on/off control.
+      return localStorage.getItem(STORAGE_KEYS.MENTION_SOUND_ENABLED) === "0" ? "none" : "default";
     } catch {
-      return true;
+      return "default";
     }
   }
 
@@ -86,13 +106,17 @@ export class MentionSoundService {
 
   private async playChime(ctx: BrowserAudioContext): Promise<void> {
     if (ctx.state === "suspended") await ctx.resume();
+    const sound = this.sound();
+    if (sound === "none") return;
     // A burst can contain many notification events. One chime communicates the
     // burst without overlapping sounds or making the user hear a long queue.
     if (ctx.currentTime < this.chimePlayingUntil) return;
     const start = ctx.currentTime + CHIME_START_DELAY_SECONDS;
-    this.chimePlayingUntil = start + CHIME_DURATION_SECONDS;
-    this.playTone(ctx, start, 880, 0.12, 0.09);
-    this.playTone(ctx, start + 0.13, 1174.66, 0.18, 0.075);
+    const motif = MOTIFS[sound];
+    this.chimePlayingUntil = start + Math.max(...motif.map(([offset, , duration]) => offset + duration + 0.03));
+    for (const [offset, frequency, duration, volume] of motif) {
+      this.playTone(ctx, start + offset, frequency, duration, volume);
+    }
   }
 
   private playTone(ctx: BrowserAudioContext, start: number, frequency: number, duration: number, volume: number): void {

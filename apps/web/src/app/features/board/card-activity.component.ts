@@ -39,6 +39,7 @@ import { ReactionPopoverComponent } from "./reaction-popover.component";
 import { formatFeedTime } from "../../shared/date-format";
 import { icu } from "../../core/i18n/icu";
 import { appLocale } from "../../core/i18n/locale";
+import { formatTrackedDuration } from "./time-in-progress.util";
 
 const CARD_FEED_PAGE_SIZE = 50;
 
@@ -920,6 +921,8 @@ export class CardActivityComponent {
         return p["toValue"] === true ? ` ${MARKED_COMPLETE()}` : ` ${MARKED_INCOMPLETE()}`;
       case "overdue":
         return $localize`:Card activity shown without a person; overdue is a highlighted status word:This card is marked as ${this.v($localize`:Card status:overdue`, "overdue")}:overdue:`;
+      case "inProgress:tooLong":
+        return icu($localize`:Card activity shown without a person - the card passed the workspace's time in progress alert:{days, plural, one {This card has been in progress for more than # day} other {This card has been in progress for more than # days}}`, { days: Math.max(0, Number(p["alertDays"]) || 0) });
       case "deleted":
         return ` ${$localize`:Card activity after a person's name:deleted this card`}`;
       case "labels:set": {
@@ -1141,6 +1144,11 @@ export class CardActivityComponent {
         return ` ${$localize`:Card activity after a person's name:set a cover image`}`;
       case "cover_removed":
         return ` ${$localize`:Card activity after a person's name:removed the cover image`}`;
+      case "inProgressTime:set": {
+        const from = formatTrackedDuration(Math.max(0, Number(p["fromSeconds"]) || 0) * 1000);
+        const to = formatTrackedDuration(Math.max(0, Number(p["toSeconds"]) || 0) * 1000);
+        return ` ${$localize`:Card activity after a person's name - a workspace admin corrected tracked time, e.g. from 96h 20m to 80h:changed the time in progress from ${this.v(from)}:from: to ${this.v(to)}:to:`}`;
+      }
       case "agentRun:ended": {
         const title = this.activityPayloadText(p, "title");
         const status = this.activityPayloadText(p, "status");
@@ -1182,7 +1190,7 @@ export class CardActivityComponent {
   }
 
   activityActorText(event: ActivityFeedEvent): string | null {
-    if (event.action === "overdue" && event.actorKind === "system") return null;
+    if ((event.action === "overdue" || event.action === "inProgress:tooLong") && event.actorKind === "system") return null;
     const copiedName = this.activityPayloadText(event.payload as Record<string, unknown>, "copiedActorName");
     return copiedName && event.actorKind === "system" ? `${event.actorName} (${copiedName})` : event.actorName;
   }

@@ -64,6 +64,8 @@ function summary(overrides: Partial<WireCardSummary> = {}): WireCardSummary {
     dueDateTimezone: overrides.dueDateTimezone ?? null,
     completedAt: overrides.completedAt ?? new Date("2026-05-20T12:00:00.000Z"),
     archivedAt: overrides.archivedAt ?? null,
+    inProgressSince: null,
+    inProgressSeconds: 0,
     coverAttachmentId: overrides.coverAttachmentId ?? null,
     createdAt: overrides.createdAt ?? new Date("2026-05-19T00:00:00.000Z"),
     updatedAt: overrides.updatedAt ?? new Date("2026-05-20T12:00:00.000Z"),

@@ -44,6 +44,8 @@ const activity: ActivitySummaryMessages = {
   setFieldTo: (fieldName) => `estableció ${fieldName} en`,
   setCover: "estableció la imagen de portada",
   removedCover: "quitó la imagen de portada",
+  correctedTimeInProgress: "corrigió el tiempo en curso",
+  flaggedInProgressTooLong: (days) => `marcó esta tarjeta como en curso durante más de ${days} ${days === 1 ? "día" : "días"}`,
   addedChecklist: "añadió la lista de verificación",
   deletedChecklist: "eliminó la lista de verificación",
   completedSubChecklist: "completó la sublista de verificación",

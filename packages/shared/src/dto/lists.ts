@@ -7,6 +7,8 @@ export const createListBody = z.object({
   name: z.string().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH),
   icon: createIconSchema(DEFAULT_LIST_ICON),
   color: colorTokenSchema.nullable().optional(),
+  /** Cards in an in-progress list count as actively being worked on and carry a time-in-progress clock. */
+  inProgress: z.boolean().optional(),
 });
 export type CreateListBody = z.infer<typeof createListBody>;
 
@@ -14,6 +16,7 @@ export const updateListBody = z.object({
   name: z.string().min(1).max(WORKSPACE_ENTITY_NAME_MAX_LENGTH).optional(),
   icon: updateIconSchema(DEFAULT_LIST_ICON),
   color: colorTokenSchema.nullable().optional(),
+  inProgress: z.boolean().optional(),
 });
 export type UpdateListBody = z.infer<typeof updateListBody>;
 

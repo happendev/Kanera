@@ -73,6 +73,9 @@ export interface ActivitySummaryMessages {
   setFieldTo: (fieldName: string) => string;
   setCover: string;
   removedCover: string;
+  correctedTimeInProgress: string;
+  /** After the system's name ("Kanera"): the card's current stint passed its workspace alert. */
+  flaggedInProgressTooLong: (days: number) => string;
   addedChecklist: string;
   deletedChecklist: string;
   completedSubChecklist: string;
@@ -134,6 +137,8 @@ export const ACTIVITY_SUMMARY_SOURCE_MESSAGES: ActivitySummaryMessages = {
   setFieldTo: (fieldName) => `set ${fieldName} to`,
   setCover: "set the cover image",
   removedCover: "removed the cover image",
+  correctedTimeInProgress: "corrected the time in progress",
+  flaggedInProgressTooLong: (days) => `flagged this card as in progress for more than ${days} ${days === 1 ? "day" : "days"}`,
   addedChecklist: "added checklist",
   deletedChecklist: "deleted checklist",
   completedSubChecklist: "completed sub-checklist",
@@ -256,6 +261,10 @@ export function summariseActivityChange(
           return { icon: "ti ti-photo", text: m.setCover };
         case "cover_removed":
           return { icon: "ti ti-photo-off", text: m.removedCover };
+        case "inProgressTime:set":
+          return { icon: "ti ti-progress", text: m.correctedTimeInProgress };
+        case "inProgress:tooLong":
+          return { icon: "ti ti-progress-alert", text: m.flaggedInProgressTooLong(Number(payload["alertDays"]) || 0) };
         case "checklist:created":
           return { icon: "ti ti-list-check", text: m.addedChecklist, value: shortName(payload["title"]) ?? undefined };
         case "checklist:deleted":

@@ -24,6 +24,8 @@ function card(id: string, boardId: string, listId = "list-1"): WireCardSummary {
     dueDateTimezone: null,
     completedAt: null,
     archivedAt: null,
+    inProgressSince: null,
+    inProgressSeconds: 0,
     coverAttachmentId: null,
     createdAt: new Date("2026-06-09T00:00:00.000Z"),
     updatedAt: new Date("2026-06-09T00:00:00.000Z"),
@@ -125,7 +127,7 @@ describe("BulkCardActionsMenuPopover", () => {
     expect(component.labelState("label-1")).toBe("all");
     expect(component.assigneeState("user-1")).toBe("all");
     await component.moveToList("target");
-    expect(store.moveCard).toHaveBeenCalledWith("card-1", "target", moved.position);
+    expect(store.moveCard).toHaveBeenCalledWith("card-1", "target", moved.position, { inProgressSince: null, inProgressSeconds: 0 });
     fixture.componentRef.setInput("workspaceActionsEnabled", false);
     post.mockClear();
     await component.moveToList("other-workspace-list");

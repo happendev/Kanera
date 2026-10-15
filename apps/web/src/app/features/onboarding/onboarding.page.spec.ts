@@ -40,6 +40,7 @@ function workspace(): Workspace {
     accentColor: null,
     completedCardsActiveDays: 35,
     inactiveCardsDays: 14,
+    inProgressAlertDays: 7, timeZone: "UTC",
     boardLinkingEnabled: true,
     notesEnabled: true,
     createdAt: new Date("2026-05-28T00:00:00.000Z"),

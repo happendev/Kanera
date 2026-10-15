@@ -394,6 +394,15 @@
               @case ('card_becomes_inactive') {
                 <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n>{ settings.entityKind(), select, board {Runs when a card reaches the inactivity period, on this board. New card activity resets the period.} other {Runs when a card reaches the inactivity period, on every board in this workspace. New card activity resets the period.} }</ng-container></p>
               }
+              @case ('card_in_progress_too_long') {
+                <p class="ac-trigger-note"><i class="ti ti-info-circle"></i>
+                  @if (settings.inProgressAlertDaysDraft() > 0) {
+                    <ng-container i18n="Help for the Card in progress too long automation trigger">{ settings.inProgressAlertDaysDraft(), plural, =1 {Runs once each time an open card has been in progress for more than 1 day. Leaving and re-entering In progress starts a new clock.} other {Runs once each time an open card has been in progress for more than {{ settings.inProgressAlertDaysDraft() }} days. Leaving and re-entering In progress starts a new clock.} }</ng-container>
+                  } @else {
+                    <ng-container i18n="Help for the Card in progress too long automation trigger when the alert setting is 0">Won't run: the time in progress alert is off in General settings.</ng-container>
+                  }
+                </p>
+              }
               @case ('all_checklist_items_complete') {
                 <p class="ac-trigger-note"><i class="ti ti-info-circle"></i> <ng-container i18n>Runs when the last unticked checklist item on a card is completed.</ng-container></p>
               }

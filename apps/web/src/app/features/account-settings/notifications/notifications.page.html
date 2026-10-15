@@ -25,12 +25,20 @@
           </span>
         </label>
 
-        <label class="push-toggle-row">
-          <input type="checkbox" [checked]="settings.mentionSound.enabled()" (change)="settings.setMentionSoundEnabled($any($event.target).checked)" />
-          <span class="push-toggle-copy">
-            <span class="push-toggle-title" i18n>Play a sound for assignments and mentions</span>
-          </span>
-        </label>
+        <div class="notification-sound-field">
+          <label for="notification-sound" class="push-toggle-title" i18n>Notification sound</label>
+          <p id="notification-sound-help" class="settings-section-help" i18n>For assignments and mentions in this browser.</p>
+          <div class="notification-sound-controls">
+            <select id="notification-sound" aria-describedby="notification-sound-help" [value]="settings.mentionSound.sound()" (change)="settings.setNotificationSound($any($event.target).value)">
+              @for (option of settings.mentionSound.options; track option.value) {
+              <option [value]="option.value" [selected]="settings.mentionSound.sound() === option.value">{{ option.label }}</option>
+              }
+            </select>
+            <button type="button" class="ghost" [disabled]="!settings.mentionSound.enabled()" (click)="settings.mentionSound.playMention()">
+              <i class="ti ti-volume"></i><span i18n="Button: preview notification sound">Preview sound</span>
+            </button>
+          </div>
+        </div>
 
         <label class="push-toggle-row">
           <input type="checkbox" [checked]="notificationSettings.watchedActivityOutbound" (change)="settings.setWatchedActivityOutbound($any($event.target).checked)" [disabled]="settings.notificationSettingsSaving()" />

@@ -1,4 +1,5 @@
 import { ToastService } from "../../shared/toast.service";
+import { InProgressHintService } from "./in-progress-hint.service";
 import type { CdkDragDrop, CdkDragMove} from "@angular/cdk/drag-drop";
 import { CdkDrag, CdkDragPreview, CdkDropList } from "@angular/cdk/drag-drop";
 import type { OnDestroy} from "@angular/core";
@@ -34,6 +35,8 @@ export interface BoardListPresentation {
   icon: string | null;
   color: string | null;
   position: string;
+  /** Marks a list that runs the time-in-progress clock (see `list.in_progress`). */
+  inProgress?: boolean;
 }
 type AnyList = List | WireList | BoardListPresentation;
 type AnyCard = Card | WireCard | WireCardSummary;
@@ -130,6 +133,7 @@ class CloseCardChecklistsBeforeDragDirective {
   styleUrl: "./list.component.scss",
 })
 export class ListComponent implements OnDestroy {
+  protected readonly inProgressHint = inject(InProgressHintService);
   private readonly toasts = inject(ToastService);
   private readonly api = inject(ApiClient);
   private readonly notifications = inject(NotificationsService);
