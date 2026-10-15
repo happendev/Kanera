@@ -12,7 +12,7 @@ import {
   untracked,
   viewChild,
 } from "@angular/core";
-import type { CardFeedPage, CommentReactionSummary, ReactionType, ReactionUserSummary } from "@kanera/shared/dto";
+import type { CardAttachmentRow, CardFeedPage, CommentReactionSummary, ReactionType, ReactionUserSummary } from "@kanera/shared/dto";
 import { SERVER_EVENTS, type ActivityFeedEvent, type CardFeedItem, type CommentRow, type ServerToClientEvents, type WireBoardMemberUser } from "@kanera/shared/events";
 import { ApiClient } from "../../core/api/api.client";
 import { AuthService } from "../../core/auth/auth.service";
@@ -42,10 +42,15 @@ import { appLocale } from "../../core/i18n/locale";
 
 const CARD_FEED_PAGE_SIZE = 50;
 
+// The live attachment behind an activity row, when it still exists. Reactions and "comment on this"
+// target the attachment itself, so a deleted upload's history row shows its preview but no actions.
+type ActivityAttachmentTarget = Pick<CardAttachmentRow, "id" | "fileName" | "mimeType" | "url" | "uploadedById" | "uploadedByName" | "reactions">;
+
 type ActivityAttachmentPreview =
-  | { kind: "image"; markdown: string; attachmentId: string }
+  | { kind: "image"; markdown: string; attachmentId: string; target: ActivityAttachmentTarget }
   | {
       kind: "file";
+      target: ActivityAttachmentTarget | null;
       fileName: string;
       iconClass: string;
       thumbnailUrl: string | null;
@@ -521,7 +526,33 @@ export class CardActivityComponent {
 
   startReplyComment(comment: CommentRow) {
     if (!this.canMutate()) return;
-    const quote = this.buildReplyQuote(comment);
+    this.openComposerWithQuote(this.buildReplyQuote(comment));
+  }
+
+  // Quotes the attachment and mentions the uploader so feedback on their screenshot reaches them.
+  // Images are quoted as the picture itself (shown as a thumbnail inside quotes) so the comment and
+  // its notification read on their own; other files keep a link chip.
+  private buildAttachmentQuote(attachment: ActivityAttachmentTarget): string {
+    const ownUpload = attachment.uploadedById === this.currentUserId()?.id;
+    const mention = `@[${attachment.uploadedByName}](kanera-user:${attachment.uploadedById})`;
+    if (attachment.mimeType.startsWith("image/")) {
+      const image = `![${this.markdownAltText(attachment.fileName)}](${attachment.url})`;
+      if (ownUpload) return `> ${image}\n\n`;
+      return `> ${$localize`:Header above an image quoted at the top of a new comment; person is a mention of the uploader:${mention}:person: attached:`}\n>\n> ${image}\n\n`;
+    }
+    const link = `[${this.markdownAltText(attachment.fileName)}](${attachment.url})`;
+    const header = ownUpload
+      ? link
+      : $localize`:Header quoting an attachment at the top of a new comment; person is a mention of the uploader:${link}:file: from ${mention}:person:`;
+    return `> ${header}\n\n`;
+  }
+
+  startAttachmentComment(attachment: ActivityAttachmentTarget) {
+    if (!this.canMutate()) return;
+    this.openComposerWithQuote(this.buildAttachmentQuote(attachment));
+  }
+
+  private openComposerWithQuote(quote: string) {
     if (this.addingComment()) {
       // Composer already open with a draft — prepend the quote, keep the draft.
       this.newCommentEditor()?.prependMarkdown(quote);
@@ -780,12 +811,14 @@ export class CardActivityComponent {
       return {
         kind: "image",
         attachmentId,
+        target: attachment!,
         markdown: `![${this.markdownAltText(fileName)}](${src})`,
       };
     }
     const previewType = attachmentPreviewType(mimeType, fileName);
     return {
       kind: "file",
+      target: attachment ?? null,
       fileName,
       iconClass: attachmentIconClass(mimeType, fileName),
       thumbnailUrl: visibleSignedMediaUrl(attachment?.thumbnailUrl),
@@ -1187,6 +1220,34 @@ export class CardActivityComponent {
   // Live gate: can react right now (also requires online). Drives disabled/readonly state + guards.
   canReact(comment: CommentRow): boolean {
     return this.canReactRole(comment) && this.sockets.displayedOnline();
+  }
+
+  attachmentReaction(attachment: ActivityAttachmentTarget, type: ReactionType): CommentReactionSummary | undefined {
+    return attachment.reactions?.find((r) => r.type === type);
+  }
+
+  attachmentUserReacted(attachment: ActivityAttachmentTarget, type: ReactionType): boolean {
+    const myId = this.currentUserId()?.id;
+    return Boolean(myId && this.attachmentReaction(attachment, type)?.userIds.includes(myId));
+  }
+
+  // Same rules as comments: editors only, and nobody reacts to their own upload.
+  canReactToAttachmentRole(attachment: ActivityAttachmentTarget): boolean {
+    const myId = this.currentUserId()?.id;
+    return this.canEdit() && this.canViewReactions() && Boolean(myId) && attachment.uploadedById !== myId;
+  }
+
+  canReactToAttachment(attachment: ActivityAttachmentTarget): boolean {
+    return this.canReactToAttachmentRole(attachment) && this.sockets.displayedOnline();
+  }
+
+  async toggleAttachmentReaction(attachment: ActivityAttachmentTarget, type: ReactionType) {
+    if (!this.canReactToAttachment(attachment)) return;
+    if (this.attachmentUserReacted(attachment, type)) {
+      await this.api.delete(`/attachments/${attachment.id}/reactions/${type}`);
+    } else {
+      await this.api.post(`/attachments/${attachment.id}/reactions`, { type });
+    }
   }
 
   async toggleReaction(comment: CommentRow, type: ReactionType) {

@@ -23,6 +23,8 @@ const activity: ActivitySummaryMessages = {
   markedComplete: "marcou este cartão como concluído",
   markedIncomplete: "marcou este cartão como não concluído",
   attached: (fileName) => `anexou ${fileName}`,
+  reactedToComment: "deu um joinha no seu comentário",
+  reactedToAttachment: (fileName) => `deu um joinha em ${fileName}`,
   attachedFile: "anexou um arquivo",
   removedAttachment: "removeu um anexo",
   assignedSelf: "atribuiu este cartão a si",
@@ -179,6 +181,13 @@ const ptBR: ServerMessages = {
       preheader: ({ actor, card, board }) => `${actor} comentou em “${card}” em ${board}.`,
       heading: "Novo comentário no seu cartão",
       intro: ({ firstName, actor, card, board }) => `Olá, ${firstName}. ${actor} comentou em “${card}” em ${board}.`,
+    },
+    reactionAdded: {
+      subject: ({ actor, card }) => `${actor} deu um joinha para você em ${card}`,
+      preheader: ({ actor, card, board }) => `${actor} reagiu ao seu trabalho em “${card}” em ${board}.`,
+      heading: "Você recebeu um joinha",
+      introComment: ({ firstName, actor, card, board }) => `Olá, ${firstName}. ${actor} deu um joinha no seu comentário em “${card}” em ${board}.`,
+      introAttachment: ({ firstName, actor, file, card, board }) => `Olá, ${firstName}. ${actor} deu um joinha em ${file} em “${card}” em ${board}.`,
     },
     commentMentioned: {
       subject: ({ card }) => `Você foi mencionado em um comentário em ${card}`,
@@ -598,6 +607,7 @@ const ptBR: ServerMessages = {
   push: {
     cardAssigned: { title: "Cartão atribuído", body: ({ actor, card }) => `${actor} atribuiu ${card} a você` },
     commentAdded: { title: "Novo comentário", body: ({ actor, board, card, excerpt }) => `${actor} comentou em ${board} / ${card}: ${excerpt}` },
+    reacted: { title: "Joinha", comment: ({ actor, board, card }) => `${actor} curtiu seu comentário em ${board} / ${card}`, attachment: ({ actor, board, card, file }) => `${actor} curtiu ${file} em ${board} / ${card}` },
     mentioned: { title: "Menção em comentário", body: ({ actor, board, card, excerpt }) => `${actor} mencionou você em ${board} / ${card}: ${excerpt}` },
     dueDateChanged: { title: "Data de entrega alterada", body: ({ actor, card }) => `${actor} alterou a data de entrega de ${card}` },
     cardOverdue: { title: "Cartão atrasado", body: ({ card }) => `${card} está atrasado` },

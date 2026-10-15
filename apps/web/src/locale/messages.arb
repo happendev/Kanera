@@ -527,6 +527,20 @@
       "src/app/core/i18n/activity-summary.messages.ts"
     ]
   },
+  "4136754018231879233": "gave your comment a thumbs-up",
+  "@4136754018231879233": {
+    "description": "Notification line after a person's name; only the comment's author sees it",
+    "x-files": [
+      "src/app/core/i18n/activity-summary.messages.ts"
+    ]
+  },
+  "792062627254237087": "gave {$fileName} a thumbs-up",
+  "@792062627254237087": {
+    "description": "Notification line after a person's name; only the uploader sees it",
+    "x-files": [
+      "src/app/core/i18n/activity-summary.messages.ts"
+    ]
+  },
   "894073162382631591": "removed an attachment",
   "@894073162382631591": {
     "description": "Notification line after a person's name",
@@ -3614,6 +3628,13 @@
   "2126838550163114860": "Your card reminders",
   "@2126838550163114860": {
     "description": "Notification type",
+    "x-files": [
+      "src/app/features/account-settings/account-settings.page.ts"
+    ]
+  },
+  "3692062283572698890": "Thumbs-up on your comment or file",
+  "@3692062283572698890": {
+    "description": "Notification type; someone gave your comment or uploaded file a thumbs-up",
     "x-files": [
       "src/app/features/account-settings/account-settings.page.ts"
     ]
@@ -9635,6 +9656,13 @@
       "src/app/features/board/card-activity.component.html"
     ]
   },
+  "8040230931233687227": "Comment",
+  "@8040230931233687227": {
+    "description": "Button under an uploaded file in card activity: start a comment about it",
+    "x-files": [
+      "src/app/features/board/card-activity.component.html"
+    ]
+  },
   "4058854127237095660": "View changes",
   "@4058854127237095660": {
     "description": "Button: show what changed in the description",
@@ -9684,6 +9712,20 @@
   "710756679370077640": "{$person} wrote:",
   "@710756679370077640": {
     "description": "Header of a quoted comment in a reply; person is a mention of the original author",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
+  "2139615018945424245": "{$person} attached:",
+  "@2139615018945424245": {
+    "description": "Header above an image quoted at the top of a new comment; person is a mention of the uploader",
+    "x-files": [
+      "src/app/features/board/card-activity.component.ts"
+    ]
+  },
+  "7859942588673701410": "{$file} from {$person}",
+  "@7859942588673701410": {
+    "description": "Header quoting an attachment at the top of a new comment; person is a mention of the uploader",
     "x-files": [
       "src/app/features/board/card-activity.component.ts"
     ]

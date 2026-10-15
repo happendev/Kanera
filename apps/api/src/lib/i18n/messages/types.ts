@@ -163,6 +163,13 @@ export interface EmailMessages {
     heading: string;
     intro: (p: { firstName: string; actor: string; card: string; board: string }) => string;
   };
+  reactionAdded: {
+    subject: (p: { actor: string; card: string }) => string;
+    preheader: (p: { actor: string; card: string; board: string }) => string;
+    heading: string;
+    introComment: (p: { firstName: string; actor: string; card: string; board: string }) => string;
+    introAttachment: (p: { firstName: string; actor: string; file: string; card: string; board: string }) => string;
+  };
   commentMentioned: {
     subject: (p: { card: string }) => string;
     preheader: (p: { actor: string; card: string; board: string }) => string;
@@ -501,6 +508,11 @@ export interface PushMessages {
   cardAssigned: { title: string; body: (p: { actor: string; card: string }) => string };
   commentAdded: { title: string; body: (p: { actor: string; board: string; card: string; excerpt: string }) => string };
   mentioned: { title: string; body: (p: { actor: string; board: string; card: string; excerpt: string }) => string };
+  reacted: {
+    title: string;
+    comment: (p: { actor: string; board: string; card: string }) => string;
+    attachment: (p: { actor: string; board: string; card: string; file: string }) => string;
+  };
   dueDateChanged: { title: string; body: (p: { actor: string; card: string }) => string };
   cardOverdue: { title: string; body: (p: { card: string }) => string };
   checklistItemOverdue: { title: string; body: (p: { item: string; card: string }) => string };

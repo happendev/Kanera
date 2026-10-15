@@ -104,6 +104,7 @@ export const ERROR_MESSAGES = [
   "cannot change an inherited board admin role",
   "cannot change your own role",
   "cannot demote the last owner",
+  "cannot react to your own attachment",
   "cannot react to your own comment",
   "cannot remove an inherited board admin",
   "cannot remove or downgrade the last workspace admin",

@@ -1,4 +1,5 @@
-import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { readFile, mkdir, writeFile, rename, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
@@ -36,6 +37,14 @@ ${formattedIcons}
 `;
 
 await mkdir(dirname(outputPath), { recursive: true });
-await writeFile(outputPath, contents);
+// Recursive lint/build runs typecheck other packages while web assets are generated.
+// Publish the complete module atomically so those readers never see a truncated export.
+const temporaryPath = `${outputPath}.${randomUUID()}.tmp`;
+try {
+  await writeFile(temporaryPath, contents);
+  await rename(temporaryPath, outputPath);
+} finally {
+  await rm(temporaryPath, { force: true });
+}
 
 console.log(`Generated ${uniqueIconNames.length.toLocaleString()} Tabler icon names.`);

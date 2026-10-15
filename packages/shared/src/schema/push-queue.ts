@@ -13,6 +13,7 @@ export const PUSH_QUEUE_REASONS = [
   "overdue",
   "watching",
   "reminder",
+  "reacted",
 ] as const;
 export type PushQueueReason = (typeof PUSH_QUEUE_REASONS)[number];
 

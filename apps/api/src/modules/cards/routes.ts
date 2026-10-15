@@ -51,6 +51,7 @@ import { duplicateCardInto, emitDuplicatedCardIntoBoard, resolveDuplicateTargetL
 import { absoluteCardUrl, toWireCard } from "../../lib/wire-card.js";
 import { assertCardActive, assertIntegrationEmbeddedMediaStoredLocally } from "../../lib/card-guards.js";
 import { attachmentRowBaseColumns } from "../../lib/attachment-rows.js";
+import { fetchReactionsByAttachment } from "../../lib/comment-reactions.js";
 import { ensureBoardMembershipForUsers, shouldAutoWatchAuthoredCards } from "../../lib/card-assignment.js";
 import { clearRemindersOnCompletedCards, emitClearedCardReminders, type ClearedCardReminder } from "../../lib/card-follow.js";
 import type { AuthClaims } from "../../auth/plugin.js";
@@ -596,6 +597,7 @@ export async function cardRoutes(
         .where(eq(cardChecklistTemplateApplications.cardId, id)),
       loadLinkedNotesForCard(req.auth, id, ctx.workspaceId),
     ]);
+    const attachmentReactions = await fetchReactionsByAttachment(attachments.map((attachment) => attachment.id));
 
     return {
       card: toWireCard(card, req.auth.cid),
@@ -605,6 +607,7 @@ export async function cardRoutes(
       attachments: attachments.map(({ uploadedByClientId, uploadedByAvatarUrl, ...attachment }) => ({
         ...shapeAttachmentMedia(attachment),
         uploadedByAvatarUrl: signedAvatarUrl(uploadedByClientId, uploadedByAvatarUrl),
+        reactions: attachmentReactions.get(attachment.id) ?? [],
       })),
       checklists,
       appliedChecklistTemplateIds: appliedTemplateRows.map((row) => row.templateId),

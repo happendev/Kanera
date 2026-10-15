@@ -29,6 +29,8 @@ const activity: ActivitySummaryMessages = {
   markedComplete: "a marqué cette carte comme terminée",
   markedIncomplete: "a marqué cette carte comme non terminée",
   attached: (fileName) => `a joint ${fileName}`,
+  reactedToComment: "a mis un pouce levé à votre commentaire",
+  reactedToAttachment: (fileName) => `a mis un pouce levé à ${fileName}`,
   attachedFile: "a joint un fichier",
   removedAttachment: "a supprimé une pièce jointe",
   assignedSelf: "s’est assigné la carte",
@@ -188,6 +190,13 @@ const fr: ServerMessages = {
       preheader: ({ actor, card, board }) => `${actor} a commenté «\u00a0${card}\u00a0» dans ${board}.`,
       heading: "Nouveau commentaire sur votre carte",
       intro: ({ firstName, actor, card, board }) => `Bonjour ${firstName}, ${actor} a commenté «\u00a0${card}\u00a0» dans ${board}.`,
+    },
+    reactionAdded: {
+      subject: ({ actor, card }) => `${actor} vous a donné un pouce levé sur ${card}`,
+      preheader: ({ actor, card, board }) => `${actor} a réagi à votre travail sur «\u00a0${card}\u00a0» dans ${board}.`,
+      heading: "Vous avez reçu un pouce levé",
+      introComment: ({ firstName, actor, card, board }) => `Bonjour ${firstName}, ${actor} a mis un pouce levé à votre commentaire sur «\u00a0${card}\u00a0» dans ${board}.`,
+      introAttachment: ({ firstName, actor, file, card, board }) => `Bonjour ${firstName}, ${actor} a mis un pouce levé à ${file} sur «\u00a0${card}\u00a0» dans ${board}.`,
     },
     commentMentioned: {
       subject: ({ card }) => `Mention dans un commentaire sur ${card}`,
@@ -608,6 +617,7 @@ const fr: ServerMessages = {
   push: {
     cardAssigned: { title: "Carte assignée", body: ({ actor, card }) => `${actor} vous a assigné la carte ${card}` },
     commentAdded: { title: "Nouveau commentaire", body: ({ actor, board, card, excerpt }) => `${actor} a commenté dans ${board} / ${card}\u00a0: ${excerpt}` },
+    reacted: { title: "Pouce levé", comment: ({ actor, board, card }) => `${actor} a aimé votre commentaire dans ${board} / ${card}`, attachment: ({ actor, board, card, file }) => `${actor} a aimé ${file} dans ${board} / ${card}` },
     mentioned: { title: "Mention dans un commentaire", body: ({ actor, board, card, excerpt }) => `${actor} vous a mentionné dans ${board} / ${card}\u00a0: ${excerpt}` },
     dueDateChanged: { title: "Date d’échéance modifiée", body: ({ actor, card }) => `${actor} a modifié la date d’échéance de ${card}` },
     cardOverdue: { title: "Carte en retard", body: ({ card }) => `${card} est en retard` },

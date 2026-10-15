@@ -33,6 +33,7 @@ import { billingRoutes } from "./modules/billing/routes.js";
 import { boardRoutes } from "./modules/boards/routes.js";
 import { cardLabelRoutes } from "./modules/card-labels/routes.js";
 import { cardAttachmentRoutes } from "./modules/cards/attachments.routes.js";
+import { cardAttachmentReactionRoutes } from "./modules/cards/attachment-reactions.routes.js";
 import { cardRoutes } from "./modules/cards/routes.js";
 import { clientRoutes } from "./modules/clients/routes.js";
 import { checklistTemplateRoutes } from "./modules/checklist-templates/routes.js";
@@ -269,6 +270,7 @@ export async function buildServer(options: BuildServerOptions = {}) {
   await app.register(cardRoutes, { allowGlobalWorkLayoutMoves: true });
   await app.register(separatorRoutes);
   await app.register(cardAttachmentRoutes);
+  await app.register(cardAttachmentReactionRoutes);
   await app.register(customFieldRoutes);
   await app.register(checklistTemplateRoutes);
   await app.register(automationRoutes);

@@ -99,8 +99,10 @@ const ENTITIES: { name: string; table: unknown; synthetic?: string[]; omitted?: 
     name: "WebhookEndpoint",
     table: schema.webhookEndpoints,
     // `scope` summarises the two owner columns; the owning key/grant ids themselves are internal.
+    // `provider`, `priorityFieldId` and `locale` configure chat destinations, which only the app API
+    // manages; public endpoints are generic webhooks whose JSON envelopes carry no translated text.
     synthetic: ["scope", "lastSuccessfulAt"],
-    omitted: ["createdById", "provider", "encryptedSecret", "encryptedConfig", "priorityFieldId", "ownerApiKeyId", "ownerAgentGrantId"],
+    omitted: ["createdById", "provider", "locale", "encryptedSecret", "encryptedConfig", "priorityFieldId", "ownerApiKeyId", "ownerAgentGrantId"],
   },
   { name: "WebhookDelivery", table: schema.webhookDeliveries },
   {

@@ -20,6 +20,7 @@ import {
   cardReminderEmail,
   checklistItemOverdueEmail,
   commentMentionedEmail,
+  reactionAddedEmail,
   dailyDigestEmail,
   downgradedToFreeEmail,
   inviteAcceptedEmail,
@@ -61,6 +62,7 @@ import {
   type CardReminderEmailParams,
   type ChecklistItemOverdueEmailParams,
   type CommentMentionedEmailParams,
+  type ReactionAddedEmailParams,
   type DailyDigestEmailParams,
   type InviteAcceptedEmailParams,
   type StorageWarningEmailParams,
@@ -85,6 +87,7 @@ export interface Mailer {
   sendCardAssigned(to: string, params: CardAssignedEmailParams): Promise<EmailQueue>;
   sendCardCommentAdded(to: string, params: CardCommentAddedEmailParams): Promise<EmailQueue>;
   sendCommentMentioned(to: string, params: CommentMentionedEmailParams): Promise<EmailQueue>;
+  sendReactionAdded(to: string, params: ReactionAddedEmailParams): Promise<EmailQueue>;
   sendCardDueDateChanged(to: string, params: CardDueDateChangedEmailParams): Promise<EmailQueue>;
   sendCardOverdue(to: string, params: CardOverdueEmailParams): Promise<EmailQueue>;
   sendCardReminder(to: string, params: CardReminderEmailParams): Promise<EmailQueue>;
@@ -201,6 +204,10 @@ export function createMailer({ db, resolveSmtpConfig, webOrigin, log, sendEmail:
 
     async sendCommentMentioned(to, params) {
       return queueEmail(to, mail(params.locale).commentMentioned.subject({ card: params.cardTitle }), "comment_mentioned", params);
+    },
+
+    async sendReactionAdded(to, params) {
+      return queueEmail(to, mail(params.locale).reactionAdded.subject({ actor: params.actorName, card: params.cardTitle }), "reaction_added", params);
     },
 
     async sendCardDueDateChanged(to, params) {
@@ -393,6 +400,8 @@ export function renderEmail(row: EmailQueue): string {
       return cardCommentAddedEmail(data as CardCommentAddedEmailParams);
     case "comment_mentioned":
       return commentMentionedEmail(data as CommentMentionedEmailParams);
+    case "reaction_added":
+      return reactionAddedEmail(data as ReactionAddedEmailParams);
     case "card_due_date_changed":
       return cardDueDateChangedEmail(data as CardDueDateChangedEmailParams);
     case "card_overdue":

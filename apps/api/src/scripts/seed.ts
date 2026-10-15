@@ -17,6 +17,7 @@ try {
   console.log(`comments: ${summary.comments}`);
   console.log(`separators: ${summary.separators}`);
   console.log(`attachments: ${summary.attachments}`);
+  console.log(`attachment reactions: ${summary.attachmentReactions}`);
   console.log(`card covers: ${summary.cardCovers}`);
   console.log(`card moves: ${summary.cardMoves}`);
   console.log(`notes: ${summary.notes}`);

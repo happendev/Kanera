@@ -184,6 +184,61 @@ export async function enqueueCommentMentionedNotifications(params: {
   return recipients.filter((recipient) => allowsNotificationEmail(settings.get(recipient.id)!, "commentMentioned", deliveryScope(rules, recipient.id, ctx))).length;
 }
 
+/**
+ * Email (opt-in by default) and push for a thumbs-up, sent to the comment's author or the file's
+ * uploader. The caller has already checked that the recipient can see the card and that this is
+ * the first time this person reacted to this item, so a toggled reaction never re-sends.
+ */
+export async function enqueueReactionAddedNotifications(params: {
+  tx: Tx;
+  mailer: Mailer;
+  webOrigin: string;
+  cardId: string;
+  actorId: string;
+  recipientUserId: string;
+  target: { kind: "comment"; body: string } | { kind: "attachment"; fileName: string };
+}): Promise<void> {
+  const recipients = await loadRecipients(params.tx, [params.recipientUserId], actorSuppressionId(params.actorId));
+  if (recipients.length === 0) return;
+  const [ctx, actorName] = await Promise.all([
+    loadCardEmailContext(params.tx, params.cardId),
+    resolveActorName(params.tx, params.actorId),
+  ]);
+  if (!ctx || !actorName) return;
+  const settings = await getNotificationSettingsForUsers(params.tx, recipients.map((recipient) => recipient.id));
+  const rules = await getNotificationWorkspaceRulesForUsers(params.tx, recipients.map((recipient) => recipient.id), [ctx.workspaceId]);
+  const cardUrlValue = cardUrl(params.webOrigin, ctx.organisationKey, ctx.cardKey);
+  const commentExcerpt = params.target.kind === "comment" ? commentEmailExcerpt(params.target.body) : null;
+  const fileName = params.target.kind === "attachment" ? params.target.fileName : null;
+  await Promise.all(recipients.map(async (recipient) => {
+    if (!allowsNotificationEmail(settings.get(recipient.id)!, "reactionAdded", deliveryScope(rules, recipient.id, ctx))) return;
+    const locale = recipientLocale(recipient.locale);
+    await params.mailer.sendReactionAdded(recipient.email, {
+      locale,
+      displayName: recipient.displayName,
+      actorName: actorName(locale),
+      cardTitle: ctx.cardTitle,
+      boardName: ctx.boardName,
+      cardUrl: cardUrlValue,
+      commentExcerpt: commentExcerpt === null ? null : excerptOrFallback(commentExcerpt, locale),
+      fileName,
+    });
+  }));
+  await enqueuePushForRecipients(params.tx, recipients, settings, rules, ctx, "reactionAdded", "reacted", (locale) => {
+    const m = serverMessages(locale).push.reacted;
+    const actor = actorName(locale);
+    return {
+      kind: "reaction_added",
+      title: m.title,
+      body: fileName
+        ? m.attachment({ actor, board: ctx.boardName, card: ctx.cardTitle, file: fileName })
+        : m.comment({ actor, board: ctx.boardName, card: ctx.cardTitle }),
+      url: cardUrlValue,
+      tag: `card:${ctx.cardId}:reacted`,
+    };
+  });
+}
+
 export async function enqueueDueDateChangedEmails(params: {
   tx: Tx;
   mailer: Mailer;

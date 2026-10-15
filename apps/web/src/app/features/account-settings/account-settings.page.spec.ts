@@ -46,6 +46,7 @@ const enabledWorkspaceRuleTypes = (): NotificationWorkspaceRule["types"] => ({
   cardDueDateChanged: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
   cardOverdue: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
   cardReminder: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+  reactionAdded: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
 });
 
 describe("AccountSettingsPage", () => {
@@ -213,6 +214,7 @@ describe("AccountSettingsPage", () => {
         cardDueDateChanged: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
         cardOverdue: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
         cardReminder: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+        reactionAdded: { email: false, push: true, ntfy: true, gotify: true, webhook: true },
       },
       workspaceRules: [],
     };
@@ -406,8 +408,8 @@ describe("AccountSettingsPage", () => {
     expect(typeGrid?.textContent).not.toContain("ntfy");
     expect(typeGrid?.textContent).not.toContain("Gotify");
     expect(typeGrid?.textContent).not.toContain("Webhook");
-    expect(typeGrid?.querySelectorAll(".mini-toggle").length).toBe(12);
-    expect(additionalDestinations?.querySelectorAll(".personal-channel-types .mini-toggle").length).toBe(18);
+    expect(typeGrid?.querySelectorAll(".mini-toggle").length).toBe(14);
+    expect(additionalDestinations?.querySelectorAll(".personal-channel-types .mini-toggle").length).toBe(21);
   });
 
   it("keeps email and browser push available while hiding Pro-only personal destinations on Free", async () => {
@@ -473,6 +475,7 @@ describe("AccountSettingsPage", () => {
         cardDueDateChanged: { email: true, push: false, ntfy: true, gotify: true, webhook: true },
         cardOverdue: { email: true, push: false, ntfy: true, gotify: true, webhook: true },
         cardReminder: { email: true, push: false, ntfy: true, gotify: true, webhook: true },
+        reactionAdded: { email: true, push: false, ntfy: true, gotify: true, webhook: true },
       },
     });
     expect(component.notificationSettings()?.workspaceRules).toHaveLength(1);

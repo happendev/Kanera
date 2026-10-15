@@ -51,6 +51,8 @@ export interface ActivitySummaryMessages {
   markedComplete: string;
   markedIncomplete: string;
   attached: (fileName: string) => string;
+  reactedToComment: string;
+  reactedToAttachment: (fileName: string) => string;
   attachedFile: string;
   removedAttachment: string;
   assignedSelf: string;
@@ -111,6 +113,8 @@ export const ACTIVITY_SUMMARY_SOURCE_MESSAGES: ActivitySummaryMessages = {
   markedComplete: "marked this card complete",
   markedIncomplete: "marked this card incomplete",
   attached: (fileName) => `attached ${fileName}`,
+  reactedToComment: "gave your comment a thumbs-up",
+  reactedToAttachment: (fileName) => `gave ${fileName} a thumbs-up`,
   attachedFile: "attached a file",
   removedAttachment: "removed an attachment",
   assignedSelf: "assigned themself",
@@ -173,6 +177,14 @@ export function summariseActivityChange(
   }
   const activity = input.activity;
   const payload = (activity.payload ?? {}) as Record<string, unknown>;
+  // Only the author or uploader receives these, so the copy can say "your".
+  if (activity.action === "reaction:added") {
+    const fileName = shortName(payload["fileName"]);
+    return {
+      icon: "ti ti-thumb-up",
+      text: activity.entityType === "comment" ? m.reactedToComment : m.reactedToAttachment(fileName ?? "…"),
+    };
+  }
   switch (activity.entityType) {
     case "comment":
       return {

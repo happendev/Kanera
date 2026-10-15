@@ -144,6 +144,8 @@ export const publicWebhookEventTypes = [
   "card:assignees:set",
   "card:attachment:created",
   "card:attachment:deleted",
+  "card:attachment:reaction:added",
+  "card:attachment:reaction:removed",
   "card:checklist:created",
   "card:checklist:updated",
   "card:checklist:moved",

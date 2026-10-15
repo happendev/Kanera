@@ -574,6 +574,20 @@ export interface ServerToClientEvents {
   "card:links:changed": (payload: { boardId: string; cardId: string }) => void;
   "card:attachment:created": (payload: { boardId: string; cardId: string; attachment: CardAttachmentRow }) => void;
   "card:attachment:deleted": (payload: { boardId: string; cardId: string; attachmentId: string }) => void;
+  "card:attachment:reaction:added": (payload: {
+    boardId: string;
+    cardId: string;
+    attachmentId: string;
+    type: ReactionType;
+    user: ReactionUserSummary;
+  }) => void;
+  "card:attachment:reaction:removed": (payload: {
+    boardId: string;
+    cardId: string;
+    attachmentId: string;
+    type: ReactionType;
+    userId: string;
+  }) => void;
   "card:checklist:created": (payload: { boardId: string; cardId: string; checklist: WireCardChecklist }) => void;
   "card:checklist:updated": (payload: { boardId: string; cardId: string; checklist: WireCardChecklist }) => void;
   "card:checklist:moved": (payload: {
@@ -898,6 +912,8 @@ export const SERVER_EVENTS = {
   CARD_LINKS_CHANGED: "card:links:changed",
   CARD_ATTACHMENT_CREATED: "card:attachment:created",
   CARD_ATTACHMENT_DELETED: "card:attachment:deleted",
+  CARD_ATTACHMENT_REACTION_ADDED: "card:attachment:reaction:added",
+  CARD_ATTACHMENT_REACTION_REMOVED: "card:attachment:reaction:removed",
   CARD_CHECKLIST_CREATED: "card:checklist:created",
   CARD_CHECKLIST_UPDATED: "card:checklist:updated",
   CARD_CHECKLIST_MOVED: "card:checklist:moved",

@@ -50,6 +50,7 @@ const enabledWorkspaceRuleTypes = (): NotificationWorkspaceRule["types"] => ({
   cardDueDateChanged: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
   cardOverdue: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
   cardReminder: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+  reactionAdded: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
 });
 
 async function overdueRowsForCard(cardId: string) {
@@ -1184,6 +1185,7 @@ void test("notification settings default enabled and patch merges type settings"
       cardDueDateChanged: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
       cardOverdue: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
       cardReminder: { email: true, push: true, ntfy: true, gotify: true, webhook: true },
+      reactionAdded: { email: false, push: true, ntfy: true, gotify: true, webhook: true },
     },
     push: {
       status: "enabled",
