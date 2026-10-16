@@ -2,8 +2,38 @@
   <p class="overview-error"><i class="ti ti-alert-circle"></i>{{ message }}</p>
 }
 
-<div class="overview-grid">
-  @if (unownedRows(); as unowned) {
+<!-- Picks one teammate to look at: their panel alone, with their Up next docked beside it. A
+     horizontal strip rather than a wrapping one, so on a phone it stays one row above the panels. -->
+@if (stripPeople().length > 1) {
+  <nav class="person-strip" aria-label="Teammates" i18n-aria-label="Team overview person strip">
+    <button
+      type="button"
+      class="strip-chip strip-everyone"
+      [class.is-active]="!focusedOverview()"
+      [attr.aria-pressed]="!focusedOverview()"
+      (click)="focusChanged.emit(null)"
+    >
+      <i class="ti ti-users-group"></i>
+      <span i18n="Team overview person strip: show every teammate">Everyone</span>
+    </button>
+    @for (person of stripPeople(); track person.userId) {
+      <button
+        type="button"
+        class="strip-chip"
+        [class.is-active]="focusedOverview()?.person?.userId === person.userId"
+        [attr.aria-pressed]="focusedOverview()?.person?.userId === person.userId"
+        [attr.aria-label]="personChipLabel(person.displayName, focusedOverview()?.person?.userId === person.userId)"
+        (click)="focusChanged.emit(focusedOverview()?.person?.userId === person.userId ? null : person.userId)"
+      >
+        <k-avatar [url]="person.avatarUrl" [name]="person.displayName" [size]="22" [userId]="person.userId" />
+        <span class="strip-name">{{ person.displayName.split(" ")[0] }}</span>
+      </button>
+    }
+  </nav>
+}
+
+<div class="overview-grid" [class.is-focused]="focusedOverview()">
+  @if (!focusedOverview() && unownedRows(); as unowned) {
     <!-- Every other panel is a person; in-progress work with no assignee would otherwise vanish. -->
     <section class="person unowned" aria-label="In progress with no assignee" i18n-aria-label>
       <header class="person-head">
@@ -31,11 +61,21 @@
     </section>
   }
   @for (item of activePeople(); track item.person.userId) {
-    <section class="person" [attr.aria-label]="item.person.displayName">
+    <section class="person" [class.is-docked]="isDocked(item.person.userId)" [attr.aria-label]="item.person.displayName">
       <header class="person-head">
-        <k-avatar [url]="item.person.avatarUrl" [name]="item.person.displayName" [size]="32" [userId]="item.person.userId" />
+        <!-- The avatar opens their profile card, as avatars do across the app; the name is the
+             shortcut into "just this person", and again back to everyone. -->
+        <k-avatar [url]="item.person.avatarUrl" [name]="item.person.displayName" [size]="32" [userId]="item.person.userId" [profile]="true" />
         <div class="person-id">
-          <strong class="person-name">{{ item.person.displayName }}</strong>
+          <button
+            type="button"
+            class="person-focus"
+            [attr.aria-pressed]="focusedOverview() !== null"
+            [kTooltip]="personChipLabel(item.person.displayName, focusedOverview() !== null)"
+            (click)="focusChanged.emit(focusedOverview() ? null : item.person.userId)"
+          >
+            <strong class="person-name">{{ item.person.displayName }}</strong>
+          </button>
           <span class="person-active" [class.is-idle]="!item.lastActiveAt">{{ lastActiveLabel(item) }}</span>
         </div>
         <button
@@ -102,9 +142,20 @@
         </div>
       } @else {
         <div class="section tone-progress">
-          <h4 class="section-title" kTooltip="Their open cards in In progress lists, longest time in progress first" i18n-kTooltip>
-            <span class="section-icon"><i class="ti ti-progress"></i></span><ng-container i18n="Team overview section">In progress</ng-container>
+          <h4 class="section-title">
+            <button
+              type="button"
+              class="section-toggle"
+              [attr.aria-expanded]="!isCollapsed('inProgress')"
+              kTooltip="Their open cards in In progress lists, longest time in progress first"
+              i18n-kTooltip
+              (click)="toggleSection('inProgress')"
+            >
+              <i class="ti section-chevron" [class.ti-chevron-right]="isCollapsed('inProgress')" [class.ti-chevron-down]="!isCollapsed('inProgress')"></i>
+              <span class="section-icon"><i class="ti ti-progress"></i></span><ng-container i18n="Team overview section">In progress</ng-container>
+            </button>
           </h4>
+          @if (!isCollapsed("inProgress")) {
           @for (row of item.inProgressRows; track row.card.id) {
             <ng-container *ngTemplateOutlet="rowTpl; context: { $implicit: row }" />
           } @empty {
@@ -117,18 +168,27 @@
           @if (item.inProgressMore) {
             <p class="section-more" i18n>+{{ item.inProgressMore // i18n(ph="count") }} more in progress</p>
           }
+          }
         </div>
 
         @if (item.recent.length) {
           <div class="section tone-recent">
-            <h4
-              class="section-title"
+            <h4 class="section-title">
+              <button
+              type="button"
+              class="section-toggle"
+              [attr.aria-expanded]="!isCollapsed('recent')"
               [kTooltip]="recentTooltip"
+              (click)="toggleSection('recent')"
             >
+              <i class="ti section-chevron" [class.ti-chevron-right]="isCollapsed('recent')" [class.ti-chevron-down]="!isCollapsed('recent')"></i>
               <span class="section-icon"><i class="ti ti-activity"></i></span><ng-container i18n="Team overview section">Recently active</ng-container>
+            </button>
             </h4>
-            @for (row of item.recent; track row.card.id) {
-              <ng-container *ngTemplateOutlet="rowTpl; context: { $implicit: row }" />
+            @if (!isCollapsed("recent")) {
+              @for (row of item.recent; track row.card.id) {
+                <ng-container *ngTemplateOutlet="rowTpl; context: { $implicit: row }" />
+              }
             }
           </div>
         }
@@ -136,8 +196,33 @@
         @if (item.upNext; as upNext) {
           <div class="section tone-next">
             <h4 class="section-title">
-              <span class="section-icon"><i class="ti ti-list-numbers"></i></span><ng-container i18n="Team overview section">Up next</ng-container><span class="section-count">{{ upNext.total }}</span>
+              <button
+              type="button"
+              class="section-toggle"
+              [attr.aria-expanded]="!isCollapsed('upNext')"
+              (click)="toggleSection('upNext')"
+            >
+              <i class="ti section-chevron" [class.ti-chevron-right]="isCollapsed('upNext')" [class.ti-chevron-down]="!isCollapsed('upNext')"></i>
+              <span class="section-icon"><i class="ti ti-list-numbers"></i></span><ng-container i18n="Team overview section">Up next</ng-container>
+            </button><span class="section-count">{{ upNext.total }}</span>
+              <!-- The way into curating this person's queue: the page docks it beside the overview. -->
+              <button
+                type="button"
+                class="section-action"
+                [class.is-open]="isDocked(item.person.userId)"
+                [attr.aria-pressed]="isDocked(item.person.userId)"
+                [attr.aria-label]="upNextActionLabel(item.person.displayName, isDocked(item.person.userId))"
+                (click)="upNextToggled.emit(item.person.userId)"
+              >
+                <i class="ti ti-layout-sidebar-right"></i>
+                @if (isDocked(item.person.userId)) {
+                  <span i18n="Button on a teammate's Up next section while the panel shows it">Close</span>
+                } @else {
+                  <span i18n="Button on a teammate's Up next section that opens the panel to change it">Edit</span>
+                }
+              </button>
             </h4>
+            @if (!isCollapsed("upNext")) {
             @for (row of upNext.rows; track row.card.id) {
               <ng-container *ngTemplateOutlet="rowTpl; context: { $implicit: row }" />
             } @empty {
@@ -152,13 +237,25 @@
             @if (upNext.total > upNext.rows.length && upNext.rows.length) {
               <p class="section-more" i18n>+{{ upNext.total - upNext.rows.length // i18n(ph="count") }} more in their queue</p>
             }
+            }
           </div>
         }
 
         <div class="section tone-assigned">
-          <h4 class="section-title" kTooltip="Their other open cards, soonest due first" i18n-kTooltip>
-            <span class="section-icon"><i class="ti ti-user-check"></i></span><ng-container i18n="Team overview section">Assigned</ng-container>
+          <h4 class="section-title">
+            <button
+              type="button"
+              class="section-toggle"
+              [attr.aria-expanded]="!isCollapsed('assigned')"
+              kTooltip="Their other open cards, soonest due first"
+              i18n-kTooltip
+              (click)="toggleSection('assigned')"
+            >
+              <i class="ti section-chevron" [class.ti-chevron-right]="isCollapsed('assigned')" [class.ti-chevron-down]="!isCollapsed('assigned')"></i>
+              <span class="section-icon"><i class="ti ti-user-check"></i></span><ng-container i18n="Team overview section">Assigned</ng-container>
+            </button>
           </h4>
+          @if (!isCollapsed("assigned")) {
           @for (row of item.assigned; track row.card.id) {
             <ng-container *ngTemplateOutlet="rowTpl; context: { $implicit: row }" />
           } @empty {
@@ -167,15 +264,26 @@
           @if (item.assignedMore) {
             <p class="section-more" i18n="Count of further cards in a team overview section">+{{ item.assignedMore // i18n(ph="count") }} more</p>
           }
+          }
         </div>
 
         @if (item.doneRows.length) {
           <div class="section tone-done">
             <h4 class="section-title">
+              <button
+              type="button"
+              class="section-toggle"
+              [attr.aria-expanded]="!isCollapsed('done')"
+              (click)="toggleSection('done')"
+            >
+              <i class="ti section-chevron" [class.ti-chevron-right]="isCollapsed('done')" [class.ti-chevron-down]="!isCollapsed('done')"></i>
               <span class="section-icon"><i class="ti ti-circle-check"></i></span><ng-container i18n="Team overview section">Recently done</ng-container>
+            </button>
             </h4>
-            @for (row of item.doneRows; track row.card.id) {
-              <ng-container *ngTemplateOutlet="rowTpl; context: { $implicit: row }" />
+            @if (!isCollapsed("done")) {
+              @for (row of item.doneRows; track row.card.id) {
+                <ng-container *ngTemplateOutlet="rowTpl; context: { $implicit: row }" />
+              }
             }
           </div>
         }

@@ -89,6 +89,7 @@ Everywhere:
 | group by | group by | agrupar por | agrupar por | regrouper par | gruppieren nach | グループ化 | groeperen op | grupper etter | 分组依据 | 分組依據 |
 | sort | sort | ordenar | ordenar | trier | sortieren | 並べ替え | sorteren | sorter | 排序 | 排序 |
 | Up next (personal queue) | Up next | Próximas | A seguir | À suivre | „Als Nächstes“ | 次にやること | Hierna | Neste | 接下来 | 接下來 |
+| Not queued (open cards outside Up next) | Not queued | Fuera de Próximas | Fora de A seguir | Hors À suivre | Nicht eingereiht | 未追加 | Niet in Hierna | Ikke i Neste | 未加入 | 未加入 |
 | editor / observer (board roles) | editor / observer | editor / observador | editor / observador | éditeur / observateur | Bearbeiter / Betrachter | 編集者 / 閲覧者 | bewerker / waarnemer | redaktør / observatør | 编辑者 / 观察者 | 編輯者 / 觀察者 |
 | trigger / action (automation) | trigger / action | desencadenante / acción | gatilho / ação | déclencheur / action | Auslöser / Aktion | トリガー / アクション | trigger / actie | utløser / handling | 触发条件 / 操作 | 觸發條件 / 操作 |
 | source / target (mirror) | source / target | origen / destino | origem / destino | source / cible | Quelle / Ziel | コピー元 / コピー先 | bron / doel | kilde / mål | 来源 / 目标 | 來源 / 目標 |

@@ -23,12 +23,11 @@ export const WORK_SORT_VALUES = [
   "inProgressDesc",
 ] as const;
 /**
- * `priorities` is the Team Cards lanes display: one "Up next" queue per readable teammate, side by
- * side, so a manager reads everyone's order without focusing each person in turn. It is the one
- * display backed by the priority endpoints rather than the card query — which is also why there is
- * still no priority `WORK_SORT_VALUES` entry: rank is a property of the (user, card) pair, so under
- * `team` one card has several ranks and there is no single `ORDER BY` at all. A single focused
- * person's queue stays a docked panel over the other displays, not a display of its own.
+ * `priorities` is retired: it was a Team Cards display of every readable teammate's "Up next" queue
+ * side by side. It stays in the enum only so saved views and preferences that still name it parse;
+ * the web client opens Team overview in its place, where a docked panel curates one person's queue.
+ * There is still no priority `WORK_SORT_VALUES` entry: rank is a property of the (user, card) pair,
+ * so under `team` one card has several ranks and there is no single `ORDER BY` at all.
  *
  * `overview` is the Team Cards manager overview: one panel per teammate combining their work in
  * progress (cards in In progress lists), their own recent activity, their Up next head, their other

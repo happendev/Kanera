@@ -149,6 +149,7 @@ describe("GlobalWorkPage card routing", () => {
     const state = {
       auth: { user: () => null },
       focusedTargetUserId: () => null,
+      definition: signal({ display: "board" }),
       cards: signal([completedCard]),
       response: signal({
         cards: [completedCard],
@@ -528,6 +529,7 @@ describe("GlobalWorkPage card routing", () => {
     const state = {
       auth: { user: () => null },
       focusedTargetUserId: () => null,
+      definition: signal({ display: "board" }),
       cards: signal([card]),
       response: signal({
         cards: [card],
@@ -845,6 +847,7 @@ describe("GlobalWorkPage display preferences", () => {
     const state = {
       auth: { user: () => null },
       focusedTargetUserId: () => null,
+      definition: signal({ display: "board" }),
       cards: signal([]),
       response: signal({ cards: [], checklistItems: [], totals: { cards: 0, overdue: 0, dueSoon: 0, completed: 0, checklistItems: 0, overdueChecklistItems: 0 }, nextCursor: null }),
       initialize: vi.fn(() => Promise.resolve()),
@@ -1215,6 +1218,9 @@ describe("GlobalWorkPage toolbar state", () => {
     });
     const moveTeamPriority = vi.fn(() => Promise.resolve());
     const addTeamPriority = vi.fn(() => Promise.resolve());
+    const removeTeamPriority = vi.fn(() => Promise.resolve());
+    const overviewFocusUserId = signal<string | null>(null);
+    const setOverviewFocus = vi.fn((userId: string | null) => overviewFocusUserId.set(userId));
     const state = {
       auth: { user: () => null },
       focusedTargetUserId: () => null,
@@ -1302,6 +1308,9 @@ describe("GlobalWorkPage toolbar state", () => {
       setAssignees,
       moveTeamPriority,
       addTeamPriority,
+      removeTeamPriority,
+      overviewFocusUserId,
+      setOverviewFocus,
     };
 
     await TestBed.configureTestingModule({
@@ -1333,6 +1342,8 @@ describe("GlobalWorkPage toolbar state", () => {
       priorityCandidateCard,
       moveTeamPriority,
       addTeamPriority,
+      removeTeamPriority,
+      setOverviewFocus,
       state,
     };
   }
@@ -1397,28 +1408,22 @@ describe("GlobalWorkPage toolbar state", () => {
     });
   });
 
-  it("places the team Priority view and overview immediately after Board", () => {
+  it("places the team overview immediately after Board, with no Up next display", () => {
     return mount().then(({ fixture }) => {
       fixture.componentRef.setInput("lens", "team");
       TestBed.tick();
 
       expect(fixture.componentInstance.displayOptions().map((option) => option.id))
-        .toEqual(["board", "overview", "priorities", "table", "calendar", "history"]);
+        .toEqual(["board", "overview", "table", "calendar", "history"]);
       expect(fixture.componentInstance.showTeammateFilter()).toBe(true);
       expect(fixture.componentInstance.showUpNextControl()).toBe(true);
 
-      fixture.componentInstance.state.definition.update((current) => ({ ...current, display: "priorities" }));
-      TestBed.tick();
-      expect(fixture.componentInstance.showTeammateFilter()).toBe(false);
-      expect(fixture.componentInstance.showUpNextControl()).toBe(false);
-
-      // The overview is whole-team too: no teammate focus and no docked queue beside it.
+      // The overview is whole-team: no teammate focus, and no focus-driven dock beside it.
       fixture.componentInstance.state.definition.update((current) => ({ ...current, display: "overview" }));
       TestBed.tick();
       expect(fixture.componentInstance.showTeammateFilter()).toBe(false);
       expect(fixture.componentInstance.upNextAvailable()).toBe(false);
-      fixture.componentInstance.state.definition.update((current) => ({ ...current, display: "priorities" }));
-      TestBed.tick();
+      expect(fixture.componentInstance.upNextOpen()).toBe(false);
 
       fixture.componentInstance.state.definition.update((current) => ({ ...current, display: "table" }));
       TestBed.tick();
@@ -1428,19 +1433,50 @@ describe("GlobalWorkPage toolbar state", () => {
     });
   });
 
-  it("hides and restores a Priority lane from its profile toggle", () => {
-    return mount().then(({ fixture, priorityTargetId }) => {
-      expect(fixture.componentInstance.visiblePriorityLanes().map((lane) => lane.target.userId))
-        .toEqual([priorityTargetId]);
+  it("focuses the overview on one teammate and curates their queue in the dock", () => {
+    return mount().then(({
+      fixture, priorityTargetId, priorityCandidateCard,
+      moveTeamPriority, addTeamPriority, removeTeamPriority, setOverviewFocus,
+    }) => {
+      fixture.componentRef.setInput("lens", "team");
+      fixture.componentInstance.state.definition.update((current) => ({ ...current, display: "overview" }));
+      TestBed.tick();
+      const page = fixture.componentInstance;
+      expect(page.overviewQueues().map((lane) => lane.target.userId)).toEqual([priorityTargetId]);
 
-      fixture.componentInstance.togglePriorityLane(priorityTargetId);
-      expect(fixture.componentInstance.isPriorityLaneHidden(priorityTargetId)).toBe(true);
-      expect(fixture.componentInstance.visiblePriorityLanes()).toEqual([]);
+      page.setOverviewFocus(priorityTargetId);
+      TestBed.tick();
+      expect(setOverviewFocus).toHaveBeenLastCalledWith(priorityTargetId);
+      expect(page.upNextOpen()).toBe(true);
+      expect(page.dockPriorities()?.targetUserId).toBe(priorityTargetId);
+      expect(page.dockTargetName()).toBe("Priority Person");
+      // Not queued: the teammate's open assignments outside the queue, from the filter-free pool.
+      expect(page.dockAddableCards().map((item) => item.id)).toEqual([priorityCandidateCard.id]);
+      // Their queue is not the viewer's own, so no quick complete.
+      expect(page.dockAllowQuickComplete()).toBe(false);
 
-      fixture.componentInstance.togglePriorityLane(priorityTargetId);
-      expect(fixture.componentInstance.isPriorityLaneHidden(priorityTargetId)).toBe(false);
-      expect(fixture.componentInstance.visiblePriorityLanes().map((lane) => lane.target.userId))
-        .toEqual([priorityTargetId]);
+      // Gestures land on the teammate's queue in the team batch, never on the viewer's own queue.
+      page.onPriorityReordered({ priorityId: "70000000-0000-4000-8000-000000000002", afterId: null });
+      expect(moveTeamPriority).toHaveBeenCalledWith(priorityTargetId, "70000000-0000-4000-8000-000000000002", { afterId: null });
+      page.onUpNextAddFromPanel({ cardId: priorityCandidateCard.id, beforeId: null });
+      expect(addTeamPriority).toHaveBeenCalledWith(priorityTargetId, priorityCandidateCard.id, { beforeId: null });
+      page.onPriorityRemoved({ priorityId: "70000000-0000-4000-8000-000000000002" });
+      expect(removeTeamPriority).toHaveBeenCalledWith(priorityTargetId, "70000000-0000-4000-8000-000000000002");
+
+      // Closing the dock (a sheet over the panel on a phone) keeps the focus; Edit reopens it.
+      page.closeUpNextDock();
+      TestBed.tick();
+      expect(page.upNextOpen()).toBe(false);
+      expect(setOverviewFocus).toHaveBeenLastCalledWith(priorityTargetId);
+      page.toggleOverviewDock(priorityTargetId);
+      TestBed.tick();
+      expect(page.upNextOpen()).toBe(true);
+      // Edit on the open dock closes it; Everyone clears the focus.
+      page.toggleOverviewDock(priorityTargetId);
+      TestBed.tick();
+      expect(page.upNextOpen()).toBe(false);
+      page.setOverviewFocus(null);
+      expect(setOverviewFocus).toHaveBeenLastCalledWith(null);
 
       fixture.destroy();
     });
@@ -1462,51 +1498,17 @@ describe("GlobalWorkPage toolbar state", () => {
     });
   });
 
-  it("adapts priority queues into shared-table groups without losing their relation rank", () => {
-    return mount().then(({ fixture, priorityTargetId, prioritySecondCard, moveTeamPriority, addTeamPriority }) => {
-      fixture.componentRef.setInput("lens", "team");
-      TestBed.tick();
-
-      const group = fixture.componentInstance.priorityTableGroups()[0]!;
-      expect(group.key).toBe(`priority:${priorityTargetId}`);
-      expect(group.label).toBe("Priority Person");
-      expect(group.cards.map((item) => item.id)).toEqual([card.id, prioritySecondCard.id]);
-      expect(fixture.componentInstance.priorityTableRanksByGroup().get(group.key)?.get(card.id)).toBe(4);
-      expect(fixture.componentInstance.priorityTableEditableCardIds().has(card.id)).toBe(true);
-      expect(fixture.componentInstance.priorityTableReorderableCardIdsByGroup().get(group.key)?.has(card.id)).toBe(true);
-
-      fixture.componentInstance.onPriorityTableReordered({
-        groupKey: group.key,
-        cardId: prioritySecondCard.id,
-        previousIndex: 1,
-        currentIndex: 0,
-      });
-      expect(moveTeamPriority).toHaveBeenCalledWith(
-        priorityTargetId,
-        "70000000-0000-4000-8000-000000000002",
-        { afterId: null },
-      );
-
-      fixture.componentInstance.onPriorityTableAdded({ groupKey: group.key, cardId: "candidate-card" });
-      expect(addTeamPriority).toHaveBeenCalledWith(priorityTargetId, "candidate-card", { beforeId: null });
-
-      fixture.componentInstance.setPriorityLayout("table");
-      expect(localStorage.getItem("kanera.view.mode:globalWork:team:priorities")).toBe("table");
-      fixture.componentInstance.setPriorityLayout("grid");
-      fixture.destroy();
-    });
-  });
-
-  it("updates each lane's Add card choices after an add and a removal", async () => {
+  it("updates the overview dock's Not queued cards after an add and a removal", async () => {
     const { fixture, priorityTargetId, priorityCandidateCard, state } = await mount();
     fixture.componentRef.setInput("lens", "team");
+    state.definition.update((current) => ({ ...current, display: "overview" }));
+    fixture.componentInstance.setOverviewFocus(priorityTargetId);
     await fixture.whenStable();
 
-    const candidateIds = () =>
-      fixture.componentInstance.teamPriorityAddableCards().get(priorityTargetId)?.map((item) => item.id) ?? [];
+    const candidateIds = () => fixture.componentInstance.dockAddableCards().map((item) => item.id);
     expect(candidateIds()).toEqual([priorityCandidateCard.id]);
 
-    // Adding changes only queue membership; reopening the picker must no longer offer that card.
+    // Adding changes only queue membership; Not queued must no longer offer that card.
     state.teamPriorities.update((current) => ({
       queues: current.queues.map((lane) => lane.target.userId === priorityTargetId
         ? {
@@ -1547,25 +1549,19 @@ describe("GlobalWorkPage toolbar state", () => {
     fixture.destroy();
   });
 
-  it("restores and persists the Up next and Work Done layouts", async () => {
-    const priorityKey = "kanera.view.mode:globalWork:team:priorities";
+  it("restores and persists the Work Done layout", async () => {
     const workDoneKey = workDonePreferencesStorageKey("global");
-    localStorage.setItem(priorityKey, "table");
     localStorage.setItem(workDoneKey, JSON.stringify({ preset: "30d", layout: "grid" }));
 
     const { fixture } = await mount();
     try {
-      expect(fixture.componentInstance.priorityLayout()).toBe("table");
       expect(fixture.componentInstance.workDoneLayout()).toBe("grid");
 
-      fixture.componentInstance.setPriorityLayout("grid");
       fixture.componentInstance.setWorkDoneLayout("list");
-      expect(localStorage.getItem(priorityKey)).toBe("grid");
       expect(JSON.parse(localStorage.getItem(workDoneKey) ?? "{}"))
         .toEqual({ preset: "30d", layout: "list" });
     } finally {
       fixture.destroy();
-      localStorage.removeItem(priorityKey);
       localStorage.removeItem(workDoneKey);
     }
   });

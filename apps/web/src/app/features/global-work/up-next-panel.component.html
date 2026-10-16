@@ -46,7 +46,8 @@
 }
 
 <!-- `acceptExternalCardDrops` only here: this is the one surface docked beside a board whose lanes
-     name its drop list in `cdkDropListConnectedTo`. -->
+     name its drop list in `cdkDropListConnectedTo`, and the Not queued rows below do the same. The
+     queue's own inline Add card would sit directly above that list, offering the same cards twice. -->
 <k-priority-queue
   [priorities]="priorities()"
   [catalog]="catalog()"
@@ -58,9 +59,88 @@
   [editableCardIds]="editableCardIds()"
   [allowQuickComplete]="allowQuickComplete()"
   [acceptExternalCardDrops]="true"
+  [showAdd]="false"
+  [emptyHint]="canReorder() ? emptyHint : null"
   (reordered)="reordered.emit($event)"
   (removed)="removed.emit($event)"
   (added)="added.emit($event)"
   (cardOpened)="cardOpened.emit($event.cardId)"
   (completed)="completed.emit($event)"
 />
+
+@if (canReorder()) {
+  <section class="not-queued" [class.is-collapsed]="notQueuedCollapsed()" aria-labelledby="up-next-not-queued-title">
+    <header class="not-queued-head">
+      <button
+        type="button"
+        class="not-queued-toggle"
+        [attr.aria-expanded]="!notQueuedCollapsed()"
+        [attr.aria-label]="notQueuedToggleLabel(notQueuedCollapsed())"
+        (click)="notQueuedCollapsed.set(!notQueuedCollapsed())"
+      >
+        <i class="ti" [class.ti-chevron-right]="notQueuedCollapsed()" [class.ti-chevron-down]="!notQueuedCollapsed()"></i>
+        <h4 id="up-next-not-queued-title" i18n="Heading in the Up next panel: open assigned cards that are not in the queue">Not queued</h4>
+        <span class="not-queued-count">{{ addableCards().length }}</span>
+      </button>
+    </header>
+    @if (!notQueuedCollapsed()) {
+      @if (atCapacity()) {
+        <p class="not-queued-note">
+          <i class="ti ti-alert-circle"></i>
+          <ng-container i18n="Queue at capacity">{ maxEntries(), plural, =1 {Full at 1 card. Remove one before adding another.} other {Full at {{ maxEntries() }} cards. Remove one before adding another.} }</ng-container>
+        </p>
+      }
+      <!-- Sorting is off: this list has no order of its own to change, it only hands rows to the
+           queue above, which is the one drop list it connects to. -->
+      <div
+        class="not-queued-rows"
+        cdkDropList
+        cdkDropListSortingDisabled
+        [cdkDropListConnectedTo]="[queueDropListId]"
+        [cdkDropListDisabled]="atCapacity()"
+      >
+        @for (group of notQueuedGroups(); track group.boardId) {
+          <h5 class="not-queued-board">
+            <i [class]="group.boardIconClass" [style.color]="group.boardIconColor"></i>
+            <span>{{ group.boardName }}</span>
+          </h5>
+          @for (row of group.rows; track row.card.id) {
+            <div
+              class="not-queued-row"
+              cdkDrag
+              [cdkDragData]="row.dragData"
+              [class.is-selected]="row.card.id === selectedCardId()"
+              (cdkDragStarted)="onNotQueuedDragStarted()"
+              (cdkDragEnded)="onNotQueuedDragEnded()"
+            >
+              <button type="button" class="not-queued-main" (click)="cardOpened.emit(row.card.id)">
+                @if (showCardKeys()) { <span class="not-queued-key">{{ row.card.key }}</span> }
+                <span class="not-queued-title">{{ row.card.title }}</span>
+                <span class="not-queued-list">
+                  <i [class]="row.listIconClass" [style.color]="row.listColor"></i>
+                  <span [style.color]="row.listColor">{{ row.card.listName }}</span>
+                </span>
+              </button>
+              @if (row.due) {
+                <span class="not-queued-due" [class.overdue]="row.overdue" [class.due-soon]="row.dueSoon">{{ row.due }}</span>
+              }
+              <button
+                type="button"
+                class="not-queued-add"
+                aria-label="Add to Up next"
+                i18n-aria-label="Button: add this card to the end of Up next"
+                [disabled]="atCapacity()"
+                [kTooltip]="notQueuedTooltip()"
+                (click)="onNotQueuedAdd(row.card.id)"
+              >
+                <i class="ti ti-plus"></i>
+              </button>
+            </div>
+          }
+        } @empty {
+          <p class="not-queued-empty" i18n="Empty state of the Not queued list in the Up next panel">Every open card assigned here is already in Up next.</p>
+        }
+      </div>
+    }
+  </section>
+}

@@ -31,8 +31,7 @@ import { PageHeaderComponent } from "../../shared/page-header.component";
 import { PageToolbarComponent } from "../../shared/page-toolbar.component";
 import { PanelStackService } from "../../shared/panel-stack.service";
 import { mediaQuerySignal } from "../../shared/media-query.signal";
-import type { PickerGroup } from "../../shared/picker-list.component";
-import { navBoardOrder, priorityAddGroups } from "../../shared/priority-queue/priority-add-cards";
+import { navBoardOrder } from "../../shared/priority-queue/priority-add-cards";
 import { SearchFieldComponent } from "../../shared/search-field.component";
 import { SegmentedComponent, type SegmentedOption } from "../../shared/segmented.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
@@ -53,14 +52,13 @@ import { WorkDoneViewComponent } from "../board/work-done-view/work-done-view.co
 import { workDoneLayoutState } from "../board/work-done-view/work-done-preferences";
 import { readBackground, readCompactCards, writeBackground, writeCompactCards } from "../board/table-view/view-preference";
 import type { WorkDoneLayout } from "../board/work-done-view/work-done.types";
-import { BoardTableViewComponent, type HostedTableCardReorder } from "../board/table-view/board-table-view.component";
+import { BoardTableViewComponent } from "../board/table-view/board-table-view.component";
 import { TABLE_CARD_STORE, type TableCardStore } from "../board/table-view/table-card-store";
 import type {
   AnyCustomField,
   AnyLabel,
   AnyList,
   AnyMember,
-  CardGroup,
   GroupBy,
   SortBy,
   SourceBoardRef,
@@ -75,10 +73,8 @@ import { BulkCardActionsMenuPopover } from "../board/bulk-card-actions-menu.popo
 import { BulkCustomFieldsDialogComponent } from "../board/bulk-custom-fields.dialog";
 import { BULK_CARD_STORE } from "../board/bulk-card-store";
 import { globalWorkBulkCardStore } from "./global-work-bulk-card-store";
-import { priorityAnchorAt, type PriorityAnchor } from "../../shared/priority-queue/priority-queue-math";
 import { SaveViewPopover } from "./save-view.popover";
 import { TeamOverviewComponent } from "./team-overview.component";
-import { TeamPrioritiesViewComponent, type TeamPriorityReorder } from "./team-priorities-view.component";
 import { UpNextPanelComponent, type UpNextAddableCard } from "./up-next-panel.component";
 import { boardPickerGroups, peoplePickerGroups, savedViewPickerGroups, scopePickerGroups } from "./work-pickers";
 import { createSortedLaneProjection, createLaneItemsProjection } from "../board/lane-projection";
@@ -100,7 +96,6 @@ type ChecklistGroup = {
 /** Which toolbar/header popover is open. Only one at a time, so opening one dismisses the rest. */
 type WorkMenu = "save" | "display" | "source" | "team" | "view" | "group" | "sort" | "period";
 type PortfolioMetric = "active" | "overdue" | "dueSoon" | "unassigned" | "inactive" | "inProgress" | "inProgressTooLong" | "completed" | "overdueChecklistItems";
-type PriorityLayout = "grid" | "table";
 type PortfolioRow = {
   id: string;
   level: "organisation" | "workspace" | "board";
@@ -168,21 +163,6 @@ const CHECKLIST_SECTION_COLLAPSE_ID = "checklist:section";
  * would reject anyway.
  */
 const MAX_UP_NEXT_ENTRIES = 50;
-const PRIORITY_LAYOUT_KEY = viewPreferenceKey("mode", "globalWork:team:priorities");
-
-function storedPriorityLayout(): PriorityLayout {
-  if (typeof localStorage === "undefined") return "grid";
-  try {
-    return localStorage.getItem(PRIORITY_LAYOUT_KEY) === "table" ? "table" : "grid";
-  } catch {
-    return "grid";
-  }
-}
-
-function priorityGroupKey(userId: string): string {
-  return `priority:${userId}`;
-}
-
 @Component({
   selector: "k-global-work",
   standalone: true,
@@ -206,7 +186,6 @@ function priorityGroupKey(userId: string): string {
     SegmentedComponent,
     TooltipDirective,
     WorkDoneViewComponent,
-    TeamPrioritiesViewComponent,
     TeamOverviewComponent,
     UpNextPanelComponent,
     CardComposerDialogComponent,
@@ -291,21 +270,13 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   setWorkDoneLayout(layout: WorkDoneLayout): void {
     this.workDoneLayoutState.setLayout(layout);
   }
-  readonly priorityLayout = signal<PriorityLayout>(storedPriorityLayout());
-  readonly priorityLayoutOptions: readonly SegmentedOption<PriorityLayout>[] = [
-    { id: "grid", icon: "layout-grid", label: $localize`:Up next layout option:Grid view` },
-    { id: "table", icon: "table", label: $localize`:Up next layout option:Table view` },
-  ];
   /**
    * Every display that renders `k-board-table-view` full-height, which is what `.is-table-frame`
    * sizes with flexbox. The sheet owns a scrollport and raises its incremental row cap from that
    * element's scroll position, so a display that lands here without the frame would leave the sheet at
    * auto height and strand every row past the first page.
    */
-  readonly usesTableFrame = computed(() =>
-    this.effectiveDisplay() === "table" ||
-    (this.effectiveDisplay() === "priorities" && this.priorityLayout() === "table")
-  );
+  readonly usesTableFrame = computed(() => this.effectiveDisplay() === "table");
   readonly collapsedOrganisationIds = computed(() =>
     new Set(this.state.definition().collapsedOrganisationIds)
   );
@@ -366,14 +337,11 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     }
     return [
       option("board", "layout-kanban", $localize`:Display option:Board view`, $localize`:Short display option:Board`),
-      // Team only: the per-teammate overview, then everyone's Up next queues, sit immediately beside
-      // the board view, since all three read the same work person by person. My Cards already has
-      // the docked single queue, and an overview of one person is just My Cards.
+      // Team only: the per-teammate overview sits beside the board view, since both read the same
+      // work person by person. It is also where teammates' Up next queues are curated, through the
+      // dock (see `dockTargetUserId`). An overview of one person is just My Cards.
       ...(this.lens() === "team"
-        ? [
-            option("overview", "users-group", $localize`:Display option:Team overview`, $localize`:Short display option:Overview`),
-            option("priorities", "list-numbers", $localize`:Display option:Up next view`, $localize`:Short display option:Up next`),
-          ]
+        ? [option("overview", "users-group", $localize`:Display option:Team overview`, $localize`:Short display option:Overview`)]
         : []),
       option("table", "table", $localize`:Display option:Table view`, $localize`:Short display option:Table`),
       option("calendar", "calendar", $localize`:Display option:Calendar view`, $localize`:Short display option:Calendar`),
@@ -387,26 +355,23 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     // since the label describes a table the reader is no longer looking at.
     if (display === "summary") this.drilldownLabel.set(null);
   }
-  // History has no offline query, and the lanes' queues are deliberately not cached (a stale
-  // sequence reads as an instruction) — both fall back to the table over a cached snapshot. The
-  // overview is built from both, so it falls back with them.
+  // History has no offline query, and the team's queues are deliberately not cached (a stale
+  // sequence reads as an instruction). The overview is built from both, so it falls back to the
+  // table over a cached snapshot.
   readonly effectiveDisplay = computed<WorkDisplayMode>(() =>
-    this.state.cachedAt() && ["history", "priorities", "overview"].includes(this.state.definition().display)
+    this.state.cachedAt() && ["history", "overview"].includes(this.state.definition().display)
       ? "table"
       : this.state.definition().display
   );
   readonly historyOfflineFallback = computed(() =>
     this.state.cachedAt() !== null && this.state.definition().display === "history"
   );
-  readonly prioritiesOfflineFallback = computed(() =>
-    this.state.cachedAt() !== null && this.state.definition().display === "priorities"
-  );
   readonly overviewOfflineFallback = computed(() =>
     this.state.cachedAt() !== null && this.state.definition().display === "overview"
   );
-  /** Priority and overview are whole-team displays; teammate focus is only meaningful on card views. */
+  /** The overview is a whole-team display; teammate focus is only meaningful on card views. */
   readonly showTeammateFilter = computed(() =>
-    this.lens() === "team" && this.effectiveDisplay() !== "priorities" && this.effectiveDisplay() !== "overview"
+    this.lens() === "team" && this.effectiveDisplay() !== "overview"
   );
 
   readonly organisationsById = computed(() =>
@@ -1003,18 +968,6 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     return collapsed
       ? $localize`:Button, expand a portfolio row:Expand ${label}:name:`
       : $localize`:Button, collapse a portfolio row:Collapse ${label}:name:`;
-  }
-
-  priorityLaneToggleLabel(name: string, count: number, hidden: boolean): string {
-    return hidden
-      ? icu($localize`:Button, show a teammate's Up next lane:Show Up next for {name}, {count, plural, one {# card} other {# cards}}`, { name, count })
-      : icu($localize`:Button, hide a teammate's Up next lane:Hide Up next for {name}, {count, plural, one {# card} other {# cards}}`, { name, count });
-  }
-
-  priorityLaneToggleTooltip(name: string, count: number, hidden: boolean): string {
-    return hidden
-      ? $localize`:Tooltip, show a teammate's Up next lane, with its card count:Show Up next for ${name}:person: · ${count}:count:`
-      : $localize`:Tooltip, hide a teammate's Up next lane, with its card count:Hide Up next for ${name}:person: · ${count}:count:`;
   }
 
   offlineStamp(value: string | number | Date): string {
@@ -1671,7 +1624,8 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
    *
    * The queue is a property of the focused person, not a display of its own: rank pills ride the
    * card tiles, curation happens in a docked panel, and the display underneath — with all its
-   * filters, grouping and search — is the candidate pool. Everything here reads
+   * filters, grouping and search — is the candidate pool. Team overview is the exception, with no
+   * person in focus: its dock is opened per teammate (see `overviewDock`). Everything else reads
    * `currentPriorities`, which binds the response to the person currently in focus so a teammate
    * switch can never relabel the previous person's order while the next request is in flight.
    */
@@ -1697,9 +1651,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     && this.state.cachedAt() === null
     && this.effectiveDisplay() !== "history"
     && this.effectiveDisplay() !== "summary"
-    // The lanes display *is* every queue; a docked copy of one of them beside it is noise. The
-    // overview already shows every teammate's queue head.
-    && this.effectiveDisplay() !== "priorities"
+    // The overview has no person in focus; its dock follows `overviewDockQueue` instead.
     && this.effectiveDisplay() !== "overview"
   );
   /** The dock is a board curation tool; every other display keeps its own full-width reading mode. */
@@ -1707,15 +1659,12 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     this.lens() !== "portfolio" && this.effectiveDisplay() === "board"
   );
   readonly upNextUnavailableTooltip = computed(() => {
-    if (this.effectiveDisplay() === "priorities") {
-      return $localize`:Tooltip on the disabled Up next button:The Up next view already shows everyone`;
-    }
     if (this.effectiveDisplay() === "history" || this.effectiveDisplay() === "summary") {
       return $localize`:Tooltip on the disabled Up next button:Up next is unavailable on this view`;
     }
     if (!this.state.focusedTargetUserId()) {
       return this.lens() === "team"
-        ? $localize`:Tooltip on the disabled Up next button:Pick one teammate to curate their Up next, or switch to the Up next view to see everyone`
+        ? $localize`:Tooltip on the disabled Up next button:Pick one teammate to curate their Up next, or open it from Team overview`
         : $localize`:Tooltip on the disabled Up next button:Up next is unavailable on this view`;
     }
     if (!this.state.interactionReady()) return $localize`:Tooltip on the disabled Up next button:Loading Up next…`;
@@ -1731,9 +1680,11 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   private readonly sheetMode = mediaQuerySignal(UP_NEXT_SHEET_QUERY);
   private readonly sheetOpen = signal(false);
   readonly upNextOpen = computed(() =>
-    this.upNextAvailable()
-    && this.showUpNextControl()
-    && (this.sheetMode() ? this.sheetOpen() : this.state.upNextPanelOpen())
+    this.overviewDock()
+      ? this.overviewDockQueue() !== null && this.overviewDockOpen()
+      : this.upNextAvailable()
+        && this.showUpNextControl()
+        && (this.sheetMode() ? this.sheetOpen() : this.state.upNextPanelOpen())
   );
   /** Names the queue's owner in the panel header when curating somebody else. */
   readonly upNextTargetName = computed(() => {
@@ -1786,28 +1737,76 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     return this.presentPriorityCandidates(this.state.cards().filter((card) => addable.has(card.id)));
   });
 
-  /** Eligible assigned cards for each whole-team lane's two Add card pickers. */
-  readonly teamPriorityAddableCards = computed<ReadonlyMap<string, UpNextAddableCard[]>>(() => {
-    const result = new Map<string, UpNextAddableCard[]>();
-    if (!this.state.interactionReady()) return result;
-    for (const lane of this.priorityLanes()) {
-      if (!lane.queue.canReorder || lane.queue.totalCount >= MAX_UP_NEXT_ENTRIES) continue;
-      const ranked = new Set(lane.queue.items.flatMap((item) => item.card ? [item.card.id] : []));
-      const workspaces = new Set(lane.queue.reorderableWorkspaceIds);
-      // This dedicated pool is independent of the page query. Queue rows are independent of those
-      // filters too, so a card removed from Up next must reappear here even when the visible board
-      // projection does not currently contain it.
-      const candidates = this.state.teamPriorityCandidateCards().filter((card) =>
-        card.assigneeIds.includes(lane.target.userId)
-        && !ranked.has(card.id)
-        && !card.completedAt
-        && !card.archivedAt
-        && workspaces.has(card.workspaceId)
-      );
-      result.set(lane.target.userId, this.presentPriorityCandidates(candidates));
-    }
-    return result;
+  /* The overview's dock. The overview is whole-team, so instead of the lens focus the dock follows
+   * the person the overview is focused on (picked from its person strip, an avatar or an Edit
+   * button), and reads and writes that person's queue inside the team batch the overview already
+   * loaded. */
+
+  readonly overviewDock = computed(() =>
+    this.lens() === "team" && this.state.definition().display === "overview" && this.effectiveDisplay() === "overview"
+  );
+  /** Every queue this viewer may read, self first. */
+  readonly overviewQueues = computed(() =>
+    this.overviewDock() && this.state.cachedAt() === null ? this.state.teamPriorities()?.queues ?? [] : []
+  );
+  /**
+   * Whether the focused person's dock is showing. Separate from the focus so closing the dock (on a
+   * phone, a sheet over their panel) leaves their panel in view; Edit brings it back.
+   */
+  readonly overviewDockOpen = signal(true);
+  readonly overviewDockQueue = computed(() => {
+    const targetUserId = this.state.overviewFocusUserId();
+    return targetUserId ? this.overviewQueues().find((lane) => lane.target.userId === targetUserId) ?? null : null;
   });
+
+  /**
+   * The overview dock's Not queued list: the person's open assigned cards that are not ranked yet.
+   * Drawn from the dedicated candidate pool rather than the page's filtered cards, because the
+   * queue ignores filters too: a card removed from Up next must come back here even when the
+   * overview's search hides it.
+   */
+  private readonly overviewDockAddableCards = computed<UpNextAddableCard[]>(() => {
+    const lane = this.overviewDockQueue();
+    if (!lane || !lane.queue.canReorder || !this.state.interactionReady()) return [];
+    if (lane.queue.totalCount >= MAX_UP_NEXT_ENTRIES) return [];
+    const ranked = new Set(lane.queue.items.flatMap((item) => item.card ? [item.card.id] : []));
+    const workspaces = new Set(lane.queue.reorderableWorkspaceIds);
+    return this.presentPriorityCandidates(this.state.teamPriorityCandidateCards().filter((card) =>
+      card.assigneeIds.includes(lane.target.userId)
+      && !ranked.has(card.id)
+      && !card.completedAt
+      && !card.archivedAt
+      && workspaces.has(card.workspaceId)
+    ));
+  });
+
+  /* What the dock binds, from whichever source owns it on this display. */
+  readonly dockPriorities = computed(() => this.overviewDock() ? this.overviewDockQueue()?.queue ?? null : this.currentPriorities());
+  readonly dockTargetName = computed(() => {
+    if (!this.overviewDock()) return this.upNextTargetName();
+    return this.overviewDockQueue()?.target.displayName ?? null;
+  });
+  readonly dockAddableCards = computed(() => this.overviewDock() ? this.overviewDockAddableCards() : this.upNextAddableCards());
+  // Quick complete goes through the shell's own-queue service, which the overview's batch copy is not.
+  readonly dockAllowQuickComplete = computed(() => !this.overviewDock() && this.isSelfUpNextTarget());
+
+  /** The person strip and avatars: show one person with their Up next docked, or everyone again. */
+  setOverviewFocus(userId: string | null): void {
+    this.priorityError.set(null);
+    this.overviewDockOpen.set(true);
+    this.state.setOverviewFocus(userId);
+  }
+
+  /** A teammate's Up next Edit button: focus them with the dock open, or close the open dock. */
+  toggleOverviewDock(targetUserId: string): void {
+    this.priorityError.set(null);
+    if (this.state.overviewFocusUserId() === targetUserId && this.overviewDockOpen()) {
+      this.overviewDockOpen.set(false);
+      return;
+    }
+    this.overviewDockOpen.set(true);
+    this.state.setOverviewFocus(targetUserId);
+  }
 
   private presentPriorityCandidates(cards: GlobalCard[]): UpNextAddableCard[] {
     const boards = this.boardsById();
@@ -1906,6 +1905,15 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     }
   });
 
+  closeUpNextDock(): void {
+    if (this.overviewDock()) {
+      this.priorityError.set(null);
+      this.overviewDockOpen.set(false);
+      return;
+    }
+    this.toggleUpNextPanel();
+  }
+
   toggleUpNextPanel(): void {
     if (!this.showUpNextControl() || !this.upNextAvailable()) return;
     this.priorityError.set(null);
@@ -1933,7 +1941,11 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   onUpNextAddFromPanel(event: { cardId: string; afterId?: string | null; beforeId?: string | null }): void {
     this.priorityError.set(null);
     const { cardId, ...anchor } = event;
-    void this.state.addPriority(cardId, anchor).catch(() => {
+    const target = this.overviewDockQueue()?.target.userId;
+    const added = this.overviewDock() && target
+      ? this.state.addTeamPriority(target, cardId, anchor)
+      : this.state.addPriority(cardId, anchor);
+    void added.catch(() => {
       this.priorityError.set($localize`We couldn’t add that card to Up next. Nothing has changed.`);
     });
   }
@@ -1948,14 +1960,22 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   onPriorityReordered(event: { priorityId: string; afterId?: string | null; beforeId?: string | null }): void {
     this.priorityError.set(null);
     const { priorityId, ...anchor } = event;
-    void this.state.movePriority(priorityId, anchor).catch(() => {
+    const target = this.overviewDockQueue()?.target.userId;
+    const moved = this.overviewDock() && target
+      ? this.state.moveTeamPriority(target, priorityId, anchor)
+      : this.state.movePriority(priorityId, anchor);
+    void moved.catch(() => {
       this.priorityError.set($localize`We couldn’t reorder that Up next card. Its previous position has been restored.`);
     });
   }
 
   onPriorityRemoved(event: { priorityId: string }): void {
     this.priorityError.set(null);
-    void this.state.removePriority(event.priorityId).catch(() => {
+    const target = this.overviewDockQueue()?.target.userId;
+    const removed = this.overviewDock() && target
+      ? this.state.removeTeamPriority(target, event.priorityId)
+      : this.state.removePriority(event.priorityId);
+    void removed.catch(() => {
       this.priorityError.set($localize`We couldn’t remove that card from Up next. It has been put back.`);
     });
   }
@@ -1970,215 +1990,6 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     void this.myPriorities.setCardCompleted(event.cardId, event.completed).catch(() => {
       this.priorityError.set($localize`We couldn’t update that card. Nothing has changed.`);
     });
-  }
-
-  /** Priority view is the whole readable team at once; person drill-down belongs to Board view. */
-  readonly priorityLanes = computed(() => this.state.teamPriorities()?.queues ?? []);
-  readonly hiddenPriorityLaneIds = signal<ReadonlySet<string>>(new Set());
-  readonly visiblePriorityLanes = computed(() => {
-    const hidden = this.hiddenPriorityLaneIds();
-    return this.priorityLanes().filter((lane) => !hidden.has(lane.target.userId));
-  });
-
-  setPriorityLayout(layout: PriorityLayout): void {
-    this.priorityLayout.set(layout);
-    // Presentation-only and browser-local, matching the board table's layout preferences. The
-    // priority relation and its ordering remain server-owned regardless of the chosen projection.
-    if (typeof localStorage === "undefined") return;
-    try {
-      localStorage.setItem(PRIORITY_LAYOUT_KEY, layout);
-    } catch {
-      // The in-memory switch still works when storage is unavailable in a hardened browser context.
-    }
-  }
-
-  /**
-   * Priority queues are relation-backed groups, not a grouping inferred from card fields. Supplying
-   * them to the shared table preserves a shared card in each person's queue and keeps each queue's
-   * exact rank order while gaining the board table's inline editors and column tooling.
-   */
-  readonly priorityTableGroups = computed<CardGroup[]>(() => {
-    const query = this.state.definition().filters.q.trim().toLowerCase();
-    const liveCards = new Map(this.state.cards().map((card) => [card.id, card]));
-    const priorityCards = this.priorityCardsById();
-    const people = this.peopleById();
-    return this.visiblePriorityLanes().map((lane) => ({
-      key: priorityGroupKey(lane.target.userId),
-      label: lane.target.self ? $localize`:Table group heading for the viewer's own Up next:${lane.target.displayName}:person: · You` : lane.target.displayName,
-      icon: null,
-      color: null,
-      avatarUrl: people.get(lane.target.userId)?.avatarUrl ?? null,
-      acceptsDrop: false,
-      meta: {},
-      cards: lane.queue.items.flatMap((entry) => {
-        if (!entry.card) return [];
-        const card = liveCards.get(entry.card.id) ?? priorityCards.get(entry.card.id) ?? expandCardSummary(entry.card);
-        return query && !card.title.toLowerCase().includes(query) ? [] : [card];
-      }),
-    }));
-  });
-
-  readonly priorityTableCards = computed<GlobalCard[]>(() =>
-    // Every hosted row above is resolved through expandCardSummary or the live Global Work
-    // projection, so the broader AnyCard type exposed by CardGroup can be narrowed back here.
-    this.priorityTableGroups().flatMap((group) => group.cards) as GlobalCard[]
-  );
-  readonly priorityTableRanksByGroup = computed<ReadonlyMap<string, ReadonlyMap<string, number>>>(() => {
-    const result = new Map<string, ReadonlyMap<string, number>>();
-    for (const lane of this.visiblePriorityLanes()) {
-      result.set(priorityGroupKey(lane.target.userId), new Map(
-        lane.queue.items.flatMap((entry) => entry.card ? [[entry.card.id, entry.rank] as const] : []),
-      ));
-    }
-    return result;
-  });
-  readonly priorityTableReorderableCardIdsByGroup = computed<ReadonlyMap<string, ReadonlySet<string>>>(() => {
-    const result = new Map<string, ReadonlySet<string>>();
-    for (const lane of this.visiblePriorityLanes()) {
-      const workspaces = new Set(lane.queue.reorderableWorkspaceIds);
-      result.set(priorityGroupKey(lane.target.userId), new Set(
-        this.state.interactionReady() && lane.queue.canReorder
-          ? lane.queue.items.flatMap((entry) =>
-              entry.card && workspaces.has(entry.card.workspaceId) ? [entry.card.id] : []
-            )
-          : [],
-      ));
-    }
-    return result;
-  });
-  readonly priorityTableAddGroupsByGroup = computed<ReadonlyMap<string, PickerGroup[]>>(() => {
-    const result = new Map<string, PickerGroup[]>();
-    const candidates = this.teamPriorityAddableCards();
-    for (const lane of this.visiblePriorityLanes()) {
-      // Match the grid: read-only queues have no add affordance; curatable queues retain a disabled
-      // + when full or when every eligible assigned card is already queued.
-      if (!lane.queue.canReorder) continue;
-      result.set(
-        priorityGroupKey(lane.target.userId),
-        priorityAddGroups(candidates.get(lane.target.userId) ?? [], { showCardKeys: this.showCardKeys() }),
-      );
-    }
-    return result;
-  });
-  readonly priorityTableHiddenCount = computed(() =>
-    this.visiblePriorityLanes().reduce((count, lane) => count + lane.queue.hiddenCount, 0)
-  );
-  readonly priorityTableEditableCardIds = computed(() => new Set(
-    this.priorityTableCards()
-      .filter((card) => this.boardsById().get(card.boardId)?.viewerRole === "editor")
-      .map((card) => card.id),
-  ));
-  readonly priorityTableAssigneesByCard = computed(() => {
-    const members = new Map(this.tableMembers().map((member) => [member.userId, member]));
-    return new Map(this.priorityTableCards().map((card) => [
-      card.id,
-      card.assigneeIds.flatMap((userId) => {
-        const member = members.get(userId);
-        return member ? [member] : [];
-      }),
-    ]));
-  });
-  readonly priorityTableLabelsByCard = computed(() => {
-    const labels = new Map(this.tableLabels().map((label) => [label.id, label]));
-    return new Map(this.priorityTableCards().map((card) => [
-      card.id,
-      card.labelIds.flatMap((id) => {
-        const label = labels.get(id);
-        return label ? [label] : [];
-      }),
-    ]));
-  });
-  readonly priorityTableCustomFieldValues = computed(() => new Map(
-    this.priorityTableCards().map((card) => [
-      card.id,
-      new Map(card.customFieldValues.map((value) => [value.fieldId, value])),
-    ]),
-  ));
-
-  isPriorityLaneHidden(targetUserId: string): boolean {
-    return this.hiddenPriorityLaneIds().has(targetUserId);
-  }
-
-  togglePriorityLane(targetUserId: string): void {
-    const hidden = new Set(this.hiddenPriorityLaneIds());
-    if (hidden.has(targetUserId)) {
-      hidden.delete(targetUserId);
-    } else {
-      hidden.add(targetUserId);
-    }
-    this.hiddenPriorityLaneIds.set(hidden);
-  }
-
-  /** A lane's gestures reuse the panel's error surface; both render beside the row that failed. */
-  onLaneReordered(event: TeamPriorityReorder): void {
-    this.priorityError.set(null);
-    const { targetUserId, priorityId, ...anchor } = event;
-    void this.state.moveTeamPriority(targetUserId, priorityId, anchor).catch(() => {
-      this.priorityError.set($localize`We couldn’t reorder that Up next card. Its previous position has been restored.`);
-    });
-  }
-
-  onPriorityTableReordered(event: HostedTableCardReorder): void {
-    const lane = this.visiblePriorityLanes().find(
-      (candidate) => priorityGroupKey(candidate.target.userId) === event.groupKey,
-    );
-    const moved = lane?.queue.items.find((entry) => entry.card?.id === event.cardId);
-    if (!lane || !moved) return;
-
-    const fullRest = lane.queue.items.filter((entry) => entry.id !== moved.id);
-    let anchor: PriorityAnchor | null;
-    if (!this.state.definition().filters.q.trim() && lane.queue.hiddenCount === 0) {
-      anchor = priorityAnchorAt(fullRest, event.currentIndex);
-    } else {
-      // A filtered or partly redacted table only has visible row coordinates. Anchor against the
-      // nearest rendered neighbour, never an invisible entry the server deliberately rejects.
-      const group = this.priorityTableGroups().find((candidate) => candidate.key === event.groupKey);
-      const visibleRest = (group?.cards ?? []).filter((card) => card.id !== event.cardId);
-      if (visibleRest.length === 0) return;
-      const below = visibleRest[event.currentIndex];
-      const neighbour = below ?? visibleRest.at(-1)!;
-      const neighbourEntry = fullRest.find((entry) => entry.card?.id === neighbour.id);
-      anchor = neighbourEntry
-        ? below ? { beforeId: neighbourEntry.id } : { afterId: neighbourEntry.id }
-        : null;
-    }
-    if (!anchor) return;
-    this.onLaneReordered({
-      targetUserId: lane.target.userId,
-      priorityId: moved.id,
-      ...anchor,
-    });
-  }
-
-  onPriorityTableDragStarted(): void {
-    // Keep realtime reconciliation from replacing a queue while its table row is in flight, matching
-    // the grid lanes' drag lifecycle.
-    this.cardDrag.start("team-priority-table");
-  }
-
-  onPriorityTableDragEnded(): void {
-    this.cardDrag.end();
-  }
-
-  onLaneRemoved(event: { targetUserId: string; priorityId: string }): void {
-    this.priorityError.set(null);
-    void this.state.removeTeamPriority(event.targetUserId, event.priorityId).catch(() => {
-      this.priorityError.set($localize`We couldn’t remove that card from Up next. It has been put back.`);
-    });
-  }
-
-  onLaneAdded(event: { targetUserId: string; cardId: string }): void {
-    this.priorityError.set(null);
-    void this.state.addTeamPriority(event.targetUserId, event.cardId, { beforeId: null }).catch(() => {
-      this.priorityError.set($localize`We couldn’t add that card to Up next. Nothing has changed.`);
-    });
-  }
-
-  onPriorityTableAdded(event: { groupKey: string; cardId: string }): void {
-    const lane = this.visiblePriorityLanes().find(
-      (candidate) => priorityGroupKey(candidate.target.userId) === event.groupKey,
-    );
-    if (lane) this.onLaneAdded({ targetUserId: lane.target.userId, cardId: event.cardId });
   }
 
   openChecklistItem(item: WireChecklistAssignment): void {

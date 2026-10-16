@@ -14,6 +14,7 @@ import type {
 } from "@kanera/shared/dto";
 import { expandCardSummary, type WireCardSummary } from "@kanera/shared/events";
 import { ApiClient } from "../../core/api/api.client";
+import { viewPreferenceKey } from "../../core/browser/browser-contracts";
 import { AvatarComponent } from "../../shared/avatar.component";
 import { CardKeyDisplayService } from "../../shared/card-key-display.service";
 import { icu } from "../../core/i18n/icu";
@@ -24,6 +25,21 @@ import { priorityRankHeat } from "../../shared/priority-rank";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { dueDateTimestamp, formatDueDate, isDueSoon, isOverdue } from "../board/due-date.util";
 import { isInProgressTooLong, timeInProgressChip, type TimeInProgressChip } from "../board/time-in-progress.util";
+
+/** The per-person sections a viewer can fold. Folding one folds it in every panel at once. */
+type OverviewSection = "inProgress" | "recent" | "upNext" | "assigned" | "done";
+const OVERVIEW_SECTIONS: readonly OverviewSection[] = ["inProgress", "recent", "upNext", "assigned", "done"];
+const COLLAPSED_SECTIONS_KEY = viewPreferenceKey("collapsedSections", "teamOverview");
+
+/** Viewer-local and best-effort: private windows and blocked storage simply start expanded. */
+function storedCollapsedSections(): ReadonlySet<OverviewSection> {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(COLLAPSED_SECTIONS_KEY) ?? "[]");
+    return new Set(Array.isArray(value) ? OVERVIEW_SECTIONS.filter((section) => value.includes(section)) : []);
+  } catch {
+    return new Set();
+  }
+}
 
 /** How far back "recently active" and "done" look. Matches Work done's default 7-day preset. */
 const OVERVIEW_ACTIVITY_DAYS = 7;
@@ -141,11 +157,44 @@ export class TeamOverviewComponent {
   readonly cardOpened = output<WireCardSummary>();
   /** Opens the person's own cards (board display, focused on them). */
   readonly personFocused = output<string>();
+  /**
+   * The one teammate to show, with their Up next docked beside the overview by the page; null shows
+   * everyone. A focus on someone this overview has no panel for (scope changed under it) shows
+   * everyone rather than an empty page.
+   */
+  readonly focusedUserId = input<string | null>(null);
+  /** Whether the page's dock is showing the focused person's queue, so their Edit button says so. */
+  readonly upNextOpen = input(false);
+  /** The person strip and avatars: focus this person, or null for everyone. The page owns focus. */
+  readonly focusChanged = output<string | null>();
+  /** Edit on a teammate's Up next: focus them with their queue docked, or close the open dock. */
+  readonly upNextToggled = output<string>();
 
   readonly events = signal<WorkDoneEvent[]>([]);
   readonly activityError = signal<string | null>(null);
   readonly activityLoading = signal(false);
   readonly showQuiet = signal(false);
+
+  /**
+   * Folded sections, shared by every panel: comparing one kind of work across the team ("what is
+   * everyone working on") means hiding the same other sections everywhere, not panel by panel.
+   */
+  readonly collapsedSections = signal<ReadonlySet<OverviewSection>>(storedCollapsedSections());
+
+  isCollapsed(section: OverviewSection): boolean {
+    return this.collapsedSections().has(section);
+  }
+
+  toggleSection(section: OverviewSection): void {
+    const next = new Set(this.collapsedSections());
+    if (!next.delete(section)) next.add(section);
+    this.collapsedSections.set(next);
+    try {
+      localStorage.setItem(COLLAPSED_SECTIONS_KEY, JSON.stringify([...next]));
+    } catch {
+      // Storage can be unavailable in privacy mode; the fold still applies for this visit.
+    }
+  }
   /** Each person's selected stat, by user id. Absent means the summary. */
   readonly selectedStats = signal<ReadonlyMap<string, OverviewStat>>(new Map());
   private loadSeq = 0;
@@ -439,8 +488,26 @@ export class TeamOverviewComponent {
    * line instead of a panel of empty sections, which on a large scope would push the people with
    * actual work below the fold.
    */
-  readonly activePeople = computed(() => this.overviews().filter((item) => !this.isQuiet(item)));
-  readonly quietPeople = computed(() => this.overviews().filter((item) => this.isQuiet(item)));
+  readonly activePeople = computed(() => {
+    const focused = this.focusedOverview();
+    return focused ? [focused] : this.overviews().filter((item) => !this.isQuiet(item));
+  });
+  readonly quietPeople = computed(() => this.focusedOverview() ? [] : this.overviews().filter((item) => this.isQuiet(item)));
+
+  /** The focused person's panel, shown even when they are quiet: they were picked on purpose. */
+  readonly focusedOverview = computed(() => {
+    const userId = this.focusedUserId();
+    return userId ? this.overviews().find((item) => item.person.userId === userId) ?? null : null;
+  });
+
+  /** Everyone with a panel or a quiet row, in panel order, for the person strip. */
+  readonly stripPeople = computed(() => this.overviews().map((item) => item.person));
+
+  personChipLabel(name: string, focused: boolean): string {
+    return focused
+      ? $localize`:Button on the Team overview person strip; shows every teammate again:Show everyone instead of ${name}:person:`
+      : $localize`:Button on the Team overview person strip; shows only this teammate and their Up next:Show only ${name}:person:`;
+  }
 
   private isQuiet(item: PersonOverview): boolean {
     return item.open === 0 && item.done === 0 && item.recent.length === 0 && !item.upNext?.total;
@@ -448,6 +515,16 @@ export class TeamOverviewComponent {
 
   openCardsLabel(name: string): string {
     return $localize`:Button opening one teammate's cards:Open ${name}:person:’s cards`;
+  }
+
+  isDocked(userId: string): boolean {
+    return this.upNextOpen() && this.focusedUserId() === userId;
+  }
+
+  upNextActionLabel(name: string, open: boolean): string {
+    return open
+      ? $localize`:Button closing the Up next panel for one teammate:Close Up next for ${name}:person:`
+      : $localize`:Button opening the Up next panel to change one teammate's queue:Edit Up next for ${name}:person:`;
   }
 
   cardsGroupLabel(name: string): string {

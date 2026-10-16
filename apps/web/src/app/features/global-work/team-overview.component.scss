@@ -30,8 +30,131 @@
   // grid wraps to two and one columns as the page narrows but never adds a fourth.
   grid-template-columns: repeat(auto-fill, minmax(max(340px, calc((100% - 2 * var(--overview-gap)) / 3)), 1fr));
   gap: var(--overview-gap);
-  align-items: start;
+  // Panels in a row share its height, so a row reads as one band rather than ragged cards; the
+  // sections stay stacked at the top and the spare surface falls below the last one.
+  align-items: stretch;
   padding-bottom: 8px;
+}
+
+// One teammate on their own fills the row beside the dock rather than a third of it.
+.overview-grid.is-focused {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.person-strip {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 0 0 12px;
+  padding-bottom: 2px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+// Undoes the global button reset (36px tall, accent hover).
+.strip-chip {
+  display: inline-flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+  height: 32px;
+  min-width: 0;
+  padding: 0 10px 0 5px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+
+  &:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--surface-hover);
+  }
+
+  // A ring and tint, matching the docked panel's ring, never a filled accent button. The tint is
+  // mixed into the opaque surface rather than a translucent wash: the strip sits on the page, which
+  // can carry a background image, and a wash there left the selected chip unreadable.
+  &.is-active,
+  &.is-active:hover:not(:disabled) {
+    color: var(--text);
+    background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+
+  @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+    height: 40px;
+  }
+}
+
+.strip-everyone {
+  padding-left: 10px;
+
+  i {
+    font-size: 15px;
+  }
+}
+
+.strip-name {
+  max-width: 10ch;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+// The name as a button: no chrome of its own, an underline on hover saying it can be pressed.
+.person-focus {
+  display: block;
+  justify-self: start;
+  max-width: 100%;
+  height: auto;
+  min-width: 0;
+  padding: 0;
+  color: var(--text);
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+
+  &:hover:not(:disabled) {
+    color: var(--text);
+    background: none;
+
+    .person-name {
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+  }
+}
+
+// Folds the section in every panel. Undoes the global button reset and inherits the heading's
+// uppercase type, so the title reads exactly as it did before it became a control.
+.section-toggle {
+  display: inline-flex;
+  flex: 0 1 auto;
+  gap: 8px;
+  align-items: center;
+  height: auto;
+  min-width: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  background: none;
+  border: 0;
+
+  &:hover:not(:disabled) {
+    color: inherit;
+    background: none;
+  }
+}
+
+.section-chevron {
+  margin-right: -2px;
+  color: var(--text-muted);
+  font-size: 13px;
 }
 
 .person {
@@ -47,6 +170,13 @@
 
 // In-progress work with no assignee: the same panel, marked with a dashed edge because it belongs to
 // nobody rather than to a teammate.
+// The teammate whose queue the page's Up next dock is showing: an accent ring, so the panel and the
+// dock beside it read as one.
+.person.is-docked {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), var(--shadow, 0 2px 8px rgb(0 0 0 / 12%));
+}
+
 .person.unowned {
   border-style: dashed;
 }
@@ -246,6 +376,46 @@
 }
 
 // Closes a drill-down back to the summary, after the count at the heading's right edge.
+.section-action {
+  display: inline-flex;
+  flex: none;
+  gap: 4px;
+  align-items: center;
+  height: 22px;
+  min-width: 0;
+  margin: -2px -4px -2px 0;
+  padding: 0 7px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+
+  i {
+    font-size: 13px;
+  }
+
+  &:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--surface-hover);
+  }
+
+  &.is-open,
+  &.is-open:hover:not(:disabled) {
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-color: var(--accent);
+  }
+
+  @media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+    height: 32px;
+    padding: 0 10px;
+  }
+}
+
 .section-close {
   display: inline-flex;
   align-items: center;

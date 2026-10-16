@@ -5290,6 +5290,7 @@
     "x-files": [
       "src/app/features/account-settings/notifications/notifications.page.html",
       "src/app/features/board/card-activity.component.html",
+      "src/app/features/global-work/team-overview.component.html",
       "src/app/features/workspace-settings/integrations/integrations.page.html"
     ]
   },
@@ -7695,6 +7696,7 @@
       "src/app/features/completed-cards/completed-cards-panel.component.html",
       "src/app/features/global-work/global-card-detail-host.component.ts",
       "src/app/features/global-work/save-view.popover.ts",
+      "src/app/features/global-work/team-overview.component.html",
       "src/app/features/global-work/up-next-panel.component.html",
       "src/app/features/notes/notes-view.component.ts",
       "src/app/features/scratchpad/scratchpad-panel.component.html",
@@ -11731,7 +11733,6 @@
     "x-files": [
       "src/app/features/board/card.component.html",
       "src/app/features/board/table-view/board-table-view.component.html",
-      "src/app/features/global-work/team-priorities-view.component.html",
       "src/app/features/global-work/up-next-panel.component.html",
       "src/app/shared/priority-queue/priority-queue.component.html"
     ]
@@ -11743,7 +11744,6 @@
       "src/app/features/board/card.component.html",
       "src/app/features/board/table-view/board-table-view.component.ts",
       "src/app/features/global-work/global-work.page.html",
-      "src/app/features/global-work/global-work.page.ts",
       "src/app/features/global-work/team-overview.component.html",
       "src/app/features/global-work/up-next-panel.component.html",
       "src/app/features/home/home.page.html",
@@ -12492,8 +12492,6 @@
     "x-files": [
       "src/app/features/board/list.component.html",
       "src/app/features/board/table-view/board-table-view.component.ts",
-      "src/app/features/global-work/team-priorities-view.component.html",
-      "src/app/features/global-work/team-priorities-view.component.ts",
       "src/app/features/global-work/up-next-panel.component.ts",
       "src/app/shared/priority-queue/priority-queue.component.html"
     ]
@@ -12947,7 +12945,6 @@
   "@5856743755786592145": {
     "x-files": [
       "src/app/features/board/table-view/board-table-view.component.html",
-      "src/app/features/global-work/team-priorities-view.component.html",
       "src/app/features/global-work/up-next-panel.component.html"
     ]
   },
@@ -12955,7 +12952,6 @@
   "@4900216009940588337": {
     "x-files": [
       "src/app/features/board/table-view/board-table-view.component.html",
-      "src/app/features/global-work/team-priorities-view.component.html",
       "src/app/features/global-work/up-next-panel.component.html",
       "src/app/shared/priority-queue/priority-queue.component.html"
     ]
@@ -12964,7 +12960,6 @@
   "@1895495175797473608": {
     "x-files": [
       "src/app/features/board/table-view/board-table-view.component.html",
-      "src/app/features/global-work/team-priorities-view.component.html",
       "src/app/features/global-work/up-next-panel.component.html",
       "src/app/shared/priority-queue/priority-queue.component.html"
     ]
@@ -13281,8 +13276,7 @@
   "@5657124872247335584": {
     "description": "Tooltip - no cards can be added to this Up next group",
     "x-files": [
-      "src/app/features/board/table-view/board-table-view.component.ts",
-      "src/app/features/global-work/team-priorities-view.component.ts"
+      "src/app/features/board/table-view/board-table-view.component.ts"
     ]
   },
   "2912139697705968274": "Open {$name}",
@@ -14753,18 +14747,6 @@
       "src/app/features/global-work/global-work.page.html"
     ]
   },
-  "8363704019658220743": "Up next layout",
-  "@8363704019658220743": {
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
-  "6200026051166028868": "People in Up next",
-  "@6200026051166028868": {
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
   "6761140389203160404": "Show all teammates",
   "@6761140389203160404": {
     "x-files": [
@@ -14868,13 +14850,6 @@
       "src/app/features/global-work/global-work.page.html"
     ]
   },
-  "1024134926117409532": "The Up next view will return after reconnecting.",
-  "@1024134926117409532": {
-    "description": "Offline banner",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
   "4662761733846597167": "The team overview will return after reconnecting.",
   "@4662761733846597167": {
     "description": "Offline banner",
@@ -14934,33 +14909,6 @@
   },
   "6493429101232832178": "{$START_TAG_STRONG}Showing {$LOADED} of {$TOTAL} matching cards.{$CLOSE_TAG_STRONG} Counts and the longest-running work cover only these. Narrow the scope or filters for a complete overview.",
   "@6493429101232832178": {
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
-  "5919965624322057631": "Everyone is hidden",
-  "@5919965624322057631": {
-    "description": "Up next view when every lane is hidden",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
-  "2839669099120470306": "Choose a profile above to show their Up next.",
-  "@2839669099120470306": {
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
-  "1276219773237015558": "{VAR_PLURAL, plural, one {{INTERPOLATION} ranked card is hidden because you don’t have access.} other {{INTERPOLATION} ranked cards are hidden because you don’t have access.}}",
-  "@1276219773237015558": {
-    "description": "Note above the Up next table",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
-  "1183285370363226084": "Team Up next",
-  "@1183285370363226084": {
-    "description": "Name of the Team Cards Up next table, used in exports",
     "x-files": [
       "src/app/features/global-work/global-work.page.html"
     ]
@@ -15087,13 +15035,6 @@
       "src/app/features/global-work/global-work.page.ts"
     ]
   },
-  "4311303465889471086": "Grid view",
-  "@4311303465889471086": {
-    "description": "Up next layout option",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
   "5314723712231181922": "Across all boards",
   "@5314723712231181922": {
     "description": "Subtitle of My Cards, Team Cards and Portfolio",
@@ -15118,13 +15059,6 @@
   "2614607010577950577": "Overview",
   "@2614607010577950577": {
     "description": "Short display option",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
-  "5117264093506043513": "Up next view",
-  "@5117264093506043513": {
-    "description": "Display option",
     "x-files": [
       "src/app/features/global-work/global-work.page.ts"
     ]
@@ -15269,34 +15203,6 @@
       "src/app/features/priorities/my-priorities-panel.component.html"
     ]
   },
-  "4154424105896998258": "Show Up next for {name}, {count, plural, one {# card} other {# cards}}",
-  "@4154424105896998258": {
-    "description": "Button, show a teammate's Up next lane",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
-  "7402094997236882123": "Hide Up next for {name}, {count, plural, one {# card} other {# cards}}",
-  "@7402094997236882123": {
-    "description": "Button, hide a teammate's Up next lane",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
-  "6807988503093169110": "Show Up next for {$person} · {$count}",
-  "@6807988503093169110": {
-    "description": "Tooltip, show a teammate's Up next lane, with its card count",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
-  "9148607594219538196": "Hide Up next for {$person} · {$count}",
-  "@9148607594219538196": {
-    "description": "Tooltip, hide a teammate's Up next lane, with its card count",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
   "5544251363257632928": "Due next 7 days",
   "@5544251363257632928": {
     "description": "Portfolio stat tile",
@@ -15339,13 +15245,6 @@
       "src/app/features/global-work/global-work.page.ts"
     ]
   },
-  "6173322913703094122": "The Up next view already shows everyone",
-  "@6173322913703094122": {
-    "description": "Tooltip on the disabled Up next button",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
   "4514210656713791404": "Up next is unavailable on this view",
   "@4514210656713791404": {
     "description": "Tooltip on the disabled Up next button",
@@ -15353,8 +15252,8 @@
       "src/app/features/global-work/global-work.page.ts"
     ]
   },
-  "7646961513298045974": "Pick one teammate to curate their Up next, or switch to the Up next view to see everyone",
-  "@7646961513298045974": {
+  "35204690016799182": "Pick one teammate to curate their Up next, or open it from Team overview",
+  "@35204690016799182": {
     "description": "Tooltip on the disabled Up next button",
     "x-files": [
       "src/app/features/global-work/global-work.page.ts"
@@ -15401,13 +15300,6 @@
       "src/app/features/global-work/global-work.page.ts",
       "src/app/features/home/home.page.ts",
       "src/app/features/priorities/my-priorities-panel.component.ts"
-    ]
-  },
-  "3647098177019732355": "{$person} · You",
-  "@3647098177019732355": {
-    "description": "Table group heading for the viewer's own Up next",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
     ]
   },
   "80172943225082900": "Select editable cards to use bulk actions.",
@@ -15578,7 +15470,8 @@
   "@6534056417716630629": {
     "description": "Saved view visibility option, everyone in the organisation",
     "x-files": [
-      "src/app/features/global-work/save-view.popover.ts"
+      "src/app/features/global-work/save-view.popover.ts",
+      "src/app/features/global-work/team-overview.component.html"
     ]
   },
   "2266653954931315628": "Only you and the people you share it with can open this view.",
@@ -15591,6 +15484,13 @@
   "@8034491443783577724": {
     "x-files": [
       "src/app/features/global-work/save-view.popover.ts"
+    ]
+  },
+  "395792664436496517": "Teammates",
+  "@395792664436496517": {
+    "description": "Team overview person strip",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
     ]
   },
   "3498944575911784027": "In progress with no assignee",
@@ -15820,9 +15720,37 @@
       "src/app/features/global-work/team-overview.component.ts"
     ]
   },
+  "1828918972378089736": "Show everyone instead of {$person}",
+  "@1828918972378089736": {
+    "description": "Button on the Team overview person strip; shows every teammate again",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "8094778148005568454": "Show only {$person}",
+  "@8094778148005568454": {
+    "description": "Button on the Team overview person strip; shows only this teammate and their Up next",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
   "4875921088778203989": "Open {$person}’s cards",
   "@4875921088778203989": {
     "description": "Button opening one teammate's cards",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "6336533552281101568": "Close Up next for {$person}",
+  "@6336533552281101568": {
+    "description": "Button closing the Up next panel for one teammate",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "4766284696448562726": "Edit Up next for {$person}",
+  "@4766284696448562726": {
+    "description": "Button opening the Up next panel to change one teammate's queue",
     "x-files": [
       "src/app/features/global-work/team-overview.component.ts"
     ]
@@ -15883,103 +15811,32 @@
       "src/app/features/global-work/team-overview.component.ts"
     ]
   },
-  "2300330839560978971": "you",
-  "@2300330839560978971": {
-    "description": "Marker after the viewer's own name",
+  "8659456265912586276": "Not queued",
+  "@8659456265912586276": {
+    "description": "Heading in the Up next panel: open assigned cards that are not in the queue",
     "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.html"
+      "src/app/features/global-work/up-next-panel.component.html"
     ]
   },
-  "8502065112576581103": "Move up",
-  "@8502065112576581103": {
-    "description": "Button: move the card up the queue",
+  "1447713365747622738": "{VAR_PLURAL, plural, =1 {Full at 1 card. Remove one before adding another.} other {Full at {INTERPOLATION} cards. Remove one before adding another.}}",
+  "@1447713365747622738": {
+    "description": "Queue at capacity",
     "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.html",
+      "src/app/features/global-work/up-next-panel.component.html",
       "src/app/shared/priority-queue/priority-queue.component.html"
     ]
   },
-  "2207764482815871800": "Move down",
-  "@2207764482815871800": {
-    "description": "Button: move the card down the queue",
+  "1379170775986851153": "Every open card assigned here is already in Up next.",
+  "@1379170775986851153": {
+    "description": "Empty state of the Not queued list in the Up next panel",
     "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.html",
-      "src/app/shared/priority-queue/priority-queue.component.html"
-    ]
-  },
-  "7552442042396670081": "Remove from Up next",
-  "@7552442042396670081": {
-    "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.html",
-      "src/app/shared/priority-queue/priority-queue.component.html"
-    ]
-  },
-  "9022135715669548852": "A card you don’t have access to",
-  "@9022135715669548852": {
-    "description": "Placeholder for a queued card the viewer cannot see",
-    "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.html",
-      "src/app/shared/priority-queue/priority-queue.component.html"
-    ]
-  },
-  "7896458425226601835": "No cards match this search",
-  "@7896458425226601835": {
-    "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.html"
-    ]
-  },
-  "7019958974259261208": "Nothing in Up next yet",
-  "@7019958974259261208": {
-    "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.html",
-      "src/app/features/priorities/my-priorities-panel.component.html",
-      "src/app/shared/priority-queue/priority-queue.component.html"
-    ]
-  },
-  "8829660250772043587": "{VAR_PLURAL, plural, one {Full at {INTERPOLATION} card} other {Full at {INTERPOLATION} cards}}",
-  "@8829660250772043587": {
-    "description": "Note when the Up next queue is full",
-    "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.html"
-    ]
-  },
-  "3419889899644422418": "No one’s Up next to show",
-  "@3419889899644422418": {
-    "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.html"
-    ]
-  },
-  "3950389064020746610": "Up next appears here for you and every teammate you’re allowed to view.",
-  "@3950389064020746610": {
-    "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.html"
-    ]
-  },
-  "5002476825649958415": "Add an assigned card to Up next",
-  "@5002476825649958415": {
-    "description": "Tooltip, add a card to a teammate's Up next",
-    "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.ts"
-    ]
-  },
-  "8097119757175637440": "{count, plural, one {# card in Up next} other {# cards in Up next}}",
-  "@8097119757175637440": {
-    "description": "Tooltip on a teammate's Up next count",
-    "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.ts"
-    ]
-  },
-  "3985878345917926433": "Hide Up next for {$person}",
-  "@3985878345917926433": {
-    "description": "Button, hide a teammate's Up next lane",
-    "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.ts"
+      "src/app/features/global-work/up-next-panel.component.html"
     ]
   },
   "6712925725833911303": "Full at {count, plural, one {# card} other {# cards}}",
   "@6712925725833911303": {
     "description": "Tooltip on a disabled add button when the Up next queue is full",
     "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.ts",
       "src/app/features/global-work/up-next-panel.component.ts"
     ]
   },
@@ -15993,6 +15850,34 @@
   "6598111124075820445": "Up next for {$person}",
   "@6598111124075820445": {
     "description": "Tooltip naming whose Up next queue is shown",
+    "x-files": [
+      "src/app/features/global-work/up-next-panel.component.ts"
+    ]
+  },
+  "1296833373716830436": "Drag a card up from Not queued, or press + beside it, to say what gets done first.",
+  "@1296833373716830436": {
+    "description": "Empty state hint in the Up next panel; Not queued is the list heading below",
+    "x-files": [
+      "src/app/features/global-work/up-next-panel.component.ts"
+    ]
+  },
+  "7427409389857950248": "Add to the end of Up next",
+  "@7427409389857950248": {
+    "description": "Tooltip, add a card to the end of Up next",
+    "x-files": [
+      "src/app/features/global-work/up-next-panel.component.ts"
+    ]
+  },
+  "6814075170576816740": "Show cards not in Up next",
+  "@6814075170576816740": {
+    "description": "Button that shows the Not queued list in the Up next panel",
+    "x-files": [
+      "src/app/features/global-work/up-next-panel.component.ts"
+    ]
+  },
+  "655734672140667511": "Hide cards not in Up next",
+  "@655734672140667511": {
+    "description": "Button that hides the Not queued list in the Up next panel",
     "x-files": [
       "src/app/features/global-work/up-next-panel.component.ts"
     ]
@@ -19441,6 +19326,13 @@
   "@537194528205665600": {
     "x-files": [
       "src/app/features/priorities/my-priorities-panel.component.html"
+    ]
+  },
+  "7019958974259261208": "Nothing in Up next yet",
+  "@7019958974259261208": {
+    "x-files": [
+      "src/app/features/priorities/my-priorities-panel.component.html",
+      "src/app/shared/priority-queue/priority-queue.component.html"
     ]
   },
   "2424667880733993893": "Your personal queue for assigned cards. The first card is what you plan to work on next. Pick the cards you want to do first, in the order you want to do them.",
@@ -25526,6 +25418,34 @@
       "src/app/shared/priority-queue/priority-add-cards.ts"
     ]
   },
+  "8502065112576581103": "Move up",
+  "@8502065112576581103": {
+    "description": "Button: move this card one place earlier in the queue",
+    "x-files": [
+      "src/app/shared/priority-queue/priority-queue.component.html"
+    ]
+  },
+  "2207764482815871800": "Move down",
+  "@2207764482815871800": {
+    "description": "Button: move this card one place later in the queue",
+    "x-files": [
+      "src/app/shared/priority-queue/priority-queue.component.html"
+    ]
+  },
+  "7552442042396670081": "Remove from Up next",
+  "@7552442042396670081": {
+    "description": "Button; Up next is the personal priority queue",
+    "x-files": [
+      "src/app/shared/priority-queue/priority-queue.component.html"
+    ]
+  },
+  "1203781063868253363": "{VAR_PLURAL, plural, =1 {A card you don’t have access to} other {{INTERPOLATION} cards you don’t have access to}}",
+  "@1203781063868253363": {
+    "description": "Placeholder row for one or more queued cards the viewer cannot see",
+    "x-files": [
+      "src/app/shared/priority-queue/priority-queue.component.html"
+    ]
+  },
   "7159645578836883278": "Drag a card in, or use {$START_EMPHASISED_TEXT}Add card{$CLOSE_EMPHASISED_TEXT} below, to say what gets done first.",
   "@7159645578836883278": {
     "description": "Empty state hint; Add card is the button label below",
@@ -25543,13 +25463,6 @@
   "5693174589837820232": "{VAR_PLURAL, plural, other {{INTERPOLATION} more in Up next}}",
   "@5693174589837820232": {
     "description": "Footer under a truncated queue; Up next is the personal priority queue",
-    "x-files": [
-      "src/app/shared/priority-queue/priority-queue.component.html"
-    ]
-  },
-  "1447713365747622738": "{VAR_PLURAL, plural, =1 {Full at 1 card. Remove one before adding another.} other {Full at {INTERPOLATION} cards. Remove one before adding another.}}",
-  "@1447713365747622738": {
-    "description": "Queue at capacity",
     "x-files": [
       "src/app/shared/priority-queue/priority-queue.component.html"
     ]

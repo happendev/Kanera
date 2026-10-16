@@ -186,7 +186,7 @@ const teammateQueue: WorkPrioritiesResponse = {
   reorderableWorkspaceIds: ["20000000-0000-4000-8000-000000000001"],
 };
 
-/** The Team Cards lanes batch: the viewer's own queue plus the teammate's. */
+/** The Team overview's queue batch: the viewer's own queue plus the teammate's. */
 const teamQueues: WorkPriorityQueuesResponse = {
   queues: [
     {
@@ -1474,7 +1474,7 @@ describe("GlobalWorkState priority queue", () => {
     expect(state.cards().length).toBeGreaterThan(0);
   });
 
-  it.each(["table", "priorities"] as const)("loads only the queues needed by the saved %s display", async (display) => {
+  it.each(["table", "overview"] as const)("loads only the queues needed by the saved %s display", async (display) => {
     const { state, get } = setup();
     writeGlobalWorkPreference(VIEWER_ID, "team", {
       definition: { ...cachedDefinition, display }, selectedViewId: null, drilldownLabel: null,
@@ -1482,12 +1482,12 @@ describe("GlobalWorkState priority queue", () => {
     await state.initialize("team");
     expect(state.definition().display).toBe(display);
     expect(get.mock.calls.filter(([path]) => path === "/work/priorities"))
-      .toHaveLength(display === "priorities" ? 1 : 0);
+      .toHaveLength(display === "overview" ? 1 : 0);
     expect(state.loading()).toBe(false);
     expect(state.cards().length).toBeGreaterThan(0);
   });
 
-  it("loads team queues only on entering Priority view and refreshes them on invalidation", async () => {
+  it("loads team queues only on entering the overview and refreshes them on invalidation", async () => {
     const { state, socket, get } = setup();
     const batchGets = () => get.mock.calls.filter(([path]) => path === "/work/priorities");
     await state.initialize("team");
@@ -1497,9 +1497,9 @@ describe("GlobalWorkState priority queue", () => {
     expect(batchGets()).toHaveLength(0);
     expect(state.cards().length).toBeGreaterThan(0);
 
-    state.setDisplay("priorities");
-    await vi.waitFor(() => expect(state.loading()).toBe(false));
-    expect(batchGets()).toHaveLength(1);
+    state.setDisplay("overview");
+    await vi.waitFor(() => expect(state.reconciling()).toBe(false));
+    await vi.waitFor(() => expect(batchGets()).toHaveLength(1));
     expect(state.teamPriorities()?.queues.map((lane) => lane.target.userId)).toEqual([VIEWER_ID, TEAMMATE_ID]);
 
     socket.trigger(SERVER_EVENTS.CARD_PRIORITY_INVALIDATED, { targetUserId: TEAMMATE_ID });
@@ -1514,28 +1514,34 @@ describe("GlobalWorkState priority queue", () => {
     expect(batchGets()).toHaveLength(2);
   });
 
-  it("loads a filter-independent add-candidate pool when Team Cards enters Priority view", async () => {
+  it("loads a filter-independent candidate pool for the one person the overview dock is on", async () => {
     const { state, post } = setup();
     await state.initialize("team");
-    expect(state.teamPriorityCandidateCards()).toEqual([]);
-
-    state.setDisplay("priorities");
-    expect(state.interactionReady()).toBe(false);
-    await vi.waitFor(() => expect(state.interactionReady()).toBe(true));
-
-    expect(state.teamPriorityCandidateCards().map((card) => card.id)).toEqual([
-      "40000000-0000-4000-8000-000000000001",
-    ]);
-    const candidateQueries = post.mock.calls.filter(([path, body]) =>
+    state.setDisplay("overview");
+    await vi.waitFor(() => expect(state.teamPriorities()).not.toBeNull());
+    const candidateQueries = () => post.mock.calls.filter(([path, body]) =>
       path === "/work/cards/query"
-      && ["team", "my"].includes((body as { lens?: string }).lens ?? "")
       && (body as { filters?: { completion?: string } }).filters?.completion === "active"
       && Object.hasOwn((body as { filters: object }).filters, "customFieldValues")
-    );
-    expect(candidateQueries.map(([, body]) => (body as { lens: string }).lens)).toEqual(["team", "my"]);
-    expect(candidateQueries.every(([, body]) =>
-      (body as { scope: { allAccessible: boolean } }).scope.allAccessible
-    )).toBe(true);
+    ).map(([, body]) => body as { lens: string; scope: { allAccessible: boolean }; filters: { assigneeIds: string[] } });
+    // Nothing to offer until a dock is open: the overview alone never pages through assignments.
+    expect(candidateQueries()).toEqual([]);
+    expect(state.teamPriorityCandidateCards()).toEqual([]);
+
+    state.setOverviewFocus(TEAMMATE_ID);
+    await vi.waitFor(() => expect(state.teamPriorityCandidateCards().map((card) => card.id)).toEqual([
+      "40000000-0000-4000-8000-000000000001",
+    ]));
+    expect(candidateQueries().map((body) => [body.lens, body.filters.assigneeIds])).toEqual([["team", [TEAMMATE_ID]]]);
+    expect(candidateQueries().every((body) => body.scope.allAccessible)).toBe(true);
+
+    // The viewer's own queue: the team lens excludes the viewer, so the pool comes from the my lens.
+    state.setOverviewFocus(VIEWER_ID);
+    await vi.waitFor(() => expect(candidateQueries().at(-1)?.lens).toBe("my"));
+
+    // Leaving the overview closes its dock.
+    state.setDisplay("table");
+    expect(state.overviewFocusUserId()).toBeNull();
   });
 
   it("never fetches the queue batch outside the team lens", async () => {
@@ -1548,8 +1554,8 @@ describe("GlobalWorkState priority queue", () => {
   it("reorders one lane optimistically and folds the server's queue back into the batch", async () => {
     const { state, post } = setup();
     await state.initialize("team");
-    state.setDisplay("priorities");
-    await vi.waitFor(() => expect(state.loading()).toBe(false));
+    state.setDisplay("overview");
+    await vi.waitFor(() => expect(state.teamPriorities()).not.toBeNull());
     const laneOf = () => state.teamPriorities()!.queues.find((lane) => lane.target.userId === TEAMMATE_ID)!.queue;
     const [first, second] = laneOf().items;
 
@@ -1575,8 +1581,8 @@ describe("GlobalWorkState priority queue", () => {
   it("adds to one team lane optimistically and settles only that lane", async () => {
     const { state, post } = setup();
     await state.initialize("team");
-    state.setDisplay("priorities");
-    await vi.waitFor(() => expect(state.loading()).toBe(false));
+    state.setDisplay("overview");
+    await vi.waitFor(() => expect(state.teamPriorities()).not.toBeNull());
     const candidate = {
       ...response.cards[0]!,
       id: "40000000-0000-4000-8000-000000000019",
@@ -1615,8 +1621,8 @@ describe("GlobalWorkState priority queue", () => {
   it("restores the exact lane snapshot when a lane removal is rejected", async () => {
     const { state, setOffline } = setup();
     await state.initialize("team");
-    state.setDisplay("priorities");
-    await vi.waitFor(() => expect(state.loading()).toBe(false));
+    state.setDisplay("overview");
+    await vi.waitFor(() => expect(state.teamPriorities()).not.toBeNull());
     const snapshot = state.teamPriorities();
 
     setOffline(true);
@@ -1700,15 +1706,14 @@ describe("GlobalWorkState priority queue", () => {
     }
   });
 
-  it("allows the Priorities display on the team lens only", () => {
-    // "priorities" is the team lanes display. A stored preference naming it — including one left
-    // over from the pre-panel display-mode era — is honoured on the team lens and falls back
-    // everywhere else: My Cards has the docked panel, and the portfolio has no queues.
+  it("opens the overview in place of the retired Priorities display", () => {
+    // "priorities" was the team lanes display. A stored preference or saved view naming it lands on
+    // the overview, whose dock replaced it, on the team lens and falls back everywhere else.
     const stored = { ...cachedDefinition, display: "priorities" } as WorkViewDefinition;
     writeGlobalWorkPreference(VIEWER_ID, "team", { definition: stored, selectedViewId: null, drilldownLabel: null });
     expect(readGlobalWorkPreference(VIEWER_ID, "team")?.definition.display).toBe("priorities");
 
-    expect(sanitizeGlobalWorkDefinition(stored, "team", catalog, VIEWER_ID).display).toBe("priorities");
+    expect(sanitizeGlobalWorkDefinition(stored, "team", catalog, VIEWER_ID).display).toBe("overview");
     expect(sanitizeGlobalWorkDefinition({
       ...stored,
       filters: { ...stored.filters, assigneeIds: [TEAMMATE_ID] },

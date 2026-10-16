@@ -118,23 +118,20 @@
 
     <!--
       Row 2 — the query bar. Fixed order, left to right: search → scope → Filter → Up next → Group →
-      Sort, with the saved-view picker pinned right. Search and Priority's layout/lane controls stay
-      visible on a phone; the larger query controls collapse behind the single trigger.
+      Sort, with the saved-view picker pinned right. Search stays visible on a phone; the larger query
+      controls collapse behind the single trigger.
     -->
     <k-page-toolbar
-      [class.priority-toolbar]="effectiveDisplay() === 'priorities'"
       [compactActive]="toolbarFilterActive()"
       [disabled]="!state.interactionReady()"
-      [showCompact]="effectiveDisplay() !== 'priorities'"
     >
       <!--
         The portfolio summary renders counts, not cards, so a "Search cards" box there would look like
         search while actually being an invisible title filter on every metric. It returns for the
         portfolio's table drill-down, where there is a card list to search.
       -->
-      <!-- Priority lanes apply this title query locally while preserving each card's true rank. -->
       @if (effectiveDisplay() !== "summary") {
-        <div ptSearch class="work-search" [class.with-priority-people]="effectiveDisplay() === 'priorities'">
+        <div ptSearch class="work-search">
           <k-search-field
             [value]="state.definition().filters.q"
             [disabled]="!state.interactionReady()"
@@ -151,39 +148,6 @@
               i18n-ariaLabel
               (valueChange)="setWorkDoneLayout($event)"
             />
-          }
-          @if (effectiveDisplay() === "priorities") {
-            <!-- This switches the shape of the current result, so it belongs immediately beside
-                 Search in the query bar rather than in a separate row above the result itself. -->
-            <k-segmented
-              class="priority-layout-switch"
-              [options]="priorityLayoutOptions"
-              [value]="priorityLayout()"
-              ariaLabel="Up next layout"
-              i18n-ariaLabel
-              (valueChange)="setPriorityLayout($event)"
-            />
-            <div class="priority-people" aria-label="People in Up next" i18n-aria-label>
-              @for (lane of priorityLanes(); track lane.target.userId) {
-                <button
-                  type="button"
-                  class="priority-person-toggle"
-                  [class.is-hidden]="isPriorityLaneHidden(lane.target.userId)"
-                  [attr.aria-pressed]="!isPriorityLaneHidden(lane.target.userId)"
-                  [attr.aria-label]="priorityLaneToggleLabel(lane.target.displayName, lane.queue.totalCount, isPriorityLaneHidden(lane.target.userId))"
-                  [kTooltip]="priorityLaneToggleTooltip(lane.target.displayName, lane.queue.totalCount, isPriorityLaneHidden(lane.target.userId))"
-                  (click)="togglePriorityLane(lane.target.userId)"
-                >
-                  <k-avatar
-                    [url]="peopleById().get(lane.target.userId)?.avatarUrl ?? null"
-                    [name]="lane.target.displayName"
-                    [size]="22"
-                    [userId]="lane.target.userId"
-                  />
-                  <span>{{ lane.queue.totalCount }}</span>
-                </button>
-              }
-            </div>
           }
         </div>
       }
@@ -239,10 +203,6 @@
           </div>
         }
 
-        <!-- The queues are deliberately filter- and scope-independent (rank must not lie because a
-             filter hides a card), so on the lanes display the board scope and filter bar would be
-             controls that visibly do nothing. Search is the exception and filters titles locally. -->
-        @if (effectiveDisplay() !== "priorities") {
         <div class="menu-anchor">
           <button
             type="button"
@@ -345,7 +305,6 @@
               <span class="up-next-pulse" aria-hidden="true"></span>
             }
           </button>
-        }
         }
 
         @if (lens() === "portfolio" && effectiveDisplay() === "summary") {
@@ -547,7 +506,6 @@
       <span>
         <ng-container i18n="Offline banner">Showing a saved copy from {{ offlineStamp(cachedAt) // i18n(ph="time") }}. Reconnect to make changes.</ng-container>
         @if (historyOfflineFallback()) { <ng-container i18n="Offline banner">History will return after reconnecting.</ng-container> }
-        @if (prioritiesOfflineFallback()) { <ng-container i18n="Offline banner">The Up next view will return after reconnecting.</ng-container> }
         @if (overviewOfflineFallback()) { <ng-container i18n="Offline banner">The team overview will return after reconnecting.</ng-container> }
       </span>
     </div>
@@ -719,7 +677,7 @@
         <k-team-overview
           [people]="teamPeople()"
           [cards]="state.cards()"
-          [queues]="priorityLanes()"
+          [queues]="overviewQueues()"
           [lists]="state.catalog().lists"
           [boards]="state.catalog().boards"
           [workspaces]="state.catalog().workspaces"
@@ -728,92 +686,13 @@
           [enabled]="state.cachedAt() === null"
           [refreshVersion]="workDoneRefreshVersion() + state.reconciliationVersion()"
           [selectedCardId]="selectedCard()?.id ?? null"
+          [focusedUserId]="state.overviewFocusUserId()"
+          [upNextOpen]="upNextOpen()"
           (cardOpened)="openHistoryCard($event)"
           (personFocused)="focusTeammate($event)"
+          (focusChanged)="setOverviewFocus($event)"
+          (upNextToggled)="toggleOverviewDock($event)"
         />
-      } @else if (effectiveDisplay() === "priorities") {
-        <!-- The priority queues replace the card query wholesale: no totals strip (it describes a
-             query they do not render) and no docked Up next panel (every queue is already on screen). -->
-        @if (priorityLanes().length > 0 && visiblePriorityLanes().length === 0) {
-          <section class="priority-all-hidden">
-            <i class="ti ti-eye-off"></i>
-            <strong i18n="Up next view when every lane is hidden">Everyone is hidden</strong>
-            <span i18n>Choose a profile above to show their Up next.</span>
-          </section>
-        } @else if (priorityLayout() === "grid") {
-          <k-team-priorities-view
-            [queues]="visiblePriorityLanes()"
-            [people]="state.catalog().people"
-            [canDrag]="state.interactionReady()"
-            [error]="priorityError()"
-            [addableCardsByUserId]="teamPriorityAddableCards()"
-            [editableCardIds]="roleEditableCardIds()"
-            [searchQuery]="state.definition().filters.q"
-            [selectedCardId]="selectedCard()?.id ?? null"
-            (reordered)="onLaneReordered($event)"
-            (removed)="onLaneRemoved($event)"
-            (added)="onLaneAdded($event)"
-            (laneHidden)="togglePriorityLane($event)"
-            (cardOpened)="openCardById($event)"
-          />
-        } @else {
-          @if (priorityError(); as message) {
-            <p class="priority-table-error"><i class="ti ti-alert-circle"></i>{{ message }}</p>
-          }
-          @if (priorityTableHiddenCount()) {
-            <p class="priority-table-hidden-note">
-              <i class="ti ti-lock"></i>
-              <ng-container i18n="Note above the Up next table">{ priorityTableHiddenCount(), plural, one {{{ priorityTableHiddenCount() }} ranked card is hidden because you don’t have access.} other {{{ priorityTableHiddenCount() }} ranked cards are hidden because you don’t have access.} }</ng-container>
-            </p>
-          }
-          <!--
-            Priority ownership and order come from the queue relation, so the host supplies those
-            groups to the shared board table. Everything inside the rows remains the canonical table:
-            inline title/status/assignee/due/label/custom-field editors, columns, summaries and export.
-          -->
-          <k-board-table-view
-            class="work-table-view priority-shared-table"
-            boardId="global-work-team-priorities"
-            boardName="Team Up next"
-            i18n-boardName="Name of the Team Cards Up next table, used in exports"
-            [cards]="priorityTableCards()"
-            [lists]="tableLists()"
-            [customFields]="tableCustomFields()"
-            [cardLabels]="tableLabels()"
-            [members]="tableMembers()"
-            [labelsByCard]="priorityTableLabelsByCard()"
-            [assigneesByCard]="priorityTableAssigneesByCard()"
-            [customFieldValuesByCardAndField]="priorityTableCustomFieldValues()"
-            [priorityRanksByGroup]="priorityTableRanksByGroup()"
-            [sourceBoards]="tableSourceBoards()"
-            [sourceWorkspaces]="tableSourceWorkspaces()"
-            [sourceOrganisations]="tableSourceOrganisations()"
-            [hostCardGroups]="priorityTableGroups()"
-            [hostReorderableCardIdsByGroup]="priorityTableReorderableCardIdsByGroup()"
-            [hostAddGroupsByGroup]="priorityTableAddGroupsByGroup()"
-            hostGroupBy="assignee"
-            hostSortBy="position"
-            preferenceScope="globalWork:team:priorities"
-            [selectedCardId]="selectedCard()?.id ?? null"
-            [currentUserId]="state.auth.user()?.id ?? null"
-            [loading]="state.loading()"
-            [canEdit]="state.interactionReady()"
-            [editableCardIds]="priorityTableEditableCardIds()"
-            [showSearch]="false"
-            [showFilterBar]="false"
-            [showGroupingControl]="false"
-            [labelsVisibleByDefault]="true"
-            [priorityVisibleByDefault]="true"
-            [showRowSelection]="false"
-            [canCreate]="false"
-            (cardOpened)="openCardById($event)"
-            (boardOpened)="openBoard($event)"
-            (hostCardReordered)="onPriorityTableReordered($event)"
-            (hostCardAdded)="onPriorityTableAdded($event)"
-            (hostCardDragStarted)="onPriorityTableDragStarted()"
-            (hostCardDragEnded)="onPriorityTableDragEnded()"
-          />
-        }
       } @else {
         <section class="totals-strip">
           <span i18n="Totals strip">{ state.response().totals.cards, plural, one {<strong>{{ state.response().totals.cards }}</strong> card} other {<strong>{{ state.response().totals.cards }}</strong> cards} }</span>
@@ -1105,22 +984,22 @@
     @if (upNextOpen()) {
       <k-up-next-panel
         class="up-next-dock"
-        [priorities]="currentPriorities()"
+        [priorities]="dockPriorities()"
         [catalog]="state.catalog()"
         [boardSummariesById]="boardsById()"
         [canDrag]="state.interactionReady()"
-        [targetName]="upNextTargetName()"
+        [targetName]="dockTargetName()"
         [error]="priorityError()"
         [selectedCardId]="selectedCard()?.id ?? null"
-        [addableCards]="upNextAddableCards()"
+        [addableCards]="dockAddableCards()"
         [editableCardIds]="roleEditableCardIds()"
-        [allowQuickComplete]="isSelfUpNextTarget()"
+        [allowQuickComplete]="dockAllowQuickComplete()"
         (reordered)="onPriorityReordered($event)"
         (removed)="onPriorityRemoved($event)"
         (added)="onUpNextAddFromPanel($event)"
         (cardOpened)="openCardById($event)"
         (completed)="onPriorityCompleted($event)"
-        (closed)="toggleUpNextPanel()"
+        (closed)="closeUpNextDock()"
       />
     }
     </div>

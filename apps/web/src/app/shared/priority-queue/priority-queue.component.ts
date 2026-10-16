@@ -40,6 +40,12 @@ type QueueRow = {
    * viewer's catalog. Empty on an optimistic row until the server's response lands.
    */
   labels: CardLabelPresentation[];
+  /**
+   * Every entry this row stands for. One for a card row; for a locked row, the whole run of
+   * consecutive redacted entries it collapses, so three cards a manager cannot see read as one
+   * muted line rather than three identical placeholders. `entry` is the run's first.
+   */
+  entries: WorkPriorityItem[];
 };
 
 /** One open right-click menu. `token` identifies the *opening*, not the card — see `actionsMenu`. */
@@ -133,6 +139,8 @@ export class PriorityQueueComponent {
   readonly showDragHint = input(true);
   /** Empty-state suppression for hosts that render their own richer one (the drawer). */
   readonly showEmptyState = input(true);
+  /** Replaces the curator's empty-state hint where the host offers a different way to add. */
+  readonly emptyHint = input<string | null>(null);
   /** Tighter rows for embedded surfaces like Home's section, which is not a scroller. */
   readonly compact = input(false);
   /** Adds a one-click "mark complete" to each row — the drawer's and Home's quick action. */
@@ -194,7 +202,7 @@ export class PriorityQueueComponent {
    * from another organisation is in the queue but not necessarily in this viewer's work catalog).
    * The catalog and board summaries only backfill optimistic rows, whose context is still null.
    */
-  private readonly allRows = computed<QueueRow[]>(() =>
+  private readonly allRows = computed<Omit<QueueRow, "entries">[]>(() =>
     this.items().map((entry) => {
       const card = entry.card ? expandCardSummary(entry.card) : null;
       const board = card ? this.boardSummariesById().get(card.boardId) ?? null : null;
@@ -219,13 +227,28 @@ export class PriorityQueueComponent {
     }),
   );
 
+  /** `allRows` with each run of consecutive locked entries folded into the run's first row. */
+  private readonly collapsedRows = computed<QueueRow[]>(() => {
+    const rows: QueueRow[] = [];
+    for (const row of this.allRows()) {
+      const previous = rows.at(-1);
+      if (!row.card && previous && !previous.card) {
+        previous.entries.push(row.entry);
+        continue;
+      }
+      rows.push({ ...row, entries: [row.entry] });
+    }
+    return rows;
+  });
+
   /**
-   * A prefix slice, never a filtered subset: indices into the rendered list must stay valid indices
-   * into `items()`, or a drop on a truncated surface would resolve against the wrong neighbours.
+   * A prefix slice, never a filtered subset, so every rendered row maps back to a contiguous run of
+   * `items()`. Gestures convert rendered slots back to queue indices through `queueIndexAt`, which
+   * is what keeps a drop on a truncated or collapsed surface resolving against the right neighbours.
    */
   readonly rows = computed<QueueRow[]>(() => {
     const limit = this.visibleLimit();
-    return limit === null ? this.allRows() : this.allRows().slice(0, limit);
+    return limit === null ? this.collapsedRows() : this.collapsedRows().slice(0, limit);
   });
 
   /** How many ranked cards a truncated surface is not showing. */
@@ -234,7 +257,9 @@ export class PriorityQueueComponent {
   protected readonly allAddedTooltip = $localize`:Tooltip on a disabled add button; Up next is the personal priority queue:Every card you can add is already in Up next`;
   protected readonly addCardTooltip = $localize`:Tooltip; Up next is the personal priority queue:Add a card to Up next`;
 
-  readonly hiddenByLimit = computed(() => Math.max(0, this.totalCount() - this.rows().length));
+  readonly hiddenByLimit = computed(() =>
+    Math.max(0, this.totalCount() - this.rows().reduce((count, row) => count + row.entries.length, 0))
+  );
 
   readonly addGroups = computed<PickerGroup[]>(() =>
     priorityAddGroups(this.addableCards(), { showCardKeys: this.showCardKeys() })
@@ -383,10 +408,13 @@ export class PriorityQueueComponent {
       // frame a reorder uses — the full queue is the "rest", since nothing was lifted out of it.
       const data = event.item.data as BoardLaneItem | undefined;
       if (data?.kind !== "card" || !this.canEnterFromBoard(event.item)) return;
-      this.added.emit({ cardId: data.card.id, ...priorityAnchorAt(this.items(), event.currentIndex) });
+      this.added.emit({
+        cardId: data.card.id,
+        ...priorityAnchorAt(this.items(), this.queueIndexAt(this.rows(), this.items(), event.currentIndex)),
+      });
       return;
     }
-    const moved = this.items()[event.previousIndex];
+    const moved = this.rows()[event.previousIndex]?.entry;
     if (!moved) return;
     // Released outside the surface: the gesture reads "take it out of the queue", so it performs the
     // same removal the row's × does. Safe to key off the release point alone — CDK fires drops only
@@ -397,22 +425,43 @@ export class PriorityQueueComponent {
       return;
     }
     if (event.previousIndex === event.currentIndex) return;
+    this.emitMove(moved, event.currentIndex);
+  }
+
+  /**
+   * Reorder `moved` to a slot among the rendered rows *without* it, the frame CDK reports drops in.
+   * Rows can stand for several queue entries (a collapsed locked run), so the slot is converted to a
+   * queue index before the anchor is worked out.
+   */
+  private emitMove(moved: WorkPriorityItem, slot: number): void {
     const rest = this.items().filter((item) => item.id !== moved.id);
-    this.reordered.emit({ priorityId: moved.id, ...priorityAnchorAt(rest, event.currentIndex) });
+    const restRows = this.rows().filter((row) => row.entry.id !== moved.id);
+    this.reordered.emit({ priorityId: moved.id, ...priorityAnchorAt(rest, this.queueIndexAt(restRows, rest, slot)) });
+  }
+
+  /** The queue index a rendered slot lands on: before that row's first entry, or past the end. */
+  private queueIndexAt(rows: QueueRow[], items: WorkPriorityItem[], slot: number): number {
+    const row = rows[slot];
+    if (!row) return items.length;
+    const index = items.findIndex((item) => item.id === row.entry.id);
+    return index < 0 ? items.length : index;
   }
 
   /**
    * One step up or down, for keyboard and coarse pointers, where a precise drag is the worst verb.
-   * Anchors are computed in "rest" coordinates (the queue without the moved row), the same frame
-   * `onDrop` uses, so a step over a redacted neighbour resolves exactly like a drop next to it.
+   * A step is one *rendered* row, so stepping over a collapsed locked run passes the whole run in
+   * one press, exactly like dropping the row on its far side. Steps on a truncated surface count
+   * the whole queue's rows, not just the ones on screen.
    */
   moveBy(entry: WorkPriorityItem, delta: number): void {
-    const index = this.items().findIndex((item) => item.id === entry.id);
+    const rows = this.collapsedRows();
+    const index = rows.findIndex((row) => row.entry.id === entry.id);
     if (index < 0) return;
-    const target = Math.max(0, Math.min(this.items().length - 1, index + delta));
+    const target = Math.max(0, Math.min(rows.length - 1, index + delta));
     if (target === index) return;
     const rest = this.items().filter((item) => item.id !== entry.id);
-    this.reordered.emit({ priorityId: entry.id, ...priorityAnchorAt(rest, target) });
+    const restRows = rows.filter((row) => row.entry.id !== entry.id);
+    this.reordered.emit({ priorityId: entry.id, ...priorityAnchorAt(rest, this.queueIndexAt(restRows, rest, target)) });
   }
 
   /**

@@ -194,3 +194,130 @@ test("Team overview shows each teammate's in-progress work, own activity, queue 
   await expect(page.locator("k-card").filter({ hasText: workedOn })).toHaveCount(1);
   await expect(page.locator("button.k-toolbar-trigger.is-set").filter({ hasText: "Marcus Cole" })).toBeVisible();
 });
+
+test("Team overview focuses one teammate with their Up next docked, curated from Not queued, live for them", async ({ page, signIn, apiAs, pageAs, uniqueName }) => {
+  const amelia = await apiAs("amelia");
+  const marcus = await apiAs("marcus");
+  await signIn(page, "amelia");
+  const board = await platformDelivery(page, amelia);
+  const marcusId = await userId(marcus);
+
+  const head = uniqueName("E2E dock head");
+  const sooner = uniqueName("E2E dock due sooner");
+  const later = uniqueName("E2E dock due later");
+  const suffix = head.split(" ").at(-1)!;
+  const headId = await createCard(amelia, board, head, [marcusId]);
+  const soonerId = await createCard(amelia, board, sooner, [marcusId]);
+  const laterId = await createCard(amelia, board, later, [marcusId]);
+  for (const [id, due] of [[soonerId, "2099-01-05"], [laterId, "2099-03-05"]] as const) {
+    const dated = await amelia.patch(`/api/cards/${id}`, { data: { dueDateLocalDate: due } });
+    expect(dated.ok(), await dated.text()).toBe(true);
+  }
+  const queued = await marcus.post(`/api/work/priorities/${marcusId}/cards`, { data: { cardId: headId, afterId: null } });
+  expect(queued.ok(), await queued.text()).toBe(true);
+  // Marcus's seeded queue sits below the head, so appended cards rank after all of it.
+  const queueSize = ((await queued.json()) as { totalCount: number }).totalCount;
+
+  // Marcus keeps his own Up next open in the shell drawer: Amelia's edits must reach it live.
+  const marcusPage = await pageAs("marcus");
+  await marcusPage.getByRole("button", { name: /^Up next/ }).first().click();
+  const marcusQueue = marcusPage.locator("k-my-priorities-panel");
+  await expect(marcusQueue.locator(".panel-row").filter({ hasText: head })).toBeVisible();
+
+  await page.goto("/team-cards");
+  await page.getByRole("button", { name: "Team overview" }).click();
+  // The retired Up next display is gone from the display switch.
+  await expect(page.getByRole("button", { name: "Up next view" })).toHaveCount(0);
+  await page.getByRole("searchbox", { name: "Search cards" }).fill(suffix);
+  const panel = personPanel(page, "Marcus Cole");
+  await section(panel, "Up next").getByRole("button", { name: "Edit Up next for Marcus Cole" }).click();
+
+  const dock = page.locator("k-up-next-panel");
+  await expect(dock.locator(".panel-target")).toHaveText("Marcus Cole");
+  await expect(panel).toHaveClass(/\bis-docked\b/);
+  // Edit focuses the overview on Marcus: his panel alone, and his chip pressed in the person strip.
+  await expect(page.locator("k-team-overview section.person")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Show everyone instead of Marcus Cole" }).first()).toHaveAttribute("aria-pressed", "true");
+  // Search, scope and Filter stay together in the query bar; the strip is a row of its own.
+  const searchBox = (await page.getByRole("searchbox", { name: "Search cards" }).boundingBox())!;
+  const strip = (await page.locator("k-team-overview .person-strip").boundingBox())!;
+  expect(strip.y).toBeGreaterThan(searchBox.y + searchBox.height);
+  const queueRow = (title: string) => dock.locator("k-priority-queue .panel-row").filter({ hasText: title });
+  const notQueuedRow = (title: string) => dock.locator(".not-queued-row").filter({ hasText: title });
+  await expect(queueRow(head).locator(".row-rank")).toHaveText("1");
+
+  // Not queued ignores the overview's search (the queue does too), and puts the sooner due first.
+  await expect(notQueuedRow(sooner)).toBeVisible();
+  const soonerBox = await notQueuedRow(sooner).boundingBox();
+  const laterBox = await notQueuedRow(later).boundingBox();
+  expect(soonerBox!.y).toBeLessThan(laterBox!.y);
+  await expect(notQueuedRow(head)).toHaveCount(0);
+  await page.screenshot({ path: test.info().outputPath("team-overview-dock.png") });
+
+  // + appends: last in the dock, counted in the overview's queue head, and live in Marcus's drawer.
+  await notQueuedRow(sooner).getByRole("button", { name: "Add to Up next" }).click();
+  await expect(queueRow(sooner).locator(".row-rank")).toHaveText(String(queueSize + 1));
+  await expect(notQueuedRow(sooner)).toHaveCount(0);
+  await expect(section(panel, "Up next").locator(".section-count")).toHaveText(String(queueSize + 1));
+  await expect(marcusQueue.locator(".panel-row").filter({ hasText: sooner }).locator(".row-rank")).toHaveText(String(queueSize + 1));
+
+  // Dragging a Not queued card onto the head of the queue ranks it first.
+  const source = notQueuedRow(later);
+  const target = queueRow(head);
+  const from = (await source.boundingBox())!;
+  const to = (await target.boundingBox())!;
+  await page.mouse.move(from.x + 40, from.y + from.height / 2);
+  await page.mouse.down();
+  for (let step = 1; step <= 12; step += 1) {
+    await page.mouse.move(from.x + 40, from.y + from.height / 2 + ((to.y + 4) - (from.y + from.height / 2)) * (step / 12));
+  }
+  await page.mouse.up();
+  await expect(queueRow(later).locator(".row-rank")).toHaveText("1");
+  await expect(queueRow(head).locator(".row-rank")).toHaveText("2");
+  await expect(marcusQueue.locator(".panel-row").filter({ hasText: later }).locator(".row-rank")).toHaveText("1");
+
+  // Removing returns the card to Not queued.
+  await queueRow(sooner).hover();
+  await queueRow(sooner).getByRole("button", { name: "Remove from Up next" }).click();
+  await expect(notQueuedRow(sooner)).toBeVisible();
+  await expect(marcusQueue.locator(".panel-row").filter({ hasText: sooner })).toHaveCount(0);
+
+  // Phone width: the dock is a bottom sheet over Marcus's panel, with no horizontal overflow, and
+  // closing it leaves his panel in view.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(dock).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: test.info().outputPath("team-overview-dock-phone.png") });
+  await dock.getByRole("button", { name: "Close Up next" }).click();
+  await expect(dock).toHaveCount(0);
+  await expect(panel).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  // Everyone brings every panel back; another teammate's name focuses them instead.
+  await page.locator("k-team-overview .strip-everyone").click();
+  await expect(page.locator("k-team-overview section.person").nth(1)).toBeVisible();
+  const teammates = page.locator("k-team-overview section.person:not(.unowned)");
+  const other = teammates.filter({ hasNot: page.locator(".person-name", { hasText: "Marcus Cole" }) }).first();
+  const otherName = (await other.locator(".person-name").textContent())!.trim();
+  await other.locator(".person-focus").click();
+  await expect(teammates).toHaveCount(1);
+  await expect(page.locator("k-team-overview section.unowned")).toHaveCount(0);
+  await expect(page.locator("k-team-overview .person-name")).toHaveText(otherName);
+  // Their avatar opens their profile card, as avatars do everywhere else.
+  await teammates.locator("k-avatar").first().click();
+  await expect(page.getByRole("dialog", { name: `${otherName} profile` })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.locator("k-team-overview .person-focus").click();
+  await expect(page.locator("k-team-overview section.person").nth(1)).toBeVisible();
+
+  // Folding a section folds it in every panel, and the fold survives a reload.
+  const assignedToggles = page.locator("k-team-overview .section.tone-assigned .section-toggle");
+  await expect(assignedToggles.nth(1)).toHaveAttribute("aria-expanded", "true");
+  await assignedToggles.first().click();
+  for (const toggle of await assignedToggles.all()) await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator("k-team-overview .section.tone-assigned .row")).toHaveCount(0);
+  await page.reload();
+  await expect(assignedToggles.first()).toHaveAttribute("aria-expanded", "false");
+  await assignedToggles.first().click();
+  await expect(assignedToggles.first()).toHaveAttribute("aria-expanded", "true");
+});

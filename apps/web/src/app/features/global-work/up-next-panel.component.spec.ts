@@ -2,12 +2,32 @@ import { provideZonelessChangeDetection } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import type { WorkCard, WorkPrioritiesResponse, WorkPriorityItem } from "@kanera/shared/dto";
 import { beforeEach, describe, expect, it } from "vitest";
-import { UpNextPanelComponent } from "./up-next-panel.component";
+import { UpNextPanelComponent, type UpNextAddableCard } from "./up-next-panel.component";
+
+function addable(id: string, boardId: string, boardName: string, dueDateLocalDate: string | null): UpNextAddableCard {
+  return {
+    id,
+    title: `Card ${id}`,
+    key: `DEV-${id}`,
+    boardId,
+    boardName,
+    boardIcon: null,
+    boardIconColor: null,
+    listId: "50000000-0000-4000-8000-000000000001",
+    listName: "Backlog",
+    listIcon: null,
+    listColor: null,
+    dueDateLocalDate,
+    dueDateSlot: null,
+    dueDateTimezone: "UTC",
+  };
+}
 
 /**
  * Row behaviour — anchors, drags, removal, the inline Add card — belongs to the shared
  * `k-priority-queue` and is covered in `shared/priority-queue/priority-queue.component.spec.ts`.
- * What is left here is this dock's own chrome: the header, its "+" picker, and the error banner.
+ * What is left here is this dock's own chrome: the header, its "+" picker, the error banner, and
+ * the Not queued list under the queue.
  */
 
 function card(id: string, title: string): WorkCard {
@@ -119,5 +139,33 @@ describe("UpNextPanelComponent", () => {
     fixture.componentInstance.closed.subscribe(() => (closed += 1));
     host.querySelector<HTMLButtonElement>(".panel-close")?.click();
     expect(closed).toBe(1);
+  });
+
+  // Sorting is the list's whole job: what is due soonest is what gets queued next. A board's undated
+  // cards must not jump ahead of its dated ones, and boards must keep the sidebar order supplied.
+  it("lists Not queued cards by board, soonest due first, and adds one to the end", () => {
+    const fixture = setup();
+    fixture.componentRef.setInput("addableCards", [
+      addable("a", "b1", "Roadmap", null),
+      addable("b", "b1", "Roadmap", "2026-11-02"),
+      addable("c", "b2", "Ops", null),
+      addable("d", "b1", "Roadmap", "2026-10-20"),
+    ]);
+    fixture.detectChanges();
+    const panel = fixture.componentInstance;
+    expect(panel.notQueuedGroups().map((group) => [group.boardName, group.rows.map((row) => row.card.id)]))
+      .toEqual([["Roadmap", ["d", "b", "a"]], ["Ops", ["c"]]]);
+
+    const added: unknown[] = [];
+    panel.added.subscribe((event) => added.push(event));
+    (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(".not-queued-add")!.click();
+    expect(added).toEqual([{ cardId: "d", beforeId: null }]);
+  });
+
+  it("offers no Not queued list on a queue the viewer may not change", () => {
+    const fixture = setup({ canReorder: false });
+    fixture.componentRef.setInput("addableCards", [addable("a", "b1", "Roadmap", null)]);
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).querySelector(".not-queued")).toBeNull();
   });
 });
