@@ -31,9 +31,10 @@ export const WORK_SORT_VALUES = [
  * person's queue stays a docked panel over the other displays, not a display of its own.
  *
  * `overview` is the Team Cards manager overview: one panel per teammate combining their work in
- * progress (cards in In progress lists), their own recent activity, where their open work sits in the
- * workflow, their Up next head, and what is due soon, plus in-progress work nobody owns. It composes the card query, the priority batch and the team work-done
- * feed on the client, so it adds no endpoint of its own.
+ * progress (cards in In progress lists), their own recent activity, their Up next head, their other
+ * open cards by due date and their recent completions, plus in-progress work nobody owns. It composes
+ * the card query, the priority batch and the team work-done feed on the client, so it adds no
+ * endpoint of its own.
  */
 export const WORK_DISPLAY_MODES = ["board", "table", "calendar", "priorities", "overview", "history", "summary"] as const;
 /**

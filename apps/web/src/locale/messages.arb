@@ -8529,6 +8529,7 @@
       "src/app/features/board/table-view/filter-bar.component.ts",
       "src/app/features/board/table-view/table-view.types.ts",
       "src/app/features/global-work/global-work.page.ts",
+      "src/app/features/global-work/team-overview.component.ts",
       "src/app/features/home/home.page.html",
       "src/app/features/home/home.state.ts",
       "src/app/shared/user-profile/user-profile-popover.component.html"
@@ -8573,6 +8574,8 @@
       "src/app/features/board/card-detail.component.html",
       "src/app/features/board/table-view/filter-bar.component.ts",
       "src/app/features/global-work/global-work.page.ts",
+      "src/app/features/global-work/team-overview.component.html",
+      "src/app/features/global-work/team-overview.component.ts",
       "src/app/features/onboarding/onboarding.page.html",
       "src/app/features/workspace-settings/lists/lists.page.html",
       "src/app/features/workspace-settings/workspace-settings.page.ts"
@@ -9410,7 +9413,8 @@
   "@8411907789677252899": {
     "description": "Button - show the cards hidden in a calendar day",
     "x-files": [
-      "src/app/features/board/calendar-view/board-calendar-view.component.html"
+      "src/app/features/board/calendar-view/board-calendar-view.component.html",
+      "src/app/features/global-work/team-overview.component.html"
     ]
   },
   "3517550046701184661": "Show less",
@@ -11740,6 +11744,7 @@
       "src/app/features/board/table-view/board-table-view.component.ts",
       "src/app/features/global-work/global-work.page.html",
       "src/app/features/global-work/global-work.page.ts",
+      "src/app/features/global-work/team-overview.component.html",
       "src/app/features/global-work/up-next-panel.component.html",
       "src/app/features/home/home.page.html",
       "src/app/features/priorities/my-priorities-panel.component.html",
@@ -13850,7 +13855,8 @@
   "@430859064314356197": {
     "description": "Group heading for cards not yet completed",
     "x-files": [
-      "src/app/features/board/table-view/group-by.util.ts"
+      "src/app/features/board/table-view/group-by.util.ts",
+      "src/app/features/global-work/team-overview.component.ts"
     ]
   },
   "4451997363840910432": "Up next order",
@@ -14869,6 +14875,13 @@
       "src/app/features/global-work/global-work.page.html"
     ]
   },
+  "4662761733846597167": "The team overview will return after reconnecting.",
+  "@4662761733846597167": {
+    "description": "Offline banner",
+    "x-files": [
+      "src/app/features/global-work/global-work.page.html"
+    ]
+  },
   "7669586489275293002": "Connection lost. Showing the last loaded view from {$TIME}. Changes are paused.",
   "@7669586489275293002": {
     "description": "Offline banner",
@@ -14909,6 +14922,18 @@
   },
   "3888374188534477612": "Back to portfolio",
   "@3888374188534477612": {
+    "x-files": [
+      "src/app/features/global-work/global-work.page.html"
+    ]
+  },
+  "8371055686202976923": "{$START_TAG_STRONG}Loading all matching cards…{$CLOSE_TAG_STRONG} Counts settle when the full set is ready.",
+  "@8371055686202976923": {
+    "x-files": [
+      "src/app/features/global-work/global-work.page.html"
+    ]
+  },
+  "6493429101232832178": "{$START_TAG_STRONG}Showing {$LOADED} of {$TOTAL} matching cards.{$CLOSE_TAG_STRONG} Counts and the longest-running work cover only these. Narrow the scope or filters for a complete overview.",
+  "@6493429101232832178": {
     "x-files": [
       "src/app/features/global-work/global-work.page.html"
     ]
@@ -15086,6 +15111,20 @@
   "5117264093506043513": "Up next view",
   "@5117264093506043513": {
     "description": "Display option",
+    "x-files": [
+      "src/app/features/global-work/global-work.page.ts"
+    ]
+  },
+  "5639970111104368806": "Team overview",
+  "@5639970111104368806": {
+    "description": "Display option",
+    "x-files": [
+      "src/app/features/global-work/global-work.page.ts"
+    ]
+  },
+  "2614607010577950577": "Overview",
+  "@2614607010577950577": {
+    "description": "Short display option",
     "x-files": [
       "src/app/features/global-work/global-work.page.ts"
     ]
@@ -15552,6 +15591,296 @@
   "@8034491443783577724": {
     "x-files": [
       "src/app/features/global-work/save-view.popover.ts"
+    ]
+  },
+  "3498944575911784027": "In progress with no assignee",
+  "@3498944575911784027": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "7903315130275858788": "No assignee",
+  "@7903315130275858788": {
+    "description": "Team overview panel for unassigned work",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "1963168294880790466": "In progress, but nobody owns it",
+  "@1963168294880790466": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "2878062867928155639": "Open cards in In progress lists with no assignee, longest time in progress first",
+  "@2878062867928155639": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "3219659210566569338": "+{$COUNT} more with no assignee",
+  "@3219659210566569338": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "1523067323144540649": "Back to summary",
+  "@1523067323144540649": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "7889021945991084119": "+{$COUNT} more — open their cards",
+  "@7889021945991084119": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "2561564569166996904": "Their open cards in In progress lists, longest time in progress first",
+  "@2561564569166996904": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "8895923666392389603": "Nothing in progress",
+  "@8895923666392389603": {
+    "description": "Team overview empty state",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html",
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "4099284730689700340": "No lists are marked In progress yet — mark them in workspace settings",
+  "@4099284730689700340": {
+    "description": "Team overview empty state",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html",
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "4911019079423033152": "+{$COUNT} more in progress",
+  "@4911019079423033152": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "241222113318658792": "Recently active",
+  "@241222113318658792": {
+    "description": "Team overview section",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "8704314850413710059": "Nothing queued",
+  "@8704314850413710059": {
+    "description": "Team overview Up next empty state",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "4223995742881444072": "Queued cards aren’t visible to you",
+  "@4223995742881444072": {
+    "description": "Team overview Up next empty state",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "2785777493048947568": "No queued cards match this search",
+  "@2785777493048947568": {
+    "description": "Team overview Up next empty state",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "2761580161538136318": "+{$COUNT} more in their queue",
+  "@2761580161538136318": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "3604403583923319665": "Their other open cards, soonest due first",
+  "@3604403583923319665": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "6069680004547866674": "Assigned",
+  "@6069680004547866674": {
+    "description": "Team overview section",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "1147013106987408866": "Nothing else assigned",
+  "@1147013106987408866": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "3825950297491538845": "Recently done",
+  "@3825950297491538845": {
+    "description": "Team overview section",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "3788846870575879602": "No teammates to show",
+  "@3788846870575879602": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "3588126637149797833": "Teammates on the boards in this scope appear here with their open and recent work.",
+  "@3588126637149797833": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "2015467180035437519": "{VAR_PLURAL, plural, one {{INTERPOLATION} teammate has no open cards or recent activity} other {{INTERPOLATION} teammates have no open cards or recent activity}}",
+  "@2015467180035437519": {
+    "description": "Team overview row collapsing teammates with nothing to show",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "2450973332099804953": "Other open cards they moved, created or ticked items on in the last {$days} days",
+  "@2450973332099804953": {
+    "description": "Team overview section tooltip",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "8564853652858345875": "Done {$time}",
+  "@8564853652858345875": {
+    "description": "Overview row note, e.g. \"Done 2h ago\"",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "5249629887488927270": "All their open cards",
+  "@5249629887488927270": {
+    "description": "Team overview stat tooltip",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "6818993069107239962": "{count, plural, one {# in progress longer than the workspace alert} other {# in progress longer than the workspace alert}}",
+  "@6818993069107239962": {
+    "description": "Team overview stat tooltip",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "3979400396303016544": "Their open cards in In progress lists",
+  "@3979400396303016544": {
+    "description": "Team overview stat tooltip",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "5057470079211918533": "Their open cards past due",
+  "@5057470079211918533": {
+    "description": "Team overview stat tooltip",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "5642349890500799643": "Done {$days}d",
+  "@5642349890500799643": {
+    "description": "Team overview stat, cards completed in the last N days",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "3562716030556684161": "Cards they completed in the last {$days} days",
+  "@3562716030556684161": {
+    "description": "Team overview stat tooltip",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "7879894837197960722": "No open cards",
+  "@7879894837197960722": {
+    "description": "Team overview drill-down empty state",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "1575138977612744309": "Nothing overdue",
+  "@1575138977612744309": {
+    "description": "Team overview drill-down empty state",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "1018005099733189631": "Nothing completed in the last {$days} days",
+  "@1018005099733189631": {
+    "description": "Team overview drill-down empty state",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "4875921088778203989": "Open {$person}’s cards",
+  "@4875921088778203989": {
+    "description": "Button opening one teammate's cards",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "6239338747020521018": "{$person}’s cards",
+  "@6239338747020521018": {
+    "description": "Group of one teammate's card counts",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "8225018754533371665": "Loading activity…",
+  "@8225018754533371665": {
+    "description": "Team overview person header",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "7112065803041924038": "Active {$time}",
+  "@7112065803041924038": {
+    "description": "Team overview person header, e.g. \"Active 2h ago\"",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "6986368494983043641": "No activity in {$days} days",
+  "@6986368494983043641": {
+    "description": "Team overview person header",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "8441773592961110476": "Recent activity couldn’t be loaded, so “Recently active” and “Recently done” are empty.",
+  "@8441773592961110476": {
+    "description": "Team overview error",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "4424986872649386272": "Moved {$time}",
+  "@4424986872649386272": {
+    "description": "Overview row note, e.g. \"Moved 2h ago\"",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "8133812027698876021": "Created {$time}",
+  "@8133812027698876021": {
+    "description": "Overview row note, e.g. \"Created 2h ago\"",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "2491475474344804581": "Ticked item {$time}",
+  "@2491475474344804581": {
+    "description": "Overview row note, a checklist item was ticked, e.g. \"Ticked item 2h ago\"",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
     ]
   },
   "2300330839560978971": "you",

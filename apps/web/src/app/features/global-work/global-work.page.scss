@@ -964,6 +964,10 @@ k-work-done-view {
 
 
 .board-priority-note,
+.overview-partial > .ti {
+  color: var(--warning);
+}
+
 .board-move-error {
   display: flex;
   align-items: center;

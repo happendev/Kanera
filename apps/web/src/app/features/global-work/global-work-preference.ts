@@ -311,11 +311,12 @@ export function sanitizeGlobalWorkDefinition(
   // Portfolio is a rollup lens: a summary, plus the table its metric drill-downs land in. It has no
   // board, history, or calendar display, so a stored definition naming one falls back to the summary.
   // The priorities lanes display belongs to the team lens alone: on My Cards the docked panel already
-  // is your one queue, and the portfolio has no queues at all.
+  // is your one queue, and the portfolio has no queues at all. The overview is per-teammate, so it
+  // only exists where there are teammates.
   const allowedDisplays = lens === "portfolio"
     ? new Set(["summary", "table"])
     : lens === "team"
-      ? new Set(["board", "table", "calendar", "priorities", "history"])
+      ? new Set(["board", "table", "calendar", "priorities", "overview", "history"])
       : new Set(["board", "table", "calendar", "history"]);
   const display = allowedDisplays.has(definition.display)
     ? definition.display
@@ -359,7 +360,8 @@ export function sanitizeGlobalWorkDefinition(
     },
     filters: {
       ...definition.filters,
-      assigneeIds: lens === "my" || display === "priorities"
+      // Both whole-team displays render every teammate at once, so a remembered focus is dropped.
+      assigneeIds: lens === "my" || display === "priorities" || display === "overview"
         ? []
         : definition.filters.assigneeIds.filter((id) =>
             peopleIds.has(id) && (lens !== "team" || id !== currentUserId)

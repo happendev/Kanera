@@ -113,6 +113,14 @@ function defaultDefinition(lens: WorkViewLens): WorkViewDefinition {
   };
 }
 
+/**
+ * Displays that are wrong on a partial card set: the board's lane order and "Next" card, and the
+ * overview's per-teammate counts, which would silently under-report from page one.
+ */
+function displayNeedsEveryCard(display: WorkDisplayMode): boolean {
+  return display === "board" || display === "priorities" || display === "overview";
+}
+
 /** The card fields the query projection keeps in sync, whether from a realtime echo or a local edit. */
 export interface VisibleCardPatch {
   id: string;
@@ -489,7 +497,7 @@ export class GlobalWorkState {
       this.otherPriorities.set(priorities);
       this.teamPriorities.set(teamPriorities);
       this.teamPriorityCandidates.set(priorityCandidateCards);
-      if (["board", "priorities"].includes(this.definition().display)) {
+      if (displayNeedsEveryCard(this.definition().display)) {
         await this.loadRemainingCards(version);
       }
       if (this.lens() === "portfolio") {
@@ -627,9 +635,10 @@ export class GlobalWorkState {
     // every count and heatmap with no visible control explaining why.
     const clearSearch = this.lens() === "portfolio" && display === "summary";
     // Priority is the whole-team queue overview. Carrying a hidden teammate filter into it would
-    // leave other lanes without add-card candidates even though their queues are visible.
+    // leave other lanes without add-card candidates even though their queues are visible. The
+    // overview is whole-team by definition too: a focus would silently empty every other panel.
     const clearTeamFocus = this.lens() === "team"
-      && display === "priorities"
+      && (display === "priorities" || display === "overview")
       && this.definition().filters.assigneeIds.length > 0;
     this.definition.update((definition) => ({
       ...definition,
@@ -652,8 +661,15 @@ export class GlobalWorkState {
       void this.queryFirstPage();
       return;
     }
-    if (display === "priorities") {
+    if (display === "priorities" || (display === "overview" && clearTeamFocus)) {
       void this.queryFirstPage();
+    } else if (display === "overview") {
+      // The overview needs every teammate's queue head and the full card set. Both load without
+      // resetting the page, so switching in from the board does not flash a loading state.
+      this.teamPriorityCandidates.set([]);
+      void Promise.all([this.refreshTeamPriorities(this.requestVersion), this.loadRemainingCards(this.requestVersion)])
+        .then(() => this.persistCache())
+        .catch(() => this.error.set($localize`We couldn’t load every card. Try refreshing the page.`));
     } else if (display === "board") {
       this.teamPriorityCandidates.set([]);
       void this.loadRemainingCards(this.requestVersion)
@@ -662,6 +678,22 @@ export class GlobalWorkState {
     } else {
       this.teamPriorityCandidates.set([]);
     }
+  }
+
+  /**
+   * Switch display and teammate focus as one change with one query. Doing it as `setDisplay` then
+   * `setAssignees` would start the new display's paging against the old (whole-team) cursor and
+   * then supersede it, briefly painting everyone's cards under one person's name.
+   */
+  focusTeammate(userId: string, display: WorkDisplayMode): void {
+    this.definition.update((definition) => ({
+      ...definition,
+      display,
+      filters: { ...definition.filters, assigneeIds: [userId] },
+    }));
+    this.persistPreference();
+    this.teamPriorityCandidates.set([]);
+    void this.queryFirstPage();
   }
 
   setPortfolioDays(portfolioDays: number): void {
@@ -1360,7 +1392,7 @@ export class GlobalWorkState {
     ) {
       this.selectedViewId.set(null);
     }
-    if (!atomicCards && ["board", "priorities"].includes(this.definition().display)) {
+    if (!atomicCards && displayNeedsEveryCard(this.definition().display)) {
       await this.loadRemainingCards(version);
     }
     this.cachedAt.set(null);
@@ -1406,8 +1438,16 @@ export class GlobalWorkState {
    * so unlike `loadPriorities` there is no cross-user 403 to absorb here.
    */
   private loadTeamPriorities(): Promise<WorkPriorityQueuesResponse | null> {
-    if (this.lens() !== "team" || this.definition().display !== "priorities") return Promise.resolve(null);
+    // The overview reads each teammate's queue head from the same batch the lanes render.
+    const display = this.definition().display;
+    if (this.lens() !== "team" || (display !== "priorities" && display !== "overview")) return Promise.resolve(null);
     return this.api.get<WorkPriorityQueuesResponse>("/work/priorities");
+  }
+
+  /** Loads the queue batch alone, for entering the overview without re-querying the cards. */
+  private async refreshTeamPriorities(version: number): Promise<void> {
+    const queues = await this.loadTeamPriorities();
+    if (version === this.requestVersion) this.teamPriorities.set(queues);
   }
 
   /**
@@ -1522,7 +1562,7 @@ export class GlobalWorkState {
   private async loadAllCards(version: number): Promise<WorkQueryResponse> {
     // Background refreshes preserve the depth the reader already loaded. Replacing a table or
     // calendar with its first page would remove later rows after any realtime edit.
-    const exhaustive = ["board", "priorities"].includes(this.definition().display);
+    const exhaustive = displayNeedsEveryCard(this.definition().display);
     const targetCount = exhaustive ? 10_000 : Math.max(100, this.response().cards.length);
     // Each continuation cursor carries the ids already returned, so this walk is inherently
     // sequential: one round trip per bounded page. scheduleRealtimeRefresh scales its

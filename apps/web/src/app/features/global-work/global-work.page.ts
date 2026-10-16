@@ -77,6 +77,7 @@ import { BULK_CARD_STORE } from "../board/bulk-card-store";
 import { globalWorkBulkCardStore } from "./global-work-bulk-card-store";
 import { priorityAnchorAt, type PriorityAnchor } from "../../shared/priority-queue/priority-queue-math";
 import { SaveViewPopover } from "./save-view.popover";
+import { TeamOverviewComponent } from "./team-overview.component";
 import { TeamPrioritiesViewComponent, type TeamPriorityReorder } from "./team-priorities-view.component";
 import { UpNextPanelComponent, type UpNextAddableCard } from "./up-next-panel.component";
 import { boardPickerGroups, peoplePickerGroups, savedViewPickerGroups, scopePickerGroups } from "./work-pickers";
@@ -206,6 +207,7 @@ function priorityGroupKey(userId: string): string {
     TooltipDirective,
     WorkDoneViewComponent,
     TeamPrioritiesViewComponent,
+    TeamOverviewComponent,
     UpNextPanelComponent,
     CardComposerDialogComponent,
     GlobalCardDetailHostComponent,
@@ -364,9 +366,15 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     }
     return [
       option("board", "layout-kanban", $localize`:Display option:Board view`, $localize`:Short display option:Board`),
-      // Team only: everyone's Up next queues sit immediately beside the board view, since both are
-      // lane-based ways of reading the same work. My Cards already has the docked single queue.
-      ...(this.lens() === "team" ? [option("priorities", "list-numbers", $localize`:Display option:Up next view`, $localize`:Short display option:Up next`)] : []),
+      // Team only: everyone's Up next queues, then the per-teammate overview, sit immediately beside
+      // the board view, since all three read the same work person by person. My Cards already has
+      // the docked single queue, and an overview of one person is just My Cards.
+      ...(this.lens() === "team"
+        ? [
+            option("priorities", "list-numbers", $localize`:Display option:Up next view`, $localize`:Short display option:Up next`),
+            option("overview", "users-group", $localize`:Display option:Team overview`, $localize`:Short display option:Overview`),
+          ]
+        : []),
       option("table", "table", $localize`:Display option:Table view`, $localize`:Short display option:Table`),
       option("calendar", "calendar", $localize`:Display option:Calendar view`, $localize`:Short display option:Calendar`),
       option("history", "history", $localize`:Display option:Work done`),
@@ -380,9 +388,10 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     if (display === "summary") this.drilldownLabel.set(null);
   }
   // History has no offline query, and the lanes' queues are deliberately not cached (a stale
-  // sequence reads as an instruction) — both fall back to the table over a cached snapshot.
+  // sequence reads as an instruction) — both fall back to the table over a cached snapshot. The
+  // overview is built from both, so it falls back with them.
   readonly effectiveDisplay = computed<WorkDisplayMode>(() =>
-    this.state.cachedAt() && ["history", "priorities"].includes(this.state.definition().display)
+    this.state.cachedAt() && ["history", "priorities", "overview"].includes(this.state.definition().display)
       ? "table"
       : this.state.definition().display
   );
@@ -392,9 +401,12 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   readonly prioritiesOfflineFallback = computed(() =>
     this.state.cachedAt() !== null && this.state.definition().display === "priorities"
   );
-  /** Priority is the whole-team overview; teammate focus is only meaningful on card views. */
+  readonly overviewOfflineFallback = computed(() =>
+    this.state.cachedAt() !== null && this.state.definition().display === "overview"
+  );
+  /** Priority and overview are whole-team displays; teammate focus is only meaningful on card views. */
   readonly showTeammateFilter = computed(() =>
-    this.lens() === "team" && this.effectiveDisplay() !== "priorities"
+    this.lens() === "team" && this.effectiveDisplay() !== "priorities" && this.effectiveDisplay() !== "overview"
   );
 
   readonly organisationsById = computed(() =>
@@ -1519,6 +1531,15 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     return "";
   }
 
+  /**
+   * From the overview into one teammate's own board: the focused board display is where the whole
+   * of their work, their separators and their docked Up next can actually be curated.
+   */
+  focusTeammate(userId: string): void {
+    if (!this.state.interactionReady()) return;
+    this.state.focusTeammate(userId, "board");
+  }
+
   selectTeamPerson(userId: string): void {
     this.closeMenu("team");
     this.state.setAssignees(userId ? [userId] : []);
@@ -1676,8 +1697,10 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     && this.state.cachedAt() === null
     && this.effectiveDisplay() !== "history"
     && this.effectiveDisplay() !== "summary"
-    // The lanes display *is* every queue; a docked copy of one of them beside it is noise.
+    // The lanes display *is* every queue; a docked copy of one of them beside it is noise. The
+    // overview already shows every teammate's queue head.
     && this.effectiveDisplay() !== "priorities"
+    && this.effectiveDisplay() !== "overview"
   );
   /** The dock is a board curation tool; every other display keeps its own full-width reading mode. */
   readonly showUpNextControl = computed(() =>

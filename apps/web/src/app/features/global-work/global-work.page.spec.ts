@@ -1397,13 +1397,13 @@ describe("GlobalWorkPage toolbar state", () => {
     });
   });
 
-  it("places the team Priority view immediately after Board", () => {
+  it("places the team Priority view and overview immediately after Board", () => {
     return mount().then(({ fixture }) => {
       fixture.componentRef.setInput("lens", "team");
       TestBed.tick();
 
       expect(fixture.componentInstance.displayOptions().map((option) => option.id))
-        .toEqual(["board", "priorities", "table", "calendar", "history"]);
+        .toEqual(["board", "priorities", "overview", "table", "calendar", "history"]);
       expect(fixture.componentInstance.showTeammateFilter()).toBe(true);
       expect(fixture.componentInstance.showUpNextControl()).toBe(true);
 
@@ -1411,6 +1411,14 @@ describe("GlobalWorkPage toolbar state", () => {
       TestBed.tick();
       expect(fixture.componentInstance.showTeammateFilter()).toBe(false);
       expect(fixture.componentInstance.showUpNextControl()).toBe(false);
+
+      // The overview is whole-team too: no teammate focus and no docked queue beside it.
+      fixture.componentInstance.state.definition.update((current) => ({ ...current, display: "overview" }));
+      TestBed.tick();
+      expect(fixture.componentInstance.showTeammateFilter()).toBe(false);
+      expect(fixture.componentInstance.upNextAvailable()).toBe(false);
+      fixture.componentInstance.state.definition.update((current) => ({ ...current, display: "priorities" }));
+      TestBed.tick();
 
       fixture.componentInstance.state.definition.update((current) => ({ ...current, display: "table" }));
       TestBed.tick();
