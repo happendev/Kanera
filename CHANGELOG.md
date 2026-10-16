@@ -31,6 +31,7 @@ All notable changes to Kanera are documented here.
 
 ### Fixed
 
+- Closing a profile while it is still loading no longer causes an Angular error when the response arrives.
 - Board mirrors now copy attachments uploaded by guests from another organisation, instead of failing to find the file and retrying the card indefinitely. A card that still can't sync (for example, its source file is gone) stops retrying after about a day and resumes when the source card changes or the mirror is resumed; one broken card no longer holds up the rest of the mirror.
 - Emails to reserved test domains (`.test`, `.example`, `example.com` and similar) are no longer sent from production, and a recipient the mail server permanently refuses is marked failed straight away instead of being retried.
 - Self-hosted monitoring: Alloy no longer re-sends old container logs that Loki rejects after a restart, and a new alert catches log entries Loki rejects (4xx) or Alloy drops, which the 5xx alert missed.

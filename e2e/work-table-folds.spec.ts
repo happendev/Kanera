@@ -21,6 +21,9 @@ test("Global Work table folds survive saving a view, reloading and realtime refr
     await signIn(page, "amelia");
     await page.goto("/my-cards");
     await page.getByRole("button", { name: "Table view", exact: true }).click();
+    // Earlier specs leave more cards than the first query page or table render cap can show.
+    // Scope this fold-persistence check to its own card, including after saving and reloading.
+    await page.getByRole("searchbox", { name: "Search cards" }).fill(title);
     const row = page.locator(`.tv-row[data-card-id="${card.id}"]`);
     await expect(row).toBeVisible();
     await page.locator("button.k-toolbar-trigger").filter({ has: page.locator(".ti-layout-rows") }).click();
