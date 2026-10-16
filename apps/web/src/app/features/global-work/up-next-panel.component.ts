@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from "@angular/core";
+import { CdkDrag, CdkDropList } from "@angular/cdk/drag-drop";
 import type { WorkCatalog, WorkPrioritiesResponse } from "@kanera/shared/dto";
 import { AnchoredPickerPopover } from "../../shared/anchored-picker.popover";
 import { CardKeyDisplayService } from "../../shared/card-key-display.service";
@@ -11,6 +12,8 @@ import {
 } from "../../shared/priority-queue/priority-queue.component";
 import { TooltipDirective } from "../../shared/tooltip.directive";
 import { icu } from "../../core/i18n/icu";
+import { CardDragCoordinator } from "../board/card-drag-coordinator.service";
+import { formatDueDate, isDueSoon, isOverdue } from "../board/due-date.util";
 
 export type { PriorityAnchor, PriorityReorder };
 /**
@@ -34,12 +37,13 @@ export type UpNextAddableCard = PriorityAddableCard;
 @Component({
   selector: "k-up-next-panel",
   standalone: true,
-  imports: [AnchoredPickerPopover, PriorityQueueComponent, TooltipDirective],
+  imports: [AnchoredPickerPopover, CdkDrag, CdkDropList, PriorityQueueComponent, TooltipDirective],
   templateUrl: "./up-next-panel.component.html",
   styleUrl: "./up-next-panel.component.scss",
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class UpNextPanelComponent {
+  private readonly cardDrag = inject(CardDragCoordinator);
   protected readonly showCardKeys = inject(CardKeyDisplayService).showCardKeys;
 
   readonly priorities = input<WorkPrioritiesResponse | null>(null);
@@ -96,4 +100,97 @@ export class UpNextPanelComponent {
     this.headAddOpen.set(false);
     this.added.emit({ cardId, beforeId: null });
   }
+
+  /* ── Not queued ──────────────────────────────────────────────────────────────
+   *
+   * The person's open cards that are not in Up next yet, listed under the queue. Sequencing someone's
+   * work is choosing among what they already own, so the candidates sit in view instead of behind a
+   * search picker. It is the same pool the picker offers (`addableCards`), so the two always agree.
+   */
+
+  protected readonly emptyHint = $localize`:Empty state hint in the Up next panel; Not queued is the list heading below:Drag a card up from Not queued, or press + beside it, to say what gets done first.`;
+
+  /** The queue's drop list, which accepts these rows as it accepts board tiles. */
+  protected readonly queueDropListId = "up-next-drop";
+  readonly notQueuedCollapsed = signal(false);
+
+  /**
+   * Board sections in the order the host supplies them (sidebar order), and due date first inside
+   * each: this list exists to decide what comes next, which nobody does from titles alone.
+   */
+  readonly notQueuedGroups = computed<NotQueuedGroup[]>(() => {
+    const now = new Date();
+    const groups = new Map<string, NotQueuedGroup>();
+    for (const card of this.addableCards()) {
+      const group = groups.get(card.boardId) ?? {
+        boardId: card.boardId,
+        boardName: card.boardName,
+        boardIconClass: `ti ti-${card.boardIcon ?? "layout-kanban"}`,
+        boardIconColor: card.boardIconColor ? `var(--color-${card.boardIconColor})` : null,
+        rows: [],
+      };
+      group.rows.push({
+        card,
+        // A drag payload in the board tile's shape, which is the only shape the queue accepts.
+        dragData: { kind: "card", card: { id: card.id } },
+        listIconClass: `ti ti-${card.listIcon ?? "list"}`,
+        listColor: card.listColor ? `var(--color-${card.listColor})` : null,
+        due: card.dueDateLocalDate ? formatDueDate(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone) : null,
+        overdue: isOverdue(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone, now),
+        dueSoon: isDueSoon(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone, now),
+      });
+      groups.set(card.boardId, group);
+    }
+    // Stable sort, so undated cards keep the host's list-then-position order among themselves.
+    for (const group of groups.values()) {
+      group.rows.sort((a, b) => dueKey(a.card).localeCompare(dueKey(b.card)));
+    }
+    return [...groups.values()];
+  });
+
+  readonly notQueuedTooltip = computed(() => this.atCapacity()
+    ? icu($localize`:Tooltip on a disabled add button when the Up next queue is full:Full at {count, plural, one {# card} other {# cards}}`, { count: this.maxEntries() })
+    : $localize`:Tooltip, add a card to the end of Up next:Add to the end of Up next`);
+
+  notQueuedToggleLabel(collapsed: boolean): string {
+    return collapsed
+      ? $localize`:Button that shows the Not queued list in the Up next panel:Show cards not in Up next`
+      : $localize`:Button that hides the Not queued list in the Up next panel:Hide cards not in Up next`;
+  }
+
+  onNotQueuedAdd(cardId: string): void {
+    this.added.emit({ cardId, beforeId: null });
+  }
+
+  // Registered like the queue's own drags, so a realtime refresh waits for the drop to settle.
+  onNotQueuedDragStarted(): void {
+    this.cardDrag.start("up-next-not-queued");
+  }
+
+  onNotQueuedDragEnded(): void {
+    this.cardDrag.end();
+  }
+}
+
+type NotQueuedRow = {
+  card: UpNextAddableCard;
+  dragData: { kind: "card"; card: { id: string } };
+  listIconClass: string;
+  listColor: string | null;
+  due: string | null;
+  overdue: boolean;
+  dueSoon: boolean;
+};
+
+type NotQueuedGroup = {
+  boardId: string;
+  boardName: string;
+  boardIconClass: string;
+  boardIconColor: string | null;
+  rows: NotQueuedRow[];
+};
+
+/** ISO dates sort as strings; undated cards go last. */
+function dueKey(card: UpNextAddableCard): string {
+  return card.dueDateLocalDate ?? "9999-12-31";
 }

@@ -216,6 +216,52 @@ describe("PriorityQueueComponent", () => {
     expect(fixture.componentInstance.isDraggable(queue.items[0]!)).toBe(true);
   });
 
+  /**
+   * A run of redacted entries renders as one row, so rendered indices stop matching queue indices.
+   * The failure this guards: a drop or step resolving against the wrong entry, sending the server an
+   * anchor that lands the card a few places away from where it was released.
+   */
+  describe("with a run of locked entries", () => {
+    const run = {
+      items: [entry("p1", 1, true), entry("p2", 2, false), entry("p3", 3, false), entry("p4", 4, false), entry("p5", 5, true)],
+      totalCount: 5,
+      hiddenCount: 3,
+    };
+
+    it("collapses the run into one row numbered with its first rank", () => {
+      const fixture = setup(run);
+      const host = fixture.nativeElement as HTMLElement;
+      expect([...host.querySelectorAll(".row-rank")].map((element) => element.textContent?.trim()))
+        .toEqual(["1", "2", "5"]);
+      expect(host.querySelector(".row-locked")?.textContent).toContain("3 cards you don’t have access to");
+    });
+
+    it("maps drops and steps across the collapsed row back to queue anchors", () => {
+      const fixture = setup(run);
+      const emitted: PriorityReorder[] = [];
+      fixture.componentInstance.reordered.subscribe((event) => emitted.push(event));
+
+      // #5 dropped between #1 and the locked row: above the whole run.
+      fixture.componentInstance.onDrop(drop(2, 1));
+      expect(emitted.at(-1)).toEqual({ priorityId: "p5", afterId: "p1" });
+      // #1 dropped between the locked row and #5: below the whole run.
+      fixture.componentInstance.onDrop(drop(0, 1));
+      expect(emitted.at(-1)).toEqual({ priorityId: "p1", beforeId: "p5" });
+      // One step passes the whole run, never splitting it.
+      fixture.componentInstance.moveBy(run.items[0]!, 1);
+      expect(emitted.at(-1)).toEqual({ priorityId: "p1", beforeId: "p5" });
+      fixture.componentInstance.moveBy(run.items[4]!, -1);
+      expect(emitted.at(-1)).toEqual({ priorityId: "p5", afterId: "p1" });
+    });
+
+    it("counts every collapsed entry when a truncated surface says how many more there are", () => {
+      const fixture = setup(run);
+      fixture.componentRef.setInput("visibleLimit", 2);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.hiddenByLimit()).toBe(1);
+    });
+  });
+
   it("is read-only when the viewer may not curate this queue", () => {
     const fixture = setup({ canReorder: false });
     expect(fixture.componentInstance.canReorder()).toBe(false);

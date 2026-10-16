@@ -38,7 +38,7 @@ void test("protected routes reject malformed bearer tokens", async () => {
   });
 
   assert.equal(response.statusCode, 401);
-  assert.deepEqual(response.json(), { code: "UNAUTHORIZED", message: "unauthorized" });
+  assert.deepEqual(response.json(), { code: "UNAUTHORIZED", message: "unauthorized", reason: "token_invalid" });
 });
 
 void test("protected routes reject JWTs signed with the wrong secret", async () => {
@@ -55,7 +55,7 @@ void test("protected routes reject JWTs signed with the wrong secret", async () 
   });
 
   assert.equal(response.statusCode, 401);
-  assert.deepEqual(response.json(), { code: "UNAUTHORIZED", message: "unauthorized" });
+  assert.deepEqual(response.json(), { code: "UNAUTHORIZED", message: "unauthorized", reason: "token_invalid" });
 });
 
 void test("protected routes expose valid JWT claims on req.auth", async () => {
@@ -75,4 +75,34 @@ void test("protected routes expose valid JWT claims on req.auth", async () => {
   assert.equal(auth.role, "admin");
   assert.equal(typeof auth.iat, "number");
   assert.equal(typeof auth.exp, "number");
+});
+
+// The web client renews on any 401, so the reason is what lets logs and metrics tell routine
+// five-minute expiry apart from a request that never carried, or carried a forged, credential.
+void test("protected routes report an expired access token as token_expired", async () => {
+  const app = await buildAuthPluginTestServer();
+  const { env } = await import("../env.js");
+  const issuedAt = Math.floor(Date.now() / 1000) - 600;
+  const expiredToken = signJwtWithSecret(
+    { sub: "user-1", cid: "client-1", role: "member", iat: issuedAt, exp: issuedAt + 300 },
+    env.JWT_SECRET,
+  );
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/protected",
+    headers: { authorization: `Bearer ${expiredToken}` },
+  });
+
+  assert.equal(response.statusCode, 401);
+  assert.deepEqual(response.json(), { code: "UNAUTHORIZED", message: "unauthorized", reason: "token_expired" });
+});
+
+void test("protected routes report a request without a bearer token as no_token", async () => {
+  const app = await buildAuthPluginTestServer();
+
+  const response = await app.inject({ method: "GET", url: "/protected" });
+
+  assert.equal(response.statusCode, 401);
+  assert.deepEqual(response.json(), { code: "UNAUTHORIZED", message: "unauthorized", reason: "no_token" });
 });

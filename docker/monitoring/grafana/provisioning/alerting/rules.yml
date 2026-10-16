@@ -132,6 +132,37 @@ groups:
   # Meta-monitoring: the monitoring stack and host watching themselves. Without these, a dead exporter,
   # a stuck Prometheus, a failing log pipeline, or a filling disk would go unnoticed precisely when you
   # need the data most.
+
+      # Terminal email failures leave the queue, so queue depth alone looks healthy while mail is
+      # lost. "rejected" is a recipient refused by SMTP (5xx to RCPT TO); "error" is retries
+      # exhausted. Reserved-domain recipients count as "suppressed" and deliberately do not alert.
+      - uid: kanera-email-terminal-failures
+        title: Emails failed permanently
+        condition: C
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: "Queued emails were rejected by SMTP or exhausted their retries in the last hour (see email_queue.last_error)"
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: sum(increase(kanera_notification_delivery_total{queue="email",outcome=~"error|rejected"}[1h])) or vector(0)
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
   - orgId: 1
     name: kanera-monitoring
     folder: Kanera Alerts
@@ -265,6 +296,35 @@ groups:
               refId: A
               instant: true
               expr: sum(rate(loki_request_duration_seconds_count{status_code=~"5.."}[5m]))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+
+      # The 5xx rule above misses write rejections: Loki answers old, out-of-order or rate-limited
+      # pushes with 4xx. Count what Loki discarded and what Alloy gave up on, by any reason.
+      - uid: kanera-loki-rejected-writes
+        title: Log entries rejected or dropped
+        condition: C
+        for: 0s
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: "Loki discarded or Alloy dropped log entries in the last 10m (replayed old logs, out-of-order or rate-limited writes)"
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: (sum(increase(loki_discarded_samples_total[10m])) or vector(0)) + (sum(increase(loki_write_dropped_entries_total[10m])) or vector(0))
           - refId: C
             datasourceUid: __expr__
             model:

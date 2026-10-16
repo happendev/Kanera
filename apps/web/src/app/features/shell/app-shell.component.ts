@@ -945,8 +945,11 @@ export class AppShellComponent implements OnInit, OnDestroy {
     const leaveWorkspaces = groups.map((g) => this.sockets.joinWorkspace(g.workspace.id));
     void this.registerPushForEligibleBrowser();
     const handlers: Partial<ServerToClientEvents> = {
-      "client:updated": ({ name, logoUrl }) => {
-        this.auth.updateUser((u) => ({ ...u, orgName: name, logoUrl }));
+      "client:updated": ({ clientId, name, logoUrl, inProgressEnabled }) => {
+        if (clientId !== this.user()?.clientId) return;
+        this.auth.updateUser((u) => ({ ...u, orgName: name, logoUrl,
+          ...(inProgressEnabled !== undefined ? { inProgressEnabled } : {}),
+        }));
       },
       "standaloneBoardGroup:upserted": ({ group }) => {
         this.standaloneBoardGroups.update((groups) => [...groups.filter((item) => item.id !== group.id), group]

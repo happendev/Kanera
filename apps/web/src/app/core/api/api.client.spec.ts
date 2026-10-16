@@ -1,8 +1,9 @@
 import { provideZonelessChangeDetection, signal } from "@angular/core";
 import { TestBed } from "@angular/core/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AuthService } from "../auth/auth.service";
+import { AuthService, type AuthUser } from "../auth/auth.service";
 import { SocketService } from "../realtime/socket.service";
+import { viewerTimeZone } from "../../shared/day-key.util";
 import { ApiClient, ApiError, ORGANISATION_SWITCH_NAVIGATOR } from "./api.client";
 
 class MockXmlHttpRequest extends EventTarget {
@@ -44,6 +45,7 @@ class MockXmlHttpRequest extends EventTarget {
 describe("ApiClient organisation recovery", () => {
   const auth = {
     getAccessToken: vi.fn(() => "client-1-token"),
+    getFreshAccessToken: vi.fn(async () => auth.getAccessToken()),
     refresh: vi.fn(),
     switchOrg: vi.fn(async () => ({ clientId: "client-2" })),
     organisationSwitchPending: signal(false),
@@ -125,6 +127,7 @@ describe("ApiClient organisation recovery", () => {
       onProgress,
       signal: controller.signal,
     });
+    await vi.waitFor(() => expect(MockXmlHttpRequest.instances).toHaveLength(1));
     const xhr = MockXmlHttpRequest.instances[0]!;
 
     xhr.upload.dispatchEvent(new ProgressEvent("progress", { lengthComputable: true, loaded: 3, total: 4 }));
@@ -154,6 +157,7 @@ describe("ApiClient organisation recovery", () => {
     vi.stubGlobal("XMLHttpRequest", MockXmlHttpRequest);
     const controller = new AbortController();
     const upload = TestBed.inject(ApiClient).upload("/attachments", new FormData(), { signal: controller.signal });
+    await vi.waitFor(() => expect(MockXmlHttpRequest.instances).toHaveLength(1));
     const xhr = MockXmlHttpRequest.instances[0]!;
 
     controller.abort();
@@ -164,8 +168,10 @@ describe("ApiClient organisation recovery", () => {
 
   it("refreshes once and retries an upload after a 401", async () => {
     vi.stubGlobal("XMLHttpRequest", MockXmlHttpRequest);
+    auth.getAccessToken.mockReset().mockReturnValue("client-1-token");
     auth.refresh.mockResolvedValueOnce("fresh-token");
     const upload = TestBed.inject(ApiClient).upload<{ id: string }>("/attachments", new FormData());
+    await vi.waitFor(() => expect(MockXmlHttpRequest.instances).toHaveLength(1));
     const first = MockXmlHttpRequest.instances[0]!;
     first.status = 401;
     first.responseText = JSON.stringify({ message: "expired" });
@@ -180,6 +186,195 @@ describe("ApiClient organisation recovery", () => {
     await expect(upload).resolves.toEqual({ id: "attachment-1" });
     expect(auth.refresh).toHaveBeenCalledTimes(1);
     expect(second.headers.get("Authorization")).toBe("Bearer fresh-token");
+  });
+});
+
+function accessToken(label: string, issuedAtSeconds: number, lifetimeSeconds = 300): string {
+  const part = (value: unknown) => btoa(JSON.stringify(value)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return `${part({ alg: "HS256", typ: "JWT" })}.${part({ sub: "user-1", label, iat: issuedAtSeconds, exp: issuedAtSeconds + lifetimeSeconds })}.signature`;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
+class RefreshingAuthService extends AuthService {
+  readonly refreshTokens: string[] = [];
+  readonly refreshCalls = vi.fn();
+
+  protected override request(input: RequestInfo | URL): Promise<Response> {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (!url.endsWith("/auth/refresh")) return Promise.resolve(new Response("{}"));
+    this.refreshCalls();
+    const token = this.refreshTokens.shift();
+    return Promise.resolve(token
+      ? new Response(JSON.stringify({ accessToken: token, user: sessionUser() }))
+      : new Response(JSON.stringify({ code: "UNAUTHORIZED" }), { status: 401 }));
+  }
+}
+
+function sessionUser(): AuthUser {
+  // Matching timezone and a chosen locale keep installSession from issuing its own /auth/me writes.
+  return {
+    id: "user-1", clientId: "client-1", email: "me@example.com", displayName: "Me", avatarUrl: null,
+    orgName: "Kanera", logoUrl: null, deploymentMode: "self_hosted", hasWorkspace: true, role: "member",
+    timezone: viewerTimeZone(), locale: "en-US",
+  };
+}
+
+/**
+ * Access tokens live five minutes. Long-lived tabs fire requests on their own (socket events, focus
+ * refetches, a tab resumed from suspension), and without early renewal each one spent a 401
+ * round-trip before refreshing. These run the real AuthService so expiry, single-flight refresh and
+ * the rotated-token reuse are exercised together.
+ */
+describe("ApiClient access-token renewal", { concurrent: false }, () => {
+  const T0 = new Date("2026-10-16T09:00:00Z");
+  const t0Seconds = T0.getTime() / 1000;
+  let auth: RefreshingAuthService;
+  let fetch: ReturnType<typeof vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>>;
+  const sentTokens = () => fetch.mock.calls.map(([, init]) => new Headers(init?.headers).get("Authorization"));
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(T0);
+    auth = new RefreshingAuthService();
+    fetch = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>()
+      .mockImplementation(async () => new Response(JSON.stringify({ count: 0 })));
+    vi.stubGlobal("fetch", fetch);
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        ApiClient,
+        { provide: AuthService, useValue: auth },
+        { provide: SocketService, useValue: { displayedOnline: () => true } },
+        { provide: ORGANISATION_SWITCH_NAVIGATOR, useValue: vi.fn() },
+      ],
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    localStorage.removeItem("kanera:offline-identity");
+  });
+
+  it("sends a token with time to spare as is", async () => {
+    const tokenA = accessToken("a", t0Seconds);
+    auth.setSession(tokenA, sessionUser());
+    vi.setSystemTime(T0.getTime() + 240_000);
+
+    await TestBed.inject(ApiClient).get("/notifications/unread-count");
+
+    expect(auth.refreshCalls).not.toHaveBeenCalled();
+    expect(sentTokens()).toEqual([`Bearer ${tokenA}`]);
+  });
+
+  it("renews a token inside the expiry margin before sending, so no 401 is spent", async () => {
+    const tokenB = accessToken("b", t0Seconds + 280);
+    auth.setSession(accessToken("a", t0Seconds), sessionUser());
+    auth.refreshTokens.push(tokenB);
+    vi.setSystemTime(T0.getTime() + 280_000);
+
+    await TestBed.inject(ApiClient).get("/notifications/unread-count");
+
+    expect(auth.refreshCalls).toHaveBeenCalledTimes(1);
+    expect(sentTokens()).toEqual([`Bearer ${tokenB}`]);
+  });
+
+  it("renews once for a burst of requests from a tab resumed after the token lapsed", async () => {
+    const tokenB = accessToken("b", t0Seconds + 900);
+    auth.setSession(accessToken("a", t0Seconds), sessionUser());
+    auth.refreshTokens.push(tokenB);
+    vi.setSystemTime(T0.getTime() + 900_000);
+    const api = TestBed.inject(ApiClient);
+
+    await Promise.all([
+      api.get("/notifications/unread-count"),
+      api.get("/notifications/inbox-count"),
+      api.get("/work/priorities/user-1"),
+    ]);
+
+    expect(auth.refreshCalls).toHaveBeenCalledTimes(1);
+    expect(sentTokens()).toEqual([`Bearer ${tokenB}`, `Bearer ${tokenB}`, `Bearer ${tokenB}`]);
+  });
+
+  it("measures the lifetime from receipt, so a fast device clock does not renew every request", async () => {
+    // Device clock ten minutes ahead of the server: the token's exp is already in the local past.
+    const skewed = accessToken("a", t0Seconds - 600);
+    auth.setSession(skewed, sessionUser());
+
+    await TestBed.inject(ApiClient).get("/notifications/unread-count");
+
+    expect(auth.refreshCalls).not.toHaveBeenCalled();
+    expect(sentTokens()).toEqual([`Bearer ${skewed}`]);
+  });
+
+  it("retries a 401 with a token another caller already rotated instead of refreshing again", async () => {
+    const tokenA = accessToken("a", t0Seconds);
+    const tokenB = accessToken("b", t0Seconds + 10);
+    auth.setSession(tokenA, sessionUser());
+    auth.refreshTokens.push(tokenB);
+    const firstResponse = deferred<Response>();
+    fetch.mockImplementationOnce(() => firstResponse.promise);
+
+    const request = TestBed.inject(ApiClient).get<{ count: number }>("/notifications/unread-count");
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    // Another caller renews while the first request is in flight; the server then rejects tokenA.
+    await expect(auth.refresh()).resolves.toBe(tokenB);
+    firstResponse.resolve(new Response(JSON.stringify({ code: "UNAUTHORIZED", reason: "token_expired" }), { status: 401 }));
+
+    await expect(request).resolves.toEqual({ count: 0 });
+    expect(auth.refreshCalls).toHaveBeenCalledTimes(1);
+    expect(sentTokens()).toEqual([`Bearer ${tokenA}`, `Bearer ${tokenB}`]);
+  });
+
+  it("still refreshes and retries once when the rejected token is the current one", async () => {
+    const tokenA = accessToken("a", t0Seconds);
+    const tokenB = accessToken("b", t0Seconds + 10);
+    auth.setSession(tokenA, sessionUser());
+    auth.refreshTokens.push(tokenB);
+    fetch.mockImplementationOnce(async () => new Response(JSON.stringify({ code: "UNAUTHORIZED" }), { status: 401 }));
+
+    await TestBed.inject(ApiClient).get("/notifications/unread-count");
+
+    expect(auth.refreshCalls).toHaveBeenCalledTimes(1);
+    expect(sentTokens()).toEqual([`Bearer ${tokenA}`, `Bearer ${tokenB}`]);
+  });
+
+  it("sends a support-session token unchanged, since it has no refresh companion", async () => {
+    const supportToken = accessToken("support", t0Seconds);
+    auth.enterSupportSession(supportToken, sessionUser(), { sessionId: "support-1", orgName: "Customer" });
+    vi.setSystemTime(T0.getTime() + 290_000);
+
+    await TestBed.inject(ApiClient).get("/notifications/unread-count");
+
+    expect(auth.refreshCalls).not.toHaveBeenCalled();
+    expect(sentTokens()).toEqual([`Bearer ${supportToken}`]);
+  });
+
+  it("renews before an upload too", async () => {
+    vi.stubGlobal("XMLHttpRequest", MockXmlHttpRequest);
+    MockXmlHttpRequest.instances = [];
+    const tokenB = accessToken("b", t0Seconds + 290);
+    auth.setSession(accessToken("a", t0Seconds), sessionUser());
+    auth.refreshTokens.push(tokenB);
+    vi.setSystemTime(T0.getTime() + 290_000);
+
+    const upload = TestBed.inject(ApiClient).upload<{ id: string }>("/attachments", new FormData());
+    await vi.waitFor(() => expect(MockXmlHttpRequest.instances).toHaveLength(1));
+    const xhr = MockXmlHttpRequest.instances[0]!;
+    xhr.status = 201;
+    xhr.responseText = JSON.stringify({ id: "attachment-1" });
+    xhr.dispatchEvent(new Event("load"));
+
+    await expect(upload).resolves.toEqual({ id: "attachment-1" });
+    expect(auth.refreshCalls).toHaveBeenCalledTimes(1);
+    expect(xhr.headers.get("Authorization")).toBe(`Bearer ${tokenB}`);
   });
 });
 

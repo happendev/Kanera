@@ -717,6 +717,8 @@ export class WorkspaceSettingsPage implements OnDestroy {
   readonly generalSettingsError = signal<string | null>(null);
   readonly completedCardsActiveDaysDraft = signal(DEFAULT_COMPLETED_CARDS_ACTIVE_DAYS);
   readonly inactiveCardsDaysDraft = signal(DEFAULT_INACTIVE_CARDS_DAYS);
+  readonly organisationInProgressEnabled = signal(true);
+  readonly progressSettingsEnabled = computed(() => this.organisationInProgressEnabled() && (!this.isStandalone() || this.boardList().some((board) => board.inProgressEnabled)));
   readonly inProgressAlertDaysDraft = signal(DEFAULT_IN_PROGRESS_ALERT_DAYS);
   /** The zone whose working hours time in progress counts (09:00-17:00, Monday to Friday). */
   readonly timeZoneDraft = signal("UTC");
@@ -1182,7 +1184,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
   }
 
   async reload(workspaceId = this.workspaceId()) {
-    const detail = await this.api.get<{ workspace: Workspace; role: WorkspaceRole; lists: List[]; customFields: WireCustomField[]; cardLabels: WireCardLabel[]; checklistTemplates: WireChecklistTemplate[]; automations: WireAutomation[]; automationExecutionsRemaining: number | null }>(`/workspaces/${workspaceId}`);
+    const detail = await this.api.get<{ organisationInProgressEnabled?: boolean; workspace: Workspace; role: WorkspaceRole; lists: List[]; customFields: WireCustomField[]; cardLabels: WireCardLabel[]; checklistTemplates: WireChecklistTemplate[]; automations: WireAutomation[]; automationExecutionsRemaining: number | null }>(`/workspaces/${workspaceId}`);
     const ws = { ...detail.workspace, role: detail.role } as Workspace & { role: WorkspaceRole };
     const canManageApi = detail.role === "admin" || this.auth.isOrgAdmin();
     const [members, orgUsers, boards, boardGroups] = await Promise.all([
@@ -1200,6 +1202,7 @@ export class WorkspaceSettingsPage implements OnDestroy {
       ])
       : [[] as WorkspaceApiKeyRow[], [] as AgentConnectionRow[], [] as WebhookEndpointRow[], null];
     if (workspaceId !== this.workspaceId()) return;
+    this.organisationInProgressEnabled.set(detail.organisationInProgressEnabled !== false);
     this.applyWorkspace(ws, true);
     this.lists.set([...detail.lists].sort(byPosition));
     this.fields.set([...detail.customFields].sort(byPosition));
@@ -1381,7 +1384,9 @@ export class WorkspaceSettingsPage implements OnDestroy {
         this.boardList.update((bs) => bs.some((b) => b.id === board.id) ? bs : sortBoards([...bs, board as unknown as Board]));
         this.upsertGuestBoard(board as unknown as Board);
       },
-      "board:updated": ({ board }) => {
+      "board:updated": ({ board, organisationInProgressEnabled }) => {
+        if (!matchWs(board.workspaceId)) return;
+        if (organisationInProgressEnabled !== undefined) this.organisationInProgressEnabled.set(organisationInProgressEnabled);
         const updated = board as unknown as Board;
         if (updated.archivedAt) {
           this.boardList.update((bs) => bs.filter((b) => b.id !== updated.id));
@@ -3592,6 +3597,20 @@ export class WorkspaceSettingsPage implements OnDestroy {
     this.boardList.update((bs) => bs.map((b) => (b.id === id ? { ...b, icon } : b)));
     await this.api.patch<Board>(`/boards/${id}`, { icon });
     this.guestBoards.update((boards) => boards.map((board) => board.id === id ? { ...board, icon } : board));
+  }
+
+  readonly progressBoardSaving = signal<string | null>(null);
+  async updateBoardInProgress(id: string, enabled: boolean, input?: HTMLInputElement) {
+    const previous = this.boardList().find((board) => board.id === id)?.inProgressEnabled ?? true;
+    this.generalSettingsError.set(null);
+    this.progressBoardSaving.set(id);
+    try {
+      const board = await this.autosave.track(() => this.api.patch<Board>(`/boards/${id}`, { inProgressEnabled: enabled }));
+      this.boardList.update((items) => items.map((item) => item.id === id ? board : item));
+    } catch (err) {
+      if (input) input.checked = previous;
+      this.generalSettingsError.set(extractErrorMessage(err));
+    } finally { this.progressBoardSaving.set(null); }
   }
 
   async updateBoardColor(id: string, iconColor: ColorToken | null) {

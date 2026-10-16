@@ -5290,6 +5290,7 @@
     "x-files": [
       "src/app/features/account-settings/notifications/notifications.page.html",
       "src/app/features/board/card-activity.component.html",
+      "src/app/features/global-work/team-overview.component.html",
       "src/app/features/workspace-settings/integrations/integrations.page.html"
     ]
   },
@@ -5697,6 +5698,28 @@
   "@5536494665625548839": {
     "x-files": [
       "src/app/features/account-settings/org/org.page.html"
+    ]
+  },
+  "3911817769522706118": "Time in progress",
+  "@3911817769522706118": {
+    "x-files": [
+      "src/app/features/account-settings/org/org.page.html",
+      "src/app/features/board/table-view/table-columns.util.ts",
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "4269318564728384576": "Track active work across this organisation. Turning it off pauses clocks and hides progress features on every board. Recorded time is kept. Boards can also opt out individually.",
+  "@4269318564728384576": {
+    "x-files": [
+      "src/app/features/account-settings/org/org.page.html"
+    ]
+  },
+  "4387535478780037275": "Enable in progress",
+  "@4387535478780037275": {
+    "x-files": [
+      "src/app/features/account-settings/org/org.page.html",
+      "src/app/features/workspace-settings/boards/boards.page.html",
+      "src/app/features/workspace-settings/general/general.page.html"
     ]
   },
   "2547571169649786686": "Danger zone",
@@ -7695,6 +7718,7 @@
       "src/app/features/completed-cards/completed-cards-panel.component.html",
       "src/app/features/global-work/global-card-detail-host.component.ts",
       "src/app/features/global-work/save-view.popover.ts",
+      "src/app/features/global-work/team-overview.component.html",
       "src/app/features/global-work/up-next-panel.component.html",
       "src/app/features/notes/notes-view.component.ts",
       "src/app/features/scratchpad/scratchpad-panel.component.html",
@@ -8529,6 +8553,7 @@
       "src/app/features/board/table-view/filter-bar.component.ts",
       "src/app/features/board/table-view/table-view.types.ts",
       "src/app/features/global-work/global-work.page.ts",
+      "src/app/features/global-work/team-overview.component.ts",
       "src/app/features/home/home.page.html",
       "src/app/features/home/home.state.ts",
       "src/app/shared/user-profile/user-profile-popover.component.html"
@@ -8573,6 +8598,8 @@
       "src/app/features/board/card-detail.component.html",
       "src/app/features/board/table-view/filter-bar.component.ts",
       "src/app/features/global-work/global-work.page.ts",
+      "src/app/features/global-work/team-overview.component.html",
+      "src/app/features/global-work/team-overview.component.ts",
       "src/app/features/onboarding/onboarding.page.html",
       "src/app/features/workspace-settings/lists/lists.page.html",
       "src/app/features/workspace-settings/workspace-settings.page.ts"
@@ -9410,7 +9437,8 @@
   "@8411907789677252899": {
     "description": "Button - show the cards hidden in a calendar day",
     "x-files": [
-      "src/app/features/board/calendar-view/board-calendar-view.component.html"
+      "src/app/features/board/calendar-view/board-calendar-view.component.html",
+      "src/app/features/global-work/team-overview.component.html"
     ]
   },
   "3517550046701184661": "Show less",
@@ -11727,7 +11755,6 @@
     "x-files": [
       "src/app/features/board/card.component.html",
       "src/app/features/board/table-view/board-table-view.component.html",
-      "src/app/features/global-work/team-priorities-view.component.html",
       "src/app/features/global-work/up-next-panel.component.html",
       "src/app/shared/priority-queue/priority-queue.component.html"
     ]
@@ -11739,7 +11766,7 @@
       "src/app/features/board/card.component.html",
       "src/app/features/board/table-view/board-table-view.component.ts",
       "src/app/features/global-work/global-work.page.html",
-      "src/app/features/global-work/global-work.page.ts",
+      "src/app/features/global-work/team-overview.component.html",
       "src/app/features/global-work/up-next-panel.component.html",
       "src/app/features/home/home.page.html",
       "src/app/features/priorities/my-priorities-panel.component.html",
@@ -12487,8 +12514,6 @@
     "x-files": [
       "src/app/features/board/list.component.html",
       "src/app/features/board/table-view/board-table-view.component.ts",
-      "src/app/features/global-work/team-priorities-view.component.html",
-      "src/app/features/global-work/team-priorities-view.component.ts",
       "src/app/features/global-work/up-next-panel.component.ts",
       "src/app/shared/priority-queue/priority-queue.component.html"
     ]
@@ -12942,7 +12967,6 @@
   "@5856743755786592145": {
     "x-files": [
       "src/app/features/board/table-view/board-table-view.component.html",
-      "src/app/features/global-work/team-priorities-view.component.html",
       "src/app/features/global-work/up-next-panel.component.html"
     ]
   },
@@ -12950,7 +12974,6 @@
   "@4900216009940588337": {
     "x-files": [
       "src/app/features/board/table-view/board-table-view.component.html",
-      "src/app/features/global-work/team-priorities-view.component.html",
       "src/app/features/global-work/up-next-panel.component.html",
       "src/app/shared/priority-queue/priority-queue.component.html"
     ]
@@ -12959,7 +12982,6 @@
   "@1895495175797473608": {
     "x-files": [
       "src/app/features/board/table-view/board-table-view.component.html",
-      "src/app/features/global-work/team-priorities-view.component.html",
       "src/app/features/global-work/up-next-panel.component.html",
       "src/app/shared/priority-queue/priority-queue.component.html"
     ]
@@ -13276,8 +13298,7 @@
   "@5657124872247335584": {
     "description": "Tooltip - no cards can be added to this Up next group",
     "x-files": [
-      "src/app/features/board/table-view/board-table-view.component.ts",
-      "src/app/features/global-work/team-priorities-view.component.ts"
+      "src/app/features/board/table-view/board-table-view.component.ts"
     ]
   },
   "2912139697705968274": "Open {$name}",
@@ -13850,7 +13871,8 @@
   "@430859064314356197": {
     "description": "Group heading for cards not yet completed",
     "x-files": [
-      "src/app/features/board/table-view/group-by.util.ts"
+      "src/app/features/board/table-view/group-by.util.ts",
+      "src/app/features/global-work/team-overview.component.ts"
     ]
   },
   "4451997363840910432": "Up next order",
@@ -13858,14 +13880,6 @@
     "description": "Table column header - the card's rank in the viewer's Up next queue",
     "x-files": [
       "src/app/features/board/table-view/table-columns.util.ts"
-    ]
-  },
-  "3911817769522706118": "Time in progress",
-  "@3911817769522706118": {
-    "description": "Table column header - tracked working time the card has spent in In progress lists",
-    "x-files": [
-      "src/app/features/board/table-view/table-columns.util.ts",
-      "src/app/features/workspace-settings/general/general.page.html"
     ]
   },
   "7239750919884229270": "Updated",
@@ -14747,18 +14761,6 @@
       "src/app/features/global-work/global-work.page.html"
     ]
   },
-  "8363704019658220743": "Up next layout",
-  "@8363704019658220743": {
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
-  "6200026051166028868": "People in Up next",
-  "@6200026051166028868": {
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
   "6761140389203160404": "Show all teammates",
   "@6761140389203160404": {
     "x-files": [
@@ -14862,8 +14864,8 @@
       "src/app/features/global-work/global-work.page.html"
     ]
   },
-  "1024134926117409532": "The Up next view will return after reconnecting.",
-  "@1024134926117409532": {
+  "4662761733846597167": "The team overview will return after reconnecting.",
+  "@4662761733846597167": {
     "description": "Offline banner",
     "x-files": [
       "src/app/features/global-work/global-work.page.html"
@@ -14913,29 +14915,14 @@
       "src/app/features/global-work/global-work.page.html"
     ]
   },
-  "5919965624322057631": "Everyone is hidden",
-  "@5919965624322057631": {
-    "description": "Up next view when every lane is hidden",
+  "8371055686202976923": "{$START_TAG_STRONG}Loading all matching cards…{$CLOSE_TAG_STRONG} Counts settle when the full set is ready.",
+  "@8371055686202976923": {
     "x-files": [
       "src/app/features/global-work/global-work.page.html"
     ]
   },
-  "2839669099120470306": "Choose a profile above to show their Up next.",
-  "@2839669099120470306": {
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
-  "1276219773237015558": "{VAR_PLURAL, plural, one {{INTERPOLATION} ranked card is hidden because you don’t have access.} other {{INTERPOLATION} ranked cards are hidden because you don’t have access.}}",
-  "@1276219773237015558": {
-    "description": "Note above the Up next table",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.html"
-    ]
-  },
-  "1183285370363226084": "Team Up next",
-  "@1183285370363226084": {
-    "description": "Name of the Team Cards Up next table, used in exports",
+  "6493429101232832178": "{$START_TAG_STRONG}Showing {$LOADED} of {$TOTAL} matching cards.{$CLOSE_TAG_STRONG} Counts and the longest-running work cover only these. Narrow the scope or filters for a complete overview.",
+  "@6493429101232832178": {
     "x-files": [
       "src/app/features/global-work/global-work.page.html"
     ]
@@ -15062,13 +15049,6 @@
       "src/app/features/global-work/global-work.page.ts"
     ]
   },
-  "4311303465889471086": "Grid view",
-  "@4311303465889471086": {
-    "description": "Up next layout option",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
   "5314723712231181922": "Across all boards",
   "@5314723712231181922": {
     "description": "Subtitle of My Cards, Team Cards and Portfolio",
@@ -15083,9 +15063,16 @@
       "src/app/features/global-work/global-work.page.ts"
     ]
   },
-  "5117264093506043513": "Up next view",
-  "@5117264093506043513": {
+  "5639970111104368806": "Team overview",
+  "@5639970111104368806": {
     "description": "Display option",
+    "x-files": [
+      "src/app/features/global-work/global-work.page.ts"
+    ]
+  },
+  "2614607010577950577": "Overview",
+  "@2614607010577950577": {
+    "description": "Short display option",
     "x-files": [
       "src/app/features/global-work/global-work.page.ts"
     ]
@@ -15230,34 +15217,6 @@
       "src/app/features/priorities/my-priorities-panel.component.html"
     ]
   },
-  "4154424105896998258": "Show Up next for {name}, {count, plural, one {# card} other {# cards}}",
-  "@4154424105896998258": {
-    "description": "Button, show a teammate's Up next lane",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
-  "7402094997236882123": "Hide Up next for {name}, {count, plural, one {# card} other {# cards}}",
-  "@7402094997236882123": {
-    "description": "Button, hide a teammate's Up next lane",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
-  "6807988503093169110": "Show Up next for {$person} · {$count}",
-  "@6807988503093169110": {
-    "description": "Tooltip, show a teammate's Up next lane, with its card count",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
-  "9148607594219538196": "Hide Up next for {$person} · {$count}",
-  "@9148607594219538196": {
-    "description": "Tooltip, hide a teammate's Up next lane, with its card count",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
   "5544251363257632928": "Due next 7 days",
   "@5544251363257632928": {
     "description": "Portfolio stat tile",
@@ -15300,13 +15259,6 @@
       "src/app/features/global-work/global-work.page.ts"
     ]
   },
-  "6173322913703094122": "The Up next view already shows everyone",
-  "@6173322913703094122": {
-    "description": "Tooltip on the disabled Up next button",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
   "4514210656713791404": "Up next is unavailable on this view",
   "@4514210656713791404": {
     "description": "Tooltip on the disabled Up next button",
@@ -15314,8 +15266,8 @@
       "src/app/features/global-work/global-work.page.ts"
     ]
   },
-  "7646961513298045974": "Pick one teammate to curate their Up next, or switch to the Up next view to see everyone",
-  "@7646961513298045974": {
+  "35204690016799182": "Pick one teammate to curate their Up next, or open it from Team overview",
+  "@35204690016799182": {
     "description": "Tooltip on the disabled Up next button",
     "x-files": [
       "src/app/features/global-work/global-work.page.ts"
@@ -15362,13 +15314,6 @@
       "src/app/features/global-work/global-work.page.ts",
       "src/app/features/home/home.page.ts",
       "src/app/features/priorities/my-priorities-panel.component.ts"
-    ]
-  },
-  "3647098177019732355": "{$person} · You",
-  "@3647098177019732355": {
-    "description": "Table group heading for the viewer's own Up next",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
     ]
   },
   "80172943225082900": "Select editable cards to use bulk actions.",
@@ -15539,7 +15484,8 @@
   "@6534056417716630629": {
     "description": "Saved view visibility option, everyone in the organisation",
     "x-files": [
-      "src/app/features/global-work/save-view.popover.ts"
+      "src/app/features/global-work/save-view.popover.ts",
+      "src/app/features/global-work/team-overview.component.html"
     ]
   },
   "2266653954931315628": "Only you and the people you share it with can open this view.",
@@ -15554,103 +15500,371 @@
       "src/app/features/global-work/save-view.popover.ts"
     ]
   },
-  "2300330839560978971": "you",
-  "@2300330839560978971": {
-    "description": "Marker after the viewer's own name",
+  "395792664436496517": "Teammates",
+  "@395792664436496517": {
+    "description": "Team overview person strip",
     "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.html"
+      "src/app/features/global-work/team-overview.component.html"
     ]
   },
-  "8502065112576581103": "Move up",
-  "@8502065112576581103": {
-    "description": "Button: move the card up the queue",
+  "3498944575911784027": "In progress with no assignee",
+  "@3498944575911784027": {
     "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.html",
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "7903315130275858788": "No assignee",
+  "@7903315130275858788": {
+    "description": "Team overview panel for unassigned work",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "1963168294880790466": "In progress, but nobody owns it",
+  "@1963168294880790466": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "2878062867928155639": "Open cards in In progress lists with no assignee, longest time in progress first",
+  "@2878062867928155639": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "3219659210566569338": "+{$COUNT} more with no assignee",
+  "@3219659210566569338": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "1523067323144540649": "Back to summary",
+  "@1523067323144540649": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "7889021945991084119": "+{$COUNT} more — open their cards",
+  "@7889021945991084119": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "2561564569166996904": "Their open cards in In progress lists, longest time in progress first",
+  "@2561564569166996904": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "8895923666392389603": "Nothing in progress",
+  "@8895923666392389603": {
+    "description": "Team overview empty state",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html",
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "4099284730689700340": "No lists are marked In progress yet — mark them in workspace settings",
+  "@4099284730689700340": {
+    "description": "Team overview empty state",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html",
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "4911019079423033152": "+{$COUNT} more in progress",
+  "@4911019079423033152": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "241222113318658792": "Recently active",
+  "@241222113318658792": {
+    "description": "Team overview section",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "8704314850413710059": "Nothing queued",
+  "@8704314850413710059": {
+    "description": "Team overview Up next empty state",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "4223995742881444072": "Queued cards aren’t visible to you",
+  "@4223995742881444072": {
+    "description": "Team overview Up next empty state",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "2785777493048947568": "No queued cards match this search",
+  "@2785777493048947568": {
+    "description": "Team overview Up next empty state",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "2761580161538136318": "+{$COUNT} more in their queue",
+  "@2761580161538136318": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "3604403583923319665": "Their other open cards, soonest due first",
+  "@3604403583923319665": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "6069680004547866674": "Assigned",
+  "@6069680004547866674": {
+    "description": "Team overview section",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "1147013106987408866": "Nothing else assigned",
+  "@1147013106987408866": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "3825950297491538845": "Recently done",
+  "@3825950297491538845": {
+    "description": "Team overview section",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "3788846870575879602": "No teammates to show",
+  "@3788846870575879602": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "3588126637149797833": "Teammates on the boards in this scope appear here with their open and recent work.",
+  "@3588126637149797833": {
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "2015467180035437519": "{VAR_PLURAL, plural, one {{INTERPOLATION} teammate has no open cards or recent activity} other {{INTERPOLATION} teammates have no open cards or recent activity}}",
+  "@2015467180035437519": {
+    "description": "Team overview row collapsing teammates with nothing to show",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.html"
+    ]
+  },
+  "2450973332099804953": "Other open cards they moved, created or ticked items on in the last {$days} days",
+  "@2450973332099804953": {
+    "description": "Team overview section tooltip",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "8564853652858345875": "Done {$time}",
+  "@8564853652858345875": {
+    "description": "Overview row note, e.g. \"Done 2h ago\"",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "5249629887488927270": "All their open cards",
+  "@5249629887488927270": {
+    "description": "Team overview stat tooltip",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "6818993069107239962": "{count, plural, one {# in progress longer than the workspace alert} other {# in progress longer than the workspace alert}}",
+  "@6818993069107239962": {
+    "description": "Team overview stat tooltip",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "3979400396303016544": "Their open cards in In progress lists",
+  "@3979400396303016544": {
+    "description": "Team overview stat tooltip",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "5057470079211918533": "Their open cards past due",
+  "@5057470079211918533": {
+    "description": "Team overview stat tooltip",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "5642349890500799643": "Done {$days}d",
+  "@5642349890500799643": {
+    "description": "Team overview stat, cards completed in the last N days",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "3562716030556684161": "Cards they completed in the last {$days} days",
+  "@3562716030556684161": {
+    "description": "Team overview stat tooltip",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "7879894837197960722": "No open cards",
+  "@7879894837197960722": {
+    "description": "Team overview drill-down empty state",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "1575138977612744309": "Nothing overdue",
+  "@1575138977612744309": {
+    "description": "Team overview drill-down empty state",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "1018005099733189631": "Nothing completed in the last {$days} days",
+  "@1018005099733189631": {
+    "description": "Team overview drill-down empty state",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "1828918972378089736": "Show everyone instead of {$person}",
+  "@1828918972378089736": {
+    "description": "Button on the Team overview person strip; shows every teammate again",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "8094778148005568454": "Show only {$person}",
+  "@8094778148005568454": {
+    "description": "Button on the Team overview person strip; shows only this teammate and their Up next",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "1059198867325116136": "Collapse all sections",
+  "@1059198867325116136": {
+    "description": "Team overview panel button folding every section in every panel",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "5141061786065104291": "Expand all sections",
+  "@5141061786065104291": {
+    "description": "Team overview panel button unfolding every section in every panel",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "4875921088778203989": "Open {$person}’s cards",
+  "@4875921088778203989": {
+    "description": "Button opening one teammate's cards",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "6336533552281101568": "Close Up next for {$person}",
+  "@6336533552281101568": {
+    "description": "Button closing the Up next panel for one teammate",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "4766284696448562726": "Edit Up next for {$person}",
+  "@4766284696448562726": {
+    "description": "Button opening the Up next panel to change one teammate's queue",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "6239338747020521018": "{$person}’s cards",
+  "@6239338747020521018": {
+    "description": "Group of one teammate's card counts",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "8225018754533371665": "Loading activity…",
+  "@8225018754533371665": {
+    "description": "Team overview person header",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "7112065803041924038": "Active {$time}",
+  "@7112065803041924038": {
+    "description": "Team overview person header, e.g. \"Active 2h ago\"",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "6986368494983043641": "No activity in {$days} days",
+  "@6986368494983043641": {
+    "description": "Team overview person header",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "8441773592961110476": "Recent activity couldn’t be loaded, so “Recently active” and “Recently done” are empty.",
+  "@8441773592961110476": {
+    "description": "Team overview error",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "4424986872649386272": "Moved {$time}",
+  "@4424986872649386272": {
+    "description": "Overview row note, e.g. \"Moved 2h ago\"",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "8133812027698876021": "Created {$time}",
+  "@8133812027698876021": {
+    "description": "Overview row note, e.g. \"Created 2h ago\"",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "2491475474344804581": "Ticked item {$time}",
+  "@2491475474344804581": {
+    "description": "Overview row note, a checklist item was ticked, e.g. \"Ticked item 2h ago\"",
+    "x-files": [
+      "src/app/features/global-work/team-overview.component.ts"
+    ]
+  },
+  "8659456265912586276": "Not queued",
+  "@8659456265912586276": {
+    "description": "Heading in the Up next panel: open assigned cards that are not in the queue",
+    "x-files": [
+      "src/app/features/global-work/up-next-panel.component.html"
+    ]
+  },
+  "1447713365747622738": "{VAR_PLURAL, plural, =1 {Full at 1 card. Remove one before adding another.} other {Full at {INTERPOLATION} cards. Remove one before adding another.}}",
+  "@1447713365747622738": {
+    "description": "Queue at capacity",
+    "x-files": [
+      "src/app/features/global-work/up-next-panel.component.html",
       "src/app/shared/priority-queue/priority-queue.component.html"
     ]
   },
-  "2207764482815871800": "Move down",
-  "@2207764482815871800": {
-    "description": "Button: move the card down the queue",
+  "1379170775986851153": "Every open card assigned here is already in Up next.",
+  "@1379170775986851153": {
+    "description": "Empty state of the Not queued list in the Up next panel",
     "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.html",
-      "src/app/shared/priority-queue/priority-queue.component.html"
-    ]
-  },
-  "7552442042396670081": "Remove from Up next",
-  "@7552442042396670081": {
-    "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.html",
-      "src/app/shared/priority-queue/priority-queue.component.html"
-    ]
-  },
-  "9022135715669548852": "A card you don’t have access to",
-  "@9022135715669548852": {
-    "description": "Placeholder for a queued card the viewer cannot see",
-    "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.html",
-      "src/app/shared/priority-queue/priority-queue.component.html"
-    ]
-  },
-  "7896458425226601835": "No cards match this search",
-  "@7896458425226601835": {
-    "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.html"
-    ]
-  },
-  "7019958974259261208": "Nothing in Up next yet",
-  "@7019958974259261208": {
-    "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.html",
-      "src/app/features/priorities/my-priorities-panel.component.html",
-      "src/app/shared/priority-queue/priority-queue.component.html"
-    ]
-  },
-  "8829660250772043587": "{VAR_PLURAL, plural, one {Full at {INTERPOLATION} card} other {Full at {INTERPOLATION} cards}}",
-  "@8829660250772043587": {
-    "description": "Note when the Up next queue is full",
-    "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.html"
-    ]
-  },
-  "3419889899644422418": "No one’s Up next to show",
-  "@3419889899644422418": {
-    "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.html"
-    ]
-  },
-  "3950389064020746610": "Up next appears here for you and every teammate you’re allowed to view.",
-  "@3950389064020746610": {
-    "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.html"
-    ]
-  },
-  "5002476825649958415": "Add an assigned card to Up next",
-  "@5002476825649958415": {
-    "description": "Tooltip, add a card to a teammate's Up next",
-    "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.ts"
-    ]
-  },
-  "8097119757175637440": "{count, plural, one {# card in Up next} other {# cards in Up next}}",
-  "@8097119757175637440": {
-    "description": "Tooltip on a teammate's Up next count",
-    "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.ts"
-    ]
-  },
-  "3985878345917926433": "Hide Up next for {$person}",
-  "@3985878345917926433": {
-    "description": "Button, hide a teammate's Up next lane",
-    "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.ts"
+      "src/app/features/global-work/up-next-panel.component.html"
     ]
   },
   "6712925725833911303": "Full at {count, plural, one {# card} other {# cards}}",
   "@6712925725833911303": {
     "description": "Tooltip on a disabled add button when the Up next queue is full",
     "x-files": [
-      "src/app/features/global-work/team-priorities-view.component.ts",
       "src/app/features/global-work/up-next-panel.component.ts"
     ]
   },
@@ -15664,6 +15878,34 @@
   "6598111124075820445": "Up next for {$person}",
   "@6598111124075820445": {
     "description": "Tooltip naming whose Up next queue is shown",
+    "x-files": [
+      "src/app/features/global-work/up-next-panel.component.ts"
+    ]
+  },
+  "1296833373716830436": "Drag a card up from Not queued, or press + beside it, to say what gets done first.",
+  "@1296833373716830436": {
+    "description": "Empty state hint in the Up next panel; Not queued is the list heading below",
+    "x-files": [
+      "src/app/features/global-work/up-next-panel.component.ts"
+    ]
+  },
+  "7427409389857950248": "Add to the end of Up next",
+  "@7427409389857950248": {
+    "description": "Tooltip, add a card to the end of Up next",
+    "x-files": [
+      "src/app/features/global-work/up-next-panel.component.ts"
+    ]
+  },
+  "6814075170576816740": "Show cards not in Up next",
+  "@6814075170576816740": {
+    "description": "Button that shows the Not queued list in the Up next panel",
+    "x-files": [
+      "src/app/features/global-work/up-next-panel.component.ts"
+    ]
+  },
+  "655734672140667511": "Hide cards not in Up next",
+  "@655734672140667511": {
+    "description": "Button that hides the Not queued list in the Up next panel",
     "x-files": [
       "src/app/features/global-work/up-next-panel.component.ts"
     ]
@@ -19112,6 +19354,13 @@
   "@537194528205665600": {
     "x-files": [
       "src/app/features/priorities/my-priorities-panel.component.html"
+    ]
+  },
+  "7019958974259261208": "Nothing in Up next yet",
+  "@7019958974259261208": {
+    "x-files": [
+      "src/app/features/priorities/my-priorities-panel.component.html",
+      "src/app/shared/priority-queue/priority-queue.component.html"
     ]
   },
   "2424667880733993893": "Your personal queue for assigned cards. The first card is what you plan to work on next. Pick the cards you want to do first, in the order you want to do them.",
@@ -25197,6 +25446,34 @@
       "src/app/shared/priority-queue/priority-add-cards.ts"
     ]
   },
+  "8502065112576581103": "Move up",
+  "@8502065112576581103": {
+    "description": "Button: move this card one place earlier in the queue",
+    "x-files": [
+      "src/app/shared/priority-queue/priority-queue.component.html"
+    ]
+  },
+  "2207764482815871800": "Move down",
+  "@2207764482815871800": {
+    "description": "Button: move this card one place later in the queue",
+    "x-files": [
+      "src/app/shared/priority-queue/priority-queue.component.html"
+    ]
+  },
+  "7552442042396670081": "Remove from Up next",
+  "@7552442042396670081": {
+    "description": "Button; Up next is the personal priority queue",
+    "x-files": [
+      "src/app/shared/priority-queue/priority-queue.component.html"
+    ]
+  },
+  "1203781063868253363": "{VAR_PLURAL, plural, =1 {A card you don’t have access to} other {{INTERPOLATION} cards you don’t have access to}}",
+  "@1203781063868253363": {
+    "description": "Placeholder row for one or more queued cards the viewer cannot see",
+    "x-files": [
+      "src/app/shared/priority-queue/priority-queue.component.html"
+    ]
+  },
   "7159645578836883278": "Drag a card in, or use {$START_EMPHASISED_TEXT}Add card{$CLOSE_EMPHASISED_TEXT} below, to say what gets done first.",
   "@7159645578836883278": {
     "description": "Empty state hint; Add card is the button label below",
@@ -25214,13 +25491,6 @@
   "5693174589837820232": "{VAR_PLURAL, plural, other {{INTERPOLATION} more in Up next}}",
   "@5693174589837820232": {
     "description": "Footer under a truncated queue; Up next is the personal priority queue",
-    "x-files": [
-      "src/app/shared/priority-queue/priority-queue.component.html"
-    ]
-  },
-  "1447713365747622738": "{VAR_PLURAL, plural, =1 {Full at 1 card. Remove one before adding another.} other {Full at {INTERPOLATION} cards. Remove one before adding another.}}",
-  "@1447713365747622738": {
-    "description": "Queue at capacity",
     "x-files": [
       "src/app/shared/priority-queue/priority-queue.component.html"
     ]

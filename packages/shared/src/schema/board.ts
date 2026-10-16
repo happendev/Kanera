@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, index, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { COLOR_TOKENS, GRADIENT_TOKENS } from "../lib/colors.js";
 import { valueIn } from "./_value-check.js";
 import { boardGroups } from "./board-group.js";
@@ -18,6 +18,9 @@ export const boards = pgTable(
     // validate both workspace kind and owning client because PostgreSQL cannot express that join.
     standaloneGroupId: uuid("standalone_group_id").references(() => standaloneBoardGroups.id, { onDelete: "set null" }),
     name: text("name").notNull(),
+    inProgressEnabled: boolean("in_progress_enabled").notNull().default(true),
+    // Clamp list backfills to the latest resume, so disabled time is never counted retroactively.
+    inProgressResumedAt: timestamp("in_progress_resumed_at", { withTimezone: true }),
     description: text("description"),
     icon: text("icon").default("layout-kanban"),
     iconColor: text("icon_color", { enum: COLOR_TOKENS }),

@@ -11,7 +11,7 @@ import { icu } from "../../../core/i18n/icu";
 import { MinuteClockService } from "../../../shared/minute-clock.service";
 import { timeInProgressChip, type TimeInProgressChip } from "../time-in-progress.util";
 
-export type WorkDoneBoardSummary = { id: string; name: string; icon: string | null; iconColor: string | null };
+export type WorkDoneBoardSummary = { inProgressEnabled?: boolean; id: string; name: string; icon: string | null; iconColor: string | null };
 
 /** Contributor avatars shown in a day header before the rest roll into a "+n" pill. */
 const MAX_HEADER_ACTORS = 5;
@@ -67,6 +67,7 @@ export class WorkDoneDayComponent {
   readonly collapsed = input(false);
   readonly workspaceId = input<string | null>(null);
   readonly selectedCardId = input<string | null>(null);
+  readonly inProgressEnabled = input(true);
   readonly boardSummariesById = input<Map<string, WorkDoneBoardSummary> | null>(null);
   readonly timeZonesByWorkspace = input<ReadonlyMap<string, string> | null>(null);
   readonly labelsById = input<ReadonlyMap<string, CardLabelPresentation> | null>(null);
@@ -176,6 +177,7 @@ export class WorkDoneDayComponent {
    * No workspace alert here: this view reports work, it does not flag stuck cards.
    */
   timeInProgressFor(digest: CardDayDigest): TimeInProgressChip | null {
+    if (!this.inProgressEnabled() || this.boardSummariesById()?.get(digest.card.boardId)?.inProgressEnabled === false) return null;
     return timeInProgressChip(digest.card, this.clock.now(), 0, this.timeZonesByWorkspace()?.get(digest.card.workspaceId));
   }
 

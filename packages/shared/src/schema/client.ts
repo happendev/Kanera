@@ -64,6 +64,8 @@ export const clients = pgTable(
     pushEnabled: boolean("push_enabled").notNull().default(false),
     // When enabled, password login cannot issue a session until the member has completed TOTP setup.
     requireMfa: boolean("require_mfa").notNull().default(false),
+    // Master switch: boards can opt out, but cannot override an organisation disabling tracking.
+    inProgressEnabled: boolean("in_progress_enabled").notNull().default(true),
     // Shows the Portfolio rollup in this organisation's web navigation. Some teams don't want a
     // cross-board counts view, so admins can hide it; it is a navigation choice, not an access control.
     portfolioEnabled: boolean("portfolio_enabled").notNull().default(true),

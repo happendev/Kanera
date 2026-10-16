@@ -98,6 +98,7 @@ async function boardPayload(
         completedCardsActiveDays: workspaces.completedCardsActiveDays,
         inactiveCardsDays: workspaces.inactiveCardsDays,
         inProgressAlertDays: workspaces.inProgressAlertDays,
+        inProgressEnabled: clients.inProgressEnabled,
         timeZone: workspaces.timeZone,
         boardLinkingEnabled: workspaces.boardLinkingEnabled,
         notesEnabled: workspaces.notesEnabled,
@@ -210,7 +211,7 @@ async function boardPayload(
     ? hydratedCardSummaries
     : hydratedCardSummaries.slice(0, cardQuery.limit);
 
-  return { board, workspaceClientId: workspace.clientId, workspaceKind: workspace.kind, workspaceInactiveCardsDays: workspace.inactiveCardsDays, workspaceInProgressAlertDays: workspace.inProgressAlertDays, workspaceTimeZone: workspace.timeZone, workspaceCardKeyPrefixes: workspaceCardKeyPrefixRows.map((row) => row.prefix), boardLinkingEnabled: workspace.boardLinkingEnabled, notesEnabled: workspace.notesEnabled, boardSyncAllowed: hasBoardSyncEntitlement(workspace.plan, workspace.billingStatus), hasMirrors: participatingMirrors.length > 0, lists: boardLists, ...(cardQuery.includeCards === false ? {} : { cards: cardSummaries, ...(cardQuery.limit === undefined ? {} : { cardPage: { offset: cardQuery.offset ?? 0, limit: cardQuery.limit, hasMore: hasMoreCards } }) }), separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, checklistTemplates, members, viewerRole, viewerSource, viewerCanAccessWorkspace, viewerIsWorkspaceAdmin, viewerAssignedItemsOnly: Boolean(assignedUserId), customFieldValuesComplete };
+  return { board, organisationInProgressEnabled: workspace.inProgressEnabled, workspaceClientId: workspace.clientId, workspaceKind: workspace.kind, workspaceInactiveCardsDays: workspace.inactiveCardsDays, workspaceInProgressAlertDays: workspace.inProgressAlertDays, workspaceTimeZone: workspace.timeZone, workspaceCardKeyPrefixes: workspaceCardKeyPrefixRows.map((row) => row.prefix), boardLinkingEnabled: workspace.boardLinkingEnabled, notesEnabled: workspace.notesEnabled, boardSyncAllowed: hasBoardSyncEntitlement(workspace.plan, workspace.billingStatus), hasMirrors: participatingMirrors.length > 0, lists: boardLists, ...(cardQuery.includeCards === false ? {} : { cards: cardSummaries, ...(cardQuery.limit === undefined ? {} : { cardPage: { offset: cardQuery.offset ?? 0, limit: cardQuery.limit, hasMore: hasMoreCards } }) }), separators: boardSeparatorsRows, customFields: boardCustomFields, cardLabels: boardLabels, checklistTemplates, members, viewerRole, viewerSource, viewerCanAccessWorkspace, viewerIsWorkspaceAdmin, viewerAssignedItemsOnly: Boolean(assignedUserId), customFieldValuesComplete };
 }
 
 // Reorder requests only need the anchor and its immediate neighbor. Keep this
@@ -280,6 +281,7 @@ export async function boardRoutes(app: FastifyInstance) {
           workspaceId,
           groupId,
           name: body.name,
+          inProgressEnabled: body.inProgressEnabled,
           description: body.description,
           icon: body.icon ?? null,
           iconColor: body.iconColor ?? null,
@@ -593,6 +595,7 @@ export async function boardRoutes(app: FastifyInstance) {
           ...(body.icon !== undefined && { icon: body.icon }),
           ...(body.iconColor !== undefined && { iconColor: body.iconColor }),
           ...(body.backgroundGradient !== undefined && { backgroundGradient: body.backgroundGradient }),
+          ...(body.inProgressEnabled !== undefined && { inProgressEnabled: body.inProgressEnabled }),
           updatedAt: new Date(),
         })
         .where(eq(boards.id, id))

@@ -184,6 +184,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                     </span>
                     @if (value().showInactiveOnly) { <i class="ti ti-check fb-row-check"></i> }
                   </button>
+                  @if (inProgressEnabled()) {
                   <button type="button" class="fb-row" [class.active]="value().showInProgressOnly" (click)="toggleInProgress()">
                     <i class="ti ti-progress fb-row-icon"></i>
                     <span class="fb-row-text">
@@ -192,6 +193,7 @@ function groupRows(rows: OptionRow[]): OptionSection[] {
                     </span>
                     @if (value().showInProgressOnly) { <i class="ti ti-check fb-row-check"></i> }
                   </button>
+                  }
                 }
                 @if (showPrioritySet()) {
                   <button type="button" class="fb-row" [class.active]="value().showPrioritySetOnly" (click)="togglePrioritySet()">
@@ -855,6 +857,7 @@ export class FilterBarComponent implements OnDestroy {
   readonly showBoards = input(false);
   /** History-only activity type dimension, hosted here so it uses the page's canonical filter UI. */
   readonly showWorkDoneType = input(false);
+  readonly inProgressEnabled = input(true);
   readonly showActivity = input(true);
   /**
    * Opt in to the "Priority set" quick filter. Only pages whose rank pills show the *viewer's own*

@@ -82,6 +82,7 @@ const draftLabelsFromTemplate = (template: WorkspaceTemplate): DraftLabel[] => t
 export class OnboardingPage implements OnInit {
   private readonly api = inject(ApiClient);
   private readonly auth = inject(AuthService);
+  protected readonly inProgressEnabled = computed(() => this.auth.user()?.inProgressEnabled !== false);
   private readonly router = inject(Router);
   private readonly sockets = inject(SocketService);
   private draftSequence = 0;

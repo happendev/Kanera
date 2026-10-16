@@ -627,7 +627,8 @@ export async function workspaceRoutes(app: FastifyInstance, options: WorkspaceRo
       // home agenda endpoint merely to decide whether its allowance callout should be shown.
       role === "admin" ? getAutomationExecutionsRemaining(req.auth.cid) : Promise.resolve(null),
     ]);
-    return { workspace: toWireWorkspace(workspace), role, lists: workspaceLists, customFields: workspaceFields, cardLabels: workspaceLabels, checklistTemplates, automations, automationExecutionsRemaining };
+    const [organisation] = await db.select({ inProgressEnabled: clients.inProgressEnabled }).from(clients).where(eq(clients.id, workspace.clientId));
+    return { organisationInProgressEnabled: organisation!.inProgressEnabled, workspace: toWireWorkspace(workspace), role, lists: workspaceLists, customFields: workspaceFields, cardLabels: workspaceLabels, checklistTemplates, automations, automationExecutionsRemaining };
   });
 
   app.patch("/workspaces/:id", async (req) => {

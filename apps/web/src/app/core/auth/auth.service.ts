@@ -24,6 +24,7 @@ export interface AuthUser {
   hasWorkspace: boolean;
   // Active organisation's choice; absent on sessions cached before the setting existed.
   portfolioEnabled?: boolean;
+  inProgressEnabled?: boolean;
   role: OrgRole;
   organisations?: AuthOrganisation[];
   canCreateOrganisation?: boolean;
@@ -78,10 +79,35 @@ const OFFLINE_IDENTITY_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const HYDRATION_RETRY_DELAYS_MS = [250, 500, 1_000, 2_000] as const;
 
+// Access tokens live five minutes (JWT_ACCESS_TTL). Renewing just before expiry spares the requests a
+// long-lived tab fires on its own (socket events, focus refetches, a tab resumed from suspension, where
+// timers never ran) a wasted 401 round-trip. The margin covers request latency and network delay.
+const ACCESS_TOKEN_RENEW_MARGIN_MS = 30_000;
+
+/**
+ * Local wall-clock time at which an access token received at `receivedAt` lapses, or null when it
+ * carries no usable lifetime. The lifetime comes from the token's own iat/exp and is anchored to local
+ * receipt time rather than compared with exp directly: a device clock running minutes fast would
+ * otherwise renew before every request, and one running slow would never renew early.
+ */
+function accessTokenLocalExpiry(token: string, receivedAt: number): number | null {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const claims = JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "="))) as { iat?: unknown; exp?: unknown };
+    if (typeof claims.iat !== "number" || typeof claims.exp !== "number" || claims.exp <= claims.iat) return null;
+    return receivedAt + (claims.exp - claims.iat) * 1_000;
+  } catch {
+    return null;
+  }
+}
+
 @Injectable({ providedIn: "root" })
 export class AuthService {
   private readonly _user = signal<AuthUser | null>(null);
   private accessToken: string | null = null;
+  private accessTokenExpiresAt: number | null = null;
   private refreshInFlight: Promise<RefreshResult> | null = null;
   private hydrateInFlight: Promise<void> | null = null;
   private refreshDisabled = false;
@@ -145,6 +171,23 @@ export class AuthService {
     return this.accessToken;
   }
 
+  /**
+   * The access token to send now, renewed first when it lapses within the margin. A failed renewal
+   * still returns whatever token remains, so the request's own 401 handling decides what happens.
+   * Support sessions have no refresh companion and always send their token as is.
+   */
+  async getFreshAccessToken(): Promise<string | null> {
+    const token = this.accessToken;
+    if (!token || this.refreshDisabled || this.accessTokenExpiresAt === null) return token;
+    if (this.accessTokenExpiresAt - Date.now() > ACCESS_TOKEN_RENEW_MARGIN_MS) return token;
+    return (await this.refresh()) ?? this.accessToken;
+  }
+
+  private setAccessToken(token: string | null): void {
+    this.accessToken = token;
+    this.accessTokenExpiresAt = token ? accessTokenLocalExpiry(token, Date.now()) : null;
+  }
+
   getSessionGeneration(): number {
     return this.sessionGeneration;
   }
@@ -166,7 +209,7 @@ export class AuthService {
     this.offlineSession.set(false);
     // Persist identity only: cookies and bearer tokens remain the server authentication boundary.
     try { localStorage.setItem(OFFLINE_IDENTITY_KEY, JSON.stringify({ user, cachedAt: Date.now() })); } catch { /* Storage is optional. */ }
-    this.accessToken = accessToken;
+    this.setAccessToken(accessToken);
     this._user.set(user);
     void this.syncTimezone(user);
     void this.syncLocale(user);
@@ -184,7 +227,7 @@ export class AuthService {
     this.forgetOfflineIdentity();
     // Suppress analytics before publishing the impersonated customer identity.
     this._supportSession.set(session);
-    this.accessToken = accessToken;
+    this.setAccessToken(accessToken);
     this._user.set(user);
     this.refreshDisabled = true;
   }
@@ -211,7 +254,7 @@ export class AuthService {
     }
     if (revision !== this.sessionRevision) return;
     this._supportSession.set(null);
-    this.accessToken = null;
+    this.setAccessToken(null);
     this._user.set(null);
     this.refreshDisabled = false;
   }
@@ -232,7 +275,7 @@ export class AuthService {
       const cached = JSON.parse(localStorage.getItem(OFFLINE_IDENTITY_KEY) ?? "null") as { user?: AuthUser; cachedAt?: number } | null;
       if (!cached?.user?.id || !cached.user.clientId || typeof cached.cachedAt !== "number"
         || cached.cachedAt > Date.now() || Date.now() - cached.cachedAt > OFFLINE_IDENTITY_MAX_AGE_MS) return false;
-      this.accessToken = null;
+      this.setAccessToken(null);
       this.offlineSession.set(true);
       this._user.set(cached.user);
       return true;
@@ -244,7 +287,7 @@ export class AuthService {
     this.invalidateSessionRequests();
     this.forgetOfflineIdentity();
     if (options.disableRefresh) this.refreshDisabled = true;
-    this.accessToken = null;
+    this.setAccessToken(null);
     this._user.set(null);
     this._organisationSwitchPending.set(false);
     this._supportSession.set(null);

@@ -74,8 +74,10 @@
           <button type="button" [class.needs-attention]="overview.overdue > 0" [class.is-active]="boardCardFilter() === 'overdue'" [disabled]="overview.overdue === 0" (click)="setBoardCardFilter('overdue')" kTooltip="Show overdue cards" i18n-kTooltip><strong>{{ overview.overdue }}</strong><span i18n="Board overview count: cards past their due date">Overdue</span></button>
           <button type="button" [class.is-active]="boardCardFilter() === 'unassigned'" [disabled]="overview.unassigned === 0" (click)="setBoardCardFilter('unassigned')" kTooltip="Show unassigned cards" i18n-kTooltip><strong>{{ overview.unassigned }}</strong><span i18n="Board overview count: cards with no assignee">Unassigned</span></button>
           <button type="button" [class.is-active]="boardCardFilter() === 'inactive'" [disabled]="overview.inactive === 0" (click)="setBoardCardFilter('inactive')" [kTooltip]="inactiveCardsTooltip()"><strong>{{ overview.inactive }}</strong><span i18n="Board overview count: cards with no recent activity">Inactive</span></button>
+          @if (state.inProgressEnabled()) {
           <button type="button" [class.is-active]="boardCardFilter() === 'inProgress'" [disabled]="overview.inProgress === 0" (click)="setBoardCardFilter('inProgress')" kTooltip="Show cards in progress" i18n-kTooltip="Tooltip on the In progress count in the board overview"><strong>{{ overview.inProgress }}</strong><span i18n="Board overview count: open cards whose time-in-progress clock is running">In progress</span></button>
           <button type="button" [class.needs-follow-up]="overview.inProgressTooLong > 0" [class.is-active]="boardCardFilter() === 'inProgressTooLong'" [disabled]="overview.inProgressTooLong === 0" (click)="setBoardCardFilter('inProgressTooLong')" [kTooltip]="inProgressTooLongTooltip()"><strong>{{ overview.inProgressTooLong }}</strong><span i18n="Board overview count: cards in progress past the workspace alert (keep it short)">Too long</span></button>
+          }
         </div>
         @if (overview.dueSoon > 0) {
         <div class="board-overview-callout"><i class="ti ti-calendar-due"></i><ng-container i18n="Board overview: count of cards due within a week">{ overview.dueSoon, plural, other {{{ overview.dueSoon }} due in the next 7 days} }</ng-container></div>
@@ -242,7 +244,7 @@
     </span>
     }
 
-    <k-filter-bar
+    <k-filter-bar [inProgressEnabled]="state.inProgressEnabled()"
       [value]="filterValue()"
       [labels]="sortedLabels()"
       [members]="sortedFilterMembers()"

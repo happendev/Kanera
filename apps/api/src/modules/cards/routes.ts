@@ -1,6 +1,6 @@
 import { dto } from "@kanera/shared";
 import { inProgressClockOf, SERVER_EVENTS, type WireCard, type WireCardChecklist, type WireCardDetail } from "@kanera/shared/events";
-import { ACTIVITY_ACTION, activityEvents, agentRuns, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cards, cardWatchers, customFields, lists, users, type ActivityEvent } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, activityEvents, boards, clients, workspaces, automationInProgressRuns, agentRuns, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardInProgressAlerts, cardLabelAssignments, cardLabels, cards, cardWatchers, customFields, lists, users, type ActivityEvent } from "@kanera/shared/schema";
 import { IN_PROGRESS_CLOCK_COLUMNS } from "../../lib/in-progress-clock.js";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -25,7 +25,7 @@ import { loadChecklistsForCard, loadChecklistsForCards } from "../../lib/checkli
 import { emitLaneRebalanced, emitWorkspaceLaneRebalanced, positionForLaneInsert, rebalanceBoardLane } from "../../lib/board-lane.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { assertValidOptionIds, assertWorkspaceMemberIds, buildCustomFieldValueColumns, customFieldValueEquals, describeCustomFieldValue, emptyValueColumns, hasCustomFieldValue, type CustomFieldValueColumns } from "../../lib/custom-fields.js";
-import { AppError, badRequest, notFound } from "../../lib/errors.js";
+import { AppError, badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { resolveDueDatePatch } from "../../lib/due-date.js";
 import { allocateCardKeys, resolveCardKey } from "../../lib/card-keys.js";
 import { signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls } from "../../lib/media-keys.js";
@@ -683,13 +683,14 @@ export async function cardRoutes(
     if (!card) throw notFound();
     // The row is already in hand; passing it skips a redundant re-read of its board_id.
     const ctx = await assertCardAccess(req.auth, card);
-    // Healing with the viewer's claims can reveal links the author could not record, but its
-    // workspace-wide note scan must not block this read; the next open can consume the repair.
-    void repairInternalLinksAroundCard(req.auth, id, ctx.workspaceId).catch((err: unknown) =>
-      req.log.warn({ err, cardId: id }, "failed to repair internal links around card"),
-    );
 
-    const [customFieldValues, labelAssignments, assignees, attachments, checklists, appliedTemplateRows, linkedNotes] = await Promise.all([
+    const attachmentsQuery = db
+      .select(attachmentRowBaseColumns)
+      .from(cardAttachments)
+      .innerJoin(users, eq(users.id, cardAttachments.uploadedById))
+      .where(eq(cardAttachments.cardId, id))
+      .orderBy(desc(cardAttachments.createdAt));
+    const [customFieldValues, labelAssignments, assignees, [attachments, attachmentReactions], checklists, appliedTemplateRows, linkedNotes] = await Promise.all([
       db.select().from(cardCustomFieldValues).where(eq(cardCustomFieldValues.cardId, id)),
       db
         .select({ labelId: cardLabelAssignments.labelId })
@@ -699,12 +700,9 @@ export async function cardRoutes(
         .select({ userId: cardAssignees.userId })
         .from(cardAssignees)
         .where(eq(cardAssignees.cardId, id)),
-      db
-        .select(attachmentRowBaseColumns)
-        .from(cardAttachments)
-        .innerJoin(users, eq(users.id, cardAttachments.uploadedById))
-        .where(eq(cardAttachments.cardId, id))
-        .orderBy(desc(cardAttachments.createdAt)),
+      // Reactions need only the attachment ids, so they chain off that query instead of waiting for
+      // the slowest of the other reads.
+      attachmentsQuery.then(async (rows) => [rows, await fetchReactionsByAttachment(rows.map((attachment) => attachment.id))] as const),
       loadChecklistsForCard(id),
       db
         .select({ templateId: cardChecklistTemplateApplications.templateId })
@@ -712,7 +710,12 @@ export async function cardRoutes(
         .where(eq(cardChecklistTemplateApplications.cardId, id)),
       loadLinkedNotesForCard(req.auth, id, ctx.workspaceId),
     ]);
-    const attachmentReactions = await fetchReactionsByAttachment(attachments.map((attachment) => attachment.id));
+    // Healing with the viewer's claims can reveal links the author could not record, but its
+    // workspace-wide note scan must not block this read; the next open can consume the repair. It
+    // starts only once this read's own queries are done so it never competes with them for the pool.
+    void repairInternalLinksAroundCard(req.auth, id, ctx.workspaceId).catch((err: unknown) =>
+      req.log.warn({ err, cardId: id }, "failed to repair internal links around card"),
+    );
 
     return {
       card: toWireCard(card, req.auth.cid),
@@ -1539,9 +1542,9 @@ export async function cardRoutes(
 
   // Workspace admins correct a card's tracked time in progress (a card that sat in an In progress
   // list over a holiday, or work done before the list was flagged). The value is the total as of
-  // now. A running stint keeps its start when the correction covers it, so the alert and its
-  // automation keep reading the real stint; a total below what the running stint already tracked
-  // restarts the stint now instead. Only the clock columns are written, so the card trigger does not
+  // now. Reductions below the alert restart the running stint and rearm its notification and
+  // automations. Other corrections keep the start when they cover the running time; a total
+  // below what the running stint already tracked restarts it instead. Only the clock columns are written, so the card trigger does not
   // fire. The audit entry is feed-only: a correction is not news for assignees or watchers.
   app.put("/cards/:id/in-progress-time", async (req) => {
     const { id } = req.params as { id: string };
@@ -1549,10 +1552,15 @@ export async function cardRoutes(
     const { card: current, ctx } = await loadEditableCard(req.auth, id);
     await assertWorkspaceAccess(req.auth, ctx.workspaceId, "admin");
     assertCardActive(current);
-
     const { card, activity } = await db.transaction(async (tx) => {
-      const [clock] = await tx.execute<{ banked: number; running: number }>(sql`
-        select c.in_progress_seconds as banked,
+      const [locked] = await tx.select({ boardId: cards.boardId }).from(cards).where(eq(cards.id, id)).for("update");
+      if (!locked) throw notFound();
+      const [progress] = await tx.select({ enabled: sql<boolean>`${boards.inProgressEnabled} and ${clients.inProgressEnabled}` })
+        .from(boards).innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+        .innerJoin(clients, eq(clients.id, workspaces.clientId)).where(eq(boards.id, locked.boardId));
+      if (!progress?.enabled) throw forbidden();
+      const [clock] = await tx.execute<{ banked: number; running: number; alertDays: number }>(sql`
+        select c.in_progress_seconds as banked, w.in_progress_alert_days as "alertDays",
                in_progress_working_seconds(c.in_progress_since, now(), w.time_zone) as running
         from card c
         inner join workspace w on w.id = c.workspace_id
@@ -1562,7 +1570,13 @@ export async function cardRoutes(
       if (!clock) throw notFound();
       const running = Number(clock.running);
       const fromSeconds = Number(clock.banked) + running;
-      const keepsStint = body.seconds >= running;
+      // Only an explicit reduction below the enabled alert rearms it, never a move or settings edit.
+      const rearmAlert = body.seconds < fromSeconds && clock.alertDays > 0 && body.seconds < clock.alertDays * 86400;
+      const keepsStint = body.seconds >= running && !rearmAlert;
+      if (rearmAlert) {
+        await tx.delete(cardInProgressAlerts).where(eq(cardInProgressAlerts.cardId, id));
+        await tx.delete(automationInProgressRuns).where(eq(automationInProgressRuns.cardId, id));
+      }
       const [updated] = await tx
         .update(cards)
         .set({
@@ -1579,7 +1593,7 @@ export async function cardRoutes(
         entityType: "card",
         entityId: id,
         action: ACTIVITY_ACTION.IN_PROGRESS_TIME_SET,
-        payload: { fromSeconds, toSeconds: body.seconds },
+        payload: { fromSeconds, toSeconds: body.seconds, rearmAlert },
       });
       return { card: updated!, activity: recorded };
     });

@@ -133,6 +133,7 @@ class CloseCardChecklistsBeforeDragDirective {
   styleUrl: "./list.component.scss",
 })
 export class ListComponent implements OnDestroy {
+  protected readonly state = inject(BoardState);
   protected readonly inProgressHint = inject(InProgressHintService);
   private readonly toasts = inject(ToastService);
   private readonly api = inject(ApiClient);

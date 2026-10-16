@@ -22,11 +22,15 @@ import {
   externalLinks,
   lists,
   workspaceMembers,
+  workspaces,
 } from "@kanera/shared/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../../db.js";
 import { buildIntegrationServer } from "../../test/integration.js";
 import { processBoardMirrors } from "./drain.js";
+import { MAX_DIRTY_ATTEMPTS } from "./apply.js";
+import { getStorageForClient } from "../storage/index.js";
+import { unsignedMediaUrl } from "../media-keys.js";
 import { signupOwner } from "../../test/api-fixtures.js";
 
 async function waitForOutboxEvent(boardId: string, eventType: (typeof eventOutbox.$inferSelect)["eventType"]) {
@@ -752,4 +756,70 @@ void test("mirrored descriptions and comments point inline images at the destina
   await processBoardMirrors();
   const [editedTarget] = await db.select().from(cards).where(eq(cards.id, cardLink.entityId));
   assert.equal(editedTarget?.description, `Edited ![inline](${targetAttachment.url})`);
+});
+
+void test("attachment copies read the uploader's tenant storage and park cards whose source file is gone", async () => {
+  const app = await buildIntegrationServer();
+  const { user, auth } = await signupOwner(app, { orgName: "Mirror Blob Org", email: "mirror-blob@example.com", displayName: "Owner" });
+  const guestOrg = await signupOwner(app, { orgName: "Guest Org", email: "mirror-blob-guest@example.com", displayName: "Guest" });
+  const workspace = (await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Delivery" } })).json<{ id: string }>();
+  const [sourceList] = await db.select().from(lists).where(eq(lists.workspaceId, workspace.id)).orderBy(lists.position).limit(1);
+  const [source, target] = await db.insert(boards).values([
+    { workspaceId: workspace.id, name: "Source", position: "1000.0000000000" },
+    { workspaceId: workspace.id, name: "Target", position: "2000.0000000000" },
+  ]).returning();
+  await db.insert(boardMembers).values([
+    { boardId: source!.id, userId: user.id, role: "editor" },
+    { boardId: target!.id, userId: user.id, role: "editor" },
+  ]);
+  const mirrorResponse = await app.inject({ method: "POST", url: `/boards/${source!.id}/mirrors`, headers: auth, payload: { targetBoardId: target!.id, lists: [{ sourceListId: sourceList!.id }] } });
+  assert.equal(mirrorResponse.statusCode, 201, mirrorResponse.body);
+  const mirror = mirrorResponse.json<{ id: string }>();
+  await processBoardMirrors();
+  const created = await app.inject({ method: "POST", url: `/boards/${source!.id}/lists/${sourceList!.id}/cards`, headers: auth, payload: { title: "Guest files" } });
+  assert.equal(created.statusCode, 201, created.body);
+  const sourceCard = created.json<{ id: string }>();
+  await processBoardMirrors();
+  const [cardLink] = await db.select().from(externalLinks).where(and(eq(externalLinks.provider, `mirror:${mirror.id}`), eq(externalLinks.externalType, "card"), eq(externalLinks.externalId, sourceCard.id)));
+  assert.ok(cardLink);
+  const [sourceRow] = await db.select({ clientId: workspaces.clientId }).from(workspaces).where(eq(workspaces.id, workspace.id));
+
+  // A cross-organisation guest's upload lives in the guest's tenant storage; the row's clientId is
+  // still the board's organisation, and only the media URL records where the bytes are.
+  const guestClientId = guestOrg.user.clientId;
+  assert.notEqual(guestClientId, sourceRow!.clientId);
+  const guestKey = `cards/${sourceCard.id}/guest-upload.txt`;
+  await (await getStorageForClient(guestClientId)).put(guestKey, Buffer.from("guest bytes"), "text/plain");
+  const missingKey = `cards/${sourceCard.id}/vanished.txt`;
+  const attachment = { cardId: sourceCard.id, clientId: sourceRow!.clientId, uploadedById: user.id, mimeType: "text/plain", byteSize: 11 };
+  await db.insert(cardAttachments).values([
+    { ...attachment, fileName: "guest-upload.txt", fileKey: guestKey, url: unsignedMediaUrl(guestClientId, guestKey)! },
+    { ...attachment, fileName: "vanished.txt", fileKey: missingKey, url: unsignedMediaUrl(sourceRow!.clientId, missingKey)! },
+  ]);
+  await db.insert(boardMirrorDirtyCards).values({ mirrorId: mirror.id, sourceCardId: sourceCard.id, facets: ["attachments", "activities"] });
+  await processBoardMirrors();
+
+  const copies = await db.select().from(cardAttachments).where(eq(cardAttachments.cardId, cardLink.entityId));
+  assert.deepEqual(copies.map((copy) => copy.fileName), ["guest-upload.txt"], "the guest's file copies; the missing one is skipped");
+  const [parked] = await db.select().from(boardMirrorDirtyCards).where(and(eq(boardMirrorDirtyCards.mirrorId, mirror.id), eq(boardMirrorDirtyCards.sourceCardId, sourceCard.id)));
+  assert.ok(parked, "the card keeps a dirty row explaining why it is not in sync");
+  assert.equal(parked.attempts, MAX_DIRTY_ATTEMPTS, "a missing source file parks the card at once");
+  assert.equal(parked.nextRetryAt, null);
+  assert.match(parked.lastError ?? "", /source attachment file missing/);
+
+  await processBoardMirrors();
+  const [stillParked] = await db.select().from(boardMirrorDirtyCards).where(and(eq(boardMirrorDirtyCards.mirrorId, mirror.id), eq(boardMirrorDirtyCards.sourceCardId, sourceCard.id)));
+  assert.equal(stillParked?.updatedAt.getTime(), parked.updatedAt.getTime(), "a parked card is not retried by the next poll");
+  const [mirrorRow] = await db.select().from(boardMirrors).where(eq(boardMirrors.id, mirror.id));
+  assert.equal(mirrorRow?.consecutiveFailures, 0, "one parked card does not fail the mirror");
+
+  // Removing the broken source attachment is a new source signal: the card re-queues and converges.
+  await db.delete(cardAttachments).where(and(eq(cardAttachments.cardId, sourceCard.id), eq(cardAttachments.fileName, "vanished.txt")));
+  const edited = await app.inject({ method: "PATCH", url: `/cards/${sourceCard.id}`, headers: auth, payload: { title: "Guest files (fixed)" } });
+  assert.equal(edited.statusCode, 200, edited.body);
+  await processBoardMirrors();
+  await db.insert(boardMirrorDirtyCards).values({ mirrorId: mirror.id, sourceCardId: sourceCard.id, facets: ["attachments"] }).onConflictDoNothing();
+  await processBoardMirrors();
+  const remaining = await db.select().from(boardMirrorDirtyCards).where(and(eq(boardMirrorDirtyCards.mirrorId, mirror.id), eq(boardMirrorDirtyCards.sourceCardId, sourceCard.id)));
+  assert.equal(remaining.length, 0, "the re-queued card converges once its source is consistent");
 });

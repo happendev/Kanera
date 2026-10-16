@@ -30,6 +30,8 @@ describe("BoardPickerPopover", () => {
     icon: null,
     iconColor: null,
     backgroundGradient: null,
+    inProgressEnabled: true,
+    inProgressResumedAt: null,
     groupId: null,
     standaloneGroupId: null,
     position: "1000.0000000000",

@@ -12,6 +12,7 @@ export const createBoardBody = z.object({
   icon: createIconSchema(DEFAULT_BOARD_ICON),
   iconColor: colorTokenSchema.nullable().optional(),
   backgroundGradient: gradientTokenSchema.nullable().optional(),
+  inProgressEnabled: z.boolean().optional(),
 });
 export type CreateBoardBody = z.infer<typeof createBoardBody>;
 
@@ -22,6 +23,7 @@ export const updateBoardBody = z.object({
   icon: updateIconSchema(DEFAULT_BOARD_ICON),
   iconColor: colorTokenSchema.nullable().optional(),
   backgroundGradient: gradientTokenSchema.nullable().optional(),
+  inProgressEnabled: z.boolean().optional(),
 });
 export type UpdateBoardBody = z.infer<typeof updateBoardBody>;
 

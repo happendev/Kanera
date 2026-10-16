@@ -100,6 +100,7 @@ function customFieldValue(overrides: Partial<CardCustomFieldValue> = {}): CardCu
 
 function boardStateStub() {
   return {
+    inProgressEnabled: signal(true),
     canEdit: signal(false),
     canEditRole: signal(false),
     inactiveCardsDays: signal(14),

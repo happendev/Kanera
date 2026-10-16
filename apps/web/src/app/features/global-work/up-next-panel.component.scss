@@ -108,3 +108,281 @@
     flex: none;
   }
 }
+
+/* ── Not queued ────────────────────────────────────────────────────────────────
+ * Shares the panel's height with the queue above. The queue keeps the larger claim (it is what the
+ * panel is about), so this list caps at under half the panel and scrolls on its own.
+ */
+.not-queued {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 45%;
+  border-top: 1px solid var(--border-strong);
+
+  &.is-collapsed {
+    flex: none;
+  }
+}
+
+.not-queued-head {
+  flex: none;
+  background: var(--surface-2);
+}
+
+// Undoes the global button reset: a full-width row button, left-aligned, no accent hover.
+.not-queued-toggle {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  height: auto;
+  min-height: 36px;
+  padding: 7px 12px;
+  color: var(--text);
+  background: none;
+  border: 0;
+  border-radius: 0;
+
+  &:hover:not(:disabled) {
+    color: var(--text);
+    background: var(--surface-hover);
+  }
+
+  > i {
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  h4 {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+  }
+}
+
+.not-queued-count {
+  padding: 0 7px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.not-queued-note {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+  margin: 0;
+  padding: 6px 12px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+.not-queued-rows {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1px;
+  min-height: 0;
+  padding: 2px 6px 8px;
+  overflow-y: auto;
+}
+
+.not-queued-board {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+  margin: 8px 6px 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+
+  span {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}
+
+.not-queued-row {
+  display: grid;
+  flex: none;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 6px 5px 8px;
+  background: var(--surface);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  cursor: grab;
+
+  &:hover {
+    background: var(--surface-hover);
+  }
+
+  &.is-selected {
+    background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+    border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  }
+
+  // CDK appends the preview to the body, so it needs its own surface and lift to read as held.
+  &.cdk-drag-preview {
+    background: var(--surface);
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-lg, 0 8px 24px rgb(0 0 0 / 22%));
+  }
+
+  &.cdk-drag-placeholder {
+    opacity: 0.35;
+  }
+}
+
+// Undoes the global button reset for a text row. The reset's `justify-content: center` centred the
+// inner grid's content-sized track, indenting every row whose title was short enough not to
+// truncate; `start` keeps every key, title and list on one left edge.
+.not-queued-main {
+  display: grid;
+  grid-column: 1;
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: start;
+  justify-self: stretch;
+  gap: 1px;
+  justify-items: start;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  color: var(--text);
+  text-align: left;
+  background: none;
+  border: 0;
+
+  &:hover:not(:disabled) {
+    color: var(--text);
+    background: none;
+  }
+}
+
+.not-queued-key {
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.not-queued-title {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.not-queued-list {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  max-width: 100%;
+  color: var(--text-muted);
+  font-size: 11px;
+
+  span {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}
+
+// Fixed tracks, so an undated row keeps its + in the same column as the dated rows around it.
+.not-queued-due {
+  grid-column: 2;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+
+  &.overdue {
+    color: var(--danger);
+  }
+
+  &.due-soon {
+    color: var(--color-amber);
+  }
+}
+
+.not-queued-add {
+  grid-column: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  min-width: 0;
+  height: 26px;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+
+  &:hover:not(:disabled) {
+    color: var(--accent);
+    background: var(--surface);
+    border-color: var(--accent);
+  }
+}
+
+.not-queued-empty {
+  margin: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  .not-queued-row {
+    min-height: 48px;
+  }
+
+  .not-queued-add {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+// Below the page's sheet split (UP_NEXT_SHEET_QUERY) the panel is a bottom sheet of at most 60vh.
+// Two scrollers sharing that height left the queue about one row tall, so here the whole sheet
+// scrolls as one list: queue, then Not queued, with the header pinned.
+@media (max-width: 900px) {
+  :host {
+    overflow-y: auto;
+  }
+
+  .panel-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  k-priority-queue {
+    flex: none;
+    overflow: visible;
+  }
+
+  .not-queued {
+    flex: none;
+    max-height: none;
+  }
+
+  .not-queued-rows {
+    overflow-y: visible;
+  }
+}

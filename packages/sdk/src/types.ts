@@ -148,6 +148,7 @@ export interface CreatedWorkspace extends Workspace {
 }
 
 export interface CreateBoardInput {
+  inProgressEnabled?: boolean;
   name: string;
   groupId?: Uuid | null;
   description?: string;
@@ -227,6 +228,9 @@ export interface Member {
 }
 
 export interface Board {
+  /** Board opt-out. The owning organisation must also enable tracking. */
+  inProgressEnabled: boolean;
+  inProgressResumedAt: Timestamp | null;
   id: Uuid;
   workspaceId: Uuid;
   name: string;

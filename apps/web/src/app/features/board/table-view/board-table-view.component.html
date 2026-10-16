@@ -30,7 +30,7 @@
 
     @if (showFilterBar()) {
     <span class="tv-filter-slot">
-      <k-filter-bar
+      <k-filter-bar [inProgressEnabled]="inProgressEnabled()"
         [value]="resolvedFilterValue()"
         [labels]="filterLabels()"
         [members]="filterMembers()"
@@ -183,7 +183,7 @@
         }
         @if (sortOpen()) {
           <div kMenu class="ap-panel tv-small-menu" kAnchoredPanel [apPlacement]="{ align: 'end', width: 230 }" (apDismissed)="sortOpen.set(false)">
-            @for (option of sortOptions; track option.value) {
+            @for (option of sortOptions(); track option.value) {
               <button type="button" class="k-menu-item tv-menu-row" [class.is-selected]="sortBy() === option.value" (click)="setSort(option.value)">
                 <span>{{ option.label }}</span>
                 @if (sortBy() === option.value) { <i class="ti ti-check"></i> }

@@ -64,6 +64,8 @@ export class BoardState {
   readonly workspaceClientId = signal<string | null>(null);
   readonly workspaceKind = signal<"standard" | "board" | null>(null);
   readonly inactiveCardsDays = signal(DEFAULT_INACTIVE_CARDS_DAYS);
+  readonly organisationInProgressEnabled = signal(true);
+  readonly inProgressEnabled = computed(() => this.organisationInProgressEnabled() && this.board()?.inProgressEnabled !== false);
   /** Days in progress after which a card's clock is flagged; 0 turns the flag off. */
   readonly inProgressAlertDays = signal(DEFAULT_IN_PROGRESS_ALERT_DAYS);
   /** The workspace's IANA zone: time in progress counts its working hours (09:00-17:00 weekdays). */
@@ -518,6 +520,7 @@ export class BoardState {
     workspaceClientId?: string | null;
     workspaceKind?: "standard" | "board";
     workspaceInactiveCardsDays?: number;
+    organisationInProgressEnabled?: boolean;
     workspaceInProgressAlertDays?: number;
     workspaceTimeZone?: string;
     workspaceCardKeyPrefixes?: string[];
@@ -554,6 +557,7 @@ export class BoardState {
     this.workspaceClientId.set(payload.workspaceClientId ?? null);
     this.workspaceKind.set(payload.workspaceKind ?? null);
     this.inactiveCardsDays.set(payload.workspaceInactiveCardsDays ?? DEFAULT_INACTIVE_CARDS_DAYS);
+    this.organisationInProgressEnabled.set(payload.organisationInProgressEnabled !== false);
     this.inProgressAlertDays.set(payload.workspaceInProgressAlertDays ?? DEFAULT_IN_PROGRESS_ALERT_DAYS);
     this.workspaceTimeZone.set(payload.workspaceTimeZone ?? "UTC");
     this.workspaceCardKeyPrefixes.set(payload.workspaceCardKeyPrefixes ?? []);
@@ -710,6 +714,7 @@ export class BoardState {
     this.workspaceClientId.set(null);
     this.workspaceKind.set(null);
     this.inactiveCardsDays.set(DEFAULT_INACTIVE_CARDS_DAYS);
+    this.organisationInProgressEnabled.set(true);
     this.inProgressAlertDays.set(DEFAULT_IN_PROGRESS_ALERT_DAYS);
     this.workspaceTimeZone.set("UTC");
     this.workspaceCardKeyPrefixes.set([]);
@@ -833,7 +838,7 @@ export class BoardState {
   }
 
   isListInProgress(listId: string): boolean {
-    return this.lists().some((list) => list.id === listId && list.inProgress);
+    return this.inProgressEnabled() && this.lists().some((list) => list.id === listId && list.inProgress);
   }
 
   /**
@@ -1271,6 +1276,7 @@ export class BoardState {
       workspaceClientId: this.workspaceClientId() ?? undefined,
       workspaceKind: this.workspaceKind() ?? undefined,
       workspaceInactiveCardsDays: this.inactiveCardsDays(),
+      organisationInProgressEnabled: this.organisationInProgressEnabled(),
       workspaceInProgressAlertDays: this.inProgressAlertDays(),
       workspaceTimeZone: this.workspaceTimeZone(),
       workspaceCardKeyPrefixes: this.workspaceCardKeyPrefixes(),
@@ -1310,6 +1316,7 @@ export class BoardState {
     this.workspaceClientId.set(snapshot.workspaceClientId ?? null);
     this.workspaceKind.set(snapshot.workspaceKind ?? null);
     this.inactiveCardsDays.set(snapshot.workspaceInactiveCardsDays ?? DEFAULT_INACTIVE_CARDS_DAYS);
+    this.organisationInProgressEnabled.set(snapshot.organisationInProgressEnabled !== false);
     this.inProgressAlertDays.set(snapshot.workspaceInProgressAlertDays ?? DEFAULT_IN_PROGRESS_ALERT_DAYS);
     this.workspaceTimeZone.set(snapshot.workspaceTimeZone ?? "UTC");
     this.workspaceCardKeyPrefixes.set(snapshot.workspaceCardKeyPrefixes ?? []);

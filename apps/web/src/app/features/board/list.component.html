@@ -3,7 +3,7 @@
     <span class="card-count">{{ cardCount() }}</span>
     <i [class]="'ti ti-' + (list().icon || 'list')"></i>
     {{ list().name }}
-    @if (list().inProgress) {
+    @if (state.inProgressEnabled() && list().inProgress) {
     <span class="list-in-progress" kTooltip="In progress list: each card shows its time in progress" i18n-kTooltip="Tooltip on the marker beside an In progress list's name" aria-label="In progress list" i18n-aria-label="Accessible name of the marker beside an In progress list's name">
       <i class="ti ti-progress"></i>
     </span>
@@ -77,7 +77,7 @@
   }
 </div>
 
-@if (list().inProgress && !inProgressHint.dismissed()) {
+@if (state.inProgressEnabled() && list().inProgress && !inProgressHint.dismissed()) {
 <!-- Explains the column marker once; dismissing it here dismisses it on every in-progress list. -->
 <div class="list-in-progress-hint" role="note">
   <i class="ti ti-progress"></i>

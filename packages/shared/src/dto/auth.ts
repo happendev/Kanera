@@ -6,6 +6,12 @@ import { CLIENT_BILLING_STATUSES, CLIENT_PLANS } from "../schema/client.js";
 import { GENERAL_NAME_MAX_LENGTH } from "./name-limits.js";
 import { deploymentModeSchema, kaneraEnvironmentSchema } from "./deployment.js";
 
+// Why the API answered 401 UNAUTHORIZED, sent as `reason` beside `code` on the error body. Expired
+// access tokens are the routine trigger for a client's refresh-and-retry; the other reasons are
+// genuine authentication failures, so clients, logs and metrics can tell the two apart.
+export const AUTH_FAILURE_REASONS = ["token_expired", "no_token", "token_invalid"] as const;
+export type AuthFailureReason = (typeof AUTH_FAILURE_REASONS)[number];
+
 export const storageUsageResponse = z.object({
   usedBytes: z.number().int().nonnegative(),
   quotaBytes: z.number().int().nonnegative().nullable(),
@@ -136,6 +142,7 @@ export const authResponse = z.object({
     deploymentMode: deploymentModeSchema,
     kaneraEnvironment: kaneraEnvironmentSchema,
     hasWorkspace: z.boolean(),
+    inProgressEnabled: z.boolean(),
     // The active organisation's choice; the web app hides Portfolio navigation when false.
     portfolioEnabled: z.boolean(),
     role: z.enum(CLIENT_ROLES),

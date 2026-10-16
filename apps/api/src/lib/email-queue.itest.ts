@@ -9,6 +9,7 @@ import { setStripeClientForTests } from "./billing.js";
 import { buildIntegrationServer } from "../test/integration.js";
 import { newOpaqueToken } from "./tokens.js";
 import { runEmailQueueCleanup, runEmailQueueSweep } from "./email-queue.js";
+import { SmtpReplyError } from "./smtp.js";
 
 const smtpConfig = {
   host: "smtp.example.com",
@@ -564,4 +565,54 @@ void test("queue sweep bounds concurrency and lets other recipients start during
   assert.equal(maxActive, 5);
   const rows = await db.select().from(emailQueue);
   assert.ok(rows.every((row) => row.status === EMAIL_QUEUE_STATUS.success && row.processingLeaseExpiresAt === null));
+});
+
+void test("recipient refusals end a queued email at once while relay faults stay retryable", async () => {
+  const welcome = { subject: "Welcome to Kanera", type: "welcome" as const, data: { displayName: "Ada", loginUrl: "https://kanera.example/login" }, status: EMAIL_QUEUE_STATUS.queued };
+  const [refused, relayFault] = await db.insert(emailQueue).values([
+    { ...welcome, toEmail: "refused@kanera.app" },
+    { ...welcome, toEmail: "relay@kanera.app" },
+  ]).returning();
+
+  await runEmailQueueSweep({
+    db,
+    log,
+    resolveSmtpConfig: async () => smtpConfig,
+    sendEmail: async ({ to }) => {
+      // A 5xx to RCPT TO is about this recipient; a 5xx to MAIL FROM is the relay refusing us.
+      if (to === "refused@kanera.app") throw new SmtpReplyError(501, "RCPT", "501 5.1.3 Recipient address rejected");
+      throw new SmtpReplyError(550, "MAIL", "550 5.7.1 Sender not allowed");
+    },
+  });
+
+  const rows = new Map((await db.select().from(emailQueue).where(inArray(emailQueue.id, [refused!.id, relayFault!.id]))).map((row) => [row.id, row]));
+  assert.equal(rows.get(refused!.id)!.status, EMAIL_QUEUE_STATUS.error, "a refused recipient is terminal after one attempt");
+  assert.equal(rows.get(refused!.id)!.retries, 1);
+  assert.match(rows.get(refused!.id)!.lastError ?? "", /501/);
+  assert.equal(rows.get(relayFault!.id)!.status, EMAIL_QUEUE_STATUS.queued, "a relay fault is retried");
+});
+
+void test("production never hands reserved-domain recipients to SMTP", async () => {
+  const previous = env.KANERA_ENVIRONMENT;
+  env.KANERA_ENVIRONMENT = "production";
+  try {
+    const welcome = { subject: "Welcome to Kanera", type: "welcome" as const, data: { displayName: "Ada", loginUrl: "https://kanera.example/login" }, status: EMAIL_QUEUE_STATUS.queued };
+    const rows = await db.insert(emailQueue).values([
+      { ...welcome, toEmail: "priya@kanera.test" },
+      { ...welcome, toEmail: "demo@sub.example.com" },
+      { ...welcome, toEmail: "ada@kanera.app" },
+    ]).returning();
+
+    const delivered: string[] = [];
+    await runEmailQueueSweep({ db, log, resolveSmtpConfig: async () => smtpConfig, sendEmail: async ({ to }) => { delivered.push(to); } });
+
+    assert.deepEqual(delivered, ["ada@kanera.app"]);
+    const after = new Map((await db.select().from(emailQueue).where(inArray(emailQueue.id, rows.map((row) => row.id)))).map((row) => [row.toEmail, row]));
+    for (const reserved of ["priya@kanera.test", "demo@sub.example.com"]) {
+      assert.equal(after.get(reserved)!.status, EMAIL_QUEUE_STATUS.error, `${reserved} is terminal without a send`);
+      assert.match(after.get(reserved)!.lastError ?? "", /reserved domain/);
+    }
+  } finally {
+    env.KANERA_ENVIRONMENT = previous;
+  }
 });

@@ -3,6 +3,7 @@ import { cardPath } from "@kanera/shared/card-links";
 import {
   ACTIVITY_ACTION,
   activityEvents,
+  boardMirrorDirtyCards,
   boardMirrorLists,
   boards,
   cardAttachments,
@@ -38,7 +39,7 @@ import { cardAttachmentUrlMap, rewriteCopiedMediaUrls } from "../copied-media-ur
 import { replaceCardMentions } from "../mentions.js";
 import { clearNotificationsForCards, emitDeletedNotifications, type DeletedNotificationRef } from "../notifications.js";
 import { emitToBoard } from "../../realtime/emit.js";
-import { getStorageForClient } from "../storage/index.js";
+import { getStorageForClient, isStorageObjectMissing } from "../storage/index.js";
 import {
   duplicateCardInto,
   copyAttachmentBlobs,
@@ -991,12 +992,22 @@ async function convergeAttachments(mirror: BoardMirror, sourceCardId: string, ta
     // history even though the preview row itself no longer exists.
   }
 
-  const sourceStorage = await getStorageForClient(sourceWorkspace.clientId);
   let copiedAny = false;
+  const missingSourceIds: string[] = [];
   for (const source of sourceRows) {
     if (linkBySource.has(source.id)) continue;
     await assertCanUploadAttachment(db, actor.cid, source.byteSize);
-    const copy = await copyAttachmentBlobs(sourceStorage, destinationStorage, actor.cid, source, targetCardId);
+    let copy: Awaited<ReturnType<typeof copyAttachmentBlobs>>;
+    try {
+      copy = await copyAttachmentBlobs(destinationStorage, actor.cid, source, targetCardId);
+    } catch (error) {
+      // A source row whose blob is gone cannot heal by retrying. Skip it so the card's other
+      // attachments still copy, then fail the facet permanently (below) so the dirty row parks
+      // until the source attachment changes instead of retrying forever.
+      if (!isStorageObjectMissing(error)) throw error;
+      missingSourceIds.push(source.id);
+      continue;
+    }
     try {
       const commentId = source.commentId ? commentTargetIdBySource.get(source.commentId) ?? null : null;
       const [created] = await db.transaction(async (tx) => {
@@ -1042,6 +1053,9 @@ async function convergeAttachments(mirror: BoardMirror, sourceCardId: string, ta
   // text facets now that the copy exists; each is idempotent and only writes what changed.
   if (copiedAny) {
     for (const facet of ["core", "comments", "checklists"] as const) await convergeFacet(mirror, sourceCardId, facet);
+  }
+  if (missingSourceIds.length > 0) {
+    throw new BoardMirrorPermanentError(`source attachment file missing from storage: ${missingSourceIds.join(", ")}`);
   }
 }
 
@@ -1400,6 +1414,14 @@ async function convergeFacet(mirror: BoardMirror, sourceCardId: string, facet: B
   // Blob IO occurs before each attachment DB transaction; the helper cleans copied keys on failure.
 }
 
+/**
+ * A failure retrying cannot fix (for example a source attachment whose file no longer exists).
+ * The dirty-card row parks until a new source signal or a reconcile re-queues it.
+ */
+export class BoardMirrorPermanentError extends Error {
+  override name = "BoardMirrorPermanentError";
+}
+
 export async function convergeSourceCard(mirror: BoardMirror, sourceCardId: string, facets: BoardMirrorFacet[]) {
   // Unarchive catch-up: when the source went live again while the target is still mirror-archived,
   // the narrow dirty facets can miss content edited during the archived window. Widen to a full sync
@@ -1421,13 +1443,44 @@ export async function convergeSourceCard(mirror: BoardMirror, sourceCardId: stri
     }
   }
   const requested = new Set(effectiveFacets);
-  for (const facet of CANONICAL_FACETS) if (requested.has(facet)) await convergeFacet(mirror, sourceCardId, facet);
+  // A permanent failure in one facet must not starve the facets after it (checklists, activities),
+  // so finish the pass and report it once at the end. Transient errors still abort immediately.
+  let permanent: BoardMirrorPermanentError | null = null;
+  for (const facet of CANONICAL_FACETS) {
+    if (!requested.has(facet)) continue;
+    try {
+      await convergeFacet(mirror, sourceCardId, facet);
+    } catch (error) {
+      if (!(error instanceof BoardMirrorPermanentError)) throw error;
+      permanent ??= error;
+    }
+  }
+  if (permanent) throw permanent;
+}
+
+async function deferCardToDirtyQueue(mirror: BoardMirror, sourceCardId: string, error: unknown) {
+  const lastError = error instanceof Error ? error.message : "board mirror card sync failed";
+  await db.insert(boardMirrorDirtyCards).values({ mirrorId: mirror.id, sourceCardId, facets: ALL_SYNC_FACETS, lastError }).onConflictDoUpdate({
+    target: [boardMirrorDirtyCards.mirrorId, boardMirrorDirtyCards.sourceCardId],
+    set: { facets: ALL_SYNC_FACETS, lastError, updatedAt: new Date() },
+  });
 }
 
 export async function reconcileMirror(mirror: BoardMirror, gapStart: Date) {
   const providerLinks = await listExternalLinksByProvider(mirror.targetWorkspaceId, providerFor(mirror));
   const cardLinks = providerLinks.filter((link) => link.externalType === "card" && link.entityType === "card");
-  for (const link of cardLinks) await convergeSourceCard(mirror, link.externalId, ALL_SYNC_FACETS);
+  // Reconcile is the operator's recovery path, so it gives parked dirty cards a fresh budget.
+  await db.update(boardMirrorDirtyCards).set({ attempts: 0, nextRetryAt: null, updatedAt: new Date() }).where(eq(boardMirrorDirtyCards.mirrorId, mirror.id));
+  for (const link of cardLinks) {
+    try {
+      await convergeSourceCard(mirror, link.externalId, ALL_SYNC_FACETS);
+    } catch (error) {
+      // One broken card must not fail the whole reconcile: that would hold the mirror's cursor
+      // back and retry every card hourly. Hand it to the per-card dirty queue, which backs off
+      // and parks it on its own.
+      await deferCardToDirtyQueue(mirror, link.externalId, error);
+    }
+  }
 
   const mappings = await db.select({ sourceListId: boardMirrorLists.sourceListId }).from(boardMirrorLists).where(eq(boardMirrorLists.mirrorId, mirror.id));
   if (mappings.length === 0) return;
@@ -1440,5 +1493,12 @@ export async function reconcileMirror(mirror: BoardMirror, gapStart: Date) {
     sql`(${cards.createdAt} >= ${mirror.createdAt} or ${cards.updatedAt} >= ${gapStart})`,
     linkedIds.size > 0 ? notInArray(cards.id, [...linkedIds]) : undefined,
   ));
-  for (const candidate of candidates) await linkSourceCard(mirror, candidate.id);
+  for (const candidate of candidates) {
+    try {
+      await linkSourceCard(mirror, candidate.id);
+    } catch (error) {
+      // Any non-link facet re-links a missing target, so the dirty queue can retry this too.
+      await deferCardToDirtyQueue(mirror, candidate.id, error);
+    }
+  }
 }

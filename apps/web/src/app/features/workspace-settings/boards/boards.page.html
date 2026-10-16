@@ -11,6 +11,7 @@
         @if (settings.boardLimitReached()) {
         <p class="plan-limit-hint"><i class="ti ti-lock"></i> <ng-container i18n>Your existing boards stay active on Free. Add another board to review the exact Pro price for your team.</ng-container></p>
         }
+        @if (settings.generalSettingsError(); as message) { <p class="form-error" role="alert">{{ message }}</p> }
         <div class="boards" cdkDropList [cdkDropListData]="settings.boardList()" (cdkDropListDropped)="settings.dropBoard($event)">
           @for (board of settings.boardList(); track board.id) {
           <div cdkDrag class="board-tile">
@@ -22,6 +23,10 @@
             } @else {
             <span (click)="settings.startEditBoard(board)" kTooltip="Click to rename" i18n-kTooltip class="grow" style="cursor:pointer">{{ board.name }}</span>
             }
+            <label class="board-progress-toggle">
+              <input type="checkbox" [checked]="board.inProgressEnabled" [disabled]="!settings.organisationInProgressEnabled() || !!settings.progressBoardSaving()" (change)="settings.updateBoardInProgress(board.id, $any($event.target).checked, $any($event.target))" />
+              <span i18n>Enable in progress</span>
+            </label>
             <div class="row-actions">
               @if (settings.boardGroups().length > 0) {
               <select class="board-group-select" [value]="board.groupId ?? ''" (change)="settings.updateBoardGroup(board.id, $any($event.target).value || null)" kTooltip="Board group" i18n-kTooltip aria-label="Board group" i18n-aria-label>
