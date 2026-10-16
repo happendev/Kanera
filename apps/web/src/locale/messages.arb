@@ -15108,13 +15108,6 @@
       "src/app/features/global-work/global-work.page.ts"
     ]
   },
-  "5117264093506043513": "Up next view",
-  "@5117264093506043513": {
-    "description": "Display option",
-    "x-files": [
-      "src/app/features/global-work/global-work.page.ts"
-    ]
-  },
   "5639970111104368806": "Team overview",
   "@5639970111104368806": {
     "description": "Display option",
@@ -15125,6 +15118,13 @@
   "2614607010577950577": "Overview",
   "@2614607010577950577": {
     "description": "Short display option",
+    "x-files": [
+      "src/app/features/global-work/global-work.page.ts"
+    ]
+  },
+  "5117264093506043513": "Up next view",
+  "@5117264093506043513": {
+    "description": "Display option",
     "x-files": [
       "src/app/features/global-work/global-work.page.ts"
     ]

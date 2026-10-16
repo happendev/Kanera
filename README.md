@@ -151,9 +151,15 @@ Descriptions, custom fields, checklists, due dates, comments, attachments, and a
 
 ### Team Cards brings assigned work together across boards
 
-See the whole visible team or focus on one teammate without losing each card's board, list, fields, or permissions. Switch between Board, Table, Calendar, Work Done, and ranked team Up next views to review ownership, workload, and execution order across projects.
+See the whole visible team or focus on one teammate without losing each card's board, list, fields, or permissions. Switch between Board, Team overview, ranked team Up next, Table, Calendar, and Work Done views to review ownership, workload, and execution order across projects.
 
 ![Kanera Team Cards focused on Ben Ortega with his ranked Up next queue beside assigned work across accessible boards](docs/readme-assets/team-cards.jpg)
+
+### Team overview shows what everyone is busy with
+
+One panel per teammate answers "what is each person working on, and what is next?" without opening each board in turn: their In progress cards longest-running first with time in progress, what they recently moved or created themselves, the head of their Up next queue, their other assigned cards by due date, and what they finished this week. Open, In progress, Overdue, and Done counts expand into the full list, and in-progress work with no assignee gets its own panel.
+
+![Kanera Team overview with panels for Ben Ortega, Grace Liu, and Henry Walsh showing their In progress cards with time in progress, recent activity, Up next, and assigned work](docs/readme-assets/team-overview.jpg)
 
 ### Automations keep routine work moving
 

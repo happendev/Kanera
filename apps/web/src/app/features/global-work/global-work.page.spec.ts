@@ -1403,7 +1403,7 @@ describe("GlobalWorkPage toolbar state", () => {
       TestBed.tick();
 
       expect(fixture.componentInstance.displayOptions().map((option) => option.id))
-        .toEqual(["board", "priorities", "overview", "table", "calendar", "history"]);
+        .toEqual(["board", "overview", "priorities", "table", "calendar", "history"]);
       expect(fixture.componentInstance.showTeammateFilter()).toBe(true);
       expect(fixture.componentInstance.showUpNextControl()).toBe(true);
 

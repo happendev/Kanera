@@ -366,13 +366,13 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
     }
     return [
       option("board", "layout-kanban", $localize`:Display option:Board view`, $localize`:Short display option:Board`),
-      // Team only: everyone's Up next queues, then the per-teammate overview, sit immediately beside
+      // Team only: the per-teammate overview, then everyone's Up next queues, sit immediately beside
       // the board view, since all three read the same work person by person. My Cards already has
       // the docked single queue, and an overview of one person is just My Cards.
       ...(this.lens() === "team"
         ? [
-            option("priorities", "list-numbers", $localize`:Display option:Up next view`, $localize`:Short display option:Up next`),
             option("overview", "users-group", $localize`:Display option:Team overview`, $localize`:Short display option:Overview`),
+            option("priorities", "list-numbers", $localize`:Display option:Up next view`, $localize`:Short display option:Up next`),
           ]
         : []),
       option("table", "table", $localize`:Display option:Table view`, $localize`:Short display option:Table`),

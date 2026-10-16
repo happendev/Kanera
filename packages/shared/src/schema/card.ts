@@ -126,3 +126,9 @@ export const cards = pgTable(
 );
 
 export type Card = typeof cards.$inferSelect;
+
+// Durable notification latch: activity retention must never rearm an already flagged card.
+export const cardInProgressAlerts = pgTable("card_in_progress_alert", {
+  cardId: uuid("card_id").primaryKey().references(() => cards.id, { onDelete: "cascade" }),
+  firedAt: timestamp("fired_at", { withTimezone: true }).notNull().defaultNow(),
+});

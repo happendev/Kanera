@@ -1,6 +1,6 @@
 import { dto } from "@kanera/shared";
 import { inProgressClockOf, SERVER_EVENTS, type WireCard, type WireCardChecklist, type WireCardDetail } from "@kanera/shared/events";
-import { ACTIVITY_ACTION, activityEvents, agentRuns, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardLabelAssignments, cardLabels, cards, cardWatchers, customFields, lists, users, type ActivityEvent } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, activityEvents, automationInProgressRuns, agentRuns, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardInProgressAlerts, cardLabelAssignments, cardLabels, cards, cardWatchers, customFields, lists, users, type ActivityEvent } from "@kanera/shared/schema";
 import { IN_PROGRESS_CLOCK_COLUMNS } from "../../lib/in-progress-clock.js";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -1539,9 +1539,9 @@ export async function cardRoutes(
 
   // Workspace admins correct a card's tracked time in progress (a card that sat in an In progress
   // list over a holiday, or work done before the list was flagged). The value is the total as of
-  // now. A running stint keeps its start when the correction covers it, so the alert and its
-  // automation keep reading the real stint; a total below what the running stint already tracked
-  // restarts the stint now instead. Only the clock columns are written, so the card trigger does not
+  // now. Reductions below the alert restart the running stint and rearm its notification and
+  // automations. Other corrections keep the start when they cover the running time; a total
+  // below what the running stint already tracked restarts it instead. Only the clock columns are written, so the card trigger does not
   // fire. The audit entry is feed-only: a correction is not news for assignees or watchers.
   app.put("/cards/:id/in-progress-time", async (req) => {
     const { id } = req.params as { id: string };
@@ -1551,8 +1551,8 @@ export async function cardRoutes(
     assertCardActive(current);
 
     const { card, activity } = await db.transaction(async (tx) => {
-      const [clock] = await tx.execute<{ banked: number; running: number }>(sql`
-        select c.in_progress_seconds as banked,
+      const [clock] = await tx.execute<{ banked: number; running: number; alertDays: number }>(sql`
+        select c.in_progress_seconds as banked, w.in_progress_alert_days as "alertDays",
                in_progress_working_seconds(c.in_progress_since, now(), w.time_zone) as running
         from card c
         inner join workspace w on w.id = c.workspace_id
@@ -1562,7 +1562,13 @@ export async function cardRoutes(
       if (!clock) throw notFound();
       const running = Number(clock.running);
       const fromSeconds = Number(clock.banked) + running;
-      const keepsStint = body.seconds >= running;
+      // Only an explicit reduction below the enabled alert rearms it, never a move or settings edit.
+      const rearmAlert = body.seconds < fromSeconds && clock.alertDays > 0 && body.seconds < clock.alertDays * 86400;
+      const keepsStint = body.seconds >= running && !rearmAlert;
+      if (rearmAlert) {
+        await tx.delete(cardInProgressAlerts).where(eq(cardInProgressAlerts.cardId, id));
+        await tx.delete(automationInProgressRuns).where(eq(automationInProgressRuns.cardId, id));
+      }
       const [updated] = await tx
         .update(cards)
         .set({
@@ -1579,7 +1585,7 @@ export async function cardRoutes(
         entityType: "card",
         entityId: id,
         action: ACTIVITY_ACTION.IN_PROGRESS_TIME_SET,
-        payload: { fromSeconds, toSeconds: body.seconds },
+        payload: { fromSeconds, toSeconds: body.seconds, rearmAlert },
       });
       return { card: updated!, activity: recorded };
     });

@@ -153,9 +153,8 @@ export const automationInProgressRuns = pgTable(
     cardId: uuid("card_id")
       .notNull()
       .references(() => cards.id, { onDelete: "cascade" }),
-    // The event identity is the stint's boundary: in_progress_since + the workspace's
-    // inProgressAlertDays. A new stint (the card left and re-entered progress) or a changed setting is
-    // a new boundary, so the rule fires once per stint without a persisted "too long" flag.
+    // Records the first crossing until an admin corrects the card's time below the alert.
+    // List moves and workspace setting changes do not rearm an existing run.
     alertAt: timestamp("alert_at", { withTimezone: true }).notNull(),
     firedAt: timestamp("fired_at", { withTimezone: true }).notNull().defaultNow(),
   },

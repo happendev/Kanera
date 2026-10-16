@@ -44,7 +44,7 @@ import { parseKaneraBoardExport } from "../imports/kanera-parser.js";
  *     allowed in the future.
  * 15. Export/import loses the list's flag, or restarts every imported clock.
  * 16. card_in_progress_too_long fires before the workspace alert, more than once per stint, for
- *     completed cards, or while the alert is off; or fails to fire again for a new stint.
+ *     completed cards, or while the alert is off; or rearms without an admin correction.
  * 17. The work query's inProgressOnly filter includes completed or not-in-progress cards, the
  *     longest-in-progress sort misorders them, or agent source maps omit which lists are in progress.
  * 18. Time in progress is not cumulative: a stint that ends (leaving, completion, archiving) is lost
@@ -56,7 +56,7 @@ import { parseKaneraBoardExport } from "../imports/kanera-parser.js";
  * 21. A workspace admin's correction of the tracked total is not applied, is open to non-admins,
  *     leaves no activity entry, or moves a running stint's start (and so its alert) when it need not.
  * 22. Card watchers are not told when a card passes the in-progress alert, are told more than once per
- *     stint, are not told again for a new stint, or are told while the alert is off.
+ *     card, including microsecond starts and concurrent sweeps, or fail to rearm after admin correction.
  */
 
 type CardSummary = { id: string; listId: string; inProgressSince?: string | null };
@@ -378,7 +378,7 @@ void test("Kanera export and import keep in-progress lists and each card's start
   await app.close();
 });
 
-void test("card_in_progress_too_long fires once per in-progress stint past the workspace alert", async () => {
+void test("card_in_progress_too_long stays latched until an admin lowers tracked time", async () => {
   const { app, auth, workspaceId, list, insertCard, read } = await setupWorkspace("owner-in-progress-alert@example.com");
   const doing = list("Doing");
   const todo = list("Todo");
@@ -410,15 +410,19 @@ void test("card_in_progress_too_long fires once per in-progress stint past the w
   await db.delete(cardLabelAssignments).where(eq(cardLabelAssignments.labelId, label.id));
   assert.equal(await runInProgressAlertAutomationSweep(undefined, new Date()), 0);
 
-  // Leaving and re-entering progress is a new stint with a new boundary a week out.
+  // Leaving and re-entering progress does not rearm a previously alerted card.
   await db.update(cards).set({ listId: todo.id }).where(eq(cards.id, stuck.id));
   await db.update(cards).set({ listId: doing.id }).where(eq(cards.id, stuck.id));
-  const restarted = (await read(stuck.id)).inProgressSince!;
+  assert.ok((await read(stuck.id)).inProgressSince);
   assert.equal(await runInProgressAlertAutomationSweep(undefined, new Date()), 0);
   const nextWeek = new Date(Date.now() + 8 * DAY_MS);
-  assert.equal(await runInProgressAlertAutomationSweep(undefined, nextWeek), 2);
-  assert.deepEqual(await labelled(), [fresh.id, stuck.id].sort());
-  assert.equal((await ledger(stuck.id))?.alertAt.getTime(), restarted.getTime() + 7 * DAY_MS);
+  assert.equal(await runInProgressAlertAutomationSweep(undefined, nextWeek), 1);
+  assert.deepEqual(await labelled(), [fresh.id]);
+  const reset = await app.inject({ method: "PUT", url: `/cards/${stuck.id}/in-progress-time`, headers: auth, payload: { seconds: 0 } });
+  assert.equal(reset.statusCode, 200, reset.body);
+  assert.equal(await ledger(stuck.id), null);
+  assert.equal(await runInProgressAlertAutomationSweep(undefined, nextWeek), 1);
+  assert.equal(await runInProgressAlertAutomationSweep(undefined, nextWeek), 0);
 
   // 0 turns the alert, and so the trigger, off.
   const off = await app.inject({ method: "PATCH", url: `/workspaces/${workspaceId}`, headers: auth, payload: { inProgressAlertDays: 0 } });
@@ -662,8 +666,8 @@ void test("workspace admins correct a card's tracked time in progress, with an a
   await app.close();
 });
 
-void test("card watchers are notified once per stint when a card passes the in-progress alert", async () => {
-  const { app, user, workspaceId, board, list, insertCard } = await setupWorkspace("owner-in-progress-notify@example.com");
+void test("card watchers receive one durable alert until an admin lowers time below the threshold", async () => {
+  const { app, auth, user, workspaceId, board, list, insertCard } = await setupWorkspace("owner-in-progress-notify@example.com");
   await db.update(workspaces).set({ inProgressAlertDays: 2 }).where(eq(workspaces.id, workspaceId));
   const card = await insertCard(list("Doing").id);
   const [watcher] = await insertTestUsers(db, { clientId: user.clientId, email: "watcher-in-progress-notify@example.com", passwordHash: "x", displayName: "Watcher" }).returning();
@@ -689,8 +693,9 @@ void test("card watchers are notified once per stint when a card passes the in-p
 
   // Past it: one system activity for this stint, delivered to the watcher.
   const firstStart = new Date(Date.now() - 3 * DAY_MS);
-  await db.update(cards).set({ inProgressSince: firstStart }).where(eq(cards.id, card.id));
-  await runInProgressAlertNotificationSweep();
+  // Postgres starts have microseconds, unlike JS Date: equality used to repeat every hour.
+  await db.update(cards).set({ inProgressSince: sql`${firstStart.toISOString()}::timestamptz + interval '123 microseconds'` }).where(eq(cards.id, card.id));
+  await Promise.all([runInProgressAlertNotificationSweep(), runInProgressAlertNotificationSweep()]);
   const [first] = await alerts();
   assert.ok(first);
   assert.equal(first.actorKind, "system");
@@ -704,16 +709,42 @@ void test("card watchers are notified once per stint when a card passes the in-p
   await runInProgressAlertNotificationSweep();
   assert.equal((await alerts()).length, 1);
 
-  // A new stint past the alert is news again.
+  // Moving to another stint and changing the setting do not rearm the alert.
   await db.update(cards).set({ inProgressSince: new Date(Date.now() - 4 * DAY_MS) }).where(eq(cards.id, card.id));
   await runInProgressAlertNotificationSweep();
+  assert.equal((await alerts()).length, 1);
+  await db.update(workspaces).set({ inProgressAlertDays: 1 }).where(eq(workspaces.id, workspaceId));
+  await runInProgressAlertNotificationSweep();
+  assert.equal((await alerts()).length, 1);
+
+  // Neither increasing the total nor reducing it while still above the threshold rearms it.
+  for (const seconds of [10 * 86400, 9 * 86400]) {
+    const correction = await app.inject({ method: "PUT", url: `/cards/${card.id}/in-progress-time`, headers: auth, payload: { seconds } });
+    assert.equal(correction.statusCode, 200, correction.body);
+    await runInProgressAlertNotificationSweep();
+    assert.equal((await alerts()).length, 1);
+  }
+
+  const reset = await app.inject({ method: "PUT", url: `/cards/${card.id}/in-progress-time`, headers: auth, payload: { seconds: 0 } });
+  assert.equal(reset.statusCode, 200, reset.body);
+  await runInProgressAlertNotificationSweep();
+  assert.equal((await alerts()).length, 1);
+  await db.update(cards).set({ inProgressSince: new Date(Date.now() - 3 * DAY_MS) }).where(eq(cards.id, card.id));
+  await Promise.all([runInProgressAlertNotificationSweep(), runInProgressAlertNotificationSweep()]);
   assert.equal((await alerts()).length, 2);
+  await runInProgressAlertNotificationSweep();
+  assert.equal((await alerts()).length, 2);
+
+  // History retention must not rearm the durable claim.
+  await db.delete(activityEvents).where(and(eq(activityEvents.entityId, card.id), eq(activityEvents.action, "inProgress:tooLong")));
+  await runInProgressAlertNotificationSweep();
+  assert.equal((await alerts()).length, 0);
 
   // The alert set to 0 turns it off.
   await db.update(workspaces).set({ inProgressAlertDays: 0 }).where(eq(workspaces.id, workspaceId));
   await db.update(cards).set({ inProgressSince: new Date(Date.now() - 5 * DAY_MS) }).where(eq(cards.id, card.id));
   await runInProgressAlertNotificationSweep();
-  assert.equal((await alerts()).length, 2);
+  assert.equal((await alerts()).length, 0);
 
   await app.close();
 });
