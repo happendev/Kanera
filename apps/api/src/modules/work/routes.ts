@@ -470,6 +470,7 @@ async function loadCatalog(scopeBoards: AccessibleBoard[], viewerClientId: strin
       iconColor: board.iconColor,
       viewerRole: board.viewerRole,
       assignedItemsOnly: board.assignedItemsOnly,
+      inProgressEnabled: board.inProgressEnabled,
     })),
     // Native metadata follows the sidebar's workspace sequence first, then its own position inside
     // that workspace. Comparing position globally would interleave unrelated workspace vocabularies.

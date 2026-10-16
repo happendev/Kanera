@@ -5700,6 +5700,28 @@
       "src/app/features/account-settings/org/org.page.html"
     ]
   },
+  "3911817769522706118": "Time in progress",
+  "@3911817769522706118": {
+    "x-files": [
+      "src/app/features/account-settings/org/org.page.html",
+      "src/app/features/board/table-view/table-columns.util.ts",
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
+  "4269318564728384576": "Track active work across this organisation. Turning it off pauses clocks and hides progress features on every board. Recorded time is kept. Boards can also opt out individually.",
+  "@4269318564728384576": {
+    "x-files": [
+      "src/app/features/account-settings/org/org.page.html"
+    ]
+  },
+  "4387535478780037275": "Enable in progress",
+  "@4387535478780037275": {
+    "x-files": [
+      "src/app/features/account-settings/org/org.page.html",
+      "src/app/features/workspace-settings/boards/boards.page.html",
+      "src/app/features/workspace-settings/general/general.page.html"
+    ]
+  },
   "2547571169649786686": "Danger zone",
   "@2547571169649786686": {
     "x-files": [
@@ -13858,14 +13880,6 @@
     "description": "Table column header - the card's rank in the viewer's Up next queue",
     "x-files": [
       "src/app/features/board/table-view/table-columns.util.ts"
-    ]
-  },
-  "3911817769522706118": "Time in progress",
-  "@3911817769522706118": {
-    "description": "Table column header - tracked working time the card has spent in In progress lists",
-    "x-files": [
-      "src/app/features/board/table-view/table-columns.util.ts",
-      "src/app/features/workspace-settings/general/general.page.html"
     ]
   },
   "7239750919884229270": "Updated",

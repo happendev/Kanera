@@ -107,7 +107,10 @@ const automationActionPickerGroups = [
 })
 export class WorkspaceSettingsAutomationsPage {
   protected readonly settings = inject(WorkspaceSettingsPage);
-  protected readonly eventPickerGroups = automationEventPickerGroups;
+  protected readonly eventPickerGroups = computed(() => automationEventPickerGroups.map((group) => ({
+    ...group,
+    options: group.options.filter((option) => this.settings.progressSettingsEnabled() || option.id !== "card_in_progress_too_long"),
+  })));
   protected readonly actionPickerGroups = automationActionPickerGroups;
   protected readonly listPickerGroups = computed<PickerGroup[]>(() => [{
     id: "lists",

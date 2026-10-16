@@ -24,6 +24,7 @@ export interface AuthUser {
   hasWorkspace: boolean;
   // Active organisation's choice; absent on sessions cached before the setting existed.
   portfolioEnabled?: boolean;
+  inProgressEnabled?: boolean;
   role: OrgRole;
   organisations?: AuthOrganisation[];
   canCreateOrganisation?: boolean;

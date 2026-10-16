@@ -606,6 +606,8 @@ export const publicOpenApiDocument: Record<string, unknown> = {
           icon: nullable({ type: "string" }),
           iconColor: nullable({ type: "string" }),
           backgroundGradient: nullable({ type: "string" }),
+          inProgressEnabled: { type: "boolean", description: "Board tracking preference. The owning organisation must also enable in progress." },
+          inProgressResumedAt: nullable({ type: "string", format: "date-time" }),
           standaloneGroupId: nullable(uuid),
           position,
           createdAt: dateTime,

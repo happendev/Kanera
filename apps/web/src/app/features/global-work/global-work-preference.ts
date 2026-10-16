@@ -322,6 +322,7 @@ export function sanitizeGlobalWorkDefinition(
   const display = allowedDisplays.has(requestedDisplay)
     ? requestedDisplay
     : lens === "portfolio" ? "summary" : lens === "team" ? "board" : "table";
+  const progressEnabled = catalog.boards.some((board) => board.inProgressEnabled !== false);
   const builtinTableColumns = new Set([
     "status", "board", "assignees", "due", "inProgress", "labels", "checklist", "description", "created", "updated",
   ]);
@@ -359,8 +360,11 @@ export function sanitizeGlobalWorkDefinition(
       // apparently "All boards" picker backed by an empty explicit scope.
       allAccessible: definition.scope.allAccessible || !hasExplicitScope,
     },
+    sort: !progressEnabled && definition.sort.startsWith("inProgress") ? "dueAsc" : definition.sort,
     filters: {
       ...definition.filters,
+      inProgressOnly: progressEnabled && definition.filters.inProgressOnly,
+      inProgressTooLongOnly: progressEnabled && definition.filters.inProgressTooLongOnly,
       // The whole-team overview renders every teammate at once, so a remembered focus is dropped.
       assigneeIds: lens === "my" || display === "overview"
         ? []

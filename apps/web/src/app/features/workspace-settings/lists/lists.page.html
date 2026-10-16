@@ -34,6 +34,7 @@
             </button>
             }
             <div class="row-actions">
+              @if (settings.progressSettingsEnabled()) {
               <button
                 type="button"
                 class="list-progress-toggle"
@@ -46,6 +47,7 @@
                 <i class="ti ti-progress"></i>
                 <span class="mobile-hide" i18n="Toggle on a workspace list - marks it as one where work is actively happening">In progress</span>
               </button>
+              }
               <k-icon-picker [value]="list.icon ?? 'list'" (valueChange)="settings.updateListStyle(list.id, { icon: $event })" />
               <k-color-picker [value]="$any(list.color)" (valueChange)="settings.updateListStyle(list.id, { color: $event })" />
               <button class="ghost icon danger" (click)="settings.archiveList(list.id)" [disabled]="!!settings.deletionPreviewKey()" aria-label="Delete list" i18n-aria-label kTooltip="Delete list" i18n-kTooltip>

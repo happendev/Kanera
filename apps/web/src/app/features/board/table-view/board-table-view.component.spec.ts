@@ -91,6 +91,7 @@ describe("BoardTableViewComponent", () => {
     createCard: vi.fn(),
   };
   const state = {
+    inProgressEnabled: vi.fn(() => true),
     updateCard: vi.fn(),
     cardById: vi.fn((id: string) => card(id)),
     positionForCardDrop: vi.fn(() => "2000.0000000000"),

@@ -815,6 +815,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       name: board.name,
       icon: board.icon,
       iconColor: board.iconColor,
+      inProgressEnabled: board.inProgressEnabled,
     }))
   );
   readonly tableSourceWorkspaces = computed<SourceWorkspaceRef[]>(() =>
@@ -913,7 +914,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   }]);
   readonly sortGroups = computed(() => [{
     id: "sort",
-    options: this.sortOptions.map((option) => ({ id: option.id, label: option.label, icon: option.icon })),
+    options: this.sortOptions.filter((option) => this.inProgressEnabled() || !option.id.startsWith("inProgress")).map((option) => ({ id: option.id, label: option.label, icon: option.icon })),
   }]);
 
   readonly scopeTrigger = computed(() => {
@@ -997,7 +998,7 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
   }[]>(() => {
     const totals = this.state.portfolio()?.totals;
     if (!totals) return [];
-    return [
+    const metrics: { key: PortfolioMetric; label: string; icon: string; tone: "danger" | "success" | null; value: number }[] = [
       { key: "active", label: $localize`:Portfolio stat tile, cards not completed:Active`, icon: "player-play", tone: null, value: totals.cards - totals.completed },
       { key: "overdue", label: $localize`:Portfolio stat tile, overdue cards:Overdue`, icon: "alert-triangle", tone: "danger", value: totals.overdue },
       { key: "dueSoon", label: $localize`:Portfolio stat tile:Due next 7 days`, icon: "calendar-due", tone: null, value: totals.dueSoon },
@@ -1009,9 +1010,11 @@ export class GlobalWorkPage implements OnInit, OnDestroy {
       { key: "completed", label: $localize`:Portfolio stat tile, completed cards:Completed`, icon: "circle-check", tone: "success", value: totals.completed },
       { key: "overdueChecklistItems", label: $localize`:Portfolio stat tile, overdue checklist items:Overdue checklist`, icon: "list-check", tone: "danger", value: totals.overdueChecklistItems },
     ];
+    return metrics.filter((metric) => this.inProgressEnabled() || (metric.key !== "inProgress" && metric.key !== "inProgressTooLong"));
   });
 
-  readonly portfolioColumns = PORTFOLIO_COLUMNS;
+  readonly inProgressEnabled = computed(() => this.state.catalog().boards.some((board) => board.inProgressEnabled !== false));
+  readonly portfolioColumns = computed(() => PORTFOLIO_COLUMNS.filter((column) => this.inProgressEnabled() || (column.key !== "inProgress" && column.key !== "inProgressTooLong")));
 
   /** Full organisation → workspace → board tree. Collapse only affects which rows render. */
   private readonly portfolioTree = computed<PortfolioRow[]>(() => {

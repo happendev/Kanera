@@ -3761,6 +3761,8 @@
     "3652007016355058890": "Tus tableros",
     "2054599520790063739": "Tableros en común",
     "6368227149612917458": "Dirección de correo copiada",
-    "8228936172465447983": "No se pudo copiar la dirección de correo electrónico."
+    "8228936172465447983": "No se pudo copiar la dirección de correo electrónico.",
+    "4269318564728384576": "Registra el trabajo activo en esta organización. Al desactivarlo, se pausan los temporizadores y se ocultan las funciones de progreso en todos los tableros. El tiempo registrado se conserva. También se puede desactivar en cada tablero.",
+    "4387535478780037275": "Activar en progreso"
   }
 }

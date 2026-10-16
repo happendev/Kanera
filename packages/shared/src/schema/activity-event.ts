@@ -10,6 +10,7 @@ import { workspaceApiKeys } from "./workspace-api-key.js";
 import { workspaces } from "./workspace.js";
 
 export const ACTIVITY_ENTITY_TYPES = [
+  "client",
   "board",
   "boardGroup",
   "standaloneBoardGroup",

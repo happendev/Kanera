@@ -75,6 +75,8 @@ function board(overrides: Partial<Board & { disabledByPlan?: boolean }> = {}): B
     icon: null,
     iconColor: null,
     backgroundGradient: null,
+    inProgressEnabled: true,
+    inProgressResumedAt: null,
     position: "1000.0000000000",
     archivedAt: null,
     createdAt: new Date("2026-05-21T00:00:00.000Z"),

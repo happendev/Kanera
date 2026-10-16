@@ -1,6 +1,6 @@
 import { dto } from "@kanera/shared";
 import { inProgressClockOf, SERVER_EVENTS, type WireCard, type WireCardChecklist, type WireCardDetail } from "@kanera/shared/events";
-import { ACTIVITY_ACTION, activityEvents, automationInProgressRuns, agentRuns, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardInProgressAlerts, cardLabelAssignments, cardLabels, cards, cardWatchers, customFields, lists, users, type ActivityEvent } from "@kanera/shared/schema";
+import { ACTIVITY_ACTION, activityEvents, boards, clients, workspaces, automationInProgressRuns, agentRuns, cardAssignees, cardAttachments, cardChecklistItems, cardChecklists, cardChecklistTemplateApplications, cardCustomFieldValues, cardInProgressAlerts, cardLabelAssignments, cardLabels, cards, cardWatchers, customFields, lists, users, type ActivityEvent } from "@kanera/shared/schema";
 import { IN_PROGRESS_CLOCK_COLUMNS } from "../../lib/in-progress-clock.js";
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -25,7 +25,7 @@ import { loadChecklistsForCard, loadChecklistsForCards } from "../../lib/checkli
 import { emitLaneRebalanced, emitWorkspaceLaneRebalanced, positionForLaneInsert, rebalanceBoardLane } from "../../lib/board-lane.js";
 import { shapeAttachmentMedia } from "../../lib/attachment-media.js";
 import { assertValidOptionIds, assertWorkspaceMemberIds, buildCustomFieldValueColumns, customFieldValueEquals, describeCustomFieldValue, emptyValueColumns, hasCustomFieldValue, type CustomFieldValueColumns } from "../../lib/custom-fields.js";
-import { AppError, badRequest, notFound } from "../../lib/errors.js";
+import { AppError, badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { resolveDueDatePatch } from "../../lib/due-date.js";
 import { allocateCardKeys, resolveCardKey } from "../../lib/card-keys.js";
 import { signedAvatarUrl, signEmbeddedMediaUrls, stripSignedEmbeddedMediaUrls } from "../../lib/media-keys.js";
@@ -1549,8 +1549,13 @@ export async function cardRoutes(
     const { card: current, ctx } = await loadEditableCard(req.auth, id);
     await assertWorkspaceAccess(req.auth, ctx.workspaceId, "admin");
     assertCardActive(current);
-
     const { card, activity } = await db.transaction(async (tx) => {
+      const [locked] = await tx.select({ boardId: cards.boardId }).from(cards).where(eq(cards.id, id)).for("update");
+      if (!locked) throw notFound();
+      const [progress] = await tx.select({ enabled: sql<boolean>`${boards.inProgressEnabled} and ${clients.inProgressEnabled}` })
+        .from(boards).innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+        .innerJoin(clients, eq(clients.id, workspaces.clientId)).where(eq(boards.id, locked.boardId));
+      if (!progress?.enabled) throw forbidden();
       const [clock] = await tx.execute<{ banked: number; running: number; alertDays: number }>(sql`
         select c.in_progress_seconds as banked, w.in_progress_alert_days as "alertDays",
                in_progress_working_seconds(c.in_progress_since, now(), w.time_zone) as running

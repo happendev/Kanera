@@ -83,7 +83,7 @@ export class CardComponent {
   readonly allowCopyToBoard = input<boolean>(true);
   readonly allowMoveToBoard = input<boolean>(true);
   readonly allowBoardNavigation = input<boolean>(false);
-  readonly boardSummary = input<{ id: string; name: string; icon: string | null; iconColor: string | null } | null>(null);
+  readonly boardSummary = input<{ inProgressEnabled?: boolean; id: string; name: string; icon: string | null; iconColor: string | null } | null>(null);
   // Consolidated work surfaces render the same card tile for cards from source boards with
   // different roles. These overrides keep the presentation shared without flattening those
   // source-specific permissions into the route-local BoardState.
@@ -199,7 +199,7 @@ export class CardComponent {
     const now = this.clock.now();
     // The alert setting is only read for a card that has time to show.
     // Workspace settings are only read for a card that has time to show.
-    if (card.archivedAt || !hasTimeInProgress(card)) return null;
+    if (!(this.boardSummary()?.inProgressEnabled ?? this.state.inProgressEnabled()) || card.archivedAt || !hasTimeInProgress(card)) return null;
     return timeInProgressChip(card, now, this.state.inProgressAlertDays(), this.state.workspaceTimeZone());
   });
 

@@ -3761,6 +3761,8 @@
     "3652007016355058890": "Tavlene dine",
     "2054599520790063739": "Tavler du deler",
     "6368227149612917458": "E-postadresse kopiert",
-    "8228936172465447983": "Kunne ikke kopiere e-postadressen."
+    "8228936172465447983": "Kunne ikke kopiere e-postadressen.",
+    "4269318564728384576": "Spor aktivt arbeid i denne organisasjonen. Når funksjonen slås av, settes tidtakingen på pause og fremdriftsfunksjonene skjules på alle tavler. Registrert tid beholdes. Funksjonen kan også slås av på hver enkelt tavle.",
+    "4387535478780037275": "Aktiver pågår"
   }
 }

@@ -3761,6 +3761,8 @@
     "3652007016355058890": "Vos tableaux",
     "2054599520790063739": "Tableaux en commun",
     "6368227149612917458": "Adresse e-mail copiée",
-    "8228936172465447983": "Impossible de copier l'adresse e-mail."
+    "8228936172465447983": "Impossible de copier l'adresse e-mail.",
+    "4269318564728384576": "Suivez le travail en cours dans cette organisation. La désactivation met les compteurs en pause et masque les fonctionnalités de progression sur tous les tableaux. Le temps enregistré est conservé. Chaque tableau peut aussi désactiver cette option.",
+    "4387535478780037275": "Activer le suivi en cours"
   }
 }

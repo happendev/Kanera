@@ -748,3 +748,75 @@ void test("card watchers receive one durable alert until an admin lowers time be
 
   await app.close();
 });
+
+// E2E sees seconds of elapsed time only. These assertions catch lost banked working hours,
+// disabled-time backfill and resumed clocks starting from old history instead of the enable time.
+void test("organisation and board progress gates bank time and exclude disabled intervals", async () => {
+  const app = await buildIntegrationServer();
+  const { auth, user } = await signupOwner(app, { orgName: "Progress gates", email: "progress-gates@example.com", displayName: "Owner" });
+  const created = await app.inject({ method: "POST", url: "/workspaces", headers: auth, payload: { name: "Gates" } });
+  assert.equal(created.statusCode, 201, created.body);
+  const workspaceId = created.json<{ id: string }>().id;
+  const [list] = await db.select().from(lists).where(and(eq(lists.workspaceId, workspaceId), eq(lists.inProgress, true)));
+  assert.ok(list);
+  const response = await app.inject({ method: "POST", url: `/workspaces/${workspaceId}/boards`, headers: auth, payload: { name: "Gated" } });
+  assert.equal(response.statusCode, 201, response.body);
+  const boardId = response.json<{ id: string }>().id;
+  const [card] = await db.insert(cards).values({ workspaceId, boardId, listId: list.id, title: "Clock", createdById: user.id, position: "1000" }).returning();
+  assert.ok(card);
+  const read = async () => (await db.select().from(cards).where(eq(cards.id, card.id)))[0]!;
+  const patch = async (url: string, inProgressEnabled: boolean) => {
+    const res = await app.inject({ method: "PATCH", url, headers: auth, payload: { inProgressEnabled } });
+    assert.equal(res.statusCode, 200, res.body);
+  };
+  await db.update(cards).set({ inProgressSince: new Date("2026-01-05T09:00:00Z"), inProgressSeconds: 600 }).where(eq(cards.id, card.id));
+  await patch(`/boards/${boardId}`, false);
+  const stopped = await read();
+  assert.equal(stopped.inProgressSince, null);
+  assert.ok(stopped.inProgressSeconds > 600, "completed working hours are banked");
+  await db.update(lists).set({ inProgress: false }).where(eq(lists.id, list.id));
+  await db.update(lists).set({ inProgress: true }).where(eq(lists.id, list.id));
+  assert.equal((await read()).inProgressSince, null, "list backfill respects board opt-out");
+  await patch("/clients/me", false);
+  await patch(`/boards/${boardId}`, true);
+  assert.equal((await read()).inProgressSince, null, "organisation off wins over board on");
+  const correction = await app.inject({ method: "PUT", url: `/cards/${card.id}/in-progress-time`, headers: auth, payload: { seconds: 1 } });
+  assert.equal(correction.statusCode, 403);
+  assert.equal(await runInProgressAlertNotificationSweep(), 0);
+  assert.equal(await runInProgressAlertAutomationSweep(), 0);
+  const resumeAfter = Date.now();
+  await patch("/clients/me", true);
+  const resumed = await read();
+  assert.ok(resumed.inProgressSince && resumed.inProgressSince.getTime() >= resumeAfter);
+  assert.equal(resumed.inProgressSeconds, stopped.inProgressSeconds);
+  await db.update(lists).set({ inProgress: false }).where(eq(lists.id, list.id));
+  await db.update(lists).set({ inProgress: true }).where(eq(lists.id, list.id));
+  assert.ok((await read()).inProgressSince!.getTime() >= resumeAfter, "list backfill cannot count the disabled interval");
+  await patch(`/boards/${boardId}`, false);
+  await patch("/clients/me", false);
+  await patch("/clients/me", true);
+  assert.equal((await read()).inProgressSince, null, "org enable retains individual board opt-outs");
+});
+
+// A browser cannot hold a transaction across a settings toggle. Prove that a card inserted while
+// the organisation switch is uncommitted reads the committed setting after waiting on its board.
+void test("cards created during an organisation toggle use the committed progress setting", async () => {
+  const { workspaceId, insertCard, list } = await setupWorkspace("progress-org-race@example.com");
+  const [workspace] = await db.select().from(workspaces).where(eq(workspaces.id, workspaceId));
+  assert.ok(workspace);
+  let release!: () => void;
+  let written!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const ready = new Promise<void>((resolve) => { written = resolve; });
+  const toggling = db.transaction(async (tx) => {
+    await tx.execute(sql`update client set in_progress_enabled = false where id = ${workspace.clientId}`);
+    written();
+    await gate;
+  });
+  await ready;
+  const inserting = insertCard(list("Doing").id);
+  try { await assertStillWaiting(inserting); }
+  finally { release(); }
+  await toggling;
+  assert.equal((await inserting).inProgressSince, null);
+});

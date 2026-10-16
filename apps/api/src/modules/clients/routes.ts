@@ -51,6 +51,7 @@ function toPublicClient(row: ClientRow): PublicClientResponse {
       pushEnabled: true,
       requireMfa: row.requireMfa,
       portfolioEnabled: row.portfolioEnabled,
+      inProgressEnabled: row.inProgressEnabled,
       mcpPolicy: row.mcpPolicy,
       defaultCompletedCardsActiveDays: row.defaultCompletedCardsActiveDays,
       defaultInactiveCardsDays: row.defaultInactiveCardsDays,
@@ -80,6 +81,7 @@ function toPublicClient(row: ClientRow): PublicClientResponse {
     pushEnabled: row.pushEnabled,
     requireMfa: row.requireMfa,
     portfolioEnabled: row.portfolioEnabled,
+    inProgressEnabled: row.inProgressEnabled,
     // Not enforced self-hosted (lib/mcp-policy.ts), so report the effective value.
     mcpPolicy: "write",
     defaultCompletedCardsActiveDays: row.defaultCompletedCardsActiveDays,
@@ -331,6 +333,7 @@ export async function clientRoutes(app: FastifyInstance) {
     if (body.name !== undefined) updates.name = body.name;
     if (body.pushEnabled !== undefined) updates.pushEnabled = body.pushEnabled;
     if (body.requireMfa !== undefined) updates.requireMfa = body.requireMfa;
+    if (body.inProgressEnabled !== undefined) updates.inProgressEnabled = body.inProgressEnabled;
     if (body.portfolioEnabled !== undefined) updates.portfolioEnabled = body.portfolioEnabled;
     if (body.mcpPolicy !== undefined) updates.mcpPolicy = body.mcpPolicy;
     if (body.defaultCompletedCardsActiveDays !== undefined) updates.defaultCompletedCardsActiveDays = body.defaultCompletedCardsActiveDays;
@@ -338,8 +341,27 @@ export async function clientRoutes(app: FastifyInstance) {
     if (nextStorage !== undefined) updates.storageConfig = encryptStorageConfig(nextStorage);
     if (nextSmtp !== undefined) updates.smtpConfig = encryptSmtpConfig(nextSmtp);
 
-    const [updated] = await db.update(clients).set(updates).where(eq(clients.id, req.auth.cid)).returning();
-    emitToClient(req.auth.cid, "client:updated", withSignedMedia(req.auth.cid, { clientId: updated!.id, name: updated!.name, logoUrl: updated!.logoUrl }));
+    const [updated] = await db.transaction(async (tx) => {
+      const result = await tx.update(clients).set(updates).where(eq(clients.id, req.auth.cid)).returning();
+      if (body.inProgressEnabled !== undefined && body.inProgressEnabled !== current.inProgressEnabled) {
+        await recordActivity(tx, {
+          boardId: null, workspaceId: null, clientId: req.auth.cid, actorId: req.auth.sub,
+          entityType: "client", entityId: req.auth.cid, action: "updated",
+          payload: { inProgressEnabled: body.inProgressEnabled },
+        });
+      }
+      return result;
+    });
+    if (body.inProgressEnabled !== undefined && body.inProgressEnabled !== current.inProgressEnabled) {
+      const affected = await db.select({ board: boards }).from(boards)
+        .innerJoin(workspaces, eq(workspaces.id, boards.workspaceId))
+        .where(eq(workspaces.clientId, req.auth.cid));
+      for (const { board } of affected) {
+        await emitToBoardAudience(board.id, SERVER_EVENTS.BOARD_UPDATED,
+          { board, organisationInProgressEnabled: updated!.inProgressEnabled }, { workspaceId: board.workspaceId });
+      }
+    }
+    emitToClient(req.auth.cid, "client:updated", withSignedMedia(req.auth.cid, { clientId: updated!.id, name: updated!.name, logoUrl: updated!.logoUrl, inProgressEnabled: updated!.inProgressEnabled }));
     return toPublicClient(updated!);
   });
 

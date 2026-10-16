@@ -136,6 +136,7 @@ export const authResponse = z.object({
     deploymentMode: deploymentModeSchema,
     kaneraEnvironment: kaneraEnvironmentSchema,
     hasWorkspace: z.boolean(),
+    inProgressEnabled: z.boolean(),
     // The active organisation's choice; the web app hides Portfolio navigation when false.
     portfolioEnabled: z.boolean(),
     role: z.enum(CLIENT_ROLES),

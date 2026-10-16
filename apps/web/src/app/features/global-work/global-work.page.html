@@ -248,7 +248,7 @@
           }
         </div>
 
-        <k-filter-bar
+        <k-filter-bar [inProgressEnabled]="inProgressEnabled()"
           [value]="filterValue()"
           [labels]="filterLabels()"
           [lists]="filterLists()"
@@ -577,7 +577,7 @@
                       }
                     </span>
                   </th>
-                  @for (column of portfolioColumns; track column.key) {
+                  @for (column of portfolioColumns(); track column.key) {
                     <th>{{ column.label }}</th>
                   }
                 </tr>
@@ -607,7 +607,7 @@
                         </div>
                       </div>
                     </td>
-                    @for (column of portfolioColumns; track column.key) {
+                    @for (column of portfolioColumns(); track column.key) {
                       <td>
                         <button
                           type="button"

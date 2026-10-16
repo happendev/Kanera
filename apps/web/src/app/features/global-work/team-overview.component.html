@@ -141,6 +141,7 @@
           }
         </div>
       } @else {
+        @if (inProgressEnabled()) {
         <div class="section tone-progress">
           <h4 class="section-title">
             <button
@@ -171,6 +172,7 @@
           }
         </div>
 
+        }
         @if (item.recent.length) {
           <div class="section tone-recent">
             <h4 class="section-title">

@@ -3761,6 +3761,8 @@
     "3652007016355058890": "Deine Boards",
     "2054599520790063739": "Gemeinsame Boards",
     "6368227149612917458": "E-Mail-Adresse kopiert",
-    "8228936172465447983": "Die E-Mail-Adresse konnte nicht kopiert werden."
+    "8228936172465447983": "Die E-Mail-Adresse konnte nicht kopiert werden.",
+    "4269318564728384576": "Erfasse aktive Arbeit in dieser Organisation. Beim Deaktivieren pausieren die Zeitzähler und die Fortschrittsfunktionen werden auf allen Boards ausgeblendet. Erfasste Zeiten bleiben erhalten. Die Funktion kann auch pro Board deaktiviert werden.",
+    "4387535478780037275": "In Bearbeitung aktivieren"
   }
 }

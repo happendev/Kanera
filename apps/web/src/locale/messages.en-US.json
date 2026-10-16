@@ -3761,6 +3761,8 @@
     "3652007016355058890": "Your boards",
     "2054599520790063739": "Boards you share",
     "6368227149612917458": "Email copied",
-    "8228936172465447983": "Couldn't copy the email address."
+    "8228936172465447983": "Couldn't copy the email address.",
+    "4269318564728384576": "Track active work across this organization. Turning it off pauses clocks and hides progress features on every board. Recorded time is kept. Boards can also opt out individually.",
+    "4387535478780037275": "Enable in progress"
   }
 }

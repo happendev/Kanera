@@ -578,16 +578,17 @@ export class CardDetailComponent {
    */
   readonly timeInProgress = computed<(TimeInProgressChip & { detail: string }) | null>(() => {
     const card = this.card();
-    const now = this.clock.now();
+    // A corrected total can arrive between minute ticks; render it using the current instant.
+    const now = Math.max(this.clock.now(), Date.now());
     // The alert setting is only read for a card that has time to show.
-    if (!hasTimeInProgress(card)) return null;
+    if (!this.state.inProgressEnabled() || !hasTimeInProgress(card)) return null;
     const chip = timeInProgressChip(card, now, this.state.inProgressAlertDays(), this.state.workspaceTimeZone())!;
     return { ...chip, detail: formatTrackedDuration(chip.ms) };
   });
   readonly otherLists = computed(() => this.state.visibleLists().filter((l) => l.id !== this.card().listId));
 
   // Correcting tracked time is an audited workspace-admin action (see PUT /cards/:id/in-progress-time).
-  readonly canCorrectTimeInProgress = computed(() => this.canEdit() && this.state.viewerIsWorkspaceAdmin());
+  readonly canCorrectTimeInProgress = computed(() => this.canEdit() && this.state.viewerIsWorkspaceAdmin() && this.state.inProgressEnabled());
   readonly editingTimeInProgress = signal(false);
   readonly savingTimeInProgress = signal(false);
   readonly timeInProgressError = signal(false);

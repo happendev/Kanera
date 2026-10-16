@@ -443,8 +443,9 @@ export class BoardPage implements OnDestroy {
     const unreadOnly = this.effectiveView() !== "history" && this.showUnreadOnly();
     const overdueOnly = this.showOverdueOnly();
     const inactiveOnly = this.showInactiveOnly();
-    const cardFilter = this.boardCardFilter();
-    const inProgressOnly = this.showInProgressOnly();
+    const selectedFilter = this.boardCardFilter();
+    const cardFilter = !this.state.inProgressEnabled() && (selectedFilter === "inProgress" || selectedFilter === "inProgressTooLong") ? null : selectedFilter;
+    const inProgressOnly = this.state.inProgressEnabled() && this.showInProgressOnly();
     // Like overdue, ignored while viewing archived: archived cards are never in the live queue,
     // so applying it there would blank the archive rather than filter it.
     const prioritySetOnly = this.showPrioritySetOnly();
@@ -976,6 +977,12 @@ export class BoardPage implements OnDestroy {
   }
 
   constructor() {
+    effect(() => {
+      if (this.state.inProgressEnabled()) return;
+      this.showInProgressOnly.set(false);
+      const filter = this.boardCardFilter();
+      if (filter === "inProgress" || filter === "inProgressTooLong") this.boardCardFilter.set(null);
+    });
     // Page-level shortcuts. They win over the shell's while this page is mounted and unregister with
     // it, so the sheet shows them only on a board. Guarded on a loaded board so nothing fires on the
     // skeleton.

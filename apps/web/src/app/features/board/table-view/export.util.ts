@@ -87,6 +87,8 @@ export interface BoardExportContext {
   priorityRanksByGroup?: ReadonlyMap<string, ReadonlyMap<string, number>>;
   currentUserId: string | null;
   cardLinkBaseUrl?: string;
+  /** Disabled boards retain history but exclude it from visible exports and aggregates. */
+  inProgressEnabledForCard?: (card: AnyCard) => boolean;
   /** Each card's workspace time zone, whose working hours time in progress counts. Default UTC. */
   timeZoneForCard?: (card: AnyCard) => string;
 }
@@ -828,7 +830,7 @@ function aggregateTarget(key: string, ctx: BoardExportContext, index: ExportInde
 
 /** Tracked hours at `at`, to two decimals; null for a card with no tracked time (so averages skip it). */
 function inProgressHours(card: AnyCard, ctx: BoardExportContext): number | null {
-  if (!hasTimeInProgress(card)) return null;
+  if (ctx.inProgressEnabledForCard?.(card) === false || !hasTimeInProgress(card)) return null;
   const now = new Date(ctx.exportedAt).getTime();
   const timeZone = ctx.timeZoneForCard?.(card) ?? "UTC";
   return Math.round((timeInProgressMs(card, now, timeZone) / 3_600_000) * 100) / 100;

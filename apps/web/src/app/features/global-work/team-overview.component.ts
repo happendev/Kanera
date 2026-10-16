@@ -228,7 +228,7 @@ export class TeamOverviewComponent {
 
   readonly unownedRows = computed(() => {
     const unowned = this.unowned();
-    if (!unowned || unowned.total === 0) return null;
+    if (!this.inProgressEnabled() || !unowned || unowned.total === 0) return null;
     const nowMs = this.clock.now();
     const rows = unowned.cards.slice(0, UNOWNED_LIMIT).map((card) => this.row(card, nowMs));
     return { rows, more: Math.max(0, unowned.total - rows.length) };
@@ -246,6 +246,7 @@ export class TeamOverviewComponent {
   private readonly boardsById = computed(() => new Map(this.boards().map((board) => [board.id, board])));
   private readonly listsById = computed(() => new Map(this.lists().map((list) => [list.id, list])));
   /** With no list marked in progress anywhere in scope, "In progress" explains how to turn it on. */
+  readonly inProgressEnabled = computed(() => this.boards().some((board) => board.inProgressEnabled !== false));
   readonly hasInProgressLists = computed(() => this.lists().some((list) => list.inProgress));
 
   /** Each person's open assigned cards, grouped in one pass instead of a scan of every card per person. */
@@ -430,7 +431,8 @@ export class TeamOverviewComponent {
         },
       ];
 
-      const stat = selected.get(base.person.userId) ?? null;
+      const selection = selected.get(base.person.userId) ?? null;
+      const stat = selection === "inProgress" && !this.inProgressEnabled() ? null : selection;
       let drillDown: PersonOverview["drillDown"] = null;
       if (stat) {
         const rows = stat === "open"
@@ -469,7 +471,7 @@ export class TeamOverviewComponent {
         person: base.person,
         ...counts,
         inProgressTooLong,
-        stats,
+        stats: stats.filter((stat) => this.inProgressEnabled() || stat.key !== "inProgress"),
         lastActiveAt: base.lastActiveAt,
         inProgressRows,
         inProgressMore: Math.max(0, base.inProgressAll.length - IN_PROGRESS_LIMIT),
@@ -556,7 +558,7 @@ export class TeamOverviewComponent {
       boardIconClass: `ti ti-${board?.icon ?? "layout-kanban"}`,
       boardIconColor: board?.iconColor ? `var(--color-${board.iconColor})` : null,
       listName: this.listsById().get(card.listId)?.name ?? "",
-      time: timeInProgressChip(card, nowMs, this.alertDaysFor(card), this.timeZoneByWorkspace().get(card.workspaceId)),
+      time: this.boardsById().get(card.boardId)?.inProgressEnabled === false ? null : timeInProgressChip(card, nowMs, this.alertDaysFor(card), this.timeZoneByWorkspace().get(card.workspaceId)),
       due: withDue && card.dueDateLocalDate
         ? { text: formatDueDate(card.dueDateLocalDate, card.dueDateSlot, card.dueDateTimezone) ?? "", tone: dueTone(card) }
         : null,

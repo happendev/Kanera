@@ -283,6 +283,7 @@
         <i class="ti ti-grip-vertical ob-grip" cdkDragHandle></i>
         <i [class]="'ob-icon ti ti-' + (list.icon || 'list')"></i>
         <span>{{ list.name }}</span>
+        @if (inProgressEnabled()) {
         <button
           type="button"
           class="ob-pill-toggle ob-progress-toggle"
@@ -295,6 +296,7 @@
           <i class="ti ti-progress"></i>
           <ng-container i18n="Toggle on an onboarding workflow stage - marks the list as one where work is actively happening">In progress</ng-container>
         </button>
+        }
         <button type="button" class="ghost icon ob-item-action" (click)="removeList(index)" [attr.aria-label]="deleteItemLabel(list.name)" [kTooltip]="deleteItemLabel(list.name)">
           <i class="ti ti-trash"></i>
         </button>
