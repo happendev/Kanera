@@ -137,13 +137,6 @@
   box-shadow: 0 0 0 2px var(--surface);
 }
 
-// Priority lane visibility belongs beside search: it changes which teammate columns are on screen,
-// while search changes the cards inside those columns. The shared toolbar normally caps its search
-// slot at 340px; this view lets the combined query strip use the row instead.
-k-page-toolbar.priority-toolbar {
-  --pt-search-max-width: none;
-}
-
 .work-search {
   display: flex;
   flex: 1 1 auto;
@@ -157,102 +150,11 @@ k-page-toolbar.priority-toolbar {
     max-width: 340px;
     min-width: 160px;
   }
-
-  &.with-priority-people {
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-}
-
-.priority-people {
-  display: flex;
-  flex: 0 1 auto;
-  flex-wrap: wrap;
-  gap: 4px;
-  align-items: center;
-  min-width: 0;
-}
-
-.priority-layout-switch {
-  flex: none;
 }
 
 .work-done-layout-switch {
   flex: none;
   margin-left: 8px;
-}
-
-.priority-person-toggle {
-  display: inline-flex;
-  gap: 5px;
-  align-items: center;
-  justify-content: center;
-  min-width: 46px;
-  height: 32px;
-  padding: 0 7px 0 5px;
-  color: var(--text);
-  font-size: 11px;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-  background: var(--surface-2);
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-
-  &:hover {
-    background: var(--surface-hover);
-  }
-
-  // It remains a button, but visually reads as disabled because its lane is absent. Keeping it
-  // clickable is the entire restore path, so this must not use the native disabled attribute.
-  &.is-hidden {
-    color: var(--text-muted);
-    background: transparent;
-    border-style: dashed;
-    filter: grayscale(1);
-    opacity: 0.45;
-  }
-}
-
-.priority-table-hidden-note,
-.priority-table-error {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  margin: 0 0 8px;
-  padding: 7px 10px;
-  color: var(--text-muted);
-  font-size: 11.5px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-}
-
-.priority-table-error {
-  color: var(--danger);
-  background: var(--danger-bg);
-  border-color: var(--danger-border);
-}
-
-.priority-all-hidden {
-  display: grid;
-  gap: 4px;
-  justify-items: center;
-  padding: 48px 16px;
-  color: var(--text-muted);
-  text-align: center;
-
-  i {
-    font-size: 22px;
-  }
-
-  strong {
-    color: var(--text);
-    font-size: 13px;
-  }
-
-  span {
-    font-size: 12px;
-  }
 }
 
 /* ── Up next dock ──────────────────────────────────────────────────────────────
@@ -964,6 +866,10 @@ k-work-done-view {
 
 
 .board-priority-note,
+.overview-partial > .ti {
+  color: var(--warning);
+}
+
 .board-move-error {
   display: flex;
   align-items: center;

@@ -70,6 +70,16 @@
   @if (settings.portfolioEnabledError()) { <p class="form-error">{{ settings.portfolioEnabledError() }}</p> }
 </div>
 
+<div class="settings-section">
+  <h3 class="settings-section-title"><i class="ti ti-progress"></i><span i18n>Time in progress</span></h3>
+  <p class="settings-section-help" i18n>Track active work across this organisation. Turning it off pauses clocks and hides progress features on every board. Recorded time is kept. Boards can also opt out individually.</p>
+  <label class="push-toggle-row">
+    <input type="checkbox" [checked]="settings.inProgressEnabledDraft()" (change)="settings.saveInProgressEnabled($any($event.target).checked)" [disabled]="!settings.isClientAdmin() || settings.inProgressEnabledSaving()" />
+    <span class="push-toggle-copy"><span class="push-toggle-title" i18n>Enable in progress</span></span>
+  </label>
+  @if (settings.inProgressEnabledError()) { <p class="form-error">{{ settings.inProgressEnabledError() }}</p> }
+</div>
+
 @if (settings.isOrgOwner()) {
 <div class="danger-zone">
   <div class="danger-zone-head">

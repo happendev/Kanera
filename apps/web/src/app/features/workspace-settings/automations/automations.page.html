@@ -242,7 +242,7 @@
                 i18n-searchPlaceholder
                 emptyLabel="No matching events"
                 i18n-emptyLabel
-                [groups]="eventPickerGroups"
+                [groups]="eventPickerGroups()"
                 [value]="settings.automationTriggerTypeValue(automation)"
                 (valueChange)="settings.updateAutomationTrigger(automation.id, $any($event))"
               />

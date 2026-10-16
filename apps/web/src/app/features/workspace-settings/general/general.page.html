@@ -94,11 +94,21 @@
     </label>
   </div>
 </div>
+@if (settings.isStandalone() || settings.progressSettingsEnabled()) {
 <div class="board-settings-section">
   <div class="guest-section-head">
     <i class="ti ti-progress"></i>
     <span i18n="Section heading - tracked working time cards spend in In progress lists">Time in progress</span>
   </div>
+@if (settings.isStandalone()) {
+  @for (board of settings.boardList(); track board.id) {
+    <label class="board-linking-toggle">
+      <input type="checkbox" [checked]="board.inProgressEnabled" [disabled]="!settings.organisationInProgressEnabled() || !!settings.progressBoardSaving()" (change)="settings.updateBoardInProgress(board.id, $any($event.target).checked, $any($event.target))" />
+      <span i18n>Enable in progress</span>
+    </label>
+  }
+}
+  @if (settings.progressSettingsEnabled()) {
   <div class="board-form single-line-capture">
     <label class="compact-number-field">
       <span i18n="Followed by a number input and the word days">Flag cards in progress for more than</span>
@@ -119,7 +129,9 @@
     </label>
   </div>
   <p class="board-linking-help field-help" i18n="Help text under the working hours time zone setting">Tracked time counts working hours only: 09:00–17:00, Monday to Friday, in this time zone. Nights and weekends in progress add nothing.</p>
+  }
 </div>
+}
 <div class="board-settings-section">
   <div class="guest-section-head">
     <i class="ti ti-circle-check"></i>

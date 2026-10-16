@@ -395,7 +395,11 @@ export class BoardTableViewComponent implements OnDestroy {
   readonly groupBy = signal<GroupBy>("list");
   /** What the sheet is actually grouped and sorted by, host control taking precedence. */
   readonly effectiveGroupBy = computed<GroupBy>(() => this.hostGroupBy() ?? this.groupBy());
-  readonly effectiveSortBy = computed<SortBy>(() => this.hostSortBy() ?? this.sortBy());
+  readonly effectiveSortBy = computed<SortBy>(() => {
+    const sort = this.hostSortBy() ?? this.sortBy();
+    return !this.inProgressEnabled() && sort.startsWith("in-progress-") ? "position" : sort;
+  });
+  readonly inProgressEnabled = computed(() => this.crossBoard() ? this.sourceBoards().some((board) => board.inProgressEnabled !== false) : this.state.inProgressEnabled());
   readonly crossBoard = computed(() => this.sourceBoards().length > 0);
   /** More than one list/label/custom-field vocabulary in play, since all three are workspace-scoped. */
   readonly crossWorkspace = computed(() => this.sourceWorkspaces().length > 1);
@@ -484,7 +488,7 @@ export class BoardTableViewComponent implements OnDestroy {
     ...(this.crossBoard() ? ["board"] : []),
     "assignees",
     "due",
-    "inProgress",
+    ...(this.inProgressEnabled() ? ["inProgress"] : []),
     "labels",
     "checklist",
     "created",
@@ -776,7 +780,7 @@ export class BoardTableViewComponent implements OnDestroy {
     return unreadMarkLabel(this.unreadCount(cardId));
   }
 
-  readonly sortOptions = SORT_BY_OPTIONS;
+  readonly sortOptions = computed(() => SORT_BY_OPTIONS.filter((option) => this.inProgressEnabled() || !option.value.startsWith("in-progress-")));
 
   readonly groupByOptions = computed<GroupByOption[]>(() => [
     ...GROUP_BY_OPTIONS,
@@ -1958,10 +1962,15 @@ export class BoardTableViewComponent implements OnDestroy {
    * The card's tracked total, running or stopped. Reads the shared minute clock, so the cell ages in
    * place without a per-row timer.
    */
+  private progressEnabledFor(card: AnyCard): boolean {
+    return this.crossBoard() ? this.sourceBoardById().get(card.boardId)?.inProgressEnabled !== false : this.state.inProgressEnabled();
+  }
+
   timeInProgress(card: AnyCard): TimeInProgressChip | null {
     const now = this.clock.now();
     // The alert setting is only resolved for a card that has time to show.
     if (!hasTimeInProgress(card)) return null;
+    if (!this.progressEnabledFor(card)) return null;
     return timeInProgressChip(card, now, this.inProgressAlertDaysFor(card), this.timeZoneFor(card));
   }
 
@@ -2427,7 +2436,7 @@ export class BoardTableViewComponent implements OnDestroy {
     for (const card of cards) {
       let value: number;
       if (key === IN_PROGRESS_COLUMN_ID) {
-        value = hasTimeInProgress(card) ? timeInProgressMs(card, now, this.timeZoneFor(card)) : Number.NaN;
+        value = this.progressEnabledFor(card) && hasTimeInProgress(card) ? timeInProgressMs(card, now, this.timeZoneFor(card)) : Number.NaN;
       } else {
         const raw = this.valueFor(card.id, key)?.valueNumber;
         value = raw === null || raw === undefined || raw === "" ? Number.NaN : Number(raw);
@@ -2523,7 +2532,7 @@ export class BoardTableViewComponent implements OnDestroy {
       // its unit (see `exportColumnLabel`).
       case IN_PROGRESS_COLUMN_ID: {
         const now = this.clock.now();
-        return hasTimeInProgress(card) ? String(Math.round((timeInProgressMs(card, now, this.timeZoneFor(card)) / 3_600_000) * 100) / 100) : "";
+        return this.progressEnabledFor(card) && hasTimeInProgress(card) ? String(Math.round((timeInProgressMs(card, now, this.timeZoneFor(card)) / 3_600_000) * 100) / 100) : "";
       }
       default: {
         const field = this.customFieldForColumn(column);
@@ -2550,7 +2559,7 @@ export class BoardTableViewComponent implements OnDestroy {
       groupBy: this.groupByLabel(),
       sortBy: this.sortByLabel(),
       columns: this.visibleColumns().map((id) => ({ id, label: this.exportColumnLabel(id) })),
-      aggregateConfig: this.aggregateConfig(),
+      aggregateConfig: Object.fromEntries(Object.entries(this.aggregateConfig()).filter(([key]) => key !== IN_PROGRESS_COLUMN_ID || this.inProgressEnabled())),
       aggregateSplitBy: this.aggregateSplitBy(),
       aggregateSplitLabel: this.splitByLabel(),
       groups,
@@ -2575,6 +2584,7 @@ export class BoardTableViewComponent implements OnDestroy {
       currentUserId: this.currentUserId(),
       cardLinkBaseUrl: window.location.origin,
       timeZoneForCard: (card) => this.timeZoneFor(card),
+      inProgressEnabledForCard: (card) => this.progressEnabledFor(card),
     });
   }
 

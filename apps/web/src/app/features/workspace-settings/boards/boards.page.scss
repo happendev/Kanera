@@ -39,3 +39,28 @@
 
 // On narrow screens the shared media query already collapses guest rows to a single stacked
 // column with data-labels, so no extra handling is needed here.
+
+.board-progress-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.board-progress-toggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: none;
+}
+
+@media (hover: none), (pointer: coarse), (any-pointer: coarse) {
+  .board-progress-toggle { min-height: 44px; }
+  .board-tile { height: auto; min-height: 44px; }
+}
+
+@media (max-width: 640px) {
+  .board-progress-toggle { margin-left: 26px; }
+}

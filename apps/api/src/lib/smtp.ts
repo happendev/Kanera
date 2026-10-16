@@ -176,6 +176,14 @@ export async function sendEmail({ config, to, subject, html, text, headers }: Se
   }
 }
 
+/** An unexpected SMTP reply, with the command it answered so callers can tell who refused what. */
+export class SmtpReplyError extends Error {
+  override name = "SmtpReplyError";
+  constructor(readonly code: number, readonly stage: string, reply: string) {
+    super(`SMTP server returned ${reply}`);
+  }
+}
+
 class SmtpProbe {
   private socket!: net.Socket | tls.TLSSocket;
   private buffer = "";
@@ -220,7 +228,7 @@ class SmtpProbe {
 
   async command(command: string, expected: number[]) {
     this.socket.write(`${command}\r\n`);
-    return this.read(expected);
+    return this.read(expected, command.split(" ", 1)[0]!.toUpperCase());
   }
 
   async sendMail(to: string, message: string) {
@@ -228,17 +236,17 @@ class SmtpProbe {
     await this.command(`RCPT TO:<${to}>`, [250, 251]);
     await this.command("DATA", [354]);
     this.socket.write(`${escapeData(message)}\r\n.\r\n`);
-    await this.read([250]);
+    await this.read([250], "DATA");
   }
 
   close() {
     this.socket?.destroy();
   }
 
-  private async read(expected: number[]): Promise<string> {
+  private async read(expected: number[], stage = "GREETING"): Promise<string> {
     const line = await this.waitForResponse();
     const code = Number(line.slice(0, 3));
-    if (!expected.includes(code)) throw new Error(`SMTP server returned ${line}`);
+    if (!expected.includes(code)) throw new SmtpReplyError(code, stage, line);
     return line;
   }
 

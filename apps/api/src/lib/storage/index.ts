@@ -47,3 +47,10 @@ export async function getStorageForClient(clientId: string): Promise<StorageProv
   }
   return createStorageForConfig(clientId, config);
 }
+
+/** True when a read failed because the object is absent, not because storage is unreachable. */
+export function isStorageObjectMissing(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const err = error as { name?: unknown; Code?: unknown; code?: unknown; $metadata?: { httpStatusCode?: unknown } };
+  return err.name === "NoSuchKey" || err.Code === "NoSuchKey" || err.code === "ENOENT" || err.$metadata?.httpStatusCode === 404;
+}

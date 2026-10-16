@@ -117,11 +117,12 @@
           </span>
         }
       } @else {
-        <!-- Ranked but invisible to this viewer. A locked placeholder, never a draggable row,
-             because the rank must keep its number. -->
+        <!-- Ranked but invisible to this viewer, and a whole run of them is one row. A locked
+             placeholder, never a draggable row, and numbered with the run's first rank so the
+             numbers either side still read true. -->
         <span class="row-locked">
           <i class="ti ti-lock"></i>
-          <span i18n="Placeholder row for a queued card the viewer cannot see">A card you don’t have access to</span>
+          <span i18n="Placeholder row for one or more queued cards the viewer cannot see">{ row.entries.length, plural, =1 {A card you don’t have access to} other {{{ row.entries.length }} cards you don’t have access to} }</span>
         </span>
       }
     </div>
@@ -130,7 +131,9 @@
       <div class="panel-empty">
         <i class="ti ti-list-numbers"></i>
         <strong i18n="Empty state; Up next is the personal priority queue">Nothing in Up next yet</strong>
-        @if (canReorder()) {
+        @if (canReorder() && emptyHint(); as hint) {
+          <span>{{ hint }}</span>
+        } @else if (canReorder()) {
           <span i18n="Empty state hint; Add card is the button label below">Drag a card in, or use <em>Add card</em> below, to say what gets done first.</span>
         } @else {
           <span i18n="Empty state for a queue the viewer cannot change">Nothing has been added here yet.</span>

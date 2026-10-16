@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { EMAIL_QUEUE_STATUS, type EmailQueue } from "@kanera/shared/schema";
 import { billingChangedEmail, proCancelledEmail, proTrialWarningEmail, seatBilledEmail, upgradedToProEmail } from "./email-templates/billing.js";
-import { emailSubject, renderEmail, shouldSendDailyDigest } from "./mailer.js";
+import { emailSubject, isReservedEmailDomain, renderEmail, shouldSendDailyDigest } from "./mailer.js";
 
 test("development email subjects are prefixed once", () => {
   assert.equal(emailSubject("Welcome to Kanera", "development"), "[Development] Welcome to Kanera");
@@ -287,4 +287,13 @@ void test("a queued row renders in the locale it was queued with", () => {
   assert.match(renderEmail(row), /<html lang="en-US">/);
   // An unknown stored value (a language since removed, say) falls back to the source language.
   assert.match(renderEmail({ ...row, data: { ...row.data, locale: "xx" as never } }), /<html lang="en-GB">/);
+});
+
+void test("reserved email domains match RFC 2606 names without catching lookalikes", () => {
+  for (const email of ["priya@kanera.test", "a@example.com", "a@mail.example.org", "a@host.invalid", "a@box.localhost", "A@EXAMPLE.NET.", "a@foo.example"]) {
+    assert.equal(isReservedEmailDomain(email), true, email);
+  }
+  for (const email of ["a@kanera.app", "a@notexample.com", "a@example.co", "a@testing.io", "a@example.com.au"]) {
+    assert.equal(isReservedEmailDomain(email), false, email);
+  }
 });

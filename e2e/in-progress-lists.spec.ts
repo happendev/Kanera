@@ -179,3 +179,108 @@ test("in-progress cards carry a title icon, and a workspace admin corrects their
   await expectBoardLoaded(watcher, boardName);
   await expect(tile(watcher, working).locator(".card-time-in-progress")).toHaveText(/^\s*2h\s*$/);
 });
+
+test("organisation master switch and board opt-out pause clocks and hide progress live", async ({ page, signIn, pageAs, apiAs, uniqueName }) => {
+  const api = await apiAs("amelia");
+  const original = await (await api.get("/api/clients/me")).json() as { inProgressEnabled: boolean };
+  const name = uniqueName("Progress controls");
+  const workspaceName = uniqueName("Progress controls workspace");
+  const ws = await createWorkspace(api, workspaceName, name);
+  const title = uniqueName("Tracked work");
+  try {
+    expect((await api.patch("/api/clients/me", { data: { inProgressEnabled: true } })).ok()).toBe(true);
+    expect((await api.patch(`/api/lists/${ws.lists.get("Doing")}`, { data: { inProgress: true } })).ok()).toBe(true);
+    const id = await createCard(api, ws, "Doing", title);
+    // A recorded total must survive disabling, including the stopped-history display case.
+    expect((await api.put(`/api/cards/${id}/in-progress-time`, { data: { seconds: 7200 } })).ok()).toBe(true);
+    await signIn(page, "amelia");
+    await page.goto(`/b/${ws.boardId}`);
+    await expectBoardLoaded(page, name);
+    await expect(tile(page, title).locator(".card-time-in-progress")).toBeVisible();
+    const settings = await pageAs("amelia");
+    await settings.goto(`/w/${ws.workspaceId}/settings/boards`);
+    const boardToggle = settings.getByRole("checkbox", { name: "Enable in progress", exact: true });
+    await expect(boardToggle).toBeChecked();
+    await boardToggle.uncheck();
+    await expect(tile(page, title).locator(".card-time-in-progress")).toHaveCount(0);
+    await expect(listHeader(page, "Doing").locator(".list-in-progress")).toHaveCount(0);
+    await tile(page, title).click();
+    const disabledDetail = page.getByRole("dialog", { name: `Card detail: ${title}` });
+    await expect(disabledDetail).toBeVisible();
+    await expect(disabledDetail.locator(".detail-time-in-progress")).toHaveCount(0);
+    await disabledDetail.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(disabledDetail).toBeHidden();
+    const catalog = await (await api.get("/api/work/catalog")).json() as { boards: { id: string; inProgressEnabled: boolean }[] };
+    expect(catalog.boards.find((board) => board.id === ws.boardId)?.inProgressEnabled).toBe(false);
+    const paused = (await (await api.get(`/api/cards/${id}/detail`)).json() as { card: { inProgressSince: string | null; inProgressSeconds: number } }).card;
+    expect(paused.inProgressSince).toBeNull();
+    expect(paused.inProgressSeconds).toBeGreaterThanOrEqual(7200);
+    await page.getByRole("button", { name: "Table view", exact: true }).click();
+    await expect(page.locator('k-board-table-view [data-col="inProgress"]')).toHaveCount(0);
+    await settings.screenshot({ animations: "disabled", path: test.info().outputPath("board-progress-settings-desktop.png") });
+    await settings.setViewportSize({ width: 390, height: 844 });
+    await expect(settings.locator(".sidebar")).toHaveCSS("width", "52px");
+    await settings.screenshot({ animations: "disabled", path: test.info().outputPath("board-progress-settings-phone.png") });
+    await boardToggle.check();
+    await expect(page.locator('k-board-table-view [data-col="inProgress"] .tv-time-in-progress')).toBeVisible();
+
+    await settings.goto("/settings/org");
+    const orgToggle = settings.getByRole("checkbox", { name: "Enable in progress", exact: true });
+    await expect(orgToggle).toBeChecked();
+    await orgToggle.uncheck();
+    await expect(page.locator('k-board-table-view [data-col="inProgress"]')).toHaveCount(0);
+    const off = (await (await api.get(`/api/cards/${id}/detail`)).json() as { card: { inProgressSince: string | null; inProgressSeconds: number } }).card;
+    expect(off.inProgressSince).toBeNull();
+    expect(off.inProgressSeconds).toBeGreaterThanOrEqual(paused.inProgressSeconds);
+    expect((await api.put(`/api/cards/${id}/in-progress-time`, { data: { seconds: 1 } })).status()).toBe(403);
+    await moveCard(api, ws, id, "Todo");
+    await moveCard(api, ws, id, "Doing");
+    expect((await (await api.get(`/api/cards/${id}/detail`)).json() as { card: { inProgressSince: string | null } }).card.inProgressSince).toBeNull();
+    // A board's on preference cannot override its owning organisation.
+    expect((await api.patch(`/api/boards/${ws.boardId}`, { data: { inProgressEnabled: true } })).ok()).toBe(true);
+    await page.reload();
+    await expectBoardLoaded(page, name);
+    await expect(page.locator('k-board-table-view [data-col="inProgress"]')).toHaveCount(0);
+    await settings.screenshot({ animations: "disabled", path: test.info().outputPath("organisation-progress-settings-phone.png") });
+    await settings.setViewportSize({ width: 1440, height: 1000 });
+    await settings.screenshot({ animations: "disabled", path: test.info().outputPath("organisation-progress-settings-desktop.png") });
+    await orgToggle.check();
+    await expect(page.locator('k-board-table-view [data-col="inProgress"] .tv-time-in-progress')).toBeVisible();
+    const resumed = (await (await api.get(`/api/cards/${id}/detail`)).json() as { card: { inProgressSince: string | null; inProgressSeconds: number } }).card;
+    expect(resumed.inProgressSince).not.toBeNull();
+    expect(resumed.inProgressSeconds).toBeGreaterThanOrEqual(off.inProgressSeconds);
+  } finally {
+    expect((await api.patch("/api/clients/me", { data: { inProgressEnabled: original.inProgressEnabled } })).ok()).toBe(true);
+    expect((await api.delete(`/api/workspaces/${ws.workspaceId}`, { data: { confirmationName: workspaceName } })).ok()).toBe(true);
+  }
+});
+
+test("standalone boards can opt out from General settings", async ({ page, signIn, apiAs, uniqueName }) => {
+  const api = await apiAs("amelia");
+  const name = uniqueName("Standalone progress");
+  const response = await api.post("/api/workspaces", { data: {
+    name, kind: "board", initialBoard: { name },
+    lists: [{ name: "Todo" }, { name: "Doing", inProgress: true }], customFields: [], labels: [],
+  } });
+  expect(response.ok(), await response.text()).toBe(true);
+  const workspace = await response.json() as { id: string; initialBoard: { id: string } };
+  try {
+    await signIn(page, "amelia");
+    await page.goto(`/b/${workspace.initialBoard.id}/settings/general`);
+    const toggle = page.getByRole("checkbox", { name: "Enable in progress", exact: true });
+    await expect(toggle).toBeChecked();
+    await toggle.uncheck();
+    await expect(page.getByRole("spinbutton", { name: "Time in progress alert in days" })).toHaveCount(0);
+    await page.reload();
+    await expect(toggle).not.toBeChecked();
+    await page.screenshot({ animations: "disabled", path: test.info().outputPath("standalone-progress-desktop.png") });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.locator(".sidebar")).toHaveCSS("width", "52px");
+    await toggle.scrollIntoViewIfNeeded();
+    await page.screenshot({ animations: "disabled", path: test.info().outputPath("standalone-progress-phone.png") });
+    await toggle.check();
+    await expect(page.getByRole("spinbutton", { name: "Time in progress alert in days" })).toBeVisible();
+  } finally {
+    expect((await api.delete(`/api/workspaces/${workspace.id}`, { data: { confirmationName: name } })).ok()).toBe(true);
+  }
+});

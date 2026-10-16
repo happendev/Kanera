@@ -487,6 +487,7 @@ describe("CardDetailComponent realtime regressions", () => {
         {
           provide: BoardState,
           useValue: {
+            inProgressEnabled: signal(true),
             detailForCard: vi.fn((_cardId: string) => boardStateDetail()),
             liveAgentRunsForCard: vi.fn(() => []),
             mergeAgentRuns: vi.fn(),

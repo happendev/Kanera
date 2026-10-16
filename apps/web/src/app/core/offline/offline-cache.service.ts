@@ -103,6 +103,7 @@ export type OfflineBoardSnapshot = {
   workspaceClientId?: string | null;
   workspaceKind?: "standard" | "board";
   workspaceInactiveCardsDays?: number;
+  organisationInProgressEnabled?: boolean;
   workspaceInProgressAlertDays?: number;
   workspaceTimeZone?: string;
   workspaceCardKeyPrefixes?: string[];

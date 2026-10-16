@@ -44,7 +44,8 @@ export const cards = pgTable(
     // public API, automations, imports, board transfers) agrees.
     //
     // `inProgressSince` is the start of the running stint: set while the card is *actively* in
-    // progress (in an in-progress list, open and not archived), null otherwise. Moving between two
+    // progress (enabled by its organisation and board, in a progress list, open and not archived),
+    // null otherwise. Disabling banks the current stint; enabling starts from now. Moving between two
     // in-progress lists keeps the original start; leaving, completing or archiving ends the stint.
     inProgressSince: timestamp("in_progress_since", { withTimezone: true }),
     // Tracked seconds from every finished stint. A stint's time is banked here when it ends, so a
@@ -126,3 +127,9 @@ export const cards = pgTable(
 );
 
 export type Card = typeof cards.$inferSelect;
+
+// Durable notification latch: activity retention must never rearm an already flagged card.
+export const cardInProgressAlerts = pgTable("card_in_progress_alert", {
+  cardId: uuid("card_id").primaryKey().references(() => cards.id, { onDelete: "cascade" }),
+  firedAt: timestamp("fired_at", { withTimezone: true }).notNull().defaultNow(),
+});

@@ -1720,13 +1720,9 @@ const IN_PROGRESS_ALERT_SWEEP_BATCH_SIZE = 500;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Fires card_in_progress_too_long once per in-progress stint, when the card's time in progress
- * passes its workspace's inProgressAlertDays (0 turns the alert, and so the trigger, off).
- *
- * The ledger's identity is the stint boundary: in_progress_since + inProgressAlertDays. A card that
- * leaves progress and comes back has a new start, and a changed setting moves the boundary, so
- * either produces a new event; re-running the sweep over the same boundary is a no-op. Completed
- * cards are skipped: their clock is frozen and "still in progress" no longer describes them.
+ * Fires once when a running card passes its workspace alert (0 disables it).
+ * The ledger stays latched across list moves and setting changes; only an admin correction
+ * below the threshold clears it. Completed cards are skipped because their clock is frozen.
  */
 export async function runInProgressAlertAutomationSweep(
   log?: FastifyBaseLogger,
@@ -1775,7 +1771,6 @@ export async function runInProgressAlertAutomationSweep(
               select 1 from automation_in_progress_run aipr
               where aipr.automation_id = a.id
                 and aipr.card_id = ${cards.id}
-                and aipr.alert_at = ${cards.inProgressSince} + make_interval(days => ${workspaces.inProgressAlertDays})
             )
         )`,
       ))
@@ -1812,7 +1807,7 @@ export async function runInProgressAlertAutomationSweep(
               .from(automationInProgressRuns)
               .where(and(eq(automationInProgressRuns.automationId, automation.id), eq(automationInProgressRuns.cardId, card.id)))
               .limit(1);
-            if (existing?.alertAt.getTime() === alertAt.getTime()) return EMPTY_EFFECTS;
+            if (existing) return EMPTY_EFFECTS;
             const result = await applyAutomationActionsAndRecordStats(tx, automation.id, {
               card,
               boardId: card.boardId,

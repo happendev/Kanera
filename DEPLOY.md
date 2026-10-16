@@ -523,10 +523,15 @@ What you get:
   config), delivered via Grafana's Slack integration (Slack and every Slack-compatible
   endpoint — Zulip's `slack_incoming`, Mattermost, ... — accept it). Starter rules
   (review and tune thresholds in the Grafana UI):
-  - **App:** 5xx ratio, p95 latency, Postgres pool saturation, app service down.
+  - **App:** 5xx ratio, p95 latency, Postgres pool saturation, app service down, and
+    emails that failed permanently (SMTP rejected the recipient or retries ran out).
   - **Meta-monitoring:** any monitoring/infra target down (exporters, Grafana, Loki,
     Alloy, Prometheus, DB, cache), **host disk space low**, Prometheus config-reload
-    failure, Prometheus TSDB compaction failure, and Loki ingestion (5xx) errors.
+    failure, Prometheus TSDB compaction failure, Loki ingestion (5xx) errors, and log
+    entries Loki rejected (4xx: too old, out of order, rate limited) or Alloy dropped.
+  - Alloy drops log lines older than 1h before pushing them, so a replay after a lost
+    read position doesn't flood Loki with rejected writes. Keep the `kanera_alloy_data`
+    volume (don't `down -v` the monitoring stack) so positions survive restarts.
 
 > **Disk safety.** Prometheus is bounded by `PROMETHEUS_RETENTION_SIZE` (a real disk
 > cap). Loki's filesystem store has **no** hard size cap — retention deletes by age on

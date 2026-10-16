@@ -13,6 +13,7 @@ import { BoardState } from "../board/board-state";
 import { CardDetailComponent } from "../board/card-detail.component";
 
 type SourceBoardPayload = {
+  organisationInProgressEnabled?: boolean;
   board: Board;
   workspaceClientId?: string | null;
   workspaceKind?: "standard" | "board";
@@ -189,6 +190,8 @@ export class GlobalCardDetailHostComponent implements OnInit, OnDestroy {
       board: {
         id: board.id,
         workspaceId: board.workspaceId,
+        inProgressEnabled: board.inProgressEnabled,
+        inProgressResumedAt: null,
         groupId: null,
         standaloneGroupId: null,
         name: board.name,

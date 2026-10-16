@@ -108,7 +108,8 @@ void test("over-limit API key requests queue for their slot before the queue ove
     const outcomes = await Promise.all(Array.from({ length: 5 }, async () => {
       const startedAt = performance.now();
       const response = await publicApi.inject({ method: "GET", url: "/api/v1/workspaces", headers: { authorization: `Bearer ${secret}` } });
-      return { status: response.statusCode, ms: performance.now() - startedAt, body: response.body };
+      const waitedMs = Number(/ratelimit;dur=([0-9.]+)/.exec(String(response.headers["server-timing"] ?? ""))?.[1] ?? 0);
+      return { status: response.statusCode, ms: performance.now() - startedAt, waitedMs, body: response.body };
     }));
     const succeeded = outcomes.filter((outcome) => outcome.status === 200).sort((a, b) => a.ms - b.ms);
     const limited = outcomes.filter((outcome) => outcome.status === 429);
@@ -116,6 +117,8 @@ void test("over-limit API key requests queue for their slot before the queue ove
     assert.equal(limited.length, 1, JSON.stringify(outcomes));
     assert.ok(succeeded[2]!.ms >= 500, `queued requests waited for the next window (${succeeded[2]!.ms}ms)`);
     assert.ok(limited[0]!.ms < succeeded[2]!.ms, "the overflow request fails fast rather than waiting");
+    // Queue wait is reported apart from handler time, so a throttled burst does not read as a slow route.
+    assert.ok(succeeded[2]!.waitedMs >= 400, `queued requests report their wait in Server-Timing (${JSON.stringify(outcomes)})`);
   } finally {
     await publicApi.close();
   }

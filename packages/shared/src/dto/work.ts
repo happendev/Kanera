@@ -229,6 +229,7 @@ export type WorkCatalogWorkspace = {
 };
 
 export type WorkCatalogBoard = {
+  inProgressEnabled: boolean;
   id: string;
   workspaceId: string;
   name: string;

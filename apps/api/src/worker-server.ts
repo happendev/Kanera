@@ -62,6 +62,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
       db.select({
         queued: sql<number>`count(*) filter (where ${emailQueue.status} = ${EMAIL_QUEUE_STATUS.queued})::int`,
         inFlight: sql<number>`count(*) filter (where ${emailQueue.status} = ${EMAIL_QUEUE_STATUS.immediate})::int`,
+        failedLast24h: sql<number>`count(*) filter (where ${emailQueue.status} = ${EMAIL_QUEUE_STATUS.error} and ${emailQueue.updatedAt} > now() - interval '24 hours')::int`,
         oldest: sql<Date | string | null>`min(${emailQueue.createdAt}) filter (where ${emailQueue.status} in (${EMAIL_QUEUE_STATUS.queued}, ${EMAIL_QUEUE_STATUS.immediate}))`,
       }).from(emailQueue),
     ]);
@@ -74,6 +75,7 @@ export async function buildWorkerServer(options: BuildWorkerServerOptions = {}) 
       email: {
         queued: emailStats?.queued ?? 0,
         inFlight: emailStats?.inFlight ?? 0,
+        failedLast24h: emailStats?.failedLast24h ?? 0,
         oldestAgeSeconds: timestampAgeSeconds(emailStats?.oldest ?? null, now),
       },
     };

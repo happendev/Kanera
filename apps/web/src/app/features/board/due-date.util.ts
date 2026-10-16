@@ -121,7 +121,7 @@ function zonedDateTimeToUtc(localDate: string, slot: DueDateSlot, timezone: stri
   return guess;
 }
 
-function dueDateTimestamp(
+export function dueDateTimestamp(
   localDate: string | null | undefined,
   slot: DueDateSlot | null | undefined,
   timezone: string | null | undefined,

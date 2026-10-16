@@ -475,6 +475,9 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
   readonly requireMfaDraft = signal(false);
   readonly requireMfaSaving = signal(false);
   readonly requireMfaError = signal<string | null>(null);
+  readonly inProgressEnabledDraft = signal(true);
+  readonly inProgressEnabledSaving = signal(false);
+  readonly inProgressEnabledError = signal<string | null>(null);
   readonly portfolioEnabledDraft = signal(true);
   readonly portfolioEnabledSaving = signal(false);
   readonly portfolioEnabledError = signal<string | null>(null);
@@ -766,6 +769,7 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     this.pushEnabledDraft.set(c.pushEnabled);
     this.requireMfaDraft.set(c.requireMfa);
     this.portfolioEnabledDraft.set(c.portfolioEnabled);
+    this.inProgressEnabledDraft.set(c.inProgressEnabled);
     this.mcpPolicyDraft.set(c.mcpPolicy);
     this.defaultCompletedCardsActiveDays.set(c.defaultCompletedCardsActiveDays);
     this.defaultInactiveCardsDays.set(c.defaultInactiveCardsDays);
@@ -2136,6 +2140,21 @@ export class AccountSettingsPage implements OnInit, OnDestroy {
     }
     catch (err) { this.portfolioEnabledDraft.set(current.portfolioEnabled); this.portfolioEnabledError.set(extractErrorMessage(err)); }
     finally { this.portfolioEnabledSaving.set(false); }
+  }
+
+  async saveInProgressEnabled(next: boolean) {
+    const current = this.client();
+    if (!current || current.inProgressEnabled === next) return;
+    this.inProgressEnabledDraft.set(next);
+    this.inProgressEnabledSaving.set(true); this.inProgressEnabledError.set(null);
+    try {
+      const updated = await this.api.patch<PublicClientResponse>("/clients/me", { inProgressEnabled: next });
+      this.applyClient(updated);
+      // Board events propagate the effective setting to other members and external guests.
+      this.auth.updateUser((u) => ({ ...u, inProgressEnabled: updated.inProgressEnabled }));
+    }
+    catch (err) { this.inProgressEnabledDraft.set(current.inProgressEnabled); this.inProgressEnabledError.set(extractErrorMessage(err)); }
+    finally { this.inProgressEnabledSaving.set(false); }
   }
 
   async saveMcpPolicy() {

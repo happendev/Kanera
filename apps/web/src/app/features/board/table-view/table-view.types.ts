@@ -77,6 +77,7 @@ export const NULL_GROUP_KEY = "__none__";
  * `WorkCatalog*` would make the board table depend on the Global Work DTO.
  */
 export interface SourceBoardRef {
+  inProgressEnabled?: boolean;
   id: string;
   workspaceId: string;
   name: string;

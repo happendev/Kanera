@@ -701,7 +701,7 @@ export interface ServerToClientEvents {
   "card:feedItem:deleted": (payload: { boardId: string; cardId: string; type: CardFeedItem["type"]; itemId: string }) => void;
 
   "board:created": (payload: { workspaceId: string; board: WireBoard }) => void;
-  "board:updated": (payload: { board: WireBoard }) => void;
+  "board:updated": (payload: { board: WireBoard; organisationInProgressEnabled?: boolean }) => void;
   "board:moved": (payload: {
     workspaceId: string;
     boardId: string;
@@ -748,7 +748,7 @@ export interface ServerToClientEvents {
     targetCardId: string;
     targetBoardId: string;
   }) => void;
-  "client:updated": (payload: { clientId: string; name: string; logoUrl: string | null }) => void;
+  "client:updated": (payload: { clientId: string; name: string; logoUrl: string | null; inProgressEnabled?: boolean }) => void;
   "client:entitlements:changed": (payload: { clientId: string }) => void;
   "user:profile:updated": (payload: { userId: string; displayName: string; avatarUrl: string | null }) => void;
 

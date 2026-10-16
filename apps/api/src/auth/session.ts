@@ -76,6 +76,7 @@ export async function authUserPayload(userId: string, requestedClientId?: string
     kaneraEnvironment: env.KANERA_ENVIRONMENT,
     hasWorkspace: active.hasWorkspace,
     portfolioEnabled: active.portfolioEnabled,
+    inProgressEnabled: active.inProgressEnabled,
     role: active.role,
     isClientAdmin: isClientAdminRole(active.role),
     organisations: organisations.map(({ addedAt: _addedAt, analyticsExcluded: _analyticsExcluded, requireMfa: _requireMfa, portfolioEnabled: _portfolioEnabled, ...organisation }) => organisation),

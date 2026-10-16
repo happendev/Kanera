@@ -2,7 +2,7 @@ import { EMAIL_QUEUE_STATUS, emailQueue, type EmailQueue, type SmtpConfig } from
 import { and, eq, inArray, isNull, lt, lte, or } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import type { Db } from "../db.js";
-import { emailHeaders, errorMessage, renderEmail } from "./mailer.js";
+import { assertDeliverableRecipient, emailHeaders, errorMessage, permanentEmailFailure, renderEmail } from "./mailer.js";
 import { notificationDeliveryDuration, notificationDeliveryTotal, notificationQueueWaitDuration } from "./metrics.js";
 import { sendEmail, type SendEmailOptions } from "./smtp.js";
 import { forEachConcurrent } from "./concurrent-delivery.js";
@@ -59,6 +59,7 @@ export async function runEmailQueueSweep({
         Math.max(0, (startedAt - row.createdAt.getTime()) / 1000),
       );
       try {
+        assertDeliverableRecipient(row.toEmail);
         await deliverEmail({ config, to: row.toEmail, subject: row.subject, html: renderEmail(row), headers: emailHeaders(row) });
         await db
           .update(emailQueue)
@@ -68,11 +69,13 @@ export async function runEmailQueueSweep({
         outcome = "success";
       } catch (err) {
         const retries = row.retries + 1;
+        const permanent = permanentEmailFailure(err);
+        const terminal = permanent !== null || retries >= MAX_RETRIES;
         const now = new Date();
         await db
           .update(emailQueue)
           .set({
-            status: retries >= MAX_RETRIES ? EMAIL_QUEUE_STATUS.error : EMAIL_QUEUE_STATUS.queued,
+            status: terminal ? EMAIL_QUEUE_STATUS.error : EMAIL_QUEUE_STATUS.queued,
             retries,
             // Defer the next attempt with exponential backoff so this drain skips the row
             // until it becomes due again. Terminal failures keep a future value too; it is ignored.
@@ -82,8 +85,11 @@ export async function runEmailQueueSweep({
             updatedAt: now,
           })
           .where(eq(emailQueue.id, row.id));
-        log.error({ err, emailQueueId: row.id, retries }, "queued email send failed");
-        outcome = retries >= MAX_RETRIES ? "error" : "retry";
+        if (permanent) log.warn({ err, emailQueueId: row.id, retries }, "queued email recipient rejected permanently");
+        else log.error({ err, emailQueueId: row.id, retries }, "queued email send failed");
+        // "suppressed"/"rejected" are recipient problems; "error" means retries ran out on a
+        // delivery fault. Alert on rejected and error only: suppression is the guard working.
+        outcome = permanent ?? (terminal ? "error" : "retry");
       } finally {
         notificationDeliveryDuration.observe({ queue: "email", channel: "smtp" }, (Date.now() - startedAt) / 1000);
         notificationDeliveryTotal.inc({ queue: "email", channel: "smtp", outcome });

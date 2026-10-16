@@ -39,7 +39,15 @@ export class BoardSocketBridge {
     const handlers: Partial<ServerToClientEvents> = {
       // Lists, labels, and custom fields are workspace-scoped, so ignore events from
       // other workspaces even if the socket connection itself remains alive.
-      [SERVER_EVENTS.BOARD_UPDATED]: ({ board }) => { if (board.id === boardId) state.board.set(board); },
+      [SERVER_EVENTS.BOARD_UPDATED]: ({ board, organisationInProgressEnabled }) => {
+        if (board.id !== boardId) return;
+        const changed = state.board()?.inProgressEnabled !== board.inProgressEnabled
+          || organisationInProgressEnabled !== undefined;
+        state.board.set(board);
+        if (organisationInProgressEnabled !== undefined) state.organisationInProgressEnabled.set(organisationInProgressEnabled);
+        // The database reconciles all clocks; refetch rather than guessing elapsed working time.
+        if (changed) requestResync();
+      },
       [SERVER_EVENTS.WORKSPACE_UPDATED]: ({ workspace }) => {
         if (!isCurrentWorkspace(workspace.id)) return;
         // The app shell joins owned workspace rooms while this bridge joins the board room. Consume

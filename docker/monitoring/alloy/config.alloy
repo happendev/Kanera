@@ -49,6 +49,16 @@ loki.source.docker "containers" {
 loki.process "app" {
   forward_to = [loki.write.default.receiver]
 
+  // Guard against replay. When Alloy loses or never flushed a container's read position it re-tails
+  // the whole json-file log, and Loki answers every line older than its out-of-order window (1h on
+  // an active stream) with HTTP 400. Drop those here, counted as
+  // loki_process_dropped_lines_total{reason="too_old"}, instead of flooding Loki with rejected
+  // pushes. Trade-off: after an Alloy outage longer than this, the older backlog is not ingested.
+  stage.drop {
+    older_than          = "1h"
+    drop_counter_reason = "too_old"
+  }
+
   // Best-effort JSON parse. Non-JSON lines (e.g. nginx access logs) simply skip the extractions.
   stage.json {
     expressions = {

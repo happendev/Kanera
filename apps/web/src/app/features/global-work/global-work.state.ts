@@ -113,6 +113,14 @@ function defaultDefinition(lens: WorkViewLens): WorkViewDefinition {
   };
 }
 
+/**
+ * Displays that are wrong on a partial card set: the board's lane order and "Next" card, and the
+ * overview's per-teammate counts, which would silently under-report from page one.
+ */
+function displayNeedsEveryCard(display: WorkDisplayMode): boolean {
+  return display === "board" || display === "overview";
+}
+
 /** The card fields the query projection keeps in sync, whether from a realtime echo or a local edit. */
 export interface VisibleCardPatch {
   id: string;
@@ -231,23 +239,33 @@ export class GlobalWorkState {
       : this.otherPriorities(),
   );
   /**
-   * Every queue this viewer may read — the Team Cards lanes display, one lane per teammate.
+   * Every queue this viewer may read: each teammate's Up next head on Team overview, and the queue
+   * the overview's dock curates.
    *
-   * Loaded only for the Priority display; `setDisplay` queries it on entry. Hydrating every
-   * teammate’s queue must not hold up the ordinary board or table projection. Deliberately
-   * absent from the offline cache: like the docked panel, a stale sequence reads as an
-   * instruction, so the lanes display is withheld on a cached snapshot instead of showing last
-   * week's order.
+   * Loaded only for the overview; `setDisplay` queries it on entry. Hydrating every teammate’s
+   * queue must not hold up the ordinary board or table projection. Deliberately absent from the
+   * offline cache: like the docked panel, a stale sequence reads as an instruction, so the overview
+   * is withheld on a cached snapshot instead of showing last week's order.
    */
   readonly teamPriorities = signal<WorkPriorityQueuesResponse | null>(null);
   /**
-   * The stable candidate pool behind every Team Cards Up next picker.
+   * The one teammate Team overview is showing, with their Up next docked beside them; null shows
+   * everyone.
+   *
+   * Separate from the teammate filter on purpose. Focusing through `assigneeIds` would re-query the
+   * cards and switch the page into the focused-person mode every other display has; here the
+   * overview only narrows to a panel it already built. Session-only: reopening the overview starts
+   * with everyone in view.
+   */
+  readonly overviewFocusUserId = signal<string | null>(null);
+  /**
+   * The candidate pool behind the overview dock's Not queued list and its Add card picker.
    *
    * This cannot reuse `response.cards`: that projection follows the page's current filters, while
    * a priority queue deliberately does not. In particular, once a filtered-out queue entry is
-   * removed, it still needs to become addable again. The team and self queries below load every
-   * active assignment independently of the visible card projection, then queue membership is
-   * applied reactively by the page.
+   * removed, it still needs to become addable again. The queries below load every active
+   * assignment of the dock's person independently of the visible card projection, then queue
+   * membership is applied reactively by the page.
    */
   private readonly teamPriorityCandidates = signal<WorkQueryResponse["cards"]>([]);
   readonly teamPriorityCandidateCards = computed(() => this.teamPriorityCandidates().map((card) => this.expandWorkCard(card)));
@@ -358,6 +376,7 @@ export class GlobalWorkState {
     this.portfolio.set(null);
     this.otherPriorities.set(null);
     this.teamPriorities.set(null);
+    this.overviewFocusUserId.set(null);
     this.teamPriorityCandidates.set([]);
     this.savedViews.set([]);
     this.shareCandidates.set([]);
@@ -489,7 +508,7 @@ export class GlobalWorkState {
       this.otherPriorities.set(priorities);
       this.teamPriorities.set(teamPriorities);
       this.teamPriorityCandidates.set(priorityCandidateCards);
-      if (["board", "priorities"].includes(this.definition().display)) {
+      if (displayNeedsEveryCard(this.definition().display)) {
         await this.loadRemainingCards(version);
       }
       if (this.lens() === "portfolio") {
@@ -626,11 +645,13 @@ export class GlobalWorkState {
     // the title filter on the way in stops a query typed during a drill-down from silently narrowing
     // every count and heatmap with no visible control explaining why.
     const clearSearch = this.lens() === "portfolio" && display === "summary";
-    // Priority is the whole-team queue overview. Carrying a hidden teammate filter into it would
-    // leave other lanes without add-card candidates even though their queues are visible.
+    // The overview is whole-team by definition: a carried-over focus would silently empty every
+    // other panel.
     const clearTeamFocus = this.lens() === "team"
-      && display === "priorities"
+      && display === "overview"
       && this.definition().filters.assigneeIds.length > 0;
+    // The overview's focus belongs to the overview; every other display focuses through the filter.
+    if (display !== "overview") this.overviewFocusUserId.set(null);
     this.definition.update((definition) => ({
       ...definition,
       display,
@@ -652,8 +673,15 @@ export class GlobalWorkState {
       void this.queryFirstPage();
       return;
     }
-    if (display === "priorities") {
+    if (display === "overview" && clearTeamFocus) {
       void this.queryFirstPage();
+    } else if (display === "overview") {
+      // The overview needs every teammate's queue head and the full card set. Both load without
+      // resetting the page, so switching in from the board does not flash a loading state.
+      this.teamPriorityCandidates.set([]);
+      void Promise.all([this.refreshTeamPriorities(this.requestVersion), this.loadRemainingCards(this.requestVersion)])
+        .then(() => this.persistCache())
+        .catch(() => this.error.set($localize`We couldn’t load every card. Try refreshing the page.`));
     } else if (display === "board") {
       this.teamPriorityCandidates.set([]);
       void this.loadRemainingCards(this.requestVersion)
@@ -662,6 +690,22 @@ export class GlobalWorkState {
     } else {
       this.teamPriorityCandidates.set([]);
     }
+  }
+
+  /**
+   * Switch display and teammate focus as one change with one query. Doing it as `setDisplay` then
+   * `setAssignees` would start the new display's paging against the old (whole-team) cursor and
+   * then supersede it, briefly painting everyone's cards under one person's name.
+   */
+  focusTeammate(userId: string, display: WorkDisplayMode): void {
+    this.definition.update((definition) => ({
+      ...definition,
+      display,
+      filters: { ...definition.filters, assigneeIds: [userId] },
+    }));
+    this.persistPreference();
+    this.teamPriorityCandidates.set([]);
+    void this.queryFirstPage();
   }
 
   setPortfolioDays(portfolioDays: number): void {
@@ -716,7 +760,11 @@ export class GlobalWorkState {
     if (view.lens !== this.lens()) return;
     this.selectedViewId.set(view.id);
     this.drilldownLabel.set(null);
-    this.definition.set(view.definition);
+    this.overviewFocusUserId.set(null);
+    // A view saved on the retired Up next lanes display opens its successor, the overview.
+    this.definition.set(view.definition.display === "priorities"
+      ? { ...view.definition, display: "overview", filters: { ...view.definition.filters, assigneeIds: [] } }
+      : view.definition);
     this.updateRooms();
     void this.queryFirstPage();
   }
@@ -1023,7 +1071,7 @@ export class GlobalWorkState {
   }
 
   /**
-   * Reorder one lane of the Team Cards lanes display. Same endpoint and same settle-by-replacement
+   * Reorder one queue of the Team overview's batch. Same endpoint and same settle-by-replacement
    * as `movePriority`, but applied to the matching queue inside `teamPriorities` — the two signals
    * are separate copies, and each mutation must update the one its display is reading.
    */
@@ -1051,7 +1099,7 @@ export class GlobalWorkState {
     }
   }
 
-  /** Add to one lane without relying on the Team Cards teammate filter to focus its owner. */
+  /** Add to one person's queue without relying on the Team Cards teammate filter to focus them. */
   async addTeamPriority(
     targetUserId: string,
     cardId: string,
@@ -1066,7 +1114,7 @@ export class GlobalWorkState {
         id: `pending:${cardId}`,
         card,
         // The server response supplies canonical board/list context; the card already contains the
-        // ids needed for the optimistic row while the lane picker closes.
+        // ids needed for the optimistic row while the picker closes.
         context: null,
         rank: 0,
         position: "0",
@@ -1115,7 +1163,7 @@ export class GlobalWorkState {
     }
   }
 
-  /** Fold one lane's fresh server queue into the batch without touching the other lanes. */
+  /** Fold one person's fresh server queue into the batch without touching the others. */
   private patchTeamQueue(targetUserId: string, queue: WorkPrioritiesResponse): void {
     this.teamPriorities.update((all) => all && {
       queues: all.queues.map((lane) => lane.target.userId === targetUserId ? { ...lane, queue } : lane),
@@ -1360,7 +1408,7 @@ export class GlobalWorkState {
     ) {
       this.selectedViewId.set(null);
     }
-    if (!atomicCards && ["board", "priorities"].includes(this.definition().display)) {
+    if (!atomicCards && displayNeedsEveryCard(this.definition().display)) {
       await this.loadRemainingCards(version);
     }
     this.cachedAt.set(null);
@@ -1401,37 +1449,62 @@ export class GlobalWorkState {
   }
 
   /**
-   * The batch behind the Team Cards lanes display: every queue this viewer may read, in one
+   * The batch behind Team overview and its dock: every queue this viewer may read, in one
    * request. The server scopes it to the caller (a plain member simply gets their own lane back),
    * so unlike `loadPriorities` there is no cross-user 403 to absorb here.
    */
   private loadTeamPriorities(): Promise<WorkPriorityQueuesResponse | null> {
-    if (this.lens() !== "team" || this.definition().display !== "priorities") return Promise.resolve(null);
+    if (this.lens() !== "team" || this.definition().display !== "overview") return Promise.resolve(null);
     return this.api.get<WorkPriorityQueuesResponse>("/work/priorities");
   }
 
+  /** Loads the queue batch alone, for entering the overview without re-querying the cards. */
+  private async refreshTeamPriorities(version: number): Promise<void> {
+    const queues = await this.loadTeamPriorities();
+    if (version === this.requestVersion) this.teamPriorities.set(queues);
+  }
+
   /**
-   * Every active assignment the Team Cards Up next pickers may offer.
+   * Focus the overview on one person, or show everyone with null, and fetch the cards their dock
+   * may offer. The pool is dropped first so the previous person's cards never show under the new
+   * name while the request is in flight.
+   */
+  setOverviewFocus(userId: string | null): void {
+    if (userId === this.overviewFocusUserId()) return;
+    this.overviewFocusUserId.set(userId);
+    this.teamPriorityCandidates.set([]);
+    if (!userId) return;
+    const version = this.requestVersion;
+    void this.loadTeamPriorityCandidateCards(version, this.teamPriorities())
+      .then((cards) => {
+        // A later query or another person picked meanwhile owns the pool now.
+        if (version === this.requestVersion && this.overviewFocusUserId() === userId) {
+          this.teamPriorityCandidates.set(cards);
+        }
+      })
+      .catch(() => undefined);
+  }
+
+  /**
+   * Every active assignment the overview dock may offer for its person.
    *
    * Priority queues are filter-independent, so their candidate pool must be too. A dedicated team
-   * query plus the self query (the team lens excludes the viewer by definition) keeps the pool
-   * stable when a queued card is absent from the visible filtered projection. Pages are exhausted
-   * because a disabled Add button must mean there are truly no eligible cards.
+   * query, or the self query when the dock is on the viewer (the team lens excludes the viewer by
+   * definition), keeps the pool stable when a queued card is absent from the visible filtered
+   * projection. Pages are exhausted because the Not queued list must be every eligible card.
    *
-   * Scoped to the lane owners, which is what makes exhausting the pages affordable. Every consumer
-   * filters by `card.assigneeIds.includes(lane.target.userId)`, so a pool of every active card in
-   * every accessible board was fetching — and re-fetching on four reload paths — a large multiple of
-   * what any picker can offer. Unscoped, this paged to a 10,000-card cap at 100 per request, twice:
-   * up to ~200 sequential round-trips to decide whether an Add button is enabled.
+   * Scoped to the dock's one person, which is what makes exhausting the pages affordable: an
+   * unscoped pool paged to a 10,000-card cap at 100 per request.
    */
   private async loadTeamPriorityCandidateCards(
     version: number,
     queues: WorkPriorityQueuesResponse | null,
   ): Promise<WorkQueryResponse["cards"]> {
-    if (this.lens() !== "team" || this.definition().display !== "priorities") return [];
-    const laneUserIds = queues?.queues.map((lane) => lane.target.userId) ?? [];
-    // No readable queue means no picker to populate, so there is nothing to fetch at all.
-    if (laneUserIds.length === 0) return [];
+    if (this.lens() !== "team" || this.definition().display !== "overview") return [];
+    const targetUserId = this.overviewFocusUserId();
+    // No readable queue for the dock's person means nothing to offer, so nothing to fetch at all.
+    if (!targetUserId || !queues?.queues.some((lane) => lane.target.userId === targetUserId)) return [];
+    const laneUserIds = [targetUserId];
     const viewerId = this.auth.user()?.id ?? null;
     const teamUserIds = laneUserIds.filter((userId) => userId !== viewerId);
     const cards: WorkQueryResponse["cards"] = [];
@@ -1522,7 +1595,7 @@ export class GlobalWorkState {
   private async loadAllCards(version: number): Promise<WorkQueryResponse> {
     // Background refreshes preserve the depth the reader already loaded. Replacing a table or
     // calendar with its first page would remove later rows after any realtime edit.
-    const exhaustive = ["board", "priorities"].includes(this.definition().display);
+    const exhaustive = displayNeedsEveryCard(this.definition().display);
     const targetCount = exhaustive ? 10_000 : Math.max(100, this.response().cards.length);
     // Each continuation cursor carries the ids already returned, so this walk is inherently
     // sequential: one round trip per bounded page. scheduleRealtimeRefresh scales its
@@ -1642,7 +1715,7 @@ export class GlobalWorkState {
         // The viewer's own queue is service-owned and converges there; refetching it here would be
         // a second request for the same rows and a second chance for the two copies to disagree.
         if (targetUserId === this.auth.user()?.id && this.lens() !== "team") return;
-        // The team lens holds every readable queue (the lanes display rides teamPriorities), so any
+        // The team lens holds every readable queue (the overview rides teamPriorities), so any
         // target's ping is relevant there; elsewhere only the focused person's queue is on screen.
         if (targetUserId === this.focusedTargetUserId() || this.lens() === "team") refreshCards();
       },

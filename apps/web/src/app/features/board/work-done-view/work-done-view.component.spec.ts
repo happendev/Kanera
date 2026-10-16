@@ -59,6 +59,7 @@ describe("WorkDoneViewComponent", () => {
     window.localStorage.clear();
     api = { get: vi.fn(), post: vi.fn() };
     const boardState = {
+      inProgressEnabled: signal(true),
       cardLabels: signal([{ id: "label-1", name: "Billing", color: "blue" }]),
       members: signal([{ userId: "user-1", displayName: "Ada", avatarUrl: null, role: "editor", source: "workspace" }]),
       customFields: signal([]),
